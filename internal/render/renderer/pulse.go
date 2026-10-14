@@ -147,7 +147,7 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 			dx := float64(mapX - originX)
 
 			// Normalized squared distance (<=1 means inside ellipse)
-			distSq := vmath.EllipseDistSqF(dx, dy, invRxSq, invRySq)
+			distSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
 			if distSq > 1.0 {
 				continue
 			}
@@ -157,7 +157,7 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 
 			// Concentric ripples: sin(dist * ringCount - phaseOffset)
 			angle := dist*r.ringCount*vmath.TwoPi - phaseOffset
-			rippleSin := vmath.SinF(angle)
+			rippleSin := vmath.Sin(angle)
 
 			// rippleIntensity = 0.5 + 0.5 * sin
 			rippleIntensity := (1.0 + rippleSin) / 2.0

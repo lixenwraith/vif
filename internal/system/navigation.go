@@ -402,7 +402,7 @@ func (s *NavigationSystem) Update() {
 
 		var gridX, gridY int
 		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
-			cell := vmath.PointAtF(kinetic.PreciseX, kinetic.PreciseY)
+			cell := vmath.PointAt(kinetic.PreciseX, kinetic.PreciseY)
 			gridX, gridY = cell.X, cell.Y
 		} else if pos, ok := s.world.Positions.GetPosition(entity); ok {
 			gridX, gridY = pos.X, pos.Y
@@ -459,7 +459,7 @@ func (s *NavigationSystem) Update() {
 		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
 			preciseX, preciseY = kinetic.PreciseX, kinetic.PreciseY
 		} else if pos, ok := s.world.Positions.GetPosition(entity); ok {
-			preciseX, preciseY = vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+			preciseX, preciseY = vmath.Point{X: pos.X, Y: pos.Y}.Center()
 		} else {
 			continue
 		}
@@ -669,7 +669,7 @@ func (s *NavigationSystem) resolveGroupTargets() {
 // getCompositeFlowDirection returns flow direction from composite-aware flow field
 // Handles case where entity's current cell is blocked in passability
 func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64, src navigation.Source) (float64, float64) {
-	cell := vmath.PointAtF(preciseX, preciseY)
+	cell := vmath.PointAt(preciseX, preciseY)
 	x0, y0 := cell.X, cell.Y
 
 	dir := src.GetDirection(x0, y0)
@@ -733,7 +733,7 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 	resY := sumY / totalWeight
 
 	if resX != 0 || resY != 0 {
-		return vmath.Normalize2DF(resX, resY)
+		return vmath.Normalize2D(resX, resY)
 	}
 	return 0, 0
 }

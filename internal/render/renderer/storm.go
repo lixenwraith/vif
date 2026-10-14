@@ -449,7 +449,7 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 		return
 	}
 	angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
-	pulse := 0.5 + 0.5*vmath.SinF(angle)
+	pulse := 0.5 + 0.5*vmath.Sin(angle)
 
 	glowIntensity := depthBright * (parameter.StormConvexGlowIntensityMin +
 		(parameter.StormConvexGlowIntensityMax-parameter.StormConvexGlowIntensityMin)*pulse)
@@ -584,9 +584,9 @@ func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *rend
 	dirX, dirY := dx/dist, dy/dist
 
 	// Spawn point at ellipse exterior
-	angle := vmath.Atan2F(dy, dx)
-	spawnX := float64(circle.x) + r.radiusX*vmath.CosF(angle)
-	spawnY := float64(circle.y) + r.radiusY*vmath.SinF(angle)
+	angle := vmath.Atan2(dy, dx)
+	spawnX := float64(circle.x) + r.radiusX*vmath.Cos(angle)
+	spawnY := float64(circle.y) + r.radiusY*vmath.Sin(angle)
 
 	// Short muzzle flash: 4 cells, narrow wedge
 	const flashLength = 4.0
@@ -597,7 +597,7 @@ func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *rend
 	// Time-based flicker using game time
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	flickerAngle := float64(gameTimeMs%80) / 80.0 * vmath.TwoPi
-	flicker := 0.85 + 0.15*vmath.SinF(flickerAngle)
+	flicker := 0.85 + 0.15*vmath.Sin(flickerAngle)
 
 	for step := 0; step <= int(flashLength); step++ {
 		t := float64(step) / flashLength
@@ -617,7 +617,7 @@ func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *rend
 
 			// Add chaotic displacement for flame effect
 			jitterPhase := (gameTimeMs/20 + int64(step*7+w*13)) % 100
-			jitter := vmath.SinF(float64(jitterPhase)*vmath.TwoPi/100.0) * 0.3
+			jitter := vmath.Sin(float64(jitterPhase)*vmath.TwoPi/100.0) * 0.3
 			cellX := axisX + perpX*(wFrac+jitter)*widthMult
 			cellY := axisY + perpY*(wFrac+jitter)*widthMult
 
@@ -665,8 +665,8 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 		return
 	}
 	angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
-	cosA := vmath.CosF(angle)
-	sinA := vmath.SinF(angle)
+	cosA := vmath.Cos(angle)
+	sinA := vmath.Sin(angle)
 
 	// Warm amber glow contrasting blue body
 	glowColor := color.RGB{R: 255, G: 190, B: 70}
@@ -703,8 +703,8 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 			cellDirY := ny / dist
 
 			// Double glow: dot with both opposite directions
-			dot1 := vmath.DotProductF(cellDirX, cellDirY, cosA, sinA)
-			dot2 := vmath.DotProductF(cellDirX, cellDirY, -cosA, -sinA)
+			dot1 := vmath.DotProduct(cellDirX, cellDirY, cosA, sinA)
+			dot2 := vmath.DotProduct(cellDirX, cellDirY, -cosA, -sinA)
 
 			dot := math.Max(dot1, dot2)
 			if dot <= 0.1 {

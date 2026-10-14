@@ -68,8 +68,8 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 		period := int64(style.GlowPeriod)
 		phase := ctx.GameTime.UnixNano() % period
 		angle := float64(phase) / float64(period) * vmath.TwoPi
-		p.rotDirX = vmath.CosF(angle)
-		p.rotDirY = vmath.SinF(angle)
+		p.rotDirX = vmath.Cos(angle)
+		p.rotDirY = vmath.Sin(angle)
 	}
 	p.prepareFrame(p)
 
@@ -92,7 +92,7 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 
 			dx := float64(mapX - centerX)
 			dy := float64(mapY - centerY)
-			normalizedDistSq := vmath.EllipseDistSqF(dx, dy, cfg.InvRxSq, cfg.InvRySq)
+			normalizedDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
 
 			if normalizedDistSq > visual.ShieldFeatherEnd {
 				continue
@@ -151,9 +151,9 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 	}
 
 	// Vector normalization
-	cellDirX, cellDirY := vmath.Normalize2DF(p.cellDx, p.cellDy)
+	cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
 
-	dot := vmath.DotProductF(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
+	dot := vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
 	if dot <= 0 {
 		return
 	}
@@ -176,8 +176,8 @@ func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY 
 	}
 	palette := p.rim256
 	if p.glowActive {
-		cellDirX, cellDirY := vmath.Normalize2DF(p.cellDx, p.cellDy)
-		if vmath.DotProductF(cellDirX, cellDirY, p.rotDirX, p.rotDirY) >= visual.Shield256GlowDot {
+		cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
+		if vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY) >= visual.Shield256GlowDot {
 			palette = p.glow256
 		}
 	}
@@ -390,7 +390,7 @@ func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx r
 
 			dx := float64(mapX - centerX)
 			dy := float64(mapY - centerY)
-			normDistSq := vmath.EllipseDistSqF(dx, dy, cfg.InvRxSq, cfg.InvRySq)
+			normDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
 
 			// Only within shield boundary (with small margin)
 			if normDistSq > visual.ShieldFeatherEnd {

@@ -107,7 +107,7 @@ func CombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEnt
 // FindTargetsInEllipse returns all combat targets with members inside the ellipse; see FindTargetsIn
 func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64, scope engine.DomainScope, ownerEntity core.Entity) []TargetGroup {
 	return FindTargetsIn(w, func(x, y int) bool {
-		return vmath.EllipseContainsPointF(x, y, cx, cy, invRxSq, invRySq)
+		return vmath.EllipseContainsPoint(x, y, cx, cy, invRxSq, invRySq)
 	}, scope, ownerEntity)
 }
 
@@ -211,8 +211,8 @@ func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainSc
 		if !ok {
 			continue
 		}
-		px, py := vmath.Point{X: x, Y: y}.CenterF()
-		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
+		px, py := vmath.Point{X: x, Y: y}.Center()
+		distSq := vmath.MagnitudeSq(px-fromX, py-fromY)
 		singles = append(singles, TargetAssignment{Target: e, Hit: e, DistSq: distSq})
 	}
 
@@ -227,8 +227,8 @@ func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainSc
 		if !ok {
 			return true
 		}
-		px, py := vmath.Point{X: x, Y: y}.CenterF()
-		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
+		px, py := vmath.Point{X: x, Y: y}.Center()
+		distSq := vmath.MagnitudeSq(px-fromX, py-fromY)
 
 		if i, exists := compositeIdx[headerEntity]; exists {
 			if distSq < composites[i].DistSq {
@@ -346,8 +346,8 @@ func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, from
 		if !ok {
 			continue
 		}
-		mx, my := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
-		d := vmath.MagnitudeSqF(mx-fromX, my-fromY)
+		mx, my := vmath.Point{X: pos.X, Y: pos.Y}.Center()
+		d := vmath.MagnitudeSq(mx-fromX, my-fromY)
 		if bestDistSq < 0 || d < bestDistSq {
 			bestDistSq = d
 			best = member.Entity
@@ -422,7 +422,7 @@ func ResolveMovementTarget(w *engine.World, entity core.Entity, kineticComp *com
 		return kineticComp.PreciseX, kineticComp.PreciseY, true
 	}
 
-	baseCenterX, baseCenterY := vmath.Point{X: baseX, Y: baseY}.CenterF()
+	baseCenterX, baseCenterY := vmath.Point{X: baseX, Y: baseY}.Center()
 
 	navComp, hasNav := w.Components.Navigation.GetComponent(entity)
 	if !hasNav {
@@ -450,6 +450,6 @@ func ResolveBaseTargetPrecise(w *engine.World, entity core.Entity) (float64, flo
 	if !ok {
 		return 0, 0, false
 	}
-	px, py := vmath.Point{X: x, Y: y}.CenterF()
+	px, py := vmath.Point{X: x, Y: y}.Center()
 	return px, py, true
 }

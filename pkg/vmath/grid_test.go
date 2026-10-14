@@ -8,9 +8,9 @@ func randFloat(rng *FastRand, cells int) float64 {
 	return float64(rng.Intn(cells)) + rng.Float64()
 }
 
-func collectIterF(x1, y1, x2, y2 float64) [][2]int {
+func collectIter(x1, y1, x2, y2 float64) [][2]int {
 	out := make([][2]int, 0, 64)
-	tr := NewGridTraverserF(x1, y1, x2, y2)
+	tr := NewGridTraverser(x1, y1, x2, y2)
 	for tr.Next() {
 		x, y := tr.Pos()
 		out = append(out, [2]int{x, y})
@@ -52,14 +52,14 @@ func assertPath(t *testing.T, path [][2]int, sx, sy, tx, ty int) {
 
 func TestTraverseSameCell(t *testing.T) {
 	x, y := 3.25, 7.75
-	if p := collectIterF(x, y, x+0.1, y+0.1); len(p) != 1 || p[0] != [2]int{3, 7} {
+	if p := collectIter(x, y, x+0.1, y+0.1); len(p) != 1 || p[0] != [2]int{3, 7} {
 		t.Fatalf("sub-cell iterator = %v, want a single cell", p)
 	}
 }
 
 func TestTraverseAxisAligned(t *testing.T) {
 	sx, sy := 2.5, 4.5
-	p := collectIterF(sx, sy, 7.5, sy)
+	p := collectIter(sx, sy, 7.5, sy)
 	assertPath(t, p, 2, 4, 7, 4)
 	if len(p) != 6 {
 		t.Fatalf("horizontal run length %d, want 6", len(p))
@@ -72,56 +72,49 @@ func TestTraverseAxisAligned(t *testing.T) {
 }
 
 func TestTraverseNegativeCoordinates(t *testing.T) {
-	p := collectIterF(-3.5, -2.5, 2.5, 1.5)
+	p := collectIter(-3.5, -2.5, 2.5, 1.5)
 	assertPath(t, p, -4, -3, 2, 1)
 }
 
-func TestGridTraverserFInvariants(t *testing.T) {
+func TestGridTraverserInvariants(t *testing.T) {
 	rng := NewFastRand(0x6218)
 	for range 5000 {
 		x1, y1 := randFloat(rng, 48), randFloat(rng, 48)
 		x2, y2 := randFloat(rng, 48), randFloat(rng, 48)
-		p := collectIterF(x1, y1, x2, y2)
-		start := PointAtF(x1, y1)
-		target := PointAtF(x2, y2)
+		p := collectIter(x1, y1, x2, y2)
+		start := PointAt(x1, y1)
+		target := PointAt(x2, y2)
 		assertPath(t, p, start.X, start.Y, target.X, target.Y)
 	}
 }
 
-func TestFloatGridConversionsUseCellCentersAndFloor(t *testing.T) {
+func TestGridConversionsUseCellCentersAndFloor(t *testing.T) {
 	for _, p := range []Point{{X: 0, Y: 0}, {X: 3, Y: -4}, {X: -9, Y: 9}} {
-		x, y := CenteredFromGridF(p.X, p.Y)
-		wantX, wantY := p.CenterF()
+		x, y := CenteredFromGrid(p.X, p.Y)
+		wantX, wantY := p.Center()
 		if x != wantX || y != wantY {
-			t.Errorf("CenteredFromGridF(%v) = (%v,%v), want (%v,%v)", p, x, y, wantX, wantY)
+			t.Errorf("CenteredFromGrid(%v) = (%v,%v), want (%v,%v)", p, x, y, wantX, wantY)
 		}
-		gx, gy := GridFromCenteredF(x, y)
+		gx, gy := GridFromCentered(x, y)
 		if gx != p.X || gy != p.Y {
-			t.Errorf("GridFromCenteredF(%v.CenterF()) = (%d,%d)", p, gx, gy)
+			t.Errorf("GridFromCentered(%v.Center()) = (%d,%d)", p, gx, gy)
 		}
 	}
 
-	if x, y := GridFromCenteredF(-0.25, -1.75); x != -1 || y != -2 {
-		t.Errorf("GridFromCenteredF negative = (%d,%d), want (-1,-2)", x, y)
+	if x, y := GridFromCentered(-0.25, -1.75); x != -1 || y != -2 {
+		t.Errorf("GridFromCentered negative = (%d,%d), want (-1,-2)", x, y)
 	}
 }
 
 func TestCalculateCentroid(t *testing.T) {
-	if x, y := CalculateCentroid([]int{0, 0, 4, 8}); x != 2 || y != 4 {
-		t.Errorf("centroid = (%d,%d), want (2,4)", x, y)
+	if x, y := CalculateCentroid([]float64{0, 0, 4, 8}); x != 2 || y != 4 {
+		t.Errorf("centroid = (%v,%v), want (2,4)", x, y)
 	}
 	if x, y := CalculateCentroid(nil); x != 0 || y != 0 {
 		t.Error("nil centroid must be origin")
 	}
-	if x, y := CalculateCentroid([]int{1, 2, 3}); x != 0 || y != 0 {
+	if x, y := CalculateCentroid([]float64{1, 2, 3}); x != 0 || y != 0 {
 		t.Error("odd-length centroid must be origin")
-	}
-}
-
-func TestCalculateCentroidFMatchesInt(t *testing.T) {
-	x, y := CalculateCentroidF([]float64{0, 0, 4, 8})
-	if x != 2 || y != 4 {
-		t.Errorf("centroidF = (%v,%v), want (2,4)", x, y)
 	}
 }
 

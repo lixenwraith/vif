@@ -211,7 +211,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 		// Impact check before homing (specific target proximity)
 		dx := targetX - k.PreciseX
 		dy := targetY - k.PreciseY
-		if vmath.MagnitudeSqF(dx, dy) < parameter.MissileImpactRadiusSq {
+		if vmath.MagnitudeSq(dx, dy) < parameter.MissileImpactRadiusSq {
 			k.PreciseX = targetX
 			k.PreciseY = targetY
 			return true
@@ -228,7 +228,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 	// General combat collision: the missile detonates on any target contact.
 	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, m)
 	if hitType != impactNone {
-		k.PreciseX, k.PreciseY = vmath.Point{X: impactX, Y: impactY}.CenterF()
+		k.PreciseX, k.PreciseY = vmath.Point{X: impactX, Y: impactY}.Center()
 		return true
 	}
 
@@ -246,15 +246,15 @@ const (
 // traverseForImpact walks the path checking for wall and combatant collisions;
 // a hostile missile's combatants are cursors and their shields.
 func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, m *component.MissileComponent) (x, y int, hit impactType) {
-	from := vmath.PointAtF(fromX, fromY)
-	to := vmath.PointAtF(toX, toY)
+	from := vmath.PointAt(fromX, fromY)
+	to := vmath.PointAt(toX, toY)
 
 	// No movement or same cell
 	if from == to {
 		return 0, 0, impactNone
 	}
 
-	traverser := vmath.NewGridTraverserF(fromX, fromY, toX, toY)
+	traverser := vmath.NewGridTraverser(fromX, fromY, toX, toY)
 	lastSafeX, lastSafeY := from.X, from.Y
 
 	for traverser.Next() {
@@ -293,7 +293,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 	// 1. Sticky hit entity
 	if m.HitEntity != 0 {
 		if pos, ok := s.world.Positions.GetPosition(m.HitEntity); ok {
-			x, y := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+			x, y := vmath.Point{X: pos.X, Y: pos.Y}.Center()
 			return x, y, true
 		}
 		m.HitEntity = 0
@@ -309,7 +309,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 			}
 			m.TargetEntity = 0
 		} else if pos, ok := s.world.Positions.GetPosition(m.TargetEntity); ok {
-			x, y := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+			x, y := vmath.Point{X: pos.X, Y: pos.Y}.Center()
 			m.HitEntity = m.TargetEntity
 			return x, y, true
 		} else {
@@ -319,13 +319,13 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 
 	// 3. Retarget: nearest cursor for a hostile missile, nearest combatant otherwise
 	if m.Hostile {
-		cell := vmath.PointAtF(missileX, missileY)
+		cell := vmath.PointAt(missileX, missileY)
 		cursor, x, y, ok := ClosestCursor(s.world, cell.X, cell.Y)
 		if !ok {
 			return 0, 0, false
 		}
 		m.TargetEntity, m.HitEntity = cursor, cursor
-		cx, cy := vmath.Point{X: x, Y: y}.CenterF()
+		cx, cy := vmath.Point{X: x, Y: y}.Center()
 		return cx, cy, true
 	}
 	targets := FindNearestTargets(s.world, missileX, missileY, 1, engine.ScopeBoth, m.Owner)
@@ -338,7 +338,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 	m.HitEntity = nearest.Hit
 
 	if pos, ok := s.world.Positions.GetPosition(nearest.Hit); ok {
-		x, y := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		x, y := vmath.Point{X: pos.X, Y: pos.Y}.Center()
 		return x, y, true
 	}
 
@@ -356,20 +356,20 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 	sumX, sumY, validCount := 0.0, 0.0, 0
 	for _, t := range p.Targets {
 		if pos, ok := s.world.Positions.GetPosition(t); ok {
-			cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+			cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.Center()
 			sumX += cx
 			sumY += cy
 			validCount++
 		}
 	}
 
-	originX, originY := vmath.Point{X: p.OriginX, Y: p.OriginY}.CenterF()
+	originX, originY := vmath.Point{X: p.OriginX, Y: p.OriginY}.Center()
 
 	baseDirX, baseDirY := 0.0, -1.0 // Default UP
 	if validCount > 0 {
 		centroidX := sumX / float64(validCount)
 		centroidY := sumY / float64(validCount)
-		dirX, dirY := vmath.Normalize2DF(centroidX-originX, centroidY-originY)
+		dirX, dirY := vmath.Normalize2D(centroidX-originX, centroidY-originY)
 		if dirX != 0 || dirY != 0 {
 			baseDirX, baseDirY = dirX, dirY
 		}
@@ -385,7 +385,7 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 
 	for i := range p.Count {
 		angle := startAngle + step*float64(i)
-		dirX, dirY := vmath.RotateVectorF(baseDirX, baseDirY, angle*vmath.TwoPi)
+		dirX, dirY := vmath.RotateVector(baseDirX, baseDirY, angle*vmath.TwoPi)
 
 		// Stagger initial speed slightly for visual spread
 		speedFactor := 1.0 - parameter.MissileStaggerFactor*float64(i)
@@ -432,7 +432,7 @@ func (s *MissileSystem) spawnMissile(p *event.MissileSpawnRequestPayload, x, y, 
 		},
 	})
 
-	cell := vmath.PointAtF(x, y)
+	cell := vmath.PointAt(x, y)
 	s.world.Positions.SetPosition(e, component.PositionComponent{X: cell.X, Y: cell.Y})
 	armTimer(s.world, e, component.TimerDeadline, parameter.MissileMaxLifetime)
 	s.statSpawned.Add(1)

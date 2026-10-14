@@ -143,16 +143,16 @@ func flyLoot(t *testing.T, w *engine.World, lootEntity, owner core.Entity, maxTi
 			out.ticks = i
 			return out
 		}
-		if speed := vmath.MagnitudeF(k.VelX, k.VelY); speed > out.peakSpeed {
+		if speed := vmath.Magnitude(k.VelX, k.VelY); speed > out.peakSpeed {
 			out.peakSpeed = speed
 		}
 		if pos, ok := w.Positions.GetPosition(owner); ok {
-			cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
-			if d := vmath.MagnitudeF(k.PreciseX-cx, k.PreciseY-cy); d > out.maxDist {
+			cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.Center()
+			if d := vmath.Magnitude(k.PreciseX-cx, k.PreciseY-cy); d > out.maxDist {
 				out.maxDist = d
 			}
 		}
-		if i > 0 && vmath.AbsF(k.PreciseX-lastX) < 0.02 && vmath.AbsF(k.PreciseY-lastY) < 0.02 {
+		if i > 0 && vmath.Abs(k.PreciseX-lastX) < 0.02 && vmath.Abs(k.PreciseY-lastY) < 0.02 {
 			run++
 			if run > out.pinned {
 				out.pinned = run
@@ -234,7 +234,7 @@ func TestLootSettlesInsteadOfOrbitingItsOwner(t *testing.T) {
 		t.Fatal("the drop carries no kinetic component")
 	}
 	ownerPos, _ := w.Positions.GetPosition(owner)
-	radius := vmath.MagnitudeF(float64(dropX-ownerPos.X), float64(dropY-ownerPos.Y))
+	radius := vmath.Magnitude(float64(dropX-ownerPos.X), float64(dropY-ownerPos.Y))
 	k.VelX, k.VelY = 0, 40 // across the line to its owner, hard
 
 	flight := flyLoot(t, w, drop, owner, 300)

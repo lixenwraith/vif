@@ -89,7 +89,7 @@ func (r *MissileRenderer) renderMissileTrueColor(
 		color := render.LerpRGB(startCol, endCol, tFactor)
 
 		// Step-DDA iterator (thinner diagonal profile than Supercover Traverse)
-		traverser := vmath.NewGridTraverserF(prevX, prevY, pt.X, pt.Y)
+		traverser := vmath.NewGridTraverser(prevX, prevY, pt.X, pt.Y)
 		for traverser.Next() {
 			mapX, mapY := traverser.Pos()
 
@@ -111,7 +111,7 @@ func (r *MissileRenderer) renderMissileTrueColor(
 
 // bodyCell resolves the screen cell a missile body occupies
 func (r *MissileRenderer) bodyCell(ctx render.RenderContext, kinetic *component.KineticComponent) (int, int, bool) {
-	point := vmath.PointAtF(kinetic.PreciseX, kinetic.PreciseY)
+	point := vmath.PointAt(kinetic.PreciseX, kinetic.PreciseY)
 	return ctx.MapToScreen(point.X, point.Y)
 }
 
@@ -190,7 +190,7 @@ func (r *MissileRenderer) renderMissile256(
 			continue
 		}
 
-		point := vmath.PointAtF(pt.X, pt.Y)
+		point := vmath.PointAt(pt.X, pt.Y)
 		mapX := point.X
 		mapY := point.Y
 

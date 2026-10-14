@@ -765,7 +765,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.nextSpawnOrder++
 
 	// Initialize Kinetic with centered spawn position, zero velocity
-	preciseX, preciseY := vmath.Point{X: spawnX, Y: spawnY}.CenterF()
+	preciseX, preciseY := vmath.Point{X: spawnX, Y: spawnY}.Center()
 	drainComp := component.DrainComponent{
 		SpawnOrder: s.nextSpawnOrder,
 		LastIntX:   spawnX,
@@ -1084,7 +1084,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		lastSafeX, lastSafeY := drainComp.LastIntX, drainComp.LastIntY
 		hitWall := false
 
-		traverser := vmath.NewGridTraverserF(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY)
+		traverser := vmath.NewGridTraverser(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY)
 		for traverser.Next() {
 			s.statGridSteps.Add(1)
 			x, y := traverser.Pos()
@@ -1151,7 +1151,7 @@ func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wa
 	if wallY != fromY {
 		physics.ReflectVelocityY(k, 1.0)
 	}
-	k.PreciseX, k.PreciseY = vmath.Point{X: fromX, Y: fromY}.CenterF()
+	k.PreciseX, k.PreciseY = vmath.Point{X: fromX, Y: fromY}.Center()
 }
 
 // handleCollisionAtPosition processes collision with a specific entity at a

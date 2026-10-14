@@ -12,7 +12,7 @@ import (
 var (
 	EmberRadiusX               = parameter.PlayerShieldRadiusX
 	EmberRadiusY               = parameter.PlayerShieldRadiusY
-	EmberInvRxSq, EmberInvRySq = vmath.EllipseInvRadiiSqF(EmberRadiusX, EmberRadiusY)
+	EmberInvRxSq, EmberInvRySq = vmath.EllipseInvRadiiSq(EmberRadiusX, EmberRadiusY)
 
 	// Precomputed constants
 	ExpLUTDecayK      float64 = vmath.ExpLUTDecayK
@@ -127,25 +127,25 @@ func InterpolateEmberParams(heat int) EmberParams {
 	t := float64(heat) / 100.0
 
 	return EmberParams{
-		JaggedAmp:     vmath.LerpF(emberJaggedAmp[0], emberJaggedAmp[1], t),
-		JaggedFreq:    vmath.LerpF(emberJaggedFreq[0], emberJaggedFreq[1], t),
-		JaggedSpeed:   vmath.LerpF(emberJaggedSpeed[0], emberJaggedSpeed[1], t),
-		Octave2:       vmath.LerpF(emberOctave2[0], emberOctave2[1], t),
-		Octave3:       vmath.LerpF(emberOctave3[0], emberOctave3[1], t),
-		EruptionPower: vmath.LerpF(emberEruptionPower[0], emberEruptionPower[1], t),
+		JaggedAmp:     vmath.Lerp(emberJaggedAmp[0], emberJaggedAmp[1], t),
+		JaggedFreq:    vmath.Lerp(emberJaggedFreq[0], emberJaggedFreq[1], t),
+		JaggedSpeed:   vmath.Lerp(emberJaggedSpeed[0], emberJaggedSpeed[1], t),
+		Octave2:       vmath.Lerp(emberOctave2[0], emberOctave2[1], t),
+		Octave3:       vmath.Lerp(emberOctave3[0], emberOctave3[1], t),
+		EruptionPower: vmath.Lerp(emberEruptionPower[0], emberEruptionPower[1], t),
 
-		CoreFalloff:   vmath.LerpF(emberCoreFalloff[0], emberCoreFalloff[1], t),
-		CorePower:     vmath.LerpF(emberCorePower[0], emberCorePower[1], t),
-		MidFalloff:    vmath.LerpF(emberMidFalloff[0], emberMidFalloff[1], t),
-		MidPower:      vmath.LerpF(emberMidPower[0], emberMidPower[1], t),
-		MidIntensity:  vmath.LerpF(emberMidIntensity[0], emberMidIntensity[1], t),
-		EdgePower:     vmath.LerpF(emberEdgePower[0], emberEdgePower[1], t),
-		EdgeIntensity: vmath.LerpF(emberEdgeIntensity[0], emberEdgeIntensity[1], t),
+		CoreFalloff:   vmath.Lerp(emberCoreFalloff[0], emberCoreFalloff[1], t),
+		CorePower:     vmath.Lerp(emberCorePower[0], emberCorePower[1], t),
+		MidFalloff:    vmath.Lerp(emberMidFalloff[0], emberMidFalloff[1], t),
+		MidPower:      vmath.Lerp(emberMidPower[0], emberMidPower[1], t),
+		MidIntensity:  vmath.Lerp(emberMidIntensity[0], emberMidIntensity[1], t),
+		EdgePower:     vmath.Lerp(emberEdgePower[0], emberEdgePower[1], t),
+		EdgeIntensity: vmath.Lerp(emberEdgeIntensity[0], emberEdgeIntensity[1], t),
 
-		RingAlpha:   vmath.LerpF(emberRingAlpha[0], emberRingAlpha[1], t),
-		RingWidth:   vmath.LerpF(emberRingWidth[0], emberRingWidth[1], t),
-		RingVisible: vmath.LerpF(emberRingVisible[0], emberRingVisible[1], t),
-		RingSpeed:   vmath.LerpF(emberRingSpeed[0], emberRingSpeed[1], t),
+		RingAlpha:   vmath.Lerp(emberRingAlpha[0], emberRingAlpha[1], t),
+		RingWidth:   vmath.Lerp(emberRingWidth[0], emberRingWidth[1], t),
+		RingVisible: vmath.Lerp(emberRingVisible[0], emberRingVisible[1], t),
+		RingSpeed:   vmath.Lerp(emberRingSpeed[0], emberRingSpeed[1], t),
 
 		HeatFactor: t,
 	}

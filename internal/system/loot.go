@@ -207,7 +207,7 @@ func (s *LootSystem) Update() {
 		// A transition or correction can shrink the shared map under private loot.
 		if s.world.Positions.IsOutOfBounds(curX, curY) {
 			curX, curY = min(max(curX, 0), config.MapWidth-1), min(max(curY, 0), config.MapHeight-1)
-			kineticComp.PreciseX, kineticComp.PreciseY = (vmath.Point{X: curX, Y: curY}).CenterF()
+			kineticComp.PreciseX, kineticComp.PreciseY = (vmath.Point{X: curX, Y: curY}).Center()
 			kineticComp.VelX, kineticComp.VelY = 0, 0
 			s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: curX, Y: curY})
 		}
@@ -244,8 +244,8 @@ func (s *LootSystem) Update() {
 			// press against whatever is in the way.
 			unreachable++
 			physics.ApplyLinearDrag(&kineticComp.Kinetic, parameter.LootVelocityBleed, dtSec)
-			if vmath.AbsF(kineticComp.VelX) < parameter.LootStopSpeed &&
-				vmath.AbsF(kineticComp.VelY) < parameter.LootStopSpeed {
+			if vmath.Abs(kineticComp.VelX) < parameter.LootStopSpeed &&
+				vmath.Abs(kineticComp.VelY) < parameter.LootStopSpeed {
 				kineticComp.VelX, kineticComp.VelY = 0, 0
 			}
 		}
@@ -352,7 +352,7 @@ func (s *LootSystem) homingTarget(
 		return 0, 0, false
 	}
 
-	ownerCenterX, ownerCenterY := vmath.Point{X: ownerPos.X, Y: ownerPos.Y}.CenterF()
+	ownerCenterX, ownerCenterY := vmath.Point{X: ownerPos.X, Y: ownerPos.Y}.Center()
 	if s.world.Positions.HasLineOfSight(curX, curY, ownerPos.X, ownerPos.Y, component.WallBlockKinetic) {
 		return ownerCenterX, ownerCenterY, true
 	}
@@ -366,8 +366,8 @@ func (s *LootSystem) homingTarget(
 		return 0, 0, false
 	}
 
-	lookahead := vmath.ClampF(
-		vmath.MagnitudeF(ownerCenterX-kineticComp.PreciseX, ownerCenterY-kineticComp.PreciseY),
+	lookahead := vmath.Clamp(
+		vmath.Magnitude(ownerCenterX-kineticComp.PreciseX, ownerCenterY-kineticComp.PreciseY),
 		1.0, parameter.LootFlowLookahead)
 	return kineticComp.PreciseX + flowX*lookahead, kineticComp.PreciseY + flowY*lookahead, true
 }
@@ -458,11 +458,11 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	}
 
 	entity := s.world.CreateEntity(core.DomainPlayer)
-	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
+	preciseX, preciseY := vmath.Point{X: x, Y: y}.Center()
 
 	var velX, velY float64
 	if burstDirX != 0 || burstDirY != 0 {
-		dirX, dirY := vmath.Normalize2DF(float64(burstDirX), float64(burstDirY))
+		dirX, dirY := vmath.Normalize2D(float64(burstDirX), float64(burstDirY))
 		velX = dirX * parameter.LootBurstSpeed
 		velY = dirY * parameter.LootBurstSpeed
 	}

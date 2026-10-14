@@ -139,7 +139,7 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 	pulse := 0.5
 	if periodMs > 0 {
 		angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
-		pulse = 0.5 + 0.5*vmath.SinF(angle)
+		pulse = 0.5 + 0.5*vmath.Sin(angle)
 	}
 
 	glowIntensity := visual.PylonGlowIntensityMin +

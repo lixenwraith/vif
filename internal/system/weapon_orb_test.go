@@ -52,14 +52,14 @@ func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
 				angles = append(angles, orb.OrbitAngle)
 			}
 			if point == edge {
-				samples := vmath.SampleEllipseGridF(point.X, point.Y, parameter.OrbOrbitRadiusX, parameter.OrbOrbitRadiusY, vmath.EllipseSampleCount)
+				samples := vmath.SampleEllipseGrid(point.X, point.Y, parameter.OrbOrbitRadiusX, parameter.OrbOrbitRadiusY, vmath.EllipseSampleCount)
 				blocked := make([]bool, len(samples))
 				for i, p := range samples {
 					blocked[i] = !w.Positions.IsPointValidForOrbit(p[0], p[1], component.WallBlockKinetic)
 				}
-				arc := vmath.FindUnblockedArcsF(blocked)[0]
+				arc := vmath.FindUnblockedArcs(blocked)[0]
 				for i := range angles {
-					angles[i] = vmath.NormalizeAngleF(angles[i] - arc.StartAngle)
+					angles[i] = vmath.NormalizeAngle(angles[i] - arc.StartAngle)
 				}
 				slices.Sort(angles)
 				for i := 1; i < len(angles); i++ {
@@ -70,7 +70,7 @@ func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
 			} else {
 				slices.Sort(angles)
 				for i := range angles {
-					gap := vmath.NormalizeAngleF(angles[(i+1)%len(angles)] - angles[i])
+					gap := vmath.NormalizeAngle(angles[(i+1)%len(angles)] - angles[i])
 					if math.Abs(gap-vmath.TwoPi/float64(len(angles))) > 1e-8 {
 						t.Fatalf("after edge %v: uneven free orbit %v", edge, angles)
 					}

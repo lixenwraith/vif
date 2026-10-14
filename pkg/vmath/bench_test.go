@@ -14,27 +14,9 @@ var (
 
 const bfx, bfy = 7.25, 3.5
 
-func BenchmarkMulFloat(b *testing.B) {
+func BenchmarkMagnitude(b *testing.B) {
 	for b.Loop() {
-		sinkF = bfx * bfy
-	}
-}
-
-func BenchmarkDivFloat(b *testing.B) {
-	for b.Loop() {
-		sinkF = bfx / bfy
-	}
-}
-
-func BenchmarkSqrtFloat(b *testing.B) {
-	for b.Loop() {
-		sinkF = math.Sqrt(bfx)
-	}
-}
-
-func BenchmarkMagnitudeF(b *testing.B) {
-	for b.Loop() {
-		sinkF = MagnitudeF(bfx, bfy)
+		sinkF = Magnitude(bfx, bfy)
 	}
 }
 
@@ -44,15 +26,15 @@ func BenchmarkMagnitudeHypot(b *testing.B) {
 	}
 }
 
-func BenchmarkNormalize2DF(b *testing.B) {
+func BenchmarkNormalize2D(b *testing.B) {
 	for b.Loop() {
-		sinkF, _ = Normalize2DF(bfx, bfy)
+		sinkF, _ = Normalize2D(bfx, bfy)
 	}
 }
 
-func BenchmarkSinF(b *testing.B) {
+func BenchmarkSin(b *testing.B) {
 	for b.Loop() {
-		sinkF = SinF(bfx)
+		sinkF = Sin(bfx)
 	}
 }
 
@@ -62,9 +44,9 @@ func BenchmarkSinStdlib(b *testing.B) {
 	}
 }
 
-func BenchmarkAtan2F(b *testing.B) {
+func BenchmarkAtan2(b *testing.B) {
 	for b.Loop() {
-		sinkF = Atan2F(bfy, bfx)
+		sinkF = Atan2(bfy, bfx)
 	}
 }
 
@@ -74,17 +56,17 @@ func BenchmarkAtan2Stdlib(b *testing.B) {
 	}
 }
 
-func BenchmarkEllipseContainsF(b *testing.B) {
-	invRx, invRy := EllipseInvRadiiSqF(5, 2.5)
+func BenchmarkEllipseContains(b *testing.B) {
+	invRx, invRy := EllipseInvRadiiSq(5, 2.5)
 	for b.Loop() {
-		sinkB = EllipseContainsF(bfx, bfy, invRx, invRy)
+		sinkB = EllipseContains(bfx, bfy, invRx, invRy)
 	}
 }
 
-func BenchmarkGridTraverserF(b *testing.B) {
+func BenchmarkGridTraverser(b *testing.B) {
 	n := 0
 	for b.Loop() {
-		tr := NewGridTraverserF(2.5, 3.5, 40.5, 28.5)
+		tr := NewGridTraverser(2.5, 3.5, 40.5, 28.5)
 		for tr.Next() {
 			n++
 		}
@@ -92,8 +74,8 @@ func BenchmarkGridTraverserF(b *testing.B) {
 	sinkI = int64(n)
 }
 
-func BenchmarkExpDecayF(b *testing.B) {
+func BenchmarkExpDecay(b *testing.B) {
 	for b.Loop() {
-		sinkF = ExpDecayF(137)
+		sinkF = ExpDecay(137)
 	}
 }

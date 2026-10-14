@@ -86,7 +86,7 @@ func (s *KrakenSystem) spawn(p *event.KrakenSpawnRequestPayload) {
 	}
 	rx, ry := int(parameter.KrakenBodyRadius*2), int(parameter.KrakenBodyRadius)
 	x, y = max(rx, min(x, cfg.MapWidth-rx-1)), max(ry, min(y, cfg.MapHeight-ry-1))
-	px, py := (vmath.Point{X: x, Y: y}).CenterF()
+	px, py := (vmath.Point{X: x, Y: y}).Center()
 	if !s.bodyFits(px, py) {
 		s.world.PushEvent(event.EventKrakenSpawnFailed, nil)
 		return
@@ -150,7 +150,7 @@ func (s *KrakenSystem) Update() {
 			s.chooseState(k, motion.PreciseX, motion.PreciseY)
 		}
 		s.animate(k, motion, seconds)
-		cell := vmath.PointAtF(motion.PreciseX, motion.PreciseY)
+		cell := vmath.PointAt(motion.PreciseX, motion.PreciseY)
 		s.world.Positions.SetPosition(e, component.PositionComponent{X: cell.X, Y: cell.Y})
 		s.syncMembers(e, k, motion.PreciseX, motion.PreciseY)
 		s.interact()
@@ -224,7 +224,7 @@ func (s *KrakenSystem) aimCharge(k *component.KrakenComponent, x, y float64) boo
 		if !ok {
 			continue
 		}
-		tx, ty := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		tx, ty := vmath.Point{X: pos.X, Y: pos.Y}.Center()
 		tx = max(rx+0.5, min(tx, float64(cfg.MapWidth)-rx-0.5))
 		ty = max(ry+0.5, min(ty, float64(cfg.MapHeight)-ry-0.5))
 		d := (tx-x)*(tx-x) + 4*(ty-y)*(ty-y)
@@ -469,7 +469,7 @@ func (s *KrakenSystem) touches(cursor core.Entity, x, y int) bool {
 	rx, ry := int(shield.RadiusX), int(shield.RadiusY)
 	for cy := y - ry; cy <= y+ry; cy++ {
 		for cx := x - rx; cx <= x+rx; cx++ {
-			if s.covers(cx, cy) && vmath.EllipseContainsPointF(cx, cy, x, y, shield.InvRxSq, shield.InvRySq) {
+			if s.covers(cx, cy) && vmath.EllipseContainsPoint(cx, cy, x, y, shield.InvRxSq, shield.InvRySq) {
 				return true
 			}
 		}

@@ -364,7 +364,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 	})
 
 	// Kinetic component
-	preciseX, preciseY := vmath.Point{X: headX, Y: headY}.CenterF()
+	preciseX, preciseY := vmath.Point{X: headX, Y: headY}.Center()
 	s.world.Components.Kinetic.SetComponent(headEntity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
@@ -489,7 +489,7 @@ func (s *SnakeSystem) processSpawnSequence(snakeComp *component.SnakeComponent, 
 		return
 	}
 
-	restX, restY := vmath.Point{X: snakeComp.SpawnOriginX, Y: snakeComp.SpawnOriginY}.CenterF()
+	restX, restY := vmath.Point{X: snakeComp.SpawnOriginX, Y: snakeComp.SpawnOriginY}.Center()
 	bodyComp.Segments = append(bodyComp.Segments, component.SnakeSegment{
 		RestX:     restX,
 		RestY:     restY,
@@ -523,7 +523,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 		return false
 	}
 
-	perpX, perpY := vmath.PerpendicularF(headComp.FacingX, headComp.FacingY)
+	perpX, perpY := vmath.Perpendicular(headComp.FacingX, headComp.FacingY)
 	createdAny := false
 
 	for _, lateralOffset := range snakeLateralOffsets {
@@ -548,7 +548,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 			HitPoints:        memberHP,
 		})
 
-		preciseX, preciseY := vmath.Point{X: memberX, Y: memberY}.CenterF()
+		preciseX, preciseY := vmath.Point{X: memberX, Y: memberY}.Center()
 		s.world.Components.Kinetic.SetComponent(memberEntity, component.KineticComponent{
 			Kinetic: physics.Kinetic{
 				PreciseX: preciseX,
@@ -608,9 +608,9 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	kineticComp.VelX, kineticComp.VelY = physics.CapSpeed(kineticComp.VelX, kineticComp.VelY, parameter.SnakeMaxSpeed)
 
 	// Update facing direction from velocity
-	velMag := vmath.MagnitudeF(kineticComp.VelX, kineticComp.VelY)
+	velMag := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
 	if velMag > 0.5 {
-		headComp.FacingX, headComp.FacingY = vmath.Normalize2DF(kineticComp.VelX, kineticComp.VelY)
+		headComp.FacingX, headComp.FacingY = vmath.Normalize2D(kineticComp.VelX, kineticComp.VelY)
 	}
 
 	// Wall collision check
@@ -654,7 +654,7 @@ func (s *SnakeSystem) updateTrail(headEntity core.Entity, headComp *component.Sn
 	// Sub-cell threshold against a cell-integer delta: any cell change passes
 	dx := float64(headPos.X - headComp.LastTrailX)
 	dy := float64(headPos.Y - headComp.LastTrailY)
-	if vmath.MagnitudeSqF(dx, dy) < parameter.SnakeTrailSampleIntervalSq {
+	if vmath.MagnitudeSq(dx, dy) < parameter.SnakeTrailSampleIntervalSq {
 		return
 	}
 
@@ -690,12 +690,12 @@ func (s *SnakeSystem) updateSegmentRestPositions(headComp *component.SnakeHeadCo
 		}
 
 		pos := headComp.Trail[idx]
-		bodyComp.Segments[i].RestX, bodyComp.Segments[i].RestY = pos.CenterF()
+		bodyComp.Segments[i].RestX, bodyComp.Segments[i].RestY = pos.Center()
 	}
 }
 
 func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyComponent, headComp *component.SnakeHeadComponent, resolved []resolvedSegment, dtSec float64) {
-	perpX, perpY := vmath.PerpendicularF(headComp.FacingX, headComp.FacingY)
+	perpX, perpY := vmath.Perpendicular(headComp.FacingX, headComp.FacingY)
 
 	for i := range bodyComp.Segments {
 		seg := &bodyComp.Segments[i]
@@ -885,7 +885,7 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 	var tailX, tailY int
 	if len(bodyComp.Segments) > 0 {
 		lastSeg := &bodyComp.Segments[len(bodyComp.Segments)-1]
-		tail := vmath.PointAtF(lastSeg.RestX, lastSeg.RestY)
+		tail := vmath.PointAt(lastSeg.RestX, lastSeg.RestY)
 		tailX, tailY = tail.X, tail.Y
 	} else {
 		headPos, ok := s.world.Positions.GetPosition(snakeComp.HeadEntity)
@@ -897,7 +897,7 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 	}
 
 	if s.createBodySegmentMembers(snakeComp.BodyEntity, tailX, tailY, len(bodyComp.Segments), headComp, parameter.CombatInitialHPSnakeMemberMin) {
-		restX, restY := vmath.Point{X: snakeComp.SpawnOriginX, Y: snakeComp.SpawnOriginY}.CenterF()
+		restX, restY := vmath.Point{X: snakeComp.SpawnOriginX, Y: snakeComp.SpawnOriginY}.Center()
 		bodyComp.Segments = append(bodyComp.Segments, component.SnakeSegment{
 			RestX:     restX,
 			RestY:     restY,

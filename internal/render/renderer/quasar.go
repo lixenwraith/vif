@@ -130,8 +130,8 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 
 			dx := float64(mapX - headerX)
 			dy := float64(mapY - headerY)
-			dyCirc := vmath.ScaleToCircularF(dy)
-			dist := vmath.MagnitudeF(dx, dyCirc)
+			dyCirc := vmath.ScaleToCircular(dy)
+			dist := vmath.Magnitude(dx, dyCirc)
 
 			normDist := dist / quasar.ZapRadius
 

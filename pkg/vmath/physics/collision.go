@@ -84,7 +84,7 @@ func CheckSoftCollision(
 	sourceX, sourceY int,
 	invRxSq, invRySq float64,
 ) (radialX, radialY float64, hit bool) {
-	if !vmath.EllipseContainsPointF(entityX, entityY, sourceX, sourceY, invRxSq, invRySq) {
+	if !vmath.EllipseContainsPoint(entityX, entityY, sourceX, sourceY, invRxSq, invRySq) {
 		return 0, 0, false
 	}
 
@@ -122,13 +122,13 @@ func ApplyCollisionImpulse(
 	magnitudeMin, magnitudeMax float64,
 	rng *vmath.FastRand,
 ) (impulseX, impulseY float64) {
-	dirX, dirY := vmath.Normalize2DF(impactorVelX, impactorVelY)
+	dirX, dirY := vmath.Normalize2D(impactorVelX, impactorVelY)
 	if dirX == 0 && dirY == 0 {
 		return 0, 0
 	}
 
 	if a := randSpread(angleVar, rng); a != 0 {
-		dirX, dirY = vmath.RotateVectorF(dirX, dirY, a)
+		dirX, dirY = vmath.RotateVector(dirX, dirY, a)
 	}
 
 	magnitude := magnitudeMin
@@ -151,24 +151,24 @@ func ApplyOffsetCollisionImpulse(
 	magnitudeMin, magnitudeMax float64,
 	rng *vmath.FastRand,
 ) (impulseX, impulseY float64) {
-	baseX, baseY := vmath.Normalize2DF(impactorVelX, impactorVelY)
+	baseX, baseY := vmath.Normalize2D(impactorVelX, impactorVelY)
 	if baseX == 0 && baseY == 0 {
 		return 0, 0
 	}
 
 	// Offset direction: push away from hit point (negate offset)
 	if offsetInfluence > 0 && (offsetX != 0 || offsetY != 0) {
-		offDirX, offDirY := vmath.Normalize2DF(float64(-offsetX), float64(-offsetY))
+		offDirX, offDirY := vmath.Normalize2D(float64(-offsetX), float64(-offsetY))
 
 		inv := 1.0 - offsetInfluence
 		baseX = baseX*inv + offDirX*offsetInfluence
 		baseY = baseY*inv + offDirY*offsetInfluence
 
-		baseX, baseY = vmath.Normalize2DF(baseX, baseY)
+		baseX, baseY = vmath.Normalize2D(baseX, baseY)
 	}
 
 	if a := randSpread(angleVar, rng); a != 0 {
-		baseX, baseY = vmath.RotateVectorF(baseX, baseY, a)
+		baseX, baseY = vmath.RotateVector(baseX, baseY, a)
 	}
 
 	magnitude := magnitudeMin

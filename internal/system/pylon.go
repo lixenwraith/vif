@@ -336,14 +336,14 @@ func (s *PylonSystem) createDiscMembers(
 	var members []component.MemberEntry
 
 	// Precompute inverse squared radii for ellipse containment.
-	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(float64(radiusX), float64(radiusY))
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(float64(radiusX), float64(radiusY))
 
 	hpRange := maxHP - minHP
 
 	for dy := -radiusY; dy <= radiusY; dy++ {
 		for dx := -radiusX; dx <= radiusX; dx++ {
 			// Ellipse containment check.
-			if !vmath.EllipseContainsPointF(dx, dy, 0, 0, invRxSq, invRySq) {
+			if !vmath.EllipseContainsPoint(dx, dy, 0, 0, invRxSq, invRySq) {
 				continue
 			}
 
@@ -351,7 +351,7 @@ func (s *PylonSystem) createDiscMembers(
 			// normDistSq is 0 at the center and 1 at the ellipse boundary.
 			var hp int
 			if hpRange > 0 {
-				normDistSq := vmath.EllipseDistSqF(float64(dx), float64(dy), invRxSq, invRySq)
+				normDistSq := vmath.EllipseDistSq(float64(dx), float64(dy), invRxSq, invRySq)
 				normDist := math.Sqrt(normDistSq)
 				if normDist > 1.0 {
 					normDist = 1.0

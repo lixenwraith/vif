@@ -70,5 +70,5 @@ const (
 
 // Pre-computed inverse squared radii for ellipse overlap checks
 var (
-	QuasarCollisionInvRxSq, QuasarCollisionInvRySq = vmath.EllipseInvRadiiSqF(QuasarCollisionRadiusX, QuasarCollisionRadiusY)
+	QuasarCollisionInvRxSq, QuasarCollisionInvRySq = vmath.EllipseInvRadiiSq(QuasarCollisionRadiusX, QuasarCollisionRadiusY)
 )
