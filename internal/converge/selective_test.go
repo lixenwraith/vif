@@ -78,32 +78,10 @@ func TestBaselineBytesFollowTheirBaseline(t *testing.T) {
 // rather than the world, and the rest follows as the link delivers it.
 func TestAWholeWorldLeavesAsItsLinkDrains(t *testing.T) {
 	t.Parallel()
-	mesh := network.NewMesh()
-	mesh.Link(1, 2)
-	mesh.Shape(1, 2, network.LinkShape{BytesPerTick: 2000})
-	runs := []*run{newRun(t, 1, mesh.Node(1), roster(2)), newRun(t, 2, mesh.Node(2), roster(2))}
-	host, guest := runs[0], runs[1]
-	for _, r := range runs {
-		r.open(1, nil, false)
-	}
-	// A world that compresses poorly, so its keyframe spans many chunks.
-	cap := capture(1, 0)
-	rng := vmath.NewFastRand(3)
-	for i := range 6000 {
-		cap.World.Positions = append(cap.World.Positions, engine.StoreEntry[component.PositionComponent]{
-			Entity: core.Entity(captureRows + i + 1),
-			Value:  component.PositionComponent{X: rng.Intn(1 << 15), Y: rng.Intn(1 << 15)},
-		})
-	}
-	cap.World.NextEntity = uint64(captureRows + 6000 + 1)
-	host.world.setWorld(seal(cap))
-	for range 8 {
-		deliver(runs, 1) // probes give the link the origin a backlog is read against
-	}
-
+	host, guest, runs := slowLink(t)
 	host.c.sendKeyframeTo(host.world.port, 2, host.world.Position().Tick)
 	host.c.publishMu.Lock()
-	left, total := len(host.c.peers[2].outbox), len(host.c.keyCorrection)
+	left, total := len(host.c.peers[2].flight.frames), len(host.c.keyCorrection)
 	host.c.publishMu.Unlock()
 	if total < 8*parameter.SnapshotCorrectionChunkBytes || left == 0 {
 		t.Fatalf("a %d-byte world left %d chunks behind on a slow link; want it paced", total, left)
@@ -118,6 +96,56 @@ func TestAWholeWorldLeavesAsItsLinkDrains(t *testing.T) {
 		deliver(runs, 1)
 	}
 	t.Fatal("the rest of the world never followed its first chunks")
+}
+
+// TestWhatABusyLinkIsOwedFollowsWithoutAPublication: what a peer is owed while its
+// link still delivers an earlier transfer waits behind it rather than being dropped,
+// and leaves as the link drains with nothing but the exchange running. A dropped
+// answer would wait on a publication a driven session never makes.
+func TestWhatABusyLinkIsOwedFollowsWithoutAPublication(t *testing.T) {
+	t.Parallel()
+	host, guest, runs := slowLink(t)
+	host.c.sendKeyframeTo(host.world.port, 2, host.world.Position().Tick)
+
+	host.world.advance(5)
+	guest.world.advance(5) // the clock a world at the new tick installs against
+	want := host.world.Position().Tick
+	host.c.sendKeyframeTo(host.world.port, 2, want)
+
+	for range 400 {
+		if guest.world.installedTick() == want {
+			return
+		}
+		deliver(runs, 1)
+	}
+	t.Fatalf("the guest holds tick %d; the world owed behind the first never followed it", guest.world.installedTick())
+}
+
+// slowLink is a host and a guest on one link that drains far slower than the world
+// between them, which compresses poorly, so a keyframe spans many chunks.
+func slowLink(t *testing.T) (host, guest *run, runs []*run) {
+	t.Helper()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Shape(1, 2, network.LinkShape{BytesPerTick: 2000})
+	runs = []*run{newRun(t, 1, mesh.Node(1), roster(2)), newRun(t, 2, mesh.Node(2), roster(2))}
+	for _, r := range runs {
+		r.open(1, nil, false)
+	}
+	cap := capture(1, 0)
+	rng := vmath.NewFastRand(3)
+	for i := range 6000 {
+		cap.World.Positions = append(cap.World.Positions, engine.StoreEntry[component.PositionComponent]{
+			Entity: core.Entity(captureRows + i + 1),
+			Value:  component.PositionComponent{X: rng.Intn(1 << 15), Y: rng.Intn(1 << 15)},
+		})
+	}
+	cap.World.NextEntity = uint64(captureRows + 6000 + 1)
+	runs[0].world.setWorld(seal(cap))
+	for range 8 {
+		deliver(runs, 1) // probes give the link the origin a backlog is read against
+	}
+	return runs[0], runs[1], runs
 }
 
 // exchange is a host and a guest on one link, the guest holding the host's world
