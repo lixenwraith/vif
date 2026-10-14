@@ -59,14 +59,9 @@ func near(p component.PositionComponent, c linkpace.Cell, radius int) bool {
 
 // movedEntities is the set of shared entities a delta against the current baseline
 // would touch; nil for a keyframe, which carries the world whole. Only placement and
-// motion are consulted: they are what a participant standing near an entity
-// perceives, and the two stores whose delta says the entity is doing something.
-//
-// Two stores compared rather than the whole-world delta this used to read: that
-// delta is every store, through reflect.DeepEqual and four maps each, and the
-// publication path threw all of it away but these two. At the storm high water it
-// was 837us and 2,368 allocations against 35us and six, on the cadence where a
-// converged exchange is otherwise hashes.
+// motion are consulted: they are what a participant near an entity perceives. Two
+// stores compared, not a whole-world delta through reflect.DeepEqual: at the storm
+// high water that costs 837us and 2,368 allocations, these two 35us and six.
 func movedEntities(base, next snapshot.SharedCapture, keyframe bool) map[core.Entity]struct{} {
 	if keyframe {
 		return nil

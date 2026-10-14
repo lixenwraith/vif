@@ -252,8 +252,8 @@ func (a *App) openAuthorityLocked(o network.SessionOffer, local network.PeerID) 
 
 // applyAuthorityChange moves the membership a handoff carries into the places the
 // session reads it from, and switches this instance's role. Nothing is re-derived:
-// roster, slots, anchor and barrier delay are adopted exactly as carried, which is
-// what makes them byte-identical on every survivor.
+// roster, slots and anchor are adopted exactly as carried, which is what makes
+// them identical on every survivor.
 func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	a.sessionMu.Lock()
 	a.sessionRoster = slices.Clone(rec.Roster)

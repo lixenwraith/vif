@@ -138,9 +138,8 @@ func (c *Corrections) Selective() SelectiveReport {
 
 // AuthorityReport is the structured answer to who is authoring, beside the one line
 // Summary gives the status bar.
-// Roster, Anchor and Delay are the membership a handoff carries unchanged: a record
-// is refused unless all three are the ones the session closed on, so what they say
-// before and after one is what says a handoff moved authorship and nothing else.
+// Roster and Anchor are the membership a handoff carries; a record is refused
+// unless its surviving roster matches this instance's.
 type AuthorityReport struct {
 	Term       network.AuthorityTerm
 	Authority  network.PeerID

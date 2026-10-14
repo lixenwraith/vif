@@ -150,12 +150,15 @@ type Config struct {
 	// file. Harnesses set it to capture records in memory.
 	JournalSink event.JournalSink
 
-	// HostAddress binds a startup-only two-participant session. The scheduler
-	// remains at tick zero until the joining participant passes the start gate.
+	// HostAddress is the address this run hosts a session on. An interactive run
+	// opens it once its clock runs, as :host does; a scripted, bot-driven or
+	// dedicated host holds tick zero in a lobby until lobbyQuorum guests pass the
+	// start gate.
 	HostAddress string
 
-	// JoinAddress connects to a startup-only session. The host anchor supplies
-	// simulation identity before the App is constructed.
+	// JoinAddress is the session this run joins, at startup or through :join, at
+	// whatever tick the host has reached. The host's offer supplies simulation
+	// identity before the App is constructed.
 	JoinAddress string
 
 	// SessionName is what one address calls this session, so a deployment can put
@@ -183,11 +186,11 @@ type Config struct {
 	// keep up; nil keeps the default. See converge.SlowPolicy.
 	SlowPolicy *converge.SlowPolicy
 
-	// Participants is a ceiling on the roster, itself included; zero means the whole
-	// roster. On an interactive host an explicit value is also what the startup
-	// lobby waits for — a party that says how big it is starts together. Unset, the
-	// lobby starts on its first guest and the rest arrive through the mid-run gate,
-	// which is what a dedicated host always does.
+	// Participants is a ceiling on the roster's cursors, a playing host's own
+	// included; zero means the whole roster. On a scripted or bot-driven host an
+	// explicit value is also what the startup lobby waits for. Unset, and always on
+	// a dedicated host, the lobby starts on its first guest and the rest arrive
+	// through the mid-run gate; an interactive host has no lobby.
 	Participants int
 
 	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats

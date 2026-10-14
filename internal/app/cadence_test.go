@@ -60,8 +60,8 @@ func runSession(host, guest *App, ticks int) {
 }
 
 // TestAHealthyLinkKeepsTheNominalPointAndHidesItsTiming is the "do no harm" case
-// plus the boundary the phase is constrained by: an unconstrained link is not
-// adapted away from the shipped cadence, and no link measurement reaches the
+// plus the boundary the adaptive cadence is constrained by: an unconstrained link
+// is not adapted away from the shipped cadence, and no link measurement reaches the
 // compared surface, where it would be a value a session could diverge over.
 func TestAHealthyLinkKeepsTheNominalPointAndHidesItsTiming(t *testing.T) {
 	t.Parallel()
@@ -154,10 +154,10 @@ func TestALinkThatIsGoneLeavesNoOperatingPoint(t *testing.T) {
 	}
 }
 
-// TestAConstrainedLinkSlowsTheCadenceAndPublishesIt is the phase's headline: the
-// cadence becomes a function of what the link carries, the operating point is
-// reported rather than guessed at, and the correction magnitude that rises with
-// it stays bounded — a magnitude that climbs is divergence, not degradation.
+// TestAConstrainedLinkSlowsTheCadenceAndPublishesIt is the adaptive cadence's
+// headline: the cadence becomes a function of what the link carries, the operating
+// point is reported rather than guessed at, and the correction magnitude that rises
+// with it stays bounded — a magnitude that climbs is divergence, not degradation.
 func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	t.Parallel()
 	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 200})

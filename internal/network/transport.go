@@ -83,8 +83,7 @@ func (t *Transport) Start() error {
 			}
 		}
 		// And then it listens, if it was asked to. A bind that fails is not fatal:
-		// the participant plays as a leaf, which is what every participant but the
-		// coordinator was before reach.go existed.
+		// the participant plays as a leaf.
 		if t.config.AcceptPeer != nil {
 			if err := t.serveAsPeer(); err != nil {
 				t.report(err)

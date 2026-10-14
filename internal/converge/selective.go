@@ -842,8 +842,9 @@ func (c *Corrections) applyRepair(body []byte) {
 		"sections", rep.Sections, "cells", rep.Rows)
 }
 
-// requestKeyframe asks the authority for a whole world and remembers that it is
-// waiting for one, so the next manifest does not start a repair instead.
+// requestKeyframe asks the peer its manifest came from for a whole world and
+// remembers that it is waiting for one, so the next manifest does not start a
+// repair instead. A relay answers it with MsgStateUnserved.
 func (c *Corrections) requestKeyframe(from uint32, want snapshot.CorrectionManifest) {
 	c.selectiveMu.Lock()
 	c.selective.wantKeyframe = true

@@ -1,7 +1,7 @@
 package event
 
-// Origin identifies the producer of an event. The dispatcher never branches on
-// it; it is carried and journaled only.
+// Origin identifies the producer of an event. The dispatcher never routes on it;
+// it is journaled and read by the wire filter, the action tally and a few handlers.
 type Origin uint8
 
 const (

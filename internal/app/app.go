@@ -508,7 +508,8 @@ func (a *App) initScheduler() error {
 }
 
 // initJournal opens the replay journal and installs it on the event queue.
-// Opt-in: it records every non-system event for the life of the run.
+// Opt-in: for the life of the run it records every event of a journaled origin
+// (all but system and device) and every own crossing.
 func (a *App) initJournal() error {
 	if !a.cfg.Journal {
 		return nil

@@ -34,8 +34,9 @@ type EventType int
 // and the no-effect sentinel; regenerate instead of editing registry_gen.go.
 
 const (
-	// EventNone is the zero value, reserved so that no real event
-	// aliases the FSM tick sentinel (fsm.Transition.Event == 0) or the
+	// EventNone is the zero value, reserved so that no real event aliases the FSM
+	// tick sentinel (fsm.Transition.Event == 0) or the no-effect sentinel a field
+	// such as a death batch's EffectEvent leaves unset.
 	EventNone EventType = iota
 
 	// --- Level ---

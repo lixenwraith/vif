@@ -18,7 +18,8 @@ type AuthorityTerm uint64
 const FirstTerm AuthorityTerm = 1
 
 // AuthorityReport floods loss news beyond the lost authority's direct neighbours.
-// Deduplication uses (From, Term); the roster, not reports, elects the successor.
+// Deduplication uses (From, Term); the succession chain and the roster, not
+// reports, elect the successor.
 type AuthorityReport struct {
 	Term AuthorityTerm `json:"term"`
 	From PeerID        `json:"from"`
@@ -35,8 +36,9 @@ type HandoffRecord struct {
 	Predecessor PeerID        `json:"predecessor"`
 
 	// The membership, moved whole. Roster and slot assignments are the closed
-	// roster (D-11) and must be byte-identical across the handoff; the anchor is
-	// what a joiner admitted by the successor adopts.
+	// roster (D-11); apart from the lost predecessor and the bots it holds they
+	// must agree across the handoff. The anchor is what a joiner admitted by the
+	// successor adopts.
 	Roster []RosterEntry    `json:"roster"`
 	Anchor event.JoinAnchor `json:"anchor"`
 
@@ -85,8 +87,8 @@ func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain) err
 	}
 	// The whole of the split-brain check, and the receiver makes it for itself
 	// rather than counting evidence the record brought with it: the successor a
-	// term may name is a function of the roster above, which this instance already
-	// holds and has just been shown to agree with.
+	// term may name is a function of the roster above, which this instance has
+	// just been shown to agree with, and of its own chain.
 	want, ok := DesignatedSuccessor(roster, h.Predecessor, chain)
 	if !ok {
 		return errors.New("handoff names a successor for a roster with no survivor")

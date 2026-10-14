@@ -374,8 +374,8 @@ func (a *App) adoptClockLocked(h snapshot.CaptureHeader) {
 }
 
 // adoptSnapshotBarrierLocked tells the crossing barrier which world it now holds:
-// the tick boundary for peer/barrier artifacts and the authority's exact local-
-// first sequence fence. Caller MUST hold updateMutex.
+// the tick boundary for barrier-bound artifacts and each source's applied crossing
+// fence. Caller MUST hold updateMutex.
 func (a *App) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
 	for _, sys := range a.world.Systems() {
 		if b, ok := sys.(interface {
