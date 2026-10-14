@@ -158,7 +158,7 @@ func (app *AppState) computeOutputStats() (totalFiles, depFiles int, totalSize, 
 		}
 		totalSize += fi.Size
 
-		// CountEntities as dep if in output but not directly selected/#all
+		// Count as dep if in output but not directly selected/#all
 		if !directSet[path] {
 			depFiles++
 			depSize += fi.Size

@@ -44,7 +44,7 @@ func init() {
 		"where": {"where", "transport bar:step and per-slot sounding pattern", 0, 0, cmdWhere},
 		"stat":  {"stat", "backend, silent mode, play stats, dirty entries", 0, 0, cmdStat},
 
-		"new":   {"new sound|pattern <name>", "create an empty entry (invalid until fields are set)", 2, 2, cmdNew},
+		"new":   {"new sound|pattern <name>", "create an entry seeded with a minimal valid spec", 2, 2, cmdNew},
 		"cp":    {"cp <src> <dst>", "duplicate an entry", 2, 2, cmdCp},
 		"mv":    {"mv <src> <dst>", "rename (sound noise variants re-roll: rng seeds from name)", 2, 2, cmdMv},
 		"mix":   {"mix <src> <dst>", "append src's tracks/layers into dst (same kind; src unchanged; validate dst after)", 2, 2, cmdMix},
@@ -65,7 +65,7 @@ func init() {
 		"music": {"music start|stop|reset", "transport control", 1, 1, cmdMusic},
 		"bpm":   {"bpm <n>", "tempo, beat-quantized", 1, 1, cmdBPM},
 		"swing": {"swing <f>", "shuffle 0..0.5", 1, 1, cmdSwing},
-		"fill":  {"fill on|off", "slot-2 auto-fill (off while auditioning slot 2)", 1, 1, cmdFill},
+		"fill":  {"fill on|off", "slot-2 phrase auto-fill; soundlab starts with it off", 1, 1, cmdFill},
 		"key":   {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
 		"mute":  {"mute music|sfx|all|none", "absolute channel mute state", 1, 1, cmdMute},
 		"vol":   {"vol <f>", "master volume 0..1", 1, 1, cmdVol},

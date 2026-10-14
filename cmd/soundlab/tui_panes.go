@@ -566,7 +566,7 @@ func (a *tuiApp) footHint() string {
 	case focusInspector:
 		return "j/k move  h/l fold  H/L all  enter edit  space play  a add  x del  esc back  dim=default  p piano  m reset  ^S save  : cmd  ^Q quit"
 	case focusLog:
-		return "j/k scroll  g/G ends  tab/shift-tab focus  p piano  m/M music  ^S save  : cmd  ^Q quit"
+		return "j/k scroll  g/G ends  tab focus  p piano  m reset  ^S save  : cmd  ^Q quit"
 	default: // focusBrowser
 		if a.kind == kindPattern {
 			return "j/k move  h/l kind  space play  0-2 slot  b beat  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"

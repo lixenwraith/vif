@@ -9,13 +9,11 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// SubRec is the vlog subsystem tag on every flight-recorder record.
-//
-// Flush encoding: one record per metric group per window. A metric whose value
-// never changed is emitted as a scalar of its native type; a metric that varied
-// is emitted as a string — comma-separated for ints, floats and strings, a run
-// of 0/1 digits for bools. t0 names the first tick and n the sample count, so
-// position k in a series belongs to tick t0+k.
+// SubRec is the vlog subsystem tag on every flight-recorder record. A flush writes
+// one record per metric group per window: an unchanged metric as a scalar of its
+// native type, a varied one as a string, comma-separated for ints, floats and
+// strings and a run of 0/1 digits for bools. t0 names the first tick and n the
+// sample count, so position k in a series belongs to tick t0+k.
 const SubRec = "rec"
 
 // Trigger reasons

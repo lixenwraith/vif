@@ -128,7 +128,7 @@ func (app *AppState) buildEditorTagTree() {
 	e := app.Editor
 	total := len(e.SelectedFiles)
 
-	// CountEntities occurrences at each level
+	// Count occurrences at each level
 	type tagKey struct{ cat, group, mod, tag string }
 	tagCounts := make(map[tagKey]int)
 	modCounts := make(map[string]int)   // cat.group.mod -> count
@@ -672,7 +672,7 @@ func (app *AppState) toggleEditorDeletion() {
 
 	for _, ref := range targets {
 		if alreadyDeleted {
-			// RemoveEntity from deletions
+			// Remove from deletions
 			app.removeFromDeletions(ref)
 		} else {
 			// Set to deletions

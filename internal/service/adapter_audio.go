@@ -92,7 +92,8 @@ func (s *AudioService) Start() error {
 
 	// Registration, freeze and preload completed inside audioEngine.Start, on the
 	// ErrNoAudioBackend path too, so the table resolves whether or not a device was
-	// found. Fatal by design: a missing name means soundTable and the shipped bank
+	// found, and Hub.StartAll precedes the first tick, so no sound was requested yet.
+	// Fatal by design: a missing name means soundTable and the shipped bank
 	// disagree, and every Play of it would be a bad-ID rejection.
 	if err := parameter.ResolveSounds(); err != nil {
 		return fmt.Errorf("audio service: %w", err)

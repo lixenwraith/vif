@@ -142,7 +142,7 @@ func scopeNote() string {
 	return "Scopes (-ls)\n" +
 		"  Names     " + names.String() + "\n" +
 		"  Sets      all is every scope, none is nothing\n" +
-		`  Combine   join names or letters with + or , — "app+fsm+stat" and "afs" are one set` + "\n" +
+		`  Combine   join names or letters with +, a comma or a space — "app+fsm+stat" and "afs" are one set` + "\n" +
 		"  Adjust    lead with + or - to add to or remove from the set already selected"
 }
 
