@@ -1,12 +1,8 @@
-// Package vmath provides float64 primitives for grid-based simulation:
-// scalar math, LUT trigonometry, vectors, ellipses, arcs, grid traversal,
-// and deterministic randomness.
-//
-// Grid coordinates are plain integer cell indices. Point.Center is the
-// sanctioned cell-to-precise-position conversion and applies the half-cell
-// offset that keeps physics and rendering aligned.
-//
-// The package depends only on the standard library.
+// Package vmath provides float64 primitives for grid-based simulation, on the
+// standard library only: named math constants, scalar math, LUT trigonometry,
+// 2D/3D vectors, ellipses, arcs, grid traversal, cell rays and seeded randomness.
+// Point and Area hold integer cell indices; Point.Center is the sanctioned
+// cell-to-precise conversion, adding the half-cell offset physics and rendering share.
 package vmath
 
 import "math"
