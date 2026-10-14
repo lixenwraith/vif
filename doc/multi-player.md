@@ -40,10 +40,10 @@ Network role, simulation domain, roster ownership, topology, and authority term
 are orthogonal. Do not infer authorship from participant ID, infer topology from a
 roster slot, or encode host/guest roles in entity domains.
 
-Two numbering spaces, each with its own reserved zero. A **participant identity**
-runs `1..MaxPlayers+1`; zero means *no participant*, which is what makes an absent
-crossing fence, an unused epoch window and every `id == 0` guard answer the same
-way. A **roster slot** runs `0..MaxPlayers-1` and names a cursor, with
+Two numbering spaces, each with its own reserved zero. A **participant identity**,
+which every peer holds despite the name, runs `1..MaxPlayers+1`; zero means *no
+participant*, which is what makes an absent crossing fence, an unused epoch
+window and every `id == 0` guard answer the same way. A **roster slot** runs `0..MaxPlayers-1` and names a cursor, with
 `NoPlayerSlot` for a peer that drives none. Slot zero is the first cursor
 rather than the local one — an instance identifies itself by its participant
 identity, and giving it a second name would cost the identity space its sentinel.

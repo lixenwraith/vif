@@ -88,9 +88,10 @@ backends are useful in automation:
 - `-ab wav:path/to/out.wav` captures the live stream into a finalized WAV file.
 
 `-mw[=DIR]` (`-music-wav`, `paths.music`) records the music bus alone, before
-ducking, to `vif-mus-<stamp>.wav` beside the logs: what plays, so a muted or
-paused stretch adds nothing. It needs a running mixer; `-ab null -mw` records
-on a machine with no device.
+ducking, to `vif-mus-<stamp>.wav` in the state root's `music/` directory, a
+sibling of `log/` ([layout §5](filesystem-layout.md#5-logs-journals-and-runtime-output)):
+what plays, so a muted or paused stretch adds nothing. It needs a running
+mixer; `-ab null -mw` records on a machine with no device.
 
 If no backend survives, the service degrades to a valid silent engine. Gameplay
 continues, sound requests become no-ops with rejection telemetry, and absence
