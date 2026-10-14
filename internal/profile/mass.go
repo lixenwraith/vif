@@ -1,5 +1,7 @@
-// Package profile combines physics primitives with game tuning into collision,
-// homing and combat profiles. Parameter holds scalars; profile holds engine structs.
+// Package profile combines physics primitives with game tuning: entity masses,
+// collision and homing profiles, the combat attack matrix with species contact
+// damage, and loot drop tiers. Parameter holds scalars; profile holds the engine
+// structs and tables built from them.
 package profile
 
 // Mass is an entity's collision mass in relative units
