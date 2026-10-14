@@ -1,7 +1,8 @@
 //go:build wasm || novlog
 
-// Package vlog is the process-wide logging facade. This build carries no
-// logger: every entry point is a no-op and lixenwraith/log is not linked.
+// Package vlog is the process's log facade. This build carries no logger: every
+// entry point is a no-op, a start or file write reports ErrDisabled, ParseScopes
+// accepts any spec, and lixenwraith/log is not linked.
 package vlog
 
 import (
