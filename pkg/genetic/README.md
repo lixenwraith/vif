@@ -1,8 +1,9 @@
 # genetic
 
 Generic evolutionary optimization for Go. The core package and every subpackage
-use only the standard library, except the TOML codec in the optional
-`persistence` subpackage, which imports `github.com/lixenwraith/toml`.
+use only the standard library, except `persistence`, whose TOML codec imports
+`github.com/lixenwraith/toml`; `registry` imports `persistence` and so carries
+that dependency too.
 
 Two engines share one operator set:
 
@@ -35,8 +36,12 @@ controllers evolved with asynchronous flights, a terminal view, and a
 ## Core types
 
 ```go
-type Solution any                      // Any candidate encoding
-type Numeric interface { ~int | ... | ~float64 }
+type Solution any // Any candidate encoding
+type Numeric interface {
+    ~int | ~int8 | ~int16 | ~int32 | ~int64 |
+        ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+        ~float32 | ~float64
+}
 
 type Candidate[S Solution, F Numeric] struct {
     Data  S
@@ -61,11 +66,11 @@ type PoolStats[F Numeric] struct {
 trees, and strings work as long as the operators match.
 
 ```go
-type InitializerFunc[S]    func(rng *rand.Rand) S
-type EvaluatorFunc[S, F]   func(solution S) F
-type TerminationFunc[S, F] func(pool *Pool[S, F], iteration int) bool
-type DiversityFunc[S, F]   func(members []Candidate[S, F]) float64
-type EqualFunc[S]          func(a, b S) bool
+type InitializerFunc[S Solution]            func(rng *rand.Rand) S
+type EvaluatorFunc[S Solution, F Numeric]   func(solution S) F
+type TerminationFunc[S Solution, F Numeric] func(pool *Pool[S, F], iteration int) bool
+type DiversityFunc[S Solution, F Numeric]   func(members []Candidate[S, F]) float64
+type EqualFunc[S Solution]                  func(a, b S) bool
 ```
 
 ---
@@ -118,6 +123,8 @@ defer e.Stop()                  // Retains the archive; Start resumes
 
 `Start`/`Stop` are idempotent and may be interleaved any number of times.
 `Stop` does not discard state — `Propose` simply returns a zero `EvalID`.
+`Reset` drops pending evaluations, queued proposals and the partial generation's
+outcome count; the archive and generation stay.
 
 ### Evaluation protocol
 
@@ -134,7 +141,7 @@ For genotypes the engine did not generate — probes, seeds, hand-authored
 candidates:
 
 ```go
-id := e.BeginEvaluation(myGenes)  // Engine keeps a copy; caller retains myGenes
+id := e.BeginEvaluation(myGenes)  // Copied under a Cloner; kept as is when nil
 ```
 
 `EvalID` is monotonic and `0` is never issued, so it doubles as a validity flag.
@@ -167,7 +174,7 @@ The `Cloner` argument decides who owns what:
 
 `SliceCloner[S, T]` covers slice genotypes and reuses `dst` capacity. Pass `nil`
 only when the caller provably reads the genotype and discards it before the next
-`Propose`. `Best` and `Snapshot` clone under the same rule.
+`Propose`. `Best`, `Snapshot` and `Checkpoint` clone under the same rule.
 
 ### Diversity
 
@@ -185,7 +192,8 @@ e.SetDiversity(genetic.GeneSpread[float64](bounds))
 
 Every mutating method takes one mutex; there are no background goroutines and no
 channels. `Propose`, `CompleteEvaluation`, `BeginEvaluation`, `AbandonEvaluation`,
-`Reset`, `Best`, `Snapshot`, and `Inject` are safe from any goroutine.
+`Reset`, `Best`, `Snapshot`, `Inject`, `Checkpoint`, and `Restore` are safe from
+any goroutine.
 
 `Stats()` is lock-free: it dereferences an `atomic.Pointer[PoolStats]` republished
 after each state transition. It is safe to poll every frame. `Generation()`,
@@ -231,13 +239,15 @@ state, err := e.Checkpoint()         // Complete, caller-owned continuation poin
 err = other.Restore(state)           // Exact next proposal and EvalID
 ```
 
-`StreamingState` also carries the normalized configuration, PCG position, FIFO
-proposal ring, pending evaluations, partial-generation outcome count, next ID,
-eviction counter and running state. `Restore` validates the complete value before
-changing the engine. The destination must use the same normalized configuration
-and equivalent initializer/operators. The state is plain generic data and
-standard-library `encoding/json` can encode it when the solution type can be
-encoded.
+`StreamingState` carries the archive, generation and last diversity, plus the
+normalized configuration, PCG position, FIFO proposal ring, pending evaluations,
+partial-generation outcome count, next ID, eviction counter and running state.
+`Restore` validates the complete value before changing the engine, refusing a
+mismatch with `ErrInvalidStreamingState`, and `ValidateState` runs that check
+alone, to preflight several engines before restoring any. The destination must
+use the same normalized configuration and equivalent initializer/operators. The
+state is plain generic data and standard-library `encoding/json` can encode it
+when the solution type can be encoded.
 
 ---
 
@@ -246,7 +256,7 @@ encoded.
 ```go
 e := genetic.NewEngine[[]float64, float64](
     evaluator, initializer, selector, combiner, perturbator, cfg)
-e.SetTerminator(func(p *Pool[[]float64, float64], iter int) bool {
+e.SetTerminator(func(p *genetic.Pool[[]float64, float64], iter int) bool {
     return p.Stats.BestScore > 0.99
 })
 pool, err := e.Run(ctx)
@@ -261,7 +271,8 @@ Solution *generation* is serial because `*rand.Rand` is not goroutine-safe;
 goroutine-safe when `Parallelism > 1`**. `Run` honours context cancellation
 between generations. The batch engine takes no `Cloner`: `Best` and the returned
 `Pool` alias engine memory, and offspring buffers are freshly allocated each
-generation because ownership moves into the pool.
+generation because ownership moves into the pool. Its `SetDiversity` takes the
+same `DiversityFunc`, evaluated once per generation into `PoolStats.Diversity`.
 
 ---
 
@@ -272,16 +283,16 @@ All four interfaces are allocation-free in steady state. `Selector` and
 in place.
 
 ```go
-type Selector[S, F] interface {
-    Select(members, dst []Candidate[S, F], rng *rand.Rand)
+type Selector[S Solution, F Numeric] interface {
+    Select(members []Candidate[S, F], dst []Candidate[S, F], rng *rand.Rand)
 }
-type Combiner[S, F] interface {
+type Combiner[S Solution, F Numeric] interface {
     Combine(parents []Candidate[S, F], dst []S, rng *rand.Rand) int
 }
-type Perturbator[S] interface {
+type Perturbator[S Solution] interface {
     Perturb(solution *S, rate, strength float64, rng *rand.Rand)
 }
-type Cloner[S] interface {
+type Cloner[S Solution] interface {
     Clone(dst, src S) S
 }
 ```
@@ -294,8 +305,8 @@ capacity when shape-compatible.
 | `TournamentSelector` | k uniform draws, best wins. `TournamentSize < 2` clamps to 2 |
 | `RouletteSelector` | Score-proportional, min-shifted so negative fitness works. `Floor` keeps the worst member selectable (default `1e-9`). Stateful — not goroutine-safe |
 | `UniformCombiner` | Per-element mix at `MixProbability`; emits up to 2 offspring |
-| `NPointCombiner` | `Points` crossover sites, alternating segments |
-| `BoundedPerturbator` | Gaussian noise sigma = `strength × (Max-Min)` per gene, returned to `ParameterBounds` by `Boundary`: clamp (default), reflect, or wrap. Genes past `len(Bounds)` are left alone. Non-finite results are rejected, never written |
+| `NPointCombiner` | `Points` crossover sites, alternating segments. Keeps a cut-point scratch buffer |
+| `BoundedPerturbator` | Gaussian noise sigma = `strength × (Max-Min)` per gene, returned to `ParameterBounds` by `Boundary`: clamp (default), reflect, or wrap. Genes past `len(Bounds)` are left alone, a NaN draw (non-finite range) leaves the gene untouched, and zero `strength` is a no-op |
 | `GaussianPerturbator` | Unbounded noise for numeric slices |
 | `SliceCloner` | Capacity-reusing copy for `~[]T` |
 | `GeneSpread` | `DiversityFunc` for bounded `[]float64`: mean normalized per-gene standard deviation |
@@ -303,18 +314,23 @@ capacity when shape-compatible.
 `Perturb`'s two knobs are independent: `rate` is the per-*element* probability,
 `strength` the magnitude. Both are applied by the engine from config; a
 `PerturbationRate` of 0.2 with `PerturbationStrength` 0.15 mutates one gene in
-five by 15% of its range. Size `rate` to the genome: with four genes, 0.2 leaves
-41% of offspring unmutated, so short genomes want a rate near `1/len` or above.
-`BoundaryClamp` piles mutated mass onto the bounds; prefer `BoundaryReflect`
-when a gene is decoded into bins.
+five with a sigma of 15% of its range. Size `rate` to the genome: with four
+genes, 0.2 leaves 41% of offspring unmutated, so short genomes want a rate near
+`1/len` or above. `BoundaryClamp` piles mutated mass onto the bounds; prefer
+`BoundaryReflect` when a gene is decoded into bins.
+
+`ParameterBounds.Bin(v, n)` decodes a gene into one of `n` equal bins, half-open
+at the top so `Max` lands in bin `n-1`; `BinCenter(i, n)` is its inverse.
 
 ---
 
 ## Configuration
 
 `EngineConfig` is shared; `StreamingConfig` embeds it. Take a defaults value and
-override fields — never build one from zero, since `Normalize` treats several
-zeros as "unset" and substitutes the default rather than the literal.
+override fields — never build one from zero. `Normalize` replaces zero sizes
+and budgets with defaults and raises `Parallelism` and `MinOutcomesPerGen` to 1,
+but keeps a zero `PerturbationRate` or `PerturbationStrength`, so a zero config
+never mutates.
 
 ```go
 cfg := genetic.DefaultStreamingConfig()
@@ -369,34 +385,41 @@ defer reg.Stop()
 ```
 
 `Register` validates `GeneCount == len(Bounds)` and rejects duplicate ids. Unset
-`TournamentSize` / `MixProbability` / `Name` are filled from package defaults.
-Every species engine runs tournament selection, uniform crossover, bounded
-Gaussian mutation under `Boundary`, and duplicate rejection.
+`TournamentSize` / `MixProbability` / `Name` are filled from package defaults,
+and a positive `PerturbationStdDev` overrides the engine's
+`PerturbationStrength`. Every species engine runs tournament selection, uniform
+crossover, bounded Gaussian mutation under `Boundary`, and duplicate rejection.
 `Start` is idempotent — it loads and starts only species not already running, so
 it is safe to call after each late registration. A missing persistence file is
-not an error; other I/O failures are returned.
+not an error; other I/O failures are returned. `Deregister` stops and drops one
+species, `Registered` lists the held ids, and `Reset` clears every species'
+pending evaluations and queued proposals while keeping its archive.
 
 Hot-path methods (`Sample`, `SampleScout`, `Stats`, `ReportFitness`) resolve the
-species through an `atomic.Pointer` array — no map, no lock. `Register`/`Start`
-take a mutex.
+species through an `atomic.Pointer` array, with no map and no registry lock.
+`Register`, `Deregister`, `Registered`, `Start`, `Export` and `Import` take a
+mutex.
 
 `Export`/`Import` are the registry-level exact-continuation contract. Each
 `SpeciesState` contains the engine checkpoint plus the scout PCG position and
-stratification counter; species name and ID must match exactly. This is distinct
-from `SaveAll`, whose files intentionally retain only learned archives.
+stratification counter. `Import` refuses a state whose species set, IDs or names
+differ from the registered ones, and validates every species before restoring
+any. This is distinct from `SaveAll`, whose files intentionally retain only
+learned archives.
 
 ### Sampling
 
 ```go
 genes, evalID := reg.Sample(1)       // Archive-derived proposal
-genes, evalID := reg.SampleScout(1)  // Stratified probe
+probe, probeID := reg.SampleScout(1) // Stratified probe
 reg.ReportFitness(1, evalID, score)  // Bypasses the aggregator
-reg.AbandonFitness(1, evalID)        // Subject never materialized
+reg.AbandonFitness(1, probeID)       // Subject never materialized
 ```
 
 `Sample` degrades gracefully: when the engine is stopped it returns the
 per-gene bound *midpoints* with `evalID == 0`, so a host can always spawn
 something. Test `evalID != 0` to distinguish a real proposal from the fallback.
+An unregistered species returns `nil, 0`.
 
 `SampleScout` synthesizes a genotype outside the archive: `gene[0]` walks
 `ProbeBins` bin centers round-robin, remaining genes are uniform within bounds.
@@ -405,9 +428,10 @@ how far the archive has converged — the intended use is keeping every discrete
 variant under evaluation when `gene[0]` is decoded into a category. Returns
 `nil, 0` when the species is stopped. `ProbeBins == 0` disables stratification.
 
-If `gene[0]` is decoded as `int(gene[0] * N)`, register its `Max` strictly below
-the top of the decode range; clamped mutations land exactly on `Max` and would
-otherwise over-weight the last bin.
+Decode a categorical `gene[0]` with `Bounds[0].Bin(gene[0], ProbeBins)`, whose
+bin centers are exactly the scout probes, and register it with
+`Boundary: genetic.BoundaryReflect`: clamped mutations pile onto both bounds and
+over-weight the end bins.
 
 ### Metric pipeline (optional)
 
@@ -470,14 +494,16 @@ agg := &fitness.WeightedAggregator{
 ```
 
 Metrics absent from the bundle are skipped, not treated as zero. `WeightAdjuster`
-is called per key per evaluation and rescales in place — no map is rebuilt.
-Terms are summed in key order, so a score is bit-identical across runs; map
-iteration order would otherwise perturb rounding and break seeded replay.
+is called for each weighted key present in the bundle, only when `ctx` is
+non-nil, and rescales in place — no map is rebuilt. Terms are summed in key
+order, so a score is bit-identical across runs; map iteration order would
+otherwise perturb rounding and break seeded replay.
 
 Normalizers: `NormalizeLinear(min, max)` clamped to [0,1] · `NormalizeInverse(scale)`
 = `1/(1+raw/scale)`, monotone decreasing, for costs like distance or time ·
-`NormalizeCap(max)` = `min(raw/max, 1)`. All three handle degenerate arguments by
-returning a constant 0 rather than dividing by zero.
+`NormalizeCap(max)` = `raw/max` clamped to [0,1]. A degenerate range
+(`max <= min`, `max <= 0`) makes Linear and Cap return a constant 0, and
+Inverse substitutes a scale of 1 for `scale <= 0`.
 
 `Context` is a `Get(key) (float64, bool)` lookup; `MapContext` is the trivial
 implementation.
@@ -491,15 +517,18 @@ entity's samples and emits derived series on `Finalize`:
 
 | Emitted key | From |
 |---|---|
-| `ticks_alive` | `Collect` call count |
+| `ticks_alive` | `Collect` and `Tick` call count |
 | `avg_<k>`, `min_<k>`, `max_<k>` | every key seen |
 | `time_<k>` | seconds where value > 0.5 (boolean-metric convention) |
 
-Derived names are cached per key and survive `Reset`, so a pooled collector
-allocates strings only on first sighting. `Finalize` overlays the death bundle
-last, so death-condition keys win.
+`Collect` records a whole bundle for one tick; `Add`, `Flag` and `Tick` record a
+single sample, active time, or a tick without a sample. Derived names are cached
+per key and survive `Reset`, so a pooled collector allocates strings only on
+first sighting. `Finalize` overlays the death bundle last, so death-condition
+keys win.
 
-`CompositeCollector` adds `peak_member_count`, `final_member_count`, and
+`CompositeCollector` reads `member_count` from each bundle and adds
+`peak_member_count`, `final_member_count`, and (when the peak is positive)
 `member_retention` for multi-part entities.
 
 `CollectorPool` is a LIFO free list — deterministic reuse, no `sync.Pool`
@@ -513,7 +542,9 @@ type Collector interface {
 }
 ```
 
-Collectors are not goroutine-safe; the registry serializes access.
+Collectors are not goroutine-safe. The registry locks only its map of active
+collectors and calls `Collect` and `Finalize` outside it, so feed one
+evaluation from one goroutine.
 
 ---
 
@@ -522,8 +553,8 @@ Collectors are not goroutine-safe; the registry serializes access.
 ```go
 store := persistence.NewManager("./state", nil)  // nil codec selects TOML
 reg := registry.NewRegistry(store)
-...
-reg.SaveAll()
+// ... register, Start, evolve ...
+err := reg.SaveAll()
 ```
 
 One file per species named after `SpeciesConfig.Name`. Writes go through a temp
@@ -619,8 +650,9 @@ whole point of the streaming model.
 ## Invariants
 
 - The archive is sorted by `Score` descending and never exceeds `PoolSize`.
-- A candidate leaves the archive only by being displaced by a strictly better one.
-- With `SetEqual`, no two archive members are equal genotypes.
+- Outside `Inject` and `Restore`, a candidate leaves the archive only by being
+  displaced by a strictly better one.
+- With `SetEqual`, no two archive members share both genotype and score.
 - Unevaluated genotypes never appear in the archive, statistics, or selection.
 - `EvalID` is monotonic; `0` is never issued.
 - `pending` never exceeds `PendingCapacity`, regardless of host behaviour.
@@ -632,8 +664,8 @@ whole point of the streaming model.
 ## Gotchas
 
 - Build config from `DefaultConfig()` / `DefaultStreamingConfig()`. A zero
-  `StreamingConfig` normalizes every field to its default, silently discarding
-  intentional zeros.
+  `StreamingConfig` gets default sizes, `Parallelism` and `MinOutcomesPerGen`
+  of 1, and zero mutation rate and strength.
 - `EliteCount` does nothing in the streaming engine.
 - Without `SetEqual` the streaming archive converges to copies of one genotype;
   `Diversity` reads 0 and `AverageScore` equals `BestScore` long before the
@@ -645,5 +677,5 @@ whole point of the streaming model.
 - `RefillTimeBudget` intentionally weakens seeded reproducibility; deterministic
   refill is the default.
 - The batch `Engine`'s evaluator runs concurrently when `Parallelism > 1`.
-- `RouletteSelector` carries a scratch buffer; do not share one instance across
-  engines.
+- `RouletteSelector` and `NPointCombiner` carry scratch buffers; do not share
+  one instance across engines.
