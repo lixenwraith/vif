@@ -40,7 +40,7 @@ var SnakeHoming = physics.HomingProfile{
 }
 
 // LootHoming: aggressive arrival drag kills orbital momentum for reliable capture.
-// LootSystem applies the cornering brake beside it, as every homing species does.
+// LootSystem applies the cornering brake beside it, as drains, swarms, quasars and eyes do.
 var LootHoming = physics.HomingProfile{
 	BaseSpeed:        parameter.LootHomingMaxSpeed,
 	HomingAccel:      parameter.LootHomingAccel,

@@ -6,11 +6,10 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-// TestSaveStreamsReportsOneDomainsIssuedStreams answers the "~24 per-system RNG
-// streams" hidden-state survey line (D-19) and which of them a capture may carry
-// (D-8). A Player stream is drawn by mechanics only its own participant simulates,
-// so a shared capture carrying one makes every correction overwrite each receiver's
-// position with the sender's.
+// TestSaveStreamsReportsOneDomainsIssuedStreams checks which RNG streams a capture
+// may carry (D-8, D-19). A Player stream is drawn by mechanics only its own
+// participant simulates, so a shared capture carrying one makes every correction
+// overwrite each receiver's position with the sender's.
 func TestSaveStreamsReportsOneDomainsIssuedStreams(t *testing.T) {
 	rr := NewRandResource(0x5EED)
 	shared := rr.Stream(core.DomainShared, "swarm")

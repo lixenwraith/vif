@@ -117,74 +117,43 @@ const (
 	// graph MaxPlayers participants can form.
 	NetworkRelayHopLimit = 16
 
-	// SessionVacantReset is how long an unbounded dedicated host holds an emptied
-	// session before starting a fresh one.
-	//
-	// The park that precedes it is immediate and unbounded: an empty session has
-	// nothing to simulate for, and simulating it anyway is not free — the gold
-	// cycle cannot place a sequence with no cursor on the map, so it fails, retries
-	// a tenth of a second later, and fails again for as long as the process runs.
-	// This is the other half: a world nobody came back to is not the world the next
-	// guest should be dropped into, and one minute is long enough to cover a
-	// reconnect and short enough that a host left alone is not holding a match
-	// nobody is going to finish.
-	//
-	// It is wall time rather than game time on purpose. The clock it is measured
-	// beside is stopped.
+	// SessionVacantReset is how long an unbounded dedicated host holds an emptied,
+	// parked session before starting a fresh one: a world nobody came back to is not
+	// the one the next guest should be dropped into, and a minute covers a reconnect.
+	// Wall time on purpose: the clock it is measured beside is stopped.
 	SessionVacantReset = time.Minute
 
 	// SessionRejoinWindow and SessionRejoinInterval bound a participant redialling
-	// the coordinator that told it the session is rebuilding on another scenario.
-	// The window covers the coordinator tearing one App down and constructing the
-	// next, which is a world build rather than a link event, so it is generous; the
-	// interval is what a refused dial costs before the door is open.
-	//
-	// Wall time, not game time: neither run has a clock while this is measured.
+	// the coordinator that told it the session is rebuilding on another scenario. The
+	// window covers a world build, so it is generous; the interval is what a refused
+	// dial costs. Wall time: neither run has a clock while this is measured.
 	SessionRejoinWindow   = 30 * time.Second
 	SessionRejoinInterval = 250 * time.Millisecond
 
 	// NetworkJoinReadyTimeout bounds how long a coordinator waits for a mid-run
-	// joiner to install the world it was sent and confirm it. It is a link and
-	// install bound rather than a game one: a participant that needs longer than
-	// this has a link or a machine that cannot keep the playout lead, and refusing
-	// its join is better than admitting a participant whose crossings will arrive
-	// after the ticks they name.
+	// joiner to install the world it was sent and confirm it, a link and install
+	// bound: a participant that needs longer cannot keep the playout lead, and its
+	// crossings would arrive after the ticks they name.
 	NetworkJoinReadyTimeout = 5 * time.Second
 
-	// NetworkJoinLagTicks is how far behind the session a freshly installed
-	// participant may land and still be admitted, in ticks.
-	//
-	// It is the default playout lead, and that is not a coincidence: a participant
-	// N ticks behind produces a crossing for tick Q+lead when the rest of the
-	// session is already at Q+N, so the artifact is late by N-lead. The join
-	// measures its own lag against this and refuses rather than joining a session
-	// it will immediately diverge from. A fixed bound rather than the session's
-	// live lead, because an admission rule that moved with a measurement would
-	// admit and refuse the same participant a second apart.
+	// NetworkJoinLagTicks is how far behind the session, in ticks, a freshly
+	// installed participant may land and still be admitted. It is the default playout
+	// lead: N ticks behind, a crossing stamped for Q+lead meets a session at Q+N, late
+	// by N-lead. Fixed rather than the live lead, so one participant is not admitted
+	// and refused a second apart.
 	NetworkJoinLagTicks = NetworkBarrierDelayTicks
 
-	// NetworkJoinCatchUpTicks bounds the ticks a joining participant may simulate
-	// to close the gap between the world it installed and the session's current
-	// tick. The gap is the transfer and install cost, which is a function of world
-	// size rather than of session length; this ceiling is far above the measured
-	// cost and exists so a pathological link fails the join instead of stalling
-	// inside it.
+	// NetworkJoinCatchUpTicks bounds the ticks a joining participant may simulate to
+	// reach the session's tick. The gap is the transfer and install cost, a function
+	// of world size rather than session length; this ceiling is far above it, so a
+	// pathological link fails the join instead of stalling inside it.
 	NetworkJoinCatchUpTicks = 200
 
-	// SnapshotCorrectionTicks is the correction cadence a session rests at, in
-	// ticks. At the 50 ms tick this is 5 Hz, which is the fast end of §2.1's
-	// hypothesis and the one the storm measurement said is only affordable with
-	// deltas.
-	//
-	// The rate is low because it can be: both instances run the same deterministic
-	// simulation, so a guest between corrections is extrapolating rather than
-	// guessing, and a correction is a repair of the difference an unmodelled input
-	// made rather than the picture itself.
-	//
-	// It is the *nominal* point of a bounded controller rather than the cadence.
-	// What a peer actually receives is chosen per peer from its measured
-	// link and its own demand, inside SnapshotCadenceMinTicks and
-	// SnapshotCadenceMaxTicks, and never past the convergence floor below.
+	// SnapshotCorrectionTicks is the nominal correction cadence, in ticks: 5 Hz at the
+	// 50 ms tick. It is low because both instances run the same deterministic
+	// simulation, so a correction repairs what an unmodelled input changed. Each peer's
+	// cadence follows its link and demand within SnapshotCadenceMinTicks and
+	// SnapshotCadenceMaxTicks, never past the convergence floor.
 	SnapshotCorrectionTicks = 4
 
 	// SnapshotCadenceMinTicks is the fastest a correction may be published to one
@@ -205,23 +174,11 @@ const (
 	// relevance is a budget reallocation, not a free increase.
 	SnapshotCadenceQuietTicks = 8
 
-	// SnapshotUrgentDriftPercent and SnapshotUrgentRelevancePercent are where a
-	// peer stops being ordinary, and both are percentages rather than counts
-	// because an absolute threshold is a threshold about the world rather than
-	// about the participant.
-	//
-	// A correction that moves five hundred shared entities is enormous in a quiet
-	// world and unremarkable in a storm — measured, the storm's magnitude is the
-	// whole shared population every cadence — so a fixed magnitude would pin every
-	// storm at the fastest cadence the link allows and spend the entire uplink on
-	// a condition that is simply what a storm looks like. What says the cadence is
-	// no longer keeping up is the *rise*: how far the far end's correction
-	// magnitude stands above its own recent level.
-	//
-	// Relevance is a comparison for the same reason, against the session's mean
-	// rather than a count: with one guest there is nobody to prioritise against
-	// and the whole link is already its own, and with several the question is
-	// which of them has more at stake in the next correction.
+	// SnapshotUrgentDriftPercent and SnapshotUrgentRelevancePercent are where a peer
+	// stops being ordinary, as percentages because a count is about the world rather
+	// than the participant: drift is how far the far end's correction magnitude rises
+	// above its own recent level, relevance how far its share stands above the
+	// session's mean (see linkpace.Bounds).
 	SnapshotUrgentDriftPercent     = 50
 	SnapshotUrgentRelevancePercent = 100
 
@@ -233,18 +190,10 @@ const (
 	SnapshotRelevanceRadius = 24
 
 	// SnapshotKeyframeCorrections is how many deltas the host sends between whole
-	// captures at the nominal operating point. A delta is worthless without the
-	// keyframe it names, so this is the longest a participant that missed one —
-	// or that has just arrived — waits before it can apply anything again: 10
-	// corrections is two seconds at the nominal cadence.
-	//
-	// It is also the loss bound. Nothing here acknowledges a correction, and
-	// nothing needs to: a keyframe supersedes everything before it, so a lost
-	// delta costs freshness for at most this many corrections and never
-	// correctness. Under pressure the controller stretches it toward
-	// SnapshotKeyframeMaxCorrections, because a keyframe costs six times a delta
-	// on this world and stretching it spends recovery time the floor bounds
-	// rather than freshness a player sees.
+	// captures at the nominal operating point: the longest a participant that missed a
+	// keyframe, or just arrived, waits to apply anything (two seconds), and the loss
+	// bound, since a keyframe supersedes every delta before it. Under pressure the
+	// controller stretches it toward SnapshotKeyframeMaxCorrections.
 	SnapshotKeyframeCorrections = 10
 
 	// SnapshotKeyframeMinCorrections is one: every correction a whole capture.
@@ -258,20 +207,10 @@ const (
 	SnapshotKeyframeMaxCorrections = 30
 
 	// SnapshotFloorKeyframeTicks is the convergence floor: the most ticks a
-	// participant may go without a whole authoritative world.
-	//
-	// This is the promise the whole adaptive path is bounded by. Cadence and
-	// keyframe interval are preferences the controller may trade away under
-	// pressure; the floor is not. Their product may never exceed it, and a link
-	// that cannot carry one whole world per floor window cannot sustain
-	// convergence at all — which is refused at admission and reported as an
-	// unrecoverable operating condition mid-session, never adapted past in
-	// silence.
-	//
-	// Three seconds is 1.5 times the nominal keyframe period, which is the room
-	// adaptation needs, and it is short enough that a participant that loses every
-	// delta still re-converges inside a span a player experiences as a stutter
-	// rather than as a broken session.
+	// participant may go without a whole authoritative world. Cadence times keyframe
+	// interval never exceeds it; a link that cannot carry one world per floor window
+	// is refused at admission and reported mid-session. Three seconds is 1.5 times
+	// the nominal keyframe period, the room adaptation needs.
 	SnapshotFloorKeyframeTicks = 60
 
 	// SnapshotLinkUtilisation is the share of measured link capacity the
@@ -305,15 +244,10 @@ const (
 	SnapshotCadenceRecoverTicks    = 2
 	SnapshotCadenceRecoverKeyframe = 2
 
-	// NetworkProbeInterval is how often a link measures a real round trip. It is
-	// wall time rather than ticks because it measures the wire and not the
-	// simulation: a paused instance still has a link, and a link that has gone
-	// silent is exactly what a probe is for.
-	//
-	// Five probes a second costs 45 bytes each way per peer — under half a
-	// kilobyte a second at MaxPlayers — against a correction stream measured in
-	// hundreds of kilobytes. The estimator smooths over eight samples, so this is
-	// also how quickly a link change becomes steerable: about a second and a half.
+	// NetworkProbeInterval is how often a link measures a real round trip, in wall
+	// time because it measures the wire: a paused instance still has a link. Five
+	// small probes a second are nothing beside the correction stream, and with the
+	// estimator's 1/8 smoothing a link change is steerable in about 1.5 seconds.
 	NetworkProbeInterval = 200 * time.Millisecond
 
 	// NetworkProbeLostAfter is how long a link may go without any echo before its
@@ -321,21 +255,16 @@ const (
 	NetworkProbeLostAfter = time.Second
 
 	// SnapshotFloorGraceTicks is how far past the floor a receiver waits before
-	// calling its own condition unrecoverable. The floor is a publication
-	// guarantee; a receiver additionally pays the transfer and the install, so
-	// reporting a breach the instant the floor elapses would flag every ordinary
-	// slow keyframe. One nominal keyframe period of grace is the smallest margin
-	// that cannot fire on a healthy link.
+	// calling its own condition unrecoverable: the floor bounds publication, and a
+	// receiver also pays the transfer and the install. One nominal keyframe period is
+	// the smallest margin that cannot fire on a healthy link.
 	SnapshotFloorGraceTicks = SnapshotCorrectionTicks * SnapshotKeyframeCorrections
 
-	// SnapshotStaleTicks is where the staleness indicator turns on: how far behind
-	// the session's newest observed tick this instance may stand before a player
-	// should be told the link rather than the game is the problem.
-	//
-	// It is the default playout lead, for the same reason NetworkJoinLagTicks is:
-	// past it this participant's own crossings reach the host after the tick they
-	// name, so the host reorders them and the correction magnitude grows. Fixed
-	// rather than live, so an indicator does not flicker with the lead it reads.
+	// SnapshotStaleTicks is how far behind the session's newest observed tick this
+	// instance may stand before the staleness indicator blames the link. It is the
+	// default playout lead, as NetworkJoinLagTicks is: past it this participant's
+	// crossings reach the host after the tick they name. Fixed rather than live, so
+	// the indicator does not flicker with the lead it reads.
 	SnapshotStaleTicks = NetworkBarrierDelayTicks
 
 	// SnapshotCorrectionQueue bounds the corrections one instance may hold
@@ -346,13 +275,10 @@ const (
 
 	// === Hash-guided selective correction ===
 
-	// SnapshotManifestPageRows is how many rows a manifest page holds at the
-	// nominal partition. A page is the unit of both proof and repair, so it is a
-	// trade between the two: larger pages hash and compare more cheaply and repair
-	// more coarsely, smaller ones the reverse. Thirty-two cells is roughly one
-	// storm circle's worth of a component store — small enough that a single
-	// diverged entity does not drag a hundred unrelated ones onto the wire, and
-	// large enough that a healthy section's page list stays short.
+	// SnapshotManifestPageRows is how many rows a manifest page holds at the nominal
+	// partition. A page is the unit of proof and repair: larger pages compare more
+	// cheaply and repair more coarsely. Thirty-two keeps one diverged entity from
+	// dragging a hundred unrelated ones onto the wire, and a healthy page list short.
 	SnapshotManifestPageRows = 32
 
 	// SnapshotManifestMaxPages bounds a section's page count whatever its row
@@ -383,41 +309,25 @@ const (
 	SnapshotManifestSilenceCorrections = 3
 
 	// SnapshotReplayTicks, SnapshotReplayRecords and SnapshotReplayBytes bound the
-	// suffix of its own accepted crossings a guest retains for replay after a
-	// correction rebases it.
-	//
-	// All three are needed and they bound different failures. The tick span is the
-	// useful window — a correction older than the convergence floor is not
-	// something local input should be replayed onto — the record count bounds a
-	// participant typing or firing far faster than the cadence, and the byte bound
-	// is what keeps a pathological payload from turning retention into an
-	// unbounded buffer. Overflowing any of them makes the suffix unavailable
-	// rather than partial: a partial replay is a guess, and this never guesses.
+	// suffix of its own crossings an instance retains for replay after a correction:
+	// the useful span (one convergence floor), a participant acting far faster than
+	// the cadence, and a pathological payload. A replay that needs a dropped record
+	// is refused whole rather than run partial, since a partial replay is a guess.
 	SnapshotReplayTicks   = SnapshotFloorKeyframeTicks
 	SnapshotReplayRecords = 512
 	SnapshotReplayBytes   = 256 << 10
 
-	// PredictionLedgerMax bounds the shared derivations a guest holds waiting for
-	// an authoritative world to prove them.
-	//
-	// It is a cousin of the replay suffix and bounded for the same reason, but it
-	// overflows the other way: a dropped crossing is a different history and is
-	// refused, while a derivation past the bound is released unproved. Losing a
-	// player's progression to a bound is worse than paying it a cadence early, and
-	// a guest that fills this inside one convergence floor has a correction problem
-	// the ledger cannot fix. Twice the storm high-water's shared population.
+	// PredictionLedgerMax bounds the shared derivations a guest holds waiting for an
+	// authoritative world to prove them. Unlike the replay suffix it overflows by
+	// releasing the oldest unproved: paying a reward a cadence early beats losing it,
+	// and a guest that fills this inside one convergence floor has a correction
+	// problem the ledger cannot fix.
 	PredictionLedgerMax = 1024
 
-	// NetworkSuccessionTicks bounds a succession. A survivor that has neither
-	// adopted a handoff nor been elected within it falls back to local
-	// continuation and says so.
-	//
-	// It is a deadline rather than a timer to elect by: nothing about the choice
-	// of successor depends on it, because a randomized or racing timer is exactly
-	// what would let two instances elect themselves in one term. What it bounds is
-	// how long an instance waits before admitting there is no succession — one
-	// convergence floor, which is the window the session already promises a whole
-	// authoritative world inside.
+	// NetworkSuccessionTicks bounds a succession: a survivor that has neither adopted
+	// a handoff nor taken the term within one convergence floor continues locally and
+	// says so. A deadline, never a timer to choose by: the successor is a function of
+	// the roster and chain, and a racing timer could let two instances take one term.
 	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
 
 	// NetworkRejoinPassInterval paces a survivor's walk down the succession list. A
@@ -433,29 +343,15 @@ const (
 	NetworkMigrationBadgeTicks = 40
 
 	// NetworkApplyWindowTicks is the furthest ahead of this instance's own tick an
-	// arriving artifact may name and still be scheduled.
-	//
-	// The schedule keeps what is not yet due, so without a forward bound an apply
-	// tick this run will never reach is not a schedule but a reservation, and
-	// nothing ever retires it. The window has to clear the largest gap two
-	// participants legitimately hold at once, which is a fresh join: a participant
-	// that has just installed a world is behind the session by the transfer and the
-	// install, and NetworkJoinCatchUpTicks is the ceiling that gap is admitted
-	// under. A convergence floor on top of it covers the ordinary case of a peer
-	// running ahead. Past the sum, a tick is not a participant's position, it is a
-	// number.
+	// arriving artifact may name and still be scheduled, since nothing retires a tick
+	// this run never reaches. It clears the largest legitimate gap, a fresh join's
+	// (NetworkJoinCatchUpTicks), plus a convergence floor for a peer running ahead.
 	NetworkApplyWindowTicks = NetworkJoinCatchUpTicks + SnapshotFloorKeyframeTicks
 
-	// NetworkScheduledMax and NetworkScheduledBytes bound the artifacts one
-	// instance holds waiting for their apply tick.
-	//
-	// Two bounds for the reason the replay suffix has three: the count bounds a
-	// peer producing many small artifacts, and the byte bound is what keeps one
-	// pathological payload from turning the schedule into an unbounded buffer.
-	// Both sit far above the window above at any legitimate production rate — one
-	// epoch per source per tick, a handful of artifacts in each — so reaching
-	// either means a sender that is not playing the game, and the overflow is
-	// counted rather than silently absorbed.
+	// NetworkScheduledMax and NetworkScheduledBytes bound the artifacts one instance
+	// holds waiting for their apply tick: the count against many small artifacts, the
+	// bytes against one pathological payload. Both sit far above any legitimate
+	// production rate, so an overflow is a sender not playing the game, and is counted.
 	NetworkScheduledMax   = 4096
 	NetworkScheduledBytes = 4 << 20
 
@@ -464,19 +360,10 @@ const (
 	NetworkScheduledPerSource = NetworkScheduledMax / MaxPlayers
 
 	// NetworkAdmitWindow, NetworkAdmitBurst and NetworkAdmitTracked bound how often
-	// one dialling host may be admitted to a session.
-	//
-	// The expensive part of a join is not the handshake but what follows it: a
-	// whole world read, encoded and sent. A peer that joins and leaves in a loop
-	// therefore costs the session a capture per cycle while costing itself one
-	// connect, and that amplification is what this bounds.
-	//
-	// The key is the dialling address rather than the participant identity, because
-	// an identity is what the attack consumes and is released the moment the
-	// connection drops. Addresses are coarse — one NAT is one key — so the budget
-	// is deliberately far above what a person reconnecting after a crash needs.
-	// NetworkAdmitTracked bounds the limiter itself, so the defence cannot become
-	// the leak.
+	// one dialling address may be admitted: each join costs the session a whole world
+	// for one connect. Keyed by address, since an identity is released when the
+	// connection drops; one NAT is one key, so the burst is generous. Tracked bounds
+	// the limiter itself, so the defence cannot become the leak.
 	NetworkAdmitWindow  = time.Minute
 	NetworkAdmitBurst   = 6
 	NetworkAdmitTracked = 1024

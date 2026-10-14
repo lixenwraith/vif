@@ -21,12 +21,12 @@ type NavigationComponent struct {
 	Width  int
 	Height int
 
-	// FlowLookahead: aspect-weighted distance threshold below which flow routing yields to direct homing
-	// Entity converges via optimal flow within this distance of target
+	// FlowLookahead is how far along the flow vector, in cells, the homing target is
+	// placed while the target is out of sight
 	FlowLookahead float64
 
 	// UseRouteGraph enables per-route flow field navigation instead of shared optimal field
-	// Default false: entity uses shared group flow field (backward compatible)
+	// Default false: entity uses shared group flow field
 	UseRouteGraph bool
 
 	// RouteGraphID selects which pre-computed route graph to use (0 = none)

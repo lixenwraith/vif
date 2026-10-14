@@ -738,7 +738,6 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 	return 0, 0
 }
 
-// findBestNeighborDirection finds direction toward lowest-distance passable neighbor, used when entity is at a blocked cell
 // resolveRouteField returns the per-route flow field for an entity's route assignment
 // Returns nil for invalid routes or graphs whose goal no longer matches the group
 // target (retargeted tower), forcing fallback to the shared group flow field

@@ -39,8 +39,9 @@ func drawableWidth(w *World, private bool, viewport, mapped int) int64 {
 
 // replicatedConfigKeys are the script-visible fields every instance agrees on: the
 // map bounds, the extent a script draws on, and the crop flag, written only by the
-// map script's EventLevelSetup (D-14). The rest describe this terminal — camera and
-// color mode — and a guard branching on one takes a different arm on each instance.
+// map script's EventLevelSetup and a reset (D-14). The rest describe this terminal
+// — camera and color mode — and a guard branching on one takes a different arm on
+// each instance.
 var replicatedConfigKeys = map[string]bool{
 	"map_width": true, "map_height": true, "crop_on_resize": true,
 	"viewport_width": true, "viewport_height": true,
