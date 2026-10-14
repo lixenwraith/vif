@@ -1,11 +1,8 @@
-// Package event: the wire predicate and frame codec.
-//
-// Compared is not sent. Replicated answers "must both instances hold this
-// record", which is what the journal filter needs; OnWire answers "must a peer
-// receive it", which is narrower. A Shared event is re-derived identically on
-// every instance (D-5) and must never travel, or it applies twice. What crosses
-// is the D-3 artifact: the Bus class, plus the one Stamped type a player-domain
-// producer aims at a shared target.
+// Package event is the simulation's message layer: the EventType catalog and its
+// generated registry, replication classes and producer origins, the MPSC queue and
+// handler router, pooled payloads, the replay journal schema, and the wire codec.
+// Replicated says whether every instance's journal must agree on a record; OnWire,
+// narrower, whether a peer must receive it: a re-derived Shared event never does.
 package event
 
 import (
