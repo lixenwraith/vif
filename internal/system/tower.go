@@ -13,7 +13,7 @@ import (
 )
 
 // TowerSystem manages tower entity lifecycle
-// Tower is a stationary ablative composite owned by the player
+// Tower is a stationary ablative composite the players defend
 // Blocks cursor movement via WallBlockCursor on members
 // Attacked by eye species via proximity self-destruct
 type TowerSystem struct {
@@ -242,7 +242,7 @@ func (s *TowerSystem) spawnTower(cursorEntity core.Entity, payload *event.TowerS
 		})
 	}
 
-	// Towers are player-owned, but remain a species for lifecycle routing.
+	// Towers are player-defended, but remain a species for lifecycle routing.
 	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
 		Entity:      headerEntity,
 		Species:     component.SpeciesTower,

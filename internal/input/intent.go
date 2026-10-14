@@ -27,7 +27,7 @@ const (
 	IntentNuggetJump  // Tab
 	IntentGoldJump    // Shift+Tab
 	IntentFireMain    // Enter in Normal mode
-	IntentFireSpecial // \ in Normal mode
+	IntentFireSpecial // Backspace or Space in Normal mode
 
 	// Motion markers
 	IntentMotionMarkerShow // gl/gh/gk/gj - show markers, await color
