@@ -53,6 +53,19 @@ func (i instance) Transport() engine.NetworkPort {
 	return i.a.sessionTransport()
 }
 
+// Downstream reads the barrier's view of who is behind this instance.
+func (i instance) Downstream() (out []uint32) {
+	i.a.world.RunSafe(func() {
+		for _, sys := range i.a.world.Systems() {
+			if d, ok := sys.(interface{ Downstream() []uint32 }); ok {
+				out = d.Downstream()
+				return
+			}
+		}
+	})
+	return out
+}
+
 // DrainOffTick translates whatever the endpoint holds without advancing a tick, so
 // a manifest, a request or a repair is acted on the moment it lands.
 func (i instance) DrainOffTick() {
@@ -230,11 +243,13 @@ func (a *App) authorityID() network.PeerID {
 	return hostParticipantID
 }
 
-// openAuthority records the term and membership this run enters a session under.
+// openAuthority records the term and membership this run enters a session under,
+// and the relay it joined through, which is its path to the authority.
 func (a *App) openAuthority(o network.SessionOffer, local network.PeerID) {
 	if a.authority == nil {
 		return
 	}
+	a.joinedThrough = o.Relay
 	a.authority.Open(o, local)
 	a.publishAuthorityResource()
 }
@@ -246,6 +261,7 @@ func (a *App) openAuthorityLocked(o network.SessionOffer, local network.PeerID) 
 	if a.authority == nil {
 		return
 	}
+	a.joinedThrough = o.Relay
 	a.authority.Open(o, local)
 	a.publishAuthorityResourceLocked()
 }
@@ -301,6 +317,7 @@ func (a *App) publishAuthorityResourceLocked() {
 	if r := a.world.Resources.Network; r != nil {
 		r.Authority.Store(holder)
 		r.Term.Store(uint64(term))
+		r.Relay = uint32(a.joinedThrough)
 	}
 	a.world.LatchSession()
 }

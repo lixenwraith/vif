@@ -29,6 +29,9 @@ type Instance interface {
 	// Transport is the attached endpoint, nil outside a session; DrainOffTick
 	// translates what it holds without advancing a tick.
 	Transport() engine.NetworkPort
+	// Downstream lists the linked participants behind this instance: the ones it
+	// forwards the authority's artifacts to and answers for.
+	Downstream() []uint32
 	DrainOffTick()
 
 	// InstallCapture projects a capture this protocol has proved — by its integrity

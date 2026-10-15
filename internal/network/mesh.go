@@ -92,6 +92,7 @@ func (m *Mesh) nodeLocked(id PeerID) *MeshPort {
 	p := &MeshPort{
 		local:    id,
 		links:    make(map[PeerID]*MeshPort),
+		served:   make(map[PeerID]bool),
 		up:       true,
 		meters:   make(map[PeerID]*linkMeter),
 		inBytes:  make(map[PeerID]uint64),
@@ -111,21 +112,28 @@ func (m *Mesh) Shape(a, b PeerID, s LinkShape) {
 	y.SetShape(s)
 }
 
-// Link connects two participants directly. Each observes the other as a peer, which
-// is the only membership a node has: a mesh participant knows its links, not the
-// roster.
-func (m *Mesh) Link(a, b PeerID) {
+// Link connects two participants directly, b having joined through a: a serves
+// the link as a coordinator or a relay does, so b is behind it from the start.
+// Each observes the other as a peer, which is the only membership a node has: a
+// mesh participant knows its links, not the roster.
+func (m *Mesh) Link(a, b PeerID) { m.link(a, b, true) }
+
+// Peer links two participants that both already hold identities, as the
+// succession chain does: neither joined through the other.
+func (m *Mesh) Peer(a, b PeerID) { m.link(a, b, false) }
+
+func (m *Mesh) link(a, b PeerID, served bool) {
 	if a == b {
 		return
 	}
 	m.mu.Lock()
 	x, y := m.nodeLocked(a), m.nodeLocked(b)
 	m.mu.Unlock()
-	if !x.addLink(y) {
+	if !x.addLink(y, served) {
 		return
 	}
-	y.addLink(x)
-	x.deliver(Inbound{Kind: InboundConnect, Peer: b})
+	y.addLink(x, false)
+	x.deliver(Inbound{Kind: InboundConnect, Peer: b, Served: served})
 	y.deliver(Inbound{Kind: InboundConnect, Peer: a})
 }
 
@@ -142,10 +150,11 @@ func NewLoopbackPair(a, b PeerID) (*MeshPort, *MeshPort) {
 type MeshPort struct {
 	local PeerID
 
-	mu    sync.Mutex
-	links map[PeerID]*MeshPort
-	queue []meshFrame
-	up    bool
+	mu     sync.Mutex
+	links  map[PeerID]*MeshPort
+	served map[PeerID]bool // links whose participant joined through this node
+	queue  []meshFrame
+	up     bool
 
 	// The virtual clock and the link measurement that reads it. drains is the
 	// clock: one game tick per Drain, which is what a tick loop calls once.
@@ -230,14 +239,32 @@ func (p *MeshPort) meterLocked(id PeerID) *linkMeter {
 func (p *MeshPort) ParticipantID() uint32 { return uint32(p.local) }
 
 // addLink records a neighbour, reporting whether it was new.
-func (p *MeshPort) addLink(peer *MeshPort) bool {
+func (p *MeshPort) addLink(peer *MeshPort, served bool) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, exists := p.links[peer.local]; exists {
 		return false
 	}
 	p.links[peer.local] = peer
+	if served {
+		p.served[peer.local] = true
+	}
 	return true
+}
+
+// Served lists the linked participants that joined through this node, in a
+// stable order.
+func (p *MeshPort) Served() []uint32 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]uint32, 0, len(p.served))
+	for id := range p.served {
+		if _, linked := p.links[id]; linked && p.up {
+			out = append(out, uint32(id))
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // deliver appends to this node's inbound queue, through whatever shape is

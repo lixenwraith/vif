@@ -10,23 +10,18 @@ import (
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
-// links is the transport and the participants this instance is directly linked to,
-// read together because Transport takes the world lock and every decision below
-// needs both.
+// links is the transport and the participants behind this instance, read together
+// because both take the world lock and every decision below needs both.
 func (c *Corrections) links() (engine.NetworkPort, []uint32) {
-	port := c.inst.Transport()
-	if link, ok := port.(engine.LinkMeasuringPort); ok {
-		return port, link.Peers()
-	}
-	return port, nil
+	return c.inst.Transport(), c.inst.Downstream()
 }
 
 // canRelay reports whether this instance can answer for a participant behind it: not
-// the authority, more than one link, and retention to serve from. The retention test
+// the authority, somebody behind it, and retention to serve from. The retention test
 // is what keeps the claim honest — saying otherwise upstream would leave the
 // participants behind it holding an index nobody can act on.
-func (c *Corrections) canRelay(peers []uint32) bool {
-	if network.SessionRole(c.authority.isAuthority(), len(peers)) != network.RoleRelay {
+func (c *Corrections) canRelay(behind []uint32) bool {
+	if network.SessionRole(c.authority.isAuthority(), len(behind)) != network.RoleRelay {
 		return false
 	}
 	c.publishMu.Lock()
@@ -60,8 +55,8 @@ func (c *Corrections) forwardManifest(body []byte, from uint32, tick uint64) {
 	c.log.Debug("converge", "msg", "manifest relayed", "tick", tick, "from", from, "to", sent)
 }
 
-// behindLinks is this instance's links other than the one an index arrives on,
-// which is the set it forwards to and answers for.
+// behindLinks is the participants behind this instance other than the link an
+// index arrives on, which is the set it forwards to and answers for.
 func behindLinks(peers []uint32, from uint32) []uint32 {
 	out := make([]uint32, 0, len(peers))
 	for _, id := range peers {

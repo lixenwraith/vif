@@ -178,3 +178,45 @@ func (c *Corrections) expect(want snapshot.CorrectionManifest, from uint32) erro
 	c.selectiveMu.Unlock()
 	return nil
 }
+
+// TestARelayAnswersOnlyForThoseBehindIt: the successor link a guest holds is a peer
+// link, not a participant behind it, so a guest holding only one is a peer, and a
+// relay neither forwards an index across one nor claims to answer for its far end.
+func TestARelayAnswersOnlyForThoseBehindIt(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(2, 3)
+	mesh.Peer(2, 4)
+	mesh.Link(1, 4)
+	runs := make([]*run, 4)
+	for i := range runs {
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(4))
+		runs[i].open(1, nil, false)
+	}
+	host, relay, far := runs[0], runs[1], runs[3]
+	if err := host.c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	for _, r := range runs {
+		r.world.advance(1)
+	}
+	if err := host.c.Publish(); err != nil {
+		t.Fatalf("index: %v", err)
+	}
+	deliver(runs, 3)
+	if got := relay.c.role(); got != network.RoleRelay {
+		t.Fatalf("the participant serving a leaf holds role %d, want the relay role", got)
+	}
+	if got := far.c.role(); got != network.RolePeer {
+		t.Fatalf("the participant on the peer link holds role %d, want the peer role", got)
+	}
+	leaves := relay.c.relayedParticipants()
+	if len(leaves) != 1 || leaves[0].ID != 3 {
+		t.Fatalf("the relay answers for %v, want the leaf behind it alone", leaves)
+	}
+	if got := far.stat("snapshot.manifests_received"); got != 1 {
+		t.Fatalf("the far end of the peer link received %d indexes, want the authority's alone", got)
+	}
+}

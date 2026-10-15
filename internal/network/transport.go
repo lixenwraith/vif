@@ -54,7 +54,7 @@ func NewTransport(cfg *Config) *Transport {
 
 // SetHandlers configures message and connection callbacks
 func (t *Transport) SetHandlers(
-	onConnect func(PeerID),
+	onConnect func(id PeerID, served bool),
 	onDisconnect func(PeerID),
 	onMessage func(PeerID, *Message),
 ) {
@@ -101,12 +101,12 @@ func (t *Transport) serveAsPeer() error {
 	if t.config.PreboundListener == nil && t.config.ListenAddress == "" {
 		return nil
 	}
-	return t.listen(t.config.ListenAddress, t.config.AcceptPeer)
+	return t.listen(t.config.ListenAddress, t.config.AcceptPeer, false)
 }
 
 // startServer accepts joiners.
 func (t *Transport) startServer() error {
-	if err := t.listen(t.config.Address, nil); err != nil {
+	if err := t.listen(t.config.Address, nil, true); err != nil {
 		t.running.Store(false)
 		return err
 	}
@@ -114,8 +114,9 @@ func (t *Transport) startServer() error {
 }
 
 // listen serves the port the caller bound, else binds addr. accept is the
-// per-connection handshake; nil selects the coordinator's session handshake.
-func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) error {
+// per-connection handshake, nil the coordinator's session handshake; served says
+// the handshake admits joiners rather than peers.
+func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error), served bool) error {
 	ln := t.config.PreboundListener
 	if ln == nil {
 		var err error
@@ -125,7 +126,7 @@ func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error)) e
 	}
 	t.listener = ln
 	t.wg.Add(1)
-	go t.acceptLoop(ln, accept, t.config.OnAdmit)
+	go t.acceptLoop(ln, accept, t.config.OnAdmit, served)
 	return nil
 }
 
@@ -163,7 +164,7 @@ func (t *Transport) DialPeer(addr string, local PeerID) error {
 	if err != nil {
 		return err
 	}
-	if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
+	if _, err := t.peers.AddConnectionAs(conn, id, false); err != nil {
 		return err
 	}
 	if t.config.OnAdmit != nil {
@@ -185,7 +186,7 @@ func (t *Transport) serveSession(addr string, accept func(net.Conn) (PeerID, err
 	}
 	t.extraListeners = append(t.extraListeners, ln)
 	t.wg.Add(1)
-	go t.acceptLoop(ln, accept, admitted)
+	go t.acceptLoop(ln, accept, admitted, true)
 	return ln.Addr().String(), nil
 }
 
@@ -207,12 +208,12 @@ func (t *Transport) serveConn(conn net.Conn, accept func(net.Conn) (PeerID, erro
 		return errors.New("transport is stopped")
 	}
 	t.wg.Add(1)
-	go t.handshake(conn, accept, admitted)
+	go t.handshake(conn, accept, admitted, true)
 	return nil
 }
 
 // acceptLoop handles incoming connections
-func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) {
+func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, error), admitted func(PeerID), served bool) {
 	defer t.wg.Done()
 
 	for {
@@ -271,12 +272,12 @@ func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, e
 			continue
 		}
 		t.wg.Add(1)
-		go t.handshake(conn, handshake, admitted)
+		go t.handshake(conn, handshake, admitted, served)
 	}
 }
 
 // Release the unauthenticated budget before running the bounded participant gate.
-func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) {
+func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, error), admitted func(PeerID), served bool) {
 	defer t.wg.Done()
 	t.holdPending(conn)
 
@@ -289,7 +290,7 @@ func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, erro
 		return
 	}
 	// AddConnectionAs closes the connection on every failure of its own.
-	if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
+	if _, err := t.peers.AddConnectionAs(conn, id, served); err != nil {
 		t.report(err)
 		return
 	}
@@ -345,7 +346,7 @@ func (t *Transport) startClient() error {
 		t.running.Store(false)
 		return errors.New("transport: peer has no coordinator identity from the join handshake")
 	}
-	if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
+	if _, err := t.peers.AddConnectionAs(conn, id, false); err != nil {
 		_ = conn.Close()
 		t.running.Store(false)
 		return err

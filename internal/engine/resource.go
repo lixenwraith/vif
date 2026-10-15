@@ -1014,6 +1014,9 @@ type NetworkResource struct {
 	Port              NetworkPort
 	ParticipantID     uint32
 	BarrierDelayTicks uint64
+	// Relay is the participant this instance joined through when that is not the
+	// authority: its path to the authority until a link to it exists.
+	Relay uint32
 	// SharedDigest is supplied by App after construction. NetworkSystem calls it
 	// under the world lock when publishing periodic runtime parity probes.
 	// detail asks for the per-record breakdown, which costs a map on the wire and

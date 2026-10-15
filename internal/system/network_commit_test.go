@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -128,10 +129,10 @@ func TestACommittedCopyRestartsItsHopCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.scheduleCrossings(2, body)
-	if len(port.flooded) != 1 {
-		t.Fatalf("the authority flooded %d copies, want the committed one", len(port.flooded))
+	if len(port.sent) != 1 {
+		t.Fatalf("the authority sent %d copies, want the committed one", len(port.sent))
 	}
-	got, err := event.DecodeWireBatch(port.flooded[0])
+	got, err := event.DecodeWireBatch(port.sent[0].body)
 	if err != nil || !got.Committed || got.Hops != 1 {
 		t.Fatalf("committed copy leaves with %d hops (committed %t, err %v), want 1", got.Hops, got.Committed, err)
 	}
@@ -434,5 +435,75 @@ func TestAnInstallThatHoldsAnOwnCrossingClosesItsFence(t *testing.T) {
 	guest.CrossingApplied(2)
 	if got := guest.AppliedCrossingFences().Seq(2); got != 2 {
 		t.Fatalf("the local fence is %d after sequence 2 applied, want 2", got)
+	}
+}
+
+// sentTo lists the participants a port was asked to send to, in order; zero is a
+// broadcast to every link.
+func sentTo(port *linkedPort) []uint32 {
+	out := make([]uint32, 0, len(port.sent))
+	for _, f := range port.sent {
+		out = append(out, f.to)
+	}
+	return out
+}
+
+// TestAGuestForwardsDownOnlyToThoseBehindIt: a committed copy and a correction
+// chunk from the authority go to the link that sends this guest raw artifacts,
+// never back up and never across the successor link.
+func TestAGuestForwardsDownOnlyToThoseBehindIt(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{1, 3, 4}}
+	guest := sessionSystem(t, 2, 100, port)
+	guest.scheduleCrossings(3, rawBatch(t, 3, 100, 104)) // participant 3 is behind this guest
+	port.sent = nil
+	guest.scheduleCrossings(1, boundsBatch(t, 5, 100, 105, 1, 0))
+	chunks, err := network.EncodeSnapshotChunks(100, []byte("world"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	guest.receiveCorrection(1, chunks[0])
+	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{3, 3}) {
+		t.Fatalf("the guest sent to %v and flooded %d frames, want the copy and the chunk to participant 3 alone",
+			got, len(port.flooded))
+	}
+}
+
+// TestTheAuthorityReturnsTheCommittedCopyToItsProducer: the commit goes down every
+// link, the producer's included, which is how a guest learns what was committed.
+func TestTheAuthorityReturnsTheCommittedCopyToItsProducer(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{2}}
+	s := sessionSystem(t, 1, 100, port)
+	s.scheduleCrossings(2, rawBatch(t, 2, 100, 104))
+	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{0}) {
+		t.Fatalf("the authority sent to %v and flooded %d frames, want one broadcast", got, len(port.flooded))
+	}
+	if got, err := event.DecodeWireBatch(port.sent[0].body); err != nil || !got.Committed {
+		t.Fatalf("the broadcast is not the committed copy (committed %t, err %v)", got.Committed, err)
+	}
+}
+
+// TestAParticipantWithNoPathAdoptsTheLinkThatReturnsItsEpochs: with neither the
+// authority nor its relay on a link, a participant offers its raw epoch on every
+// link not behind it, and the first link to return the committed copy is its path
+// from then on.
+func TestAParticipantWithNoPathAdoptsTheLinkThatReturnsItsEpochs(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{2, 4}}
+	s := sessionSystem(t, 3, 100, port)
+	s.Flush(100)
+	if got := sentTo(port); !slices.Equal(got, []uint32{2, 4}) {
+		t.Fatalf("a participant with no path sent to %v, want its epoch offered on both links", got)
+	}
+	port.sent = nil
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: 3, ProducedTick: 100, Committed: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.scheduleCrossings(2, body)
+	s.Flush(101)
+	if got := sentTo(port); !slices.Equal(got, []uint32{2}) || port.sent[0].kind != network.MsgBundle {
+		t.Fatalf("after its epoch came back through participant 2 it sent %v, want one bundle to 2", got)
 	}
 }

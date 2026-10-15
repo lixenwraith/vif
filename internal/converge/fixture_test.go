@@ -70,6 +70,15 @@ func (s *stub) WorldRoster() []network.RosterEntry {
 
 func (s *stub) Transport() engine.NetworkPort { return s.port }
 
+// Downstream is the links this stub serves, which in a tree built from the host
+// outward is everyone behind it.
+func (s *stub) Downstream() []uint32 {
+	if port, ok := s.port.(*network.MeshPort); ok {
+		return port.Served()
+	}
+	return nil
+}
+
 func (s *stub) DrainOffTick() {}
 
 func (s *stub) CaptureShared() (snapshot.SharedCapture, error) {
