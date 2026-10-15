@@ -54,6 +54,10 @@ type Peer struct {
 	InBytes  atomic.Uint64
 	OutBytes atomic.Uint64
 
+	// served is a stream this end admitted through a join handshake, so the
+	// participant on it is behind this one; a dialled or peer link is not.
+	served bool
+
 	// I/O, and the frame header scratch each loop owns
 	conn   net.Conn
 	stream *flateStream
@@ -289,7 +293,7 @@ type PeerManager struct {
 	config   *Config
 
 	// Callbacks
-	onConnect    func(PeerID)
+	onConnect    func(id PeerID, served bool)
 	onDisconnect func(PeerID)
 	onMessage    func(PeerID, *Message)
 }
@@ -305,7 +309,7 @@ func NewPeerManager(cfg *Config) *PeerManager {
 
 // SetHandlers configures event callbacks
 func (pm *PeerManager) SetHandlers(
-	onConnect func(PeerID),
+	onConnect func(id PeerID, served bool),
 	onDisconnect func(PeerID),
 	onMessage func(PeerID, *Message),
 ) {
@@ -314,8 +318,9 @@ func (pm *PeerManager) SetHandlers(
 	pm.onMessage = onMessage
 }
 
-// AddConnectionAs registers a stream under its session-assigned participant ID.
-func (pm *PeerManager) AddConnectionAs(conn net.Conn, id PeerID) (PeerID, error) {
+// AddConnectionAs registers a stream under its session-assigned participant ID;
+// served says the far end joined the session through this one.
+func (pm *PeerManager) AddConnectionAs(conn net.Conn, id PeerID, served bool) (PeerID, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -333,6 +338,7 @@ func (pm *PeerManager) AddConnectionAs(conn net.Conn, id PeerID) (PeerID, error)
 	}
 
 	peer := newPeer(id, conn, pm.config)
+	peer.served = served
 	pm.peers[id] = peer
 
 	// Start I/O loops
@@ -341,7 +347,7 @@ func (pm *PeerManager) AddConnectionAs(conn net.Conn, id PeerID) (PeerID, error)
 	go pm.monitorPeer(peer)
 
 	if pm.onConnect != nil {
-		pm.onConnect(id)
+		pm.onConnect(id, served)
 	}
 
 	return id, nil

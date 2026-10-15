@@ -13,4 +13,8 @@ type Inbound struct {
 	Kind InboundKind
 	Peer PeerID
 	Msg  *Message // nil for Connect/Disconnect
+
+	// Served marks a connect from a participant that joined through this one: it
+	// is behind this instance from its admission, before its first epoch says so.
+	Served bool
 }

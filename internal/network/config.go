@@ -21,12 +21,13 @@ const (
 )
 
 // SessionRole is a participant's protocol role from what it is, not how it
-// connected: the author hosts, one with more than one link relays, others are peers.
-func SessionRole(authoring bool, links int) Role {
+// connected: the author hosts, one with participants behind it relays, others are
+// peers.
+func SessionRole(authoring bool, behind int) Role {
 	switch {
 	case authoring:
 		return RoleHost
-	case links > 1:
+	case behind > 0:
 		return RoleRelay
 	default:
 		return RolePeer

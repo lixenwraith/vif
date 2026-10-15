@@ -44,7 +44,7 @@ func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
 	pm := NewPeerManager(DefaultConfig())
 	client, server := net.Pipe()
 	defer client.Close()
-	if _, err := pm.AddConnectionAs(server, 1); err != nil {
+	if _, err := pm.AddConnectionAs(server, 1, false); err != nil {
 		t.Fatal(err)
 	}
 	received := make(chan *Message, 1)
