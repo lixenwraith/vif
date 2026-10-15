@@ -103,11 +103,14 @@ type ScheduledWireFrame struct {
 
 // WireBatch closes one participant's production epoch, even an empty one. Source is
 // every receiver's ordering key and, with ProducedTick, names the epoch, so a copy
-// arriving by a second mesh path is recognised. Hops counts links since the copy's
-// origin (its producer, or the authority that committed it) and bounds relay loops.
-// Committed marks the authority's copy, carrying the apply ticks it chose.
+// arriving by a second mesh path is recognised. Run names the run the ticks count
+// in: a receiver in another run has no tick for the frames and refuses the batch.
+// Hops counts links since the copy's origin (its producer, or the authority that
+// committed it) and bounds relay loops. Committed marks the authority's copy,
+// carrying the apply ticks it chose.
 type WireBatch struct {
 	Frames       []ScheduledWireFrame `json:"frames,omitempty"`
+	Run          uint64               `json:"run"`
 	ProducedTick uint64               `json:"produced_tick"`
 	Source       uint32               `json:"source"`
 	Hops         uint8                `json:"hops,omitempty"`

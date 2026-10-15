@@ -242,7 +242,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. The authority requires none |
 | `network.barrier_peer_lag_ticks`, `network.barrier_peer_artifacts`, `network.barrier_peer_applied` | Closed-epoch lag beyond this instance's lead (zero on the authority), and the peer artifacts admitted at the latest boundary |
 | `network.artifacts_refused` (int) | Peer artifacts refused: an arrival or departure from a participant that is not the coordinator, or a raw epoch under an identity whose link it did not arrive on |
-| `network.artifacts_refused_tick` (int) | Peer artifacts naming an apply tick more than `NetworkApplyWindowTicks` ahead |
+| `network.artifacts_refused_tick` (int) | Peer artifacts naming an apply tick more than `NetworkApplyWindowTicks` ahead, or a run this instance is not in: a reset's last epochs, sent a round trip before it applied |
 | `network.artifacts_schedule_full` (int) | Peer artifacts turned away because their source held its `NetworkScheduledPerSource` share, the schedule held `NetworkScheduledMax` entries, or the artifact would take it past `NetworkScheduledBytes` |
 | `network.artifacts_pre_install` (int) | Scheduled or arriving artifacts the installed world already contains: a barrier-bound one due at or before the capture's tick (D-22), any other at or below its source's fence. Non-zero on a joiner is the ordering working |
 | `network.artifacts_authority_superseded` (int) | The part of `artifacts_pre_install` that a source fence, rather than the capture's tick, proved contained |

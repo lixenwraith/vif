@@ -372,3 +372,67 @@ func TestADepartedIdentityLeavesNoFence(t *testing.T) {
 		t.Fatalf("fence for participant 2 = %d after it departed, want none", got)
 	}
 }
+
+// inRun re-stamps one encoded batch with the run it was produced in.
+func inRun(t *testing.T, body []byte, run uint64) []byte {
+	t.Helper()
+	batch, err := event.DecodeWireBatch(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch.Run = run
+	if body, err = event.EncodeWireBatch(batch); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+// TestABatchFromAnotherRunIsRefused: a guest's last epochs and syncs of the run
+// before a reset reach the authority after it applied the reset, a round trip
+// after they were produced. Neither may land in the new run: an old sync would
+// hold the slot's sequence over the new run's, an old epoch its source's window.
+func TestABatchFromAnotherRunIsRefused(t *testing.T) {
+	t.Parallel()
+	authority := sessionSystem(t, 1, 3, &linkedPort{peers: []uint32{2}})
+	authority.world.Resources.Event.Queue.RebaseStamp(1, 3)
+
+	authority.scheduleCursorState(2, inRun(t, stateBatch(t, 2, 300, 0, false), 0))
+	authority.scheduleCursorState(2, inRun(t, stateBatch(t, 2, 1, 0, false), 1))
+	if len(authority.states) != 1 || authority.states[0].payload.Seq != 1 {
+		t.Fatalf("the authority scheduled %+v, want the new run's first sync alone", authority.states)
+	}
+
+	authority.scheduleCrossings(2, inRun(t, rawBatch(t, 2, 150, 153), 0))
+	authority.scheduleCrossings(2, inRun(t, rawBatch(t, 2, 1, 4), 1))
+	authority.mu.Lock()
+	got := append([]barrierArtifact(nil), authority.scheduled...)
+	authority.mu.Unlock()
+	if len(got) != 1 || got[0].applyTick != 4 {
+		t.Fatalf("the authority scheduled %+v, want the new run's crossing at tick 4 alone", got)
+	}
+}
+
+// TestAnInstallThatHoldsAnOwnCrossingClosesItsFence: a capture installed past the
+// tick an own crossing was stamped for holds it, the authority having committed it
+// late. The pruned copy never dispatches, so the install closes its place in the
+// local fence; otherwise every later sequence waits behind it for the whole run.
+func TestAnInstallThatHoldsAnOwnCrossingClosesItsFence(t *testing.T) {
+	t.Parallel()
+	event.EnsureRegistry()
+	port := &linkedPort{peers: []uint32{1}}
+	guest := sessionSystem(t, 2, 100, port)
+	guest.refreshLink(port)
+	for range 2 {
+		if !guest.Cross(event.GameEvent{Type: event.EventGoldJumpRequest, Domain: core.DomainPlayer}) {
+			t.Fatal("the barrier did not take an own crossing")
+		}
+	}
+	guest.AdoptSnapshot(110, 1, network.CrossingFences{{Source: 2, Seq: 1}})
+	if got := guest.AppliedCrossingFences().Seq(2); got != 1 {
+		t.Fatalf("the local fence is %d after an install holding sequence 1, want 1", got)
+	}
+	guest.CrossingApplied(2)
+	if got := guest.AppliedCrossingFences().Seq(2); got != 2 {
+		t.Fatalf("the local fence is %d after sequence 2 applied, want 2", got)
+	}
+}
