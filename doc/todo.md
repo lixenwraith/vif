@@ -72,17 +72,6 @@ from on_enter. Options: honour it (a nested call only marks the exiting region, 
 the outer exit deletes it and skips any enter phase); or forbid it
 (`TerminateRegion` returns an error for an exiting region, and the reference says so).
 
-### Delete search text by rune
-
-- Priority: P0, to review
-- Affected files: `internal/mode/router.go`
-
-Backspace in Search mode cuts one byte (`router.go:745`), though Search takes any
-rune (`internal/input/machine.go:662-682`). After `/é` and Backspace the pattern is
-`"\xc3"` (reproduced), which `PerformSearch` reads as U+FFFD (`search.go:16`) and
-never matches. Command mode (`router.go:747-754`) and the overlay filter
-(`:757-760`) already cut a rune; Search should too.
-
 ### Decide which control keys work in an overlay
 
 - Priority: P0, to review
