@@ -25,10 +25,6 @@ const (
 	// relay its crossing to the others before they reach the tick it names.
 	NetworkRelaySlackTicks = 1
 
-	// NetworkBarrierJitterMargin multiplies the measured round-trip variation added
-	// to the round trip a guest's lead covers.
-	NetworkBarrierJitterMargin = 2
-
 	// NetworkAheadTicks is how late, in ticks, a guest lets the authority's epochs
 	// reach it so its own crossings apply that much sooner. Everyone else's arrive
 	// that late on it too, and are repaired there, so only it pays.
@@ -41,7 +37,8 @@ const (
 
 	// NetworkPaceWindow is how many authority epochs one pace decision reads; the
 	// latest of them trims and the earliest steps, so one jittered arrival never
-	// moves whole ticks.
+	// moves whole ticks. It is also how many round trips, probed or relayed, the
+	// own lead's worst reading covers.
 	NetworkPaceWindow = 10
 
 	// NetworkPaceGainPermille and NetworkPacePermilleMax trim a guest's tick interval

@@ -18,7 +18,8 @@ import (
 // the lead read from one, and keeps what it floods and sends.
 type linkedPort struct {
 	peers   []uint32
-	rtt     time.Duration
+	rtt     time.Duration // the smoothed round trip; the worst of the window is rtt+worst
+	worst   time.Duration
 	flooded [][]byte
 	sent    []sentFrame
 }
@@ -47,7 +48,7 @@ func (p *linkedPort) Peers() []uint32                              { return p.pe
 func (p *linkedPort) SetLinkReport(network.LinkReport)             {}
 func (p *linkedPort) ObserveTransfer(uint32, int64, time.Duration) {}
 func (p *linkedPort) LinkMetric(uint32) linkpace.Metrics {
-	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, Ready: p.rtt > 0}
+	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, MaxRTT: p.rtt + p.worst, Ready: p.rtt > 0}
 }
 
 // sessionSystem is participant local in a session participant 1 authors, at tick.
@@ -274,10 +275,11 @@ func TestALeadFallsToTheHighestReadingOfItsWindow(t *testing.T) {
 	}
 }
 
-// TestAGuestStampsWithItsOwnRoundTrip: the lead is this guest's round trip to the
-// authority plus the relay tick, less how late the authority's epochs land; the
-// authority's own is a tick, and an unmeasured link keeps the default. Behind a
-// relay the trip is how long this guest's own epochs took to come back committed.
+// TestAGuestStampsWithItsOwnRoundTrip: the lead is the worst recent round trip to
+// the authority, not the smoothed one, plus the relay tick, less how late the
+// authority's epochs land; the authority's own is a tick, and an unmeasured link
+// keeps the default. Behind a relay the trip is how long this guest's own epochs
+// took to come back committed.
 func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
 	t.Parallel()
 	port := &linkedPort{peers: []uint32{1}}
@@ -285,11 +287,11 @@ func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
 	if got, _ := guest.ownLead(port); got != parameter.NetworkBarrierDelayTicks {
 		t.Fatalf("unmeasured lead %d, want the default %d", got, parameter.NetworkBarrierDelayTicks)
 	}
-	port.rtt = 150 * time.Millisecond
+	port.rtt, port.worst = 100*time.Millisecond, 50*time.Millisecond
 	guest.paceLatest, guest.paceKnown = -1, true
 	want := uint64(3 + parameter.NetworkRelaySlackTicks + 1)
 	if got, _ := guest.ownLead(port); got != want {
-		t.Fatalf("lead over a 150 ms round trip landing a tick early = %d, want %d", got, want)
+		t.Fatalf("lead over a worst 150 ms round trip landing a tick early = %d, want %d", got, want)
 	}
 	authority := sessionSystem(t, 1, 100, port)
 	if got, _ := authority.ownLead(port); got != parameter.NetworkBarrierMinDelayTicks {
