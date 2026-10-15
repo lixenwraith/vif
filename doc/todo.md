@@ -17,22 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Decide how the network badge shows a succession walk
-
-- Priority: P0, to review
-- Affected files: `internal/render/renderer/status_bar.go`,
-  `doc/services-and-networking.md`, `doc/telemetry-reference.md`
-
-`networkBadge` returns `Host lost` before it reads `network.migrating`
-(`status_bar.go:518-530`). The rejoin count rises only on a guest that lost its
-authority link (`converge/reach.go:202-225`), which has `host_lost` set
-(`system/network.go:1396`) until a handoff clears both (`converge/authority.go:649`,
-`reach.go:178`), so the `Migrating k` badge that
-[Services and networking](services-and-networking.md) §9 and the
-[Telemetry reference](telemetry-reference.md) describe is never drawn. Options: show
-the count beside `Host lost`; let `Migrating k` outrank `Host lost` until the walk
-gives up (`authority.go:588-589`); or drop the count from the badge and the docs.
-
 ### Decide what `:new!` sets free mouse, auto-fire and rate to
 
 - Priority: P0, to review

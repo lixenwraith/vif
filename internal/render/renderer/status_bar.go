@@ -513,20 +513,20 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 // instance is keeping up, and at most one qualifier. A worse fact hides a lesser
 // one; the numbers behind them are in :session and the status snapshot.
 func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
-	// Losing the authority outranks everything, including the link state that
-	// described the host that went, until a handoff is adopted.
-	if r.statHostLost.Load() {
-		return r.pal.net[severityFailing].with(" Host lost "), true
-	}
-	// Transient by construction: the badge is cleared a fixed number of ticks after
-	// the handoff is adopted, so the two states a player reads are either side of it.
+	// A succession in progress outranks the loss that opened it, and stays a fixed
+	// number of ticks past the handoff, so the two states a player reads are either
+	// side of it. The count is the reconnect walking the candidate list.
 	if r.statMigrating.Load() {
-		// The count is the reconnect walking the candidate list.
 		text := " Migrating "
 		if n := r.statRejoin.Load(); n > 0 {
 			text = fmt.Sprintf(" Migrating %d ", n)
 		}
 		return r.pal.net[severityDegrading].with(text), true
+	}
+	// Losing the authority with no succession open outranks everything else,
+	// including the link state that described the host that went.
+	if r.statHostLost.Load() {
+		return r.pal.net[severityFailing].with(" Host lost "), true
 	}
 	state := r.statNet.Load()
 	if state == "" || state == "off" {
