@@ -219,7 +219,7 @@ state, peer count and connected state.
 | `RoleNone` | Disabled/no-op. |
 | `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, then allocates a participant identity and slot and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
 | `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
-| `RoleRelay` | A *session* role rather than a transport mode: a participant with more than one link, which forwards the authority's artifacts to the participants behind it and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, links)` is what the protocol reads. |
+| `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
 ```mermaid
 flowchart TD
@@ -663,16 +663,20 @@ reads terminal events. The game clock is frozen before FSM deadlines are created
 and released only after the common start gate, so the host's lobby wait cannot age
 shared timers before a later-created joiner reaches tick one.
 
-An instance sends only to the peers it is linked to. A guest linked to the
-authority bundles its own raw epochs for it alone, and passes on toward the
-authority the raw epochs of the participants behind it; a guest with no such link
-floods its own. The committed copy reaches the rest of the session by being
-forwarded: each node floods an epoch it has not seen to every link but the one it
-arrived on, and the per-source epoch window is what stops the flood
-(`NetworkRelayHopLimit` is only the backstop for a bug in it). Because every
-frame names the absolute tick it applies at, a relayed artifact still lands on the
-same tick everywhere. A roster change travels the same way, produced only by the
-coordinator so it has one apply tick.
+An instance sends only to the peers it is linked to, and knows each link as up,
+down or beside. A guest bundles its own raw epochs and those of the participants
+behind it for its one link up — the authority, else the relay it joined through or
+adopted (`NetworkResource.Relay`) — and a guest with no such link and the
+authority alive offers them on every link not behind it, adopting the first that
+returns them committed; with the authority lost it holds them for the handoff to
+resend. The authority sends a committed copy down every link, the producer's
+included, and each node passes a copy it has not seen down to the links behind it
+(`InboundConnect.Served` marks a served join behind a node from its admission, raw
+traffic marks the rest); the per-source epoch and sequence windows stop a copy
+arriving twice (`NetworkRelayHopLimit` is only the backstop for a bug in it).
+Because every frame names the absolute tick it applies at, a relayed artifact
+still lands on the same tick everywhere. A roster change travels the same way,
+produced only by the coordinator so it has one apply tick.
 
 `MsgStateSync` periodically copies only the D-13 owner-authored cursor set, is
 written at the tick the authority committed it to, and only when the payload's
@@ -701,10 +705,9 @@ authoritative state and keeps `Host lost` visible.
 
 The host publishes its world as a whole capture and a delta against the last whole
 one in between, chunked under `MsgStateCorrection` and reassembled once per node,
-whichever link a chunk arrives on. A node relays the chunks it admitted, on the
-same argument the epoch flood uses, so the authority reaches a participant the host
-is not linked to directly; an assembly per link would admit each chunk once per
-path, a cycle the mesh closes. A guest queues what arrives and installs the newest
+whichever link a chunk arrives on. A node passes the chunks it admitted down to
+the links behind it, as it does committed epochs, so the authority reaches a
+participant the host is not linked to directly. A guest queues what arrives and installs the newest
 that resolves between two ticks, into a staging world built once and re-used; the
 `snapshot.correction` group carries what it cost and how far its prediction had
 drifted. Measured at the storm high water, the

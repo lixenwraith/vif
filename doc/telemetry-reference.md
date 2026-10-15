@@ -253,8 +253,8 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.lag_ticks` (int) | How far behind the newest tick any peer closed this instance stands, measured every tick. Zero on the authority |
 | `network.stale` (bool) | That lag exceeds `SnapshotStaleTicks`, so this participant's crossings reach the host after the ticks they name. Always false on the authority. The status bar shows `desync <lag_ticks>` |
 | `network.corrections_received` (int) | Authoritative corrections reassembled from the wire |
-| `network.relay_forwarded` (int) | Artifact batches, correction chunks and departure notices this instance passed on to its other links |
-| `network.relay_duplicates` (int) | Copies already admitted, arriving by a second path. These end the flood |
+| `network.relay_forwarded` (int) | Artifact batches and correction chunks this instance passed down to the participants behind it, and departure notices it flooded |
+| `network.relay_duplicates` (int) | Epochs, syncs and chunks already admitted arriving again, and crossing sequences already taken, whatever epoch carried them |
 | `network.transport_lost_in`, `network.transport_lost_out` (int) | Inbound notifications a full poll buffer discarded, and outbound frames a peer's send queue refused. A new loss is also logged |
 | `network.digest_mismatches` (int) | Runtime parity samples that disagreed. A gauge under weakened D-11, not a fault |
 | `network.drift_part` (string), `network.drift_tick` (int) | The first surface, in this order, that differed at the last disagreement: positions, kinetics, combat, context, status or snapshot, or `combined` when only the whole hash did. Then its tick |
