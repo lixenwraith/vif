@@ -17,21 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Carry adaptation's tracked routes and pending deaths in the capture
-
-- Priority: P0, to review
-- Affected files: `internal/system/adaptation.go`, `internal/snapshot/capture.go`
-
-`AdaptationSystem.SaveShared` carries only `Resources.Adaptation`
-(`adaptation.go:676-682`). `tracking` (each live eye's route) and `pendingDeaths`
-(scored next tick, `:180`) stay local, though
-[D-19](domain-design.md#d-19--every-future-affecting-shared-value-is-restorable)
-asks that every future-affecting Shared value be restorable, and the genetic carrier
-ships its equivalents (`genetic.go:482-493`). A joiner scores nothing when a pre-join
-eye dies, so its EXP3 weights and the Shared RNG draws in `samplePool` drift from the
-authority's until the next correction. Carry both, sorted by entity, in the
-adaptation record (a capture schema bump).
-
 ### Decide how the network badge shows a succession walk
 
 - Priority: P0, to review
