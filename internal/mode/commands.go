@@ -24,8 +24,7 @@ import (
 
 // CommandResult represents the outcome of command execution
 type CommandResult struct {
-	Continue   bool // false = exit game
-	KeepPaused bool // true = caller should not unpause
+	Continue bool // false = exit game
 }
 
 // commandNames lists every case label below, aliases included. Kept adjacent to
@@ -49,7 +48,7 @@ func CommandNames() []string { return commandNames }
 func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	// The answer a command that says nothing else leaves; one that answers replaces it
 	ctx.SetStatusMessage(":"+command, parameter.StatusNotice)
@@ -143,7 +142,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handlePlayerCommand(ctx, args)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 }
 
@@ -178,7 +177,7 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
 		reportLogState(ctx)
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	switch strings.ToLower(args[0]) {
@@ -191,7 +190,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		path, err := vlog.Start()
 		if err != nil {
 			setCommandError(ctx, "Logging failed: "+err.Error())
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		ctx.Log.Info("app", "msg", "logging started", "path", path, "level", vlog.LevelName())
 		ctx.SetStatusMessage("Logging to "+path, parameter.StatusNotice)
@@ -213,7 +212,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		s, err := vlog.ParseScopes(strings.Join(args[1:], "+"), vlog.Scopes())
 		if err != nil {
 			setCommandError(ctx, "Usage: :log scope [+|-]<scope>+<scope> | <letters> | all | none; scopes in :help logging")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		vlog.SetScopes(s)
 		ctx.Log.Info("app", "msg", "log scope changed", "scope", vlog.ScopeString(s))
@@ -222,7 +221,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 	case "level", "lvl":
 		if len(args) < 2 || vlog.SetLevelName(args[1]) != nil {
 			setCommandError(ctx, "Usage: :log level trace|debug|info|warn|error")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		ctx.Log.Info("app", "msg", "log level changed", "level", vlog.LevelName())
 		reportLogState(ctx)
@@ -235,7 +234,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		n, err := strconv.Atoi(args[1])
 		if err != nil || n < 0 {
 			setCommandError(ctx, "Usage: :log stat <ticks> (0 disables)")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		ctx.World.Resources.Status.SetSnapshotInterval(uint64(n))
 		ctx.Log.Info("app", "msg", "stat interval changed", "ticks", n)
@@ -247,13 +246,13 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 	default:
 		if err := vlog.SetLevelName(args[0]); err != nil {
 			setCommandError(ctx, "Usage: :log [on|off|trace|debug|info|warn|error|scope|level|stat]")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		ctx.Log.Info("app", "msg", "log level changed", "level", vlog.LevelName())
 		reportLogState(ctx)
 	}
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleLogRec controls the flight recorder
@@ -262,7 +261,7 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 	reg := ctx.World.Resources.Status
 	if len(args) == 0 {
 		reportLogState(ctx)
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	switch strings.ToLower(args[0]) {
@@ -270,7 +269,7 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 		rc := reg.Recorder()
 		if rc == nil {
 			setCommandError(ctx, "Recorder disabled")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		// Command mode holds the world lock; the ring belongs to the tick
 		// goroutine, which owns sample. Request, do not flush here.
@@ -281,12 +280,12 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 		rc := reg.Recorder()
 		if rc == nil {
 			setCommandError(ctx, "Recorder disabled")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		desired, explicit, ok := parseToggleArg(args[1:])
 		if !ok {
 			setCommandError(ctx, "Usage: :log rec fsm [on|off]")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		if !explicit {
 			desired = !rc.FSMTrigger()
@@ -298,7 +297,7 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 		n, err := strconv.Atoi(args[0])
 		if err != nil || n < 0 {
 			setCommandError(ctx, "Usage: :log rec [<ticks>|flush|fsm]")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		// Relayout discards history; the metric set is already frozen
 		reg.EnableRecorder(n)
@@ -306,7 +305,7 @@ func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
 		reportLogState(ctx)
 	}
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // reportLogState shows session state in the status bar
@@ -329,7 +328,7 @@ func setCommandError(ctx *engine.GameContext, message string) {
 
 // handleQuitCommand exits the game
 func handleQuitCommand(ctx *engine.GameContext) CommandResult {
-	return CommandResult{Continue: false, KeepPaused: true}
+	return CommandResult{Continue: false}
 }
 
 // handleNewCommand starts a new game. Bare, it resets this run's state through the
@@ -339,15 +338,15 @@ func handleQuitCommand(ctx *engine.GameContext) CommandResult {
 func handleNewCommand(ctx *engine.GameContext, args []string, purge bool) CommandResult {
 	if len(args) > 1 {
 		setCommandError(ctx, "Usage: :n [scenario]")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	if len(args) == 1 {
 		return changeScenario(ctx, args[0])
 	}
 	if !resetGame(ctx, purge) {
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
-	return CommandResult{Continue: true, KeepPaused: true}
+	return CommandResult{Continue: true}
 }
 
 // resetGame requests a new game on the run as it stands, crossing it in a live
@@ -373,25 +372,25 @@ func resetGame(ctx *engine.GameContext, purge bool) bool {
 func changeScenario(ctx *engine.GameContext, name string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime cannot change scenario")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	changed, err := ctx.SessionCtl.ChangeScenario(name)
 	if err != nil {
 		setCommandError(ctx, "Scenario: "+err.Error())
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	if !changed {
 		// Already running these bytes, so a reset is the same new game without a
 		// restart's cost — and in a session it crosses, as a bare :n does
 		if !resetGame(ctx, false) {
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
-		return CommandResult{Continue: true, KeepPaused: true}
+		return CommandResult{Continue: true}
 	}
 	ctx.MacroClearFlag.Store(true)
 	// Nothing to report on the restart path: the loop returns before the next
 	// frame, and what the operator sees is the new scenario.
-	return CommandResult{Continue: true, KeepPaused: true}
+	return CommandResult{Continue: true}
 }
 
 // handleFreeCommand toggles or sets mouse motion cursor tracking
@@ -429,7 +428,7 @@ func applyToggle(ctx *engine.GameContext, flag *atomic.Bool, args []string, cmd,
 	desired, explicit, ok := parseToggleArg(args)
 	if !ok {
 		setCommandError(ctx, fmt.Sprintf("Usage: :%s [on|off]", cmd))
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	if !explicit {
 		desired = !flag.Load()
@@ -441,7 +440,7 @@ func applyToggle(ctx *engine.GameContext, flag *atomic.Bool, args []string, cmd,
 		state = "enabled"
 	}
 	ctx.SetStatusMessage(label+" "+state, parameter.StatusNotice)
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // parseToggleArg accepts an empty argument list (toggle) or a single on|off
@@ -473,12 +472,12 @@ func toggleWord(v bool) string {
 func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 2 {
 		setCommandError(ctx, "Usage: :system <name> enable|disable")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	if !ctx.World.HasSystem(args[0]) {
 		setCommandError(ctx, fmt.Sprintf("Invalid system: %s", args[0]))
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	enabledFlag := false
@@ -489,13 +488,13 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 		enabledFlag = false
 	default:
 		setCommandError(ctx, fmt.Sprintf("Invalid state: %s", args[1]))
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	if !enabledFlag && !ctx.World.AllowSystemDisable(args[0]) {
 		setCommandError(ctx, fmt.Sprintf("%s is required by %s", args[0],
 			strings.Join(ctx.World.SystemsRequiring(args[0], engine.DepRequired), ", ")))
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	ctx.PushEvent(event.EventMetaSystemCommandRequest, &event.MetaSystemCommandPayload{
@@ -503,14 +502,14 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 		Enabled:    enabledFlag,
 	})
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleMouseCommand controls mouse input
 func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
 		setCommandError(ctx, "Usage: :mouse enable|disable|free")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	switch args[0] {
@@ -536,10 +535,10 @@ func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 	default:
 		setCommandError(ctx, "Usage: :mouse enable|disable|free")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleEmitCommand emits an event by name with optional TOML payload (debug/testing)
@@ -548,7 +547,7 @@ func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
 func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) < 1 {
 		setCommandError(ctx, "Usage: :emit <EventName> [{ payload }]")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	name := args[0]
@@ -561,7 +560,7 @@ func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
 	eventType, ok := event.GetEventType(name)
 	if !ok {
 		setCommandError(ctx, fmt.Sprintf("Unknown event: %s", name))
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	// Parse payload if provided
@@ -572,13 +571,13 @@ func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
 		payload, err = parseEventPayload(eventType, payloadStr)
 		if err != nil {
 			setCommandError(ctx, fmt.Sprintf("Payload error: %v", err))
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 	}
 
 	ctx.PushEvent(eventType, payload)
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // parseEventPayload parses an inline TOML table string into the typed payload struct
@@ -628,17 +627,17 @@ func handleTelemetryCommand(ctx *engine.GameContext, args []string) CommandResul
 		case "unpin", "clear":
 			ctx.ClearOverlayPins()
 			ctx.SetStatusMessage("Pins cleared", parameter.StatusNotice)
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		default:
 			setCommandError(ctx, "Usage: :telemetry [save|hud|unpin]")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 	}
 
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
 	ctx.PushLocal(event.EventMetaTelemetryRequest, nil)
-	return CommandResult{Continue: true, KeepPaused: true}
+	return CommandResult{Continue: true}
 }
 
 // snapRecord is one captured snapshot record, written after the lock is released
@@ -671,7 +670,7 @@ func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
 		ctx.SetStatusMessage("Snapshot saved to "+path, parameter.StatusNotice)
 	})
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleDebugCommand opens the profiler report, or runs a profiling subcommand
@@ -680,13 +679,13 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 		ctx.RequestMode(core.ModeOverlay)
 		ctx.SetPaused(true)
 		ctx.PushLocal(event.EventMetaDebugRequest, nil)
-		return CommandResult{Continue: true, KeepPaused: true}
+		return CommandResult{Continue: true}
 	}
 
 	kind := strings.ToLower(args[0])
 	if _, ok := timedCaptures[kind]; ok {
 		handleCaptureCommand(ctx, kind, args[1:])
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	switch kind {
 	case "p", "prof":
@@ -703,7 +702,7 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 	default:
 		setCommandError(ctx, "Usage: :debug [prof [on|off]|break ...|cpu [s]|heap|mutex [s]|trace [s]]")
 	}
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleProfCommand toggles or sets the profiler; starting it pins its cards
@@ -979,18 +978,18 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
 	ctx.PushLocal(event.EventMetaHelpRequest, nil)
-	return CommandResult{Continue: true, KeepPaused: true}
+	return CommandResult{Continue: true}
 }
 
 // Opening a session uses its own admission check, before the live-session guard applies.
 func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime has no session transport")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	if len(args) != 1 && len(args) != 2 {
 		setCommandError(ctx, "Usage: :host <addr> [host|migrate]  (e.g. :host :7777 migrate, :host ws://:7777)")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	authority := ""
 	if len(args) == 2 {
@@ -998,9 +997,9 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 	if err := ctx.SessionCtl.BeginHosting(args[0], authority); err != nil {
 		setCommandError(ctx, err.Error())
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleJoinCommand replaces this solo run with one joined to a session.
@@ -1008,18 +1007,18 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime has no session transport")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	if len(args) != 1 {
 		setCommandError(ctx, "Usage: :join <target>  (e.g. :join host:7777, a ws(s):// URL, or an https:// site for a new session)")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	if err := ctx.SessionCtl.Join(args[0]); err != nil {
 		setCommandError(ctx, "Join: "+err.Error())
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	ctx.MacroClearFlag.Store(true)
-	return CommandResult{Continue: true, KeepPaused: true}
+	return CommandResult{Continue: true}
 }
 
 // handleJournalCommand reports the journal, or starts one from the current world.
@@ -1027,7 +1026,7 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime cannot start a journal")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	switch {
 	case len(args) == 0:
@@ -1039,23 +1038,23 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 	case len(args) == 1 && (args[0] == "start" || args[0] == "on"):
 		if err := ctx.SessionCtl.StartJournal(); err != nil {
 			setCommandError(ctx, "Journal: "+err.Error())
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		ctx.MacroClearFlag.Store(true)
 	default:
 		setCommandError(ctx, "Usage: :journal [start]")
 	}
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleSessionCommand reports what this run is part of.
 func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime has no session transport")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	ctx.SetStatusMessage(ctx.SessionCtl.SessionSummary(), parameter.StatusNotice)
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleBotCommand lists, seats or drops the bots this run holds. Outside the
@@ -1064,13 +1063,13 @@ func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime has no session transport")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	var err error
 	switch {
 	case len(args) == 0:
 		ctx.SetStatusMessage(ctx.SessionCtl.BotSummary(), parameter.StatusNotice)
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	case args[0] == "add" && len(args) <= 2:
 		graph := ""
 		if len(args) == 2 {
@@ -1089,12 +1088,12 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 		}
 	default:
 		setCommandError(ctx, "Usage: :bot [add [N[:graph]|graph] | drop <slot>]")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 	if err != nil {
 		setCommandError(ctx, "Bot: "+err.Error())
 	}
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 func parsePlayerSlot(value string) (int, error) {
@@ -1112,7 +1111,7 @@ func parsePlayerSlot(value string) (int, error) {
 }
 
 func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
-	result := CommandResult{Continue: true, KeepPaused: false}
+	result := CommandResult{Continue: true}
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime has no session transport")
 		return result
@@ -1160,7 +1159,7 @@ func handleAboutCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
 	ctx.PushLocal(event.EventMetaAboutRequest, nil)
-	return CommandResult{Continue: true, KeepPaused: true}
+	return CommandResult{Continue: true}
 }
 
 // handleContentCommand reports corpus telemetry in the status bar
@@ -1174,20 +1173,20 @@ func handleContentCommand(ctx *engine.GameContext) CommandResult {
 		reg.Strings.Get("content.file").Load(),
 	)
 	ctx.SetStatusMessage(msg, parameter.StatusNotice)
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleEnergyCommand sets the energy to a specified value
 func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 1 {
 		setCommandError(ctx, "Invalid arguments for energy")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	value, err := strconv.Atoi(args[0])
 	if err != nil {
 		setCommandError(ctx, "Invalid arguments for energy")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
@@ -1195,20 +1194,20 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 		Value:  value,
 	})
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleHeatCommand sets the heat to a specified value
 func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 1 {
 		setCommandError(ctx, "Usage: :heat <0-100>")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	value, err := strconv.Atoi(args[0])
 	if err != nil {
 		setCommandError(ctx, "Invalid number format")
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	if value < 0 {
@@ -1223,7 +1222,7 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 		Value:  value,
 	})
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleBoostCommand triggers boost request event
@@ -1238,7 +1237,7 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 		Duration: parameter.BoostBaseDuration,
 	})
 
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleGodCommand sets max heat, high energy of the given sign and every weapon;
@@ -1249,25 +1248,25 @@ func handleGodCommand(ctx *engine.GameContext, sign int) CommandResult {
 	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
 		Entity: player, Value: sign * parameter.GodEnergyAmount, Weapons: true,
 	})
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleBlossomCommand triggers a blossom wave
 func handleBlossomCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushLocal(event.EventParticleWave, &event.ParticleWavePayload{Behavior: component.ParticleBlossom})
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleDecayCommand triggers a decay wave
 func handleDecayCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushLocal(event.EventParticleWave, &event.ParticleWavePayload{Behavior: component.ParticleDecay})
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleDustCommand triggers glyph to dust transform
 func handleDustCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushLocal(event.EventDustAllRequest, nil)
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // === DEBUG ===
@@ -1279,13 +1278,13 @@ func handleFlowCommand(ctx *engine.GameContext, args []string) CommandResult {
 		groupID, err := strconv.Atoi(args[0])
 		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
 			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		ctx.PushLocal(event.EventDebugFlowToggle, &event.DebugFlowGroupPayload{
 			GroupID: uint8(groupID),
 		})
 	}
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
@@ -1295,13 +1294,13 @@ func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
 		groupID, err := strconv.Atoi(args[0])
 		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
 			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		ctx.PushLocal(event.EventDebugGraphToggle, &event.DebugFlowGroupPayload{
 			GroupID: uint8(groupID),
 		})
 	}
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleSpeedCommand reports or sets the simulation time scale
@@ -1310,7 +1309,7 @@ func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 	cur := ctx.TimeCtl.Scale()
 	if len(args) == 0 {
 		ctx.SetStatusMessage("Speed "+cur.String()+"x", parameter.StatusNotice)
-		return CommandResult{Continue: true, KeepPaused: false}
+		return CommandResult{Continue: true}
 	}
 
 	var next engine.TimeScale
@@ -1325,14 +1324,14 @@ func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 		s, ok := engine.ParseScale(args[0])
 		if !ok {
 			setCommandError(ctx, "Usage: :speed [1/8|1/4|1/2|1|2|4|8|+|-|reset]")
-			return CommandResult{Continue: true, KeepPaused: false}
+			return CommandResult{Continue: true}
 		}
 		next = s
 	}
 
 	ctx.PushLocal(event.EventGameSpeedRequest, &event.GameSpeedPayload{Num: next.Num, Den: next.Den})
 	ctx.SetStatusMessage("Speed "+next.String()+"x", parameter.StatusNotice)
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleStepCommand advances the paused simulation or arms a run-until breakpoint
@@ -1368,7 +1367,7 @@ func handleStepCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 
 	ctx.PushLocal(event.EventGameStepRequest, p)
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // parseStepCond fills the run-until fields from "fsm [region]" or "ev <Event>",
@@ -1404,7 +1403,7 @@ func parseStepCond(p *event.GameStepPayload, args []string) bool {
 
 func stepUsage(ctx *engine.GameContext) CommandResult {
 	setCommandError(ctx, "Usage: :step [n] | :step [rate] fsm [region] [pause] | :step [rate] ev <Event> [pause] | :step off")
-	return CommandResult{Continue: true, KeepPaused: false}
+	return CommandResult{Continue: true}
 }
 
 // handleReplayCommand moves a replay to its start, or to a tick of the run it
@@ -1459,7 +1458,7 @@ func parseClock(s string) (time.Duration, bool) {
 func handleRegionCommand(ctx *engine.GameContext, args []string) CommandResult {
 	const usage = "Usage: :region list | spawn <name> <state> | pause|resume|terminate <name>"
 
-	res := CommandResult{Continue: true, KeepPaused: false}
+	res := CommandResult{Continue: true}
 	if len(args) == 0 {
 		setCommandError(ctx, usage)
 		return res
