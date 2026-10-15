@@ -133,7 +133,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &player{a: a, src: botSource{d}, interactive: true, interval: parameter.GameUpdateInterval,
+	p := &player{a: a, src: botSource{d}, driven: true, interactive: true, interval: parameter.GameUpdateInterval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
 	press := func(key terminal.Key, char rune) {
 		t.Helper()
@@ -174,6 +174,38 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 		t.Fatalf("the requested bot did not join: %s", a.ctx.GetStatusMessage())
 	}
 	press(terminal.KeyEscape, 0)
+}
+
+// A watched script in a session is live as a watched bot is: Runtime §1.1 and
+// Input and modes §9 leave it pan and quit, and the session clock runs on.
+func TestAPresentedScriptInASessionKeepsOnlyPanAndQuit(t *testing.T) {
+	script, err := journal.ParseScript([]byte("schema = 1\nticks = 4\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	d, err := journal.NewScriptDriver(scriptTarget{a: a}, script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.AttachTransport(network.NewMesh().Node(1))
+	p := &player{a: a, src: scriptSource{d}, driven: true, interval: parameter.GameUpdateInterval,
+		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+	for _, r := range " .,+-" {
+		p.key(terminal.Event{Key: terminal.KeyRune, Rune: r})
+	}
+	if p.paused || p.step != 0 || p.scale != engine.ScaleNormal || !p.live {
+		t.Fatalf("playback keys reached a live script: paused=%v step=%d scale=%v live=%v",
+			p.paused, p.step, p.scale, p.live)
+	}
+	p.key(terminal.Event{Key: terminal.KeyRune, Rune: 'l'})
+	if p.panX != panStep || !strings.HasPrefix(a.ctx.GetStatusMessage(), "LIVE") {
+		t.Fatalf("pan %d, status %q; want a pan and a LIVE status", p.panX, a.ctx.GetStatusMessage())
+	}
+	if p.key(terminal.Event{Key: terminal.KeyRune, Rune: 'q'}) {
+		t.Fatal("q did not quit the viewer")
+	}
 }
 
 func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {

@@ -48,21 +48,6 @@ authority link (`converge/reach.go:202-225`), which has `host_lost` set
 the count beside `Host lost`; let `Migrating k` outrank `Host lost` until the walk
 gives up (`authority.go:588-589`); or drop the count from the badge and the docs.
 
-### Keep a watched script in a session to pan and quit
-
-- Priority: P0, to review
-- Affected files: `internal/app/play.go`, `doc/runtime.md`, `doc/input-and-modes.md`
-
-`runPresented` marks a driven run in a session live (`play.go:102`), but `advance`
-and `key` recompute `live` as `p.interactive && sessionTransport() != nil` (`:267`,
-`:609`), and only a bot is interactive (`:110`). A watched script in a session
-therefore takes SPACE . , + - and `:` from its first frame and reports `PLAY`
-instead of `LIVE` (reproduced), where [Runtime](runtime.md) §1.1 and
-[Input and modes](input-and-modes.md) §9 allow only pan and quit. Smallest fix:
-carry a driven flag from `runPresented` into the recompute and give a script the
-bot's unpause and 1x reset (`:268-272`); a replay with a transport stays pausable.
-If a script should keep its keys, the docs change instead.
-
 ### Decide whether a reset clears every instance's macros
 
 - Priority: P0, to review
