@@ -9,6 +9,13 @@
     const WORKER_PATH = files.worker || 'worker.js';
     const EXEC_PATH = files.exec || 'wasm_exec.js';
 
+    /* Touch, decided once at load. Any touch screen keeps the system keyboard
+       down on taps; a touch-first one (phone, tablet) also gets the key strip. A
+       phone draws at 10px, about what 14px is on a laptop at their viewing distances. */
+    const anyTouch = matchMedia('(any-pointer: coarse)').matches;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    const FONT = touch && Math.min(screen.width, screen.height) < 600 ? 10 : 14;
+
     let term;
     let fitAddon;
     let webglAddon;
@@ -57,7 +64,7 @@
             allowProposedApi: true,
             scrollback: 0,
             fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, monospace',
-            fontSize: 14,
+            fontSize: FONT,
             lineHeight: 1.0,
             letterSpacing: 0,
             theme: {
@@ -84,8 +91,14 @@
         }
 
         const container = document.getElementById('terminal');
+        if (touch) document.getElementById('strip').hidden = false;   // before the first fit
         term.open(container);
+        // xterm focuses this field on every tap; so marked, the focus raises no
+        // keyboard, while hardware keys still type through it.
+        if (anyTouch) term.textarea.setAttribute('inputmode', 'none');
         fitAddon.fit();
+        fitted();
+        if (touch) wireTouch();
 
         return term;
     }
@@ -174,6 +187,7 @@
 
         program = new Worker(WORKER_PATH);
         program.onerror = function(e) {
+            if (!program) return;   // a timer Go left behind throws after exit; the exit stands
             showMessage('Failed to start vif (' + e.message + '). Reload to retry.', true);
         };
         program.onmessage = function(e) {
@@ -208,6 +222,7 @@
         if (!program) return;
         program.terminate();
         program = null;
+        if (touch) term.blur();   // nothing left to type into, and a keyboard would cover the message
     }
 
     function sendInput(arr) {
@@ -251,17 +266,25 @@
 
         function fitNow(passes) {
             if (!fitAddon) return;
+            if (term.options.fontSize !== FONT) term.options.fontSize = FONT;   // never fit at the keyboard's size
             fitAddon.fit();
             snapRows();
             if (passes > 1) {
                 requestAnimationFrame(function() { fitNow(passes - 1); });
                 return;
             }
+            fitted();
             if (program) program.postMessage({ type: 'resize', cols: term.cols, rows: term.rows });
+            if (touch) layoutKeyboard();
         }
 
         let fitTimer = 0;
         function handleResize() {
+            // Where a soft keyboard shrinks the page itself, the grid must not follow it.
+            if ((keyboard || keyboardUp) && document.documentElement.clientWidth === fitW) {
+                refitPending = true;
+                return;
+            }
             clearTimeout(fitTimer);
             fitTimer = setTimeout(function() { fitNow(2); }, 50);
         }
@@ -294,6 +317,126 @@
         container.addEventListener('click', function() {
             term.focus();
         });
+    }
+
+    // === Touch: key strip and system keyboard ===
+    const STRIP_KEYS = { tab: '\t', esc: '\x1b' };
+    const KEYBOARD_MIN = 100;   // px of screen a soft keyboard takes at least; less is a toolbar
+    const FONT_MIN = 6;         // smallest the grid is drawn to fit above the keyboard
+    let keyboard = false;       // the player asked for the system keyboard
+    let keyboardSeen = false;   // and it came up, so its going away is the system dismissing it
+    let keyboardUp = false;     // a keyboard the player asked for covers the page, or is still leaving
+    let refitPending = false;   // a resize put off while that keyboard was asked for or up
+    let fitW = 0, fitH = 0;     // page size the grid was last fitted to
+    let layoutKeyboard = function() {};
+
+    function fitted() {
+        fitW = document.documentElement.clientWidth;
+        fitH = document.documentElement.clientHeight;
+    }
+
+    function wireTouch() {
+        const strip = document.getElementById('strip');
+        const kbdButton = document.getElementById('kbd');
+        const escButton = document.getElementById('esc');
+        const fullButton = document.getElementById('full');
+        const container = document.getElementById('terminal');
+        const gridEl = term.element.querySelector('.xterm-screen');
+        const vv = window.visualViewport;
+
+        // A strip tap must leave focus, and with it the keyboard, where it is.
+        strip.addEventListener('pointerdown', function(e) { e.preventDefault(); });
+        strip.addEventListener('click', function(e) {
+            const b = e.target.closest('button');
+            if (!b) return;
+            if (b.dataset.key) term.input(STRIP_KEYS[b.dataset.key]);   // the path typed keys take
+            else if (b === kbdButton) setKeyboard(!keyboard, true);
+            else if (b === fullButton) toggleFullscreen();
+        });
+
+        function setKeyboard(on, refocus) {
+            keyboard = on;
+            keyboardSeen = false;
+            term.textarea.setAttribute('inputmode', on ? 'text' : 'none');
+            // A focused field keeps the keyboard it has: refocusing inside the tap is what
+            // raises or drops it, and the only way iOS raises one at all.
+            if (refocus) {
+                term.blur();
+                term.focus();
+            }
+            kbdButton.setAttribute('aria-pressed', on);
+            escButton.hidden = !on;
+            layoutKeyboard();
+        }
+
+        /* While a keyboard covers the page the grid keeps its size, which is the solo
+           map's, and is drawn at a smaller font between the strip and the keyboard;
+           below FONT_MIN it keeps the bottom rows, where commands are typed, in view. */
+        function drawAt(size) {
+            if (term.options.fontSize !== size) term.options.fontSize = size;
+            return gridEl.getBoundingClientRect().height;
+        }
+
+        let fullHeight = 0;   // the grid's height at FONT
+        let lastFit = null;   // the size found for a height, kept while the keyboard holds still
+        layoutKeyboard = function() {
+            const up = !!vv && fitH - vv.height * vv.scale > KEYBOARD_MIN;
+            if (keyboard && up) keyboardSeen = true;
+            else if (keyboard && keyboardSeen) return setKeyboard(false, false);   // dismissed by the system
+            keyboardUp = up && (keyboard || keyboardUp);
+
+            if (term.options.fontSize === FONT) {
+                fullHeight = gridEl.getBoundingClientRect().height;
+                lastFit = null;
+            }
+            let shift = 0;
+            if (up) {
+                const cs = getComputedStyle(term.element);
+                const avail = vv.height - strip.offsetHeight
+                    - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+                let size = lastFit && lastFit.avail === avail ? lastFit.size
+                    : Math.max(FONT_MIN, Math.min(FONT, Math.floor(2 * FONT * avail / fullHeight) / 2));
+                let h;
+                while ((h = drawAt(size)) > avail && size > FONT_MIN) size -= 0.5;
+                lastFit = { avail: avail, size: size };
+                shift = Math.max(0, h - avail);
+            } else {
+                drawAt(FONT);
+                // Only once the page is whole again does a put-off refit see its real size.
+                if (!keyboard && refitPending) {
+                    refitPending = false;
+                    window.dispatchEvent(new Event('resize'));
+                }
+            }
+            // The page follows the visible area if the browser pans it to the keyboard.
+            document.body.style.transform = up && vv.offsetTop ? 'translateY(' + vv.offsetTop + 'px)' : '';
+            container.style.transform = shift ? 'translateY(' + -shift + 'px)' : '';
+        };
+
+        if (vv) {
+            let queued = false;
+            const schedule = function() {
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(function() { queued = false; layoutKeyboard(); });
+            };
+            vv.addEventListener('resize', schedule);
+            vv.addEventListener('scroll', schedule);
+        }
+
+        // Fullscreen refits the grid as a rotation does; iPhone Safari has no API for it.
+        if (document.fullscreenEnabled) {
+            fullButton.hidden = false;
+            document.addEventListener('fullscreenchange', function() {
+                fullButton.setAttribute('aria-pressed', document.fullscreenElement !== null);
+            });
+        }
+        function toggleFullscreen() {
+            const done = document.fullscreenElement
+                ? document.exitFullscreen()
+                : document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+            done.catch(function() {});
+        }
     }
 
     function showMessage(msg, isError) {

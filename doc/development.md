@@ -579,9 +579,13 @@ with the fit and optional WebGL addons and starts the Go WASM instance in a Work
 (`web/worker.js`), so a frame xterm takes long to draw never delays a tick, a
 probe echo or a socket read. The page batches the worker's writes into
 microtasks, relays text/binary input and resizes to it, prevents the context menu,
-and keeps focus. Before launch it maps `window.VIF_ARGS` and repeated `arg` query
-parameters into the program's argv; a site that renames the files says so with
-`data-wasm`, `data-worker` and `data-exec` on the script element
+and keeps focus. On a touch screen a tap raises no system keyboard; a strip along
+the top toggles it, sends Tab (and Esc while it is up) and goes fullscreen where
+the browser can. Neither the strip nor the keyboard refits the grid, so only a
+rotation or leaving fullscreen crops the solo map. Before launch it maps
+`window.VIF_ARGS` and repeated `arg` query parameters into the program's argv; a
+site that renames the files says so with `data-wasm`, `data-worker` and
+`data-exec` on the script element
 ([Build profiles](multi-platform.md#6-browser-launch-arguments)). `make serve`
 builds `web/vif.wasm` and serves this directory.
 
