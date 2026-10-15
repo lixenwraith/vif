@@ -72,21 +72,6 @@ from on_enter. Options: honour it (a nested call only marks the exiting region, 
 the outer exit deletes it and skips any enter phase); or forbid it
 (`TerminateRegion` returns an error for an exiting region, and the reference says so).
 
-### Let a macro run an ex command, or leave it out of the recording
-
-- Priority: P0, to review
-- Affected files: `internal/mode/router.go`, `internal/mode/macro.go`,
-  `doc/input-and-modes.md`
-
-A recording keeps every intent (`router.go:199-201`), so `qa:auto off<Enter>q`
-stores the `:`, the characters and the confirm. Played back, `:` opens the command
-line (`:626-631`) and Command mode suspends playback (`:1074-1076`, `:1254-1262`):
-the line waits empty, and after Escape the rest plays in Normal mode and does nothing
-(reproduced), though [Input and modes](input-and-modes.md) §6 says macros replay
-commands. Options: record a confirmed command as one step that playback runs through
-`ExecuteCommand`, settling whether `:q` and `:n` may run from a macro; or keep
-Command-mode intents out of a recording and say so in §6.
-
 ### Delete search text by rune
 
 - Priority: P0, to review
