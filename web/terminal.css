@@ -23,7 +23,10 @@ html, body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    width: max-content;                   /* else it wraps at half a narrow screen */
     max-width: 90vw;
+    padding: 0.5em 1em;
+    background: #000;                     /* readable over the frame a crash leaves */
     color: #888;
     font-family: monospace;
     font-size: 16px;
@@ -46,4 +49,68 @@ html, body {
 
 .xterm-viewport {
     overflow: hidden !important;
+}
+
+/* Touch-primary devices: terminal.js shows the key strip before the first fit,
+   so its height is never the grid's. */
+:root { --strip-h: 40px; }
+
+#strip {
+    position: relative;
+    z-index: 1;                    /* above a grid shifted up over the keyboard */
+    display: flex;
+    height: var(--strip-h);
+    background: #111;
+    border-bottom: 1px solid #262626;
+}
+
+#strip[hidden],
+#strip [hidden] { display: none; }
+
+#strip:not([hidden]) + #terminal { height: calc(100% - var(--strip-h)); }
+
+#strip button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 52px;
+    padding: 0 12px;
+    border: 0;
+    background: none;
+    color: #bbb;
+    font: 15px/1 monospace;
+}
+
+#strip button:active        { background: #262626; }
+#strip button[aria-pressed="true"] { background: #1d2a55; color: #fff; }
+#full { margin-left: auto; }
+
+/* Any touch screen: taps never zoom, select or call out, and the hidden field
+   xterm types through stays at the top (16px, or iOS zooms in on focus; at the
+   cursor, the browser pans the page to show it above the keyboard). */
+@media (any-pointer: coarse) {
+    html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    #terminal,
+    #strip {
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+
+    .xterm .xterm-helper-textarea {
+        font-size: 16px;
+        left: 0 !important;
+        top: 0 !important;
+        pointer-events: none;   /* else touch adjustment hands taps on cells near it to its cell */
+    }
+}
+
+@media (pointer: coarse) {
+    .xterm .xterm-screen { margin: 0 auto; }   /* a grid drawn smaller over the keyboard stays centred */
 }
