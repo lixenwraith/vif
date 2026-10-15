@@ -515,7 +515,7 @@ func (a *App) initJournal() error {
 		return nil
 	}
 
-	r, err := journal.Start(a.world.Resources.Event.Queue, a.buildAnchor(), a.cfg.JournalSink)
+	r, err := journal.Start(a.world.Resources.Event.Queue, a.buildAnchor(), a.cfg.JournalSink, a.log)
 	if err != nil {
 		return err
 	}

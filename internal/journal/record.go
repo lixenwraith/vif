@@ -30,8 +30,9 @@ type Recorder struct {
 }
 
 // Start attaches a replay journal and emits its initial anchor. A nil sink opens
-// the dedicated vif-jrn file; harnesses pass an in-memory Capture instead.
-func Start(queue *event.EventQueue, anchor event.JournalAnchor, sink event.JournalSink) (*Recorder, error) {
+// the dedicated vif-jrn file, its envelopes stamped by log, the run's own handle
+// (nil for the process default); harnesses pass an in-memory Capture instead.
+func Start(queue *event.EventQueue, anchor event.JournalAnchor, sink event.JournalSink, log *vlog.Log) (*Recorder, error) {
 	if queue == nil {
 		return nil, errors.New("journal: event queue is nil")
 	}
@@ -46,7 +47,10 @@ func Start(queue *event.EventQueue, anchor event.JournalAnchor, sink event.Journ
 			return nil, fmt.Errorf("journal: %w", err)
 		}
 		r.path, r.ownsFile = path, true
-		sink = event.VlogSink()
+		if log == nil {
+			log = vlog.Default()
+		}
+		sink = event.VlogSink(log)
 	}
 
 	r.journal = event.NewJournal(sink)

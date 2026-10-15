@@ -525,14 +525,15 @@ func currentJournalPath() string {
 	return ""
 }
 
-// Journal writes one record stamped with the live run and tick.
-// No level or scope gate: a replay capture is not debug output.
-func Journal(sub string, args ...any) {
-	l := jsink.Load()
-	if l == nil {
+// Journal writes one record stamped with this handle's run and tick: a driven
+// run ticks a handle of its own. No level or scope gate: a replay capture is not
+// debug output.
+func (l *Log) Journal(sub string, args ...any) {
+	j := jsink.Load()
+	if j == nil {
 		return
 	}
-	l.LogContext(defaultLog.context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
+	j.LogContext(l.context(sub), j.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
 }
 
 // LastJournalPath returns the journal file, live or most recently closed
