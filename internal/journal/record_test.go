@@ -9,7 +9,7 @@ import (
 func TestRecorderAttachesAccountsAndDetaches(t *testing.T) {
 	queue := event.NewEventQueue()
 	capture := NewCapture()
-	recorder, err := Start(queue, event.JournalAnchor{Seed: 7}, capture)
+	recorder, err := Start(queue, event.JournalAnchor{Seed: 7}, capture, nil)
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}

@@ -698,7 +698,10 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	m.SectionsCompared.Add(int64(sections))
 	m.PagesCompared.Add(int64(pages))
 
-	if c.selective.wantKeyframe {
+	c.selectiveMu.Lock()
+	wantKeyframe := c.selective.wantKeyframe
+	c.selectiveMu.Unlock()
+	if wantKeyframe {
 		req.Keyframe = true
 		req.Sections = nil
 	}

@@ -134,7 +134,8 @@ file = "boss.toml" # no initial: dynamic region
 
 Initial regions are sorted by name before startup. That sorted insertion order
 becomes their deterministic update/event order. Dynamically spawned regions are
-appended in spawn order.
+appended in spawn order. A capture carries the machine's order and an import
+adopts it, so an installed machine runs its regions as the sender does.
 
 ## 4. States and hierarchy
 

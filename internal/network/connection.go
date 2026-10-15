@@ -54,9 +54,11 @@ type Peer struct {
 	InBytes  atomic.Uint64
 	OutBytes atomic.Uint64
 
-	// I/O
+	// I/O, and the frame header scratch each loop owns
 	conn   net.Conn
 	stream *flateStream
+	rhdr   [HeaderSize]byte
+	whdr   [HeaderSize]byte
 
 	// Send queue
 	sendCh chan *Message
@@ -139,7 +141,7 @@ func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 		if p.readTimeout > 0 {
 			_ = p.conn.SetReadDeadline(time.Now().Add(p.readTimeout))
 		}
-		msg, err := Decode(p.stream)
+		msg, err := decode(p.stream, MaxPayloadSize, p.rhdr[:])
 		if err != nil {
 			return
 		}
@@ -193,7 +195,7 @@ func (p *Peer) writeLoop() {
 		for {
 			msg.Seq = p.OutSeq.Add(1)
 			msg.Ack = p.InSeq.Load()
-			if err := msg.Encode(p.stream); err != nil {
+			if err := msg.encode(p.stream, p.whdr[:]); err != nil {
 				return
 			}
 			select {
@@ -219,7 +221,7 @@ func (p *Peer) flushQueued() {
 		case msg := <-p.sendCh:
 			msg.Seq = p.OutSeq.Add(1)
 			msg.Ack = p.InSeq.Load()
-			if msg.Encode(p.stream) != nil {
+			if msg.encode(p.stream, p.whdr[:]) != nil {
 				return
 			}
 		default:

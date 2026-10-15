@@ -17,21 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Keep the FSM's region order through an install
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/export.go`, `internal/fsm/machine.go`,
-  `doc/fsm-and-configuration.md`
-
-`Machine.Export` sorts region names (`export.go:51-52`) and `importState` adopts
-that order (`:244-248`), while a live machine runs regions in spawn order
-(`machine.go:137`, `:159`, `:284`). A joiner, each correction and a replay copy
-restored by `Scheduler.CopyIn` therefore run regions in name order where the
-authority runs spawn order, so shared variables and emitted events interleave
-differently (reproduced). Options: export `regionOrder` as it stands, which import
-already keeps; or hold every region in name order, which changes scenario behaviour
-and the spawn-order rule in [FSM and configuration](fsm-and-configuration.md) §3.
-
 ### Carry adaptation's tracked routes and pending deaths in the capture
 
 - Priority: P0, to review
@@ -77,21 +62,6 @@ instead of `LIVE` (reproduced), where [Runtime](runtime.md) §1.1 and
 carry a driven flag from `runPresented` into the recompute and give a script the
 bot's unpause and 1x reset (`:268-272`); a replay with a transport stays pausable.
 If a script should keep its keys, the docs change instead.
-
-### Stamp a driven run's journal envelope with its own run and tick
-
-- Priority: P0, to review
-- Affected files: `internal/vlog/vlog.go`, `internal/event/journal_sink.go`,
-  `internal/journal/record.go`, `internal/app/app.go`
-
-`vlog.Journal` stamps the envelope from `defaultLog` (`vlog.go:530-536`), but a
-driven App (script, headless bot, harness) ticks its own `vlog.NewLog` handle
-(`internal/app/app.go:205-211`). Every record of a `-script -j` or
-`-bot -headless -j` journal carries the process default's `run` and `tick`, normally
-0 and 0, beside correct `jrun` and `jtick` (reproduced). `vif-log` reads only the
-envelope (`tool/vif-log/internal/logfile/scan.go:292-295`), so its tick column and
-filters misplace such a journal. Stamp the envelope from the record's `jrun` and
-`jtick`, or give `event.VlogSink` the App's `*Log`.
 
 ### Decide whether a reset clears every instance's macros
 
@@ -1174,11 +1144,14 @@ along its path instead of sampling it from returned commits, a protocol bump.
 A star's authority relays every participant's epochs and owner syncs to every other:
 at 16 players 4,444 epochs and 736 syncs a second, 1.4 MB/s framed on the tower map
 and 2.8 MB/s on td before deflate. Rounds follow the union of peer deadlines, 7.2 a
-second at td, and whole bodies add 2.2 MB/s there. Candidates, each a message-set or
-cadence change that cuts constants where delegated relays move the quadratic term
-off the host: one bundle per guest per tick carrying every source's committed frames
-with their epoch markers, which pacing and fences read, as `MsgBundle` already does
-upstream; owner syncs as deltas; and rounds aligned across peers.
+second at td, and whole bodies add 2.2 MB/s there. In a migrate session every
+guest also forwards each committed epoch and correction chunk down its successor
+link, so the successor takes one copy per guest and suppresses all but the first.
+Candidates, each a message-set or cadence change that cuts constants where delegated
+relays move the quadratic term off the host: one bundle per guest per tick carrying
+every source's committed frames with their epoch markers, which pacing and fences
+read, as `MsgBundle` already does upstream; owner syncs as deltas; rounds aligned
+across peers; and a flood that skips a neighbour the authority already reaches.
 
 ### Project a correction outside the live lock
 
@@ -1198,10 +1171,12 @@ projection and the write. WASM gains scheduling time, not parallel CPU.
 - Priority: P3
 - Affected files: `internal/converge/correction.go`
 
-A guest still behind its host at a reset, by up to the barrier lead, refuses the
-host's first keyframe of the new run as another run's, and every delta against it,
-until the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body silence.
-Holding a keyframe of the next run until the guest enters it, through
+A guest lagging its host by more than its pacing band at a reset refuses the host's
+first keyframe of the new run as another run's, and every delta against it, until
+the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body silence, in
+which manifests are still answered and repairs still install. Epochs and syncs of
+another run are refused by the run their batch names, so only the keyframe is at
+stake. Holding a keyframe of the next run until the guest enters it, through
 `followRunLocked`, closes that window.
 
 ### Tell both ends why a join failed

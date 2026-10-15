@@ -83,7 +83,7 @@ func StartJournal() (string, error) { return "", ErrDisabled }
 func StopJournal() error            { return nil }
 func JournalEnabled() bool          { return false }
 func JournalPath() string           { return "" }
-func Journal(string, ...any)        {}
+func (*Log) Journal(string, ...any) {}
 func LastJournalPath() string       { return "" }
 
 func ScopeOf(string) Scope     { return ScopeTap }

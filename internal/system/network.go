@@ -41,10 +41,10 @@ type NetworkSystem struct {
 	productionEpoch uint64
 	crossSeq        uint64
 	// appliedCrossSeq is the contiguous source-local sequence through which every
-	// ordinary local crossing has completed dispatch. Barrier-bound sequences are
-	// closed when scheduled because snapshots continue to classify those by their
-	// agreed ApplyTick. appliedAhead holds completions that raced an earlier
-	// publisher; a capture may expose only the contiguous prefix.
+	// ordinary local crossing has completed dispatch, or an install discarded as
+	// held by the world it wrote. Barrier-bound sequences are closed when scheduled
+	// because snapshots classify those by their agreed ApplyTick. appliedAhead holds
+	// completions that raced an earlier publisher; a capture exposes the prefix.
 	appliedCrossSeq uint64
 	appliedAhead    map[uint64]struct{}
 	localSource     uint32
@@ -115,11 +115,11 @@ type NetworkSystem struct {
 	statPreInstall *atomic.Int64
 	statSuperseded *atomic.Int64
 
-	// statRefusedTick and statScheduleFull count what the forward window and the
-	// schedule's ceilings turned away. They are separate from statDrop because a
-	// drop is a frame this instance could not read and these are frames it read and
-	// refused: a non-zero pair names a peer whose ticks or whose volume are not
-	// those of a participant, which is a different diagnosis from a decode failure.
+	// statRefusedTick and statScheduleFull count what the forward window, the run
+	// and the schedule's ceilings turned away. They are separate from statDrop
+	// because a drop is a frame this instance could not read and these are frames it
+	// read and refused: past a reset's last epochs, a non-zero pair names a peer
+	// whose ticks or whose volume are not those of a participant.
 	statRefusedTick    *atomic.Int64
 	statScheduleFull   *atomic.Int64
 	statAgreedRestored *atomic.Int64
@@ -171,6 +171,11 @@ type NetworkSystem struct {
 	// "what did this participant do that the authority has not described yet"; this
 	// answers it for everything else this instance applied, which nothing replays.
 	applied []barrierArtifact
+
+	// due, retain and dueStates are applyDue's per-tick scratch, reused: one tick
+	// runs at a time, and what a tick applied is dead by the next.
+	due, retain []barrierArtifact
+	dueStates   []pendingState
 
 	// paceSamples holds the newest arrival offsets of the authority's epochs, and
 	// paceCount how many are live; paceSettled is the first local tick sampled after
@@ -448,6 +453,7 @@ func (s *NetworkSystem) Init() {
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
+	s.upstream = network.Bundle{}
 
 	// Held derivations go for the reason the replay suffix below does: a reward the
 	// authority never proved belongs to the run that predicted it, and that run has
@@ -580,6 +586,13 @@ func (s *NetworkSystem) participantID() uint32 {
 // drain paths differ on whether a tick is in progress and the answer must not.
 func (s *NetworkSystem) localTick() uint64 {
 	return s.world.Resources.Event.Queue.Stamp().Tick
+}
+
+// localRun is the run this instance's ticks count in, which every batch it
+// sends names and every batch it takes must name: a reset applies at one agreed
+// tick, and what a guest sent a round trip before it arrives after.
+func (s *NetworkSystem) localRun() uint64 {
+	return s.world.Resources.Event.Queue.Stamp().Run
 }
 
 // adoptDelay installs this instance's own lead at the tick its journaled event
@@ -871,43 +884,47 @@ func (s *NetworkSystem) retainLocked(frame event.WireFrame, produced, applyTick 
 	s.suffix = append(s.suffix, rec)
 	s.suffixBytes += rec.bytes
 
-	drop := func() {
-		if len(s.suffix) == 0 {
-			return
-		}
-		old := s.suffix[0]
-		if old.frame.Frame.Seq > s.lostSeq {
-			s.lostSeq = old.frame.Frame.Seq
-		}
-		s.suffixBytes -= old.bytes
-		s.suffix = append(s.suffix[:0], s.suffix[1:]...)
-		s.suffixDropped++
-	}
 	horizon := uint64(0)
 	if produced > parameter.SnapshotReplayTicks {
 		horizon = produced - parameter.SnapshotReplayTicks
 	}
-	for len(s.suffix) > 0 && s.suffix[0].produced < horizon {
+	cut, bytes := 0, s.suffixBytes
+	drop := func() { bytes -= s.suffix[cut].bytes; cut++ }
+	for cut < len(s.suffix) && s.suffix[cut].produced < horizon {
 		drop()
 	}
-	for len(s.suffix) > parameter.SnapshotReplayRecords {
+	for len(s.suffix)-cut > parameter.SnapshotReplayRecords {
 		drop()
 	}
-	for s.suffixBytes > parameter.SnapshotReplayBytes && len(s.suffix) > 1 {
+	for bytes > parameter.SnapshotReplayBytes && len(s.suffix)-cut > 1 {
 		drop()
 	}
+	if cut == 0 {
+		return
+	}
+	for _, old := range s.suffix[:cut] {
+		s.lostSeq = max(s.lostSeq, old.frame.Frame.Seq)
+	}
+	s.suffixDropped += int64(cut)
+	s.suffix = append(s.suffix[:0], s.suffix[cut:]...)
+	s.suffixBytes = bytes
 }
 
-// retainApplied keeps one applied peer or barrier-bound artifact, so a projection
-// over a capture that lacks it can re-apply it. Bounded by age and by count, like
-// the local suffix; a peer frame the next capture holds is pruned by its fence.
-func (s *NetworkSystem) retainApplied(a barrierArtifact) {
+// retainApplied keeps a tick's applied peer and barrier-bound artifacts, in apply
+// order, so a projection over a capture that lacks one can re-apply it. Bounded by
+// age and by count, like the local suffix; a peer frame the next capture holds is
+// pruned by its fence.
+func (s *NetworkSystem) retainApplied(batch []barrierArtifact) {
+	if len(batch) == 0 {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.applied = append(s.applied, a)
+	s.applied = append(s.applied, batch...)
+	newest := batch[len(batch)-1].applyTick
 	kept := s.applied[:0]
 	for _, r := range s.applied {
-		if r.applyTick+parameter.SnapshotReplayTicks >= a.applyTick {
+		if r.applyTick+parameter.SnapshotReplayTicks >= newest {
 			kept = append(kept, r)
 		}
 	}
@@ -1049,6 +1066,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 	for _, f := range s.crossings {
 		if f.Frame.Seq != 0 && f.Frame.Seq <= localFence {
 			pendingDropped++
+			s.closeAppliedCrossingLocked(f.Frame.Seq)
 			continue
 		}
 		pending = append(pending, f)
@@ -1067,10 +1085,16 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 			if bySequence {
 				superseded++
 			}
-			// This source's own placement lands in the installed world rather than
-			// through CursorSystem, so it settles its D-18 prediction here.
-			if et, ok := event.GetEventType(a.frame.Event); ok && a.source == s.localSource && et == event.EventCursorMoveRequest {
-				s.world.Resources.Player.Reconcile(component.PositionComponent{}, true)
+			if a.source == s.localSource {
+				// The pruned copy never dispatches, and the world holds its effect:
+				// the local fence closes over it here, or every later sequence
+				// would wait behind it. An own placement lands in the installed
+				// world rather than through CursorSystem, so it settles its D-18
+				// prediction here too.
+				s.closeAppliedCrossingLocked(a.frame.Seq)
+				if et, ok := event.GetEventType(a.frame.Event); ok && et == event.EventCursorMoveRequest {
+					s.world.Resources.Player.Reconcile(component.PositionComponent{}, true)
+				}
 			}
 			continue
 		}
@@ -1766,7 +1790,7 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 		return
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{
-		Source: source, ProducedTick: epoch, Frames: pending,
+		Source: source, Run: s.localRun(), ProducedTick: epoch, Frames: pending,
 	})
 	if err != nil {
 		s.statDrop.Add(int64(len(pending)))
@@ -1888,6 +1912,10 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	if batch.Source == 0 || int(batch.Source) >= len(s.epochs) {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
+		return
+	}
+	if batch.Run != s.localRun() {
+		s.statRefusedTick.Add(int64(max(1, len(batch.Frames))))
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()
@@ -2118,8 +2146,13 @@ func (s *NetworkSystem) ingress(source, from uint32) uint32 {
 
 // linked reports whether a participant is on a direct link of this instance.
 func (s *NetworkSystem) linked(id uint32) bool {
-	p, ok := s.port().(interface{ Peers() []uint32 })
-	return ok && slices.Contains(p.Peers(), id)
+	switch p := s.port().(type) {
+	case interface{ Connected(uint32) bool }:
+		return p.Connected(id)
+	case interface{ Peers() []uint32 }:
+		return slices.Contains(p.Peers(), id)
+	}
+	return false
 }
 
 // observeAuthorityEpoch paces a guest against the authority. The sample is how
@@ -2284,7 +2317,7 @@ func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch 
 func (s *NetworkSystem) applyDue(nextTick uint64) {
 	s.writeDueStates(nextTick)
 	s.mu.Lock()
-	due := make([]barrierArtifact, 0, len(s.scheduled))
+	due := s.due[:0]
 	keep := s.scheduled[:0]
 	held := 0
 	for _, a := range s.scheduled {
@@ -2311,6 +2344,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 	})
 
 	local, peer := 0, 0
+	retain := s.retain[:0]
 	for _, a := range due {
 		if a.void {
 			s.noteAppliedFrom(a.source, a.frame.Seq)
@@ -2341,7 +2375,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 		}
 		s.world.Resources.Event.Queue.PushReady(ev)
 		if barrierBound(et) || a.source != localSource {
-			s.retainApplied(a)
+			retain = append(retain, a)
 		}
 		if !barrierBound(et) && a.source != localSource {
 			// The receive-side half of the capture fence. Recorded after the push
@@ -2356,6 +2390,8 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 			peer++
 		}
 	}
+	s.retainApplied(retain)
+	s.due, s.retain = due[:0], retain[:0]
 	s.statAppliedLocal.Add(int64(local))
 	s.statAppliedPeer.Add(int64(peer))
 	s.statPeerArtifacts.Store(int64(peer))
@@ -2470,7 +2506,7 @@ func (s *NetworkSystem) sendCursorState(p engine.NetworkPort) {
 			f.ApplyTick = s.localTick() + 1
 		}
 		body, err := event.EncodeWireBatch(event.WireBatch{
-			Source: s.participantID(), Frames: []event.ScheduledWireFrame{f},
+			Source: s.participantID(), Run: s.localRun(), Frames: []event.ScheduledWireFrame{f},
 		})
 		if err != nil {
 			s.statDrop.Add(1)
@@ -2538,6 +2574,10 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 		s.statDrop.Add(1)
 		return
 	}
+	if batch.Run != s.localRun() {
+		s.statRefusedTick.Add(1)
+		return
+	}
 	local, authority := s.participantID(), s.authorityParticipant()
 	raw := !batch.Committed && batch.Source != authority
 	committing := raw && local == authority
@@ -2595,7 +2635,7 @@ func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 	if len(s.states) == 0 {
 		return
 	}
-	due := make([]pendingState, 0, len(s.states))
+	due := s.dueStates[:0]
 	keep := s.states[:0]
 	for _, st := range s.states {
 		if st.applyTick <= nextTick {
@@ -2621,6 +2661,8 @@ func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 			Origin: event.OriginNetwork, Domain: core.DomainPlayer,
 		})
 	}
+	clear(due)
+	s.dueStates = due[:0]
 }
 
 // writeCursorState applies one sync, dropping a stale or misaddressed one. The

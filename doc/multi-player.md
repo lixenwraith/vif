@@ -194,7 +194,9 @@ Two deliberate asymmetries in how the fences are computed:
 - The **local** entry is a contiguous prefix rather than the highest assigned
   sequence, because local dispatch can complete out of order: a capture racing an
   input that has been encoded but not yet dispatched must not claim it. Completions
-  that arrive ahead of a gap are held until the gap closes.
+  that arrive ahead of a gap are held until the gap closes. An own crossing an
+  install discards as already held closes its place too: the written world holds
+  its effect, and nothing else would ever dispatch it.
 - Each **remote** entry is a maximum rather than a contiguous prefix. Within one
   link a source's frames arrive in order, so the two are the same number in every
   topology the CLI builds; where they could differ — a frame overtaking a lower one
@@ -385,7 +387,9 @@ differ on a relay whose equal canonical state has another dense-store order.
 Nothing acknowledges or retransmits a correction; the newest in the run supersedes,
 so loss costs freshness rather than correctness. A reset restarts the tick count, so
 on a run change each end drops what it keyed by tick and refuses an artifact naming
-another run (`Corrections.followRun`). A body leaves in
+another run: a correction by its header (`Corrections.followRun`), an epoch or owner
+sync by the run its batch names, since a guest's last epochs of a run reach the
+authority a round trip after the reset applied there. A body leaves in
 `SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
 what its latest echo reports received — drains within `SnapshotBulkQueue` past the
 round trip, so an epoch waits behind a chunk, not a world. What a link still
