@@ -94,7 +94,7 @@ func TestSnapshotCarriersAreSharedOrDual(t *testing.T) {
 		}
 		if d := ProfileFor(name).Domain; d == engine.SystemPlayer {
 			t.Errorf("%s declares snapshot state but is a player-domain system; "+
-				"a capture carries shared state only (D-1, D-6)", name)
+				"a capture carries shared state only (D-2, D-6)", name)
 		}
 	}
 }

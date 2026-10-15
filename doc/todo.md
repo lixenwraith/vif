@@ -471,17 +471,6 @@ A float pass against the post-reset baseline passes today with the `proc.` prefi
 exemption alone (tried in a scratch test), since the glyph pair resets. Add the float
 pass and delete the two entries.
 
-### Cite D-2 in the snapshot carrier test's failure
-
-- Priority: P0, to review
-- Affected files: `internal/manifest/snapshot_declaration_test.go`
-
-`TestSnapshotCarriersAreSharedOrDual` explains itself through D-2 and D-6
-(`internal/manifest/snapshot_declaration_test.go:86-89`), but its failure message
-cites D-1 and D-6 (`:97`). D-1 governs which domain may read what; D-2 is the rule
-that remote Player-domain state does not exist locally, which is why a capture cannot
-carry it. Cite D-2 in the message.
-
 ### Confine a scenario's wall image path to the roots
 
 - Priority: P0, to review
