@@ -2293,9 +2293,9 @@ func (s *NetworkSystem) linked(id uint32) bool {
 
 // observeAuthorityEpoch paces a guest against the authority. The sample is how
 // late the epoch landed: this instance's completed tick minus the epoch's. The
-// latest of a window decides, and a step clears the window it has answered. The
-// scheduler takes a step at the next tick and waits it out before the one after;
-// a sample read while it waits counts the lateness the step already answers.
+// latest of a window trims, the earliest steps, and a step clears the window it
+// has answered. The scheduler takes a step at the next tick and waits it out before
+// the one after; a sample read while it waits counts the lateness the step answers.
 func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	r := s.world.Resources.Network
 	tick := s.localTick()
@@ -2308,8 +2308,8 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	if s.paceCount < len(s.paceSamples) {
 		return
 	}
-	latest := slices.Max(s.paceSamples[:])
-	trim, step := paceDecision(latest)
+	latest, earliest := slices.Max(s.paceSamples[:]), slices.Min(s.paceSamples[:])
+	trim, step := paceDecision(latest, earliest)
 	s.paceLatest, s.paceKnown = latest-step, true
 	s.statPaceLate.Store(latest)
 	s.statPaceTrim.Store(int64(trim))
@@ -2321,19 +2321,20 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	}
 }
 
-// paceDecision turns the latest arrival offset into a trim of the tick interval, in
-// permille, and a whole-tick step; positive slows this instance down. Inside the
-// band it rests; far outside it steps, and a step back is bounded by the debt the
-// scheduler runs back to back.
-func paceDecision(latest int64) (trimPermille int32, stepTicks int64) {
+// paceDecision turns a window's arrival offsets into a trim of the tick interval,
+// in permille, and a whole-tick step; positive slows this instance down. Inside the
+// band it rests. A step forward needs the earliest arrival past the threshold too:
+// one jittered epoch is a trim, a whole window late is a clock to move at once. A
+// step back is bounded by the debt the scheduler runs back to back.
+func paceDecision(latest, earliest int64) (trimPermille int32, stepTicks int64) {
 	late := latest - parameter.NetworkAheadTicks
 	early := parameter.NetworkAheadTicks - parameter.NetworkPaceBandTicks - latest
 	trim := func(ticks int64) int32 {
 		return int32(min(ticks*parameter.NetworkPaceGainPermille, parameter.NetworkPacePermilleMax))
 	}
 	switch {
-	case late >= parameter.NetworkPaceStepTicks:
-		return 0, late
+	case earliest-parameter.NetworkAheadTicks >= parameter.NetworkPaceStepTicks:
+		return 0, earliest - parameter.NetworkAheadTicks
 	case late > 0:
 		return trim(late), 0
 	case early >= parameter.NetworkPaceStepTicks:

@@ -49,7 +49,8 @@ const (
 	NetworkPacePermilleMax  = 80
 
 	// NetworkPaceStepTicks is the error a guest closes in one step rather than by
-	// trimming: a lobby that released it a round trip early is corrected at once.
+	// trimming, when every epoch of the window shows it: a lobby that released it a
+	// round trip early is corrected at once, a single jittered arrival only trims.
 	// A backwards step is bounded by the debt the scheduler will run back to back.
 	NetworkPaceStepTicks     = 3
 	NetworkPaceStepBackTicks = 2

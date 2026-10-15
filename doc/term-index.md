@@ -1242,7 +1242,7 @@ code does not have yet, described only by a design such as
 ## P
 
 **pacing** (also: pace) — three senses. See also **playout lead**, **time control**.
-- *Guest*: A guest trims its wall tick interval by up to `NetworkPacePermilleMax` (80 per mille), or steps whole ticks past `NetworkPaceStepTicks` of error, until the authority's epochs land inside its pace band; the simulation step never changes. [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing) · `internal/system` `NetworkSystem.observeAuthorityEpoch`, `paceDecision`; `internal/engine` `Scheduler.TakePace`
+- *Guest*: A guest trims its wall tick interval by up to `NetworkPacePermilleMax` (80 per mille), or steps whole ticks when every epoch of the window is past `NetworkPaceStepTicks` of error, until the authority's epochs land inside its pace band; the simulation step never changes. [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing) · `internal/system` `NetworkSystem.observeAuthorityEpoch`, `paceDecision`; `internal/engine` `Scheduler.TakePace`
 - *Script*: An authored script runs unpaced when solo and at real time in a session; `-speed` sets its wall pace, and `-speed max` (no wall pacing) is refused with `-host`, `-join` or seated bots. [Runtime §1.1](runtime.md#11-script-pacing-and-presentation) · `internal/app` `scriptPacing`, `ScriptPaceMax`
 - *Bot*: A bot graph releases `actions_per_second` intents (default 12) per second of game time. [Bots: Document](bots.md#document) · `internal/bot` `DefaultActionsPerSecond`
 
