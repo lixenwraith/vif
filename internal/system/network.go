@@ -34,10 +34,14 @@ type NetworkSystem struct {
 	crossings      []event.ScheduledWireFrame
 	scheduled      []barrierArtifact
 	scheduledBytes int
-	epochs         [participantSlots]epochWindow
+	epochs         [participantSlots]window
 	// rawEpochs dedupes the raw epochs this instance only passes on toward the
 	// authority; the committed copy shares their key and must still be admitted.
-	rawEpochs       [participantSlots]epochWindow
+	// seqs takes each source's crossing sequences once, whatever epoch carries
+	// them; ownCommitted is the own epochs returned committed, for the handoff.
+	rawEpochs       [participantSlots]window
+	seqs            [participantSlots]window
+	ownCommitted    window
 	productionEpoch uint64
 	crossSeq        uint64
 	// appliedCrossSeq is the contiguous source-local sequence through which every
@@ -280,65 +284,84 @@ type stateDigest struct {
 // epochWindow admits each source epoch once within NetworkEpochWindow.
 // A bitmap preserves out-of-order arrivals over unequal mesh paths; a single
 // high-water mark would silently discard them as duplicates.
-type epochWindow struct {
-	high uint64 // newest ProducedTick admitted; zero means nothing yet
-	seen uint64 // bit i set: epoch high-1-i was admitted
+type window struct {
+	high uint64                                       // newest admitted; zero means nothing yet
+	seen [parameter.NetworkSequenceWindow / 64]uint64 // bit i set: high-1-i was admitted
 }
 
-// admit reports whether tick is new to this source and records it. Zero is not a
-// valid production epoch — the first tick a session can close is one — so it is
-// refused rather than treated as "nothing seen yet".
-func (w *epochWindow) admit(tick uint64) bool {
+// admit reports whether n is new within width of the newest and records it. Zero
+// is neither a production epoch nor a sequence, so it is refused rather than
+// treated as "nothing seen yet".
+func (w *window) admit(n, width uint64) bool {
 	switch {
-	case tick == 0:
+	case n == 0:
 		return false
-
 	case w.high == 0:
-		w.high = tick
+		w.high = n
 		return true
-
-	case tick > w.high:
+	case n > w.high:
 		// The old high joins the backlog, shifted by the gap it now sits behind.
-		if shift := tick - w.high; shift < parameter.NetworkEpochWindow {
-			w.seen = (w.seen << shift) | (1 << (shift - 1))
-		} else {
-			w.seen = 0
+		shift := n - w.high
+		w.shift(shift)
+		w.high = n
+		if i, bit, ok := w.bit(n-shift, uint64(len(w.seen))*64); ok {
+			w.seen[i] |= bit
 		}
-		w.high = tick
 		return true
-
-	case tick == w.high:
+	case n == w.high:
 		return false
+	}
+	i, bit, ok := w.bit(n, width)
+	if !ok || w.seen[i]&bit != 0 {
+		return false
+	}
+	w.seen[i] |= bit
+	return true
+}
 
-	default:
-		behind := w.high - tick
-		if behind > parameter.NetworkEpochWindow {
-			return false
+// shift moves the backlog by further behind the newest.
+func (w *window) shift(by uint64) {
+	if by >= uint64(len(w.seen))*64 {
+		w.seen = [len(w.seen)]uint64{}
+		return
+	}
+	words, bits := int(by/64), by%64
+	for i := len(w.seen) - 1; i >= 0; i-- {
+		var v uint64
+		if j := i - words; j >= 0 {
+			v = w.seen[j] << bits
+			if bits != 0 && j > 0 {
+				v |= w.seen[j-1] >> (64 - bits)
+			}
 		}
-		bit := uint64(1) << (behind - 1)
-		if w.seen&bit != 0 {
-			return false
-		}
-		w.seen |= bit
-		return true
+		w.seen[i] = v
 	}
 }
 
-// has reports whether tick was admitted, without admitting it.
-func (w *epochWindow) has(tick uint64) bool {
+// bit locates n in the backlog: its word and bit, if it is within width.
+func (w *window) bit(n, width uint64) (int, uint64, bool) {
+	behind := w.high - n
+	if behind == 0 || behind > width {
+		return 0, 0, false
+	}
+	return int((behind - 1) / 64), 1 << ((behind - 1) % 64), true
+}
+
+// has reports whether n was admitted, without admitting it.
+func (w *window) has(n, width uint64) bool {
 	switch {
-	case tick == 0 || w.high == 0 || tick > w.high:
+	case n == 0 || w.high == 0 || n > w.high:
 		return false
-	case tick == w.high:
+	case n == w.high:
 		return true
 	}
-	behind := w.high - tick
-	return behind <= parameter.NetworkEpochWindow && w.seen&(uint64(1)<<(behind-1)) != 0
+	i, bit, ok := w.bit(n, width)
+	return ok && w.seen[i]&bit != 0
 }
 
-// newest reports the highest epoch admitted from this source, for the playout lag
-// telemetry that asks how far behind a peer's production is.
-func (w *epochWindow) newest() uint64 { return w.high }
+// newest reports the highest number admitted, for the playout lag telemetry that
+// asks how far behind a peer's production is.
+func (w *window) newest() uint64 { return w.high }
 
 // participantSlots sizes every array this system indexes by participant identity.
 // The coordinator hands out 1..MaxPlayers+1 and never zero; one name for every
@@ -476,8 +499,10 @@ func (s *NetworkSystem) Init() {
 	s.suffixBytes = 0
 	s.suffixDropped = 0
 	s.lostSeq = 0
-	s.epochs = [participantSlots]epochWindow{}
-	s.rawEpochs = [participantSlots]epochWindow{}
+	s.epochs = [participantSlots]window{}
+	s.rawEpochs = [participantSlots]window{}
+	s.seqs = [participantSlots]window{}
+	s.ownCommitted = window{}
 	s.snapshotFloor = 0
 	s.snapshotAuthority = 0
 	s.snapshotFences = nil
@@ -691,6 +716,7 @@ func (s *NetworkSystem) forgetParticipant(participant uint32) {
 	defer s.mu.Unlock()
 	s.appliedPeerSeq[participant] = 0
 	s.downAt[participant] = 0
+	s.seqs[participant] = window{}
 	kept := make(network.CrossingFences, 0, len(s.snapshotFences)) // shared with the capture header
 	for _, f := range s.snapshotFences {
 		if f.Source != network.PeerID(participant) {
@@ -762,30 +788,33 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	return true
 }
 
-// DropUncommitted forgets this instance's own crossings when a handoff moves
-// authorship: the authority they were sent to is gone and its successor never had
-// them. What already applied here the next correction takes back; the sequences
-// dropped unapplied are closed so the local fence does not stall on them.
-// Caller MUST hold updateMutex.
-func (s *NetworkSystem) DropUncommitted() {
+// ResendUncommitted puts this instance's own retained crossings that no authority
+// returned committed back into the open epoch, at a handoff: the authority they
+// went to is gone and its successor never saw them. The successor commits them
+// late and refuses by sequence what it already holds. Caller MUST hold updateMutex.
+func (s *NetworkSystem) ResendUncommitted() {
 	s.mu.Lock()
-	kept, bytes, dropped := s.scheduled[:0], 0, len(s.suffix)
-	for _, a := range s.scheduled {
-		if a.source == s.localSource {
-			s.closeAppliedCrossingLocked(a.frame.Seq)
-			dropped++
+	resent, dropped, bytes := 0, 0, 0
+	for i := range s.suffix {
+		rec := &s.suffix[i]
+		if rec.produced >= s.productionEpoch || s.ownCommitted.has(rec.produced, parameter.NetworkSequenceWindow) {
 			continue
 		}
-		kept = append(kept, a)
-		bytes += frameBytes(a.frame)
+		if bytes += rec.bytes; bytes > network.MaxPayloadSize/2 {
+			dropped++ // more than one frame carries; the next correction takes the rest back
+			continue
+		}
+		rec.produced = s.productionEpoch
+		s.crossings = append(s.crossings, rec.frame)
+		resent++
 	}
-	s.scheduled, s.scheduledBytes = kept, bytes
-	s.suffix, s.suffixBytes = s.suffix[:0], 0
 	s.mu.Unlock()
-	s.world.Resources.Player.DropPrediction()
 	if dropped > 0 {
 		s.statDrop.Add(int64(dropped))
-		s.world.Log().Info("session", "msg", "uncommitted crossings dropped at handoff", "crossings", dropped)
+	}
+	if resent > 0 {
+		s.world.Log().Info("session", "msg", "uncommitted crossings resent at handoff",
+			"crossings", resent, "dropped", dropped)
 	}
 }
 
@@ -1935,7 +1964,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	case batch.Source == local:
 		// Committed and returned: those behind this instance need it once, it
 		// measures the path to the authority, and it proves the link is one.
-		if batch.Committed && s.observeOwnCommit(batch.ProducedTick) {
+		if batch.Committed && s.noteOwnCommit(batch.ProducedTick) {
 			s.adoptRelay(from)
 			s.forwardDown(from, network.MsgEvent, batch)
 		}
@@ -1945,7 +1974,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		// behind one. A copy on another of one already admitted is a duplicate; any
 		// other is claimed.
 		s.mu.Lock()
-		dup := s.epochs[batch.Source].has(batch.ProducedTick)
+		dup := s.epochs[batch.Source].has(batch.ProducedTick, parameter.NetworkEpochWindow)
 		s.mu.Unlock()
 		if !dup {
 			s.statForged.Add(int64(max(1, len(batch.Frames))))
@@ -1953,7 +1982,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		return
 	case raw && !committing:
 		s.mu.Lock()
-		fresh := s.rawEpochs[batch.Source].admit(batch.ProducedTick)
+		fresh := s.rawEpochs[batch.Source].admit(batch.ProducedTick, parameter.NetworkEpochWindow)
 		s.mu.Unlock()
 		s.statUncommitted.Add(1)
 		if fresh {
@@ -1972,8 +2001,8 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 
 	s.mu.Lock()
-	admitted := s.epochs[batch.Source].admit(batch.ProducedTick)
-	installed, superseded, refused, overflowed, late, void := 0, 0, 0, 0, 0, 0
+	admitted := s.epochs[batch.Source].admit(batch.ProducedTick, parameter.NetworkEpochWindow)
+	installed, superseded, refused, overflowed, late, void, repeated := 0, 0, 0, 0, 0, 0, 0
 	sourceFence := s.snapshotFences.Seq(network.PeerID(batch.Source))
 	held := 0
 	for _, a := range s.scheduled {
@@ -1988,6 +2017,14 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 			// apply tick is per frame and is not derived from the epoch's.
 			if f.ApplyTick > horizon {
 				refused++
+				continue
+			}
+			// A sequence this instance took already is a copy whatever epoch
+			// carries it: a resend after a handoff, or a second path. It leaves
+			// the committed copy with the void frames.
+			if f.Frame.Seq != 0 && !s.seqs[batch.Source].admit(f.Frame.Seq, parameter.NetworkSequenceWindow) {
+				repeated++
+				f.Frame.Event = ""
 				continue
 			}
 			a := barrierArtifact{
@@ -2044,6 +2081,9 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	if refused > 0 {
 		s.statRefusedTick.Add(int64(refused))
+	}
+	if repeated > 0 {
+		s.statDuplicates.Add(int64(repeated))
 	}
 	if overflowed > 0 {
 		s.statScheduleFull.Add(int64(overflowed))
@@ -2352,17 +2392,19 @@ func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	return uint64(min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks)), true
 }
 
-// observeOwnCommit samples how long an own epoch took to come back committed. Only
-// a participant behind a relay sees that: the authority excludes a producer it is
-// linked to. A later copy of a sampled epoch took a longer path and is ignored.
-func (s *NetworkSystem) observeOwnCommit(produced uint64) bool {
-	if produced <= s.pathEpoch {
-		return false
+// noteOwnCommit records an own epoch returned committed, reporting whether this is
+// its first copy, and samples how long the newest took to come back; a later copy
+// took a longer path and is not sampled.
+func (s *NetworkSystem) noteOwnCommit(produced uint64) bool {
+	s.mu.Lock()
+	fresh := s.ownCommitted.admit(produced, parameter.NetworkSequenceWindow)
+	s.mu.Unlock()
+	if produced > s.pathEpoch {
+		s.pathEpoch = produced
+		s.pathSamples[s.pathCount%len(s.pathSamples)] = int64(s.localTick()) - int64(produced)
+		s.pathCount++
 	}
-	s.pathEpoch = produced
-	s.pathSamples[s.pathCount%len(s.pathSamples)] = int64(s.localTick()) - int64(produced)
-	s.pathCount++
-	return true
+	return fresh
 }
 
 // chooseLead raises at once and lowers only after the lower target has held for
@@ -2832,7 +2874,8 @@ type networkState struct {
 	crossings                                  []event.ScheduledWireFrame
 	scheduled, applied                         []barrierArtifact
 	scheduledBytes, suffixBytes                int
-	epochs, rawEpochs                          [participantSlots]epochWindow
+	epochs, rawEpochs, seqs                    [participantSlots]window
+	ownCommitted                               window
 	productionEpoch, crossSeq, appliedCrossSeq uint64
 	appliedAhead                               map[uint64]struct{}
 	localSource, snapshotAuthority, relay      uint32
@@ -2863,6 +2906,7 @@ func (s *NetworkSystem) CopyState() any {
 	c := networkState{
 		crossings: slices.Clone(s.crossings), scheduled: slices.Clone(s.scheduled), applied: slices.Clone(s.applied),
 		scheduledBytes: s.scheduledBytes, suffixBytes: s.suffixBytes, epochs: s.epochs, rawEpochs: s.rawEpochs,
+		seqs: s.seqs, ownCommitted: s.ownCommitted,
 		productionEpoch: s.productionEpoch, crossSeq: s.crossSeq, appliedCrossSeq: s.appliedCrossSeq,
 		appliedAhead: maps.Clone(s.appliedAhead), localSource: s.localSource, snapshotAuthority: s.snapshotAuthority,
 		delayTicks: s.delayTicks, lastApplyTick: s.lastApplyTick, snapshotFloor: s.snapshotFloor,
@@ -2884,6 +2928,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	defer s.mu.Unlock()
 	s.crossings, s.scheduled, s.applied = slices.Clone(c.crossings), slices.Clone(c.scheduled), slices.Clone(c.applied)
 	s.scheduledBytes, s.suffixBytes, s.epochs, s.rawEpochs = c.scheduledBytes, c.suffixBytes, c.epochs, c.rawEpochs
+	s.seqs, s.ownCommitted = c.seqs, c.ownCommitted
 	s.productionEpoch, s.crossSeq, s.appliedCrossSeq = c.productionEpoch, c.crossSeq, c.appliedCrossSeq
 	s.appliedAhead, s.localSource, s.snapshotAuthority = maps.Clone(c.appliedAhead), c.localSource, c.snapshotAuthority
 	if s.appliedAhead == nil {

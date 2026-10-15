@@ -283,6 +283,15 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	if a.corrections == nil {
 		return
 	}
+	// What the lost authority never returned committed goes to its successor,
+	// this instance's own when it is the successor.
+	a.world.RunSafe(func() {
+		for _, sys := range a.world.Systems() {
+			if r, ok := sys.(interface{ ResendUncommitted() }); ok {
+				r.ResendUncommitted()
+			}
+		}
+	})
 	if mine {
 		a.corrections.BecomeAuthority(rec)
 		// Live scripts and bots advance their clock, but need the same publication
@@ -293,14 +302,6 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 		a.crossPredecessorDeparture(rec)
 		return
 	}
-	// The crossings the lost authority was sent are nobody's to commit now.
-	a.world.RunSafe(func() {
-		for _, sys := range a.world.Systems() {
-			if d, ok := sys.(interface{ DropUncommitted() }); ok {
-				d.DropUncommitted()
-			}
-		}
-	})
 	a.corrections.FollowAuthority(rec)
 }
 
