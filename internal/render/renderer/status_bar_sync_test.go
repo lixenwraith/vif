@@ -125,16 +125,23 @@ func TestStatusBarAuthorityLossHidesTheLinkItDescribed(t *testing.T) {
 		t.Fatalf("migrating item = %#v, %t", item, ok)
 	}
 
-	// Permanent for this run, so it outranks even the handoff badge.
+	// The loss that opened the succession stays behind it while the walk runs, with
+	// the passes walked, and shows once the walk has given up.
 	r.statHostLost.Store(true)
+	r.statRejoin.Store(2)
 	item, ok := r.networkBadge()
+	if !ok || item.text != " Migrating 2 " || item.bg != visual.RgbNetWarnBg {
+		t.Fatalf("walking item = %#v, %t", item, ok)
+	}
+	r.statMigrating.Store(false)
+	r.statRejoin.Store(0)
+	item, ok = r.networkBadge()
 	if !ok || item.text != " Host lost " || item.bg != visual.RgbNetBadBg {
 		t.Fatalf("host-loss item = %#v, %t", item, ok)
 	}
 
 	// And a link that has gone says so rather than reporting the peers it had.
 	r.statHostLost.Store(false)
-	r.statMigrating.Store(false)
 	r.statNet.Store("down")
 	item, ok = r.networkBadge()
 	if !ok || item.text != " Net: down " || item.bg != visual.RgbNetBadBg {

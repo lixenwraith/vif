@@ -204,8 +204,8 @@ the speed and the D-14 map latch. `ConfigForJoin` runs before `New`, so
 participant IDs and roster slots; every instance creates the roster in slot order
 and marks only its own cursor human-controlled.
 
-The status bar draws one network badge, chosen by severity: `Host lost`, then
-`Migrating`, then `Net: down` or `Net: wait`, otherwise `<players>P` with this
+The status bar draws one network badge, chosen by severity: `Migrating`, then
+`Host lost`, then `Net: down` or `Net: wait`, otherwise `<players>P` with this
 instance's slot when it has one and the round trip to its slowest link (§9). The
 D-14 latch is not on it: a session run holds the latch from before its first
 joiner to after its last one leaves, and a solo run never does, so it is a fact
@@ -745,11 +745,11 @@ Beside them the authority surface says who is publishing at all.
 believes is authoring, how many handoffs it has adopted and what their records
 cost, how many artifacts the term gate ignored or refused, how many participants
 it evicted, and the run-level facts: `network.fork`, set when this instance is a
-local continuation rather than part of a session; `network.host_lost`, which draws
-`Host lost`, raised when a guest loses its link to the authority or a succession
-ends as a fork and cleared once a handoff is adopted; and `network.migrating`, which
-draws a transient `Migrating` badge while a succession is open and for
-`NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
+local continuation rather than part of a session; `network.host_lost`, raised when
+a guest loses its link to the authority or a succession ends as a fork and cleared
+once a handoff is adopted, which draws `Host lost` while no succession is open; and
+`network.migrating`, which draws `Migrating` over it while a succession is open and
+for `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
 `network.rejoin_attempts` beside it while a survivor with no link is walking the
 succession list. `:session` prints the term, the authority when it is somebody
 else, the handoff count once there has been one, a succession in progress, the
