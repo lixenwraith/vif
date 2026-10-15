@@ -374,10 +374,12 @@ func (d *joinDial) open() (*App, error) {
 	// declared is what was actually bound, which is why this cannot wait until the
 	// transport exists — the reply goes out first. See internal/converge/reach.go.
 	// A browser is never dialled, and js/wasm's net would bind a port nobody reaches.
+	// A participant that joined through a relay could not reach the host, so it is a
+	// leaf unless -listen names an address the session can reach it at.
 	var listener net.Listener
 	var declared string
 	gate := &converge.PeerLinkGate{}
-	if !offer.FixedAuthority && !cfg.NoAdvertise && buildHasSocketNetwork {
+	if !offer.FixedAuthority && !cfg.NoAdvertise && buildHasSocketNetwork && (offer.Relay == 0 || cfg.ListenAddress != "") {
 		listener, declared = converge.BindAdvertised(cfg.ListenAddress, cfg.JoinAddress, cfg.networkConfig)
 	}
 	if listener != nil {
@@ -967,9 +969,11 @@ func (a *App) socketPort() (*network.SocketPort, error) {
 	return a.networkSvc.Port(), nil
 }
 
-// activateNetworkSession closes the crossing window before terminal input is read.
+// activateNetworkSession closes the crossing window before terminal input is read,
+// and opens the relay address once the session it serves exists.
 func (a *App) activateNetworkSession() {
 	a.world.RunSafe(a.activateNetworkSessionLocked)
+	a.serveRelay()
 }
 
 // activateNetworkSessionLocked is the same for a caller that already holds the

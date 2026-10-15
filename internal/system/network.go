@@ -1453,6 +1453,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	authorityLost := peerID == s.authorityParticipant() && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
+	if peerID == s.relay && !authorityLost {
+		message = "Relay connection lost; looking for another path to the authority"
+	}
 	if authorityLost {
 		// The badge and the message are the fallback's, and the session layer may
 		// clear both: a succession that finds an eligible successor ends with an

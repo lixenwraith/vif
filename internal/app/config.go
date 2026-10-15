@@ -175,6 +175,10 @@ type Config struct {
 	ListenAddress string
 	NoAdvertise   bool
 
+	// RelayAddress is where a joined run admits participants that cannot reach the
+	// host, carrying their artifacts on its own link. Empty relays only its bots.
+	RelayAddress string
+
 	// FixedAuthority pins authorship to the participant that opens the session, so
 	// losing it ends the session rather than moving it. It is a session property:
 	// the coordinator's value travels in the offer. Default on for a dedicated host,
@@ -354,10 +358,24 @@ func (c Config) Validate() error {
 			return err
 		}
 	}
+	if c.RelayAddress != "" {
+		relay, err := network.ParseEndpoint(c.RelayAddress)
+		if err == nil {
+			err = relay.Listenable()
+		}
+		if err == nil && c.JoinAddress == "" {
+			err = errors.New("-relay admits participants to a session this run joined")
+		}
+		if err != nil {
+			return err
+		}
+	}
 	if !buildHasSocketNetwork {
 		switch {
 		case c.HostAddress != "":
 			return errors.New("a browser build can join a session but not host one")
+		case c.RelayAddress != "":
+			return errors.New("a browser relays only its own bots")
 		case c.JoinAddress != "" && join.Scheme != network.SchemeWebSocket:
 			return errors.New("a browser cannot dial host:port; join with the session's wss:// link")
 		}
