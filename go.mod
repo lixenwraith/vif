@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	github.com/lixenwraith/color v0.1.3
 	github.com/lixenwraith/log v0.1.12
-	github.com/lixenwraith/terminal v0.2.3-0.20261015001950-f13646943183
+	github.com/lixenwraith/terminal v0.3.0
 	github.com/lixenwraith/toml v0.1.3
 )
 
