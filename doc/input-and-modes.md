@@ -217,7 +217,8 @@ re-recorded, press no captured key, and dispatch with the macro origin, which
 admits no APM.
 
 Macro state resets on the instance that issues `:new` or `:new!`, and when a
-scenario change, join or journal start replaces the run; it is never saved across
+scenario change, join or journal start replaces the run; a reset the scenario
+raises, or one crossed from the host, clears none, and nothing is saved across
 process runs. Other operator preferences have a different reset contract (§9).
 
 ## 7. Mouse and automatic fire

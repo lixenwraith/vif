@@ -33,23 +33,6 @@ authority link (`converge/reach.go:202-225`), which has `host_lost` set
 the count beside `Host lost`; let `Migrating k` outrank `Host lost` until the walk
 gives up (`authority.go:588-589`); or drop the count from the badge and the docs.
 
-### Decide whether a reset clears every instance's macros
-
-- Priority: P0, to review
-- Affected files: `internal/mode/commands.go`, `internal/mode/router.go`,
-  `internal/system/meta.go`, `doc/input-and-modes.md`, `doc/runtime.md`
-
-Only a command that replaces the run sets `MacroClearFlag` (`commands.go:366`,
-`:391`, `:1021`, `:1044`, `config_form.go:74`, `:108`), and the router clears that
-instance's registers and playback on its next intent (`router.go:159-164`). A
-coordinator's `:new` resets every participant, but each peer's macros keep playing
-into the new game, and a reset the FSM raises (the default scenario's defeat) clears
-none. [Input and modes](input-and-modes.md) §6 and §9 state the issuer-only rule;
-[Runtime](runtime.md) §10 says both reset forms clear macros and names no instance.
-Options: keep the rule and name the issuer in Runtime §10; set the flag in
-`MetaSystem.handleGameReset` (`meta.go:384`), which already resets mode and captured
-keys everywhere; or keep registers across a plain `:new` and stop only playback.
-
 ### Decide what `:new!` sets free mouse, auto-fire and rate to
 
 - Priority: P0, to review
