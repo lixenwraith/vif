@@ -187,7 +187,7 @@ func (u *Authority) driveEviction(now time.Time) {
 		if u.inst.DropParticipant(uint32(e.ID)) {
 			u.statEvict.Add(1)
 			u.log.Warn("session", "msg", "participant evicted as too slow",
-				"participant", e.ID, "late_per_s", rate, "bytes_per_s", bps,
+				"peer", e.ID, "late_per_s", rate, "bytes_per_s", bps,
 				"window", u.slow.Window.String())
 		}
 	}
@@ -245,7 +245,7 @@ func (u *Authority) driveIngress(now time.Time) {
 		if rate > u.ingress*float64(carried) && u.inst.DropParticipant(uint32(e.ID)) {
 			u.statEvict.Add(1)
 			u.log.Warn("session", "msg", "participant evicted for what its link sends",
-				"participant", e.ID, "bytes_per_s", rate, "carried", carried, "window", u.slow.Window.String())
+				"peer", e.ID, "bytes_per_s", rate, "carried", carried, "window", u.slow.Window.String())
 		}
 	}
 	for id := range u.metered {
@@ -905,7 +905,7 @@ func (u *Authority) Summary() string {
 	// is what every session that has never migrated reports.
 	line := fmt.Sprintf("term %d, authoring", term)
 	if local != holder {
-		line = fmt.Sprintf("term %d, following participant %d", term, holder)
+		line = fmt.Sprintf("term %d, following peer %d", term, holder)
 	}
 	if migrations > 0 {
 		line += fmt.Sprintf(", %d handoff(s)", migrations)

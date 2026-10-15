@@ -10,6 +10,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -21,7 +22,7 @@ import (
 func sessionOfferFor(an event.JoinAnchor, n int) network.SessionOffer {
 	o := network.SessionOffer{
 		Anchor:   an,
-		Host:     hostParticipantID,
+		Host:     engine.CoordinatorParticipant,
 		Assigned: 2,
 		Term:     network.FirstTerm,
 	}

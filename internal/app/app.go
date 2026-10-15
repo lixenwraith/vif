@@ -533,7 +533,7 @@ func (a *App) initJournal() error {
 func (a *App) journalErrorLocked() error {
 	port := a.sessionTransportLocked()
 	guest := a.cfg.JoinAddress != "" && port != nil && port.IsRunning() && port.PeerCount() > 0 &&
-		!a.world.IsSessionCoordinator() && a.authorityID() == hostParticipantID
+		!a.world.IsSessionCoordinator() && a.authorityID() == engine.CoordinatorParticipant
 	switch {
 	case a.cfg.Mode != ModePlay:
 		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)

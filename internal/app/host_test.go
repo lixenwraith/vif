@@ -13,6 +13,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/mode"
@@ -138,9 +139,9 @@ func TestAMidRunHostAttributesItsOwnCursor(t *testing.T) {
 		c, _ := host.World().Components.Cursor.GetComponent(host.World().Resources.Player.Slot(0))
 		owner = c.PeerID
 	})
-	if owner != uint32(hostParticipantID) {
+	if owner != engine.CoordinatorParticipant {
 		t.Fatalf("the coordinator's own cursor names participant %d, want %d",
-			owner, hostParticipantID)
+			owner, engine.CoordinatorParticipant)
 	}
 }
 

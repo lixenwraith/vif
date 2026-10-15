@@ -235,12 +235,12 @@ func (a *App) authorityTerm() network.AuthorityTerm {
 // not opened a session yet still offers a valid one.
 func (a *App) authorityID() network.PeerID {
 	if a.authority == nil {
-		return hostParticipantID
+		return engine.CoordinatorParticipant
 	}
 	if id := a.authority.Holder(); id != 0 {
 		return id
 	}
-	return hostParticipantID
+	return engine.CoordinatorParticipant
 }
 
 // openAuthority records the term and membership this run enters a session under,

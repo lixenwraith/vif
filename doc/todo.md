@@ -67,43 +67,6 @@ code. Options: keep turning them off and correct the comment; or restore the
 startup values, with an auto-fire default in `internal/parameter` and the `-speed`
 rate kept on the context.
 
-### Decide what the session identity is called
-
-- Priority: P0, to review
-- Affected files: `internal/network`, `internal/engine`, `internal/event`,
-  `internal/journal/read.go`, `internal/app`, `internal/converge`,
-  `internal/system/network.go`, `internal/bot/bot.go`, `doc/multi-player.md`,
-  `doc/domain-design.md`, `doc/logging-and-diagnostics.md`, `doc/term-index.md`
-
-[Domain design](domain-design.md) §1 defines a participant as a peer bound to a
-cursor, but about two dozen identifiers and some 250 uses call the identity every
-peer holds, `1..MaxPlayers+1`, a participant: `network.Config.ParticipantID`,
-`NetworkResource.ParticipantID`, `World.LocalParticipant`, `CoordinatorParticipant`,
-`hostParticipantID`, `participantSlots`. Seven names use the cursor sense, among them
-`SessionOffer.ParticipantCount`, `app.Config.Participants` and `remoteParticipants`.
-The senses clash around a dedicated host's cursorless coordinator: `Validate` refuses
-"more than one cursorless participant" (`network/session.go:169,189`), a `:session`
-line reads "peer 2 … following participant 1" (`app/host.go:455`,
-`converge/authority.go:908`), a successor sends `EventParticipantDeparted` with
-`NoPlayerSlot` (`app/session.go:563-574`), and four log records
-(`converge/authority.go:190`, `:248`, `app/seat.go:208`, `:221`) key the identity
-`participant` where [Logging and diagnostics](logging-and-diagnostics.md) asks for
-`peer`. Renaming the event names, the payload key `participant`
-(`event/payload.go:134,145,158`), the offer's `participants` or the journal
-capture's `participant` bumps `ProtocolVersion` and `JournalSchema`, and older
-journals stop replaying; every other name is local. Options:
-
-- Rename the identity in code and docs, local names only or the format keys too,
-  building on `network.PeerID`, which already holds the same number.
-- Keep participant as the code name for the identity every peer holds, the
-  coordinator included, as [Multi-player](multi-player.md) §1 already defines it,
-  define it there only, say that participant counts mean cursors, and change the
-  four log keys to `peer`.
-
-Either way, `CoordinatorParticipant` (`engine/world.go:484`), renamed or not, becomes
-the one constant for identity 1 and replaces `hostParticipantID` and the literals in
-`NewNetworkResource` (`engine/resource.go:1102-1103`).
-
 ### Refuse a parent cycle at load
 
 - Priority: P0, to review
