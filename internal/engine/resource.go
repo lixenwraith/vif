@@ -1069,8 +1069,9 @@ type NetworkResource struct {
 	// beside the identity release OnDeparture does. It is a different question:
 	// which identities the lobby may hand out again is local bookkeeping, and
 	// whether the participant that just left was the one authoring is what starts
-	// a succession.
-	OnPeerLost func(participant uint32)
+	// a succession. It reports whether the departure was this instance's own doing,
+	// a seat it dropped, which is news to nobody.
+	OnPeerLost func(participant uint32) bool
 
 	// Authority is the participant currently authoring the Shared world, and Term
 	// the generation it authors under. Both are written by the session layer when

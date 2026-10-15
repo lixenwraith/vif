@@ -755,7 +755,8 @@ The useful runtime signals are:
 - `network.transport_lost_in` and `network.transport_lost_out`: bounded queue
   refusal;
 - `snapshot.cadence_*` and `network.link_*`: the selected operating point and the
-  measurements behind it;
+  measurements behind it; a holder's `snapshot.relay_*`, `shard_bytes_sent` and
+  `manifest_bytes_sent` include the loopback links of its own seats;
 - `network.term_stale`, `network.term_refused`, `network.fork`, and
   `network.migrations`: authority continuity.
 

@@ -212,8 +212,8 @@ func waitForCursors(t *testing.T, a *App, n int) {
 }
 
 // TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session hosts one
-// on loopback, its bots join it as participants, one dropped departs, and the rest
-// leave with the run.
+// on loopback, its bots join it as participants, one dropped departs as the drop
+// it was asked for rather than a link loss, and the rest leave with the run.
 func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	holder, stop := driveBot(t, Config{Bots: []string{"roam", "patrol"}}, "patrol", nil)
@@ -230,6 +230,9 @@ func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	waitForCursors(t, holder, 2)
+	if msg := holder.Context().GetStatusMessage(); strings.Contains(msg, "disconnected") {
+		t.Fatalf("a dropped seat was reported as a link loss: %q", msg)
+	}
 	stop()
 	if left := holder.seatGraphs(); len(left) != 0 {
 		t.Fatalf("seats %v outlived their holder", left)

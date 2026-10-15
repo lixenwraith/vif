@@ -295,7 +295,6 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 			"peer", pending.from, "error", err.Error())
 		return
 	}
-	m.RequestBytes.Add(int64(len(pending.body)))
 
 	if !c.authority.admit(req.Term, pending.from) || req.Run != c.followRun().Run {
 		m.ShardsRefused.Add(1)

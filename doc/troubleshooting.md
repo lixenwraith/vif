@@ -631,3 +631,25 @@ only large corrections (321 entities, a 678-cell repair, 208 entities) while eve
 other install wrote nothing; and the mean lead was 10.7 ticks (535 ms) over a 161 ms
 round trip, since the jitter term doubles a probe-to-probe swing that a queue
 behind correction chunks produces whole.
+
+## 19. Fourteenth round (2026-10-15, a terminal guest with two seats on a 110 ms link)
+
+The same person joined the pod with one bot, seated a second, dropped it, and
+played through a scenario reset and two storms (round trip 105-128 ms, jitter
+21-37 ms). The cadence was clean: 50 ms frames throughout, no tick slip, no pace
+step or trim, no late commit, installs under 3 ms, the reset and both joins inside
+one frame. What the recording held instead was waste and one wrong note. Of six
+repairs built for the guest five arrived after a whole world had cleared the
+baseline — a keyframe the schedule sent because one diverged answer had zeroed
+the peer's proof, twelve of thirteen such bodies writing nothing — and the sixth
+answered an index for a tick the guest had already proved past, compared off its
+tick, and was dropped at install as superseded while counted as applied. The
+guest's lead sat one tick above its own formula for most of the run and the seats'
+two to four, because each lowering restarted the renegotiation window while the
+estimator was still decaying inside it, a staircase of one tick per window. The
+deliberate bot drop reached the player as an eight-second "disconnected" alert and
+the session's only warning. All four landed: a receiver refuses what a later proof
+has outgrown and a proof stands for half the floor; the lead is the worst reading
+of one sliding window; a dropped seat closes at Info. Neither storm diverged, and
+the seats' recurring one-page repairs were a section of exactly eight rows, which
+the repair logs now name.
