@@ -117,8 +117,9 @@ func (a *App) seatConfigLocked() (Config, error) {
 	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: BotWidth, Height: BotHeight,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
 	if a.cfg.JoinAddress != "" && !a.world.IsSessionCoordinator() {
+		// The name too: the relay acceptor is this run's own and waits for it.
 		local := network.PeerID(a.world.LocalParticipant())
-		cfg.JoinAddress, cfg.holder = a.cfg.JoinAddress, local
+		cfg.JoinAddress, cfg.SessionName, cfg.holder = a.cfg.JoinAddress, a.cfg.SessionName, local
 		cfg.relay = func() (net.Conn, error) { return a.relayLink(local) }
 		return cfg, nil
 	}

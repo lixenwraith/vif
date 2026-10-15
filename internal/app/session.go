@@ -340,6 +340,9 @@ func dialJoin(cfg Config) (*joinDial, error) {
 	netCfg.Dial = cfg.relay
 	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
 	if err != nil {
+		if cfg.relay != nil {
+			return nil, fmt.Errorf("join through the holder: %w", err)
+		}
 		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)
 	}
 	d := &joinDial{pending: pending, offer: offer}

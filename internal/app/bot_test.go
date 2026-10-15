@@ -351,10 +351,11 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 // the host's, the host still allocates it and crosses its arrival, and what it plays
 // reaches the host through the guest.
 func TestAGuestsBotsJoinThroughIt(t *testing.T) {
-	// Not parallel: real sockets against wall-clock deadlines.
-	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	// Not parallel: real sockets against wall-clock deadlines. The session is
+	// named: the guest's relay acceptor checks the name, so its seat must send it.
+	host, _ := driveBot(t, Config{Bots: []string{"roam"}, SessionName: "named"}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{"roam"}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), SessionName: "named", Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
 	if h, g := host.sessionTransport().PeerCount(), guest.sessionTransport().PeerCount(); h != 2 || g != 2 {
