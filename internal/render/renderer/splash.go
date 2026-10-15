@@ -36,7 +36,10 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return true
 		}
 
-		anchorX, anchorY := r.resolveAnchor(splash)
+		anchorX, anchorY, ok := r.resolveAnchor(splash)
+		if !ok {
+			return true
+		}
 
 		for i := range length {
 			charX := anchorX + i*parameter.SplashCharWidth
@@ -46,22 +49,18 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	})
 }
 
-// resolveAnchor returns the splash's origin in map coordinates, following its anchor
-// entity while that entity has a position
-func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (int, int) {
-	baseX, baseY := splashComp.AnchorX, splashComp.AnchorY
-
-	if splashComp.AnchorEntity != 0 {
-		if anchorPos, ok := r.gameCtx.World.Positions.GetPosition(splashComp.AnchorEntity); ok {
-			baseX = anchorPos.X + splashComp.OffsetX
-			baseY = anchorPos.Y + splashComp.OffsetY
-		}
-	} else {
-		baseX = splashComp.AnchorX
-		baseY = splashComp.AnchorY
+// resolveAnchor returns the splash's origin in map coordinates. An anchored splash
+// follows its anchor entity and has no origin once that entity has no position:
+// it is leaving with its anchor, and AnchorX/Y hold nothing for it
+func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (int, int, bool) {
+	if splashComp.AnchorEntity == 0 {
+		return splashComp.AnchorX, splashComp.AnchorY, true
 	}
-
-	return baseX, baseY
+	anchorPos, ok := r.gameCtx.World.Positions.GetPosition(splashComp.AnchorEntity)
+	if !ok {
+		return 0, 0, false
+	}
+	return anchorPos.X + splashComp.OffsetX, anchorPos.Y + splashComp.OffsetY, true
 }
 
 // splashBitmap is one glyph of the splash font, a row per element
