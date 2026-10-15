@@ -41,10 +41,10 @@ type NetworkSystem struct {
 	productionEpoch uint64
 	crossSeq        uint64
 	// appliedCrossSeq is the contiguous source-local sequence through which every
-	// ordinary local crossing has completed dispatch. Barrier-bound sequences are
-	// closed when scheduled because snapshots continue to classify those by their
-	// agreed ApplyTick. appliedAhead holds completions that raced an earlier
-	// publisher; a capture may expose only the contiguous prefix.
+	// ordinary local crossing has completed dispatch, or an install discarded as
+	// held by the world it wrote. Barrier-bound sequences are closed when scheduled
+	// because snapshots classify those by their agreed ApplyTick. appliedAhead holds
+	// completions that raced an earlier publisher; a capture exposes the prefix.
 	appliedCrossSeq uint64
 	appliedAhead    map[uint64]struct{}
 	localSource     uint32

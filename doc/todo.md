@@ -1144,11 +1144,14 @@ along its path instead of sampling it from returned commits, a protocol bump.
 A star's authority relays every participant's epochs and owner syncs to every other:
 at 16 players 4,444 epochs and 736 syncs a second, 1.4 MB/s framed on the tower map
 and 2.8 MB/s on td before deflate. Rounds follow the union of peer deadlines, 7.2 a
-second at td, and whole bodies add 2.2 MB/s there. Candidates, each a message-set or
-cadence change that cuts constants where delegated relays move the quadratic term
-off the host: one bundle per guest per tick carrying every source's committed frames
-with their epoch markers, which pacing and fences read, as `MsgBundle` already does
-upstream; owner syncs as deltas; and rounds aligned across peers.
+second at td, and whole bodies add 2.2 MB/s there. In a migrate session every
+guest also forwards each committed epoch and correction chunk down its successor
+link, so the successor takes one copy per guest and suppresses all but the first.
+Candidates, each a message-set or cadence change that cuts constants where delegated
+relays move the quadratic term off the host: one bundle per guest per tick carrying
+every source's committed frames with their epoch markers, which pacing and fences
+read, as `MsgBundle` already does upstream; owner syncs as deltas; rounds aligned
+across peers; and a flood that skips a neighbour the authority already reaches.
 
 ### Project a correction outside the live lock
 
@@ -1168,10 +1171,12 @@ projection and the write. WASM gains scheduling time, not parallel CPU.
 - Priority: P3
 - Affected files: `internal/converge/correction.go`
 
-A guest still behind its host at a reset, by up to the barrier lead, refuses the
-host's first keyframe of the new run as another run's, and every delta against it,
-until the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body silence.
-Holding a keyframe of the next run until the guest enters it, through
+A guest lagging its host by more than its pacing band at a reset refuses the host's
+first keyframe of the new run as another run's, and every delta against it, until
+the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body silence, in
+which manifests are still answered and repairs still install. Epochs and syncs of
+another run are refused by the run their batch names, so only the keyframe is at
+stake. Holding a keyframe of the next run until the guest enters it, through
 `followRunLocked`, closes that window.
 
 ### Tell both ends why a join failed
