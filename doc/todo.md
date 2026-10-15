@@ -17,23 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Decide what `:new!` sets free mouse, auto-fire and rate to
-
-- Priority: P0, to review
-- Affected files: `internal/engine/game_context.go`, `internal/help/topics.go`,
-  `internal/parameter/gameplay.go`, `internal/app/app.go`, `doc/input-and-modes.md`,
-  `doc/runtime.md`, `doc/telemetry-reference.md`, `doc/term-index.md`
-
-`ResetSessionState` says it restores every operator toggle to its startup value
-(`game_context.go:535`) but stores free mouse off, auto-fire off and 1x
-(`:538-543`). A run starts with free mouse on (`parameter.DefaultMouseFreeMode`),
-auto-fire on both weapons (`:285-286`) and the `-speed` rate
-(`internal/app/app.go:392-395`); [Input and modes](input-and-modes.md) §9,
-[Runtime](runtime.md) §10 and the `:new!` help line (`topics.go:161`) follow the
-code. Options: keep turning them off and correct the comment; or restore the
-startup values, with an auto-fire default in `internal/parameter` and the `-speed`
-rate kept on the context.
-
 ### Refuse a parent cycle at load
 
 - Priority: P0, to review
@@ -1302,6 +1285,18 @@ system still calls its own `Init` in its constructor (manifest order) and again
 on reset (handler order). The engine would instead call `Init` once per system
 in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
 calls would go.
+
+### Let a command return the operator settings to their defaults
+
+- Priority: P3
+- Affected files: `internal/engine/game_context.go`, `internal/mode/commands.go`,
+  `internal/parameter`, `internal/app/app.go`
+
+`:new!` keeps free mouse, auto-fire and the rate: they are the player's choices and
+reach no log or journal. Nothing returns them to their startup values, free mouse
+on (`parameter.DefaultMouseFreeMode`), auto-fire on both weapons (`app.go`, the
+auto-fire default) and the `-speed` rate, which the context would have to keep.
+Fold the return into an existing command rather than adding one for it.
 
 ### Give the composite lifecycle methods a user
 

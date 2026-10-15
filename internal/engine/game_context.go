@@ -532,15 +532,13 @@ func (ctx *GameContext) SetOverlayFilterEditing(editing bool) {
 // anything else is world state. Logging is process configuration and is excluded;
 // pending step requests name what a reset destroys and are cancelled.
 
-// ResetSessionState restores every operator toggle to its startup value.
-// Called only on the purge path, never by a plain reset.
+// ResetSessionState clears the operator's transient state: the HUD, pins, overlay
+// content and standing breakpoints. Free mouse, auto-fire and the rate are the
+// player's choices and stay. Called only on the purge path, never by a plain reset.
 func (ctx *GameContext) ResetSessionState() {
-	ctx.MouseFreeMode.Store(false)
-	ctx.AutoFire.Store(AutoFireOff)
 	ctx.OverlayHUD.Store(false)
 	ctx.ClearOverlayPins()
 	ctx.SetOverlayContent(nil)
-	ctx.TimeCtl.SetScale(ScaleNormal)
 	ctx.TimeCtl.ClearBreaks(nil)
 }
 
