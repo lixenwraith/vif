@@ -2,6 +2,7 @@ package render
 
 import (
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -29,6 +30,7 @@ func (t *captureTerminal) PollEvent() terminal.Event               { return term
 func (t *captureTerminal) PostEvent(terminal.Event)                {}
 func (t *captureTerminal) SetMouseMode(terminal.MouseMode) error   { return nil }
 func (t *captureTerminal) SetPasteMode(bool) error                 { return nil }
+func (t *captureTerminal) Blocked() time.Duration                  { return 0 }
 
 func (t *captureTerminal) Flush(cells []terminal.Cell, width, height int) {
 	t.cells = append(t.cells[:0], cells...)

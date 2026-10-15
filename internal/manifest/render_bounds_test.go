@@ -4,6 +4,7 @@ package manifest
 
 import (
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -135,3 +136,4 @@ func (nullTerminal) PollEvent() terminal.Event               { return terminal.E
 func (nullTerminal) PostEvent(terminal.Event)                {}
 func (nullTerminal) SetMouseMode(terminal.MouseMode) error   { return nil }
 func (nullTerminal) SetPasteMode(bool) error                 { return nil }
+func (nullTerminal) Blocked() time.Duration                  { return 0 }

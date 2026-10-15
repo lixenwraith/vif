@@ -3,6 +3,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/manifest"
@@ -15,6 +17,9 @@ type presentationState struct {
 	termSvc      *service.TerminalService
 	term         terminal.Terminal
 	orchestrator *render.RenderOrchestrator
+
+	// termBlocked is when the terminal stopped taking output, zero while it takes it
+	termBlocked time.Time
 }
 
 func validateBuildConfig(Config) error { return nil }

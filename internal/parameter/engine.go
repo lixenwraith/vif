@@ -7,8 +7,9 @@ import "time"
 
 // Game Loop & Engine Timing
 const (
-	// FrameUpdateInterval is the rendering frame rate interval (~60 FPS)
-	FrameUpdateInterval = 16 * time.Millisecond
+	// FrameUpdateInterval is the rendering frame interval, 60 FPS: a third of a tick,
+	// so every tick is drawn for exactly three frames
+	FrameUpdateInterval = GameUpdateInterval / 3
 
 	// GameUpdateInterval is the game logic update interval (clock tick) [game]
 	GameUpdateInterval = 50 * time.Millisecond
@@ -22,6 +23,11 @@ const (
 
 	// InputTickInterval drives the router input tick: auto-fire, macro playback, etc.
 	InputTickInterval = 16 * time.Millisecond
+
+	// TerminalBlockedAfter is how long the terminal may hold one write before the
+	// frame loop stops drawing for it: past any write a reading terminal takes, so
+	// only one that stopped reading (a hidden tab, a gone client) crosses it [wall]
+	TerminalBlockedAfter = 100 * time.Millisecond
 
 	// ProbeStallInterval is how long a running scheduler may leave the tick
 	// counter unmoved before a liveness probe calls the run stalled: forty ticks,
