@@ -3,6 +3,7 @@ package converge
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -306,8 +307,15 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	if p != nil {
 		p.silence = 0
 		p.answeredTick = req.Tick
-		p.converged = req.Converged()
 		p.relayed = slices.Clone(req.Relayed)
+		if req.Converged() {
+			p.provedTick = max(p.provedTick, req.Tick)
+			// A partial answer owed for an older tick repairs a world the peer has
+			// since proved it holds; a whole one stays, since a delta may name it.
+			if o := p.owed; o != nil && !o.whole && o.tick < req.Tick {
+				p.owed = nil
+			}
+		}
 	}
 	if req.Version != snapshot.ManifestVersion || req.Schema != snapshot.Schema {
 		c.publishMu.Unlock()
@@ -320,7 +328,12 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		c.publishMu.Unlock()
 		return // the cheapest correction there is: the receiver already agrees
 	}
-
+	// A repair for a tick the peer has since proved it holds would be refused on
+	// arrival as outgrown; only a whole world is still worth sending.
+	var proved uint64
+	if p != nil {
+		proved = p.provedTick
+	}
 	held, ok := c.retainedAtLocked(req.Tick)
 	authored := ok && held.authored
 	c.publishMu.Unlock()
@@ -331,6 +344,12 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		if req.Keyframe {
 			c.sendKeyframeTo(port, pending.from, req.Tick)
 		}
+		return
+	}
+	if ok && req.Tick < proved && !req.Keyframe {
+		m.ShardsRefused.Add(1)
+		c.log.Debug("converge", "msg", "correction request outgrown",
+			"peer", pending.from, "tick", req.Tick, "proved", proved)
 		return
 	}
 	if req.Index && !req.Keyframe && c.sendIndex(port, pending.from, req.Tick) {
@@ -392,7 +411,8 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	c.recordSelectiveSizeLocked(len(body))
 	c.publishMu.Unlock()
 	c.log.Debug("converge", "msg", "repair sent",
-		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
+		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body),
+		"sections", requestedSections(req))
 }
 
 // widen drops one peer out of the selective exchange for the next few
@@ -427,6 +447,15 @@ func countRequestedPages(req snapshot.CorrectionRequest) int {
 		n += len(s.Hash)
 	}
 	return n
+}
+
+// requestedSections names the sections a request put in play, for the log.
+func requestedSections(req snapshot.CorrectionRequest) string {
+	ids := make([]string, 0, len(req.Sections))
+	for _, s := range req.Sections {
+		ids = append(ids, s.ID)
+	}
+	return strings.Join(ids, ",")
 }
 
 // sendKeyframeTo pushes a whole compressed capture at one peer: the bounded fallback
@@ -507,10 +536,17 @@ func (c *Corrections) applySelective() {
 	if len(manifests) == 0 {
 		return
 	}
-	// Only the newest manifest is answered. An older one describes a state the
-	// authority has already moved past, and answering it would spend a round trip
-	// repairing this instance onto a world nobody holds any more.
+	// Only the newest manifest opens an exchange: an older one describes a state
+	// the authority has moved past, and answering it would spend a round trip
+	// repairing this instance onto a world nobody holds any more. A section index
+	// answering an exchange already under way is still taken, so a newer root does
+	// not strand a descent a cadence from its repair.
 	newest := manifests[len(manifests)-1]
+	for _, body := range manifests[:len(manifests)-1] {
+		if c.awaitedIndex(body) {
+			c.answerManifest(body, 0)
+		}
+	}
 	// Compared at the tick it describes, for the reason a correction is applied
 	// there: this instance's world moves, and an index over a tick it has not
 	// reached would name every page different and buy a repair of nothing. Past
@@ -527,6 +563,18 @@ func (c *Corrections) applySelective() {
 	}
 	c.holdForward(newest, from, tick)
 	c.flushForward()
+}
+
+// awaitedIndex reports whether body is a section index for a tick this instance
+// is awaiting a repair for.
+func (c *Corrections) awaitedIndex(body []byte) bool {
+	want, err := snapshot.DecodeManifest(body)
+	if err != nil || want.Sections == nil {
+		return false
+	}
+	c.selectiveMu.Lock()
+	defer c.selectiveMu.Unlock()
+	return slices.ContainsFunc(c.selective.awaiting, func(a *awaitingRepair) bool { return a.tick == want.Header.Tick })
 }
 
 // manifestAhead reports how far ahead of this instance's clock a manifest's tick
@@ -669,6 +717,14 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		c.log.Debug("converge", "msg", "manifest describes another session", "error", err.Error())
 		return 0
 	}
+	// A manifest or index no newer than the world this instance has proved buys
+	// nothing: compared off its tick, it would ask for a repair refused on arrival.
+	if proved := c.provedTick(); want.Header.Tick <= proved {
+		m.BaselineRefusals.Add(1)
+		c.log.Debug("converge", "msg", "manifest names a tick this instance has proved past",
+			"tick", want.Header.Tick, "proved", proved)
+		return 0
+	}
 
 	// The sections of an index whose root this instance already answered are
 	// compared against the world that answer read, not a fresh one.
@@ -795,7 +851,7 @@ func (c *Corrections) applyRepair(body []byte) {
 		return
 	}
 	awaiting := c.takeAwaiting(set.Header.Tick)
-	if awaiting == nil {
+	if awaiting == nil || c.superseded(awaiting.tick) {
 		m.BaselineRefusals.Add(1)
 		m.ShardsRefused.Add(1)
 		c.log.Debug("converge", "msg", "repair names a baseline this instance has moved past",
@@ -842,7 +898,7 @@ func (c *Corrections) applyRepair(body []byte) {
 	m.CellsRepaired.Add(int64(rep.Rows))
 	c.log.Debug("converge", "msg", "repair applied",
 		"tick", repaired.Header.Tick, "pages", rep.Pages,
-		"sections", rep.Sections, "cells", rep.Rows)
+		"sections", strings.Join(rep.Sections, ","), "cells", rep.Rows)
 }
 
 // requestKeyframe asks the peer its manifest came from for a whole world and

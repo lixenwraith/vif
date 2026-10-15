@@ -145,8 +145,8 @@ func TestOneMismatchRepairsOnlyItsPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if rep.Pages != 1 || rep.Sections != 1 {
-		t.Fatalf("the repair touched %d pages in %d sections", rep.Pages, rep.Sections)
+	if rep.Pages != 1 || len(rep.Sections) != 1 {
+		t.Fatalf("the repair touched %d pages in sections %v", rep.Pages, rep.Sections)
 	}
 	if guest.Root() != host.Root() {
 		t.Fatal("the repaired capture does not reproduce the authority's root")

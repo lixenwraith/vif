@@ -290,6 +290,143 @@ func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
 	}
 }
 
+// discard drops whatever r's port holds without handing it to the protocol.
+func discard(r *run) {
+	port := r.world.port.(*network.MeshPort)
+	buf := make([]network.Inbound, 64)
+	for port.Drain(buf) == len(buf) {
+	}
+}
+
+// TestAManifestNoNewerThanTheProvedWorldIsRefused: an index answering a tick this
+// instance has since proved past is refused rather than compared off its tick,
+// which would buy a repair refused on arrival.
+func TestAManifestNoNewerThanTheProvedWorldIsRefused(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	host.world.advance(1)
+	guest.world.advance(1)
+	if err := host.c.Publish(); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	deliver([]*run{guest}, 1)
+	proved := guest.stat("snapshot.corrections_hash_only")
+	if proved == 0 {
+		t.Fatal("the guest did not prove the published tick")
+	}
+	host.c.publishMu.Lock()
+	held, ok := host.c.retainedAtLocked(guest.c.provedTick())
+	host.c.publishMu.Unlock()
+	if !ok {
+		t.Fatal("the host retained no index for the proved tick")
+	}
+	body, err := snapshot.EncodeManifest(held.index.Summary())
+	if err != nil {
+		t.Fatal(err)
+	}
+	refusals := guest.stat("snapshot.baseline_refusals")
+	guest.c.ReceiveSelective(uint8(network.MsgStateManifest), 1, body)
+	guest.c.Apply()
+	if guest.stat("snapshot.baseline_refusals") != refusals+1 || guest.stat("snapshot.corrections_hash_only") != proved {
+		t.Fatal("an index for a tick already proved was answered instead of refused")
+	}
+}
+
+// TestARequestThePeerHasOutgrownIsNotServed: a page request for a tick the peer has
+// since proved it holds is not built or sent, since the repair would only be
+// refused; the proof is the newest hash-only answer.
+func TestARequestThePeerHasOutgrownIsNotServed(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	diverge(guest, 9)
+	_, tick := outstandingRepair(t, host, guest, nil)
+	guest.c.selectiveMu.Lock()
+	a := guest.c.selective.awaiting[len(guest.c.selective.awaiting)-1]
+	guest.c.selectiveMu.Unlock()
+	req, _, _ := snapshot.CompareRequest(a.index, a.manifest)
+	req.Term = a.manifest.Header.Term
+	body, err := snapshot.EncodeCorrectionRequest(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discard(host) // the page request in flight; it is re-sent below, after the proof
+
+	host.world.advance(1)
+	guest.world.setWorld(host.world.world)
+	if err := host.c.Publish(); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	deliver([]*run{guest}, 1)
+	deliver([]*run{host}, 1)
+	if guest.c.provedTick() <= tick {
+		t.Fatalf("the guest proved %d, not past %d", guest.c.provedTick(), tick)
+	}
+	sent, refused := host.stat("snapshot.shards_sent"), host.stat("snapshot.shards_refused")
+	host.c.ReceiveSelective(uint8(network.MsgStateRequest), 2, body)
+	host.c.Apply()
+	if host.stat("snapshot.shards_sent") != sent || host.stat("snapshot.shards_refused") != refused+1 {
+		t.Fatal("a page request the peer had outgrown was served")
+	}
+}
+
+// TestADivergedAnswerDoesNotForfeitAPeersProof: a hash-only answer stands as the
+// peer's proof for half the floor, so one answer that asks for pages does not make
+// the next publication a whole world the repair under way would also deliver.
+func TestADivergedAnswerDoesNotForfeitAPeersProof(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	host.c.publishMu.Lock()
+	keyTick := host.c.lastKeyTick
+	host.c.publishMu.Unlock()
+	for i := range parameter.SnapshotFloorKeyframeTicks {
+		host.world.advance(1)
+		guest.world.advance(1)
+		if i == parameter.SnapshotFloorKeyframeTicks*3/4 {
+			diverge(guest, 9)
+		}
+		if err := host.c.Publish(); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		deliver([]*run{guest}, 1)
+		deliver([]*run{host}, 1)
+	}
+	host.c.publishMu.Lock()
+	sent := host.c.lastKeyTick
+	host.c.publishMu.Unlock()
+	if sent != keyTick {
+		t.Fatalf("the host sent a keyframe at %d for one diverged answer", sent)
+	}
+	if guest.stat("snapshot.shards_applied") == 0 {
+		t.Fatal("the divergence was never repaired selectively")
+	}
+}
+
+// TestADescentSurvivesANewerRoot: a section index for a tick the guest awaits a
+// repair for is answered beside a newer root, so a cadence shorter than the descent
+// does not strand every repair a tick from being built.
+func TestADescentSurvivesANewerRoot(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	diverge(guest, 9)
+	host.world.advance(1)
+	guest.world.advance(1)
+	if err := host.c.Publish(); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	deliver([]*run{guest}, 1) // the root differs: an index request
+	deliver([]*run{host}, 1)  // the section index leaves
+	host.world.advance(1)
+	guest.world.advance(1)
+	if err := host.c.Publish(); err != nil { // a newer root lands beside it
+		t.Fatalf("publish: %v", err)
+	}
+	deliver([]*run{guest}, 1)
+	deliver([]*run{host}, 1)
+	if host.stat("snapshot.shards_sent") == 0 {
+		t.Fatal("the newer root stranded the descent: no page request was answered")
+	}
+}
+
 // TestAWidenedPeerIsServedForItsWholeWindow: a peer dropped out of the exchange for
 // a repair wider than the world it aimed at is owed the whole body for every round
 // it is out, the final one included. The skip and the fallback are one decision —

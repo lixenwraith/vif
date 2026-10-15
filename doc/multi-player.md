@@ -410,8 +410,13 @@ the newest replacing the older and nothing partial replacing a whole world, and
 leaves once the link drains, released between every two ticks rather than by the
 next publication: a late or lost frame costs a round trip, never a stall. A
 request naming a tick the authority has let go was overtaken by the index since and
-is not answered unless it asks for a whole world; indexes to a peer are spaced by
-its round trip, so a descent's second request finds its tick retained. A link that
+is not answered unless it asks for a whole world, nor is one naming a tick the peer
+has since proved it holds, whose answer the receiver would refuse as outgrown — as
+it refuses an index or a repair no newer than the world it last proved, rather than
+comparing it off its tick. A section index for a tick a receiver is awaiting a
+repair for is answered beside a newer root, so a cadence shorter than the descent
+does not strand it. Indexes to a peer are spaced by its round trip, so a descent's
+second request finds its tick retained. A link that
 cannot deliver a keyframe within `SnapshotKeyframeDrain` takes none on schedule: it
 meets the floor with proofs, takes a whole world on request and reports
 constrained. Echoes carry the answering side's clock, and delivery rate is
