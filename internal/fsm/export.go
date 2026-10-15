@@ -44,13 +44,13 @@ type DelayedSnapshot struct {
 }
 
 // Export reads the runtime position of every region, the variables, and the
-// pending delayed actions, in a canonical order.
+// pending delayed actions. Regions keep the machine's own order, which an import
+// adopts: it is their update and event order, so a sorted copy would run them in
+// another order than the machine it was read from.
 func (m *Machine[T]) Export() MachineState {
 	var out MachineState
 
-	names := append([]string(nil), m.regionOrder...)
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range m.regionOrder {
 		region, ok := m.regions[name]
 		if !ok {
 			continue
