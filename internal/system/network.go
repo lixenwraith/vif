@@ -209,9 +209,11 @@ type NetworkSystem struct {
 	// it, its own and those it carries; Flush sends them as one frame.
 	upstream network.Bundle
 
-	// leadLowSince and leadPushed are driveOwnLead's hysteresis: when a lower
-	// target first held, and the change already pushed and not yet dispatched.
+	// leadLowSince, leadLowMax and leadPushed are driveOwnLead's hysteresis: when a
+	// lower target first held, the highest it has read since, and the change
+	// already pushed and not yet dispatched.
 	leadLowSince  uint64
+	leadLowMax    uint64
 	leadPushed    uint64
 	statPaceLate  *atomic.Int64
 	statPaceTrim  *atomic.Int64
@@ -2357,12 +2359,14 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 	if !ok {
 		return
 	}
-	next, lowSince := chooseLead(r.BarrierDelayTicks, target, s.localTick(), s.leadLowSince)
-	s.leadLowSince = lowSince
+	next, lowSince, lowMax := chooseLead(r.BarrierDelayTicks, target, s.localTick(), s.leadLowSince, s.leadLowMax)
+	s.leadLowSince, s.leadLowMax = lowSince, lowMax
 	if next == r.BarrierDelayTicks || next == s.leadPushed {
 		return
 	}
 	s.leadPushed = next
+	s.world.Log().Debug("net", "msg", "lead pushed", "ticks", next, "target", target,
+		"pace_latest", s.paceLatest, "held", r.BarrierDelayTicks)
 	s.world.PushEventFull(event.EventPlayoutLead,
 		&event.PlayoutLeadPayload{Ticks: next}, event.OriginSession, core.DomainPlayer)
 }
@@ -2411,19 +2415,20 @@ func (s *NetworkSystem) noteOwnCommit(produced uint64) bool {
 	return fresh
 }
 
-// chooseLead raises at once and lowers only after the lower target has held for
-// NetworkBarrierRenegotiateTicks: a crossing that misses its lead costs a
-// correction, one that clears it costs nothing.
-func chooseLead(current, target, tick, lowSince uint64) (next, nextLowSince uint64) {
+// chooseLead raises at once and lowers only after the target has read lower for
+// NetworkBarrierRenegotiateTicks, to the highest of those readings: a crossing
+// that misses its lead costs a correction, one that clears it costs nothing, and
+// a momentary trough would only be climbed back a tick at a time.
+func chooseLead(current, target, tick, lowSince, lowMax uint64) (next, nextLowSince, nextLowMax uint64) {
 	switch {
 	case target >= current:
-		return target, 0
+		return target, 0, 0
 	case lowSince == 0 || tick < lowSince:
-		return current, tick
+		return current, tick, target
 	case tick-lowSince >= parameter.NetworkBarrierRenegotiateTicks:
-		return target, 0
+		return max(target, lowMax), 0, 0
 	}
-	return current, lowSince
+	return current, lowSince, max(lowMax, target)
 }
 
 // forwardDown passes one admitted committed epoch down unchanged but for the hop
