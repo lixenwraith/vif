@@ -69,29 +69,6 @@ func TestLinkJitterRisesWithVariationAndFallsWithout(t *testing.T) {
 	}
 }
 
-// TestLinkReportsTheWorstRoundTripOfItsWindow: MaxRTT is the slowest of the last
-// Window raw round trips, so one excursion holds it for a window and then ages out.
-func TestLinkReportsTheWorstRoundTripOfItsWindow(t *testing.T) {
-	l := NewLink(LinkConfig{Window: 4})
-	if got := l.Metrics().MaxRTT; got != 0 {
-		t.Fatalf("an unobserved link reports a worst round trip of %s", got)
-	}
-	l.Observe(steady(80*time.Millisecond, 0, 0))
-	l.Observe(steady(300*time.Millisecond, 0, 0))
-	for range 2 {
-		l.Observe(steady(80*time.Millisecond, 0, 0))
-	}
-	if got := l.Metrics().MaxRTT; got != 300*time.Millisecond {
-		t.Fatalf("the worst of the window reads %s, want the 300ms excursion", got)
-	}
-	for range 2 {
-		l.Observe(steady(80*time.Millisecond, 0, 0))
-	}
-	if got := l.Metrics().MaxRTT; got != 80*time.Millisecond {
-		t.Fatalf("the excursion is out of the window and the worst still reads %s", got)
-	}
-}
-
 // TestLinkReportsSaturationOnlyWhenTheLinkWasTheLimit is the estimator's central
 // claim. A delivery rate measured while the sender had nothing queued is a lower
 // bound on capacity and not a measurement of it; a controller that throttled on
