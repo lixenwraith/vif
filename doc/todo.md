@@ -215,23 +215,6 @@ add the Ctrl-Space branch and update [Input and modes](input-and-modes.md) §4 a
 §6, which say overlay navigation ignores these keys; or keep overlays navigation-only
 and correct the help line.
 
-### Drop or wire the unreachable macro stop-one path
-
-- Priority: P0, to review
-- Affected files: `internal/input/machine.go`, `internal/input/intent.go`,
-  `internal/input/strings_gen.go`, `internal/mode/router.go`,
-  `internal/help/topics.go`, `doc/input-and-modes.md`
-
-Nothing calls `processMacroStopAwait` (`internal/input/machine.go:579-605`; the state
-switch at `:231-252` never reaches it), so `IntentMacroStopOne` (`intent.go:42`) and
-`Router.handleMacroStopOne` (`router.go:1238-1242`) never run. `q` on a playing
-register opens record-await instead (`router.go:184-195`), and recording stops and
-empties it (`:1191-1205`, `macro.go:62-69`), so stopping one register costs its
-contents. Delete the dead path, or give stop-one a sequence that keeps the register.
-`IntentMacroRecordStop` (`intent.go:38`) is never emitted either: `q` while recording
-stops in the router's `IntentMacroRecordToggle` branch (`router.go:184-190`), so
-`handleMacroRecordStop` (`:1207-1212`) is dead the same way.
-
 ### Drop `CommandResult.KeepPaused`
 
 - Priority: P0, to review

@@ -272,16 +272,12 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	// Macro control
 	case input.IntentMacroRecordStart:
 		return r.handleMacroRecordStart(intent)
-	case input.IntentMacroRecordStop:
-		return r.handleMacroRecordStop()
 	case input.IntentMacroPlay:
 		return r.handleMacroPlay(intent)
 	case input.IntentMacroPlayInfinite:
 		return r.handleMacroPlayInfinite(intent)
 	case input.IntentMacroPlayAll:
 		return r.handleMacroPlayAll()
-	case input.IntentMacroStopOne:
-		return r.handleMacroStopOne(intent)
 	case input.IntentMacroStopAll:
 		return r.handleMacroStopAll()
 
@@ -1204,13 +1200,6 @@ func (r *Router) handleMacroRecordStart(intent *input.Intent) bool {
 	return true
 }
 
-func (r *Router) handleMacroRecordStop() bool {
-	r.macro.StopRecording()
-	r.ctx.MacroRecording.Store(false)
-	r.ctx.MacroRecordingLabel.Store(0)
-	return true
-}
-
 func (r *Router) handleMacroPlay(intent *input.Intent) bool {
 	now := r.ctx.TimeCtl.Now()
 	if r.macro.StartPlayback(intent.Char, intent.Count, now) {
@@ -1232,12 +1221,6 @@ func (r *Router) handleMacroPlayAll() bool {
 	if r.macro.StartAllPlayback(now) > 0 {
 		r.ctx.MacroPlaying.Store(true)
 	}
-	return true
-}
-
-func (r *Router) handleMacroStopOne(intent *input.Intent) bool {
-	r.macro.StopPlayback(intent.Char)
-	r.updateMacroPlayingState()
 	return true
 }
 
@@ -1265,9 +1248,8 @@ func (r *Router) ProcessMacroTick() []*input.Intent {
 
 func isMacroControlIntent(t input.IntentType) bool {
 	switch t {
-	case input.IntentMacroRecordStart, input.IntentMacroRecordStop,
-		input.IntentMacroPlay, input.IntentMacroPlayInfinite,
-		input.IntentMacroStopOne, input.IntentMacroStopAll,
+	case input.IntentMacroRecordStart, input.IntentMacroPlay,
+		input.IntentMacroPlayInfinite, input.IntentMacroStopAll,
 		input.IntentMacroRecordToggle:
 		return true
 	}

@@ -576,34 +576,6 @@ func (m *Machine) processMacroInfiniteAwait(key rune) *Intent {
 	return nil
 }
 
-func (m *Machine) processMacroStopAwait(key rune) *Intent {
-	m.cmdBuffer = append(m.cmdBuffer, key)
-
-	// q@ -> stop all
-	if key == '@' {
-		cmd := m.captureCommand()
-		m.Reset()
-		return &Intent{
-			Type:    IntentMacroStopAll,
-			Command: cmd,
-		}
-	}
-
-	// q<label> -> stop specific
-	if key >= 'a' && key <= 'z' {
-		cmd := m.captureCommand()
-		m.Reset()
-		return &Intent{
-			Type:    IntentMacroStopOne,
-			Char:    key,
-			Command: cmd,
-		}
-	}
-
-	m.Reset()
-	return nil
-}
-
 func (m *Machine) motionToDirectionKey(motion MotionOp) rune {
 	switch motion {
 	case MotionColoredGlyphRight:

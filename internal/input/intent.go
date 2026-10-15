@@ -35,11 +35,9 @@ const (
 
 	// Macro
 	IntentMacroRecordStart  // q + label - start recording to label
-	IntentMacroRecordStop   // q while recording - stop recording
 	IntentMacroPlay         // [count]@label - play macro
 	IntentMacroPlayInfinite // @@label - play indefinitely
 	IntentMacroPlayAll      // @@@ - play all recorded macros indefinitely
-	IntentMacroStopOne      // q + label while playing - stop that macro
 	IntentMacroStopAll      // q@ while playing - stop all macros
 	IntentMacroRecordToggle // q key - placeholder, Router interprets based on context
 
