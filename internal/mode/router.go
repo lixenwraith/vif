@@ -738,9 +738,8 @@ func (r *Router) handleTextBackspace() bool {
 
 	switch currentMode {
 	case core.ModeSearch:
-		searchText := r.ctx.GetSearchText()
-		if len(searchText) > 0 {
-			r.ctx.SetSearchText(searchText[:len(searchText)-1])
+		if q := []rune(r.ctx.GetSearchText()); len(q) > 0 {
+			r.ctx.SetSearchText(string(q[:len(q)-1]))
 		}
 	case core.ModeCommand:
 		text := []rune(r.ctx.GetCommandText())
