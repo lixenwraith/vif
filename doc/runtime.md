@@ -794,10 +794,11 @@ pause gate. It does not freeze the whole process:
 `MetaSystem` is the single owner that keeps pause flag, clock, and pause-change
 events aligned. It refuses a request to enter pause while a transport has a live
 peer: stopping one participant would also stop its barrier production and apply
-loop while every peer continued. Command and overlay modes still open, but do not
-pause a live network session. The exception is an authority whose every linked
-participant is a seat it holds (`SessionState.SeatsOnly`): its seats stand still
-with it, and a late joiner's admission unpauses it.
+loop while every peer continued. Command and overlay modes still open, and ask
+for no pause where the run cannot take one (`SessionState.Pausable`). The
+exception is an authority whose every linked participant is a seat it holds
+(`SessionState.SeatsOnly`): its seats stand still with it, and a late joiner's
+admission unpauses it.
 
 In a driven App, pause remains observable/operator state but never revokes the
 caller's authority: `App.Tick` uses the stepped tick path and still advances.
@@ -902,12 +903,12 @@ being driven or observed and survives plain `:new`. Its explicit contract is:
 Both `:new` and `:new!` clear the issuing instance's recorded and playing macros,
 and on every instance close overlays, return to Normal mode, and clear
 command/search/status text; a reset the scenario raises, as the default
-scenario's defeat does, clears no instance's macros. `:new!` additionally purges
-the initiating instance's operator contract: free mouse and auto-fire become
-off, speed returns to 1x, and the telemetry HUD/pins and breakpoints are cleared.
-A peer receiving the crossed reset retains its own operator state, macros
-included. Logging target, level, scope, snapshot period, and recorder depth are
-process diagnostics and are never part of this purge.
+scenario's defeat does, clears no instance's macros. `:new!` additionally clears
+the initiating instance's telemetry HUD, pins and breakpoints; free mouse,
+auto-fire and the time scale are the player's choices and survive both forms. A
+peer receiving the crossed reset retains its own operator state, macros included.
+Logging target, level, scope, snapshot period, and recorder depth are process
+diagnostics and are never part of this purge.
 
 Other session-observer fields have explicit behavior rather than belonging to
 that purge list: the render frame remains monotonic, reset ends paused state,

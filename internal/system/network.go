@@ -209,9 +209,11 @@ type NetworkSystem struct {
 	// it, its own and those it carries; Flush sends them as one frame.
 	upstream network.Bundle
 
-	// leadLowSince and leadPushed are driveOwnLead's hysteresis: when a lower
-	// target first held, and the change already pushed and not yet dispatched.
+	// leadLowSince, leadLowMax and leadPushed are driveOwnLead's hysteresis: when a
+	// lower target first held, the highest it has read since, and the change
+	// already pushed and not yet dispatched.
 	leadLowSince  uint64
+	leadLowMax    uint64
 	leadPushed    uint64
 	statPaceLate  *atomic.Int64
 	statPaceTrim  *atomic.Int64
@@ -476,7 +478,7 @@ func (s *NetworkSystem) Init() {
 	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled = 0, 0, false, 0
 	s.pathCount, s.pathEpoch = 0, 0
 	s.downAt = [participantSlots]uint64{}
-	s.leadLowSince, s.leadPushed = 0, 0
+	s.leadLowSince, s.leadLowMax, s.leadPushed = 0, 0, 0
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
@@ -642,7 +644,8 @@ func (s *NetworkSystem) adoptDelay(ticks uint64) {
 		return
 	}
 	s.statDelayTicks.Store(int64(ticks))
-	s.world.Log().Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
+	s.world.Log().Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick(),
+		"pace_latest", s.paceLatest)
 }
 
 // barrierDelayTicks returns this instance's own lead.
@@ -2293,9 +2296,9 @@ func (s *NetworkSystem) linked(id uint32) bool {
 
 // observeAuthorityEpoch paces a guest against the authority. The sample is how
 // late the epoch landed: this instance's completed tick minus the epoch's. The
-// latest of a window decides, and a step clears the window it has answered. The
-// scheduler takes a step at the next tick and waits it out before the one after;
-// a sample read while it waits counts the lateness the step already answers.
+// latest of a window trims, the earliest steps, and a step clears the window it
+// has answered. The scheduler takes a step at the next tick and waits it out before
+// the one after; a sample read while it waits counts the lateness the step answers.
 func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	r := s.world.Resources.Network
 	tick := s.localTick()
@@ -2308,8 +2311,8 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	if s.paceCount < len(s.paceSamples) {
 		return
 	}
-	latest := slices.Max(s.paceSamples[:])
-	trim, step := paceDecision(latest)
+	latest, earliest := slices.Max(s.paceSamples[:]), slices.Min(s.paceSamples[:])
+	trim, step := paceDecision(latest, earliest)
 	s.paceLatest, s.paceKnown = latest-step, true
 	s.statPaceLate.Store(latest)
 	s.statPaceTrim.Store(int64(trim))
@@ -2321,19 +2324,20 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	}
 }
 
-// paceDecision turns the latest arrival offset into a trim of the tick interval, in
-// permille, and a whole-tick step; positive slows this instance down. Inside the
-// band it rests; far outside it steps, and a step back is bounded by the debt the
-// scheduler runs back to back.
-func paceDecision(latest int64) (trimPermille int32, stepTicks int64) {
-	late := latest - parameter.NetworkAheadTicks
+// paceDecision turns a window's arrival offsets into a trim of the tick interval,
+// in permille, and a whole-tick step; positive slows this instance down. Inside the
+// band it rests. A step forward needs the earliest arrival past the threshold too:
+// one jittered epoch is a trim, a whole window late is a clock to move at once. A
+// step back is bounded by the debt the scheduler runs back to back.
+func paceDecision(latest, earliest int64) (trimPermille int32, stepTicks int64) {
+	late, lateAll := latest-parameter.NetworkAheadTicks, earliest-parameter.NetworkAheadTicks
 	early := parameter.NetworkAheadTicks - parameter.NetworkPaceBandTicks - latest
 	trim := func(ticks int64) int32 {
 		return int32(min(ticks*parameter.NetworkPaceGainPermille, parameter.NetworkPacePermilleMax))
 	}
 	switch {
-	case late >= parameter.NetworkPaceStepTicks:
-		return 0, late
+	case lateAll >= parameter.NetworkPaceStepTicks:
+		return 0, lateAll
 	case late > 0:
 		return trim(late), 0
 	case early >= parameter.NetworkPaceStepTicks:
@@ -2356,8 +2360,8 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 	if !ok {
 		return
 	}
-	next, lowSince := chooseLead(r.BarrierDelayTicks, target, s.localTick(), s.leadLowSince)
-	s.leadLowSince = lowSince
+	next, lowSince, lowMax := chooseLead(r.BarrierDelayTicks, target, s.localTick(), s.leadLowSince, s.leadLowMax)
+	s.leadLowSince, s.leadLowMax = lowSince, lowMax
 	if next == r.BarrierDelayTicks || next == s.leadPushed {
 		return
 	}
@@ -2410,19 +2414,20 @@ func (s *NetworkSystem) noteOwnCommit(produced uint64) bool {
 	return fresh
 }
 
-// chooseLead raises at once and lowers only after the lower target has held for
-// NetworkBarrierRenegotiateTicks: a crossing that misses its lead costs a
-// correction, one that clears it costs nothing.
-func chooseLead(current, target, tick, lowSince uint64) (next, nextLowSince uint64) {
+// chooseLead raises at once and lowers only after the target has read lower for
+// NetworkBarrierRenegotiateTicks, to the highest of those readings: a crossing
+// that misses its lead costs a correction, one that clears it costs nothing, and
+// a momentary trough would only be climbed back a tick at a time.
+func chooseLead(current, target, tick, lowSince, lowMax uint64) (next, nextLowSince, nextLowMax uint64) {
 	switch {
 	case target >= current:
-		return target, 0
+		return target, 0, 0
 	case lowSince == 0 || tick < lowSince:
-		return current, tick
+		return current, tick, target
 	case tick-lowSince >= parameter.NetworkBarrierRenegotiateTicks:
-		return target, 0
+		return max(target, lowMax), 0, 0
 	}
-	return current, lowSince
+	return current, lowSince, max(lowMax, target)
 }
 
 // forwardDown passes one admitted committed epoch down unchanged but for the hop
@@ -2899,7 +2904,8 @@ type networkState struct {
 	paceLatest                                 int64
 	paceKnown                                  bool
 	paceSettled                                uint64
-	pathEpoch, leadLowSince, leadPushed        uint64
+	pathEpoch, leadLowSince, leadLowMax        uint64
+	leadPushed                                 uint64
 	lastLostIn, lastLostOut                    uint64
 }
 
@@ -2920,7 +2926,8 @@ func (s *NetworkSystem) CopyState() any {
 		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
 		paceSamples: s.paceSamples, pathSamples: s.pathSamples, paceCount: s.paceCount, pathCount: s.pathCount,
 		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
-		leadLowSince: s.leadLowSince, leadPushed: s.leadPushed, lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
+		leadLowSince: s.leadLowSince, leadLowMax: s.leadLowMax, leadPushed: s.leadPushed,
+		lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
 	}
 	return c
 }
@@ -2946,7 +2953,8 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
 	s.paceSamples, s.pathSamples, s.paceCount, s.pathCount = c.paceSamples, c.pathSamples, c.paceCount, c.pathCount
 	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch
-	s.leadLowSince, s.leadPushed, s.lastLostIn, s.lastLostOut = c.leadLowSince, c.leadPushed, c.lastLostIn, c.lastLostOut
+	s.leadLowSince, s.leadLowMax, s.leadPushed = c.leadLowSince, c.leadLowMax, c.leadPushed
+	s.lastLostIn, s.lastLostOut = c.lastLostIn, c.lastLostOut
 	return nil
 }
 

@@ -17,7 +17,8 @@ const (
 	NetworkBarrierMaxDelayTicks = 20
 
 	// NetworkBarrierRenegotiateTicks is how long a lower measurement holds before a
-	// participant's own lead follows it down; raising is immediate.
+	// participant's own lead follows it down, to the highest reading of that
+	// window; raising is immediate.
 	NetworkBarrierRenegotiateTicks = SnapshotFloorKeyframeTicks
 
 	// NetworkRelaySlackTicks is the tick a guest's lead leaves the authority to
@@ -39,7 +40,8 @@ const (
 	NetworkPaceBandTicks = 1
 
 	// NetworkPaceWindow is how many authority epochs one pace decision reads; the
-	// latest of them decides, so a jittered arrival counts at its worst.
+	// latest of them trims and the earliest steps, so one jittered arrival never
+	// moves whole ticks.
 	NetworkPaceWindow = 10
 
 	// NetworkPaceGainPermille and NetworkPacePermilleMax trim a guest's tick interval
@@ -49,7 +51,8 @@ const (
 	NetworkPacePermilleMax  = 80
 
 	// NetworkPaceStepTicks is the error a guest closes in one step rather than by
-	// trimming: a lobby that released it a round trip early is corrected at once.
+	// trimming, when every epoch of the window shows it: a lobby that released it a
+	// round trip early is corrected at once, a single jittered arrival only trims.
 	// A backwards step is bounded by the debt the scheduler will run back to back.
 	NetworkPaceStepTicks     = 3
 	NetworkPaceStepBackTicks = 2

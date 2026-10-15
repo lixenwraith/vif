@@ -198,27 +198,28 @@ func TestAGuestAppliesAPeerOnlyAsCommitted(t *testing.T) {
 }
 
 // TestAGuestPacesIntoItsBand: inside the band it rests, a little late or early it
-// trims the tick interval toward it, and far outside it steps.
+// trims the tick interval toward it, and far outside it steps; a step forward
+// waits for the whole window, since one jittered arrival would freeze the world.
 func TestAGuestPacesIntoItsBand(t *testing.T) {
 	t.Parallel()
-	ahead := int64(parameter.NetworkAheadTicks)
+	ahead, far := int64(parameter.NetworkAheadTicks), int64(parameter.NetworkPaceStepTicks)
 	for _, c := range []struct {
-		latest   int64
-		slower   bool
-		faster   bool
-		stepping bool
+		latest, earliest int64
+		slower, faster   bool
+		stepping         bool
 	}{
-		{latest: ahead},
-		{latest: ahead - parameter.NetworkPaceBandTicks},
-		{latest: ahead + 1, slower: true},
-		{latest: ahead + parameter.NetworkPaceStepTicks, slower: true, stepping: true},
-		{latest: ahead - parameter.NetworkPaceBandTicks - 1, faster: true},
-		{latest: ahead - parameter.NetworkPaceBandTicks - parameter.NetworkPaceStepTicks, faster: true, stepping: true},
+		{latest: ahead, earliest: ahead},
+		{latest: ahead - parameter.NetworkPaceBandTicks, earliest: ahead - parameter.NetworkPaceBandTicks},
+		{latest: ahead + 1, earliest: ahead, slower: true},
+		{latest: ahead + far, earliest: ahead, slower: true},
+		{latest: ahead + far, earliest: ahead + far, slower: true, stepping: true},
+		{latest: ahead - parameter.NetworkPaceBandTicks - 1, earliest: ahead - parameter.NetworkPaceBandTicks - 1, faster: true},
+		{latest: ahead - parameter.NetworkPaceBandTicks - far, earliest: ahead - parameter.NetworkPaceBandTicks - far, faster: true, stepping: true},
 	} {
-		trim, step := paceDecision(c.latest)
+		trim, step := paceDecision(c.latest, c.earliest)
 		slower, faster := trim > 0 || step > 0, trim < 0 || step < 0
 		if slower != c.slower || faster != c.faster || (step != 0) != c.stepping {
-			t.Errorf("latest %d: trim %d step %d", c.latest, trim, step)
+			t.Errorf("latest %d earliest %d: trim %d step %d", c.latest, c.earliest, trim, step)
 		}
 	}
 }
@@ -248,6 +249,28 @@ func TestAGuestStepsOnceForOneLateness(t *testing.T) {
 	window(60)
 	if got := r.PaceStep.Load(); got == first {
 		t.Fatal("a late window after the step was served ordered none")
+	}
+}
+
+// TestALeadFallsToTheHighestReadingOfItsWindow: a lower target is adopted only
+// once it has held for the window, and then at the highest value it read in it,
+// since a trough the link cannot hold is climbed back a tick at a time.
+func TestALeadFallsToTheHighestReadingOfItsWindow(t *testing.T) {
+	t.Parallel()
+	window := uint64(parameter.NetworkBarrierRenegotiateTicks)
+	var lowSince, lowMax uint64
+	next := uint64(12)
+	for _, r := range []struct{ tick, target, want uint64 }{
+		{90, 13, 13}, // a higher target is adopted at once
+		{100, 6, 13}, // the window opens
+		{110, 9, 13}, // a higher lower reading is remembered
+		{100 + window - 1, 7, 13},
+		{100 + window, 5, 9}, // the window closes on its highest reading
+	} {
+		next, lowSince, lowMax = chooseLead(next, r.target, r.tick, lowSince, lowMax)
+		if next != r.want {
+			t.Fatalf("tick %d target %d: lead %d, want %d", r.tick, r.target, next, r.want)
+		}
 	}
 }
 

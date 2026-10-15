@@ -17,23 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Decide what `:new!` sets free mouse, auto-fire and rate to
-
-- Priority: P0, to review
-- Affected files: `internal/engine/game_context.go`, `internal/help/topics.go`,
-  `internal/parameter/gameplay.go`, `internal/app/app.go`, `doc/input-and-modes.md`,
-  `doc/runtime.md`, `doc/telemetry-reference.md`, `doc/term-index.md`
-
-`ResetSessionState` says it restores every operator toggle to its startup value
-(`game_context.go:535`) but stores free mouse off, auto-fire off and 1x
-(`:538-543`). A run starts with free mouse on (`parameter.DefaultMouseFreeMode`),
-auto-fire on both weapons (`:285-286`) and the `-speed` rate
-(`internal/app/app.go:392-395`); [Input and modes](input-and-modes.md) §9,
-[Runtime](runtime.md) §10 and the `:new!` help line (`topics.go:161`) follow the
-code. Options: keep turning them off and correct the comment; or restore the
-startup values, with an auto-fire default in `internal/parameter` and the `-speed`
-rate kept on the context.
-
 ### Refuse a parent cycle at load
 
 - Priority: P0, to review
@@ -72,17 +55,6 @@ from on_enter. Options: honour it (a nested call only marks the exiting region, 
 the outer exit deletes it and skips any enter phase); or forbid it
 (`TerminateRegion` returns an error for an exiting region, and the reference says so).
 
-### Delete search text by rune
-
-- Priority: P0, to review
-- Affected files: `internal/mode/router.go`
-
-Backspace in Search mode cuts one byte (`router.go:745`), though Search takes any
-rune (`internal/input/machine.go:662-682`). After `/é` and Backspace the pattern is
-`"\xc3"` (reproduced), which `PerformSearch` reads as U+FFFD (`search.go:16`) and
-never matches. Command mode (`router.go:747-754`) and the overlay filter
-(`:757-760`) already cut a rune; Search should too.
-
 ### Decide which control keys work in an overlay
 
 - Priority: P0, to review
@@ -99,18 +71,6 @@ Ctrl+Space works "from any mode" (`topics.go:125`). Options: bind the three keys
 add the Ctrl-Space branch and update [Input and modes](input-and-modes.md) §4 and
 §6, which say overlay navigation ignores these keys; or keep overlays navigation-only
 and correct the help line.
-
-### Drop `CommandResult.KeepPaused`
-
-- Priority: P0, to review
-- Affected files: `internal/mode/commands.go`, `internal/mode/config_menu.go`,
-  `internal/mode/router.go`
-
-`KeepPaused` (`commands.go:28`) is set 88 times across `commands.go` and
-`config_menu.go` and read nowhere: the router unpauses before every command
-(`router.go:787-791`), and a command that wants the pause requests it again
-(`commands.go:980`, `config_menu.go:245`). Delete the field, its assignments and the
-comment at `router.go:790`.
 
 ### Decide whether loads refuse unknown keys and `op` values
 
@@ -1045,6 +1005,42 @@ the session shares ([Multi-player](multi-player.md#8-remaining-gaps) §8). Decid
 between a hybrid shared/local shape, as the cursor and its shield have, and an
 "every player" ownership value that attribution expands.
 
+### Answer no repair request a later manifest has outgrown
+
+- Priority: P2
+- Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`
+
+A request goes out for every answered manifest with no check for one outstanding,
+so a repair can arrive after a later manifest has proved the guest converged and be
+refused by `takeAwaiting`, built and sent for nothing ([Troubleshooting](troubleshooting.md)
+§18: 57% of the repair bytes). Either the request carries the newest tick the guest
+has proved, so the authority skips an older one, or the guest sends none while
+`awaiting` holds a tick within the cadence.
+
+### Find why a storm spawn diverges on a guest
+
+- Priority: P1
+- Affected files: `internal/system/storm.go`, `internal/converge/correction.go`
+
+A guest's only large corrections follow its storm spawns ([Troubleshooting](troubleshooting.md)
+§18). Compare the authority's and the guest's spawn at the same tick to find the
+input the guest predicts differently. If it is inherent, a forced keyframe at the
+spawn tick lands the snap once and early instead of as a repair.
+
+### Derive the lead's margin from the measured worst round trip
+
+- Priority: P2
+- Affected files: `internal/system/network.go`, `pkg/linkpace/link.go`,
+  `internal/parameter/network.go`
+
+The own lead covers the round trip plus `NetworkBarrierJitterMargin` (2) times a
+jitter that reads a probe-to-probe swing whole, so it carries 1.5-2.5 ticks more than
+the worst round trip needs ([Troubleshooting](troubleshooting.md) §18). Keep a ring
+of raw round trips in `linkpace.Link` and let the lead follow the worst of the last
+`NetworkPaceWindow`, as it already does behind a relay, or lower the margin to 1 with
+a one-tick floor. Either lowers the lead's value, not its meaning; a late commit
+stays bounded by `NetworkCommitLateTicks`.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -1313,6 +1309,18 @@ system still calls its own `Init` in its constructor (manifest order) and again
 on reset (handler order). The engine would instead call `Init` once per system
 in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
 calls would go.
+
+### Let a command return the operator settings to their defaults
+
+- Priority: P3
+- Affected files: `internal/engine/game_context.go`, `internal/mode/commands.go`,
+  `internal/parameter`, `internal/app/app.go`
+
+`:new!` keeps free mouse, auto-fire and the rate: they are the player's choices and
+reach no log or journal. Nothing returns them to their startup values, free mouse
+on (`parameter.DefaultMouseFreeMode`), auto-fire on both weapons (`game_context.go`,
+`AutoFireBoth`) and the `-speed` rate, which the context would have to keep.
+Fold the return into an existing command rather than adding one for it.
 
 ### Give the composite lifecycle methods a user
 

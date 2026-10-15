@@ -626,7 +626,7 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 		r.ctx.SetCommandText("")
 		r.ctx.SetCommandCursorPos(0)
 		r.resetCommandHistoryBrowse()
-		r.ctx.SetPaused(true)
+		r.ctx.PauseForInput()
 	case input.ModeTargetVisual:
 		if r.ctx.IsVisualMode() {
 			newMode = core.ModeNormal // Toggle off
@@ -738,9 +738,8 @@ func (r *Router) handleTextBackspace() bool {
 
 	switch currentMode {
 	case core.ModeSearch:
-		searchText := r.ctx.GetSearchText()
-		if len(searchText) > 0 {
-			r.ctx.SetSearchText(searchText[:len(searchText)-1])
+		if q := []rune(r.ctx.GetSearchText()); len(q) > 0 {
+			r.ctx.SetSearchText(string(q[:len(q)-1]))
 		}
 	case core.ModeCommand:
 		text := []rune(r.ctx.GetCommandText())
@@ -784,8 +783,8 @@ func (r *Router) handleTextConfirm() bool {
 
 		// Unpause ahead of execution: the command's own events are queued
 		// before this intent's dispatch, so a trailing unpause is applied too
-		// late and every EventSoundRequest the command produces is gated.
-		// KeepPaused commands re-pause from their own handlers.
+		// late and every EventSoundRequest the command produces is gated. A
+		// command that wants the pause requests it again from its own handler.
 		r.ctx.SetPaused(false)
 
 		var result CommandResult
