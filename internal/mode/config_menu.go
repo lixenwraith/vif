@@ -245,7 +245,7 @@ func handleConfigCommand(ctx *engine.GameContext, args []string) CommandResult {
 	ctx.SetPaused(true)
 	ctx.SetOverlayContent(nil)
 	showConfigMenu(ctx, "")
-	return CommandResult{Continue: true, KeepPaused: true}
+	return CommandResult{Continue: true}
 }
 
 func configMenu(ctx *engine.GameContext) *core.OverlayMenu {

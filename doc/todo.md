@@ -72,18 +72,6 @@ add the Ctrl-Space branch and update [Input and modes](input-and-modes.md) §4 a
 §6, which say overlay navigation ignores these keys; or keep overlays navigation-only
 and correct the help line.
 
-### Drop `CommandResult.KeepPaused`
-
-- Priority: P0, to review
-- Affected files: `internal/mode/commands.go`, `internal/mode/config_menu.go`,
-  `internal/mode/router.go`
-
-`KeepPaused` (`commands.go:28`) is set 88 times across `commands.go` and
-`config_menu.go` and read nowhere: the router unpauses before every command
-(`router.go:787-791`), and a command that wants the pause requests it again
-(`commands.go:980`, `config_menu.go:245`). Delete the field, its assignments and the
-comment at `router.go:790`.
-
 ### Decide whether loads refuse unknown keys and `op` values
 
 - Priority: P0, to review

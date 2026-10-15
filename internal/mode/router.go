@@ -783,8 +783,8 @@ func (r *Router) handleTextConfirm() bool {
 
 		// Unpause ahead of execution: the command's own events are queued
 		// before this intent's dispatch, so a trailing unpause is applied too
-		// late and every EventSoundRequest the command produces is gated.
-		// KeepPaused commands re-pause from their own handlers.
+		// late and every EventSoundRequest the command produces is gated. A
+		// command that wants the pause requests it again from its own handler.
 		r.ctx.SetPaused(false)
 
 		var result CommandResult
