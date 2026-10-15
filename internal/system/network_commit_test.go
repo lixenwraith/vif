@@ -198,27 +198,28 @@ func TestAGuestAppliesAPeerOnlyAsCommitted(t *testing.T) {
 }
 
 // TestAGuestPacesIntoItsBand: inside the band it rests, a little late or early it
-// trims the tick interval toward it, and far outside it steps.
+// trims the tick interval toward it, and far outside it steps; a step forward
+// waits for the whole window, since one jittered arrival would freeze the world.
 func TestAGuestPacesIntoItsBand(t *testing.T) {
 	t.Parallel()
-	ahead := int64(parameter.NetworkAheadTicks)
+	ahead, far := int64(parameter.NetworkAheadTicks), int64(parameter.NetworkPaceStepTicks)
 	for _, c := range []struct {
-		latest   int64
-		slower   bool
-		faster   bool
-		stepping bool
+		latest, earliest int64
+		slower, faster   bool
+		stepping         bool
 	}{
-		{latest: ahead},
-		{latest: ahead - parameter.NetworkPaceBandTicks},
-		{latest: ahead + 1, slower: true},
-		{latest: ahead + parameter.NetworkPaceStepTicks, slower: true, stepping: true},
-		{latest: ahead - parameter.NetworkPaceBandTicks - 1, faster: true},
-		{latest: ahead - parameter.NetworkPaceBandTicks - parameter.NetworkPaceStepTicks, faster: true, stepping: true},
+		{latest: ahead, earliest: ahead},
+		{latest: ahead - parameter.NetworkPaceBandTicks, earliest: ahead - parameter.NetworkPaceBandTicks},
+		{latest: ahead + 1, earliest: ahead, slower: true},
+		{latest: ahead + far, earliest: ahead, slower: true},
+		{latest: ahead + far, earliest: ahead + far, slower: true, stepping: true},
+		{latest: ahead - parameter.NetworkPaceBandTicks - 1, earliest: ahead - parameter.NetworkPaceBandTicks - 1, faster: true},
+		{latest: ahead - parameter.NetworkPaceBandTicks - far, earliest: ahead - parameter.NetworkPaceBandTicks - far, faster: true, stepping: true},
 	} {
-		trim, step := paceDecision(c.latest)
+		trim, step := paceDecision(c.latest, c.earliest)
 		slower, faster := trim > 0 || step > 0, trim < 0 || step < 0
 		if slower != c.slower || faster != c.faster || (step != 0) != c.stepping {
-			t.Errorf("latest %d: trim %d step %d", c.latest, trim, step)
+			t.Errorf("latest %d earliest %d: trim %d step %d", c.latest, c.earliest, trim, step)
 		}
 	}
 }
