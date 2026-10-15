@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -417,10 +418,10 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// is being tested is the admission gate, which reads "is a succession running"
 	// rather than "who went".
 	host.openAuthority(network.SessionOffer{
-		Anchor: host.JoinAnchor(), Host: 2, Assigned: hostParticipantID,
+		Anchor: host.JoinAnchor(), Host: 2, Assigned: engine.CoordinatorParticipant,
 		Term:   network.FirstTerm,
 		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
-	}, hostParticipantID)
+	}, engine.CoordinatorParticipant)
 	host.reportPeerLost(2)
 	host.ApplyPendingCorrections()
 	if !host.authority.Migrating() {

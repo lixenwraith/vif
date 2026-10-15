@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
@@ -18,10 +19,10 @@ import (
 // and one cursor-owning guest per slot from zero.
 func cursorlessOffer(an event.JoinAnchor, guests int) network.SessionOffer {
 	o := network.SessionOffer{
-		Anchor: an, Host: hostParticipantID, Assigned: 2,
+		Anchor: an, Host: engine.CoordinatorParticipant, Assigned: 2,
 		Term: network.FirstTerm,
 		Roster: []network.RosterEntry{
-			{ID: hostParticipantID, Slot: parameter.NoPlayerSlot},
+			{ID: engine.CoordinatorParticipant, Slot: parameter.NoPlayerSlot},
 		},
 	}
 	for i := range guests {

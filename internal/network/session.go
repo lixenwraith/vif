@@ -168,7 +168,7 @@ func (o SessionOffer) Validate() error {
 		// entry while contributing nothing the roster describes.
 		if p.Slot == parameter.NoPlayerSlot {
 			if cursorless != 0 {
-				return errors.New("join offer carries more than one cursorless participant")
+				return errors.New("join offer carries more than one cursorless peer")
 			}
 			cursorless = p.ID
 			continue
@@ -188,7 +188,7 @@ func (o SessionOffer) Validate() error {
 		}
 	}
 	if cursorless != 0 && cursorless != o.Host {
-		return errors.New("join offer makes a participant other than the host cursorless")
+		return errors.New("join offer makes a peer other than the host cursorless")
 	}
 	if !ids[o.Host] || !ids[o.Assigned] {
 		return errors.New("join offer roster omits host or assigned participant")

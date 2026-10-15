@@ -90,11 +90,12 @@ local one is `local`. The emitting instance is otherwise not repeated per record
 `session summary` — because within one log it is a constant, and across a fleet
 `session_id` already names the process.
 
-A **participant** is a cursor on the map, so the two are not the same count. A
-dedicated host is peer 1 with `slot` 255 (`parameter.NoPlayerSlot`) and drives
-none, which is why its first guest is peer 2 and the session's only participant.
+Every peer holds a participant identity ([Multi-player](multi-player.md) §1), but
+anything that counts participants counts cursors, so the two are not the same
+count. A dedicated host is peer 1 with `slot` 255 (`parameter.NoPlayerSlot`) and
+drives none, which is why its first guest is peer 2 and the session's only cursor.
 `peers` counts live transport links; `roster` counts admitted peers, the
-cursorless coordinator included; anything named participants counts cursors.
+cursorless coordinator included.
 
 ### Correlation stamps
 
@@ -249,7 +250,7 @@ greps for rather than enumerating every refusal.
 | `network session active` | INFO | `local`, `slot`, `coordinator`, `barrier_delay_ticks`, `peers` | this instance's one statement of who it is |
 | `server running` | INFO | `address`, `capacity` | the `-serve` loop, once its session is open |
 | `session summary` | INFO | `summary` | the `-serve` loop, every 30 s when the line changed; the same line `:session` prints. With peer links it names the slowest link and the correction plan's totals over all of them; with none it names neither |
-| `participant evicted as too slow` / `participant evicted for what its link sends` | WARN | `participant`, `late_per_s`, `bytes_per_s`, `window` / `participant`, `bytes_per_s`, `carried`, `window` | the authority's slow and ingress policies (multi-player.md §3.5) |
+| `participant evicted as too slow` / `participant evicted for what its link sends` | WARN | `peer`, `late_per_s`, `bytes_per_s`, `window` / `peer`, `bytes_per_s`, `carried`, `window` | the authority's slow and ingress policies (multi-player.md §3.5) |
 | `authority handed off` / `authority lost; succession opened` | WARN | `term`, `authority`, `predecessor`, `roster`, `evidence_tick`, `local` / `peer`, `term`, `local` | `Authority` |
 | `authoring under a new term` / `following a new authority` / `continuing locally` | WARN / INFO / WARN | `term`, `seeded_from_tick`, `have_baseline` / `term`, `authority` / `held_term`, `contested_term`, `lost`, `reason` | the successor; every other survivor; a survivor left playing alone, with no reachable successor or under a pinned authority |
 | `uncommitted crossings dropped at handoff` | INFO | `crossings` | a guest following a new authority |

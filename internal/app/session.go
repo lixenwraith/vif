@@ -21,10 +21,6 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// hostParticipantID is the coordinator. It allocates every other identity, so it
-// takes the first one itself and hands out the rest in arrival order.
-const hostParticipantID network.PeerID = 1
-
 var errSessionCanceled = errors.New("network session canceled")
 
 // errSessionSignalled is a cancel the process was told to make: it quits even a
@@ -93,7 +89,7 @@ func newHostingApp(cfg Config) (*App, error) {
 // hostNetworkConfig captures the App before the service starts its accept loop.
 func (a *App) hostNetworkConfig() *network.Config {
 	netCfg := network.DebugConfig(network.RoleHost, a.cfg.HostAddress)
-	netCfg.ParticipantID = hostParticipantID
+	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = a.sessionCapacity()
 	netCfg.OnError = logSessionError
 	netCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
@@ -494,7 +490,7 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network
 
 	limit := a.sessionCapacity() + 1
 	if len(a.sessionRoster) == 0 {
-		a.sessionRoster = []network.RosterEntry{{ID: hostParticipantID, Slot: a.hostSlot()}}
+		a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: a.hostSlot()}}
 	}
 	if len(a.sessionRoster) >= limit {
 		return network.SessionOffer{}, fmt.Errorf("session is full at %d participant(s)",
@@ -654,7 +650,7 @@ func (a *App) hostOffer() (network.SessionOffer, error) {
 		// No joiner ever arrived; describe the two-participant lobby this host opened.
 		// Through the allocator rather than beside it: a dedicated host holds no slot,
 		// so its guest takes slot zero and a second rule here would disagree.
-		a.sessionRoster = []network.RosterEntry{{ID: hostParticipantID, Slot: a.hostSlot()}}
+		a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: a.hostSlot()}}
 		a.sessionRoster = append(a.sessionRoster, a.nextParticipantLocked())
 	}
 	assigned := a.authorityID()

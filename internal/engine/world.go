@@ -480,8 +480,8 @@ func (w *World) LocalParticipant() uint32 {
 // CoordinatorParticipant is the identity the handshake always assigns to the host.
 // It is the one participant every topology the session can build has a path to,
 // which is what makes it the single producer of a departure crossing, and the
-// authority every session starts under.
-const CoordinatorParticipant uint32 = 1
+// authority every session starts under. Untyped: uint32 and network.PeerID carry it.
+const CoordinatorParticipant = 1
 
 // IsSessionCoordinator reports whether this instance is the one authoring the
 // session now: the participant the current term names, which moves with a

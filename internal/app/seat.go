@@ -205,7 +205,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				s.slot.Store(uint32(entry.Slot))
 				s.id.Store(uint32(entry.ID))
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
-					"participant", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
+					"peer", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
 				return seatSource{botSource{d}, forkCell(a)}, nil
 			})
 		if driver == nil && err != nil && retryableJoin(err) && time.Now().Before(deadline) &&
@@ -218,7 +218,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 			a.ctx.SetStatusMessage("Bot "+s.graph.Name+": "+err.Error(), parameter.StatusAlert)
 		case driver != nil:
 			st := driver.Stats()
-			a.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "participant", s.id.Load(),
+			a.log.Info("app", "msg", "bot left", "graph", s.graph.Name, "peer", s.id.Load(),
 				"finished", finished, "ticks", st.Ticks, "injected", st.Injected, "dropped", st.Dropped,
 				"fitness", st.Fitness, "state", st.State, "error", fmt.Sprint(err))
 		}

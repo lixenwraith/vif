@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -34,7 +35,7 @@ func seatGuests(a *App, n int) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	a.sessionRoster = []network.RosterEntry{
-		{ID: hostParticipantID, Slot: parameter.NoPlayerSlot},
+		{ID: engine.CoordinatorParticipant, Slot: parameter.NoPlayerSlot},
 	}
 	for i := range n {
 		a.sessionRoster = append(a.sessionRoster,
@@ -245,7 +246,7 @@ func TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession(t *testing.T) {
 	a.life.Start(time.Now())
 
 	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = hostParticipantID
+	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: a.assignParticipant, Release: a.releaseParticipant,
 		Report: a.noteJoinerReport,
