@@ -257,23 +257,20 @@ func TestAGuestStepsOnceForOneLateness(t *testing.T) {
 // since a trough the link cannot hold is climbed back a tick at a time.
 func TestALeadFallsToTheHighestReadingOfItsWindow(t *testing.T) {
 	t.Parallel()
-	const current = 13
 	window := uint64(parameter.NetworkBarrierRenegotiateTicks)
 	var lowSince, lowMax uint64
-	next := uint64(current)
+	next := uint64(12)
 	for _, r := range []struct{ tick, target, want uint64 }{
-		{100, 6, current}, // the window opens
-		{110, 9, current}, // a higher lower reading is remembered
-		{100 + window - 1, 7, current},
+		{90, 13, 13}, // a higher target is adopted at once
+		{100, 6, 13}, // the window opens
+		{110, 9, 13}, // a higher lower reading is remembered
+		{100 + window - 1, 7, 13},
 		{100 + window, 5, 9}, // the window closes on its highest reading
 	} {
 		next, lowSince, lowMax = chooseLead(next, r.target, r.tick, lowSince, lowMax)
 		if next != r.want {
 			t.Fatalf("tick %d target %d: lead %d, want %d", r.tick, r.target, next, r.want)
 		}
-	}
-	if next, _, _ = chooseLead(next, 12, 200, lowSince, lowMax); next != 12 {
-		t.Fatalf("a higher target was not adopted at once: %d", next)
 	}
 }
 

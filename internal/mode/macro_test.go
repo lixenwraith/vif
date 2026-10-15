@@ -16,12 +16,7 @@ func TestARecordingLeavesCommandAndOverlayModeOut(t *testing.T) {
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	machine := input.NewMachine()
 	r := NewRouter(ctx, machine)
-	key := func(k terminal.Key, ch rune) {
-		t.Helper()
-		if intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); intent != nil {
-			r.Handle(intent)
-		}
-	}
+	key := func(k terminal.Key, ch rune) { press(machine, r, k, ch) }
 	key(terminal.KeyRune, 'q')
 	key(terminal.KeyRune, 'a')
 	key(terminal.KeyRune, 'j')
@@ -39,5 +34,12 @@ func TestARecordingLeavesCommandAndOverlayModeOut(t *testing.T) {
 	got := r.macro.buffers['a']
 	if len(got) != 2 || got[0].Type != input.IntentMotion || got[1].Type != input.IntentMotion {
 		t.Fatalf("register a holds %+v, want the two motions alone", got)
+	}
+}
+
+// press parses one key as the game would and routes what it makes of it.
+func press(machine *input.Machine, r *Router, k terminal.Key, ch rune) {
+	if intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); intent != nil {
+		r.Handle(intent)
 	}
 }

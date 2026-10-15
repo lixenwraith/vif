@@ -605,3 +605,29 @@ displaces a whole world. The owed item leaves whenever the link drains, from a
 publication or from `Apply` between every two ticks, so a late or lost frame costs a
 round trip. `TestWhatABusyLinkIsOwedFollowsWithoutAPublication` fails on the old
 code, and the TCP test passed 40 of 40 under `-race` with the same load.
+
+## 18. Thirteenth round (2026-10-15, a terminal guest on a 160 ms link)
+
+A person joined a fleet pod over the internet (round trip 161 ms, jitter 55-130 ms)
+with `-j -l`, and reported small stutters and a failed `:bot add`. The log held one
+warning pair: the seat timed out five seconds after the command, reading "connected,
+but no vif session answered" at an address it never dialled. A guest seats its bot
+through its own relay acceptor, named with the session and waiting for the route
+frame first; the seat's configuration carried the address and the holder but not
+the name. The cadence was clean (median tick gap 49.7 ms, fps 60, no tick slip,
+installs under 9 ms) except for 48 whole-tick pace steps in 150 s: 18 freezes of
+200 ms where the guest waited out a step forward, the rest bursts of ticks run back
+to back, one step every three seconds, with `commit_late` and the barrier's `late`
+at zero throughout. The controller stepped on the latest arrival of its ten-epoch
+window, so one epoch three ticks late froze the world; it now steps on the earliest
+and trims on the latest. The lead moved 89 times between 5 and 14 ticks, 81 of them
+one cycle: a lowering landed on the momentary reading when the renegotiation window
+closed and was climbed back a tick at a time; it now lowers to the window's highest
+reading. Left open, as items under [Multiplayer](todo.md#multiplayer): four repairs
+(ticks 295, 813, 829, 2359) arrived after a later manifest had already proved the
+guest converged and were refused, 92 of 134 shards and 25.8 of 45.4 KB; each storm
+spawn (ticks 594, 1421, 2178) was followed within 19-66 ticks by one of the run's
+only large corrections (321 entities, a 678-cell repair, 208 entities) while every
+other install wrote nothing; and the mean lead was 10.7 ticks (535 ms) over a 161 ms
+round trip, since the jitter term doubles a probe-to-probe swing that a queue
+behind correction chunks produces whole.

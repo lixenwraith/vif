@@ -1010,26 +1010,22 @@ between a hybrid shared/local shape, as the cursor and its shield have, and an
 - Priority: P2
 - Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`
 
-On a recorded 160 ms session four repairs (ticks 295, 813, 829, 2359) arrived 5-13
-ticks after their request, after a later manifest had proved the guest converged or
-a whole install had cleared the wait, so `takeAwaiting` refused them: 92 of 134
-shards, 25.8 of 45.4 KB of repair bytes, built, sent and discarded on a 12-30 kB/s
-link. A request goes out for every answered manifest with no check for one
-outstanding. Either the request carries the newest tick the guest has proved, so the
-authority skips an older one, or the guest sends none while `awaiting` holds a tick
-within the cadence.
+A request goes out for every answered manifest with no check for one outstanding,
+so a repair can arrive after a later manifest has proved the guest converged and be
+refused by `takeAwaiting`, built and sent for nothing ([Troubleshooting](troubleshooting.md)
+§18: 57% of the repair bytes). Either the request carries the newest tick the guest
+has proved, so the authority skips an older one, or the guest sends none while
+`awaiting` holds a tick within the cadence.
 
 ### Find why a storm spawn diverges on a guest
 
 - Priority: P1
 - Affected files: `internal/system/storm.go`, `internal/converge/correction.go`
 
-Each `StormSetup` spawn of a recorded session (ticks 594, 1421, 2178) was followed
-within 19-66 ticks by one of the run's only large corrections (321 entities, a
-678-cell repair, 208 entities) and by positions digest mismatches; every other
-install wrote nothing. Compare the authority's and the guest's spawn at the same
-tick to find the input the guest predicts differently. If it is inherent, a forced
-keyframe at the spawn tick lands the snap once and early instead of as a repair.
+A guest's only large corrections follow its storm spawns ([Troubleshooting](troubleshooting.md)
+§18). Compare the authority's and the guest's spawn at the same tick to find the
+input the guest predicts differently. If it is inherent, a forced keyframe at the
+spawn tick lands the snap once and early instead of as a repair.
 
 ### Derive the lead's margin from the measured worst round trip
 
@@ -1037,16 +1033,13 @@ keyframe at the spawn tick lands the snap once and early instead of as a repair.
 - Affected files: `internal/system/network.go`, `pkg/linkpace/link.go`,
   `internal/parameter/network.go`
 
-The own lead covers the round trip plus `NetworkBarrierJitterMargin` (2) times the
-jitter, an EWMA of consecutive probe differences on the stream that also carries
-corrections. When probe round trips alternate between the path and the path plus a
-queue, the estimate reads the whole swing and the lead covers about 2.5 swings
-against a worst case of one: 1.5-2.5 ticks of margin on the recorded session, whose
-mean lead was 10.7 ticks (535 ms) over a 161 ms round trip with no late commit.
-Keep a ring of raw round trips in `linkpace.Link` and let the lead follow the worst
-of the last `NetworkPaceWindow`, as it already does behind a relay, or lower the
-margin to 1 with a one-tick floor. Either lowers the lead's value, not its meaning;
-a late commit stays bounded by `NetworkCommitLateTicks`.
+The own lead covers the round trip plus `NetworkBarrierJitterMargin` (2) times a
+jitter that reads a probe-to-probe swing whole, so it carries 1.5-2.5 ticks more than
+the worst round trip needs ([Troubleshooting](troubleshooting.md) §18). Keep a ring
+of raw round trips in `linkpace.Link` and let the lead follow the worst of the last
+`NetworkPaceWindow`, as it already does behind a relay, or lower the margin to 1 with
+a one-tick floor. Either lowers the lead's value, not its meaning; a late commit
+stays bounded by `NetworkCommitLateTicks`.
 
 ## Session membership
 
@@ -1325,8 +1318,8 @@ calls would go.
 
 `:new!` keeps free mouse, auto-fire and the rate: they are the player's choices and
 reach no log or journal. Nothing returns them to their startup values, free mouse
-on (`parameter.DefaultMouseFreeMode`), auto-fire on both weapons (`app.go`, the
-auto-fire default) and the `-speed` rate, which the context would have to keep.
+on (`parameter.DefaultMouseFreeMode`), auto-fire on both weapons (`game_context.go`,
+`AutoFireBoth`) and the `-speed` rate, which the context would have to keep.
 Fold the return into an existing command rather than adding one for it.
 
 ### Give the composite lifecycle methods a user

@@ -478,7 +478,7 @@ func (s *NetworkSystem) Init() {
 	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled = 0, 0, false, 0
 	s.pathCount, s.pathEpoch = 0, 0
 	s.downAt = [participantSlots]uint64{}
-	s.leadLowSince, s.leadPushed = 0, 0
+	s.leadLowSince, s.leadLowMax, s.leadPushed = 0, 0, 0
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
@@ -644,7 +644,8 @@ func (s *NetworkSystem) adoptDelay(ticks uint64) {
 		return
 	}
 	s.statDelayTicks.Store(int64(ticks))
-	s.world.Log().Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick())
+	s.world.Log().Info("net", "msg", "playout lead adopted", "ticks", ticks, "tick", s.localTick(),
+		"pace_latest", s.paceLatest)
 }
 
 // barrierDelayTicks returns this instance's own lead.
@@ -2329,14 +2330,14 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 // one jittered epoch is a trim, a whole window late is a clock to move at once. A
 // step back is bounded by the debt the scheduler runs back to back.
 func paceDecision(latest, earliest int64) (trimPermille int32, stepTicks int64) {
-	late := latest - parameter.NetworkAheadTicks
+	late, lateAll := latest-parameter.NetworkAheadTicks, earliest-parameter.NetworkAheadTicks
 	early := parameter.NetworkAheadTicks - parameter.NetworkPaceBandTicks - latest
 	trim := func(ticks int64) int32 {
 		return int32(min(ticks*parameter.NetworkPaceGainPermille, parameter.NetworkPacePermilleMax))
 	}
 	switch {
-	case earliest-parameter.NetworkAheadTicks >= parameter.NetworkPaceStepTicks:
-		return 0, earliest - parameter.NetworkAheadTicks
+	case lateAll >= parameter.NetworkPaceStepTicks:
+		return 0, lateAll
 	case late > 0:
 		return trim(late), 0
 	case early >= parameter.NetworkPaceStepTicks:
@@ -2365,8 +2366,6 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		return
 	}
 	s.leadPushed = next
-	s.world.Log().Debug("net", "msg", "lead pushed", "ticks", next, "target", target,
-		"pace_latest", s.paceLatest, "held", r.BarrierDelayTicks)
 	s.world.PushEventFull(event.EventPlayoutLead,
 		&event.PlayoutLeadPayload{Ticks: next}, event.OriginSession, core.DomainPlayer)
 }
@@ -2905,7 +2904,8 @@ type networkState struct {
 	paceLatest                                 int64
 	paceKnown                                  bool
 	paceSettled                                uint64
-	pathEpoch, leadLowSince, leadPushed        uint64
+	pathEpoch, leadLowSince, leadLowMax        uint64
+	leadPushed                                 uint64
 	lastLostIn, lastLostOut                    uint64
 }
 
@@ -2926,7 +2926,8 @@ func (s *NetworkSystem) CopyState() any {
 		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
 		paceSamples: s.paceSamples, pathSamples: s.pathSamples, paceCount: s.paceCount, pathCount: s.pathCount,
 		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
-		leadLowSince: s.leadLowSince, leadPushed: s.leadPushed, lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
+		leadLowSince: s.leadLowSince, leadLowMax: s.leadLowMax, leadPushed: s.leadPushed,
+		lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
 	}
 	return c
 }
@@ -2952,7 +2953,8 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
 	s.paceSamples, s.pathSamples, s.paceCount, s.pathCount = c.paceSamples, c.pathSamples, c.paceCount, c.pathCount
 	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch
-	s.leadLowSince, s.leadPushed, s.lastLostIn, s.lastLostOut = c.leadLowSince, c.leadPushed, c.lastLostIn, c.lastLostOut
+	s.leadLowSince, s.leadLowMax, s.leadPushed = c.leadLowSince, c.leadLowMax, c.leadPushed
+	s.lastLostIn, s.lastLostOut = c.lastLostIn, c.lastLostOut
 	return nil
 }
 

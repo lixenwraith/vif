@@ -383,7 +383,7 @@ func (s *MetaSystem) resetKills() {
 // purge additionally clears operator state.
 func (s *MetaSystem) handleGameReset(purge bool) {
 	// 1. Pause and stop audio
-	s.ctx.SetPaused(true)
+	s.ctx.PauseForInput()
 
 	// 2. Synchronous World Cleanup
 	// Already inside world.RunSafe from main -> DispatchEventsImmediately
