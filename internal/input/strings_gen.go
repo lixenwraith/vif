@@ -40,16 +40,12 @@ func (i IntentType) String() string {
 		return "IntentMotionMarkerJump"
 	case IntentMacroRecordStart:
 		return "IntentMacroRecordStart"
-	case IntentMacroRecordStop:
-		return "IntentMacroRecordStop"
 	case IntentMacroPlay:
 		return "IntentMacroPlay"
 	case IntentMacroPlayInfinite:
 		return "IntentMacroPlayInfinite"
 	case IntentMacroPlayAll:
 		return "IntentMacroPlayAll"
-	case IntentMacroStopOne:
-		return "IntentMacroStopOne"
 	case IntentMacroStopAll:
 		return "IntentMacroStopAll"
 	case IntentMacroRecordToggle:
