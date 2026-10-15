@@ -77,6 +77,11 @@ const (
 	SubJournal = "journal"
 	// SubAnchor marks the journal's self-describing header records.
 	SubAnchor = "anchor"
+	// SubCapture, SubDigest and SubEnd mark the journal's installed-world, world
+	// digest and end records.
+	SubCapture = "capture"
+	SubDigest  = "digest"
+	SubEnd     = "end"
 )
 
 // Domain is a journal record's replication scope. DomNone covers every record
@@ -139,11 +144,13 @@ func DomainByName(s string) (Domain, bool) {
 // journal records use ev — the event name is what distinguishes them.
 var discriminatorKeys = [...]string{"msg", "type", "ev"}
 
-// SyntheticMsg names records whose fields carry no discriminator at all. The
-// journal anchor is the only one: it is a header, so its sub is its identity.
+// SyntheticMsg names records whose fields carry no discriminator at all: the
+// journal's anchor, capture, digest and end records are headers and marks rather
+// than events, so the sub is the identity.
 func SyntheticMsg(sub string) string {
-	if sub == SubAnchor {
-		return SubAnchor
+	switch sub {
+	case SubAnchor, SubCapture, SubDigest, SubEnd:
+		return sub
 	}
 	return ""
 }
@@ -152,7 +159,8 @@ func SyntheticMsg(sub string) string {
 // of sub rather than a fresh string, so a record without a discriminator costs
 // the scan no allocation.
 func syntheticMsgTok(sub []byte) []byte {
-	if string(sub) == SubAnchor {
+	switch string(sub) {
+	case SubAnchor, SubCapture, SubDigest, SubEnd:
 		return sub
 	}
 	return nil
@@ -165,15 +173,6 @@ func StampText(m Meta) string {
 		return "--:--:--.---"
 	}
 	return FormatTS(m.TS)
-}
-
-// KnownSubs is the subsystem vocabulary the game emits, in scope order, with
-// the two journal subs last. Ad-hoc taps are also accepted; this drives the
-// filter hint only.
-var KnownSubs = []string{
-	"app", "service", "crash", "race", "fsm", "event", "dispatch", "push",
-	"input", "stat", "rec", "lock", "domain", "system",
-	SubJournal, SubAnchor,
 }
 
 // DurUnit is the time unit implied by a metric key's suffix.
