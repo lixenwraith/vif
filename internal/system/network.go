@@ -1468,9 +1468,14 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	}
 	// Every departure reaches the session layer, not only the authority's: a
 	// survivor's own reach is what the succession rule counts, and it changes
-	// whenever any link does.
+	// whenever any link does. A seat this run dropped leaves as it was told to.
+	dropped := false
 	if r := s.world.Resources.Network; r != nil && r.OnPeerLost != nil {
-		r.OnPeerLost(peerID)
+		dropped = r.OnPeerLost(peerID)
+	}
+	if dropped {
+		s.world.Log().Info("net", "msg", "seat link closed", "peer", peerID, "remaining_peers", remaining)
+		return
 	}
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Alert: true})
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,

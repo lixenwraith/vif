@@ -184,6 +184,7 @@ type App struct {
 	// never takes it.
 	seatsMu     sync.Mutex
 	seats       []*seat
+	dropped     []uint32 // seats told to leave, until their links close
 	seatSerial  uint64
 	seatAddress string // extra loopback join listener after succession; world lock
 	relay       relayDesk
