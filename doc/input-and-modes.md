@@ -196,7 +196,9 @@ entries. These are session interaction structures, not persisted editor files.
 ## 6. Macros
 
 Macros record semantic intents after parsing, so they replay the same actions
-even when they contain multi-key motions or commands.
+even when they contain multi-key motions. Command and Overlay mode stay out of a
+recording, the `:` or Ctrl-G that enters them included: playback waits in both,
+so a macro replays Normal, Insert, Visual and Search actions only.
 
 | Sequence | Behavior |
 |---|---|
