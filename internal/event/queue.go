@@ -26,6 +26,10 @@ type EventQueue struct {
 	journal     atomic.Pointer[Journal] // nil = journaling off
 	wire        atomic.Pointer[wireHolder]
 	stamp       atomic.Pointer[Stamp] // record position; advanced under the world lock
+
+	// consumeBuf is what Consume returns, reused: one consumer, and a pass's slice
+	// is dead by the next call.
+	consumeBuf []GameEvent
 }
 
 // wireHolder boxes the interface so the pointer swap stays atomic
@@ -135,8 +139,9 @@ func (eq *EventQueue) FlushWire(completedTick uint64) {
 // only pending system events leaves no journal record and cannot be replayed.
 func (eq *EventQueue) Pushed() uint64 { return eq.tail.Load() }
 
-// Consume returns all pending events in FIFO order and advances head
-// Single-consumer design (game loop). Checks published flags for safety
+// Consume returns all pending events in FIFO order and advances head.
+// Single-consumer design (game loop). Checks published flags for safety. The
+// slice is the queue's and is overwritten by the next Consume.
 func (eq *EventQueue) Consume() []GameEvent {
 	for {
 		currentHead := eq.head.Load()
@@ -152,7 +157,7 @@ func (eq *EventQueue) Consume() []GameEvent {
 			currentHead = currentTail - parameter.EventQueueSize
 		}
 
-		result := make([]GameEvent, 0, maxAvailable)
+		result := eq.consumeBuf[:0]
 		for i := uint64(0); i < maxAvailable; i++ {
 			idx := (currentHead + i) & parameter.EventBufferMask
 
@@ -166,6 +171,7 @@ func (eq *EventQueue) Consume() []GameEvent {
 
 		newHead := currentHead + uint64(len(result))
 		if eq.head.CompareAndSwap(currentHead, newHead) {
+			eq.consumeBuf = result
 			if len(result) == 0 {
 				return nil
 			}

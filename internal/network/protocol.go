@@ -157,12 +157,19 @@ type Message struct {
 
 // Encode writes the message to a writer with length prefix
 func (m *Message) Encode(w io.Writer) error {
+	var header [HeaderSize]byte
+	return m.encode(w, header[:])
+}
+
+// encode frames the message through header, a HeaderSize scratch the caller owns:
+// a link's writer frames thousands a second and keeps one.
+func (m *Message) encode(w io.Writer, header []byte) error {
 	payloadLen := len(m.Payload)
 	if payloadLen > MaxPayloadSize {
 		return errors.New("payload exceeds maximum size")
 	}
 
-	header := make([]byte, HeaderSize)
+	header = header[:HeaderSize]
 	header[0] = byte(m.Type)
 	header[1] = m.Flags
 	binary.BigEndian.PutUint32(header[2:6], m.Seq)
@@ -199,12 +206,14 @@ func writeFull(w io.Writer, p []byte) error {
 
 // Decode reads a message from a reader
 func Decode(r io.Reader) (*Message, error) {
-	return decode(r, MaxPayloadSize)
+	var header [HeaderSize]byte
+	return decode(r, MaxPayloadSize, header[:])
 }
 
-// decode refuses a payload longer than limit before reading any of it.
-func decode(r io.Reader, limit int) (*Message, error) {
-	header := make([]byte, HeaderSize)
+// decode refuses a payload longer than limit before reading any of it; header is
+// a HeaderSize scratch the caller owns.
+func decode(r io.Reader, limit int, header []byte) (*Message, error) {
+	header = header[:HeaderSize]
 	if _, err := io.ReadFull(r, header); err != nil {
 		return nil, err
 	}

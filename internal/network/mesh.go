@@ -333,6 +333,14 @@ func (p *MeshPort) Inject(peer uint32, msgType uint8, payload []byte) {
 	})
 }
 
+// Connected reports whether one participant is on a direct link of this node.
+func (p *MeshPort) Connected(peerID uint32) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.links[PeerID(peerID)]
+	return p.up && ok
+}
+
 // PeerCount reports directly linked participants; D-14 reads it to latch the map.
 func (p *MeshPort) PeerCount() int {
 	p.mu.Lock()
