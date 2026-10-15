@@ -899,13 +899,15 @@ being driven or observed and survives plain `:new`. Its explicit contract is:
 - telemetry HUD visibility and pinned overlay cards;
 - standing breakpoints.
 
-Both `:new` and `:new!` clear recorded/playing macros, close overlays, return to
-Normal mode, and clear command/search/status text. `:new!` additionally purges
+Both `:new` and `:new!` clear the issuing instance's recorded and playing macros,
+and on every instance close overlays, return to Normal mode, and clear
+command/search/status text; a reset the scenario raises, as the default
+scenario's defeat does, clears no instance's macros. `:new!` additionally purges
 the initiating instance's operator contract: free mouse and auto-fire become
 off, speed returns to 1x, and the telemetry HUD/pins and breakpoints are cleared.
-A peer receiving the crossed reset retains its own operator state. Logging target,
-level, scope, snapshot period, and recorder depth are process diagnostics and are
-never part of this purge.
+A peer receiving the crossed reset retains its own operator state, macros
+included. Logging target, level, scope, snapshot period, and recorder depth are
+process diagnostics and are never part of this purge.
 
 Other session-observer fields have explicit behavior rather than belonging to
 that purge list: the render frame remains monotonic, reset ends paused state,
