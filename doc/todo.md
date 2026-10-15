@@ -1014,20 +1014,6 @@ A guest's only large corrections follow its storm spawns ([Troubleshooting](trou
 input the guest predicts differently. If it is inherent, a forced keyframe at the
 spawn tick lands the snap once and early instead of as a repair.
 
-### Derive the lead's margin from the measured worst round trip
-
-- Priority: P2
-- Affected files: `internal/system/network.go`, `pkg/linkpace/link.go`,
-  `internal/parameter/network.go`
-
-The own lead covers the round trip plus `NetworkBarrierJitterMargin` (2) times a
-jitter that reads a probe-to-probe swing whole, so it carries 1.5-2.5 ticks more than
-the worst round trip needs ([Troubleshooting](troubleshooting.md) §18). Keep a ring
-of raw round trips in `linkpace.Link` and let the lead follow the worst of the last
-`NetworkPaceWindow`, as it already does behind a relay, or lower the margin to 1 with
-a one-tick floor. Either lowers the lead's value, not its meaning; a late commit
-stays bounded by `NetworkCommitLateTicks`.
-
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

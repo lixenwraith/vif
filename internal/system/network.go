@@ -2370,10 +2370,10 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		&event.PlayoutLeadPayload{Ticks: next}, event.OriginSession, core.DomainPlayer)
 }
 
-// ownLead is the round trip to the authority plus its jitter margin, a tick for
-// the authority to relay it, less how late the authority's epochs already land
-// here. Behind a relay no link measures that trip, so it is the slowest recent
-// return of this instance's own committed epochs. The authority waits one tick.
+// ownLead is the worst recent round trip to the authority plus a tick for the
+// authority to relay it, less how late the authority's epochs already land here.
+// Behind a relay no link measures that trip, so it is the slowest recent return
+// of this instance's own committed epochs. The authority waits one tick.
 func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	authority := s.authorityParticipant()
 	if s.participantID() == authority {
@@ -2387,9 +2387,8 @@ func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	switch m := link.LinkMetric(authority); {
 	case !s.paceKnown:
 		return parameter.NetworkBarrierDelayTicks, true
-	case m.Ready && m.RTT > 0:
-		d := m.RTT + parameter.NetworkBarrierJitterMargin*m.Jitter
-		trip = int64((d + parameter.GameUpdateInterval - 1) / parameter.GameUpdateInterval)
+	case m.Ready && m.MaxRTT > 0:
+		trip = int64((m.MaxRTT + parameter.GameUpdateInterval - 1) / parameter.GameUpdateInterval)
 	case s.pathCount > 0:
 		trip = slices.Max(s.pathSamples[:min(s.pathCount, len(s.pathSamples))])
 	default:
