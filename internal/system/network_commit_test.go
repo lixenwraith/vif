@@ -252,6 +252,31 @@ func TestAGuestStepsOnceForOneLateness(t *testing.T) {
 	}
 }
 
+// TestALeadFallsToTheHighestReadingOfItsWindow: a lower target is adopted only
+// once it has held for the window, and then at the highest value it read in it,
+// since a trough the link cannot hold is climbed back a tick at a time.
+func TestALeadFallsToTheHighestReadingOfItsWindow(t *testing.T) {
+	t.Parallel()
+	const current = 13
+	window := uint64(parameter.NetworkBarrierRenegotiateTicks)
+	var lowSince, lowMax uint64
+	next := uint64(current)
+	for _, r := range []struct{ tick, target, want uint64 }{
+		{100, 6, current}, // the window opens
+		{110, 9, current}, // a higher lower reading is remembered
+		{100 + window - 1, 7, current},
+		{100 + window, 5, 9}, // the window closes on its highest reading
+	} {
+		next, lowSince, lowMax = chooseLead(next, r.target, r.tick, lowSince, lowMax)
+		if next != r.want {
+			t.Fatalf("tick %d target %d: lead %d, want %d", r.tick, r.target, next, r.want)
+		}
+	}
+	if next, _, _ = chooseLead(next, 12, 200, lowSince, lowMax); next != 12 {
+		t.Fatalf("a higher target was not adopted at once: %d", next)
+	}
+}
+
 // TestAGuestStampsWithItsOwnRoundTrip: the lead is this guest's round trip to the
 // authority plus the relay tick, less how late the authority's epochs land; the
 // authority's own is a tick, and an unmeasured link keeps the default. Behind a

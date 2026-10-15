@@ -299,7 +299,8 @@ and `NetworkBarrierMaxDelayTicks`; the authority's own is the minimum, one tick,
 a guest not yet paced uses the default `NetworkBarrierDelayTicks`.
 Behind a relay no link measures that trip, so it is the slowest recent return of the
 guest's own committed epochs, which reach only a participant behind a relay. It rises
-at once and falls after `NetworkBarrierRenegotiateTicks` of a lower reading. Each
+at once and falls after `NetworkBarrierRenegotiateTicks` of lower readings, to the
+highest of them, so a momentary trough is not climbed back a tick at a time. Each
 change is a local, journaled `EventPlayoutLead`, so a reproduction switches on the
 same tick.
 

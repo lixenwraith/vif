@@ -17,7 +17,8 @@ const (
 	NetworkBarrierMaxDelayTicks = 20
 
 	// NetworkBarrierRenegotiateTicks is how long a lower measurement holds before a
-	// participant's own lead follows it down; raising is immediate.
+	// participant's own lead follows it down, to the highest reading of that
+	// window; raising is immediate.
 	NetworkBarrierRenegotiateTicks = SnapshotFloorKeyframeTicks
 
 	// NetworkRelaySlackTicks is the tick a guest's lead leaves the authority to
