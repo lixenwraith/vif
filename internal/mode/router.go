@@ -626,7 +626,7 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 		r.ctx.SetCommandText("")
 		r.ctx.SetCommandCursorPos(0)
 		r.resetCommandHistoryBrowse()
-		r.ctx.SetPaused(true)
+		r.ctx.PauseForInput()
 	case input.ModeTargetVisual:
 		if r.ctx.IsVisualMode() {
 			newMode = core.ModeNormal // Toggle off

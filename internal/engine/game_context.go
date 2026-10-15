@@ -923,3 +923,12 @@ func (ctx *GameContext) SetPaused(paused bool) {
 	}
 	ctx.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }
+
+// PauseForInput pauses a solo run while the operator types a command or reads an
+// overlay. A live session keeps ticking for every participant, so there the request
+// is not made: it would only earn the refusal an explicit pause does.
+func (ctx *GameContext) PauseForInput() {
+	if ctx.World.Session().Pausable() {
+		ctx.SetPaused(true)
+	}
+}

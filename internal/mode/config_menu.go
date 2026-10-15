@@ -242,7 +242,7 @@ func handleConfigCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true}
 	}
 	ctx.RequestMode(core.ModeOverlay)
-	ctx.SetPaused(true)
+	ctx.PauseForInput()
 	ctx.SetOverlayContent(nil)
 	showConfigMenu(ctx, "")
 	return CommandResult{Continue: true}
