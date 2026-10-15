@@ -293,7 +293,7 @@ The command dispatcher recognizes aliases shown in the first column.
 |---|---|
 | `:quit`, `:q` | Exit. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and every participant resets. |
-| `:new!`, `:n!` | Reset and clear the initiating operator's telemetry HUD, pins and breakpoints; free mouse, auto-fire and speed stay. |
+| `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:g`, `:config` | Open the [configuration menu](config-menu.md). |
@@ -360,10 +360,11 @@ Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, pinn
 overlay cards and breakpoints are operator-owned and survive plain `:new`. Both
 reset forms clear the issuing instance's macros, and every instance's captured
 keys and transient command/overlay state. `:new!` additionally clears the issuing
-instance's HUD, pins and breakpoints; its two preferences and the time scale are
-the player's choices and stay, and peers retain their own operator state when the
-shared reset arrives. Logging state is process diagnostic configuration and
-survives both forms.
+instance's HUD, pins and breakpoints and returns its two preferences and the time
+scale to their startup values (free mouse on, auto-fire on both weapons, the
+`-speed` rate); peers retain their own operator state when the shared reset
+arrives. Logging state is process diagnostic configuration and survives both
+forms.
 
 Telemetry cards contain at most 15 metrics. Empty player slots are omitted until
 they become active. A clipped selected card consumes `j`/`k` scroll steps before

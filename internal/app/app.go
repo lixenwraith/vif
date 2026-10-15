@@ -394,6 +394,7 @@ func (a *App) initWorld() {
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
+		a.ctx.StartScale = s
 		a.ctx.TimeCtl.SetScale(s)
 	}
 	// The host can wait in the lobby much longer than a joiner. Freeze both clocks

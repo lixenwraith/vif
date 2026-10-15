@@ -1283,18 +1283,6 @@ on reset (handler order). The engine would instead call `Init` once per system
 in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
 calls would go.
 
-### Let a command return the operator settings to their defaults
-
-- Priority: P3
-- Affected files: `internal/engine/game_context.go`, `internal/mode/commands.go`,
-  `internal/parameter`, `internal/app/app.go`
-
-`:new!` keeps free mouse, auto-fire and the rate: they are the player's choices and
-reach no log or journal. Nothing returns them to their startup values, free mouse
-on (`parameter.DefaultMouseFreeMode`), auto-fire on both weapons (`game_context.go`,
-`AutoFireBoth`) and the `-speed` rate, which the context would have to keep.
-Fold the return into an existing command rather than adding one for it.
-
 ### Give the composite lifecycle methods a user
 
 - Priority: P3

@@ -383,6 +383,32 @@ func TestTelemetryFilterNarrowsCardsUntilTheOverlayCloses(t *testing.T) {
 	}
 }
 
+// TestAPurgeReturnsTheOperatorSettingsToTheirDefaults: a plain reset keeps free
+// mouse, auto-fire and the rate as the player set them; :new! returns all three to
+// what the run started with.
+func TestAPurgeReturnsTheOperatorSettingsToTheirDefaults(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x0A51, 120, 40)
+	defer a.Close()
+	ctx := a.Context()
+	r := newScriptRunner(t, a)
+	for _, cmd := range []string{"auto off", "free off", "speed 2", "new"} {
+		r.step(1, intentModeSwitch(input.ModeTargetCommand))
+		r.step(2, intentCommandBody(cmd)...)
+	}
+	if ctx.AutoFire.Load() != engine.AutoFireOff || ctx.MouseFreeMode.Load() == parameter.DefaultMouseFreeMode ||
+		ctx.TimeCtl.Scale() == engine.ScaleNormal {
+		t.Fatal("a plain reset touched the player's settings")
+	}
+	r.step(1, intentModeSwitch(input.ModeTargetCommand))
+	r.step(2, intentCommandBody("new!")...)
+	if ctx.AutoFire.Load() != engine.AutoFireBoth || ctx.MouseFreeMode.Load() != parameter.DefaultMouseFreeMode ||
+		ctx.TimeCtl.Scale() != engine.ScaleNormal {
+		t.Fatalf("the purge left auto-fire %d, free mouse %v, rate %s",
+			ctx.AutoFire.Load(), ctx.MouseFreeMode.Load(), ctx.TimeCtl.Scale())
+	}
+}
+
 // TestEveryParticipantsResourcesAreReported is the multi-cursor half of the resource
 // telemetry. Every owner-authored publisher wrote only the cursor it authored, so a
 // peer's player.<slot>.* keys were published by nobody and the bare keys were empty

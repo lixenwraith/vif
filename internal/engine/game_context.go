@@ -82,6 +82,8 @@ type GameContext struct {
 	State   *GameState   // Centralized game state; has internal lock
 	TimeCtl *TimeControl // Sole time surface: reads, rate, pause, step; registry-bound
 
+	StartScale TimeScale // the rate the run started at, which a purge returns to
+
 	KeyTable        *input.KeyTable
 	Log             *vlog.Log
 	NavigationDebug NavigationDebugState
@@ -194,10 +196,11 @@ func NewGameContextWithClock(world *World, width, height int, clock Clock) *Game
 
 func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log) *GameContext {
 	ctx := &GameContext{
-		World:  world,
-		Width:  width,
-		Height: height,
-		Log:    log,
+		World:      world,
+		Width:      width,
+		Height:     height,
+		Log:        log,
+		StartScale: ScaleNormal,
 	}
 
 	// Calculate game area
@@ -281,7 +284,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	ctx.SetMode(core.ModeNormal)
 	ctx.lastFPSUpdate = time.Now() // [wall] see IncrementFrameNumber
 
-	// 13. Initial input state - Not restored by EventGameResetRequest: user-owned for the session
+	// 13. Initial input state; a plain reset keeps it and a purge restores it
 	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
 	ctx.AutoFire.Store(AutoFireBoth)
 
@@ -532,14 +535,17 @@ func (ctx *GameContext) SetOverlayFilterEditing(editing bool) {
 // anything else is world state. Logging is process configuration and is excluded;
 // pending step requests name what a reset destroys and are cancelled.
 
-// ResetSessionState clears the operator's transient state: the HUD, pins, overlay
-// content and standing breakpoints. Free mouse, auto-fire and the rate are the
-// player's choices and stay. Called only on the purge path, never by a plain reset.
+// ResetSessionState returns the operator's state to its startup values: the HUD,
+// pins, overlay content and standing breakpoints cleared, free mouse, auto-fire and
+// the rate as the run began. Called only on the purge path, never by a plain reset.
 func (ctx *GameContext) ResetSessionState() {
 	ctx.OverlayHUD.Store(false)
 	ctx.ClearOverlayPins()
 	ctx.SetOverlayContent(nil)
 	ctx.TimeCtl.ClearBreaks(nil)
+	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
+	ctx.AutoFire.Store(AutoFireBoth)
+	ctx.TimeCtl.SetScale(ctx.StartScale)
 }
 
 // === Viewport and Bounds ===
