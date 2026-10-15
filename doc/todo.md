@@ -17,21 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Keep the FSM's region order through an install
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/export.go`, `internal/fsm/machine.go`,
-  `doc/fsm-and-configuration.md`
-
-`Machine.Export` sorts region names (`export.go:51-52`) and `importState` adopts
-that order (`:244-248`), while a live machine runs regions in spawn order
-(`machine.go:137`, `:159`, `:284`). A joiner, each correction and a replay copy
-restored by `Scheduler.CopyIn` therefore run regions in name order where the
-authority runs spawn order, so shared variables and emitted events interleave
-differently (reproduced). Options: export `regionOrder` as it stands, which import
-already keeps; or hold every region in name order, which changes scenario behaviour
-and the spawn-order rule in [FSM and configuration](fsm-and-configuration.md) §3.
-
 ### Carry adaptation's tracked routes and pending deaths in the capture
 
 - Priority: P0, to review

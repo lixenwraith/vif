@@ -390,3 +390,22 @@ parent = "Root"
 		})
 	}
 }
+
+// TestExportKeepsTheMachinesRegionOrder: regions update and take events in the
+// order they were spawned, so a capture carries that order and an import adopts
+// it. Sorted, a receiver would run the same regions in another order than the
+// sender and interleave their variables and events differently.
+func TestExportKeepsTheMachinesRegionOrder(t *testing.T) {
+	source, sourceTrace := newReconcileMachine(t)
+	spawnState(t, source, sourceTrace, "storm", "StormLive")
+	spawnState(t, source, sourceTrace, "quasar", "QuasarLive")
+	want := source.ActiveRegions()
+
+	live, got := newReconcileMachine(t)
+	if err := live.Import(got, source.Export()); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if regions := live.ActiveRegions(); !reflect.DeepEqual(regions, want) {
+		t.Fatalf("regions after import run in order %v, the source in %v", regions, want)
+	}
+}
