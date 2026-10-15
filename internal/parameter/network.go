@@ -16,9 +16,9 @@ const (
 	NetworkBarrierMinDelayTicks = 1
 	NetworkBarrierMaxDelayTicks = 20
 
-	// NetworkBarrierRenegotiateTicks is how long a lower measurement holds before a
-	// participant's own lead follows it down, to the highest reading of that
-	// window; raising is immediate.
+	// NetworkBarrierRenegotiateTicks is how long a reading holds in the window a
+	// participant's own lead is the worst of: raising is immediate, lowering waits
+	// until every higher reading has aged out.
 	NetworkBarrierRenegotiateTicks = SnapshotFloorKeyframeTicks
 
 	// NetworkRelaySlackTicks is the tick a guest's lead leaves the authority to
@@ -37,8 +37,7 @@ const (
 
 	// NetworkPaceWindow is how many authority epochs one pace decision reads; the
 	// latest of them trims and the earliest steps, so one jittered arrival never
-	// moves whole ticks. It is also how many round trips, probed or relayed, the
-	// own lead's worst reading covers.
+	// moves whole ticks.
 	NetworkPaceWindow = 10
 
 	// NetworkPaceGainPermille and NetworkPacePermilleMax trim a guest's tick interval

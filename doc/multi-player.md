@@ -66,7 +66,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
 | Roster | Every admitted peer holds an identity; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed: a join whose link cannot carry one whole world per floor window is refused (`Corrections.AdmitLink`). Past admission it is reported as `snapshot.cadence_floor_breached` (D-24): by the authority for a link whose plan cannot hold it, and by a guest no whole world reached within the floor plus its grace. |
-| Playout lead | Per participant (§3.5): the worst of a guest's recent round trips to the authority plus a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
+| Playout lead | Per participant (§3.5): the worst recent round trip to the authority plus a tick of margin and a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
 | Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is elected only when the chain names no survivor (§5.1, §5.3). |
@@ -291,21 +291,22 @@ reward is held until the state that caused it is proved.
 ### 3.5 Command frames, the commit and pacing
 
 Each participant stamps its own crossings with the lead its own link asks for, and
-nobody defers by anyone else's. A guest's lead (`ownLead`) is the worst of its last
-`NetworkPaceWindow` probed round trips to the authority (`linkpace.Metrics.MaxRTT`),
-plus `NetworkRelaySlackTicks` for the authority to relay it, less how late the
-authority's epochs already land on it, held between `NetworkBarrierMinDelayTicks`
-and `NetworkBarrierMaxDelayTicks`; the authority's own is the minimum, one tick, and
-a guest not yet paced uses the default `NetworkBarrierDelayTicks`. The worst reading
-rather than the mean and a jitter term: the lead has to cover every round trip of
-the window, and a smoothed swing read twice over carried two ticks the worst trip
-never needed.
-Behind a relay no link measures that trip, so it is the slowest recent return of the
-guest's own committed epochs, which reach only a participant behind a relay. It rises
-at once and falls after `NetworkBarrierRenegotiateTicks` of lower readings, to the
-highest of them, so a momentary trough is not climbed back a tick at a time. Each
-change is a local, journaled `EventPlayoutLead`, so a reproduction switches on the
-same tick.
+nobody defers by anyone else's. A guest reads its lead every tick (`ownLead`): the
+newest probed round trip to the authority (`linkpace.Metrics.LastRTT`) plus a tick
+of margin on a reading one probe wide, plus `NetworkRelaySlackTicks` for the
+authority to relay it, less how late the authority's epochs already land on it,
+held between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`; the
+authority's own is the minimum, one tick, and a guest not yet paced uses the default
+`NetworkBarrierDelayTicks`. Behind a relay no link measures that trip, so the
+reading is the return of the guest's own newest committed epoch, which reaches only
+a participant behind a relay. The lead in force is the worst reading of the last
+`NetworkBarrierRenegotiateTicks` (`leadOf`): it rises at once and falls only as the
+higher readings age out of the window, to the highest still in it, so a momentary
+trough is not climbed back a tick at a time and a passed spike does not step down
+one tick a window. The readings rather than the smoothed trip and a jitter term: the
+lead has to cover every round trip, and a smoothed swing read twice over carried two
+ticks the worst trip never needed. Each change is a local, journaled
+`EventPlayoutLead`, so a reproduction switches on the same tick.
 
 The authority commits. A guest sends its epoch raw; the authority applies an on-time
 crossing at its stamped tick, a late one at its own next tick, and one more than

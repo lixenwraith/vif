@@ -149,7 +149,7 @@ type linkMeter struct {
 }
 
 func newLinkMeter() *linkMeter {
-	return &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{Window: parameter.NetworkPaceWindow})}
+	return &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{})}
 }
 
 // rebase discards the origin, so the next echo sets it again.

@@ -7,7 +7,6 @@ package linkpace
 
 import (
 	"math"
-	"slices"
 	"time"
 )
 
@@ -49,9 +48,9 @@ type Metrics struct {
 	MinRTT time.Duration
 	Jitter time.Duration
 
-	// MaxRTT is the worst round trip of the last Window samples, which a lead that
-	// has to cover every one of them follows rather than the mean and its jitter.
-	MaxRTT time.Duration
+	// LastRTT is the newest raw round trip, for a consumer that keeps its own
+	// window over the readings rather than the mean and its jitter.
+	LastRTT time.Duration
 
 	// Throughput is the observed delivery rate in bytes per second.
 	Throughput float64
@@ -108,9 +107,6 @@ type LinkConfig struct {
 
 	// ReadyAfter is how many completed round trips make an estimate steerable.
 	ReadyAfter int
-
-	// Window is how many raw round trips MaxRTT covers.
-	Window int
 }
 
 // DefaultLinkConfig is the production estimator.
@@ -122,7 +118,6 @@ func DefaultLinkConfig() LinkConfig {
 		InflationRatio:  1.5,
 		InflationFloor:  20 * time.Millisecond,
 		ReadyAfter:      3,
-		Window:          10,
 	}
 }
 
@@ -135,7 +130,6 @@ type Link struct {
 	minRTT  time.Duration
 	jitter  time.Duration
 	lastRTT time.Duration
-	worst   []time.Duration // the last Window raw round trips, a ring over samples
 
 	throughput float64
 	saturated  bool
@@ -172,10 +166,7 @@ func NewLink(cfg LinkConfig) *Link {
 	if cfg.ReadyAfter <= 0 {
 		cfg.ReadyAfter = def.ReadyAfter
 	}
-	if cfg.Window <= 0 {
-		cfg.Window = def.Window
-	}
-	return &Link{cfg: cfg, worst: make([]time.Duration, cfg.Window)}
+	return &Link{cfg: cfg}
 }
 
 // Observe folds one completed round trip into the estimate.
@@ -202,7 +193,6 @@ func (l *Link) Observe(s Sample) {
 		}
 	}
 	l.lastRTT = s.RTT
-	l.worst[l.samples%len(l.worst)] = s.RTT
 	l.samples++
 
 	if s.Elapsed > 0 && s.Delivered > 0 {
@@ -247,7 +237,7 @@ func (l *Link) Metrics() Metrics {
 		RTT:        l.rtt,
 		MinRTT:     l.minRTT,
 		Jitter:     l.jitter,
-		MaxRTT:     l.maxRTT(),
+		LastRTT:    l.lastRTT,
 		Throughput: l.throughput,
 		Saturated:  l.saturated,
 		Loss:       l.loss,
@@ -259,20 +249,11 @@ func (l *Link) Metrics() Metrics {
 	}
 }
 
-// maxRTT is the worst of the round trips the ring holds; zero before the first.
-func (l *Link) maxRTT() time.Duration {
-	if l.samples == 0 {
-		return 0
-	}
-	return slices.Max(l.worst[:min(l.samples, len(l.worst))])
-}
-
 // Reset returns the estimator to its unobserved state, for a peer identity that
 // has been reused by a different connection.
 func (l *Link) Reset() {
-	cfg, worst := l.cfg, l.worst
-	clear(worst)
-	*l = Link{cfg: cfg, worst: worst}
+	cfg := l.cfg
+	*l = Link{cfg: cfg}
 }
 
 // ObserveTransfer folds a bulk transfer into the estimate — a join's capture,
