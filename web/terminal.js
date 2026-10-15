@@ -9,10 +9,9 @@
     const WORKER_PATH = files.worker || 'worker.js';
     const EXEC_PATH = files.exec || 'wasm_exec.js';
 
-    /* Touch, decided once at load. Any touch screen keeps the system keyboard
-       down on taps; a touch-first one (phone, tablet) also gets the key strip. A
-       phone draws at 10px, about what 14px is on a laptop at their viewing distances. */
-    const anyTouch = matchMedia('(any-pointer: coarse)').matches;
+    /* A touch-first screen (phone, tablet), decided once at load, keeps the system
+       keyboard down on taps and gets the key strip to raise it. A phone draws at
+       10px, about what 14px is on a laptop at their viewing distances. */
     const touch = matchMedia('(pointer: coarse)').matches;
     const FONT = touch && Math.min(screen.width, screen.height) < 600 ? 10 : 14;
 
@@ -95,7 +94,7 @@
         term.open(container);
         // xterm focuses this field on every tap; so marked, the focus raises no
         // keyboard, while hardware keys still type through it.
-        if (anyTouch) term.textarea.setAttribute('inputmode', 'none');
+        if (touch) term.textarea.setAttribute('inputmode', 'none');
         fitAddon.fit();
         fitted();
         if (touch) wireTouch();
@@ -281,7 +280,7 @@
         let fitTimer = 0;
         function handleResize() {
             // Where a soft keyboard shrinks the page itself, the grid must not follow it.
-            if ((keyboard || keyboardUp) && document.documentElement.clientWidth === fitW) {
+            if ((keyboard || keyboardUp) && !pageChanged()) {
                 refitPending = true;
                 return;
             }
@@ -328,11 +327,20 @@
     let keyboardUp = false;     // a keyboard the player asked for covers the page, or is still leaving
     let refitPending = false;   // a resize put off while that keyboard was asked for or up
     let fitW = 0, fitH = 0;     // page size the grid was last fitted to
+    let fitFull = false;        // and whether it was fullscreen then
     let layoutKeyboard = function() {};
 
     function fitted() {
         fitW = document.documentElement.clientWidth;
         fitH = document.documentElement.clientHeight;
+        fitFull = document.fullscreenElement != null;
+        keyboardSeen = false;   // seen over the old page; the layout after the fit looks again
+    }
+
+    // A rotation or a fullscreen change: the page itself resized, which no keyboard does.
+    function pageChanged() {
+        return document.documentElement.clientWidth !== fitW
+            || (document.fullscreenElement != null) !== fitFull;
     }
 
     function wireTouch() {
@@ -380,6 +388,7 @@
         let fullHeight = 0;   // the grid's height at FONT
         let lastFit = null;   // the size found for a height, kept while the keyboard holds still
         layoutKeyboard = function() {
+            if (pageChanged()) return;   // measured against the old page; the refit lays out again
             const up = !!vv && fitH - vv.height * vv.scale > KEYBOARD_MIN;
             if (keyboard && up) keyboardSeen = true;
             else if (keyboard && keyboardSeen) return setKeyboard(false, false);   // dismissed by the system
@@ -429,6 +438,7 @@
             fullButton.hidden = false;
             document.addEventListener('fullscreenchange', function() {
                 fullButton.setAttribute('aria-pressed', document.fullscreenElement !== null);
+                window.dispatchEvent(new Event('resize'));   // a refit, even where the size holds
             });
         }
         function toggleFullscreen() {
