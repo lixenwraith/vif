@@ -300,3 +300,44 @@ func TestAJournalNeverAppendsToTheOneBeforeIt(t *testing.T) {
 		t.Fatalf("both runs journal to %s", first)
 	}
 }
+
+// TestJournalRecordsCarryTheHandlesStamp: a driven run ticks a handle of its own,
+// so a journal record's envelope names that handle's run and tick, not the process
+// default's, which such a run never advances.
+func TestJournalRecordsCarryTheHandlesStamp(t *testing.T) {
+	dir := t.TempDir()
+	Configure(Config{Dir: dir, JournalDir: dir, Level: "info", Scope: "all"})
+	path, err := StartJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = StopJournal() })
+	l := NewLog("")
+	l.SetRun(3)
+	l.SetTick(7)
+	l.Journal("journal", "jseq", 1)
+	if err := StopJournal(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range bytes.Split(data, []byte{'\n'}) {
+		if !bytes.Contains(line, []byte(`"sub":"journal"`)) {
+			continue
+		}
+		var record struct {
+			Run  uint64 `json:"run"`
+			Tick uint64 `json:"tick"`
+		}
+		if err := json.Unmarshal(line, &record); err != nil {
+			t.Fatalf("decode %q: %v", line, err)
+		}
+		if record.Run != 3 || record.Tick != 7 {
+			t.Fatalf("journal envelope stamped run %d tick %d, want 3 and 7: %s", record.Run, record.Tick, line)
+		}
+		return
+	}
+	t.Fatal("journal record not found")
+}

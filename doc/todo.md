@@ -63,21 +63,6 @@ carry a driven flag from `runPresented` into the recompute and give a script the
 bot's unpause and 1x reset (`:268-272`); a replay with a transport stays pausable.
 If a script should keep its keys, the docs change instead.
 
-### Stamp a driven run's journal envelope with its own run and tick
-
-- Priority: P0, to review
-- Affected files: `internal/vlog/vlog.go`, `internal/event/journal_sink.go`,
-  `internal/journal/record.go`, `internal/app/app.go`
-
-`vlog.Journal` stamps the envelope from `defaultLog` (`vlog.go:530-536`), but a
-driven App (script, headless bot, harness) ticks its own `vlog.NewLog` handle
-(`internal/app/app.go:205-211`). Every record of a `-script -j` or
-`-bot -headless -j` journal carries the process default's `run` and `tick`, normally
-0 and 0, beside correct `jrun` and `jtick` (reproduced). `vif-log` reads only the
-envelope (`tool/vif-log/internal/logfile/scan.go:292-295`), so its tick column and
-filters misplace such a journal. Stamp the envelope from the record's `jrun` and
-`jtick`, or give `event.VlogSink` the App's `*Log`.
-
 ### Decide whether a reset clears every instance's macros
 
 - Priority: P0, to review

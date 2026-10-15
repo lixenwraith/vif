@@ -16,16 +16,17 @@ const (
 	SubJournalEnd     = "end"
 )
 
-// vlogSink writes journal output to the dedicated vlog journal session
-type vlogSink struct{}
+// vlogSink writes journal output to the dedicated vlog journal session, each
+// record's envelope stamped by the run's own log handle.
+type vlogSink struct{ log *vlog.Log }
 
-// VlogSink returns the sink backed by the vlog journal file
-func VlogSink() JournalSink { return vlogSink{} }
+// VlogSink returns the sink backed by the vlog journal file, stamping through l.
+func VlogSink(l *vlog.Log) JournalSink { return vlogSink{log: l} }
 
 // Record writes one event record; every argument is an immutable value, as
 // vlog formats asynchronously on its own goroutine. encode_err and crossing are
 // written only when set: most records are neither broken nor an own crossing.
-func (vlogSink) Record(r JournalRecord) {
+func (s vlogSink) Record(r JournalRecord) {
 	kv := []any{
 		"jseq", r.JSeq,
 		"seq", r.Seq,
@@ -43,12 +44,12 @@ func (vlogSink) Record(r JournalRecord) {
 	if r.Crossing != 0 {
 		kv = append(kv, "crossing", r.Crossing)
 	}
-	vlog.Journal(SubJournalRecord, kv...)
+	s.log.Journal(SubJournalRecord, kv...)
 }
 
 // Anchor writes one header record
-func (vlogSink) Anchor(a JournalAnchor) {
-	vlog.Journal(SubJournalAnchor,
+func (s vlogSink) Anchor(a JournalAnchor) {
+	s.log.Journal(SubJournalAnchor,
 		"schema", a.Schema,
 		"jseq", a.JSeq,
 		"jrun", a.Run,
@@ -76,8 +77,8 @@ func (vlogSink) Anchor(a JournalAnchor) {
 }
 
 // Capture writes one installed world, its body base64 in a JSON string
-func (vlogSink) Capture(c JournalCapture) {
-	vlog.Journal(SubJournalCapture,
+func (s vlogSink) Capture(c JournalCapture) {
+	s.log.Journal(SubJournalCapture,
 		"jseq", c.JSeq,
 		"cseq", c.CSeq,
 		"jrun", c.Run,
@@ -89,14 +90,14 @@ func (vlogSink) Capture(c JournalCapture) {
 }
 
 // Digest writes one world digest, its hashes in hex as a snapshot line carries them
-func (vlogSink) Digest(d JournalDigest) {
-	vlog.Journal(SubJournalDigest, "jrun", d.Run, "jtick", d.Tick,
+func (s vlogSink) Digest(d JournalDigest) {
+	s.log.Journal(SubJournalDigest, "jrun", d.Run, "jtick", d.Tick,
 		"positions", strconv.FormatUint(d.Positions, 16),
 		"kinetics", strconv.FormatUint(d.Kinetics, 16),
 		"combat", strconv.FormatUint(d.Combat, 16),
 		"entities", strconv.FormatUint(d.Entities, 16))
 }
 
-func (vlogSink) Finish(st Stamp) {
-	vlog.Journal(SubJournalEnd, "jrun", st.Run, "jtick", st.Tick, "boundary", st.Boundary)
+func (s vlogSink) Finish(st Stamp) {
+	s.log.Journal(SubJournalEnd, "jrun", st.Run, "jtick", st.Tick, "boundary", st.Boundary)
 }
