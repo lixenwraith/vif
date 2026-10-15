@@ -40,7 +40,8 @@ const (
 	NetworkPaceBandTicks = 1
 
 	// NetworkPaceWindow is how many authority epochs one pace decision reads; the
-	// latest of them decides, so a jittered arrival counts at its worst.
+	// latest of them trims and the earliest steps, so one jittered arrival never
+	// moves whole ticks.
 	NetworkPaceWindow = 10
 
 	// NetworkPaceGainPermille and NetworkPacePermilleMax trim a guest's tick interval
