@@ -287,27 +287,119 @@ func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
 	}
 }
 
-// TestAHandoffDropsWhatNoAuthorityCommitted: a guest's own crossings still waiting
-// to apply, and those applied but unproved, go with the authority they were sent
-// to, and the fence closes over the unapplied ones.
-func TestAHandoffDropsWhatNoAuthorityCommitted(t *testing.T) {
-	t.Parallel()
-	s := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
-	s.mu.Lock()
-	s.scheduled = append(s.scheduled, barrierArtifact{
-		frame: event.WireFrame{Event: "EventGoldJumpRequest", Seq: 1}, applyTick: 104, source: 2,
-	})
-	s.suffix = append(s.suffix, localCrossing{frame: event.ScheduledWireFrame{Frame: event.WireFrame{Seq: 1}}})
-	s.mu.Unlock()
-
-	s.DropUncommitted()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.scheduled) != 0 || len(s.suffix) != 0 {
-		t.Fatalf("kept %d scheduled and %d retained own crossings", len(s.scheduled), len(s.suffix))
+// seqBatch is one guest's epoch carrying the given sequences, all for one tick.
+func seqBatch(t *testing.T, source uint32, produced, applyTick uint64, seqs ...uint64) []byte {
+	t.Helper()
+	frames := make([]event.ScheduledWireFrame, len(seqs))
+	for i, seq := range seqs {
+		frames[i] = event.ScheduledWireFrame{ApplyTick: applyTick, Frame: event.WireFrame{
+			Event: "EventGoldJumpRequest", Domain: "shared", Seq: seq,
+		}}
 	}
-	if s.appliedCrossSeq != 1 {
-		t.Fatalf("the local fence stands at %d, want it closed over the dropped crossing", s.appliedCrossSeq)
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: source, ProducedTick: produced, Frames: frames})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+// bundledSeqs lists the sequences of the epochs one bundle carries.
+func bundledSeqs(t *testing.T, bundle []byte) []uint64 {
+	t.Helper()
+	var seqs []uint64
+	err := network.Unbundle(bundle, func(kind network.MessageType, body []byte) {
+		b, err := event.DecodeWireBatch(body)
+		if err != nil || kind != network.MsgEvent {
+			return
+		}
+		for _, f := range b.Frames {
+			seqs = append(seqs, f.Frame.Seq)
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seqs
+}
+
+// TestAHandoffResendsWhatNoAuthorityCommitted: with the authority lost a guest's
+// own epochs wait, and the handoff sends the successor the crossings the lost
+// authority never returned committed, retained and scheduled as they were.
+func TestAHandoffResendsWhatNoAuthorityCommitted(t *testing.T) {
+	t.Parallel()
+	event.EnsureRegistry()
+	port := &linkedPort{peers: []uint32{1, 3}}
+	guest := sessionSystem(t, 2, 99, port)
+	guest.Flush(99)
+	cross := func(tick uint64) {
+		guest.world.Resources.Event.Queue.RebaseStamp(0, tick)
+		if !guest.Cross(event.GameEvent{Type: event.EventGoldJumpRequest, Domain: core.DomainPlayer}) {
+			t.Fatal("the barrier did not take an own crossing")
+		}
+		guest.Flush(tick)
+	}
+	cross(100)
+	cross(101)
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: 2, ProducedTick: 100, Committed: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guest.scheduleCrossings(1, body)
+
+	// The authority goes with epoch 101 in flight; the successor link is all that
+	// is left, and nothing is offered on it until the handoff names the successor.
+	port.peers, port.sent = []uint32{3}, nil
+	guest.statHostLost.Store(true)
+	cross(102)
+	if len(port.sent) != 0 {
+		t.Fatalf("a guest whose authority is lost sent %v", sentTo(port))
+	}
+	guest.world.Resources.Network.Authority.Store(3)
+	guest.statHostLost.Store(false)
+	guest.ResendUncommitted()
+	guest.world.Resources.Event.Queue.RebaseStamp(0, 103)
+	guest.Flush(103)
+	if got := sentTo(port); !slices.Equal(got, []uint32{3}) || port.sent[0].kind != network.MsgBundle {
+		t.Fatalf("after the handoff the guest sent %v, want one bundle to the successor", got)
+	}
+	if got := bundledSeqs(t, port.sent[0].body); !slices.Equal(got, []uint64{2, 3}) {
+		t.Fatalf("the successor was sent sequences %v, want the two the lost authority never committed", got)
+	}
+	guest.mu.Lock()
+	defer guest.mu.Unlock()
+	if len(guest.suffix) != 3 || len(guest.scheduled) != 3 {
+		t.Fatalf("the handoff left %d retained and %d scheduled own crossings, want all 3 of each",
+			len(guest.suffix), len(guest.scheduled))
+	}
+}
+
+// TestAResentCrossingIsCommittedOnceAndAGapIsFilled: a crossing the authority
+// already holds is refused by sequence whatever epoch carries it and leaves the
+// committed copy, while one it never received is committed from the resend.
+func TestAResentCrossingIsCommittedOnceAndAGapIsFilled(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{2}}
+	authority := sessionSystem(t, 1, 100, port)
+	authority.scheduleCrossings(2, seqBatch(t, 2, 99, 104, 1, 2))
+	authority.scheduleCrossings(2, seqBatch(t, 2, 100, 104, 2, 3))
+	authority.mu.Lock()
+	var seqs []uint64
+	for _, a := range authority.scheduled {
+		seqs = append(seqs, a.frame.Seq)
+	}
+	authority.mu.Unlock()
+	if !slices.Equal(seqs, []uint64{1, 2, 3}) {
+		t.Fatalf("the authority scheduled sequences %v, want each once", seqs)
+	}
+	if len(port.sent) != 2 {
+		t.Fatalf("the authority committed %d epochs, want both", len(port.sent))
+	}
+	copy, err := event.DecodeWireBatch(port.sent[1].body)
+	if err != nil || len(copy.Frames) != 1 || copy.Frames[0].Frame.Seq != 3 {
+		t.Fatalf("the resend's committed copy carries %+v (%v), want sequence 3 alone", copy.Frames, err)
+	}
+	if got := authority.statDuplicates.Load(); got != 1 {
+		t.Fatalf("%d duplicates counted, want the repeated sequence", got)
 	}
 }
 
