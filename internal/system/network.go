@@ -115,11 +115,11 @@ type NetworkSystem struct {
 	statPreInstall *atomic.Int64
 	statSuperseded *atomic.Int64
 
-	// statRefusedTick and statScheduleFull count what the forward window and the
-	// schedule's ceilings turned away. They are separate from statDrop because a
-	// drop is a frame this instance could not read and these are frames it read and
-	// refused: a non-zero pair names a peer whose ticks or whose volume are not
-	// those of a participant, which is a different diagnosis from a decode failure.
+	// statRefusedTick and statScheduleFull count what the forward window, the run
+	// and the schedule's ceilings turned away. They are separate from statDrop
+	// because a drop is a frame this instance could not read and these are frames it
+	// read and refused: past a reset's last epochs, a non-zero pair names a peer
+	// whose ticks or whose volume are not those of a participant.
 	statRefusedTick    *atomic.Int64
 	statScheduleFull   *atomic.Int64
 	statAgreedRestored *atomic.Int64
@@ -448,6 +448,7 @@ func (s *NetworkSystem) Init() {
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
+	s.upstream = network.Bundle{}
 
 	// Held derivations go for the reason the replay suffix below does: a reward the
 	// authority never proved belongs to the run that predicted it, and that run has
@@ -580,6 +581,13 @@ func (s *NetworkSystem) participantID() uint32 {
 // drain paths differ on whether a tick is in progress and the answer must not.
 func (s *NetworkSystem) localTick() uint64 {
 	return s.world.Resources.Event.Queue.Stamp().Tick
+}
+
+// localRun is the run this instance's ticks count in, which every batch it
+// sends names and every batch it takes must name: a reset applies at one agreed
+// tick, and what a guest sent a round trip before it arrives after.
+func (s *NetworkSystem) localRun() uint64 {
+	return s.world.Resources.Event.Queue.Stamp().Run
 }
 
 // adoptDelay installs this instance's own lead at the tick its journaled event
@@ -1049,6 +1057,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 	for _, f := range s.crossings {
 		if f.Frame.Seq != 0 && f.Frame.Seq <= localFence {
 			pendingDropped++
+			s.closeAppliedCrossingLocked(f.Frame.Seq)
 			continue
 		}
 		pending = append(pending, f)
@@ -1067,10 +1076,16 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 			if bySequence {
 				superseded++
 			}
-			// This source's own placement lands in the installed world rather than
-			// through CursorSystem, so it settles its D-18 prediction here.
-			if et, ok := event.GetEventType(a.frame.Event); ok && a.source == s.localSource && et == event.EventCursorMoveRequest {
-				s.world.Resources.Player.Reconcile(component.PositionComponent{}, true)
+			if a.source == s.localSource {
+				// The pruned copy never dispatches, and the world holds its effect:
+				// the local fence closes over it here, or every later sequence
+				// would wait behind it. An own placement lands in the installed
+				// world rather than through CursorSystem, so it settles its D-18
+				// prediction here too.
+				s.closeAppliedCrossingLocked(a.frame.Seq)
+				if et, ok := event.GetEventType(a.frame.Event); ok && et == event.EventCursorMoveRequest {
+					s.world.Resources.Player.Reconcile(component.PositionComponent{}, true)
+				}
 			}
 			continue
 		}
@@ -1766,7 +1781,7 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 		return
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{
-		Source: source, ProducedTick: epoch, Frames: pending,
+		Source: source, Run: s.localRun(), ProducedTick: epoch, Frames: pending,
 	})
 	if err != nil {
 		s.statDrop.Add(int64(len(pending)))
@@ -1888,6 +1903,10 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	if batch.Source == 0 || int(batch.Source) >= len(s.epochs) {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
+		return
+	}
+	if batch.Run != s.localRun() {
+		s.statRefusedTick.Add(int64(max(1, len(batch.Frames))))
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()
@@ -2470,7 +2489,7 @@ func (s *NetworkSystem) sendCursorState(p engine.NetworkPort) {
 			f.ApplyTick = s.localTick() + 1
 		}
 		body, err := event.EncodeWireBatch(event.WireBatch{
-			Source: s.participantID(), Frames: []event.ScheduledWireFrame{f},
+			Source: s.participantID(), Run: s.localRun(), Frames: []event.ScheduledWireFrame{f},
 		})
 		if err != nil {
 			s.statDrop.Add(1)
@@ -2536,6 +2555,10 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 	batch, err := event.DecodeWireBatch(body)
 	if err != nil || batch.Source == 0 || int(batch.Source) >= participantSlots {
 		s.statDrop.Add(1)
+		return
+	}
+	if batch.Run != s.localRun() {
+		s.statRefusedTick.Add(1)
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()
