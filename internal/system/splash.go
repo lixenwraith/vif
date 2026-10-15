@@ -488,13 +488,15 @@ func (s *SplashSystem) getTimerBBoxes(excludeEntity core.Entity) []BBox {
 			continue
 		}
 
-		// Resolve position
+		// Resolve position; a timer whose anchor is gone is leaving and holds no space
 		x, y := splashComp.AnchorX, splashComp.AnchorY
 		if splashComp.AnchorEntity != 0 {
-			if pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity); ok {
-				x = pos.X + splashComp.OffsetX
-				y = pos.Y + splashComp.OffsetY
+			pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity)
+			if !ok {
+				continue
 			}
+			x = pos.X + splashComp.OffsetX
+			y = pos.Y + splashComp.OffsetY
 		}
 
 		// Dynamic width for timer

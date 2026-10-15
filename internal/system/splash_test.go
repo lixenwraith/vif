@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -37,5 +38,25 @@ func TestTimerContentIsBoundedByItsComponentBuffer(t *testing.T) {
 	}
 	if c.Length != parameter.SplashMaxLength {
 		t.Fatalf("timer length = %d, want bounded length %d", c.Length, parameter.SplashMaxLength)
+	}
+}
+
+// A countdown whose anchor has left the map is leaving with it: until the next
+// update retires it, it holds no space against magnifiers or other countdowns.
+func TestTimerWithoutItsAnchorHoldsNoSpace(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())
+	splash := NewSplashSystem(w).(*SplashSystem)
+
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 60, Y: 20})
+	splash.handleTimerSpawn(&event.SplashTimerRequestPayload{AnchorEntity: header, Duration: 10 * time.Second})
+	if boxes := splash.getTimerBBoxes(0); len(boxes) != 1 {
+		t.Fatalf("anchored countdown boxes = %d, want 1", len(boxes))
+	}
+
+	w.DestroyEntity(header)
+	if boxes := splash.getTimerBBoxes(0); len(boxes) != 0 {
+		t.Fatalf("countdown without its anchor holds %v", boxes)
 	}
 }
