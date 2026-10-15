@@ -662,9 +662,9 @@ define first; doing Android first would define it without a second consumer.
 - Guide: [Bots](bots.md)
 
 Bots play beside a person, in place of one, or alone on a dedicated host, and a
-guest's bots join and play through its own link. What remains is under
-[Bots](#bots); people behind relays are
-[Delegate convergence to relays](#delegate-convergence-to-relays).
+guest's bots and the people at its `-relay` address join and play through its own
+link. What remains is under [Bots](#bots) and
+[Reach a relay without an address in hand](#reach-a-relay-without-an-address-in-hand).
 
 ### Extract the renderer-neutral Android host model
 
@@ -1109,49 +1109,35 @@ with one seat held 672 MB resident and 1255 MB with two more, its ticks slipped 
 two seats on, and networked joiners stalled ("no authoritative world inside the
 convergence floor") or lost their links within seconds.
 
-### Delegate convergence to relays
+### Reach a relay without an address in hand
 
-- Priority: P1
-- Affected files: `internal/app/relay.go`, `internal/converge/relay.go`,
-  `internal/converge/authority.go`, `internal/system/network.go`, `internal/network`
+- Priority: P3
+- Affected files: `internal/app/relay.go`, `internal/converge/reach.go`, `internal/network`
 
-Goal: a person who cannot reach the host joins through another, who lends the
-session uplink and CPU without becoming its host. The host commits alone and each
-relay owns its subtree's convergence: sixteen players as four relays of three cut
-the host's epoch fan-out from (N−1)² to about 4N copies a tick, while each relay
-pays its leaves' share.
-
-A guest's own bots already join and play that way. Already generic:
-`SessionOffer.Relay`, `PendingJoin.Peer`, the `Relayed` proofs a manifest answer
-carries, counting a participant as answered through its relay, and the mesh
-fixtures. Restricted to bots: `relayReport` refuses a joiner with a foreign holder
-or a listener; `assignFor` stamps the relay as the joiner's `Holder`, whose
-departure retires its subtree; `relayLink` serves only an in-process pipe.
-
-Decide: how a person's parent is represented and where it travels on the wire,
-since a relay's departure re-parents a person rather than retiring it; the relay's
-port and flag; discovery; re-parenting or rejoining when a relay leaves; whether a
-relay stays eligible for succession; a way through NAT. A browser relays only its
-own bots. Verify with relayed topologies under `LinkShape`s, asserting hash-only
-convergence and the authority's per-link fan-out. Optional: advertise a leaf's lead
-along its path instead of sampling it from returned commits, a protocol bump.
+A person who cannot reach the host joins at a guest's `-relay` address and plays
+through it; the session is a tree, raw artifacts go up and the authority's down,
+and a relayed person whose relay leaves walks the chain to another participant
+(multi-player.md §5). What is left is finding that address: a relay's address is
+handed out of band like the host's, nothing publishes which participants relay,
+and a NAT between a person and every relay is not crossed. A browser relays only
+its own bots. Optional: advertise a leaf's lead along its path instead of sampling
+it from returned commits, a protocol bump. Verify a relayed topology under
+`LinkShape`s, asserting hash-only convergence and the authority's per-link fan-out.
 
 ### Decide the authority's fan-out and publication cadence
 
 - Priority: P2
 - Affected files: `internal/system/network.go`, `internal/converge/correction.go`
 
-A star's authority relays every participant's epochs and owner syncs to every other:
-at 16 players 4,444 epochs and 736 syncs a second, 1.4 MB/s framed on the tower map
-and 2.8 MB/s on td before deflate. Rounds follow the union of peer deadlines, 7.2 a
-second at td, and whole bodies add 2.2 MB/s there. In a migrate session every
-guest also forwards each committed epoch and correction chunk down its successor
-link, so the successor takes one copy per guest and suppresses all but the first.
-Candidates, each a message-set or cadence change that cuts constants where delegated
-relays move the quadratic term off the host: one bundle per guest per tick carrying
-every source's committed frames with their epoch markers, which pacing and fences
-read, as `MsgBundle` already does upstream; owner syncs as deltas; rounds aligned
-across peers; and a flood that skips a neighbour the authority already reaches.
+A star's authority sends every participant's epochs and owner syncs down to every
+other, the producer's own copy included: at 16 players 4,444 epochs and 736 syncs a
+second, 1.4 MB/s framed on the tower map and 2.8 MB/s on td before deflate. Rounds
+follow the union of peer deadlines, 7.2 a second at td, and whole bodies add
+2.2 MB/s there. Candidates, each a message-set or cadence change that cuts
+constants where relays (`-relay`) move the quadratic term off the host: one bundle
+per link per tick carrying every source's committed frames with their epoch
+markers, which pacing and fences read, as `MsgBundle` already does upstream; owner
+syncs as deltas; and rounds aligned across peers.
 
 ### Project a correction outside the live lock
 

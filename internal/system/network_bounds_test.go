@@ -22,7 +22,7 @@ func boundsBatch(t *testing.T, source uint32, produced, applyTick uint64, n, pad
 				Event:   "EventGoldJumpRequest",
 				Domain:  "shared",
 				Payload: strings.Repeat("x", pad),
-				Seq:     uint64(i + 1),
+				Seq:     produced*uint64(n) + uint64(i+1), // one producer's sequences never repeat
 			},
 			ApplyTick: applyTick,
 		})
@@ -178,5 +178,29 @@ func TestDrainingTheScheduleReturnsItsBudget(t *testing.T) {
 	s.mu.Unlock()
 	if held != 0 || after != 0 {
 		t.Fatalf("after draining every due artifact: %d held, %d bytes; want 0 and 0", held, after)
+	}
+}
+
+// TestAWindowAdmitsEachNumberOnceWithinItsWidth: a number is taken once however
+// far it lags the newest within the width, across the words of the backlog, and
+// one further behind is refused as unknowable rather than taken again.
+func TestAWindowAdmitsEachNumberOnceWithinItsWidth(t *testing.T) {
+	t.Parallel()
+	const width = parameter.NetworkSequenceWindow
+	var w window
+	for _, c := range []struct {
+		n    uint64
+		want bool
+	}{
+		{0, false}, {1, true}, {1, false}, {300, true}, {299, true}, {299, false}, {2, true},
+		{1, false}, {300 + width, true}, {300, false}, {299, false}, {301, true}, {300 + width - 1, true},
+	} {
+		if got := w.admit(c.n, width); got != c.want {
+			t.Fatalf("admit(%d) = %t, want %t", c.n, got, c.want)
+		}
+	}
+	if !w.has(301, width) || !w.has(300, width) || w.has(299, width) || w.newest() != 300+width {
+		t.Fatalf("the window holds 301 %t, 300 %t, 299 %t and newest %d",
+			w.has(301, width), w.has(300, width), w.has(299, width), w.newest())
 	}
 }

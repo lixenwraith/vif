@@ -358,9 +358,9 @@ func (p *SocketPort) Refused() uint64 { return p.refused.Load() }
 // Received reports complete non-control frames admitted by the read loop.
 func (p *SocketPort) Received() uint64 { return p.received.Load() }
 
-func (p *SocketPort) onConnect(id PeerID) {
+func (p *SocketPort) onConnect(id PeerID, served bool) {
 	p.ever.Store(true)
-	p.push(Inbound{Kind: InboundConnect, Peer: id})
+	p.push(Inbound{Kind: InboundConnect, Peer: id, Served: served})
 	p.signal()
 }
 

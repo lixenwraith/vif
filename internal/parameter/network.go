@@ -387,4 +387,10 @@ const (
 	// receiver never applied. At 20 ticks/s this is just over three seconds — far
 	// beyond any path an artifact can take and still meet its apply tick.
 	NetworkEpochWindow = 64
+
+	// NetworkSequenceWindow is how far behind a source's newest crossing sequence
+	// a receiver still recognises one it took, and how far behind its newest epoch
+	// returned committed a producer still knows one was. A handoff resends the
+	// retained suffix, whose records this covers at any input rate.
+	NetworkSequenceWindow = 512
 )

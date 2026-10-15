@@ -319,6 +319,7 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 // bindSessionHooks answers a network resource from this run's session layer, the
 // service's endpoint and an attached one alike.
 func (a *App) bindSessionHooks(r *engine.NetworkResource) {
+	r.Relay = uint32(a.joinedThrough)
 	r.OnDeparture = a.releaseParticipant32
 	// Replays and staging worlds apply roster changes without ending their viewer.
 	if _, live := r.Port.(engine.PeerDroppingPort); live {

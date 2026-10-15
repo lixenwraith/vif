@@ -187,6 +187,9 @@ type App struct {
 	seatSerial  uint64
 	seatAddress string // extra loopback join listener after succession; world lock
 	relay       relayDesk
+	// joinedThrough is the relay this run joined the session through, zero on a
+	// dial to the authority; the barrier reaches the authority through it.
+	joinedThrough network.PeerID
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are

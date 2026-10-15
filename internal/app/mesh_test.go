@@ -16,8 +16,10 @@ import (
 )
 
 // meshSession builds n participants on one seed and links them into the given
-// topology; links are the pairs of participant IDs that share a stream, and
-// everything else is reached by relay. chain, when given, is the succession
+// topology; links are the pairs of participant IDs that share a stream, written
+// from the host outward, and everything else is reached by relay. A link to a
+// participant with no path yet is the one it joined through; any other is a peer
+// link, as the succession chain opens. chain, when given, is the succession
 // candidate list a real session would publish — it travels in the offer, so a
 // fixture that wants a leaf out of the candidates leaves it out.
 func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...network.PeerID) []*App {
@@ -58,6 +60,7 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 
 	// Every instance adopts the same anchor and the same closed roster, so shared
 	// entity identity and creation order are identical from tick zero (D-11).
+	mesh, through := meshOf(links)
 	anchor := apps[0].JoinAnchor()
 	for i, a := range apps {
 		local := offer
@@ -67,6 +70,9 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 			// The host's own copy keeps a joiner in Assigned: an offer that assigns
 			// the coordinator to itself is not a valid handshake.
 			local.Assigned = network.PeerID(i + 1)
+			if relay := through[i+1]; relay != 1 {
+				local.Relay = network.PeerID(relay)
+			}
 		}
 		if i == 0 {
 			if err := a.HostSession(local); err != nil {
@@ -79,10 +85,6 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 		}
 	}
 
-	mesh := network.NewMesh()
-	for _, l := range links {
-		mesh.Link(network.PeerID(l[0]), network.PeerID(l[1]))
-	}
 	for i, a := range apps {
 		a.AttachTransport(mesh.Node(network.PeerID(i + 1)))
 	}
@@ -90,6 +92,36 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 		a.activateNetworkSession()
 	}
 	return apps
+}
+
+// meshOf links a mesh from the host outward and reports whom each participant
+// joined through: the host's links first, then each link that first reaches a
+// participant; the rest are peer links.
+func meshOf(links [][2]int) (*network.Mesh, map[int]int) {
+	mesh, through := network.NewMesh(), map[int]int{1: 0}
+	join := func(a, b int) {
+		mesh.Link(network.PeerID(a), network.PeerID(b))
+		through[b] = a
+	}
+	for _, l := range links {
+		if l[0] == 1 {
+			join(1, l[1])
+		}
+	}
+	for _, l := range links {
+		_, a := through[l[0]]
+		_, b := through[l[1]]
+		switch {
+		case l[0] == 1:
+		case a && !b:
+			join(l[0], l[1])
+		case b && !a:
+			join(l[1], l[0])
+		default:
+			mesh.Peer(network.PeerID(l[0]), network.PeerID(l[1]))
+		}
+	}
+	return mesh, through
 }
 
 // localCursors returns each participant's own cursor and asserts the roster came out
@@ -621,6 +653,35 @@ func TestACyclicMeshTerminatesTheCorrectionFlood(t *testing.T) {
 		if got := statOf(a, "network.corrections_received"); got > rounds {
 			t.Fatalf("participant %d took %d bodies off the mesh for %d corrections",
 				i+1, got, rounds)
+		}
+	}
+}
+
+// TestAPeerLinkCarriesNoArtifacts: in the star every guest links to the authority
+// and the successor link between them is a peer link. Committed epochs reach each
+// guest once, on its link to the authority, and nothing crosses the peer link.
+func TestAPeerLinkCarriesNoArtifacts(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}, {2, 3}})
+	local := localCursors(t, apps)
+	for i, a := range apps {
+		start := cursorPosition(a, local[i])
+		a.Context().PushCrossing(event.EventCursorMoveRequest,
+			&event.CursorMoveRequestPayload{Entity: local[i], X: start.X + 1, Y: start.Y})
+		a.Settle()
+	}
+	for range 12 {
+		tickAll(apps)
+	}
+	for _, i := range []int{1, 2} {
+		if got := statOf(apps[i], "network.relay_forwarded"); got != 0 {
+			t.Fatalf("participant %d forwarded %d artifacts across its peer link", i+1, got)
+		}
+		if got := statOf(apps[i], "network.relay_duplicates"); got != 0 {
+			t.Fatalf("participant %d received %d duplicate copies", i+1, got)
+		}
+		if got := statOf(apps[i], "network.crossings_received"); got == 0 {
+			t.Fatalf("participant %d applied no peer crossing", i+1)
 		}
 	}
 }

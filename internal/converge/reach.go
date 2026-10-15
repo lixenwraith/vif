@@ -171,12 +171,26 @@ func (r *Reach) drive(contested bool) {
 		return
 	}
 	r.statChain.Store(int64(len(r.authority.Chain())))
-	if contested {
+	if contested || r.cutOff() {
 		r.retrySuccession()
 		return
 	}
 	r.statAttempts.Store(0)
 	r.dialSuccessor()
+}
+
+// cutOff reports a participant with no link at all that still has a session to
+// reach: the relay it joined through left. It walks the chain as a survivor does,
+// and whichever participant answers carries its artifacts (NetworkSystem.sendUp).
+func (r *Reach) cutOff() bool {
+	port := r.inst.Transport()
+	if port == nil || !port.IsRunning() || port.PeerCount() > 0 {
+		return false
+	}
+	u := r.authority
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.term > 0 && !u.fork && u.local != u.holder
 }
 
 // dialSuccessor keeps the chain's first link open, so the instance that will have

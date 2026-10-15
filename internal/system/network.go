@@ -34,10 +34,14 @@ type NetworkSystem struct {
 	crossings      []event.ScheduledWireFrame
 	scheduled      []barrierArtifact
 	scheduledBytes int
-	epochs         [participantSlots]epochWindow
+	epochs         [participantSlots]window
 	// rawEpochs dedupes the raw epochs this instance only passes on toward the
 	// authority; the committed copy shares their key and must still be admitted.
-	rawEpochs       [participantSlots]epochWindow
+	// seqs takes each source's crossing sequences once, whatever epoch carries
+	// them; ownCommitted is the own epochs returned committed, for the handoff.
+	rawEpochs       [participantSlots]window
+	seqs            [participantSlots]window
+	ownCommitted    window
 	productionEpoch uint64
 	crossSeq        uint64
 	// appliedCrossSeq is the contiguous source-local sequence through which every
@@ -193,9 +197,13 @@ type NetworkSystem struct {
 	pathCount   int
 	pathEpoch   uint64
 
-	// relayingAt is, per link, the tick another participant's raw artifact last
-	// reached this authority through it; see relaysFor.
-	relayingAt [participantSlots]uint64
+	// downAt is, per link, the tick a raw artifact last arrived on it or the
+	// participant on it joined through this instance: the links behind this one.
+	// relay is the participant this instance reaches the authority through when no
+	// link to it exists: the one it joined through, or the one that returned its
+	// own epochs committed once that was gone.
+	downAt [participantSlots]uint64
+	relay  uint32
 
 	// upstream is this tick's raw artifacts for the authority on a guest linked to
 	// it, its own and those it carries; Flush sends them as one frame.
@@ -276,65 +284,84 @@ type stateDigest struct {
 // epochWindow admits each source epoch once within NetworkEpochWindow.
 // A bitmap preserves out-of-order arrivals over unequal mesh paths; a single
 // high-water mark would silently discard them as duplicates.
-type epochWindow struct {
-	high uint64 // newest ProducedTick admitted; zero means nothing yet
-	seen uint64 // bit i set: epoch high-1-i was admitted
+type window struct {
+	high uint64                                       // newest admitted; zero means nothing yet
+	seen [parameter.NetworkSequenceWindow / 64]uint64 // bit i set: high-1-i was admitted
 }
 
-// admit reports whether tick is new to this source and records it. Zero is not a
-// valid production epoch — the first tick a session can close is one — so it is
-// refused rather than treated as "nothing seen yet".
-func (w *epochWindow) admit(tick uint64) bool {
+// admit reports whether n is new within width of the newest and records it. Zero
+// is neither a production epoch nor a sequence, so it is refused rather than
+// treated as "nothing seen yet".
+func (w *window) admit(n, width uint64) bool {
 	switch {
-	case tick == 0:
+	case n == 0:
 		return false
-
 	case w.high == 0:
-		w.high = tick
+		w.high = n
 		return true
-
-	case tick > w.high:
+	case n > w.high:
 		// The old high joins the backlog, shifted by the gap it now sits behind.
-		if shift := tick - w.high; shift < parameter.NetworkEpochWindow {
-			w.seen = (w.seen << shift) | (1 << (shift - 1))
-		} else {
-			w.seen = 0
+		shift := n - w.high
+		w.shift(shift)
+		w.high = n
+		if i, bit, ok := w.bit(n-shift, uint64(len(w.seen))*64); ok {
+			w.seen[i] |= bit
 		}
-		w.high = tick
 		return true
-
-	case tick == w.high:
+	case n == w.high:
 		return false
+	}
+	i, bit, ok := w.bit(n, width)
+	if !ok || w.seen[i]&bit != 0 {
+		return false
+	}
+	w.seen[i] |= bit
+	return true
+}
 
-	default:
-		behind := w.high - tick
-		if behind > parameter.NetworkEpochWindow {
-			return false
+// shift moves the backlog by further behind the newest.
+func (w *window) shift(by uint64) {
+	if by >= uint64(len(w.seen))*64 {
+		w.seen = [len(w.seen)]uint64{}
+		return
+	}
+	words, bits := int(by/64), by%64
+	for i := len(w.seen) - 1; i >= 0; i-- {
+		var v uint64
+		if j := i - words; j >= 0 {
+			v = w.seen[j] << bits
+			if bits != 0 && j > 0 {
+				v |= w.seen[j-1] >> (64 - bits)
+			}
 		}
-		bit := uint64(1) << (behind - 1)
-		if w.seen&bit != 0 {
-			return false
-		}
-		w.seen |= bit
-		return true
+		w.seen[i] = v
 	}
 }
 
-// has reports whether tick was admitted, without admitting it.
-func (w *epochWindow) has(tick uint64) bool {
+// bit locates n in the backlog: its word and bit, if it is within width.
+func (w *window) bit(n, width uint64) (int, uint64, bool) {
+	behind := w.high - n
+	if behind == 0 || behind > width {
+		return 0, 0, false
+	}
+	return int((behind - 1) / 64), 1 << ((behind - 1) % 64), true
+}
+
+// has reports whether n was admitted, without admitting it.
+func (w *window) has(n, width uint64) bool {
 	switch {
-	case tick == 0 || w.high == 0 || tick > w.high:
+	case n == 0 || w.high == 0 || n > w.high:
 		return false
-	case tick == w.high:
+	case n == w.high:
 		return true
 	}
-	behind := w.high - tick
-	return behind <= parameter.NetworkEpochWindow && w.seen&(uint64(1)<<(behind-1)) != 0
+	i, bit, ok := w.bit(n, width)
+	return ok && w.seen[i]&bit != 0
 }
 
-// newest reports the highest epoch admitted from this source, for the playout lag
-// telemetry that asks how far behind a peer's production is.
-func (w *epochWindow) newest() uint64 { return w.high }
+// newest reports the highest number admitted, for the playout lag telemetry that
+// asks how far behind a peer's production is.
+func (w *window) newest() uint64 { return w.high }
 
 // participantSlots sizes every array this system indexes by participant identity.
 // The coordinator hands out 1..MaxPlayers+1 and never zero; one name for every
@@ -448,7 +475,7 @@ func (s *NetworkSystem) Init() {
 	s.barrierActive.Store(false)
 	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled = 0, 0, false, 0
 	s.pathCount, s.pathEpoch = 0, 0
-	s.relayingAt = [participantSlots]uint64{}
+	s.downAt = [participantSlots]uint64{}
 	s.leadLowSince, s.leadPushed = 0, 0
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
@@ -472,8 +499,10 @@ func (s *NetworkSystem) Init() {
 	s.suffixBytes = 0
 	s.suffixDropped = 0
 	s.lostSeq = 0
-	s.epochs = [participantSlots]epochWindow{}
-	s.rawEpochs = [participantSlots]epochWindow{}
+	s.epochs = [participantSlots]window{}
+	s.rawEpochs = [participantSlots]window{}
+	s.seqs = [participantSlots]window{}
+	s.ownCommitted = window{}
 	s.snapshotFloor = 0
 	s.snapshotAuthority = 0
 	s.snapshotFences = nil
@@ -686,6 +715,8 @@ func (s *NetworkSystem) forgetParticipant(participant uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.appliedPeerSeq[participant] = 0
+	s.downAt[participant] = 0
+	s.seqs[participant] = window{}
 	kept := make(network.CrossingFences, 0, len(s.snapshotFences)) // shared with the capture header
 	for _, f := range s.snapshotFences {
 		if f.Source != network.PeerID(participant) {
@@ -757,30 +788,33 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	return true
 }
 
-// DropUncommitted forgets this instance's own crossings when a handoff moves
-// authorship: the authority they were sent to is gone and its successor never had
-// them. What already applied here the next correction takes back; the sequences
-// dropped unapplied are closed so the local fence does not stall on them.
-// Caller MUST hold updateMutex.
-func (s *NetworkSystem) DropUncommitted() {
+// ResendUncommitted puts this instance's own retained crossings that no authority
+// returned committed back into the open epoch, at a handoff: the authority they
+// went to is gone and its successor never saw them. The successor commits them
+// late and refuses by sequence what it already holds. Caller MUST hold updateMutex.
+func (s *NetworkSystem) ResendUncommitted() {
 	s.mu.Lock()
-	kept, bytes, dropped := s.scheduled[:0], 0, len(s.suffix)
-	for _, a := range s.scheduled {
-		if a.source == s.localSource {
-			s.closeAppliedCrossingLocked(a.frame.Seq)
-			dropped++
+	resent, dropped, bytes := 0, 0, 0
+	for i := range s.suffix {
+		rec := &s.suffix[i]
+		if rec.produced >= s.productionEpoch || s.ownCommitted.has(rec.produced, parameter.NetworkSequenceWindow) {
 			continue
 		}
-		kept = append(kept, a)
-		bytes += frameBytes(a.frame)
+		if bytes += rec.bytes; bytes > network.MaxPayloadSize/2 {
+			dropped++ // more than one frame carries; the next correction takes the rest back
+			continue
+		}
+		rec.produced = s.productionEpoch
+		s.crossings = append(s.crossings, rec.frame)
+		resent++
 	}
-	s.scheduled, s.scheduledBytes = kept, bytes
-	s.suffix, s.suffixBytes = s.suffix[:0], 0
 	s.mu.Unlock()
-	s.world.Resources.Player.DropPrediction()
 	if dropped > 0 {
 		s.statDrop.Add(int64(dropped))
-		s.world.Log().Info("session", "msg", "uncommitted crossings dropped at handoff", "crossings", dropped)
+	}
+	if resent > 0 {
+		s.world.Log().Info("session", "msg", "uncommitted crossings resent at handoff",
+			"crossings", resent, "dropped", dropped)
 	}
 }
 
@@ -1038,6 +1072,9 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 	s.localSource = s.world.Session().Participant
 	if r := s.world.Resources.Network; r != nil {
 		s.delayTicks = r.BarrierDelayTicks
+		if s.relay == 0 {
+			s.relay = r.Relay
+		}
 	}
 	s.mu.Unlock()
 	s.barrierActive.Store(active)
@@ -1388,6 +1425,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 		in := &s.buf[i]
 		switch in.Kind {
 		case network.InboundConnect:
+			if in.Served {
+				s.noteDown(uint32(in.Peer))
+			}
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
 			s.world.LatchSession()
 		case network.InboundDisconnect:
@@ -1413,6 +1453,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	authorityLost := peerID == s.authorityParticipant() && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
+	if peerID == s.relay && !authorityLost {
+		message = "Relay connection lost; looking for another path to the authority"
+	}
 	if authorityLost {
 		// The badge and the message are the fallback's, and the session layer may
 		// clear both: a succession that finds an eligible successor ends with an
@@ -1657,21 +1700,17 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 		s.statDuplicates.Add(1)
 		return
 	}
-	// Forwarded on the same argument the artifact flood uses: a node relays only
-	// what it admitted, so a copy arriving by a second path is recognised and the
-	// flood terminates. Without it the authority would reach only the participants
-	// the host happens to be linked to directly, and a relayed session would have
-	// crossings but no corrections.
-	if p := s.port(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
-		p.BroadcastExcept(from, uint8(network.MsgStateCorrection), body)
+	// Passed on to the participants behind this instance, as every committed
+	// artifact is: without it a relayed session would have crossings but no
+	// corrections.
+	if s.sendDown(from, network.MsgStateCorrection, body) {
 		s.statRelayed.Add(1)
 	}
 	if !done {
 		return
 	}
-	// The completed transfer is kept rather than cleared: it is what recognises the
-	// copies still arriving by the mesh's other paths, and recognising them is the
-	// whole of the flood's termination.
+	// The completed transfer is kept rather than cleared: it is what recognises a
+	// copy that still arrives by a second path.
 	tick, whole := asm.Result()
 	s.statCorrections.Add(1)
 	if r := s.world.Resources.Network; r != nil && r.OnCorrection != nil {
@@ -1921,12 +1960,16 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	local, authority := s.participantID(), s.authorityParticipant()
 	raw := !batch.Committed && batch.Source != authority
 	committing := raw && local == authority
+	if raw && batch.Source != local {
+		s.noteDown(from)
+	}
 	switch {
 	case batch.Source == local:
-		// Committed back through a relay, or round a cycle: those behind this
-		// instance need it once, and it measures the path to the authority.
-		if batch.Committed && s.observeOwnCommit(batch.ProducedTick) {
-			s.relayBatch(from, network.MsgEvent, batch)
+		// Committed and returned: those behind this instance need it once, it
+		// measures the path to the authority, and it proves the link is one.
+		if batch.Committed && s.noteOwnCommit(batch.ProducedTick) {
+			s.adoptRelay(from)
+			s.forwardDown(from, network.MsgEvent, batch)
 		}
 		return
 	case committing && from != s.ingress(batch.Source, from):
@@ -1934,7 +1977,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		// behind one. A copy on another of one already admitted is a duplicate; any
 		// other is claimed.
 		s.mu.Lock()
-		dup := s.epochs[batch.Source].has(batch.ProducedTick)
+		dup := s.epochs[batch.Source].has(batch.ProducedTick, parameter.NetworkEpochWindow)
 		s.mu.Unlock()
 		if !dup {
 			s.statForged.Add(int64(max(1, len(batch.Frames))))
@@ -1942,15 +1985,14 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		return
 	case raw && !committing:
 		s.mu.Lock()
-		fresh := s.rawEpochs[batch.Source].admit(batch.ProducedTick)
+		fresh := s.rawEpochs[batch.Source].admit(batch.ProducedTick, parameter.NetworkEpochWindow)
 		s.mu.Unlock()
 		s.statUncommitted.Add(1)
 		if fresh {
-			s.relayRaw(from, authority, network.MsgEvent, batch)
+			s.relayRaw(network.MsgEvent, batch)
 		}
 		return
 	}
-	s.noteRelaying(from, batch.Source, committing)
 
 	// The forward window, applied before the epoch window rather than after it. An
 	// epoch from beyond the horizon is refused without being admitted, so it
@@ -1962,8 +2004,8 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 
 	s.mu.Lock()
-	admitted := s.epochs[batch.Source].admit(batch.ProducedTick)
-	installed, superseded, refused, overflowed, late, void := 0, 0, 0, 0, 0, 0
+	admitted := s.epochs[batch.Source].admit(batch.ProducedTick, parameter.NetworkEpochWindow)
+	installed, superseded, refused, overflowed, late, void, repeated := 0, 0, 0, 0, 0, 0, 0
 	sourceFence := s.snapshotFences.Seq(network.PeerID(batch.Source))
 	held := 0
 	for _, a := range s.scheduled {
@@ -1978,6 +2020,14 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 			// apply tick is per frame and is not derived from the epoch's.
 			if f.ApplyTick > horizon {
 				refused++
+				continue
+			}
+			// A sequence this instance took already is a copy whatever epoch
+			// carries it: a resend after a handoff, or a second path. It leaves
+			// the committed copy with the void frames.
+			if f.Frame.Seq != 0 && !s.seqs[batch.Source].admit(f.Frame.Seq, parameter.NetworkSequenceWindow) {
+				repeated++
+				f.Frame.Event = ""
 				continue
 			}
 			a := barrierArtifact{
@@ -2035,6 +2085,9 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	if refused > 0 {
 		s.statRefusedTick.Add(int64(refused))
 	}
+	if repeated > 0 {
+		s.statDuplicates.Add(int64(repeated))
+	}
 	if overflowed > 0 {
 		s.statScheduleFull.Add(int64(overflowed))
 		s.world.Log().Warn("net", "msg", "barrier schedule full",
@@ -2057,67 +2110,150 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	s.relayCommitted(from, committing, network.MsgEvent, batch)
 }
 
-// relayCommitted floods a committed copy onward. The authority that commits one is
-// its origin: the hop count restarts, and a relay the raw copy crossed still needs
-// it, so only the producer is excluded — unless it relays too, when those behind it
-// need the copy and it forwards its own.
+// relayCommitted passes a committed copy down. The authority that commits one is
+// its origin: the hop count restarts and every link takes it, the producer's
+// included, which is how a producer learns what was committed.
 func (s *NetworkSystem) relayCommitted(from uint32, committing bool, kind network.MessageType, batch event.WireBatch) {
 	batch.Committed = true
 	if committing {
-		from, batch.Hops = batch.Source, 0
-		if s.relaysFor(from) {
-			from = 0
+		from, batch.Hops = 0, 0
+	}
+	s.forwardDown(from, kind, batch)
+}
+
+// noteDown records that a raw artifact arrived on from, or a participant joined
+// through it: it is behind this instance until the epoch window passes in silence.
+func (s *NetworkSystem) noteDown(from uint32) {
+	if from != 0 && int(from) < len(s.downAt) {
+		s.downAt[from] = max(1, s.localTick())
+	}
+}
+
+// behind reports whether a link is behind this instance at tick.
+func (s *NetworkSystem) behind(id uint32, tick uint64) bool {
+	at := s.downAt[id]
+	return at != 0 && tick <= at+parameter.NetworkEpochWindow
+}
+
+// up is the link toward the authority: the authority itself, else the relay this
+// instance joined through or adopted. Zero is no path.
+func (s *NetworkSystem) up() uint32 {
+	if authority := s.authorityParticipant(); authority != s.participantID() && s.linked(authority) {
+		return authority
+	}
+	if s.relay != 0 && s.linked(s.relay) {
+		return s.relay
+	}
+	return 0
+}
+
+// adoptRelay takes the link that returned this instance's own epoch committed as
+// its path when it has none: the relay it joined through is gone, and this one
+// carried its artifacts to the authority and back.
+func (s *NetworkSystem) adoptRelay(from uint32) {
+	if from == 0 || from == s.relay || s.up() != 0 {
+		return
+	}
+	s.relay = from
+	s.world.Log().Info("net", "msg", "relay adopted", "relay", from)
+}
+
+// Downstream lists the linked participants behind this instance: every link at
+// the authority, else the ones it serves or that send it raw artifacts.
+func (s *NetworkSystem) Downstream() []uint32 {
+	link, ok := s.port().(engine.LinkMeasuringPort)
+	if !ok {
+		return nil
+	}
+	peers := link.Peers()
+	if s.isCoordinator() {
+		return peers
+	}
+	tick := s.localTick()
+	return slices.DeleteFunc(peers, func(id uint32) bool { return !s.behind(id, tick) })
+}
+
+// relayRaw passes a raw artifact on toward the authority, one hop further.
+func (s *NetworkSystem) relayRaw(kind network.MessageType, batch event.WireBatch) {
+	batch.Hops++
+	if batch.Hops >= parameter.NetworkRelayHopLimit {
+		s.statDrop.Add(1)
+		s.world.Log().Warn("net", "msg", "relay hop limit reached",
+			"source", batch.Source, "produced_tick", batch.ProducedTick)
+		return
+	}
+	body, err := event.EncodeWireBatch(batch)
+	if err != nil {
+		s.statDrop.Add(int64(max(1, len(batch.Frames))))
+		return
+	}
+	s.sendUp(kind, body)
+}
+
+// sendUp carries one raw artifact toward the authority, in this tick's bundle for
+// the link to it. With no such link and the authority alive this instance is behind
+// a relay that left: it offers the artifact on every link not behind it, and
+// adoptRelay takes whichever returns its epochs. With the authority lost it holds
+// its own for the handoff to resend.
+func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
+	if s.up() != 0 {
+		s.upstream.Add(kind, body)
+		return
+	}
+	p := s.port()
+	link, ok := p.(engine.LinkMeasuringPort)
+	if !ok || s.statHostLost.Load() {
+		s.statDrop.Add(1)
+		return
+	}
+	tick := s.localTick()
+	for _, id := range link.Peers() {
+		if !s.behind(id, tick) {
+			p.Send(id, uint8(kind), body)
 		}
 	}
-	s.relayBatch(from, kind, batch)
 }
 
-// noteRelaying records that the authority received another participant's raw
-// artifact through from, which makes from a relay.
-func (s *NetworkSystem) noteRelaying(from, source uint32, committing bool) {
-	if committing && from != source && int(from) < len(s.relayingAt) {
-		s.relayingAt[from] = s.localTick()
-	}
-}
-
-// relaysFor reports whether id carried another participant's raw artifact to this
-// authority within the epoch window.
-func (s *NetworkSystem) relaysFor(id uint32) bool {
-	if int(id) >= len(s.relayingAt) || s.relayingAt[id] == 0 {
+// sendDown passes one artifact to the participants behind this instance but the
+// link it arrived on, every link at the authority. Reports whether any took it.
+func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body []byte) bool {
+	p := s.port()
+	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return false
 	}
-	return s.localTick() <= s.relayingAt[id]+parameter.NetworkEpochWindow
+	if s.isCoordinator() {
+		if except == 0 {
+			p.Broadcast(uint8(kind), body)
+		} else {
+			p.BroadcastExcept(except, uint8(kind), body)
+		}
+		return true
+	}
+	tick, sent := s.localTick(), false
+	for id := range uint32(len(s.downAt)) {
+		if id != except && s.behind(id, tick) && p.Send(id, uint8(kind), body) {
+			sent = true
+		}
+	}
+	return sent
 }
 
-// relayRaw passes a raw epoch on toward the authority: in this tick's bundle when
-// this instance has a link to it, else onward through the mesh.
-func (s *NetworkSystem) relayRaw(from, authority uint32, kind network.MessageType, batch event.WireBatch) {
-	if s.port() == nil || !s.linked(authority) {
-		s.relayBatch(from, kind, batch)
-		return
-	}
-	batch.Hops++
-	if body, err := event.EncodeWireBatch(batch); err == nil && batch.Hops < parameter.NetworkRelayHopLimit {
-		s.upstream.Add(kind, body)
-	}
-}
-
-// sendOwn sends one of this instance's own artifacts. Nobody but the authority does
-// more with a raw one than pass it on, so a guest linked to it bundles it for it
-// alone; the authority's own, and a guest's with no such link, flood.
+// sendOwn sends one of this instance's own artifacts: the authority's are committed
+// as sent and go down every link, a guest's go up raw.
 func (s *NetworkSystem) sendOwn(p engine.NetworkPort, kind network.MessageType, body []byte) {
-	if authority := s.authorityParticipant(); authority != s.participantID() && s.linked(authority) {
-		s.upstream.Add(kind, body)
+	if s.isCoordinator() {
+		p.Broadcast(uint8(kind), body)
 		return
 	}
-	p.Broadcast(uint8(kind), body)
+	s.sendUp(kind, body)
 }
 
-// flushUpstream sends this tick's bundle. One whose link to the authority went
-// with a handoff is lost, as an epoch in flight to a departed authority is.
+// flushUpstream sends this tick's bundle up. One whose path went with a handoff is
+// lost, as an epoch in flight to a departed authority is; the handoff resends.
 func (s *NetworkSystem) flushUpstream(p engine.NetworkPort) {
+	to := s.up()
 	for _, m := range s.upstream.Take() {
-		if p == nil || !p.Send(s.authorityParticipant(), uint8(m.Type), m.Payload) {
+		if p == nil || to == 0 || !p.Send(to, uint8(m.Type), m.Payload) {
 			s.statDrop.Add(1)
 		}
 	}
@@ -2259,17 +2395,19 @@ func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	return uint64(min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks)), true
 }
 
-// observeOwnCommit samples how long an own epoch took to come back committed. Only
-// a participant behind a relay sees that: the authority excludes a producer it is
-// linked to. A later copy of a sampled epoch took a longer path and is ignored.
-func (s *NetworkSystem) observeOwnCommit(produced uint64) bool {
-	if produced <= s.pathEpoch {
-		return false
+// noteOwnCommit records an own epoch returned committed, reporting whether this is
+// its first copy, and samples how long the newest took to come back; a later copy
+// took a longer path and is not sampled.
+func (s *NetworkSystem) noteOwnCommit(produced uint64) bool {
+	s.mu.Lock()
+	fresh := s.ownCommitted.admit(produced, parameter.NetworkSequenceWindow)
+	s.mu.Unlock()
+	if produced > s.pathEpoch {
+		s.pathEpoch = produced
+		s.pathSamples[s.pathCount%len(s.pathSamples)] = int64(s.localTick()) - int64(produced)
+		s.pathCount++
 	}
-	s.pathEpoch = produced
-	s.pathSamples[s.pathCount%len(s.pathSamples)] = int64(s.localTick()) - int64(produced)
-	s.pathCount++
-	return true
+	return fresh
 }
 
 // chooseLead raises at once and lowers only after the lower target has held for
@@ -2287,15 +2425,10 @@ func chooseLead(current, target, tick, lowSince uint64) (next, nextLowSince uint
 	return current, lowSince
 }
 
-// relayBatch forwards one admitted epoch unchanged but for the hop count: Source,
-// ProducedTick and each frame's ApplyTick and sequence make the artifact identical
-// everywhere, so a relay never restamps them. Excluding from is economy only,
-// since that peer already holds the copy.
-func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch event.WireBatch) {
-	p := s.port()
-	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
-		return
-	}
+// forwardDown passes one admitted committed epoch down unchanged but for the hop
+// count: Source, ProducedTick and each frame's ApplyTick and sequence make the
+// artifact identical everywhere, so a relay never restamps them.
+func (s *NetworkSystem) forwardDown(from uint32, kind network.MessageType, batch event.WireBatch) {
 	if batch.Hops >= parameter.NetworkRelayHopLimit {
 		s.statDrop.Add(1)
 		s.world.Log().Warn("net", "msg", "relay hop limit reached",
@@ -2309,8 +2442,9 @@ func (s *NetworkSystem) relayBatch(from uint32, kind network.MessageType, batch 
 		s.world.Log().Warn("net", "msg", "relay not encoded", "error", err.Error())
 		return
 	}
-	p.BroadcastExcept(from, uint8(kind), body)
-	s.statRelayed.Add(1)
+	if s.sendDown(from, kind, body) {
+		s.statRelayed.Add(1)
+	}
 }
 
 // applyDue publishes due artifacts in the same source/sequence order everywhere.
@@ -2589,7 +2723,9 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 		s.statForged.Add(1)
 		return
 	}
-	s.noteRelaying(from, batch.Source, committing)
+	if raw && !own {
+		s.noteDown(from)
+	}
 	fresh := batch.Frames[:0]
 	for _, f := range batch.Frames {
 		et, payload, _, err := f.Frame.Decode()
@@ -2621,7 +2757,7 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 	}
 	batch.Frames = fresh
 	if raw && !committing {
-		s.relayRaw(from, authority, network.MsgStateSync, batch)
+		s.relayRaw(network.MsgStateSync, batch)
 		return
 	}
 	s.relayCommitted(from, committing, network.MsgStateSync, batch)
@@ -2741,14 +2877,15 @@ type networkState struct {
 	crossings                                  []event.ScheduledWireFrame
 	scheduled, applied                         []barrierArtifact
 	scheduledBytes, suffixBytes                int
-	epochs, rawEpochs                          [participantSlots]epochWindow
+	epochs, rawEpochs, seqs                    [participantSlots]window
+	ownCommitted                               window
 	productionEpoch, crossSeq, appliedCrossSeq uint64
 	appliedAhead                               map[uint64]struct{}
-	localSource, snapshotAuthority             uint32
+	localSource, snapshotAuthority, relay      uint32
 	delayTicks, lastApplyTick, snapshotFloor   uint64
 	encodeErr, suffixDropped                   int64
 	barrierActive                              bool
-	appliedPeerSeq, relayingAt                 [participantSlots]uint64
+	appliedPeerSeq, downAt                     [participantSlots]uint64
 	snapshotFences                             network.CrossingFences
 	syncSeq, ticks, lostSeq                    uint64
 	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
@@ -2772,11 +2909,12 @@ func (s *NetworkSystem) CopyState() any {
 	c := networkState{
 		crossings: slices.Clone(s.crossings), scheduled: slices.Clone(s.scheduled), applied: slices.Clone(s.applied),
 		scheduledBytes: s.scheduledBytes, suffixBytes: s.suffixBytes, epochs: s.epochs, rawEpochs: s.rawEpochs,
+		seqs: s.seqs, ownCommitted: s.ownCommitted,
 		productionEpoch: s.productionEpoch, crossSeq: s.crossSeq, appliedCrossSeq: s.appliedCrossSeq,
 		appliedAhead: maps.Clone(s.appliedAhead), localSource: s.localSource, snapshotAuthority: s.snapshotAuthority,
 		delayTicks: s.delayTicks, lastApplyTick: s.lastApplyTick, snapshotFloor: s.snapshotFloor,
 		encodeErr: s.encodeErr, suffixDropped: s.suffixDropped, barrierActive: s.barrierActive.Load(),
-		appliedPeerSeq: s.appliedPeerSeq, relayingAt: s.relayingAt, snapshotFences: slices.Clone(s.snapshotFences),
+		appliedPeerSeq: s.appliedPeerSeq, downAt: s.downAt, relay: s.relay, snapshotFences: slices.Clone(s.snapshotFences),
 		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
 		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed,
 		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
@@ -2793,6 +2931,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	defer s.mu.Unlock()
 	s.crossings, s.scheduled, s.applied = slices.Clone(c.crossings), slices.Clone(c.scheduled), slices.Clone(c.applied)
 	s.scheduledBytes, s.suffixBytes, s.epochs, s.rawEpochs = c.scheduledBytes, c.suffixBytes, c.epochs, c.rawEpochs
+	s.seqs, s.ownCommitted = c.seqs, c.ownCommitted
 	s.productionEpoch, s.crossSeq, s.appliedCrossSeq = c.productionEpoch, c.crossSeq, c.appliedCrossSeq
 	s.appliedAhead, s.localSource, s.snapshotAuthority = maps.Clone(c.appliedAhead), c.localSource, c.snapshotAuthority
 	if s.appliedAhead == nil {
@@ -2801,7 +2940,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.delayTicks, s.lastApplyTick, s.snapshotFloor = c.delayTicks, c.lastApplyTick, c.snapshotFloor
 	s.encodeErr, s.suffixDropped = c.encodeErr, c.suffixDropped
 	s.barrierActive.Store(c.barrierActive)
-	s.appliedPeerSeq, s.relayingAt, s.snapshotFences = c.appliedPeerSeq, c.relayingAt, slices.Clone(c.snapshotFences)
+	s.appliedPeerSeq, s.downAt, s.relay, s.snapshotFences = c.appliedPeerSeq, c.downAt, c.relay, slices.Clone(c.snapshotFences)
 	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
 	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
 	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)

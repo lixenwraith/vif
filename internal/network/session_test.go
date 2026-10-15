@@ -31,7 +31,7 @@ func TestSilentPeerBecomesDisconnectNotification(t *testing.T) {
 	local, remote := net.Pipe()
 	defer remote.Close()
 	defer pm.Close()
-	if _, err := pm.AddConnectionAs(local, 2); err != nil {
+	if _, err := pm.AddConnectionAs(local, 2, true); err != nil {
 		t.Fatal(err)
 	}
 	select {

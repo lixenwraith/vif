@@ -22,10 +22,11 @@ Use these terms consistently:
   peer 1 until a handoff moves authorship.
 - A **game guest** runs the same Shared simulation as a predictor and adopts host
   corrections. It is not a thin renderer.
-- A **relay** forwards authoritative artifacts for participants behind it,
-  retains authoritative captures so it can answer their selective repair
-  requests, and reports their proofs upstream. It authors nothing. A guest is
-  the relay of its own bots.
+- A **relay** carries the raw artifacts of the participants behind it up toward
+  the authority and the authority's committed copies and corrections down to
+  them, retains authoritative captures so it can answer their selective repair
+  requests, and reports their proofs upstream. It authors nothing. A guest is the
+  relay of its own bots, and with `-relay <addr>` of the people who join there.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
   and never moves backwards on an instance.
@@ -67,7 +68,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed: a join whose link cannot carry one whole world per floor window is refused (`Corrections.AdmitLink`). Past admission it is reported as `snapshot.cadence_floor_breached` (D-24): by the authority for a link whose plan cannot hold it, and by a guest no whole world reached within the floor plus its grace. |
 | Playout lead | Per participant (§3.5): a guest's own round trip to the authority plus a jitter allowance and a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
-| Mesh and relay | Committed epochs, owner state, whole correction bodies and authority records flood, each with its own duplicate suppression (epoch window, sync sequence, chunk assembly, record content); selective frames never flood; a raw epoch travels only toward the authority, and its committed copy floods back through every relay it crossed. A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. A guest linked to the authority sends it alone its raw epochs and syncs and those it carries, one bundle a tick; the authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
+| Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is elected only when the chain names no survivor (§5.1, §5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
@@ -335,9 +336,15 @@ still. The first window after arrival is grace, and only a participant's own raw
 epochs count, so its actions relayed to the others never mark them. A link is
 evicted with the bots it holds once what it sends over the window passes
 `NetworkIngressBytesPerSecond` for itself, each bot it holds and each person the
-authority has no link to (`driveIngress`). `-slow-window 0` turns off both. On a
-handoff a guest drops its own uncommitted crossings, scheduled and retained: the
-authority they went to is gone.
+authority has no link to (`driveIngress`). `-slow-window 0` turns off both. The
+authority sends every committed copy down each of its links, the producer's
+included, so a producer knows which of its epochs were committed. On a handoff a
+guest resends to the successor, in its next epoch, the retained crossings of the
+epochs that never came back (`ResendUncommitted`); the successor commits them late
+and refuses by sequence any it already holds from the predecessor's copies, so a
+lost authority costs a player only what the commit bound voids. Every receiver
+takes each source's crossing sequence once (`NetworkSequenceWindow`), whatever
+epoch carries it.
 
 ## 4. Correction pipeline
 
@@ -444,20 +451,30 @@ catch-up gap past `NetworkJoinCatchUpTicks`, or one still wider than
 `NetworkJoinLagTicks` (the default lead) once it has caught up; a bot seat retries
 either, since a fresh attempt brings a fresher world.
 
-The session protocol supports a mesh even though the shipped CLI normally builds
-a star, or a two-level tree once a guest seats bots behind it, and in a migrate
-session every participant also links to the successor (§5.3). Each committed source
-epoch is admitted once within a bounded replay window and forwarded to every
-neighbour except the arrival edge; a raw one travels only toward the authority.
-Corrections retain the authority's term, tick, hashes, and chunks across relays.
+The session is a tree rooted at the authority: the shipped CLI builds a star, a
+guest seating bots or relaying people (`-relay`) adds a level, and in a migrate
+session every participant also holds a peer link to the successor (§5.3). Every
+link is up, down or beside. A participant's **up** link is the authority if it
+holds one, else the relay it joined through (`NetworkResource.Relay`) or adopted;
+its **down** links are those that send it raw artifacts or were served a join
+within the epoch window, every link at the authority. Raw artifacts go up, one
+bundle a tick; committed epochs, owner syncs and correction chunks go down, each
+admitted once within a bounded window; a peer link carries succession records and
+departure notices, which still flood. Corrections retain the authority's term,
+tick, hashes, and chunks across relays.
 
-Bot admission declares an independent holder. That identity is retained in the
-roster and Shared cursor across captures, resets and succession. A host's bots dial
-its listener over loopback; a guest's join on an in-process stream the guest serves
-(`relayLink`): it asks the authority on its own link to allocate the identity and,
-once the bot installed the world the guest last proved, to cross its arrival
-(`MsgRelayJoin`). A bot dials no peer links, since it shares its holder's fate. A holder
-departure retires its bot group at the same crossing. Hosts may remove any remote
+A relayed join — a guest's own bot on an in-process stream (`relayLink`), or a
+person at the guest's `-relay` address — is served by the guest as a coordinator
+would: it asks the authority on its own link to allocate the identity and, once
+the joiner installed the world the guest last proved, to cross its arrival with
+what the joiner reported (`MsgRelayJoin`). A bot declares its holder and dials no
+peer links, since it shares its holder's fate; a holder departure retires its bot
+group at the same crossing. A person declares no holder: it keeps its slot when
+its relay leaves, and, having no link then, walks the chain like a survivor does
+and plays on through whichever participant answers (`Reach.cutOff`,
+`NetworkSystem.sendUp`). It is a leaf unless `-listen` names an address, since it
+could not reach the host itself. The holder identity is retained in the roster and
+Shared cursor across captures, resets and succession. Hosts may remove any remote
 slot with `:player drop`; removing a bot alone leaves its holder and siblings.
 `:bot drop` also lets a guest remove its own bot. Both accept decimal or hex slots.
 Holder checks are structural; they do not authenticate a peer. The player's view of
@@ -470,9 +487,9 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator always: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host` or, to seat bots, on loopback. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, and every `-authority host` session leave a participant with no port of its own. |
+| Who binds a port? | The coordinator always: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host` or, to seat bots, on loopback. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
-| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
+| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
 A successor is usually on another machine and cannot bind its predecessor's
 address, so a successor that authors must already be reachable at an address of its
