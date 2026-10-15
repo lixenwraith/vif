@@ -23,8 +23,13 @@ The app draws a frame every third of a tick, 60 per second, so each tick shows f
 three frames. `RenderOrchestrator` owns one reusable `RenderBuffer`, clears it,
 acquires the world lock, invokes visible renderers in ascending priority, and
 releases the lock. Finalization and terminal flushing
-happen outside the world lock so a stalled host write cannot block game ticks,
-event delivery, or input routing.
+happen outside the world lock, and the terminal writes on a goroutine of its own:
+`Flush` never waits, holding only the newest frame while a write is out. A terminal
+that stops reading (a hidden tab, a multiplexer client that went away) therefore
+cannot block game ticks, event delivery, or input routing. Once it has held a write
+for `TerminalBlockedAfter` (100 ms) the frame loop stops drawing, logs `terminal
+stopped taking output; drawing paused`, and resumes with a matching record when the
+write returns; the tick handshake runs throughout.
 
 Before the lock the orchestrator derives the frame's playfield rectangle and
 declares the void around it; each simulation layer then draws clipped to the

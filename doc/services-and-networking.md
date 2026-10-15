@@ -115,7 +115,9 @@ adapter in this repository owns application lifecycle:
 The polling channel applies backpressure rather than silently dropping normal
 terminal events: if the app stops consuming, the poll loop waits until space or
 shutdown. Terminal flush is performed by the render orchestrator outside the
-world lock.
+world lock, and the module writes output on its own goroutine, so a terminal that
+stops reading holds that goroutine and never the frame loop; `Blocked` reports how
+long its write has waited, and `Fini` gives up on it after two seconds.
 
 ## 5. Capability injection
 

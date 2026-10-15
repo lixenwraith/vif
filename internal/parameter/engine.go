@@ -24,6 +24,11 @@ const (
 	// InputTickInterval drives the router input tick: auto-fire, macro playback, etc.
 	InputTickInterval = 16 * time.Millisecond
 
+	// TerminalBlockedAfter is how long the terminal may hold one write before the
+	// frame loop stops drawing for it: past any write a reading terminal takes, so
+	// only one that stopped reading (a hidden tab, a gone client) crosses it [wall]
+	TerminalBlockedAfter = 100 * time.Millisecond
+
 	// ProbeStallInterval is how long a running scheduler may leave the tick
 	// counter unmoved before a liveness probe calls the run stalled: forty ticks,
 	// past any ordinary slip, short enough that a wedged loop is restarted.

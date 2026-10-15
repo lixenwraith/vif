@@ -299,10 +299,12 @@ func (a *App) renderContext() render.RenderContext {
 
 // frame advances one render frame; false means the player quit. A hidden page draws
 // nothing, so its terminal holds no backlog to replay; web/worker.js repaints it
-// whole on its return. The tick handshake below runs either way.
+// whole on its return. Neither does a terminal that stopped taking output. The tick
+// handshake below runs either way: the frame loop never waits on the terminal, so a
+// terminal nobody reads cannot slow the world.
 func (a *App) frame() bool {
 	a.ctx.IncrementFrameNumber()
-	draw := !pageHidden()
+	draw := !pageHidden() && a.terminalTaking()
 	var renderCtx render.RenderContext
 	if draw {
 		renderCtx = a.renderContext()
@@ -336,6 +338,25 @@ func (a *App) frame() bool {
 		}
 	}
 	return true
+}
+
+// terminalTaking reports whether the terminal is taking output. One that has held a
+// write for TerminalBlockedAfter (a hidden tab, a multiplexer client that went away)
+// is not drawn for until it returns, and the hold is logged at both ends, since
+// nothing else on screen or in the frame counter shows it.
+func (a *App) terminalTaking() bool {
+	held := a.term.Blocked()
+	switch blocked := held >= parameter.TerminalBlockedAfter; {
+	case blocked && a.termBlocked.IsZero():
+		a.termBlocked = time.Now().Add(-held) // [wall]
+		a.log.Warn("app", "msg", "terminal stopped taking output; drawing paused",
+			"held_ms", held.Milliseconds())
+	case !blocked && held == 0 && !a.termBlocked.IsZero():
+		a.log.Info("app", "msg", "terminal taking output again; drawing resumed",
+			"held_ms", time.Since(a.termBlocked).Milliseconds()) // [wall]
+		a.termBlocked = time.Time{}
+	}
+	return a.termBlocked.IsZero()
 }
 
 // applyMouseMode is the Router's terminal sink for mouse reporting state
