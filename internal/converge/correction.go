@@ -888,6 +888,8 @@ func (c *Corrections) followRunLocked() event.Stamp {
 // the admission tick either, so the caller asks for one far enough ahead that every
 // such artifact has been applied into it. A join reuses whatever the cadence made.
 func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
+	poll := time.NewTimer(keyframePoll)
+	defer poll.Stop()
 	for {
 		c.publishMu.Lock()
 		at := c.followRunLocked()
@@ -915,10 +917,11 @@ func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 		// deadline alone would answer eventually; selecting on the stop is what
 		// keeps a join arriving as the process shuts down from adding its whole
 		// length to the time between SIGTERM and exit.
+		poll.Reset(keyframePoll)
 		select {
 		case <-c.stop:
 			return nil, 0, errors.New("session is shutting down")
-		case <-time.After(keyframePoll):
+		case <-poll.C:
 		}
 	}
 }
@@ -987,6 +990,8 @@ func (c *Corrections) StartCorrector() {
 
 func (c *Corrections) correct() {
 	defer close(c.correctDone)
+	backstop := time.NewTimer(time.Hour)
+	defer backstop.Stop()
 	for {
 		// A wake accompanies every arrival; the timer is the backstop for a wake
 		// lost to a full channel, and costs one queue check per cadence when idle.
@@ -996,11 +1001,12 @@ func (c *Corrections) correct() {
 		if c.holding() {
 			wait = parameter.GameUpdateInterval
 		}
+		backstop.Reset(wait)
 		select {
 		case <-c.stop:
 			return
 		case <-c.wake:
-		case <-time.After(wait):
+		case <-backstop.C:
 		}
 		c.Apply()
 	}

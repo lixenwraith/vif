@@ -407,7 +407,8 @@ func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
 // ReadSessionRoute reads the frame a dialer sends before it reads and returns the
 // name it carries. A named host checks it; a front door places the connection on it.
 func ReadSessionRoute(r io.Reader) (string, error) {
-	msg, err := decode(r, MaxSessionName)
+	var header [HeaderSize]byte
+	msg, err := decode(r, MaxSessionName, header[:])
 	if err != nil {
 		return "", err
 	}
