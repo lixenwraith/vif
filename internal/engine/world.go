@@ -508,6 +508,10 @@ type SessionState struct {
 	Peers                  uint32
 }
 
+// Pausable reports whether this instance may pause: a solo run, or an authority
+// whose every linked participant is a bot seat it holds.
+func (s SessionState) Pausable() bool { return !s.Live || s.SeatsOnly }
+
 // Coordinator reports whether this participant authors the session.
 func (s SessionState) Coordinator() bool {
 	return s.Participant != 0 && s.Participant == cmp.Or(s.Authority, CoordinatorParticipant)

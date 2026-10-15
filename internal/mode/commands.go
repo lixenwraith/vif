@@ -635,7 +635,7 @@ func handleTelemetryCommand(ctx *engine.GameContext, args []string) CommandResul
 	}
 
 	ctx.RequestMode(core.ModeOverlay)
-	ctx.SetPaused(true)
+	ctx.PauseForInput()
 	ctx.PushLocal(event.EventMetaTelemetryRequest, nil)
 	return CommandResult{Continue: true}
 }
@@ -677,7 +677,7 @@ func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
 func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
 		ctx.RequestMode(core.ModeOverlay)
-		ctx.SetPaused(true)
+		ctx.PauseForInput()
 		ctx.PushLocal(event.EventMetaDebugRequest, nil)
 		return CommandResult{Continue: true}
 	}
@@ -976,7 +976,7 @@ func diagnosticsDir() string {
 // handleHelpCommand triggers help overlay event
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
-	ctx.SetPaused(true)
+	ctx.PauseForInput()
 	ctx.PushLocal(event.EventMetaHelpRequest, nil)
 	return CommandResult{Continue: true}
 }
@@ -1157,7 +1157,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 // handleAboutCommand triggers about overlay event
 func handleAboutCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
-	ctx.SetPaused(true)
+	ctx.PauseForInput()
 	ctx.PushLocal(event.EventMetaAboutRequest, nil)
 	return CommandResult{Continue: true}
 }
