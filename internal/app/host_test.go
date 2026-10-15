@@ -1108,3 +1108,34 @@ func TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime(t *testin
 		t.Fatal("a forged elapsed game time did not move the shared snapshot")
 	}
 }
+
+// An abandoned relayed join leaves by a departure crossing that applies a lead
+// later, so its identity is free only then: a dial assigned it in between, as a
+// person joining right after a dropped probe of the relay's address was, is the
+// participant the crossing removes.
+func TestAnAbandonedRelayedIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, 120, 40)
+	defer host.Close()
+	host.AttachTransport(network.NewMesh().Node(1))
+	anchor := host.JoinAnchor()
+	relay, err := host.assignFor(anchor, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := host.assignFor(anchor, relay.Assigned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.world.RunSafe(func() { host.abandonRelayedLocked(relay.Assigned, leaf.Assigned) })
+	next, err := host.assignFor(anchor, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Assigned == leaf.Assigned {
+		t.Fatalf("identity %d was reassigned while its departure was still to apply", leaf.Assigned)
+	}
+	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
+	if again, err := host.assignFor(anchor, 0); err != nil || again.Assigned != leaf.Assigned {
+		t.Fatalf("after the departure applied, assigned %d, %v; want %d back", again.Assigned, err, leaf.Assigned)
+	}
+}

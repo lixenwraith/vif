@@ -594,11 +594,11 @@ func (a *App) crossDeparture(id network.PeerID, slot uint8) {
 	a.pushDeparture(id, slot, core.DomainPlayer)
 }
 
-// pushDeparture emits one participant's removal and returns its identity to the
-// pool. The domain is the whole difference between the two producers above: player
-// puts the artifact on the wire for every instance to apply at one agreed tick,
-// shared keeps it here. Both are recorded, so a replay of either reaches the same
-// world the same way.
+// pushDeparture emits one participant's removal: player puts the artifact on the
+// wire for every instance to apply at one agreed tick, shared keeps it here, and
+// both are recorded. The identity returns to the pool when the departure applies
+// (OnDeparture), never here: a dial assigned it in between would be the
+// participant the crossing removes.
 func (a *App) pushDeparture(id network.PeerID, slot uint8, domain core.Domain) {
 	a.world.RunSafe(func() { a.pushDepartureLocked(id, slot, domain) })
 }
@@ -609,7 +609,6 @@ func (a *App) pushDepartureLocked(id network.PeerID, slot uint8, domain core.Dom
 	a.world.PushEventFull(event.EventParticipantDeparted,
 		&event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot},
 		event.OriginSession, domain)
-	a.releaseParticipant(id)
 }
 
 // offerLocked builds the offer addressed to one participant. Caller holds sessionMu,
