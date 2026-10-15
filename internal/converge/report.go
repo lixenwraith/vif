@@ -119,7 +119,7 @@ func (c *Corrections) Selective() SelectiveReport {
 		out.PeerState[id] = PeerSelective{
 			ManifestTick: p.manifestTick,
 			AnsweredTick: p.answeredTick,
-			Converged:    p.converged,
+			Converged:    p.provedTick != 0 && p.provedTick == p.answeredTick,
 			Silence:      p.silence,
 		}
 	}

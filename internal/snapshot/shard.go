@@ -258,7 +258,7 @@ type ShardRepair struct {
 	Pages    int
 	Rows     int
 	Entities int
-	Sections int
+	Sections []string // the ids of the sections the set touched, sorted
 }
 
 // ValidateShardSet refuses a set before anything is spliced: an unknown version or
@@ -359,17 +359,15 @@ func ApplyShardSet(mine *SharedCapture, index *Manifest, set CorrectionShardSet)
 		rep.Entities += n
 		touched[sh.Section] = true
 	}
-	rep.Sections = len(touched)
+	for id := range touched {
+		rep.Sections = append(rep.Sections, id)
+	}
+	slices.Sort(rep.Sections)
 
 	mine.Header = set.Header
 	mine.Header.Integrity = 0
 
-	ids := make([]string, 0, len(touched))
-	for id := range touched {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	if err := index.rebuild(*mine, ids); err != nil {
+	if err := index.rebuild(*mine, rep.Sections); err != nil {
 		return ShardRepair{}, err
 	}
 	if index.Root() != set.Root {

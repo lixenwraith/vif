@@ -992,18 +992,6 @@ the session shares ([Multi-player](multi-player.md#8-remaining-gaps) §8). Decid
 between a hybrid shared/local shape, as the cursor and its shield have, and an
 "every player" ownership value that attribution expands.
 
-### Answer no repair request a later manifest has outgrown
-
-- Priority: P2
-- Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`
-
-A request goes out for every answered manifest with no check for one outstanding,
-so a repair can arrive after a later manifest has proved the guest converged and be
-refused by `takeAwaiting`, built and sent for nothing ([Troubleshooting](troubleshooting.md)
-§18: 57% of the repair bytes). Either the request carries the newest tick the guest
-has proved, so the authority skips an older one, or the guest sends none while
-`awaiting` holds a tick within the cadence.
-
 ### Find why a storm spawn diverges on a guest
 
 - Priority: P1

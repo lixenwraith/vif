@@ -85,9 +85,7 @@ func (c *Corrections) relayedParticipants() []snapshot.RelayedLeaf {
 	for _, id := range behind {
 		leaf := snapshot.RelayedLeaf{ID: id}
 		if p := c.peers[id]; p != nil {
-			if p.converged {
-				leaf.Proved = p.answeredTick
-			}
+			leaf.Proved = p.provedTick
 			out = append(out, p.relayed...)
 		}
 		out = append(out, leaf)
@@ -97,15 +95,13 @@ func (c *Corrections) relayedParticipants() []snapshot.RelayedLeaf {
 
 // provedLocked maps every participant this instance can answer, on a link of its
 // own or through a relay that reported it, to the tick its newest matching answer
-// proved, zero while its newest did not match. Caller MUST hold publishMu.
+// proved, zero before any matched. Caller MUST hold publishMu.
 func (c *Corrections) provedLocked(ids []uint32) map[uint32]uint64 {
 	out := make(map[uint32]uint64, len(ids))
 	for _, id := range ids {
 		var at uint64
 		if p := c.peers[id]; p != nil {
-			if p.converged {
-				at = p.answeredTick
-			}
+			at = p.provedTick
 			for _, leaf := range p.relayed {
 				out[leaf.ID] = max(out[leaf.ID], leaf.Proved)
 			}
@@ -183,7 +179,8 @@ func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 	c.recordSelectiveSizeLocked(len(body))
 	c.publishMu.Unlock()
 	c.log.Debug("converge", "msg", "relayed repair served",
-		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
+		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body),
+		"sections", requestedSections(req))
 	return true
 }
 
