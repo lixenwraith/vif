@@ -1272,7 +1272,7 @@ code does not have yet, described only by a design such as
 - *Search*: The literal text typed in Search mode, matched against the map's glyphs and remembered so `n` and `N` repeat it. [Input §5](input-and-modes.md#5-insert-search-and-command-text-editing) · `internal/mode` `PerformSearch`, `RepeatSearch`
 
 **pause** — three senses. See also **time control**.
-- *Simulation*: Pause freezes simulation ticks through the pausable clock while input, dispatch and the frame continue; in a live session only an authority whose other participants are all its own seats may pause, and an arrival ends it. [Runtime §8](runtime.md#8-pause-semantics) · `internal/engine` `PausableClock`; `internal/system` `MetaSystem`
+- *Simulation*: Pause freezes simulation ticks through the pausable clock while input, dispatch and the frame continue; in a live session only an authority whose other participants are all its own seats may pause, and an arrival ends it. [Runtime §8](runtime.md#8-pause-semantics) · `internal/engine` `PausableClock`, `SessionState.Pausable`; `internal/system` `MetaSystem`
 - *FSM region*: A paused region keeps its state and time but neither updates nor handles events; other regions continue. `:region pause` and the `PauseRegion` action set it. [FSM §5](fsm-and-configuration.md#5-tick-processing) · [FSM: Operator region primitives](fsm-and-configuration.md#operator-region-primitives) · `internal/fsm` `Machine.PauseRegion`
 - *Audio*: A mixer output state that ramps master gain over 250 ms and freezes music in place for resume. [Audio §6](audio.md#6-mixer-buses-mute-and-pause) · `pkg/audio` `Mixer`
 

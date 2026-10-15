@@ -794,10 +794,11 @@ pause gate. It does not freeze the whole process:
 `MetaSystem` is the single owner that keeps pause flag, clock, and pause-change
 events aligned. It refuses a request to enter pause while a transport has a live
 peer: stopping one participant would also stop its barrier production and apply
-loop while every peer continued. Command and overlay modes still open, but do not
-pause a live network session. The exception is an authority whose every linked
-participant is a seat it holds (`SessionState.SeatsOnly`): its seats stand still
-with it, and a late joiner's admission unpauses it.
+loop while every peer continued. Command and overlay modes still open, and ask
+for no pause where the run cannot take one (`SessionState.Pausable`). The
+exception is an authority whose every linked participant is a seat it holds
+(`SessionState.SeatsOnly`): its seats stand still with it, and a late joiner's
+admission unpauses it.
 
 In a driven App, pause remains observable/operator state but never revokes the
 caller's authority: `App.Tick` uses the stepped tick path and still advances.
