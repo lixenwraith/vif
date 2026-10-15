@@ -195,8 +195,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return true
 	}
 
-	// Record intent if recording (exclude macro control intents and playback-originated)
-	if r.macro.IsRecording() && !isMacroControlIntent(intent.Type) && !intent.MacroPlayback {
+	// A recording keeps what playback can replay: not macro control, not playback's
+	// own intents, and nothing that enters or drives a mode playback waits in.
+	if r.macro.IsRecording() && !isMacroControlIntent(intent.Type) && !intent.MacroPlayback &&
+		!r.suspendsPlayback(intent) {
 		r.macro.Record(*intent)
 	}
 
@@ -272,16 +274,12 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	// Macro control
 	case input.IntentMacroRecordStart:
 		return r.handleMacroRecordStart(intent)
-	case input.IntentMacroRecordStop:
-		return r.handleMacroRecordStop()
 	case input.IntentMacroPlay:
 		return r.handleMacroPlay(intent)
 	case input.IntentMacroPlayInfinite:
 		return r.handleMacroPlayInfinite(intent)
 	case input.IntentMacroPlayAll:
 		return r.handleMacroPlayAll()
-	case input.IntentMacroStopOne:
-		return r.handleMacroStopOne(intent)
 	case input.IntentMacroStopAll:
 		return r.handleMacroStopAll()
 
@@ -1204,13 +1202,6 @@ func (r *Router) handleMacroRecordStart(intent *input.Intent) bool {
 	return true
 }
 
-func (r *Router) handleMacroRecordStop() bool {
-	r.macro.StopRecording()
-	r.ctx.MacroRecording.Store(false)
-	r.ctx.MacroRecordingLabel.Store(0)
-	return true
-}
-
 func (r *Router) handleMacroPlay(intent *input.Intent) bool {
 	now := r.ctx.TimeCtl.Now()
 	if r.macro.StartPlayback(intent.Char, intent.Count, now) {
@@ -1232,12 +1223,6 @@ func (r *Router) handleMacroPlayAll() bool {
 	if r.macro.StartAllPlayback(now) > 0 {
 		r.ctx.MacroPlaying.Store(true)
 	}
-	return true
-}
-
-func (r *Router) handleMacroStopOne(intent *input.Intent) bool {
-	r.macro.StopPlayback(intent.Char)
-	r.updateMacroPlayingState()
 	return true
 }
 
@@ -1265,13 +1250,23 @@ func (r *Router) ProcessMacroTick() []*input.Intent {
 
 func isMacroControlIntent(t input.IntentType) bool {
 	switch t {
-	case input.IntentMacroRecordStart, input.IntentMacroRecordStop,
-		input.IntentMacroPlay, input.IntentMacroPlayInfinite,
-		input.IntentMacroStopOne, input.IntentMacroStopAll,
+	case input.IntentMacroRecordStart, input.IntentMacroPlay,
+		input.IntentMacroPlayInfinite, input.IntentMacroStopAll,
 		input.IntentMacroRecordToggle:
 		return true
 	}
 	return false
+}
+
+// suspendsPlayback reports an intent that enters or drives Command or Overlay mode.
+// Playback waits in both, so a recording that held one would stall at it: a macro
+// replays Normal, Insert, Visual and Search mode actions only.
+func (r *Router) suspendsPlayback(intent *input.Intent) bool {
+	if r.ctx.IsCommandMode() || r.ctx.IsOverlayMode() {
+		return true
+	}
+	return intent.Type == input.IntentConfigMenu ||
+		intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand
 }
 
 func isMouseIntent(t input.IntentType) bool {

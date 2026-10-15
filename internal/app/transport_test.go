@@ -9,6 +9,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -399,7 +400,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	// The lobby is not closed here: hostOffer closes it, and the coordinator has to
 	// allocate this run's guest identity from an open one.
 	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = hostParticipantID
+	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: a.assignParticipant, Release: a.releaseParticipant,
 	}, socketWait)

@@ -107,7 +107,7 @@ func runPresented(a *App, src pacedSource, kind, name string,
 	p := &player{
 		a: a, src: src, interval: interval,
 		rec: engine.ScaleNormal, scale: engine.ScaleNormal,
-		live: live, interactive: kind == "bot", signals: signals,
+		driven: true, live: live, interactive: kind == "bot", signals: signals,
 	}
 	return p.run()
 }
@@ -129,8 +129,10 @@ type player struct {
 	rec      engine.TimeScale // rate the stream was produced at
 	scale    engine.TimeScale // viewer rate, relative to the produced one
 
+	driven      bool // a script or a bot rather than a replay
 	interactive bool // live bot control, separate from journal inspection
-	// Playback controls cannot stop one participant's clock in a live session.
+	// A driven run in a session is live: playback controls cannot stop one
+	// participant's clock, so the viewer keeps pan and quit.
 	live    bool
 	signals <-chan os.Signal
 
@@ -264,8 +266,8 @@ func (p *player) advance(elapsed time.Duration) {
 	if p.rw != nil && p.rw.lent {
 		return // a batch holds the presented copy
 	}
-	p.live = p.interactive && p.a.sessionTransport() != nil
-	if p.interactive && p.live {
+	p.live = p.driven && p.a.sessionTransport() != nil
+	if p.live {
 		p.paused, p.scale = false, engine.ScaleNormal
 		if p.a.cfg.TimeScaleSpec == "" {
 			p.interval = parameter.GameUpdateInterval
@@ -606,7 +608,7 @@ func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) 
 // routed through the keymap: these drive the viewer, not the game. Any other key is
 // offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
-	p.live = p.interactive && p.a.sessionTransport() != nil
+	p.live = p.driven && p.a.sessionTransport() != nil
 	if p.cmd != nil {
 		// The viewer's command line or overlay, parsed as the game parses it
 		if intent := p.a.inputMachine.Process(ev); intent != nil {

@@ -35,13 +35,12 @@ Every `World` has two domains:
 zero is invalid in both. A cursor's roster slot lives in `CursorComponent` and is
 not encoded in the domain tag.
 
-A peer and a cursor are separate things. Every admitted peer holds an identity, a
-roster entry and the authority term it follows; a roster slot binds it to a cursor
-and makes it a participant. The coordinator of a dedicated host holds
-`parameter.NoPlayerSlot`: it authors the Shared world and puts nobody on the map,
-so it is a peer and not a participant. It is the only roster entry allowed no
-cursor, and `parameter.MaxPlayers` counts participants (cursors), not roster
-entries.
+A peer and a cursor are separate things. Every admitted peer holds a participant
+identity ([Multi-player](multi-player.md) §1), a roster entry and the authority
+term it follows; a roster slot binds it to a cursor. The coordinator of a dedicated
+host holds `parameter.NoPlayerSlot`: it authors the Shared world and puts nobody on
+the map. It is the only roster entry allowed no cursor, and anything that counts
+participants, `parameter.MaxPlayers` included, counts cursors, not roster entries.
 
 ## 2. Domain rules
 

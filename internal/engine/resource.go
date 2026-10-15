@@ -1102,8 +1102,8 @@ type NetworkResource struct {
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.
 func NewNetworkResource(port NetworkPort) *NetworkResource {
-	r := &NetworkResource{Port: port, ParticipantID: 1, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks}
-	r.Authority.Store(1)
+	r := &NetworkResource{Port: port, ParticipantID: CoordinatorParticipant, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks}
+	r.Authority.Store(CoordinatorParticipant)
 	r.Term.Store(uint64(1))
 	if session, ok := port.(NetworkSessionPort); ok {
 		if id := session.ParticipantID(); id != 0 {

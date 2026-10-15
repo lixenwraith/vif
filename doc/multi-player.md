@@ -772,8 +772,8 @@ no participant may originate one in a live session — the authority included.
 as `:new` is.
 
 The status bar renders the whole of this as **one badge**, chosen by severity, so a
-worse fact hides a lesser one rather than sitting beside it: `Host lost`,
-`Migrating [n]`, `Net: down`, `Net: wait`, or
+worse fact hides a lesser one rather than sitting beside it: `Migrating [n]`,
+`Host lost`, `Net: down`, `Net: wait`, or
 `<players>P:<local hex slot> <round trip>` with at most one qualifier — `slow!`,
 `desync <ticks>`, `loss <pct>%` or `slow` — and a
 background that is green, amber or red by the worst of the round trip and that

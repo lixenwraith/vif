@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/network"
@@ -355,7 +356,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 	host.cfg.Participants = 3
 
 	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = hostParticipantID
+	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.MaxPeers = host.sessionCapacity()
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: host.assignParticipant, Release: host.releaseParticipant,

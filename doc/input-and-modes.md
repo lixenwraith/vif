@@ -196,7 +196,9 @@ entries. These are session interaction structures, not persisted editor files.
 ## 6. Macros
 
 Macros record semantic intents after parsing, so they replay the same actions
-even when they contain multi-key motions or commands.
+even when they contain multi-key motions. Command and Overlay mode stay out of a
+recording, the `:` or Ctrl-G that enters them included: playback waits in both,
+so a macro replays Normal, Insert, Visual and Search actions only.
 
 | Sequence | Behavior |
 |---|---|
@@ -217,7 +219,8 @@ re-recorded, press no captured key, and dispatch with the macro origin, which
 admits no APM.
 
 Macro state resets on the instance that issues `:new` or `:new!`, and when a
-scenario change, join or journal start replaces the run; it is never saved across
+scenario change, join or journal start replaces the run; a reset the scenario
+raises, or one crossed from the host, clears none, and nothing is saved across
 process runs. Other operator preferences have a different reset contract (§9).
 
 ## 7. Mouse and automatic fire

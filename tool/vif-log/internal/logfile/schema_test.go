@@ -52,9 +52,14 @@ func TestDomainInitialsAreDistinct(t *testing.T) {
 	}
 }
 
-func TestSyntheticMsgNamesOnlyTheAnchor(t *testing.T) {
-	if got := SyntheticMsg(SubAnchor); got != SubAnchor {
-		t.Errorf("SyntheticMsg(anchor) = %q, want %q", got, SubAnchor)
+func TestSyntheticMsgNamesTheJournalRecordsWithoutOne(t *testing.T) {
+	for _, sub := range []string{SubAnchor, SubCapture, SubDigest, SubEnd} {
+		if got := SyntheticMsg(sub); got != sub {
+			t.Errorf("SyntheticMsg(%q) = %q, want the sub", sub, got)
+		}
+		if got := syntheticMsgTok([]byte(sub)); string(got) != sub {
+			t.Errorf("syntheticMsgTok(%q) = %q, want the sub", sub, got)
+		}
 	}
 	// A journal record carries ev, and every diagnostic record carries msg, so
 	// nothing else may claim a synthetic discriminator.

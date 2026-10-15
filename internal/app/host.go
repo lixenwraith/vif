@@ -351,21 +351,21 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	// this call holds, which is what makes the attach below happen first.
 	a.sessionMu.Lock()
 	a.midRunPort = port
-	a.sessionRoster = []network.RosterEntry{{ID: hostParticipantID, Slot: 0}}
+	a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: 0}}
 	roster := slices.Clone(a.sessionRoster)
 	a.sessionMu.Unlock()
 
 	// A lobby binds this through the roster it closes on; a session opened mid-run
 	// has no lobby, and an unattributed cursor is one no successor can see leave.
-	a.bindCursorOwnersLocked(roster, hostParticipantID)
+	a.bindCursorOwnersLocked(roster, engine.CoordinatorParticipant)
 
 	// The run that opens a session authors its first term. Everything downstream
 	// reads authorship from here rather than from the identity the handshake
 	// assigns, which is what lets a later handoff move it.
 	a.openAuthorityLocked(network.SessionOffer{
-		Anchor: a.joinAnchorLocked(), Host: hostParticipantID, Assigned: hostParticipantID,
+		Anchor: a.joinAnchorLocked(), Host: engine.CoordinatorParticipant, Assigned: engine.CoordinatorParticipant,
 		Term: network.FirstTerm, Roster: roster, FixedAuthority: a.cfg.FixedAuthority,
-	}, hostParticipantID)
+	}, engine.CoordinatorParticipant)
 
 	// Attaching latches the world as shared (D-14) and installs the departure and
 	// digest hooks; activating closes the pre-session crossing window so this

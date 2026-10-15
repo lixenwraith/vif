@@ -233,8 +233,9 @@ bandit implementation.
 Gateway despawn marks its adaptation entry as draining. After
 `RouteDrainTimeout` (60 s), the system removes the entry, route graph, and
 buffered outcomes, once in-flight actors have had time to finish. The weights,
-pools and consumer heads travel in the D-19 capture
-(`engine.AdaptationState`), so a join or correction pops the same next route.
+pools and consumer heads travel in the D-19 capture (`engine.AdaptationState`),
+with the route each live eye took and the deaths not yet scored, so a join or
+correction pops the same next route and scores the same deaths.
 
 ## 7. Genetic library
 

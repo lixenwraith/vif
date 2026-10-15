@@ -17,69 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Carry adaptation's tracked routes and pending deaths in the capture
-
-- Priority: P0, to review
-- Affected files: `internal/system/adaptation.go`, `internal/snapshot/capture.go`
-
-`AdaptationSystem.SaveShared` carries only `Resources.Adaptation`
-(`adaptation.go:676-682`). `tracking` (each live eye's route) and `pendingDeaths`
-(scored next tick, `:180`) stay local, though
-[D-19](domain-design.md#d-19--every-future-affecting-shared-value-is-restorable)
-asks that every future-affecting Shared value be restorable, and the genetic carrier
-ships its equivalents (`genetic.go:482-493`). A joiner scores nothing when a pre-join
-eye dies, so its EXP3 weights and the Shared RNG draws in `samplePool` drift from the
-authority's until the next correction. Carry both, sorted by entity, in the
-adaptation record (a capture schema bump).
-
-### Decide how the network badge shows a succession walk
-
-- Priority: P0, to review
-- Affected files: `internal/render/renderer/status_bar.go`,
-  `doc/services-and-networking.md`, `doc/telemetry-reference.md`
-
-`networkBadge` returns `Host lost` before it reads `network.migrating`
-(`status_bar.go:518-530`). The rejoin count rises only on a guest that lost its
-authority link (`converge/reach.go:202-225`), which has `host_lost` set
-(`system/network.go:1396`) until a handoff clears both (`converge/authority.go:649`,
-`reach.go:178`), so the `Migrating k` badge that
-[Services and networking](services-and-networking.md) §9 and the
-[Telemetry reference](telemetry-reference.md) describe is never drawn. Options: show
-the count beside `Host lost`; let `Migrating k` outrank `Host lost` until the walk
-gives up (`authority.go:588-589`); or drop the count from the badge and the docs.
-
-### Keep a watched script in a session to pan and quit
-
-- Priority: P0, to review
-- Affected files: `internal/app/play.go`, `doc/runtime.md`, `doc/input-and-modes.md`
-
-`runPresented` marks a driven run in a session live (`play.go:102`), but `advance`
-and `key` recompute `live` as `p.interactive && sessionTransport() != nil` (`:267`,
-`:609`), and only a bot is interactive (`:110`). A watched script in a session
-therefore takes SPACE . , + - and `:` from its first frame and reports `PLAY`
-instead of `LIVE` (reproduced), where [Runtime](runtime.md) §1.1 and
-[Input and modes](input-and-modes.md) §9 allow only pan and quit. Smallest fix:
-carry a driven flag from `runPresented` into the recompute and give a script the
-bot's unpause and 1x reset (`:268-272`); a replay with a transport stays pausable.
-If a script should keep its keys, the docs change instead.
-
-### Decide whether a reset clears every instance's macros
-
-- Priority: P0, to review
-- Affected files: `internal/mode/commands.go`, `internal/mode/router.go`,
-  `internal/system/meta.go`, `doc/input-and-modes.md`, `doc/runtime.md`
-
-Only a command that replaces the run sets `MacroClearFlag` (`commands.go:366`,
-`:391`, `:1021`, `:1044`, `config_form.go:74`, `:108`), and the router clears that
-instance's registers and playback on its next intent (`router.go:159-164`). A
-coordinator's `:new` resets every participant, but each peer's macros keep playing
-into the new game, and a reset the FSM raises (the default scenario's defeat) clears
-none. [Input and modes](input-and-modes.md) §6 and §9 state the issuer-only rule;
-[Runtime](runtime.md) §10 says both reset forms clear macros and names no instance.
-Options: keep the rule and name the issuer in Runtime §10; set the flag in
-`MetaSystem.handleGameReset` (`meta.go:384`), which already resets mode and captured
-keys everywhere; or keep registers across a plain `:new` and stop only playback.
-
 ### Decide what `:new!` sets free mouse, auto-fire and rate to
 
 - Priority: P0, to review
@@ -96,43 +33,6 @@ auto-fire on both weapons (`:285-286`) and the `-speed` rate
 code. Options: keep turning them off and correct the comment; or restore the
 startup values, with an auto-fire default in `internal/parameter` and the `-speed`
 rate kept on the context.
-
-### Decide what the session identity is called
-
-- Priority: P0, to review
-- Affected files: `internal/network`, `internal/engine`, `internal/event`,
-  `internal/journal/read.go`, `internal/app`, `internal/converge`,
-  `internal/system/network.go`, `internal/bot/bot.go`, `doc/multi-player.md`,
-  `doc/domain-design.md`, `doc/logging-and-diagnostics.md`, `doc/term-index.md`
-
-[Domain design](domain-design.md) §1 defines a participant as a peer bound to a
-cursor, but about two dozen identifiers and some 250 uses call the identity every
-peer holds, `1..MaxPlayers+1`, a participant: `network.Config.ParticipantID`,
-`NetworkResource.ParticipantID`, `World.LocalParticipant`, `CoordinatorParticipant`,
-`hostParticipantID`, `participantSlots`. Seven names use the cursor sense, among them
-`SessionOffer.ParticipantCount`, `app.Config.Participants` and `remoteParticipants`.
-The senses clash around a dedicated host's cursorless coordinator: `Validate` refuses
-"more than one cursorless participant" (`network/session.go:169,189`), a `:session`
-line reads "peer 2 … following participant 1" (`app/host.go:455`,
-`converge/authority.go:908`), a successor sends `EventParticipantDeparted` with
-`NoPlayerSlot` (`app/session.go:563-574`), and four log records
-(`converge/authority.go:190`, `:248`, `app/seat.go:208`, `:221`) key the identity
-`participant` where [Logging and diagnostics](logging-and-diagnostics.md) asks for
-`peer`. Renaming the event names, the payload key `participant`
-(`event/payload.go:134,145,158`), the offer's `participants` or the journal
-capture's `participant` bumps `ProtocolVersion` and `JournalSchema`, and older
-journals stop replaying; every other name is local. Options:
-
-- Rename the identity in code and docs, local names only or the format keys too,
-  building on `network.PeerID`, which already holds the same number.
-- Keep participant as the code name for the identity every peer holds, the
-  coordinator included, as [Multi-player](multi-player.md) §1 already defines it,
-  define it there only, say that participant counts mean cursors, and change the
-  four log keys to `peer`.
-
-Either way, `CoordinatorParticipant` (`engine/world.go:484`), renamed or not, becomes
-the one constant for identity 1 and replaces `hostParticipantID` and the literals in
-`NewNetworkResource` (`engine/resource.go:1102-1103`).
 
 ### Refuse a parent cycle at load
 
@@ -172,21 +72,6 @@ from on_enter. Options: honour it (a nested call only marks the exiting region, 
 the outer exit deletes it and skips any enter phase); or forbid it
 (`TerminateRegion` returns an error for an exiting region, and the reference says so).
 
-### Let a macro run an ex command, or leave it out of the recording
-
-- Priority: P0, to review
-- Affected files: `internal/mode/router.go`, `internal/mode/macro.go`,
-  `doc/input-and-modes.md`
-
-A recording keeps every intent (`router.go:199-201`), so `qa:auto off<Enter>q`
-stores the `:`, the characters and the confirm. Played back, `:` opens the command
-line (`:626-631`) and Command mode suspends playback (`:1074-1076`, `:1254-1262`):
-the line waits empty, and after Escape the rest plays in Normal mode and does nothing
-(reproduced), though [Input and modes](input-and-modes.md) §6 says macros replay
-commands. Options: record a confirmed command as one step that playback runs through
-`ExecuteCommand`, settling whether `:q` and `:n` may run from a macro; or keep
-Command-mode intents out of a recording and say so in §6.
-
 ### Delete search text by rune
 
 - Priority: P0, to review
@@ -214,23 +99,6 @@ Ctrl+Space works "from any mode" (`topics.go:125`). Options: bind the three keys
 add the Ctrl-Space branch and update [Input and modes](input-and-modes.md) §4 and
 §6, which say overlay navigation ignores these keys; or keep overlays navigation-only
 and correct the help line.
-
-### Drop or wire the unreachable macro stop-one path
-
-- Priority: P0, to review
-- Affected files: `internal/input/machine.go`, `internal/input/intent.go`,
-  `internal/input/strings_gen.go`, `internal/mode/router.go`,
-  `internal/help/topics.go`, `doc/input-and-modes.md`
-
-Nothing calls `processMacroStopAwait` (`internal/input/machine.go:579-605`; the state
-switch at `:231-252` never reaches it), so `IntentMacroStopOne` (`intent.go:42`) and
-`Router.handleMacroStopOne` (`router.go:1238-1242`) never run. `q` on a playing
-register opens record-await instead (`router.go:184-195`), and recording stops and
-empties it (`:1191-1205`, `macro.go:62-69`), so stopping one register costs its
-contents. Delete the dead path, or give stop-one a sequence that keeps the register.
-`IntentMacroRecordStop` (`intent.go:38`) is never emitted either: `q` while recording
-stops in the router's `IntentMacroRecordToggle` branch (`router.go:184-190`), so
-`handleMacroRecordStop` (`:1207-1212`) is dead the same way.
 
 ### Drop `CommandResult.KeepPaused`
 
@@ -403,23 +271,6 @@ logging build (`internal/vlog/scope.go:130-163`). `Scope`, its constants and the
 parser need only `fmt` and `strings`: move them to an untagged file that both builds
 share, or keep the stub and correct its comment.
 
-### Name the journal's capture, digest and end records in vif-log
-
-- Priority: P0, to review
-- Affected files: `tool/vif-log/internal/logfile/schema.go`,
-  `tool/vif-log/internal/logfile/schema_test.go`, `tool/vif-log/README.md`
-
-`SyntheticMsg` and `syntheticMsgTok`
-(`tool/vif-log/internal/logfile/schema.go:142-159`) name only the `anchor` sub, on
-the comment that it is the only record without msg, type or ev, but the journal
-sink's `capture`, `digest` and `end` records carry none either
-(`internal/event/journal_sink.go:79-102`). vif-log shows them with an empty msg, as
-`tool/vif-log/README.md:25` documents, so a `msg:` filter cannot tell them apart.
-Synthesize theirs from the sub too, and correct the comment, that README line and
-`TestSyntheticMsgNamesOnlyTheAnchor`. `KnownSubs` (`schema.go:170-177`) is
-referenced nowhere and lacks those subs and `net`, `session`, `admit` and
-`converge`; delete it.
-
 ### Delete the dead diagnostics entry points
 
 - Priority: P0, to review
@@ -470,17 +321,6 @@ ranges floats, so the entries match nothing and no float is checked across a res
 A float pass against the post-reset baseline passes today with the `proc.` prefix
 exemption alone (tried in a scratch test), since the glyph pair resets. Add the float
 pass and delete the two entries.
-
-### Cite D-2 in the snapshot carrier test's failure
-
-- Priority: P0, to review
-- Affected files: `internal/manifest/snapshot_declaration_test.go`
-
-`TestSnapshotCarriersAreSharedOrDual` explains itself through D-2 and D-6
-(`internal/manifest/snapshot_declaration_test.go:86-89`), but its failure message
-cites D-1 and D-6 (`:97`). D-1 governs which domain may read what; D-2 is the rule
-that remote Player-domain state does not exist locally, which is why a capture cannot
-carry it. Cite D-2 in the message.
 
 ### Confine a scenario's wall image path to the roots
 
