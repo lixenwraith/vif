@@ -541,7 +541,7 @@ from its own epochs returning committed, keeps the floor while anyone is behind 
 relay, keeps a relaying producer among the committed copy's recipients and has
 producers forward their own. Leaves then answered 95% hash-only with late commits
 at the star's rate, at the cost of a whole world per floor window through every
-link. The delegated relay in [Todo](todo.md#delegate-convergence-to-relays) is the
+link. The tree the session now is ([Multi-player](multi-player.md) §5) is the
 intended shape.
 
 **Since** (`d76ebe4`). A relay's manifest answer names each participant behind it

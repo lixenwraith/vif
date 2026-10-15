@@ -564,18 +564,19 @@ Both the already-scheduled queue and later arrivals apply the same classificatio
 
 ### 4.2 Mesh relay
 
-Relays forward each newly admitted source epoch except along its arrival edge.
-A raw epoch travels only toward the authority: a guest linked to it sends its own
-and those it carries as one `MsgBundle` a tick, and the authority takes a
+The session is a tree rooted at the authority, and every link is up, down or
+beside. A raw epoch travels only up: a participant sends its own and those of the
+participants behind it as one `MsgBundle` a tick on its link to the authority,
+else to the relay it joined through or adopted, and the authority takes a
 participant's raw artifacts on its own link, else on its holder's for a bot, else —
-a person behind a relay — on any.
-When the authority commits a raw guest epoch it is the copy's origin: the hop
-count restarts, and it excludes the producer instead of the arrival edge, because
-the incoming intermediary still needs the committed copy. A producer that carried
-another participant's raw artifact recently is a relay and is not excluded; any
-producer forwards its own committed copy once to its other links. A per-source
-64-epoch window admits out-of-order paths once and suppresses duplicates; the hop
-limit bounds forwarding. Owner-state syncs take the same paths.
+a person behind a relay — on any. When the authority commits one it is the copy's
+origin: the hop count restarts and the copy goes down every link, the producer's
+included, so the producer knows what was committed; each relay passes a copy it
+admitted down to the links behind it. A per-source 64-epoch window admits
+out-of-order paths once, a 512-sequence window takes each crossing once whatever
+epoch carries it, and the hop limit bounds forwarding. Owner-state syncs take the
+same paths; a peer link to the successor carries only succession records and
+departure notices.
 
 Owner-state sync uses a per-slot sequence. Correction chunks carry the authority
 term and capture tick unchanged. A relay serves selective pages only from retained

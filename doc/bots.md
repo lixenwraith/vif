@@ -56,6 +56,9 @@ A bot belongs to the run that started it, its holder.
 - After a hand-off, a holder that inherited authority admits new bots on a
   loopback listener of its own; a guest keeps seating bots through whoever holds
   authority.
+- A person who joins at a guest's `-relay` address plays through the guest the
+  same way but is not its bot: it holds no holder, is dropped on its own, and
+  keeps its slot when the guest leaves.
 - A seated bot belongs to its holder, so it is never elected: succession
   considers only independent participants. A watched or headless bot is one and
   follows `-no-advertise` like any other.
