@@ -668,50 +668,80 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 	}
 }
 
-// SaveShared carries the EXP3 route learning (D-19): the weights, the pre-sampled
-// pool, the consumer head and the fallback rotation decide which route the next
-// spawned eye takes. The resource owns the export, since the rotation is unexported.
-// The per-tick outcome buffer is not carried: it holds this tick's unapplied
-// observations, which the capture's tick boundary has already applied or not.
-func (s *AdaptationSystem) SaveShared() ([]byte, error) {
-	res := s.world.Resources.Adaptation
-	if res == nil {
-		return json.Marshal(engine.AdaptationState{})
-	}
-	return json.Marshal(res.SaveState(s.world.Resources.Time.GameTime))
+// adaptationSnapshot is the capture's adaptation record (D-19): the learned
+// routing, the route each live eye took and the deaths the next tick scores. A
+// joiner without the last two scored nothing when a pre-join eye died, and its
+// weights and Shared RNG draws drifted from the authority's until the next correction.
+type adaptationSnapshot struct {
+	engine.AdaptationState
+	Tracking      []adaptationTrackedState     `json:"tracking,omitempty"`
+	PendingDeaths []event.SpeciesKilledPayload `json:"pending_deaths,omitempty"`
 }
 
-// LoadShared installs exported routing, rebasing drain ages onto this world's
+// adaptationTrackedState is one tracked eye's route, keyed by entity.
+type adaptationTrackedState struct {
+	Entity  core.Entity `json:"entity"`
+	GraphID uint32      `json:"graph_id"`
+	RouteID int         `json:"route_id"`
+	SubType uint8       `json:"sub_type"`
+}
+
+// SaveShared carries the route learning and what scores it next. The resource owns
+// its own export, since the fallback rotation is unexported. The per-tick outcome
+// buffer is not carried: Update fills and applies it within one tick.
+func (s *AdaptationSystem) SaveShared() ([]byte, error) {
+	snap := adaptationSnapshot{PendingDeaths: s.pendingDeaths}
+	if res := s.world.Resources.Adaptation; res != nil {
+		snap.AdaptationState = res.SaveState(s.world.Resources.Time.GameTime)
+	}
+	for _, entity := range slices.Sorted(maps.Keys(s.tracking)) {
+		t := s.tracking[entity]
+		snap.Tracking = append(snap.Tracking, adaptationTrackedState{
+			Entity: entity, GraphID: t.GraphID, RouteID: t.RouteID, SubType: t.SubType})
+	}
+	return json.Marshal(snap)
+}
+
+// LoadShared installs the record whole, rebasing drain ages onto this world's
 // current instant.
 func (s *AdaptationSystem) LoadShared(data []byte) error {
-	var state engine.AdaptationState
-	if err := json.Unmarshal(data, &state); err != nil {
+	var snap adaptationSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("adaptation: %w", err)
 	}
 	res := s.world.Resources.Adaptation
 	if res == nil {
 		return errors.New("adaptation: resource is not initialized")
 	}
-	res.LoadState(state, s.world.Resources.Time.GameTime)
+	tracking := make(map[core.Entity]trackedRoute, len(snap.Tracking))
+	for _, t := range snap.Tracking {
+		if t.Entity == 0 {
+			return errors.New("adaptation: tracked route names entity zero")
+		}
+		if _, exists := tracking[t.Entity]; exists {
+			return fmt.Errorf("adaptation: tracked entity %d appears more than once", t.Entity)
+		}
+		tracking[t.Entity] = trackedRoute{GraphID: t.GraphID, RouteID: t.RouteID, SubType: t.SubType}
+	}
+	s.tracking = tracking
+	s.pendingDeaths = append(s.pendingDeaths[:0], snap.PendingDeaths...)
+	res.LoadState(snap.AdaptationState, s.world.Resources.Time.GameTime)
 	return nil
 }
 
 type adaptationCopy struct {
-	saved         []byte
-	err           error
-	outcomes      map[uint32]map[uint8][]routeOutcome
-	tracking      map[core.Entity]trackedRoute
-	pendingDeaths []event.SpeciesKilledPayload
-	telemetry     int
+	saved     []byte
+	err       error
+	outcomes  map[uint32]map[uint8][]routeOutcome
+	telemetry int
 }
 
 // CopyState is the capture plus what it leaves to a tick boundary: the outcomes not
-// yet applied and the route each tracked entity took, which a copy between two
-// settles still needs.
+// yet applied, which a copy between two settles still needs.
 func (s *AdaptationSystem) CopyState() any {
 	saved, err := s.SaveShared()
 	c := adaptationCopy{saved: saved, err: err, outcomes: make(map[uint32]map[uint8][]routeOutcome, len(s.outcomes)),
-		tracking: maps.Clone(s.tracking), pendingDeaths: slices.Clone(s.pendingDeaths), telemetry: s.telemetryTicks}
+		telemetry: s.telemetryTicks}
 	for g, subs := range s.outcomes {
 		c.outcomes[g] = make(map[uint8][]routeOutcome, len(subs))
 		for sub, o := range subs {
@@ -733,10 +763,6 @@ func (s *AdaptationSystem) RestoreState(v any) error {
 			s.outcomes[g][sub] = slices.Clone(o)
 		}
 	}
-	s.tracking = maps.Clone(c.tracking)
-	if s.tracking == nil {
-		s.tracking = make(map[core.Entity]trackedRoute)
-	}
-	s.pendingDeaths, s.telemetryTicks = append(s.pendingDeaths[:0], c.pendingDeaths...), c.telemetry
+	s.telemetryTicks = c.telemetry
 	return s.LoadShared(c.saved)
 }
