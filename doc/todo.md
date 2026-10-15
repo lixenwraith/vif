@@ -403,23 +403,6 @@ logging build (`internal/vlog/scope.go:130-163`). `Scope`, its constants and the
 parser need only `fmt` and `strings`: move them to an untagged file that both builds
 share, or keep the stub and correct its comment.
 
-### Name the journal's capture, digest and end records in vif-log
-
-- Priority: P0, to review
-- Affected files: `tool/vif-log/internal/logfile/schema.go`,
-  `tool/vif-log/internal/logfile/schema_test.go`, `tool/vif-log/README.md`
-
-`SyntheticMsg` and `syntheticMsgTok`
-(`tool/vif-log/internal/logfile/schema.go:142-159`) name only the `anchor` sub, on
-the comment that it is the only record without msg, type or ev, but the journal
-sink's `capture`, `digest` and `end` records carry none either
-(`internal/event/journal_sink.go:79-102`). vif-log shows them with an empty msg, as
-`tool/vif-log/README.md:25` documents, so a `msg:` filter cannot tell them apart.
-Synthesize theirs from the sub too, and correct the comment, that README line and
-`TestSyntheticMsgNamesOnlyTheAnchor`. `KnownSubs` (`schema.go:170-177`) is
-referenced nowhere and lacks those subs and `net`, `session`, `admit` and
-`converge`; delete it.
-
 ### Delete the dead diagnostics entry points
 
 - Priority: P0, to review

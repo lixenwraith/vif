@@ -115,7 +115,7 @@ func (r *Record) Get(key string) (Field, bool) {
 }
 
 // Msg returns the record's discriminator, falling back to the one its sub
-// implies for records that carry none — the journal anchor.
+// implies for the journal records that carry none.
 func (r *Record) Msg() string {
 	if r.msgIdx < 0 {
 		return SyntheticMsg(r.Sub)
