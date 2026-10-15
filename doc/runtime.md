@@ -902,12 +902,12 @@ being driven or observed and survives plain `:new`. Its explicit contract is:
 Both `:new` and `:new!` clear the issuing instance's recorded and playing macros,
 and on every instance close overlays, return to Normal mode, and clear
 command/search/status text; a reset the scenario raises, as the default
-scenario's defeat does, clears no instance's macros. `:new!` additionally purges
-the initiating instance's operator contract: free mouse and auto-fire become
-off, speed returns to 1x, and the telemetry HUD/pins and breakpoints are cleared.
-A peer receiving the crossed reset retains its own operator state, macros
-included. Logging target, level, scope, snapshot period, and recorder depth are
-process diagnostics and are never part of this purge.
+scenario's defeat does, clears no instance's macros. `:new!` additionally clears
+the initiating instance's telemetry HUD, pins and breakpoints; free mouse,
+auto-fire and the time scale are the player's choices and survive both forms. A
+peer receiving the crossed reset retains its own operator state, macros included.
+Logging target, level, scope, snapshot period, and recorder depth are process
+diagnostics and are never part of this purge.
 
 Other session-observer fields have explicit behavior rather than belonging to
 that purge list: the render frame remains monotonic, reset ends paused state,
