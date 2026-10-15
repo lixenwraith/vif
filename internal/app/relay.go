@@ -14,17 +14,19 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// relayDesk is a guest's half of admitting its bots on its own link: they share its
-// fate, so links of their own would only repeat its traffic at the coordinator. The
-// guest serves a world it proved the authority's; the coordinator still allocates
-// and crosses the arrival, asked on the guest's link one question at a time.
+// relayDesk is a guest's half of admitting participants through its own link: its
+// bots, which share its fate, and people who cannot reach the host, who borrow its
+// uplink. The guest serves a world it proved the authority's; the coordinator still
+// allocates and crosses the arrival, asked on the guest's link one question at a
+// time.
 type relayDesk struct {
 	turn sync.Mutex // held for one whole round trip
 
-	mu     sync.Mutex
-	nonce  uint32
-	answer chan network.RelayAdmit // the round trip in flight, nil when none
-	offers map[network.PeerID]network.SessionOffer
+	mu      sync.Mutex
+	nonce   uint32
+	answer  chan network.RelayAdmit // the round trip in flight, nil when none
+	offers  map[network.PeerID]network.SessionOffer
+	reports map[network.PeerID]network.JoinerReport
 }
 
 // relayLink opens a stream to this run for one of its bots and serves the join
@@ -35,17 +37,45 @@ func (a *App) relayLink(local network.PeerID) (net.Conn, error) {
 		return nil, err
 	}
 	near, far := network.Pipe()
-	accept := network.HostAcceptor(network.Coordinator{
-		Assign:   func() (network.SessionOffer, error) { return a.relayAssign(local) },
-		Release:  a.relayRelease,
-		Report:   func(_ network.PeerID, r network.JoinerReport) error { return relayReport(local, r) },
-		Scenario: a.scenarioBody,
-	}, network.DefaultConfig().ConnectTimeout)
-	if err := port.ServeConn(near, accept, a.releaseRelayedJoiner); err != nil {
+	if err := port.ServeConn(near, a.relayAcceptor(local), a.releaseRelayedJoiner); err != nil {
 		_ = far.Close()
 		return nil, err
 	}
 	return far, nil
+}
+
+// serveRelay opens the address -relay named, once this run is in a session: a
+// person who cannot reach the host joins there and this run carries its traffic.
+func (a *App) serveRelay() {
+	if a.cfg.RelayAddress == "" || a.cfg.JoinAddress == "" {
+		return
+	}
+	port, err := a.socketPort()
+	if err != nil {
+		return
+	}
+	local := network.PeerID(a.localParticipant())
+	bound, err := port.ServeSession(a.cfg.RelayAddress, a.relayAcceptor(local), a.releaseRelayedJoiner)
+	if err != nil {
+		a.log.Warn("session", "msg", "relay address not bound", "address", a.cfg.RelayAddress, "error", err.Error())
+		a.ctx.SetStatusMessage("Relay: "+err.Error(), parameter.StatusAlert)
+		return
+	}
+	a.log.Info("session", "msg", "relaying joins", "address", bound)
+	a.ctx.SetStatusMessage("Relaying joins at "+bound, parameter.StatusNotice)
+}
+
+// relayAcceptor is the join handshake this run serves for its bots and for the
+// people it relays, as a coordinator's with the authority asked for each answer.
+func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID, error) {
+	return network.HostAcceptor(network.Coordinator{
+		Assign:   func() (network.SessionOffer, error) { return a.relayAssign(local) },
+		Release:  a.relayRelease,
+		Admit:    a.admitDial,
+		Report:   func(id network.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
+		Name:     a.cfg.SessionName,
+		Scenario: a.scenarioBody,
+	}, network.DefaultConfig().ConnectTimeout)
 }
 
 // relayAssign asks the authority for an identity this run holds and names this run
@@ -67,10 +97,19 @@ func (a *App) relayAssign(local network.PeerID) (network.SessionOffer, error) {
 	return offer, nil
 }
 
-func relayReport(local network.PeerID, r network.JoinerReport) error {
-	if r.Holder != local || r.Listen != "" {
-		return errors.New("only this run's own bots join through it, and they advertise no listener")
+// relayReport takes what a joiner said of itself: this run's own bot, advertising
+// nothing, or a person, kept for the authority to admit it on.
+func (a *App) relayReport(local, id network.PeerID, r network.JoinerReport) error {
+	if r.Holder != 0 && (r.Holder != local || r.Listen != "") {
+		return errors.New("a bot joins through its own holder, and advertises no listener")
 	}
+	d := &a.relay
+	d.mu.Lock()
+	if d.reports == nil {
+		d.reports = make(map[network.PeerID]network.JoinerReport)
+	}
+	d.reports[id] = r
+	d.mu.Unlock()
 	return nil
 }
 
@@ -78,6 +117,7 @@ func relayReport(local network.PeerID, r network.JoinerReport) error {
 func (a *App) relayRelease(id network.PeerID) {
 	a.relay.mu.Lock()
 	delete(a.relay.offers, id)
+	delete(a.relay.reports, id)
 	a.relay.mu.Unlock()
 	a.tellAuthority(network.RelayJoin{Step: network.RelayAbandon, Leaf: id})
 }
@@ -86,12 +126,13 @@ func (a *App) relayRelease(id network.PeerID) {
 // runs on the handshake's goroutine, as the coordinator's gate does.
 func (a *App) releaseRelayedJoiner(id network.PeerID) {
 	a.relay.mu.Lock()
-	offer := a.relay.offers[id]
+	offer, report := a.relay.offers[id], a.relay.reports[id]
 	delete(a.relay.offers, id)
+	delete(a.relay.reports, id)
 	a.relay.mu.Unlock()
 	port, err := a.socketPort()
 	if err == nil {
-		err = a.sendRelayedGate(port, offer)
+		err = a.sendRelayedGate(port, offer, report)
 	}
 	if err != nil {
 		a.log.Warn("session", "msg", "relayed join failed", "peer", id, "error", err.Error())
@@ -102,11 +143,11 @@ func (a *App) releaseRelayedJoiner(id network.PeerID) {
 	}
 }
 
-// sendRelayedGate sends a bot the world this run has proved the authority's at a
+// sendRelayedGate sends a joiner the world this run has proved the authority's at a
 // playout lead past the admission, resealed because the cursor cells outside the
 // root are this run's own mirror, and has the authority cross its arrival once it
 // has installed it.
-func (a *App) sendRelayedGate(port *network.SocketPort, offer network.SessionOffer) error {
+func (a *App) sendRelayedGate(port *network.SocketPort, offer network.SessionOffer, report network.JoinerReport) error {
 	id := offer.Assigned
 	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
@@ -127,7 +168,7 @@ func (a *App) sendRelayedGate(port *network.SocketPort, offer network.SessionOff
 	if err := a.awaitJoinerReady(port, id); err != nil {
 		return err
 	}
-	if _, err := a.askAuthority(network.RelayJoin{Step: network.RelayReady, Leaf: id}); err != nil {
+	if _, err := a.askAuthority(network.RelayJoin{Step: network.RelayReady, Leaf: id, Report: report}); err != nil {
 		return err
 	}
 	a.log.Info("session", "msg", "relayed participant admitted",
@@ -241,7 +282,7 @@ func (a *App) decideRelayJoinLocked(relay network.PeerID, body []byte) {
 	case req.Step == network.RelayAssign:
 		ans.Offer, err = a.assignFor(a.joinAnchorLocked(), relay)
 	case req.Step == network.RelayReady:
-		err = a.admitRelayedLocked(relay, req.Leaf)
+		err = a.admitRelayedLocked(relay, req.Leaf, req.Report)
 	default:
 		err = fmt.Errorf("relayed join step %d is not one this build takes", req.Step)
 	}
@@ -265,12 +306,17 @@ func (a *App) relayedSlot(relay, leaf network.PeerID) (uint8, bool) {
 	return a.sessionRoster[i].Slot, true
 }
 
-// admitRelayedLocked crosses the arrival of a bot that installed its holder's world.
+// admitRelayedLocked crosses the arrival of a participant that installed its relay's
+// world. Its report settles what the assignment only guessed: a bot keeps the
+// relay as its holder, a person holds nothing and may declare an address.
 // Caller MUST hold updateMutex.
-func (a *App) admitRelayedLocked(relay, leaf network.PeerID) error {
+func (a *App) admitRelayedLocked(relay, leaf network.PeerID, report network.JoinerReport) error {
 	slot, ok := a.relayedSlot(relay, leaf)
 	if !ok {
 		return fmt.Errorf("participant %d is not joining through participant %d", leaf, relay)
+	}
+	if err := a.noteJoinerReport(leaf, report); err != nil {
+		return err
 	}
 	a.crossArrivalLocked(leaf, slot)
 	a.log.Info("session", "msg", "relayed participant admitted", "peer", leaf, "relay", relay, "slot", slot)

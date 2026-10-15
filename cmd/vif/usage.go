@@ -52,6 +52,8 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 				hint: "Address this participant is dialled back on; -join only, default the host's port then an ephemeral one"},
 			{names: []string{"no-advertise"},
 				hint: "Keep this participant's address out of the session; -join only, elected only when no advertised participant survives"},
+			{names: []string{"relay"}, arg: "<addr>",
+				hint: "Admit participants that cannot reach the host here and carry their traffic; -join only"},
 			{names: []string{"size"}, arg: "<WxH>", hint: "Terminal-equivalent size for a run that has no terminal"},
 			{names: []string{"probe"}, arg: "<addr>", hint: "Health and metrics endpoint; -serve only"},
 			{names: []string{"first-join"}, arg: "<dur>", hint: "Exit if no guest connects within this; -serve only, 0 waits forever"},

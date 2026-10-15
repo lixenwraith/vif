@@ -686,3 +686,100 @@ func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
 		}
 	}
 }
+
+// waitListening waits for a run to bind an address it was told to.
+func waitListening(t *testing.T, addr string) {
+	t.Helper()
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if conn, err := net.Dial("tcp", addr); err == nil {
+			_ = conn.Close()
+			return
+		}
+	}
+	t.Fatalf("nothing listens at %s", addr)
+}
+
+// cursorOf is the cursor a participant drives, as another instance holds it.
+func cursorOf(t *testing.T, a *App, participant uint32) core.Entity {
+	t.Helper()
+	roster := (instance{a}).WorldRoster()
+	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return uint32(e.ID) == participant })
+	if i < 0 {
+		t.Fatalf("participant %d is not in the roster %+v", participant, roster)
+	}
+	var e core.Entity
+	a.world.RunSafe(func() { e = a.world.Resources.Player.Slot(roster[i].Slot) })
+	return e
+}
+
+// waitForMotion waits for a cursor to move on an instance that does not drive it.
+func waitForMotion(t *testing.T, a *App, e core.Entity, what string) {
+	t.Helper()
+	first := cursorPosition(a, e)
+	for deadline := time.Now().Add(socketWait); cursorPosition(a, e) == first; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never moved", what)
+		}
+	}
+}
+
+// TestAPersonJoinsThroughARelayingGuest: a participant that cannot reach the host
+// joins at a guest's -relay address as an independent player, and plays through
+// it: its artifacts reach the authority on the guest's link and the authority's
+// reach it back.
+func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), RelayAddress: relayAddr}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	for _, a := range []*App{host, relay, person} {
+		waitForCursors(t, a, 4)
+	}
+	id := person.localParticipant()
+	roster := (instance{host}).WorldRoster()
+	if i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return uint32(e.ID) == id }); i < 0 || roster[i].Holder != 0 {
+		t.Fatalf("the host holds the relayed person as %+v, want an independent participant", roster)
+	}
+	if h, r, p := host.sessionTransport().PeerCount(), relay.sessionTransport().PeerCount(),
+		person.sessionTransport().PeerCount(); h != 2 || r != 2 || p != 1 {
+		t.Fatalf("the host holds %d links, the relay %d and the person %d, want 2, 2 and 1", h, r, p)
+	}
+	waitForMotion(t, host, cursorOf(t, host, id), "the relayed person's cursor on the host")
+	waitForMotion(t, person, cursorOf(t, person, host.localParticipant()), "the host's cursor on the relayed person")
+}
+
+// TestAPersonFindsAnotherPathWhenItsRelayLeaves: left with no link, a relayed
+// participant walks the chain to another guest, which carries its artifacts from
+// then on; the session goes on with its relay gone.
+func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, leave := driveBot(t, Config{JoinAddress: host.HostAddr(), RelayAddress: relayAddr}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	other, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	for _, a := range []*App{host, relay, other, person} {
+		waitForCursors(t, a, 5)
+	}
+	id := person.localParticipant()
+	if p := person.sessionTransport().PeerCount(); p != 1 {
+		t.Fatalf("the person holds %d links before its relay leaves, want its relay alone", p)
+	}
+
+	leave()
+	for _, a := range []*App{host, other, person} {
+		waitForCursors(t, a, 4)
+	}
+	waitForMotion(t, host, cursorOf(t, host, id), "the relayed person's cursor on the host after its relay left")
+	if o, p := other.sessionTransport().PeerCount(), person.sessionTransport().PeerCount(); o != 2 || p != 1 {
+		t.Fatalf("the other guest holds %d links and the person %d, want the person behind the other guest", o, p)
+	}
+}

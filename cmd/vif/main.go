@@ -329,6 +329,7 @@ func buildConfig() app.Config {
 		cfg.JoinAddress, cfg.SessionName = join.Addr, cmp.Or(join.Name, cfg.SessionName)
 	}
 	cfg.HostAddress, cfg.ListenAddress = endpoint(flagSession.host).Addr, endpoint(flagSession.listen).Addr
+	cfg.RelayAddress = endpoint(flagSession.relay).Addr
 
 	if flagSession.serve != "" {
 		cfg.HostAddress = endpoint(flagSession.serve).Addr
@@ -456,6 +457,7 @@ type sessionFlags struct {
 	authority   string
 	listen      string
 	noAdvertise bool
+	relay       string
 
 	// slow is the eviction policy a host applies to a participant that cannot keep
 	// up; see converge.SlowPolicy.
@@ -506,6 +508,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 		authorityMigrate))
 	fs.BoolVar(&f.noAdvertise, "no-advertise", false,
 		"With -join, keep this participant's address out of the session. It plays normally and is elected only when no advertised participant survives")
+	fs.StringVar(&f.relay, "relay", "",
+		"With -join, admit participants that cannot reach the host at this address and carry their traffic on this participant's link")
 	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow,
 		"With -host or -serve, the window a participant's lateness is judged over; 0 never evicts")
 	fs.Float64Var(&f.slow.LatePerSecond, "slow-late", parameter.NetworkSlowLatePerSecond,
@@ -534,9 +538,9 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
 	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bots != "" ||
-		f.authority != "" || f.listen != "" || f.noAdvertise || f.name != "" || f.lifetime().Bounded()) &&
+		f.authority != "" || f.listen != "" || f.noAdvertise || f.relay != "" || f.name != "" || f.lifetime().Bounded()) &&
 		(schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bots, -authority, -listen, -no-advertise, -name and the session lifetime bounds are available only in interactive play")
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bots, -authority, -listen, -no-advertise, -relay, -name and the session lifetime bounds are available only in interactive play")
 	}
 	if _, err := app.BotSpecs(f.bots); err != nil {
 		return err
@@ -550,7 +554,7 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	for _, a := range []struct {
 		flag, target string
 		binds        bool
-	}{{"-join", f.join, false}, {"-host", f.host, true}, {"-serve", f.serve, true}, {"-listen", f.listen, true}} {
+	}{{"-join", f.join, false}, {"-host", f.host, true}, {"-serve", f.serve, true}, {"-listen", f.listen, true}, {"-relay", f.relay, true}} {
 		if a.target == "" {
 			continue
 		}
@@ -559,7 +563,7 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		case err != nil:
 		case a.binds && e.Name != "":
 			err = errors.New("a bound address names no session; a host answers to -name")
-		case a.binds && a.flag == "-listen" && e.Scheme == network.SchemeWebSocket:
+		case a.binds && a.flag != "-host" && a.flag != "-serve" && e.Scheme == network.SchemeWebSocket:
 			err = errors.New("participants link to each other over tcp")
 		case a.binds:
 			err = e.Listenable()
@@ -570,8 +574,8 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 			return fmt.Errorf("%s: %w", a.flag, err)
 		}
 	}
-	if (f.listen != "" || f.noAdvertise) && f.join == "" {
-		return fmt.Errorf("-listen and -no-advertise describe a participant that joined a session; a host already binds one")
+	if (f.listen != "" || f.noAdvertise || f.relay != "") && f.join == "" {
+		return fmt.Errorf("-listen, -no-advertise and -relay describe a participant that joined a session; a host already binds one")
 	}
 	if f.listen != "" && f.noAdvertise {
 		return fmt.Errorf("-listen names an address to publish and -no-advertise refuses to publish one")

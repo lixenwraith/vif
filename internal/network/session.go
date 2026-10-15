@@ -130,11 +130,13 @@ const (
 
 // RelayJoin is a relay's request. Nonce pairs it with its answer; Leaf names the
 // participant once Assign has. The relay checked the participant's identity against
-// the offer, as a coordinator checks a dial's reply.
+// the offer, as a coordinator checks a dial's reply, and RelayReady carries what it
+// reported: its holder, if it is a bot, and the address it declared, if any.
 type RelayJoin struct {
-	Step  RelayStep `json:"step"`
-	Nonce uint32    `json:"nonce"`
-	Leaf  PeerID    `json:"leaf,omitempty"`
+	Step   RelayStep    `json:"step"`
+	Nonce  uint32       `json:"nonce"`
+	Leaf   PeerID       `json:"leaf,omitempty"`
+	Report JoinerReport `json:"report,omitzero"`
 }
 
 // RelayAdmit answers one RelayJoin: the offer Assign allocated, or why not.
