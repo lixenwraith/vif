@@ -64,26 +64,32 @@ type allocatorConfig struct {
 
 // sessionRequest is what a caller may choose about the session it is asking for.
 // Every field is optional and nothing else in the workload is selectable: the
-// image, the map size, the lifetime bounds, the mounts and the environment are
-// the deployment's.
+// image, the lifetime bounds, the mounts and the environment are the deployment's.
+// Size is the host's screen (-size), which a scenario may or may not make its map.
 type sessionRequest struct {
 	Players  int    `json:"players,omitempty"`
 	Bots     int    `json:"bots,omitempty"`
 	LogLevel string `json:"log_level,omitempty"`
 	Scenario string `json:"scenario,omitempty"`
+	Size     string `json:"size,omitempty"`
 }
 
-// fleetLimits is what the deployment will accept, so a caller can offer only the
-// choices this allocator would allow rather than discovering them by refusal.
-// Descriptions holds each offered scenario's own one-line summary, keyed by name;
-// a scenario whose entry states none is absent. It sits beside Scenarios rather
-// than inside it so a caller that reads the names alone is unaffected.
+// fleetLimits is what the deployment will accept and what an omitted choice gets,
+// so a caller can offer only the choices this allocator would allow, and name its
+// defaults, rather than discovering either by refusal. Descriptions and FixedMaps
+// hold what each scenario's entry states, keyed by name; one that states nothing is
+// absent. They sit beside Scenarios so a caller that reads the names alone is
+// unaffected.
 type fleetLimits struct {
-	PlayersMax   int               `json:"players_max"`
-	BotsMax      int               `json:"bots_max"`
-	LogLevels    []string          `json:"log_levels"`
-	Scenarios    []string          `json:"scenarios"`
-	Descriptions map[string]string `json:"scenario_descriptions,omitempty"`
+	PlayersMax      int               `json:"players_max"`
+	PlayersDefault  int               `json:"players_default"`
+	BotsMax         int               `json:"bots_max"`
+	LogLevels       []string          `json:"log_levels"`
+	LogLevelDefault string            `json:"log_level_default"`
+	SizeDefault     string            `json:"size_default"`
+	Scenarios       []string          `json:"scenarios"`
+	Descriptions    map[string]string `json:"scenario_descriptions,omitempty"`
+	FixedMaps       map[string]string `json:"scenario_fixed_maps,omitempty"`
 }
 
 type session struct {
@@ -96,10 +102,13 @@ type session struct {
 	// WebSocketURL is the same session reached from a browser. Absent where the
 	// deployment publishes no browser route, which is what a page keyed on it reads
 	// as "this fleet is for native clients".
-	WebSocketURL string        `json:"ws_url,omitempty"`
-	CreatedAt    string        `json:"created_at,omitempty"`
-	Routable     bool          `json:"routable"`
-	State        sessionHealth `json:"state"`
+	WebSocketURL string `json:"ws_url,omitempty"`
+	// Scenario and Size are what it was created with; State.Map is the map it has.
+	Scenario  string        `json:"scenario,omitempty"`
+	Size      string        `json:"size,omitempty"`
+	CreatedAt string        `json:"created_at,omitempty"`
+	Routable  bool          `json:"routable"`
+	State     sessionHealth `json:"state"`
 }
 
 type reconcileResult struct {
@@ -117,11 +126,10 @@ type allocator struct {
 }
 
 type createdObjects struct {
-	id        string
-	port      int
-	job       job
-	service   service
-	createdAt string
+	id      string
+	port    int
+	job     job
+	service service
 }
 
 func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *allocator {
@@ -130,8 +138,11 @@ func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *alloca
 
 func (a *allocator) limits() fleetLimits {
 	names := a.scenarios()
-	return fleetLimits{PlayersMax: a.cfg.PlayersMax, BotsMax: a.cfg.BotsMax, LogLevels: a.cfg.LogLevels,
-		Scenarios: names, Descriptions: a.describe(names)}
+	descriptions, fixed := a.describe(names)
+	w := a.cfg.Workload
+	return fleetLimits{PlayersMax: a.cfg.PlayersMax, PlayersDefault: w.Players, BotsMax: a.cfg.BotsMax,
+		LogLevels: a.cfg.LogLevels, LogLevelDefault: w.LogLevel, SizeDefault: w.Size,
+		Scenarios: names, Descriptions: descriptions, FixedMaps: fixed}
 }
 
 // scenarios is what the node's volume holds, read per request rather than kept
@@ -159,18 +170,18 @@ func (a *allocator) scenarios() []string {
 	return out
 }
 
-// describeScan bounds what is read of an entry file for its description. The key
-// is top-level, which TOML places ahead of the first table; a preamble longer than
-// this leaves the scenario offered but undescribed.
+// describeScan bounds what is read of an entry file for its description and its
+// [map] fixed. The description is top-level, which TOML places ahead of the first
+// table; either one past this leaves the scenario offered but undescribed.
 const describeScan = 4 << 10
 
-// describe reads each scenario's description from its entry file, per request for
-// the reason the names are. A main the volume does not hold is the game's embedded
-// fallback, so its description is that one's. An unreadable or malformed entry is
-// left undescribed: describing is not this service's check to fail.
-func (a *allocator) describe(names []string) map[string]string {
+// describe reads each scenario's description and [map] fixed from its entry file,
+// per request for the reason the names are. A main the volume does not hold is the
+// game's embedded fallback, so it is described by that one. An unreadable or
+// malformed entry is left undescribed: describing is not this service's check to fail.
+func (a *allocator) describe(names []string) (descriptions, fixed map[string]string) {
 	root := filepath.Join(a.cfg.WadDir, paths.ScenarioDirName)
-	out := make(map[string]string, len(names))
+	descriptions, fixed = make(map[string]string, len(names)), make(map[string]string)
 	for _, name := range names {
 		head, err := readHead(filepath.Join(root, name, paths.ScenarioFile), describeScan)
 		if errors.Is(err, fs.ErrNotExist) && name == paths.MainScenarioName {
@@ -180,13 +191,19 @@ func (a *allocator) describe(names []string) map[string]string {
 			continue
 		}
 		if text := preambleDescription(head); text != "" {
-			out[name] = text
+			descriptions[name] = text
+		}
+		if size := fixedMap(head); size != "" {
+			fixed[name] = size
 		}
 	}
-	if len(out) == 0 {
-		return nil
+	if len(descriptions) == 0 {
+		descriptions = nil
 	}
-	return out
+	if len(fixed) == 0 {
+		fixed = nil
+	}
+	return descriptions, fixed
 }
 
 // readHead returns at most limit bytes of a file, cut back to its last whole line
@@ -230,6 +247,36 @@ func preambleDescription(data []byte) string {
 	return strings.TrimSpace(text)
 }
 
+// fixedMap reads [map] fixed, the size a scenario says its map holds throughout,
+// from the [map] table alone, so a cut read never hands the parser half of another.
+// The game's loader has validated it; anything but "WxH" reads as none.
+func fixedMap(data []byte) string {
+	var table []byte
+	in := false
+	for _, line := range bytes.SplitAfter(data, []byte("\n")) {
+		trimmed := bytes.TrimSpace(line)
+		if len(trimmed) > 0 && trimmed[0] == '[' {
+			if in {
+				break
+			}
+			in = string(trimmed) == "[map]"
+			continue
+		}
+		if in {
+			table = append(table, line...)
+		}
+	}
+	doc, err := toml.NewParser(table).Parse()
+	if err != nil {
+		return ""
+	}
+	size, _ := doc["fixed"].(string)
+	if !sizePattern.MatchString(size) {
+		return ""
+	}
+	return size
+}
+
 // resolve folds a caller's choices into this deployment's workload. An omitted
 // choice keeps the default; one outside what the operator opened is refused rather
 // than clamped, because a session quietly given a different roster than the one it
@@ -265,6 +312,12 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 		}
 		workload.Scenario = req.Scenario
 	}
+	if req.Size != "" {
+		if err := checkSize(req.Size); err != nil {
+			return workloadConfig{}, fmt.Errorf("%w: %w", errRequestRefused, err)
+		}
+		workload.Size = req.Size
+	}
 	return workload, nil
 }
 
@@ -295,7 +348,7 @@ func (a *allocator) createSession(ctx context.Context, req sessionRequest) (sess
 		return session{}, errors.Join(fmt.Errorf("%w: %w", errSessionNotReady, err), cleanupErr)
 	}
 
-	return a.sessionRecord(created.id, created.port, created.createdAt, true, state), nil
+	return a.sessionRecord(created.id, created.port, created.job.Metadata, true, state), nil
 }
 
 func (a *allocator) createTransaction(ctx context.Context, workload workloadConfig) (createdObjects, error) {
@@ -338,7 +391,7 @@ func (a *allocator) createTransaction(ctx context.Context, workload workloadConf
 		return createdObjects{}, errors.Join(fmt.Errorf("Kubernetes returned a Job without a UID"), cleanupErr)
 	}
 
-	created := createdObjects{id: id, job: createdJob, createdAt: createdJob.Metadata.CreationTimestamp}
+	created := createdObjects{id: id, job: createdJob}
 	for _, port := range ports {
 		createdService, createErr := a.kube.createService(
 			ctx,
@@ -508,7 +561,7 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 				}
 				state.Reason = "health unavailable: " + probeErr.Error()
 			}
-			result[i] = a.sessionRecord(item.id, item.port, item.job.Metadata.CreationTimestamp, routable, state)
+			result[i] = a.sessionRecord(item.id, item.port, item.job.Metadata, routable, state)
 		}()
 	}
 	wg.Wait()
@@ -686,7 +739,7 @@ func (a *allocator) cleanup(created createdObjects) error {
 	return joined
 }
 
-func (a *allocator) sessionRecord(id string, port int, createdAt string, routable bool, state sessionHealth) session {
+func (a *allocator) sessionRecord(id string, port int, job objectMeta, routable bool, state sessionHealth) session {
 	link := func(port int) string {
 		return "vif://" + net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(port)) + "/" + id
 	}
@@ -696,7 +749,9 @@ func (a *allocator) sessionRecord(id string, port int, createdAt string, routabl
 		JoinTarget:   link(a.cfg.RoutePort),
 		DirectTarget: link(port),
 		WebSocketURL: a.webSocketURL(id),
-		CreatedAt:    createdAt,
+		Scenario:     job.Annotations[annotationScenario],
+		Size:         job.Annotations[annotationSize],
+		CreatedAt:    job.CreationTimestamp,
 		Routable:     routable,
 		State:        state,
 	}

@@ -40,7 +40,7 @@ atomically without restarting the allocator. See
 
 | Request | Result |
 |---|---|
-| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"bots":K,"log_level":"info","scenario":"td"}` | `201` and one created session. Those four fields are the whole of what a caller may choose; an omitted one takes the deployment default (no bots), an unknown one is a `400`. `429 create_budget` once the caller's address has asked for `-client-creates` sessions in one `-first-join` window. |
+| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"bots":K,"log_level":"info","scenario":"td","size":"160x48"}` | `201` and one created session. Those five fields are the whole of what a caller may choose; an omitted one takes the deployment default (no bots), an unknown one is a `400`. `429 create_budget` once the caller's address has asked for `-client-creates` sessions in one `-first-join` window. |
 | `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
@@ -63,6 +63,8 @@ One session row has this shape:
   "join_target": "vif://play.example.com:7777/3c3a8eec0cbb6f17",
   "direct_target": "vif://play.example.com:31700/3c3a8eec0cbb6f17",
   "ws_url": "wss://play.example.com/vif/ws/3c3a8eec0cbb6f17",
+  "scenario": "td",
+  "size": "first",
   "created_at": "2026-09-11T12:00:00Z",
   "routable": true,
   "state": {
@@ -73,6 +75,7 @@ One session row has this shape:
     "expires_in": "1m27s",
     "guests": 0,
     "bots": 0,
+    "map": "500x250",
     "phase": "waiting",
     "tick": 0
   }
@@ -85,18 +88,23 @@ Job's `activeDeadlineSeconds`. An occupied game runs no countdown, so the Job's
 deadline is what it reports. `guests` counts the session's own bots too, since each
 holds a seat; `bots` is how many of them are bots. A pod that is not ready, or
 whose probe fails, reports `live=false` with its pod phase or `starting`, and
-`routable` is false until its address is a ready endpoint.
+`routable` is false until its address is a ready endpoint. `scenario` and `size` are
+what the session was created with, kept as annotations on its Job; `map` is the map
+it has, from the first tick on.
 
 `limits` names what this deployment will accept — `players_max`, `bots_max`, the
 allowed `log_levels`, most verbose first, and the installed `scenarios`, default
-first — so a caller offers only choices that would be granted rather than
-discovering them by refusal:
+first — and what an omitted choice gets, so a caller offers only choices that would
+be granted, and can name the defaults, rather than discovering either by refusal:
 
 ```json
 {
   "players_max": 4,
+  "players_default": 4,
   "bots_max": 0,
   "log_levels": ["debug", "info", "warn", "error"],
+  "log_level_default": "info",
+  "size_default": "first",
   "scenarios": ["main", "blank", "kraken", "simon", "td"],
   "scenario_descriptions": {
     "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
@@ -104,20 +112,24 @@ discovering them by refusal:
     "kraken": "Practice fighting a Kraken in an open arena with repeating encounters.",
     "simon": "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
-  }
+  },
+  "scenario_fixed_maps": {"td": "500x250"}
 }
 ```
 
-`scenario_descriptions` is each scenario's top-level `description`, read from its
+`scenario_descriptions` is each scenario's top-level `description`, and
+`scenario_fixed_maps` its `[map] fixed`, the size it says its map holds throughout,
+so the screen a request names does not size it. Both are read from its
 `scenario.toml` on every request as the names are; `main` off the volume is the
-game's embedded fallback, described by that. A scenario that states none, or whose
-description is not in the file's first 4 KiB ahead of any table, is absent from the
+game's embedded fallback, described by that. A scenario that states either one
+past the file's first 4 KiB, the description after any table, is absent from that
 object and still offered; with none at all the key is omitted. `-players-max`
 defaults to `-players`, `-bots-max` to `0` and `-log-level-min` to `debug`:
 publishing the API must not hand an anonymous caller a sixteen-player world, the
 fleet's CPU or its shared log rate, so each opens only as far as an operator sets
 it. A value outside them is refused with `400 invalid_request` naming the bound,
-never clamped.
+never clamped. `size` is `first`, or a `WxH` screen whose game area (the screen less
+the game's gutters and status rows) is a map the grid can hold.
 
 `bots` seats that many of the session's own bots, each a roster guest playing the
 embedded `default` graph. A session is ready only while a seat is free, so a request
@@ -196,7 +208,7 @@ their defaults; `vif-allocator -h` lists every flag.
 | `-bots-max` | `0` | the most bots a request may seat (at most 6) |
 | `-log-level`, `-log-level-min` | `info`, `debug` | the default session level and the most verbose a request may select |
 | `-scenario`, `-wad` | `main`, `/var/db/vif/wad` | the default scenario and the volume scanned for the others |
-| `-map-size` | `120x40` | every session's map size, which a scenario that fixes its own ignores |
+| `-size` | `first` | the default session screen, the host's `-size`: `WxH`, or `first` for the first guest's terminal; a scenario may or may not make it its map |
 | `-first-join`, `-empty`, `-drain` | `90s`, `90s`, `20s` | the session's lifetime bounds, passed to its pod |
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |

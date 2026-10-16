@@ -19,7 +19,7 @@ import (
 var (
 	dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	headerPattern   = regexp.MustCompile(`^[A-Za-z0-9][-A-Za-z0-9]*$`)
-	mapSizePattern  = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
+	sizePattern     = regexp.MustCompile(`^([1-9][0-9]{0,4})x([1-9][0-9]{0,4})$`)
 	// A scenario name is one path element the game looks up under scenario/ on the
 	// read-only volume. Anything with a separator in it would be a caller choosing
 	// a path, which is not a choice this allocator offers.
@@ -28,6 +28,29 @@ var (
 
 // defaultWadDir is where deploy/guest/update-vif-wad.sh installs the volume.
 const defaultWadDir = "/var/db/vif/wad"
+
+// sizeFirst asks for no -size, so the host takes its first guest's terminal.
+const sizeFirst = "first"
+
+// checkSize admits sizeFirst, or a WxH screen whose game area (the screen less the
+// game's gutters and status rows, engine.ViewportFits) is a map the grid can hold.
+func checkSize(size string) error {
+	if size == sizeFirst {
+		return nil
+	}
+	m := sizePattern.FindStringSubmatch(size)
+	if m == nil {
+		return fmt.Errorf("size %q is neither %s nor WxH", size, sizeFirst)
+	}
+	w, _ := strconv.Atoi(m[1])
+	h, _ := strconv.Atoi(m[2])
+	w, h = w-parameter.LeftMargin, h-parameter.TopMargin-parameter.BottomMargin
+	if w < 1 || h < 1 || w > parameter.MaxMapWidth || h > parameter.MaxMapHeight || w*h > parameter.MaxMapCells {
+		return fmt.Errorf("size %s leaves a game area no map can be (at most %d cells)",
+			size, parameter.MaxMapCells)
+	}
+	return nil
+}
 
 // sessionLogLevels are the game's -lv names, most verbose first. A request may
 // select from -log-level-min onward, which defaults past trace: the fleet's log rate
@@ -73,7 +96,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&cfg.Allocator.Workload.LogLevel, "log-level", "info", "default session log level")
 	set.StringVar(&logLevelMin, "log-level-min", "debug",
 		"most verbose session log level a request may select")
-	set.StringVar(&cfg.Allocator.Workload.MapSize, "map-size", "120x40", "session map size")
+	set.StringVar(&cfg.Allocator.Workload.Size, "size", sizeFirst,
+		"default session screen WxH, the host's -size, or first: the first guest's terminal")
 	set.StringVar(&cfg.Allocator.Workload.Scenario, "scenario", "main", "default scenario name")
 	set.StringVar(&cfg.Allocator.WadDir, "wad", defaultWadDir,
 		"node resource volume, scanned for the scenarios a request may select")
@@ -185,8 +209,8 @@ func validateConfig(cfg runtimeConfig) error {
 		return fmt.Errorf("-log-level %q is more verbose than -log-level-min allows",
 			cfg.Allocator.Workload.LogLevel)
 	}
-	if !mapSizePattern.MatchString(cfg.Allocator.Workload.MapSize) {
-		return fmt.Errorf("invalid -map-size %q", cfg.Allocator.Workload.MapSize)
+	if err := checkSize(cfg.Allocator.Workload.Size); err != nil {
+		return fmt.Errorf("-size: %w", err)
 	}
 	if !scenarioPattern.MatchString(cfg.Allocator.Workload.Scenario) {
 		return fmt.Errorf("invalid -scenario %q", cfg.Allocator.Workload.Scenario)

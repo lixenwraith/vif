@@ -114,11 +114,12 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 	response := httptest.NewRecorder()
 
 	testServer(&fakeSessionAllocator{
-		bounds: fleetLimits{PlayersMax: 4, LogLevels: []string{"info"},
-			Scenarios: []string{"main"}},
+		bounds: fleetLimits{PlayersMax: 4, PlayersDefault: 4, LogLevels: []string{"info"},
+			LogLevelDefault: "info", SizeDefault: sizeFirst, Scenarios: []string{"main"}},
 	}).ServeHTTP(response, request)
 
-	want := `{"sessions":[],"limits":{"players_max":4,"bots_max":0,"log_levels":["info"],"scenarios":["main"]}}`
+	want := `{"sessions":[],"limits":{"players_max":4,"players_default":4,"bots_max":0,` +
+		`"log_levels":["info"],"log_level_default":"info","size_default":"first","scenarios":["main"]}}`
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -147,7 +148,7 @@ func TestGetSessionsNamesScenarioDescriptionsBesideTheList(t *testing.T) {
 func TestPostSessionCarriesTheChoicesItNames(t *testing.T) {
 	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700}}
 	request := httptest.NewRequest(http.MethodPost, "/vif/api/sessions",
-		strings.NewReader(`{"players":2,"bots":1,"log_level":"debug"}`))
+		strings.NewReader(`{"players":2,"bots":1,"log_level":"debug","size":"160x48"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 
@@ -156,7 +157,7 @@ func TestPostSessionCarriesTheChoicesItNames(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if backend.requested != (sessionRequest{Players: 2, Bots: 1, LogLevel: "debug"}) {
+	if backend.requested != (sessionRequest{Players: 2, Bots: 1, LogLevel: "debug", Size: "160x48"}) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)
 	}
 }

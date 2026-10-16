@@ -487,13 +487,13 @@ with clients. Touch input maps onto the semantic input bots already drive, and
 ### Open fleet sessions to bots
 
 - Priority: P2
-- Affected files: the Hugo site's `vif-fleet.js`, `internal/network/endpoint.go`,
+- Affected files: the Hugo site's `vif-lobby.js`, `internal/network/endpoint.go`,
   `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
   `deploy/k3s/10-quota.yaml`
 - Guide: [Session fleet](kubernetes-fleet.md) §6
 
 The allocator takes `bots`, but `bots_max` stays 0 until these hold:
-- The site's `vif-fleet.js` sends `bots` and reads `bots_max`; the native client
+- The site's `vif-lobby.js` sends `bots` and reads `bots_max`; the native client
   (`network.RequestSession`, the menu's request form) sends `bots`.
 - The quota's 1000m of CPU fills at three sessions of three bots: raise it, or
   accept fewer sessions. A create the quota cannot hold waits 75 s for a pod that
@@ -835,19 +835,6 @@ release" lines in `README.md` and [Packaging](packaging.md) §2.
 - Prerequisite: establish the release-package metadata first
 
 Publish `vif-git` alongside the release-based AUR package.
-
-### Let a request name the map size
-
-- Priority: P2
-- Affected files: `tool/vif-allocator/config.go`, `tool/vif-allocator/allocator.go`,
-  the Hugo site's `vif-fleet.js`
-
-`-map-size` is the deployment's for every session, and the session page cannot
-select it. A scenario that fixes its own dimensions ignores it — `td` emits
-`EventLevelSetup` at 500x250 — so the flag only decides the scenarios that do not,
-and those all run at one size. Offer it the way `scenarios` is offered, bounded by
-`parameter.MaxMapCells` rather than by a list: `limits` names the ceiling, a
-request names a size under it, and a scenario that sets its own still wins.
 
 ### Provision audio to the fleet when a host needs it
 

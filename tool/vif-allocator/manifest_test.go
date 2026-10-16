@@ -11,7 +11,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		Namespace: "vif",
 		Image:     "docker.io/library/vif:revision",
 		Players:   4,
-		MapSize:   "120x40",
+		Size:      "120x40",
 		Scenario:  "main",
 		FirstJoin: "90s",
 		Empty:     "90s",
@@ -43,6 +43,8 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 		`"-first-join","90s"`,
 		`"-empty","90s"`,
 		`"-drain","20s"`,
+		`"-size","120x40"`,
+		`"annotations":{"vif.lixenwraith.dev/scenario":"main","vif.lixenwraith.dev/size":"120x40"}`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Job JSON does not contain %s", want)
@@ -55,6 +57,12 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	}
 	if got := strings.Count(text, `"mountPath":"/var/log/vif-fleet"`); got != 1 {
 		t.Errorf("fleet log volume is mounted %d times, want exactly once", got)
+	}
+	// First passes no -size, which is what hands the map to the first guest.
+	first := cfg
+	first.Size = sizeFirst
+	if encoded, err := json.Marshal(buildJob("abc123", first)); err != nil || strings.Contains(string(encoded), `"-size"`) {
+		t.Errorf("a first-guest Job names a -size (err %v)", err)
 	}
 	// A bot grows the session container by a seat's cost; none leaves it as it was.
 	for bots, want := range map[int][]string{
