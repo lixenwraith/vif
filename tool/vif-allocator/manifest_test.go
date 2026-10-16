@@ -66,10 +66,10 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	}
 	// A bot grows the session container by a seat's cost; none leaves it as it was.
 	for bots, want := range map[int][]string{
-		0: {`{"name":"GOMEMLIMIT","value":"160MiB"}`,
-			`"resources":{"limits":{"cpu":"500m","memory":"192Mi"},"requests":{"cpu":"100m","memory":"96Mi"}}`},
-		3: {`{"name":"GOMEMLIMIT","value":"256MiB"}`,
-			`"resources":{"limits":{"cpu":"500m","memory":"288Mi"},"requests":{"cpu":"292m","memory":"192Mi"}}`},
+		0: {`{"name":"GOMEMLIMIT","value":"448MiB"}`,
+			`"resources":{"limits":{"cpu":"500m","memory":"480Mi"},"requests":{"cpu":"100m","memory":"96Mi"}}`},
+		3: {`{"name":"GOMEMLIMIT","value":"544MiB"}`,
+			`"resources":{"limits":{"cpu":"500m","memory":"576Mi"},"requests":{"cpu":"292m","memory":"192Mi"}}`},
 	} {
 		cfg.Bots = bots
 		encoded, err := json.Marshal(buildJob("abc123", cfg))

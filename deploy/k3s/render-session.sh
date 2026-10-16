@@ -61,8 +61,8 @@ fi
 # The allocator's envelope: each bot adds a seat's cost (tool/vif-allocator/manifest.go).
 CPU_REQUEST=$((100 + 64 * BOTS))m
 MEMORY_REQUEST=$((96 + 32 * BOTS))Mi
-MEMORY_LIMIT=$((192 + 32 * BOTS))Mi
-GOMEMLIMIT=$((160 + 32 * BOTS))MiB
+MEMORY_LIMIT=$((480 + 32 * BOTS))Mi
+GOMEMLIMIT=$((448 + 32 * BOTS))MiB
 
 template=$(dirname "$0")/30-session.yaml
 [ -r "$template" ] || { echo "$0: cannot read $template" >&2; exit 1; }

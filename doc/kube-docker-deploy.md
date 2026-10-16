@@ -112,8 +112,8 @@ sudo sysctl --system
 ```
 
 Clone the repository once and run everything below from its root. Size the node
-for the host, the OS and K3s plus the fleet's 1.9 GiB memory limit (ten sessions at
-192 MiB, fewer when each bot adds 32 MiB, held by
+for the host, the OS and K3s plus the fleet's 4800 MiB memory limit (ten sessions at
+480 MiB, fewer when each bot adds 32 MiB, held by
 [`10-quota.yaml`](../deploy/k3s/10-quota.yaml)) and the 256 MiB log tmpfs.
 
 ## 4. Docker, for builds only

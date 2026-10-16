@@ -782,7 +782,7 @@ fleet)
 		'"-name"' '"-config-dir"' '"-s"' '"td"' '"debug"' \
 		'claimName: vif-fleet-wad' 'subPath: scenario' 'subPath: image' \
 		'name: vif-session-env' \
-		'cpu: 292m$' 'memory: 192Mi$' 'memory: 288Mi$' 'value: "256MiB"'
+		'cpu: 292m$' 'memory: 192Mi$' 'memory: 576Mi$' 'value: "544MiB"'
 	do
 		printf '%s' "$rendered" | grep -q -- "$want" \
 			|| fail "the rendered template is missing $want"

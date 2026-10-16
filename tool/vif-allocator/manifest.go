@@ -7,8 +7,11 @@ import "strconv"
 const (
 	botMemoryMi = 32
 	botCPUMilli = 64
-	// The most bots whose 192Mi-based limit fits the LimitRange's 384Mi container ceiling.
-	sessionBotsMax = (384 - 192) / botMemoryMi
+	// A session's memory limit before bots: td's 500x250 map peaks near 215 MiB
+	// with one guest. GOMEMLIMIT sits 32 MiB under it.
+	sessionMemoryMi = 480
+	// The most bots whose limit fits the LimitRange's 672Mi container ceiling.
+	sessionBotsMax = (672 - sessionMemoryMi) / botMemoryMi
 )
 
 type workloadConfig struct {
@@ -152,7 +155,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							},
 							// After envFrom, so the fleet's own envelope wins.
 							"env": []any{
-								map[string]any{"name": "GOMEMLIMIT", "value": perBot(160, botMemoryMi) + "MiB"},
+								map[string]any{"name": "GOMEMLIMIT", "value": perBot(sessionMemoryMi-32, botMemoryMi) + "MiB"},
 							},
 							"securityContext": containerSecurity,
 							"volumeMounts": append([]any{
@@ -164,7 +167,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							"resources": map[string]any{
 								"requests": map[string]string{
 									"cpu": perBot(100, botCPUMilli) + "m", "memory": perBot(96, botMemoryMi) + "Mi"},
-								"limits": map[string]string{"cpu": "500m", "memory": perBot(192, botMemoryMi) + "Mi"},
+								"limits": map[string]string{"cpu": "500m", "memory": perBot(sessionMemoryMi, botMemoryMi) + "Mi"},
 							},
 							"startupProbe": map[string]any{
 								"httpGet":          map[string]any{"path": "/health", "port": "probe"},
