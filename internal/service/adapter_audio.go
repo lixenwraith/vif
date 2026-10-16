@@ -5,6 +5,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -20,14 +21,16 @@ type AudioService struct {
 	initBackend string
 	initBuffer  time.Duration
 	src         AudioSource
+	sink        io.WriteCloser // the host's speakers; nil finds a backend by name
 }
 
-func NewAudioService(muted bool, forceBackend string, buffer time.Duration, src AudioSource) *AudioService {
+func NewAudioService(muted bool, forceBackend string, buffer time.Duration, src AudioSource, sink io.WriteCloser) *AudioService {
 	return &AudioService{
 		initMuted:   muted,
 		initBackend: forceBackend,
 		initBuffer:  buffer,
 		src:         src,
+		sink:        sink,
 	}
 }
 
@@ -39,6 +42,7 @@ func (s *AudioService) Init() error {
 	config.Enabled = !s.initMuted
 	config.ForceBackend = s.initBackend
 	config.Buffer = s.initBuffer
+	config.Sink = s.sink
 
 	// Inject game-specific parameters, breaking cyclic dependency
 	config.EffectVolumes = parameter.GameEffectVolumes

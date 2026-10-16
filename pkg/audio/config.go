@@ -1,6 +1,9 @@
 package audio
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 // DefaultEffectVolume is the neutral per-sound level shipped by the package.
 // Embedders overlay EffectVolumes / EffectShapes at service wiring; no
@@ -17,6 +20,9 @@ type AudioConfig struct {
 	EffectVolumes map[string]float64
 	EffectShapes  map[string]SFXParams
 	ForceBackend  string
+	// Sink is the host's speakers: a writer that takes the stream in place of any
+	// backend found by name, closed with the engine.
+	Sink io.WriteCloser
 	// BaseSounds and BasePatterns are the banks registered at Start. The package
 	// ships no specs or authored patterns of its own: the embedder owns them, and
 	// SoundTOML and PatternTOML override them by name.

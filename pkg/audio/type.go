@@ -84,6 +84,7 @@ const (
 	BackendOSS
 	BackendNull
 	BackendWAV
+	BackendSink // the host's own writer, AudioConfig.Sink
 )
 
 // BackendConfig describes a CLI audio backend
