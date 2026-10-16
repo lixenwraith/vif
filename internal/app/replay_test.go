@@ -411,11 +411,14 @@ func recordGuestPastItsHost(t *testing.T) (*journal.Capture, map[event.Stamp][]s
 		}
 		if i == hostLeaves/4 {
 			// One guest crossing late at the host by construction, however fast the
-			// link: the host is two leads ahead when it is made, so the host applies it
-			// where it lands and the guest has a correction to install from the record.
-			host.Tick(2 * parameter.NetworkBarrierDelayTicks)
+			// link and whatever lead the guest has adopted by now — a starved link
+			// raises it: the host is that lead and a delay ahead when the crossing is
+			// made, so the host applies it where it lands and the guest has a
+			// correction to install from the record.
+			ahead := int(guest.World().Resources.Network.BarrierDelayTicks) + parameter.NetworkBarrierDelayTicks
+			host.Tick(ahead)
 			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1}, intentMotion(input.MotionRight, 2))
-			guest.Tick(2 * parameter.NetworkBarrierDelayTicks)
+			guest.Tick(ahead)
 		}
 		if i == hostLeaves+150 || i == hostLeaves+200 {
 			guest.Context().PushEventOrigin(event.EventGamePauseRequest,
