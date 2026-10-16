@@ -2,6 +2,7 @@ package system
 
 import (
 	"math"
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -29,6 +30,7 @@ type SnakeSystem struct {
 	lifecycle           lifecycleTelemetry
 	motion              bounceTelemetry
 	sweep               cellSweep
+	resolved            []resolvedSegment // one body's segments, reused each tick
 
 	toggle
 }
@@ -720,7 +722,7 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 			memberRestY := seg.RestY + perpY*float64(snakeLateralOffsets[j])
 
 			// Check if member was knocked away (has kinetic immunity from combat hit)
-			combatComp, hasCombat := s.world.Components.Combat.GetComponent(memberEntity)
+			combatComp, hasCombat := s.world.Components.Combat.GetPtr(memberEntity)
 			isDisplaced := hasCombat && combatComp.RemainingKineticImmunity > 0
 
 			if isDisplaced {
@@ -797,19 +799,20 @@ func (s *SnakeSystem) checkConnectivity(bodyEntity core.Entity, bodyComp *compon
 // deaths for HP<=0 members. Returns per-segment resolved members excluding dead.
 // HeaderComponent.MemberEntries is the single source of truth for member liveness.
 func (s *SnakeSystem) resolveAndProcessCombat(bodyEntity core.Entity, segmentCount int) []resolvedSegment {
+	s.resolved = slices.Grow(s.resolved[:0], segmentCount)[:segmentCount]
+	clear(s.resolved)
+	resolved := s.resolved
 	headerComp, ok := s.world.Components.Header.GetComponent(bodyEntity)
 	if !ok {
-		return make([]resolvedSegment, segmentCount)
+		return resolved
 	}
-
-	resolved := make([]resolvedSegment, segmentCount)
 
 	for _, entry := range headerComp.MemberEntries {
 		if entry.Entity == 0 {
 			continue
 		}
 
-		sm, ok := s.world.Components.SnakeMember.GetComponent(entry.Entity)
+		sm, ok := s.world.Components.SnakeMember.GetPtr(entry.Entity)
 		if !ok {
 			continue
 		}
@@ -818,7 +821,7 @@ func (s *SnakeSystem) resolveAndProcessCombat(bodyEntity core.Entity, segmentCou
 		}
 
 		// Combat death check
-		if combatComp, ok := s.world.Components.Combat.GetComponent(entry.Entity); ok {
+		if combatComp, ok := s.world.Components.Combat.GetPtr(entry.Entity); ok {
 			if combatComp.HitPoints <= 0 {
 				s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 					HeaderEntity: bodyEntity,

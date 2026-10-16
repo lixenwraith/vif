@@ -54,6 +54,14 @@ func (c *FlowFieldCache) Clone() *FlowFieldCache {
 	return &n
 }
 
+// Reset returns the cache to the state NewFlowFieldCache leaves it in, keeping
+// its storage for a group that replaces one removed
+func (c *FlowFieldCache) Reset(width, height int) {
+	c.Resize(width, height)
+	c.grid, c.gridGen = c.grid[:0], 0
+	c.TicksSinceCompute = c.MinTicksBetweenCompute
+}
+
 // Resize adjusts dimensions
 func (c *FlowFieldCache) Resize(width, height int) {
 	c.Field.Resize(width, height)

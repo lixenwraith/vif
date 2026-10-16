@@ -16,7 +16,8 @@ import (
 // Gateways accumulate delta time and emit species spawn requests at configured intervals
 // Anchor liveness validated each tick — gateway despawns if anchor is destroyed
 type GatewaySystem struct {
-	world *engine.World
+	world    *engine.World
+	gateways []core.Entity // the tick's gateways, detached: despawnGateway destroys mid-iteration
 
 	rng *vmath.FastRand
 
@@ -188,14 +189,12 @@ func (s *GatewaySystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	// despawnGateway destroys the current gateway immediately, so preserve the
-	// tick-start entity order while mutating surviving components in place.
 	gateways := s.world.Components.Gateway
-	gatewayEntities := gateways.GetAllEntities()
+	s.gateways = append(s.gateways[:0], gateways.Entities()...)
 
 	activeCount := 0
 
-	for _, gwEntity := range gatewayEntities {
+	for _, gwEntity := range s.gateways {
 		gw, ok := gateways.GetPtr(gwEntity)
 		if !ok {
 			continue

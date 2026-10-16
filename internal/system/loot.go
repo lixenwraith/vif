@@ -62,7 +62,8 @@ type LootSystem struct {
 	// target slice its recompute is fed from
 	ownerRoutes map[core.Entity]*ownerRoute
 	routeGoal   [1]vmath.Point
-	walls       []bool // the WallTest grid a recompute reads
+	walls       []bool        // the WallTest grid a recompute reads
+	loots       []core.Entity // the tick's loot, detached: collectLoot destroys mid-iteration
 
 	// Telemetry
 	statDrops       *atomic.Int64
@@ -176,10 +177,8 @@ func (s *LootSystem) Update() {
 		return
 	}
 
-	// collectLoot destroys the current entity immediately, so iteration needs a
-	// detached entity list even though surviving kinetic components mutate in place.
-	lootEntities := s.world.Components.Loot.GetAllEntities()
-	if len(lootEntities) == 0 {
+	s.loots = append(s.loots[:0], s.world.Components.Loot.Entities()...)
+	if len(s.loots) == 0 {
 		s.statActive.Store(0)
 		s.statUnreachable.Store(0)
 		return
@@ -188,11 +187,11 @@ func (s *LootSystem) Update() {
 	config := s.world.Resources.Config
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
-	s.refreshOwnerRoutes(lootEntities)
+	s.refreshOwnerRoutes(s.loots)
 
 	var activeCount int64
 	var unreachable int64
-	for _, lootEntity := range lootEntities {
+	for _, lootEntity := range s.loots {
 		lootComp, ok := s.world.Components.Loot.GetPtr(lootEntity)
 		if !ok {
 			continue

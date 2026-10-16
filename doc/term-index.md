@@ -207,6 +207,8 @@ code does not have yet, described only by a design such as
 - *Interest*: a peer's reported cursor cell, carried in its link report as a relevance hint for correction scheduling and never as simulation input. [Services and networking §8](services-and-networking.md#8-wire-frame-and-session-messages) · `pkg/linkpace` `Cell`
 - *Maze*: one wall-or-passage cell of `pkg/maze`'s odd-sized grid; `EventMazeSpawnRequest` scales each to `cell_width` × `cell_height` map cells, so the maze spans the map divided by them. [AI and physics §11](ai-physics-and-evolution.md#11-maze-generation) · `internal/event` `MazeSpawnRequestPayload` · `internal/system` `WallSystem`
 
+**cell aspect** (also: CellAspect, 2:1) — Future design: the width-over-height ratio of one cell, a terminal's about 1:2 and today a literal in 29 files (navigation's `CostX`/`CostY`, every `*RadiusY`, ascimage's `charAspect`); the host model makes it one parameter the surface reports, part of simulation identity. [Engine decoupling §8](engine-decoupling.md#8-geometry-flexibility-cell-aspect-and-the-position-store)
+
 **chain** — five senses. See also **succession**.
 - *Succession*: the succession chain, every participant that declared a port, in join order with its address, which survivors dial after a loss. [Multi-player §5.0](multi-player.md#50-who-listens-who-authors-who-can-be-reached) · [Multi-player §5.3](multi-player.md#53-reachability-under--authority-migrate) · `internal/network` `SuccessionChain`
 - *Combat*: an attack chain is a follow-up attack an attack profile derives from a hit, such as the tracer's lightning or the charged pulse's burn; it is derived on every instance and never transported. [Combat §5](combat.md#5-resolution-statuses-and-what-crosses) · `internal/profile` `AttackProfile.Chain`
@@ -789,7 +791,7 @@ code does not have yet, described only by a design such as
 
 **graph** (also: route graph, bot graph, `:graph`) — five senses.
 - *Bots*: a bot graph, one self-contained TOML file in the FSM dialect that drives one bot through intents; tables a bot cannot use are refused at load. [Bots: Writing a graph](bots.md#writing-a-graph) · `internal/bot` `Graph`, `ParseGraph`
-- *Navigation*: a route graph, several distinct near-optimal corridors from a gateway to its target, built by repeated penalised Dijkstra, among which route adaptation chooses; `:graph [group]` draws it. [AI §5](ai-physics-and-evolution.md#5-route-graphs) · `pkg/navigation` `RouteGraph`
+- *Navigation*: a route graph, several distinct near-optimal corridors from a gateway to its target, built by repeated penalised Dijkstra, among which route adaptation chooses; `:graph [group]` draws it. [AI §5](ai-physics-and-evolution.md#5-route-graphs) · `pkg/navigation` `RouteGraph`, `RouteSolver`
 - *FSM*: the validated, immutable state hierarchy and transitions a loaded scenario compiles to, which the machine steps. [FSM §1](fsm-and-configuration.md#1-boundary-and-data-flow) · [FSM §4](fsm-and-configuration.md#4-states-and-hierarchy) · `internal/fsm`
 - *Architecture*: the dependency graph of services, which `core.TopoSort` orders, and of systems (`Requires`, `Optional`), which the same sort checks for missing names and cycles. [Services §2](services-and-networking.md#2-dependency-ordering-and-rollback) · `internal/core` `TopoSort`
 - *Future design*: `machine.Graph`, an immutable per-species state graph built and validated once. [Behavior machines §6.2](machine-design.md#62-graph)
@@ -878,7 +880,8 @@ code does not have yet, described only by a design such as
 
 **homing** (also: HomingProfile, cornering brake) — Steering toward a target at a cruise speed with acceleration, overspeed drag, arrival slowing and a dead-zone snap, tuned per actor by a `HomingProfile` (drains, loot, missiles, each homing species); a cornering brake damps the turn so an actor cannot orbit its target. [AI §9](ai-physics-and-evolution.md#9-physics-primitives) · `pkg/vmath/physics` `HomingProfile`, `ApplyHomingScaled` · `internal/profile` `DrainHoming`
 
-**host** (also: `-host`, `:host`) — eight senses. See also **dedicated host**, **coordinator**.
+**host** (also: `-host`, `:host`) — nine senses. See also **dedicated host**, **coordinator**.
+- *Host model*: Future design: the value of host adapters a platform supplies (presentation surface, audio sink, file and content providers, dialer), so build tags guard constructors and the simulation sees none of it. [Engine decoupling §5](engine-decoupling.md#5-host-model-how-adapters-plug-in)
 - *Multiplayer*: the game host, the participant currently authoring the canonical Shared world, session identity, roster and correction stream: the coordinator until a handoff moves authorship; `SessionRole` reports it as `RoleHost`. [Multi-player §1](multi-player.md#1-vocabulary-and-boundaries) · [Domain design D-11](domain-design.md#d-11--the-host-is-exact-guests-converge) · `internal/network` `SessionRole`, `RoleHost`
 - *Session flag*: `-host <addr>` binds a port and plays from its first tick with a local cursor and terminal, and `:host <addr>` opens the game already running as a session; contrast `-serve`. [Runtime §1.0](runtime.md#10-the-four-session-flags) · [Services §6](services-and-networking.md#6-operator-session-surface) · `internal/app` `App.BeginHosting`
 - *Authority policy*: `-authority host`, the default with `-serve`, keeps authorship on the starting machine, so losing it leaves each survivor a local fork; contrast `migrate`. [Multi-player §5.0](multi-player.md#50-who-listens-who-authors-who-can-be-reached) · [§5.1](multi-player.md#51-succession) · `internal/app` `AuthorityHost`
@@ -1776,7 +1779,8 @@ code does not have yet, described only by a design such as
 
 **succession chain** (also: SuccessionChain, ChainEntry, MsgPeerList) — The append-only, join-ordered list of participants that declared a listening port, with their addresses, which the coordinator publishes on `MsgPeerList`; every participant but a seat keeps a link to the current successor, and a participant that declares none is a leaf, elected only when the chain names no survivor. [Multiplayer §5.3](multi-player.md#53-reachability-under--authority-migrate) · `internal/network` `SuccessionChain` `ChainEntry`
 
-**surface** — three senses. See also **release surface**.
+**surface** — four senses. See also **release surface**.
+- *Rendering*: the three-method sink a finished frame is handed to (color mode, `Flush` of the cell grid, `Sync`): the terminal in a terminal build, and what a graphical or Android host implements to draw the same cells. [Rendering §1](rendering.md#1-frame-pipeline) · `internal/render` `Surface`, `RenderOrchestrator`
 - *Comparison*: the compared (shared) surface is the set of status keys and lines two instances, or a run and its replay, are compared on. See **compared surface**. [Domain model §5](domain-design.md#5-telemetry-and-snapshot-views) · `internal/snapshot/surface.go`
 - *Operator*: the operator session surface is the flags and commands that host, join and report a session (`-host`, `-join`, `-name`, `:host`, `:join`, `:session`). [Services §6](services-and-networking.md#6-operator-session-surface)
 - *Diagnostics*: the logging control surface is the startup flags and runtime `:log` commands that set level, scopes, periods and the recorder. [Logging §12](logging-and-diagnostics.md#12-control-surface)

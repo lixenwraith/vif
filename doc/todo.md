@@ -471,16 +471,46 @@ link. What remains is under [Bots](#bots) and
 - Priority: P1, after bots
 - Affected files: terminal-shaped input/cell/color values, `internal/app`, host
   entry points
-- Prerequisite: define the minimum visual contract
-- Guide: fleet item H4
+- Guide: fleet item H4, [Engine decoupling](engine-decoupling.md) §7 for the
+  decisions taken and the order
 
 Target a minimally polished Android build within one month of development time.
-`vif_headless` already leaves out the renderer and audio packages. Move the
-terminal-shaped key, color, cell and image values still in common packages behind
-positive renderer/host adapters, add a library entry point, and keep lifecycle,
-simulation, networking, resource providers and the simulation fingerprint common
-with clients. Touch input maps onto the semantic input bots already drive, and
-[Multi-platform](multi-platform.md) lists the terminal-shaped values that remain.
+`vif_headless` already leaves out the renderer and audio packages, the frame
+leaves through `render.Surface`, and the terminal module's value types are the
+renderer-neutral vocabulary (D1). In order: `app.Host` carrying presentation,
+audio sink, providers and dialer so build tags guard constructors only, with the
+input source stubbed in its final shape and the cell aspect a parameter; the
+bitmap font atlas as a TOML asset under `internal/asset/font/` generated once
+from a monospace TrueType by a tool, with a software rasterizer as its reference
+drawer; the Android host on `SurfaceView` behind a Java-side drawer interface a
+GLES drawer can replace; then touch mapped onto the semantic input bots already
+drive, and a radial menu summoned by holding a tap in place of the Ctrl-G menu,
+whose gameplay implication is unresolved.
+
+### Make the cell aspect a parameter
+
+- Priority: P2, with the host model
+- Affected files: `pkg/navigation`, `pkg/vmath/ellipse.go`, `pkg/ascimage`,
+  `internal/parameter`, `internal/engine/position.go`, the renderers and systems
+  that scale a Y radius
+
+The code assumes a 2:1 cell in 29 files; a graphical surface draws any cell, and a
+1:1 cell with the splash font is the cheapest pilot. One `CellAspect` the surface
+reports with its grid, read from one definition: navigation builds its direction
+costs from it at construction, Y radii derive from X and the aspect, ascimage
+takes it as an argument. It joins the session fingerprint and the join anchor as
+map bounds do (D-14) ([Engine decoupling](engine-decoupling.md) §8).
+
+### Take the position store out of the engine
+
+- Priority: P3
+- Affected files: `internal/engine/position.go`, `spatial_grid.go`
+
+`engine.Position` answers 2D cell queries over integer cells and couples to the
+world only for the component mask. As a `pkg/` package generic over its value
+type and taking its blocking predicate from the caller, it could add a third axis
+without the engine knowing. A design direction for the host model to stay
+compatible with, not a change on its own.
 
 ## Bots
 
@@ -743,6 +773,47 @@ blocks, about a quarter of the cells, where its directions mostly agree with the
 full field's away from walls; then a second Go instance in another worker computing
 fields at a fixed lead, at the cost of a second runtime and of copying the grid in
 and the field out.
+
+### Prove the wall grid current by an epoch
+
+- Priority: P2
+- Affected files: `internal/engine/position.go`, `internal/system/wall.go`
+
+`wallGrid.current` walks every wall entity to prove the cached grid current: 10 %
+of td's tick CPU flat, 18 % through `WallTest`, with 50,000 walls and two callers a
+tick. The scan exists because `BlockMask` is written in place once
+(`handleMaskChange`). Bump a wall epoch there, on store mutation and on a wall placement, and
+`current` becomes one comparison ([Engine decoupling](engine-decoupling.md) §6).
+
+### Index a store by a per-domain slice
+
+- Priority: P3
+- Affected files: `internal/engine/store.go`, `position.go`
+
+Map lookups in the sparse-set index are 24 % of td's tick CPU. Entity IDs are
+per-domain counters, so a slice per domain indexed by the ID's low bits would make
+the lookup an array read; the idea is noted without analysis, and needs its own
+measurement on `main` as well as `td` ([Engine decoupling](engine-decoupling.md) §6).
+
+### Reuse the maze spawn payload
+
+- Priority: P3
+- Affected files: `internal/system/wall.go`, `internal/event`
+
+A maze spawn builds a 50,000-cell payload and the batch spawn grows four slices:
+145 MB and 118 MB over 22 spawns in the td profile, most of the garbage a level
+costs. Pool the payload's cells as the pooled death and particle payloads are, and
+pre-size the batch from the payload.
+
+### Export a backend constructor in the terminal module
+
+- Priority: P3
+- Affected files: `lixenwraith/terminal`
+
+`terminal.New` takes only a color mode; a constructor taking a `Backend` would let
+a pipe or an in-process emulator stand in for the tty, for tests and tooling.
+Measured at 80x the cell path per frame, it is not the renderer route
+([Engine decoupling](engine-decoupling.md) §4.3); add it when a consumer exists.
 
 ### Serve wss from vif's own listener
 
