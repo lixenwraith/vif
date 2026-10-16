@@ -4,7 +4,6 @@ package manifest
 
 import (
 	"testing"
-	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -119,21 +118,9 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 	}
 }
 
-// nullTerminal is a host that accepts a flush and does nothing with it
+// nullTerminal is a surface that accepts a flush and does nothing with it
 type nullTerminal struct{}
 
-func (nullTerminal) Init() error                             { return nil }
-func (nullTerminal) Fini()                                   {}
-func (nullTerminal) Size() (int, int)                        { return 0, 0 }
-func (nullTerminal) ResizeChan() <-chan terminal.ResizeEvent { return nil }
-func (nullTerminal) ColorMode() terminal.ColorMode           { return terminal.ColorModeTrueColor }
-func (nullTerminal) Flush([]terminal.Cell, int, int)         {}
-func (nullTerminal) Clear(color.RGB)                         {}
-func (nullTerminal) SetCursorVisible(bool)                   {}
-func (nullTerminal) MoveCursor(int, int)                     {}
-func (nullTerminal) Sync()                                   {}
-func (nullTerminal) PollEvent() terminal.Event               { return terminal.Event{} }
-func (nullTerminal) PostEvent(terminal.Event)                {}
-func (nullTerminal) SetMouseMode(terminal.MouseMode) error   { return nil }
-func (nullTerminal) SetPasteMode(bool) error                 { return nil }
-func (nullTerminal) Blocked() time.Duration                  { return 0 }
+func (nullTerminal) ColorMode() terminal.ColorMode   { return terminal.ColorModeTrueColor }
+func (nullTerminal) Flush([]terminal.Cell, int, int) {}
+func (nullTerminal) Sync()                           {}

@@ -513,8 +513,8 @@ func (b *RenderBuffer) untouchedBg() color.RGB {
 	return visual.RgbBackground
 }
 
-// FlushToTerminal writes render buffer to terminal
-func (b *RenderBuffer) FlushToTerminal(term terminal.Terminal) {
+// FlushToTerminal finalizes the frame and hands it to the surface
+func (b *RenderBuffer) FlushToTerminal(s Surface) {
 	b.finalize()
-	term.Flush(b.cells, b.width, b.height)
+	s.Flush(b.cells, b.width, b.height)
 }

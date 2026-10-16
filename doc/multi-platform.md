@@ -366,7 +366,8 @@ not a simulation fork:
 2. change the terminal adapter and generated terminal renderer constraints to
    `!vif_headless && !vif_gui`;
 3. implement the same presentation lifecycle and geometry/input bridge in
-   `presentation_gui.go`;
+   `presentation_gui.go`, drawing through a `render.Surface` (color mode, `Flush`
+   of the cell grid, `Sync`), which is the whole of what the orchestrator needs;
 4. keep graphical assets and renderer construction out of the common manifest
    builder;
 5. leave components, systems, events, scheduler, and manifest fingerprint common.

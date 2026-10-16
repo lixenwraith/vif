@@ -31,6 +31,10 @@ for `TerminalBlockedAfter` (100 ms) the frame loop stops drawing, logs `terminal
 stopped taking output; drawing paused`, and resumes with a matching record when the
 write returns; the tick handshake runs throughout.
 
+The frame leaves through `render.Surface`: color mode, `Flush` of the cell grid and
+`Sync`. The terminal satisfies it, and it is all a graphical or Android host has to
+provide to draw the same cells ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+
 Before the lock the orchestrator derives the frame's playfield rectangle and
 declares the void around it; each simulation layer then draws clipped to the
 playfield and each screen-space layer to the whole buffer. See section 2.1.
@@ -420,7 +424,7 @@ retains only game-specific asset interpretation and layering.
 
 | Concern | Primary source |
 |---|---|
-| Orchestration | `internal/render/orchestrator.go`, `interface.go` |
+| Orchestration and the frame sink (`Surface`) | `internal/render/orchestrator.go`, `interface.go` |
 | Context/transforms | `internal/render/context.go` |
 | Replay presentation and pan | `internal/app/play.go` |
 | Buffer/finalization | `internal/render/buffer.go` |
