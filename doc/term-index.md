@@ -1776,7 +1776,8 @@ code does not have yet, described only by a design such as
 
 **succession chain** (also: SuccessionChain, ChainEntry, MsgPeerList) — The append-only, join-ordered list of participants that declared a listening port, with their addresses, which the coordinator publishes on `MsgPeerList`; every participant but a seat keeps a link to the current successor, and a participant that declares none is a leaf, elected only when the chain names no survivor. [Multiplayer §5.3](multi-player.md#53-reachability-under--authority-migrate) · `internal/network` `SuccessionChain` `ChainEntry`
 
-**surface** — three senses. See also **release surface**.
+**surface** — four senses. See also **release surface**.
+- *Rendering*: the three-method sink a finished frame is handed to (color mode, `Flush` of the cell grid, `Sync`): the terminal in a terminal build, and what a graphical or Android host implements to draw the same cells. [Rendering §1](rendering.md#1-frame-pipeline) · `internal/render` `Surface`, `RenderOrchestrator`
 - *Comparison*: the compared (shared) surface is the set of status keys and lines two instances, or a run and its replay, are compared on. See **compared surface**. [Domain model §5](domain-design.md#5-telemetry-and-snapshot-views) · `internal/snapshot/surface.go`
 - *Operator*: the operator session surface is the flags and commands that host, join and report a session (`-host`, `-join`, `-name`, `:host`, `:join`, `:session`). [Services §6](services-and-networking.md#6-operator-session-surface)
 - *Diagnostics*: the logging control surface is the startup flags and runtime `:log` commands that set level, scopes, periods and the recorder. [Logging §12](logging-and-diagnostics.md#12-control-surface)

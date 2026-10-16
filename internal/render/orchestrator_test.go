@@ -2,7 +2,6 @@ package render
 
 import (
 	"testing"
-	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -17,20 +16,8 @@ type captureTerminal struct {
 	width, height int
 }
 
-func (t *captureTerminal) Init() error                             { return nil }
-func (t *captureTerminal) Fini()                                   {}
-func (t *captureTerminal) Size() (int, int)                        { return t.width, t.height }
-func (t *captureTerminal) ResizeChan() <-chan terminal.ResizeEvent { return nil }
-func (t *captureTerminal) ColorMode() terminal.ColorMode           { return terminal.ColorModeTrueColor }
-func (t *captureTerminal) Clear(color.RGB)                         {}
-func (t *captureTerminal) SetCursorVisible(bool)                   {}
-func (t *captureTerminal) MoveCursor(int, int)                     {}
-func (t *captureTerminal) Sync()                                   {}
-func (t *captureTerminal) PollEvent() terminal.Event               { return terminal.Event{} }
-func (t *captureTerminal) PostEvent(terminal.Event)                {}
-func (t *captureTerminal) SetMouseMode(terminal.MouseMode) error   { return nil }
-func (t *captureTerminal) SetPasteMode(bool) error                 { return nil }
-func (t *captureTerminal) Blocked() time.Duration                  { return 0 }
+func (t *captureTerminal) ColorMode() terminal.ColorMode { return terminal.ColorModeTrueColor }
+func (t *captureTerminal) Sync()                         {}
 
 func (t *captureTerminal) Flush(cells []terminal.Cell, width, height int) {
 	t.cells = append(t.cells[:0], cells...)

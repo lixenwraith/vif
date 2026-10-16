@@ -15,20 +15,29 @@ type rendererEntry struct {
 	timer    *prof.Timer // bound the first frame the profiler runs
 }
 
+// Surface is what a finished frame is handed to: the terminal in a terminal build,
+// and all another host drawing the same cells, a window or an Android view, has to
+// provide. Flush must not wait on the host; a held frame is dropped for a newer one.
+type Surface interface {
+	ColorMode() terminal.ColorMode
+	Flush(cells []terminal.Cell, width, height int)
+	Sync() // the next frame is drawn whole
+}
+
 // RenderOrchestrator coordinates the render pipeline
 type RenderOrchestrator struct {
-	term      terminal.Terminal
+	surface   Surface
 	buffer    *RenderBuffer
 	renderers []rendererEntry
 	regCount  int
 	prof      *prof.Profiler // profiler the timers are bound to
 }
 
-// NewRenderOrchestrator creates an orchestrator with the given terminal and dimensions
-func NewRenderOrchestrator(term terminal.Terminal, width, height int) *RenderOrchestrator {
+// NewRenderOrchestrator creates an orchestrator drawing to surface at the given dimensions
+func NewRenderOrchestrator(surface Surface, width, height int) *RenderOrchestrator {
 	return &RenderOrchestrator{
-		term:      term,
-		buffer:    NewRenderBuffer(term.ColorMode(), width, height),
+		surface:   surface,
+		buffer:    NewRenderBuffer(surface.ColorMode(), width, height),
 		renderers: make([]rendererEntry, 0, 32),
 	}
 }
@@ -64,10 +73,10 @@ func (o *RenderOrchestrator) SetConsole(c *Console) { o.buffer.SetConsole(c) }
 // Size is the terminal the frame buffer is laid out for.
 func (o *RenderOrchestrator) Size() (int, int) { return o.buffer.width, o.buffer.height }
 
-// Resize updates buffer dimensions and syncs terminal
+// Resize updates buffer dimensions and syncs the surface
 func (o *RenderOrchestrator) Resize(width, height int) {
 	o.buffer.Resize(width, height)
-	o.term.Sync()
+	o.surface.Sync()
 }
 
 // RenderFrame executes the render pipeline: clear, render all, flush, show
@@ -113,7 +122,7 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 	render.End()
 	world.Unlock()
 
-	// Terminal I/O outside the world lock: stalled terminal write mustn't block evel loop
+	// Host I/O outside the world lock: a stalled write must not block the event loop
 	defer p.BeginPhase(prof.PhaseFlush).End()
-	o.buffer.FlushToTerminal(o.term)
+	o.buffer.FlushToTerminal(o.surface)
 }
