@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/network"
@@ -115,6 +117,40 @@ func TestAnUnreportedOrUnusableGeometryChangesNothing(t *testing.T) {
 		a.adoptLobbyGeometry()
 		if w, h := mapSize(a); w != beforeW || h != beforeH {
 			t.Fatalf("report %+v moved the map from %dx%d to %dx%d", report, beforeW, beforeH, w, h)
+		}
+	}
+}
+
+// TestAScenarioThatSetsItsOwnMapIsServedOnIt: a dedicated host offers the map its
+// scenario's boot sets up, as td does, rather than -size's, and its first guest does
+// not resize it. Read before the boot settled, the lobby gave every guest the
+// operator's size and the first run played on it.
+func TestAScenarioThatSetsItsOwnMapIsServedOnIt(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	dir := writeScenario(t, root, "fixed", "A map of its own size.")
+	main := "[states]\nMainStart = { parent = \"Root\", on_enter = [{ action = \"EmitEvent\", " +
+		"event = \"EventLevelSetup\", payload = { width = 90, height = 30, crop_on_resize = false } }] }\n"
+	if err := os.WriteFile(filepath.Join(dir, "main.toml"), []byte(main), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, size := range [][2]int{{120, 40}, {0, 0}} {
+		a, err := newSessionApp(Config{
+			Mode: ModeServer, HostAddress: "127.0.0.1:0", Width: size[0], Height: size[1],
+			Resources: resource.Options{Dir: root, Scenario: "fixed"}, Seed: 0x6E02,
+		})
+		if err != nil {
+			t.Fatalf("server: %v", err)
+		}
+		t.Cleanup(a.Close)
+		reportGeometry(t, a, network.JoinerReport{Width: 190, Height: 44})
+		a.adoptLobbyGeometry()
+		if w, h := mapSize(a); w != 90 || h != 30 {
+			t.Fatalf("-size %dx%d: map %dx%d, want the scenario's 90x30", size[0], size[1], w, h)
+		}
+		if an := a.JoinAnchor().Anchor; an.MapWidth != 90 || an.MapHeight != 30 || an.CropOnResize {
+			t.Fatalf("-size %dx%d: guests are offered %dx%d crop=%v, want 90x30 uncropped",
+				size[0], size[1], an.MapWidth, an.MapHeight, an.CropOnResize)
 		}
 	}
 }

@@ -356,15 +356,15 @@ and its slot is `parameter.NoPlayerSlot`.
 
 A server has no terminal to derive geometry from, so `-size` fixes the D-14 map
 latch every joiner adopts; without it the first guest's terminal sizes the map
-before the lobby closes (`adoptLobbyGeometry`, `internal/app/session.go`), unless
-the scenario fixes its own. It logs a session summary periodically rather than
-drawing a status bar, so `-l -lv info` is how the run is watched. A server whose
-roster empties parks: it stops its clock at once, so the world a returning guest
-reclaims is the world it left. An unbounded server starts a fresh run after
-`parameter.SessionVacantReset`; one with `-empty` preserves the same run until that
-grace expires. A returning participant releases the park and receives the world at
-its stopped tick, into the slot its departure released. See [Runtime](runtime.md)
-§1.2.
+before the lobby closes (`adoptLobbyGeometry`, `internal/app/session.go`). A
+scenario that sets up its own map keeps it either way. It logs a session summary
+periodically rather than drawing a status bar, so `-l -lv info` is how the run is
+watched. A server whose roster empties parks: it stops its clock at once, so the
+world a returning guest reclaims is the world it left. An unbounded server starts
+a fresh run after `parameter.SessionVacantReset`; one with `-empty` preserves the
+same run until that grace expires. A returning participant releases the park and
+receives the world at its stopped tick, into the slot its departure released. See
+[Runtime](runtime.md) §1.2.
 
 A server started this way runs until somebody stops it. One that was *allocated* —
 created by a website when a player asked for a game — bounds its own life instead:
