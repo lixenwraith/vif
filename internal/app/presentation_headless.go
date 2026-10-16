@@ -13,6 +13,9 @@ import (
 
 type presentationState struct{}
 
+// Host is empty: a headless build has no screen and no speakers to supply
+type Host struct{}
+
 func validateBuildConfig(cfg Config) error {
 	if cfg.Mode.Presents() {
 		return fmt.Errorf("%s: presentation is unavailable in a vif_headless build", cfg.Mode)

@@ -177,7 +177,7 @@ func (p *player) run() error {
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
-	events := p.a.termSvc.Events()
+	events := p.a.pres.Events()
 	sigChan := p.signals
 	if sigChan == nil {
 		var stopSignals func()
@@ -189,7 +189,7 @@ func (p *player) run() error {
 		results = p.rw.results
 	}
 
-	p.termW, p.termH = p.a.term.Size()
+	p.termW, p.termH = p.a.pres.Size()
 	p.a.ctx.SetPresentationSize(p.termW, p.termH)
 	p.report()
 	last := time.Now()

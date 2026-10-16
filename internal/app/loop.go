@@ -18,8 +18,6 @@ import (
 )
 
 // defaultMouseMode is the reporting mode used outside free-look
-const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
-
 // A scenario change rebuilds the run because its FSM metrics are frozen at startup.
 // In a session the coordinator requests the change for every participant.
 func Run(cfg Config) error {
@@ -207,7 +205,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	inputTicker := time.NewTicker(parameter.InputTickInterval)
 	defer inputTicker.Stop()
 
-	eventChan := a.termSvc.Events()
+	eventChan := a.pres.Events()
 
 	for {
 		// Before the wait, not inside it: a latched restart is serviced on the
@@ -345,7 +343,7 @@ func (a *App) frame() bool {
 // is not drawn for until it returns, and the hold is logged at both ends, since
 // nothing else on screen or in the frame counter shows it.
 func (a *App) terminalTaking() bool {
-	held := a.term.Blocked()
+	held := a.pres.Blocked()
 	switch blocked := held >= parameter.TerminalBlockedAfter; {
 	case blocked && a.termBlocked.IsZero():
 		a.termBlocked = time.Now().Add(-held) // [wall]
@@ -360,17 +358,7 @@ func (a *App) terminalTaking() bool {
 }
 
 // applyMouseMode is the Router's terminal sink for mouse reporting state
-func (a *App) applyMouseMode(enabled, motion bool) {
-	if !enabled {
-		a.term.SetMouseMode(0)
-		return
-	}
-	mode := defaultMouseMode
-	if motion {
-		mode |= terminal.MouseModeMotion
-	}
-	a.term.SetMouseMode(mode)
-}
+func (a *App) applyMouseMode(enabled, motion bool) { a.pres.SetPointerMode(enabled, motion) }
 
 // inputTick advances input-driven work: mouse reporting reconciliation,
 // auto-fire and button repeat, macro playback. Each macro intent settles
