@@ -65,8 +65,29 @@ type RouteGraph struct {
 // penalty far above routeTolerance, so any in-tolerance disjoint path wins next pass
 const routeCellPenalty = CostDiagonal
 
+// RouteSolver computes route graphs on scratch kept from one computation to the
+// next, so a caller rebuilding graphs as a game runs allocates only the graphs
+type RouteSolver struct {
+	sc          routeScratch
+	fieldSearch gridSearch // the search every route's field is computed on
+	penalty     []int32
+	usedDilated []bool
+	allowed     []uint32
+}
+
 // ComputeRouteGraph computes routes using iterative penalized Dijkstra
 func ComputeRouteGraph(
+	sourceX, sourceY, targetX, targetY int,
+	mapW, mapH int,
+	footprintW, footprintH, headerOffX, headerOffY int,
+	isBlocked WallChecker,
+) *RouteGraph {
+	return new(RouteSolver).Compute(sourceX, sourceY, targetX, targetY, mapW, mapH,
+		footprintW, footprintH, headerOffX, headerOffY, isBlocked)
+}
+
+// Compute is ComputeRouteGraph on the solver's scratch
+func (rs *RouteSolver) Compute(
 	sourceX, sourceY, targetX, targetY int,
 	mapW, mapH int,
 	footprintW, footprintH, headerOffX, headerOffY int,
@@ -91,11 +112,12 @@ func ComputeRouteGraph(
 	}
 
 	size := mapW * mapH
-	sc := newRouteScratch(size)
+	sc := &rs.sc
+	sc.grow(size)
 	sc.search.fill(mapW, mapH, isBlocked)
 	tolerance := 0
-	penalty := make([]int32, size)
-	usedDilated := make([]bool, size)
+	rs.penalty, rs.usedDilated = scratch(rs.penalty, size), scratch(rs.usedDilated, size)
+	penalty, usedDilated := rs.penalty, rs.usedDilated
 	var acceptedPaths [][]int
 	optDist := -1
 
@@ -150,7 +172,7 @@ func ComputeRouteGraph(
 	}
 
 	computeRouteWeights(rg)
-	computePathFields(rg, acceptedPaths, mapW, mapH, isBlocked, sc)
+	rs.computePathFields(rg, acceptedPaths, mapW, mapH, isBlocked)
 	return rg
 }
 
@@ -184,9 +206,11 @@ func decimateWaypoints(path []int, mapW int) []Waypoint {
 
 // computePathFields computes per-route flow fields constrained to each route's
 // dilated corridor; every accepted route receives a valid Field
-func computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked WallChecker, sc *routeScratch) {
+func (rs *RouteSolver) computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked WallChecker) {
+	sc := &rs.sc
 	targets := []vmath.Point{{X: rg.TargetX, Y: rg.TargetY}}
-	allowed := make([]uint32, mapW*mapH)
+	rs.allowed = scratch(rs.allowed, mapW*mapH)
+	allowed := rs.allowed
 	var gen uint32
 
 	for ri, path := range paths {
@@ -201,7 +225,7 @@ func computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked 
 		}
 
 		field := NewFlowField(mapW, mapH)
-		field.Compute(targets, routeBlocked)
+		field.computeWith(&rs.fieldSearch, targets, routeBlocked)
 		rg.Routes[ri].Field = field
 	}
 }
@@ -254,8 +278,8 @@ func routeTolerance(optDist int) int {
 	return (optDist * RouteTolerancePct) / 100
 }
 
-// routeScratch holds reusable buffers for one ComputeRouteGraph invocation, over
-// one passability its search reads for every route
+// routeScratch holds the buffers of a route graph computation, over one
+// passability its search reads for every route
 type routeScratch struct {
 	search         gridSearch
 	dist           []int32
@@ -265,14 +289,19 @@ type routeScratch struct {
 	gen            uint32
 }
 
-func newRouteScratch(size int) *routeScratch {
-	return &routeScratch{
-		dist:   make([]int32, size),
-		prev:   make([]int32, size),
-		stamp:  make([]uint32, size),
-		frontA: make([]int, 0, 1024),
-		frontB: make([]int, 0, 1024),
+// grow sizes the scratch to a field of size cells, keeping its storage
+func (sc *routeScratch) grow(size int) {
+	sc.dist, sc.prev, sc.stamp = scratch(sc.dist, size), scratch(sc.prev, size), scratch(sc.stamp, size)
+}
+
+// scratch is s at n zeroed elements, reallocated only past its capacity
+func scratch[T any](s []T, n int) []T {
+	if cap(s) < n {
+		return make([]T, n)
 	}
+	s = s[:n]
+	clear(s)
+	return s
 }
 
 // dilate performs BFS dilation over passable cells to radius; fn invoked once per unique cell
