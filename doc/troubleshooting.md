@@ -650,6 +650,8 @@ estimator was still decaying inside it, a staircase of one tick per window. The
 deliberate bot drop reached the player as an eight-second "disconnected" alert and
 the session's only warning. All four landed: a receiver refuses what a later proof
 has outgrown and a proof stands for half the floor; the lead is the worst reading
-of one sliding window; a dropped seat closes at Info. Neither storm diverged, and
+of one sliding window, and reads the age the authority committed each epoch at
+rather than a probed round trip, since every raise here followed a stall on the
+way down; a dropped seat closes at Info. Neither storm diverged, and
 the seats' recurring one-page repairs were a section of exactly eight rows, which
 the repair logs now name.

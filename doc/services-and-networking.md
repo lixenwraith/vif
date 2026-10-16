@@ -628,10 +628,11 @@ included, for that one apply tick; there is no producer copy published sooner. T
 artifacts that decide what the world *is* — roster, run, shared species, the
 progression a region gates its spawns on, the defeat that rebuilds the level — are
 `barrierBound` and also close the capture fence at production. Each participant's
-lead follows its own link to the authority: the worst recent round trip plus a
-tick of margin and a relay tick, held between `NetworkBarrierMinDelayTicks` and
-`NetworkBarrierMaxDelayTicks`, with the default `NetworkBarrierDelayTicks` (three
-50 ms ticks) until it is paced; the authority's own is one tick. A change is a
+lead follows its own path to the authority: the worst recent age at which the
+authority committed its epochs, stamped on the committed copies, plus a relay
+tick, held between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`,
+with the default `NetworkBarrierDelayTicks` (three 50 ms ticks) until a copy comes
+back; the authority's own is one tick. A change is a
 journaled `EventPlayoutLead`. The authority commits: it applies a guest's raw
 crossing at its stamped tick when on time, at its own next tick when late, and as
 void past `NetworkCommitLateTicks`, and every other instance applies another's

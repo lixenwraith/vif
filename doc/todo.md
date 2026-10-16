@@ -907,9 +907,8 @@ and a relayed person whose relay leaves walks the chain to another participant
 (multi-player.md §5). What is left is finding that address: a relay's address is
 handed out of band like the host's, nothing publishes which participants relay,
 and a NAT between a person and every relay is not crossed. A browser relays only
-its own bots. Optional: advertise a leaf's lead along its path instead of sampling
-it from returned commits, a protocol bump. Verify a relayed topology under
-`LinkShape`s, asserting hash-only convergence and the authority's per-link fan-out.
+its own bots. Verify a relayed topology under `LinkShape`s, asserting hash-only
+convergence and the authority's per-link fan-out.
 
 ### Decide the authority's fan-out and publication cadence
 
