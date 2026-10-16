@@ -471,16 +471,18 @@ link. What remains is under [Bots](#bots) and
 - Priority: P1, after bots
 - Affected files: terminal-shaped input/cell/color values, `internal/app`, host
   entry points
-- Prerequisite: define the minimum visual contract
-- Guide: fleet item H4
+- Prerequisite: decisions D1 to D8 of [Engine decoupling](engine-decoupling.md) §7
+- Guide: fleet item H4, [Engine decoupling](engine-decoupling.md)
 
 Target a minimally polished Android build within one month of development time.
-`vif_headless` already leaves out the renderer and audio packages. Move the
-terminal-shaped key, color, cell and image values still in common packages behind
-positive renderer/host adapters, add a library entry point, and keep lifecycle,
-simulation, networking, resource providers and the simulation fingerprint common
-with clients. Touch input maps onto the semantic input bots already drive, and
-[Multi-platform](multi-platform.md) lists the terminal-shaped values that remain.
+`vif_headless` already leaves out the renderer and audio packages, and the frame
+leaves through `render.Surface`, the three methods a graphical host implements.
+What remains, in the order the guide's plan takes it: the four terminal-shaped
+values still in simulation packages (`WallComponent.Attrs`, the pattern
+pipeline's palette flags, `ConfigResource.ColorMode`, the death system's attribute
+test), `app.Host` carrying presentation, audio sink, providers and dialer so build
+tags guard constructors only, a library entry point, and touch mapped onto the
+semantic input bots already drive.
 
 ## Bots
 
@@ -743,6 +745,27 @@ blocks, about a quarter of the cells, where its directions mostly agree with the
 full field's away from walls; then a second Go instance in another worker computing
 fields at a fixed lead, at the cost of a second runtime and of copying the grid in
 and the field out.
+
+### Prove the wall grid current by an epoch
+
+- Priority: P2
+- Affected files: `internal/engine/position.go`, `internal/system/wall.go`
+
+`wallGrid.current` walks every wall entity to prove the cached grid current: 10 %
+of td's tick CPU flat, 18 % through `WallTest`, with 50,000 walls and two callers a
+tick. The scan exists because `BlockMask` is written in place once
+(`handleMaskChange`). Bump a wall epoch there, on store mutation and on a wall placement, and
+`current` becomes one comparison ([Engine decoupling](engine-decoupling.md) §6).
+
+### Reuse the maze spawn payload
+
+- Priority: P3
+- Affected files: `internal/system/wall.go`, `internal/event`
+
+A maze spawn builds a 50,000-cell payload and the batch spawn grows four slices:
+145 MB and 118 MB over 22 spawns in the td profile, most of the garbage a level
+costs. Pool the payload's cells as the pooled death and particle payloads are, and
+pre-size the batch from the payload.
 
 ### Serve wss from vif's own listener
 

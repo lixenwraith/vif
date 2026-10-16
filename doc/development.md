@@ -497,6 +497,12 @@ selective: many gameplay systems and renderers, content parsing, the generator a
 the other `tool/*` commands have no focused test file. Programs under `sandbox/`
 are experiments, not tests.
 
+`BenchmarkHeadlessTicks` in `internal/app` ticks a driven App on the embedded
+scenario and on `td`; run it with `-benchtime=1500x -benchmem` so every run
+simulates the same ticks of one seed and the allocation counts compare exactly, and
+compare `SnapshotSimulation` before and after a change that must not move the
+simulation.
+
 The soak profiles are tiered, because the widest one costs too much for an edit
 cycle; no workflow sets `VIF_SOAK`, so it runs only when asked for.
 `soakScale(short, normal, full)` in `internal/app` selects a repetition or step
