@@ -184,6 +184,7 @@ type App struct {
 	// never takes it.
 	seatsMu     sync.Mutex
 	seats       []*seat
+	dropped     []uint32 // seats told to leave, until their links close
 	seatSerial  uint64
 	seatAddress string // extra loopback join listener after succession; world lock
 	relay       relayDesk
@@ -394,6 +395,7 @@ func (a *App) initWorld() {
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
+		a.ctx.StartScale = s
 		a.ctx.TimeCtl.SetScale(s)
 	}
 	// The host can wait in the lobby much longer than a joiner. Freeze both clocks

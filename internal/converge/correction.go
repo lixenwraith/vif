@@ -160,13 +160,14 @@ type peerPublisher struct {
 	refused int64
 
 	// The manifest exchange's per-peer standing: the last index sent, the last
-	// answered, and how many have gone unanswered — which decides whether the peer
-	// can still be repaired selectively or is owed a whole body. converged records an
-	// answer that needed no state, the hash-only correction from the publishing side.
+	// answered, the newest answer that needed no state — the hash-only correction
+	// from the publishing side, which stands as the peer's proof until the floor —
+	// and how many have gone unanswered, which decides whether the peer can still be
+	// repaired selectively or is owed a whole body.
 	manifestTick uint64
 	answeredTick uint64
+	provedTick   uint64
 	silence      int
-	converged    bool
 
 	// relayed names the participants this peer forwards the index to and holds
 	// retention for, with their proofs. The authority cannot see past its own links;
@@ -856,7 +857,7 @@ func (c *Corrections) followRunLocked() event.Stamp {
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = snapshot.SharedCapture{}, nil, false, 0
 	c.keyCorrection, c.nextBroadcast = nil, 0
 	for _, p := range c.peers {
-		p.nextTick, p.manifestTick, p.answeredTick, p.converged = 0, 0, 0, false
+		p.nextTick, p.manifestTick, p.answeredTick, p.provedTick = 0, 0, 0, 0
 		p.flight, p.owed = owedSend{}, nil
 	}
 	c.selective.retained = nil
@@ -1145,16 +1146,16 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 // this instance's own tick, which is itself a prediction; and one this instance has
 // not yet reached, which is held rather than dropped.
 func (c *Corrections) install(cap snapshot.SharedCapture) error {
-	if c.superseded(cap) || c.hold(cap) {
+	if c.superseded(cap.Header.Tick) || c.hold(cap) {
 		return nil
 	}
 	return c.commit(cap)
 }
 
 // superseded reports, and counts, a correction no newer than the last installed.
-func (c *Corrections) superseded(cap snapshot.SharedCapture) bool {
+func (c *Corrections) superseded(tick uint64) bool {
 	c.installedMu.Lock()
-	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
+	stale := c.lastInstalled > 0 && tick <= c.lastInstalled
 	c.installedMu.Unlock()
 	if stale {
 		c.tel.Superseded.Add(1)
@@ -1236,7 +1237,7 @@ func (c *Corrections) releaseHeld() {
 	c.installedMu.Unlock()
 	// A newer one may have jumped the clock past it since; installing this one then
 	// rewinds the world, losing every crossing applied after its tick.
-	if c.superseded(cap) {
+	if c.superseded(cap.Header.Tick) {
 		return
 	}
 	if err := c.commit(cap); err != nil {
@@ -1282,6 +1283,14 @@ func (c *Corrections) proved(tick uint64) {
 	c.installedMu.Lock()
 	c.keyTick = max(c.keyTick, tick)
 	c.installedMu.Unlock()
+}
+
+// provedTick is the newest tick this instance has proved it holds the authority's
+// world at: by a whole world, a repair or a matching root.
+func (c *Corrections) provedTick() uint64 {
+	c.installedMu.Lock()
+	defer c.installedMu.Unlock()
+	return c.keyTick
 }
 
 // provedWait is one join waiting for a proved world at or past tick.

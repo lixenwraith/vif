@@ -48,6 +48,10 @@ type Metrics struct {
 	MinRTT time.Duration
 	Jitter time.Duration
 
+	// LastRTT is the newest raw round trip, for a consumer that keeps its own
+	// window over the readings rather than the mean and its jitter.
+	LastRTT time.Duration
+
 	// Throughput is the observed delivery rate in bytes per second.
 	Throughput float64
 
@@ -233,6 +237,7 @@ func (l *Link) Metrics() Metrics {
 		RTT:        l.rtt,
 		MinRTT:     l.minRTT,
 		Jitter:     l.jitter,
+		LastRTT:    l.lastRTT,
 		Throughput: l.throughput,
 		Saturated:  l.saturated,
 		Loss:       l.loss,

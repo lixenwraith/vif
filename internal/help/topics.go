@@ -158,7 +158,7 @@ var topics = []topicDef{
 			{Keys: ":g  :config", Desc: "Configuration: bots, multiplayer, audio, controls, display, solo speed and diagnostics; startup settings explain files and flags"},
 			{Keys: ":about", Desc: "Version, engine and licence"},
 			{Keys: ":new  :n", Desc: "New game; in a live session the host resets everyone and a guest is refused"},
-			{Keys: ":new! :n!", Desc: "Restart and clear this operator's telemetry HUD, pins and breakpoints; free mouse, auto-fire, rate and logging are untouched"},
+			{Keys: ":new! :n!", Desc: "Restart, clear this operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and the rate to their startup values; logging is untouched"},
 			{Keys: ":n <scenario>", Desc: "Rebuild the run on another scenario, by installed name or path; everything operator-owned restarts with it"},
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},

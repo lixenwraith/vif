@@ -627,8 +627,8 @@ included, for that one apply tick; there is no producer copy published sooner. T
 artifacts that decide what the world *is* — roster, run, shared species, the
 progression a region gates its spawns on, the defeat that rebuilds the level — are
 `barrierBound` and also close the capture fence at production. Each participant's
-lead follows its own link to the authority: the round trip plus a jitter margin and
-a relay tick, held between `NetworkBarrierMinDelayTicks` and
+lead follows its own link to the authority: the worst recent round trip plus a
+tick of margin and a relay tick, held between `NetworkBarrierMinDelayTicks` and
 `NetworkBarrierMaxDelayTicks`, with the default `NetworkBarrierDelayTicks` (three
 50 ms ticks) until it is paced; the authority's own is one tick. A change is a
 journaled `EventPlayoutLead`. The authority commits: it applies a guest's raw

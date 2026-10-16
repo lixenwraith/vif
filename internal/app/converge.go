@@ -184,11 +184,13 @@ func (a *App) receiveAuthorityFrame(kind uint8, from uint32, body []byte) {
 	}
 }
 
-// reportPeerLost hands a departure to the succession. Caller holds the world lock.
-func (a *App) reportPeerLost(id uint32) {
+// reportPeerLost hands a departure to the succession and says whether this run
+// asked for it by dropping the seat. Caller holds the world lock.
+func (a *App) reportPeerLost(id uint32) bool {
 	if a.corrections != nil {
 		a.corrections.QueuePeerLost(id)
 	}
+	return a.seatHalted(id)
 }
 
 // ApplyPendingCorrections installs whatever authority has arrived, between two

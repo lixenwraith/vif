@@ -168,7 +168,8 @@ because it is already held by the application and is non-reentrant.
 Reset also has an explicit ownership split. Simulation entities/resources/FSM
 state are rebuilt. Operator-owned free-mouse/auto-fire preferences, time scale,
 telemetry HUD/pins and standing breakpoints survive plain `:new`; `:new!` clears
-the HUD, pins and breakpoints and keeps the preferences and time scale. Replay comparison drops that session record plus the exact observer-only
+the HUD, pins and breakpoints and returns the preferences and time scale to their
+startup values. Replay comparison drops that session record plus the exact observer-only
 keys in `internal/snapshot/surface.go` rather than treating whole metric groups as
 noise.
 

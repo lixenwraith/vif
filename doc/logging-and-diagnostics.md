@@ -237,7 +237,7 @@ greps for rather than enumerating every refusal.
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `peer link opened` / `peer link lost` | INFO / WARN | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss | `Reach.dial`, `NetworkSystem.reportDisconnect` |
+| `peer link opened` / `peer link lost` / `seat link closed` | INFO / WARN / INFO | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss; a seat this run dropped closes rather than is lost, with no alert | `Reach.dial`, `NetworkSystem.reportDisconnect` |
 | `peer listener bound` / `no listening port; this participant is a leaf` | INFO / WARN | `bound`, `declared` / `address`, `error` | `Reach.AdoptListener`, `BindAdvertised` |
 | `playout lead adopted` | INFO | `ticks`, `tick` | a change of this instance's own lead, at the tick its journaled event dispatched |
 | `transport loss` | WARN | `inbound_dropped`, `outbound_refused` | `NetworkSystem`, when either count moves |

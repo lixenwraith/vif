@@ -59,6 +59,19 @@ type seat struct {
 
 func (s *seat) halt() { s.once.Do(func() { close(s.stop) }) }
 
+// seatHalted reports whether participant id is a seat this run told to leave, so
+// its link closing is the drop that was asked for. A seat forgets itself before
+// its link closes, so the drop is remembered by identity until then.
+func (a *App) seatHalted(id uint32) bool {
+	a.seatsMu.Lock()
+	defer a.seatsMu.Unlock()
+	i := slices.Index(a.dropped, id)
+	if i >= 0 {
+		a.dropped = slices.Delete(a.dropped, i, i+1)
+	}
+	return i >= 0
+}
+
 // seatBots seats cfg.Bots in the session this run is in, or in one it hosts on
 // loopback for them.
 func (a *App) seatBots() error {
@@ -297,6 +310,9 @@ func (a *App) stopSeat(match func(*seat) bool) bool {
 	defer a.seatsMu.Unlock()
 	for _, s := range a.seats {
 		if match(s) {
+			if id := s.id.Load(); id != 0 {
+				a.dropped = append(a.dropped, id)
+			}
 			s.halt()
 			return true
 		}

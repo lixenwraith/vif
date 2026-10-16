@@ -190,12 +190,10 @@ type NetworkSystem struct {
 	paceKnown   bool
 	paceSettled uint64
 
-	// pathSamples holds the newest round trips, in ticks, of this instance's own
-	// epochs returned committed, pathCount how many are live and pathEpoch the newest
-	// sampled; see observeOwnCommit.
-	pathSamples [parameter.NetworkPaceWindow]int64
-	pathCount   int
-	pathEpoch   uint64
+	// pathTicks is the round trip, in ticks, of the newest of this instance's own
+	// epochs returned committed, and pathEpoch which one; see noteOwnCommit.
+	pathTicks int64
+	pathEpoch uint64
 
 	// downAt is, per link, the tick a raw artifact last arrived on it or the
 	// participant on it joined through this instance: the links behind this one.
@@ -209,11 +207,11 @@ type NetworkSystem struct {
 	// it, its own and those it carries; Flush sends them as one frame.
 	upstream network.Bundle
 
-	// leadLowSince, leadLowMax and leadPushed are driveOwnLead's hysteresis: when a
-	// lower target first held, the highest it has read since, and the change
-	// already pushed and not yet dispatched.
-	leadLowSince  uint64
-	leadLowMax    uint64
+	// leadWindow holds the own lead's reading at each of the last
+	// NetworkBarrierRenegotiateTicks ticks, leadCount how many have been read, and
+	// leadPushed the change already pushed and not yet dispatched.
+	leadWindow    [parameter.NetworkBarrierRenegotiateTicks]uint64
+	leadCount     uint64
 	leadPushed    uint64
 	statPaceLate  *atomic.Int64
 	statPaceTrim  *atomic.Int64
@@ -476,9 +474,9 @@ func (s *NetworkSystem) Init() {
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
 	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled = 0, 0, false, 0
-	s.pathCount, s.pathEpoch = 0, 0
+	s.pathTicks, s.pathEpoch = 0, 0
 	s.downAt = [participantSlots]uint64{}
-	s.leadLowSince, s.leadLowMax, s.leadPushed = 0, 0, 0
+	s.leadCount, s.leadPushed = 0, 0
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
@@ -1470,9 +1468,14 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	}
 	// Every departure reaches the session layer, not only the authority's: a
 	// survivor's own reach is what the succession rule counts, and it changes
-	// whenever any link does.
+	// whenever any link does. A seat this run dropped leaves as it was told to.
+	dropped := false
 	if r := s.world.Resources.Network; r != nil && r.OnPeerLost != nil {
-		r.OnPeerLost(peerID)
+		dropped = r.OnPeerLost(peerID)
+	}
+	if dropped {
+		s.world.Log().Info("net", "msg", "seat link closed", "peer", peerID, "remaining_peers", remaining)
+		return
 	}
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Alert: true})
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
@@ -2350,7 +2353,8 @@ func paceDecision(latest, earliest int64) (trimPermille int32, stepTicks int64) 
 
 // driveOwnLead re-derives the lead this instance stamps its crossings with and
 // pushes a change as a journaled local event, so a reproduction switches on the
-// same tick. Raising is immediate; lowering waits a window of the lower reading.
+// same tick. The lead is the worst reading of the window: raising is immediate,
+// lowering waits until every higher reading has aged out.
 func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 	r := s.world.Resources.Network
 	if r == nil || p == nil || !p.IsRunning() || p.PeerCount() == 0 {
@@ -2360,8 +2364,10 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 	if !ok {
 		return
 	}
-	next, lowSince, lowMax := chooseLead(r.BarrierDelayTicks, target, s.localTick(), s.leadLowSince, s.leadLowMax)
-	s.leadLowSince, s.leadLowMax = lowSince, lowMax
+	if s.leadCount == 0 {
+		s.leadOf(r.BarrierDelayTicks) // the lead in force is the window's first reading
+	}
+	next := s.leadOf(target)
 	if next == r.BarrierDelayTicks || next == s.leadPushed {
 		return
 	}
@@ -2370,10 +2376,11 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		&event.PlayoutLeadPayload{Ticks: next}, event.OriginSession, core.DomainPlayer)
 }
 
-// ownLead is the round trip to the authority plus its jitter margin, a tick for
-// the authority to relay it, less how late the authority's epochs already land
-// here. Behind a relay no link measures that trip, so it is the slowest recent
-// return of this instance's own committed epochs. The authority waits one tick.
+// ownLead is this tick's reading of the lead: the round trip to the authority, a
+// tick of margin on a reading one probe wide, a tick for the authority to relay
+// it, less how late the authority's epochs already land here. Behind a relay no
+// link measures that trip, so it is the return of this instance's own newest
+// committed epoch. The authority waits one tick.
 func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	authority := s.authorityParticipant()
 	if s.participantID() == authority {
@@ -2387,11 +2394,10 @@ func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
 	switch m := link.LinkMetric(authority); {
 	case !s.paceKnown:
 		return parameter.NetworkBarrierDelayTicks, true
-	case m.Ready && m.RTT > 0:
-		d := m.RTT + parameter.NetworkBarrierJitterMargin*m.Jitter
-		trip = int64((d + parameter.GameUpdateInterval - 1) / parameter.GameUpdateInterval)
-	case s.pathCount > 0:
-		trip = slices.Max(s.pathSamples[:min(s.pathCount, len(s.pathSamples))])
+	case m.Ready && m.LastRTT > 0:
+		trip = int64((m.LastRTT+parameter.GameUpdateInterval-1)/parameter.GameUpdateInterval) + 1
+	case s.pathEpoch > 0:
+		trip = s.pathTicks
 	default:
 		return parameter.NetworkBarrierDelayTicks, true
 	}
@@ -2407,27 +2413,19 @@ func (s *NetworkSystem) noteOwnCommit(produced uint64) bool {
 	fresh := s.ownCommitted.admit(produced, parameter.NetworkSequenceWindow)
 	s.mu.Unlock()
 	if produced > s.pathEpoch {
-		s.pathEpoch = produced
-		s.pathSamples[s.pathCount%len(s.pathSamples)] = int64(s.localTick()) - int64(produced)
-		s.pathCount++
+		s.pathEpoch, s.pathTicks = produced, int64(s.localTick())-int64(produced)
 	}
 	return fresh
 }
 
-// chooseLead raises at once and lowers only after the target has read lower for
-// NetworkBarrierRenegotiateTicks, to the highest of those readings: a crossing
-// that misses its lead costs a correction, one that clears it costs nothing, and
-// a momentary trough would only be climbed back a tick at a time.
-func chooseLead(current, target, tick, lowSince, lowMax uint64) (next, nextLowSince, nextLowMax uint64) {
-	switch {
-	case target >= current:
-		return target, 0, 0
-	case lowSince == 0 || tick < lowSince:
-		return current, tick, target
-	case tick-lowSince >= parameter.NetworkBarrierRenegotiateTicks:
-		return max(target, lowMax), 0, 0
-	}
-	return current, lowSince, max(lowMax, target)
+// leadOf records this tick's reading and returns the worst of the window: a
+// crossing that misses its lead costs a correction and one that clears it costs
+// nothing, so a reading holds for NetworkBarrierRenegotiateTicks and the lead
+// falls only as the higher readings age out, never a tick at a time.
+func (s *NetworkSystem) leadOf(target uint64) uint64 {
+	s.leadWindow[s.leadCount%uint64(len(s.leadWindow))] = target
+	s.leadCount++
+	return slices.Max(s.leadWindow[:min(s.leadCount, uint64(len(s.leadWindow)))])
 }
 
 // forwardDown passes one admitted committed epoch down unchanged but for the hop
@@ -2899,13 +2897,13 @@ type networkState struct {
 	digestHistory                              [parameter.NetworkEpochWindow]stateDigest
 	pendingDigest                              [participantSlots]stateDigest
 	suffix                                     []localCrossing
-	paceSamples, pathSamples                   [parameter.NetworkPaceWindow]int64
-	paceCount, pathCount                       int
-	paceLatest                                 int64
+	paceSamples                                [parameter.NetworkPaceWindow]int64
+	paceCount                                  int
+	paceLatest, pathTicks                      int64
 	paceKnown                                  bool
-	paceSettled                                uint64
-	pathEpoch, leadLowSince, leadLowMax        uint64
-	leadPushed                                 uint64
+	paceSettled, pathEpoch                     uint64
+	leadWindow                                 [parameter.NetworkBarrierRenegotiateTicks]uint64
+	leadCount, leadPushed                      uint64
 	lastLostIn, lastLostOut                    uint64
 }
 
@@ -2924,9 +2922,9 @@ func (s *NetworkSystem) CopyState() any {
 		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
 		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed,
 		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
-		paceSamples: s.paceSamples, pathSamples: s.pathSamples, paceCount: s.paceCount, pathCount: s.pathCount,
+		paceSamples: s.paceSamples, paceCount: s.paceCount, pathTicks: s.pathTicks,
 		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
-		leadLowSince: s.leadLowSince, leadLowMax: s.leadLowMax, leadPushed: s.leadPushed,
+		leadWindow: s.leadWindow, leadCount: s.leadCount, leadPushed: s.leadPushed,
 		lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
 	}
 	return c
@@ -2951,9 +2949,9 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
 	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
 	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
-	s.paceSamples, s.pathSamples, s.paceCount, s.pathCount = c.paceSamples, c.pathSamples, c.paceCount, c.pathCount
+	s.paceSamples, s.paceCount, s.pathTicks = c.paceSamples, c.paceCount, c.pathTicks
 	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch
-	s.leadLowSince, s.leadLowMax, s.leadPushed = c.leadLowSince, c.leadLowMax, c.leadPushed
+	s.leadWindow, s.leadCount, s.leadPushed = c.leadWindow, c.leadCount, c.leadPushed
 	s.lastLostIn, s.lastLostOut = c.lastLostIn, c.lastLostOut
 	return nil
 }

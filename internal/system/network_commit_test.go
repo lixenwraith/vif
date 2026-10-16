@@ -47,7 +47,7 @@ func (p *linkedPort) Peers() []uint32                              { return p.pe
 func (p *linkedPort) SetLinkReport(network.LinkReport)             {}
 func (p *linkedPort) ObserveTransfer(uint32, int64, time.Duration) {}
 func (p *linkedPort) LinkMetric(uint32) linkpace.Metrics {
-	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, Ready: p.rtt > 0}
+	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, LastRTT: p.rtt, Ready: p.rtt > 0}
 }
 
 // sessionSystem is participant local in a session participant 1 authors, at tick.
@@ -252,32 +252,33 @@ func TestAGuestStepsOnceForOneLateness(t *testing.T) {
 	}
 }
 
-// TestALeadFallsToTheHighestReadingOfItsWindow: a lower target is adopted only
-// once it has held for the window, and then at the highest value it read in it,
-// since a trough the link cannot hold is climbed back a tick at a time.
-func TestALeadFallsToTheHighestReadingOfItsWindow(t *testing.T) {
+// TestALeadFallsAsItsHigherReadingsAgeOut: a higher reading is adopted at once and
+// holds for the window; the lead then falls to the highest reading still in it
+// rather than a tick at a time, since the window slides instead of restarting.
+func TestALeadFallsAsItsHigherReadingsAgeOut(t *testing.T) {
 	t.Parallel()
-	window := uint64(parameter.NetworkBarrierRenegotiateTicks)
-	var lowSince, lowMax uint64
-	next := uint64(12)
-	for _, r := range []struct{ tick, target, want uint64 }{
-		{90, 13, 13}, // a higher target is adopted at once
-		{100, 6, 13}, // the window opens
-		{110, 9, 13}, // a higher lower reading is remembered
-		{100 + window - 1, 7, 13},
-		{100 + window, 5, 9}, // the window closes on its highest reading
-	} {
-		next, lowSince, lowMax = chooseLead(next, r.target, r.tick, lowSince, lowMax)
-		if next != r.want {
-			t.Fatalf("tick %d target %d: lead %d, want %d", r.tick, r.target, next, r.want)
+	s := boundsSystem(t)
+	window := parameter.NetworkBarrierRenegotiateTicks
+	read := func(n int, target, want uint64) {
+		t.Helper()
+		for range n {
+			if got := s.leadOf(target); got != want {
+				t.Fatalf("reading %d after %d readings: lead %d, want %d", target, s.leadCount, got, want)
+			}
 		}
 	}
+	read(1, 13, 13)        // adopted at once
+	read(10, 9, 13)        // a lower reading waits
+	read(window-11, 6, 13) // the 13 is the oldest reading still in the window
+	read(10, 6, 9)         // it aged out; the 9s are the highest left
+	read(1, 6, 6)          // and then they are
 }
 
-// TestAGuestStampsWithItsOwnRoundTrip: the lead is this guest's round trip to the
-// authority plus the relay tick, less how late the authority's epochs land; the
-// authority's own is a tick, and an unmeasured link keeps the default. Behind a
-// relay the trip is how long this guest's own epochs took to come back committed.
+// TestAGuestStampsWithItsOwnRoundTrip: a reading is the newest round trip to the
+// authority plus a tick of margin and the relay tick, less how late the
+// authority's epochs land; the authority's own is a tick, and an unmeasured link
+// keeps the default. Behind a relay the trip is how long this guest's own newest
+// epoch took to come back committed, with no margin on a reading already in ticks.
 func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
 	t.Parallel()
 	port := &linkedPort{peers: []uint32{1}}
@@ -287,7 +288,7 @@ func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
 	}
 	port.rtt = 150 * time.Millisecond
 	guest.paceLatest, guest.paceKnown = -1, true
-	want := uint64(3 + parameter.NetworkRelaySlackTicks + 1)
+	want := uint64(3 + 1 + parameter.NetworkRelaySlackTicks + 1)
 	if got, _ := guest.ownLead(port); got != want {
 		t.Fatalf("lead over a 150 ms round trip landing a tick early = %d, want %d", got, want)
 	}

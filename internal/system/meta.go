@@ -435,7 +435,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	s.ctx.ClearStatusMessage()
 	s.ctx.SetOverlayContent(nil)
 
-	// 7. Cancel pending step requests; the rate itself is operator-owned and survives
+	// 7. Cancel pending step requests; the rate survives a plain reset
 	s.ctx.TimeCtl.CancelBreak()
 
 	// 8. Signal FSM reset - Non-blocking

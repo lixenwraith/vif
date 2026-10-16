@@ -904,9 +904,10 @@ Both `:new` and `:new!` clear the issuing instance's recorded and playing macros
 and on every instance close overlays, return to Normal mode, and clear
 command/search/status text; a reset the scenario raises, as the default
 scenario's defeat does, clears no instance's macros. `:new!` additionally clears
-the initiating instance's telemetry HUD, pins and breakpoints; free mouse,
-auto-fire and the time scale are the player's choices and survive both forms. A
-peer receiving the crossed reset retains its own operator state, macros included.
+the initiating instance's telemetry HUD, pins and breakpoints and returns its free
+mouse, auto-fire and time scale to their startup values (`GameContext.StartScale`
+keeps the `-speed` rate). A peer receiving the crossed reset retains its own
+operator state, macros included.
 Logging target, level, scope, snapshot period, and recorder depth are process
 diagnostics and are never part of this purge.
 

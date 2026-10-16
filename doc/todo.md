@@ -920,11 +920,19 @@ A star's authority sends every participant's epochs and owner syncs down to ever
 other, the producer's own copy included: at 16 players 4,444 epochs and 736 syncs a
 second, 1.4 MB/s framed on the tower map and 2.8 MB/s on td before deflate. Rounds
 follow the union of peer deadlines, 7.2 a second at td, and whole bodies add
-2.2 MB/s there. Candidates, each a message-set or cadence change that cuts
-constants where relays (`-relay`) move the quadratic term off the host: one bundle
-per link per tick carrying every source's committed frames with their epoch
-markers, which pacing and fences read, as `MsgBundle` already does upstream; owner
-syncs as deltas; and rounds aligned across peers.
+2.2 MB/s there. On one guest with two seats over a 110 ms link
+([Troubleshooting](troubleshooting.md) §19) the command stream was nine tenths of
+about 64 kB/s both ways before deflate: owner syncs, a 595-byte TOML of 27 fields
+of which 17 were zero, every six ticks per cursor and twice over, a fifth; the
+explosion batch crossings a quarter; the producer's own committed echo, which a
+guest with nothing behind it reads only the marker of, a quarter of the downlink.
+Candidates, each a message-set or cadence change that cuts constants where relays
+(`-relay`) move the quadratic term off the host: one bundle per link per tick
+carrying every source's committed frames with their epoch markers, which pacing
+and fences read, as `MsgBundle` already does upstream; owner syncs as deltas, or
+first `omitempty` on `CursorStatePayload` as other payloads carry; a frames-less
+committed copy to a producer with nothing behind it; shard sets without the
+section summary the receiver already holds; and rounds aligned across peers.
 
 ### Project a correction outside the live lock
 
@@ -942,15 +950,22 @@ projection and the write. WASM gains scheduling time, not parallel CPU.
 ### Hold the next run's keyframe through a reset
 
 - Priority: P3
-- Affected files: `internal/converge/correction.go`
+- Affected files: `internal/network/snapshot.go`, `internal/system/network.go`,
+  `internal/converge/correction.go`
 
-A guest lagging its host by more than its pacing band at a reset refuses the host's
-first keyframe of the new run as another run's, and every delta against it, until
-the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body silence, in
-which manifests are still answered and repairs still install. Epochs and syncs of
-another run are refused by the run their batch names, so only the keyframe is at
-stake. Holding a keyframe of the next run until the guest enters it, through
-`followRunLocked`, closes that window.
+A guest lagging its host by more than its pacing band at a reset loses the host's
+first keyframe of the new run, and every delta against it, until the next keyframe:
+at most `SnapshotFloorKeyframeTicks` of whole-body silence, in which manifests are
+still answered and repairs still install. Epochs and syncs of another run are
+refused by the run their batch names, so only the keyframe is at stake. It is lost
+before `followRunLocked` could hold it: a chunk carries tick, index, count and total
+and no run, and `SnapshotAssembly.AddChunk` drops a chunk whose tick is below the
+transfer it last took, so the new run's tick-one chunks look moved past until the
+local reset clears the assembly. Closing the window needs the run in the chunk
+header, an assembly ordered by run then tick (a protocol bump), and `Apply`
+re-queueing a body of the run after this one until `followRun` enters it. The
+window did not open in [Troubleshooting](troubleshooting.md) §19, where the reset
+applied on the guest and its seat in one frame.
 
 ### Tell both ends why a join failed
 
@@ -992,41 +1007,22 @@ the session shares ([Multi-player](multi-player.md#8-remaining-gaps) §8). Decid
 between a hybrid shared/local shape, as the cursor and its shield have, and an
 "every player" ownership value that attribution expands.
 
-### Answer no repair request a later manifest has outgrown
-
-- Priority: P2
-- Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`
-
-A request goes out for every answered manifest with no check for one outstanding,
-so a repair can arrive after a later manifest has proved the guest converged and be
-refused by `takeAwaiting`, built and sent for nothing ([Troubleshooting](troubleshooting.md)
-§18: 57% of the repair bytes). Either the request carries the newest tick the guest
-has proved, so the authority skips an older one, or the guest sends none while
-`awaiting` holds a tick within the cadence.
-
 ### Find why a storm spawn diverges on a guest
 
 - Priority: P1
 - Affected files: `internal/system/storm.go`, `internal/converge/correction.go`
 
-A guest's only large corrections follow its storm spawns ([Troubleshooting](troubleshooting.md)
-§18). Compare the authority's and the guest's spawn at the same tick to find the
-input the guest predicts differently. If it is inherent, a forced keyframe at the
-spawn tick lands the snap once and early instead of as a repair.
-
-### Derive the lead's margin from the measured worst round trip
-
-- Priority: P2
-- Affected files: `internal/system/network.go`, `pkg/linkpace/link.go`,
-  `internal/parameter/network.go`
-
-The own lead covers the round trip plus `NetworkBarrierJitterMargin` (2) times a
-jitter that reads a probe-to-probe swing whole, so it carries 1.5-2.5 ticks more than
-the worst round trip needs ([Troubleshooting](troubleshooting.md) §18). Keep a ring
-of raw round trips in `linkpace.Link` and let the lead follow the worst of the last
-`NetworkPaceWindow`, as it already does behind a relay, or lower the margin to 1 with
-a one-tick floor. Either lowers the lead's value, not its meaning; a late commit
-stays bounded by `NetworkCommitLateTicks`.
+A guest's only large corrections followed its storm spawns in [Troubleshooting](troubleshooting.md)
+§18 and none did in §19, where both storms spawned at one tick on the guest and its
+two seats, the blue attack never fired in either round and the §18 corrections came
+before one could have, so the divergent input is at the spawn itself: the FSM
+tick on a predicted quasar kill (`machine.go` dispatches a `PhasePredicted`
+`EventSpeciesKilled` like any other), the sweep's victims, or the three z-jitter
+draws. The repair logs now name the sections a repair carries; the next §18-shaped
+recording says which. The seats' recurring one-page, eight-cell repairs are a
+section of exactly eight rows, `streams` or `systems`, and not the storm. If it is
+inherent, a forced keyframe at the spawn tick lands the snap once and early
+instead of as a repair.
 
 ## Session membership
 
@@ -1296,18 +1292,6 @@ system still calls its own `Init` in its constructor (manifest order) and again
 on reset (handler order). The engine would instead call `Init` once per system
 in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
 calls would go.
-
-### Let a command return the operator settings to their defaults
-
-- Priority: P3
-- Affected files: `internal/engine/game_context.go`, `internal/mode/commands.go`,
-  `internal/parameter`, `internal/app/app.go`
-
-`:new!` keeps free mouse, auto-fire and the rate: they are the player's choices and
-reach no log or journal. Nothing returns them to their startup values, free mouse
-on (`parameter.DefaultMouseFreeMode`), auto-fire on both weapons (`game_context.go`,
-`AutoFireBoth`) and the `-speed` rate, which the context would have to keep.
-Fold the return into an existing command rather than adding one for it.
 
 ### Give the composite lifecycle methods a user
 
