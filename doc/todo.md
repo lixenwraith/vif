@@ -950,15 +950,22 @@ projection and the write. WASM gains scheduling time, not parallel CPU.
 ### Hold the next run's keyframe through a reset
 
 - Priority: P3
-- Affected files: `internal/converge/correction.go`
+- Affected files: `internal/network/snapshot.go`, `internal/system/network.go`,
+  `internal/converge/correction.go`
 
-A guest lagging its host by more than its pacing band at a reset refuses the host's
-first keyframe of the new run as another run's, and every delta against it, until
-the next keyframe: at most `SnapshotFloorKeyframeTicks` of whole-body silence, in
-which manifests are still answered and repairs still install. Epochs and syncs of
-another run are refused by the run their batch names, so only the keyframe is at
-stake. Holding a keyframe of the next run until the guest enters it, through
-`followRunLocked`, closes that window.
+A guest lagging its host by more than its pacing band at a reset loses the host's
+first keyframe of the new run, and every delta against it, until the next keyframe:
+at most `SnapshotFloorKeyframeTicks` of whole-body silence, in which manifests are
+still answered and repairs still install. Epochs and syncs of another run are
+refused by the run their batch names, so only the keyframe is at stake. It is lost
+before `followRunLocked` could hold it: a chunk carries tick, index, count and total
+and no run, and `SnapshotAssembly.AddChunk` drops a chunk whose tick is below the
+transfer it last took, so the new run's tick-one chunks look moved past until the
+local reset clears the assembly. Closing the window needs the run in the chunk
+header, an assembly ordered by run then tick (a protocol bump), and `Apply`
+re-queueing a body of the run after this one until `followRun` enters it. The
+window did not open in [Troubleshooting](troubleshooting.md) §19, where the reset
+applied on the guest and its seat in one frame.
 
 ### Tell both ends why a join failed
 
