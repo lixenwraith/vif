@@ -12,6 +12,10 @@ const (
 	labelComponent   = "app.kubernetes.io/component"
 	labelPartOf      = "app.kubernetes.io/part-of"
 	labelSession     = "vif.lixenwraith.dev/session"
+
+	// What a session was created with, which the listing reports.
+	annotationScenario = "vif.lixenwraith.dev/scenario"
+	annotationSize     = "vif.lixenwraith.dev/size"
 )
 
 type objectMeta struct {
@@ -21,6 +25,7 @@ type objectMeta struct {
 	CreationTimestamp string            `json:"creationTimestamp,omitempty"`
 	DeletionTimestamp *string           `json:"deletionTimestamp,omitempty"`
 	Labels            map[string]string `json:"labels,omitempty"`
+	Annotations       map[string]string `json:"annotations,omitempty"`
 	OwnerReferences   []ownerReference  `json:"ownerReferences,omitempty"`
 }
 

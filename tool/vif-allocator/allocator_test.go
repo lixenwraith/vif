@@ -71,6 +71,7 @@ func (f *fakeKube) createJob(_ context.Context, object map[string]any) (job, err
 		UID:               "uid-" + name,
 		CreationTimestamp: "2026-09-11T12:00:00Z",
 		Labels:            meta["labels"].(map[string]string),
+		Annotations:       meta["annotations"].(map[string]string),
 	}}
 	f.jobObjects = append(f.jobObjects, object)
 	f.jobs = append(f.jobs, created)
@@ -198,7 +199,7 @@ func testAllocatorConfig(t *testing.T) allocatorConfig {
 			Namespace: "vif",
 			Image:     "docker.io/library/vif:test",
 			Players:   4,
-			MapSize:   "120x40",
+			Size:      sizeFirst,
 			LogLevel:  "info",
 			Scenario:  "main",
 			FirstJoin: "90s",
@@ -393,9 +394,13 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	}}, testAllocatorConfig(t))
 	controller.newID = func() (string, error) { return "chosen", nil }
 
-	if _, err := controller.createSession(context.Background(),
-		sessionRequest{Players: 2, Bots: 1, LogLevel: "debug", Scenario: "td"}); err != nil {
+	created, err := controller.createSession(context.Background(),
+		sessionRequest{Players: 2, Bots: 1, LogLevel: "debug", Scenario: "td", Size: "160x48"})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if created.Scenario != "td" || created.Size != "160x48" {
+		t.Fatalf("the session reports scenario %q size %q, want what it asked for", created.Scenario, created.Size)
 	}
 	if len(kube.jobObjects) != 1 {
 		t.Fatalf("created %d Jobs, want 1", len(kube.jobObjects))
@@ -405,7 +410,7 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{`"-players","2","-bots","1"`, `"-lv","debug"`,
-		`"-config-dir","/wad","-s","td"`, `"-check","-config-dir","/wad","-s","td"`} {
+		`"-config-dir","/wad","-s","td"`, `"-check","-config-dir","/wad","-s","td"`, `"-size","160x48"`} {
 		if !strings.Contains(string(encoded), want) {
 			t.Fatalf("the Job does not carry %s: %s", want, encoded)
 		}
@@ -427,6 +432,11 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 		{LogLevel: "shout"},
 		{Scenario: "blank"},
 		{Scenario: "../etc"},
+		{Size: "wide"},
+		{Size: "1x3"},     // a screen that leaves no game area
+		{Size: "3000x40"}, // wider than a map can be
+		{Size: "400x400"}, // more cells than a map can hold
+		{Size: "0120x40"},
 	} {
 		if _, err := controller.createSession(context.Background(), request); !errors.Is(err, errRequestRefused) {
 			t.Fatalf("createSession(%+v) returned %v, want a refusal", request, err)
@@ -437,7 +447,7 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 // TestScenarioDescriptionsComeFromTheirEntries reads each one from the file the
 // game reads, the embedded fallback standing in for a main the volume lacks. An
 // entry that states none, or whose preamble overruns the scan, is still offered.
-func TestScenarioDescriptionsComeFromTheirEntries(t *testing.T) {
+func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 	cfg := testAllocatorConfig(t)
 	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
 	if got := controller.limits().Descriptions; got != nil {
@@ -451,9 +461,13 @@ func TestScenarioDescriptionsComeFromTheirEntries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("td", "# towers\ndescription = \"  Hold the line.  \"\n\n[regions.td]\ndescription = \"not this\"\n")
+	write("td", "# towers\ndescription = \"  Hold the line.  \"\n\n[map]\nfixed = \"500x250\"\n\n"+
+		"[regions.td]\ndescription = \"not this\"\nfixed = \"9x9\"\n")
 	if got := controller.limits().Descriptions; len(got) != 1 || got["td"] != "Hold the line." {
 		t.Fatalf("descriptions = %v; want td's own, trimmed", got)
+	}
+	if got := controller.limits().FixedMaps; len(got) != 1 || got["td"] != "500x250" {
+		t.Fatalf("fixed maps = %v; want td's [map] fixed alone", got)
 	}
 
 	if err := os.RemoveAll(filepath.Join(cfg.WadDir, "scenario", "main")); err != nil {

@@ -32,6 +32,9 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 	if cfg.Allocator.ReadyTimeout != 75*time.Second {
 		t.Fatalf("ready timeout = %s", cfg.Allocator.ReadyTimeout)
 	}
+	if cfg.Allocator.Workload.Size != sizeFirst {
+		t.Fatalf("size = %q by default, want the first guest's", cfg.Allocator.Workload.Size)
+	}
 }
 
 func TestParseConfigRequiresFixedSiteValues(t *testing.T) {
@@ -97,6 +100,7 @@ func TestRequestBoundsFailClosed(t *testing.T) {
 		{"-bots-max", strconv.Itoa(sessionBotsMax + 1)},
 		{"-log-level-min", "shout"},
 		{"-log-level", "trace"},
+		{"-size", "1x1"},
 	} {
 		args := append(append([]string{}, base...), extra...)
 		if _, err := parseConfig(args, io.Discard); err == nil {

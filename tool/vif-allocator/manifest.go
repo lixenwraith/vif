@@ -7,8 +7,11 @@ import "strconv"
 const (
 	botMemoryMi = 32
 	botCPUMilli = 64
-	// The most bots whose 192Mi-based limit fits the LimitRange's 384Mi container ceiling.
-	sessionBotsMax = (384 - 192) / botMemoryMi
+	// A session's memory limit before bots: td's 500x250 map peaks near 215 MiB
+	// with one guest. GOMEMLIMIT sits 32 MiB under it.
+	sessionMemoryMi = 480
+	// The most bots whose limit fits the LimitRange's 672Mi container ceiling.
+	sessionBotsMax = (672 - sessionMemoryMi) / botMemoryMi
 )
 
 type workloadConfig struct {
@@ -17,7 +20,7 @@ type workloadConfig struct {
 	Players   int
 	Bots      int
 	LogLevel  string
-	MapSize   string
+	Size      string // the host's -size, or sizeFirst
 	Scenario  string
 	FirstJoin string
 	Empty     string
@@ -45,6 +48,29 @@ func wadMounts() []any {
 
 func buildJob(id string, cfg workloadConfig) map[string]any {
 	labels := sessionLabels(id)
+	args := []string{
+		"-serve", ":7777",
+		"-probe", ":7778",
+		// The name both routes carry, so neither can seat a
+		// player whose link named another session.
+		"-name", id,
+		"-authority", "host",
+		"-l=/var/log/vif-fleet",
+		"-log-session-id=" + id,
+		"-lv", cfg.LogLevel,
+		"-ls", "all+dispatch",
+		"-config-dir", "/wad",
+		"-s", cfg.Scenario,
+		"-players", strconv.Itoa(cfg.Players),
+		"-bots", strconv.Itoa(cfg.Bots),
+		"-first-join", cfg.FirstJoin,
+		"-empty", cfg.Empty,
+		"-drain", cfg.Drain,
+	}
+	// Without -size the host takes its first guest's terminal (adoptLobbyGeometry).
+	if cfg.Size != sizeFirst {
+		args = append(args, "-size", cfg.Size)
+	}
 	perBot := func(base, step int) string { return strconv.Itoa(base + step*cfg.Bots) }
 	containerSecurity := map[string]any{
 		"allowPrivilegeEscalation": false,
@@ -81,6 +107,10 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 			"name":      sessionPrefix + id,
 			"namespace": cfg.Namespace,
 			"labels":    labels,
+			"annotations": map[string]string{
+				annotationScenario: cfg.Scenario,
+				annotationSize:     cfg.Size,
+			},
 		},
 		"spec": map[string]any{
 			"backoffLimit":            0,
@@ -111,26 +141,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							"name":            "session",
 							"image":           cfg.Image,
 							"imagePullPolicy": "IfNotPresent",
-							"args": []string{
-								"-serve", ":7777",
-								"-probe", ":7778",
-								// The name both routes carry, so neither can seat a
-								// player whose link named another session.
-								"-name", id,
-								"-authority", "host",
-								"-l=/var/log/vif-fleet",
-								"-log-session-id=" + id,
-								"-lv", cfg.LogLevel,
-								"-ls", "all+dispatch",
-								"-config-dir", "/wad",
-								"-s", cfg.Scenario,
-								"-size", cfg.MapSize,
-								"-players", strconv.Itoa(cfg.Players),
-								"-bots", strconv.Itoa(cfg.Bots),
-								"-first-join", cfg.FirstJoin,
-								"-empty", cfg.Empty,
-								"-drain", cfg.Drain,
-							},
+							"args":            args,
 							"ports": []any{
 								map[string]any{"name": "game", "containerPort": 7777, "protocol": "TCP"},
 								map[string]any{"name": "probe", "containerPort": 7778, "protocol": "TCP"},
@@ -144,7 +155,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							},
 							// After envFrom, so the fleet's own envelope wins.
 							"env": []any{
-								map[string]any{"name": "GOMEMLIMIT", "value": perBot(160, botMemoryMi) + "MiB"},
+								map[string]any{"name": "GOMEMLIMIT", "value": perBot(sessionMemoryMi-32, botMemoryMi) + "MiB"},
 							},
 							"securityContext": containerSecurity,
 							"volumeMounts": append([]any{
@@ -156,7 +167,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 							"resources": map[string]any{
 								"requests": map[string]string{
 									"cpu": perBot(100, botCPUMilli) + "m", "memory": perBot(96, botMemoryMi) + "Mi"},
-								"limits": map[string]string{"cpu": "500m", "memory": perBot(192, botMemoryMi) + "Mi"},
+								"limits": map[string]string{"cpu": "500m", "memory": perBot(sessionMemoryMi, botMemoryMi) + "Mi"},
 							},
 							"startupProbe": map[string]any{
 								"httpGet":          map[string]any{"path": "/health", "port": "probe"},

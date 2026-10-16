@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -134,6 +135,21 @@ func TestWhatTheProbeReportsAboutAdmission(t *testing.T) {
 	draining := a.probeSnapshot()
 	if draining.Ready || draining.Reason == "session at capacity" {
 		t.Fatalf("a draining session reported ready=%v reason=%q", draining.Ready, draining.Reason)
+	}
+}
+
+// TestTheProbeReportsTheMapOnceTheRunTicks: the fleet lists each session's map,
+// which only the run knows once its scenario, or its first guest, has sized it.
+func TestTheProbeReportsTheMapOnceTheRunTicks(t *testing.T) {
+	t.Parallel()
+	a := supervisedServer(t, 2, lifecycle.Policy{})
+	if m, ok := a.probeSnapshot().Detail["map"]; ok {
+		t.Fatalf("a run that has not ticked reported map %q", m)
+	}
+	a.Tick(1)
+	w, h := mapSize(a)
+	if got, want := a.probeSnapshot().Detail["map"], fmt.Sprintf("%dx%d", w, h); got != want {
+		t.Fatalf("probe reported map %q, the run holds %s", got, want)
 	}
 }
 

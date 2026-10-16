@@ -54,7 +54,7 @@ flowchart LR
 | Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Every fleet pod answers to its session ID, on every route (§9). |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
 | Shutdown | `SIGTERM` drains: readiness false, dials refused with `ErrSessionEnding`, exit when the roster empties or `-drain` elapses. |
-| Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster and tick. |
+| Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster, map and tick. |
 | Storage | Match state is never persisted. A 256 MiB node tmpfs backs one Retain local PV/PVC for ephemeral public game logs, and an 8 MiB node directory backs a second, read-only one for scenarios. A session Job mounts those two claims and nothing else. Replacing the scenario tree is an atomic rename: a running match keeps the inode its pod mounted, and the next pod gets the new one. |
 
 Kubernetes restart and replication do not create game-level high availability.
@@ -202,10 +202,10 @@ What the manifest asks for:
 
 | Resource | Value | Rationale |
 |---|---:|---|
-| memory request / limit | 96 / 192 MiB | Single-guest measurement plus headroom for a staging world after an authority change. |
-| `GOMEMLIMIT` | 160 MiB | An earlier collection target than the limit, so the runtime collects instead of the kernel killing. |
+| memory request / limit | 96 / 480 MiB | td's 500×250 map peaks at about 200–215 MiB with one guest (`vif -serve`, measured locally), plus headroom for a staging world after an authority change; `main` at 120×40 holds about 33 MiB. |
+| `GOMEMLIMIT` | 448 MiB | 32 MiB under the limit, an earlier collection target, so the runtime collects instead of the kernel killing. |
 | CPU request / limit | 100m / 500m | One guest was about 0.05 core in early measurement; the ceiling is wide until a storm is measured. |
-| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 384 MiB. |
+| per bot | +32 MiB memory request, limit and `GOMEMLIMIT`; +64m CPU request | A seat at 120×40 measured about 28 MB resident and 60 ms of CPU a second (`vif_headless`, a sandbox, not the node). `-bots-max` stops at 6, where the limit meets the `LimitRange`'s 672 MiB. |
 | termination grace | 30 s | Above the 20 s drain, so the process decides when the match ends. |
 
 What one session actually cost, measured on the node with one guest on `wad`
@@ -311,8 +311,8 @@ What a cluster has not yet been asked:
 - **Drain waits for the roster with a deadline.** No participant migration: there is
   nowhere to migrate a match that lives in one process's memory.
 - **Dedicated lobby:** quorum is one, `-players` is capacity.
-- **Map bounds:** an explicit `-size` wins; otherwise the first guest sets a mutable
-  scenario's shared map.
+- **Map bounds:** a scenario that sets up its own map (td) keeps it; otherwise an
+  explicit `-size` wins, and without one the first guest sets the shared map.
 - **Correction:** Shared capture is authoritative; Player-domain state is excluded
   and only explicit persistent local FSM lifecycle is re-derived.
 

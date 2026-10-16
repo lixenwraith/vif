@@ -88,6 +88,12 @@ func (a *App) probeSnapshot() probe.Snapshot {
 		// session has left before it ends itself.
 		detail["expires_in"] = life.Remaining.Round(time.Second).String()
 	}
+	// The map as the last tick left it, read from MetaSystem's telemetry rather
+	// than Config, which only the world lock guards; none before the first tick.
+	ints := a.world.Resources.Status.Ints
+	if w, h := ints.Get("context.map_w").Load(), ints.Get("context.map_h").Load(); w > 0 && h > 0 {
+		detail["map"] = strconv.FormatInt(w, 10) + "x" + strconv.FormatInt(h, 10)
+	}
 
 	return probe.Snapshot{
 		Live:   live,

@@ -83,6 +83,9 @@ func newHostingApp(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The boot settles before the accept loop opens, as BeginHosting's does: a
+	// scenario that sets up its own map (td) is offered on it, not on -size's.
+	a.Settle()
 	return a, nil
 }
 
