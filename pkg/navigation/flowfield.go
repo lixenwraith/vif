@@ -162,6 +162,12 @@ const (
 // Compute performs weighted Dijkstra from all target points across the entire
 // valid field.
 func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
+	f.computeWith(&f.search, targets, isBlocked)
+}
+
+// computeWith is Compute on the search g, which a caller computing many fields
+// at once shares among them
+func (f *FlowField) computeWith(g *gridSearch, targets []vmath.Point, isBlocked WallChecker) {
 	if len(targets) == 0 {
 		f.Valid = false
 		return
@@ -175,7 +181,6 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 		}
 		f.CurrentGen = 1
 	}
-	g := &f.search
 	g.fill(w, f.Height, isBlocked)
 	g.reset(seedSpan)
 
@@ -192,7 +197,7 @@ func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 				g.push(targetIdx, 0)
 			}
 		} else {
-			f.seedVirtualTargets(t.X, t.Y, isBlocked)
+			f.seedVirtualTargets(g, t.X, t.Y, isBlocked)
 		}
 	}
 
@@ -340,7 +345,7 @@ func (f *FlowField) Reachable(targets []vmath.Point, isBlocked WallChecker) bool
 
 // seedVirtualTargets finds passable cells near blocked target using spiral search
 // Seeds passable cells with weighted distance - does NOT mark blocked target
-func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallChecker) {
+func (f *FlowField) seedVirtualTargets(g *gridSearch, targetX, targetY int, isBlocked WallChecker) {
 	w := f.Width
 
 	// DO NOT mark the blocked target cell - only seed passable neighbors
@@ -376,7 +381,7 @@ func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallCheck
 					f.Distances[nIdx] = cost
 					f.VisitedGen[nIdx] = f.CurrentGen
 					f.Directions[nIdx] = DirTarget // Mark as target for direction derivation
-					f.search.push(int32(nIdx), cost)
+					g.push(int32(nIdx), cost)
 					foundAny = true
 				}
 			}

@@ -29,7 +29,9 @@ type NavigationSystem struct {
 	world *engine.World
 
 	// Per-group flow field management
-	groups map[uint8]*targetGroupNav
+	groups  map[uint8]*targetGroupNav
+	retired []*targetGroupNav // removed groups, whose caches the next new group takes
+	solver  navigation.RouteSolver
 
 	// Composite passability grid (shared, recomputed on wall changes)
 	compositePassability *navigation.CompositePassability
@@ -174,7 +176,7 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventTargetGroupRemove:
 		if payload, ok := ev.Payload.(*event.TargetGroupRemovePayload); ok {
-			delete(s.groups, payload.GroupID)
+			s.retire(payload.GroupID)
 			s.world.Resources.Target.SetGroup(payload.GroupID, engine.TargetGroupState{})
 		}
 
@@ -401,7 +403,7 @@ func (s *NavigationSystem) Update() {
 		}
 
 		var gridX, gridY int
-		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
+		if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
 			cell := vmath.PointAt(kinetic.PreciseX, kinetic.PreciseY)
 			gridX, gridY = cell.X, cell.Y
 		} else if pos, ok := s.world.Positions.GetPosition(entity); ok {
@@ -456,7 +458,7 @@ func (s *NavigationSystem) Update() {
 		}
 
 		var preciseX, preciseY float64
-		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
+		if kinetic, ok := s.world.Components.Kinetic.GetPtr(entity); ok {
 			preciseX, preciseY = kinetic.PreciseX, kinetic.PreciseY
 		} else if pos, ok := s.world.Positions.GetPosition(entity); ok {
 			preciseX, preciseY = vmath.Point{X: pos.X, Y: pos.Y}.Center()
@@ -543,24 +545,40 @@ func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
 		return g
 	}
 	config := s.world.Resources.Config
-	g := &targetGroupNav{
-		pointFlowCache: navigation.NewFlowFieldCache(
-			config.MapWidth, config.MapHeight,
-			parameter.NavFlowMinTicksBetweenCompute,
-			parameter.NavFlowDirtyDistance,
-			parameter.NavFlowSettleTicks,
-		),
-		compositeFlowCache: navigation.NewFlowFieldCache(
-			config.MapWidth, config.MapHeight,
-			parameter.NavFlowMinTicksBetweenCompute,
-			parameter.NavFlowDirtyDistance,
-			parameter.NavFlowSettleTicks,
-		),
+	var g *targetGroupNav
+	if n := len(s.retired); n > 0 {
+		g, s.retired = s.retired[n-1], s.retired[:n-1]
+		*g = targetGroupNav{pointFlowCache: g.pointFlowCache, compositeFlowCache: g.compositeFlowCache}
+		g.pointFlowCache.Reset(config.MapWidth, config.MapHeight)
+		g.compositeFlowCache.Reset(config.MapWidth, config.MapHeight)
+	} else {
+		g = &targetGroupNav{
+			pointFlowCache: navigation.NewFlowFieldCache(
+				config.MapWidth, config.MapHeight,
+				parameter.NavFlowMinTicksBetweenCompute,
+				parameter.NavFlowDirtyDistance,
+				parameter.NavFlowSettleTicks,
+			),
+			compositeFlowCache: navigation.NewFlowFieldCache(
+				config.MapWidth, config.MapHeight,
+				parameter.NavFlowMinTicksBetweenCompute,
+				parameter.NavFlowDirtyDistance,
+				parameter.NavFlowSettleTicks,
+			),
+		}
+		g.pointFlowCache.Lazy, g.compositeFlowCache.Lazy = true, true
 	}
-	g.pointFlowCache.Lazy, g.compositeFlowCache.Lazy = true, true
 	s.groups[groupID] = g
 	s.buffers.Observe(0, len(s.groups))
 	return g
+}
+
+// retire removes a group, keeping its caches for the next group created
+func (s *NavigationSystem) retire(groupID uint8) {
+	if g, ok := s.groups[groupID]; ok {
+		s.retired = append(s.retired, g)
+		delete(s.groups, groupID)
+	}
 }
 
 // flow is a group's field for an entity of this shape, computed now if its
@@ -776,7 +794,7 @@ func (s *NavigationSystem) snapshotTargets() {
 		pos, ok := s.world.Positions.GetPosition(e)
 		if !ok || s.world.Components.SnakeHead.CountEntities() == 0 {
 			s.targets[gid] = engine.TargetGroupState{}
-			delete(s.groups, gid)
+			s.retire(gid)
 			continue
 		}
 		s.targets[gid] = engine.TargetGroupState{Type: component.TargetCursor, Count: 1, Valid: true}
@@ -938,7 +956,7 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 // stamps the graph with the grid generation it read.
 func (s *NavigationSystem) computeRouteGraph(sourceX, sourceY, targetX, targetY int) *navigation.RouteGraph {
 	config := s.world.Resources.Config
-	rg := navigation.ComputeRouteGraph(
+	rg := s.solver.Compute(
 		sourceX, sourceY, targetX, targetY,
 		config.MapWidth, config.MapHeight,
 		parameter.EyeWidth, parameter.EyeHeight,

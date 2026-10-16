@@ -2,6 +2,7 @@ package navigation
 
 import (
 	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -334,7 +335,8 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 			}
 		}
 
-		sc := newRouteScratch(w * h)
+		sc := new(routeScratch)
+		sc.grow(w * h)
 		sc.search.fill(w, h, isBlocked)
 		path, cost := sc.penalizedShortestPath(start, goal, w, penalty)
 		if path == nil {
@@ -359,4 +361,84 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 			t.Fatalf("penalized cost %d (reference %d), reported cost %d for a path costing %d", penalized, want[goal], cost, trueCost)
 		}
 	})
+}
+
+// TestASolverReusedAcrossGraphsComputesEachAfresh: the penalties, corridors and
+// searches one computation leaves must not reach the next, or a graph would depend
+// on what the solver computed before it.
+func TestASolverReusedAcrossGraphsComputesEachAfresh(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 5))
+	const w, h = 40, 24
+	walls := make([]bool, w*h)
+	for i := range walls {
+		walls[i] = rng.IntN(4) == 0
+	}
+	for i := range w { // open rows and columns keep every pair reachable
+		walls[1*w+i], walls[12*w+i] = false, false
+	}
+	for i := range h {
+		walls[i*w+1], walls[i*w+38] = false, false
+	}
+	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
+
+	fresh := ComputeRouteGraph(1, 1, 38, 22, w, h, 1, 1, 0, 0, blocked)
+	rs := new(RouteSolver)
+	rs.Compute(20, 12, 1, 1, w, h, 1, 1, 0, 0, blocked)
+	reused := rs.Compute(1, 1, 38, 22, w, h, 1, 1, 0, 0, blocked)
+	if fresh == nil || reused == nil || len(fresh.Routes) != len(reused.Routes) {
+		t.Fatalf("fresh %v, reused %v", fresh, reused)
+	}
+	for i := range fresh.Routes {
+		a, b := fresh.Routes[i], reused.Routes[i]
+		if a.TotalDistance != b.TotalDistance || a.Weight != b.Weight || !slices.Equal(a.Waypoints, b.Waypoints) {
+			t.Fatalf("route %d differs: %+v vs %+v", i, a, b)
+		}
+		for y := range h {
+			for x := range w {
+				if a.Field.GetDistance(x, y) != b.Field.GetDistance(x, y) || a.Field.GetDirection(x, y) != b.Field.GetDirection(x, y) {
+					t.Fatalf("route %d field differs at (%d,%d)", i, x, y)
+				}
+			}
+		}
+	}
+}
+
+// TestAResetCacheIsANewCache: a cache a removed group leaves, reset for the next
+// group, falls due and computes exactly as a freshly built one, so recycling moves
+// no instance out of the D-17 phase.
+func TestAResetCacheIsANewCache(t *testing.T) {
+	walls := make([]bool, 8*6)
+	walls[2*8+3] = true
+	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= 8 || y >= 6 || walls[y*8+x] }
+	used := NewFlowFieldCache(8, 6, 3, 4, 6)
+	used.Lazy = true
+	used.ObserveGrid(walls, 1)
+	goal := []vmath.Point{{X: 1, Y: 1}}
+	for range 5 {
+		used.Update(goal, blocked)
+		goal[0].X++
+	}
+	used.Materialize(blocked)
+	used.Reset(8, 6)
+	fresh := NewFlowFieldCache(8, 6, 3, 4, 6)
+	fresh.Lazy = true
+	goal = []vmath.Point{{X: 6, Y: 4}}
+	for tick := range 12 {
+		used.ObserveGrid(walls, uint64(tick+1))
+		fresh.ObserveGrid(walls, uint64(tick+1))
+		if used.Update(goal, blocked) != fresh.Update(goal, blocked) ||
+			used.TicksSinceCompute != fresh.TicksSinceCompute || used.Computed() != fresh.Computed() {
+			t.Fatalf("tick %d: the reset cache left the fresh cache's phase", tick)
+		}
+		if tick%4 == 3 {
+			goal[0].X--
+		}
+	}
+	used.Materialize(blocked)
+	fresh.Materialize(blocked)
+	for i := range 48 {
+		if x, y := i%8, i/8; used.GetDistance(x, y) != fresh.GetDistance(x, y) {
+			t.Fatalf("distance at (%d,%d) is %d, fresh %d", x, y, used.GetDistance(x, y), fresh.GetDistance(x, y))
+		}
+	}
 }
