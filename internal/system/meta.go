@@ -303,8 +303,8 @@ func (s *MetaSystem) Update() {
 }
 
 // recordKill counts one hostile-species death, tracking deaths no cursor is
-// credited with. A tower lifecycle death with no claimed killer remains a
-// player-side loss rather than progress toward species-kill gates.
+// credited with. The tower is the players' own: its loss is the region's defeat and
+// its lifecycle's record, never a kill or progress toward a species-kill gate.
 func (s *MetaSystem) recordKill(p *event.SpeciesKilledPayload) {
 	if p.Species <= component.SpeciesNone || p.Species >= component.SpeciesCount {
 		return
@@ -312,7 +312,7 @@ func (s *MetaSystem) recordKill(p *event.SpeciesKilledPayload) {
 	if p.Species == component.SpeciesDrain {
 		return // Shared progression consumes EventDrainDefeated; local rewards consume this event.
 	}
-	if p.Species == component.SpeciesTower && p.KillerEntity == 0 {
+	if p.Species == component.SpeciesTower {
 		return
 	}
 	killer := s.world.ResolveCursor(p.KillerEntity)

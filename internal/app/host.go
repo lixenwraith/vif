@@ -595,7 +595,7 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 func sendGate(port *network.SocketPort, offer network.SessionOffer, tick uint64, body []byte) (time.Time, error) {
 	id := uint32(offer.Assigned)
 	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
-	chunks, err := network.EncodeSnapshotChunks(tick, body)
+	chunks, err := network.EncodeSnapshotChunks(0, tick, body)
 	if err != nil {
 		return time.Time{}, err
 	}

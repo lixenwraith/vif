@@ -84,7 +84,8 @@ func targetCell(w *engine.World, e core.Entity) (int, int, bool) {
 
 // HasCombatTargetAt reports whether a non-player combat target occupies a cell.
 // scope selects the enumerated domains; shared species pass ScopeShared, weapons ScopeBoth.
-// It excludes self, every cursor, cursor-owned orbs, and entities owned by ownerEntity.
+// It excludes self and the player side: every cursor, cursor-owned orbs, the tower
+// and whatever ownerEntity owns.
 func HasCombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEntity, ownerEntity core.Entity) bool {
 	_, _, ok := CombatTargetAt(w, x, y, scope, selfEntity, ownerEntity)
 	return ok
@@ -96,7 +97,7 @@ func CombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEnt
 	count := w.Positions.GetEntitiesAtInto(x, y, scope, entities[:])
 	for i := range count {
 		target, hit, valid := ResolveTargetFromEntity(w, entities[i], selfEntity)
-		if !valid || isCursorOrOwnedOrb(w, target) || isOwnedBy(w, target, ownerEntity) {
+		if !valid || isPlayerSide(w, target, ownerEntity) {
 			continue
 		}
 		return target, hit, true
@@ -112,9 +113,9 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 }
 
 // FindTargetsIn returns all combat targets with members in the cells contains accepts,
-// grouped: one TargetGroup per composite header or single entity. ownerEntity-owned
-// entities are excluded. Order is store order, never map order: callers emit one
-// event per group and combat resolution consumes RNG per event.
+// grouped: one TargetGroup per composite header or single entity. The player side,
+// ownerEntity's own included, is excluded. Order is store order, never map order:
+// callers emit one event per group and combat resolution consumes RNG per event.
 func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope engine.DomainScope, ownerEntity core.Entity) []TargetGroup {
 	index := make(map[core.Entity]int)
 	result := make([]TargetGroup, 0, 8)
@@ -127,10 +128,7 @@ func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope engine.D
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}
-		if isCursorOrOwnedOrb(w, e) {
-			continue
-		}
-		if isOwnedBy(w, e, ownerEntity) {
+		if isPlayerSide(w, e, ownerEntity) {
 			continue
 		}
 		x, y, ok := targetCell(w, e)
@@ -183,7 +181,7 @@ func (f *headerFilter) targets(w *engine.World, header core.Entity) bool {
 		headerComp, ok := w.Components.Header.GetPtr(header)
 		f.valid = ok && headerComp.Type != component.CompositeTypeContainer &&
 			w.Components.Combat.HasEntity(header) &&
-			!isCursorOrOwnedOrb(w, header) && !isOwnedBy(w, header, f.owner)
+			!isPlayerSide(w, header, f.owner)
 	}
 	return f.valid
 }
@@ -201,10 +199,7 @@ func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainSc
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}
-		if isCursorOrOwnedOrb(w, e) {
-			continue
-		}
-		if isOwnedBy(w, e, ownerEntity) {
+		if isPlayerSide(w, e, ownerEntity) {
 			continue
 		}
 		x, y, ok := targetCell(w, e)
@@ -306,25 +301,18 @@ func traceRay(w *engine.World, r vmath.Ray) int {
 	return limit
 }
 
-// isOwnedBy returns true if entity is the owner or its CombatComponent,OwnerEntity matches
-func isOwnedBy(w *engine.World, entity, ownerEntity core.Entity) bool {
-	if entity == ownerEntity {
+// isPlayerSide excludes what no player's weapon targets: every player, every weapon
+// orb owned by one, the tower they all defend, and ownerEntity itself with whatever
+// it owns.
+func isPlayerSide(w *engine.World, entity, ownerEntity core.Entity) bool {
+	if entity == ownerEntity || w.Components.Cursor.HasEntity(entity) {
+		return true
+	}
+	if orb, ok := w.Components.Orb.GetPtr(entity); ok && w.Components.Cursor.HasEntity(orb.OwnerEntity) {
 		return true
 	}
 	combat, ok := w.Components.Combat.GetPtr(entity)
-	if !ok {
-		return false
-	}
-	return combat.OwnerEntity == ownerEntity
-}
-
-// isCursorOrOwnedOrb excludes every player and every weapon orb owned by one.
-func isCursorOrOwnedOrb(w *engine.World, entity core.Entity) bool {
-	if w.Components.Cursor.HasEntity(entity) {
-		return true
-	}
-	orb, ok := w.Components.Orb.GetPtr(entity)
-	return ok && w.Components.Cursor.HasEntity(orb.OwnerEntity)
+	return ok && (combat.OwnerEntity == ownerEntity || combat.CombatEntityType == component.CombatEntityTower)
 }
 
 // ResolveClosestMember finds the nearest living member of a composite header

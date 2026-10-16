@@ -5,6 +5,7 @@ package converge
 import (
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
@@ -84,6 +85,34 @@ func TestASecondWaitingCorrectionTakesTheStep(t *testing.T) {
 // TestATamperedKeyframeInstallsNothing: an install stages what the protocol has
 // proved without hashing it again, so a whole body is proved as it is resolved, and
 // one whose integrity does not match is refused before it becomes the baseline.
+// TestTheNextRunsKeyframeWaitsForTheReset: a whole world of the run after this one
+// reaches a guest whose own reset has not applied yet; it waits in the inbox
+// rather than being refused, and installs once the reset enters that run.
+func TestTheNextRunsKeyframeWaitsForTheReset(t *testing.T) {
+	t.Parallel()
+	_, guest := exchange(t)
+	cap := capture(1, 3)
+	cap.Header.Run++
+	body, err := snapshot.EncodeCorrection(seal(cap))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installs, refused := guest.world.installs(), guest.stat("snapshot.corrections_refused")
+	guest.c.Receive(body)
+	guest.c.Apply()
+	if guest.stat("snapshot.corrections_refused") != refused || guest.world.installs() != installs {
+		t.Fatal("the next run's keyframe was refused or installed before the reset")
+	}
+	guest.world.mu.Lock()
+	guest.world.stamp = event.Stamp{Run: cap.Header.Run, Tick: 1}
+	guest.world.mu.Unlock()
+	guest.c.Apply()
+	if guest.world.installs() != installs+1 || guest.world.installedTick() != 1 {
+		t.Fatalf("the held keyframe did not install at the reset: %d installs, last tick %d",
+			guest.world.installs(), guest.world.installedTick())
+	}
+}
+
 func TestATamperedKeyframeInstallsNothing(t *testing.T) {
 	t.Parallel()
 	guest := receiver(t)

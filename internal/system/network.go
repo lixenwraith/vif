@@ -190,9 +190,9 @@ type NetworkSystem struct {
 	paceKnown   bool
 	paceSettled uint64
 
-	// pathTicks is the round trip, in ticks, of the newest of this instance's own
-	// epochs returned committed, and pathEpoch which one; see noteOwnCommit.
-	pathTicks int64
+	// pathAge is the age at which the authority committed the newest of this
+	// instance's own epochs, and pathEpoch which one; see noteOwnCommit.
+	pathAge   int64
 	pathEpoch uint64
 
 	// downAt is, per link, the tick a raw artifact last arrived on it or the
@@ -474,7 +474,7 @@ func (s *NetworkSystem) Init() {
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
 	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled = 0, 0, false, 0
-	s.pathTicks, s.pathEpoch = 0, 0
+	s.pathAge, s.pathEpoch = 0, 0
 	s.downAt = [participantSlots]uint64{}
 	s.leadCount, s.leadPushed = 0, 0
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
@@ -1973,7 +1973,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	case batch.Source == local:
 		// Committed and returned: those behind this instance need it once, it
 		// measures the path to the authority, and it proves the link is one.
-		if batch.Committed && s.noteOwnCommit(batch.ProducedTick) {
+		if batch.Committed && s.noteOwnCommit(batch) {
 			s.adoptRelay(from)
 			s.forwardDown(from, network.MsgEvent, batch)
 		}
@@ -2009,6 +2009,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		return
 	}
 
+	next := s.localTick() + 1 // the tick a committing authority applies a late crossing at
 	s.mu.Lock()
 	admitted := s.epochs[batch.Source].admit(batch.ProducedTick, parameter.NetworkEpochWindow)
 	installed, superseded, refused, overflowed, late, void, repeated := 0, 0, 0, 0, 0, 0, 0
@@ -2041,7 +2042,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 				authored: batch.Source == s.authorityParticipant(),
 			}
 			if committing {
-				if next := s.localTick() + 1; a.applyTick < next {
+				if a.applyTick < next {
 					late++
 					if next-a.applyTick > parameter.NetworkCommitLateTicks {
 						a.void, f.Frame.Event = true, ""
@@ -2113,6 +2114,9 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	// A void frame applies nowhere else, so it is not relayed; its fence closes here.
 	batch.Frames = slices.DeleteFunc(batch.Frames, func(f event.ScheduledWireFrame) bool { return f.Frame.Event == "" })
+	if committing {
+		batch.Age = int64(next) - int64(batch.ProducedTick)
+	}
 	s.relayCommitted(from, committing, network.MsgEvent, batch)
 }
 
@@ -2360,10 +2364,7 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 	if r == nil || p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return
 	}
-	target, ok := s.ownLead(p)
-	if !ok {
-		return
-	}
+	target := s.ownLead()
 	if s.leadCount == 0 {
 		s.leadOf(r.BarrierDelayTicks) // the lead in force is the window's first reading
 	}
@@ -2376,44 +2377,30 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		&event.PlayoutLeadPayload{Ticks: next}, event.OriginSession, core.DomainPlayer)
 }
 
-// ownLead is this tick's reading of the lead: the round trip to the authority, a
-// tick of margin on a reading one probe wide, a tick for the authority to relay
-// it, less how late the authority's epochs already land here. Behind a relay no
-// link measures that trip, so it is the return of this instance's own newest
-// committed epoch. The authority waits one tick.
-func (s *NetworkSystem) ownLead(p engine.NetworkPort) (uint64, bool) {
-	authority := s.authorityParticipant()
-	if s.participantID() == authority {
-		return parameter.NetworkBarrierMinDelayTicks, true
+// ownLead is this tick's reading of the lead: the age at which the authority
+// committed this instance's newest epoch, which is the up path and the clock
+// offset measured where they are paid, plus a tick for the authority to relay the
+// crossing. Until an epoch has come back the default stands; the authority waits
+// one tick. The reading reaches a participant behind a relay on the same copy.
+func (s *NetworkSystem) ownLead() uint64 {
+	if s.participantID() == s.authorityParticipant() {
+		return parameter.NetworkBarrierMinDelayTicks
 	}
-	link, ok := p.(engine.LinkMeasuringPort)
-	if !ok {
-		return 0, false
+	if s.pathEpoch == 0 {
+		return parameter.NetworkBarrierDelayTicks
 	}
-	var trip int64
-	switch m := link.LinkMetric(authority); {
-	case !s.paceKnown:
-		return parameter.NetworkBarrierDelayTicks, true
-	case m.Ready && m.LastRTT > 0:
-		trip = int64((m.LastRTT+parameter.GameUpdateInterval-1)/parameter.GameUpdateInterval) + 1
-	case s.pathEpoch > 0:
-		trip = s.pathTicks
-	default:
-		return parameter.NetworkBarrierDelayTicks, true
-	}
-	ticks := trip + parameter.NetworkRelaySlackTicks - s.paceLatest
-	return uint64(min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks)), true
+	ticks := s.pathAge + parameter.NetworkRelaySlackTicks
+	return uint64(min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks))
 }
 
 // noteOwnCommit records an own epoch returned committed, reporting whether this is
-// its first copy, and samples how long the newest took to come back; a later copy
-// took a longer path and is not sampled.
-func (s *NetworkSystem) noteOwnCommit(produced uint64) bool {
+// its first copy, and takes the newest one's age at commit as the lead's reading.
+func (s *NetworkSystem) noteOwnCommit(batch event.WireBatch) bool {
 	s.mu.Lock()
-	fresh := s.ownCommitted.admit(produced, parameter.NetworkSequenceWindow)
+	fresh := s.ownCommitted.admit(batch.ProducedTick, parameter.NetworkSequenceWindow)
 	s.mu.Unlock()
-	if produced > s.pathEpoch {
-		s.pathEpoch, s.pathTicks = produced, int64(s.localTick())-int64(produced)
+	if batch.ProducedTick > s.pathEpoch {
+		s.pathEpoch, s.pathAge = batch.ProducedTick, batch.Age
 	}
 	return fresh
 }
@@ -2899,7 +2886,7 @@ type networkState struct {
 	suffix                                     []localCrossing
 	paceSamples                                [parameter.NetworkPaceWindow]int64
 	paceCount                                  int
-	paceLatest, pathTicks                      int64
+	paceLatest, pathAge                        int64
 	paceKnown                                  bool
 	paceSettled, pathEpoch                     uint64
 	leadWindow                                 [parameter.NetworkBarrierRenegotiateTicks]uint64
@@ -2922,7 +2909,7 @@ func (s *NetworkSystem) CopyState() any {
 		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
 		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed,
 		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
-		paceSamples: s.paceSamples, paceCount: s.paceCount, pathTicks: s.pathTicks,
+		paceSamples: s.paceSamples, paceCount: s.paceCount, pathAge: s.pathAge,
 		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
 		leadWindow: s.leadWindow, leadCount: s.leadCount, leadPushed: s.leadPushed,
 		lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
@@ -2949,7 +2936,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
 	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
 	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
-	s.paceSamples, s.paceCount, s.pathTicks = c.paceSamples, c.paceCount, c.pathTicks
+	s.paceSamples, s.paceCount, s.pathAge = c.paceSamples, c.paceCount, c.pathAge
 	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch
 	s.leadWindow, s.leadCount, s.leadPushed = c.leadWindow, c.leadCount, c.leadPushed
 	s.lastLostIn, s.lastLostOut = c.lastLostIn, c.lastLostOut

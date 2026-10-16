@@ -495,14 +495,15 @@ by whoever sent the chunk, so reserving for the declared total would let one
 twenty-byte header make a receiver hold the whole ceiling. The reservation is
 bounded by `snapshotReserve` and the buffer grows with the bytes that actually
 arrive, so what a peer can make a receiver hold is what that peer sends. Each chunk
-carries a 20-byte header before its payload:
+carries a 28-byte header before its payload:
 
 | Byte range | Width | Field |
 |---|---:|---|
-| 0–7 | 8 | the tick this capture describes |
-| 8–11 | 4 | chunk index |
-| 12–15 | 4 | chunk count |
-| 16–19 | 4 | total body length |
+| 0–7 | 8 | the run this capture describes, zero on a join's own stream |
+| 8–15 | 8 | the tick this capture describes |
+| 16–19 | 4 | chunk index |
+| 20–23 | 4 | chunk count |
+| 24–27 | 4 | total body length |
 
 `SnapshotAssembly` refuses a skipped predecessor, a frame that changes the
 transfer's shape, a body that overruns its declared length and a frame shorter than
@@ -627,10 +628,11 @@ included, for that one apply tick; there is no producer copy published sooner. T
 artifacts that decide what the world *is* — roster, run, shared species, the
 progression a region gates its spawns on, the defeat that rebuilds the level — are
 `barrierBound` and also close the capture fence at production. Each participant's
-lead follows its own link to the authority: the worst recent round trip plus a
-tick of margin and a relay tick, held between `NetworkBarrierMinDelayTicks` and
-`NetworkBarrierMaxDelayTicks`, with the default `NetworkBarrierDelayTicks` (three
-50 ms ticks) until it is paced; the authority's own is one tick. A change is a
+lead follows its own path to the authority: the worst recent age at which the
+authority committed its epochs, stamped on the committed copies, plus a relay
+tick, held between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`,
+with the default `NetworkBarrierDelayTicks` (three 50 ms ticks) until a copy comes
+back; the authority's own is one tick. A change is a
 journaled `EventPlayoutLead`. The authority commits: it applies a guest's raw
 crossing at its stamped tick when on time, at its own next tick when late, and as
 void past `NetworkCommitLateTicks`, and every other instance applies another's

@@ -13,7 +13,8 @@ import (
 )
 
 // TowerSystem manages tower entity lifecycle
-// Tower is a stationary ablative composite the players defend
+// Tower is a stationary ablative composite the players defend: it owns itself, so
+// no player's weapon targets it, and its loss is the region's defeat, nobody's kill
 // Blocks cursor movement via WallBlockCursor on members
 // Attacked by eye species via proximity self-destruct
 type TowerSystem struct {
@@ -99,11 +100,7 @@ func (s *TowerSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventTowerSpawnRequest:
 		if payload, ok := ev.Payload.(*event.TowerSpawnRequestPayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
-				s.spawnTower(cursor, payload)
-			} else {
-				s.lifecycle.spawnFailures.Add(1)
-			}
+			s.spawnTower(payload)
 		}
 
 	case event.EventTowerCancelRequest:
@@ -151,7 +148,7 @@ func (s *TowerSystem) Update() {
 
 // === Spawn ===
 
-func (s *TowerSystem) spawnTower(cursorEntity core.Entity, payload *event.TowerSpawnRequestPayload) {
+func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 	radiusX := payload.RadiusX
 	radiusY := payload.RadiusY
 	if radiusX <= 0 {
@@ -221,13 +218,13 @@ func (s *TowerSystem) spawnTower(cursorEntity core.Entity, payload *event.TowerS
 
 	// Ablative header: HP=0, damage routes to members
 	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
-		OwnerEntity:      cursorEntity,
+		OwnerEntity:      headerEntity,
 		CombatEntityType: component.CombatEntityTower,
 		HitPoints:        0,
 	})
 
 	// Generate disc members
-	members := s.createDiscMembers(headerEntity, cursorEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
+	members := s.createDiscMembers(headerEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
 
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:         component.BehaviorTower,
@@ -306,7 +303,7 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 }
 
 func (s *TowerSystem) createDiscMembers(
-	headerEntity, cursorEntity core.Entity,
+	headerEntity core.Entity,
 	centerX, centerY, radiusX, radiusY, minHP, maxHP int,
 ) []component.MemberEntry {
 	var members []component.MemberEntry
@@ -354,9 +351,9 @@ func (s *TowerSystem) createDiscMembers(
 				Mask: component.ProtectFromParticle | component.ProtectFromSpecies,
 			})
 
-			// Per-member ablative combat, owned by player
+			// Per-member ablative combat, owned by the tower like every composite's
 			s.world.Components.Combat.SetComponent(memberEntity, component.CombatComponent{
-				OwnerEntity:      cursorEntity,
+				OwnerEntity:      headerEntity,
 				CombatEntityType: component.CombatEntityTower,
 				HitPoints:        hp,
 			})
@@ -418,21 +415,15 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 	if !ok {
 		return
 	}
-	var killerEntity core.Entity
-	if combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity); ok {
-		killerEntity = combatComp.LastDamagedBy
-	}
-
-	// Every terminal species death uses the same notification. Reward systems
-	// still require a cursor-resolved KillerEntity, so an uncredited tower death
-	// cannot grant boost.
+	// Every terminal species death uses the same notification, which the region's
+	// FSM reads as its defeat. The tower is the players' own, so it names no killer:
+	// nothing rewards its loss and nothing counts it.
 	s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
-		Entity:       headerEntity,
-		KillerEntity: killerEntity,
-		Species:      component.SpeciesTower,
-		SubType:      uint8(towerComp.Type),
-		X:            towerComp.SpawnX,
-		Y:            towerComp.SpawnY,
+		Entity:  headerEntity,
+		Species: component.SpeciesTower,
+		SubType: uint8(towerComp.Type),
+		X:       towerComp.SpawnX,
+		Y:       towerComp.SpawnY,
 	})
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{

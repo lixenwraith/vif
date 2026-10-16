@@ -105,10 +105,10 @@ body = { parent = "Root", on_enter = ["${request}"], transitions = [
 ] }
 
 [macros.Tower]
-doc = "Spawn tower `id` for the player at (x, y), feeding target group `group`."
+doc = "Spawn tower `id` at (x, y), feeding target group `group`."
 params = { id = "string", x = "int", y = "int", group = "int", next = "string", fallback = "string", fallback_actions = "array" }
 defaults = { fallback_actions = [] }
-body = { macro = "SpawnAwait", species = 8, capture = "${id}_anchor", next = "${next}", refused = "EventTowerSpawnFailed", fallback = "${fallback}", fallback_actions = "${fallback_actions}", request = { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = "${x}", y = "${y}", target_group_id = "${group}" }, payload_vars = { entity = "player_entity" } } }
+body = { macro = "SpawnAwait", species = 8, capture = "${id}_anchor", next = "${next}", refused = "EventTowerSpawnFailed", fallback = "${fallback}", fallback_actions = "${fallback_actions}", request = { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = "${x}", y = "${y}", target_group_id = "${group}" } } }
 
 [macros.QuadrantTower]
 doc = "A forward tower whose failure is not fatal: unspawned, its group feeds central tower `cover` instead."

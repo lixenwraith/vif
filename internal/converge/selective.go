@@ -488,7 +488,7 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	}
 	// The peer is being served a whole world, so its standing in the selective
 	// exchange starts again from the state it is about to hold.
-	chunks, err := network.EncodeSnapshotChunksOf(cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes)
+	chunks, err := network.EncodeSnapshotChunksOf(cap.Header.Run, cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes)
 	if p := c.peerLocked(id); p != nil && err == nil {
 		p.silence = 0
 		p.owe(owedSend{typ: network.MsgStateCorrection, frames: chunks, tick: cap.Header.Tick, whole: true})

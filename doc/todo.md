@@ -907,9 +907,8 @@ and a relayed person whose relay leaves walks the chain to another participant
 (multi-player.md §5). What is left is finding that address: a relay's address is
 handed out of band like the host's, nothing publishes which participants relay,
 and a NAT between a person and every relay is not crossed. A browser relays only
-its own bots. Optional: advertise a leaf's lead along its path instead of sampling
-it from returned commits, a protocol bump. Verify a relayed topology under
-`LinkShape`s, asserting hash-only convergence and the authority's per-link fan-out.
+its own bots. Verify a relayed topology under `LinkShape`s, asserting hash-only
+convergence and the authority's per-link fan-out.
 
 ### Decide the authority's fan-out and publication cadence
 
@@ -947,26 +946,6 @@ fence membership, pending barrier crossings not fed, the ledger settled before
 projection, the journal's place and mark, and no live tick between the final
 projection and the write. WASM gains scheduling time, not parallel CPU.
 
-### Hold the next run's keyframe through a reset
-
-- Priority: P3
-- Affected files: `internal/network/snapshot.go`, `internal/system/network.go`,
-  `internal/converge/correction.go`
-
-A guest lagging its host by more than its pacing band at a reset loses the host's
-first keyframe of the new run, and every delta against it, until the next keyframe:
-at most `SnapshotFloorKeyframeTicks` of whole-body silence, in which manifests are
-still answered and repairs still install. Epochs and syncs of another run are
-refused by the run their batch names, so only the keyframe is at stake. It is lost
-before `followRunLocked` could hold it: a chunk carries tick, index, count and total
-and no run, and `SnapshotAssembly.AddChunk` drops a chunk whose tick is below the
-transfer it last took, so the new run's tick-one chunks look moved past until the
-local reset clears the assembly. Closing the window needs the run in the chunk
-header, an assembly ordered by run then tick (a protocol bump), and `Apply`
-re-queueing a body of the run after this one until `followRun` enters it. The
-window did not open in [Troubleshooting](troubleshooting.md) §19, where the reset
-applied on the guest and its seat in one frame.
-
 ### Tell both ends why a join failed
 
 - Priority: P3
@@ -994,18 +973,6 @@ it can hold the epochs behind it for two seconds, where an epoch waits behind at
 one 4 KiB body chunk ([Troubleshooting](troubleshooting.md) §16). Sending it in
 `SnapshotCorrectionChunkBytes` chunks, as a body is, bounds that too. Repairs at
 20 kB/s have so far been a few kilobytes.
-
-### Credit a shared tower to the session
-
-- Priority: P3
-- Affected files: `internal/system/tower.go`, `internal/system/combat.go`,
-  `internal/asset/scenario/tower.toml`
-
-A tower's `CombatComponent.OwnerEntity` is the one cursor the FSM's `player_entity`
-names, so `applyHitDirect` and `applyHitArea` credit one participant for a structure
-the session shares ([Multi-player](multi-player.md#8-remaining-gaps) §8). Decide
-between a hybrid shared/local shape, as the cursor and its shield have, and an
-"every player" ownership value that attribution expands.
 
 ### Find why a storm spawn diverges on a guest
 

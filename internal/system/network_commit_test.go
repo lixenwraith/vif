@@ -47,7 +47,7 @@ func (p *linkedPort) Peers() []uint32                              { return p.pe
 func (p *linkedPort) SetLinkReport(network.LinkReport)             {}
 func (p *linkedPort) ObserveTransfer(uint32, int64, time.Duration) {}
 func (p *linkedPort) LinkMetric(uint32) linkpace.Metrics {
-	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, LastRTT: p.rtt, Ready: p.rtt > 0}
+	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, Ready: p.rtt > 0}
 }
 
 // sessionSystem is participant local in a session participant 1 authors, at tick.
@@ -274,40 +274,28 @@ func TestALeadFallsAsItsHigherReadingsAgeOut(t *testing.T) {
 	read(1, 6, 6)          // and then they are
 }
 
-// TestAGuestStampsWithItsOwnRoundTrip: a reading is the newest round trip to the
-// authority plus a tick of margin and the relay tick, less how late the
-// authority's epochs land; the authority's own is a tick, and an unmeasured link
-// keeps the default. Behind a relay the trip is how long this guest's own newest
-// epoch took to come back committed, with no margin on a reading already in ticks.
-func TestAGuestStampsWithItsOwnRoundTrip(t *testing.T) {
+// TestAGuestStampsWithTheAgeItsEpochsCommitAt: a reading is the age the authority
+// committed this guest's newest epoch at plus the relay tick, taken off the
+// committed copy on whichever link returns it; the authority's own is a tick, and
+// a guest no copy has reached keeps the default.
+func TestAGuestStampsWithTheAgeItsEpochsCommitAt(t *testing.T) {
 	t.Parallel()
-	port := &linkedPort{peers: []uint32{1}}
-	guest := sessionSystem(t, 2, 100, port)
-	if got, _ := guest.ownLead(port); got != parameter.NetworkBarrierDelayTicks {
-		t.Fatalf("unmeasured lead %d, want the default %d", got, parameter.NetworkBarrierDelayTicks)
+	port := &linkedPort{peers: []uint32{2}}
+	guest := sessionSystem(t, 3, 100, port)
+	if got := guest.ownLead(); got != parameter.NetworkBarrierDelayTicks {
+		t.Fatalf("lead before any copy returned = %d, want the default %d", got, parameter.NetworkBarrierDelayTicks)
 	}
-	port.rtt = 150 * time.Millisecond
-	guest.paceLatest, guest.paceKnown = -1, true
-	want := uint64(3 + 1 + parameter.NetworkRelaySlackTicks + 1)
-	if got, _ := guest.ownLead(port); got != want {
-		t.Fatalf("lead over a 150 ms round trip landing a tick early = %d, want %d", got, want)
-	}
-	authority := sessionSystem(t, 1, 100, port)
-	if got, _ := authority.ownLead(port); got != parameter.NetworkBarrierMinDelayTicks {
-		t.Fatalf("the authority's own lead is %d, want %d", got, parameter.NetworkBarrierMinDelayTicks)
-	}
-
-	behind := &linkedPort{peers: []uint32{2}}
-	leaf := sessionSystem(t, 3, 100, behind)
-	leaf.paceLatest, leaf.paceKnown = -1, true
-	body, err := event.EncodeWireBatch(event.WireBatch{Source: 3, ProducedTick: 88, Committed: true})
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: 3, ProducedTick: 88, Committed: true, Age: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaf.scheduleCrossings(2, body)
-	want = uint64(12 + parameter.NetworkRelaySlackTicks + 1)
-	if got, _ := leaf.ownLead(behind); got != want {
-		t.Fatalf("lead behind a relay, own epochs back in 12 ticks = %d, want %d", got, want)
+	guest.scheduleCrossings(2, body)
+	if got, want := guest.ownLead(), uint64(4+parameter.NetworkRelaySlackTicks); got != want {
+		t.Fatalf("lead with the newest epoch committed 4 ticks old = %d, want %d", got, want)
+	}
+	authority := sessionSystem(t, 1, 100, port)
+	if got := authority.ownLead(); got != parameter.NetworkBarrierMinDelayTicks {
+		t.Fatalf("the authority's own lead is %d, want %d", got, parameter.NetworkBarrierMinDelayTicks)
 	}
 }
 
@@ -574,7 +562,7 @@ func TestAGuestForwardsDownOnlyToThoseBehindIt(t *testing.T) {
 	guest.scheduleCrossings(3, rawBatch(t, 3, 100, 104)) // participant 3 is behind this guest
 	port.sent = nil
 	guest.scheduleCrossings(1, boundsBatch(t, 5, 100, 105, 1, 0))
-	chunks, err := network.EncodeSnapshotChunks(100, []byte("world"))
+	chunks, err := network.EncodeSnapshotChunks(0, 100, []byte("world"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,8 +583,8 @@ func TestTheAuthorityReturnsTheCommittedCopyToItsProducer(t *testing.T) {
 	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{0}) {
 		t.Fatalf("the authority sent to %v and flooded %d frames, want one broadcast", got, len(port.flooded))
 	}
-	if got, err := event.DecodeWireBatch(port.sent[0].body); err != nil || !got.Committed {
-		t.Fatalf("the broadcast is not the committed copy (committed %t, err %v)", got.Committed, err)
+	if got, err := event.DecodeWireBatch(port.sent[0].body); err != nil || !got.Committed || got.Age != 1 {
+		t.Fatalf("the broadcast is not the committed copy aged a tick (committed %t, age %d, err %v)", got.Committed, got.Age, err)
 	}
 }
 

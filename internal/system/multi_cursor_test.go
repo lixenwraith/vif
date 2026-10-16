@@ -657,7 +657,7 @@ func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) 
 	}
 }
 
-func TestTowerDeathEmitsSpeciesKillWithOptionalCursorCredit(t *testing.T) {
+func TestATowersLossNamesNoKiller(t *testing.T) {
 	w, _, killer := testCursorWorld(t)
 	towers := NewTowerSystem(w).(*TowerSystem)
 
@@ -676,33 +676,62 @@ func TestTowerDeathEmitsSpeciesKillWithOptionalCursorCredit(t *testing.T) {
 			continue
 		}
 		payload, ok := ev.Payload.(*event.SpeciesKilledPayload)
-		if !ok || payload.Entity != header || payload.KillerEntity != killer || payload.Species != component.SpeciesTower {
-			t.Fatalf("tower kill payload = %#v", ev.Payload)
+		if !ok || payload.Entity != header || payload.KillerEntity != 0 ||
+			payload.Species != component.SpeciesTower || payload.X != 7 || payload.Y != 9 {
+			t.Fatalf("tower kill payload = %#v, want the region's loss with nobody credited", ev.Payload)
 		}
 		kills++
 	}
 	if kills != 1 {
 		t.Fatalf("tower kill events = %d, want 1", kills)
 	}
+}
 
-	uncredited := w.CreateEntity(core.DomainShared)
-	w.Components.Tower.SetComponent(uncredited, component.TowerComponent{SpawnX: 3, SpawnY: 4})
-	w.Components.Combat.SetComponent(uncredited, component.CombatComponent{})
-	towers.handleTowerDeath(uncredited)
-	kills = 0
-	for _, ev := range w.Resources.Event.Queue.Consume() {
-		if ev.Type != event.EventSpeciesKilled {
-			continue
-		}
-		payload, ok := ev.Payload.(*event.SpeciesKilledPayload)
-		if !ok || payload.Entity != uncredited || payload.KillerEntity != 0 ||
-			payload.Species != component.SpeciesTower || payload.X != 3 || payload.Y != 4 {
-			t.Fatalf("uncredited tower species kill payload = %#v", ev.Payload)
-		}
-		kills++
+func TestNoPlayersWeaponTargetsTheTower(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	towers := NewTowerSystem(w).(*TowerSystem)
+	towers.HandleEvent(event.GameEvent{
+		Type:    event.EventTowerSpawnRequest,
+		Payload: &event.TowerSpawnRequestPayload{X: 25, Y: 12, RadiusX: 2, RadiusY: 2},
+	})
+	headers := w.Components.Tower.Entities()
+	if len(headers) != 1 {
+		t.Fatalf("towers spawned = %d, want 1 with no cursor named", len(headers))
 	}
-	if kills != 1 {
-		t.Fatalf("uncredited tower species kill events = %d, want 1", kills)
+	headerComp, _ := w.Components.Header.GetComponent(headers[0])
+	member, _ := w.Positions.GetPosition(headerComp.MemberEntries[0].Entity)
+
+	for _, cursor := range []core.Entity{first, second} {
+		if HasCombatTargetAt(w, member.X, member.Y, engine.ScopeBoth, 0, cursor) {
+			t.Fatalf("cursor %d targets the tower at (%d, %d)", cursor, member.X, member.Y)
+		}
+		if got := FindNearestTargets(w, float64(member.X), float64(member.Y), 1, engine.ScopeBoth, cursor); len(got) != 0 {
+			t.Fatalf("cursor %d finds %#v next to the tower", cursor, got)
+		}
+	}
+}
+
+func TestATowersDeathIsNobodysKill(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
+		Payload: &event.CursorSpawnRequestPayload{X: 5, Y: 5, Control: uint8(component.ControlLocal)}})
+	cursor := w.Resources.Player.Slot(0)
+	meta := NewMetaSystem(ctx).(*MetaSystem)
+	boost := NewBoostSystem(w).(*BoostSystem)
+
+	ev := event.GameEvent{Type: event.EventSpeciesKilled,
+		Payload: &event.SpeciesKilledPayload{Species: component.SpeciesTower, KillerEntity: cursor}}
+	meta.HandleEvent(ev)
+	boost.HandleEvent(ev)
+
+	kills := w.Resources.Status.Ints.Get("kills.tower").Load()
+	total := w.Resources.Status.Ints.Get("kills.total").Load()
+	active, _ := w.Components.Boost.GetComponent(cursor)
+	if kills != 0 || total != 0 || active.Active {
+		t.Fatalf("tower death counted %d (total %d), boost %v; want nothing for the players' own loss",
+			kills, total, active.Active)
 	}
 }
 

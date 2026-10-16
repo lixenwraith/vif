@@ -115,6 +115,11 @@ type WireBatch struct {
 	Source       uint32               `json:"source"`
 	Hops         uint8                `json:"hops,omitempty"`
 	Committed    bool                 `json:"committed,omitempty"`
+
+	// Age is how many of the authority's ticks after its production an epoch was
+	// committed, on the committed copy: the up path and the clock offset its
+	// producer's lead has to cover, measured where it matters.
+	Age int64 `json:"age,omitempty"`
 }
 
 // NewWireFrame encodes one crossing; an unencodable payload reports why rather

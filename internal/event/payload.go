@@ -1289,7 +1289,6 @@ type EyeSpawnRequestPayload struct {
 
 // TowerSpawnRequestPayload contains parameters for tower creation
 type TowerSpawnRequestPayload struct {
-	Entity        core.Entity         `toml:"entity"`
 	X             int                 `toml:"x"`
 	Y             int                 `toml:"y"`
 	RadiusX       int                 `toml:"radius_x"`

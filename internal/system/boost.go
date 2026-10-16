@@ -143,9 +143,9 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 			return
 		}
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
-			// Player-owned tower lifecycle deaths use the shared species event so
-			// FSMs can observe them, but are not failed reward requests.
-			if payload.Species == component.SpeciesTower && payload.KillerEntity == 0 {
+			// The tower's death rides the shared species event for the FSM's sake;
+			// it is the players' own loss, not a failed reward request.
+			if payload.Species == component.SpeciesTower {
 				return
 			}
 			if cursor := s.world.ResolveOwnedCursor(payload.KillerEntity); cursor != 0 {

@@ -411,7 +411,7 @@ func (c *Corrections) publishRound(force bool) error {
 	}
 	var chunks [][]byte
 	if len(body) > 0 {
-		if chunks, err = network.EncodeSnapshotChunksOf(cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes); err != nil {
+		if chunks, err = network.EncodeSnapshotChunksOf(cap.Header.Run, cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes); err != nil {
 			return fmt.Errorf("correction chunk: %w", err)
 		}
 	}
@@ -469,7 +469,7 @@ func (c *Corrections) publishBroadcast(port engine.NetworkPort, tick uint64, for
 	if err != nil {
 		return err
 	}
-	chunks, err := network.EncodeSnapshotChunks(cap.Header.Tick, body)
+	chunks, err := network.EncodeSnapshotChunks(cap.Header.Run, cap.Header.Tick, body)
 	if err != nil {
 		return fmt.Errorf("correction chunk: %w", err)
 	}
@@ -1067,9 +1067,14 @@ func (c *Corrections) Apply() {
 	var (
 		newest snapshot.SharedCapture
 		found  bool
+		ahead  [][]byte
 	)
 	for _, body := range pending {
 		cap, err := c.resolve(body)
+		if errors.Is(err, errRunAhead) {
+			ahead = append(ahead, body)
+			continue
+		}
 		if err != nil {
 			c.tel.Refused.Add(1)
 			c.log.Debug("converge", "msg", "correction refused", "error", err.Error())
@@ -1084,6 +1089,13 @@ func (c *Corrections) Apply() {
 		}
 		newest, found = cap, true
 	}
+	// The next run's world is the one this instance will want first once its own
+	// reset lands, a tick or a round trip from now; it waits at the head of the queue.
+	if len(ahead) > 0 {
+		c.inboxMu.Lock()
+		c.inbox = keepNewest(append(ahead, c.inbox...), parameter.SnapshotCorrectionQueue)
+		c.inboxMu.Unlock()
+	}
 	if !found {
 		return
 	}
@@ -1097,6 +1109,10 @@ func (c *Corrections) Apply() {
 // tick, so a manifest, a request or a repair is acted on the moment it lands
 // rather than one tick later.
 func (c *Corrections) drainTransport() { c.inst.DrainOffTick() }
+
+// errRunAhead marks a correction of the run after this one: the reset that opens
+// it is on its way, so the body waits rather than being refused.
+var errRunAhead = errors.New("correction describes the run after this one")
 
 // resolve turns one correction body into a whole capture proved by its own integrity
 // hash, reconstructing a delta against the baseline this instance holds, so a corrupt
@@ -1119,7 +1135,10 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 	if !c.authority.admit(header.Term, 0) {
 		return snapshot.SharedCapture{}, errors.New("correction carries a term this instance does not hold")
 	}
-	if header.Run != c.followRun().Run {
+	if at := c.followRun(); header.Run != at.Run {
+		if header.Run == at.Run+1 {
+			return snapshot.SharedCapture{}, errRunAhead
+		}
 		return snapshot.SharedCapture{}, errors.New("correction describes a run this instance is not in")
 	}
 	if kind == snapshot.CorrectionKeyframe {

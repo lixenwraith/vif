@@ -353,10 +353,10 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 	score(1)
 }
 
-// TestExternalConfigsOwnTheirTowers covers the external producer side of cursor
-// addressing on both shipped scenarios: the machine must spawn and capture a cursor
-// before its tower requests inject player_entity into their payloads.
-func TestExternalConfigsOwnTheirTowers(t *testing.T) {
+// TestShippedConfigsSpawnTowersThatOwnThemselves covers both shipped scenarios'
+// tower requests: a tower is the session's, spawned without a cursor named and
+// owned by its own header, so no player's weapon targets it.
+func TestShippedConfigsSpawnTowersThatOwnThemselves(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
@@ -388,10 +388,6 @@ func TestExternalConfigsOwnTheirTowers(t *testing.T) {
 			defer a.Close()
 
 			a.Tick(1)
-			player := a.World().Resources.Player.Entity
-			if player == 0 {
-				t.Fatal("the config did not spawn a cursor")
-			}
 			if tc.spawn {
 				a.Region(event.RegionSpawn, "tower", "TowerSetup")
 				a.Tick(2)
@@ -401,12 +397,12 @@ func TestExternalConfigsOwnTheirTowers(t *testing.T) {
 
 			towers := a.World().Components.Tower.Entities()
 			if len(towers) == 0 {
-				t.Fatal("the config did not spawn an explicitly owned tower")
+				t.Fatal("the config did not spawn a tower")
 			}
 			for _, tower := range towers {
 				combat, ok := a.World().Components.Combat.GetComponent(tower)
-				if !ok || combat.OwnerEntity != player {
-					t.Fatalf("tower %d owner = %d, want cursor %d", tower, combat.OwnerEntity, player)
+				if !ok || combat.OwnerEntity != tower {
+					t.Fatalf("tower %d owner = %d, want itself", tower, combat.OwnerEntity)
 				}
 			}
 		})
