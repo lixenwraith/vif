@@ -97,6 +97,10 @@ If no backend survives, the service degrades to a valid silent engine. Gameplay
 continues, sound requests become no-ops with rejection telemetry, and absence
 of a device is not an application-start failure.
 
+A host that has its own speakers skips detection: `AudioConfig.Sink` (from
+`app.Config.Host.Audio`) is a writer the mixer streams to as the `host` backend,
+whatever name was forced, closed with the engine as the WAV and OSS sinks are.
+
 ## 4. Concurrency and command ownership
 
 ```mermaid

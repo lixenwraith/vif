@@ -477,15 +477,15 @@ link. What remains is under [Bots](#bots) and
 Target a minimally polished Android build within one month of development time.
 `vif_headless` already leaves out the renderer and audio packages, the frame
 leaves through `render.Surface`, and the terminal module's value types are the
-renderer-neutral vocabulary (D1). In order: `app.Host` carrying presentation,
-audio sink, providers and dialer so build tags guard constructors only, with the
-input source stubbed in its final shape and the cell aspect a parameter; the
-bitmap font atlas as a TOML asset under `internal/asset/font/` generated once
-from a monospace TrueType by a tool, with a software rasterizer as its reference
-drawer; the Android host on `SurfaceView` behind a Java-side drawer interface a
-GLES drawer can replace; then touch mapped onto the semantic input bots already
-drive, and a radial menu summoned by holding a tap in place of the Ctrl-G menu,
-whose gameplay implication is unresolved.
+renderer-neutral vocabulary (D1). Done: `app.Presentation` and `Config.Host`
+(the terminal as the default presentation, the host's speakers as the audio
+sink), the font atlas under `internal/asset/font/` with `pkg/glyph` and its
+software rasterizer as the reference drawer. Next, in order: the cell aspect as
+a parameter (below); the Android host on `SurfaceView` behind a Java-side drawer
+interface a GLES drawer can replace, with its asset provider; then touch mapped
+onto the semantic input bots already drive, and a radial menu summoned by
+holding a tap in place of the Ctrl-G menu, whose gameplay implication is
+unresolved.
 
 ### Make the cell aspect a parameter
 

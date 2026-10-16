@@ -113,6 +113,7 @@ flowchart TD
     Game --> Genetic["pkg/genetic and subpackages"]
     Game --> Link["pkg/linkpace"]
     Game --> Image["pkg/ascimage"]
+    Game --> Glyph["pkg/glyph"]
     Game --> Macro["pkg/tomlmacro"]
     Game --> Socket["pkg/websocket"]
 ```
@@ -120,6 +121,7 @@ flowchart TD
 | Package | Public purpose | Important coupling |
 |---|---|---|
 | `pkg/ascimage` | Convert images to terminal cells and read/write dual-mode `.vifimg` assets. | External terminal/color types only. The interactive viewer lives in `cmd/ascimage` because it needs the in-repo render buffer. |
+| `pkg/glyph` | Parse the bitmap font atlas and draw a frame of terminal cells into RGBA, changed cells only: the reference drawer of a graphical host. | External terminal, color and TOML modules only; the atlas comes from the caller (`internal/asset`). |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the sound bank* are injected; the package ships no specs and imports nothing under `internal/`. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | Core package uses the standard library only. |
@@ -214,6 +216,7 @@ duplicating version strings that would become stale.
 | `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
 | `script/*` | `test.sh`, the named end-to-end setups ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person, and that the setups also run. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
+| `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |
 | `tool/font-editor` | Edit the bitmap splash font. |
 | `tool/hierarchy-map` | Terminal UI that selects Go source subsets as LLM context, indexed by `@lixen:` annotations, local imports and symbol-level coupling. |
 | `tool/http-server` | Minimal static server used by `make serve` for the WASM bundle. |
