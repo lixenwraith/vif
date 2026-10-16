@@ -184,11 +184,12 @@ Ebitengine site's platform list, which marks Android as cgo-required.
 ### 4.3 Costs, pitfalls and risks
 
 - **Glyph atlas.** The host takes on text. The set is bounded, not Unicode:
-  `TestConsoleGlyphsAreInEveryConsoleFont` already confines effects to glyphs every
-  console font has, and typeable text is printable ASCII. Rasterizing a bitmap
-  font at load (the splash font in `internal/asset` is the precedent) avoids a
-  font-shaping dependency; a TrueType path needs `golang.org/x/image/font`, which
-  is a dependency decision (D4).
+  the renderers, visual parameters, mode and app draw 122 distinct non-ASCII
+  runes (box drawing, block elements, geometric shapes, arrows, a few symbols)
+  beside printable ASCII, 217 glyphs in all; the corpus and every shipped scenario
+  are ASCII; `consoleGlyphs` names the 64 a text console must have. The splash
+  font (`internal/asset/splash_font.go`, 95 glyphs of 12x12 bits, edited by
+  `tool/font-editor`) is the precedent for a bitmap asset.
 - **Cell aspect.** Navigation costs (`CostX` 10, `CostY` 20), mount shapes, the
   2x1 swarm and every `.vifimg` assume a 2:1 cell. The surface must keep cells at
   that ratio, so a portrait phone shows fewer rows than columns of a landscape
@@ -205,14 +206,24 @@ Ebitengine site's platform list, which marks Android as cgo-required.
   (`web/terminal.js`, `pointer: coarse`); the Android host needs the same or the
   system keyboard. Captured keys (`EventKeyCaptureRequest`) are scenario buttons
   and work as taps.
-- **The pipe variant.** Routing the terminal module's byte output through a pipe
-  into an emulator widget would work with any terminal emulator and change
-  nothing in vif, but it serializes a frame to ANSI and parses it back on the
-  other side. The module's `Backend` interface is the seam for that (`Write`,
-  `Read`, `Size`, `SetResizeHandler`), and it is unexported today: `New` takes
-  only a color mode and `newTerm(Backend, ColorMode)` is private. One exported
-  constructor would open it. Keep it as a test and tmux-style option; the cell
-  path is the product path.
+- **The pipe variant, measured.** Routing the terminal module's byte output
+  through a pipe into an emulator widget would work with any terminal emulator
+  and change nothing in vif, but it serializes a frame to ANSI and parses it
+  back on the other side. Benchmarked on the module's own `outputBuffer` with
+  120x40 game-like frames (every cell has a background and a glyph):
+
+  | Path | Per frame | Bytes per frame |
+  |---|---:|---:|
+  | ANSI serialization, 15 % of cells changed | 200 µs | 24,822 |
+  | ANSI serialization, every cell changed (a strobe, a resize) | 550 µs | 102,300 |
+  | cell copy to a `Surface` | 2.5 µs | 57,600 |
+
+  At 60 fps the pipe spends 12 ms a second serializing before the emulator has
+  parsed a byte, and a parser costs at least as much again; the cell path is
+  under 1 % of that and already exists. The module's `Backend` interface is the
+  seam for a pipe (`Write`, `Read`, `Size`, `SetResizeHandler`) and is
+  unexported today: `New` takes only a color mode. One exported constructor would
+  open it for tests and tooling; it is not the product path.
 
 ## 5. Host model: how adapters plug in
 
@@ -311,59 +322,84 @@ The main scenario's tick is 33 µs and 2.5 KB: there is nothing to win there. Th
 machine design's host contract (`GetPtr` hosts pass the live instance) is the
 right default and the detached style is for the loops that reorder commits.
 
-## 7. Plan and the decisions it waits on
+## 7. Decisions taken and the plan
 
-Phase 0 is this push. Each later phase is one PR.
+Decided after the first review of this document.
 
-1. **Minimum visual contract.** Decide D1 and D2, then move the four leaks out of
-   the simulation packages: `WallComponent.Attrs` and the pattern pipeline's
-   palette flags, `ConfigResource.ColorMode`, and the death system's attribute
-   test. The headless binary then links no terminal code, and the dependency
-   check in `make verify` can assert it.
-2. **Host model.** `app.Host` (§5.2), the terminal host built in `cmd/vif`, a
-   nil host for headless, `audio.Sink`, and `Presentation` as the interface the
-   frame loop and resize path already use. No simulation change.
-3. **Library entry point and input source.** A constructor that takes a `Host`
-   and a `Config` and returns the loop to drive; pointer and key events as a
-   small `input.Event` the terminal adapter translates to, so `Machine.Process`
-   stops taking `terminal.Event` (D3).
-4. **Android host.** `gomobile bind`, a `SurfaceView` drawing the cell grid with a
-   bitmap atlas from the Java side, touch to intents, `AudioTrack` sink, asset
-   provider, lifecycle hooks. Target: the one-month minimally polished build.
-5. **Desktop GPU surface** (optional, after 4): a `vif_gui` command drawing the
-   same grid through purego GLES or Vulkan, with the software rasterizer as its
-   fallback and test.
-6. **Performance follow-ups** from §6, in order of measured weight: the wall
-   epoch, then the index slice, then the maze payload.
+- **D1, vocabulary: keep.** `terminal.Cell`, `Attr`, `ColorMode` and `Key` from
+  `lixenwraith/terminal` are the renderer-neutral model. The four values in
+  simulation packages (§3) are therefore not leaks and do not move; the 14 KB the
+  headless binary links is accepted.
+- **D3, input: stub first.** The first iteration is render-first. The host model
+  carries an input source with the right shape and a terminal implementation;
+  the Android implementation and `input.Event` are a focused task after it.
+- **D4, font: a bitmap atlas as an asset, generated once.** A TOML document in
+  `internal/asset/font/`, one table per glyph with its rows as bit strings, the
+  glyph cell size in its header, loaded by the host into whatever texture it
+  draws with. It covers the 217 glyphs of §4.3. The splash font is reused where
+  its 12x12 cells fit (ASCII at a 1:1 aspect); the rest is generated once from a
+  monospace TrueType by a `tool/font-atlas` program, so the font dependency (the
+  `x/image` rasterizer, or an external converter) stays in the tool. WOFF2 is out:
+  decoding it needs Brotli. A TrueType rasterized at load remains the later option
+  behind the same loader; the document format is interchangeable.
+- **D5, pipe: cell path.** By the measurement in §4.3 the pipe costs 80x the cell
+  path and buys nothing the surface does not. The exported backend constructor in
+  the terminal module is a tooling item for when a consumer exists.
+- **D6, Android drawing: `SurfaceView` and `Canvas` for the pilot**, behind a
+  Java-side cell drawer interface so a GLES drawer replaces it without touching
+  the Go side; GLES if the pilot misses 60 fps on a target device.
+- **D7, store index: noted** as a todo item without further analysis.
+- **D8, menu: keep `tui`.** The overlay renderer already adapts forms into cells;
+  the configuration menu stays as it is, and Android gets a different
+  presentation (a radial menu summoned by holding a tap), a later task with a
+  gameplay implication to resolve.
+- **D2** is resolved by D1: nothing moves.
 
-Decisions:
+Each later phase is one PR.
 
-- **D1. Vocabulary.** Keep `terminal.Cell`, `Attr`, `ColorMode` and `Key` from
-  `lixenwraith/terminal` as the renderer-neutral model, or copy them into a vif
-  package (`internal/core` or a new `pkg/cell`). Recommended: keep the module's
-  types. They are plain values, the module is pure Go with three backends already,
-  and 56 render files use them; copying buys a name and costs a conversion layer.
-- **D2. Where the leaks go.** `WallComponent.Attrs` becomes a two-bit palette
-  flag in `component` that renderers map to `Attr`, or stays `terminal.Attr`
-  under D1. Under D1 it stays; only `engine.ConfigResource.ColorMode` moves to a
-  render-owned setting, since a GUI host is always truecolor.
-- **D3. Input boundary.** Keep `Machine.Process(terminal.Event)` and have hosts
-  synthesize terminal events (cheapest; Android taps become mouse events), or
-  introduce `input.Event` (cleaner; touches the keymap and five input files).
-  Recommended: synthesize for the first Android build, introduce `input.Event`
-  with the host model PR.
-- **D4. Font.** A bitmap atlas shipped as an asset (no dependency, fixed glyph set)
-  or a TrueType rasterized at load (`golang.org/x/image/font`). Recommended:
-  bitmap, generated once from a monospace font by a tool under `tool/`.
-- **D5. Terminal module.** Export a constructor taking a `Backend` so a pipe or
-  an in-process emulator can be plugged for tests and tooling. Low cost, not on
-  the product path; do it when a consumer exists.
-- **D6. Android drawing side.** Java `SurfaceView` and `Canvas` first, GLES only
-  if a device misses 60 fps. The grid is small; expect Canvas to be enough.
-- **D7. Store index.** Whether to try the per-domain index slice in `Store`
-  (24 % of td's CPU in map lookups). It touches the ECS foundation; it needs its
-  own measurement on `main` as well as `td` before a decision.
-- **D8. Config menu.** `internal/mode` draws the Ctrl-G menu with `terminal/tui`;
-  it is the one presentation dependency in a common package. Move the form to the
-  overlay renderer, or accept the 2.4 KB in headless. Recommended: move it with
-  the host model, when the overlay gains a non-terminal drawer anyway.
+1. **Host model, render-first.** `app.Host` (§5.2) with presentation, audio sink,
+   providers and dialer; the terminal host built in `cmd/vif`; a nil host for
+   headless; the input source stubbed with its final shape; the library entry
+   point. No simulation change. The cell aspect becomes a parameter here (§8),
+   because the surface is the first consumer that is not 2:1.
+2. **Font atlas.** The TOML asset, its loader, the generator tool, and the
+   software rasterizer (§4.1) as the reference drawer and the test of the atlas.
+3. **Android host.** `gomobile bind`, `SurfaceView` drawing the cell grid from the
+   atlas, `AudioTrack` sink, asset provider, lifecycle hooks; touch mapped to
+   intents as the focused input task; the radial menu after that.
+4. **Desktop GPU surface** (optional): a `vif_gui` command through purego GLES or
+   Vulkan over the same atlas, the software rasterizer as its fallback.
+5. **Performance follow-ups** from §6 in order of measured weight: the wall
+   epoch, then the maze payload; the index slice when its measurement is in.
+
+## 8. Geometry flexibility: cell aspect and the position store
+
+Two considerations shape the host model without asking for implementation now.
+
+**The cell aspect is a parameter, not a constant.** A terminal cell is about
+twice as tall as it is wide, and the code assumes 2:1 in 29 files across nine
+packages: `pkg/navigation` (`CostX` 10, `CostY` 20, the diagonal 22, and the
+steering normalization), `pkg/vmath` (`ScaleToCircular`), `pkg/ascimage`
+(`charAspect` 0.5), `internal/parameter` (every `*RadiusY` and `DriftAspectY`),
+`internal/engine` (two aspect-corrected distance helpers), four renderers and
+seven systems. A graphical surface draws whatever cell it is given, and a 1:1
+cell with the 12x12 splash font is the cheapest pilot. The host model therefore
+declares one `CellAspect` (width over height) that the surface reports with its
+grid, and the places above read it from one definition instead of a literal:
+navigation builds its direction costs from it at construction, the ellipse and
+radius parameters derive their Y from X and the aspect, ascimage takes it as an
+argument. It is part of simulation identity, so it joins the session fingerprint
+and the join anchor, as map bounds do (D-14): two participants at different
+aspects would steer differently. The parameter's default stays 2:1.
+
+**The position store can leave the engine.** `engine.Position` is a sparse set
+over `PositionComponent` with a dense `SpatialGrid` and the wall-grid cache, and
+it couples to the world only for the component mask, to `component` for the
+value and the wall masks, to `parameter` for the cell capacities and to `status`
+for telemetry. Everything it answers, cell queries, area queries, line of sight,
+free-space search, is 2D over integer cells. Extracted as a package under `pkg/`
+that takes its value type as a type parameter and its blocking predicate from the
+caller, as `pkg/navigation` already does, it could grow a third axis (a layer or
+a height) without the engine knowing, and the engine would keep only the mask
+bookkeeping. That is a direction for the design of `app.Host` and the aspect
+parameter to stay compatible with, not work for this push.
