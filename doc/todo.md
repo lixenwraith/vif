@@ -974,18 +974,6 @@ one 4 KiB body chunk ([Troubleshooting](troubleshooting.md) §16). Sending it in
 `SnapshotCorrectionChunkBytes` chunks, as a body is, bounds that too. Repairs at
 20 kB/s have so far been a few kilobytes.
 
-### Credit a shared tower to the session
-
-- Priority: P3
-- Affected files: `internal/system/tower.go`, `internal/system/combat.go`,
-  `internal/asset/scenario/tower.toml`
-
-A tower's `CombatComponent.OwnerEntity` is the one cursor the FSM's `player_entity`
-names, so `applyHitDirect` and `applyHitArea` credit one participant for a structure
-the session shares ([Multi-player](multi-player.md#8-remaining-gaps) §8). Decide
-between a hybrid shared/local shape, as the cursor and its shield have, and an
-"every player" ownership value that attribution expands.
-
 ### Find why a storm spawn diverges on a guest
 
 - Priority: P1

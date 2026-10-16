@@ -53,7 +53,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 
 | Area | Current behaviour |
 |---|---|
-| Local input | The producer stamps every crossing with its own lead and applies its own copy at that tick; the authority commits it there, or at its own next tick when it arrives late, and every other instance applies the committed copy (§3.5, §8 item 5). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. A typed gold member leaves at its tick like everything else; the typist validates its next keystroke against the run without the members it has already typed. |
+| Local input | The producer stamps every crossing with its own lead and applies its own copy at that tick; the authority commits it there, or at its own next tick when it arrives late, and every other instance applies the committed copy (§3.5, §8 item 4). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. A typed gold member leaves at its tick like everything else; the typist validates its next keystroke against the run without the members it has already typed. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Predicted derivations | A shared death a predicting instance derives is stamped `PhasePredicted` and held in a ledger. Presentation follows it; the player-domain rewards behind it are paid once, when an authoritative world proves the entity gone. |
@@ -108,7 +108,7 @@ the lead undo the kill, rewind the knockback and tear down the region's species,
 then derive them again. The exception is a crossing that reaches the authority past
 its `ApplyTick`: the authority commits it at its own next tick, or voids it past
 `NetworkCommitLateTicks`, and its producer alone keeps the stamped tick (§3.5, §8
-item 5). Input feel is the D-18 prediction's job, not the store's
+item 4). Input feel is the D-18 prediction's job, not the store's
 ([D-18](domain-design.md#d-18--local-prediction-is-private)), and for a typed gold
 member it is the typist's own record of what it has typed, which the next keystroke
 validates against.
@@ -823,20 +823,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
 
 ### Open
 
-2. **Tower ownership binds a shared structure to one cursor.** A tower's
-   `CombatComponent.OwnerEntity` is the cursor its spawn request named, which
-   comes from the FSM's `player_entity` capture variable — one cursor for the
-   whole machine. Damage attribution (`ResolveCursor(payload.OwnerEntity)` in
-   `applyHitDirect` and its area-damage sibling) therefore credits one participant
-   for a structure the session shares. There is no quick fix: the options are a
-   hybrid shared/local shape like the cursor and its shield, or an explicit
-   "every player" ownership value that attribution expands. **To be decided.**
-
-   Quasar escalation gating on the session-wide `kills.drain` is not this gap: the
-   FSM that reads the counter is authoritative and `MetaSystem`'s record carries it
-   in the correction.
-
-3. **Presentation is clipped, not wrong.** A terminal smaller than the session's
+2. **Presentation is clipped, not wrong.** A terminal smaller than the session's
    map shows less of the map. It does not produce a different world or a
    misplaced cursor: `applyMapLatch` installs the session bounds before the FSM
    boot script spawns cursor slot zero, and `LockMap` latches the world shared for
@@ -851,7 +838,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
    observed across terminal sizes, that is a regression in the map latch and not
    this item.
 
-4. **Cross-platform float drift is repaired live but not in replay.** A correction
+3. **Cross-platform float drift is repaired live but not in replay.** A correction
    carries every shared component whole, float fields included, and a delta is
    proved lossless by re-hashing the reconstruction against the capture's own
    integrity hash — so a `float64` that drifted on another platform is repaired
@@ -865,7 +852,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
      against, so a float difference there accumulates. Replay determinism is
      guaranteed within one implementation build.
 
-5. **A crossing that misses its lead lands later on the authority than on its
+4. **A crossing that misses its lead lands later on the authority than on its
    producer.** The producer applies it as stamped and the authority commits it at
    its own next tick (§3.5). The knockback window covers every attacker, so the
    knockback an instance applies first holds it and the next correction repairs a
@@ -873,7 +860,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
    finishing one target inside that lateness can each be credited on their own
    instance.
 
-6. **An instance that keeps a link after a loss keeps the whole roster.**
+5. **An instance that keeps a link after a loss keeps the whole roster.**
    `DropAbandonedCursors` acts only on an instance left with no link (§5.2). A
    successor that some survivors could not reach, or a fork still linked to its
    own bots, keeps every roster entry, and a participant it has no path to stays a
