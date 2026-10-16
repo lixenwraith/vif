@@ -311,8 +311,8 @@ What a cluster has not yet been asked:
 - **Drain waits for the roster with a deadline.** No participant migration: there is
   nowhere to migrate a match that lives in one process's memory.
 - **Dedicated lobby:** quorum is one, `-players` is capacity.
-- **Map bounds:** an explicit `-size` wins; otherwise the first guest sets a mutable
-  scenario's shared map.
+- **Map bounds:** a scenario that sets up its own map (td) keeps it; otherwise an
+  explicit `-size` wins, and without one the first guest sets the shared map.
 - **Correction:** Shared capture is authoritative; Player-domain state is excluded
   and only explicit persistent local FSM lifecycle is re-derived.
 
