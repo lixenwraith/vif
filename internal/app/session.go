@@ -744,7 +744,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		return err
 	}
 	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
-	chunks, err := network.EncodeSnapshotChunks(tick, body)
+	chunks, err := network.EncodeSnapshotChunks(0, tick, body)
 	if err != nil {
 		return err
 	}

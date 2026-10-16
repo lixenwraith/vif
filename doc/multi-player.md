@@ -53,7 +53,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 
 | Area | Current behaviour |
 |---|---|
-| Local input | The producer stamps every crossing with its own lead and applies its own copy at that tick; the authority commits it there, or at its own next tick when it arrives late, and every other instance applies the committed copy (§3.5, §8 item 5). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. A typed gold member leaves at its tick like everything else; the typist validates its next keystroke against the run without the members it has already typed. |
+| Local input | The producer stamps every crossing with its own lead and applies its own copy at that tick; the authority commits it there, or at its own next tick when it arrives late, and every other instance applies the committed copy (§3.5, §8 item 4). The D-18 prediction answers the keystroke and the weapons fire from the predicted cell; the shared store moves when the crossing applies. A typed gold member leaves at its tick like everything else; the typist validates its next keystroke against the run without the members it has already typed. |
 | Shared authority | The host's Shared world is canonical. A guest's predicted result is provisional until the next correction. |
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Predicted derivations | A shared death a predicting instance derives is stamped `PhasePredicted` and held in a ledger. Presentation follows it; the player-domain rewards behind it are paid once, when an authoritative world proves the entity gone. |
@@ -66,7 +66,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
 | Roster | Every admitted peer holds an identity; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed: a join whose link cannot carry one whole world per floor window is refused (`Corrections.AdmitLink`). Past admission it is reported as `snapshot.cadence_floor_breached` (D-24): by the authority for a link whose plan cannot hold it, and by a guest no whole world reached within the floor plus its grace. |
-| Playout lead | Per participant (§3.5): the worst recent round trip to the authority plus a tick of margin and a relay tick, less how late the authority's epochs land on it; behind a relay, the round trip is how long its own epochs take to come back committed. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
+| Playout lead | Per participant (§3.5): the worst recent age at which the authority committed its epochs, read off the committed copies, plus a relay tick; a participant behind a relay reads it off the same copies. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
 | Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is elected only when the chain names no survivor (§5.1, §5.3). |
@@ -108,7 +108,7 @@ the lead undo the kill, rewind the knockback and tear down the region's species,
 then derive them again. The exception is a crossing that reaches the authority past
 its `ApplyTick`: the authority commits it at its own next tick, or voids it past
 `NetworkCommitLateTicks`, and its producer alone keeps the stamped tick (§3.5, §8
-item 5). Input feel is the D-18 prediction's job, not the store's
+item 4). Input feel is the D-18 prediction's job, not the store's
 ([D-18](domain-design.md#d-18--local-prediction-is-private)), and for a typed gold
 member it is the typist's own record of what it has typed, which the next keystroke
 validates against.
@@ -290,22 +290,23 @@ reward is held until the state that caused it is proved.
 
 ### 3.5 Command frames, the commit and pacing
 
-Each participant stamps its own crossings with the lead its own link asks for, and
-nobody defers by anyone else's. A guest reads its lead every tick (`ownLead`): the
-newest probed round trip to the authority (`linkpace.Metrics.LastRTT`) plus a tick
-of margin on a reading one probe wide, plus `NetworkRelaySlackTicks` for the
-authority to relay it, less how late the authority's epochs already land on it,
-held between `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`; the
-authority's own is the minimum, one tick, and a guest not yet paced uses the default
-`NetworkBarrierDelayTicks`. Behind a relay no link measures that trip, so the
-reading is the return of the guest's own newest committed epoch, which reaches only
-a participant behind a relay. The lead in force is the worst reading of the last
-`NetworkBarrierRenegotiateTicks` (`leadOf`): it rises at once and falls only as the
-higher readings age out of the window, to the highest still in it, so a momentary
-trough is not climbed back a tick at a time and a passed spike does not step down
-one tick a window. The readings rather than the smoothed trip and a jitter term: the
-lead has to cover every round trip, and a smoothed swing read twice over carried two
-ticks the worst trip never needed. Each change is a local, journaled
+Each participant stamps its own crossings with the lead its own path asks for, and
+nobody defers by anyone else's. The authority stamps every committed copy with the
+epoch's age at commit (`WireBatch.Age`): how many of its own ticks after production
+it applied the epoch, which is the up path and the clock offset the producer's lead
+has to cover, measured where they are paid. A guest reads its lead every tick
+(`ownLead`): the age of its newest epoch to come back committed plus
+`NetworkRelaySlackTicks` for the authority to relay it, held between
+`NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`; the authority's
+own is the minimum, one tick, and a guest no copy has reached uses the default
+`NetworkBarrierDelayTicks`. A participant behind a relay reads the same copy, which
+reaches it down its path, so no link has to measure a trip for it. The lead in
+force is the worst reading of the last `NetworkBarrierRenegotiateTicks` (`leadOf`):
+it rises at once and falls only as the higher readings age out of the window, to
+the highest still in it, so a momentary trough is not climbed back a tick at a time
+and a passed spike does not step down one tick a window. The age rather than a
+probed round trip: a probe measures both directions and a stall on the way down
+raised a lead the way up never needed. Each change is a local, journaled
 `EventPlayoutLead`, so a reproduction switches on the same tick.
 
 The authority commits. A guest sends its epoch raw; the authority applies an on-time
@@ -402,7 +403,10 @@ so loss costs freshness rather than correctness. A reset restarts the tick count
 on a run change each end drops what it keyed by tick and refuses an artifact naming
 another run: a correction by its header (`Corrections.followRun`), an epoch or owner
 sync by the run its batch names, since a guest's last epochs of a run reach the
-authority a round trip after the reset applied there. A body leaves in
+authority a round trip after the reset applied there. The run after this one is
+the exception: its first world reaches a guest whose reset is still on its way, so
+the chunk header carries the run, the assembly orders transfers by run then tick,
+and `Apply` keeps such a body at the head of its inbox until the reset enters it. A body leaves in
 `SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
 what its latest echo reports received — drains within `SnapshotBulkQueue` past the
 round trip, so an epoch waits behind a chunk, not a world. What a link still
@@ -819,20 +823,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
 
 ### Open
 
-2. **Tower ownership binds a shared structure to one cursor.** A tower's
-   `CombatComponent.OwnerEntity` is the cursor its spawn request named, which
-   comes from the FSM's `player_entity` capture variable — one cursor for the
-   whole machine. Damage attribution (`ResolveCursor(payload.OwnerEntity)` in
-   `applyHitDirect` and its area-damage sibling) therefore credits one participant
-   for a structure the session shares. There is no quick fix: the options are a
-   hybrid shared/local shape like the cursor and its shield, or an explicit
-   "every player" ownership value that attribution expands. **To be decided.**
-
-   Quasar escalation gating on the session-wide `kills.drain` is not this gap: the
-   FSM that reads the counter is authoritative and `MetaSystem`'s record carries it
-   in the correction.
-
-3. **Presentation is clipped, not wrong.** A terminal smaller than the session's
+2. **Presentation is clipped, not wrong.** A terminal smaller than the session's
    map shows less of the map. It does not produce a different world or a
    misplaced cursor: `applyMapLatch` installs the session bounds before the FSM
    boot script spawns cursor slot zero, and `LockMap` latches the world shared for
@@ -847,7 +838,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
    observed across terminal sizes, that is a regression in the map latch and not
    this item.
 
-4. **Cross-platform float drift is repaired live but not in replay.** A correction
+3. **Cross-platform float drift is repaired live but not in replay.** A correction
    carries every shared component whole, float fields included, and a delta is
    proved lossless by re-hashing the reconstruction against the capture's own
    integrity hash — so a `float64` that drifted on another platform is repaired
@@ -861,7 +852,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
      against, so a float difference there accumulates. Replay determinism is
      guaranteed within one implementation build.
 
-5. **A crossing that misses its lead lands later on the authority than on its
+4. **A crossing that misses its lead lands later on the authority than on its
    producer.** The producer applies it as stamped and the authority commits it at
    its own next tick (§3.5). The knockback window covers every attacker, so the
    knockback an instance applies first holds it and the next correction repairs a
@@ -869,7 +860,7 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
    finishing one target inside that lateness can each be credited on their own
    instance.
 
-6. **An instance that keeps a link after a loss keeps the whole roster.**
+5. **An instance that keeps a link after a loss keeps the whole roster.**
    `DropAbandonedCursors` acts only on an instance left with no link (§5.2). A
    successor that some survivors could not reach, or a fork still linked to its
    own bots, keeps every roster entry, and a participant it has no path to stays a

@@ -373,7 +373,7 @@ func serveScenario(conn net.Conn, c Coordinator, digest string, timeout time.Dur
 		RefuseJoin(conn, err, timeout)
 		return err
 	}
-	chunks, err := EncodeSnapshotChunks(0, body)
+	chunks, err := EncodeSnapshotChunks(0, 0, body)
 	if err != nil {
 		return err
 	}

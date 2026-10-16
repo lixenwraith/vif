@@ -27,7 +27,7 @@ func TestSnapshotChunksRoundTrip(t *testing.T) {
 			body[i] = byte(r.UintN(256))
 		}
 
-		chunks, err := EncodeSnapshotChunks(4242, body)
+		chunks, err := EncodeSnapshotChunks(1, 4242, body)
 		if err != nil {
 			t.Fatalf("%d bytes: encode: %v", size, err)
 		}
@@ -62,13 +62,44 @@ func TestSnapshotChunksRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSnapshotAssemblyOrdersTransfersByRunThenTick: a reset restarts the tick
+// count, so the new run's first world supersedes an older run's transfer at any
+// tick, and a chunk of the older run arriving after it is moved past.
+func TestSnapshotAssemblyOrdersTransfersByRunThenTick(t *testing.T) {
+	body := bytes.Repeat([]byte{0xCD}, 2*SnapshotChunkBody)
+	encode := func(run, tick uint64) [][]byte {
+		chunks, err := EncodeSnapshotChunks(run, tick, body)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		return chunks
+	}
+	old, next, late := encode(0, 175), encode(1, 1), encode(0, 200)
+	var asm SnapshotAssembly
+	if admitted, _, err := asm.AddChunk(old[0]); err != nil || !admitted {
+		t.Fatalf("the old run's transfer did not start: admitted=%t err=%v", admitted, err)
+	}
+	if admitted, _, err := asm.AddChunk(next[0]); err != nil || !admitted {
+		t.Fatalf("the next run's tick-one world did not supersede the old run's: admitted=%t err=%v", admitted, err)
+	}
+	if admitted, _, err := asm.AddChunk(late[0]); err != nil || admitted {
+		t.Fatalf("a chunk of the old run was taken after the next run's: admitted=%t err=%v", admitted, err)
+	}
+	if _, done, err := asm.AddChunk(next[1]); err != nil || !done {
+		t.Fatalf("the next run's transfer did not complete: done=%t err=%v", done, err)
+	}
+	if tick, got := asm.Result(); tick != 1 || !bytes.Equal(got, body) {
+		t.Fatalf("reassembled tick %d, want the next run's tick 1", tick)
+	}
+}
+
 // TestSnapshotAssemblyRefusesAConfusedTransfer pins what the chunk header is for.
 // A world installed from a prefix, from two interleaved captures, or from frames
 // that arrived out of order is a world that looks installed and is not, which is
 // the failure mode the whole capture path exists to avoid.
 func TestSnapshotAssemblyRefusesAConfusedTransfer(t *testing.T) {
 	body := bytes.Repeat([]byte{0xAB}, 3*SnapshotChunkBody)
-	chunks, err := EncodeSnapshotChunks(7, body)
+	chunks, err := EncodeSnapshotChunks(1, 7, body)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -84,7 +115,7 @@ func TestSnapshotAssemblyRefusesAConfusedTransfer(t *testing.T) {
 	})
 
 	t.Run("second transfer", func(t *testing.T) {
-		other, err := EncodeSnapshotChunks(9, body)
+		other, err := EncodeSnapshotChunks(1, 9, body)
 		if err != nil {
 			t.Fatalf("encode: %v", err)
 		}
@@ -105,7 +136,7 @@ func TestSnapshotAssemblyRefusesAConfusedTransfer(t *testing.T) {
 	})
 
 	t.Run("empty body", func(t *testing.T) {
-		if _, err := EncodeSnapshotChunks(1, nil); err == nil {
+		if _, err := EncodeSnapshotChunks(1, 1, nil); err == nil {
 			t.Fatal("an empty capture was encoded")
 		}
 	})

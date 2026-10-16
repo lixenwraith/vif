@@ -11,10 +11,10 @@ import (
 // delivered length disagree, which the encoder cannot produce.
 func chunkHeaderFor(tick uint64, index, count, total uint32, payload []byte) []byte {
 	frame := make([]byte, SnapshotChunkHeader+len(payload))
-	binary.BigEndian.PutUint64(frame[0:8], tick)
-	binary.BigEndian.PutUint32(frame[8:12], index)
-	binary.BigEndian.PutUint32(frame[12:16], count)
-	binary.BigEndian.PutUint32(frame[16:20], total)
+	binary.BigEndian.PutUint64(frame[8:16], tick)
+	binary.BigEndian.PutUint32(frame[16:20], index)
+	binary.BigEndian.PutUint32(frame[20:24], count)
+	binary.BigEndian.PutUint32(frame[24:28], total)
 	copy(frame[SnapshotChunkHeader:], payload)
 	return frame
 }
@@ -60,7 +60,7 @@ func TestAssemblyStillReassemblesARealTransfer(t *testing.T) {
 	for i := range body {
 		body[i] = byte(i)
 	}
-	chunks, err := EncodeSnapshotChunks(42, body)
+	chunks, err := EncodeSnapshotChunks(1, 42, body)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}

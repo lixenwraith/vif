@@ -1384,8 +1384,8 @@ func (s *WeaponSystem) tracerStrike(x, y int, selfEntity, owner core.Entity, vel
 			continue
 		}
 
-		// Skip cursors, their orbs, and the firing cursor's owned entities.
-		if isCursorOrOwnedOrb(s.world, target) || isOwnedBy(s.world, target, owner) {
+		// Skip the player side: cursors, their orbs, the tower, the firing cursor's own.
+		if isPlayerSide(s.world, target, owner) {
 			continue
 		}
 

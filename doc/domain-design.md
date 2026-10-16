@@ -745,7 +745,6 @@ departing cursor, and reconnect must take a current world.
 | Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the current successor from the published succession chain, so the shape is a star with a successor chain over it. |
 | Partition | The **first survivor in the succession chain**, else the lowest independent roster identity, succeeds without a vote; losing that successor once it holds the term runs the next succession, but losing it together with the authority elects nobody, because the roster still names it, and the survivors fork. A survivor with no link walks the succession list, and one that hears no record within the succession window forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
-| Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
 | Presentation | Small terminals clip the map; remote cursor presentation has no interpolation beyond receive scheduling. |
 | Portability | `float64` determinism is a same-build guarantee, not arbitrary cross-platform bit-exact lockstep. |

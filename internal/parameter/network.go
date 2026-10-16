@@ -5,8 +5,8 @@ import "time"
 // Transport cadence. Every participant stamps its own crossings with a lead its own
 // link to the authority asks for; owner-authored state is a periodic value sync.
 const (
-	// NetworkBarrierDelayTicks is the lead a guest stamps with before its link to the
-	// authority is measured, and the tick budget a join is admitted and a guest is
+	// NetworkBarrierDelayTicks is the lead a guest stamps with before its first epoch
+	// comes back committed, and the tick budget a join is admitted and a guest is
 	// called stale against.
 	NetworkBarrierDelayTicks = 3
 

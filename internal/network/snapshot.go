@@ -9,16 +9,11 @@ import (
 )
 
 // SnapshotChunkHeader precedes each frame of a capture in transit:
-// [Tick:8][Index:4][Count:4][Total:4].
-//
-// A capture is the one message in this protocol whose size is a function of the
-// world rather than of the format, so it is the one that has to be split: the frame
-// header's length field is 16 bits and a storm's world does not fit in it. The
-// chunk header names the whole transfer rather than just this piece — the tick it
-// describes, which piece this is, how many there are, and how many bytes the
-// reassembled body must come to — so a receiver can size its buffer once, reject a
-// transfer that changes its mind mid-stream, and say which of the two it was.
-const SnapshotChunkHeader = 20
+// [Run:8][Tick:8][Index:4][Count:4][Total:4]. A capture's size is a function of
+// the world, so it is the message that has to be split; the header names the whole
+// transfer — the run and tick it describes, which piece this is, how many there are
+// and the body's length — so a receiver sizes its buffer once and orders transfers.
+const SnapshotChunkHeader = 28
 
 // SnapshotChunkBody is the payload each chunk carries. The frame header is already
 // accounted for by MaxPayloadSize.
@@ -52,13 +47,15 @@ const MaxSnapshotPlainBytes = 8 * MaxSnapshotBytes
 // place a peer could name a number and have it allocated.
 const snapshotReserve = 64 << 10
 
-// EncodeSnapshotChunks splits an encoded capture into wire frames.
-func EncodeSnapshotChunks(tick uint64, body []byte) ([][]byte, error) {
-	return EncodeSnapshotChunksOf(tick, body, SnapshotChunkBody)
+// EncodeSnapshotChunks splits an encoded capture into wire frames. run and tick
+// order transfers on an assembly that sees several; a join's sees one, and passes
+// zero.
+func EncodeSnapshotChunks(run, tick uint64, body []byte) ([][]byte, error) {
+	return EncodeSnapshotChunksOf(run, tick, body, SnapshotChunkBody)
 }
 
 // EncodeSnapshotChunksOf splits body into frames carrying at most size bytes of it.
-func EncodeSnapshotChunksOf(tick uint64, body []byte, size int) ([][]byte, error) {
+func EncodeSnapshotChunksOf(run, tick uint64, body []byte, size int) ([][]byte, error) {
 	if len(body) == 0 {
 		return nil, errors.New("snapshot: empty body")
 	}
@@ -72,10 +69,11 @@ func EncodeSnapshotChunksOf(tick uint64, body []byte, size int) ([][]byte, error
 		lo := i * size
 		hi := min(lo+size, len(body))
 		frame := make([]byte, SnapshotChunkHeader+hi-lo)
-		binary.BigEndian.PutUint64(frame[0:8], tick)
-		binary.BigEndian.PutUint32(frame[8:12], uint32(i))
-		binary.BigEndian.PutUint32(frame[12:16], uint32(count))
-		binary.BigEndian.PutUint32(frame[16:20], uint32(len(body)))
+		binary.BigEndian.PutUint64(frame[0:8], run)
+		binary.BigEndian.PutUint64(frame[8:16], tick)
+		binary.BigEndian.PutUint32(frame[16:20], uint32(i))
+		binary.BigEndian.PutUint32(frame[20:24], uint32(count))
+		binary.BigEndian.PutUint32(frame[24:28], uint32(len(body)))
 		copy(frame[SnapshotChunkHeader:], body[lo:hi])
 		out = append(out, frame)
 	}
@@ -98,8 +96,10 @@ func EncodeSnapshotChunksOf(tick uint64, body []byte, size int) ([][]byte, error
 // has already assembled whole — the paths carry differently shaped bodies for one
 // tick — and a chunk of a *newer* transfer, which supersedes the one in progress
 // because a correction carries no information the one after it lacks. Everything
-// else is still an error.
+// else is still an error. Transfers order by run, then tick: a reset restarts the
+// tick count, and the new run's first world is the newest thing on the wire.
 type SnapshotAssembly struct {
+	run     uint64
 	tick    uint64
 	count   uint32
 	next    uint32
@@ -129,11 +129,14 @@ func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err erro
 	if len(frame) < SnapshotChunkHeader {
 		return false, false, fmt.Errorf("snapshot chunk: %d bytes, want at least %d", len(frame), SnapshotChunkHeader)
 	}
-	tick := binary.BigEndian.Uint64(frame[0:8])
-	index := binary.BigEndian.Uint32(frame[8:12])
-	count := binary.BigEndian.Uint32(frame[12:16])
-	total := binary.BigEndian.Uint32(frame[16:20])
+	run := binary.BigEndian.Uint64(frame[0:8])
+	tick := binary.BigEndian.Uint64(frame[8:16])
+	index := binary.BigEndian.Uint32(frame[16:20])
+	count := binary.BigEndian.Uint32(frame[20:24])
+	total := binary.BigEndian.Uint32(frame[24:28])
 	payload := frame[SnapshotChunkHeader:]
+	newer := run > s.run || (run == s.run && tick > s.tick)
+	older := run < s.run || (run == s.run && tick < s.tick)
 
 	switch {
 	case count == 0:
@@ -145,7 +148,7 @@ func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err erro
 	}
 	// A newer transfer supersedes whatever is half-assembled, and must start at its
 	// own first chunk: joining one in the middle would build a body from two.
-	if s.started && tick > s.tick {
+	if s.started && newer {
 		if index != 0 {
 			return false, false, nil
 		}
@@ -158,16 +161,17 @@ func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err erro
 			// next one starts at its own first chunk.
 			return false, false, nil
 		}
-		s.tick, s.count, s.total, s.started = tick, count, total, true
+		s.run, s.tick, s.count, s.total, s.started = run, tick, count, total, true
 		s.body = make([]byte, 0, min(int(total), snapshotReserve))
+		older = false
 	}
 	// Already taken, or moved past. Two paths can carry differently shaped bodies
 	// for the same tick — a delta down one and the keyframe down another — and once
 	// either is whole the other describes a world this node already holds.
-	if tick < s.tick || (tick == s.tick && s.next == s.count) {
+	if older || (tick == s.tick && s.next == s.count) {
 		return false, false, nil
 	}
-	if tick != s.tick || count != s.count || total != s.total {
+	if run != s.run || tick != s.tick || count != s.count || total != s.total {
 		return false, false, fmt.Errorf("snapshot chunk %d: transfer changed to tick %d, %d chunks, %d bytes",
 			index, tick, count, total)
 	}
@@ -199,7 +203,7 @@ func (s *SnapshotAssembly) Tick() uint64 { return s.tick }
 
 // writeSnapshot sends a whole capture down a raw handshake stream.
 func writeSnapshot(conn net.Conn, timeout time.Duration, tick uint64, body []byte) error {
-	chunks, err := EncodeSnapshotChunks(tick, body)
+	chunks, err := EncodeSnapshotChunks(0, tick, body)
 	if err != nil {
 		return err
 	}

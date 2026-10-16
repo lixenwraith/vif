@@ -183,7 +183,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `player.local` (int) | The slot this instance drives |
 | `session.any_defeated` (bool) | At least one rostered cursor's owner-authored defeat latch (`EventCursorDefeatState`) is set. A shipped game-over guard |
 | `session.all_defeated` (bool) | Every rostered cursor's defeat latch is set |
-| `kills.<species>` (int) | Species deaths. `kills.drain` counts `EventDrainDefeated`, not `EventSpeciesKilled`. A tower death with no killer is not counted |
+| `kills.<species>` (int) | Species deaths. `kills.drain` counts `EventDrainDefeated`, not `EventSpeciesKilled`. A tower's death is never counted: the structure is the players' own, and `kills.tower` stays zero |
 | `kills.total`, `kills.uncredited` (int) | All counted deaths, and those whose killer resolves to no roster cursor |
 | `energy.damage_multiplier` (int) | The cycle damage factor. `MetaSystem.setDamageMultiplier` is its only writer: it doubles on `EventCycleDamageMultiplierIncrease` and returns to 1 on `EventCycleDamageMultiplierReset` and in `Init`. `EnergySystem` multiplies penalties by it |
 | `energy.penalty_rejects` (int) | Penalties absorbed by an active boost or ember |
