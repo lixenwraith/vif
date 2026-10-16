@@ -411,7 +411,7 @@ func (s *PylonSystem) processAblativeCombat(headerEntity core.Entity, headerComp
 			continue
 		}
 
-		combatComp, ok := s.world.Components.Combat.GetComponent(member.Entity)
+		combatComp, ok := s.world.Components.Combat.GetPtr(member.Entity)
 		if !ok {
 			continue
 		}

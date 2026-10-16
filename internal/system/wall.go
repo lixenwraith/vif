@@ -350,6 +350,9 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 
 	result.minX, result.minY = config.MapWidth, config.MapHeight
 	result.maxX, result.maxY = 0, 0
+	if payload.BlockMask != component.WallBlockNone {
+		s.pendingPushChecks = slices.Grow(s.pendingPushChecks, len(resolved))
+	}
 
 	for _, rc := range resolved {
 		cell := payload.Cells[rc.idx]
@@ -724,7 +727,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 		}
 
 		// Stuck: destroy non-cursor-owned combat entities that cannot escape
-		if combat, ok := s.world.Components.Combat.GetComponent(entity); ok {
+		if combat, ok := s.world.Components.Combat.GetPtr(entity); ok {
 			if !s.world.Components.Cursor.HasEntity(combat.OwnerEntity) {
 				event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
 			}

@@ -12,7 +12,8 @@ import (
 // from the phantom head, liveness tombstones, compaction, integrity breach events and
 // destroy requests
 type CompositeSystem struct {
-	world *engine.World
+	world   *engine.World
+	headers []core.Entity // the tick's headers, detached: syncMembers and destroyHead move the store
 	toggle
 }
 
@@ -87,9 +88,9 @@ func (s *CompositeSystem) Update() {
 
 	// syncMembers and destroyHead can structurally mutate Header/Member stores;
 	// preserve the original header order and keep component values detached.
-	headerEntities := s.world.Components.Header.GetAllEntities()
+	s.headers = append(s.headers[:0], s.world.Components.Header.Entities()...)
 
-	for _, headerEntity := range headerEntities {
+	for _, headerEntity := range s.headers {
 		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 		if !ok {
 			continue

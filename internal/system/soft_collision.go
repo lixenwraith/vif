@@ -454,7 +454,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 		for i := range targets {
 			tgt := &targets[i]
 
-			combatComp, ok := s.world.Components.Combat.GetComponent(tgt.entity)
+			combatComp, ok := s.world.Components.Combat.GetPtr(tgt.entity)
 			// Flocking does not apply if dead, immune to kinetic shifts (recently hit), enraged (attacking), or stunned
 			if !ok || combatComp.HitPoints <= 0 || combatComp.RemainingKineticImmunity > 0 || combatComp.IsEnraged || combatComp.Status[component.StatusStun].Remaining > 0 {
 				continue
