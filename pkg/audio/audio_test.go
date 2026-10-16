@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -667,5 +668,60 @@ func TestTransitionKeepsIncomingWhole(t *testing.T) {
 	}
 	if got := s.slots[1].revealN; got != 2 {
 		t.Errorf("build-up starts from %d tracks, want the 2 the outgoing pattern sounded", got)
+	}
+}
+
+// closeBuffer is a host's speakers in a test: it keeps what the mixer wrote and
+// whether the engine closed it.
+type closeBuffer struct {
+	mu     sync.Mutex
+	n      int
+	closed bool
+}
+
+func (b *closeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.n += len(p)
+	return len(p), nil
+}
+
+func (b *closeBuffer) Close() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.closed = true
+	return nil
+}
+
+// TestAHostSinkReplacesBackendDetection: a host that supplies its speakers gets
+// the stream whatever backend name is set, and the engine closes them with itself.
+func TestAHostSinkReplacesBackendDetection(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+
+	sink := &closeBuffer{}
+	cfg := DefaultAudioConfig()
+	cfg.Enabled = true
+	cfg.BaseSounds = testBank()
+	cfg.ForceBackend = BackendNameNull
+	cfg.Sink = sink
+	ae, err := NewAudioEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ae.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if got := ae.BackendName(); got != BackendNameHost {
+		t.Fatalf("backend %q, want %q", got, BackendNameHost)
+	}
+	ae.Play(ae.SoundID("coin"))
+	time.Sleep(3 * AudioBufferDuration)
+	ae.Stop()
+
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.n == 0 || !sink.closed {
+		t.Fatalf("sink took %d bytes, closed %v", sink.n, sink.closed)
 	}
 }
