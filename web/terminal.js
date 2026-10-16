@@ -335,6 +335,7 @@
         fitH = document.documentElement.clientHeight;
         fitFull = document.fullscreenElement != null;
         keyboardSeen = false;   // seen over the old page; the layout after the fit looks again
+        refitPending = false;   // this fit took the resizes put off before it
     }
 
     // A rotation or a fullscreen change: the page itself resized, which no keyboard does.
