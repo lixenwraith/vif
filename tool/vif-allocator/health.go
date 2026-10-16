@@ -26,6 +26,7 @@ type sessionHealth struct {
 	Bots      int    `json:"bots"`
 	Phase     string `json:"phase,omitempty"`
 	Tick      uint64 `json:"tick"`
+	Map       string `json:"map,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 }
 
@@ -159,6 +160,8 @@ func parseHealth(data []byte) (sessionHealth, error) {
 				result.Bots = parsed
 			case "phase":
 				result.Phase = value
+			case "map":
+				result.Map = value
 			case "tick":
 				parsed, err := strconv.ParseUint(value, 10, 64)
 				if err != nil {

@@ -8,14 +8,14 @@ import "testing"
 func TestParseHealthReadsTheBodyTheProbeWrites(t *testing.T) {
 	input := []byte("live=true ready=false reason=session at capacity\n" +
 		"address=:7777\nbots=1\ncapacity=2\nclock=running\nexpires_in=1m12s\n" +
-		"guests=2\nphase=occupied\ntick=228\n")
+		"guests=2\nmap=500x250\nphase=occupied\ntick=228\n")
 	got, err := parseHealth(input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !got.Live || got.Ready || got.Capacity != 2 || got.Clock != "running" ||
 		got.ExpiresIn != "1m12s" || got.Guests != 2 || got.Bots != 1 || got.Phase != "occupied" ||
-		got.Tick != 228 || got.Reason != "session at capacity" {
+		got.Tick != 228 || got.Map != "500x250" || got.Reason != "session at capacity" {
 		t.Fatalf("unexpected health: %+v", got)
 	}
 }
