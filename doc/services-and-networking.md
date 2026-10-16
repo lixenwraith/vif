@@ -495,14 +495,15 @@ by whoever sent the chunk, so reserving for the declared total would let one
 twenty-byte header make a receiver hold the whole ceiling. The reservation is
 bounded by `snapshotReserve` and the buffer grows with the bytes that actually
 arrive, so what a peer can make a receiver hold is what that peer sends. Each chunk
-carries a 20-byte header before its payload:
+carries a 28-byte header before its payload:
 
 | Byte range | Width | Field |
 |---|---:|---|
-| 0–7 | 8 | the tick this capture describes |
-| 8–11 | 4 | chunk index |
-| 12–15 | 4 | chunk count |
-| 16–19 | 4 | total body length |
+| 0–7 | 8 | the run this capture describes, zero on a join's own stream |
+| 8–15 | 8 | the tick this capture describes |
+| 16–19 | 4 | chunk index |
+| 20–23 | 4 | chunk count |
+| 24–27 | 4 | total body length |
 
 `SnapshotAssembly` refuses a skipped predecessor, a frame that changes the
 transfer's shape, a body that overruns its declared length and a frame shorter than

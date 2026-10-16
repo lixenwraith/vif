@@ -8,7 +8,7 @@ import (
 )
 
 // ProtocolVersion changes when peers cannot share the session wire contract.
-const ProtocolVersion uint32 = 6
+const ProtocolVersion uint32 = 7
 
 // IdentityRefusalTag distinguishes incompatible simulation identity from a
 // retryable admission failure without matching user-facing prose.

@@ -574,7 +574,7 @@ func TestAGuestForwardsDownOnlyToThoseBehindIt(t *testing.T) {
 	guest.scheduleCrossings(3, rawBatch(t, 3, 100, 104)) // participant 3 is behind this guest
 	port.sent = nil
 	guest.scheduleCrossings(1, boundsBatch(t, 5, 100, 105, 1, 0))
-	chunks, err := network.EncodeSnapshotChunks(100, []byte("world"))
+	chunks, err := network.EncodeSnapshotChunks(0, 100, []byte("world"))
 	if err != nil {
 		t.Fatal(err)
 	}

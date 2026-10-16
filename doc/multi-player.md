@@ -402,7 +402,10 @@ so loss costs freshness rather than correctness. A reset restarts the tick count
 on a run change each end drops what it keyed by tick and refuses an artifact naming
 another run: a correction by its header (`Corrections.followRun`), an epoch or owner
 sync by the run its batch names, since a guest's last epochs of a run reach the
-authority a round trip after the reset applied there. A body leaves in
+authority a round trip after the reset applied there. The run after this one is
+the exception: its first world reaches a guest whose reset is still on its way, so
+the chunk header carries the run, the assembly orders transfers by run then tick,
+and `Apply` keeps such a body at the head of its inbox until the reset enters it. A body leaves in
 `SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
 what its latest echo reports received — drains within `SnapshotBulkQueue` past the
 round trip, so an epoch waits behind a chunk, not a world. What a link still
