@@ -66,6 +66,7 @@ only_systems = ["system_name", ...]     # Or (not both): every other toggled sys
 [map]
 min_width = 50                      # Floor under the map's size (optional)
 min_height = 20
+fixed = "500x250"                   # Size the map holds throughout, for front-ends (optional)
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)

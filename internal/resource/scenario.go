@@ -50,6 +50,9 @@ type Scenario struct {
 	// MapMinWidth and MapMinHeight are the [map] floor under the map's size, zero
 	// when the scenario sets none
 	MapMinWidth, MapMinHeight int
+	// MapFixedWidth and MapFixedHeight are [map] fixed, the size the scenario says
+	// its map holds throughout, for front-ends; its level setups are what hold it
+	MapFixedWidth, MapFixedHeight int
 
 	entry  string
 	files  []scenarioFile
@@ -263,20 +266,28 @@ func (s *Scenario) validate() error {
 		}
 	}
 	if table, exists := doc["map"]; exists {
-		return s.readMapFloor(table)
+		return s.readMap(table)
 	}
 	return nil
 }
 
-// readMapFloor reads [map] min_width and min_height. A floor the grid cannot hold is
-// refused rather than clamped: it names the size the scenario's layout needs, and
-// it arrives from a peer as readily as from disk.
-func (s *Scenario) readMapFloor(v any) error {
+// readMap reads [map] min_width, min_height and fixed. A size the grid cannot hold
+// is refused rather than clamped: it names what the scenario's layout needs, and it
+// arrives from a peer as readily as from disk.
+func (s *Scenario) readMap(v any) error {
 	table, ok := v.(map[string]any)
 	if !ok {
 		return errors.New("map must be a table")
 	}
 	for key, value := range table {
+		if key == "fixed" {
+			text, _ := value.(string)
+			if _, err := fmt.Sscanf(text, "%dx%d", &s.MapFixedWidth, &s.MapFixedHeight); err != nil ||
+				fmt.Sprintf("%dx%d", s.MapFixedWidth, s.MapFixedHeight) != text || s.MapFixedWidth < 1 || s.MapFixedHeight < 1 {
+				return errors.New(`map.fixed must be "WxH", positive integers`)
+			}
+			continue
+		}
 		n, ok := value.(int64)
 		switch {
 		case key != "min_width" && key != "min_height":
@@ -291,6 +302,13 @@ func (s *Scenario) readMapFloor(v any) error {
 	}
 	if w, h := engine.ClampMapSize(max(s.MapMinWidth, 1), max(s.MapMinHeight, 1)); w < s.MapMinWidth || h < s.MapMinHeight {
 		return fmt.Errorf("map floor %dx%d is larger than a map can be", s.MapMinWidth, s.MapMinHeight)
+	}
+	if s.MapFixedWidth > 0 {
+		if w, h := engine.ClampMapSize(s.MapFixedWidth, s.MapFixedHeight); w != s.MapFixedWidth || h != s.MapFixedHeight ||
+			w < s.MapMinWidth || h < s.MapMinHeight {
+			return fmt.Errorf("map.fixed %dx%d is not a map this scenario can have",
+				s.MapFixedWidth, s.MapFixedHeight)
+		}
 	}
 	return nil
 }

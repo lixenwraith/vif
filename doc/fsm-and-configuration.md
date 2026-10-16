@@ -126,6 +126,7 @@ file = "boss.toml" # no initial: dynamic region
 | `systems.disabled_systems` | Systems disabled after FSM initialization. Names are validated against runtime `System.Name()` values. |
 | `systems.only_systems` | Every toggled system not named starts disabled; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
 | `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
+| `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's level setups are what hold it. A scenario whose regions size the map differently leaves it out. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
 | `background` | Keeps the region out of the foreground summary the status bar shows; it still updates, handles events and publishes its own `fsm.<region>.*` metrics. |
