@@ -26,7 +26,7 @@ spec:
     requests.cpu: 1000m
     requests.memory: 960Mi
     limits.cpu: "5"
-    limits.memory: 1920Mi
+    limits.memory: 4800Mi
     # Two shared local claims: the volatile log tmpfs every session writes through,
     # and the read-only scenario volume they all mount. Neither is per-session
     # persistence; the node's own tmpfs and directory are the hard capacity.
@@ -46,10 +46,10 @@ spec:
     - type: Container
       default:
         cpu: 500m
-        memory: 192Mi
+        memory: 480Mi
       defaultRequest:
         cpu: 100m
         memory: 96Mi
       max:
         cpu: "1"
-        memory: 384Mi
+        memory: 672Mi
