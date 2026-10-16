@@ -358,26 +358,30 @@ integrity; it does not establish trust.
 
 ## 8. Adding another renderer or Android host
 
-The current default presentation adapter is terminal-specific and selected by
-`!vif_headless`. Adding a graphical renderer should be a small composition change,
-not a simulation fork:
+A presenting run takes its screen from `app.Presentation`: a service the hub
+runs, the `render.Surface` frames are flushed to, its size, how long it has held
+a frame, the events it reports in the terminal's vocabulary (`terminal.Event`,
+which a host posts for the keys and pointer cells it maps), and the pointer mode.
+The terminal is one (`terminalHost`); it is the default when `Config.Host` names
+none. A host also supplies its speakers as `Host.Audio`, a writer the mixer
+streams PCM to in place of a backend found by name. Adding a graphical host is
+therefore composition, not a simulation fork:
 
-1. introduce a positive tag such as `vif_gui` for the new adapter;
-2. change the terminal adapter and generated terminal renderer constraints to
-   `!vif_headless && !vif_gui`;
-3. implement the same presentation lifecycle and geometry/input bridge in
-   `presentation_gui.go`, drawing through a `render.Surface` (color mode, `Flush`
-   of the cell grid, `Sync`), which is the whole of what the orchestrator needs;
-4. keep graphical assets and renderer construction out of the common manifest
-   builder;
-5. leave components, systems, events, scheduler, and manifest fingerprint common.
+1. implement `Presentation` over the window or view, drawing the cell grid with
+   the embedded font atlas (`asset.DefaultFont`, `pkg/glyph`): `glyph.Raster`
+   is the software drawer, a `Surface` any host can start from;
+2. build a `Config` with that `Host` and call `app.Run`; a library binding wraps
+   that call;
+3. keep graphical assets and renderer construction out of the common manifest
+   builder, and leave components, systems, events, scheduler and the manifest
+   fingerprint common.
 
-Android should use the same pattern through a library entry point rather than the
-terminal CLI. Its renderer, lifecycle, input, audio, networking, and packaged asset
-providers are host adapters. The remaining terminal-shaped cell/color and key types
-described in §2 are the main architectural work before that port; the development
-target is a minimally polished Android app within one month, so renderer-neutral
-visual and input extraction belongs on that launch path rather than after it.
+Android follows the same path through `gomobile bind`: the view is the
+`Presentation`, `AudioTrack` the sink, and its packaged assets reach the game
+through the resource providers. The terminal module's value types (`Cell`,
+`Attr`, `ColorMode`, `Key`) are the renderer-neutral vocabulary by decision
+([Engine decoupling](engine-decoupling.md) §7); the cell aspect is the next
+parameter to take out of the code.
 
 Build tags should remain orthogonal capabilities. Avoid an accumulating
 `linux`/`windows`/`android` switch in gameplay code: use a platform tag only where
