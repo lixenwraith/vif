@@ -487,11 +487,13 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	particles := s.world.Components.Particle
 
 	for _, entity := range s.entities {
-		particle, ok := particles.GetComponent(entity)
+		// Live pointers: the only structural change in the body is the annihilation
+		// that destroys this particle too, after which neither is read
+		particle, ok := particles.GetPtr(entity)
 		if !ok || particle.Behavior != behavior {
 			continue
 		}
-		kineticComp, ok := s.world.Components.Kinetic.GetComponent(entity)
+		kineticComp, ok := s.world.Components.Kinetic.GetPtr(entity)
 		if !ok {
 			continue
 		}
@@ -503,7 +505,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 			kinetic.VelY += vmath.Sin(angle) * prof.jitter
 		}
 		center, anchored := nearestCenter(centers, kinetic.PreciseX, kinetic.PreciseY)
-		s.steer(prof, &particle, kinetic, center, anchored, chase, dtSec)
+		s.steer(prof, particle, kinetic, center, anchored, chase, dtSec)
 
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 		curX, curY := physics.Integrate(kinetic, dtSec)
@@ -577,9 +579,6 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: curX, Y: curY})
 		}
 		s.fade(prof, entity)
-
-		particles.SetComponent(entity, particle)
-		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 	}
 
 	switch behavior {

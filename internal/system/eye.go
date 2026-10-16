@@ -16,7 +16,8 @@ import (
 // EyeSystem manages eye composite entity lifecycle
 // Eyes are 5×3 composites that home toward an assigned target group and self-destruct on contact
 type EyeSystem struct {
-	world *engine.World
+	world   *engine.World
+	headers []core.Entity // the tick's eyes, detached: despawnEye removes mid-iteration
 
 	// Telemetry
 	statCount           *atomic.Int64
@@ -137,11 +138,10 @@ func (s *EyeSystem) Update() {
 
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
-	// Detached copy: despawnEye may remove from the Eye store mid-iteration
-	headerEntities := s.world.Components.Eye.GetAllEntities()
+	s.headers = append(s.headers[:0], s.world.Components.Eye.Entities()...)
 	activeCount := 0
 
-	for _, headerEntity := range headerEntities {
+	for _, headerEntity := range s.headers {
 		eyeComp, ok := s.world.Components.Eye.GetPtr(headerEntity)
 		if !ok {
 			continue
