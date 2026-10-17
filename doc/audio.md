@@ -30,10 +30,12 @@ shapes, and `MusicSystem` interprets the game's five-second APM signal.
 
 Runtime mode and build capability select whether this layer exists. In a full
 build, `ModePlay`, `ModeReplay` and `ModeScript` register the audio service;
-`ModeHeadless` and `ModeServer` do not. `vif_noaudio`, `vif_headless`, and
-`js/wasm` omit the service, engine resource, full audio systems, and `pkg/audio`
-implementation. Lightweight null systems still consume local audio events and
-publish audio as unavailable, preserving telemetry and system controls. Event
+`ModeHeadless` and `ModeServer` do not. `vif_noaudio` and `vif_headless` omit the
+service, engine resource, full audio systems, and `pkg/audio` implementation;
+lightweight null systems still consume local audio events and publish audio as
+unavailable, preserving telemetry and system controls. The browser build keeps
+them all and streams to the page as a host's speakers (§3, [platforms
+§8](multi-platform.md#8-adding-another-renderer-or-android-host)). Event
 payloads carry audio identifiers from the dependency-free `pkg/audio/model`
 package, which every build compiles. Replay rebuilds simulation from recorded
 events, including sound requests; the journal carries no mute state, so
@@ -100,6 +102,8 @@ of a device is not an application-start failure.
 A host that has its own speakers skips detection: `AudioConfig.Sink` (from
 `app.Config.Host.Audio`) is a writer the mixer streams to as the `host` backend,
 whatever name was forced, closed with the engine as the WAV and OSS sinks are.
+Android's is its `AudioTrack`; the browser's posts each buffer that sounds to the
+page, which plays it through an AudioWorklet.
 
 ## 4. Concurrency and command ownership
 

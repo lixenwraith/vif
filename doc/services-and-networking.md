@@ -82,8 +82,8 @@ Assembly is mode-dependent:
 
 The predicates in `internal/app/config.go` are authoritative for terminal and
 audio capabilities, then build capabilities constrain them further. A
-`vif_headless` build has no terminal or audio adapter; `vif_noaudio` and browser
-builds have no audio adapter. Native networking is role-selected separately:
+`vif_headless` build has no terminal or audio adapter; `vif_noaudio` has no audio
+adapter. Native networking is role-selected separately:
 play constructs the no-op-capable socket adapter, while every other mode
 constructs it only for a host or join address, which only a script or bot run and
 `-serve` may be given. A browser registers the same adapter

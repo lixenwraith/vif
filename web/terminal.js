@@ -3,18 +3,23 @@
 
     /* The files beside the page, by the names web/ gives them. A site that
        publishes them under other names, as content-hashed ones, says so on this
-       script's element: data-wasm, data-worker and data-exec (wasm_exec.js). */
+       script's element: data-wasm, data-worker, data-exec (wasm_exec.js) and
+       data-audio (audio-worklet.js). */
     const files = (document.currentScript && document.currentScript.dataset) || {};
     const WASM_PATH = files.wasm || 'vif.wasm';
     const WORKER_PATH = files.worker || 'worker.js';
     const EXEC_PATH = files.exec || 'wasm_exec.js';
+    const AUDIO_PATH = files.audio || 'audio-worklet.js';
 
     /* A touch-first screen (phone, tablet), decided once at load, keeps the system
        keyboard down on taps and gets the key strip to raise it. A cell is CELL CSS
-       pixels tall and half as wide, the aspect the game is authored at; a phone's 12
-       is about what a laptop's 16 is at their viewing distances. */
+       pixels tall and half as wide, the aspect the game is authored at; a phone
+       starts at 6, which holds the map's width in its screen, and a pinch, or
+       Ctrl and the wheel, takes the cell between CELL_LEAST and CELL_MOST. */
     const touch = matchMedia('(pointer: coarse)').matches;
-    const CELL = touch && Math.min(screen.width, screen.height) < 600 ? 12 : 16;
+    const CELL = touch && Math.min(screen.width, screen.height) < 600 ? 6 : 16;
+    const CELL_LEAST = 4, CELL_MOST = 40;
+    let cellBase = CELL;    // the cell the grid is fitted at: CELL until a zoom moves it
     const FONT = '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, "DejaVu Sans Mono", Consolas, monospace';
 
     const container = document.getElementById('terminal');
@@ -352,10 +357,10 @@ void main() {
         }
     }
 
-    // fit sizes the grid to the cells the container holds at CELL and reports it to Go
-    // when it changed; the grid is never fitted at a keyboard's smaller cell
+    // fit sizes the grid to the cells the container holds at cellBase and reports it
+    // to Go when it changed; the grid is never fitted at a keyboard's smaller cell
     function fit() {
-        cellCSS = CELL;
+        cellCSS = cellBase;
         size();
         cell();
         const c = Math.max(1, Math.floor(canvas.width / drawer.cw));
@@ -508,6 +513,9 @@ void main() {
                 pointer = { enabled: msg.enabled, motion: msg.motion };
                 lastCell = null;
                 break;
+            case 'audio':
+                onAudio(msg.data);
+                break;
             case 'exit':
                 showExit(msg.code, msg.reason);
                 stop();
@@ -533,7 +541,46 @@ void main() {
         if (!program) return;
         program.terminate();
         program = null;
+        if (audio && audio.ctx) audio.ctx.close().catch(function() {});
         if (touch) input.blur();   // nothing left to type into, and a keyboard would cover the message
+    }
+
+    // === Sound ===
+    /* The Worker posts the mixer's PCM once a sound plays; a muted game, the
+       default, posts nothing. The first buffer opens an AudioContext at the mixer's
+       rate and loads the worklet (AUDIO_PATH) that plays what follows through a ring.
+       A context opened outside a gesture stays suspended, so each key or pointer
+       resumes it; a buffer that arrives before it runs is dropped. */
+    let audio = null;   // { ctx, node }, node once the worklet loaded
+
+    function onAudio(data) {
+        if (!audio) openAudio();
+        if (audio.node && audio.ctx.state === 'running') audio.node.port.postMessage(data, [data.buffer]);
+    }
+
+    function openAudio() {
+        audio = { ctx: null, node: null };
+        let ctx;
+        try {
+            ctx = new AudioContext({ sampleRate: 44100 });
+        } catch (err) {
+            return;   // no sound on this browser; the game plays on
+        }
+        if (!ctx.audioWorklet) {
+            ctx.close().catch(function() {});
+            return;
+        }
+        audio.ctx = ctx;
+        ctx.audioWorklet.addModule(AUDIO_PATH).then(function() {
+            audio.node = new AudioWorkletNode(ctx, 'vif-speaker', { numberOfInputs: 0, outputChannelCount: [2] });
+            audio.node.connect(ctx.destination);
+        }).catch(function(err) {
+            notice('No sound (' + err.message + ').');
+        });
+        // The events that count as a gesture: a mouse's press, a touch's release, a key.
+        const wake = function() { if (ctx.state !== 'running') ctx.resume().catch(function() {}); };
+        for (const type of ['pointerdown', 'pointerup', 'keydown']) document.addEventListener(type, wake, true);
+        wake();
     }
 
     function focus() {
@@ -613,6 +660,15 @@ void main() {
     function onPointerDown(e) {
         focus();   // keys follow the pointer
         e.preventDefault();
+        if (e.pointerType === 'touch') {
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (pointers.size === 2) {
+                if (pointer.enabled && lastCell) mouse(e, 1, 2);
+                pinch = { dist: pinchDistance(), cell: cellBase };
+                return;
+            }
+            if (pointers.size > 2) return;
+        }
         if (!pointer.enabled) return;
         const button = e.pointerType === 'touch' ? 1 : BUTTONS[e.button];
         if (!button) return;
@@ -621,12 +677,23 @@ void main() {
     }
 
     function onPointerUp(e) {
+        if (e.pointerType === 'touch') {
+            pointers.delete(e.pointerId);
+            if (pinch) {
+                if (pointers.size === 0) pinch = null;
+                return;
+            }
+        }
         if (!pointer.enabled) return;
         const button = e.pointerType === 'touch' ? 1 : BUTTONS[e.button];
         if (button) mouse(e, button, 2);
     }
 
     function onPointerMove(e) {
+        if (pinch) {
+            onPinchMove(e);
+            return;
+        }
         if (!pointer.enabled) return;
         const button = held(e);
         if (!button && !pointer.motion) return;
@@ -637,7 +704,38 @@ void main() {
 
     function onWheel(e) {
         e.preventDefault();
+        if (e.ctrlKey) {   // a trackpad's pinch, or Ctrl and the wheel: zoom, never the page's
+            if (e.deltaY) zoomTo(cellBase * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+            return;
+        }
         if (pointer.enabled && e.deltaY) mouse(e, e.deltaY < 0 ? 4 : 5, 1);
+    }
+
+    // === Zoom ===
+    /* A zoom moves the cell the grid is fitted at, in half pixels between the
+       bounds, and refits: the grid changes, and Go sees a resize as it does for a
+       window, so a solo map follows it and a shared one shows more or less of
+       itself. A pinch is two pointers on the canvas; the first is released to the
+       game when the second lands, so no press is left held under the gesture. */
+    const pointers = new Map();   // active pointers on the canvas, by id
+    let pinch = null;             // { dist, cell }: the pinch's start
+    let zoomFrame = 0;
+
+    function zoomTo(cell) {
+        cell = Math.min(CELL_MOST, Math.max(CELL_LEAST, Math.round(cell * 2) / 2));
+        if (cell === cellBase) return;
+        cellBase = cell;
+        if (!zoomFrame) zoomFrame = requestAnimationFrame(function() { zoomFrame = 0; fit(); });
+    }
+
+    function pinchDistance() {
+        const [a, b] = [...pointers.values()];
+        return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function onPinchMove(e) {
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 2 && pinch) zoomTo(pinch.cell * pinchDistance() / pinch.dist);
     }
 
     // === Event Wiring ===
@@ -718,7 +816,7 @@ void main() {
         strip.addEventListener('click', function(e) {
             const b = e.target.closest('button');
             if (!b) return;
-            if (b.dataset.key) send({ type: 'key', key: b.dataset.key, mods: 0 });
+            if (b.dataset.key) send({ type: 'key', key: b.dataset.key, mods: Number(b.dataset.mods) || 0 });
             else if (b === kbdButton) setKeyboard(!keyboard, true);
             else if (b === fullButton) toggleFullscreen();
         });
@@ -740,7 +838,8 @@ void main() {
 
         /* While a keyboard covers the page the grid keeps its size, which is the solo
            map's, and is drawn at a smaller cell between the strip and the keyboard;
-           below CELL_MIN it keeps the bottom rows, where commands are typed, in view. */
+           below CELL_MIN it keeps the bottom rows, where commands are typed, in view.
+           A zoom under a keyboard refits once the keyboard is down (fit, above). */
         function drawAt(h) {
             if (cellCSS !== h) {
                 cellCSS = h;
@@ -750,7 +849,7 @@ void main() {
             return drawer.frame()[1] / (window.devicePixelRatio || 1);   // the grid's CSS height
         }
 
-        let fullHeight = 0;   // the grid's height at CELL
+        let fullHeight = 0;   // the grid's height at cellBase
         let lastFit = null;   // the cell found for a height, kept while the keyboard holds still
         layoutKeyboard = function() {
             if (pageChanged()) return;   // measured against the old page; the refit lays out again
@@ -759,21 +858,21 @@ void main() {
             else if (keyboard && keyboardSeen) return setKeyboard(false, false);   // dismissed by the system
             keyboardUp = up && (keyboard || keyboardUp);
 
-            if (cellCSS === CELL) {
-                fullHeight = drawAt(CELL);
+            if (cellCSS === cellBase) {
+                fullHeight = drawAt(cellBase);
                 lastFit = null;
             }
             let shift = 0;
             if (up) {
                 const avail = vv.height - strip.offsetHeight;
                 let h = lastFit && lastFit.avail === avail ? lastFit.cell
-                    : Math.max(CELL_MIN, Math.min(CELL, Math.floor(2 * CELL * avail / fullHeight) / 2));
+                    : Math.max(CELL_MIN, Math.min(cellBase, Math.floor(2 * cellBase * avail / fullHeight) / 2));
                 let drawn;
                 while ((drawn = drawAt(h)) > avail && h > CELL_MIN) h -= 0.5;
                 lastFit = { avail: avail, cell: h };
                 shift = Math.max(0, drawn - avail);
             } else {
-                drawAt(CELL);
+                drawAt(cellBase);
                 // Only once the page is whole again does a put-off refit see its real size.
                 if (!keyboard && refitPending) {
                     refitPending = false;

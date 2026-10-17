@@ -23,16 +23,15 @@ downloadable content, a non-text renderer, and Android.
 | Full native | `make release` | Terminal renderer | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
-| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Omitted | No | Stub | Solo play, or a session joined over its `wss://` route |
+| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Desktop window | `make gui` / `vif_gui` (Linux, FreeBSD) | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | Play outside a terminal; cgo stays off |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
-`vif_noaudio` removes audio while retaining terminal presentation. The Go-provided
-`wasm` build constraint also selects the audio-free files, so a direct
-`GOOS=js GOARCH=wasm go build` remains safe; the Makefile supplies
-`vif_noaudio` as an explicit statement of the artifact contract.
+`vif_noaudio` removes audio while retaining terminal presentation. The browser
+build keeps the audio implementation: the mixer streams to the page as a host's
+speakers (§8), so `vif_noaudio` on a wasm build is a choice, not a requirement.
 
 The useful commands are:
 
@@ -114,20 +113,17 @@ not release budgets; toolchain and source changes move them.
 | Full native | 16,580,768 | 15.81 | baseline for native profiles |
 | `vif_noaudio` native | 16,195,744 | 15.45 | 2.32% smaller than full |
 | `vif_headless` native | 15,130,784 | 14.43 | 8.74% smaller than full |
-| Browser (`js/wasm`, `vif_noaudio`) | 28,197,392 | 26.89 | — |
+| Browser (`js/wasm`) | 29,378,949 | 28.02 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
-that these commands print no renderer or audio-engine package:
+that this command prints no renderer or audio-engine package:
 
 ```bash
 go list -deps -tags=vif_headless ./cmd/vif \
   | grep -E 'internal/render|render/renderer|/pkg/audio$'
-
-GOOS=js GOARCH=wasm go list -deps ./cmd/vif \
-  | grep '/pkg/audio$'
 ```
 
-Both commands should produce no output. The container is one static binary in
+It should produce no output. The container is one static binary in
 `scratch`; its exact layer size should be measured for each release.
 
 ## 4. Platform matrix
@@ -137,7 +133,7 @@ Both commands should produce no output. The container is one static binary in
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; published as an untested zip, not a development focus, and may be removed if field reports show it is broken |
-| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas (`pkg/browser`); no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas and plays the mixer's PCM (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
 | Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
@@ -281,12 +277,14 @@ time one side changes.
 
 A deployment that publishes the files under other names, as content-hashed ones
 for long caching, names them on the `terminal.js` script element instead of
-editing a script: `data-wasm` for `vif.wasm`, `data-worker` for `worker.js` and
-`data-exec` for `wasm_exec.js`. Each one unnamed is the file beside the page.
+editing a script: `data-wasm` for `vif.wasm`, `data-worker` for `worker.js`,
+`data-exec` for `wasm_exec.js` and `data-audio` for `audio-worklet.js`. Each one
+unnamed is the file beside the page.
 
 ```html
 <script src="/vif/wasm/terminal.4f1c….js" data-wasm="/vif/vif.9a2e….wasm"
-        data-worker="/vif/wasm/worker.07bd….js" data-exec="/js/wasm_exec.0c94….js"></script>
+        data-worker="/vif/wasm/worker.07bd….js" data-exec="/js/wasm_exec.0c94….js"
+        data-audio="/vif/wasm/audio-worklet.5b3a….js"></script>
 ```
 
 ```html
@@ -405,7 +403,14 @@ changed cell on a 2D canvas from the same mask, slower on a large grid, and says
 so once. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
 (a touch is the left button, as on Android) and its size as the terminal events the
 host posts. A hidden tab draws nothing and is handed the whole screen on return; the
-run is not paused ([§5](#a-hidden-tab)).
+run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
+(`browser.Speaker`): the Worker posts each mixer buffer that sounds, and the page
+opens an `AudioContext` at the first and plays them through an AudioWorklet
+(`web/audio-worklet.js`) that holds two buffers ahead and goes silent when the
+Worker falls behind, as a tick longer than a mixer period makes it; rendering a
+50 ms buffer with music and effects playing costs the Worker's thread about 1.3 ms.
+A muted game, the default, posts nothing; the touch strip's speaker button sends
+Ctrl-S, as a keyboard would, to cycle the channels.
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
@@ -473,8 +478,7 @@ go build ./...
 go test ./...
 go vet ./...
 ./script/test.sh all
-node --check web/terminal.js
-node --check web/worker.js
+node --check web/terminal.js web/worker.js web/audio-worklet.js
 ```
 
 Compilation is not runtime certification. What the browser route still has to
