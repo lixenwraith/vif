@@ -1,7 +1,10 @@
 package engine
 
 import (
+	"unsafe"
+
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Store is a sparse-set container for component type T.
@@ -15,7 +18,7 @@ import (
 // are valid by construction — no tombstones, no stale slots.
 type Store[T any] struct {
 	world    *World
-	index    map[core.Entity]int32
+	index    sparseIndex
 	dense    []T
 	entities []core.Entity // parallel to dense
 
@@ -25,7 +28,6 @@ type Store[T any] struct {
 // NewStore creates a new component store for type T
 func NewStore[T any](w *World, bit uint64) *Store[T] {
 	return &Store[T]{
-		index:    make(map[core.Entity]int32, 256),
 		dense:    make([]T, 0, 256),
 		entities: make([]core.Entity, 0, 256),
 		world:    w,
@@ -35,11 +37,11 @@ func NewStore[T any](w *World, bit uint64) *Store[T] {
 
 // SetComponent inserts or overwrites a component for an entity
 func (s *Store[T]) SetComponent(e core.Entity, val T) {
-	if i, ok := s.index[e]; ok {
+	if i, ok := s.index.get(e); ok {
 		s.dense[i] = val
 		return
 	}
-	s.index[e] = int32(len(s.dense))
+	s.index.set(e, int32(len(s.dense)))
 	s.dense = append(s.dense, val)
 	s.entities = append(s.entities, e)
 	s.world.AddComponentMask(e, s.bit)
@@ -47,7 +49,7 @@ func (s *Store[T]) SetComponent(e core.Entity, val T) {
 
 // GetComponent retrieves a component by value (compatibility API)
 func (s *Store[T]) GetComponent(e core.Entity) (T, bool) {
-	if i, ok := s.index[e]; ok {
+	if i, ok := s.index.get(e); ok {
 		return s.dense[i], true
 	}
 	var zero T
@@ -60,7 +62,7 @@ func (s *Store[T]) GetComponent(e core.Entity) (T, bool) {
 // (swap-remove moves elements). Mutations through the pointer persist
 // without a SetComponent write-back.
 func (s *Store[T]) GetPtr(e core.Entity) (*T, bool) {
-	if i, ok := s.index[e]; ok {
+	if i, ok := s.index.get(e); ok {
 		return &s.dense[i], true
 	}
 	return nil, false
@@ -68,7 +70,7 @@ func (s *Store[T]) GetPtr(e core.Entity) (*T, bool) {
 
 // HasEntity checks if entity has this component
 func (s *Store[T]) HasEntity(e core.Entity) bool {
-	_, ok := s.index[e]
+	_, ok := s.index.get(e)
 	return ok
 }
 
@@ -81,7 +83,7 @@ func (s *Store[T]) removeAt(i int32) {
 		moved := s.entities[last]
 		s.dense[i] = s.dense[last]
 		s.entities[i] = moved
-		s.index[moved] = i
+		s.index.set(moved, i)
 	}
 
 	// Zero the vacated tail slot so pointer-bearing components
@@ -90,12 +92,12 @@ func (s *Store[T]) removeAt(i int32) {
 	s.dense[last] = zero
 	s.dense = s.dense[:last]
 	s.entities = s.entities[:last]
-	delete(s.index, e)
+	s.index.del(e)
 }
 
 // RemoveEntity deletes a component from an entity. O(1)
 func (s *Store[T]) RemoveEntity(e core.Entity, skipMask ...bool) {
-	i, ok := s.index[e]
+	i, ok := s.index.get(e)
 	if !ok {
 		return
 	}
@@ -107,12 +109,12 @@ func (s *Store[T]) RemoveEntity(e core.Entity, skipMask ...bool) {
 
 // RemoveBatch deletes multiple entities. O(m), no allocation
 func (s *Store[T]) RemoveBatch(entities []core.Entity, skipMask ...bool) {
-	if len(s.index) == 0 {
+	if len(s.entities) == 0 {
 		return
 	}
 	clearMask := len(skipMask) == 0 || !skipMask[0]
 	for _, e := range entities {
-		i, ok := s.index[e]
+		i, ok := s.index.get(e)
 		if !ok {
 			continue
 		}
@@ -158,7 +160,7 @@ func (s *Store[T]) CountEntities() int {
 
 // ClearAllComponents removes all components, retaining capacity
 func (s *Store[T]) ClearAllComponents() {
-	clear(s.index)
+	s.index.clear()
 	clear(s.dense) // zero elements: release inner pointers
 	s.dense = s.dense[:0]
 	s.entities = s.entities[:0]
@@ -184,8 +186,152 @@ func (s *Store[T]) copyOut(reuse storeCopy[T]) storeCopy[T] {
 func (s *Store[T]) copyIn(c storeCopy[T]) {
 	s.ClearAllComponents()
 	for i, e := range c.entities {
-		s.index[e] = int32(i)
+		s.index.set(e, int32(i))
 		s.dense = append(s.dense, DetachSnapshotValue(c.dense[i]))
 		s.entities = append(s.entities, e)
 	}
+}
+
+const (
+	indexPageSize  = 1 << parameter.StoreIndexPageBits
+	indexPageMask  = indexPageSize - 1
+	indexPageBytes = int(unsafe.Sizeof([indexPageSize]int32{}))
+	indexRefBytes  = int(unsafe.Sizeof(indexRef{}))
+
+	// indexDomainBits are the bits a valid domain sets in an entity. Clearing them
+	// leaves any other domain's ID past every page table.
+	indexDomainBits = core.Entity((core.EntityIDMax + 1) * uint64(core.DomainCount-1))
+)
+
+// get masks a domain into its page table, which needs DomainCount a power of two
+var _ = [1]struct{}{}[core.DomainCount&(core.DomainCount-1)]
+
+type indexRef struct {
+	slot *[indexPageSize]int32 // dense slot + 1, zero absent; emptyPage when none is held
+	live int32
+}
+
+// emptyPage stands in for every page not held, so a lookup needs no nil check
+var emptyPage [indexPageSize]int32
+
+// sparseIndex maps an entity to its dense slot through a page table per domain
+// indexed by the entity's ID. A page is freed when its last entity leaves, so memory
+// follows the live IDs. Table and pages stay within a byte bound of the entities
+// indexed; an entity the bound refuses a page, an ID a peer chose, is kept in far.
+type sparseIndex struct {
+	pages [core.DomainCount][]indexRef
+	far   map[core.Entity]int32
+	n     int                     // entities indexed, paged or far
+	held  int                     // bytes of page table and pages
+	spare []*[indexPageSize]int32 // empty pages: the one a release keeps, all a clear frees
+}
+
+func (x *sparseIndex) get(e core.Entity) (int32, bool) {
+	t := x.pages[e.Domain()&(core.DomainCount-1)]
+	if pi := uint64(e&^indexDomainBits) >> parameter.StoreIndexPageBits; pi < uint64(len(t)) {
+		if v := t[pi].slot[e&indexPageMask]; v != 0 {
+			return v - 1, true
+		}
+	}
+	if x.far == nil {
+		return 0, false
+	}
+	i, ok := x.far[e]
+	return i, ok
+}
+
+// ref returns e's page table entry, nil where the table does not reach
+func (x *sparseIndex) ref(e core.Entity) *indexRef {
+	d, pi := e.Domain(), e.ID()>>parameter.StoreIndexPageBits
+	if d >= core.DomainCount || pi >= uint64(len(x.pages[d])) {
+		return nil
+	}
+	return &x.pages[d][pi]
+}
+
+// set inserts e or rewrites its slot
+func (x *sparseIndex) set(e core.Entity, slot int32) {
+	r := x.ref(e)
+	if r != nil && r.slot[e&indexPageMask] != 0 {
+		r.slot[e&indexPageMask] = slot + 1
+		return
+	}
+	if _, ok := x.far[e]; ok {
+		x.far[e] = slot
+		return
+	}
+	x.n++
+	if r = x.hold(e, r); r == nil {
+		if x.far == nil {
+			x.far = make(map[core.Entity]int32)
+		}
+		x.far[e] = slot
+		return
+	}
+	r.slot[e&indexPageMask] = slot + 1
+	r.live++
+}
+
+// hold returns e's page, growing the table and taking a page if the byte bound
+// leaves room; nil when it does not
+func (x *sparseIndex) hold(e core.Entity, r *indexRef) *indexRef {
+	if r != nil && r.slot != &emptyPage {
+		return r
+	}
+	d, pi := e.Domain(), e.ID()>>parameter.StoreIndexPageBits
+	if d >= core.DomainCount {
+		return nil
+	}
+	room := parameter.StoreIndexFloorBytes + x.n*parameter.StoreIndexEntityBytes - x.held - indexPageBytes
+	var grow uint64
+	if n := uint64(len(x.pages[d])); pi >= n {
+		grow = pi + 1 - n
+	}
+	if room < 0 || grow > uint64(room/indexRefBytes) {
+		return nil
+	}
+	for range grow {
+		x.pages[d] = append(x.pages[d], indexRef{slot: &emptyPage})
+	}
+	r = &x.pages[d][pi]
+	if n := len(x.spare); n > 0 {
+		r.slot, x.spare = x.spare[n-1], x.spare[:n-1]
+	} else {
+		r.slot = new([indexPageSize]int32)
+	}
+	x.held += int(grow)*indexRefBytes + indexPageBytes
+	return r
+}
+
+// del removes e, which must be indexed
+func (x *sparseIndex) del(e core.Entity) {
+	x.n--
+	if r := x.ref(e); r != nil && r.slot[e&indexPageMask] != 0 {
+		r.slot[e&indexPageMask] = 0
+		if r.live--; r.live == 0 {
+			if len(x.spare) == 0 {
+				x.spare = append(x.spare, r.slot)
+			}
+			r.slot = &emptyPage
+			x.held -= indexPageBytes
+		}
+		return
+	}
+	if delete(x.far, e); len(x.far) == 0 {
+		x.far = nil
+	}
+}
+
+func (x *sparseIndex) clear() {
+	for d := range x.pages {
+		for _, r := range x.pages[d] {
+			if r.slot != &emptyPage {
+				clear(r.slot[:])
+				x.spare = append(x.spare, r.slot)
+			}
+		}
+		clear(x.pages[d])
+		x.pages[d] = x.pages[d][:0]
+	}
+	x.far, x.n, x.held = nil, 0, 0
 }
