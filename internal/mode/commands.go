@@ -505,6 +505,25 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true}
 }
 
+// cycleMouseMode steps the pointer from follow to click to off and round, the
+// states :mouse and :free set apart
+func cycleMouseMode(ctx *engine.GameContext) CommandResult {
+	word := "off"
+	switch {
+	case ctx.MouseDisabled.Load():
+		ctx.MouseDisabled.Store(false)
+		ctx.MouseFreeMode.Store(true)
+		word = "follow"
+	case ctx.MouseFreeMode.Load():
+		ctx.MouseFreeMode.Store(false)
+		word = "click"
+	default:
+		ctx.MouseDisabled.Store(true)
+	}
+	ctx.SetStatusMessage("Mouse: "+word, parameter.StatusNotice)
+	return CommandResult{Continue: true}
+}
+
 // handleMouseCommand controls mouse input
 func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
