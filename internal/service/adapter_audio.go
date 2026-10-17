@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -65,12 +66,9 @@ func (s *AudioService) Init() error {
 		}
 		config.PatternTOML = data
 	}
-	if s.src.SoundPath != "" {
-		data, err := os.ReadFile(s.src.SoundPath)
-		if err != nil {
-			return fmt.Errorf("audio sounds %s: %w", s.src.SoundPath, err)
-		}
-		config.SoundTOML = data
+	if p := s.src.SoundPath; p != "" {
+		// Includes resolve inside the document's directory, as soundlab's do
+		config.SoundFS, config.SoundFile = os.DirFS(filepath.Dir(p)), filepath.Base(p)
 	}
 
 	eng, err := audio.NewAudioEngine(config)

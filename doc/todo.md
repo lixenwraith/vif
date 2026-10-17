@@ -176,22 +176,6 @@ against [Packaging](packaging.md) §1, and a scenario a coordinator serves a joi
 through the roots and require a regular file; decide whether absolute paths stay,
 or stay only for a scenario this run resolved itself.
 
-### Decide how sound includes reach the game
-
-- Priority: P0, to review
-- Affected files: `cmd/soundlab/session.go`, `internal/service/adapter_audio.go`,
-  `internal/resource/check_audio.go`, `pkg/audio/sound_load.go`
-
-soundlab loads a sounds document through `LoadSoundsFS`, keeps its `include` list,
-adopts the user override as clean and writes the list back on save
-(`cmd/soundlab/session.go:128,160-175,254`). The game hands that file to
-`LoadSoundsTOML` (`internal/service/adapter_audio.go:69`, `pkg/audio/engine.go:141`),
-which refuses any include (`pkg/audio/sound_load.go:23-25`), so play ignores the whole
-override and `-check` fails it (`internal/resource/check_audio.go:37`); soundlab
-prints that refusal only at start. Options: the audio service and `-check` resolve
-includes inside the file's directory as soundlab does; or soundlab flattens or
-refuses includes in a file the game reads.
-
 ### Build the Makefile's release binaries without CGO
 
 - Priority: P0, to review

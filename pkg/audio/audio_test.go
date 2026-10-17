@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -233,6 +234,38 @@ instr = "cowbell"
 `))
 	if err == nil || !strings.Contains(err.Error(), "cowbell") {
 		t.Errorf("want an error naming the instrument, got %v", err)
+	}
+}
+
+// TestEngineResolvesSoundIncludes: the sounds document an embedder names loads
+// with its includes, as the editor that wrote it read them.
+func TestEngineResolvesSoundIncludes(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+
+	cfg := DefaultAudioConfig()
+	cfg.Enabled = true
+	cfg.BaseSounds = testBank()
+	cfg.BasePatterns = testPatterns()
+	cfg.ForceBackend = BackendNameNull
+	cfg.SoundFS = fstest.MapFS{
+		"sounds.toml":    {Data: []byte("include = [\"extra/inc.toml\"]\n")},
+		"extra/inc.toml": {Data: []byte("[[sound]]\nname = \"included\"\nduration = 0.05\n[[sound.layer]]\nsource = { kind = \"osc\", wave = \"sine\", freq = 440 }\n")},
+	}
+	cfg.SoundFile = "sounds.toml"
+	ae, err := NewAudioEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ae.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer ae.Stop()
+	if err := ae.SpecError(); err != nil {
+		t.Fatalf("spec error: %v", err)
+	}
+	if ae.SoundID("included") == SoundNone {
+		t.Fatal("the included sound did not register")
 	}
 }
 

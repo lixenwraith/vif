@@ -2,6 +2,7 @@ package audio
 
 import (
 	"io"
+	"io/fs"
 	"time"
 )
 
@@ -25,11 +26,14 @@ type AudioConfig struct {
 	Sink io.WriteCloser
 	// BaseSounds and BasePatterns are the banks registered at Start. The package
 	// ships no specs or authored patterns of its own: the embedder owns them, and
-	// SoundTOML and PatternTOML override them by name.
+	// the sounds document and PatternTOML override them by name.
 	BaseSounds   []*SoundDef
 	BasePatterns []*Pattern // their roles, groups and tiers are the drawn arrangement
-	SoundTOML    []byte     // raw sounds.toml
-	PatternTOML  []byte     // raw music.toml
+	// SoundFS and SoundFile name the sounds document, read at Start with its
+	// includes resolved inside SoundFS; a nil SoundFS reads none
+	SoundFS     fs.FS
+	SoundFile   string
+	PatternTOML []byte // raw music.toml
 	// Buffer is the mixer period; zero is AudioBufferDuration.
 	Buffer time.Duration
 }

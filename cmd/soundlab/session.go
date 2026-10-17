@@ -89,10 +89,8 @@ func NewSession(backend string, masterVol float64, out io.Writer, files audioFil
 			return nil, err
 		}
 	}
-	if files.sounds != "" {
-		if cfg.SoundTOML, err = os.ReadFile(files.sounds); err != nil {
-			return nil, err
-		}
+	if p := files.sounds; p != "" {
+		cfg.SoundFS, cfg.SoundFile = os.DirFS(filepath.Dir(p)), filepath.Base(p)
 	}
 
 	eng, err := audio.NewAudioEngine(cfg)

@@ -281,9 +281,11 @@ The categorized locations are `audio/sounds.toml` and `audio/music.toml`.
 [External filesystem layout](filesystem-layout.md).
 
 An invalid user definition leaves the shipped one in place; a document that does
-not parse or names an unknown key is ignored whole, and so is a user
-`sounds.toml` that uses `include`, which the game's loader rejects. Play reports
-the first line of the engine's combined specification error on the status bar;
+not parse or names an unknown key is ignored whole. A user `sounds.toml` may
+`include` files inside its own directory, which the game, `-check` and soundlab
+resolve alike, so a file soundlab saves with its includes is what play loads.
+Play reports the first line of the engine's combined specification error on the
+status bar;
 `vif -check` checks music, then sounds, before startup and stops at the first
 document that fails, listing every invalid definition in it.
 

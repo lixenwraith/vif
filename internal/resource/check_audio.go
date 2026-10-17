@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/lixenwraith/vif/pkg/audio"
 )
@@ -29,15 +30,11 @@ func checkAudio(o Options, w io.Writer) error {
 		}
 		fmt.Fprintln(w, "music ok:", src.MusicPath)
 	}
-	if src.SoundPath != "" {
-		data, err := os.ReadFile(src.SoundPath)
-		if err != nil {
-			return fmt.Errorf("sounds %s: %w", src.SoundPath, err)
+	if p := src.SoundPath; p != "" {
+		if _, err := audio.LoadSoundsFS(os.DirFS(filepath.Dir(p)), filepath.Base(p)); err != nil {
+			return fmt.Errorf("sounds %s: %w", p, err)
 		}
-		if _, err := audio.LoadSoundsTOML(data); err != nil {
-			return fmt.Errorf("sounds %s: %w", src.SoundPath, err)
-		}
-		fmt.Fprintln(w, "sounds ok:", src.SoundPath)
+		fmt.Fprintln(w, "sounds ok:", p)
 	}
 	return nil
 }
