@@ -37,9 +37,9 @@ func (s *FileService) Contribute(r *engine.Resource) {
 	r.Files = &engine.FileResource{Provider: s}
 }
 
-// Open opens an existing path directly. A missing path is instead treated as a
-// logical name below category/ in each configured root. This keeps old authored
-// relative paths working while making installed assets portable.
+// Open serves a logical name below category/ from the first configured root that
+// holds it as a regular file. A host path, absolute or relative to the working
+// directory, is never opened: the scenario naming it may have come from a peer.
 func (s *FileService) Open(category, name string) (io.ReadCloser, error) {
 	if !validFileCategory(category) {
 		return nil, fmt.Errorf("invalid file category %q", category)
@@ -47,21 +47,13 @@ func (s *FileService) Open(category, name string) (io.ReadCloser, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%s file name is empty", category)
 	}
-
-	f, err := openRegularFile(name)
-	if err == nil {
-		return f, nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("open %s file %q: %w", category, name, err)
-	}
 	if !validLogicalFileName(name) {
 		return nil, fmt.Errorf("%s file name %q escapes its category", category, name)
 	}
 
 	for _, root := range s.roots {
 		candidate := filepath.Join(root, category, name)
-		f, err = openRegularFile(candidate)
+		f, err := openRegularFile(candidate)
 		if err == nil {
 			return f, nil
 		}
@@ -69,7 +61,7 @@ func (s *FileService) Open(category, name string) (io.ReadCloser, error) {
 			return nil, fmt.Errorf("open %s file %q: %w", category, name, err)
 		}
 	}
-	return nil, fmt.Errorf("%s file %q not found as a path or in any configuration root: %w",
+	return nil, fmt.Errorf("%s file %q not found in any configuration root: %w",
 		category, name, os.ErrNotExist)
 }
 
@@ -83,9 +75,9 @@ func openRegularFile(path string) (*os.File, error) {
 		_ = f.Close()
 		return nil, err
 	}
-	if info.IsDir() {
+	if !info.Mode().IsRegular() {
 		_ = f.Close()
-		return nil, fmt.Errorf("%s is a directory", path)
+		return nil, fmt.Errorf("%s is not a regular file", path)
 	}
 	return f, nil
 }

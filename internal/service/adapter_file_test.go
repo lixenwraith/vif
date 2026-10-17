@@ -45,26 +45,29 @@ func TestFileServiceContributesCategorizedOpenCapability(t *testing.T) {
 		t.Fatalf("body = %q, want fixture", got)
 	}
 
-	explicitDir := t.TempDir()
-	explicit := filepath.Join(explicitDir, "relative.vifimg")
-	if err := os.WriteFile(explicit, []byte("explicit"), 0o600); err != nil {
+	// A file of the same name beside the process must not shadow the root's copy,
+	// and nothing outside the roots opens, whatever the name's shape.
+	cwd := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwd, "test.vifimg"), []byte("cwd"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(explicitDir)
-	f, err = resources.Files.Open("image", "relative.vifimg")
-	if err != nil {
-		t.Fatal(err)
+	t.Chdir(cwd)
+	if _, err := resources.Files.Open("image", "test.vifimg"); err == nil {
+		t.Fatal("a working-directory file opened as an image")
 	}
-	got, readErr = io.ReadAll(f)
-	closeErr = f.Close()
-	if readErr != nil || closeErr != nil || string(got) != "explicit" {
-		t.Fatalf("explicit body = %q, read = %v, close = %v", got, readErr, closeErr)
-	}
-
-	if _, err := resources.Files.Open("image", filepath.Join("..", "outside.vifimg")); err == nil {
-		t.Fatal("logical name escaped its category")
+	for _, name := range []string{filepath.Join("..", "outside.vifimg"), image, os.DevNull} {
+		if _, err := resources.Files.Open("image", name); err == nil {
+			t.Fatalf("name %q opened outside the roots", name)
+		}
 	}
 	if _, err := resources.Files.Open(filepath.Join("..", "image"), "test.vifimg"); err == nil {
 		t.Fatal("invalid category accepted")
+	}
+	device := filepath.Join(root, "image", "device.vifimg")
+	if err := os.Symlink(os.DevNull, device); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+	if _, err := resources.Files.Open("image", "device.vifimg"); err == nil {
+		t.Fatal("a device opened as an image")
 	}
 }

@@ -183,9 +183,9 @@ Go boolean-style flags, a directory must use the equals form.
 owns composition-time resource selection. Loaders in `internal/fsm`,
 `internal/input`, `internal/content`, and `internal/service` receive
 already-resolved files or filesystem capabilities; they do not invent search
-orders. Runtime categorized opens, including strict explicit-path handling,
-cross the generic `FileService` capability contributed to the world; systems do
-not open host paths directly.
+orders. Runtime categorized opens cross the generic `FileService` capability
+contributed to the world, which serves regular files under a category in the
+roots and nothing else; systems do not open host paths directly.
 
 `internal/asset` owns every embedded group and is the only package with an
 `embed` directive for shipped data. In an audio-capable build, `pkg/audio`
