@@ -40,7 +40,8 @@ of the Canvas drawer. `adb logcat -s vif` prints the render thread's frame time 
 seconds: frames painted per second, mean, p95 and max of take, paint and post.
 
 Controls: a tap is a left press and release on the cell under it, and one held on
-the status bar opens the configuration menu; keys, a hardware keyboard's or the
+the status bar opens the configuration menu, whose rows a tap selects and a second
+tap acts on; keys, a hardware keyboard's or the
 system keyboard's, arrive as a terminal reports them; a two-finger tap raises or
 drops the system keyboard; Back is Escape; `:q` quits.
 

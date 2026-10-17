@@ -351,11 +351,17 @@ Decided after the first review of this document.
 - **D7, store index: paged by entity ID** (§6), with a flat slice per domain
   rejected: it is sized by the highest ID a store has held, 4.8 MB on td.
 - **D8, menu: keep `tui`, summoned by a hold.** The overlay renderer already
-  adapts forms into cells and the configuration menu stays as it is. Every host
+  adapts forms into cells and the configuration menu keeps its pages. Every host
   summons it as Ctrl-G does by holding a left press on the status bar
   (`MenuHoldDuration`, a drift of `MenuHoldSlack` cells allowed): a mouse in a
   terminal or the window, a finger on Android, and the browser launcher's touch
-  hold. The radial menu is dropped; the status bar is where a finger idles.
+  hold. The status bar is where a finger idles. A menu Android draws itself,
+  likely circular, may replace this one on a phone later; it is past this push.
+  The menu takes the pointer as well as keys: a press selects a row and on the
+  selected row acts as Enter (as Left on a setting's left half), focuses a form
+  field, and outside the window goes back. So a phone gets no key strip: the
+  system keyboard types, Back is Escape, and a tap on a target is what Tab and
+  Shift-Tab reach with keys.
 - **D2** is resolved by D1: nothing moves.
 
 Each later phase is one PR.

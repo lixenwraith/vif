@@ -172,7 +172,7 @@ func (r *OverlayRenderer) renderContent(root tui.Region, g engine.OverlayGeometr
 	switch data.Layout {
 	case core.OverlayLayoutMenu:
 		if data.Menu != nil && data.Menu.Form != nil {
-			r.renderForm(body, data.Menu.Form)
+			r.renderForm(body, g, data.Menu.Form)
 			r.renderHint(root, g, parameter.OverlayHintsForm)
 		} else {
 			r.renderMenu(root, body, g, data.Menu)
@@ -221,7 +221,7 @@ func (r *OverlayRenderer) syncLayout(g engine.OverlayGeometry, data *core.Overla
 	}
 }
 
-func (r *OverlayRenderer) renderForm(body tui.Region, form *core.OverlayForm) {
+func (r *OverlayRenderer) renderForm(body tui.Region, g engine.OverlayGeometry, form *core.OverlayForm) {
 	if len(form.Fields) == 0 || body.H < 1 {
 		return
 	}
@@ -233,7 +233,7 @@ func (r *OverlayRenderer) renderForm(body tui.Region, form *core.OverlayForm) {
 		state.Fields = append(state.Fields, tui.FormField{Label: f.Label, State: field})
 		labelW = max(labelW, tui.RuneLen(f.Label)+2)
 	}
-	listH := min(len(form.Fields), max(body.H-parameter.OverlayMenuDetailRows, 1))
+	listH := min(len(form.Fields), g.ListH())
 	scroll := tui.NewScrollState(len(form.Fields), listH)
 	scroll.Select(form.Focus)
 	state.Fields = state.Fields[scroll.Offset:min(scroll.Offset+listH, len(state.Fields))]
@@ -261,7 +261,7 @@ func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeom
 	}
 	selected := slices.IndexFunc(menu.Rows, func(row core.OverlayMenuRow) bool { return row.Key == r.gameCtx.GetOverlaySelection() })
 	selected = max(selected, 0)
-	listH := max(body.H-parameter.OverlayMenuDetailRows, 1)
+	listH := g.ListH()
 	scroll := tui.NewScrollState(len(menu.Rows), listH)
 	scroll.Offset = r.gameCtx.GetOverlayScroll()
 	scroll.Select(selected)

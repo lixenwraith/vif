@@ -61,6 +61,9 @@ func ComputeOverlayGeometry(screenW, screenH int) OverlayGeometry {
 	return g
 }
 
+// ListH is the content rows a menu or form list takes; the rest explain its selection
+func (g OverlayGeometry) ListH() int { return max(g.ContentH-parameter.OverlayMenuDetailRows, 1) }
+
 // overlayAxis scales one axis by percentage, applies the floor and cap,
 // then bounds it by the screen minus its edge margin
 func overlayAxis(screen int, pct float64, minV, maxV, margin int) int {

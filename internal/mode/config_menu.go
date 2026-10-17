@@ -348,7 +348,7 @@ func (r *Router) moveConfigMenu(motion input.MotionOp, pageDelta int) bool {
 	case input.MotionScreenBottom:
 		i = len(m.Rows) - 1
 	}
-	i += pageDelta * max(r.ctx.OverlayGeometry().ContentH-parameter.OverlayMenuDetailRows, 1)
+	i += pageDelta * r.ctx.OverlayGeometry().ListH()
 	i = tui.ClampCursor(i, len(m.Rows))
 	if i >= 0 {
 		r.ctx.SetOverlaySelection(m.Rows[i].Key)
@@ -372,64 +372,108 @@ func (r *Router) changeConfigMenu(direction int, activate bool) bool {
 		}
 		return true
 	}
+	o, ok := configOptionFor(r.ctx, m.Page, key)
+	if !ok || (o.activate != nil || o.action) && !activate {
+		return true
+	}
+	if why := o.unavailable(r.ctx); why != "" {
+		setCommandError(r.ctx, why)
+		return true
+	}
+	r.ctx.WithOrigin(event.OriginCommand, func() {
+		if o.activate != nil {
+			o.activate(r)
+			return
+		}
+		if o.change != nil {
+			o.change(r.ctx, direction)
+			return
+		}
+		command := o.command
+		if len(o.steps) > 0 {
+			current, _ := strconv.ParseUint(o.read(r.ctx), 10, 64)
+			next := current
+			for _, n := range o.steps {
+				if direction > 0 && n > current {
+					next = n
+					break
+				}
+				if direction < 0 && n < current {
+					next = n
+				}
+			}
+			// A key at the limit must not discard recorder history.
+			if next == current {
+				return
+			}
+			command += " " + strconv.FormatUint(next, 10)
+		} else if len(o.choices) > 0 {
+			i := slices.Index(o.choices, o.read(r.ctx))
+			if i < 0 && direction < 0 {
+				i = 0
+			}
+			i = (i + direction + len(o.choices)) % len(o.choices)
+			command += " " + o.choices[i]
+		}
+		ExecuteCommand(r.ctx, command)
+	})
+	if o.action {
+		return r.closeOverlay()
+	}
+	r.RefreshConfigMenu()
+	return true
+}
+
+func configOptionFor(ctx *engine.GameContext, page, key string) (configOption, bool) {
 	for _, p := range configPages {
-		if p.key != m.Page {
+		if p.key != page {
 			continue
 		}
-		for _, o := range p.entries(r.ctx) {
-			if o.key != key {
-				continue
+		for _, o := range p.entries(ctx) {
+			if o.key == key {
+				return o, true
 			}
-			if (o.activate != nil || o.action) && !activate {
-				return true
-			}
-			if why := o.unavailable(r.ctx); why != "" {
-				setCommandError(r.ctx, why)
-				return true
-			}
-			r.ctx.WithOrigin(event.OriginCommand, func() {
-				if o.activate != nil {
-					o.activate(r)
-					return
-				}
-				if o.change != nil {
-					o.change(r.ctx, direction)
-					return
-				}
-				command := o.command
-				if len(o.steps) > 0 {
-					current, _ := strconv.ParseUint(o.read(r.ctx), 10, 64)
-					next := current
-					for _, n := range o.steps {
-						if direction > 0 && n > current {
-							next = n
-							break
-						}
-						if direction < 0 && n < current {
-							next = n
-						}
-					}
-					// A key at the limit must not discard recorder history.
-					if next == current {
-						return
-					}
-					command += " " + strconv.FormatUint(next, 10)
-				} else if len(o.choices) > 0 {
-					i := slices.Index(o.choices, o.read(r.ctx))
-					if i < 0 && direction < 0 {
-						i = 0
-					}
-					i = (i + direction + len(o.choices)) % len(o.choices)
-					command += " " + o.choices[i]
-				}
-				ExecuteCommand(r.ctx, command)
-			})
-			if o.action {
-				return r.closeOverlay()
-			}
-			r.RefreshConfigMenu()
-			return true
 		}
 	}
-	return true
+	return configOption{}, false
+}
+
+// pointConfigMenu is a left press on the menu. Outside its window it goes back as
+// Escape does; on a form field it focuses it; on a row it selects it, and on the
+// row already selected it acts as Enter does, or as Left on a setting's left half.
+func (r *Router) pointConfigMenu(intent *input.Intent) bool {
+	m := configMenu(r.ctx)
+	if m == nil || r.ctx.MouseDisabled.Load() {
+		return true
+	}
+	g := r.ctx.OverlayGeometry()
+	if intent.X < g.X || intent.Y < g.Y || intent.X >= g.X+g.W || intent.Y >= g.Y+g.H {
+		return r.configMenuBack()
+	}
+	x, y := intent.X-g.X-g.ContentX, intent.Y-g.Y-g.ContentY
+	if x < 0 || x >= g.ContentW || y < 0 || y >= g.ListH() {
+		return true
+	}
+	if f := r.configForm; f != nil {
+		scroll := tui.NewScrollState(len(f.state.Fields), min(len(f.state.Fields), g.ListH()))
+		scroll.Select(f.state.Focus)
+		if i := scroll.Offset + y; i < len(f.state.Fields) {
+			f.state.Focus = i
+			r.publishConfigForm()
+		}
+		return true
+	}
+	i := r.ctx.GetOverlayScroll() + y
+	if i >= len(m.Rows) {
+		return true
+	}
+	selected := max(slices.IndexFunc(m.Rows, func(row core.OverlayMenuRow) bool { return row.Key == r.ctx.GetOverlaySelection() }), 0)
+	r.ctx.SetOverlaySelection(m.Rows[i].Key)
+	if i != selected {
+		return true
+	}
+	if o, ok := configOptionFor(r.ctx, m.Page, m.Rows[i].Key); ok && o.activate == nil && !o.action && x < g.ContentW/2 {
+		return r.changeConfigMenu(-1, false)
+	}
+	return r.changeConfigMenu(1, true)
 }

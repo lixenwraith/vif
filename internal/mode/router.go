@@ -302,6 +302,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleOverlayClose()
 	case input.IntentOverlayFilter:
 		return r.handleOverlayFilter()
+	case input.IntentOverlayPoint:
+		return r.pointConfigMenu(intent)
 
 	// Mouse
 	case input.IntentMouseLeftDown:

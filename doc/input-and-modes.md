@@ -233,6 +233,7 @@ When terminal mouse reporting is enabled:
 | Left press on a button | Press the button's key (§1); never moves or fires. |
 | Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on a phone, in the browser through its launcher. |
 | Left release | End held fire; release a held button. Passed on from every mode. |
+| Left press in the configuration menu | Select and act on its rows, focus a form field, or go back from outside its window ([Config menu](config-menu.md#navigation)). |
 | Left drag | Continue moving the cursor. |
 | Held left | Repeat main fire at the shared repeat interval. |
 | Right press/hold | Fire/repeat special without moving first. |

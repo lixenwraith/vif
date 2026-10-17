@@ -500,13 +500,13 @@ the push stops at:
 
 - a finger's drag posted as the terminal's drag per cell, so the cursor follows
   it and the menu hold's slack applies; a held finger already repeats fire;
-- the keys a phone lacks (Tab, Ctrl chords, arrows) as a strip the way the
-  browser's `web/terminal.js` shows one, or left to the menu and the system
-  keyboard, whose composed text the pilot reads only as it commits;
 - a record of the phone's frame time (`adb logcat -s vif`), and the GLES drawer
   only if a device misses 60 fps with the Canvas one.
 
-A release-signed APK is the player's keystore and a Gradle signing block, after
+The system keyboard's text arrives as it commits, not while it is composed. The
+`tui` menu taken by taps is the phone's for now; one Android draws itself, likely
+circular, is the later design (D8). A
+release-signed APK is the player's keystore and a Gradle signing block, after
 the line.
 
 ### Measure and round out the desktop window
