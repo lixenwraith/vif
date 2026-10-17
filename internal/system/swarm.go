@@ -27,7 +27,6 @@ type SwarmSystem struct {
 	// Telemetry
 	statActive          *atomic.Bool
 	statCount           *atomic.Int64
-	statPlayerKills     *atomic.Int64
 	statProtected       *atomic.Int64
 	statProtectedPlayer *atomic.Int64
 	statStalls          *atomic.Int64
@@ -45,7 +44,6 @@ func NewSwarmSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resources.Status.Bools.Get("swarm.active")
 	s.statCount = world.Resources.Status.Ints.Get("swarm.count")
-	s.statPlayerKills = world.Resources.Status.Ints.Get("swarm.player_kills")
 	s.statProtected = world.Resources.Status.Ints.Get("swarm.protected_rejects")
 	s.statProtectedPlayer = world.Resources.Status.Ints.Get("swarm.protected_player_rejects")
 	s.statStalls = world.Resources.Status.Ints.Get("swarm.transition_stalls")
@@ -60,7 +58,6 @@ func (s *SwarmSystem) Init() {
 	s.active = false
 	s.statActive.Store(false)
 	s.statCount.Store(0)
-	s.statPlayerKills.Store(0)
 	s.statProtected.Store(0)
 	s.statProtectedPlayer.Store(0)
 	s.statStalls.Store(0)
@@ -105,9 +102,6 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventSpeciesKilled {
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesSwarm {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
-			if s.world.ResolveCursor(payload.KillerEntity) != 0 {
-				s.statPlayerKills.Add(1)
-			}
 		}
 		return
 	}

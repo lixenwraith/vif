@@ -124,19 +124,6 @@ capture and passed to `GeneticResource.Sample` and `SampleScout`
 and no scenario sets the key. Options: drop the parameter, field and key (a capture
 schema bump); or give the registry per-island populations for it to select.
 
-### Drop `swarm.player_kills`
-
-- Priority: P0, to review
-- Affected files: `internal/system/swarm.go`, `doc/telemetry-reference.md`
-
-`SwarmSystem` adds to `swarm.player_kills` (`internal/system/swarm.go:107-110`) on
-the same `ResolveCursor` test with which `lifecycle.RecordKill`, one line earlier,
-adds to `swarm.killed_by_player` (`internal/system/telemetry.go:102-108`), so the two
-always agree, and the duplicate is one of the swarm card's 12 entries, of the 15 a
-card may hold (`parameter.OverlayCardMaxEntries`). Remove the counter, its field,
-its key note in the [Telemetry reference](telemetry-reference.md) and its key in
-that page's Swarm row.
-
 ### Drop navigation's two unhandled cursor subscriptions
 
 - Priority: P0, to review
