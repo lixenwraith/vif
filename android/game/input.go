@@ -98,15 +98,36 @@ func (v *view) touch(x, y int, down bool) (terminal.Event, bool) {
 	if !v.pointer.Load() {
 		return terminal.Event{}, false
 	}
-	v.mu.Lock()
-	cols, rows, w, h := v.cols, v.rows, v.w, v.h
-	v.mu.Unlock()
+	cx, cy := v.cellAt(x, y)
+	v.finger.down, v.finger.x, v.finger.y = down, cx, cy
 	action := terminal.MouseActionRelease
 	if down {
 		action = terminal.MouseActionPress
 	}
-	return terminal.Event{
-		Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: action,
-		MouseX: min(max(x*cols/w, 0), cols-1), MouseY: min(max(y*rows/h, 0), rows-1),
-	}, true
+	return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: action,
+		MouseX: cx, MouseY: cy}, true
+}
+
+// drag is a pressed finger moving: the left button dragged to the cell drawn under
+// pixel x, y, reported once per cell as a terminal reports motion
+func (v *view) drag(x, y int) (terminal.Event, bool) {
+	if !v.pointer.Load() || !v.finger.down {
+		return terminal.Event{}, false
+	}
+	cx, cy := v.cellAt(x, y)
+	if cx == v.finger.x && cy == v.finger.y {
+		return terminal.Event{}, false
+	}
+	v.finger.x, v.finger.y = cx, cy
+	return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
+		MouseAction: terminal.MouseActionDrag, MouseX: cx, MouseY: cy}, true
+}
+
+// cellAt is the cell drawn under pixel x, y, the grid stretched over the view; the
+// nearest edge cell for one past its edge
+func (v *view) cellAt(x, y int) (int, int) {
+	v.mu.Lock()
+	cols, rows, w, h := v.cols, v.rows, v.w, v.h
+	v.mu.Unlock()
+	return min(max(x*cols/w, 0), cols-1), min(max(y*rows/h, 0), rows-1)
 }
