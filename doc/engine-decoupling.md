@@ -314,7 +314,7 @@ From the td profile (1,600 ticks, including the resets):
 |---|---|---|
 | `wallGrid.current` walked every wall to prove the cached wall grid current | 10 % of CPU flat, `WallTest.func1` 18 % cumulative, with 50,000 walls and two callers a tick | done: the wall epoch and the grid generation replace the scan (ECS and events §3); td 1.72 to 1.49 ms a tick, median of six interleaved runs, main unchanged within noise |
 | Map lookups in the sparse-set index | `mapaccess2_fast64` 24 % cumulative | entity IDs are per-domain counters; an index slice per domain would turn the lookup into an array read; measure before changing `Store` |
-| Maze spawn builds a 50,000-cell payload and the batch spawn grows four slices | 145 MB and 118 MB flat over 22 spawns | reuse the payload cells and pre-size the batch; event payloads are pooled elsewhere (`event.pool`) |
+| Maze spawn built a 50,000-cell payload and the batch spawn grew its slices | 145 MB and 118 MB flat over 22 spawns | done: the payload is pooled (`event.AcquireWallBatchSpawn`) and sized by a count of the maze's walls, the position batch is sized by the spawn and members are made only for a composite; the maze spawn's allocation over the run 363 to 138 MB, td 515 to 370 KB a tick |
 | Drain's exclusion map is built per spawn | 37 MB | a map the system keeps and clears |
 | `SpatialGrid.Resize` | 68 MB over the run | one allocation per level; grow-only already |
 
@@ -383,7 +383,7 @@ Each later phase is one PR.
 5. **Desktop GPU surface** (optional): a `vif_gui` command through purego GLES or
    Vulkan over the same atlas, the software rasterizer as its fallback.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
-   epoch, then the maze payload; the index slice when its measurement is in.
+   epoch and the maze payload are done; the index slice when its measurement is in.
 
 ## 8. Geometry flexibility: cell aspect and the position store
 

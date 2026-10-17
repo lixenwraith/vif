@@ -771,16 +771,6 @@ per-domain counters, so a slice per domain indexed by the ID's low bits would ma
 the lookup an array read; the idea is noted without analysis, and needs its own
 measurement on `main` as well as `td` ([Engine decoupling](engine-decoupling.md) §6).
 
-### Reuse the maze spawn payload
-
-- Priority: P3
-- Affected files: `internal/system/wall.go`, `internal/event`
-
-A maze spawn builds a 50,000-cell payload and the batch spawn grows four slices:
-145 MB and 118 MB over 22 spawns in the td profile, most of the garbage a level
-costs. Pool the payload's cells as the pooled death and particle payloads are, and
-pre-size the batch from the payload.
-
 ### Export a backend constructor in the terminal module
 
 - Priority: P3

@@ -240,7 +240,7 @@ func (s *NuggetSystem) spawnNugget() {
 	nugget := component.NuggetComponent{Char: randomChar}
 
 	// Use batch for atomic position validation
-	batch := s.world.Positions.BeginBatch()
+	batch := s.world.Positions.BeginBatch(1)
 	batch.Add(entity, pos)
 	if err := batch.Commit(); err != nil {
 		// Positions was taken while we were creating the nugget
