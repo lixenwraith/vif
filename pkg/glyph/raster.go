@@ -59,11 +59,10 @@ func (r *Raster) Flush(cells []terminal.Cell, width, height int) {
 	r.prev = append(r.prev[:0], cells...)
 }
 
-// draw paints one cell: its background, and its glyph in the foreground where
-// the atlas has it. Reverse swaps the two and dim halves the foreground; bold
-// and underline have no bitmap and are not drawn.
-func (r *Raster) draw(cx, cy int, c terminal.Cell) {
-	fg, bg := cellColor(c.Fg, c.Attrs&terminal.AttrFg256 != 0, c.Attrs&terminal.AttrFgDefault != 0, defaultFg),
+// Colors is a cell's foreground and background as a drawer paints them: reverse
+// swaps the two and dim halves the foreground; bold and underline have no bitmap
+func Colors(c terminal.Cell) (fg, bg color.RGB) {
+	fg, bg = cellColor(c.Fg, c.Attrs&terminal.AttrFg256 != 0, c.Attrs&terminal.AttrFgDefault != 0, defaultFg),
 		cellColor(c.Bg, c.Attrs&terminal.AttrBg256 != 0, c.Attrs&terminal.AttrBgDefault != 0, defaultBg)
 	if c.Attrs&terminal.AttrReverse != 0 {
 		fg, bg = bg, fg
@@ -71,6 +70,13 @@ func (r *Raster) draw(cx, cy int, c terminal.Cell) {
 	if c.Attrs&terminal.AttrDim != 0 {
 		fg = color.Scale(fg, 0.5)
 	}
+	return fg, bg
+}
+
+// draw paints one cell: its background, and its glyph in the foreground where
+// the atlas has it
+func (r *Raster) draw(cx, cy int, c terminal.Cell) {
+	fg, bg := Colors(c)
 	rows, _ := r.atlas.Rows(c.Rune)
 	w, h := r.atlas.Width, r.atlas.Height
 	stride := r.cols * w * 4

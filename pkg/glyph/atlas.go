@@ -5,6 +5,8 @@ package glyph
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/lixenwraith/toml"
@@ -73,3 +75,7 @@ func (a *Atlas) Rows(r rune) ([]uint32, bool) {
 
 // Len is how many glyphs the atlas holds
 func (a *Atlas) Len() int { return len(a.glyphs) }
+
+// Runes lists the glyphs the atlas holds in code point order, for a host that
+// uploads them as one texture
+func (a *Atlas) Runes() []rune { return slices.Sorted(maps.Keys(a.glyphs)) }
