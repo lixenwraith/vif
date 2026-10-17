@@ -455,6 +455,15 @@ continuous real play, and make the site playable alone. A bot is also the first
 non-terminal source of semantic input, the contract the Android extraction has to
 define first; doing Android first would define it without a second consumer.
 
+The push stops where [Engine decoupling §7](engine-decoupling.md#7-decisions-taken-and-the-plan)
+says: a phone playing the embedded scenario by touch at a legible cell size, with
+drag, repeat fire and the held-tap menu, from an APK `make android` builds; and the
+desktop window measured on a hardware driver once. What is left under
+[Extract the renderer-neutral Android host model](#extract-the-renderer-neutral-android-host-model)
+and [Measure and round out the desktop window](#measure-and-round-out-the-desktop-window)
+is that line; the items after it stay items. The list is pruned before the next
+push.
+
 ### Add bots that play as participants
 
 - Priority: P1, leading the push
@@ -482,24 +491,38 @@ renderer-neutral vocabulary (D1). Done: `app.Presentation` and `Config.Host`
 (the terminal as the default presentation, the host's speakers as the audio
 sink), the font atlas under `internal/asset/font/` with `pkg/glyph` and its
 software rasterizer as the reference drawer, and the cell aspect as one parameter
-(`vmath.Aspect`, carried by the anchor), and the pilot Android host in `android/`
+(`vmath.Aspect`, carried by the anchor), the pilot Android host in `android/`
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
-measured only on an emulator. Next, the input task, which replaces the pilot's
-stand-ins (a tap as a terminal press and release, a two-finger tap for the
-keyboard, Back as Escape):
+playing on a phone with sound and taps, `make android` for its APK, and the menu
+every host summons by holding a press on the status bar (D8). Left, to the line
+the push stops at:
 
-- map touch onto the semantic input bots already drive (`Intent.MapCell`), with
-  a finger's drag across cells and a hold that repeats fire;
-- give a phone the keys its keyboard lacks (Escape, Tab, Ctrl chords, arrows), as
-  the browser's key strip does, and take the keyboard's composed text, of which
-  the pilot reads only what it commits;
 - size the cell to the screen's density: 12x24 device pixels is about 4.6x9 dp on
-  a 420 dpi phone, so a scale or pinch zoom over the atlas;
-- the radial menu summoned by holding a tap, in place of the Ctrl-G menu, whose
-  gameplay implication is unresolved.
+  a 420 dpi phone, so an integer scale of the atlas in the drawer, chosen from the
+  density, with the grid sized by the scaled cell; the desktop window's HiDPI
+  scale is the same step in `pkg/window`;
+- a finger's drag posted as the terminal's drag per cell, so the cursor follows
+  it and the menu hold's slack applies; a held finger already repeats fire;
+- the keys a phone lacks (Tab, Ctrl chords, arrows) as a strip the way the
+  browser's `web/terminal.js` shows one, or left to the menu and the system
+  keyboard, whose composed text the pilot reads only as it commits;
+- a record of the phone's frame time (`adb logcat -s vif`), and the GLES drawer
+  only if a device misses 60 fps with the Canvas one.
 
-Then measure on arm64 hardware, and write the GLES drawer if a device misses 60
-fps with the Canvas one.
+A release-signed APK is the player's keystore and a Gradle signing block, after
+the line.
+
+### Lift the hosts' key tables into the terminal module
+
+- Priority: P3
+- Affected files: `lixenwraith/terminal`, `pkg/window/keys.go`,
+  `android/game/input.go`
+
+Both hosts hold the same table of what a terminal reports for Ctrl and a printable
+key, and the same rule that modifiers ride only the editing, navigation and
+function keys; the module parses the same control bytes in `parseControl`. One
+exported `terminal.ControlKey(r rune) (Key, bool)` and the rule beside it would
+leave each host its key-code table alone.
 
 ### Measure and round out the desktop window
 
@@ -784,16 +807,6 @@ blocks, about a quarter of the cells, where its directions mostly agree with the
 full field's away from walls; then a second Go instance in another worker computing
 fields at a fixed lead, at the cost of a second runtime and of copying the grid in
 and the field out.
-
-### Export a backend constructor in the terminal module
-
-- Priority: P3
-- Affected files: `lixenwraith/terminal`
-
-`terminal.New` takes only a color mode; a constructor taking a `Backend` would let
-a pipe or an in-process emulator stand in for the tty, for tests and tooling.
-Measured at 80x the cell path per frame, it is not the renderer route
-([Engine decoupling](engine-decoupling.md) §4.3); add it when a consumer exists.
 
 ### Serve wss from vif's own listener
 

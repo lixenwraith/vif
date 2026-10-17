@@ -222,9 +222,8 @@ Ebitengine site's platform list, which marks Android as cgo-required.
   At 60 fps the pipe spends 12 ms a second serializing before the emulator has
   parsed a byte, and a parser costs at least as much again; the cell path is
   under 1 % of that and already exists. The module's `Backend` interface is the
-  seam for a pipe (`Write`, `Read`, `Size`, `SetResizeHandler`) and is
-  unexported today: `New` takes only a color mode. One exported constructor would
-  open it for tests and tooling; it is not the product path.
+  seam for a pipe (`Write`, `Read`, `Size`, `SetResizeHandler`); `NewWithBackend`
+  (terminal v0.4.0) opens it for tests and tooling. It is not the product path.
 
 ## 5. Host model: how adapters plug in
 
@@ -392,6 +391,17 @@ Each later phase is one PR.
    until a hardware driver misses 60 fps.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
    epoch, the maze payload and the store index are done.
+
+**Where this push stops.** It ends when a phone plays the embedded scenario end
+to end by touch: the cell scaled to the screen's density so the grid is legible,
+a finger's drag moving the cursor across cells and a held one repeating fire, the
+held-tap menu for the commands and Back for Escape, the APK built by `make
+android`; and the desktop window measured once on a hardware driver. Past that
+line everything is a todo item, not this push: the GLES drawer (only if a device
+misses 60 fps), a release-signed APK, the window's native Wayland, HiDPI scale and
+paste, the hosts' key tables lifted into the terminal module, the position store
+out of the engine, bots on a phone. The todo list is pruned before the next push
+starts.
 
 ## 8. Geometry flexibility: cell aspect and the position store
 

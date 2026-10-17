@@ -411,7 +411,8 @@ the game hands over a frame every vsync and about 20 a second change cells, its
 20 Hz tick; taking, painting and posting one costs 3.5–4.2 ms mean and under 7 ms
 at p95 on the host GPU, 6–9 ms on the software one. The raster fallback costs
 36–57 ms a changed frame on the software GPU, a picture's worth of pixels across
-JNI each time: a fallback, not a 60 fps path.
+JNI each time: a fallback, not a 60 fps path. On a phone the APK plays with
+sound, taps and the held-tap menu; its frame times are not recorded yet.
 
 The terminal module's value types (`Cell`, `Attr`, `ColorMode`, `Key`) are the
 renderer-neutral vocabulary by decision ([Engine decoupling](engine-decoupling.md)
