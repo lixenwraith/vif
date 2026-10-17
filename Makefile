@@ -65,7 +65,7 @@ help:
 	@echo "  android  Build the Android debug APK as bin/vif-debug.apk (Android SDK and NDK: android/README.md)"
 	@echo "  android-install Install bin/vif-debug.apk on the device adb sees"
 	@echo "  nolog    Release build without logger"
-	@echo "  wasm     Build WebAssembly binary for xterm.js (audio and logging omitted)"
+	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (audio and logging omitted)"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  allocator Build the website-to-K3s session allocator"

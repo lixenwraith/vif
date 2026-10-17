@@ -318,8 +318,8 @@ func (a *App) renderContext() render.RenderContext {
 }
 
 // frame advances one render frame; false means the player quit. A hidden page draws
-// nothing, so its terminal holds no backlog to replay; web/worker.js repaints it
-// whole on its return. Neither does a terminal that stopped taking output. The tick
+// nothing, so no frames queue behind it, and is handed the whole screen on its
+// return. Neither does a terminal that stopped taking output. The tick
 // handshake below runs either way: the frame loop never waits on the terminal, so a
 // terminal nobody reads cannot slow the world.
 func (a *App) frame() bool {

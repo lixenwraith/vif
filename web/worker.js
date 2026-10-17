@@ -1,11 +1,12 @@
-/* The Go program's thread. A frame xterm takes long to draw holds only the page,
-   never a tick, a probe echo or a socket read; the page relays the terminal both
-   ways and this side presents it to Go as the page globals it expects. */
+/* The Go program's thread. The page draws the frames posted from here and reports
+   back what it saw: keys, the pointer, its size and each frame drawn. This side
+   presents those to Go as the globals pkg/browser expects, and keeps Go's stderr for
+   the page to show once the program ends. */
 'use strict';
 
 /* Why the program ended. stderr is a Go program's only word on that, and
    wasm_exec sends it to the console alone; kept here, the page shows it once the
-   program exits instead of leaving a terminal that simply stopped. */
+   program exits instead of leaving a screen that simply stopped. */
 let lastLine = '';
 let crashLine = '';
 const errDecoder = new TextDecoder('utf-8');
@@ -29,9 +30,15 @@ function loadRuntime(exec) {
     };
 }
 
-// Go allocates each array for this call alone, so its buffer can move.
-globalThis.goTerminalWrite = function(data) {
-    postMessage({ type: 'write', data: data }, [data.buffer]);
+// Go allocates each array for this call alone, so its buffer can move to the page.
+globalThis.vifAtlas = function(data) {
+    postMessage({ type: 'atlas', data: data }, [data.buffer]);
+};
+globalThis.vifFrame = function(data) {
+    postMessage({ type: 'frame', data: data }, [data.buffer]);
+};
+globalThis.vifPointer = function(enabled, motion) {
+    postMessage({ type: 'pointer', enabled: enabled, motion: motion });
 };
 
 async function start(msg) {
@@ -41,7 +48,7 @@ async function start(msg) {
         postMessage({ type: 'failed', reason: 'wasm_exec.js did not load: ' + err.message });
         return;
     }
-    globalThis.xterm = { cols: msg.cols, rows: msg.rows };
+    globalThis.vifGrid = { cols: msg.cols, rows: msg.rows };
     const go = new Go();
     go.argv = msg.argv;
     go.exit = function(code) {
@@ -61,23 +68,20 @@ onmessage = function(e) {
     case 'start':
         start(msg);
         break;
-    case 'input':
-        if (typeof globalThis.goTerminalInput === 'function') globalThis.goTerminalInput(msg.data);
-        break;
-    case 'resize':
-        if (!globalThis.xterm) break; // not started: the page's first fit can come first
-        globalThis.xterm.cols = msg.cols;
-        globalThis.xterm.rows = msg.rows;
-        if (typeof globalThis.goTerminalResize === 'function') globalThis.goTerminalResize(msg.cols, msg.rows);
+    case 'event':
+        // A size measured before the program started is what it opens at.
+        if (msg.event.type === 'resize' && globalThis.vifGrid) {
+            globalThis.vifGrid.cols = msg.event.cols;
+            globalThis.vifGrid.rows = msg.event.rows;
+        }
+        if (typeof globalThis.goEvent === 'function') globalThis.goEvent(msg.event);
         break;
     case 'visibility':
-        /* Go draws nothing while the page is hidden, so the page's timer-throttled
-           terminal gathers no backlog to replay on return. A resize of the same size
-           is what repaints the whole screen once it is seen again. */
+        /* Go draws nothing while the page is hidden, so no frames queue behind the
+           page's throttled timers to replay on return; the next frame it draws once
+           seen again is the whole screen. */
         globalThis.vifHidden = msg.hidden;
-        if (!msg.hidden && globalThis.xterm && typeof globalThis.goTerminalResize === 'function') {
-            globalThis.goTerminalResize(globalThis.xterm.cols, globalThis.xterm.rows);
-        }
+        if (!msg.hidden && typeof globalThis.goEvent === 'function') globalThis.goEvent({ type: 'sync' });
         break;
     }
 };

@@ -5,22 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-visual">
     <title>vif</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/vendor/xterm-5.5/xterm.min.css">
     <link rel="stylesheet" href="terminal.css">
 </head>
 <body>
 <div id="strip" role="toolbar" aria-label="Keys" hidden>
     <button type="button" id="kbd" aria-label="Keyboard" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
-    <button type="button" data-key="tab">Tab</button>
-    <button type="button" data-key="esc" id="esc" hidden>Esc</button>
+    <button type="button" data-key="Tab">Tab</button>
+    <button type="button" data-key="Escape" id="esc" hidden>Esc</button>
     <button type="button" id="full" aria-label="Fullscreen" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button>
 </div>
-<div id="terminal"></div>
+<div id="terminal">
+    <canvas id="screen"></canvas>
+    <textarea id="input" aria-label="Game input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+</div>
 <div id="loading">Loading vif...</div>
 <noscript><div id="nojs">vif requires JavaScript and WebAssembly.<br><a href="/vif/">Back to the project page</a></div></noscript>
-<script src="/vendor/xterm-5.5/xterm.min.js"></script>
-<script src="/vendor/xterm-5.5/addon-fit.min.js"></script>
-<script src="/vendor/xterm-5.5/addon-webgl.min.js"></script>
 <script src="terminal.js"></script>
 </body>
 </html>

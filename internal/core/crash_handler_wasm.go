@@ -14,7 +14,7 @@ func HandleCrash(r any) {
 		return
 	}
 
-	// Clean up xterm.js state if terminal registered
+	// A presentation that asked to be restored is; the browser host asks nothing
 	if crashTerminal != nil {
 		crashTerminal.Fini()
 	}

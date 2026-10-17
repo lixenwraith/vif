@@ -119,8 +119,8 @@ Audio starts muted; press `Ctrl-S` to cycle audio channels or launch with
 `-mute=false`. Run `./bin/vif -h` for all flags — it prints to stdout, so it pipes
 into `grep` without redirecting stderr.
 
-Primary native targets are Linux and FreeBSD. The repository also contains an
-xterm.js/WASM build, which plays solo or joins a session over its `wss://` route,
+Primary native targets are Linux and FreeBSD. The repository also contains a
+browser (WASM) build, which plays solo or joins a session over its `wss://` route,
 and an experimental Windows cross-build. See the
 [build and platform analysis](doc/multi-platform.md) for browser networking,
 launch arguments, external assets, and the future renderer boundary.

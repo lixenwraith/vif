@@ -23,7 +23,7 @@ downloadable content, a non-text renderer, and Android.
 | Full native | `make release` | Terminal renderer | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
-| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Browser terminal | Omitted | No | Stub | Solo play, or a session joined over its `wss://` route |
+| Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Omitted | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Desktop window | `make gui` / `vif_gui` (Linux, FreeBSD) | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | Play outside a terminal; cgo stays off |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
@@ -137,7 +137,7 @@ Both commands should produce no output. The container is one static binary in
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; published as an untested zip, not a development focus, and may be removed if field reports show it is broken |
-| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | xterm.js presentation; no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas (`pkg/browser`); no audio, filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
 | Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
@@ -190,9 +190,10 @@ at once rather than lingering for a burst, because a browser timer is clamped to
 
 While the page is hidden the Go program draws nothing (`pageHidden`); its tick, its
 socket and its probe answers carry on in the Worker for as long as the browser runs
-it, so the other players see an idle participant. On return the page repaints the
-whole screen once. Drawing on would queue some 60 KB/s of terminal output behind the
-page's throttled timers, which the terminal then replays at speed on return.
+it, so the other players see an idle participant. On return the page is handed the
+whole screen once. Drawing on would hold frames behind the page's throttled timers;
+the host hands the page one at a time, so even then one waits, never a backlog to
+replay.
 
 A browser that freezes the tab instead, as Chrome may under its energy or memory
 saving and mobile browsers readily do, stops the Worker, so nothing reads the
@@ -273,8 +274,8 @@ Go's browser support accepts an argument vector through `Go.argv` in
 2. repeated `arg` query parameters.
 
 `web/` is the launcher, and it is copied to a deployment as it stands: the same
-page, the same script, the same vendor tree at `/vendor/xterm-5.5/`, the same
-`vif.wasm` and `wasm_exec.js` the Makefile writes, from one Go. A deployment that
+page, the same scripts and stylesheet, the same `vif.wasm` and `wasm_exec.js` the
+Makefile writes, from one Go. A deployment that
 edits any of them has forked the launcher, and the fork is only visible the next
 time one side changes.
 
@@ -389,6 +390,20 @@ its size with nearest filtering, for a HiDPI screen. Its libraries
 (`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
 `bin/vif-gui` builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which
 `make gui` passes. It runs on Wayland through XWayland.
+
+The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
+`Host.Presentation` to a `pkg/browser` host. The Go program runs in a Worker, so the
+page's drawing never holds it; the host embeds `glyph.Frames` and hands the page one
+frame at a time, the cells changed since the one it holds, the next once the page
+reports the last drawn, so a page that stops drawing holds a frame rather than a
+queue and shows as `Blocked`. The page (`web/terminal.js`) draws the grid with one
+WebGL quad whose fragment shader finds its cell in two data textures and mixes the
+cell's colors by a glyph mask, rasterized from a monospace font at the cell's device
+size, so glyphs are crisp at any zoom; the mask is drawn again only when that size
+changes. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
+(a touch is the left button, as on Android) and its size as the terminal events the
+host posts. A hidden tab draws nothing and is handed the whole screen on return; the
+run is not paused ([§5](#a-hidden-tab)).
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
