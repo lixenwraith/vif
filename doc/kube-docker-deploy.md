@@ -511,7 +511,7 @@ log:
 ```sh
 for check in \
   'create jobs.batch:yes' 'delete jobs.batch:yes' 'create services:yes' \
-  'list services:yes' 'get pods:yes' 'list endpointslices.discovery.k8s.io:yes' \
+  'list services:yes' 'list pods:yes' 'list endpointslices.discovery.k8s.io:yes' \
   'get secrets:no'
 do
   verb=${check%:*}; want=${check#*:}

@@ -32,22 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Drop the fleet grants nothing uses
-
-- Priority: P0, to review
-- Affected files: `deploy/k3s/40-allocator-rbac.yaml`,
-  `deploy/k3s/20-networkpolicy.yaml`, `doc/kube-docker-deploy.md`
-
-The allocator Role grants `get` and `watch` on jobs, services, pods and
-endpointslices, and reads events (`deploy/k3s/40-allocator-rbac.yaml:24-52`), but the
-allocator only lists, creates and deletes (`tool/vif-allocator/kube.go:23-32`),
-against the header's "exactly the verbs it needs". `allow-operator-ports` admits a
-`logstream` port (`deploy/k3s/20-networkpolicy.yaml:62-63`) no container declares
-(`tool/vif-allocator/manifest.go:135-136`). Drop the unused verbs (the `can-i` check
-in [Fleet deploy](kube-docker-deploy.md) §16 then asks `list pods`); decide whether
-the allocator should log why a session ended from events or that rule goes, and
-whether `logstream` goes or a pod declares it.
-
 ### Let update.sh check the objects on a fresh cluster
 
 - Priority: P0, to review
