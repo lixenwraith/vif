@@ -494,29 +494,29 @@ software rasterizer as the reference drawer, and the cell aspect as one paramete
 (`vmath.Aspect`, carried by the anchor), the pilot Android host in `android/`
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
 playing on a phone with sound, taps and drags at a cell sized by its density,
-`make android` for its APK, and the menu
-every host summons by holding a press on the status bar (D8). Left, to the line
-the push stops at:
-
-- a record of the phone's frame time (`adb logcat -s vif`), and the GLES drawer
-  only if a device misses 60 fps with the Canvas one.
+`make android` for its APK, the menu every host summons by holding a press on the
+status bar and drives by the pointer (D8), and the phone's frame times. Nothing is
+left to the line the push stops at.
 
 The system keyboard's text arrives as it commits, not while it is composed. The
 `tui` menu taken by taps is the phone's for now; one Android draws itself, likely
-circular, is the later design (D8). A
-release-signed APK is the player's keystore and a Gradle signing block, after
-the line.
+circular, is the later design (D8). A release-signed APK is the player's keystore
+and a Gradle signing block, after the line.
 
 ### Measure and round out the desktop window
 
 - Priority: P3
 - Affected files: `pkg/window`, `cmd/vif/gui.go`
 
-The `vif_gui` window was measured on software GL only (llvmpipe on Xvfb). Take
-`BenchmarkPresent` on a hardware driver at 120x40 and 200x60; build the per-cell
-atlas quad path only if it misses 60 fps there. Not yet done: the HiDPI scale
-read from the screen (it is the player's `-scale`), native Wayland (XWayland
-serves today) and paste (no `EventPaste` from the X selection).
+`BenchmarkPresent` on a hardware driver (GTX 1060 Mobile, NVIDIA 580, XWayland on
+a 120 Hz panel) is the display's 8.3 ms a frame at 120x40 and 200x60 with 15 % of
+cells changed and at 120x40 with all, 16.7 ms at 200x60 with all: the
+compositor paces the swap whatever its interval. Without the swap the work is
+2.4, 5.3, 6.9 and 16.3 ms, the raster 0.8, 2.0, 5.1 and 12.9 ms of it. No grid
+misses 60 fps, so the per-cell atlas quad path waits; a whole 200x60 frame
+changed is at the limit, and the raster is where it would go. Not yet done: the
+HiDPI scale read from the screen (it is the player's `-scale`), native Wayland
+(XWayland serves today) and paste (no `EventPaste` from the X selection).
 
 ### Take the position store out of the engine
 
