@@ -32,25 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Name the FNV-1a constants in vmath and settle the golden seeds
-
-- Priority: P0, to review
-- Affected files: `pkg/vmath/rand.go`, `internal/manifest/fingerprint.go`,
-  `internal/snapshot/digest.go`, `pkg/audio/sound_render.go`,
-  `pkg/audio/sequencer.go`, `pkg/maze/generator.go`, `pkg/genetic/engine.go`,
-  `doc/package-map.md`
-
-The FNV-1a 64 offset and prime are written out in
-`internal/manifest/fingerprint.go:29-30`, `internal/snapshot/digest.go:16-17`,
-`pkg/audio/sound_render.go:439` and `pkg/vmath/rand.go:107-110`, and `pkg/vmath`
-names neither: export them there and use them in all four. `0x9E3779B97F4A7C15` is
-restated beside `vmath.Golden64` as seeds in `pkg/maze/generator.go:9` and
-`pkg/genetic/engine.go:11`, and as a stream in `pkg/audio/sequencer.go:74`.
-`pkg/audio` can import `vmath`; `pkg/maze` and core `pkg/genetic` are
-standard-library only ([Package map](package-map.md) §5). Options: those two keep a
-local seed as a stated exception, an arbitrary seed not being the SplitMix
-increment; or they import `pkg/vmath` and that coupling rule changes.
-
 ### Build the Makefile's release binaries without CGO
 
 - Priority: P0, to review

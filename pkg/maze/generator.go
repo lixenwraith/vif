@@ -5,7 +5,9 @@ import (
 	"math/rand/v2"
 )
 
-// mazeDefaultSeed keeps a caller-less Generate reproducible rather than clock-seeded
+// mazeDefaultSeed keeps a caller-less Generate reproducible rather than
+// clock-seeded; it restates vmath.Golden64, since this package imports only the
+// standard library
 const mazeDefaultSeed = 0x9E3779B97F4A7C15
 
 // Cell types
