@@ -14,7 +14,8 @@ var intUnits = []struct {
 	scale  time.Duration
 }{
 	{".timer", time.Nanosecond},
-	{".duration", time.Nanosecond}, // also matches .max_duration
+	{".duration", time.Nanosecond},
+	{"_duration", time.Nanosecond}, // fsm.max_duration and the per-region ones
 	{".elapsed", time.Nanosecond},
 	{".remaining", time.Nanosecond},
 	{"_ns", time.Nanosecond},

@@ -45,3 +45,16 @@ func TestFormatLatencyChangesUnitRatherThanWidth(t *testing.T) {
 		}
 	}
 }
+
+// TestIntUnitReadsTheTrailingDurationSegment: the overlay must scale a key whose
+// last segment is a duration whether a '.' or a '_' introduces it.
+func TestIntUnitReadsTheTrailingDurationSegment(t *testing.T) {
+	for _, key := range []string{"fsm.max_duration", "fsm.main.max_duration", "tick.duration"} {
+		if IntUnit(key) == 0 {
+			t.Errorf("IntUnit(%q) = 0, want nanoseconds", key)
+		}
+	}
+	if IntUnit("fsm.populations") != 0 {
+		t.Errorf("IntUnit(fsm.populations) scaled a plain count")
+	}
+}
