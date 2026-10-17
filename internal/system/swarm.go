@@ -697,7 +697,7 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtSec float6
 
 	// Cornering drag
 	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-		parameter.NavCorneringThreshold, 1.0)
+		parameter.NavCorneringBase, 1.0)
 
 	physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.SwarmHoming, dtSec)
 

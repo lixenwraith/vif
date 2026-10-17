@@ -357,7 +357,10 @@ circles until something else stops it. Loot's 34 cells per second against 60
 cells per second squared sustains about nineteen cells, four times its arrival
 radius. What forecloses the orbit is the cornering brake (`TurnSeverity` ×
 `NavCorneringBrake`), a drag that grows as the heading turns from the target and
-acts at any distance; drains, swarms, quasars, eyes and loot apply it. A
+acts at any distance; drains, swarms, quasars, eyes and loot apply it. It never
+rests: `TurnSeverity` is `NavCorneringBase` (3) minus the cosine of the turn, so
+an actor heading straight at its target still drags at twice the brake, one
+heading away at four times, and a drain at twice either. A
 missile's zero cruise speed makes its overspeed drag continuous instead; a snake
 head has neither.
 

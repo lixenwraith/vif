@@ -473,7 +473,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 
 	// Cornering drag
 	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-		+parameter.NavCorneringThreshold, 1.0)
+		parameter.NavCorneringBase, 1.0)
 
 	// Homing with arrival steering
 	// Disable homing drag when navigating via flow field - cornering drag handles turns
