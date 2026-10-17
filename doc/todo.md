@@ -836,7 +836,12 @@ Without `-race` the package's wall time is set by its 47 serial tests, about 23 
 of 33 s on 4 cores: each drives a real socket against the shipped wall-clock
 deadlines (heartbeat loss, succession, join readiness), so none can share the
 machine. Test-only deadlines a fraction of the shipped ones, or the in-process mesh
-where a socket is not the rule under test, would cut them.
+where a socket is not the rule under test, would cut them. The same load makes
+`recordGuestPastItsHost` flaky under `go test -race ./internal/app`: its late
+crossing's correction has to cross the socket before the host leaves at tick 400,
+and in about one run in three it does not, so the three tests that read the
+shared recording fail together ("installed 1 worlds"); alone they pass. Record
+the correction's arrival before moving on, or tick the host until it lands.
 
 ### Fuzz the join handshake
 
