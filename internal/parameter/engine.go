@@ -88,6 +88,10 @@ const (
 
 	// EventBufferMask is the bitmask for fast modulo operations (2048 - 1)
 	EventBufferMask = 2047
+
+	// FreeAreaSearchRadius is the spiral radius FindFreeAreaSpiral walks when a
+	// caller names none
+	FreeAreaSearchRadius = 20
 )
 
 // Store index: an entity's ID selects a slot in a page of 1<<StoreIndexPageBits.

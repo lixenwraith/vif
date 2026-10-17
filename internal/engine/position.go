@@ -483,7 +483,8 @@ var SpiralSearchDirs = [8][2]int{
 
 // FindFreeAreaSpiral searches outward from origin, 45° counter-clockwise from top,
 // for a width×height area free of walls matching mask (0 = any wall). The anchor
-// offset is the header's position from the area's top-left; maxRadius 0 means 20.
+// offset is the header's position from the area's top-left; maxRadius 0 means
+// FreeAreaSearchRadius.
 // Returns the area's top-left and whether one was found.
 func (p *Position) FindFreeAreaSpiral(
 	originX, originY int,
@@ -497,7 +498,7 @@ func (p *Position) FindFreeAreaSpiral(
 	}
 
 	if maxRadius <= 0 {
-		maxRadius = 20
+		maxRadius = parameter.FreeAreaSearchRadius
 	}
 
 	// Check origin first (radius 0)
@@ -1061,11 +1062,10 @@ func (p *Position) FindFreeFromPattern(
 		for _, idx := range order {
 			dir := patternDirections[idx]
 
-			// Integer Circular Approximation (No Floats)
-			// Scale diagonals by 7/10 to approximate 0.707 (1/sqrt(2))
+			// Integer circular approximation: diagonals scale by 7/10 for 1/√2
 			r := radius
 			if dir[0] != 0 && dir[1] != 0 {
-				r = (radius * 7) / 10
+				r = (radius * vmath.DiagonalNum) / vmath.DiagonalDen
 			}
 
 			offsetX := dir[0] * r

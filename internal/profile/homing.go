@@ -24,9 +24,9 @@ var QuasarHoming = physics.HomingProfile{
 	BaseSpeed:        parameter.QuasarBaseSpeed,
 	HomingAccel:      parameter.QuasarHomingAccel,
 	Drag:             parameter.QuasarDrag,
-	ArrivalRadius:    3.0,
-	ArrivalDragBoost: 3.0,
-	DeadZone:         0.5,
+	ArrivalRadius:    parameter.QuasarArrivalRadius,
+	ArrivalDragBoost: parameter.QuasarArrivalDragBoost,
+	DeadZone:         parameter.QuasarDeadZone,
 }
 
 // SnakeHoming: arrival steering, 3x drag at target
@@ -34,9 +34,9 @@ var SnakeHoming = physics.HomingProfile{
 	BaseSpeed:        parameter.SnakeBaseSpeed,
 	HomingAccel:      parameter.SnakeHomingAccel,
 	Drag:             parameter.SnakeDrag,
-	ArrivalRadius:    2.0,
-	ArrivalDragBoost: 2.0,
-	DeadZone:         0.5,
+	ArrivalRadius:    parameter.SnakeArrivalRadius,
+	ArrivalDragBoost: parameter.SnakeArrivalDragBoost,
+	DeadZone:         parameter.SnakeDeadZone,
 }
 
 // LootHoming: aggressive arrival drag kills orbital momentum for reliable capture.
@@ -55,9 +55,9 @@ var MissileHoming = physics.HomingProfile{
 	HomingAccel:      parameter.MissileHomingAccel,
 	Drag:             parameter.MissileDrag,
 	ArrivalRadius:    parameter.MissileArrivalRadius,
-	ArrivalDragBoost: 2.0,
-	ArrivalAccelMin:  1.0,
-	DeadZone:         0.1,
+	ArrivalDragBoost: parameter.MissileArrivalDragBoost,
+	ArrivalAccelMin:  parameter.MissileArrivalAccelMin,
+	DeadZone:         parameter.MissileDeadZone,
 }
 
 // EyeHomingProfiles mirrors EyeHomingProfiles from the same source table

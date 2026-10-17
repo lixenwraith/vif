@@ -1344,12 +1344,9 @@ func aimed(d component.WeaponDelivery) bool {
 	return d != component.DeliveryPulse && d != component.DeliveryTracer
 }
 
-// tracerLaneOffsets are the row or column offsets a volley covers, by charge count
-var tracerLaneOffsets = [...][]int{{0}, {-1, 1}, {-1, 0, 1}}
-
 // tracerLanes are the offsets a volley of charges covers; charges past the table cover every lane
 func tracerLanes(charges int) []int {
-	return tracerLaneOffsets[max(min(charges, len(tracerLaneOffsets)), 1)-1]
+	return parameter.TracerLaneOffsets[max(min(charges, len(parameter.TracerLaneOffsets)), 1)-1]
 }
 
 // tracerFlightBounds returns cell-centered off-map targets far enough for a
