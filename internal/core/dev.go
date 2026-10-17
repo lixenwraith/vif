@@ -53,6 +53,12 @@ func CaptureStderr(dir string) (string, error) {
 	if dir == "" {
 		dir = os.TempDir()
 	}
+	// Saved before the redirect so teardown can hand fd 2 back, and before the
+	// file exists so a build that cannot redirect leaves no empty capture
+	orig, err := dupFD(2)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -65,13 +71,6 @@ func CaptureStderr(dir string) (string, error) {
 	r, err := os.Open(path)
 	if err != nil {
 		w.Close()
-		return "", err
-	}
-	// Saved before the redirect so teardown can hand fd 2 back
-	orig, err := dupFD(2)
-	if err != nil {
-		w.Close()
-		r.Close()
 		return "", err
 	}
 	if err := dupToStderr(int(w.Fd())); err != nil {
