@@ -67,6 +67,10 @@ type view struct {
 	events  chan terminal.Event
 	away    chan bool
 	pointer atomic.Bool
+	finger  struct { // the cell a pressed finger last reported; the UI thread's alone
+		down bool
+		x, y int
+	}
 
 	mu         sync.Mutex
 	cols, rows int             // the grid the view's pixels hold

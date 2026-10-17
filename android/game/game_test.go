@@ -51,6 +51,44 @@ func TestATapPressesAndReleasesTheCellUnderIt(t *testing.T) {
 	}
 }
 
+// TestAFingerDragsOncePerCell: a pressed finger moving reports a left drag each
+// time it enters another cell and nothing within one, past the view's edge on its
+// edge cell; a finger not pressed drags nothing.
+func TestAFingerDragsOncePerCell(t *testing.T) {
+	const w, h = 12, 24
+	v := testView(t, false, 1)
+	v.setGrid(10*w, 4*h)
+	v.SetPointerMode(true, false)
+	drag := func(x, y int) terminal.Event {
+		return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
+			MouseAction: terminal.MouseActionDrag, MouseX: x, MouseY: y}
+	}
+	if ev, ok := v.drag(w*2, h); ok {
+		t.Fatalf("a finger never pressed dragged: %+v", ev)
+	}
+	v.touch(w*3+1, h*2+1, true)
+	for _, c := range []struct {
+		x, y int
+		want terminal.Event
+		ok   bool
+	}{
+		{w*3 + 9, h*2 + 20, terminal.Event{}, false},
+		{w*4 + 1, h*2 + 1, drag(4, 2), true},
+		{w*4 + 11, h * 2, terminal.Event{}, false},
+		{w * 4, h*3 + 2, drag(4, 3), true},
+		{w*10 + 4, h * 3, drag(9, 3), true},
+		{w*10 + 9, h * 3, terminal.Event{}, false},
+	} {
+		if ev, ok := v.drag(c.x, c.y); ok != c.ok || ev != c.want {
+			t.Errorf("drag to %d,%d is %+v %v, want %+v %v", c.x, c.y, ev, ok, c.want, c.ok)
+		}
+	}
+	v.touch(w*9, h*3, false)
+	if ev, ok := v.drag(w, h); ok {
+		t.Fatalf("a released finger dragged: %+v", ev)
+	}
+}
+
 // TestKeysArriveAsATerminalReportsThem: a named key, Ctrl with a letter as its
 // control byte, Shift-Tab as back-tab and a typed character are the events a
 // terminal parses for them, modifiers riding only the editing, navigation and

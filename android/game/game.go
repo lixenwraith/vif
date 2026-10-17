@@ -123,6 +123,16 @@ func Tap(x, y int32, down bool) {
 	}
 }
 
+// Drag is a pressed finger moving to the view's pixel x, y: the left button dragged
+// to the cell under it, once per cell
+func Drag(x, y int32) {
+	if v := current(); v != nil {
+		if ev, ok := v.drag(int(x), int(y)); ok {
+			v.post(ev)
+		}
+	}
+}
+
 // Key is a key the view received: Android's key code, the character it types
 // without Ctrl or Alt (0 for none) and its meta state. It reports whether the game
 // takes the key; one it does not, a volume key, is left to the system.

@@ -23,8 +23,8 @@ import java.util.Arrays;
 
 /**
  * The game's screen: a render thread takes the newest frame the run flushed at each
- * vsync, hands it to the drawer and posts the drawer's picture. Taps and keys go to
- * the run; a two-finger tap raises or drops the system keyboard.
+ * vsync, hands it to the drawer and posts the drawer's picture. Taps, drags and keys
+ * go to the run; a two-finger tap raises or drops the system keyboard.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
     private final MainActivity activity;
@@ -136,6 +136,9 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 Game.tap(x, y, true);
+                break;
+            case MotionEvent.ACTION_MOVE:
+                Game.drag(x, y);
                 break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
