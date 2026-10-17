@@ -347,7 +347,7 @@ func (s *AdaptationSystem) processPendingDeaths() {
 
 				// Recover topological distance if knocked slightly out of corridor
 				if deathDist < 0 {
-					deathDist = findCorridorDistance(route.Field, death.X, death.Y, 5)
+					deathDist = findCorridorDistance(route.Field, death.X, death.Y, parameter.RouteCorridorRecoveryRadius)
 				}
 
 				var fitness float64
@@ -482,13 +482,11 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 		}
 	}
 
-	// 3. Mathematical minimum boundary (0.5%) solely to prevent extinct weights from underflowing to 0
-	// Exploration is actively enforced during selection (samplePool), NOT baked directly into latent weights
-	minWeight := 0.005
+	// 3. Floor extinct weights; exploration is samplePool's, not the weights'
 	floorApplied := false
 	for i := range k {
-		if pop.Weights[i] < minWeight {
-			pop.Weights[i] = minWeight
+		if pop.Weights[i] < parameter.RouteMinWeight {
+			pop.Weights[i] = parameter.RouteMinWeight
 			floorApplied = true
 		}
 	}
@@ -505,8 +503,8 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 	}
 }
 
-// samplePool refills the consumer pool: 10% uniform scouts, remainder sampled
-// proportionally from latent weights via CDF binary search, then shuffled
+// samplePool refills the consumer pool: RouteScoutRate uniform scouts, the rest
+// sampled proportionally from latent weights via CDF binary search, then shuffled
 func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 	n := parameter.RoutePoolDefaultSize
 	k := len(pop.Weights)
@@ -532,12 +530,8 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 	}
 	total := cdf[k-1]
 
-	// Decoupled Scout Wave mechanic (epsilon-greedy). Ensures 10% of spawns uniformly probe routes
-	// independent of the mathematical distributions of the exploitative EXP3 model
-	const scoutRate = 0.10
-
 	for i := range n {
-		if total <= 0 || s.rng.Float64() < scoutRate {
+		if total <= 0 || s.rng.Float64() < parameter.RouteScoutRate {
 			// Scout: Uniform random assignment
 			pop.Pool[i] = s.rng.Intn(k)
 		} else {
