@@ -1,9 +1,11 @@
 package fsm
 
-import "fmt"
+import (
+	"fmt"
+	"maps"
+	"slices"
+)
 
-// AddState adds a node to the machine manually
-// Useful for constructing the graph programmatically or during scenario load
 func (m *Machine[T]) AddState(id StateID, name string, parentID StateID) *Node[T] {
 	node := &Node[T]{
 		ID:          id,
@@ -18,7 +20,6 @@ func (m *Machine[T]) AddState(id StateID, name string, parentID StateID) *Node[T
 	return node
 }
 
-// AddTransition adds a transition to a specific node
 func (m *Machine[T]) AddTransition(sourceID StateID, t Transition[T]) {
 	if node, ok := m.nodes[sourceID]; ok {
 		node.Transitions = append(node.Transitions, t)
@@ -26,12 +27,14 @@ func (m *Machine[T]) AddTransition(sourceID StateID, t Transition[T]) {
 	}
 }
 
-// CompilePaths calculates the Path slice for every node in the graph
-// Must be called after all nodes are added and before Init
-// This ensures O(1) LCA lookups during runtime
+// CompilePaths gives every node its root-to-leaf path, which is what makes LCA
+// lookups O(1) at runtime; it runs after the last node is added and before Init.
+// The walk is in ID order, which the loader assigns by name, so a cycle is
+// reported from the same state on every load.
 func (m *Machine[T]) CompilePaths() error {
 	m.reacts.clear()
-	for id, node := range m.nodes {
+	for _, id := range slices.Sorted(maps.Keys(m.nodes)) {
+		node := m.nodes[id]
 		path := make([]StateID, 0, 4)
 		curr := node
 
