@@ -73,7 +73,9 @@ Operational rules:
 
 - `GetComponent` returns a value copy; update it with `SetComponent`.
 - `GetPtr` exposes an in-store pointer for a hot path, but any append or removal
-  from that store can invalidate it.
+  from that store can invalidate it. A per-tick loop reads a large component
+  (`SnakeHead` 2,104 bytes, `Combat` 256) through it; one of 120 bytes or under
+  is as well copied.
 - Entity slices returned for live iteration must not be used while structurally
   changing the same store. Collect work first or use a snapshot/copy helper.
 - Entity destruction is generated from the component manifest and removes all

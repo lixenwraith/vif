@@ -184,6 +184,16 @@ owning system, and the only functions beside them are reads a renderer or mode
 shares with a system and the snapshot detach of slice-holding components
 ([ECS and events](ecs-and-events.md#4-component-catalog)).
 
+The generated stores, capture and delta are emitted into `internal/engine`, so
+the engine imports `internal/component`: a build-time dependency, not a design
+that names game concepts. `internal/gen-manifest` hardcodes no component; it
+parses `internal/manifest/definition.go` and emits templates over whatever that
+file lists, the only name it knows being `Position`, and the world, scheduler,
+queue, convergence and snapshot code is written over the generated rows, never
+over a named component. In the headless binary the generated capture, install and
+delta code is 877 KB of text and data against 317 KB of hand-written engine, and
+the terminal module the engine's vocabulary comes from links at 14 KB.
+
 Position is specialized rather than being an ordinary generated store. It also
 maintains a fixed-capacity spatial grid used for cell queries, wall masks,
 line-of-sight, patterns, and nearby free-space searches. Large actors use a

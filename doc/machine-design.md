@@ -551,7 +551,7 @@ minority of the work.
 - **Engine split.** This is also how the engine takes species it was not built
   with. The manifest stays the one registry and the generator stays as it is: a
   data species adds a program and a prototype, not a component, and the host
-  model of [Engine decoupling](engine-decoupling.md) §5 plugs I/O, never systems.
+  model of [Build profiles](multi-platform.md) §8 plugs I/O, never systems.
   A compiled external component would need a second definition file and the
   fingerprint to cover it; nothing asks for that while programs are data.
 
