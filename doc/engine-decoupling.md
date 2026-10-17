@@ -381,8 +381,12 @@ Each later phase is one PR.
 4. **Android host.** `gomobile bind`, `SurfaceView` drawing the cell grid from the
    atlas, `AudioTrack` sink, asset provider, lifecycle hooks; touch mapped to
    intents as the focused input task; the radial menu after that.
-5. **Desktop GPU surface** (optional): a `vif_gui` command through purego GLES or
-   Vulkan over the same atlas, the software rasterizer as its fallback.
+5. **Desktop GPU surface: done.** `make gui` (`vif_gui`): `pkg/window` opens an X
+   window and a GLES 2 context through purego and uploads the `glyph.Raster`
+   frame whole as one texture ([Platforms](multi-platform.md) §8). On software GL
+   (llvmpipe) a frame with 15 % of cells changed takes 5 ms at 120x40 and 12 ms at
+   200x60, 7 and 19 ms with every cell changed; the per-cell atlas quad path waits
+   until a hardware driver misses 60 fps.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
    epoch and the maze payload are done; the index slice when its measurement is in.
 
