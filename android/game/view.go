@@ -90,9 +90,7 @@ func (v *view) Surface() render.Surface       { return v }
 func (v *view) Events() <-chan terminal.Event { return v.events }
 func (v *view) Away() <-chan bool             { return v.away }
 
-func (v *view) CellAspect() vmath.Aspect {
-	return vmath.Aspect(float64(v.font.atlas.Width) / float64(v.font.atlas.Height))
-}
+func (v *view) CellAspect() vmath.Aspect { return v.font.atlas.Aspect() }
 
 // SetPointerMode drops touches while the run takes no pointer; a finger has no
 // motion of its own to report

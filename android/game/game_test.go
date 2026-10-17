@@ -47,7 +47,8 @@ func TestATapPressesAndReleasesTheCellUnderIt(t *testing.T) {
 
 // TestKeysArriveAsATerminalReportsThem: a named key, Ctrl with a letter as its
 // control byte, Shift-Tab as back-tab and a typed character are the events a
-// terminal parses for them; a key the game has no use for is left to the system.
+// terminal parses for them, modifiers riding only the editing, navigation and
+// function keys; a key the game has no use for is left to the system.
 func TestKeysArriveAsATerminalReportsThem(t *testing.T) {
 	key := func(k terminal.Key, mods terminal.Modifier) terminal.Event {
 		return terminal.Event{Type: terminal.EventKey, Key: k, Modifiers: mods}
@@ -60,6 +61,9 @@ func TestKeysArriveAsATerminalReportsThem(t *testing.T) {
 	}{
 		{"back", 4, 0, 0, key(terminal.KeyEscape, 0)},
 		{"enter", 66, 0, '\n', key(terminal.KeyEnter, 0)},
+		{"ctrl enter", 66, metaCtrl, '\n', key(terminal.KeyEnter, 0)},
+		{"shift up", 19, metaShift, 0, key(terminal.KeyUp, terminal.ModShift)},
+		{"ctrl caret", 75, metaCtrl, '^', key(terminal.KeyCtrlCaret, 0)},
 		{"backspace", 67, 0, 0, key(terminal.KeyBackspace, 0)},
 		{"shift tab", 61, metaShift, '\t', key(terminal.KeyBacktab, terminal.ModShift)},
 		{"ctrl c", 31, metaCtrl, 'c', key(terminal.KeyCtrlC, 0)},

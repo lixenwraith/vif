@@ -25,6 +25,7 @@ downloadable content, a non-text renderer, and Android.
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Browser terminal | Omitted | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Desktop window | `make gui` / `vif_gui` (Linux, FreeBSD) | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | Play outside a terminal; cgo stays off |
+| Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
@@ -40,6 +41,7 @@ make release                 # bin/vif
 make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
 make gui                     # bin/vif-gui
+make android                 # bin/vif-debug.apk, from android/
 make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
 

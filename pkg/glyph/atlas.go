@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Atlas is a bitmap font of one cell size. A glyph's rows hold one bit per column,
@@ -79,3 +80,7 @@ func (a *Atlas) Len() int { return len(a.glyphs) }
 // Runes lists the glyphs the atlas holds in code point order, for a host that
 // uploads them as one texture
 func (a *Atlas) Runes() []rune { return slices.Sorted(maps.Keys(a.glyphs)) }
+
+// Aspect is the cell's width over its height: what a host drawing with this atlas
+// reports as its cell aspect
+func (a *Atlas) Aspect() vmath.Aspect { return vmath.Aspect(float64(a.Width) / float64(a.Height)) }

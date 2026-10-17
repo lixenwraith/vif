@@ -50,7 +50,7 @@ GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=
 # Goals run in the order given, so make release install installs what it built.
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless gui nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
+.PHONY: help generate dev release headless gui android android-install nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -60,6 +60,8 @@ help:
 	@echo "  release  Build optimized binary (stripped, trimmed)"
 	@echo "  headless Build dedicated-host binary without presentation or audio"
 	@echo "  gui      Build bin/vif-gui, the game in a desktop window (Xlib, EGL, GLES 2; Linux, FreeBSD)"
+	@echo "  android  Build the Android debug APK as bin/vif-debug.apk (Android SDK and NDK: android/README.md)"
+	@echo "  android-install Install bin/vif-debug.apk on the device adb sees"
 	@echo "  nolog    Release build without logger"
 	@echo "  wasm     Build WebAssembly binary for xterm.js (audio and logging omitted)"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
@@ -143,6 +145,16 @@ headless: generate $(BIN_DIR)
 gui: generate $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
 
+# android is its own Go module and Gradle project: gomobile binds the Go host and
+# the APK packages wad/ as its assets. Gradle fetches its own JDK; the SDK and NDK
+# are the player's (android/README.md).
+android: check-go $(BIN_DIR)
+	cd android && ./gradlew assembleDebug
+	install -m 0644 android/app/build/outputs/apk/debug/app-debug.apk $(BIN_DIR)/$(BINARY)-debug.apk
+
+android-install:
+	adb install -r $(BIN_DIR)/$(BINARY)-debug.apk
+
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: generate $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
@@ -176,6 +188,7 @@ verify: generate test
 	CGO_ENABLED=0 $(GO) build $(GUI_GCFLAGS) -tags vif_gui ./...
 	$(GO) test -tags vif_noaudio ./internal/... $(SRC)
 	$(GO) test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
+	cd android && $(GO) vet ./... && $(GO) test ./...
 	GOOS=js GOARCH=wasm $(GO) build ./...
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "novlog vif_noaudio" ./...
 	@if $(GO) list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|/pkg/audio$$'; then \
@@ -297,4 +310,4 @@ arch-check:
 	echo "arch-check: $$pkgs clean"
 
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(BIN_DIR) android/build android/app/build

@@ -37,7 +37,7 @@ func (h *windowHost) Init() error {
 	if err != nil {
 		return err
 	}
-	h.aspect = vmath.Aspect(float64(atlas.Width) / float64(atlas.Height))
+	h.aspect = atlas.Aspect()
 	h.win, err = window.Open(window.Config{Title: parameter.WindowTitle, Atlas: atlas,
 		Cols: parameter.WindowCols, Rows: parameter.WindowRows})
 	return err
