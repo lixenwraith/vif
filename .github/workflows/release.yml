@@ -42,7 +42,7 @@ jobs:
       - name: Refresh generated registries
         shell: bash
         run: |
-          go generate ./internal/event ./internal/manifest
+          go generate ./internal/manifest
           # A release's binaries must be what its source archive builds.
           if [ "$GITHUB_REF_TYPE" = tag ]; then git diff --exit-code; fi
 
