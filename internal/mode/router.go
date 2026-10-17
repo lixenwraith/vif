@@ -61,6 +61,12 @@ type Router struct {
 	mouseLeftHeld  bool
 	mouseRightHeld bool
 
+	// menuHold is a left press held on the status bar: it summons the menu once it
+	// has lasted MenuHoldDuration without a release or a drift past MenuHoldSlack
+	menuHold   bool
+	menuHoldAt [2]int
+	menuSince  time.Time // [wall]
+
 	// heldButton is the key whose button a left press holds: the release goes to the
 	// button pressed, wherever the pointer lets go
 	heldButton rune
@@ -167,7 +173,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	if isMouseIntent(intent.Type) && (r.ctx.MouseDisabled.Load() || r.inputSuspended()) {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
-			r.mouseLeftHeld = false
+			r.mouseLeftHeld, r.menuHold = false, false
 			r.releaseButton()
 		case input.IntentMouseRightDown, input.IntentMouseRightUp:
 			r.mouseRightHeld = false
@@ -1009,6 +1015,12 @@ func (r *Router) closeOverlay() bool {
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	r.releaseButton()
+	// The status bar is no map cell: a press there starts the hold that summons the
+	// menu, and neither moves the cursor nor fires
+	if r.onStatusBar(intent) {
+		r.menuHold, r.menuHoldAt, r.menuSince = true, [2]int{intent.X, intent.Y}, time.Now() // [wall]
+		return true
+	}
 	// A press on a button is its key's input whether or not that key is taken now, so
 	// it never moves the cursor onto the button or fires
 	if x, y, ok := r.pointerCell(intent); ok {
@@ -1027,7 +1039,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 }
 
 func (r *Router) handleMouseLeftUp() bool {
-	r.mouseLeftHeld = false
+	r.mouseLeftHeld, r.menuHold = false, false
 	r.releaseButton()
 	return true
 }
@@ -1048,10 +1060,20 @@ func (r *Router) handleMouseRightUp() bool {
 }
 
 func (r *Router) handleMouseDrag(intent *input.Intent) bool {
+	if r.menuHold {
+		dx, dy := intent.X-r.menuHoldAt[0], intent.Y-r.menuHoldAt[1]
+		r.menuHold = max(dx, -dx) <= parameter.MenuHoldSlack && max(dy, -dy) <= parameter.MenuHoldSlack
+	}
 	if r.mouseLeftHeld {
 		r.moveMouseCursor(intent)
 	}
 	return true
+}
+
+// onStatusBar reports whether a pointer intent names a cell of the rows below the
+// viewport, where the status bar is drawn and no map cell can be
+func (r *Router) onStatusBar(intent *input.Intent) bool {
+	return !intent.MapCell && intent.Y >= r.ctx.GameYOffset+r.ctx.World.Resources.Config.ViewportHeight
 }
 
 func (r *Router) handleMouseWheelMove(intent *input.Intent) bool {
@@ -1099,11 +1121,17 @@ func (r *Router) syncMouseMode() {
 	r.applyMouseMode(enabled, motion)
 }
 
-// ProcessInputTick checks mouse reports and emits repeat fire requests for auto-fire and held buttons
+// ProcessInputTick checks mouse reports, summons the menu a hold on the status bar
+// has earned, and emits repeat fire requests for auto-fire and held buttons
 func (r *Router) ProcessInputTick() bool {
 	r.syncMouseMode()
 	r.openBreak()
 
+	if r.menuHold && time.Since(r.menuSince) >= parameter.MenuHoldDuration { // [wall]
+		r.menuHold = false
+		r.handleConfigMenu()
+		return false
+	}
 	if r.inputSuspended() {
 		return false
 	}
