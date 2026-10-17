@@ -103,6 +103,12 @@ const (
 	// MissileArrivalRadius is distance to begin braking (cells)
 	MissileArrivalRadius = 2.0
 
+	// Inside the arrival radius the drag is boosted MissileArrivalDragBoost times
+	// while MissileArrivalAccelMin of the homing accel stays; MissileDeadZone snaps
+	MissileArrivalDragBoost = 2.0
+	MissileArrivalAccelMin  = 1.0
+	MissileDeadZone         = 0.1
+
 	// MissileMaxLifetime is safety timeout for orphaned missiles
 	MissileMaxLifetime = 3 * time.Second
 )

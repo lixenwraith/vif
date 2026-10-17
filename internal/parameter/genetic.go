@@ -31,6 +31,10 @@ const (
 
 	// GAFitnessDamageWeight scales the saturated damage term against proximity (0..1)
 	GAFitnessDamageWeight = 1.0
+
+	// GATypeFitnessEMARate is the weight a new fitness report carries in a
+	// subtype's running mean
+	GATypeFitnessEMARate = 0.1
 )
 
 // GAStreamingConfig returns package defaults overridden by game parameters

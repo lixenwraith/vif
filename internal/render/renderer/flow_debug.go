@@ -80,27 +80,17 @@ func (r *FlowFieldDebugRenderer) renderFlowField(ctx render.RenderContext, buf *
 			switch {
 			case dir == navigation.DirTarget:
 				arrow = '●'
-				fg = color.RGB{R: 255, G: 255, B: 255}
+				fg = visual.RgbFlowTarget
 			case dir == navigation.DirNone || dir < 0:
 				arrow = '·'
-				fg = color.RGB{R: 60, G: 60, B: 60}
+				fg = visual.RgbFlowUnreached
 			default:
 				arrow = flowDirArrows[dir]
 				t := 1.0 - float64(dist)/float64(maxDist)
 				if isComposite {
-					// Composite: orange/yellow gradient
-					fg = color.RGB{
-						R: uint8(180 + t*75),
-						G: uint8(80 + t*120),
-						B: uint8(20 + t*30),
-					}
+					fg = visual.FlowCompositeGradient.At(t)
 				} else {
-					// Point: cyan/blue gradient
-					fg = color.RGB{
-						R: uint8(40 + t*60),
-						G: uint8(80 + t*175),
-						B: uint8(120 + t*135),
-					}
+					fg = visual.FlowPointGradient.At(t)
 				}
 			}
 
@@ -138,11 +128,9 @@ func (r *FlowFieldDebugRenderer) renderPassabilityGrid(ctx render.RenderContext,
 			screenY := ctx.GameYOffset + vy
 
 			if pass.IsValid(mapX, mapY) {
-				// Valid: dim green dot
-				buf.SetFgOnly(screenX, screenY, '·', color.RGB{R: 40, G: 100, B: 40}, terminal.AttrNone)
+				buf.SetFgOnly(screenX, screenY, '·', visual.RgbFlowPassable, terminal.AttrNone)
 			} else {
-				// Blocked: dim red X
-				buf.SetFgOnly(screenX, screenY, '×', color.RGB{R: 120, G: 40, B: 40}, terminal.AttrNone)
+				buf.SetFgOnly(screenX, screenY, '×', visual.RgbFlowBlocked, terminal.AttrNone)
 			}
 		}
 	}
@@ -190,19 +178,13 @@ func (r *FlowFieldDebugRenderer) renderCompositeFlowField(ctx render.RenderConte
 			switch {
 			case dir == navigation.DirTarget:
 				arrow = '◆'
-				fg = color.RGB{R: 255, G: 200, B: 50}
+				fg = visual.RgbFlowCompositeTarget
 			case dir == navigation.DirNone || dir < 0:
-				// Blocked in passability but visited? Shouldn't happen
-				continue
+				continue // blocked in passability yet visited: never
 			default:
 				arrow = flowDirArrows[dir]
 				t := 1.0 - float64(dist)/float64(maxDist)
-				// Orange/yellow for composite flow
-				fg = color.RGB{
-					R: uint8(200 + t*55),
-					G: uint8(120 + t*100),
-					B: uint8(20 + t*40),
-				}
+				fg = visual.FlowCompositeFieldGradient.At(t)
 			}
 
 			buf.SetFgOnly(screenX, screenY, arrow, fg, terminal.AttrNone)

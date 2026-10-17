@@ -19,6 +19,18 @@ const (
 	KrakenSampleStep   = 0.35
 	KrakenRotResponse  = 6.0 // 1/s; how quickly rotation reaches a new state's speed
 
+	// Tentacle shape: the wiggle damps by KrakenWiggleMoveDamp of the move blend
+	// and KrakenWiggleAttackDamp of the attack extension, inertia bends the tip
+	// KrakenInertiaScale times the bend, thickness tapers by (1-step)^KrakenTaper,
+	// the bend curve samples at KrakenSampleStep/KrakenBendRadiusScale, and rows
+	// are KrakenRowSquash times shorter than columns
+	KrakenWiggleMoveDamp   = 0.7
+	KrakenWiggleAttackDamp = 0.8
+	KrakenInertiaScale     = 15
+	KrakenTaper            = 0.7
+	KrakenBendRadiusScale  = 10
+	KrakenRowSquash        = 2
+
 	KrakenAttackDuration = 1500 * time.Millisecond
 	KrakenMoveDuration   = 3 * time.Second
 	KrakenSpinDuration   = 2500 * time.Millisecond

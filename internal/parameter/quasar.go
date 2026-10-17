@@ -43,6 +43,12 @@ const (
 	// QuasarDrag is deceleration when overspeed (1/sec)
 	QuasarDrag = 1.5
 
+	// Arrival steering: within QuasarArrivalRadius cells the drag is boosted
+	// QuasarArrivalDragBoost times, and inside QuasarDeadZone it snaps
+	QuasarArrivalRadius    = 3.0
+	QuasarArrivalDragBoost = 3.0
+	QuasarDeadZone         = 0.5
+
 	// QuasarSpeedMultiplierMax caps progressive speed increase at 10x.
 	QuasarSpeedMultiplierMax = 10
 

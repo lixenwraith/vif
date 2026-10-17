@@ -32,25 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Move the inline simulation and render tunables into parameter
-
-- Priority: P0, to review
-- Affected files: `internal/engine/position.go`, `internal/profile/homing.go`,
-  `internal/system/genetic.go`, `internal/component/kraken.go`,
-  `internal/system/weapon.go`, `internal/render/renderer/flow_debug.go`,
-  `internal/parameter`, `internal/parameter/visual`, `pkg/vmath`
-
-[Development](development.md) §11 puts tunables in `internal/parameter` or
-`internal/parameter/visual`, never inline. Still inline: the spiral search's default
-radius 20 (`internal/engine/position.go:522`, eight callers); the quasar, snake and
-missile arrival and dead-zone values (`internal/profile/homing.go:27-29,37-39,58-60`;
-loot's are in `parameter`); the type-fitness EMA rate
-(`internal/system/genetic.go:412`); the tentacle factors that shape the Kraken's
-hitbox (`internal/component/kraken.go:41-66`); the gun's lane table
-(`internal/system/weapon.go:1346`); and the flow-field debug colours
-(`internal/render/renderer/flow_debug.go:83-205`). The 7/10 at `position.go:1085`
-approximates 1/√2, a `pkg/vmath` constant if named. Each move keeps its value.
-
 ### Move the runtime cadences and bounds into parameter
 
 - Priority: P0, to review

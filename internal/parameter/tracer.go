@@ -13,3 +13,6 @@ const (
 	TracerTrailHeadIntensity = 0.9
 	TracerTrailTailIntensity = 0.12
 )
+
+// TracerLaneOffsets are the row or column offsets a volley covers, by charge count
+var TracerLaneOffsets = [...][]int{{0}, {-1, 1}, {-1, 0, 1}}
