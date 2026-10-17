@@ -417,7 +417,7 @@ func (s *EyeSystem) updateHomingMovement(
 
 	// Cornering drag
 	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-		parameter.NavCorneringThreshold, 1.0)
+		parameter.NavCorneringBase, 1.0)
 
 	physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,

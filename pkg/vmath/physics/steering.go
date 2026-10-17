@@ -31,8 +31,9 @@ func ApplyQuadraticDrag(k *Kinetic, coeff, dt float64) {
 	ScaleVelocity(k, vmath.Clamp(1.0-coeff*dt*speed, 0, 1.0))
 }
 
-// TurnSeverity returns how far the heading falls below the alignment threshold
-// relative to the direction to (targetX, targetY); 0 when aligned or at/below minSpeed
+// TurnSeverity returns how far the heading's cosine to (targetX, targetY) falls
+// below threshold; 0 at or below minSpeed. A threshold above 1 never gates: the
+// result is then a constant plus the turn term.
 func TurnSeverity(k *Kinetic, targetX, targetY, threshold, minSpeed float64) float64 {
 	speed := vmath.Magnitude(k.VelX, k.VelY)
 	if speed <= minSpeed {

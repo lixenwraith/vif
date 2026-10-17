@@ -1059,7 +1059,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 			// Cornering drag scales the base drag by turn severity
 			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-				parameter.NavCorneringThreshold, 1.0)
+				parameter.NavCorneringBase, 1.0)
 
 			physics.ApplyHomingScaled(&kineticComp.Kinetic, targetX, targetY,
 				&profile.DrainHoming, 1.0, dtSec, true)

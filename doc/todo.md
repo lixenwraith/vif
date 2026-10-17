@@ -49,21 +49,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Decide what the cornering threshold gates
-
-- Priority: P0, to review
-- Affected files: `internal/parameter/navigation.go`, `pkg/vmath/physics/steering.go`
-
-`NavCorneringThreshold` is 3.0 (`internal/parameter/navigation.go:21`), but
-`TurnSeverity` compares it with a cosine (`pkg/vmath/physics/steering.go:44-48`), so
-it never gates: above 1 cell/s every drain, swarm, quasar, eye and loot that steers
-(`drain.go:1061`, `swarm.go:699`, `quasar.go:475`, `eye.go:419`, `loot.go:235`, all in
-`internal/system`) brakes at `NavCorneringBrake` × (3 − cos θ), a drain at twice that,
-even heading straight at its target. Options: keep that motion and name it, a constant
-drag plus a turn term; or make the threshold a real cosine and retune. At 0.7
-`internal/system` passes, but eleven `internal/app` tests whose scripted runs depend
-on today's motion fail.
-
 ### Put the route bandit's floor and scout rate in parameter
 
 - Priority: P0, to review
