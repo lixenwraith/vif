@@ -45,17 +45,8 @@ func (r *Registry) Trigger(reason string) {
 	}
 }
 
-// TriggerFSM requests a flush for an FSM transition; disabled by default,
-// since transitions are frequent enough to flood on their own
-func TriggerFSM(region string) {
-	rc := active.Load()
-	if rc == nil || !rc.trigFSM.Load() {
-		return
-	}
-	rc.Trigger("fsm:" + region)
-}
-
-// TriggerFSM requests a transition flush from this registry's recorder.
+// TriggerFSM requests a transition flush from this registry's recorder; off by
+// default, since transitions are frequent enough to flood on their own
 func (r *Registry) TriggerFSM(region string) {
 	rc := r.rec.Load()
 	if rc == nil || !rc.trigFSM.Load() {

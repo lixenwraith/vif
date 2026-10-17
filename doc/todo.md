@@ -124,20 +124,6 @@ capture and passed to `GeneticResource.Sample` and `SampleScout`
 and no scenario sets the key. Options: drop the parameter, field and key (a capture
 schema bump); or give the registry per-island populations for it to select.
 
-### Delete the dead diagnostics entry points
-
-- Priority: P0, to review
-- Affected files: `internal/status/recorder.go`, `internal/vlog/stream.go`,
-  `doc/term-index.md`
-
-The package-level `status.TriggerFSM` (`internal/status/recorder.go:48-56`) has no
-caller (the scheduler uses the `Registry` method,
-`internal/engine/scheduler.go:468`), and neither have `vlog.OpenStream` and
-`vlog.Stream` (`internal/vlog/stream.go`). Delete them, and `vlog.Stream` from the
-term index's **stream** entry. The package-level `status.RecorderActive`
-(`recorder.go:68`) serves only `internal/app/play_test.go:451`, which checks the
-crash path's process-wide recorder; it stays while that assertion does.
-
 ### Drop `swarm.player_kills`
 
 - Priority: P0, to review
