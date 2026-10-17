@@ -32,8 +32,8 @@ func NewHub(log *vlog.Log) *Hub {
 	}
 }
 
-// Register adds a service instance to the hub
-// Clears cached sort order to force recomputation
+// Register adds a service instance to the hub; refused once InitAll has
+// ordered the services, since a late one would never be initialized or started
 func (h *Hub) Register(svc Service) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -42,9 +42,11 @@ func (h *Hub) Register(svc Service) error {
 	if _, exists := h.services[name]; exists {
 		return fmt.Errorf("service already registered: %s", name)
 	}
+	if h.sorted != nil {
+		return fmt.Errorf("service %s registered after InitAll", name)
+	}
 
 	h.services[name] = svc
-	h.sorted = nil // Invalidate cached order
 	return nil
 }
 
@@ -72,14 +74,11 @@ func (h *Hub) InitAll() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Compute topological order if not cached
-	if h.sorted == nil {
-		order, err := h.topologicalSort()
-		if err != nil {
-			return err
-		}
-		h.sorted = order
+	order, err := h.topologicalSort()
+	if err != nil {
+		return err
 	}
+	h.sorted = order
 
 	// Initialize in dependency order
 	var initialized []string

@@ -152,3 +152,20 @@ func TestHubCircularDependency(t *testing.T) {
 		t.Errorf("services initialized despite the cycle: %v", log)
 	}
 }
+
+// TestRegisterAfterInitIsRefused: a service the order was computed without would
+// never be initialized or started, so the hub says so instead of staying silent.
+func TestRegisterAfterInitIsRefused(t *testing.T) {
+	log := &[]string{}
+	h := NewHub(vlog.Default())
+	if err := h.Register(&stubService{name: "a", log: log}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.InitAll(); err != nil {
+		t.Fatalf("InitAll: %v", err)
+	}
+	t.Cleanup(h.StopAll)
+	if err := h.Register(&stubService{name: "b", log: log}); err == nil {
+		t.Fatal("a registration after InitAll was accepted")
+	}
+}
