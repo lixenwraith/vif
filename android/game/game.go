@@ -33,12 +33,12 @@ var (
 	mu  sync.Mutex
 	run *view // the running game's screen, nil between runs
 
-	loadFont = sync.OnceValues(func() (*font, error) {
+	loadTexture = sync.OnceValues(func() (*glyph.Texture, error) {
 		a, err := glyph.Parse(asset.DefaultFont)
 		if err != nil {
 			return nil, err
 		}
-		return newFont(a), nil
+		return glyph.NewTexture(a), nil
 	})
 )
 
@@ -47,7 +47,7 @@ var (
 // and journals; wad is where the APK's assets were copied, read as the system root.
 // raster paints frames with the software raster and hands the drawer pixels.
 func Start(files, wad string, width, height int32, density float32, raster bool, speaker Speaker, listener Listener) error {
-	f, err := loadFont()
+	tex, err := loadTexture()
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func Start(files, wad string, width, height int32, density float32, raster bool,
 	}
 	vlog.Configure(vlog.Config{Dir: paths.DefaultLogDir(), JournalDir: paths.DefaultJournalDir(), Spawn: core.Go})
 
-	v := newView(f, raster, density)
+	v := newView(tex, raster, density)
 	v.setGrid(int(width), int(height))
 	cfg := app.Config{Host: app.Host{Presentation: v}}
 	if speaker != nil {
@@ -175,24 +175,23 @@ func Quit() {
 	}
 }
 
-// Frame is the newest frame since the last taken, nil when no cell changed. It is
-// little-endian 32-bit words: columns, rows, then for a cell drawer the count of
-// changed cells and per cell its index, glyph slot in Atlas (-1 for background
-// only), foreground and background ARGB; for the raster, RGBA rows top first.
+// Frame is the newest frame since the last taken, nil when no cell changed, laid
+// out as glyph.Frames.Take describes: columns, rows, then for a cell drawer the
+// changed cells with their slot in Atlas and ARGB colors; for the raster, RGBA rows
 func Frame() []byte {
 	if v := current(); v != nil {
-		return v.take()
+		return v.Take()
 	}
 	return nil
 }
 
-// Atlas is the texture a cell drawer paints glyphs from: cell width, height and
-// glyph count as words, then each glyph's rows one below the last, a byte a pixel,
-// 255 where the glyph is set
+// Atlas is the texture a cell drawer paints glyphs from, as glyph.NewTexture lays
+// it out: cell width, height and slot count as words, each slot's rows one below
+// the last with a byte a pixel, 255 where the glyph is set, then each slot's rune
 func Atlas() ([]byte, error) {
-	f, err := loadFont()
+	tex, err := loadTexture()
 	if err != nil {
 		return nil, err
 	}
-	return f.mask, nil
+	return tex.Bytes(), nil
 }

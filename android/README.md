@@ -47,8 +47,9 @@ two-finger tap raises or drops the system keyboard; Back is Escape; `:q` quits.
 
 ## Test
 
-`go test ./...` here covers the tap and key mapping, the frame hand-off and that a
-cell frame painted from the atlas texture is the raster's pixels. On a device or
+`go test ./...` here covers the tap and key mapping; the frame hand-off and that a
+cell frame painted from the atlas texture is the raster's pixels are `pkg/glyph`'s
+tests. On a device or
 emulator, `./gradlew connectedDebugAndroidTest` checks `CellDrawer.OnCanvas`
 against `glyph.Raster` pixel for pixel on Android's own Canvas. It runs on every
 device adb sees and uninstalls the app from each afterwards, its files with it:

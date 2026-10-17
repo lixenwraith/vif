@@ -1,8 +1,11 @@
 package glyph
 
 import (
+	"bytes"
+	"encoding/binary"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -94,4 +97,125 @@ func BenchmarkRasterFlush(b *testing.B) {
 	for i := range b.N {
 		r.Flush(frames[i%2], w, h)
 	}
+}
+
+// TestTheDrawerTakesTheNewestFrameAsChangesFromTheOneItHolds: a frame not taken is
+// replaced by the next, the take carries every cell that differs from what the
+// drawer holds and nothing when none does, a resize or a Sync makes it whole, and
+// Blocked counts from the oldest frame waiting.
+func TestTheDrawerTakesTheNewestFrameAsChangesFromTheOneItHolds(t *testing.T) {
+	a, err := Parse([]byte(tiny))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := NewFrames(NewTexture(a), false)
+	if f.Take() != nil || f.Blocked() != 0 {
+		t.Fatal("frames nothing was flushed to hold one")
+	}
+	cells := make([]terminal.Cell, 4*2)
+	for i := range cells {
+		cells[i] = terminal.Cell{Rune: 'x', Fg: color.RGB{R: 200}}
+	}
+	f.Flush(cells, 4, 2)
+	if n := records(t, f.Take()); n != 8 {
+		t.Fatalf("the first frame carried %d cells, want all 8", n)
+	}
+
+	cells[1].Rune = '"'
+	f.Flush(cells, 4, 2)
+	time.Sleep(5 * time.Millisecond)
+	cells[1].Rune, cells[6].Rune = 'x', ' ' // the drawer never saw the quote
+	f.Flush(cells, 4, 2)
+	if f.Blocked() < 5*time.Millisecond {
+		t.Fatalf("blocked %v counts from the newest frame, not the oldest waiting", f.Blocked())
+	}
+	if n := records(t, f.Take()); n != 1 {
+		t.Fatalf("the take carried %d cells, want the one that differs from the drawer's", n)
+	}
+	if f.Take() != nil || f.Blocked() != 0 {
+		t.Fatal("a frame was taken twice")
+	}
+
+	f.Flush(cells, 4, 2)
+	if fr := f.Take(); fr != nil {
+		t.Fatalf("a frame the drawer already holds was handed over again: %d cells", records(t, fr))
+	}
+	f.Flush(cells, 4, 2)
+	f.Sync()
+	if n := records(t, f.Take()); n != 8 {
+		t.Fatalf("after Sync the take carried %d cells, want all 8", n)
+	}
+	f.Flush(cells[:6], 3, 2)
+	if n := records(t, f.Take()); n != 6 {
+		t.Fatalf("after a resize the take carried %d cells, want all 6", n)
+	}
+}
+
+func records(t *testing.T, frame []byte) int {
+	t.Helper()
+	if len(frame) < 12 {
+		t.Fatalf("frame of %d bytes has no header", len(frame))
+	}
+	n := int(binary.LittleEndian.Uint32(frame[8:]))
+	if len(frame) != 12+16*n {
+		t.Fatalf("frame of %d bytes holds %d records", len(frame), n)
+	}
+	return n
+}
+
+// TestACellFramePaintedFromTheTextureIsTheRastersPixels: painting each record's
+// background and then its glyph from the texture in its foreground, as a cell
+// drawer does, gives the raster's pixels for the probe and for a live frame; the
+// texture names each slot's rune after the masks.
+func TestACellFramePaintedFromTheTextureIsTheRastersPixels(t *testing.T) {
+	a, err := Parse([]byte(tiny))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tex := NewTexture(a)
+	mask := tex.Bytes()
+	if n := binary.LittleEndian.Uint32(mask[8:]); n != 2 || len(mask) != 12+2*4*2+2*4 {
+		t.Fatalf("texture of %d bytes holds %d slots", len(mask), n)
+	}
+	if r := rune(binary.LittleEndian.Uint32(mask[len(mask)-8:])); tex.Slot(r) != 0 || tex.Slot('y') != -1 {
+		t.Fatalf("slot 0 is %q, slot of y is %d", r, tex.Slot('y'))
+	}
+	p := NewProbe(tex, 3)
+	if got, want := paint(t, mask, p.Frame()), p.Pixels(); !bytes.Equal(got, want) {
+		t.Fatal("the probe painted from the texture differs from the raster")
+	}
+	cell, raster := NewFrames(tex, false), NewFrames(tex, true)
+	for _, f := range []*Frames{cell, raster} {
+		f.Flush(p.Cells())
+	}
+	frame := raster.Take()
+	if got := paint(t, mask, cell.Take()); !bytes.Equal(got, frame[8:]) {
+		t.Fatal("a live cell frame differs from the raster drawer's")
+	}
+}
+
+// paint is a cell drawer in Go: RGBA from a whole cell frame and the texture
+func paint(t *testing.T, mask, frame []byte) []byte {
+	t.Helper()
+	word := func(b []byte, i int) uint32 { return binary.LittleEndian.Uint32(b[4*i:]) }
+	w, h := int(word(mask, 0)), int(word(mask, 1))
+	cols, rows, n := int(word(frame, 0)), int(word(frame, 1)), int(word(frame, 2))
+	if n != cols*rows {
+		t.Fatalf("frame of %d records for %dx%d cells", n, cols, rows)
+	}
+	pix := make([]byte, cols*w*rows*h*4)
+	for r := range n {
+		idx, slot, fg, bg := int(word(frame, 3+4*r)), int32(word(frame, 4+4*r)), word(frame, 5+4*r), word(frame, 6+4*r)
+		for y := range h {
+			for x := range w {
+				c := bg
+				if slot >= 0 && mask[12+(int(slot)*h+y)*w+x] != 0 {
+					c = fg
+				}
+				at := (((idx/cols)*h+y)*cols*w + (idx%cols)*w + x) * 4
+				pix[at], pix[at+1], pix[at+2], pix[at+3] = byte(c>>16), byte(c>>8), byte(c), byte(c>>24)
+			}
+		}
+	}
+	return pix
 }

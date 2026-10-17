@@ -122,7 +122,7 @@ flowchart TD
 | Package | Public purpose | Important coupling |
 |---|---|---|
 | `pkg/ascimage` | Convert images to terminal cells and read/write dual-mode `.vifimg` assets. | External terminal/color types only. The interactive viewer lives in `cmd/ascimage` because it needs the in-repo render buffer. |
-| `pkg/glyph` | Parse the bitmap font atlas and draw a frame of terminal cells into RGBA, changed cells only: the reference drawer of a graphical host. | External terminal, color and TOML modules only; the atlas comes from the caller (`internal/asset`). |
+| `pkg/glyph` | Parse the bitmap font atlas and draw a frame of terminal cells into RGBA, changed cells only: the reference drawer of a graphical host. The protocol a drawer in another runtime paints from: the atlas as one texture (`Texture`), frames as the cells changed since the one it holds (`Frames`), and the probe that checks such a drawer against the raster. | External terminal, color and TOML modules only; the atlas comes from the caller (`internal/asset`). |
 | `pkg/window` | A desktop window that draws a cell grid: Xlib, EGL and GLES 2 loaded at run time with purego, keys and pointer posted as terminal events. Built only under `vif_gui` on Linux and FreeBSD. | `pkg/glyph` draws the frame; external terminal module and purego. |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the sound bank* are injected; the package ships no specs and imports nothing under `internal/`. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |

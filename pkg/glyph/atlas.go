@@ -1,9 +1,11 @@
-// Package glyph is a bitmap font atlas and the software rasterizer that draws a
-// cell grid with it: the reference drawer of any graphical host and the fallback
-// of every one. The atlas is a TOML document, one bit per pixel of each glyph.
+// Package glyph is a bitmap font atlas, the software rasterizer that draws a cell
+// grid with it (the reference drawer of any graphical host and the fallback of every
+// one) and the protocol a drawer in another runtime paints from: the atlas as one
+// texture, and frames as the cells changed since the one that drawer holds.
 package glyph
 
 import (
+	"encoding/binary"
 	"fmt"
 	"maps"
 	"slices"
@@ -84,3 +86,62 @@ func (a *Atlas) Runes() []rune { return slices.Sorted(maps.Keys(a.glyphs)) }
 // Aspect is the cell's width over its height: what a host drawing with this atlas
 // reports as its cell aspect
 func (a *Atlas) Aspect() vmath.Aspect { return vmath.Aspect(float64(a.Width) / float64(a.Height)) }
+
+// Texture is the atlas as a cell drawer takes it: every glyph with a set bit as one
+// slot of a mask, one byte a pixel, and the slot of each rune. A blank glyph has no
+// slot and is painted as background.
+type Texture struct {
+	atlas *Atlas
+	bytes []byte
+	slots map[rune]int32
+}
+
+// NewTexture encodes a as little-endian words and bytes: cell width, height and
+// slot count, each slot's rows one below the last with 255 where the glyph is set,
+// then each slot's rune as a word
+func NewTexture(a *Atlas) *Texture {
+	t := &Texture{atlas: a, slots: make(map[rune]int32)}
+	t.bytes = appendWords(t.bytes, uint32(a.Width), uint32(a.Height), 0)
+	var runes []uint32
+	for _, r := range a.Runes() {
+		rows, _ := a.Rows(r)
+		var set uint32
+		for _, bits := range rows {
+			set |= bits
+		}
+		if set == 0 {
+			continue
+		}
+		t.slots[r] = int32(len(runes))
+		runes = append(runes, uint32(r))
+		for _, bits := range rows {
+			for shift := a.Width - 1; shift >= 0; shift-- {
+				t.bytes = append(t.bytes, byte(0xff*(bits>>shift&1)))
+			}
+		}
+	}
+	binary.LittleEndian.PutUint32(t.bytes[8:], uint32(len(runes)))
+	t.bytes = appendWords(t.bytes, runes...)
+	return t
+}
+
+// Atlas is the atlas the texture encodes
+func (t *Texture) Atlas() *Atlas { return t.atlas }
+
+// Bytes is the encoded texture, as NewTexture lays it out
+func (t *Texture) Bytes() []byte { return t.bytes }
+
+// Slot is a rune's slot, -1 for a glyph painted as background only
+func (t *Texture) Slot(r rune) int32 {
+	if slot, ok := t.slots[r]; ok {
+		return slot
+	}
+	return -1
+}
+
+func appendWords(dst []byte, words ...uint32) []byte {
+	for _, w := range words {
+		dst = binary.LittleEndian.AppendUint32(dst, w)
+	}
+	return dst
+}
