@@ -12,10 +12,12 @@ not rewrite `vif.toml` or the keymap.
 | Menu | Left/Right or `h/l` | Change a setting; Right also enters a category. Form and action rows need Enter or Space. |
 | Menu | Enter or Space | Enter a category, advance a setting, or activate an action. |
 | Menu | Home/End, PageUp/PageDown | Navigate longer lists. |
+| Menu | A press (a click, a tap) | Select the row; on the selected row act as Enter, or as Left on a setting's left half. |
 | Form | Up/Down | Move between fields; the focused field's help appears below. |
 | Form | Left/Right, Home/End, Backspace/Delete | Edit the field. Printable characters, including `q`, enter text. |
 | Form | Enter | Submit all fields. Invalid input keeps the form and its values. |
-| Anywhere | Escape | Cancel a form, return to categories, then close. `q` also goes back in menus. |
+| Form | A press on a field | Focus it. |
+| Anywhere | Escape | Cancel a form, return to categories, then close. `q` also goes back in menus. A press outside the window does the same. |
 | Anywhere | Ctrl-G | Close the menu and discard an unsubmitted form. |
 
 Submitting a session action closes the menu and resumes play. Joining, allocator

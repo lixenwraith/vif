@@ -134,6 +134,67 @@ func TestAHeldPressOnTheStatusBarSummonsTheMenu(t *testing.T) {
 	}
 }
 
+// TestAPressDrivesTheMenu: a left press selects the row under it and acts on the
+// row already selected, as Enter, or as Left on a setting's left half; it focuses
+// a form field, and outside the window goes back as Escape does.
+func TestAPressDrivesTheMenu(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &menuSession{}
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	g := ctx.OverlayGeometry()
+	press := func(x, y int) {
+		t.Helper()
+		ev := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: terminal.MouseActionPress, MouseX: x, MouseY: y}
+		if intent := machine.Process(ev); intent != nil {
+			r.Handle(intent)
+		}
+	}
+	left, right := g.X+g.ContentX, g.X+g.ContentX+g.ContentW-1
+	row := func(i int) int { return g.Y + g.ContentY + i }
+	r.handleConfigMenu()
+
+	press(left, row(3))
+	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "controls" {
+		t.Fatalf("a press on an unselected row: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
+	}
+	press(left, row(3))
+	if m := configMenu(ctx); m.Page != "controls" || ctx.GetOverlaySelection() != "auto" {
+		t.Fatalf("a press on the selected category: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
+	}
+	auto := ctx.AutoFire.Load()
+	press(right, row(1))
+	if got := ctx.AutoFire.Load(); got != (auto+1)%3 {
+		t.Fatalf("the right half of a setting stepped auto-fire %d to %d", auto, got)
+	}
+	press(left, row(1))
+	if got := ctx.AutoFire.Load(); got != auto {
+		t.Fatalf("the left half of a setting stepped auto-fire back to %d, want %d", got, auto)
+	}
+	press(g.X-1, row(1))
+	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "controls" {
+		t.Fatalf("a press outside the window: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
+	}
+
+	showConfigMenu(ctx, "multiplayer")
+	ctx.SetOverlaySelection("host")
+	r.handleOverlayActivate()
+	press(left, row(1))
+	if r.configForm == nil || r.configForm.state.Focus != 1 {
+		t.Fatal("a press on a form field did not focus it")
+	}
+	press(left, g.Y+g.H)
+	if r.configForm != nil || ctx.GetOverlaySelection() != "host" {
+		t.Fatal("a press outside the window did not cancel the form")
+	}
+	press(left, g.Y-1)
+	press(left, g.Y-1)
+	if ctx.IsOverlayActive() {
+		t.Fatal("presses outside the window did not close the menu")
+	}
+}
+
 func TestConfigFormsPreserveEditsOnFailureAndCancelWithoutSubmitting(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)

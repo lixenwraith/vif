@@ -100,6 +100,8 @@ func (i IntentType) String() string {
 		return "IntentConfigMenu"
 	case IntentKeyPress:
 		return "IntentKeyPress"
+	case IntentOverlayPoint:
+		return "IntentOverlayPoint"
 	default:
 		return fmt.Sprintf("IntentType(%d)", i)
 	}

@@ -494,8 +494,8 @@ software rasterizer as the reference drawer, and the cell aspect as one paramete
 (`vmath.Aspect`, carried by the anchor), the pilot Android host in `android/`
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
 playing on a phone with sound and taps, `make android` for its APK, and the menu
-every host summons by holding a press on the status bar (D8). Left, to the line
-the push stops at:
+every host summons by holding a press on the status bar and drives by the pointer
+(D8), which leaves a phone no key to lack. Left, to the line the push stops at:
 
 - size the cell to the screen's density: 12x24 device pixels is about 4.6x9 dp on
   a 420 dpi phone, so an integer scale of the atlas in the drawer, chosen from the
@@ -503,13 +503,13 @@ the push stops at:
   scale is the same step in `pkg/window`;
 - a finger's drag posted as the terminal's drag per cell, so the cursor follows
   it and the menu hold's slack applies; a held finger already repeats fire;
-- the keys a phone lacks (Tab, Ctrl chords, arrows) as a strip the way the
-  browser's `web/terminal.js` shows one, or left to the menu and the system
-  keyboard, whose composed text the pilot reads only as it commits;
 - a record of the phone's frame time (`adb logcat -s vif`), and the GLES drawer
   only if a device misses 60 fps with the Canvas one.
 
-A release-signed APK is the player's keystore and a Gradle signing block, after
+The system keyboard's text arrives as it commits, not while it is composed. The
+`tui` menu taken by taps is the phone's for now; one Android draws itself, likely
+circular, is the later design (D8). A
+release-signed APK is the player's keystore and a Gradle signing block, after
 the line.
 
 ### Measure and round out the desktop window
