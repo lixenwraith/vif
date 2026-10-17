@@ -8,15 +8,6 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
-## Suspected bugs to review
-
-The documentation sweep traced each of these to the code without fixing it; those
-marked reproduced also failed in a scratch test. Review an item before other work,
-then fix it, refile it at its real priority under its area, or delete it. Two more
-suspected bugs already have items at their own priority:
-[Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
-and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
-
 ## Bots
 
 ### Open fleet sessions to bots
@@ -807,17 +798,6 @@ the `persistence` default codec is the one external dependency: make JSON the
 default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
-
-### Reuse the drain exclusion map and the grid's level allocation
-
-- Priority: P3
-- Affected files: `internal/system/drain.go`, `internal/engine/spatial_grid.go`
-
-The two allocation findings of the host push's td profile that are not taken:
-the drain spawn builds its exclusion map per spawn (37 MB over 1,600 ticks), a
-map the system could keep and clear; and `SpatialGrid.Resize` allocates once per
-level (68 MB over the run) although it is grow-only, so a level change could
-reuse the cells when the new size fits.
 
 ### Initialize systems in dependency order from the engine
 
