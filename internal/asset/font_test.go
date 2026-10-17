@@ -19,7 +19,7 @@ func TestTheFontAtlasCoversEveryGlyphTheCodeDraws(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dirs := []string{"../parameter/visual", "../render/renderer", "../parameter", "../mode", "../app", "../help", "."}
+	dirs := []string{"../parameter/visual", "../render/renderer", "../parameter", "../mode", "../app", "../help", ".", "../prof"}
 	var missing []rune
 	seen := map[rune]bool{}
 	want := func(r rune) {
