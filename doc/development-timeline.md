@@ -1,7 +1,7 @@
 # vif Development Timeline
 
 High-level progress collapsed from commit messages and `doc/`, April 2025 through
-2026-10-14. The project was vi-fighter until it was renamed vif in September 2026.
+2026-10-17. The project was vi-fighter until it was renamed vif in September 2026.
 Each line folds many commits, so dates within a section are approximate.
 
 ## 2025-04 to 2025-11 — Prototype and core game
@@ -389,3 +389,28 @@ Each line folds many commits, so dates within a section are approximate.
 - What a busy link was owed waited behind its transfer instead of being dropped.
 - Release archives each unpacked into one root-owned directory, and a site could
   name the browser launcher's files, content-hashed ones included.
+
+## 2026-10 — The host model, Android and the desktop window
+
+- The engine's coupling was measured and found to be the package graph, not the
+  generator; `render.Surface` named the three terminal methods the orchestrator used.
+- Per-tick store reads became live pointers and navigation reused its route scratch
+  and a retired group's fields, cutting td's garbage per tick by a quarter with the
+  simulation surface unchanged.
+- `app.Presentation` and `Config.Host` made the terminal one host among others, with a
+  host's speakers as the audio sink and a solo run pausing while its player is away.
+- A bitmap font atlas (192 glyphs of 12x24) and `pkg/glyph`'s software raster became
+  the reference drawer of a graphical host.
+- The cell aspect became one parameter, `vmath.Aspect`, carried by the anchor, with
+  navigation costs and every authored radius derived from it.
+- The wall grid was proved current by an epoch, the store index became a page table
+  per domain and the maze spawn payload was pooled: td's tick fell from 1.85 to
+  0.70 ms.
+- `make gui` built the game in a desktop window through Xlib, EGL and GLES 2 loaded
+  with purego, cgo off, measured on software and hardware GL.
+- The Android host in `android/` played the game on a phone through `gomobile bind`:
+  a `SurfaceView` Canvas drawer, an `AudioTrack`, taps and drags, a cell sized by
+  the screen's density, and `make android` for the APK.
+- The configuration menu was summoned on every host by a press held on the status
+  bar and driven by taps, and the hosts' control-key tables moved into the terminal
+  module (`terminal.ControlKey`).

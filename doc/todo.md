@@ -449,65 +449,59 @@ the Go Authors' header, which points to a LICENSE no install or archive carries
 
 ## Feature development push
 
-Bots come before the Android host. They need no presentation refactor, build on
-the scripted and headless paths that exist, give the session stack and the fleet
-continuous real play, and make the site playable alone. A bot is also the first
-non-terminal source of semantic input, the contract the Android extraction has to
-define first; doing Android first would define it without a second consumer.
+The bots and host pushes are done: bots play as participants, and the engine
+presents through `app.Presentation` on a terminal, a desktop window and an Android
+view, drawn from one font atlas at one cell aspect, with the menu every host
+summons by a held press ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+The next push ships the desktop window as a way to play. The Android and
+position-store items below lie past it and stay items until a push takes them.
 
-The push reached the line [Engine decoupling §7](engine-decoupling.md#7-decisions-taken-and-the-plan)
-draws: a phone plays the embedded scenario by touch from an APK `make android`
-builds, and the desktop window is measured on a hardware driver. What stays under
-[Extract the renderer-neutral Android host model](#extract-the-renderer-neutral-android-host-model)
-and [Measure and round out the desktop window](#measure-and-round-out-the-desktop-window)
-lies past it. The list is pruned before the next push.
-
-### Add bots that play as participants
+### Ship the desktop window
 
 - Priority: P1, leading the push
-- Affected files: `internal/bot`, `internal/app`, `internal/network`,
-  `tool/vif-allocator`
-- Guide: [Bots](bots.md)
+- Affected files: `pkg/window`, `cmd/vif/gui.go`, `Makefile`,
+  `.github/workflows/release.yml`, `deploy/package`, `doc/packaging.md`,
+  `doc/multi-platform.md`
 
-Bots play beside a person, in place of one, or alone on a dedicated host, and a
-guest's bots and the people at its `-relay` address join and play through its own
-link. What remains is under [Bots](#bots) and
-[Reach a relay without an address in hand](#reach-a-relay-without-an-address-in-hand).
+`bin/vif-gui` builds, plays and is measured, but nothing ships it: `make release`
+and the release workflow build the terminal binary alone, `make install` installs
+no `vif-gui`, the desktop entry opens a terminal, and `pkg/window`'s tests run only
+where `make verify` and CI pass the tag. In order:
 
-### Extract the renderer-neutral Android host model
+- release and install the binary beside `vif`: a `vif-gui.desktop` entry with
+  `Terminal=false`, the release archives carrying it with purego's licence, and
+  [Packaging](packaging.md) saying so;
+- the window's gaps: the HiDPI scale read from the screen (Xft.dpi or RandR) in
+  place of `-scale`, paste from the X selection as `EventPaste`, a fullscreen key,
+  an icon, and native Wayland through purego's `libwayland-client` and EGL (xdg-shell;
+  XWayland serves today);
+- the frame path's ceiling, the raster at 12.9 ms for a whole 200x60 frame changed:
+  upload only the rows that changed, or the per-cell atlas quad path, whichever
+  `BenchmarkPresent` favours;
+- an end-to-end test of the window (open, flush, present, close) and the benchmark
+  under `xvfb-run` in CI, since no display-less `go test` reaches them today.
 
-- Priority: P1, after bots
-- Affected files: terminal-shaped input/cell/color values, `internal/app`,
-  `android/`
-- Guide: fleet item H4, [Engine decoupling](engine-decoupling.md) §7 for the
-  decisions taken and the order
+Measured so far: `BenchmarkPresent` on a hardware driver (GTX 1060 Mobile, NVIDIA
+580, XWayland on a 120 Hz panel) is the display's 8.3 ms a frame at 120x40 and
+200x60 with 15 % of cells changed and at 120x40 with all, 16.7 ms at 200x60 with
+all, the compositor pacing the swap whatever its interval. Without the swap the
+work is 2.4, 5.3, 6.9 and 16.3 ms, the raster 0.8, 2.0, 5.1 and 12.9 ms of it.
 
-Done to the push's line (§7): the host model, the font atlas, the cell aspect and
-the Android host in `android/`
-([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
-played on a Pixel 8 Pro by touch. Past it:
+### Android host follow-ups
+
+- Priority: P3
+- Affected files: `android/`
+
+The Android host in `android/`
+([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host))
+plays the embedded scenario by touch on a Pixel 8 Pro. Past it:
 
 - the GLES drawer, only if a device misses 60 fps with the Canvas one;
 - a menu Android draws itself, likely circular, in place of the `tui` one taken
-  by taps (D8);
+  by taps;
 - the system keyboard's text shown while composed; it arrives as it commits;
 - bots on a phone;
 - a release-signed APK: the player's keystore and a Gradle signing block.
-
-### Measure and round out the desktop window
-
-- Priority: P3
-- Affected files: `pkg/window`, `cmd/vif/gui.go`
-
-`BenchmarkPresent` on a hardware driver (GTX 1060 Mobile, NVIDIA 580, XWayland on
-a 120 Hz panel) is the display's 8.3 ms a frame at 120x40 and 200x60 with 15 % of
-cells changed and at 120x40 with all, 16.7 ms at 200x60 with all: the
-compositor paces the swap whatever its interval. Without the swap the work is
-2.4, 5.3, 6.9 and 16.3 ms, the raster 0.8, 2.0, 5.1 and 12.9 ms of it. No grid
-misses 60 fps, so the per-cell atlas quad path waits; a whole 200x60 frame
-changed is at the limit, and the raster is where it would go. Not yet done: the
-HiDPI scale read from the screen (it is the player's `-scale`), native Wayland
-(XWayland serves today) and paste (no `EventPaste` from the X selection).
 
 ### Take the position store out of the engine
 
@@ -1283,6 +1277,28 @@ the `persistence` default codec is the one external dependency: make JSON the
 default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
+
+### Harden the service hub
+
+- Priority: P3
+- Affected files: `internal/service/hub.go`
+
+`Hub.Register` after `InitAll` clears the cached order, so `StartAll` then starts
+nothing and says nothing; refuse a late registration with an error. A service
+could also implement `Pause()`/`Resume()` so a host lifecycle (an Android app
+sent to the background, a hidden browser tab) reaches audio and network through
+one hub call instead of app code; `App.setAway` pauses only the clock today.
+
+### Reuse the drain exclusion map and the grid's level allocation
+
+- Priority: P3
+- Affected files: `internal/system/drain.go`, `internal/engine/spatial_grid.go`
+
+The two allocation findings of the host push's td profile that are not taken:
+the drain spawn builds its exclusion map per spawn (37 MB over 1,600 ticks), a
+map the system could keep and clear; and `SpatialGrid.Resize` allocates once per
+level (68 MB over the run) although it is grow-only, so a level change could
+reuse the cells when the new size fits.
 
 ### Initialize systems in dependency order from the engine
 

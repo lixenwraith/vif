@@ -422,10 +422,20 @@ Canvas drawer paints every frame the game changes, 20–35 a second at 1x and 60
 4x, at 8–16 ms mean, 19–27 ms at p95 and at most 45 ms for take, paint and post,
 with no stutter to see; so the GLES drawer stays unwritten.
 
-The terminal module's value types (`Cell`, `Attr`, `ColorMode`, `Key`) are the
-renderer-neutral vocabulary by decision ([Engine decoupling](engine-decoupling.md)
-§7), and the cell aspect the presentation reports is one parameter of the
-simulation (§8).
+Decisions taken for the host model, in force: the terminal module's value types
+(`Cell`, `Attr`, `ColorMode`, `Key`, `Event`) are the renderer-neutral
+vocabulary, so the 14 KB of it a headless binary links is accepted; the cell grid
+is copied to a `Surface`, never serialized to ANSI and parsed back (a pipe into an
+emulator widget was measured at 80x the cell copy per frame;
+`terminal.NewWithBackend` keeps that seam for tooling); the font is a bitmap atlas
+generated once, not a TrueType rasterized at load; Android draws on a Canvas
+behind a drawer interface, and a GLES drawer is written only if a device misses
+60 fps; the configuration menu is the `tui` one on every host, summoned by a held
+press and driven by taps, and a menu Android draws itself is a later item; the
+cell aspect the presentation reports is one parameter of the simulation
+([Rendering §2.2](rendering.md#22-the-cell-aspect)). Host adapters plug through
+`Host`; simulation modules plug through the manifest and the generator
+([Behavior machines](machine-design.md) §8), never through a second registry.
 
 Build tags should remain orthogonal capabilities. Avoid an accumulating
 `linux`/`windows`/`android` switch in gameplay code: use a platform tag only where
