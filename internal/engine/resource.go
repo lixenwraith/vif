@@ -670,9 +670,6 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 
 // === Target Resource ===
 
-// MaxTargetsPerGroup sets the hard limit for concurrent anchors in a single target group
-const MaxTargetsPerGroup = 8
-
 // TargetData holds coordinates and entity ID for a single target instance
 type TargetData struct {
 	Entity core.Entity
@@ -683,7 +680,7 @@ type TargetData struct {
 // TargetGroupState holds resolved navigation targets for a group
 type TargetGroupState struct {
 	Type    component.TargetType
-	Targets [MaxTargetsPerGroup]TargetData
+	Targets [parameter.MaxTargetsPerGroup]TargetData
 	Count   int
 	Valid   bool // False if target entity destroyed or uninitialized
 }
@@ -867,14 +864,14 @@ func (ar *AdaptationResource) MarkDraining(id uint32, t time.Time) {
 
 // === Genetics ===
 
-// GeneticResource exposes the GA registry for synchronous gene sampling by spawners.
-// The registry keeps one population per species; populationID is unused.
+// GeneticResource exposes the GA registry for synchronous gene sampling by
+// spawners; the registry keeps one population per species.
 type GeneticResource struct {
 	Registry *registry.Registry
 }
 
 // Sample requests a genotype from the species' population
-func (gr *GeneticResource) Sample(speciesID uint8, populationID uint32) ([]float64, uint64) {
+func (gr *GeneticResource) Sample(speciesID uint8) ([]float64, uint64) {
 	if gr == nil || gr.Registry == nil {
 		return nil, 0
 	}
@@ -882,7 +879,7 @@ func (gr *GeneticResource) Sample(speciesID uint8, populationID uint32) ([]float
 }
 
 // SampleScout requests a stratified probe genotype covering all phenotype bins.
-func (gr *GeneticResource) SampleScout(speciesID uint8, populationID uint32) ([]float64, uint64) {
+func (gr *GeneticResource) SampleScout(speciesID uint8) ([]float64, uint64) {
 	if gr == nil || gr.Registry == nil {
 		return nil, 0
 	}

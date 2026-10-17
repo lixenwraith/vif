@@ -409,7 +409,7 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY 
 
 	// Per-subtype fitness EMA for probe/distribution evaluation
 	if tracked.species == component.SpeciesEye && int(tracked.subType) < parameter.EyeTypeCount {
-		const alpha = 0.1
+		const alpha = parameter.GATypeFitnessEMARate
 		s.typeFitEMA[tracked.subType] = (1-alpha)*s.typeFitEMA[tracked.subType] + alpha*fitness
 	}
 

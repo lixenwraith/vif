@@ -62,6 +62,9 @@ func (m *Machine[T]) LoadScenarioFromMap(doc map[string]any) error {
 	nameToID := make(map[string]StateID)
 	nameToID["Root"] = StateRoot
 
+	if config.States == nil {
+		config.States = make(map[string]*StateConfig)
+	}
 	if _, ok := config.States["Root"]; !ok {
 		config.States["Root"] = &StateConfig{}
 	}

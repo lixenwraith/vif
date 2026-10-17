@@ -221,8 +221,8 @@ canonical EXP3 requires. It:
 
 - multiplies an observed route weight by `exp(RouteLearningRate * meanFitness)`;
 - normalizes all weights;
-- applies a 0.5% floor to avoid numeric extinction;
-- samples 90% proportionally by CDF and 10% as uniform scouts;
+- applies a `RouteMinWeight` (0.5%) floor to avoid numeric extinction;
+- samples proportionally by CDF, with `RouteScoutRate` (10%) as uniform scouts;
 - shuffles the result into a pool of `RoutePoolDefaultSize` (100) assignments
   that spawns pop, refilled after each update and once fewer than a quarter
   remain; an exhausted pool rotates through the routes deterministically.
@@ -357,7 +357,10 @@ circles until something else stops it. Loot's 34 cells per second against 60
 cells per second squared sustains about nineteen cells, four times its arrival
 radius. What forecloses the orbit is the cornering brake (`TurnSeverity` ×
 `NavCorneringBrake`), a drag that grows as the heading turns from the target and
-acts at any distance; drains, swarms, quasars, eyes and loot apply it. A
+acts at any distance; drains, swarms, quasars, eyes and loot apply it. It never
+rests: `TurnSeverity` is `NavCorneringBase` (3) minus the cosine of the turn, so
+an actor heading straight at its target still drags at twice the brake, one
+heading away at four times, and a drain at twice either. A
 missile's zero cruise speed makes its overspeed drag continuous instead; a snake
 head has neither.
 

@@ -157,7 +157,6 @@ Automated (assert, and used by `all`)
   bundle            the release wad archive extracts to a working config root
   scenario          :n <name> rebuilds the run on another scenario and back
   transfer          a guest with no root receives the session's scenario
-  maxmap            a guest joins a host serving the largest map the grid holds
   follow            a host changes scenario and its guest rebuilds with it
   corpus            a guest reading its own content joins a host reading other
   fleet             the session template and the allocator render one workload
@@ -168,6 +167,9 @@ Automated (assert, and used by `all`)
                     leave with it; a host's own bots keep its session
   identity          a peer running a different build is refused (runs the tests)
   all               every automated scenario above
+
+Automated, apart from `all` (its guest holds a 500x250 td session past 40 s)
+  maxmap            a guest joins a host serving the largest map the grid holds
 
 Container (needs docker or podman; not part of `all`)
   image             build the container image and run its own -check
@@ -860,10 +862,13 @@ deploy)
 	;;
 
 image)
-	command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1 \
-		|| fail "no container engine found"
-	make image IMAGE_TAG="${IMAGE#*:}" >/dev/null || fail "image build"
-	make image-check IMAGE_TAG="${IMAGE#*:}" >/dev/null || fail "image config check"
+	# The Makefile takes the name and tag apart, split at the last colon so a
+	# registry port survives, and runs the engine found unless one is named.
+	engine=${CONTAINER_ENGINE:-$(command -v docker >/dev/null 2>&1 && echo docker || echo podman)}
+	command -v "$engine" >/dev/null 2>&1 || fail "no container engine found"
+	case $IMAGE in *:*) name=${IMAGE%:*}; tag=${IMAGE##*:} ;; *) name=$IMAGE; tag=dev ;; esac
+	make image IMAGE="$name" IMAGE_TAG="$tag" CONTAINER_ENGINE="$engine" >/dev/null || fail "image build"
+	make image-check IMAGE="$name" IMAGE_TAG="$tag" CONTAINER_ENGINE="$engine" >/dev/null || fail "image config check"
 	pass "$IMAGE builds and validates its own config as a non-root read-only user"
 	;;
 

@@ -1,6 +1,7 @@
 package event
 
 import (
+	"github.com/lixenwraith/vif/internal/parameter"
 	"reflect"
 	"sync/atomic"
 
@@ -163,19 +164,11 @@ type JournalSink interface {
 // Finish records the last simulated boundary, including ticks with no input.
 func (j *Journal) Finish(st Stamp) { j.sink.Finish(st) }
 
-// AnchorIntervalTicks is the tick period between anchor records, so a rotated
-// file carries one within this many ticks of its first record
-const AnchorIntervalTicks = 600
-
 // AnchorDue reports whether a tick falls on the anchor cadence
-func AnchorDue(tick uint64) bool { return tick%AnchorIntervalTicks == 0 }
-
-// DigestIntervalTicks is the tick period between world digests: a replay names
-// the tick it left its run within one period, at about 5% of a bot journal.
-const DigestIntervalTicks = 20
+func AnchorDue(tick uint64) bool { return tick%parameter.AnchorIntervalTicks == 0 }
 
 // DigestDue reports whether a completed tick falls on the digest cadence
-func DigestDue(tick uint64) bool { return tick%DigestIntervalTicks == 0 }
+func DigestDue(tick uint64) bool { return tick%parameter.DigestIntervalTicks == 0 }
 
 // Journal captures events of journaled origins, and this instance's own crossings,
 // for replay. One per queue, so concurrent harness runs in a single process cannot

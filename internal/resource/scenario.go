@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"io"
 	"io/fs"
 	"math"
@@ -26,15 +27,6 @@ import (
 
 // EmbeddedLabel is the name recorded for a built-in asset, scenario or corpus.
 const EmbeddedLabel = "embedded"
-
-// Bounds on a scenario in any form. They apply to one read from disk as much as
-// to one that arrived from a peer: the cost of the second is what they are for,
-// and a scenario nobody can transfer is not one worth loading either.
-const (
-	ScenarioMaxFiles     = 64
-	ScenarioMaxFileBytes = 256 << 10
-	ScenarioMaxBytes     = 1 << 20
-)
 
 // scenarioMagic identifies the canonical form. scenarioFormat versions the layout
 // after it; a reader that does not know a version refuses rather than guesses.
@@ -171,13 +163,13 @@ func (s Scenario) MarshalCompressed() ([]byte, error) {
 func UnmarshalScenarioCompressed(name string, body []byte) (Scenario, error) {
 	r := flate.NewReader(bytes.NewReader(body))
 	defer r.Close()
-	plain, err := io.ReadAll(io.LimitReader(r, ScenarioMaxBytes+1))
+	plain, err := io.ReadAll(io.LimitReader(r, parameter.ScenarioMaxBytes+1))
 	if err != nil {
 		return Scenario{}, fmt.Errorf("scenario %s: %w", name, err)
 	}
-	if len(plain) > ScenarioMaxBytes {
+	if len(plain) > parameter.ScenarioMaxBytes {
 		return Scenario{}, fmt.Errorf("scenario %s: inflates past the %d-byte ceiling",
-			name, ScenarioMaxBytes)
+			name, parameter.ScenarioMaxBytes)
 	}
 	return UnmarshalScenario(name, plain)
 }
@@ -186,9 +178,9 @@ func UnmarshalScenarioCompressed(name string, body []byte) (Scenario, error) {
 // disk is held to. The name travels beside the body rather than inside it, because
 // it is what a root calls this scenario and not part of what the digest answers.
 func UnmarshalScenario(name string, body []byte) (Scenario, error) {
-	if len(body) > ScenarioMaxBytes {
+	if len(body) > parameter.ScenarioMaxBytes {
 		return Scenario{}, fmt.Errorf("scenario %s: %d bytes exceeds the %d-byte ceiling",
-			name, len(body), ScenarioMaxBytes)
+			name, len(body), parameter.ScenarioMaxBytes)
 	}
 	r := reader{buf: body}
 	if got := r.take(len(scenarioMagic)); string(got) != scenarioMagic {
@@ -200,9 +192,9 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 	s := Scenario{Name: name}
 	s.entry = string(r.take(int(r.u16())))
 	count := int(r.u16())
-	if count > ScenarioMaxFiles {
+	if count > parameter.ScenarioMaxFiles {
 		return Scenario{}, fmt.Errorf("scenario %s: %d files exceeds the %d-file ceiling",
-			name, count, ScenarioMaxFiles)
+			name, count, parameter.ScenarioMaxFiles)
 	}
 	s.files = make([]scenarioFile, 0, count)
 	for range count {
@@ -230,8 +222,8 @@ func (s *Scenario) validate() error {
 	switch {
 	case len(s.files) == 0:
 		return errors.New("no files")
-	case len(s.files) > ScenarioMaxFiles:
-		return fmt.Errorf("%d files exceeds the %d-file ceiling", len(s.files), ScenarioMaxFiles)
+	case len(s.files) > parameter.ScenarioMaxFiles:
+		return fmt.Errorf("%d files exceeds the %d-file ceiling", len(s.files), parameter.ScenarioMaxFiles)
 	}
 	total := 0
 	for i, f := range s.files {
@@ -241,14 +233,14 @@ func (s *Scenario) validate() error {
 		if i > 0 && s.files[i-1].name >= f.name {
 			return fmt.Errorf("file %q is out of order or duplicated", f.name)
 		}
-		if len(f.data) > ScenarioMaxFileBytes {
+		if len(f.data) > parameter.ScenarioMaxFileBytes {
 			return fmt.Errorf("file %q is %d bytes, over the %d-byte ceiling",
-				f.name, len(f.data), ScenarioMaxFileBytes)
+				f.name, len(f.data), parameter.ScenarioMaxFileBytes)
 		}
 		total += len(f.data)
 	}
-	if total > ScenarioMaxBytes {
-		return fmt.Errorf("%d bytes exceeds the %d-byte ceiling", total, ScenarioMaxBytes)
+	if total > parameter.ScenarioMaxBytes {
+		return fmt.Errorf("%d bytes exceeds the %d-byte ceiling", total, parameter.ScenarioMaxBytes)
 	}
 	if !slices.ContainsFunc(s.files, func(f scenarioFile) bool { return f.name == s.entry }) {
 		return fmt.Errorf("entry %q is not one of the files", s.entry)

@@ -38,7 +38,7 @@ var krakenBend = func() []float64 {
 	reach := parameter.KrakenLegLength + parameter.KrakenAttackReach + parameter.KrakenMoveReach
 	curve := make([]float64, int(reach/parameter.KrakenSampleStep)+2)
 	for i := range curve {
-		curve[i] = math.Pow(float64(i)*parameter.KrakenSampleStep/10, parameter.KrakenInertiaCurve)
+		curve[i] = math.Pow(float64(i)*parameter.KrakenSampleStep/parameter.KrakenBendRadiusScale, parameter.KrakenInertiaCurve)
 	}
 	return curve
 }()
@@ -53,18 +53,18 @@ func (k *KrakenComponent) TentacleSamples(x, y float64, visit func(x, y, radius,
 		}
 		length := parameter.KrakenLegLength + extension*parameter.KrakenAttackReach + k.MoveBlend*parameter.KrakenMoveReach
 		base := k.Angle + float64(leg)*math.Pi/4
-		amplitude := parameter.KrakenWiggleAmp * (1 - k.MoveBlend*0.7) * (1 - extension*0.8)
+		amplitude := parameter.KrakenWiggleAmp * (1 - k.MoveBlend*parameter.KrakenWiggleMoveDamp) * (1 - extension*parameter.KrakenWiggleAttackDamp)
 		for i := 0; i < len(krakenBend); i++ {
 			r := float64(i) * parameter.KrakenSampleStep
 			if r > length {
 				break
 			}
 			step := r / length
-			drag := -k.RotSpeed * parameter.KrakenInertiaBend * 15 * krakenBend[i]
+			drag := -k.RotSpeed * parameter.KrakenInertiaBend * parameter.KrakenInertiaScale * krakenBend[i]
 			wiggle := math.Sin(r*parameter.KrakenWiggleFreq-k.Time*parameter.KrakenWiggleSpeed) * amplitude
 			theta := base + drag + wiggle
-			radius := parameter.KrakenLegThickness * math.Pow(1-step, 0.7)
-			visit(x+r*math.Cos(theta), y+r*math.Sin(theta)/2, radius, step, attacking)
+			radius := parameter.KrakenLegThickness * math.Pow(1-step, parameter.KrakenTaper)
+			visit(x+r*math.Cos(theta), y+r*math.Sin(theta)/parameter.KrakenRowSquash, radius, step, attacking)
 		}
 	}
 }

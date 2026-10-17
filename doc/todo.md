@@ -8,512 +8,6 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
-## Suspected bugs to review
-
-The documentation sweep traced each of these to the code without fixing it; those
-marked reproduced also failed in a scratch test. Review an item before other work,
-then fix it, refile it at its real priority under its area, or delete it. Two more
-suspected bugs already have items at their own priority:
-[Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
-and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
-
-### Refuse a parent cycle at load
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/builder.go`, `internal/fsm/loader.go`
-
-`CompilePaths` walks each state's parents without a bound (`builder.go:39-51`), and
-the loader checks only that a parent name exists (`loader.go:113`). With
-`A.parent = "B"` and `B.parent = "A"`, or a self parent, the walk never ends and its
-path grows until memory runs out (reproduced), so `-check`, startup and `:bot add`
-(under the world lock) hang. Stop the walk once it passes the node count and return
-an error naming the state.
-
-### Fail a document without `[states]` instead of panicking
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/loader.go`
-
-`LoadScenarioFromMap` writes `config.States["Root"]` (`loader.go:65-67`), and
-`toml.Decode` leaves that map nil when the document has no `[states]`. The file
-loader always adds one (`file_loader.go:103-105`), but `Machine.LoadScenario` and
-`bot.ParseGraph` (through `Graph.machine`, `internal/bot/bot.go:108`) do not, so a
-bot graph with only `[regions]` panics `-check`, `-bot` and `:bot add` (reproduced).
-Make `config.States` when it is nil.
-
-### Let an on_exit terminate its own region, or forbid it
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/machine.go`, `doc/fsm-reference.md`
-
-`TerminateRegion` runs the region's on_exit actions (`machine.go:623-628`) before
-deleting it (`:630`), so an on_exit that terminates its own region reruns itself
-until the stack overflows, whether the exit comes from a transition,
-`TerminateRegion` or `Reset` (`:471-484`; all three reproduced). The Notes of the
-[FSM reference](fsm-reference.md) call it supported; shipped scenarios terminate only
-from on_enter. Options: honour it (a nested call only marks the exiting region, and
-the outer exit deletes it and skips any enter phase); or forbid it
-(`TerminateRegion` returns an error for an exiting region, and the reference says so).
-
-### Decide which control keys work in an overlay
-
-- Priority: P0, to review
-- Affected files: `internal/input/machine.go`, `internal/asset/input/keymap.toml`,
-  `internal/help/topics.go`, `doc/input-and-modes.md`
-
-`processOverlay` (`internal/input/machine.go:708-723`) reads only the overlay tables:
-it lacks the Ctrl-Space stop the other modes handle (`:220`, `:627`, `:666`, `:689`),
-and `[overlay_keys]` (`keymap.toml:123-134`) binds no `ctrl_q`, `ctrl_c` or
-`ctrl_s`. In help, telemetry or the configuration menu these keys do nothing, yet
-while the telemetry filter is typed, which edits in Search mode
-(`internal/mode/overlay.go:98-105`), they quit, mute and stop, and the help says
-Ctrl+Space works "from any mode" (`topics.go:125`). Options: bind the three keys,
-add the Ctrl-Space branch and update [Input and modes](input-and-modes.md) §4 and
-§6, which say overlay navigation ignores these keys; or keep overlays navigation-only
-and correct the help line.
-
-### Decide whether loads refuse unknown keys and `op` values
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/guard.go`,
-  `internal/fsm/std/payload.go`, `internal/resource/check.go`, `doc/fsm-reference.md`
-
-The scenario and bot-graph decode (`loader.go:33`) drops keys outside
-`ScenarioDoc`'s tags, so a misspelt `on_entr` loads as absent and `-check` is silent.
-`CompareInt` reads an omitted or unknown `op` as `eq` (`guard.go:232-250`), unchecked
-by the guard factories, while `:d break stat` spells `ne`, `ge`, `le`
-(`internal/mode/commands.go:843-850`), so `op = "ge"` tests equality (reproduced).
-Options: keep this and have `-check` report both; or refuse at load, with the strict
-`Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
-bot graph use only known keys and ops.
-
-### Decide what the cornering threshold gates
-
-- Priority: P0, to review
-- Affected files: `internal/parameter/navigation.go`, `pkg/vmath/physics/steering.go`
-
-`NavCorneringThreshold` is 3.0 (`internal/parameter/navigation.go:21`), but
-`TurnSeverity` compares it with a cosine (`pkg/vmath/physics/steering.go:44-48`), so
-it never gates: above 1 cell/s every drain, swarm, quasar, eye and loot that steers
-(`drain.go:1061`, `swarm.go:699`, `quasar.go:475`, `eye.go:419`, `loot.go:235`, all in
-`internal/system`) brakes at `NavCorneringBrake` × (3 − cos θ), a drain at twice that,
-even heading straight at its target. Options: keep that motion and name it, a constant
-drag plus a turn term; or make the threshold a real cosine and retune. At 0.7
-`internal/system` passes, but eleven `internal/app` tests whose scripted runs depend
-on today's motion fail.
-
-### Put the route bandit's floor and scout rate in parameter
-
-- Priority: P0, to review
-- Affected files: `internal/parameter/adaptation.go`, `internal/system/adaptation.go`
-
-`parameter.RouteMinWeight` (0.05, `internal/parameter/adaptation.go:16`) is
-referenced nowhere; `applyEXP3` floors at an inline `minWeight := 0.005`
-(`internal/system/adaptation.go:487`), the 0.5% that
-[AI, physics and evolution](ai-physics-and-evolution.md) §6 documents. The 10% scout
-rate (`:537`) and the corridor recovery radius 5 (`:350`) are inline too, while the
-genetic scout rate is `parameter.GAScoutRate`. Set `RouteMinWeight` to 0.005 and use
-it, and add the other two beside it; adopting 0.05 instead would retune route
-exploration.
-
-### Move the inline simulation and render tunables into parameter
-
-- Priority: P0, to review
-- Affected files: `internal/engine/position.go`, `internal/profile/homing.go`,
-  `internal/system/genetic.go`, `internal/component/kraken.go`,
-  `internal/system/weapon.go`, `internal/render/renderer/flow_debug.go`,
-  `internal/parameter`, `internal/parameter/visual`, `pkg/vmath`
-
-[Development](development.md) §11 puts tunables in `internal/parameter` or
-`internal/parameter/visual`, never inline. Still inline: the spiral search's default
-radius 20 (`internal/engine/position.go:522`, eight callers); the quasar, snake and
-missile arrival and dead-zone values (`internal/profile/homing.go:27-29,37-39,58-60`;
-loot's are in `parameter`); the type-fitness EMA rate
-(`internal/system/genetic.go:412`); the tentacle factors that shape the Kraken's
-hitbox (`internal/component/kraken.go:41-66`); the gun's lane table
-(`internal/system/weapon.go:1346`); and the flow-field debug colours
-(`internal/render/renderer/flow_debug.go:83-205`). The 7/10 at `position.go:1085`
-approximates 1/√2, a `pkg/vmath` constant if named. Each move keeps its value.
-
-### Move the runtime cadences and bounds into parameter
-
-- Priority: P0, to review
-- Affected files: `internal/engine/sync_std.go`, `internal/app/play.go`,
-  `internal/app/serve.go`, `internal/event/journal.go`, `internal/engine/resource.go`,
-  `internal/resource/scenario.go`, `internal/resource/scenario_test.go`,
-  `internal/system/navigation.go`, `internal/engine/scheduler.go`,
-  `internal/app/play_test.go`, `internal/parameter`, `doc/logging-and-diagnostics.md`,
-  `doc/term-index.md`
-
-Wall-clock, cadence and capacity tunables sit beside their code: `LockHoldWarn`
-(`internal/engine/sync_std.go:15-24`), the replay pan step
-(`internal/app/play.go:22`), the server's report and lifecycle intervals
-(`internal/app/serve.go:16,23`), the journal anchor and digest cadences
-(`internal/event/journal.go:166,173`), the per-group target cap
-(`internal/engine/resource.go:670`) and the scenario size bounds
-(`internal/resource/scenario.go:34-36`). Their peers (`ProfWindow`, the camera
-margins, `NetworkDigestTicks`, `ContentMaxFiles`) live in `internal/parameter`.
-Moving them keeps every value; decide first whether a format bound such as the
-scenario limits counts as a tunable.
-
-### Name the FNV-1a constants in vmath and settle the golden seeds
-
-- Priority: P0, to review
-- Affected files: `pkg/vmath/rand.go`, `internal/manifest/fingerprint.go`,
-  `internal/snapshot/digest.go`, `pkg/audio/sound_render.go`,
-  `pkg/audio/sequencer.go`, `pkg/maze/generator.go`, `pkg/genetic/engine.go`,
-  `doc/package-map.md`
-
-The FNV-1a 64 offset and prime are written out in
-`internal/manifest/fingerprint.go:29-30`, `internal/snapshot/digest.go:16-17`,
-`pkg/audio/sound_render.go:439` and `pkg/vmath/rand.go:107-110`, and `pkg/vmath`
-names neither: export them there and use them in all four. `0x9E3779B97F4A7C15` is
-restated beside `vmath.Golden64` as seeds in `pkg/maze/generator.go:9` and
-`pkg/genetic/engine.go:11`, and as a stream in `pkg/audio/sequencer.go:74`.
-`pkg/audio` can import `vmath`; `pkg/maze` and core `pkg/genetic` are
-standard-library only ([Package map](package-map.md) §5). Options: those two keep a
-local seed as a stated exception, an arbitrary seed not being the SplitMix
-increment; or they import `pkg/vmath` and that coupling rule changes.
-
-### Decide whether a gateway's population ID selects anything
-
-- Priority: P0, to review
-- Affected files: `internal/engine/resource.go`, `internal/system/gateway.go`,
-  `internal/component/gateway.go`, `internal/event/payload.go`,
-  `internal/snapshot/capture.go`, `internal/engine/snapshot_world_gen.go`,
-  `pkg/genetic/registry`
-
-A gateway's `population_id` (`internal/event/payload.go:1318`) is stored in
-`GatewayComponent.PopulationID` (`internal/component/gateway.go:19`), carried in the
-capture and passed to `GeneticResource.Sample` and `SampleScout`
-(`internal/system/gateway.go:264-266`), which ignore it
-(`internal/engine/resource.go:867`); the registry keeps one population per species
-and no scenario sets the key. Options: drop the parameter, field and key (a capture
-schema bump); or give the registry per-island populations for it to select.
-
-### Give walls a write mask so pause dims them
-
-- Priority: P0, to review
-- Affected files: `internal/render/renderer/wall.go`,
-  `internal/parameter/visual/mask.go`, `doc/rendering.md`, `doc/term-index.md`
-
-`WallRenderer.Render` never calls `SetWriteMask`
-(`internal/render/renderer/wall.go:35-61`), so walls take the previous layer's mask:
-`MaskPing` when the crosshair or grid drew this frame (`ping.go:46`), else
-`MaskNone` from `Clear` (`internal/render/buffer.go:97`). Pause dim (`DimMask`,
-`internal/parameter/visual/post_process.go:24`) therefore skips walls unless ping is
-showing (reproduced). Add a wall mask bit (`0x80` is free) and set it in `Render`, or
-set `MaskNone` explicitly if walls are meant to stay bright.
-
-### Read `_duration` keys as nanoseconds in the overlay
-
-- Priority: P0, to review
-- Affected files: `internal/status/format.go`
-
-`status.IntUnit` matches `.duration` as a suffix (`internal/status/format.go:17`,
-commented "also matches .max_duration"), but `fsm.max_duration` and
-`fsm.<region>.max_duration` end in `_duration`, so the telemetry overlay and pinned
-cards show their nanoseconds as plain counts, against the units table in
-[Logging and diagnostics](logging-and-diagnostics.md) §6. The status bar converts
-the summary itself, and vif-log's `DurationUnit` already matches the `_duration`
-segment. Match the trailing `.` or `_` segment as vif-log does, or add `_duration`
-to `intUnits`; either way correct the comment at `format.go:17`.
-
-### Share the scope parser with the novlog build
-
-- Priority: P0, to review
-- Affected files: `internal/vlog/stub.go`, `internal/vlog/scope.go`
-
-In a `wasm` or `novlog` build `ParseScopes` returns `cur, nil` for any spec
-(`internal/vlog/stub.go:110-111`), under a comment saying CLI parsing behaves
-identically, so a malformed `-ls` or `:log scope` passes there and fails in a
-logging build (`internal/vlog/scope.go:130-163`). `Scope`, its constants and the
-parser need only `fmt` and `strings`: move them to an untagged file that both builds
-share, or keep the stub and correct its comment.
-
-### Delete the dead diagnostics entry points
-
-- Priority: P0, to review
-- Affected files: `internal/status/recorder.go`, `internal/vlog/stream.go`,
-  `doc/term-index.md`
-
-The package-level `status.TriggerFSM` (`internal/status/recorder.go:48-56`) has no
-caller (the scheduler uses the `Registry` method,
-`internal/engine/scheduler.go:468`), and neither have `vlog.OpenStream` and
-`vlog.Stream` (`internal/vlog/stream.go`). Delete them, and `vlog.Stream` from the
-term index's **stream** entry. The package-level `status.RecorderActive`
-(`recorder.go:68`) serves only `internal/app/play_test.go:451`, which checks the
-crash path's process-wide recorder; it stays while that assertion does.
-
-### Drop `swarm.player_kills`
-
-- Priority: P0, to review
-- Affected files: `internal/system/swarm.go`, `doc/telemetry-reference.md`
-
-`SwarmSystem` adds to `swarm.player_kills` (`internal/system/swarm.go:107-110`) on
-the same `ResolveCursor` test with which `lifecycle.RecordKill`, one line earlier,
-adds to `swarm.killed_by_player` (`internal/system/telemetry.go:102-108`), so the two
-always agree, and the duplicate is one of the swarm card's 12 entries, of the 15 a
-card may hold (`parameter.OverlayCardMaxEntries`). Remove the counter, its field,
-its key note in the [Telemetry reference](telemetry-reference.md) and its key in
-that page's Swarm row.
-
-### Drop navigation's two unhandled cursor subscriptions
-
-- Priority: P0, to review
-- Affected files: `internal/system/navigation.go`
-
-`NavigationSystem.EventTypes` subscribes `EventCursorMoved` and
-`EventCursorDespawned` (`internal/system/navigation.go:133-134`), but `HandleEvent`
-(`:145-214`) has no case for either, and nothing is missed: `Update` rebuilds group
-0 from the roster every tick (`resolveGroupTargets`, `:323`). Every cursor move is
-still dispatched to a handler that drops it. Remove the two entries.
-
-### Check float telemetry in the reset test
-
-- Priority: P0, to review
-- Affected files: `internal/app/telemetry_test.go`
-
-`persistentTelemetryKey` lists `glyph.density` and `glyph.rate_mult` under `string`
-(`internal/app/telemetry_test.go:109`), but they are floats
-(`internal/system/glyph.go:99-100`), and `TestTelemetrySessionCountersReset` never
-ranges floats, so the entries match nothing and no float is checked across a reset.
-A float pass against the post-reset baseline passes today with the `proc.` prefix
-exemption alone (tried in a scratch test), since the glyph pair resets. Add the float
-pass and delete the two entries.
-
-### Confine a scenario's wall image path to the roots
-
-- Priority: P0, to review
-- Affected files: `internal/service/adapter_file.go`, `pkg/ascimage/dual.go`
-
-`FileService.Open` opens a wall image path as given, cwd-relative or absolute,
-before its escape check and the roots (`internal/service/adapter_file.go:51-58`),
-and refuses only directories (`:86`). So `./test.vifimg` shadows the roots' copy,
-against [Packaging](packaging.md) §1, and a scenario a coordinator serves a joiner
-(`internal/app/session.go:450`) can open `../` paths or `/dev/zero`, which
-`pkg/ascimage/dual.go:421` reads without bound (all three reproduced). Resolve only
-through the roots and require a regular file; decide whether absolute paths stay,
-or stay only for a scenario this run resolved itself.
-
-### Read vif.toml in soundlab
-
-- Priority: P0, to review
-- Affected files: `cmd/soundlab/main.go`, `cmd/soundlab/session.go`
-
-soundlab resolves its audio overrides from its flags alone
-(`cmd/soundlab/main.go:38`, `cmd/soundlab/session.go:45-61`) and never reads
-`vif.toml`, while vif fills `-config-dir` from `[paths] root`
-(`cmd/vif/main.go:112-116,387`). With `root` set, vif reads an override under it
-first while soundlab opens and saves the user root's copy, so a save is not what the
-next run loads, though `cmd/soundlab/README.md:33` says it is; `[audio] buffer_ms` is
-ignored too. Load the settings in soundlab and fill both as vif does.
-
-### Decide how sound includes reach the game
-
-- Priority: P0, to review
-- Affected files: `cmd/soundlab/session.go`, `internal/service/adapter_audio.go`,
-  `internal/resource/check_audio.go`, `pkg/audio/sound_load.go`
-
-soundlab loads a sounds document through `LoadSoundsFS`, keeps its `include` list,
-adopts the user override as clean and writes the list back on save
-(`cmd/soundlab/session.go:128,160-175,254`). The game hands that file to
-`LoadSoundsTOML` (`internal/service/adapter_audio.go:69`, `pkg/audio/engine.go:141`),
-which refuses any include (`pkg/audio/sound_load.go:23-25`), so play ignores the whole
-override and `-check` fails it (`internal/resource/check_audio.go:37`); soundlab
-prints that refusal only at start. Options: the audio service and `-check` resolve
-includes inside the file's directory as soundlab does; or soundlab flattens or
-refuses includes in a file the game reads.
-
-### Build the Makefile's release binaries without CGO
-
-- Priority: P0, to review
-- Affected files: `Makefile`, `doc/packaging.md`
-
-`release`, `headless` and `nolog` run `go build` without `CGO_ENABLED=0`
-(`Makefile:131-141`), so on a host with a C compiler `net` links cgo: a scratch build
-with those flags is dynamically linked against glibc. [Packaging](packaging.md) §1
-promises no CGO, and §4 `depends=()` assumes a static binary; the release workflow,
-the Dockerfile and `make windows` already set the variable. Set `CGO_ENABLED=0` on
-the three recipes and in §4's `go build` line.
-
-### Keep code generation out of the build targets
-
-- Priority: P0, to review
-- Affected files: `Makefile`, `.github/workflows/release.yml`, `doc/development.md`
-
-The binary targets `release`, `headless`, `nolog`, `wasm` and `windows` depend on
-`generate` (`Makefile:121-151`), so a packager's `make release` reruns
-`gen-manifest`, which rewrites ten committed files
-(`internal/gen-manifest/main.go:169-182`), against [Packaging](packaging.md) §1: no
-`go generate` at package time. `.github/workflows/release.yml:45` also names
-`./internal/event`, which has no directive. Keep `generate` on `dev`, `test` and
-`verify` only, and drop `./internal/event` from the workflow.
-
-### Leave no empty stderr capture where redirection fails
-
-- Priority: P0, to review
-- Affected files: `internal/core/dev.go`
-
-`CaptureStderr` creates `vif-stderr-<stamp>.log` (`internal/core/dev.go:59-69`)
-before `dupFD` (`:71`) reports that the build cannot redirect, as every non-unix
-build does (`internal/core/redirect_other.go:9-10`); the error path closes both
-handles and keeps the file. Each `vif -dev` on Windows leaves an empty capture in the
-log directory beside "runtime capture disabled" (`cmd/vif/main.go:259-263`). Call
-`dupFD` before creating the file, or remove the file on that path.
-
-### Pass the image scenario's name and engine to make
-
-- Priority: P0, to review
-- Affected files: `script/test.sh`, `script/README.md`
-
-The `image` scenario passes only `IMAGE_TAG="${IMAGE#*:}"`
-(`script/test.sh:865-866`). An `IMAGE` set in the environment reaches make whole, so
-`IMAGE=reg/vif:x` builds `reg/vif:x:x` (`make -n image` shows it), and
-`reg:5000/vif:x` cuts at the wrong colon. Its check also passes a podman-only machine
-(`:863-864`), where `make image` runs `docker` (`Makefile:10`) unless the caller sets
-`CONTAINER_ENGINE=podman`, as `script/README.md:95` says. Pass `IMAGE` and `IMAGE_TAG`
-split at the last colon, and `CONTAINER_ENGINE`, when unset, set to the engine found.
-
-### Run maxmap under `all`, or list it apart
-
-- Priority: P0, to review
-- Affected files: `script/test.sh`, `script/README.md`
-
-`./script/test.sh list` files `maxmap` under "Automated (assert, and used by `all`)"
-and says `all` runs every automated scenario (`script/test.sh:155-170`), but the
-`all` loop leaves it out (`:871`), as `script/README.md:7,65` state. Options: add it
-to the loop, which holds a 500x250 `td` session for over 40 s, since its guest's
-6000-tick script outlasts `timeout 40` (`script/test.sh:672-674`); or list it outside
-the `all` set as `image` is.
-
-### Drop the fleet grants nothing uses
-
-- Priority: P0, to review
-- Affected files: `deploy/k3s/40-allocator-rbac.yaml`,
-  `deploy/k3s/20-networkpolicy.yaml`, `doc/kube-docker-deploy.md`
-
-The allocator Role grants `get` and `watch` on jobs, services, pods and
-endpointslices, and reads events (`deploy/k3s/40-allocator-rbac.yaml:24-52`), but the
-allocator only lists, creates and deletes (`tool/vif-allocator/kube.go:23-32`),
-against the header's "exactly the verbs it needs". `allow-operator-ports` admits a
-`logstream` port (`deploy/k3s/20-networkpolicy.yaml:62-63`) no container declares
-(`tool/vif-allocator/manifest.go:135-136`). Drop the unused verbs (the `can-i` check
-in [Fleet deploy](kube-docker-deploy.md) §16 then asks `list pods`); decide whether
-the allocator should log why a session ended from events or that rule goes, and
-whether `logstream` goes or a pod declares it.
-
-### Let update.sh check the objects on a fresh cluster
-
-- Priority: P0, to review
-- Affected files: `deploy/update.sh`
-
-`check_objects` runs `kubectl diff` on each object file before anything is applied
-and dies on an exit above 1 (`deploy/update.sh:66-76`). On a cluster without the
-`vif` namespace, where [Fleet deploy](kube-docker-deploy.md) §9 runs
-`./deploy/update.sh objects wad`, the server dry run of every namespaced object
-should be refused as namespace not found, so the first install stops before
-`apply_objects` (inferred, not tried on a cluster). When `kubectl get namespace vif`
-fails, report the objects pending, undiffed.
-
-### Decide fleet log retention against the Job deadline
-
-- Priority: P0, to review
-- Affected files: `deploy/guest/vif-fleet-log-cleanup.py`, `doc/kubernetes-fleet.md`,
-  `doc/kube-docker-deploy.md`, `deploy/guest/var-log-vif\x2dfleet.mount`,
-  `deploy/k3s/05-log-volume.yaml`
-
-The cleanup keeps every session file touched in the last five hours
-(`deploy/guest/vif-fleet-log-cleanup.py:14`), while a session Job ends within one
-(`deploy/k3s/30-session.yaml:25`), so the 256 MiB tmpfs mostly holds ended sessions.
-Ten sessions at the measured 3 KiB/s fill it in about 2.4 h, which
-[Kubernetes fleet](kubernetes-fleet.md) §6 says the cleanup carries, yet nothing is
-stale by then and the lines lost are live sessions'. Options: a stale age just over
-the deadline; five hours under a byte budget that removes ended sessions oldest
-first; or a tmpfs sized for five hours of a full fleet.
-
-### Ship the third-party licence notices
-
-- Priority: P0, to review
-- Affected files: `web/vendor/xterm-5.5`, `wad/content`, `Makefile`,
-  `.github/workflows/release.yml`
-
-None of the six files in `web/vendor/xterm-5.5/` carries xterm.js's copyright or MIT
-notice, which MIT requires in every copy, and the release's web archive copies `web/`
-with no licence file (`.github/workflows/release.yml:74-77`). The corpus files keep
-the Go Authors' header, which points to a LICENSE no install or archive carries
-(`Makefile:217,237` ship only vif's). Add xterm's LICENSE beside it and Go's in
-`wad/content/` (the loader reads only `.txt` and `.toml`,
-`internal/content/load.go:32-35`), and ship both, with vif's, in every archive.
-`bin/vif-gui` links purego (Apache-2.0), whose notice its archive needs too.
-
-## Feature development push
-
-The bots and host pushes are done: bots play as participants, and the engine
-presents through `app.Presentation` on a terminal, a desktop window and an Android
-view, drawn from one font atlas at one cell aspect, with the menu every host
-summons by a held press ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
-The next push ships the desktop window as a way to play. The Android and
-position-store items below lie past it and stay items until a push takes them.
-
-### Ship the desktop window
-
-- Priority: P1, leading the push
-- Affected files: `pkg/window`, `cmd/vif/gui.go`, `Makefile`,
-  `.github/workflows/release.yml`, `deploy/package`, `doc/packaging.md`,
-  `doc/multi-platform.md`
-
-`bin/vif-gui` builds, plays and is measured, but nothing ships it: `make release`
-and the release workflow build the terminal binary alone, `make install` installs
-no `vif-gui`, the desktop entry opens a terminal, and `pkg/window`'s tests run only
-where `make verify` and CI pass the tag. In order:
-
-- release and install the binary beside `vif`: a `vif-gui.desktop` entry with
-  `Terminal=false`, the release archives carrying it with purego's licence, and
-  [Packaging](packaging.md) saying so;
-- the window's gaps: the HiDPI scale read from the screen (Xft.dpi or RandR) in
-  place of `-scale`, paste from the X selection as `EventPaste`, a fullscreen key,
-  an icon, and native Wayland through purego's `libwayland-client` and EGL (xdg-shell;
-  XWayland serves today);
-- the frame path's ceiling, the raster at 12.9 ms for a whole 200x60 frame changed:
-  upload only the rows that changed, or the per-cell atlas quad path, whichever
-  `BenchmarkPresent` favours;
-- an end-to-end test of the window (open, flush, present, close) and the benchmark
-  under `xvfb-run` in CI, since no display-less `go test` reaches them today.
-
-Measured so far: `BenchmarkPresent` on a hardware driver (GTX 1060 Mobile, NVIDIA
-580, XWayland on a 120 Hz panel) is the display's 8.3 ms a frame at 120x40 and
-200x60 with 15 % of cells changed and at 120x40 with all, 16.7 ms at 200x60 with
-all, the compositor pacing the swap whatever its interval. Without the swap the
-work is 2.4, 5.3, 6.9 and 16.3 ms, the raster 0.8, 2.0, 5.1 and 12.9 ms of it.
-
-### Android host follow-ups
-
-- Priority: P3
-- Affected files: `android/`
-
-The Android host in `android/`
-([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host))
-plays the embedded scenario by touch on a Pixel 8 Pro. Past it:
-
-- the GLES drawer, only if a device misses 60 fps with the Canvas one;
-- a menu Android draws itself, likely circular, in place of the `tui` one taken
-  by taps;
-- the system keyboard's text shown while composed; it arrives as it commits;
-- bots on a phone;
-- a release-signed APK: the player's keystore and a Gradle signing block.
-
-### Take the position store out of the engine
-
-- Priority: P3
-- Affected files: `internal/engine/position.go`, `spatial_grid.go`
-
-`engine.Position` answers 2D cell queries over integer cells and couples to the
-world only for the component mask. As a `pkg/` package generic over its value
-type and taking its blocking predicate from the caller, it could add a third axis
-without the engine knowing. A design direction for the host model to stay
-compatible with, not a change on its own.
-
 ## Bots
 
 ### Open fleet sessions to bots
@@ -686,6 +180,21 @@ for the session and dropped at its end, and a bandit over trained genomes. Decid
 what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
+
+### Refuse unknown keys and `op` values at load
+
+- Priority: P1
+- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/guard.go`,
+  `internal/fsm/std/payload.go`, `internal/resource/check.go`, `doc/fsm-reference.md`
+
+The scenario and bot-graph decode drops keys outside `ScenarioDoc`'s tags, so a
+misspelt `on_entr` loads as absent and `-check` is silent, and `CompareInt` reads
+an omitted or unknown `op` as `eq` (`guard.go`), unchecked by the guard factories,
+so `op = "ge"` tests equality (verified by reading; `:d break stat` spells `ne`,
+`ge`, `le`). The fix is the strict `Op` and `Args` of
+[Behavior machines](machine-design.md) §7's dialect kernel, which the editor also
+needs; until it lands, the guard factories could refuse an unknown `op` alone.
+Shipped scenarios and the default bot graph use only known keys and ops.
 
 ### Widen the input hook past order-only play
 
@@ -890,6 +399,18 @@ rejoining the same session downloads it again. Writing it under the user root
 behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
+
+### Apply the fleet log retention on the node
+
+- Priority: P1
+- Affected files: `deploy/guest/vif-fleet-log-cleanup.py`, `doc/kube-docker-deploy.md`
+
+Decided: the cleanup's stale age is 75 minutes, just past the session Job's
+`activeDeadlineSeconds`, so the tmpfs holds live sessions and the ones that just
+ended instead of five hours of finished ones; a byte budget or a larger tmpfs
+were the alternatives. Apply on the node: reinstall the cleanup script as
+[Fleet deploy](kube-docker-deploy.md) §7 does, then watch `findmnt` after a full
+hour of play.
 
 ### Promote verified images to the node
 
@@ -1278,28 +799,6 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
 
-### Harden the service hub
-
-- Priority: P3
-- Affected files: `internal/service/hub.go`
-
-`Hub.Register` after `InitAll` clears the cached order, so `StartAll` then starts
-nothing and says nothing; refuse a late registration with an error. A service
-could also implement `Pause()`/`Resume()` so a host lifecycle (an Android app
-sent to the background, a hidden browser tab) reaches audio and network through
-one hub call instead of app code; `App.setAway` pauses only the clock today.
-
-### Reuse the drain exclusion map and the grid's level allocation
-
-- Priority: P3
-- Affected files: `internal/system/drain.go`, `internal/engine/spatial_grid.go`
-
-The two allocation findings of the host push's td profile that are not taken:
-the drain spawn builds its exclusion map per spawn (37 MB over 1,600 ticks), a
-map the system could keep and clear; and `SpatialGrid.Resize` allocates once per
-level (68 MB over the run) although it is grow-only, so a level change could
-reuse the cells when the new size fits.
-
 ### Initialize systems in dependency order from the engine
 
 - Priority: P3
@@ -1337,7 +836,12 @@ Without `-race` the package's wall time is set by its 47 serial tests, about 23 
 of 33 s on 4 cores: each drives a real socket against the shipped wall-clock
 deadlines (heartbeat loss, succession, join readiness), so none can share the
 machine. Test-only deadlines a fraction of the shipped ones, or the in-process mesh
-where a socket is not the rule under test, would cut them.
+where a socket is not the rule under test, would cut them. The same load makes
+`recordGuestPastItsHost` flaky under `go test -race ./internal/app`: its late
+crossing's correction has to cross the socket before the host leaves at tick 400,
+and in about one run in three it does not, so the three tests that read the
+shared recording fail together ("installed 1 worlds"); alone they pass. Record
+the correction's arrival before moving on, or tick the host until it lands.
 
 ### Fuzz the join handshake
 

@@ -11,10 +11,10 @@ import (
 	"github.com/lixenwraith/toml"
 )
 
-// LoadSoundsTOML parses one document. Include directives are rejected here —
-// resolving them needs a filesystem capability, so they go through
-// LoadSoundsFS. The returned slice holds every sound that validated; err is a
-// join of the ones that did not, so one bad spec does not discard the file.
+// LoadSoundsTOML parses one document held in memory, so an include, which needs
+// a filesystem, is refused; the engine reads through LoadSoundsFS. The returned
+// slice holds every sound that validated; err is a join of the ones that did not,
+// so one bad spec does not discard the file.
 func LoadSoundsTOML(data []byte) ([]*SoundDef, error) {
 	f, err := decodeSpecFile(data)
 	if err != nil {

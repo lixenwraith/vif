@@ -42,7 +42,7 @@ jobs:
       - name: Refresh generated registries
         shell: bash
         run: |
-          go generate ./internal/event ./internal/manifest
+          go generate ./internal/manifest
           # A release's binaries must be what its source archive builds.
           if [ "$GITHUB_REF_TYPE" = tag ]; then git diff --exit-code; fi
 
@@ -71,9 +71,10 @@ jobs:
             go build -trimpath -tags=vif_noaudio -ldflags='-s -w' \
             -o "stage/$p-web/vif.wasm" ./cmd/vif
 
-          for target in linux-amd64 linux-amd64-headless freebsd-amd64 windows-amd64; do
+          for target in linux-amd64 linux-amd64-headless freebsd-amd64 windows-amd64 web; do
             cp README.md LICENSE "stage/$p-$target/"
           done
+          # Brings xterm.js's licence along in vendor/.
           cp -R web/. "stage/$p-web/"
           # The loader of the Go that built vif.wasm above, not the committed copy.
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "stage/$p-web/"

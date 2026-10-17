@@ -43,7 +43,13 @@ const (
 	SnakeMaxSpeed    = 25.0
 	SnakeHomingAccel = 8.0
 	SnakeDrag        = 0.94
-	SnakeRestitution = 0.3
+
+	// Arrival steering: within SnakeArrivalRadius cells the drag is boosted
+	// SnakeArrivalDragBoost times, and inside SnakeDeadZone it snaps
+	SnakeArrivalRadius    = 2.0
+	SnakeArrivalDragBoost = 2.0
+	SnakeDeadZone         = 0.5
+	SnakeRestitution      = 0.3
 
 	// Spring constants for body member kinetic behavior
 	SnakeSpringStiffness = 18.0

@@ -241,13 +241,14 @@ metadata, but `WallSystem` does not consume it. A file that fails to open or dec
 is reported on the status line and spawns nothing.
 
 The extension is `.vifimg`, which is what `cmd/ascimage` detects and what the
-shipped `wad/image/test.vifimg` sample uses. An existing absolute or relative path
-in `WallPatternSpawnRequest.path` is explicit. Otherwise it is a logical name
-below `image/`, resolved through `-config-dir`, the user configuration root, the
-checkout's `wad/` and the system roots in that order. Thus `path="test.vifimg"`
+shipped `wad/image/test.vifimg` sample uses. `WallPatternSpawnRequest.path` is a
+logical name below `image/`, resolved through `-config-dir`, the user
+configuration root, the checkout's `wad/` and the system roots in that order, and
+only a regular file there opens: never a host path, absolute or relative to the
+working directory, since a scenario is served to joiners
+([Packaging §1](packaging.md#1-shared-guidelines)). Thus `path="test.vifimg"`
 works both with `-config-dir wad` and from an installed tree, independent of the
-process working directory; the existing-relative-path check is kept for
-compatibility.
+process working directory.
 Runtime image opens cross the generic `FileService` capability contributed to
 the world, so `WallSystem` neither discovers roots nor opens host paths itself.
 

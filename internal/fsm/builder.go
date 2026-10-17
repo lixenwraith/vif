@@ -35,14 +35,16 @@ func (m *Machine[T]) CompilePaths() error {
 		path := make([]StateID, 0, 4)
 		curr := node
 
-		// Walk up to root
+		// Walk up to root; a path longer than the graph has looped
 		for curr != nil {
+			if len(path) == len(m.nodes) {
+				return fmt.Errorf("state '%s': parent cycle", node.Name)
+			}
 			path = append(path, curr.ID)
 			if curr.ParentID == StateNone {
 				break
 			}
 			var ok bool
-			// Capture parent ID before lookup; nil curr deref on missing parent
 			parentID := curr.ParentID
 			curr, ok = m.nodes[parentID]
 			if !ok {

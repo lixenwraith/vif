@@ -1,16 +1,14 @@
-//go:build !wasm && !novlog
-
 package vlog
 
 import (
 	"fmt"
 	"strings"
-	"sync/atomic"
 )
 
 // Scope is a record category, orthogonal to level. Resolved from the record's
 // sub tag, so call sites stay unchanged. Unmapped subs fall into ScopeTap,
-// keeping ad-hoc debugging taps visible by default.
+// keeping ad-hoc debugging taps visible by default. The names and the parser
+// are shared with the build that carries no logger, so a spec fails the same way.
 type Scope uint32
 
 const (
@@ -60,52 +58,6 @@ var scopeDef = []struct {
 	{ScopeDomain, "domain", 'o'},
 	{ScopeTap, "tap", 't'},
 }
-
-// subScope binds a record's sub tag to its scope. A scope holds more than one sub
-// only where one is a narrower view of another: a system toggle is an FSM effect,
-// and an admission is a session's record kept apart for the fleet stream.
-var subScope = map[string]Scope{
-	"race":     ScopeApp,
-	"crash":    ScopeApp,
-	"app":      ScopeApp,
-	"service":  ScopeApp,
-	"fsm":      ScopeFSM,
-	"system":   ScopeFSM,
-	"event":    ScopeEvent,
-	"dispatch": ScopeDispatch,
-	"push":     ScopePush,
-	"input":    ScopeInput,
-	"stat":     ScopeStat,
-	"rec":      ScopeRec,
-	"lock":     ScopeLock,
-	"net":      ScopeNet,
-	"session":  ScopeSession,
-	"admit":    ScopeSession,
-	"converge": ScopeConverge,
-	"journal":  ScopeJournal,
-	"domain":   ScopeDomain,
-}
-
-var scopes atomic.Uint32
-
-func init() { scopes.Store(uint32(ScopeAll)) }
-
-// ScopeOf resolves a sub tag; unknown tags are taps
-func ScopeOf(sub string) Scope {
-	if s, ok := subScope[sub]; ok {
-		return s
-	}
-	return ScopeTap
-}
-
-// Scopes returns the active mask
-func Scopes() Scope { return Scope(scopes.Load()) }
-
-// SetScopes replaces the active mask
-func SetScopes(s Scope) { scopes.Store(uint32(s)) }
-
-// scopeEnabled reports whether records with this sub are admitted
-func scopeEnabled(sub string) bool { return Scope(scopes.Load())&ScopeOf(sub) != 0 }
 
 // ScopeString renders a mask as a canonical '+'-joined spec
 func ScopeString(s Scope) string {

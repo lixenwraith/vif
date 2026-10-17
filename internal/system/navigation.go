@@ -135,8 +135,6 @@ func (s *NavigationSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventCursorMoved,
-		event.EventCursorDespawned,
 		event.EventLevelSetup,
 		event.EventTargetGroupUpdate,
 		event.EventTargetGroupRemove,
@@ -342,7 +340,7 @@ func (s *NavigationSystem) Update() {
 
 	// Build routes before choosing a pursuit target.
 	totalRecomputes := int64(0)
-	var targetsBuffer [engine.MaxTargetsPerGroup]vmath.Point
+	var targetsBuffer [parameter.MaxTargetsPerGroup]vmath.Point
 
 	for groupID, g := range s.groups {
 		groupState := s.targets[groupID]
@@ -617,7 +615,7 @@ func (s *NavigationSystem) resolveGroupTargets() {
 	var cursorState engine.TargetGroupState
 	cursorState.Type = component.TargetCursor
 	for i := range parameter.MaxPlayers {
-		if cursorState.Count >= engine.MaxTargetsPerGroup {
+		if cursorState.Count >= parameter.MaxTargetsPerGroup {
 			break
 		}
 		e := s.world.Resources.Player.Slot(uint8(i))
@@ -651,7 +649,7 @@ func (s *NavigationSystem) resolveGroupTargets() {
 		anchored[anchor.GroupID] = true
 
 		st := &anchorStates[anchor.GroupID]
-		if st.Count >= engine.MaxTargetsPerGroup {
+		if st.Count >= parameter.MaxTargetsPerGroup {
 			continue
 		}
 		st.Type = component.TargetEntity

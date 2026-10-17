@@ -219,7 +219,10 @@ defaults:
 | Log rate | 89 KiB in 30 s, about 3 KiB/s |
 
 Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation and
-the cleanup timer carry. Do not scale the CPU and memory figures from here; H3
+the cleanup timer carry: a file untouched for 75 minutes, past the Job's deadline,
+is an ended session's and goes, so a full fleet holds about 140 MiB of the tmpfs
+rather than filling it in two and a half hours. Do not scale the CPU and memory
+figures from here; H3
 measures a four-player world, which is the shape the manifest's values are for. The
 quota totals in `10-quota.yaml` are ten times the game container without bots; the
 config-check init container counts only against its own peak.

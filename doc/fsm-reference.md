@@ -730,7 +730,12 @@ between instances; the first read of one in a shared session logs a D-14 warning
 - Event payloads are shared compiled templates: handlers must treat them as
   immutable; `payload_vars` produces an isolated copy
 - Region-control actions (`TerminateRegion` on self) are supported in
-  `on_enter`/`on_exit`/transition actions; unsupported in `on_update`
+  `on_enter`/`on_exit`/transition actions; unsupported in `on_update`. From
+  `on_exit` the terminate takes effect once the exit phase that is running ends:
+  the region's exit actions run once, and a transition under way skips its
+  `actions` and `on_enter`
+- A state whose parent chain never reaches `Root` is refused at load, as is a
+  region whose initial state the document does not define
 - A key the loader does not read is ignored, not refused, so a misspelled argument
   reads as absent; only `[map]`, macro definitions and invocations, and the top
   level of a region or macro file refuse one. `-check` catches unknown event,

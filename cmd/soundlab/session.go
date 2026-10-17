@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -35,20 +36,26 @@ type Session struct {
 }
 
 // audioFiles is where the game reads its audio overrides and where an untitled
-// save must land for the next run to read it first, resolved as vif resolves them
+// save must land for the next run to read it first, resolved as vif resolves them,
+// with the mixer period vif.toml sets
 type audioFiles struct {
 	music, sounds             string // "" = the embedded bank
 	musicTarget, soundsTarget string // "" = no configuration root
+	buffer                    time.Duration
 }
 
-// resolveAudioFiles applies vif's -config-dir, -config-music and -config-sounds
+// resolveAudioFiles applies vif's -config-dir, -config-music and -config-sounds,
+// and vif.toml's [paths] root and [audio] buffer_ms as vif does
 func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
 	if err := paths.CheckRoot(dir); err != nil {
 		return audioFiles{}, err
 	}
-	roots := paths.ConfigRoots(dir)
-	var f audioFiles
-	var err error
+	settings, _, err := paths.LoadSettings(dir)
+	if err != nil {
+		return audioFiles{}, err
+	}
+	roots := paths.ConfigRoots(cmp.Or(dir, settings.Paths.Root))
+	f := audioFiles{buffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
 	if f.music, err = paths.ConfigFile(roots, music, paths.AudioDirName, paths.MusicConfigFile); err != nil {
 		return f, fmt.Errorf("music config: %w", err)
 	}
@@ -67,6 +74,7 @@ func NewSession(backend string, masterVol float64, out io.Writer, files audioFil
 	cfg.Enabled = true
 	cfg.MasterVolume = masterVol
 	cfg.ForceBackend = backend
+	cfg.Buffer = files.buffer
 	// The same banks the game registers, from the same embedded assets.
 	base, err := parameter.BuiltinSounds()
 	if err != nil {
@@ -81,10 +89,8 @@ func NewSession(backend string, masterVol float64, out io.Writer, files audioFil
 			return nil, err
 		}
 	}
-	if files.sounds != "" {
-		if cfg.SoundTOML, err = os.ReadFile(files.sounds); err != nil {
-			return nil, err
-		}
+	if p := files.sounds; p != "" {
+		cfg.SoundFS, cfg.SoundFile = os.DirFS(filepath.Dir(p)), filepath.Base(p)
 	}
 
 	eng, err := audio.NewAudioEngine(cfg)
