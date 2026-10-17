@@ -761,17 +761,6 @@ full field's away from walls; then a second Go instance in another worker comput
 fields at a fixed lead, at the cost of a second runtime and of copying the grid in
 and the field out.
 
-### Prove the wall grid current by an epoch
-
-- Priority: P2
-- Affected files: `internal/engine/position.go`, `internal/system/wall.go`
-
-`wallGrid.current` walks every wall entity to prove the cached grid current: 10 %
-of td's tick CPU flat, 18 % through `WallTest`, with 50,000 walls and two callers a
-tick. The scan exists because `BlockMask` is written in place once
-(`handleMaskChange`). Bump a wall epoch there, on store mutation and on a wall placement, and
-`current` becomes one comparison ([Engine decoupling](engine-decoupling.md) §6).
-
 ### Index a store by a per-domain slice
 
 - Priority: P3

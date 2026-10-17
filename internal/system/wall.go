@@ -630,7 +630,10 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 		}
 
 		wasBlocking := wall.BlockMask != component.WallBlockNone
-		wall.BlockMask = payload.BlockMask
+		if wall.BlockMask != payload.BlockMask {
+			wall.BlockMask = payload.BlockMask
+			s.world.Positions.WallsChanged()
+		}
 
 		if !wasBlocking && payload.BlockMask != component.WallBlockNone {
 			s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: pos.X, Y: pos.Y})
