@@ -860,10 +860,13 @@ deploy)
 	;;
 
 image)
-	command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1 \
-		|| fail "no container engine found"
-	make image IMAGE_TAG="${IMAGE#*:}" >/dev/null || fail "image build"
-	make image-check IMAGE_TAG="${IMAGE#*:}" >/dev/null || fail "image config check"
+	# The Makefile takes the name and tag apart, split at the last colon so a
+	# registry port survives, and runs the engine found unless one is named.
+	engine=${CONTAINER_ENGINE:-$(command -v docker >/dev/null 2>&1 && echo docker || echo podman)}
+	command -v "$engine" >/dev/null 2>&1 || fail "no container engine found"
+	case $IMAGE in *:*) name=${IMAGE%:*}; tag=${IMAGE##*:} ;; *) name=$IMAGE; tag=dev ;; esac
+	make image IMAGE="$name" IMAGE_TAG="$tag" CONTAINER_ENGINE="$engine" >/dev/null || fail "image build"
+	make image-check IMAGE="$name" IMAGE_TAG="$tag" CONTAINER_ENGINE="$engine" >/dev/null || fail "image config check"
 	pass "$IMAGE builds and validates its own config as a non-root read-only user"
 	;;
 

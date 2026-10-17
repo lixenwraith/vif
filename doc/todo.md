@@ -32,19 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Pass the image scenario's name and engine to make
-
-- Priority: P0, to review
-- Affected files: `script/test.sh`, `script/README.md`
-
-The `image` scenario passes only `IMAGE_TAG="${IMAGE#*:}"`
-(`script/test.sh:865-866`). An `IMAGE` set in the environment reaches make whole, so
-`IMAGE=reg/vif:x` builds `reg/vif:x:x` (`make -n image` shows it), and
-`reg:5000/vif:x` cuts at the wrong colon. Its check also passes a podman-only machine
-(`:863-864`), where `make image` runs `docker` (`Makefile:10`) unless the caller sets
-`CONTAINER_ENGINE=podman`, as `script/README.md:95` says. Pass `IMAGE` and `IMAGE_TAG`
-split at the last colon, and `CONTAINER_ENGINE`, when unset, set to the engine found.
-
 ### Run maxmap under `all`, or list it apart
 
 - Priority: P0, to review
