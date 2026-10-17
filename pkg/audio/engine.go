@@ -137,8 +137,8 @@ func (ae *AudioEngine) Start() error {
 			return fmt.Errorf("base sounds: %w", err)
 		}
 	}
-	if len(ae.config.SoundTOML) > 0 {
-		defs, err := LoadSoundsTOML(ae.config.SoundTOML)
+	if ae.config.SoundFS != nil {
+		defs, err := LoadSoundsFS(ae.config.SoundFS, ae.config.SoundFile)
 		ae.specErr = err
 		for _, d := range defs {
 			if _, rerr := RegisterSound(d); rerr != nil {
