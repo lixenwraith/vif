@@ -235,6 +235,10 @@ tag, or that image is missing or unpinned.
 ./deploy/update.sh objects wad             # namespace, quota, policy, Role; the scenario volume's files
 ```
 
+On a cluster without the `vif` namespace the script reports every object pending
+without a diff, since nothing can be dry-run against a namespace that does not
+exist, and applies them in order, the namespace first.
+
 The two local volumes are pinned to this node (`nodeAffinity` is immutable), so
 `update.sh` reports a change to them and never applies one. Create them once:
 
