@@ -10,38 +10,44 @@ import (
 	"github.com/lixenwraith/terminal"
 )
 
-func testView(t *testing.T, raster bool) *view {
+func testView(t *testing.T, raster bool, density float32) *view {
 	t.Helper()
 	f, err := loadFont()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newView(f, raster)
+	return newView(f, raster, density)
 }
 
-// TestATapPressesAndReleasesTheCellUnderIt: pixels map to the cell the drawer paints
-// there; a press off the grid is dropped and its release kept on the edge; nothing
-// is reported while the run takes no pointer.
+// TestATapPressesAndReleasesTheCellUnderIt: a 420 dpi phone's cell is 16x32
+// pixels, and the grid they fit is stretched over the view, so a pixel maps to the
+// cell drawn there in proportion, one past the edge to the edge cell; nothing is
+// reported while the run takes no pointer.
 func TestATapPressesAndReleasesTheCellUnderIt(t *testing.T) {
-	v := testView(t, false)
-	v.setGrid(10*12+5, 4*24+20) // a margin short of a cell on each side
+	v := testView(t, false, 2.625)
+	v.setGrid(10*16+15, 4*32+31) // 10x4 cells, stretched by most of a cell each way
+	if cols, rows := v.Size(); cols != 10 || rows != 4 {
+		t.Fatalf("the grid is %dx%d, want 10x4", cols, rows)
+	}
 	if ev, ok := v.touch(30, 30, true); ok {
 		t.Fatalf("a touch with the pointer off was reported: %+v", ev)
 	}
 	v.SetPointerMode(true, false)
-	ev, ok := v.touch(12*3+11, 24*2, true)
-	want := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
-		MouseAction: terminal.MouseActionPress, MouseX: 3, MouseY: 2}
-	if !ok || ev != want {
-		t.Fatalf("press is %+v %v, want %+v", ev, ok, want)
-	}
-	if ev, ok := v.touch(12*10+2, 10, true); ok {
-		t.Fatalf("a press in the margin was reported: %+v", ev)
-	}
-	ev, ok = v.touch(12*10+2, 24*4+3, false)
-	want.MouseAction, want.MouseX, want.MouseY = terminal.MouseActionRelease, 9, 3
-	if !ok || ev != want {
-		t.Fatalf("release in the margin is %+v %v, want %+v", ev, ok, want)
+	for _, c := range []struct {
+		x, y, cx, cy int
+		down         bool
+	}{
+		{0, 0, 0, 0, true}, {17, 31, 0, 0, true}, {18, 32, 1, 0, true}, {174, 158, 9, 3, true},
+		{175, 159, 9, 3, false}, {-4, 400, 0, 3, false},
+	} {
+		want := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
+			MouseAction: terminal.MouseActionRelease, MouseX: c.cx, MouseY: c.cy}
+		if c.down {
+			want.MouseAction = terminal.MouseActionPress
+		}
+		if ev, ok := v.touch(c.x, c.y, c.down); !ok || ev != want {
+			t.Errorf("touch at %d,%d is %+v %v, want %+v", c.x, c.y, ev, ok, want)
+		}
 	}
 }
 
@@ -87,7 +93,7 @@ func TestKeysArriveAsATerminalReportsThem(t *testing.T) {
 // drawer holds and nothing when none does, a resize or a Sync makes it whole, and
 // Blocked counts from the oldest frame waiting.
 func TestTheDrawerTakesTheNewestFrameAsChangesFromTheOneItHolds(t *testing.T) {
-	v := testView(t, false)
+	v := testView(t, false, 1)
 	if v.take() != nil || v.Blocked() != 0 {
 		t.Fatal("a view nothing was flushed to has a frame")
 	}
@@ -153,7 +159,7 @@ func TestACellFramePaintedFromTheAtlasIsTheRastersPixels(t *testing.T) {
 	if got, want := paint(t, p.font.mask, p.Frame()), p.Pixels(); !bytes.Equal(got, want) {
 		t.Fatal("the probe painted from the atlas differs from the raster")
 	}
-	cell, raster := testView(t, false), testView(t, true)
+	cell, raster := testView(t, false, 1), testView(t, true, 1)
 	for _, v := range []*view{cell, raster} {
 		v.Flush(p.cells, p.cols, p.rows)
 	}

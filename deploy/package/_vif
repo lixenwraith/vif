@@ -27,6 +27,7 @@ _arguments \
   '-config-music[Music pattern override TOML]:path:_files' \
   '-config-sounds[Sound definition override TOML]:path:_files' \
   '-color[Colour depth; auto detects the terminal]:value:(auto 256 true)' \
+  '-scale[Draw the desktop window'\''s font n times its pixels, for a HiDPI screen; vif-gui only (default 1)]:n: ' \
   '-mute[Start muted, which is the default; -mute=false starts with sound]' \
   '(-ab -audio-backend)'{-ab,-audio-backend}'[Force an audio backend instead of detecting one]:name: ' \
   '-seed[Root RNG seed; 0 draws one and logs it]:n: ' \

@@ -384,20 +384,23 @@ name. Adding a graphical host is therefore composition, not a simulation fork:
 The desktop window is one such host: `cmd/vif/gui.go` under `vif_gui` sets
 `Host.Presentation` to a `pkg/window` window, which draws each frame with
 `glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
-pointer as the events a terminal reports. Its libraries (`libX11.so.6`,
-`libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so `bin/vif-gui` builds
-with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which
+pointer as the events a terminal reports; `-scale n` draws the texture `n` times
+its size with nearest filtering, for a HiDPI screen. Its libraries
+(`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
+`bin/vif-gui` builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which
 `make gui` passes. It runs on Wayland through XWayland.
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
-`app.Run`. The view's grid is its pixels in the atlas's 12x24 cells (aspect 0.5);
-a Java render thread takes the newest frame at each vsync as the cells changed
+`app.Run`. The view's grid is the cells its pixels hold at a cell 12 dp tall
+(16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5). A
+Java render thread takes the newest frame at each vsync as the cells changed
 since the one it holds, which `CellDrawer.OnCanvas` paints from the atlas texture
-(`game.Atlas`) and an instrumented test checks against `glyph.Raster` pixel for
-pixel, and posts it on a hardware canvas. `FromRaster`, Go's raster as pixels, is
-the fallback. The APK's `wad/` is copied to the app's files directory as the
+(`game.Atlas`) at the atlas's size, as an instrumented test checks against
+`glyph.Raster` pixel for pixel, and posts it on a hardware canvas stretched over
+the whole view, filtered, so no margin is left; a tap maps to its cell in
+proportion. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. Input is the pilot's: a tap is a left press and

@@ -13,8 +13,9 @@ the game runs in-process through a `gomobile bind` library, presents on a
 ## Build
 
 Needs Go (the version in `go.mod`), the Android SDK with platform `android-36.1`
-and NDK `29.0.14206865` (`sdkmanager "ndk;29.0.14206865"`), and `ANDROID_HOME` or
-`local.properties` pointing at the SDK. Gradle provisions its own JDK 21.
+and NDK `29.0.14206865` (`sdkmanager "ndk;29.0.14206865"`), and the SDK named by
+`ANDROID_HOME` or by `sdk.dir=<path>` in `android/local.properties` (ignored by
+git; Android Studio's default is `~/Android/Sdk`). Gradle provisions its own JDK 21.
 
 ```bash
 make android           # cd android && ./gradlew assembleDebug, then bin/vif-debug.apk
@@ -33,8 +34,9 @@ for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in
 adb shell am start -n com.lixen.vif/.MainActivity
 ```
 
-Add `--ez raster true` to paint with Go's software raster instead of the Canvas
-drawer. `adb logcat -s vif` prints the render thread's frame time every five
+A cell is 12 dp tall (`cellDP`), and the grid the view holds is stretched over the
+view edge to edge. Add `--ez raster true` to paint with Go's software raster instead
+of the Canvas drawer. `adb logcat -s vif` prints the render thread's frame time every five
 seconds: frames painted per second, mean, p95 and max of take, paint and post.
 
 Controls: a tap is a left press and release on the cell under it, and one held on
