@@ -808,17 +808,6 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
 
-### Harden the service hub
-
-- Priority: P3
-- Affected files: `internal/service/hub.go`
-
-`Hub.Register` after `InitAll` clears the cached order, so `StartAll` then starts
-nothing and says nothing; refuse a late registration with an error. A service
-could also implement `Pause()`/`Resume()` so a host lifecycle (an Android app
-sent to the background, a hidden browser tab) reaches audio and network through
-one hub call instead of app code; `App.setAway` pauses only the clock today.
-
 ### Reuse the drain exclusion map and the grid's level allocation
 
 - Priority: P3
