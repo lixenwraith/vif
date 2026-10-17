@@ -32,18 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Build the Makefile's release binaries without CGO
-
-- Priority: P0, to review
-- Affected files: `Makefile`, `doc/packaging.md`
-
-`release`, `headless` and `nolog` run `go build` without `CGO_ENABLED=0`
-(`Makefile:131-141`), so on a host with a C compiler `net` links cgo: a scratch build
-with those flags is dynamically linked against glibc. [Packaging](packaging.md) §1
-promises no CGO, and §4 `depends=()` assumes a static binary; the release workflow,
-the Dockerfile and `make windows` already set the variable. Set `CGO_ENABLED=0` on
-the three recipes and in §4's `go build` line.
-
 ### Keep code generation out of the build targets
 
 - Priority: P0, to review
