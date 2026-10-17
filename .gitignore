@@ -20,3 +20,4 @@ journal/**/*.jsonl
 /dist/
 /stage/
 tool/vif-allocator/vif-allocator
+*.exe
