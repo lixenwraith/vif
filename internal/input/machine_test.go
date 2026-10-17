@@ -44,3 +44,21 @@ func TestCapturedKeyOutranksPlayGrammar(t *testing.T) {
 		t.Fatalf("released key in Insert = %+v, want IntentTextChar", in)
 	}
 }
+
+// TestControlKeysReachAnOverlay: quit, the mute cycle and the macro stop are
+// global, so an open overlay must not swallow them.
+func TestControlKeysReachAnOverlay(t *testing.T) {
+	m := NewMachine()
+	m.SetMode(ModeOverlay)
+	for key, want := range map[terminal.Key]IntentType{
+		terminal.KeyCtrlQ:     IntentQuit,
+		terminal.KeyCtrlC:     IntentQuit,
+		terminal.KeyCtrlS:     IntentToggleAudioCycle,
+		terminal.KeyCtrlSpace: IntentMacroStopAll,
+	} {
+		in := m.Process(terminal.Event{Type: terminal.EventKey, Key: key})
+		if in == nil || in.Type != want {
+			t.Errorf("key %v in an overlay = %+v, want %v", key, in, want)
+		}
+	}
+}
