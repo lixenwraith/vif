@@ -17,7 +17,6 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// defaultMouseMode is the reporting mode used outside free-look
 // A scenario change rebuilds the run because its FSM metrics are frozen at startup.
 // In a session the coordinator requests the change for every participant.
 func Run(cfg Config) error {
@@ -206,6 +205,10 @@ func (a *App) Loop() (*restartRequest, error) {
 	defer inputTicker.Stop()
 
 	eventChan := a.pres.Events()
+	var awayChan <-chan bool
+	if p, ok := a.pres.(awayPresentation); ok {
+		awayChan = p.Away()
+	}
 
 	for {
 		// Before the wait, not inside it: a latched restart is serviced on the
@@ -245,6 +248,9 @@ func (a *App) Loop() (*restartRequest, error) {
 				a.handleResize(ev.Width, ev.Height)
 			}
 
+		case away := <-awayChan:
+			a.setAway(away)
+
 		case <-inputTicker.C:
 			if !a.inputTick() {
 				return nil, nil
@@ -269,6 +275,22 @@ func (a *App) handleResize(width, height int) {
 	})
 	a.scheduler.DispatchEventsImmediately()
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
+}
+
+// setAway pauses a solo run while its player is away and resumes it on return; a
+// pause the player made before leaving stays theirs to end
+func (a *App) setAway(away bool) {
+	a.world.RunSafe(func() {
+		switch {
+		case away && !a.ctx.TimeCtl.IsPaused():
+			a.ctx.PauseForInput()
+			a.awayPaused = true
+		case !away && a.awayPaused:
+			a.ctx.SetPaused(false)
+			a.awayPaused = false
+		}
+	})
+	a.scheduler.DispatchEventsImmediately()
 }
 
 // renderContext reads everything a frame draws from, in one critical section: Config
