@@ -410,15 +410,28 @@ func recordGuestPastItsHost(t *testing.T) (*journal.Capture, map[event.Stamp][]s
 			host.Close()
 		}
 		if i == hostLeaves/4 {
-			// One guest crossing late at the host by construction, however fast the
-			// link and whatever lead the guest has adopted by now — a starved link
-			// raises it: the host is that lead and a delay ahead when the crossing is
-			// made, so the host applies it where it lands and the guest has a
+			// One guest crossing late at the host by construction, whatever lead the
+			// guest has adopted: the host is that lead and a delay ahead when the
+			// crossing is made, so it applies it where it lands and the guest has a
 			// correction to install from the record.
 			ahead := int(guest.World().Resources.Network.BarrierDelayTicks) + parameter.NetworkBarrierDelayTicks
+			written := len(rec.Captures())
 			host.Tick(ahead)
 			inject(t, guest, &input.Intent{Type: input.IntentFireMain, Count: 1}, intentMotion(input.MotionRight, 2))
 			guest.Tick(ahead)
+			// The correction crosses the socket on goroutines this loop does not pace,
+			// so the host stays until the guest has written it, paced as
+			// waitForRosterPair paces its ticks, however loaded the machine.
+			deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
+			for len(rec.Captures()) == written {
+				if !time.Now().Before(deadline) {
+					t.Fatal("the guest wrote no correction before its host left")
+				}
+				host.Tick(1)
+				guest.Tick(1)
+				guest.ApplyPendingCorrections()
+				time.Sleep(joinTestTickInterval / 5)
+			}
 		}
 		if i == hostLeaves+150 || i == hostLeaves+200 {
 			guest.Context().PushEventOrigin(event.EventGamePauseRequest,
