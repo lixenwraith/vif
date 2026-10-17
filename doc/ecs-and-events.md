@@ -85,7 +85,7 @@ The index is a page table per domain indexed by the entity's ID. IDs are
 per-domain counters, so a page of `1<<parameter.StoreIndexPageBits` slots covers
 a burst of entities, and a page is freed when its last entity leaves: the index
 follows the live IDs, not the highest one issued (0.6 MB on td, where a map per
-store held 2.7 MB, and td's tick is 24 % shorter). A capture installs entities under
+store held 2.7 MB, and td's tick is 23 % shorter). A capture installs entities under
 IDs a peer chose, so table and pages stay within `StoreIndexFloorBytes` plus
 `StoreIndexEntityBytes` per entity; an entity the bound refuses a page is kept in
 a map, at about a map's memory, which no simulated run reaches.

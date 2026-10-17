@@ -761,16 +761,6 @@ full field's away from walls; then a second Go instance in another worker comput
 fields at a fixed lead, at the cost of a second runtime and of copying the grid in
 and the field out.
 
-### Index a store by a per-domain slice
-
-- Priority: P3
-- Affected files: `internal/engine/store.go`, `position.go`
-
-Map lookups in the sparse-set index are 24 % of td's tick CPU. Entity IDs are
-per-domain counters, so a slice per domain indexed by the ID's low bits would make
-the lookup an array read; the idea is noted without analysis, and needs its own
-measurement on `main` as well as `td` ([Engine decoupling](engine-decoupling.md) §6).
-
 ### Export a backend constructor in the terminal module
 
 - Priority: P3
