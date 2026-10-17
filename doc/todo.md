@@ -493,14 +493,11 @@ sink), the font atlas under `internal/asset/font/` with `pkg/glyph` and its
 software rasterizer as the reference drawer, and the cell aspect as one parameter
 (`vmath.Aspect`, carried by the anchor), the pilot Android host in `android/`
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
-playing on a phone with sound and taps, `make android` for its APK, and the menu
+playing on a phone with sound and taps at a cell scaled to its density, `make
+android` for its APK, and the menu
 every host summons by holding a press on the status bar (D8). Left, to the line
 the push stops at:
 
-- size the cell to the screen's density: 12x24 device pixels is about 4.6x9 dp on
-  a 420 dpi phone, so an integer scale of the atlas in the drawer, chosen from the
-  density, with the grid sized by the scaled cell; the desktop window's HiDPI
-  scale is the same step in `pkg/window`;
 - a finger's drag posted as the terminal's drag per cell, so the cursor follows
   it and the menu hold's slack applies; a held finger already repeats fire;
 - the keys a phone lacks (Tab, Ctrl chords, arrows) as a strip the way the
@@ -519,9 +516,9 @@ the line.
 
 The `vif_gui` window was measured on software GL only (llvmpipe on Xvfb). Take
 `BenchmarkPresent` on a hardware driver at 120x40 and 200x60; build the per-cell
-atlas quad path only if it misses 60 fps there. Not yet done: an integer pixel
-scale for HiDPI screens, native Wayland (XWayland serves today) and paste (no
-`EventPaste` from the X selection).
+atlas quad path only if it misses 60 fps there. Not yet done: the HiDPI scale
+read from the screen (it is the player's `-scale`), native Wayland (XWayland
+serves today) and paste (no `EventPaste` from the X selection).
 
 ### Take the position store out of the engine
 

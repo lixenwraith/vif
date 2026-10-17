@@ -27,10 +27,14 @@ import java.util.Arrays;
  * the run; a two-finger tap raises or drops the system keyboard.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
+    /** A cell's height in dp: the atlas's own 24 pixels are 9 dp on a 420 dpi screen. */
+    private static final float CELL_DP = 18;
+
     private final MainActivity activity;
     private final String files, wad;
     private final boolean raster;
     private final Speaker speaker;
+    private final int scale;
     private final CellDrawer drawer;
     private final Stats stats = new Stats();
 
@@ -47,14 +51,15 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         this.wad = wad;
         this.raster = raster;
         this.speaker = speaker;
-        CellDrawer d;
+        byte[] atlas;
         try {
-            byte[] atlas = Game.atlas();
-            d = raster ? new CellDrawer.FromRaster(atlas) : new CellDrawer.OnCanvas(atlas);
+            atlas = Game.atlas();
         } catch (Exception e) {
             throw new IllegalStateException("font atlas", e);
         }
-        drawer = d;
+        float density = activity.getResources().getDisplayMetrics().density;
+        scale = Math.max(1, Math.round(density * CELL_DP / CellDrawer.words(atlas, 0).get(1)));
+        drawer = raster ? new CellDrawer.FromRaster(atlas, scale) : new CellDrawer.OnCanvas(atlas, scale);
         setFocusable(true);
         setFocusableInTouchMode(true);
         getHolder().addCallback(this);
@@ -71,7 +76,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         if (!started) {
             try {
-                Game.start(files, wad, width, height, raster, speaker,
+                Game.start(files, wad, width, height, scale, raster, speaker,
                         err -> activity.runOnUiThread(() -> activity.exited(err)));
             } catch (Exception e) {
                 Log.e(MainActivity.TAG, "game not started", e);

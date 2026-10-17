@@ -172,6 +172,7 @@ and the audio buffer; a flag on the command line wins
 | Flag | Purpose |
 |---|---|
 | `-color auto\|256\|true` | Colour depth. `auto` (the default) detects the terminal; `256` draws for a text console's sixteen colours; `true` forces truecolor. |
+| `-scale <n>` | `vif-gui` only: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. |
 | `-mute[=false]` | Start muted, which is the default. `-mute=false` starts with sound. |
 | `-ab`, `-audio-backend <name>` | Force an audio backend: `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`. |
 

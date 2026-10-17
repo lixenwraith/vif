@@ -33,8 +33,9 @@ for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in
 adb shell am start -n com.lixen.vif/.MainActivity
 ```
 
-Add `--ez raster true` to paint with Go's software raster instead of the Canvas
-drawer. `adb logcat -s vif` prints the render thread's frame time every five
+A cell is the atlas's 12x24 pixels at a whole scale the screen's density chooses,
+about 9x18 dp. Add `--ez raster true` to paint with Go's software raster instead
+of the Canvas drawer. `adb logcat -s vif` prints the render thread's frame time every five
 seconds: frames painted per second, mean, p95 and max of take, paint and post.
 
 Controls: a tap is a left press and release on the cell under it, and one held on

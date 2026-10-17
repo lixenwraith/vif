@@ -54,8 +54,9 @@ func newFont(a *glyph.Atlas) *font {
 // drawer to take it, the newest replacing one not yet taken; the grid follows the
 // view's pixels; touches and keys arrive as terminal events.
 type view struct {
-	font   *font
-	raster *glyph.Raster // the fallback drawer's, nil when a Java drawer takes cells
+	font         *font
+	cellW, cellH int           // a cell on the screen, the atlas's at the drawer's scale
+	raster       *glyph.Raster // the fallback drawer's, nil when a Java drawer takes cells
 
 	events  chan terminal.Event
 	away    chan bool
@@ -72,8 +73,10 @@ type view struct {
 	out        []byte          // the encoded frame, reused between takes
 }
 
-func newView(f *font, raster bool) *view {
-	v := &view{font: f, events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
+func newView(f *font, raster bool, scale int) *view {
+	scale = max(scale, 1)
+	v := &view{font: f, cellW: f.atlas.Width * scale, cellH: f.atlas.Height * scale,
+		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
 	if raster {
 		v.raster = glyph.NewRaster(f.atlas)
 	}
@@ -167,7 +170,7 @@ func (v *view) take() []byte {
 // setGrid sizes the grid to the cells the view's pixels hold, at least one each
 // way, and reports whether it changed
 func (v *view) setGrid(width, height int) bool {
-	cols, rows := max(1, width/v.font.atlas.Width), max(1, height/v.font.atlas.Height)
+	cols, rows := max(1, width/v.cellW), max(1, height/v.cellH)
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	changed := cols != v.cols || rows != v.rows

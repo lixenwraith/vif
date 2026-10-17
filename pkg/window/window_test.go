@@ -52,6 +52,27 @@ func TestAKeyPressReportsWhatATerminalReports(t *testing.T) {
 	}
 }
 
+// TestAPixelMapsToTheCellDrawnUnderIt: at scale 2 a cell covers twice the atlas's
+// pixels each way, the frame drawn centred, and a pixel in the margin takes the
+// nearest edge cell
+func TestAPixelMapsToTheCellDrawnUnderIt(t *testing.T) {
+	atlas, err := glyph.Parse([]byte("[font]\nwidth = 4\nheight = 8\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := newWindow(Config{Atlas: atlas, Cols: 10, Rows: 5, Scale: 2})
+	w.raster.Flush(make([]terminal.Cell, 10*5), 10, 5)
+	w.winW, w.winH = 10*8+6, 5*16+4 // a margin of 3 pixels left and right, 2 above and below
+	for _, c := range []struct{ px, py, x, y int }{
+		{3, 2, 0, 0}, {3 + 8*4 + 7, 2 + 16*2 + 15, 4, 2}, {3 + 8*5, 2 + 16, 5, 1},
+		{0, 0, 0, 0}, {w.winW - 1, w.winH - 1, 9, 4},
+	} {
+		if x, y := w.cellAt(c.px, c.py); x != c.x || y != c.y {
+			t.Errorf("pixel %d,%d is cell %d,%d, want %d,%d", c.px, c.py, x, y, c.x, c.y)
+		}
+	}
+}
+
 // BenchmarkPresent times a frame through the window: copy, raster, whole-texture
 // upload, draw and swap, finished on the GPU, at 15 % and at every cell changed.
 // Needs an X display with EGL and GLES 2.
@@ -75,8 +96,9 @@ func BenchmarkPresent(b *testing.B) {
 			b.Run(fmt.Sprintf("%dx%d/changed=%d%%", grid[0], grid[1], 100/every), func(b *testing.B) {
 				runtime.LockOSThread()
 				defer runtime.UnlockOSThread()
-				w := &Window{atlas: atlas, raster: glyph.NewRaster(atlas), ready: make(chan struct{}, 1)}
-				if err := w.open(Config{Title: "bench", Atlas: atlas, Cols: grid[0], Rows: grid[1]}); err != nil {
+				cfg := Config{Title: "bench", Atlas: atlas, Cols: grid[0], Rows: grid[1]}
+				w := newWindow(cfg)
+				if err := w.open(cfg); err != nil {
 					b.Skip(err)
 				}
 				defer w.release()
