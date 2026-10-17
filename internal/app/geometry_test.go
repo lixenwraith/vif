@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -66,6 +68,47 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstGuest(t *testing.T) {
 	if a.Context().Width != 160 || a.Context().Height != 45 {
 		t.Fatalf("the run's geometry is %dx%d, want the guest's 160x45",
 			a.Context().Width, a.Context().Height)
+	}
+}
+
+// TestASizingHostIsNotRefusedByItsOwnLiveSession: the guest a host sizes from is on
+// the link, so the session is live when the level setup is pushed. That push is the
+// host authoring the bounds before the roster closes, not an operator request, and
+// the refusal a live session answers operators with must not reach it.
+func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
+	// Not parallel: this binds a real socket.
+	a := geometryServer(t, 0, 0)
+	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = engine.CoordinatorParticipant
+	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
+		Assign: a.assignParticipant, Release: a.releaseParticipant, Report: a.noteJoinerReport,
+	}, socketWait)
+	port := network.NewSocketPort(hostCfg)
+	t.Cleanup(func() { _ = port.Close() })
+	if err := port.Start(); err != nil {
+		t.Fatalf("host transport: %v", err)
+	}
+	a.AttachTransport(port)
+
+	pending, offered := dialSession(t, port.Addr().String())
+	t.Cleanup(func() { _ = pending.Close() })
+	report := network.JoinerReport{Width: 160, Height: 45, Identity: identityFromAnchor(offered.Anchor)}
+	if err := pending.Complete(nil, report); err != nil {
+		t.Fatalf("join reply: %v", err)
+	}
+	waitSocket(t, port, func() bool { return port.PeerCount() > 0 }, "the guest's admission")
+	if !a.World().LiveSession() {
+		t.Fatal("the session is not live, so the refusal is not exercised")
+	}
+
+	a.adoptLobbyGeometry()
+
+	wantW, wantH := 160-parameter.LeftMargin, 45-parameter.TopMargin-parameter.BottomMargin
+	if w, h := mapSize(a); w != wantW || h != wantH {
+		t.Fatalf("map is %dx%d with the guest on the link, want its %dx%d", w, h, wantW, wantH)
+	}
+	if an := a.JoinAnchor().Anchor; an.MapWidth != wantW || an.MapHeight != wantH {
+		t.Fatalf("guests are offered %dx%d, want %dx%d", an.MapWidth, an.MapHeight, wantW, wantH)
 	}
 }
 

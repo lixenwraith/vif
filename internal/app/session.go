@@ -291,14 +291,17 @@ func (a *App) adoptLobbyGeometry() {
 	// Through the two authorities rather than by writing Config: the resize is what
 	// moves this instance's viewport, and the level setup is what moves the shared
 	// map (D-14). Both are recorded events, so a replay of this run reaches the
-	// same bounds the same way.
+	// same bounds the same way. Pushed as adoptMapLatch does, not through SetupLevel:
+	// the guest on the link makes the session live, and this is no operator request.
 	a.Resize(report.Width, report.Height)
 	var vw, vh int
 	a.world.RunSafe(func() {
 		cfg := a.world.Resources.Config
 		vw, vh = cfg.ViewportWidth, cfg.ViewportHeight
 	})
-	a.SetupLevel(vw, vh, false, true)
+	a.ctx.PushEventOrigin(event.EventLevelSetup,
+		&event.LevelSetupPayload{Width: vw, Height: vh, CropOnResize: true}, event.OriginDebug)
+	a.scheduler.Settle()
 	a.log.Info("session", "msg", "session sized from its first guest",
 		"terminal_w", report.Width, "terminal_h", report.Height, "map_w", vw, "map_h", vh)
 }
