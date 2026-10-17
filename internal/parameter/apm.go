@@ -17,3 +17,12 @@ const (
 	// A key repeated within this of its last press extends a mashing streak
 	APMRepeatTicks = uint64(500 * time.Millisecond / GameUpdateInterval)
 )
+
+// Tier thresholds the music conductor reads a five-second burst against, as actions
+// per minute; the engine's game state measures the burst in every build
+const (
+	TierNormalAPM   = 60
+	TierElevatedAPM = 140
+	TierIntenseAPM  = 220
+	TierPeakAPM     = 300
+)

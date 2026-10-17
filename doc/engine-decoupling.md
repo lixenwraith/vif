@@ -222,9 +222,8 @@ Ebitengine site's platform list, which marks Android as cgo-required.
   At 60 fps the pipe spends 12 ms a second serializing before the emulator has
   parsed a byte, and a parser costs at least as much again; the cell path is
   under 1 % of that and already exists. The module's `Backend` interface is the
-  seam for a pipe (`Write`, `Read`, `Size`, `SetResizeHandler`) and is
-  unexported today: `New` takes only a color mode. One exported constructor would
-  open it for tests and tooling; it is not the product path.
+  seam for a pipe (`Write`, `Read`, `Size`, `SetResizeHandler`); `NewWithBackend`
+  (terminal v0.4.0) opens it for tests and tooling. It is not the product path.
 
 ## 5. Host model: how adapters plug in
 
@@ -351,10 +350,12 @@ Decided after the first review of this document.
   the Go side; GLES if the pilot misses 60 fps on a target device.
 - **D7, store index: paged by entity ID** (§6), with a flat slice per domain
   rejected: it is sized by the highest ID a store has held, 4.8 MB on td.
-- **D8, menu: keep `tui`.** The overlay renderer already adapts forms into cells;
-  the configuration menu stays as it is, and Android gets a different
-  presentation (a radial menu summoned by holding a tap), a later task with a
-  gameplay implication to resolve.
+- **D8, menu: keep `tui`, summoned by a hold.** The overlay renderer already
+  adapts forms into cells and the configuration menu stays as it is. Every host
+  summons it as Ctrl-G does by holding a left press on the status bar
+  (`MenuHoldDuration`, a drift of `MenuHoldSlack` cells allowed): a mouse in a
+  terminal or the window, a finger on Android, and the browser launcher's touch
+  hold. The radial menu is dropped; the status bar is where a finger idles.
 - **D2** is resolved by D1: nothing moves.
 
 Each later phase is one PR.
@@ -379,8 +380,9 @@ Each later phase is one PR.
    (§8). The simulation surface of both benchmark runs is unchanged at the
    reference.
 4. **Android host: pilot done** in `android/` ([Multi-platform](multi-platform.md)
-   §8), a Canvas drawer at 60 fps on an emulator; touch mapped to intents as the
-   focused input task; the radial menu after that.
+   §8), a Canvas drawer at 60 fps on an emulator and playing on a phone with
+   sound, taps and the held-tap menu (D8); the rest of touch input is the
+   focused task left.
 5. **Desktop GPU surface: done.** `make gui` (`vif_gui`): `pkg/window` opens an X
    window and a GLES 2 context through purego and uploads the `glyph.Raster`
    frame whole as one texture ([Platforms](multi-platform.md) §8). On software GL
@@ -389,6 +391,17 @@ Each later phase is one PR.
    until a hardware driver misses 60 fps.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
    epoch, the maze payload and the store index are done.
+
+**Where this push stops.** It ends when a phone plays the embedded scenario end
+to end by touch: the cell scaled to the screen's density so the grid is legible,
+a finger's drag moving the cursor across cells and a held one repeating fire, the
+held-tap menu for the commands and Back for Escape, the APK built by `make
+android`; and the desktop window measured once on a hardware driver. Past that
+line everything is a todo item, not this push: the GLES drawer (only if a device
+misses 60 fps), a release-signed APK, the window's native Wayland, HiDPI scale and
+paste, the hosts' key tables lifted into the terminal module, the position store
+out of the engine, bots on a phone. The todo list is pruned before the next push
+starts.
 
 ## 8. Geometry flexibility: cell aspect and the position store
 

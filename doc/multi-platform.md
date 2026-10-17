@@ -25,6 +25,7 @@ downloadable content, a non-text renderer, and Android.
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Browser terminal | Omitted | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Desktop window | `make gui` / `vif_gui` (Linux, FreeBSD) | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | Play outside a terminal; cgo stays off |
+| Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
@@ -40,6 +41,7 @@ make release                 # bin/vif
 make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
 make gui                     # bin/vif-gui
+make android                 # bin/vif-debug.apk, from android/
 make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
 
@@ -400,14 +402,17 @@ system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside i
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. Input is the pilot's: a tap is a left press and
 release on its cell, keys and the system keyboard's text are terminal key events,
-Back is Escape.
+Back is Escape. A tap held on the status bar opens the configuration menu, the
+hold every host shares (`MenuHoldDuration`), and the browser launcher sends the
+same hold as Ctrl-G on a touch screen, where a touch is never a mouse press.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its
 20 Hz tick; taking, painting and posting one costs 3.5–4.2 ms mean and under 7 ms
 at p95 on the host GPU, 6–9 ms on the software one. The raster fallback costs
 36–57 ms a changed frame on the software GPU, a picture's worth of pixels across
-JNI each time: a fallback, not a 60 fps path.
+JNI each time: a fallback, not a 60 fps path. On a phone the APK plays with
+sound, taps and the held-tap menu; its frame times are not recorded yet.
 
 The terminal module's value types (`Cell`, `Attr`, `ColorMode`, `Key`) are the
 renderer-neutral vocabulary by decision ([Engine decoupling](engine-decoupling.md)

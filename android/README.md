@@ -17,19 +17,17 @@ and NDK `29.0.14206865` (`sdkmanager "ndk;29.0.14206865"`), and `ANDROID_HOME` o
 `local.properties` pointing at the SDK. Gradle provisions its own JDK 21.
 
 ```bash
-cd android && ./gradlew assembleDebug
+make android           # cd android && ./gradlew assembleDebug, then bin/vif-debug.apk
+make android-install   # adb install -r bin/vif-debug.apk
 ```
 
 `bindGo` builds gomobile and gobind at the versions `go.mod` pins, binds `./game`
 for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in
 `app/build/outputs/apk/debug/`. A dependency bump at the repository root needs
 `go mod tidy` here too, since this module requires at least what the root does.
+`make verify` vets and tests this module's Go side with the rest.
 
 ## Run
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
 
 ```bash
 adb shell am start -n com.lixen.vif/.MainActivity
@@ -39,9 +37,10 @@ Add `--ez raster true` to paint with Go's software raster instead of the Canvas
 drawer. `adb logcat -s vif` prints the render thread's frame time every five
 seconds: frames painted per second, mean, p95 and max of take, paint and post.
 
-Controls: a tap is a left press and release on the cell under it; keys, a
-hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
-a two-finger tap raises or drops the system keyboard; Back is Escape; `:q` quits.
+Controls: a tap is a left press and release on the cell under it, and one held on
+the status bar opens the configuration menu; keys, a hardware keyboard's or the
+system keyboard's, arrive as a terminal reports them; a two-finger tap raises or
+drops the system keyboard; Back is Escape; `:q` quits.
 
 ## Test
 

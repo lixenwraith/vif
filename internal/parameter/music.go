@@ -19,14 +19,6 @@ func BuiltinPatterns() ([]*audio.Pattern, error) {
 	return audio.LoadPatternsTOML(asset.DefaultMusic)
 }
 
-// Tier thresholds (MusicAPM: 5s burst normalized to per-minute)
-const (
-	TierNormalAPM   = 60
-	TierElevatedAPM = 140
-	TierIntenseAPM  = 220
-	TierPeakAPM     = 300
-)
-
 // APMToBPM maps burst APM to target tempo on a square root, RestBPM + k·√APM with k
 // placing audio.MaxBPM at the admission ceiling: the first actions move it most, and
 // the last BPM ask for sustained, varied input (half the range at a quarter of the

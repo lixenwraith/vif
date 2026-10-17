@@ -103,6 +103,13 @@ const (
 
 	// AutoFireInterval is the delay between fire requests while auto-fire is active
 	AutoFireInterval = WeaponCooldownMain
+
+	// MenuHoldDuration is how long a left press held on the status bar summons the
+	// configuration menu, as Ctrl-G does: a hold is input, so it runs on the wall clock [wall]
+	MenuHoldDuration = 600 * time.Millisecond
+
+	// MenuHoldSlack is how many cells a held press may drift and still be the same hold
+	MenuHoldSlack = 1
 )
 
 // Initial input state, applied once at GameContext construction, changed state persist through game reset

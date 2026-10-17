@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func TestSelectedCardScrollDeltaTraversesClippedCard(t *testing.T) {
@@ -79,6 +80,58 @@ func (s *menuSession) AddBot(spec string) error {
 func (s *menuSession) RemoveBot(id uint64) error {
 	s.calls = append(s.calls, fmt.Sprintf("remove %d", id))
 	return nil
+}
+
+// TestAHeldPressOnTheStatusBarSummonsTheMenu: a left press on the status bar
+// neither moves the cursor nor fires; held for MenuHoldDuration it opens the
+// configuration menu, while a release or a drift past MenuHoldSlack first is nothing.
+func TestAHeldPressOnTheStatusBarSummonsTheMenu(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &menuSession{}
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	mouse := func(action terminal.MouseAction, x, y int) {
+		t.Helper()
+		ev := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: action, MouseX: x, MouseY: y}
+		if intent := machine.Process(ev); intent != nil {
+			r.Handle(intent)
+		}
+	}
+	statusY := ctx.GameYOffset + ctx.World.Resources.Config.ViewportHeight
+	pushed := ctx.World.Resources.Event.Queue.Pushed()
+
+	mouse(terminal.MouseActionPress, 10, statusY)
+	if !r.menuHold || r.mouseLeftHeld || ctx.World.Resources.Event.Queue.Pushed() != pushed {
+		t.Fatalf("a press on the status bar: hold %v, fire held %v, events %d", r.menuHold, r.mouseLeftHeld, ctx.World.Resources.Event.Queue.Pushed()-pushed)
+	}
+	mouse(terminal.MouseActionRelease, 10, statusY)
+	mouse(terminal.MouseActionPress, 10, statusY)
+	mouse(terminal.MouseActionDrag, 11, statusY)
+	if !r.menuHold {
+		t.Fatal("a drift within the slack ended the hold")
+	}
+	mouse(terminal.MouseActionDrag, 13, statusY)
+	if r.menuHold {
+		t.Fatal("a drift past the slack kept the hold")
+	}
+	mouse(terminal.MouseActionRelease, 13, statusY)
+	mouse(terminal.MouseActionPress, 10, statusY-1)
+	if r.menuHold || !r.mouseLeftHeld {
+		t.Fatal("a press on the ruler row above the status bar is a map press")
+	}
+	mouse(terminal.MouseActionRelease, 10, statusY-1)
+
+	mouse(terminal.MouseActionPress, 10, statusY)
+	r.ProcessInputTick()
+	if ctx.IsOverlayMode() {
+		t.Fatal("the menu opened before the hold lasted")
+	}
+	r.menuSince = r.menuSince.Add(-parameter.MenuHoldDuration)
+	r.ProcessInputTick()
+	if !ctx.IsOverlayMode() || configMenu(ctx) == nil || r.menuHold {
+		t.Fatalf("after the hold: overlay %v, menu %v, hold %v", ctx.IsOverlayMode(), configMenu(ctx) != nil, r.menuHold)
+	}
 }
 
 func TestConfigFormsPreserveEditsOnFailureAndCancelWithoutSubmitting(t *testing.T) {
