@@ -94,11 +94,11 @@ func (w *World) CopyOut(reuse *WorldCopy) *WorldCopy {
 func (w *World) CopyIn(c *WorldCopy) {
 	w.copyComponentsIn(c.components)
 	p := w.Positions
-	clear(p.index)
+	p.index.clear()
 	p.dense = append(p.dense[:0], c.positions.dense...)
 	p.entities = append(p.entities[:0], c.positions.entities...)
 	for i, e := range p.entities {
-		p.index[e] = int32(i)
+		p.index.set(e, int32(i))
 	}
 	p.grid.Resize(c.gridW, c.gridH)
 	at := 0
