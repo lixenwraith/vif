@@ -709,10 +709,11 @@ type positionAddition struct {
 	pos    component.PositionComponent
 }
 
-func (p *Position) BeginBatch() *PositionBatch {
+// BeginBatch starts a batch with room for n additions.
+func (p *Position) BeginBatch(n int) *PositionBatch {
 	return &PositionBatch{
 		store:     p,
-		additions: make([]positionAddition, 0),
+		additions: make([]positionAddition, 0, n),
 	}
 }
 
