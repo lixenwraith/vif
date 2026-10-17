@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"strconv"
 	"sync"
 )
@@ -25,19 +26,15 @@ var Fingerprint = sync.OnceValue(computeFingerprint)
 // computeFingerprint is Fingerprint without the memoisation, so a test can watch
 // it react to a changed definition list.
 func computeFingerprint() uint64 {
-	const (
-		offset uint64 = 14695981039346656037
-		prime  uint64 = 1099511628211
-	)
-	h := offset
+	h := vmath.FNVOffset64
 	write := func(s string) {
 		for i := range len(s) {
 			h ^= uint64(s[i])
-			h *= prime
+			h *= vmath.FNVPrime64
 		}
 		// Length-terminated, so ("ab","c") and ("a","bc") do not collide.
 		h ^= uint64(len(s))
-		h *= prime
+		h *= vmath.FNVPrime64
 	}
 
 	write("components")

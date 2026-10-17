@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"math/rand/v2"
 	"sync/atomic"
 )
@@ -71,7 +72,7 @@ func (ss *slotState) sample() float64 {
 	return out
 }
 
-const seqStream = 0x9E3779B97F4A7C15 // fixed PCG stream selector; seed varies per run
+const seqStream = vmath.Golden64 // fixed PCG stream selector; seed varies per run
 
 // Sequencer maintains tempo, harmony, and N crossfading pattern layers
 // Mixer-goroutine confined: no synchronization

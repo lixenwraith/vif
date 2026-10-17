@@ -26,6 +26,13 @@ func (r *FastRand) Reseed(seed uint64) {
 // it keeps an all-zero input from mixing to zero
 const Golden64 = 0x9e3779b97f4a7c15
 
+// FNVOffset64 and FNVPrime64 are FNV-1a 64's offset basis and prime, for the
+// identity hashes written out by hand so a per-tick digest allocates nothing
+const (
+	FNVOffset64 uint64 = 14695981039346656037
+	FNVPrime64  uint64 = 1099511628211
+)
+
 // MixChain folds values into one word, a SplitMix64 round per value, so the result
 // moves with every input and with their order
 func MixChain(values ...uint64) uint64 {
@@ -104,10 +111,10 @@ func NewSeededRand(root uint64, label string) *FastRand {
 // a label. Splitting by label keeps one system's draws from shifting another's when
 // call counts change.
 func DeriveSeed(root uint64, label string) uint64 {
-	h := uint64(14695981039346656037)
+	h := FNVOffset64
 	for i := 0; i < len(label); i++ {
 		h ^= uint64(label[i])
-		h *= 1099511628211
+		h *= FNVPrime64
 	}
 	x := root + h
 	x ^= x >> 30

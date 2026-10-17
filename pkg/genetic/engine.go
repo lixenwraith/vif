@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+// defaultSeed restates vmath.Golden64, since this package imports only the
+// standard library
 const defaultSeed = 0x9E3779B97F4A7C15
 
 // ErrNoCandidates is returned when the pool has not been initialized
