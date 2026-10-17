@@ -135,8 +135,6 @@ func (s *NavigationSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventCursorMoved,
-		event.EventCursorDespawned,
 		event.EventLevelSetup,
 		event.EventTargetGroupUpdate,
 		event.EventTargetGroupRemove,

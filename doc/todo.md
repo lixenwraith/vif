@@ -124,17 +124,6 @@ capture and passed to `GeneticResource.Sample` and `SampleScout`
 and no scenario sets the key. Options: drop the parameter, field and key (a capture
 schema bump); or give the registry per-island populations for it to select.
 
-### Drop navigation's two unhandled cursor subscriptions
-
-- Priority: P0, to review
-- Affected files: `internal/system/navigation.go`
-
-`NavigationSystem.EventTypes` subscribes `EventCursorMoved` and
-`EventCursorDespawned` (`internal/system/navigation.go:133-134`), but `HandleEvent`
-(`:145-214`) has no case for either, and nothing is missed: `Update` rebuilds group
-0 from the roster every tick (`resolveGroupTargets`, `:323`). Every cursor move is
-still dispatched to a handler that drops it. Remove the two entries.
-
 ### Build the Makefile's release binaries without CGO
 
 - Priority: P0, to review
