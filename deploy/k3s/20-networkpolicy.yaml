@@ -59,8 +59,6 @@ spec:
       ports:
         - protocol: TCP
           port: probe
-        - protocol: TCP
-          port: logstream
 # No egress allowance is defined, deliberately. A session binds two listeners and
 # accepts; it resolves no name, dials nothing, and reads no external resource, so
 # the default deny above costs it nothing. If a future feature does need to dial

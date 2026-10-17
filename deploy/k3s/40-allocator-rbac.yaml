@@ -21,10 +21,10 @@ metadata:
   name: vif-allocator
   namespace: vif
 rules:
-  # Create a session and delete it; list and watch to reconcile after a restart.
+  # Create a session and delete it; list to reconcile after a restart.
   - apiGroups: ["batch"]
     resources: ["jobs"]
-    verbs: ["create", "get", "list", "watch", "delete"]
+    verbs: ["create", "list", "delete"]
   # Portable admission of a Service with blockOwnerDeletion requires permission
   # to protect its Job owner while foreground garbage collection is in progress.
   - apiGroups: ["batch"]
@@ -34,22 +34,17 @@ rules:
   # updated in place is a session whose address changed under its players.
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["create", "get", "list", "watch", "delete"]
-  # Read-only. The allocator needs the pod's phase and readiness to answer "is this
-  # session live", and needs nothing else about it. Notably absent: pods/exec,
-  # pods/portforward, pods/attach, and any write verb.
+    verbs: ["create", "list", "delete"]
+  # Read-only, by list: the allocator needs the pod's phase and readiness to answer
+  # "is this session live", and needs nothing else about it. Notably absent:
+  # pods/exec, pods/portforward, pods/attach, and any write verb.
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["list"]
   # The Service is ready only when discovery publishes a ready endpoint.
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
-    verbs: ["get", "list", "watch"]
-  # Why a session ended, for the allocator's own log. Events are read-only for the
-  # same reason pods are.
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
