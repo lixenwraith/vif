@@ -385,10 +385,10 @@ Each later phase is one PR.
    reports it, `ConfigResource.CellAspect` holds it and the anchor carries it
    (§8). The simulation surface of both benchmark runs is unchanged at the
    reference.
-4. **Android host: pilot done** in `android/` ([Multi-platform](multi-platform.md)
-   §8), a Canvas drawer at 60 fps on an emulator and on a Pixel 8 Pro, playing
-   with sound, taps and the held-tap menu (D8); the rest of touch input is the
-   focused task left.
+4. **Android host: done** in `android/` ([Multi-platform](multi-platform.md)
+   §8): a cell 12 dp tall with the grid stretched edge to edge, taps, a finger's
+   drag once per cell, the menu held up and driven by taps (D8), sound, and a
+   Canvas drawer at 60 fps on an emulator and on a Pixel 8 Pro.
 5. **Desktop GPU surface: done.** `make gui` (`vif_gui`): `pkg/window` opens an X
    window and a GLES 2 context through purego and uploads the `glyph.Raster`
    frame whole as one texture ([Platforms](multi-platform.md) §8). On software GL
@@ -399,16 +399,17 @@ Each later phase is one PR.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
    epoch, the maze payload and the store index are done.
 
-**Where this push stops.** It ends when a phone plays the embedded scenario end
-to end by touch: the cell scaled to the screen's density so the grid is legible,
-a finger's drag moving the cursor across cells and a held one repeating fire, the
-held-tap menu for the commands and Back for Escape, the APK built by `make
-android`; and the desktop window measured once on a hardware driver. Past that
-line everything is a todo item, not this push: the GLES drawer (only if a device
-misses 60 fps), a release-signed APK, the window's native Wayland, HiDPI scale and
-paste, the hosts' key tables lifted into the terminal module, the position store
-out of the engine, bots on a phone. The todo list is pruned before the next push
-starts.
+**Where this push stopped: reached.** A phone plays the embedded scenario end to
+end by touch from the APK `make android` builds: a legible cell sized by the
+density, a finger's drag moving the cursor and a held one repeating fire, the
+menu by taps and Back for Escape; and the desktop window is measured on a
+hardware driver. The hosts' key tables went into the terminal module
+(`terminal.ControlKey`) on the way. Past the line everything is a todo item: the
+GLES drawer and the window's quad path (each only if a device misses 60 fps), a
+menu Android draws itself, the system keyboard's composed text, a release-signed
+APK, the window's native Wayland, HiDPI scale from the screen and paste, the
+position store out of the engine, bots on a phone. The todo list is pruned before
+the next push starts.
 
 ## 8. Geometry flexibility: cell aspect and the position store
 
