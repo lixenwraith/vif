@@ -138,20 +138,6 @@ schema bump); or give the registry per-island populations for it to select.
 showing (reproduced). Add a wall mask bit (`0x80` is free) and set it in `Render`, or
 set `MaskNone` explicitly if walls are meant to stay bright.
 
-### Read `_duration` keys as nanoseconds in the overlay
-
-- Priority: P0, to review
-- Affected files: `internal/status/format.go`
-
-`status.IntUnit` matches `.duration` as a suffix (`internal/status/format.go:17`,
-commented "also matches .max_duration"), but `fsm.max_duration` and
-`fsm.<region>.max_duration` end in `_duration`, so the telemetry overlay and pinned
-cards show their nanoseconds as plain counts, against the units table in
-[Logging and diagnostics](logging-and-diagnostics.md) §6. The status bar converts
-the summary itself, and vif-log's `DurationUnit` already matches the `_duration`
-segment. Match the trailing `.` or `_` segment as vif-log does, or add `_duration`
-to `intUnits`; either way correct the comment at `format.go:17`.
-
 ### Share the scope parser with the novlog build
 
 - Priority: P0, to review
