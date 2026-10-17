@@ -149,6 +149,8 @@ var topics = []topicDef{
 				Desc: "Pin or unpin the selected card; pins lead the overlay, and a new pin turns the HUD on"},
 			{Actions: []string{"overlay_page_up", "overlay_page_down"}, Scope: input.SectionOverlay, Desc: "Scroll a page"},
 			{Actions: []string{"overlay_close"}, Scope: input.SectionOverlay, All: true, Desc: "Close the overlay"},
+			{Actions: []string{"toggle_audio_cycle"}, Scope: input.SectionOverlay, Desc: "Cycle audio, as outside an overlay"},
+			{Actions: []string{"quit"}, Scope: input.SectionOverlay, All: true, Desc: "Quit the game, as outside an overlay"},
 		},
 	},
 	{

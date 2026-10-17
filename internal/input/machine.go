@@ -685,6 +685,11 @@ func (m *Machine) processCommand(ev terminal.Event) *Intent {
 func (m *Machine) processOverlay(ev terminal.Event) *Intent {
 	// Handle special keys
 	if ev.Key != terminal.KeyRune {
+		// Macro stop (Ctrl+@) works in all modes
+		if ev.Key == terminal.KeyCtrlSpace {
+			return &Intent{Type: IntentMacroStopAll}
+		}
+
 		if entry, ok := m.keyTable.OverlayKeys[ev.Key]; ok {
 			return m.handleOverlayEntry(entry)
 		}

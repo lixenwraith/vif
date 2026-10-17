@@ -17,23 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Decide which control keys work in an overlay
-
-- Priority: P0, to review
-- Affected files: `internal/input/machine.go`, `internal/asset/input/keymap.toml`,
-  `internal/help/topics.go`, `doc/input-and-modes.md`
-
-`processOverlay` (`internal/input/machine.go:708-723`) reads only the overlay tables:
-it lacks the Ctrl-Space stop the other modes handle (`:220`, `:627`, `:666`, `:689`),
-and `[overlay_keys]` (`keymap.toml:123-134`) binds no `ctrl_q`, `ctrl_c` or
-`ctrl_s`. In help, telemetry or the configuration menu these keys do nothing, yet
-while the telemetry filter is typed, which edits in Search mode
-(`internal/mode/overlay.go:98-105`), they quit, mute and stop, and the help says
-Ctrl+Space works "from any mode" (`topics.go:125`). Options: bind the three keys,
-add the Ctrl-Space branch and update [Input and modes](input-and-modes.md) §4 and
-§6, which say overlay navigation ignores these keys; or keep overlays navigation-only
-and correct the help line.
-
 ### Decide whether loads refuse unknown keys and `op` values
 
 - Priority: P0, to review

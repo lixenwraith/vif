@@ -126,8 +126,8 @@ cell shows the keys of a pending sequence, else the last one completed.
 
 | Key | Action |
 |---|---|
-| `Ctrl-Q`, `Ctrl-C` | Quit; `[overlay_keys]` does not bind them, so overlay navigation ignores them. |
-| `Ctrl-S` | Cycle audio mute state; overlay navigation ignores it too. |
+| `Ctrl-Q`, `Ctrl-C` | Quit, from any mode; `[overlay_keys]` binds them too. |
+| `Ctrl-S` | Cycle audio mute state, from any mode. |
 | `Ctrl-G` | Open or close the [configuration menu](config-menu.md), from any mode; a left press held on the status bar opens it too (§7). |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
 | `Esc` | Cancel pending input, flash the ping grid in Normal, or return to Normal (§2). |
@@ -208,7 +208,7 @@ so a macro replays Normal, Insert, Visual and Search actions only.
 | `@@a` | Play it indefinitely. |
 | `@@@` | Play every non-empty register indefinitely. |
 | `q` + playing register | Stop that register's playback and record over it. |
-| `q@` or `Ctrl-@` (`Ctrl-Space`) | Stop all playback; `Ctrl-@` works in every mode but Overlay. |
+| `q@` or `Ctrl-@` (`Ctrl-Space`) | Stop all playback; `Ctrl-@` works in every mode, overlays included. |
 
 Registers are lowercase `a` through `z`. Different registers can play
 concurrently. The 16 ms input ticker polls playback; each active register emits
