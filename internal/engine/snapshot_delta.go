@@ -272,6 +272,9 @@ func reconcileStore[T any](s *Store[T], entries []StoreEntry[T]) {
 	for _, en := range entries {
 		s.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
+	if s.bit == WallBit { // an overwrite can rewrite a BlockMask
+		s.world.Positions.WallsChanged()
+	}
 }
 
 // reconcilePositions is reconcileStore for the placement store, which has its own

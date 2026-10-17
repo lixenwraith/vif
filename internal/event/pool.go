@@ -1,6 +1,7 @@
 package event
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -66,6 +67,28 @@ func ReleaseExplosionBatchRequest(p *ExplosionBatchRequestPayload) {
 	// A recycled crossing ID would seed the next user's knockback from another run.
 	*p = ExplosionBatchRequestPayload{Centers: p.Centers[:0]}
 	explosionBatchRequestPool.Put(p)
+}
+
+// --- Wall batch spawn pool ---
+
+var wallBatchSpawnPool = sync.Pool{
+	New: func() any { return &WallBatchSpawnRequestPayload{} },
+}
+
+// AcquireWallBatchSpawn returns a pooled payload at its zero value, with room for n cells
+func AcquireWallBatchSpawn(n int) *WallBatchSpawnRequestPayload {
+	p := wallBatchSpawnPool.Get().(*WallBatchSpawnRequestPayload)
+	p.Cells = slices.Grow(p.Cells, n)
+	return p
+}
+
+// ReleaseWallBatchSpawn returns payload to pool
+func ReleaseWallBatchSpawn(p *WallBatchSpawnRequestPayload) {
+	if p == nil {
+		return
+	}
+	*p = WallBatchSpawnRequestPayload{Cells: p.Cells[:0]}
+	wallBatchSpawnPool.Put(p)
 }
 
 // ReleaseDeferredPayload returns a pooled payload after the barrier encoded it.

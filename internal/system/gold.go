@@ -290,7 +290,7 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// 3. Batch position commit (anchor NOT in grid - no collision at x,y)
-	batch := s.world.Positions.BeginBatch()
+	batch := s.world.Positions.BeginBatch(len(entities))
 	for _, ed := range entities {
 		batch.Add(ed.entity, ed.pos)
 	}

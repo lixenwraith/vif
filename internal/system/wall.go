@@ -345,8 +345,11 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 	}
 
 	// 4. Create entities, set components, batch positions
-	members := make([]component.MemberEntry, 0, len(resolved))
-	posBatch := s.world.Positions.BeginBatch()
+	var members []component.MemberEntry
+	if payload.Composite {
+		members = make([]component.MemberEntry, 0, len(resolved))
+	}
+	posBatch := s.world.Positions.BeginBatch(len(resolved))
 
 	result.minX, result.minY = config.MapWidth, config.MapHeight
 	result.maxX, result.maxY = 0, 0
@@ -630,7 +633,10 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 		}
 
 		wasBlocking := wall.BlockMask != component.WallBlockNone
-		wall.BlockMask = payload.BlockMask
+		if wall.BlockMask != payload.BlockMask {
+			wall.BlockMask = payload.BlockMask
+			s.world.Positions.WallsChanged()
+		}
 
 		if !wasBlocking && payload.BlockMask != component.WallBlockNone {
 			s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: pos.X, Y: pos.Y})
@@ -873,9 +879,16 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		}
 	}
 
-	// Collect all wall cell entries from maze grid
-	cells := make([]component.WallCellDef, 0, mazeWidth*mazeHeight)
-
+	walls := 0
+	for _, row := range result.Grid {
+		for _, isWall := range row {
+			if isWall {
+				walls++
+			}
+		}
+	}
+	batch := event.AcquireWallBatchSpawn(walls * payload.CellWidth * payload.CellHeight)
+	defer event.ReleaseWallBatchSpawn(batch)
 	for my, row := range result.Grid {
 		for mx, isWall := range row {
 			if !isWall {
@@ -886,7 +899,7 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 
 			for dy := range payload.CellHeight {
 				for dx := range payload.CellWidth {
-					cells = append(cells, component.WallCellDef{
+					batch.Cells = append(batch.Cells, component.WallCellDef{
 						OffsetX: bx + dx,
 						OffsetY: by + dy,
 						WallVisualConfig: component.WallVisualConfig{
@@ -902,15 +915,9 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		}
 	}
 
-	// Batch spawn with anchor at origin (offsets are absolute positions)
-	s.executeBatchSpawn(&event.WallBatchSpawnRequestPayload{
-		X:             0,
-		Y:             0,
-		BlockMask:     payload.BlockMask,
-		BoxStyle:      vis.BoxStyle,
-		CollisionMode: payload.CollisionMode,
-		Cells:         cells,
-	})
+	// Anchored at the origin: the offsets are absolute positions
+	batch.BlockMask, batch.BoxStyle, batch.CollisionMode = payload.BlockMask, vis.BoxStyle, payload.CollisionMode
+	s.executeBatchSpawn(batch)
 }
 
 // computeBoxCharsInArea recomputes box-drawing characters for walls in rectangular area

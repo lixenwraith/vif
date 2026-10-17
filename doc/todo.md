@@ -761,17 +761,6 @@ full field's away from walls; then a second Go instance in another worker comput
 fields at a fixed lead, at the cost of a second runtime and of copying the grid in
 and the field out.
 
-### Prove the wall grid current by an epoch
-
-- Priority: P2
-- Affected files: `internal/engine/position.go`, `internal/system/wall.go`
-
-`wallGrid.current` walks every wall entity to prove the cached grid current: 10 %
-of td's tick CPU flat, 18 % through `WallTest`, with 50,000 walls and two callers a
-tick. The scan exists because `BlockMask` is written in place once
-(`handleMaskChange`). Bump a wall epoch there, on store mutation and on a wall placement, and
-`current` becomes one comparison ([Engine decoupling](engine-decoupling.md) §6).
-
 ### Index a store by a per-domain slice
 
 - Priority: P3
@@ -781,16 +770,6 @@ Map lookups in the sparse-set index are 24 % of td's tick CPU. Entity IDs are
 per-domain counters, so a slice per domain indexed by the ID's low bits would make
 the lookup an array read; the idea is noted without analysis, and needs its own
 measurement on `main` as well as `td` ([Engine decoupling](engine-decoupling.md) §6).
-
-### Reuse the maze spawn payload
-
-- Priority: P3
-- Affected files: `internal/system/wall.go`, `internal/event`
-
-A maze spawn builds a 50,000-cell payload and the batch spawn grows four slices:
-145 MB and 118 MB over 22 spawns in the td profile, most of the garbage a level
-costs. Pool the payload's cells as the pooled death and particle payloads are, and
-pre-size the batch from the payload.
 
 ### Export a backend constructor in the terminal module
 

@@ -21,6 +21,9 @@ type Position struct {
 	entities []core.Entity // Dense array for cache-friendly iteration
 	bit      uint64        // Component bit mask
 	walls    []*wallGrid   // WallTest's grid for each mask asked
+	// wallEpoch moves wherever a wall grid's cells can change: a wall placed, moved
+	// or removed here, a wall component added or removed, a BlockMask rewritten.
+	wallEpoch uint64
 
 	statCellSaturations *atomic.Int64
 	statCellOverflows   *atomic.Int64
@@ -112,6 +115,7 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 		if old == pos && p.grid.containsEntityAt(e, old.X, old.Y) {
 			return
 		}
+		p.wallMoved(e)
 		countSaturation = old.X != pos.X || old.Y != pos.Y
 		p.grid.RemoveEntityAt(e, old.X, old.Y)
 		p.dense[i] = pos
@@ -121,6 +125,7 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 		p.entities = append(p.entities, e)
 		p.world.AddComponentMask(e, p.bit)
 		storeAtomicMax(p.statPositionsHWM, int64(len(p.entities)))
+		p.wallMoved(e)
 	}
 	p.setGrid(e, pos.X, pos.Y, countSaturation)
 }
@@ -197,6 +202,7 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 	pos := p.dense[i]
 	p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 	p.removeAt(i)
+	p.wallMoved(e)
 	if len(skipMask) == 0 || !skipMask[0] {
 		p.world.RemoveComponentMask(e, p.bit)
 	}
@@ -216,6 +222,7 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 		pos := p.dense[i]
 		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 		p.removeAt(i)
+		p.wallMoved(e)
 		if clearMask {
 			p.world.RemoveComponentMask(e, p.bit)
 		}
@@ -335,24 +342,28 @@ func (p *Position) WallTest(mask component.WallBlockMask, buf *[]bool) func(x, y
 	}
 }
 
-// wallGrid is the cells HasBlockingWallAt answers true for under one mask, beside
-// what they were read from: the wall store's entities and masks in its order, and
-// each admitted wall's position slot and value. Membership of an unmoved wall changes
-// only where the grid's epoch moves, so while all of these stand the cells are what a
-// rebuild gives; an admitted wall that marked nothing is checked anew each time.
-type wallGrid struct {
-	mask  component.WallBlockMask
-	w, h  int
-	epoch uint64
-	walls []core.Entity
-	masks []component.WallBlockMask
-	slot  []int32 // position slot of each admitted placed wall, -1 for any other
-	at    []component.PositionComponent
-	loose []core.Entity
-	cells []bool
+// WallsChanged moves the wall epoch. A writer no store sees calls it: a BlockMask
+// set in place, or a wall component overwritten.
+func (p *Position) WallsChanged() { p.wallEpoch++ }
+
+// wallMoved moves the wall epoch when e, a wall a grid can hold, changed placement.
+// The mask, not the wall store, names a wall: a destroy empties the store first.
+func (p *Position) wallMoved(e core.Entity) {
+	if e.Domain() != core.DomainPlayer && p.world != nil && p.world.componentMask[e]&WallBit != 0 {
+		p.wallEpoch++
+	}
 }
 
-// wallGridFor returns mask's grid, rebuilt only when a wall it read from moved.
+// wallGrid is the cells HasBlockingWallAt answers true for under one mask, at the
+// bounds, wall epoch and grid generation it was built at.
+type wallGrid struct {
+	mask         component.WallBlockMask
+	w, h         int
+	epoch, built uint64
+	cells        []bool
+}
+
+// wallGridFor returns mask's grid, rebuilt only when the walls or the grid changed.
 func (p *Position) wallGridFor(mask component.WallBlockMask) *wallGrid {
 	if p.world == nil {
 		return &wallGrid{}
@@ -368,54 +379,22 @@ func (p *Position) wallGridFor(mask component.WallBlockMask) *wallGrid {
 		p.walls = append(p.walls, g)
 	}
 	w, h := p.wallBounds()
-	if g.current(p, w, h) {
+	if g.w == w && g.h == h && g.epoch == p.wallEpoch && g.built == p.grid.generation {
 		return g
 	}
 	ws := p.world.Components.Wall
-	n := len(ws.entities)
-	g.w, g.h, g.epoch = w, h, p.grid.epoch
-	g.walls = append(g.walls[:0], ws.entities...)
-	g.masks, g.slot, g.at = sized(g.masks, n, n), sized(g.slot, n, n), sized(g.at, n, n)
-	g.loose, g.cells = g.loose[:0], sized(g.cells, w*h, w*h)
+	g.w, g.h, g.epoch, g.built = w, h, p.wallEpoch, p.grid.generation
+	g.cells = sized(g.cells, w*h, w*h)
 	clear(g.cells)
-	for i, e := range g.walls {
-		g.masks[i], g.slot[i] = ws.dense[i].BlockMask, -1
-		if e.Domain() == core.DomainPlayer || (mask != 0 && g.masks[i]&mask == 0) {
+	for i, e := range ws.entities {
+		if e.Domain() == core.DomainPlayer || (mask != 0 && ws.dense[i].BlockMask&mask == 0) {
 			continue
-		}
-		s, ok := p.index[e]
-		if ok {
-			g.slot[i], g.at[i] = s, p.dense[s]
 		}
 		if cell, held := p.wallCell(e, w, h); held {
 			g.cells[cell] = true
-		} else if !ok || g.at[i].X >= 0 && g.at[i].X < w && g.at[i].Y >= 0 && g.at[i].Y < h {
-			g.loose = append(g.loose, e)
 		}
 	}
 	return g
-}
-
-// current reports whether g still holds what it was built from.
-func (g *wallGrid) current(p *Position, w, h int) bool {
-	ws := p.world.Components.Wall
-	if g.w != w || g.h != h || g.epoch != p.grid.epoch || len(ws.entities) != len(g.walls) {
-		return false
-	}
-	for i, e := range ws.entities {
-		if e != g.walls[i] || ws.dense[i].BlockMask != g.masks[i] {
-			return false
-		}
-		if s := g.slot[i]; s >= 0 && (int(s) >= len(p.entities) || p.entities[s] != e || p.dense[s] != g.at[i]) {
-			return false
-		}
-	}
-	for _, e := range g.loose {
-		if _, held := p.wallCell(e, w, h); held {
-			return false
-		}
-	}
-	return true
 }
 
 // wallBounds is the part of the grid a wall test covers.
@@ -667,6 +646,7 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 	old := p.dense[i]
 	p.grid.RemoveEntityAt(e, old.X, old.Y)
 	p.dense[i] = newPos
+	p.wallMoved(e)
 	// Explicit ignore for OOB and Cell full
 	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
 }
@@ -684,6 +664,7 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 			old := p.dense[i]
 			p.grid.RemoveEntityAt(e, old.X, old.Y)
 			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
+			p.wallMoved(e)
 		}
 	}
 	for _, e := range entities {
@@ -728,10 +709,11 @@ type positionAddition struct {
 	pos    component.PositionComponent
 }
 
-func (p *Position) BeginBatch() *PositionBatch {
+// BeginBatch starts a batch with room for n additions.
+func (p *Position) BeginBatch(n int) *PositionBatch {
 	return &PositionBatch{
 		store:     p,
-		additions: make([]positionAddition, 0),
+		additions: make([]positionAddition, 0, n),
 	}
 }
 
