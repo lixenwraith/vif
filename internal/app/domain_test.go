@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/lixenwraith/vif/internal/content"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -569,15 +570,16 @@ func TestParticipantsKeepTheirOwnCorpus(t *testing.T) {
 	if err := os.MkdirAll(lone, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	entries, err := os.ReadDir(corpusDir)
-	if err != nil || len(entries) < 2 {
-		t.Skipf("corpus %s holds fewer than two files", corpusDir)
+	// The first file the loader reads; the directory also holds the corpus's licence
+	texts, _ := filepath.Glob(filepath.Join(corpusDir, "*"+content.ExtText))
+	if len(texts) < 2 {
+		t.Skipf("corpus %s holds fewer than two text files", corpusDir)
 	}
-	data, err := os.ReadFile(filepath.Join(corpusDir, entries[0].Name()))
+	data, err := os.ReadFile(texts[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(lone, entries[0].Name()), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(lone, filepath.Base(texts[0])), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
