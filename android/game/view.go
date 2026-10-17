@@ -19,8 +19,8 @@ import (
 // waits, since the poster is Android's UI thread
 const eventQueue = 256
 
-// cellDP is a cell's height in dp, never under the atlas's own pixels: 16x32 pixels
-// on a 420 dpi phone, which shows a map half again as wide as a 9x18 dp cell does
+// cellDP is a cell's height in dp, in whole pixels at the atlas's aspect and never
+// under its own: 16x32 on a 420 dpi phone, half again as much map as 9x18 dp shows
 const cellDP = 12
 
 // font is the atlas as a cell drawer takes it: one texture, a slot a glyph
@@ -81,8 +81,8 @@ type view struct {
 }
 
 func newView(f *font, raster bool, density float32) *view {
-	h := max(f.atlas.Height, int(math.Round(float64(density)*cellDP)))
-	v := &view{font: f, cellW: max(1, h*f.atlas.Width/f.atlas.Height), cellH: h,
+	w := max(f.atlas.Width, int(math.Round(float64(density)*cellDP*float64(f.atlas.Width)/float64(f.atlas.Height))))
+	v := &view{font: f, cellW: w, cellH: w * f.atlas.Height / f.atlas.Width,
 		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
 	if raster {
 		v.raster = glyph.NewRaster(f.atlas)
