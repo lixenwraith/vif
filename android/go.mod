@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/lixenwraith/color v0.1.3
-	github.com/lixenwraith/terminal v0.4.0
+	github.com/lixenwraith/terminal v0.4.1
 	github.com/lixenwraith/vif v0.0.0
 )
 
