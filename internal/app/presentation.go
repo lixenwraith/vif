@@ -26,6 +26,10 @@ type Presentation interface {
 	SetPointerMode(enabled, motion bool)
 }
 
+// awayPresentation is one its player can leave without quitting, an app sent to the
+// background: it reports leaving and returning, and a solo run pauses meanwhile
+type awayPresentation interface{ Away() <-chan bool }
+
 // Host is what a platform supplies to a run. A nil field is the build's own: the
 // terminal, and speakers reached by a backend's name.
 type Host struct {
