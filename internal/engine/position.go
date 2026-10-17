@@ -16,7 +16,7 @@ import (
 type Position struct {
 	world    *World
 	grid     *SpatialGrid
-	index    map[core.Entity]int32
+	index    sparseIndex
 	dense    []component.PositionComponent
 	entities []core.Entity // Dense array for cache-friendly iteration
 	bit      uint64        // Component bit mask
@@ -44,7 +44,6 @@ func NewPosition(w *World, bit uint64) *Position {
 	// The grid is sized by GameContext to the map it indexes: a ceiling-sized one
 	// costs 32 MB per world, which an instance per bot multiplies.
 	return &Position{
-		index:    make(map[core.Entity]int32, 256),
 		dense:    make([]component.PositionComponent, 0, 64),
 		entities: make([]core.Entity, 0, 64),
 		grid:     NewSpatialGrid(0, 0),
@@ -110,7 +109,7 @@ func (p *Position) PublishTelemetry() {
 // insertion. Multiple entities at one position are allowed, overflow silently ignored.
 func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	countSaturation := true
-	if i, ok := p.index[e]; ok {
+	if i, ok := p.index.get(e); ok {
 		old := p.dense[i]
 		if old == pos && p.grid.containsEntityAt(e, old.X, old.Y) {
 			return
@@ -120,7 +119,7 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 		p.grid.RemoveEntityAt(e, old.X, old.Y)
 		p.dense[i] = pos
 	} else {
-		p.index[e] = int32(len(p.dense))
+		p.index.set(e, int32(len(p.dense)))
 		p.dense = append(p.dense, pos)
 		p.entities = append(p.entities, e)
 		p.world.AddComponentMask(e, p.bit)
@@ -172,7 +171,7 @@ func storeAtomicMax(dst *atomic.Int64, value int64) {
 
 // GetPosition retrieves a position component
 func (p *Position) GetPosition(e core.Entity) (component.PositionComponent, bool) {
-	if i, ok := p.index[e]; ok {
+	if i, ok := p.index.get(e); ok {
 		return p.dense[i], true
 	}
 	return component.PositionComponent{}, false
@@ -186,16 +185,16 @@ func (p *Position) removeAt(i int32) {
 		moved := p.entities[last]
 		p.dense[i] = p.dense[last]
 		p.entities[i] = moved
-		p.index[moved] = i
+		p.index.set(moved, i)
 	}
 	p.dense = p.dense[:last]
 	p.entities = p.entities[:last]
-	delete(p.index, e)
+	p.index.del(e)
 }
 
 // RemoveEntity deletes an entity from the store and grid. O(1)
 func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
-	i, ok := p.index[e]
+	i, ok := p.index.get(e)
 	if !ok {
 		return
 	}
@@ -210,12 +209,12 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 
 // RemoveBatch deletes multiple entities. O(m)
 func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
-	if len(p.index) == 0 {
+	if len(p.entities) == 0 {
 		return
 	}
 	clearMask := len(skipMask) == 0 || !skipMask[0]
 	for _, e := range entities {
-		i, ok := p.index[e]
+		i, ok := p.index.get(e)
 		if !ok {
 			continue
 		}
@@ -287,7 +286,7 @@ func (p *Position) ResizeGrid(width, height int) {
 
 // HasPosition checks if an entity has a position component
 func (p *Position) HasPosition(e core.Entity) bool {
-	_, ok := p.index[e]
+	_, ok := p.index.get(e)
 	return ok
 }
 
@@ -314,7 +313,7 @@ func (p *Position) CountEntities() int {
 // ClearAllComponents removes all data, retaining capacity
 func (p *Position) ClearAllComponents() {
 	// Component mask will be removed centrally by wipeAll()
-	clear(p.index)
+	p.index.clear()
 	p.dense = p.dense[:0]
 	p.entities = p.entities[:0]
 	p.grid.Clear()
@@ -639,7 +638,7 @@ func (p *Position) HasLineOfSightUnsafe(x0, y0, x1, y1 int, mask component.WallB
 // Move updates the position of an existing entity; it is a no-op when the entity
 // has no position. Position access is serialized by World.updateMutex.
 func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
-	i, ok := p.index[e]
+	i, ok := p.index.get(e)
 	if !ok {
 		return
 	}
@@ -660,7 +659,7 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 		return unplaced
 	}
 	for _, e := range entities {
-		if i, ok := p.index[e]; ok {
+		if i, ok := p.index.get(e); ok {
 			old := p.dense[i]
 			p.grid.RemoveEntityAt(e, old.X, old.Y)
 			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
@@ -668,7 +667,7 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 		}
 	}
 	for _, e := range entities {
-		if i, ok := p.index[e]; ok && !p.setGrid(e, p.dense[i].X, p.dense[i].Y, true) {
+		if i, ok := p.index.get(e); ok && !p.setGrid(e, p.dense[i].X, p.dense[i].Y, true) {
 			unplaced = append(unplaced, e)
 		}
 	}

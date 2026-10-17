@@ -349,7 +349,8 @@ Decided after the first review of this document.
 - **D6, Android drawing: `SurfaceView` and `Canvas` for the pilot**, behind a
   Java-side cell drawer interface so a GLES drawer replaces it without touching
   the Go side; GLES if the pilot misses 60 fps on a target device.
-- **D7, store index: noted** as a todo item without further analysis.
+- **D7, store index: paged by entity ID** (§6), with a flat slice per domain
+  rejected: it is sized by the highest ID a store has held, 4.8 MB on td.
 - **D8, menu: keep `tui`.** The overlay renderer already adapts forms into cells;
   the configuration menu stays as it is, and Android gets a different
   presentation (a radial menu summoned by holding a tap), a later task with a
