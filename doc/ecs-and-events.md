@@ -127,7 +127,9 @@ flowchart LR
 The position layer provides point and area queries, out-of-bounds checks, wall
 masks, line-of-sight traversal, and free-space searches using patterns or a
 spiral. `WallTest` serves a derivation that probes every cell from a per-mask
-wall grid rebuilt only when the walls change, `Shift` moves a rigid group without
+wall grid rebuilt only when the wall epoch or the grid's generation moved: a
+wall's placement and its store membership move the epoch, and a `BlockMask`
+written in place calls `Position.WallsChanged`. `Shift` moves a rigid group without
 contending with itself for a cell, and `TopGlyphAt` names the one glyph per cell
 that is drawn and typed. Reapplying an entity's existing cell is idempotent
 when the grid already contains it, avoiding remove/reinsert churn for composite

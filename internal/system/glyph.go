@@ -358,7 +358,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		s.buffers.Observe(0, len(s.placement))
 
 		// 2. Batch position validation and commit
-		batch := s.world.Positions.BeginBatch()
+		batch := s.world.Positions.BeginBatch(len(s.placement))
 		for _, gp := range s.placement {
 			batch.Add(gp.entity, gp.pos)
 		}
