@@ -155,7 +155,7 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 		radiusX = parameter.TowerDefaultRadiusX
 	}
 	if radiusY <= 0 {
-		radiusY = parameter.TowerDefaultRadiusY
+		radiusY = s.world.Resources.Config.CellAspect.YInt(parameter.TowerDefaultRadiusY)
 	}
 
 	minHP := payload.MinHP

@@ -44,6 +44,7 @@ type EmberPainter struct {
 	params     visual.EmberParams
 	colors     emberColors
 	gameTime   float64
+	aspect     vmath.Aspect
 	radiusX    float64
 	radiusY    float64
 	blendScale float64
@@ -67,6 +68,7 @@ type EmberPainter struct {
 type EmberRenderer struct {
 	gameCtx   *engine.GameContext
 	colorMode terminal.ColorMode
+	aspect    vmath.Aspect
 	painters  [parameter.MaxPlayers]*EmberPainter
 }
 
@@ -75,12 +77,13 @@ func NewEmberRenderer(gameCtx *engine.GameContext) *EmberRenderer {
 	return &EmberRenderer{
 		gameCtx:   gameCtx,
 		colorMode: gameCtx.World.Resources.Config.ColorMode,
+		aspect:    gameCtx.World.Resources.Config.CellAspect,
 	}
 }
 
 func (r *EmberRenderer) painter(slot int) *EmberPainter {
 	if r.painters[slot] == nil {
-		r.painters[slot] = NewEmberPainter(r.colorMode)
+		r.painters[slot] = NewEmberPainter(r.colorMode, r.aspect)
 	}
 	return r.painters[slot]
 }
@@ -153,11 +156,12 @@ func interpolateEmberColors(t float64) emberColors {
 	}
 }
 
-// NewEmberPainter creates a painter for the specified color mode
-func NewEmberPainter(colorMode terminal.ColorMode) *EmberPainter {
+// NewEmberPainter creates a painter for the specified color mode and cell aspect
+func NewEmberPainter(colorMode terminal.ColorMode, aspect vmath.Aspect) *EmberPainter {
 	p := &EmberPainter{
+		aspect:   aspect,
 		radiusX:  visual.EmberRadiusX,
-		radiusY:  visual.EmberRadiusY,
+		radiusY:  aspect.Y(visual.EmberRadiusY),
 		lastHeat: -1, // Force cache rebuild on first frame
 	}
 	if colorMode == terminal.ColorMode256 {
@@ -189,7 +193,7 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 		theta := float64(i) * vmath.TwoPi / 256.0
 		disp := p.computeJaggedDisplacement(theta, timePhase)
 		adjRx := p.radiusX + disp
-		adjRy := p.radiusY + disp/2.0
+		adjRy := p.radiusY + p.aspect.FromCircular(disp)
 		invRxSq, invRySq := vmath.EllipseInvRadiiSq(adjRx, adjRy)
 		p.invRadiiSqLUT[i].invRxSq = invRxSq
 		p.invRadiiSqLUT[i].invRySq = invRySq

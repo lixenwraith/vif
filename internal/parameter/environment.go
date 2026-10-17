@@ -19,10 +19,6 @@ const (
 var DriftLayerFactor = [3]float64{0.25, 0.5, 1}
 
 const (
-	// DriftAspectY scales the row component of a drift, rows being about twice as
-	// tall as columns are wide, so one speed reads the same in every direction.
-	DriftAspectY = 0.5
-
 	// DriftMaxSpeed caps a drift start in cells/second, bounding a layer's steps
 	// per tick.
 	DriftMaxSpeed = 20.0

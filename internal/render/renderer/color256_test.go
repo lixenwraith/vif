@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // TestEmber256WearsTheHeatBarLeadColour: the solid 256-colour ember takes the
@@ -57,10 +58,10 @@ func TestShield256RimClosesOnEveryAxis(t *testing.T) {
 	rc := render.RenderContext{ViewportWidth: w, ViewportHeight: h, MapWidth: w, MapHeight: h}
 	p := NewShieldPainter(terminal.ColorMode256)
 
-	for shieldType := range visual.ShieldConfigs {
-		cfg := &visual.ShieldConfigs[shieldType]
+	for shieldType := range component.ShieldTypeCount {
+		cfg := visual.ShieldConfigFor(shieldType, vmath.RefAspect)
 		buf := render.NewRenderBuffer(terminal.ColorMode256, w, h)
-		p.Paint(buf, rc, cx, cy, ShieldStyle{Config: cfg, BlendScale: 1, Palette256: cfg.Palette256, SkipX: -1, SkipY: -1})
+		p.Paint(buf, rc, cx, cy, ShieldStyle{Config: &cfg, BlendScale: 1, Palette256: cfg.Palette256, SkipX: -1, SkipY: -1})
 
 		for _, dir := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
 			crossed := false

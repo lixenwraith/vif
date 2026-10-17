@@ -85,7 +85,7 @@ func stormGlow256(buf *render.RenderBuffer, screenX, screenY int, _ color.RGB, a
 
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 	rx := parameter.StormCircleRadiusX
-	ry := parameter.StormCircleRadiusY
+	ry := gameCtx.World.Resources.Config.CellAspect.Y(parameter.StormCircleRadiusY)
 	invRx := 1.0 / rx
 	invRy := 1.0 / ry
 	surfaceRadiusX := int(rx)

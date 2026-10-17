@@ -6,6 +6,7 @@ import (
 
 	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // QuadrantChars maps 4-bit patterns to Unicode quadrant characters
@@ -56,8 +57,8 @@ type ConvertedImage struct {
 	Height int
 }
 
-// ConvertImage converts an image to terminal cells
-func ConvertImage(img image.Image, targetWidth int, mode RenderMode, colorMode terminal.ColorMode) *ConvertedImage {
+// ConvertImage converts an image to cells of the given aspect
+func ConvertImage(img image.Image, targetWidth int, mode RenderMode, colorMode terminal.ColorMode, aspect vmath.Aspect) *ConvertedImage {
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
@@ -66,15 +67,7 @@ func ConvertImage(img image.Image, targetWidth int, mode RenderMode, colorMode t
 		return &ConvertedImage{Width: 0, Height: 0}
 	}
 
-	aspectRatio := float64(srcH) / float64(srcW)
-	charAspect := 0.5 // terminal char aspect compensation
-
-	outW := targetWidth
-	outH := int(float64(targetWidth) * aspectRatio * charAspect)
-	if outH < 1 {
-		outH = 1
-	}
-
+	outW, outH := CalculateOutputSize(srcW, srcH, targetWidth, aspect)
 	cells := make([]terminal.Cell, outW*outH)
 
 	switch mode {
@@ -91,15 +84,13 @@ func ConvertImage(img image.Image, targetWidth int, mode RenderMode, colorMode t
 	}
 }
 
-// CalculateOutputSize returns output dimensions for given parameters without converting
-func CalculateOutputSize(srcW, srcH, targetWidth int) (outW, outH int) {
+// CalculateOutputSize is the cell grid an image fills at a width, at least one row
+func CalculateOutputSize(srcW, srcH, targetWidth int, aspect vmath.Aspect) (outW, outH int) {
 	if srcW == 0 || srcH == 0 || targetWidth <= 0 {
 		return 0, 0
 	}
-	aspectRatio := float64(srcH) / float64(srcW)
-	outW = targetWidth
-	outH = max(int(float64(targetWidth)*aspectRatio*0.5), outH)
-	return outW, outH
+	imageRatio := float64(srcH) / float64(srcW)
+	return targetWidth, max(int(float64(targetWidth)*imageRatio*float64(aspect)), 1)
 }
 
 func convertBackground(img image.Image, cells []terminal.Cell, outW, outH int, colorMode terminal.ColorMode) {

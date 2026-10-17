@@ -14,6 +14,7 @@ import (
 
 	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // DualModeImage holds both TrueColor and 256-color representations
@@ -46,7 +47,7 @@ const (
 )
 
 // ConvertImageDual converts image to both color modes in single pass
-func ConvertImageDual(img image.Image, targetWidth int, mode RenderMode) *DualModeImage {
+func ConvertImageDual(img image.Image, targetWidth int, mode RenderMode, aspect vmath.Aspect) *DualModeImage {
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
@@ -55,14 +56,7 @@ func ConvertImageDual(img image.Image, targetWidth int, mode RenderMode) *DualMo
 		return &DualModeImage{Width: 0, Height: 0, RenderMode: mode}
 	}
 
-	aspectRatio := float64(srcH) / float64(srcW)
-	charAspect := 0.5
-
-	outW := targetWidth
-	outH := int(float64(targetWidth) * aspectRatio * charAspect)
-	if outH < 1 {
-		outH = 1
-	}
+	outW, outH := CalculateOutputSize(srcW, srcH, targetWidth, aspect)
 
 	cells := make([]DualCell, outW*outH)
 

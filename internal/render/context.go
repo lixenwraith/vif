@@ -1,6 +1,7 @@
 package render
 
 import (
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -37,9 +38,10 @@ type RenderContext struct {
 	MapOffsetX int
 	MapOffsetY int
 
-	// Map dimensions (simulation bounds)
-	MapWidth  int
-	MapHeight int
+	// Map dimensions (simulation bounds) and the cell aspect the geometry runs at
+	MapWidth   int
+	MapHeight  int
+	CellAspect vmath.Aspect
 
 	// Screen dimensions (terminal size)
 	ScreenWidth  int
@@ -75,8 +77,9 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResour
 		MapOffsetX: mapOffsetX,
 		MapOffsetY: mapOffsetY,
 
-		MapWidth:  config.MapWidth,
-		MapHeight: config.MapHeight,
+		MapWidth:   config.MapWidth,
+		MapHeight:  config.MapHeight,
+		CellAspect: config.CellAspect,
 
 		ScreenWidth:  ctx.Width,
 		ScreenHeight: ctx.Height,

@@ -1,17 +1,12 @@
 package parameter
 
-import "github.com/lixenwraith/vif/pkg/vmath"
-
 // Flocking separation
 var (
 	// FlockingSeparationRadiusX is horizontal separation zone (cells)
 	FlockingSeparationRadiusX = 8.0
 
-	// FlockingSeparationRadiusY is vertical separation zone (cells, aspect-corrected)
+	// FlockingSeparationRadiusY is vertical separation zone (cells, at the reference aspect)
 	FlockingSeparationRadiusY = 4.0
-
-	// Pre-computed inverse squared radii for ellipse overlap checks
-	FlockingSeparationInvRxSq, FlockingSeparationInvRySq = vmath.EllipseInvRadiiSq(FlockingSeparationRadiusX, FlockingSeparationRadiusY)
 )
 
 // Explosion field VFX
@@ -26,14 +21,4 @@ var (
 // Missile physics
 var (
 	MissileImpactRadiusSq = MissileImpactRadius * MissileImpactRadius
-)
-
-// Pulse physics
-var (
-	PulseRadiusInvRxSq, PulseRadiusInvRySq = vmath.EllipseInvRadiiSq(PulseRadiusX, PulseRadiusY)
-)
-
-// Pylon collision
-var (
-	PylonCollisionInvRxSq, PylonCollisionInvRySq = vmath.EllipseInvRadiiSq(PylonCollisionRadiusX, PylonCollisionRadiusY)
 )

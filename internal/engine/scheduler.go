@@ -1240,6 +1240,7 @@ func (s *Scheduler) anchorLive(session uint64) event.AnchorLive {
 		MapWidth:      cfg.MapWidth,
 		MapHeight:     cfg.MapHeight,
 		CropOnResize:  cfg.CropOnResize,
+		CellAspect:    float64(cfg.CellAspect),
 		SessionShared: s.world.SessionShared(),
 		Slot:          s.world.Resources.Player.LocalSlot(),
 	}
@@ -1266,6 +1267,7 @@ func (s *Scheduler) processTick() {
 		screenW, screenH int       // terminal dims for the anchor, derived under the lock
 		mapW, mapH       int       // D-14 map latch for the anchor, read under the lock
 		cropOnResize     bool
+		aspect           float64
 		sessionShared    bool  // D-14 crop admissibility, which a reproduction adopts
 		slot             uint8 // local roster slot for the anchor, read under the lock
 		ticks            uint64
@@ -1414,6 +1416,7 @@ func (s *Scheduler) processTick() {
 		cfg := s.world.Resources.Config
 		screenW, screenH = ScreenSize(cfg)
 		mapW, mapH, cropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
+		aspect = float64(cfg.CellAspect)
 		sessionShared = s.world.SessionShared()
 		slot = s.world.Resources.Player.LocalSlot()
 	})
@@ -1454,6 +1457,7 @@ func (s *Scheduler) processTick() {
 			MapWidth:      mapW,
 			MapHeight:     mapH,
 			CropOnResize:  cropOnResize,
+			CellAspect:    aspect,
 			SessionShared: sessionShared,
 			Slot:          slot,
 		})

@@ -196,6 +196,7 @@ type emberTransitionState struct {
 type ShieldRenderer struct {
 	gameCtx *engine.GameContext
 	painter *ShieldPainter
+	configs [component.ShieldTypeCount]visual.ShieldConfig // at the cell aspect
 
 	// Per-entity ember transition tracking (keyed by entity)
 	emberTransitions map[core.Entity]*emberTransitionState
@@ -203,11 +204,15 @@ type ShieldRenderer struct {
 
 // NewShieldRenderer creates the cursor shield system renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
-	return &ShieldRenderer{
+	r := &ShieldRenderer{
 		gameCtx:          gameCtx,
 		painter:          NewShieldPainter(gameCtx.World.Resources.Config.ColorMode),
 		emberTransitions: make(map[core.Entity]*emberTransitionState),
 	}
+	for t := range r.configs {
+		r.configs[t] = visual.ShieldConfigFor(component.ShieldType(t), gameCtx.World.Resources.Config.CellAspect)
+	}
+	return r
 }
 
 // Render draws all active player shields
@@ -259,7 +264,7 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 		return
 	}
 
-	cfg := &visual.ShieldConfigs[shieldComp.Type]
+	cfg := &r.configs[shieldComp.Type]
 	style := ShieldStyle{
 		Config:     cfg,
 		BlendScale: 1,

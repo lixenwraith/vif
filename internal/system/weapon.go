@@ -493,7 +493,7 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 		OrbitAngle:   0,
 		TargetAngle:  0,
 		OrbitRadiusX: parameter.OrbOrbitRadiusX,
-		OrbitRadiusY: parameter.OrbOrbitRadiusY,
+		OrbitRadiusY: s.world.Resources.Config.CellAspect.Y(parameter.OrbOrbitRadiusY),
 		OrbitSpeed:   parameter.OrbOrbitSpeed,
 	}
 
@@ -945,14 +945,16 @@ func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack componen
 // firePulse bursts at the emitter cell when a target is inside the ellipse; a
 // charged burst's artifact says so, and the profile's charged chain follows it
 func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.CombatAttackType, charged bool) bool {
-	targets := FindTargetsInEllipse(s.world, x, y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, engine.ScopeBoth, cursor)
+	aspect := s.world.Resources.Config.CellAspect
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.PulseRadiusX, aspect.Y(parameter.PulseRadiusY))
+	targets := FindTargetsInEllipse(s.world, x, y, invRxSq, invRySq, engine.ScopeBoth, cursor)
 	if len(targets) == 0 {
 		return false
 	}
 
 	// Resolve player targets here; shared targets are re-derived from the crossing geometry.
 	var pulse blastArea
-	pulse.resetOne(x, y, parameter.PulseRadiusX)
+	pulse.resetOne(x, y, parameter.PulseRadiusX, aspect)
 	strikePlayerTargets(s.world, cursor, &pulse, attack, charged)
 	s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 		Entity:  cursor,

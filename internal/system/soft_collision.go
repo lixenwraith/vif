@@ -83,6 +83,10 @@ func NewSoftCollisionSystem(world *engine.World) engine.System {
 
 // initMatrix populates the collision rule matrix
 func (s *SoftCollisionSystem) initMatrix() {
+	aspect := s.world.Resources.Config.CellAspect
+	stormInvRx, stormInvRy := vmath.EllipseInvRadiiSq(parameter.StormCircleRadiusX, aspect.Y(parameter.StormCircleRadiusY))
+	pylonInvRx, pylonInvRy := vmath.EllipseInvRadiiSq(parameter.PylonCollisionRadiusX, aspect.Y(parameter.PylonCollisionRadiusY))
+
 	// Swarm pushes Swarm (bidirectional via separate entries)
 	s.matrix[component.SpeciesSwarm][component.SpeciesSwarm] = &SoftCollisionRule{
 		Profile:     &profile.SoftSwarmToSwarm,
@@ -114,29 +118,29 @@ func (s *SoftCollisionSystem) initMatrix() {
 	// Storm pushes Swarm (reuse quasar profile per existing code)
 	s.matrix[component.SpeciesStorm][component.SpeciesSwarm] = &SoftCollisionRule{
 		Profile:     &profile.SoftQuasarToSwarm,
-		SourceInvRx: parameter.StormCircleCollisionInvRxSq,
-		SourceInvRy: parameter.StormCircleCollisionInvRySq,
+		SourceInvRx: stormInvRx,
+		SourceInvRy: stormInvRy,
 	}
 
 	// Storm pushes Quasar (reuse swarm-to-quasar profile per existing code)
 	s.matrix[component.SpeciesStorm][component.SpeciesQuasar] = &SoftCollisionRule{
 		Profile:     &profile.SoftSwarmToQuasar,
-		SourceInvRx: parameter.StormCircleCollisionInvRxSq,
-		SourceInvRy: parameter.StormCircleCollisionInvRySq,
+		SourceInvRx: stormInvRx,
+		SourceInvRy: stormInvRy,
 	}
 
 	// Pylon pushes Swarm
 	s.matrix[component.SpeciesPylon][component.SpeciesSwarm] = &SoftCollisionRule{
 		Profile:     &profile.SoftPylonToSwarm,
-		SourceInvRx: parameter.PylonCollisionInvRxSq,
-		SourceInvRy: parameter.PylonCollisionInvRySq,
+		SourceInvRx: pylonInvRx,
+		SourceInvRy: pylonInvRy,
 	}
 
 	// Pylon pushes Quasar
 	s.matrix[component.SpeciesPylon][component.SpeciesQuasar] = &SoftCollisionRule{
 		Profile:     &profile.SoftPylonToQuasar,
-		SourceInvRx: parameter.PylonCollisionInvRxSq,
-		SourceInvRy: parameter.PylonCollisionInvRySq,
+		SourceInvRx: pylonInvRx,
+		SourceInvRy: pylonInvRy,
 	}
 	for species := component.SpeciesType(1); species < component.SpeciesCount; species++ {
 		if profile.SoftKraken[species].MassRatio == 0 {
@@ -159,9 +163,11 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 		component.SpeciesQuasar,
 	}
 
+	flockInvRx, flockInvRy := vmath.EllipseInvRadiiSq(parameter.FlockingSeparationRadiusX,
+		s.world.Resources.Config.CellAspect.Y(parameter.FlockingSeparationRadiusY))
 	defaultRule := FlockingRule{
-		InvRxSq:    parameter.FlockingSeparationInvRxSq,
-		InvRySq:    parameter.FlockingSeparationInvRySq,
+		InvRxSq:    flockInvRx,
+		InvRySq:    flockInvRy,
 		MaxDist:    parameter.FlockingSeparationRadiusX,
 		Strength:   parameter.SwarmSeparationStrength,
 		WeightMult: 1.0,

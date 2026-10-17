@@ -35,6 +35,7 @@ func (a *App) joinAnchorLocked() event.JoinAnchor {
 	an.Schema = event.JournalSchema
 	cfg := a.world.Resources.Config
 	an.MapWidth, an.MapHeight, an.CropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
+	an.CellAspect = float64(cfg.CellAspect)
 	st := a.world.Resources.Event.Queue.Stamp()
 	an.Run, an.Tick = st.Run, st.Tick
 	return event.JoinAnchor{Anchor: an}

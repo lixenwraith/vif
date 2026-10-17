@@ -11,7 +11,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 22
+const JournalSchema = 23
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -84,6 +84,7 @@ type JournalAnchor struct {
 	MapWidth     int
 	MapHeight    int
 	CropOnResize bool
+	CellAspect   float64 // the cell's width over its height the geometry ran at
 
 	// SessionShared reports that this run shared its world with another participant,
 	// which is what closes the D-14 crop path. It is not derivable from anything else
@@ -141,6 +142,7 @@ type AnchorLive struct {
 	MapWidth      int
 	MapHeight     int
 	CropOnResize  bool
+	CellAspect    float64
 	SessionShared bool
 	Slot          uint8
 }
@@ -213,7 +215,7 @@ func (j *Journal) SetAnchor(a JournalAnchor, start Stamp) {
 	j.anchor.Store(&a)
 	j.Anchor(start, AnchorLive{
 		Speed: a.Speed, Session: a.Session, Width: a.Width, Height: a.Height,
-		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize,
+		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize, CellAspect: a.CellAspect,
 		SessionShared: a.SessionShared, Slot: uint8(a.Slot),
 	})
 }
@@ -235,6 +237,7 @@ func (j *Journal) Anchor(st Stamp, live AnchorLive) {
 	a.Width, a.Height = live.Width, live.Height
 	a.MapWidth, a.MapHeight = live.MapWidth, live.MapHeight
 	a.CropOnResize = live.CropOnResize
+	a.CellAspect = live.CellAspect
 	a.SessionShared = live.SessionShared
 	a.JSeq = j.seq.Load()
 	j.sink.Anchor(a)

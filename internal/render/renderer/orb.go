@@ -20,7 +20,7 @@ type OrbRenderer struct {
 	renderOrb orbRenderFunc
 	fullChar  rune // a fully charged orb's glyph
 
-	// Precomputed ellipse containment (2:1 aspect)
+	// Precomputed ellipse containment at the cell aspect
 	effectInvRxSq    float64
 	effectInvRySq    float64
 	effectRadiusXInt int
@@ -29,7 +29,7 @@ type OrbRenderer struct {
 
 func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
 	rx := parameter.OrbCoronaRadiusX
-	ry := parameter.OrbCoronaRadiusY
+	ry := gameCtx.World.Resources.Config.CellAspect.Y(parameter.OrbCoronaRadiusY)
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
 
 	r := &OrbRenderer{

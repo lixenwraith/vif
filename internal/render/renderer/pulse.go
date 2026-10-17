@@ -24,6 +24,9 @@ type PulseRenderer struct {
 	alphaMax        float64 // 0.9
 	alphaThreshold  float64 // 0.03
 	ringCount       float64 // 6
+
+	// The full pulse ellipse at the cell aspect
+	radiusY, invRxSq, invRySq float64
 }
 
 // pulseCellRenderer draws one ripple cell in the colour mode chosen at construction
@@ -52,6 +55,8 @@ func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
 		alphaThreshold:  0.03,
 		ringCount:       6.0,
 	}
+	r.radiusY = gameCtx.World.Resources.Config.CellAspect.Y(parameter.PulseRadiusY)
+	r.invRxSq, r.invRySq = vmath.EllipseInvRadiiSq(parameter.PulseRadiusX, r.radiusY)
 	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderCell = pulseCell256
 	}
@@ -120,12 +125,12 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 	if radiusMultSq == 0.0 {
 		return
 	}
-	invRxSq := parameter.PulseRadiusInvRxSq / radiusMultSq
-	invRySq := parameter.PulseRadiusInvRySq / radiusMultSq
+	invRxSq := r.invRxSq / radiusMultSq
+	invRySq := r.invRySq / radiusMultSq
 
 	// Integer bounds from scaled radii
 	intRadiusX := int(math.Floor(parameter.PulseRadiusX*radiusMult)) + 1
-	intRadiusY := int(math.Floor(parameter.PulseRadiusY*radiusMult)) + 1
+	intRadiusY := int(math.Floor(r.radiusY*radiusMult)) + 1
 
 	mapStartX := max(0, originX-intRadiusX)
 	mapEndX := min(ctx.MapWidth-1, originX+intRadiusX)

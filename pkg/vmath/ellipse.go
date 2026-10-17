@@ -1,5 +1,7 @@
 package vmath
 
+import "math"
+
 // EllipseDistSq returns normalized squared distance for ellipse containment
 // Result <= 1.0 means point is inside ellipse
 func EllipseDistSq(dx, dy, invRxSq, invRySq float64) float64 {
@@ -42,15 +44,25 @@ func CircleContains(dx, dy, radiusSq float64) bool {
 	return CircleDistSq(dx, dy) <= radiusSq
 }
 
-// ScaleToCircular transforms Y coordinate to make ellipse checks circular (1:2 terminal aspect)
-func ScaleToCircular(dy float64) float64 {
-	return dy * 2.0
-}
+// Aspect is a cell's width over its height. A terminal cell is about twice as tall
+// as it is wide, and the game's geometry is authored at that reference, RefAspect;
+// a host whose cells differ reports its own, and every vertical extent follows.
+type Aspect float64
 
-// ScaleFromCircular reverses circular normalization for display
-func ScaleFromCircular(dy float64) float64 {
-	return dy * 0.5
-}
+const RefAspect Aspect = 0.5
+
+// Y is a vertical extent authored at RefAspect, in cells at this aspect
+func (a Aspect) Y(y float64) float64 { return y * float64(a) / float64(RefAspect) }
+
+// YInt is Y for a whole number of cells, rounded
+func (a Aspect) YInt(y int) int { return int(math.Round(a.Y(float64(y)))) }
+
+// Circular is a vertical cell distance in the units of a horizontal one, so a
+// circle test reads it as circular
+func (a Aspect) Circular(dy float64) float64 { return dy / float64(a) }
+
+// FromCircular is Circular's inverse: a vertical extent in cells
+func (a Aspect) FromCircular(dy float64) float64 { return dy * float64(a) }
 
 // EllipseContainsPoint checks if grid point (x,y) is inside ellipse centered at (cx,cy)
 func EllipseContainsPoint(x, y, cx, cy int, invRxSq, invRySq float64) bool {

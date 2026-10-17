@@ -3,6 +3,7 @@
 package app
 
 import (
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -41,10 +42,16 @@ func (a *App) initPresentationService() error {
 	return a.hub.Register(a.pres)
 }
 
-func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode) {
-	colorMode := fallbackColorMode
+func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode, vmath.Aspect) {
+	colorMode, aspect := fallbackColorMode, a.cfg.CellAspect
+	if aspect == 0 {
+		aspect = vmath.RefAspect
+	}
 	if !a.cfg.Mode.Presents() {
-		return width, height, colorMode
+		return width, height, colorMode, aspect
+	}
+	if a.cfg.CellAspect == 0 {
+		aspect = a.pres.CellAspect()
 	}
 	// A presentation that has to be restored after a crash says so; a copy built
 	// off the frame loop shares the lender's
@@ -58,7 +65,7 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	if a.cfg.Mode.OwnsGeometry() || a.cfg.terminalGeometry {
 		width, height = a.pres.Size()
 	}
-	return width, height, colorMode
+	return width, height, colorMode, aspect
 }
 
 func (a *App) initPresentation() {

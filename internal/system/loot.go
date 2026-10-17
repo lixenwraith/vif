@@ -55,6 +55,9 @@ type LootSystem struct {
 	// Loot is player-domain, so it never advances the shared stream
 	rng *vmath.FastRand
 
+	// costs weight every owner route at the cell aspect
+	costs navigation.Costs
+
 	// Pity tracking per species type and roster slot
 	pity map[pityKey]*pityState
 
@@ -99,6 +102,7 @@ func NewLootSystem(world *engine.World) engine.System {
 }
 
 func (s *LootSystem) Init() {
+	s.costs = navigation.CostsFor(s.world.Resources.Config.CellAspect)
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.pity = make(map[pityKey]*pityState)
 	s.ownerRoutes = make(map[core.Entity]*ownerRoute)
@@ -325,6 +329,7 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 				parameter.NavFlowDirtyDistance,
 				parameter.NavFlowSettleTicks,
 			)
+			r.cache.Field.Costs = s.costs
 		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
 			r.cache.Resize(config.MapWidth, config.MapHeight)
 		}
@@ -360,7 +365,7 @@ func (s *LootSystem) homingTarget(
 	if !ok || r.cache == nil {
 		return 0, 0, false
 	}
-	flowX, flowY := navigation.InterpolatedDirection(r.cache, kineticComp.PreciseX, kineticComp.PreciseY)
+	flowX, flowY := s.costs.InterpolatedDirection(r.cache, kineticComp.PreciseX, kineticComp.PreciseY)
 	if flowX == 0 && flowY == 0 {
 		return 0, 0, false
 	}
@@ -482,7 +487,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		},
 	})
 
-	cfg := &visual.ShieldConfigs[component.ShieldTypeLoot]
+	cfg := visual.ShieldConfigFor(component.ShieldTypeLoot, s.world.Resources.Config.CellAspect)
 	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
 		Active:  true,
 		Type:    component.ShieldTypeLoot,

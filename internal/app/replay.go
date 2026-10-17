@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"path/filepath"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -42,7 +43,7 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 		Mode: ModeHeadless, Seed: a.Seed, Session: a.Session,
 		Width: a.Width, Height: a.Height,
 		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize,
-		LockMap: a.SessionShared,
+		CellAspect: vmath.Aspect(a.CellAspect), LockMap: a.SessionShared,
 	}
 
 	// Embedded on both sides is the only pairing Config states exactly; a mixed

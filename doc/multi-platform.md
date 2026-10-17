@@ -380,8 +380,8 @@ Android follows the same path through `gomobile bind`: the view is the
 `Presentation`, `AudioTrack` the sink, and its packaged assets reach the game
 through the resource providers. The terminal module's value types (`Cell`,
 `Attr`, `ColorMode`, `Key`) are the renderer-neutral vocabulary by decision
-([Engine decoupling](engine-decoupling.md) §7); the cell aspect is the next
-parameter to take out of the code.
+([Engine decoupling](engine-decoupling.md) §7), and the cell aspect the
+presentation reports is one parameter of the simulation (§8).
 
 Build tags should remain orthogonal capabilities. Avoid an accumulating
 `linux`/`windows`/`android` switch in gameplay code: use a platform tag only where

@@ -147,7 +147,7 @@ func (s *ExplosionSystem) resolveArea(id event.CrossingID, cursor core.Entity, c
 	config := s.world.Resources.Config
 
 	radiusCells := int(radius)
-	radiusCellsY := radiusCells / 2
+	radiusCellsY := int(config.CellAspect.FromCircular(radius))
 
 	minX := max(0, centerX-radiusCells)
 	maxX := min(config.MapWidth-1, centerX+radiusCells)
@@ -161,7 +161,7 @@ func (s *ExplosionSystem) resolveArea(id event.CrossingID, cursor core.Entity, c
 
 	var cellBuf [parameter.MaxEntitiesPerCell]core.Entity
 	for y := minY; y <= maxY; y++ {
-		dyCirc := vmath.ScaleToCircular(float64(y - centerY))
+		dyCirc := config.CellAspect.Circular(float64(y - centerY))
 		for x := minX; x <= maxX; x++ {
 			dx := float64(x - centerX)
 			if vmath.CircleDistSq(dx, dyCirc) > radiusSq {

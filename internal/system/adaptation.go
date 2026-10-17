@@ -400,8 +400,8 @@ func findCorridorDistance(field *navigation.FlowField, startX, startY, maxRadius
 				}
 				d := field.GetDistance(startX+dx, startY+dy)
 				if d >= 0 {
-					// Manhattan gap penalty using engine-defined axis costs
-					penalty := vmath.IntAbs(dx)*navigation.CostX + vmath.IntAbs(dy)*navigation.CostY
+					// Manhattan gap penalty at the field's axis costs
+					penalty := vmath.IntAbs(dx)*int(field.Costs.X) + vmath.IntAbs(dy)*int(field.Costs.Y)
 					total := d + penalty
 					if bestDist < 0 || total < bestDist {
 						bestDist = total

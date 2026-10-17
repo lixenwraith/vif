@@ -107,10 +107,20 @@ func TestEllipseGeometry(t *testing.T) {
 	if !CircleContains(3, 0, 9) || CircleContains(3, 0.1, 9) {
 		t.Error("circle containment boundary")
 	}
-	for _, v := range []float64{0, 1, 2.5, -3.75, 100} {
-		if got := ScaleFromCircular(ScaleToCircular(v)); got != v {
-			t.Errorf("circular scale round trip %v -> %v", v, got)
+}
+
+// TestAspectScalesVerticalExtents: the reference aspect leaves authored geometry
+// exactly as written, and a square cell doubles every vertical extent of it while
+// a vertical distance already reads as circular.
+func TestAspectScalesVerticalExtents(t *testing.T) {
+	for _, y := range []float64{0, 1, 2.5, -3.75, 100} {
+		if RefAspect.Y(y) != y || RefAspect.Circular(y) != 2*y || RefAspect.FromCircular(2*y) != y {
+			t.Fatalf("reference aspect moved %v", y)
 		}
+	}
+	square := Aspect(1)
+	if square.Y(2.5) != 5 || square.YInt(3) != 6 || square.Circular(4) != 4 || square.FromCircular(4) != 4 {
+		t.Fatal("a square cell must double an authored Y and leave a distance as it is")
 	}
 }
 

@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"math"
 	"math/bits"
 
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -35,27 +36,55 @@ var DirOpposite = [8]int8{
 	DirN, DirNE, DirE, DirSE,
 }
 
-// Weighted edge costs accounting for terminal 2:1 aspect ratio (Width:Height)
-// X distance = 10, Y distance = 20
-// Diagonal distance = sqrt(10^2 + 20^2) ≈ 22.36
-const (
-	CostX           = 10
-	CostY           = 20
-	CostDiagonal    = 22
-	CostUnreachable = 1<<30 - 1
-)
+// CostUnreachable is the distance of a cell no path reaches
+const CostUnreachable = 1<<30 - 1
 
-// Per-direction costs matching DirVectors index order (N, NE, E, SE, S, SW, W, NW)
-var dirCosts = [8]int32{
-	CostY, CostDiagonal, CostX, CostDiagonal,
-	CostY, CostDiagonal, CostX, CostDiagonal,
+// Costs are the weighted edge costs of one cell aspect: a horizontal step is X, a
+// vertical one X over the aspect and a diagonal the hypotenuse, so a path's cost
+// reads the same in every direction on the screen; the reference 2:1 cell gives
+// 10, 20 and 22. Unit is DirVectors as steering vectors at that aspect.
+type Costs struct {
+	X, Y, Diag int32
+	dir        [8]int32 // per DirVectors index
+	Unit       [8][2]float64
 }
+
+// CostsFor are the costs of one cell aspect
+func CostsFor(a vmath.Aspect) Costs {
+	c := Costs{X: 10}
+	c.Y = int32(math.Round(float64(c.X) / float64(a)))
+	c.Diag = int32(math.Round(math.Hypot(float64(c.X), float64(c.Y))))
+	for i, vec := range DirVectors {
+		switch {
+		case vec[0] != 0 && vec[1] != 0:
+			c.dir[i] = c.Diag
+		case vec[0] != 0:
+			c.dir[i] = c.X
+		default:
+			c.dir[i] = c.Y
+		}
+		fx, fy := float64(vec[0]), a.FromCircular(float64(vec[1]))
+		if fx != 0 || fy != 0 {
+			fx, fy = vmath.Normalize2D(fx, fy)
+		}
+		c.Unit[i] = [2]float64{fx, fy}
+	}
+	return c
+}
+
+// refCosts are the costs every field and solver starts with
+var refCosts = CostsFor(vmath.RefAspect)
+
+// seedSpan is the furthest a seed lies from its target: maxSearchRadius cells
+// along each axis
+func (c *Costs) seedSpan() int32 { return maxSearchRadius * (c.X + c.Y) }
 
 // FlowField stores precomputed navigation directions toward a target
 type FlowField struct {
 	Width, Height int
 	Directions    []int8  // Per-cell direction index, DirNone if blocked
-	Distances     []int32 // Aspect-weighted distance from target (X=10, Y=20, diag=22); 22 per cell fits any field under 97M cells
+	Distances     []int32 // Weighted distance from target by Costs; 22 per cell at the reference fits any field under 97M cells
+	Costs         Costs   // the aspect the distances are weighted at
 
 	// Generation tracking for zero-allocation reset
 	VisitedGen []uint32
@@ -79,6 +108,7 @@ func NewFlowField(width, height int) *FlowField {
 		Width:      width,
 		Height:     height,
 		Directions: dirs,
+		Costs:      refCosts,
 		Distances:  make([]int32, size),
 		VisitedGen: make([]uint32, size),
 		CurrentGen: 0,
@@ -152,12 +182,7 @@ func (f *FlowField) GetDistance(x, y int) int {
 // WallChecker is a function that returns true if cell blocks navigation
 type WallChecker func(x, y int) bool
 
-// seedSpan is the furthest a seed lies from its target: maxSearchRadius cells
-// along each axis.
-const (
-	maxSearchRadius = 8
-	seedSpan        = maxSearchRadius * (CostX + CostY)
-)
+const maxSearchRadius = 8
 
 // Compute performs weighted Dijkstra from all target points across the entire
 // valid field.
@@ -182,7 +207,7 @@ func (f *FlowField) computeWith(g *gridSearch, targets []vmath.Point, isBlocked 
 		f.CurrentGen = 1
 	}
 	g.fill(w, f.Height, isBlocked)
-	g.reset(seedSpan)
+	g.reset(f.Costs.seedSpan())
 
 	for _, t := range targets {
 		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
@@ -213,7 +238,7 @@ func (f *FlowField) computeWith(g *gridSearch, targets []vmath.Point, isBlocked 
 		for m := g.open(idx); m != 0; m &= m - 1 {
 			k := bits.TrailingZeros8(m)
 			nIdx := idx + g.step[k]
-			nd := d + dirCosts[k]
+			nd := d + f.Costs.dir[k]
 			if f.VisitedGen[nIdx] != f.CurrentGen || nd < f.Distances[nIdx] {
 				f.Distances[nIdx] = nd
 				f.VisitedGen[nIdx] = f.CurrentGen
@@ -376,7 +401,7 @@ func (f *FlowField) seedVirtualTargets(g *gridSearch, targetX, targetY int, isBl
 
 				// Seed as virtual target with distance based on manhattan distance from real target
 				// Weighted by axis costs for consistency with Dijkstra
-				cost := int32(abs(dx)*CostX + abs(dy)*CostY)
+				cost := int32(abs(dx))*f.Costs.X + int32(abs(dy))*f.Costs.Y
 				if f.VisitedGen[nIdx] != f.CurrentGen || cost < f.Distances[nIdx] {
 					f.Distances[nIdx] = cost
 					f.VisitedGen[nIdx] = f.CurrentGen

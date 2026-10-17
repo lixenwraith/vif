@@ -145,7 +145,7 @@ func (s *ShieldSystem) setActive(cursor core.Entity, active bool) {
 
 	if active {
 		shield.Type = component.ShieldTypePlayer
-		cfg := &visual.ShieldConfigs[shield.Type]
+		cfg := visual.ShieldConfigFor(shield.Type, s.world.Resources.Config.CellAspect)
 		shield.RadiusX = cfg.RadiusX
 		shield.RadiusY = cfg.RadiusY
 		shield.InvRxSq = cfg.InvRxSq

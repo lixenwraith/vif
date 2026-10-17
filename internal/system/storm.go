@@ -263,17 +263,17 @@ func (s *StormSystem) LoadShared(data []byte) error {
 
 // buildEllipseOffsets populates the LUT of cell offsets inside the circle ellipse
 func (s *StormSystem) buildEllipseOffsets() {
-	radiusX := int(parameter.StormCircleRadiusX)
-	radiusY := int(parameter.StormCircleRadiusY)
+	rx, ry := parameter.StormCircleRadiusX, s.world.Resources.Config.CellAspect.Y(parameter.StormCircleRadiusY)
+	radiusX, radiusY := int(rx), int(ry)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
 
-	// Preallocate approximate capacity: Ï€ * rx * ry
+	// Preallocate approximate capacity: pi * rx * ry
 	capacity := int(3.2 * float64(radiusX) * float64(radiusY))
 	s.ellipseOffsets = make([]vmath.Point, 0, capacity)
 
 	for y := -radiusY; y <= radiusY; y++ {
 		for x := -radiusX; x <= radiusX; x++ {
-			if vmath.EllipseContains(float64(x), float64(y),
-				parameter.StormCircleCollisionInvRxSq, parameter.StormCircleCollisionInvRySq) {
+			if vmath.EllipseContains(float64(x), float64(y), invRxSq, invRySq) {
 				s.ellipseOffsets = append(s.ellipseOffsets, vmath.Point{X: x, Y: y})
 			}
 		}
@@ -1225,8 +1225,10 @@ func (s *StormSystem) processGreenAttack(
 
 	s.statGreenActiveFrame.Add(1)
 
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormGreenRadiusX,
+		s.world.Resources.Config.CellAspect.Y(parameter.StormGreenRadiusY))
 	strikeCursorsIn(s.world, func(x, y int) bool {
-		return vmath.EllipseContainsPoint(x, y, circleX, circleY, parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq)
+		return vmath.EllipseContainsPoint(x, y, circleX, circleY, invRxSq, invRySq)
 	}, stormGreenDamage)
 }
 

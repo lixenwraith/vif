@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/ascimage"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // ViewMode determines how the image is displayed
@@ -29,6 +30,7 @@ type Viewer struct {
 
 	converted *ascimage.ConvertedImage
 	convWidth int
+	aspect    vmath.Aspect
 
 	RenderMode ascimage.RenderMode
 	ColorMode  terminal.ColorMode
@@ -40,11 +42,12 @@ type Viewer struct {
 	ShowStatus bool
 }
 
-// NewViewer creates a viewer for the given image
-func NewViewer(img image.Image) *Viewer {
+// NewViewer creates a viewer for the given image, converting at a cell aspect
+func NewViewer(img image.Image, aspect vmath.Aspect) *Viewer {
 	bounds := img.Bounds()
 	return &Viewer{
 		img:        img,
+		aspect:     aspect,
 		srcWidth:   bounds.Dx(),
 		srcHeight:  bounds.Dy(),
 		RenderMode: ascimage.ModeQuadrant,
@@ -90,11 +93,11 @@ func (v *Viewer) calculateTargetWidth(termW, termH int) int {
 
 	switch v.ViewMode {
 	case ViewFit:
-		_, h := ascimage.CalculateOutputSize(v.srcWidth, v.srcHeight, termW)
+		_, h := ascimage.CalculateOutputSize(v.srcWidth, v.srcHeight, termW, v.aspect)
 		if h <= availH {
 			return termW
 		}
-		w := (availH * 2 * v.srcWidth) / v.srcHeight
+		w := int(float64(availH*v.srcWidth)/float64(v.aspect)) / v.srcHeight
 		if w < 1 {
 			w = 1
 		}
@@ -137,7 +140,7 @@ func (v *Viewer) Update(termW, termH int) {
 		return
 	}
 
-	v.converted = ascimage.ConvertImage(v.img, targetW, v.RenderMode, v.ColorMode)
+	v.converted = ascimage.ConvertImage(v.img, targetW, v.RenderMode, v.ColorMode, v.aspect)
 	v.convWidth = targetW
 	v.clampViewport(termW, termH)
 }
