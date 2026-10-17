@@ -375,7 +375,8 @@ while keeping TCP and WebSocket sessions. It is what the K3s fleet runs: one
 routes joins to ([Session fleet](kubernetes-fleet.md)). A headless script or bot
 has no terminal or audio, but may attach the network service with `-host`/`-join`.
 
-A WASM build runs inside the bundled xterm.js page, uses embedded
+A WASM build runs in a Worker behind the bundled page, which draws its cell frames
+on a WebGL canvas (`pkg/browser`), uses embedded
 FSM/content/keymap assets without host-directory discovery, and omits audio and
 logging. It cannot open a socket, so it joins a session over the same-origin route
 `wss://<site>/vif/ws/<session>`: the page's own WebSocket wrapped as a `net.Conn`,

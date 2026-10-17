@@ -42,7 +42,7 @@ make dev       # generated code + race-enabled debug build
 | `release` | Build a stripped `-trimpath` native binary without CGO. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `nolog` | Release-style build with the `novlog` tag. |
-| `wasm` | Build audio- and log-free `web/vif.wasm` for the xterm.js host, with its toolchain's `web/wasm_exec.js`. |
+| `wasm` | Build audio- and log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
@@ -575,18 +575,20 @@ tests.
 |---|---|---|
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
-| `js/wasm` | Supported constrained build | xterm.js host, embedded scenario/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
+| `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames; embedded scenario/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as an untested zip and removable if field reports show it is broken. |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
 
 ### WASM host
 
-`web/index.html` loads xterm.js and `web/terminal.js`, which creates the terminal
-with the fit and optional WebGL addons and starts the Go WASM instance in a Worker
-(`web/worker.js`), so a frame xterm takes long to draw never delays a tick, a
-probe echo or a socket read. The page batches the worker's writes into
-microtasks, relays text/binary input and resizes to it, prevents the context menu,
-and keeps focus. On a touch-first screen (phone, tablet) a tap raises no system
+`web/index.html` holds a canvas and a hidden text field; `web/terminal.js` sizes
+the grid to the cells the page holds, starts the Go WASM instance in a Worker
+(`web/worker.js`), so a frame the page takes long to draw never delays a tick, a
+probe echo or a socket read, draws each frame the Worker hands it (the cells changed
+since the last, `pkg/glyph`) with one WebGL quad over a glyph mask rasterized from a
+monospace font at the cell's device size, and reports keys, text, the pointer and
+resizes to it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+On a touch-first screen (phone, tablet) a tap raises no system
 keyboard; a strip along the top toggles it, sends Tab (and Esc while it is up) and
 goes fullscreen where the browser can. Neither the strip nor the keyboard refits
 the grid, so only the page resizing (a rotation, a window, fullscreen) crops the
@@ -597,12 +599,9 @@ site that renames the files says so with `data-wasm`, `data-worker` and
 ([Build profiles](multi-platform.md#6-browser-launch-arguments)). `make serve`
 builds `web/vif.wasm` and serves this directory.
 
-`web/` is the deployed launcher, not a harness that resembles one. The xterm files
-load from the absolute `/vendor/xterm-5.5/`, which `make serve` finds in
-`web/vendor/` and a site serves from its root; the launcher's own files
-(`terminal.css`, `terminal.js` and what it loads) are relative to the page, so the
-directory works at whatever path a site installs it. Copy the directory; do not
-rewrite a path in it.
+`web/` is the deployed launcher, not a harness that resembles one. Its files are
+relative to the page, so the directory works at whatever path a site installs it.
+Copy the directory; do not rewrite a path in it.
 
 The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;
