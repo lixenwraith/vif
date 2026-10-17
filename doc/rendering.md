@@ -138,6 +138,26 @@ terminal, with its own viewport, centring and camera derived from the recorded
 camera plus the viewer's `h/j/k/l` scroll, clamped to the map. The recorded camera
 and viewport are never written.
 
+### 2.2 The cell aspect
+
+A terminal cell is about twice as tall as it is wide, and every vertical extent
+the game authors (radii, orbit heights, navigation costs) is written at that
+reference. `vmath.Aspect` (width over height, `RefAspect` 0.5) is the one
+definition: `Y` scales an authored vertical extent, `YInt` a cell count,
+`Circular` and `FromCircular` convert a vertical distance to and from horizontal
+units. The presentation reports its aspect with its grid
+(`Presentation.CellAspect`), `ConfigResource.CellAspect` holds it beside the
+color mode and `RenderContext.CellAspect` carries it to the renderers;
+`navigation.CostsFor` builds a field's costs from it (10, 20 and 22 at the
+reference, 10, 10 and 14 for a square cell), `visual.ShieldConfigFor` and each
+inverse-radius pair are computed where they are used, and ascimage takes it as
+`-aspect`. Footprint radii (the quasar's and the snake head's collision, the
+quasar shield) are cells whatever the aspect. It is simulation identity: the
+anchor carries it (`JournalAnchor.CellAspect`) and a guest adopts the host's as
+it adopts the map bounds (D-14), since two participants at different aspects
+would steer differently. Projection stays `PointAt` (floor): a graphical surface
+shows the same cell snapping a terminal does.
+
 ## 3. Compositor data model
 
 The buffer allocates parallel arrays sized to `width * height`:
