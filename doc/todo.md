@@ -455,14 +455,12 @@ continuous real play, and make the site playable alone. A bot is also the first
 non-terminal source of semantic input, the contract the Android extraction has to
 define first; doing Android first would define it without a second consumer.
 
-The push stops where [Engine decoupling §7](engine-decoupling.md#7-decisions-taken-and-the-plan)
-says: a phone playing the embedded scenario by touch at a legible cell size, with
-drag, repeat fire and the held-tap menu, from an APK `make android` builds; and the
-desktop window measured on a hardware driver once. What is left under
+The push reached the line [Engine decoupling §7](engine-decoupling.md#7-decisions-taken-and-the-plan)
+draws: a phone plays the embedded scenario by touch from an APK `make android`
+builds, and the desktop window is measured on a hardware driver. What stays under
 [Extract the renderer-neutral Android host model](#extract-the-renderer-neutral-android-host-model)
 and [Measure and round out the desktop window](#measure-and-round-out-the-desktop-window)
-is that line; the items after it stay items. The list is pruned before the next
-push.
+lies past it. The list is pruned before the next push.
 
 ### Add bots that play as participants
 
@@ -484,24 +482,17 @@ link. What remains is under [Bots](#bots) and
 - Guide: fleet item H4, [Engine decoupling](engine-decoupling.md) §7 for the
   decisions taken and the order
 
-Target a minimally polished Android build within one month of development time.
-`vif_headless` already leaves out the renderer and audio packages, the frame
-leaves through `render.Surface`, and the terminal module's value types are the
-renderer-neutral vocabulary (D1). Done: `app.Presentation` and `Config.Host`
-(the terminal as the default presentation, the host's speakers as the audio
-sink), the font atlas under `internal/asset/font/` with `pkg/glyph` and its
-software rasterizer as the reference drawer, and the cell aspect as one parameter
-(`vmath.Aspect`, carried by the anchor), the pilot Android host in `android/`
+Done to the push's line (§7): the host model, the font atlas, the cell aspect and
+the Android host in `android/`
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
-playing on a phone with sound, taps and drags at a cell sized by its density,
-`make android` for its APK, the menu every host summons by holding a press on the
-status bar and drives by the pointer (D8), and the phone's frame times. Nothing is
-left to the line the push stops at.
+played on a Pixel 8 Pro by touch. Past it:
 
-The system keyboard's text arrives as it commits, not while it is composed. The
-`tui` menu taken by taps is the phone's for now; one Android draws itself, likely
-circular, is the later design (D8). A release-signed APK is the player's keystore
-and a Gradle signing block, after the line.
+- the GLES drawer, only if a device misses 60 fps with the Canvas one;
+- a menu Android draws itself, likely circular, in place of the `tui` one taken
+  by taps (D8);
+- the system keyboard's text shown while composed; it arrives as it commits;
+- bots on a phone;
+- a release-signed APK: the player's keystore and a Gradle signing block.
 
 ### Measure and round out the desktop window
 
