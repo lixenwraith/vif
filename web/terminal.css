@@ -84,7 +84,7 @@ html, body {
 
 /* Touch-primary devices: terminal.js shows the key strip before the first fit,
    so its height is never the grid's. */
-:root { --strip-h: 40px; }
+:root { --strip-h: 32px; }
 
 #strip {
     position: relative;
@@ -104,12 +104,12 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 52px;
-    padding: 0 12px;
+    min-width: 44px;
+    padding: 0 10px;
     border: 0;
     background: none;
     color: #bbb;
-    font: 15px/1 monospace;
+    font: 14px/1 monospace;
 }
 
 #strip button:active        { background: #262626; }
