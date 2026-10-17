@@ -10,35 +10,36 @@ import (
 	"github.com/lixenwraith/terminal"
 )
 
-func testView(t *testing.T, raster bool) *view {
+func testView(t *testing.T, raster bool, scale int) *view {
 	t.Helper()
 	f, err := loadFont()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newView(f, raster)
+	return newView(f, raster, scale)
 }
 
 // TestATapPressesAndReleasesTheCellUnderIt: pixels map to the cell the drawer paints
-// there; a press off the grid is dropped and its release kept on the edge; nothing
-// is reported while the run takes no pointer.
+// there at its scale; a press off the grid is dropped and its release kept on the
+// edge; nothing is reported while the run takes no pointer.
 func TestATapPressesAndReleasesTheCellUnderIt(t *testing.T) {
-	v := testView(t, false)
-	v.setGrid(10*12+5, 4*24+20) // a margin short of a cell on each side
+	const w, h = 12 * 2, 24 * 2 // the 12x24 atlas cell at scale 2
+	v := testView(t, false, 2)
+	v.setGrid(10*w+5, 4*h+20) // a margin short of a cell on each side
 	if ev, ok := v.touch(30, 30, true); ok {
 		t.Fatalf("a touch with the pointer off was reported: %+v", ev)
 	}
 	v.SetPointerMode(true, false)
-	ev, ok := v.touch(12*3+11, 24*2, true)
+	ev, ok := v.touch(w*3+w-1, h*2, true)
 	want := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
 		MouseAction: terminal.MouseActionPress, MouseX: 3, MouseY: 2}
 	if !ok || ev != want {
 		t.Fatalf("press is %+v %v, want %+v", ev, ok, want)
 	}
-	if ev, ok := v.touch(12*10+2, 10, true); ok {
+	if ev, ok := v.touch(w*10+2, 10, true); ok {
 		t.Fatalf("a press in the margin was reported: %+v", ev)
 	}
-	ev, ok = v.touch(12*10+2, 24*4+3, false)
+	ev, ok = v.touch(w*10+2, h*4+3, false)
 	want.MouseAction, want.MouseX, want.MouseY = terminal.MouseActionRelease, 9, 3
 	if !ok || ev != want {
 		t.Fatalf("release in the margin is %+v %v, want %+v", ev, ok, want)
@@ -87,7 +88,7 @@ func TestKeysArriveAsATerminalReportsThem(t *testing.T) {
 // drawer holds and nothing when none does, a resize or a Sync makes it whole, and
 // Blocked counts from the oldest frame waiting.
 func TestTheDrawerTakesTheNewestFrameAsChangesFromTheOneItHolds(t *testing.T) {
-	v := testView(t, false)
+	v := testView(t, false, 1)
 	if v.take() != nil || v.Blocked() != 0 {
 		t.Fatal("a view nothing was flushed to has a frame")
 	}
@@ -153,7 +154,7 @@ func TestACellFramePaintedFromTheAtlasIsTheRastersPixels(t *testing.T) {
 	if got, want := paint(t, p.font.mask, p.Frame()), p.Pixels(); !bytes.Equal(got, want) {
 		t.Fatal("the probe painted from the atlas differs from the raster")
 	}
-	cell, raster := testView(t, false), testView(t, true)
+	cell, raster := testView(t, false, 1), testView(t, true, 1)
 	for _, v := range []*view{cell, raster} {
 		v.Flush(p.cells, p.cols, p.rows)
 	}

@@ -12,27 +12,35 @@ import java.nio.IntBuffer;
 
 /**
  * Paints the game's frames as Game.frame hands them over and posts the picture to
- * the view's surface. OnCanvas paints cells from the atlas texture; a GLES drawer
- * takes the same frames. FromRaster shows Go's software raster, the fallback.
+ * the view's surface, each atlas pixel a block of scale pixels each way. OnCanvas
+ * paints cells from the atlas texture; a GLES drawer takes the same frames.
+ * FromRaster shows Go's software raster, the fallback.
  */
 interface CellDrawer {
     /** Applies a frame from the run; false when it changed nothing. */
     boolean apply(byte[] frame);
 
-    /** Draws what the drawer holds at the surface's top left. */
+    /** Draws what the drawer holds at the surface's top left, at its scale. */
     void draw(Canvas surface);
 
-    /** The picture painted so far, kept between frames. */
+    /**
+     * The picture painted so far at the atlas's size, kept between frames and
+     * enlarged on the surface by the GPU, where painting each cell larger would
+     * cost the CPU scale squared the pixels.
+     */
     abstract class Picture implements CellDrawer {
-        final int cellWidth, cellHeight;
+        final int cellWidth, cellHeight, scale;
         Bitmap screen;
-        private final Paint margin = new Paint();
+        private final Paint margin = new Paint(), pixels = new Paint();
+        private final Rect onSurface = new Rect();
 
-        Picture(byte[] atlas) {
+        Picture(byte[] atlas, int scale) {
             IntBuffer a = words(atlas, 0);
             cellWidth = a.get(0);
             cellHeight = a.get(1);
+            this.scale = scale;
             margin.setColor(Color.BLACK);
+            pixels.setFilterBitmap(false);
         }
 
         /** Sizes the picture to a grid, keeping it while the grid holds. */
@@ -53,8 +61,9 @@ interface CellDrawer {
                 surface.drawColor(Color.BLACK);
                 return;
             }
-            int w = screen.getWidth(), h = screen.getHeight();
-            surface.drawBitmap(screen, 0, 0, null);
+            int w = screen.getWidth() * scale, h = screen.getHeight() * scale;
+            onSurface.set(0, 0, w, h);
+            surface.drawBitmap(screen, null, onSurface, pixels);
             // Skia sorts a rect, so a picture wider than a shrunk surface needs no margin
             if (w < surface.getWidth()) {
                 surface.drawRect(w, 0, surface.getWidth(), surface.getHeight(), margin);
@@ -72,8 +81,8 @@ interface CellDrawer {
         private final Rect src = new Rect(), dst = new Rect();
         private Canvas canvas;
 
-        OnCanvas(byte[] atlas) {
-            super(atlas);
+        OnCanvas(byte[] atlas, int scale) {
+            super(atlas, scale);
             int glyphs = words(atlas, 0).get(2);
             this.atlas = Bitmap.createBitmap(cellWidth, Math.max(1, glyphs * cellHeight), Bitmap.Config.ALPHA_8);
             this.atlas.copyPixelsFromBuffer(ByteBuffer.wrap(atlas, 12, cellWidth * cellHeight * glyphs));
@@ -109,8 +118,8 @@ interface CellDrawer {
 
     /** Shows the RGBA picture Go's raster painted. */
     final class FromRaster extends Picture {
-        FromRaster(byte[] atlas) {
-            super(atlas);
+        FromRaster(byte[] atlas, int scale) {
+            super(atlas, scale);
         }
 
         @Override

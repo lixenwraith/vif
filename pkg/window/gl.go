@@ -187,11 +187,13 @@ func load() error {
 	return nil
 }
 
-// gpu is an EGL context on the window and the one textured quad a frame is drawn as
+// gpu is an EGL context on the window and the one textured quad a frame is drawn
+// as, scale window pixels to a texel each way
 type gpu struct {
 	display, surface, context uintptr
 	texture                   uint32
 	texW, texH                int // the texture's allocated size, 0 before the first frame
+	scale                     int
 }
 
 // The quad covers the viewport; the texture's first row is the frame's top row
@@ -208,8 +210,8 @@ void main() { gl_FragColor = texture2D(frame, uv); }` + "\x00"
 var quad = []float32{-1, -1, 1, -1, -1, 1, 1, 1}
 
 // newGPU makes a GLES 2 context current on the calling thread, drawing to win
-func newGPU(xdpy, win uintptr) (*gpu, error) {
-	g := &gpu{}
+func newGPU(xdpy, win uintptr, scale int) (*gpu, error) {
+	g := &gpu{scale: scale}
 	// EGL 1.5 names the platform; an older one guesses it from the pointer
 	if eglGetPlatformDisplay != nil {
 		g.display = eglGetPlatformDisplay(eglPlatformX11, xdpy, 0)
@@ -324,13 +326,15 @@ func (g *gpu) upload(pix []byte, width, height int) {
 	glTexSubImage2D(glTexture2D, 0, 0, 0, int32(width), int32(height), glRGBA, glUnsignedByte, unsafe.Pointer(&pix[0]))
 }
 
-// draw clears the window and draws the frame at its own pixel size, centred
+// draw clears the window and draws the frame at its scale, centred; nearest
+// filtering keeps each texel a block of whole pixels
 func (g *gpu) draw(winW, winH int) {
 	glViewport(0, 0, int32(winW), int32(winH))
 	glClear(glColorBufferBit)
 	if g.texW > 0 {
-		x, y := (winW-g.texW)/2, (winH-g.texH)/2
-		glViewport(int32(x), int32(winH-y-g.texH), int32(g.texW), int32(g.texH))
+		w, h := g.texW*g.scale, g.texH*g.scale
+		x, y := (winW-w)/2, (winH-h)/2
+		glViewport(int32(x), int32(winH-y-h), int32(w), int32(h))
 		glDrawArrays(glTriangleStrip, 0, 4)
 	}
 	eglSwapBuffers(g.display, g.surface)

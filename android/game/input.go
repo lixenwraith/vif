@@ -100,7 +100,7 @@ func (v *view) touch(x, y int, down bool) (terminal.Event, bool) {
 		return terminal.Event{}, false
 	}
 	cols, rows := v.Size()
-	cx, cy := x/v.font.atlas.Width, y/v.font.atlas.Height
+	cx, cy := x/v.cellW, y/v.cellH
 	inside := x >= 0 && y >= 0 && cx < cols && cy < rows
 	action := terminal.MouseActionRelease
 	if down {
