@@ -1,4 +1,4 @@
-# vif for Android (pilot)
+# vif for Android
 
 The Android host of [Multi-platform §8](../doc/multi-platform.md#8-adding-another-renderer-or-android-host):
 the game runs in-process through a `gomobile bind` library, presents on a
