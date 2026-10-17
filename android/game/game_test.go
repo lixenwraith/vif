@@ -80,8 +80,8 @@ func TestKeysArriveAsATerminalReportsThem(t *testing.T) {
 
 // TestTheDrawerTakesTheNewestFrameAsChangesFromTheOneItHolds: a frame not taken is
 // replaced by the next, the take carries every cell that differs from what the
-// drawer holds, a resize or a Sync makes it whole, and Blocked counts from the
-// oldest frame waiting.
+// drawer holds and nothing when none does, a resize or a Sync makes it whole, and
+// Blocked counts from the oldest frame waiting.
 func TestTheDrawerTakesTheNewestFrameAsChangesFromTheOneItHolds(t *testing.T) {
 	v := testView(t, false)
 	if v.take() != nil || v.Blocked() != 0 {
@@ -111,6 +111,10 @@ func TestTheDrawerTakesTheNewestFrameAsChangesFromTheOneItHolds(t *testing.T) {
 		t.Fatal("a frame was taken twice")
 	}
 
+	v.Flush(cells, 4, 2)
+	if f := v.take(); f != nil {
+		t.Fatalf("a frame the drawer already holds was handed over again: %d cells", records(t, f))
+	}
 	v.Flush(cells, 4, 2)
 	v.Sync()
 	if n := records(t, v.take()); n != 8 {

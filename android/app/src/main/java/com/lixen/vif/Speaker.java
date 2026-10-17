@@ -11,6 +11,7 @@ final class Speaker implements com.lixen.vif.game.Speaker {
 
     private final AudioTrack track;
     private volatile boolean paused;
+    private boolean closed; // the run closes the speakers before the activity pauses
 
     Speaker() {
         int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
@@ -38,20 +39,25 @@ final class Speaker implements com.lixen.vif.game.Speaker {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
+        closed = true;
         track.stop();
         track.release();
     }
 
     /** Flushing frees a write blocked on the paused track. */
-    void pause() {
-        paused = true;
-        track.pause();
-        track.flush();
+    synchronized void pause() {
+        if (!closed) {
+            paused = true;
+            track.pause();
+            track.flush();
+        }
     }
 
-    void resume() {
-        paused = false;
-        track.play();
+    synchronized void resume() {
+        if (!closed) {
+            paused = false;
+            track.play();
+        }
     }
 }

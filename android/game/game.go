@@ -165,7 +165,7 @@ func Quit() {
 	}
 }
 
-// Frame is the newest frame since the last taken, nil when there is none. It is
+// Frame is the newest frame since the last taken, nil when no cell changed. It is
 // little-endian 32-bit words: columns, rows, then for a cell drawer the count of
 // changed cells and per cell its index, glyph slot in Atlas (-1 for background
 // only), foreground and background ARGB; for the raster, RGBA rows top first.

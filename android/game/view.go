@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/binary"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -139,15 +140,18 @@ func (v *view) Sync() {
 }
 
 // take encodes the newest frame for the drawer: the cells changed since the frame
-// it holds, or all of them after a resize or a Sync
+// it holds, or all of them after a resize or a Sync; nil when none changed
 func (v *view) take() []byte {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if !v.fresh {
 		return nil
 	}
-	whole := v.whole
+	whole := v.whole || len(v.shown) != len(v.next)
 	v.fresh, v.whole, v.since = false, false, time.Time{}
+	if !whole && slices.Equal(v.shown, v.next) {
+		return nil
+	}
 	if v.raster != nil {
 		if whole {
 			v.raster.Sync()
@@ -155,9 +159,9 @@ func (v *view) take() []byte {
 		v.raster.Flush(v.next, v.fw, v.fh)
 		v.out = appendWords(v.out[:0], uint32(v.fw), uint32(v.fh))
 		v.out = append(v.out, v.raster.Pix()...)
-		return v.out
+	} else {
+		v.out = encode(v.out[:0], v.font.slots, v.fw, v.fh, v.next, v.shown, whole)
 	}
-	v.out = encode(v.out[:0], v.font.slots, v.fw, v.fh, v.next, v.shown, whole)
 	v.shown = append(v.shown[:0], v.next...)
 	return v.out
 }
