@@ -400,7 +400,9 @@ queue and shows as `Blocked`. The page (`web/terminal.js`) draws the grid with o
 WebGL quad whose fragment shader finds its cell in two data textures and mixes the
 cell's colors by a glyph mask, rasterized from a monospace font at the cell's device
 size, so glyphs are crisp at any zoom; the mask is drawn again only when that size
-changes. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
+changes. Without WebGL (a Chromium build on a blocklisted GPU) it paints each
+changed cell on a 2D canvas from the same mask, slower on a large grid, and says
+so once. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
 (a touch is the left button, as on Android) and its size as the terminal events the
 host posts. A hidden tab draws nothing and is handed the whole screen on return; the
 run is not paused ([§5](#a-hidden-tab)).

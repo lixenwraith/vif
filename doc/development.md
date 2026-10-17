@@ -588,6 +588,11 @@ probe echo or a socket read, draws each frame the Worker hands it (the cells cha
 since the last, `pkg/glyph`) with one WebGL quad over a glyph mask rasterized from a
 monospace font at the cell's device size, and reports keys, text, the pointer and
 resizes to it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+Where the browser offers no WebGL (Brave and other Chromium builds blocklist older
+GPUs, and `--ignore-gpu-blocklist` needs device access an ordinary session may not
+have) the page paints on a 2D canvas instead and says so in a notice at the start:
+each changed cell is a fill and a glyph tinted through a scratch cell, the same
+picture, slower on a large grid.
 On a touch-first screen (phone, tablet) a tap raises no system
 keyboard; a strip along the top toggles it, sends Tab (and Esc while it is up) and
 goes fullscreen where the browser can. Neither the strip nor the keyboard refits

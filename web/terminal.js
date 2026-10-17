@@ -64,11 +64,79 @@ void main() {
     float m = 0.0;
     if (slot >= 0.0) {
         vec2 at = vec2(mod(slot, u_slots.x), floor(slot / u_slots.x));
-        m = texture2D(u_mask, (at + fract(pos)) / u_slots).r;
+        m = texture2D(u_mask, (at + fract(pos)) / u_slots).a;
     }
     gl_FragColor = vec4(mix(bg.rgb, fg.rgb, m), 1.0);
 }`;
     const ATLAS_COLS = 16;   // slots a row of the mask, which keeps it under every GPU's texture limit
+
+    /* rasterizeMask draws every glyph, white on transparent, at the cell's device size:
+       FONT sized so its advance is the cell's width, then stretched to the cell's
+       height, so box-drawing glyphs meet their neighbours both ways; a glyph wider
+       than its cell is clipped to it. Slot i is at column i % ATLAS_COLS. */
+    function rasterizeMask(runes, cw, ch) {
+        const n = runes.length, slotRows = Math.ceil(n / ATLAS_COLS);
+        const c = document.createElement('canvas');
+        c.width = ATLAS_COLS * cw;
+        c.height = slotRows * ch;
+        const ctx = c.getContext('2d');
+        ctx.font = ch + 'px ' + FONT;
+        let m = ctx.measureText('M');
+        const size = Math.max(1, ch * cw / (m.width || ch));
+        ctx.font = size + 'px ' + FONT;
+        m = ctx.measureText('M');
+        const asc = m.fontBoundingBoxAscent || size * 0.8;
+        const desc = m.fontBoundingBoxDescent || size * 0.2;
+        const sy = ch / (asc + desc);
+        ctx.fillStyle = '#fff';
+        ctx.textBaseline = 'alphabetic';
+        for (let i = 0; i < n; i++) {
+            const x = (i % ATLAS_COLS) * cw, y = Math.floor(i / ATLAS_COLS) * ch;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y, cw, ch);
+            ctx.clip();
+            ctx.setTransform(1, 0, 0, sy, 0, 0);
+            ctx.fillText(runes[i], x + (cw - ctx.measureText(runes[i]).width) / 2, y / sy + asc);
+            ctx.restore();
+        }
+        return { canvas: c, rows: slotRows };
+    }
+
+    // runesOf reads the texture pkg/glyph encodes: cell size and slot count as words,
+    // the masks, then each slot's rune; only the runes are used here
+    function runesOf(data) {
+        const head = new Uint32Array(data.buffer, data.byteOffset, 3);
+        const n = head[2], at = 12 + head[0] * head[1] * n;
+        return Array.from(new Uint32Array(data.slice(at, at + 4 * n).buffer), c => String.fromCodePoint(c));
+    }
+
+    // applyFrame takes a frame into a drawer's cell arrays: the cells changed since
+    // the one held, or all after a resize; it returns the changed indices
+    function applyFrame(d, data) {
+        const w = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >> 2);
+        const cols = w[0], rows = w[1], n = w[2];
+        if (cols !== d.cols || rows !== d.rows) {
+            d.cols = cols;
+            d.rows = rows;
+            d.fg = new Uint8Array(cols * rows * 4);
+            d.bg = new Uint8Array(cols * rows * 4);
+            d.resized();
+        }
+        const fg = d.fg, bg = d.bg, changed = new Uint32Array(n);
+        for (let i = 0, at = 3; i < n; i++, at += 4) {
+            const idx = w[at], o = idx * 4, slot = (w[at + 1] | 0) + 1, f = w[at + 2], b = w[at + 3];
+            fg[o] = f >>> 16 & 255; fg[o + 1] = f >>> 8 & 255; fg[o + 2] = f & 255; fg[o + 3] = slot & 255;
+            bg[o] = b >>> 16 & 255; bg[o + 1] = b >>> 8 & 255; bg[o + 2] = b & 255; bg[o + 3] = slot >>> 8 & 255;
+            changed[i] = idx;
+        }
+        return changed;
+    }
+
+    // The frame a drawer holds in device pixels, and where it is drawn: at the top,
+    // centred when narrower than the canvas
+    function frameOf(d) { return [d.cols * d.cw, d.rows * d.ch]; }
+    function originOf(d) { return [Math.max(0, Math.floor((canvas.width - d.cols * d.cw) / 2)), 0]; }
 
     function Drawer(canvas) {
         const gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false });
@@ -134,83 +202,30 @@ void main() {
         this.masked = false;   // the mask holds the atlas at the cell's size
     };
 
-    // setAtlas takes the texture pkg/glyph encodes: cell size and slot count as words,
-    // the masks, then each slot's rune; only the runes are used here
     Drawer.prototype.setAtlas = function(data) {
-        const head = new Uint32Array(data.buffer, data.byteOffset, 3);
-        const n = head[2], at = 12 + head[0] * head[1] * n;
-        const runes = new Uint32Array(data.slice(at, at + 4 * n).buffer);
-        this.runes = Array.from(runes, c => String.fromCodePoint(c));
+        this.runes = runesOf(data);
         this.rasterize();
     };
 
-    /* rasterize draws every glyph into the mask at the cell's device size: FONT sized
-       so its advance is the cell's width, then stretched to the cell's height, so
-       box-drawing glyphs meet their neighbours both ways; a glyph wider than its
-       cell is clipped to it. */
+    // rasterize uploads the glyph mask at the cell's device size
     Drawer.prototype.rasterize = function() {
-        const n = this.runes.length;
-        if (!n || !this.cw || this.lost) return;
-        const cw = this.cw, ch = this.ch, slotRows = Math.ceil(n / ATLAS_COLS);
-        const c = document.createElement('canvas');
-        c.width = ATLAS_COLS * cw;
-        c.height = slotRows * ch;
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, c.width, c.height);
-        ctx.font = ch + 'px ' + FONT;
-        let m = ctx.measureText('M');
-        const size = Math.max(1, ch * cw / (m.width || ch));
-        ctx.font = size + 'px ' + FONT;
-        m = ctx.measureText('M');
-        const asc = m.fontBoundingBoxAscent || size * 0.8;
-        const desc = m.fontBoundingBoxDescent || size * 0.2;
-        const sy = ch / (asc + desc);
-        ctx.fillStyle = '#fff';
-        ctx.textBaseline = 'alphabetic';
-        for (let i = 0; i < n; i++) {
-            const x = (i % ATLAS_COLS) * cw, y = Math.floor(i / ATLAS_COLS) * ch;
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(x, y, cw, ch);
-            ctx.clip();
-            ctx.setTransform(1, 0, 0, sy, 0, 0);
-            ctx.fillText(this.runes[i], x + (cw - ctx.measureText(this.runes[i]).width) / 2, y / sy + asc);
-            ctx.restore();
-        }
+        if (!this.runes.length || !this.cw || this.lost) return;
+        const mask = rasterizeMask(this.runes, this.cw, this.ch);
         const gl = this.gl;
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, this.tex.u_mask);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
-        gl.uniform2f(this.u.u_slots, ATLAS_COLS, slotRows);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask.canvas);
+        gl.uniform2f(this.u.u_slots, ATLAS_COLS, mask.rows);
         this.masked = true;
     };
 
-    // apply takes a frame: the cells changed since the one held, or all after a resize
+    Drawer.prototype.resized = function() {};
     Drawer.prototype.apply = function(data) {
-        const w = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >> 2);
-        const cols = w[0], rows = w[1], n = w[2];
-        if (cols !== this.cols || rows !== this.rows) {
-            this.cols = cols;
-            this.rows = rows;
-            this.fg = new Uint8Array(cols * rows * 4);
-            this.bg = new Uint8Array(cols * rows * 4);
-        }
-        const fg = this.fg, bg = this.bg;
-        for (let i = 0, at = 3; i < n; i++, at += 4) {
-            const o = w[at] * 4, slot = (w[at + 1] | 0) + 1, f = w[at + 2], b = w[at + 3];
-            fg[o] = f >>> 16 & 255; fg[o + 1] = f >>> 8 & 255; fg[o + 2] = f & 255; fg[o + 3] = slot & 255;
-            bg[o] = b >>> 16 & 255; bg[o + 1] = b >>> 8 & 255; bg[o + 2] = b & 255; bg[o + 3] = slot >>> 8 & 255;
-        }
+        applyFrame(this, data);
         this.dirty = true;
     };
-
-    // frame is the held frame in device pixels, and origin where it is drawn: at the
-    // top, centred when narrower than the canvas
-    Drawer.prototype.frame = function() { return [this.cols * this.cw, this.rows * this.ch]; };
-    Drawer.prototype.origin = function() {
-        return [Math.max(0, Math.floor((canvas.width - this.cols * this.cw) / 2)), 0];
-    };
+    Drawer.prototype.frame = function() { return frameOf(this); };
+    Drawer.prototype.origin = function() { return originOf(this); };
 
     Drawer.prototype.draw = function() {
         const gl = this.gl;
@@ -232,6 +247,83 @@ void main() {
         const [fw, fh] = this.frame(), [ox, oy] = this.origin();
         gl.uniform4f(this.u.u_quad, -1 + 2 * ox / W, 1 - 2 * oy / H, 2 * fw / W, -2 * fh / H);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    };
+
+    /* Painter is the screen without WebGL: each changed cell's background and then
+       its glyph, cut from the mask and tinted through a scratch cell, painted into a
+       picture the frame's size that is then drawn on the canvas. Slower on a large
+       grid, which the page says once at the start. */
+    function Painter(canvas) {
+        this.ctx = canvas.getContext('2d', { alpha: false });
+        if (!this.ctx) throw new Error('Canvas 2D is unavailable');
+        this.runes = [];
+        this.cw = 0; this.ch = 0;
+        this.cols = 0; this.rows = 0;
+        this.fg = null; this.bg = null;
+        this.mask = null;
+        this.lost = false;
+        this.picture = document.createElement('canvas');
+        this.pic = this.picture.getContext('2d', { alpha: false });
+        this.scratch = document.createElement('canvas');
+        this.sc = this.scratch.getContext('2d');
+    }
+
+    Painter.prototype.setAtlas = function(data) {
+        this.runes = runesOf(data);
+        this.rasterize();
+    };
+
+    // rasterize draws the mask at the cell's device size and paints every cell again with it
+    Painter.prototype.rasterize = function() {
+        if (!this.runes.length || !this.cw) return;
+        this.mask = rasterizeMask(this.runes, this.cw, this.ch).canvas;
+        this.scratch.width = this.cw;
+        this.scratch.height = this.ch;
+        this.resized();
+        if (this.fg) for (let i = 0; i < this.cols * this.rows; i++) this.paint(i);
+    };
+
+    Painter.prototype.resized = function() {
+        const [fw, fh] = this.frame();
+        this.picture.width = Math.max(1, fw);
+        this.picture.height = Math.max(1, fh);
+        this.pic.fillStyle = '#000';
+        this.pic.fillRect(0, 0, this.picture.width, this.picture.height);
+    };
+
+    Painter.prototype.apply = function(data) {
+        const changed = applyFrame(this, data);
+        if (!this.mask) return;
+        for (let i = 0; i < changed.length; i++) this.paint(changed[i]);
+    };
+
+    Painter.prototype.paint = function(i) {
+        const fg = this.fg, bg = this.bg, o = i * 4, cw = this.cw, ch = this.ch;
+        const x = (i % this.cols) * cw, y = Math.floor(i / this.cols) * ch;
+        const pic = this.pic;
+        pic.fillStyle = 'rgb(' + bg[o] + ',' + bg[o + 1] + ',' + bg[o + 2] + ')';
+        pic.fillRect(x, y, cw, ch);
+        const slot = fg[o + 3] + bg[o + 3] * 256 - 1;
+        if (slot < 0) return;
+        const sc = this.sc;
+        sc.globalCompositeOperation = 'copy';
+        sc.drawImage(this.mask, (slot % ATLAS_COLS) * cw, Math.floor(slot / ATLAS_COLS) * ch, cw, ch, 0, 0, cw, ch);
+        sc.globalCompositeOperation = 'source-in';
+        sc.fillStyle = 'rgb(' + fg[o] + ',' + fg[o + 1] + ',' + fg[o + 2] + ')';
+        sc.fillRect(0, 0, cw, ch);
+        pic.drawImage(this.scratch, x, y);
+    };
+
+    Painter.prototype.frame = function() { return frameOf(this); };
+    Painter.prototype.origin = function() { return originOf(this); };
+
+    Painter.prototype.draw = function() {
+        const ctx = this.ctx;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (!this.cols || !this.mask) return;
+        const [ox, oy] = this.origin();
+        ctx.drawImage(this.picture, ox, oy);
     };
 
     // === Fitting ===
@@ -297,8 +389,14 @@ void main() {
         try {
             drawer = new Drawer(canvas);
         } catch (err) {
-            showMessage('vif needs WebGL, which this browser does not provide (' + err.message + ').', true);
-            return false;
+            // Brave and other Chromium builds offer no WebGL on a blocklisted GPU
+            try {
+                drawer = new Painter(canvas);
+            } catch (err2) {
+                showMessage('vif needs a canvas, which this browser does not provide (' + err2.message + ').', true);
+                return false;
+            }
+            notice('No WebGL (' + err.message + '): drawing on a 2D canvas, slower on a large grid.');
         }
         if (touch) {
             document.getElementById('strip').hidden = false;   // before the first fit
@@ -712,6 +810,14 @@ void main() {
                 : document.documentElement.requestFullscreen({ navigationUI: 'hide' });
             done.catch(function() {});
         }
+    }
+
+    // notice shows a line at the top for a while, over a game that goes on
+    function notice(msg) {
+        const el = document.getElementById('notice');
+        el.textContent = msg;
+        el.hidden = false;
+        setTimeout(function() { el.hidden = true; }, 5000);
     }
 
     function showMessage(msg, isError) {
