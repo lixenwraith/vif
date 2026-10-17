@@ -42,11 +42,11 @@ var (
 	})
 )
 
-// Start runs the game on the grid the view's pixels hold in atlas cells drawn scale
-// times their pixels. files is the app's own directory, holding the user root, logs
+// Start runs the game on the grid the view's pixels hold in cells sized by the
+// screen's density. files is the app's own directory, holding the user root, logs
 // and journals; wad is where the APK's assets were copied, read as the system root.
 // raster paints frames with the software raster and hands the drawer pixels.
-func Start(files, wad string, width, height, scale int32, raster bool, speaker Speaker, listener Listener) error {
+func Start(files, wad string, width, height int32, density float32, raster bool, speaker Speaker, listener Listener) error {
 	f, err := loadFont()
 	if err != nil {
 		return err
@@ -68,7 +68,7 @@ func Start(files, wad string, width, height, scale int32, raster bool, speaker S
 	}
 	vlog.Configure(vlog.Config{Dir: paths.DefaultLogDir(), JournalDir: paths.DefaultJournalDir(), Spawn: core.Go})
 
-	v := newView(f, raster, int(scale))
+	v := newView(f, raster, density)
 	v.setGrid(int(width), int(height))
 	cfg := app.Config{Host: app.Host{Presentation: v}}
 	if speaker != nil {

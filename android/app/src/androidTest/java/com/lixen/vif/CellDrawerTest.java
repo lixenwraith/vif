@@ -18,7 +18,7 @@ public class CellDrawerTest {
     @Test
     public void theCanvasDrawerPaintsTheRastersPixels() throws Exception {
         Probe probe = Game.newProbe(16);
-        CellDrawer.OnCanvas drawer = new CellDrawer.OnCanvas(Game.atlas(), 1);
+        CellDrawer.OnCanvas drawer = new CellDrawer.OnCanvas(Game.atlas());
         drawer.apply(probe.frame());
         ByteBuffer got = ByteBuffer.allocate(drawer.screen.getByteCount());
         drawer.screen.copyPixelsToBuffer(got);

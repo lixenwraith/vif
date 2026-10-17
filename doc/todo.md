@@ -493,7 +493,7 @@ sink), the font atlas under `internal/asset/font/` with `pkg/glyph` and its
 software rasterizer as the reference drawer, and the cell aspect as one parameter
 (`vmath.Aspect`, carried by the anchor), the pilot Android host in `android/`
 ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
-playing on a phone with sound and taps at a cell scaled to its density, `make
+playing on a phone with sound and taps at a cell sized by its density, `make
 android` for its APK, and the menu
 every host summons by holding a press on the status bar (D8). Left, to the line
 the push stops at:

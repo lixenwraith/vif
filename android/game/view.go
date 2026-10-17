@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/binary"
+	"math"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -17,6 +18,10 @@ import (
 // eventQueue holds what the view posts while the run's loop is busy; a post never
 // waits, since the poster is Android's UI thread
 const eventQueue = 256
+
+// cellDP is a cell's height in dp, never under the atlas's own pixels: 16x32 pixels
+// on a 420 dpi phone, which shows a map half again as wide as a 9x18 dp cell does
+const cellDP = 12
 
 // font is the atlas as a cell drawer takes it: one texture, a slot a glyph
 type font struct {
@@ -51,11 +56,12 @@ func newFont(a *glyph.Atlas) *font {
 }
 
 // view is the activity's SurfaceView as an app.Presentation. A frame waits for the
-// drawer to take it, the newest replacing one not yet taken; the grid follows the
-// view's pixels; touches and keys arrive as terminal events.
+// drawer to take it, the newest replacing one not yet taken; the grid is the cells
+// the view's pixels hold, and the drawer stretches it over them, so a touch maps in
+// proportion; touches and keys arrive as terminal events.
 type view struct {
 	font         *font
-	cellW, cellH int           // a cell on the screen, the atlas's at the drawer's scale
+	cellW, cellH int           // the pixels a cell takes at least, sized by the density
 	raster       *glyph.Raster // the fallback drawer's, nil when a Java drawer takes cells
 
 	events  chan terminal.Event
@@ -64,6 +70,7 @@ type view struct {
 
 	mu         sync.Mutex
 	cols, rows int             // the grid the view's pixels hold
+	w, h       int             // those pixels
 	next       []terminal.Cell // the newest frame flushed
 	fw, fh     int             // its size
 	shown      []terminal.Cell // the frame the drawer holds
@@ -73,9 +80,9 @@ type view struct {
 	out        []byte          // the encoded frame, reused between takes
 }
 
-func newView(f *font, raster bool, scale int) *view {
-	scale = max(scale, 1)
-	v := &view{font: f, cellW: f.atlas.Width * scale, cellH: f.atlas.Height * scale,
+func newView(f *font, raster bool, density float32) *view {
+	h := max(f.atlas.Height, int(math.Round(float64(density)*cellDP)))
+	v := &view{font: f, cellW: max(1, h*f.atlas.Width/f.atlas.Height), cellH: h,
 		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
 	if raster {
 		v.raster = glyph.NewRaster(f.atlas)
@@ -174,7 +181,7 @@ func (v *view) setGrid(width, height int) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	changed := cols != v.cols || rows != v.rows
-	v.cols, v.rows = cols, rows
+	v.cols, v.rows, v.w, v.h = cols, rows, max(1, width), max(1, height)
 	return changed
 }
 
