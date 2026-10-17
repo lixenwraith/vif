@@ -44,9 +44,14 @@ These hold regardless of which repository is targeted first.
   `$XDG_STATE_HOME`; nothing in `/var`, nothing beside the binary.
 - **Licence stays declarable.** BSD-3-Clause, one `LICENSE` at the root. Any
   vendored or redistributed content (typing corpus, images, sound specs) must
-  be licence-checked before it enters `wad/` or a release archive. The shipped
-  corpus in `wad/content/` is Go standard-library source under the Go Authors'
-  BSD licence, and the browser bundle carries xterm.js (MIT) in `web/vendor/`.
+  be licence-checked before it enters `wad/` or a release archive, and its
+  notice travels with it: the corpus in `wad/content/` is Go standard-library
+  source under the Go Authors' BSD licence, `wad/content/LICENSE`, so the wad
+  archive and every install carry it (the content loader reads only `.txt` and
+  `.toml`); the browser bundle carries xterm.js (MIT) with its licence in
+  `web/vendor/xterm-5.5/`, which the web archive copies beside vif's; and a
+  `vif-gui` build links purego (Apache-2.0), `deploy/package/LICENSE.purego`,
+  for the archive that ships that binary.
 
 ## 2. Release surface
 

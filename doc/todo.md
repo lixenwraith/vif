@@ -77,21 +77,6 @@ stale by then and the lines lost are live sessions'. Options: a stale age just o
 the deadline; five hours under a byte budget that removes ended sessions oldest
 first; or a tmpfs sized for five hours of a full fleet.
 
-### Ship the third-party licence notices
-
-- Priority: P0, to review
-- Affected files: `web/vendor/xterm-5.5`, `wad/content`, `Makefile`,
-  `.github/workflows/release.yml`
-
-None of the six files in `web/vendor/xterm-5.5/` carries xterm.js's copyright or MIT
-notice, which MIT requires in every copy, and the release's web archive copies `web/`
-with no licence file (`.github/workflows/release.yml:74-77`). The corpus files keep
-the Go Authors' header, which points to a LICENSE no install or archive carries
-(`Makefile:217,237` ship only vif's). Add xterm's LICENSE beside it and Go's in
-`wad/content/` (the loader reads only `.txt` and `.toml`,
-`internal/content/load.go:32-35`), and ship both, with vif's, in every archive.
-`bin/vif-gui` links purego (Apache-2.0), whose notice its archive needs too.
-
 ## Feature development push
 
 The bots and host pushes are done: bots play as participants, and the engine
