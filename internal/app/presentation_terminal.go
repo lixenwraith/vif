@@ -14,8 +14,7 @@ import (
 )
 
 type presentationState struct {
-	termSvc      *service.TerminalService
-	term         terminal.Terminal
+	pres         Presentation
 	orchestrator *render.RenderOrchestrator
 
 	// termBlocked is when the terminal stopped taking output, zero while it takes it
@@ -29,15 +28,17 @@ func (a *App) initPresentationService() error {
 		return nil
 	}
 	if b := a.cfg.borrow; b != nil {
-		a.termSvc = b.termSvc // the lender's hub starts and stops it
+		a.pres = b.pres // the lender's hub starts and stops it
 		return nil
 	}
-	colorMode := terminal.DetectColorMode()
-	if a.cfg.ColorModeSet {
-		colorMode = a.cfg.ColorMode
+	if a.pres = a.cfg.Host.Presentation; a.pres == nil {
+		colorMode := terminal.DetectColorMode()
+		if a.cfg.ColorModeSet {
+			colorMode = a.cfg.ColorMode
+		}
+		a.pres = terminalHost{service.NewTerminalService(colorMode)}
 	}
-	a.termSvc = service.NewTerminalService(colorMode)
-	return a.hub.Register(a.termSvc)
+	return a.hub.Register(a.pres)
 }
 
 func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode) {
@@ -45,23 +46,24 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	if !a.cfg.Mode.Presents() {
 		return width, height, colorMode
 	}
-	a.term = a.termSvc.Terminal()
-	if a.cfg.borrow == nil {
-		core.SetCrashTerminal(a.term) // a copy built off the frame loop shares the lender's
+	// A presentation that has to be restored after a crash says so; a copy built
+	// off the frame loop shares the lender's
+	if f, ok := a.pres.(interface{ Fini() }); ok && a.cfg.borrow == nil {
+		core.SetCrashTerminal(f)
 	}
 	// The terminal reports a text console as 16 colors, the console the 256-color tier draws for
-	if colorMode = a.term.ColorMode(); colorMode == terminal.ColorMode16 {
+	if colorMode = a.pres.Surface().ColorMode(); colorMode == terminal.ColorMode16 {
 		colorMode = terminal.ColorMode256
 	}
 	if a.cfg.Mode.OwnsGeometry() || a.cfg.terminalGeometry {
-		width, height = a.term.Size()
+		width, height = a.pres.Size()
 	}
 	return width, height, colorMode
 }
 
 func (a *App) initPresentation() {
-	w, h := a.term.Size()
-	a.orchestrator = render.NewRenderOrchestrator(a.term, w, h)
+	w, h := a.pres.Size()
+	a.orchestrator = render.NewRenderOrchestrator(a.pres.Surface(), w, h)
 	// 256 colors is for a text console, whose palette renderers choose their colors from
 	if cfg := a.world.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		cfg.ConsolePalette = render.DetectConsolePalette()
@@ -73,10 +75,10 @@ func (a *App) initPresentation() {
 }
 
 func (a *App) lobbyEvents() <-chan terminal.Event {
-	if a.termSvc == nil {
+	if a.pres == nil {
 		return nil
 	}
-	return a.termSvc.Events()
+	return a.pres.Events()
 }
 
 func (a *App) lobbyEventCancels(ev terminal.Event) bool {
@@ -92,10 +94,10 @@ func (a *App) lobbyEventCancels(ev terminal.Event) bool {
 }
 
 func (a *App) pollTerminalEarly() error {
-	if a.termSvc == nil {
+	if a.pres == nil {
 		return nil
 	}
-	return a.termSvc.Start()
+	return a.pres.Start()
 }
 
 func (a *App) showStartupStatus(message string) {

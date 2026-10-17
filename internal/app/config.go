@@ -103,6 +103,9 @@ type Config struct {
 	// the individual scenario, content, keymap and audio overrides.
 	Resources resource.Options
 
+	// Host is the platform's adapters; the zero value is the build's own
+	Host Host
+
 	// ColorMode overrides terminal detection when ColorModeSet is true
 	ColorMode    terminal.ColorMode
 	ColorModeSet bool

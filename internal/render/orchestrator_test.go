@@ -7,7 +7,11 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/pkg/glyph"
 )
+
+// The software rasterizer is a Surface: the reference drawer of every graphical host
+var _ Surface = (*glyph.Raster)(nil)
 
 // captureTerminal is the smallest host the pipeline will accept: it keeps the
 // cells the orchestrator flushed so a test can read the finished frame.

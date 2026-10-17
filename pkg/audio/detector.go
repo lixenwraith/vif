@@ -13,6 +13,7 @@ import (
 // headless runs: tests, CI, and offline capture.
 const (
 	BackendNameNull = "null"
+	BackendNameHost = "host" // AudioConfig.Sink, which replaces detection
 	wavForcePrefix  = "wav:"
 )
 

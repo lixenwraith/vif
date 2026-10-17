@@ -167,10 +167,13 @@ func (ae *AudioEngine) Start() error {
 	}
 	arr := buildArrangement()
 
-	cands, err := DetectBackends(ae.config.ForceBackend)
-	if err != nil {
-		ae.silentMode.Store(true)
-		return err
+	cands := []*BackendConfig{{Type: BackendSink, Name: BackendNameHost}}
+	if ae.config.Sink == nil {
+		var err error
+		if cands, err = DetectBackends(ae.config.ForceBackend); err != nil {
+			ae.silentMode.Store(true)
+			return err
+		}
 	}
 
 	ae.beMu.Lock()
@@ -223,6 +226,9 @@ func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
 	case BackendNull:
 		ae.sink, ae.procExit = nil, nil
 		return io.Discard, nil
+	case BackendSink:
+		ae.sink, ae.procExit = ae.config.Sink, nil
+		return ae.config.Sink, nil
 	case BackendWAV:
 		s, err := newWAVSink(c.Path)
 		if err != nil {
