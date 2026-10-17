@@ -817,7 +817,7 @@ void main() {
         const el = document.getElementById('notice');
         el.textContent = msg;
         el.hidden = false;
-        setTimeout(function() { el.hidden = true; }, 10000);
+        setTimeout(function() { el.hidden = true; }, 5000);
     }
 
     function showMessage(msg, isError) {
