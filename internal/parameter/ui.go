@@ -14,6 +14,14 @@ const (
 	LeftMargin = 1
 )
 
+// WindowCols and WindowRows are the grid a desktop window opens at; the player
+// resizes it by whole cells from there
+const (
+	WindowCols  = 120
+	WindowRows  = 40
+	WindowTitle = "vif"
+)
+
 // AudioText is the audio indicator by channel mask (muted, effects, music, both): a letter
 // every terminal font has, which says the state without its color
 var AudioText = [4]string{" X ", " S ", " M ", " O "}

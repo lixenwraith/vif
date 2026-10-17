@@ -43,12 +43,14 @@ SYSCONFDIR ?= $(SYSCONFDIR_DEFAULT)
 # FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
 GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go
 GO ?= $(GO_DEFAULT)
+# purego's FreeBSD port builds its fakecgo as std to link without cgo
+GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std' || true
 
 .DEFAULT_GOAL := help
 # Goals run in the order given, so make release install installs what it built.
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
+.PHONY: help generate dev release headless gui nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -57,6 +59,7 @@ help:
 	@echo "  dev      Build with race detector and debug symbols"
 	@echo "  release  Build optimized binary (stripped, trimmed)"
 	@echo "  headless Build dedicated-host binary without presentation or audio"
+	@echo "  gui      Build bin/vif-gui, the game in a desktop window (Xlib, EGL, GLES 2; Linux, FreeBSD)"
 	@echo "  nolog    Release build without logger"
 	@echo "  wasm     Build WebAssembly binary for xterm.js (audio and logging omitted)"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
@@ -136,6 +139,10 @@ release: generate $(BIN_DIR)
 headless: generate $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
+# gui loads Xlib, EGL and GLES 2 at run time through purego, so cgo stays off
+gui: generate $(BIN_DIR)
+	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
+
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: generate $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
@@ -166,6 +173,7 @@ verify: generate test
 	$(GO) build -tags novlog ./...
 	$(GO) build -tags vif_noaudio ./...
 	$(GO) build -tags vif_headless ./...
+	CGO_ENABLED=0 $(GO) build $(GUI_GCFLAGS) -tags vif_gui ./...
 	$(GO) test -tags vif_noaudio ./internal/... $(SRC)
 	$(GO) test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
 	GOOS=js GOARCH=wasm $(GO) build ./...
@@ -177,6 +185,7 @@ verify: generate test
 		echo "FAIL: wasm imports the audio implementation"; exit 1; \
 	fi
 	$(GO) vet ./...
+	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui ./pkg/window $(SRC)
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)
