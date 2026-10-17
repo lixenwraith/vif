@@ -8,8 +8,9 @@ Command reference for verifying behaviour on a dev machine. Build first: `make d
 ```
 
 Overrides: `BIN` (default `./bin/vif`), `HOST` (`127.0.0.1`), `PORT` (`7777`),
-`PROBE_PORT` (`7778`), `PLAYERS`, `SESSION`, `AUTHORITY`, `IMAGE` (`vif:dev`), and
-for `load` `SCENARIO`, `GUEST_BOTS`, `LIMIT_MB` and `GOMEMLIMIT`.
+`PROBE_PORT` (`7778`), `PLAYERS`, `SESSION`, `AUTHORITY`, `IMAGE` (`vif:dev`) and
+`CONTAINER_ENGINE` for `image`, and for `load` `SCENARIO`, `GUEST_BOTS`,
+`LIMIT_MB` and `GOMEMLIMIT`.
 
 ## Interactive
 
@@ -92,7 +93,7 @@ it exercises is the image rather than the game.
 
 | Scenario | Asserts |
 |---|---|
-| `image` | the container image builds and validates its own config as a non-root read-only user. It runs `make image`, whose engine is `docker` unless `CONTAINER_ENGINE=podman` is set |
+| `image` | the container image builds and validates its own config as a non-root read-only user. It runs `make image` with `IMAGE` split into name and tag at its last colon and `CONTAINER_ENGINE` set to the engine found, `docker` first, unless the caller set it |
 
 ## If `-serve` seems to hang
 
