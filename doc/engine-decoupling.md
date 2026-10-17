@@ -313,7 +313,7 @@ From the td profile (1,600 ticks, including the resets):
 | Finding | Evidence | Opportunity |
 |---|---|---|
 | `wallGrid.current` walks every wall to prove the cached wall grid current | 10 % of CPU flat, `WallTest.func1` 18 % cumulative, with 50,000 walls and two callers a tick | a wall epoch bumped by the one in-place `BlockMask` write (`handleMaskChange`) and by store mutation would make the check O(1); the scan exists only because that write is in place |
-| Map lookups in the sparse-set index | `mapaccess2_fast64` 24 % cumulative | entity IDs are per-domain counters; an index slice per domain would turn the lookup into an array read; measure before changing `Store` |
+| Map lookups in the sparse-set index | `mapaccess2_fast64` 24 % cumulative | done: a page table per domain indexed by the ID, bounded against IDs a peer chose (ECS and events §2); td 1.30 to 0.98 ms a tick, main 21.5 to 18.2 µs, median of twelve interleaved runs; the index holds 0.6 MB on td where the maps held 2.7 MB |
 | Maze spawn builds a 50,000-cell payload and the batch spawn grows four slices | 145 MB and 118 MB flat over 22 spawns | reuse the payload cells and pre-size the batch; event payloads are pooled elsewhere (`event.pool`) |
 | Drain's exclusion map is built per spawn | 37 MB | a map the system keeps and clears |
 | `SpatialGrid.Resize` | 68 MB over the run | one allocation per level; grow-only already |
@@ -349,7 +349,8 @@ Decided after the first review of this document.
 - **D6, Android drawing: `SurfaceView` and `Canvas` for the pilot**, behind a
   Java-side cell drawer interface so a GLES drawer replaces it without touching
   the Go side; GLES if the pilot misses 60 fps on a target device.
-- **D7, store index: noted** as a todo item without further analysis.
+- **D7, store index: paged by entity ID** (§6), with a flat slice per domain
+  rejected: it is sized by the highest ID a store has held, 4.8 MB on td.
 - **D8, menu: keep `tui`.** The overlay renderer already adapts forms into cells;
   the configuration menu stays as it is, and Android gets a different
   presentation (a radial menu summoned by holding a tap), a later task with a
@@ -383,7 +384,7 @@ Each later phase is one PR.
 5. **Desktop GPU surface** (optional): a `vif_gui` command through purego GLES or
    Vulkan over the same atlas, the software rasterizer as its fallback.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
-   epoch, then the maze payload; the index slice when its measurement is in.
+   epoch, then the maze payload; the store index is done.
 
 ## 8. Geometry flexibility: cell aspect and the position store
 

@@ -1753,7 +1753,7 @@ code does not have yet, described only by a design such as
 - *Behavior machines*: Future design: `Graph.Step`, one machine update run in fixed phases (global edges, suspend, advance and cues, timeout, pre-tick edges, tick, post-tick edges). [Machine design §6.3](machine-design.md#63-step)
 
 **store** (also: Store[T], sparse set, typed store) — two senses.
-- *ECS*: `engine.Store[T]` holds one component type as a sparse set: an entity-to-index map, a dense entity slice and a dense value slice, with swap removal; `engine.Position` is the exception, mirroring it while keeping the spatial index. [ECS §2](ecs-and-events.md#2-entities-and-typed-stores) · `internal/engine` `Store`
+- *ECS*: `engine.Store[T]` holds one component type as a sparse set: an entity-to-slot index paged by entity ID, a dense entity slice and a dense value slice, with swap removal; `engine.Position` is the exception, mirroring it while keeping the spatial index. [ECS §2](ecs-and-events.md#2-entities-and-typed-stores) · `internal/engine` `Store`
 - *Capture*: each Shared component store is one capture section (`w.<store>`), its name a wire-stable section id. [Multiplayer §4](multi-player.md#4-correction-pipeline) · `internal/engine` `SharedWorldStoreNames` · `internal/snapshot` `StoreSectionPrefix`
 
 **storm** (also: StormSystem, StormCircleComponent, storm region) — three senses.

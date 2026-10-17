@@ -772,16 +772,6 @@ tick. The scan exists because `BlockMask` is written in place once
 (`handleMaskChange`). Bump a wall epoch there, on store mutation and on a wall placement, and
 `current` becomes one comparison ([Engine decoupling](engine-decoupling.md) §6).
 
-### Index a store by a per-domain slice
-
-- Priority: P3
-- Affected files: `internal/engine/store.go`, `position.go`
-
-Map lookups in the sparse-set index are 24 % of td's tick CPU. Entity IDs are
-per-domain counters, so a slice per domain indexed by the ID's low bits would make
-the lookup an array read; the idea is noted without analysis, and needs its own
-measurement on `main` as well as `td` ([Engine decoupling](engine-decoupling.md) §6).
-
 ### Reuse the maze spawn payload
 
 - Priority: P3
