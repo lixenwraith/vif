@@ -707,7 +707,7 @@ code does not have yet, described only by a design such as
 - *Audio*: a PCM frame, one stereo pair of signed 16-bit samples (4 bytes) at 44.1 kHz, 441 per 10 ms of buffer. [Audio §2](audio.md#2-stream-contract) · `pkg/audio` `AudioBytesPerFrame`
 - *Animation*: an eye's animation frame, `EyeComponent.FrameIndex`, which advances each time `FrameRemaining` runs out and wraps at its type's frame count. `internal/component` `EyeComponent` · `internal/system` `EyeSystem`
 
-**free mouse** (also: :free, :f, :mouse free) — The operator preference, on by default, under which bare pointer motion moves the cursor; it survives both reset forms. [Input §7](input-and-modes.md#7-mouse-and-automatic-fire) · [Input §9](input-and-modes.md#9-command-mode) · `internal/engine` `GameContext.MouseFreeMode`
+**free mouse** (also: :free, :f, :mouse free, follow) — The operator preference, on by default, under which bare pointer motion moves the cursor; it survives both reset forms. `m` in Normal mode cycles the mouse through follow, click (buttons and drags only) and off. [Input §7](input-and-modes.md#7-mouse-and-automatic-fire) · [Input §9](input-and-modes.md#9-command-mode) · `internal/engine` `GameContext.MouseFreeMode`
 
 **freeze** — three senses.
 - *Status*: `Registry.Freeze`, called once by `Scheduler.Prepare` after `World.Seal` and before the first tick, closes the status registry to new keys, builds the group index and lays out the flight recorder ring; a key registered later is a detached cell counted in `stat.late`. [Logging: Freeze](logging-and-diagnostics.md#freeze) · `internal/status` `Registry.Freeze`

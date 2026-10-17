@@ -256,6 +256,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleModeSwitch(intent)
 	case input.IntentToggleAutoFire:
 		return handleAutoCommand(r.ctx, nil).Continue
+	case input.IntentCycleMouseMode:
+		return cycleMouseMode(r.ctx).Continue
 
 	// Text entry
 	case input.IntentTextChar:

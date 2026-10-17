@@ -54,6 +54,8 @@ func (i IntentType) String() string {
 		return "IntentModeSwitch"
 	case IntentToggleAutoFire:
 		return "IntentToggleAutoFire"
+	case IntentCycleMouseMode:
+		return "IntentCycleMouseMode"
 	case IntentTextChar:
 		return "IntentTextChar"
 	case IntentTextBackspace:
