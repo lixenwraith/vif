@@ -377,9 +377,9 @@ Each later phase is one PR.
    reports it, `ConfigResource.CellAspect` holds it and the anchor carries it
    (§8). The simulation surface of both benchmark runs is unchanged at the
    reference.
-4. **Android host.** `gomobile bind`, `SurfaceView` drawing the cell grid from the
-   atlas, `AudioTrack` sink, asset provider, lifecycle hooks; touch mapped to
-   intents as the focused input task; the radial menu after that.
+4. **Android host: pilot done** in `android/` ([Multi-platform](multi-platform.md)
+   §8), a Canvas drawer at 60 fps on an emulator; touch mapped to intents as the
+   focused input task; the radial menu after that.
 5. **Desktop GPU surface** (optional): a `vif_gui` command through purego GLES or
    Vulkan over the same atlas, the software rasterizer as its fallback.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall

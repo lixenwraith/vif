@@ -362,8 +362,9 @@ A presenting run takes its screen from `app.Presentation`: a service the hub
 runs, the `render.Surface` frames are flushed to, its size, how long it has held
 a frame, the events it reports in the terminal's vocabulary (`terminal.Event`,
 which a host posts for the keys and pointer cells it maps), and the pointer mode.
-The terminal is one (`terminalHost`); it is the default when `Config.Host` names
-none. A host also supplies its speakers as `Host.Audio`, a writer the mixer
+One the player can leave without quitting also reports that on `Away`, and a solo
+run pauses until they return. The terminal is one (`terminalHost`); it is the
+default when `Config.Host` names none. A host also supplies its speakers as `Host.Audio`, a writer the mixer
 streams PCM to in place of a backend found by name. Adding a graphical host is
 therefore composition, not a simulation fork:
 
@@ -376,12 +377,32 @@ therefore composition, not a simulation fork:
    builder, and leave components, systems, events, scheduler and the manifest
    fingerprint common.
 
-Android follows the same path through `gomobile bind`: the view is the
-`Presentation`, `AudioTrack` the sink, and its packaged assets reach the game
-through the resource providers. The terminal module's value types (`Cell`,
-`Attr`, `ColorMode`, `Key`) are the renderer-neutral vocabulary by decision
-([Engine decoupling](engine-decoupling.md) §7), and the cell aspect the
-presentation reports is one parameter of the simulation (§8).
+Android follows that path in `android/` ([its README](../android/README.md)), a
+module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
+`Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
+`app.Run`. The view's grid is its pixels in the atlas's 12x24 cells (aspect 0.5);
+a Java render thread takes the newest frame at each vsync as the cells changed
+since the one it holds, which `CellDrawer.OnCanvas` paints from the atlas texture
+(`game.Atlas`) and an instrumented test checks against `glyph.Raster` pixel for
+pixel, and posts it on a hardware canvas. `FromRaster`, Go's raster as pixels, is
+the fallback. The APK's `wad/` is copied to the app's files directory as the
+system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
+through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
+the drawer the whole grid. Input is the pilot's: a tap is a left press and
+release on its cell, keys and the system keyboard's text are terminal key events,
+Back is Escape.
+
+Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
+the game hands over a frame every vsync and about 20 a second change cells, its
+20 Hz tick; taking, painting and posting one costs 3.5–4.2 ms mean and under 7 ms
+at p95 on the host GPU, 6–9 ms on the software one. The raster fallback costs
+36–57 ms a changed frame on the software GPU, a picture's worth of pixels across
+JNI each time: a fallback, not a 60 fps path.
+
+The terminal module's value types (`Cell`, `Attr`, `ColorMode`, `Key`) are the
+renderer-neutral vocabulary by decision ([Engine decoupling](engine-decoupling.md)
+§7), and the cell aspect the presentation reports is one parameter of the
+simulation (§8).
 
 Build tags should remain orthogonal capabilities. Avoid an accumulating
 `linux`/`windows`/`android` switch in gameplay code: use a platform tag only where
