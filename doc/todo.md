@@ -176,19 +176,6 @@ against [Packaging](packaging.md) §1, and a scenario a coordinator serves a joi
 through the roots and require a regular file; decide whether absolute paths stay,
 or stay only for a scenario this run resolved itself.
 
-### Read vif.toml in soundlab
-
-- Priority: P0, to review
-- Affected files: `cmd/soundlab/main.go`, `cmd/soundlab/session.go`
-
-soundlab resolves its audio overrides from its flags alone
-(`cmd/soundlab/main.go:38`, `cmd/soundlab/session.go:45-61`) and never reads
-`vif.toml`, while vif fills `-config-dir` from `[paths] root`
-(`cmd/vif/main.go:112-116,387`). With `root` set, vif reads an override under it
-first while soundlab opens and saves the user root's copy, so a save is not what the
-next run loads, though `cmd/soundlab/README.md:33` says it is; `[audio] buffer_ms` is
-ignored too. Load the settings in soundlab and fill both as vif does.
-
 ### Decide how sound includes reach the game
 
 - Priority: P0, to review
