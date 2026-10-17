@@ -115,6 +115,7 @@ flowchart TD
     Game --> Image["pkg/ascimage"]
     Game --> Glyph["pkg/glyph"]
     Game --> Window["pkg/window"]
+    Game --> Browser["pkg/browser"]
     Game --> Macro["pkg/tomlmacro"]
     Game --> Socket["pkg/websocket"]
 ```
@@ -124,6 +125,7 @@ flowchart TD
 | `pkg/ascimage` | Convert images to terminal cells and read/write dual-mode `.vifimg` assets. | External terminal/color types only. The interactive viewer lives in `cmd/ascimage` because it needs the in-repo render buffer. |
 | `pkg/glyph` | Parse the bitmap font atlas and draw a frame of terminal cells into RGBA, changed cells only: the reference drawer of a graphical host. The protocol a drawer in another runtime paints from: the atlas as one texture (`Texture`), frames as the cells changed since the one it holds (`Frames`), and the probe that checks such a drawer against the raster. | External terminal, color and TOML modules only; the atlas comes from the caller (`internal/asset`). |
 | `pkg/window` | A desktop window that draws a cell grid: Xlib, EGL and GLES 2 loaded at run time with purego, keys and pointer posted as terminal events. Built only under `vif_gui` on Linux and FreeBSD. | `pkg/glyph` draws the frame; external terminal module and purego. |
+| `pkg/browser` | A web page as the screen on `js/wasm`: frames handed to the page one at a time as the cells changed since the one it holds, keys, text, the pointer and resizes taken back as terminal events. | `pkg/glyph` encodes the frames; external terminal module and `syscall/js`. The page is `web/`. |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the sound bank* are injected; the package ships no specs and imports nothing under `internal/`. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | Core package uses the standard library only; its default seed restates `vmath.Golden64` rather than importing it. |
@@ -226,6 +228,6 @@ duplicating version strings that would become stale.
 | `tool/vif-allocator` | Website-to-K3s session allocator; a host service, not part of the game binary. |
 | `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged; its packages are internal to the tool. |
 | `wad/` | The external payload, laid out as it installs into a `vif/` configuration root: alternate scenarios, a plain-text corpus and a wall image ([filesystem layout](filesystem-layout.md)). |
-| `web/` | The xterm.js page and worker the WASM build runs in. |
+| `web/` | The page and worker the WASM build runs in: a WebGL canvas drawn from the host's cell frames, a hidden text field for keys, the key strip for touch screens. |
 | `deploy/` | The session image, K3s objects, node units, updaters and runbook, the LogWisp pipeline, the site's log-viewer page, and the packaging files in `deploy/package/` ([deploy/README.md](../deploy/README.md)). |
 | `sandbox/*` | Isolated prototypes, visual/interaction experiments, and the random and render benchmarks; not part of application assembly. |

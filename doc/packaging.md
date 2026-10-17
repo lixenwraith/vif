@@ -48,10 +48,8 @@ These hold regardless of which repository is targeted first.
   notice travels with it: the corpus in `wad/content/` is Go standard-library
   source under the Go Authors' BSD licence, `wad/content/LICENSE`, so the wad
   archive and every install carry it (the content loader reads only `.txt` and
-  `.toml`); the browser bundle carries xterm.js (MIT) with its licence in
-  `web/vendor/xterm-5.5/`, which the web archive copies beside vif's; and a
-  `vif-gui` build links purego (Apache-2.0), `deploy/package/LICENSE.purego`,
-  for the archive that ships that binary.
+  `.toml`); and a `vif-gui` build links purego (Apache-2.0),
+  `deploy/package/LICENSE.purego`, for the archive that ships that binary.
 
 ## 2. Release surface
 
