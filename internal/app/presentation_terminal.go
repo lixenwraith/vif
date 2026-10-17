@@ -20,6 +20,8 @@ type presentationState struct {
 
 	// termBlocked is when the terminal stopped taking output, zero while it takes it
 	termBlocked time.Time
+	// awayPaused is a pause made because the player left the screen, undone on return
+	awayPaused bool
 }
 
 func validateBuildConfig(Config) error { return nil }

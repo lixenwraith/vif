@@ -470,8 +470,8 @@ link. What remains is under [Bots](#bots) and
 ### Extract the renderer-neutral Android host model
 
 - Priority: P1, after bots
-- Affected files: terminal-shaped input/cell/color values, `internal/app`, host
-  entry points
+- Affected files: terminal-shaped input/cell/color values, `internal/app`,
+  `android/`
 - Guide: fleet item H4, [Engine decoupling](engine-decoupling.md) §7 for the
   decisions taken and the order
 
@@ -482,12 +482,24 @@ renderer-neutral vocabulary (D1). Done: `app.Presentation` and `Config.Host`
 (the terminal as the default presentation, the host's speakers as the audio
 sink), the font atlas under `internal/asset/font/` with `pkg/glyph` and its
 software rasterizer as the reference drawer, and the cell aspect as one parameter
-(`vmath.Aspect`, carried by the anchor). Next, in order: the Android host on
-`SurfaceView` behind a Java-side drawer interface a GLES drawer can replace, with
-its asset provider; then touch mapped
-onto the semantic input bots already drive, and a radial menu summoned by
-holding a tap in place of the Ctrl-G menu, whose gameplay implication is
-unresolved.
+(`vmath.Aspect`, carried by the anchor), and the pilot Android host in `android/`
+([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)),
+measured only on an emulator. Next, the input task, which replaces the pilot's
+stand-ins (a tap as a terminal press and release, a two-finger tap for the
+keyboard, Back as Escape):
+
+- map touch onto the semantic input bots already drive (`Intent.MapCell`), with
+  a finger's drag across cells and a hold that repeats fire;
+- give a phone the keys its keyboard lacks (Escape, Tab, Ctrl chords, arrows), as
+  the browser's key strip does, and take the keyboard's composed text, of which
+  the pilot reads only what it commits;
+- size the cell to the screen's density: 12x24 device pixels is about 4.6x9 dp on
+  a 420 dpi phone, so a scale or pinch zoom over the atlas;
+- the radial menu summoned by holding a tap, in place of the Ctrl-G menu, whose
+  gameplay implication is unresolved.
+
+Then measure on arm64 hardware, and write the GLES drawer if a device misses 60
+fps with the Canvas one.
 
 ### Measure and round out the desktop window
 
