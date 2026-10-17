@@ -24,4 +24,7 @@ const (
 	NavCorneringBase = 3.0
 	// NavFlowLookaheadDefault is flow-field target lookahead (cells)
 	NavFlowLookaheadDefault = 12.0
+
+	// MaxTargetsPerGroup is the hard limit on concurrent anchors in one target group
+	MaxTargetsPerGroup = 8
 )

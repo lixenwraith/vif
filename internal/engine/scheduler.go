@@ -324,7 +324,7 @@ func (s *Scheduler) RegisterEventHandler(handler event.Handler) {
 func (s *Scheduler) SetDispatchTap(fn func(event.GameEvent)) { s.tap = fn }
 
 // SetJournalDigest installs the world reading a journal carries every
-// event.DigestIntervalTicks ticks; set before Start.
+// parameter.DigestIntervalTicks ticks; set before Start.
 func (s *Scheduler) SetJournalDigest(fn func() event.JournalDigest) { s.digest = fn }
 
 // ExportFSM reads the FSM runtime's position for a D-19 capture: each region's state

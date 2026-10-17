@@ -11,17 +11,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// serveReportInterval is how often a server logs what it is holding. It is a log
-// line rather than a status bar because nothing here draws one.
-const serveReportInterval = 30 * time.Second
-
-// lifecycleInterval is how often the run folds its roster into the lifetime policy.
-// The bounds it enforces are counted in tens of seconds, so a second's resolution
-// is far finer than any of them and costs one mutex and one comparison; a tick is
-// not the place to do this, because the roster changes on a connection rather than
-// on a simulation step.
-const lifecycleInterval = time.Second
-
 // RunServer wires, runs and tears down a dedicated host.
 func RunServer(cfg Config) error {
 	cfg.Mode = ModeServer
@@ -98,9 +87,9 @@ func (a *App) Serve() error {
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()
-	report := time.NewTicker(serveReportInterval)
+	report := time.NewTicker(parameter.ServeReportInterval)
 	defer report.Stop()
-	life := time.NewTicker(lifecycleInterval)
+	life := time.NewTicker(parameter.LifecycleInterval)
 	defer life.Stop()
 	var lastSummary string
 
@@ -145,7 +134,7 @@ func (a *App) Serve() error {
 
 // interrupt folds the roster in at the instant of the signal and only then asks the
 // policy what a termination request means. A drain waits for the guests the session
-// holds, and the loop's last observation can be a whole lifecycleInterval old, so a
+// holds, and the loop's last observation can be a whole parameter.LifecycleInterval old, so a
 // stale empty roster would end a session somebody had only just joined.
 func (a *App) interrupt(now time.Time, reason string) lifecycle.State {
 	a.life.Observe(a.guestCount(), now)

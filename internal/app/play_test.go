@@ -42,8 +42,8 @@ func TestReplayViewStopsAtTheMapEdges(t *testing.T) {
 	if cam != 140 || kept != 70 {
 		t.Fatalf("panned past the far edge: camera %d pan %d, want 140 70", cam, kept)
 	}
-	if cam, _, _ = viewAxis(50, 100, 60, 200, kept-panStep); cam != 140-panStep {
-		t.Fatalf("one step back from the far edge: camera %d, want %d", cam, 140-panStep)
+	if cam, _, _ = viewAxis(50, 100, 60, 200, kept-parameter.ReplayPanStep); cam != 140-parameter.ReplayPanStep {
+		t.Fatalf("one step back from the far edge: camera %d, want %d", cam, 140-parameter.ReplayPanStep)
 	}
 	if cam, _, kept = viewAxis(50, 100, 60, 200, -1000); cam != 0 || kept != -70 {
 		t.Fatalf("panned past the near edge: camera %d pan %d, want 0 -70", cam, kept)
@@ -200,7 +200,7 @@ func TestAPresentedScriptInASessionKeepsOnlyPanAndQuit(t *testing.T) {
 			p.paused, p.step, p.scale, p.live)
 	}
 	p.key(terminal.Event{Key: terminal.KeyRune, Rune: 'l'})
-	if p.panX != panStep || !strings.HasPrefix(a.ctx.GetStatusMessage(), "LIVE") {
+	if p.panX != parameter.ReplayPanStep || !strings.HasPrefix(a.ctx.GetStatusMessage(), "LIVE") {
 		t.Fatalf("pan %d, status %q; want a pan and a LIVE status", p.panX, a.ctx.GetStatusMessage())
 	}
 	if p.key(terminal.Event{Key: terminal.KeyRune, Rune: 'q'}) {

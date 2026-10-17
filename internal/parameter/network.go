@@ -393,3 +393,15 @@ const (
 	// retained suffix, whose records this covers at any input rate.
 	NetworkSequenceWindow = 512
 )
+
+// A dedicated host's cadences [wall]
+const (
+	// ServeReportInterval is how often a server logs what it is holding; a log
+	// line, since nothing there draws a status bar
+	ServeReportInterval = 30 * time.Second
+
+	// LifecycleInterval is how often a run folds its roster into the lifetime
+	// policy: its bounds are tens of seconds, and the roster changes on a
+	// connection rather than a tick
+	LifecycleInterval = time.Second
+)

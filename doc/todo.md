@@ -32,27 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Move the runtime cadences and bounds into parameter
-
-- Priority: P0, to review
-- Affected files: `internal/engine/sync_std.go`, `internal/app/play.go`,
-  `internal/app/serve.go`, `internal/event/journal.go`, `internal/engine/resource.go`,
-  `internal/resource/scenario.go`, `internal/resource/scenario_test.go`,
-  `internal/system/navigation.go`, `internal/engine/scheduler.go`,
-  `internal/app/play_test.go`, `internal/parameter`, `doc/logging-and-diagnostics.md`,
-  `doc/term-index.md`
-
-Wall-clock, cadence and capacity tunables sit beside their code: `LockHoldWarn`
-(`internal/engine/sync_std.go:15-24`), the replay pan step
-(`internal/app/play.go:22`), the server's report and lifecycle intervals
-(`internal/app/serve.go:16,23`), the journal anchor and digest cadences
-(`internal/event/journal.go:166,173`), the per-group target cap
-(`internal/engine/resource.go:670`) and the scenario size bounds
-(`internal/resource/scenario.go:34-36`). Their peers (`ProfWindow`, the camera
-margins, `NetworkDigestTicks`, `ContentMaxFiles`) live in `internal/parameter`.
-Moving them keeps every value; decide first whether a format bound such as the
-scenario limits counts as a tunable.
-
 ### Name the FNV-1a constants in vmath and settle the golden seeds
 
 - Priority: P0, to review
