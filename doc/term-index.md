@@ -1765,7 +1765,7 @@ code does not have yet, described only by a design such as
 **stream** — six senses.
 - *Simulation*: an RNG stream, a labelled deterministic generator per domain. See **RNG stream**. [Domain model D-8](domain-design.md#d-8--rng-streams-are-domain-separated-and-restorable) · `internal/engine` `RandResource.Stream`
 - *Networking*: each link is one ordered byte stream (TCP, or WebSocket for a browser) carrying framed messages. [Services §7.3](services-and-networking.md#73-why-a-byte-stream-and-not-udp-or-icmp) · [Services §8](services-and-networking.md#8-wire-frame-and-session-messages) · `internal/network`
-- *Diagnostics*: `journal.Stream` is a loaded journal ordered for replay; a `vlog.Stream` is a dedicated output file outside the session logger's level and scopes. [Logging §9](logging-and-diagnostics.md#9-replay-journal) · `internal/journal` `Stream` · `internal/vlog` `Stream`
+- *Diagnostics*: `journal.Stream` is a loaded journal ordered for replay. [Logging §9](logging-and-diagnostics.md#9-replay-journal) · `internal/journal` `Stream`
 - *Combat*: at its charge cap the turret streams bullets between waves, `Stream` of them every `WeaponStreamInterval`. [Combat §4](combat.md#4-at-the-charge-cap) · `internal/component` `WeaponSpec`
 - *Audio*: the stream contract is the PCM output every backend writes: 44.1 kHz stereo signed 16-bit, in 50 ms buffers by default. [Audio §2](audio.md#2-stream-contract) · `pkg/audio` `AudioSampleRate`
 - *Genetics*: a `StreamingEngine`'s proposal stream: the same `Seed` and operation sequence yield the same stream, which never consults wall time under the default deterministic refill. See **StreamingEngine**. [Genetic README: Determinism](../pkg/genetic/README.md#determinism) · `pkg/genetic` `StreamingEngine`
