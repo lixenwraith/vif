@@ -210,7 +210,7 @@ attaches.
 | `Status`, `Prof` | Registered atomic metrics, closed by `Freeze` before the first tick, and the profiler. |
 | `Files` | Categorized external file capability. |
 | `Content` | Loaded immutable content corpus capability. |
-| `Audio` | Audio engine; absent from headless, `vif_noaudio` and WASM builds. |
+| `Audio` | Audio engine; absent from headless and `vif_noaudio` builds. |
 | `Network` | Poll-model transport endpoint, session identity and the session layer's seams; nil in ordinary play (network role `RoleNone`), bound for `-host`/`-join` or a session opened mid-run. |
 
 Target group `0` is reserved for live cursors and contains up to the navigation

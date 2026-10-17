@@ -42,7 +42,7 @@ make dev       # generated code + race-enabled debug build
 | `release` | Build a stripped `-trimpath` native binary without CGO. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `nolog` | Release-style build with the `novlog` tag. |
-| `wasm` | Build audio- and log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
+| `wasm` | Build log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
@@ -575,7 +575,7 @@ tests.
 |---|---|---|
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
-| `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames; embedded scenario/content/keymap, audio omitted, `vlog` stub, no host discovery or raw socket transport. |
+| `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
 | Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as an untested zip and removable if field reports show it is broken. |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
 

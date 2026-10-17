@@ -1,7 +1,7 @@
-/* The Go program's thread. The page draws the frames posted from here and reports
-   back what it saw: keys, the pointer, its size and each frame drawn. This side
-   presents those to Go as the globals pkg/browser expects, and keeps Go's stderr for
-   the page to show once the program ends. */
+/* The Go program's thread. The page draws the frames and plays the sound posted
+   from here and reports back what it saw: keys, the pointer, its size and each frame
+   drawn. This side presents those to Go as the globals pkg/browser expects, and
+   keeps Go's stderr for the page to show once the program ends. */
 'use strict';
 
 /* Why the program ended. stderr is a Go program's only word on that, and
@@ -36,6 +36,9 @@ globalThis.vifAtlas = function(data) {
 };
 globalThis.vifFrame = function(data) {
     postMessage({ type: 'frame', data: data }, [data.buffer]);
+};
+globalThis.vifAudio = function(data) {
+    postMessage({ type: 'audio', data: data }, [data.buffer]);
 };
 globalThis.vifPointer = function(enabled, motion) {
     postMessage({ type: 'pointer', enabled: enabled, motion: motion });

@@ -1,4 +1,4 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
+//go:build !vif_headless && !vif_noaudio
 
 package engine
 

@@ -3,11 +3,13 @@
 
     /* The files beside the page, by the names web/ gives them. A site that
        publishes them under other names, as content-hashed ones, says so on this
-       script's element: data-wasm, data-worker and data-exec (wasm_exec.js). */
+       script's element: data-wasm, data-worker, data-exec (wasm_exec.js) and
+       data-audio (audio-worklet.js). */
     const files = (document.currentScript && document.currentScript.dataset) || {};
     const WASM_PATH = files.wasm || 'vif.wasm';
     const WORKER_PATH = files.worker || 'worker.js';
     const EXEC_PATH = files.exec || 'wasm_exec.js';
+    const AUDIO_PATH = files.audio || 'audio-worklet.js';
 
     /* A touch-first screen (phone, tablet), decided once at load, keeps the system
        keyboard down on taps and gets the key strip to raise it. A cell is CELL CSS
@@ -511,6 +513,9 @@ void main() {
                 pointer = { enabled: msg.enabled, motion: msg.motion };
                 lastCell = null;
                 break;
+            case 'audio':
+                onAudio(msg.data);
+                break;
             case 'exit':
                 showExit(msg.code, msg.reason);
                 stop();
@@ -536,7 +541,46 @@ void main() {
         if (!program) return;
         program.terminate();
         program = null;
+        if (audio && audio.ctx) audio.ctx.close().catch(function() {});
         if (touch) input.blur();   // nothing left to type into, and a keyboard would cover the message
+    }
+
+    // === Sound ===
+    /* The Worker posts the mixer's PCM once a sound plays; a muted game, the
+       default, posts nothing. The first buffer opens an AudioContext at the mixer's
+       rate and loads the worklet (AUDIO_PATH) that plays what follows through a ring.
+       A context opened outside a gesture stays suspended, so each key or pointer
+       resumes it; a buffer that arrives before it runs is dropped. */
+    let audio = null;   // { ctx, node }, node once the worklet loaded
+
+    function onAudio(data) {
+        if (!audio) openAudio();
+        if (audio.node && audio.ctx.state === 'running') audio.node.port.postMessage(data, [data.buffer]);
+    }
+
+    function openAudio() {
+        audio = { ctx: null, node: null };
+        let ctx;
+        try {
+            ctx = new AudioContext({ sampleRate: 44100 });
+        } catch (err) {
+            return;   // no sound on this browser; the game plays on
+        }
+        if (!ctx.audioWorklet) {
+            ctx.close().catch(function() {});
+            return;
+        }
+        audio.ctx = ctx;
+        ctx.audioWorklet.addModule(AUDIO_PATH).then(function() {
+            audio.node = new AudioWorkletNode(ctx, 'vif-speaker', { numberOfInputs: 0, outputChannelCount: [2] });
+            audio.node.connect(ctx.destination);
+        }).catch(function(err) {
+            notice('No sound (' + err.message + ').');
+        });
+        // The events that count as a gesture: a mouse's press, a touch's release, a key.
+        const wake = function() { if (ctx.state !== 'running') ctx.resume().catch(function() {}); };
+        for (const type of ['pointerdown', 'pointerup', 'keydown']) document.addEventListener(type, wake, true);
+        wake();
     }
 
     function focus() {
@@ -772,7 +816,7 @@ void main() {
         strip.addEventListener('click', function(e) {
             const b = e.target.closest('button');
             if (!b) return;
-            if (b.dataset.key) send({ type: 'key', key: b.dataset.key, mods: 0 });
+            if (b.dataset.key) send({ type: 'key', key: b.dataset.key, mods: Number(b.dataset.mods) || 0 });
             else if (b === kbdButton) setKeyboard(!keyboard, true);
             else if (b === fullButton) toggleFullscreen();
         });
