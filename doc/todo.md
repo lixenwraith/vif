@@ -230,18 +230,6 @@ The binary targets `release`, `headless`, `nolog`, `wasm` and `windows` depend o
 `./internal/event`, which has no directive. Keep `generate` on `dev`, `test` and
 `verify` only, and drop `./internal/event` from the workflow.
 
-### Leave no empty stderr capture where redirection fails
-
-- Priority: P0, to review
-- Affected files: `internal/core/dev.go`
-
-`CaptureStderr` creates `vif-stderr-<stamp>.log` (`internal/core/dev.go:59-69`)
-before `dupFD` (`:71`) reports that the build cannot redirect, as every non-unix
-build does (`internal/core/redirect_other.go:9-10`); the error path closes both
-handles and keeps the file. Each `vif -dev` on Windows leaves an empty capture in the
-log directory beside "runtime capture disabled" (`cmd/vif/main.go:259-263`). Call
-`dupFD` before creating the file, or remove the file on that path.
-
 ### Pass the image scenario's name and engine to make
 
 - Priority: P0, to review
