@@ -2,7 +2,8 @@
 
 // Package vlog is the process's log facade. This build carries no logger: every
 // entry point is a no-op, a start, file write or level change reports ErrDisabled,
-// ParseScopes accepts any spec, and lixenwraith/log is not linked.
+// a scope spec parses as in the logging build but selects nothing, and
+// lixenwraith/log is not linked.
 package vlog
 
 import (
@@ -17,34 +18,6 @@ const (
 	LevelInfo  int64 = 0
 	LevelWarn  int64 = 4
 	LevelError int64 = 8
-)
-
-// Scope mirrors the real build's record categories
-type Scope uint32
-
-const (
-	ScopeApp Scope = 1 << iota
-	ScopeFSM
-	ScopeEvent
-	ScopeDispatch
-	ScopePush
-	ScopeInput
-	ScopeStat
-	ScopeRec
-	ScopeLock
-	ScopeNet
-	ScopeSession
-	ScopeConverge
-	ScopeJournal
-	ScopeDomain
-	ScopeTap
-)
-
-const (
-	ScopeNone Scope = 0
-	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeDispatch | ScopePush |
-		ScopeInput | ScopeStat | ScopeRec | ScopeLock | ScopeNet | ScopeSession |
-		ScopeConverge | ScopeJournal | ScopeDomain | ScopeTap
 )
 
 // ErrDisabled reports that this build carries no logger
@@ -86,11 +59,10 @@ func JournalPath() string           { return "" }
 func (*Log) Journal(string, ...any) {}
 func LastJournalPath() string       { return "" }
 
-func ScopeOf(string) Scope     { return ScopeTap }
-func Scopes() Scope            { return ScopeNone }
-func SetScopes(Scope)          {}
-func ScopeString(Scope) string { return "none" }
-func SetCrashFlush(func())     {}
+func ScopeOf(string) Scope { return ScopeTap }
+func Scopes() Scope        { return ScopeNone }
+func SetScopes(Scope)      {}
+func SetCrashFlush(func()) {}
 
 func Dump(uint64, uint64, func(func(string, ...any))) (string, error) {
 	return "", ErrDisabled
@@ -106,6 +78,3 @@ func (*Log) Trace(string, int64, int, ...any) {}
 func (*Log) EmitSet(string, uint64, uint64, func(func(...any))) (string, error) {
 	return "", ErrDisabled
 }
-
-// ParseScopes validates a spec so CLI parsing behaves identically
-func ParseScopes(spec string, cur Scope) (Scope, error) { return cur, nil }

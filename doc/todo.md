@@ -138,18 +138,6 @@ schema bump); or give the registry per-island populations for it to select.
 showing (reproduced). Add a wall mask bit (`0x80` is free) and set it in `Render`, or
 set `MaskNone` explicitly if walls are meant to stay bright.
 
-### Share the scope parser with the novlog build
-
-- Priority: P0, to review
-- Affected files: `internal/vlog/stub.go`, `internal/vlog/scope.go`
-
-In a `wasm` or `novlog` build `ParseScopes` returns `cur, nil` for any spec
-(`internal/vlog/stub.go:110-111`), under a comment saying CLI parsing behaves
-identically, so a malformed `-ls` or `:log scope` passes there and fails in a
-logging build (`internal/vlog/scope.go:130-163`). `Scope`, its constants and the
-parser need only `fmt` and `strings`: move them to an untagged file that both builds
-share, or keep the stub and correct its comment.
-
 ### Delete the dead diagnostics entry points
 
 - Priority: P0, to review
