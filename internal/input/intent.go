@@ -44,7 +44,6 @@ const (
 	// Mode switching
 	IntentModeSwitch     // i, /, :
 	IntentToggleAutoFire // a
-	IntentCycleMouseMode // m
 
 	// Text entry modes (Insert/Search/Command)
 	IntentTextChar            // Printable character
