@@ -351,10 +351,12 @@ Decided after the first review of this document.
   the Go side; GLES if the pilot misses 60 fps on a target device.
 - **D7, store index: paged by entity ID** (§6), with a flat slice per domain
   rejected: it is sized by the highest ID a store has held, 4.8 MB on td.
-- **D8, menu: keep `tui`.** The overlay renderer already adapts forms into cells;
-  the configuration menu stays as it is, and Android gets a different
-  presentation (a radial menu summoned by holding a tap), a later task with a
-  gameplay implication to resolve.
+- **D8, menu: keep `tui`, summoned by a hold.** The overlay renderer already
+  adapts forms into cells and the configuration menu stays as it is. Every host
+  summons it as Ctrl-G does by holding a left press on the status bar
+  (`MenuHoldDuration`, a drift of `MenuHoldSlack` cells allowed): a mouse in a
+  terminal or the window, a finger on Android, and the browser launcher's touch
+  hold. The radial menu is dropped; the status bar is where a finger idles.
 - **D2** is resolved by D1: nothing moves.
 
 Each later phase is one PR.
@@ -379,8 +381,9 @@ Each later phase is one PR.
    (§8). The simulation surface of both benchmark runs is unchanged at the
    reference.
 4. **Android host: pilot done** in `android/` ([Multi-platform](multi-platform.md)
-   §8), a Canvas drawer at 60 fps on an emulator; touch mapped to intents as the
-   focused input task; the radial menu after that.
+   §8), a Canvas drawer at 60 fps on an emulator and playing on a phone with
+   sound, taps and the held-tap menu (D8); the rest of touch input is the
+   focused task left.
 5. **Desktop GPU surface: done.** `make gui` (`vif_gui`): `pkg/window` opens an X
    window and a GLES 2 context through purego and uploads the `glyph.Raster`
    frame whole as one texture ([Platforms](multi-platform.md) §8). On software GL

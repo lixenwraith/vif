@@ -1,7 +1,8 @@
 # Configuration menu
 
-Press **Ctrl-G** or enter **`:g`** (`:config`) during play. Settings take effect
-in the current run; the menu does not rewrite `vif.toml` or the keymap.
+Press **Ctrl-G**, hold a left press (a finger) on the status bar, or enter **`:g`**
+(`:config`) during play. Settings take effect in the current run; the menu does
+not rewrite `vif.toml` or the keymap.
 
 ## Navigation
 

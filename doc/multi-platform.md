@@ -402,7 +402,9 @@ system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside i
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. Input is the pilot's: a tap is a left press and
 release on its cell, keys and the system keyboard's text are terminal key events,
-Back is Escape.
+Back is Escape. A tap held on the status bar opens the configuration menu, the
+hold every host shares (`MenuHoldDuration`), and the browser launcher sends the
+same hold as Ctrl-G on a touch screen, where a touch is never a mouse press.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its

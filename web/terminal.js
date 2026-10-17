@@ -363,6 +363,26 @@
             else if (b === fullButton) toggleFullscreen();
         });
 
+        // A finger held on the status bar summons the menu, as a mouse press held there
+        // does through the game's own hold: a touch is never reported as a mouse press.
+        const HOLD_MS = 600, HOLD_SLACK = 12;   // ms, and px of drift, about a cell
+        let hold = null;
+        function cancelHold() { if (hold) { clearTimeout(hold.timer); hold = null; } }
+        gridEl.addEventListener('pointerdown', function(e) {
+            if (e.pointerType !== 'touch') return;
+            const rect = gridEl.getBoundingClientRect();
+            const row = Math.floor((e.clientY - rect.top) / (rect.height / term.rows));
+            if (row < term.rows - 2) return;   // the ruler and the status bar, below the map
+            cancelHold();
+            hold = { x: e.clientX, y: e.clientY,
+                timer: setTimeout(function() { hold = null; term.input('\x07'); }, HOLD_MS) };   // Ctrl-G
+        });
+        gridEl.addEventListener('pointermove', function(e) {
+            if (hold && (Math.abs(e.clientX - hold.x) > HOLD_SLACK || Math.abs(e.clientY - hold.y) > HOLD_SLACK)) cancelHold();
+        });
+        gridEl.addEventListener('pointerup', cancelHold);
+        gridEl.addEventListener('pointercancel', cancelHold);
+
         function setKeyboard(on, refocus) {
             keyboard = on;
             keyboardSeen = false;

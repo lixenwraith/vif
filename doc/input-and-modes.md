@@ -128,7 +128,7 @@ cell shows the keys of a pending sequence, else the last one completed.
 |---|---|
 | `Ctrl-Q`, `Ctrl-C` | Quit; `[overlay_keys]` does not bind them, so overlay navigation ignores them. |
 | `Ctrl-S` | Cycle audio mute state; overlay navigation ignores it too. |
-| `Ctrl-G` | Open or close the [configuration menu](config-menu.md), from any mode. |
+| `Ctrl-G` | Open or close the [configuration menu](config-menu.md), from any mode; a left press held on the status bar opens it too (§7). |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
 | `Esc` | Cancel pending input, flash the ping grid in Normal, or return to Normal (§2). |
 | Arrow keys, `Home`, `End` | Move in the applicable mode. |
@@ -231,6 +231,7 @@ When terminal mouse reporting is enabled:
 |---|---|
 | Left press | Move the cursor to the translated map cell and fire main. |
 | Left press on a button | Press the button's key (§1); never moves or fires. |
+| Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on a phone, in the browser through its launcher. |
 | Left release | End held fire; release a held button. Passed on from every mode. |
 | Left drag | Continue moving the cursor. |
 | Held left | Repeat main fire at the shared repeat interval. |
