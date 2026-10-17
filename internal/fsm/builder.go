@@ -1,6 +1,9 @@
 package fsm
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // AddState adds a node to the machine manually
 // Useful for constructing the graph programmatically or during scenario load
@@ -31,7 +34,15 @@ func (m *Machine[T]) AddTransition(sourceID StateID, t Transition[T]) {
 // This ensures O(1) LCA lookups during runtime
 func (m *Machine[T]) CompilePaths() error {
 	m.reacts.clear()
-	for id, node := range m.nodes {
+	// In ID order, the loader's name order, so a cycle is reported by the same
+	// state every load
+	ids := make([]StateID, 0, len(m.nodes))
+	for id := range m.nodes {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		node := m.nodes[id]
 		path := make([]StateID, 0, 4)
 		curr := node
 
