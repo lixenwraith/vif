@@ -92,25 +92,21 @@ func textEvent(r rune) terminal.Event {
 	return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
 }
 
-// touch is the left button pressed or released on the cell under pixel x, y. A
-// press off the grid names no cell and is dropped; a release is kept on its edge,
-// since it ends whatever press came before.
+// touch is the left button pressed or released on the cell drawn under pixel x, y,
+// the nearest edge cell for one past the view's edge
 func (v *view) touch(x, y int, down bool) (terminal.Event, bool) {
 	if !v.pointer.Load() {
 		return terminal.Event{}, false
 	}
-	cols, rows := v.Size()
-	cx, cy := x/v.font.atlas.Width, y/v.font.atlas.Height
-	inside := x >= 0 && y >= 0 && cx < cols && cy < rows
+	v.mu.Lock()
+	cols, rows, w, h := v.cols, v.rows, v.w, v.h
+	v.mu.Unlock()
 	action := terminal.MouseActionRelease
 	if down {
-		if !inside {
-			return terminal.Event{}, false
-		}
 		action = terminal.MouseActionPress
 	}
 	return terminal.Event{
 		Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: action,
-		MouseX: min(max(cx, 0), cols-1), MouseY: min(max(cy, 0), rows-1),
+		MouseX: min(max(x*cols/w, 0), cols-1), MouseY: min(max(y*rows/h, 0), rows-1),
 	}, true
 }

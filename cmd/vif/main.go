@@ -50,6 +50,7 @@ var (
 	flagSchema   = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
 	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
 	flagSeed     = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
+	flagScale    = flag.Int("scale", 1, "Desktop window pixels per font pixel; vif-gui only")
 	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
 	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
 	flagBot      = flag.String("bot", "", "Add bots: [N[:graph]|graph], default 1:default")

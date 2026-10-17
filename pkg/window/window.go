@@ -20,18 +20,21 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Config is the window as it opens: its title, the atlas cells are drawn with and
-// the grid it is sized for
+// Config is the window as it opens: its title, the atlas cells are drawn with, the
+// grid it is sized for and the window pixels an atlas pixel covers each way, at
+// least 1
 type Config struct {
 	Title      string
 	Atlas      *glyph.Atlas
 	Cols, Rows int
+	Scale      int
 }
 
 // Window is a Surface over an X window. Frames, Sync and the pointer mode may be
 // set from any goroutine; one locked OS thread owns the display and the context.
 type Window struct {
 	atlas  *glyph.Atlas
+	scale  int
 	events chan terminal.Event
 	ready  chan struct{} // a frame is waiting to be drawn
 	stop   chan struct{}
@@ -112,8 +115,20 @@ func Open(cfg Config) (*Window, error) {
 	if err := load(); err != nil {
 		return nil, err
 	}
+	w := newWindow(cfg)
+	opened := make(chan error, 1)
+	go w.run(cfg, opened)
+	if err := <-opened; err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+// newWindow is the window's state before its thread opens it
+func newWindow(cfg Config) *Window {
 	w := &Window{
 		atlas:  cfg.Atlas,
+		scale:  max(cfg.Scale, 1),
 		events: make(chan terminal.Event, eventQueue),
 		ready:  make(chan struct{}, 1),
 		stop:   make(chan struct{}),
@@ -121,12 +136,7 @@ func Open(cfg Config) (*Window, error) {
 		raster: glyph.NewRaster(cfg.Atlas),
 	}
 	w.setGrid(cfg.Cols, cfg.Rows)
-	opened := make(chan error, 1)
-	go w.run(cfg, opened)
-	if err := <-opened; err != nil {
-		return nil, err
-	}
-	return w, nil
+	return w
 }
 
 // Close stops the thread and releases the context and the window
@@ -196,6 +206,9 @@ func (w *Window) SetPointerMode(enabled, motion bool) {
 
 func (w *Window) setGrid(cols, rows int) { w.grid.Store(uint64(cols)<<32 | uint64(uint32(rows))) }
 
+// cell is an atlas cell's size in window pixels
+func (w *Window) cell() (int, int) { return w.atlas.Width * w.scale, w.atlas.Height * w.scale }
+
 func (w *Window) run(cfg Config, opened chan<- error) {
 	defer close(w.done)
 	// Xlib and the GL context belong to the thread that made them
@@ -228,7 +241,7 @@ func (w *Window) open(cfg Config) error {
 		return errors.New("window: cannot open the X display; is DISPLAY set?")
 	}
 	screen := xDefaultScreen(w.dpy)
-	cw, ch := cfg.Atlas.Width, cfg.Atlas.Height
+	cw, ch := w.cell()
 	w.winW, w.winH = cfg.Cols*cw, cfg.Rows*ch
 	black := xBlackPixel(w.dpy, screen)
 	w.win = xCreateSimpleWindow(w.dpy, xRootWindow(w.dpy, screen), 0, 0, uint32(w.winW), uint32(w.winH), 0, black, black)
@@ -239,7 +252,7 @@ func (w *Window) open(cfg Config) error {
 	xSetWMNormalHints(w.dpy, w.win, &sizeHints{flags: hintMinSize | hintResizeInc | hintBaseSize,
 		minW: int32(cw), minH: int32(ch), incW: int32(cw), incH: int32(ch)})
 	xMapWindow(w.dpy, w.win)
-	g, err := newGPU(w.dpy, w.win)
+	g, err := newGPU(w.dpy, w.win, w.scale)
 	if err != nil {
 		w.release()
 		return err
@@ -346,7 +359,8 @@ func (w *Window) resize(width, height int) bool {
 	}
 	w.winW, w.winH = width, height
 	w.gpu.draw(width, height)
-	cols, rows := max(width/w.atlas.Width, 1), max(height/w.atlas.Height, 1)
+	cw, ch := w.cell()
+	cols, rows := max(width/cw, 1), max(height/ch, 1)
 	if c, r := w.Size(); c == cols && r == rows {
 		return true
 	}
@@ -417,8 +431,8 @@ func (w *Window) cellAt(px, py int) (int, int) {
 	if fw, fh := w.raster.Bounds(); fw > 0 {
 		cols, rows = fw/w.atlas.Width, fh/w.atlas.Height
 	}
-	x := (px - (w.winW-cols*w.atlas.Width)/2) / w.atlas.Width
-	y := (py - (w.winH-rows*w.atlas.Height)/2) / w.atlas.Height
+	cw, ch := w.cell()
+	x, y := (px-(w.winW-cols*cw)/2)/cw, (py-(w.winH-rows*ch)/2)/ch
 	return min(max(x, 0), cols-1), min(max(y, 0), rows-1)
 }
 

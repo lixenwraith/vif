@@ -12,27 +12,33 @@ import java.nio.IntBuffer;
 
 /**
  * Paints the game's frames as Game.frame hands them over and posts the picture to
- * the view's surface. OnCanvas paints cells from the atlas texture; a GLES drawer
- * takes the same frames. FromRaster shows Go's software raster, the fallback.
+ * the view's surface, stretched over all of it. OnCanvas paints cells from the
+ * atlas texture; a GLES drawer takes the same frames. FromRaster shows Go's
+ * software raster, the fallback.
  */
 interface CellDrawer {
     /** Applies a frame from the run; false when it changed nothing. */
     boolean apply(byte[] frame);
 
-    /** Draws what the drawer holds at the surface's top left. */
+    /** Draws what the drawer holds over the whole surface. */
     void draw(Canvas surface);
 
-    /** The picture painted so far, kept between frames. */
+    /**
+     * The picture painted so far at the atlas's size, kept between frames. The GPU
+     * stretches it over the surface, filtered, so the grid leaves no margin; painting
+     * each cell at the screen's size would cost the CPU every enlarged pixel.
+     */
     abstract class Picture implements CellDrawer {
         final int cellWidth, cellHeight;
         Bitmap screen;
-        private final Paint margin = new Paint();
+        private final Paint pixels = new Paint();
+        private final Rect onSurface = new Rect();
 
         Picture(byte[] atlas) {
             IntBuffer a = words(atlas, 0);
             cellWidth = a.get(0);
             cellHeight = a.get(1);
-            margin.setColor(Color.BLACK);
+            pixels.setFilterBitmap(true);
         }
 
         /** Sizes the picture to a grid, keeping it while the grid holds. */
@@ -53,15 +59,8 @@ interface CellDrawer {
                 surface.drawColor(Color.BLACK);
                 return;
             }
-            int w = screen.getWidth(), h = screen.getHeight();
-            surface.drawBitmap(screen, 0, 0, null);
-            // Skia sorts a rect, so a picture wider than a shrunk surface needs no margin
-            if (w < surface.getWidth()) {
-                surface.drawRect(w, 0, surface.getWidth(), surface.getHeight(), margin);
-            }
-            if (h < surface.getHeight()) {
-                surface.drawRect(0, h, Math.min(w, surface.getWidth()), surface.getHeight(), margin);
-            }
+            onSurface.set(0, 0, surface.getWidth(), surface.getHeight());
+            surface.drawBitmap(screen, null, onSurface, pixels);
         }
     }
 

@@ -71,7 +71,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         if (!started) {
             try {
-                Game.start(files, wad, width, height, raster, speaker,
+                Game.start(files, wad, width, height, getResources().getDisplayMetrics().density, raster, speaker,
                         err -> activity.runOnUiThread(() -> activity.exited(err)));
             } catch (Exception e) {
                 Log.e(MainActivity.TAG, "game not started", e);
