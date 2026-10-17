@@ -66,6 +66,22 @@ html, body {
 #loading.hidden { display: none; }
 #loading.error  { color: #f44; }
 
+/* A line over the game, gone after a while: the fallback drawer in use. */
+#notice {
+    position: fixed;
+    top: 4px;
+    right: 8px;
+    z-index: 2;
+    max-width: 90vw;
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #888;
+    font: 12px/1.4 monospace;
+}
+
+#notice[hidden] { display: none; }
+#strip:not([hidden]) ~ #notice { top: calc(var(--strip-h) + 4px); }   /* below the strip, not over it */
+
 /* Touch-primary devices: terminal.js shows the key strip before the first fit,
    so its height is never the grid's. */
 :root { --strip-h: 40px; }
