@@ -32,18 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Run maxmap under `all`, or list it apart
-
-- Priority: P0, to review
-- Affected files: `script/test.sh`, `script/README.md`
-
-`./script/test.sh list` files `maxmap` under "Automated (assert, and used by `all`)"
-and says `all` runs every automated scenario (`script/test.sh:155-170`), but the
-`all` loop leaves it out (`:871`), as `script/README.md:7,65` state. Options: add it
-to the loop, which holds a 500x250 `td` session for over 40 s, since its guest's
-6000-tick script outlasts `timeout 40` (`script/test.sh:672-674`); or list it outside
-the `all` set as `image` is.
-
 ### Drop the fleet grants nothing uses
 
 - Priority: P0, to review
