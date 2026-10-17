@@ -23,6 +23,8 @@ type RegionState struct {
 	Paused        bool
 
 	triggers triggerMask // union over ActivePath; rebuilt on every commit
+	// exiting marks a running exit phase; terminated, a TerminateRegion it issued
+	exiting, terminated bool
 }
 
 // Machine is the generic Hierarchical Finite State Machine runtime with parallel region support

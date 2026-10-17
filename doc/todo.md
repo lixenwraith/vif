@@ -17,44 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Refuse a parent cycle at load
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/builder.go`, `internal/fsm/loader.go`
-
-`CompilePaths` walks each state's parents without a bound (`builder.go:39-51`), and
-the loader checks only that a parent name exists (`loader.go:113`). With
-`A.parent = "B"` and `B.parent = "A"`, or a self parent, the walk never ends and its
-path grows until memory runs out (reproduced), so `-check`, startup and `:bot add`
-(under the world lock) hang. Stop the walk once it passes the node count and return
-an error naming the state.
-
-### Fail a document without `[states]` instead of panicking
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/loader.go`
-
-`LoadScenarioFromMap` writes `config.States["Root"]` (`loader.go:65-67`), and
-`toml.Decode` leaves that map nil when the document has no `[states]`. The file
-loader always adds one (`file_loader.go:103-105`), but `Machine.LoadScenario` and
-`bot.ParseGraph` (through `Graph.machine`, `internal/bot/bot.go:108`) do not, so a
-bot graph with only `[regions]` panics `-check`, `-bot` and `:bot add` (reproduced).
-Make `config.States` when it is nil.
-
-### Let an on_exit terminate its own region, or forbid it
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/machine.go`, `doc/fsm-reference.md`
-
-`TerminateRegion` runs the region's on_exit actions (`machine.go:623-628`) before
-deleting it (`:630`), so an on_exit that terminates its own region reruns itself
-until the stack overflows, whether the exit comes from a transition,
-`TerminateRegion` or `Reset` (`:471-484`; all three reproduced). The Notes of the
-[FSM reference](fsm-reference.md) call it supported; shipped scenarios terminate only
-from on_enter. Options: honour it (a nested call only marks the exiting region, and
-the outer exit deletes it and skips any enter phase); or forbid it
-(`TerminateRegion` returns an error for an exiting region, and the reference says so).
-
 ### Decide which control keys work in an overlay
 
 - Priority: P0, to review
