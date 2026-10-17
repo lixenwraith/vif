@@ -106,7 +106,6 @@ func buildActionRegistry() map[string]KeyEntry {
 		"nugget_jump":         {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentNuggetJump},
 		"gold_jump":           {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentGoldJump},
 		"toggle_auto_fire":    {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentToggleAutoFire},
-		"cycle_mouse_mode":    {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentCycleMouseMode},
 		"undo":                {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentUndo},
 		"macro_record_toggle": {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentMacroRecordToggle},
 

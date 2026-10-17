@@ -130,7 +130,6 @@ cell shows the keys of a pending sequence, else the last one completed.
 | `Ctrl-S` | Cycle audio mute state, from any mode. |
 | `Ctrl-G` | Open or close the [configuration menu](config-menu.md), from any mode; a left press held on the status bar opens it too (§7). |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
-| `m` in Normal | Cycle the mouse: follow → click → off (§7). |
 | `Esc` | Cancel pending input, flash the ping grid in Normal, or return to Normal (§2). |
 | Arrow keys, `Home`, `End` | Move in the applicable mode. |
 | `Tab` | Jump to the active nugget. |
@@ -255,9 +254,7 @@ it only where `ConfigResource.MapToViewport` says the viewport shows it: a bot
 reaches no further than a mouse on the same screen would.
 
 `:mouse enable|disable|free` controls reporting and free motion. `:free` is a
-short toggle for free mouse motion, on by default. `m` in Normal cycles the mouse
-through follow (free motion on), click (buttons and drags only) and off, the
-states the two commands set apart. The parser passes pointer input
+short toggle for free mouse motion, on by default. The parser passes pointer input
 on only in Normal, Visual and Insert, and the router drops it while the mouse is
 disabled or input is suspended (paused, Command or Overlay); a release still ends
 the hold of a press made before.

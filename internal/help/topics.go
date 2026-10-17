@@ -39,7 +39,7 @@ var topics = []topicDef{
 			{Actions: []string{"motion_line_end"}, Desc: "Last glyph on the row, then the right edge"},
 			{Actions: []string{"motion_half_page_left", "motion_half_page_right"}, Desc: "Half a viewport left and right"},
 			{Actions: []string{"motion_half_page_up", "motion_half_page_down"}, Desc: "Half a viewport up and down; PgUp and PgDn do the same"},
-			{Actions: []string{"motion_screen_vertical_mid"}, Desc: "Middle row"},
+			{Actions: []string{"motion_screen_vertical_mid", "motion_screen_horizontal_mid"}, Desc: "Middle row and middle column"},
 			{Actions: []string{"motion_screen_top"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Top row of the map"},
 			{Actions: []string{"motion_screen_bottom"}, Desc: "Bottom row of the map"},
 			{Actions: []string{"motion_origin"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Top-left corner"},
@@ -81,7 +81,6 @@ var topics = []topicDef{
 			{Actions: []string{"nugget_jump"}, Desc: "Jump to the active nugget"},
 			{Actions: []string{"gold_jump"}, Desc: "Jump to the first remaining gold glyph"},
 			{Actions: []string{"toggle_auto_fire"}, Desc: "Cycle auto-fire: both weapons, off, main only"},
-			{Actions: []string{"cycle_mouse_mode"}, Desc: "Cycle the mouse: follow, click, off"},
 		},
 	},
 	{
