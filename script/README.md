@@ -63,8 +63,8 @@ off`. A survivor that cannot reach the successor forks after the succession wind
 
 ## Automated
 
-`./script/test.sh all` runs every one of these except `maxmap` and prints
-PASS/FAIL.
+`./script/test.sh all` runs every one of these except `maxmap`, whose guest
+holds a ceiling-sized td session for over 40 s, and prints PASS/FAIL.
 
 | Scenario | Asserts |
 |---|---|
