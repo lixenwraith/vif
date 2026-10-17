@@ -416,8 +416,11 @@ the game hands over a frame every vsync and about 20 a second change cells, its
 20 Hz tick; taking, painting and posting one costs 3.5–4.2 ms mean and under 7 ms
 at p95 on the host GPU, 6–9 ms on the software one. The raster fallback costs
 36–57 ms a changed frame on the software GPU, a picture's worth of pixels across
-JNI each time: a fallback, not a 60 fps path. On a phone the APK plays with
-sound, taps and the held-tap menu; its frame times are not recorded yet.
+JNI each time: a fallback, not a 60 fps path. On a Pixel 8 Pro (Tensor G3,
+Android 17, 1008x2244 at 120 Hz, 15x30-pixel cells stretched over the view) the
+Canvas drawer paints every frame the game changes, 20–35 a second at 1x and 60 at
+4x, at 8–16 ms mean, 19–27 ms at p95 and at most 45 ms for take, paint and post,
+with no stutter to see; so the GLES drawer stays unwritten.
 
 The terminal module's value types (`Cell`, `Attr`, `ColorMode`, `Key`) are the
 renderer-neutral vocabulary by decision ([Engine decoupling](engine-decoupling.md)

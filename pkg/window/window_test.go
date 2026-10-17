@@ -75,7 +75,8 @@ func TestAPixelMapsToTheCellDrawnUnderIt(t *testing.T) {
 
 // BenchmarkPresent times a frame through the window: copy, raster, whole-texture
 // upload, draw and swap, finished on the GPU, at 15 % and at every cell changed.
-// Needs an X display with EGL and GLES 2.
+// Needs an X display with EGL and GLES 2; under a compositor the swap still waits
+// for the display's refresh.
 func BenchmarkPresent(b *testing.B) {
 	if os.Getenv("DISPLAY") == "" {
 		b.Skip("no X display")

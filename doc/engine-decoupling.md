@@ -386,15 +386,16 @@ Each later phase is one PR.
    (§8). The simulation surface of both benchmark runs is unchanged at the
    reference.
 4. **Android host: pilot done** in `android/` ([Multi-platform](multi-platform.md)
-   §8), a Canvas drawer at 60 fps on an emulator and playing on a phone with
-   sound, taps and the held-tap menu (D8); the rest of touch input is the
+   §8), a Canvas drawer at 60 fps on an emulator and on a Pixel 8 Pro, playing
+   with sound, taps and the held-tap menu (D8); the rest of touch input is the
    focused task left.
 5. **Desktop GPU surface: done.** `make gui` (`vif_gui`): `pkg/window` opens an X
    window and a GLES 2 context through purego and uploads the `glyph.Raster`
    frame whole as one texture ([Platforms](multi-platform.md) §8). On software GL
    (llvmpipe) a frame with 15 % of cells changed takes 5 ms at 120x40 and 12 ms at
-   200x60, 7 and 19 ms with every cell changed; the per-cell atlas quad path waits
-   until a hardware driver misses 60 fps.
+   200x60, 7 and 19 ms with every cell changed. On a hardware driver (NVIDIA) the
+   work is 2.4 and 5.3 ms, 6.9 and 16.3 ms, the raster most of it; no grid misses
+   60 fps, so the per-cell atlas quad path waits.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
    epoch, the maze payload and the store index are done.
 
