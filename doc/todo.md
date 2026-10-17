@@ -32,31 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Decide fleet log retention against the Job deadline
-
-- Priority: P0, to review
-- Affected files: `deploy/guest/vif-fleet-log-cleanup.py`, `doc/kubernetes-fleet.md`,
-  `doc/kube-docker-deploy.md`, `deploy/guest/var-log-vif\x2dfleet.mount`,
-  `deploy/k3s/05-log-volume.yaml`
-
-The cleanup keeps every session file touched in the last five hours
-(`deploy/guest/vif-fleet-log-cleanup.py:14`), while a session Job ends within one
-(`deploy/k3s/30-session.yaml:25`), so the 256 MiB tmpfs mostly holds ended sessions.
-Ten sessions at the measured 3 KiB/s fill it in about 2.4 h, which
-[Kubernetes fleet](kubernetes-fleet.md) §6 says the cleanup carries, yet nothing is
-stale by then and the lines lost are live sessions'. Options: a stale age just over
-the deadline; five hours under a byte budget that removes ended sessions oldest
-first; or a tmpfs sized for five hours of a full fleet.
-
-## Feature development push
-
-The bots and host pushes are done: bots play as participants, and the engine
-presents through `app.Presentation` on a terminal, a desktop window and an Android
-view, drawn from one font atlas at one cell aspect, with the menu every host
-summons by a held press ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
-The next push ships the desktop window as a way to play. The Android and
-position-store items below lie past it and stay items until a push takes them.
-
 ### Ship the desktop window
 
 - Priority: P1, leading the push
@@ -491,6 +466,18 @@ rejoining the same session downloads it again. Writing it under the user root
 behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
+
+### Apply the fleet log retention on the node
+
+- Priority: P1
+- Affected files: `deploy/guest/vif-fleet-log-cleanup.py`, `doc/kube-docker-deploy.md`
+
+Decided: the cleanup's stale age is 75 minutes, just past the session Job's
+`activeDeadlineSeconds`, so the tmpfs holds live sessions and the ones that just
+ended instead of five hours of finished ones; a byte budget or a larger tmpfs
+were the alternatives. Apply on the node: reinstall the cleanup script as
+[Fleet deploy](kube-docker-deploy.md) §7 does, then watch `findmnt` after a full
+hour of play.
 
 ### Promote verified images to the node
 

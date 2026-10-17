@@ -11,7 +11,9 @@ import time
 LOG_DIR = "/var/log/vif-fleet"
 KEEP_ROTATED = 2
 ROTATED_GRACE_SECONDS = 5 * 60
-STALE_SECONDS = 5 * 60 * 60
+# Just past the session Job's hour-long deadline: a file quiet this long is an
+# ended session's, so the tmpfs holds live sessions and the ones that just ended
+STALE_SECONDS = 75 * 60
 SESSION = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
 ACTIVE = re.compile(rf"^{SESSION}\.jsonl$")
 ROTATED = re.compile(
