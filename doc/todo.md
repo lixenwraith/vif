@@ -765,6 +765,24 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
+### Make the nugget beam read as one pass
+
+- Priority: P3
+- Affected files: `internal/render/renderer/materialize.go`
+
+A nugget beacon sometimes looks drawn twice, a flicker and then a second fast
+sweep, plainest from a corner. The nugget, timer and materialize systems emit one
+beam per spawn and one every `NuggetBeaconInterval`, never two alive (a 300-tick
+harness over the three systems confirmed it), so the second pass is the beam's own
+recede: after the 60 ms hold the dark front runs from the edge to the target while
+the bright end shrinks toward it, the direction the fill ran, in 240 ms quantized to
+five ticks; and the 8 Hz pulse at the fill's front, sampled at the 20 Hz tick,
+flickers. On a long beam the two passes are plain. Fading the whole beam in place
+during recede (`calcIntensity`'s recede case scaled by what is left of the phase,
+`segStart` held at the edge) would make it one pass. Unchecked: whether a replayed
+tick on a guest re-emits a beacon (`RestoreState` keeps `lastSpawnAttempt`), which
+would show as a second beam at the same cell.
+
 ### Draw the flow-field debug view from console glyphs
 
 - Priority: P3
