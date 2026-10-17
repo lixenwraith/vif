@@ -17,79 +17,6 @@ suspected bugs already have items at their own priority:
 [Drop the kinetic window's dead joiner path](#drop-the-kinetic-windows-dead-joiner-path)
 and [Drop the cursors a linked instance cannot reach](#drop-the-cursors-a-linked-instance-cannot-reach).
 
-### Decide whether loads refuse unknown keys and `op` values
-
-- Priority: P0, to review
-- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/guard.go`,
-  `internal/fsm/std/payload.go`, `internal/resource/check.go`, `doc/fsm-reference.md`
-
-The scenario and bot-graph decode (`loader.go:33`) drops keys outside
-`ScenarioDoc`'s tags, so a misspelt `on_entr` loads as absent and `-check` is silent.
-`CompareInt` reads an omitted or unknown `op` as `eq` (`guard.go:232-250`), unchecked
-by the guard factories, while `:d break stat` spells `ne`, `ge`, `le`
-(`internal/mode/commands.go:843-850`), so `op = "ge"` tests equality (reproduced).
-Options: keep this and have `-check` report both; or refuse at load, with the strict
-`Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
-bot graph use only known keys and ops.
-
-### Ship the desktop window
-
-- Priority: P1, leading the push
-- Affected files: `pkg/window`, `cmd/vif/gui.go`, `Makefile`,
-  `.github/workflows/release.yml`, `deploy/package`, `doc/packaging.md`,
-  `doc/multi-platform.md`
-
-`bin/vif-gui` builds, plays and is measured, but nothing ships it: `make release`
-and the release workflow build the terminal binary alone, `make install` installs
-no `vif-gui`, the desktop entry opens a terminal, and `pkg/window`'s tests run only
-where `make verify` and CI pass the tag. In order:
-
-- release and install the binary beside `vif`: a `vif-gui.desktop` entry with
-  `Terminal=false`, the release archives carrying it with purego's licence, and
-  [Packaging](packaging.md) saying so;
-- the window's gaps: the HiDPI scale read from the screen (Xft.dpi or RandR) in
-  place of `-scale`, paste from the X selection as `EventPaste`, a fullscreen key,
-  an icon, and native Wayland through purego's `libwayland-client` and EGL (xdg-shell;
-  XWayland serves today);
-- the frame path's ceiling, the raster at 12.9 ms for a whole 200x60 frame changed:
-  upload only the rows that changed, or the per-cell atlas quad path, whichever
-  `BenchmarkPresent` favours;
-- an end-to-end test of the window (open, flush, present, close) and the benchmark
-  under `xvfb-run` in CI, since no display-less `go test` reaches them today.
-
-Measured so far: `BenchmarkPresent` on a hardware driver (GTX 1060 Mobile, NVIDIA
-580, XWayland on a 120 Hz panel) is the display's 8.3 ms a frame at 120x40 and
-200x60 with 15 % of cells changed and at 120x40 with all, 16.7 ms at 200x60 with
-all, the compositor pacing the swap whatever its interval. Without the swap the
-work is 2.4, 5.3, 6.9 and 16.3 ms, the raster 0.8, 2.0, 5.1 and 12.9 ms of it.
-
-### Android host follow-ups
-
-- Priority: P3
-- Affected files: `android/`
-
-The Android host in `android/`
-([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host))
-plays the embedded scenario by touch on a Pixel 8 Pro. Past it:
-
-- the GLES drawer, only if a device misses 60 fps with the Canvas one;
-- a menu Android draws itself, likely circular, in place of the `tui` one taken
-  by taps;
-- the system keyboard's text shown while composed; it arrives as it commits;
-- bots on a phone;
-- a release-signed APK: the player's keystore and a Gradle signing block.
-
-### Take the position store out of the engine
-
-- Priority: P3
-- Affected files: `internal/engine/position.go`, `spatial_grid.go`
-
-`engine.Position` answers 2D cell queries over integer cells and couples to the
-world only for the component mask. As a `pkg/` package generic over its value
-type and taking its blocking predicate from the caller, it could add a third axis
-without the engine knowing. A design direction for the host model to stay
-compatible with, not a change on its own.
-
 ## Bots
 
 ### Open fleet sessions to bots
@@ -262,6 +189,21 @@ for the session and dropped at its end, and a bandit over trained genomes. Decid
 what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
+
+### Refuse unknown keys and `op` values at load
+
+- Priority: P1
+- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/guard.go`,
+  `internal/fsm/std/payload.go`, `internal/resource/check.go`, `doc/fsm-reference.md`
+
+The scenario and bot-graph decode drops keys outside `ScenarioDoc`'s tags, so a
+misspelt `on_entr` loads as absent and `-check` is silent, and `CompareInt` reads
+an omitted or unknown `op` as `eq` (`guard.go`), unchecked by the guard factories,
+so `op = "ge"` tests equality (verified by reading; `:d break stat` spells `ne`,
+`ge`, `le`). The fix is the strict `Op` and `Args` of
+[Behavior machines](machine-design.md) §7's dialect kernel, which the editor also
+needs; until it lands, the guard factories could refuse an unknown `op` alone.
+Shipped scenarios and the default bot graph use only known keys and ops.
 
 ### Widen the input hook past order-only play
 
