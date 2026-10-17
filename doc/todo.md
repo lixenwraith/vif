@@ -162,20 +162,6 @@ that page's Swarm row.
 0 from the roster every tick (`resolveGroupTargets`, `:323`). Every cursor move is
 still dispatched to a handler that drops it. Remove the two entries.
 
-### Confine a scenario's wall image path to the roots
-
-- Priority: P0, to review
-- Affected files: `internal/service/adapter_file.go`, `pkg/ascimage/dual.go`
-
-`FileService.Open` opens a wall image path as given, cwd-relative or absolute,
-before its escape check and the roots (`internal/service/adapter_file.go:51-58`),
-and refuses only directories (`:86`). So `./test.vifimg` shadows the roots' copy,
-against [Packaging](packaging.md) §1, and a scenario a coordinator serves a joiner
-(`internal/app/session.go:450`) can open `../` paths or `/dev/zero`, which
-`pkg/ascimage/dual.go:421` reads without bound (all three reproduced). Resolve only
-through the roots and require a regular file; decide whether absolute paths stay,
-or stay only for a scenario this run resolved itself.
-
 ### Build the Makefile's release binaries without CGO
 
 - Priority: P0, to review
