@@ -382,8 +382,9 @@ levels. `EventDriftStart` supplies a direction in the same radians, a speed in
 cells per second (capped at `DriftMaxSpeed`) and `duration_ms`, where zero drifts
 until `EventDriftCancel`. Every loose player glyph moves along that direction at
 its level's fraction of the speed, `DriftLayerFactor`: bright at full speed,
-normal at half, dark at a quarter, with rows moving at `DriftAspectY` of that for
-the cell aspect. Each level keeps an integer sub-cell phase per axis that advances
+normal at half, dark at a quarter, with rows scaled by the cell aspect so one
+speed reads the same in every direction. Each level keeps an integer sub-cell
+phase per axis that advances
 by simulated time, so drift follows game speed, draws no RNG, and every instance
 steps a layer on the same tick. A layer moves one cell and one axis at a time as
 a rigid group, so no step crosses a wall's corner. A glyph that would leave the

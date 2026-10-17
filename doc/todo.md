@@ -480,26 +480,13 @@ leaves through `render.Surface`, and the terminal module's value types are the
 renderer-neutral vocabulary (D1). Done: `app.Presentation` and `Config.Host`
 (the terminal as the default presentation, the host's speakers as the audio
 sink), the font atlas under `internal/asset/font/` with `pkg/glyph` and its
-software rasterizer as the reference drawer. Next, in order: the cell aspect as
-a parameter (below); the Android host on `SurfaceView` behind a Java-side drawer
-interface a GLES drawer can replace, with its asset provider; then touch mapped
+software rasterizer as the reference drawer, and the cell aspect as one parameter
+(`vmath.Aspect`, carried by the anchor). Next, in order: the Android host on
+`SurfaceView` behind a Java-side drawer interface a GLES drawer can replace, with
+its asset provider; then touch mapped
 onto the semantic input bots already drive, and a radial menu summoned by
 holding a tap in place of the Ctrl-G menu, whose gameplay implication is
 unresolved.
-
-### Make the cell aspect a parameter
-
-- Priority: P2, with the host model
-- Affected files: `pkg/navigation`, `pkg/vmath/ellipse.go`, `pkg/ascimage`,
-  `internal/parameter`, `internal/engine/position.go`, the renderers and systems
-  that scale a Y radius
-
-The code assumes a 2:1 cell in 29 files; a graphical surface draws any cell, and a
-1:1 cell with the splash font is the cheapest pilot. One `CellAspect` the surface
-reports with its grid, read from one definition: navigation builds its direction
-costs from it at construction, Y radii derive from X and the aspect, ascimage
-takes it as an argument. It joins the session fingerprint and the join anchor as
-map bounds do (D-14) ([Engine decoupling](engine-decoupling.md) §8).
 
 ### Take the position store out of the engine
 

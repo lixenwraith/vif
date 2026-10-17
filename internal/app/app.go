@@ -341,7 +341,7 @@ func (a *App) initWorld() {
 
 	// The terminal supplies color whenever one exists, but dimensions only when the
 	// mode says so; a replay's come from the journal, via config
-	width, height, colorMode := a.presentationGeometry(a.cfg.Width, a.cfg.Height)
+	width, height, colorMode, aspect := a.presentationGeometry(a.cfg.Width, a.cfg.Height)
 
 	// GameContext initializes the remaining world resources.
 	// A driven run uses the manual clock: game time is a pure function of ticks.
@@ -352,6 +352,7 @@ func (a *App) initWorld() {
 	}
 	a.ctx.BindLog(a.log)
 	a.world.Resources.Config.ColorMode = colorMode
+	a.world.Resources.Config.CellAspect = aspect
 
 	// The floor applies before the latch and the boot script, which places the
 	// first cursor from the map's size
@@ -606,6 +607,7 @@ func (a *App) buildAnchor() event.JournalAnchor {
 		MapWidth:       cfg.MapWidth,
 		MapHeight:      cfg.MapHeight,
 		CropOnResize:   cfg.CropOnResize,
+		CellAspect:     float64(cfg.CellAspect),
 		SessionShared:  a.world.SessionShared(),
 	}
 }

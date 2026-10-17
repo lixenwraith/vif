@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func testDrainInteractionWorld(
@@ -119,7 +120,7 @@ func TestDrainIntegratesExplosionKnockbackDuringKineticImmunity(t *testing.T) {
 	// Player-domain half of a blast: the producer strikes its own domain before
 	// the shared explosion request crosses, so no shared system sees the drain
 	var area blastArea
-	area.reset([]event.ExplosionCenterEntry{{X: 5, Y: 5}}, 4)
+	area.reset([]event.ExplosionCenterEntry{{X: 5, Y: 5}}, 4, vmath.RefAspect)
 	strikePlayerTargets(w, cursor, &area, component.CombatAttackExplosion, false)
 	applyQueuedCombatArea(t, w, combat)
 

@@ -45,7 +45,7 @@ type Route struct {
 	Field         *FlowField // Per-route constrained flow field
 	Waypoints     []Waypoint
 	ID            int     // Route index within graph; bandit arm index
-	TotalDistance int     // Weighted path distance (CostX/CostY/CostDiagonal)
+	TotalDistance int     // Weighted path distance (Costs)
 	Weight        float64 // Normalized sampling weight (inverse distance, floored)
 }
 
@@ -61,13 +61,10 @@ type RouteGraph struct {
 	Grid uint64 // Caller's generation of the passability the routes were computed on
 }
 
-// routeCellPenalty per prior-corridor cell; a ~100-cell prior path accrues
-// penalty far above routeTolerance, so any in-tolerance disjoint path wins next pass
-const routeCellPenalty = CostDiagonal
-
 // RouteSolver computes route graphs on scratch kept from one computation to the
 // next, so a caller rebuilding graphs as a game runs allocates only the graphs
 type RouteSolver struct {
+	Costs       Costs // the aspect routes are weighted at; zero is the reference
 	sc          routeScratch
 	fieldSearch gridSearch // the search every route's field is computed on
 	penalty     []int32
@@ -103,6 +100,9 @@ func (rs *RouteSolver) Compute(
 	if isBlocked(sourceX, sourceY) || isBlocked(targetX, targetY) {
 		return nil
 	}
+	if rs.Costs.X == 0 {
+		rs.Costs = refCosts
+	}
 
 	rg := &RouteGraph{
 		SourceX: sourceX, SourceY: sourceY,
@@ -123,7 +123,7 @@ func (rs *RouteSolver) Compute(
 
 	maxAttempts := RouteGraphMaxRoutes + RouteGraphExtraAttempts
 	for attempt := 0; attempt < maxAttempts && len(rg.Routes) < RouteGraphMaxRoutes; attempt++ {
-		path, trueCost := sc.penalizedShortestPath(sourceY*mapW+sourceX, targetY*mapW+targetX, mapW, penalty)
+		path, trueCost := sc.penalizedShortestPath(sourceY*mapW+sourceX, targetY*mapW+targetX, mapW, penalty, &rs.Costs)
 		if path == nil {
 			break
 		}
@@ -146,9 +146,10 @@ func (rs *RouteSolver) Compute(
 		distinct := len(rg.Routes) == 0 ||
 			shared*100 <= len(path)*RouteGraphMaxOverlapPct
 
-		// Penalize regardless of acceptance to drive out near-duplicates
+		// Penalize regardless of acceptance to drive out near-duplicates: a prior
+		// corridor's cells cost a diagonal each, far above the tolerance over ~100 cells
 		sc.dilate(path, RouteCorridorRadius, func(idx int) {
-			penalty[idx] += routeCellPenalty
+			penalty[idx] += rs.Costs.Diag
 		})
 
 		if !distinct {
@@ -176,17 +177,17 @@ func (rs *RouteSolver) Compute(
 	return rg
 }
 
-// stepCost returns the aspect-weighted cost of one step between adjacent flat indices
-func stepCost(from, to, mapW int) int {
+// stepCost returns the weighted cost of one step between adjacent flat indices
+func (c *Costs) stepCost(from, to, mapW int) int {
 	dx := to%mapW - from%mapW
 	dy := to/mapW - from/mapW
 	switch {
 	case dx != 0 && dy != 0:
-		return CostDiagonal
+		return int(c.Diag)
 	case dx != 0:
-		return CostX
+		return int(c.X)
 	default:
-		return CostY
+		return int(c.Y)
 	}
 }
 
@@ -225,6 +226,7 @@ func (rs *RouteSolver) computePathFields(rg *RouteGraph, paths [][]int, mapW, ma
 		}
 
 		field := NewFlowField(mapW, mapH)
+		field.Costs = rs.Costs
 		field.computeWith(&rs.fieldSearch, targets, routeBlocked)
 		rg.Routes[ri].Field = field
 	}
@@ -345,7 +347,7 @@ func (sc *routeScratch) dilate(path []int, radius int, fn func(idx int)) {
 
 // penalizedShortestPath is Dijkstra from start to goal over dirCost plus the penalty
 // of the cell entered, returning the path and its unpenalized cost
-func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []int32) ([]int, int) {
+func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []int32, c *Costs) ([]int, int) {
 	dist, prev := sc.dist, sc.prev
 	var most int32
 	for i := range dist {
@@ -356,7 +358,7 @@ func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []i
 	// walk only visits cells relaxed this pass (start terminates the walk)
 
 	g := &sc.search
-	g.reset(CostDiagonal + most)
+	g.reset(c.Diag + most)
 	dist[start] = 0
 	g.push(int32(start), 0)
 
@@ -370,7 +372,7 @@ func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []i
 		for m := g.open(at); m != 0; m &= m - 1 {
 			k := bits.TrailingZeros8(m)
 			nIdx := at + g.step[k]
-			if nd := d + dirCosts[k] + penalty[nIdx]; nd < dist[nIdx] {
+			if nd := d + c.dir[k] + penalty[nIdx]; nd < dist[nIdx] {
 				dist[nIdx] = nd
 				prev[nIdx] = at
 				g.push(nIdx, nd)
@@ -387,7 +389,7 @@ func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []i
 	for cur := goal; cur != start; {
 		path = append(path, cur)
 		p := int(prev[cur])
-		trueCost += stepCost(p, cur, mapW)
+		trueCost += c.stepCost(p, cur, mapW)
 		cur = p
 	}
 	path = append(path, start)

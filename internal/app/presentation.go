@@ -3,6 +3,7 @@
 package app
 
 import (
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"io"
 	"time"
 
@@ -20,6 +21,7 @@ type Presentation interface {
 	Surface() render.Surface
 	Size() (width, height int)
 	Blocked() time.Duration
+	CellAspect() vmath.Aspect // width over height of the cells it draws
 	Events() <-chan terminal.Event
 	SetPointerMode(enabled, motion bool)
 }
@@ -36,9 +38,10 @@ const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 // terminalHost is the terminal as a Presentation, around the service that opens it
 type terminalHost struct{ *service.TerminalService }
 
-func (t terminalHost) Surface() render.Surface { return t.Terminal() }
-func (t terminalHost) Size() (int, int)        { return t.Terminal().Size() }
-func (t terminalHost) Blocked() time.Duration  { return t.Terminal().Blocked() }
+func (t terminalHost) Surface() render.Surface  { return t.Terminal() }
+func (t terminalHost) Size() (int, int)         { return t.Terminal().Size() }
+func (t terminalHost) Blocked() time.Duration   { return t.Terminal().Blocked() }
+func (t terminalHost) CellAspect() vmath.Aspect { return vmath.RefAspect }
 
 // Fini restores the tty, which the crash handler calls before it prints
 func (t terminalHost) Fini() { t.Terminal().Fini() }

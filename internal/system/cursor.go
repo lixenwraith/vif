@@ -244,7 +244,7 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 	w.Components.Energy.SetComponent(e, component.EnergyComponent{Current: int64(energy)})
 	w.Components.Shield.SetComponent(e, component.ShieldComponent{
 		RadiusX:       parameter.PlayerShieldRadiusX,
-		RadiusY:       parameter.PlayerShieldRadiusY,
+		RadiusY:       w.Resources.Config.CellAspect.Y(parameter.PlayerShieldRadiusY),
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 	w.Components.Boost.SetComponent(e, component.BoostComponent{})

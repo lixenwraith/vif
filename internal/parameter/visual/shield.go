@@ -65,45 +65,44 @@ type ShieldConfig struct {
 	Palette256Alt uint8
 }
 
-// ShieldConfigs indexed by ShieldType
-var ShieldConfigs [3]ShieldConfig
-
-func init() {
-	// Player
-	ShieldConfigs[component.ShieldTypePlayer] = buildShieldConfig(
+// ShieldConfigFor is one shield type's geometry and colors at a cell aspect. The
+// player's and the loot's are circles authored at the reference aspect; the
+// quasar's hugs its footprint, which is cells whatever the aspect.
+func ShieldConfigFor(t component.ShieldType, a vmath.Aspect) ShieldConfig {
+	switch t {
+	case component.ShieldTypeQuasar:
+		qrx := float64(parameter.QuasarWidth)/2.0 + float64(parameter.QuasarShieldPadX)
+		qry := float64(parameter.QuasarHeight)/2.0 + float64(parameter.QuasarShieldPadY)
+		return buildShieldConfig(
+			qrx, qry,
+			parameter.QuasarShieldMaxOpacity,
+			RgbQuasarShield, RgbQuasarShield,
+			Quasar256Rim, Quasar256Rim,
+			color.RGB{},
+			0,
+			0,
+		)
+	case component.ShieldTypeLoot:
+		return buildShieldConfig(
+			parameter.LootShieldRadiusX,
+			a.Y(parameter.LootShieldRadiusY),
+			parameter.LootShieldMaxOpacity,
+			RgbLootShieldBorder, RgbLootShieldBorder,
+			Loot256Rim, Loot256Rim,
+			color.RGB{},
+			parameter.LootGlowIntensity,
+			parameter.LootGlowRotationPeriod,
+		)
+	}
+	return buildShieldConfig(
 		parameter.PlayerShieldRadiusX,
-		parameter.PlayerShieldRadiusY,
+		a.Y(parameter.PlayerShieldRadiusY),
 		parameter.ShieldMaxOpacity,
 		RgbTracerPositive, RgbTracerNegative,
 		Shield256Positive, Shield256Negative,
 		RgbBoostGlow,
 		ShieldPlayerGlowIntensity,
 		0,
-	)
-
-	// Quasar
-	qrx := float64(parameter.QuasarWidth)/2.0 + float64(parameter.QuasarShieldPadX)
-	qry := float64(parameter.QuasarHeight)/2.0 + float64(parameter.QuasarShieldPadY)
-	ShieldConfigs[component.ShieldTypeQuasar] = buildShieldConfig(
-		qrx, qry,
-		parameter.QuasarShieldMaxOpacity,
-		RgbQuasarShield, RgbQuasarShield,
-		Quasar256Rim, Quasar256Rim,
-		color.RGB{},
-		0,
-		0,
-	)
-
-	// Loot
-	ShieldConfigs[component.ShieldTypeLoot] = buildShieldConfig(
-		parameter.LootShieldRadiusX,
-		parameter.LootShieldRadiusY,
-		parameter.LootShieldMaxOpacity,
-		RgbLootShieldBorder, RgbLootShieldBorder,
-		Loot256Rim, Loot256Rim,
-		color.RGB{},
-		parameter.LootGlowIntensity,
-		parameter.LootGlowRotationPeriod,
 	)
 }
 

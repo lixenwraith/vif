@@ -395,7 +395,7 @@ func (s *GlyphSystem) placementRange(lineLength int) (rowLo, rowHi, colLo, colHi
 	}
 	sin, cos := math.Sincos(s.statDriftDirection.Get())
 	side := math.Abs(cos) * float64(config.MapHeight)
-	end := math.Abs(sin) * parameter.DriftAspectY * float64(config.MapWidth)
+	end := config.CellAspect.FromCircular(math.Abs(sin)) * float64(config.MapWidth)
 	fromSide := s.rng.Float64()*(side+end) < side
 	switch band := parameter.DriftEntryBand; {
 	case fromSide && cos < 0:

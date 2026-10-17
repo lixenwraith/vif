@@ -11,22 +11,6 @@ type Source interface {
 	GetDistance(x, y int) int
 }
 
-// UnitVectors are DirVectors as unit steering vectors, with Y halved before
-// normalization for the terminal's 2:1 cell aspect: a cell is twice as tall as it
-// is wide, so a diagonal that steps one cell in each axis is not a 45° heading.
-var UnitVectors [8][2]float64
-
-func init() {
-	for i, vec := range DirVectors {
-		fx := float64(vec[0])
-		fy := float64(vec[1]) * 0.5
-		if fx != 0 || fy != 0 {
-			fx, fy = vmath.Normalize2D(fx, fy)
-		}
-		UnitVectors[i] = [2]float64{fx, fy}
-	}
-}
-
 // BestNeighborDirection is the escape hatch for a cell the field does not cover —
 // one inside a wall, or one the goal cannot reach. It answers with the step toward
 // whichever neighbour stands closest to the goal, and DirNone when no neighbour
@@ -47,13 +31,14 @@ func BestNeighborDirection(src Source, x, y int) int8 {
 	return bestDir
 }
 
-// FlowVector is one cell's steering vector, and whether the field covers it.
-func FlowVector(src Source, x, y int) (float64, float64, bool) {
+// FlowVector is one cell's steering vector at these costs' aspect, and whether
+// the field covers it.
+func (c *Costs) FlowVector(src Source, x, y int) (float64, float64, bool) {
 	dir := src.GetDirection(x, y)
 	if dir < 0 || dir >= DirCount {
 		return 0, 0, false
 	}
-	return UnitVectors[dir][0], UnitVectors[dir][1], true
+	return c.Unit[dir][0], c.Unit[dir][1], true
 }
 
 // InterpolatedDirection is the steering vector at a sub-cell position, bilinear
@@ -61,7 +46,7 @@ func FlowVector(src Source, x, y int) (float64, float64, bool) {
 // smoothly instead of snapping between eight headings. Cells the field does not
 // cover drop out of the average rather than pulling it toward zero, and a position
 // with no covered neighbour returns the zero vector for the caller to interpret.
-func InterpolatedDirection(src Source, preciseX, preciseY float64) (float64, float64) {
+func (c *Costs) InterpolatedDirection(src Source, preciseX, preciseY float64) (float64, float64) {
 	sampleX := preciseX - vmath.CellCenter
 	sampleY := preciseY - vmath.CellCenter
 
@@ -79,10 +64,10 @@ func InterpolatedDirection(src Source, preciseX, preciseY float64) (float64, flo
 	w01 := invU * v
 	w11 := u * v
 
-	v00x, v00y, valid00 := FlowVector(src, x0, y0)
-	v10x, v10y, valid10 := FlowVector(src, x0+1, y0)
-	v01x, v01y, valid01 := FlowVector(src, x0, y0+1)
-	v11x, v11y, valid11 := FlowVector(src, x0+1, y0+1)
+	v00x, v00y, valid00 := c.FlowVector(src, x0, y0)
+	v10x, v10y, valid10 := c.FlowVector(src, x0+1, y0)
+	v01x, v01y, valid01 := c.FlowVector(src, x0, y0+1)
+	v11x, v11y, valid11 := c.FlowVector(src, x0+1, y0+1)
 
 	var sumX, sumY, totalWeight float64
 

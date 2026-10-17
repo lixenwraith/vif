@@ -18,7 +18,7 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 
 	emit(status.SubStat, "msg", "context",
 		"map_w", cfg.MapWidth, "map_h", cfg.MapHeight,
-		"crop_on_resize", cfg.CropOnResize)
+		"crop_on_resize", cfg.CropOnResize, "cell_aspect", float64(cfg.CellAspect))
 
 	// View: how this instance is looking at the map, not what the map is.
 	view := []any{"msg", "view",

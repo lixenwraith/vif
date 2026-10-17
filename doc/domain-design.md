@@ -309,8 +309,9 @@ correction wrote.
 `MapWidth` and `MapHeight` are Shared simulation state, carried in every capture
 header. `CropOnResize` is not in the capture: it rides the join anchor with the
 bounds, and only `EventLevelSetup` and a reset write it, each applied alike on
-every instance, so scripts may read it as agreed. Session admission installs all
-three before the FSM boots. While `World.SessionShared()` is true, a terminal
+every instance, so scripts may read it as agreed. The cell aspect rides the anchor
+the same way, and a guest plays at the host's. Session admission installs all
+four before the FSM boots. While `World.SessionShared()` is true, a terminal
 resize changes only local viewport/camera state; it cannot crop the map or announce
 a Shared cursor move. A scenario's `[map]` floor bounds every one of these writes
 from below; it travels with the scenario, so every instance holds the same one.

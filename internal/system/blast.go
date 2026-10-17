@@ -13,16 +13,18 @@ import (
 type blastArea struct {
 	centers                []event.ExplosionCenterEntry
 	one                    [1]event.ExplosionCenterEntry
+	aspect                 vmath.Aspect
 	radiusX, radiusY       int
 	radiusSq               float64
 	minX, maxX, minY, maxY int
 }
 
-// reset rebuilds the union bounding box for a center list
-func (a *blastArea) reset(centers []event.ExplosionCenterEntry, radius float64) {
+// reset rebuilds the union bounding box for a center list at a cell aspect
+func (a *blastArea) reset(centers []event.ExplosionCenterEntry, radius float64, aspect vmath.Aspect) {
 	a.centers = centers
+	a.aspect = aspect
 	a.radiusX = int(radius)
-	a.radiusY = a.radiusX / 2
+	a.radiusY = int(aspect.FromCircular(radius))
 	a.radiusSq = radius * radius
 	a.minX, a.minY = 1<<30, 1<<30
 	a.maxX, a.maxY = -(1 << 30), -(1 << 30)
@@ -35,12 +37,12 @@ func (a *blastArea) reset(centers []event.ExplosionCenterEntry, radius float64) 
 }
 
 // resetOne rebuilds the area for a single center without allocating
-func (a *blastArea) resetOne(x, y int, radius float64) {
+func (a *blastArea) resetOne(x, y int, radius float64, aspect vmath.Aspect) {
 	a.one[0] = event.ExplosionCenterEntry{X: x, Y: y}
-	a.reset(a.one[:], radius)
+	a.reset(a.one[:], radius, aspect)
 }
 
-// find returns the nearest center covering a cell, matching the consumer's aspect correction
+// find returns the nearest center covering a cell
 func (a *blastArea) find(x, y int) (cx, cy int, ok bool) {
 	if x < a.minX || x > a.maxX || y < a.minY || y > a.maxY {
 		return 0, 0, false
@@ -48,7 +50,7 @@ func (a *blastArea) find(x, y int) (cx, cy int, ok bool) {
 	best := -1.0
 	for i := range a.centers {
 		dx := float64(x - a.centers[i].X)
-		dyCirc := vmath.ScaleToCircular(float64(y - a.centers[i].Y))
+		dyCirc := a.aspect.Circular(float64(y - a.centers[i].Y))
 		distSq := vmath.CircleDistSq(dx, dyCirc)
 		if distSq > a.radiusSq {
 			continue

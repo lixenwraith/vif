@@ -529,10 +529,11 @@ func (p *Position) FindFreeAreaSpiral(
 		return topLeftX, topLeftY, true
 	}
 
-	// Spiral outward, checking 8 directions per radius
-	// Aspect ratio: terminal cells ~1:2, halve vertical distance for visual uniformity
+	// Spiral outward, checking 8 directions per radius, fewer rows than columns so
+	// the ring reads as round on the cell aspect
+	aspect := p.world.Resources.Config.CellAspect
 	for radius := 1; radius <= maxRadius; radius++ {
-		vertRadius := (radius + 1) / 2
+		vertRadius := int(math.Ceil(aspect.FromCircular(float64(radius))))
 		for _, dir := range SpiralSearchDirs {
 			checkX := originX + dir[0]*radius
 			checkY := originY + dir[1]*vertRadius
@@ -1047,7 +1048,7 @@ var diagonalFirstCCW = [8]int{7, 5, 3, 1, 0, 6, 4, 2} // NW→SW→SE→NE, then
 // FindFreeFromPattern searches 8 directions at expanding radii for free area
 // Returns (absX, absY, found) - absolute Top-Left position of the placed rectangle
 // originX, originY: The CENTER point to search around
-// aspectCorrect: apply terminal aspect ratio (1:2) to Y offsets
+// aspectCorrect: scale Y offsets to the cell aspect
 // additionalCheck: optional callback for extra validation (nil = skip), returns true if valid
 func (p *Position) FindFreeFromPattern(
 	originX, originY int,
@@ -1060,6 +1061,7 @@ func (p *Position) FindFreeFromPattern(
 ) (int, int, bool) {
 	// Compute direction internally
 	centerX := p.world.Resources.Config.MapWidth / 2
+	aspect := p.world.Resources.Config.CellAspect
 	direction := getSearchDirection(originX, centerX)
 
 	var order [8]int
@@ -1089,8 +1091,7 @@ func (p *Position) FindFreeFromPattern(
 			offsetY := dir[1] * r
 
 			if aspectCorrect {
-				// Y-axis aspect correction (1/2 scaling for visual circularity)
-				offsetY = offsetY / 2
+				offsetY = int(aspect.FromCircular(float64(offsetY)))
 			}
 
 			// Center the object on the search point

@@ -142,6 +142,10 @@ type ConfigResource struct {
 	// Set after terminal initialization
 	ColorMode terminal.ColorMode `toml:"color_mode"`
 
+	// CellAspect is the cell's width over its height the geometry runs at: session
+	// identity a joiner adopts with the map bounds, the terminal's reference by default
+	CellAspect vmath.Aspect `toml:"cell_aspect"`
+
 	// ConsolePalette is the text console a 256-color frame is drawn on; set with ColorMode
 	ConsolePalette ConsolePalette `toml:"-"`
 

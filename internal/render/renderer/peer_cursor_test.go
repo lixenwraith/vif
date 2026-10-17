@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // peerWorld builds a world holding one cursor per slot, with slot 0 local.
@@ -38,6 +39,7 @@ func peerContext(ctx *engine.GameContext) render.RenderContext {
 		ViewportWidth: cfg.ViewportWidth, ViewportHeight: cfg.ViewportHeight,
 		MapWidth: cfg.MapWidth, MapHeight: cfg.MapHeight,
 		ScreenWidth: ctx.Width, ScreenHeight: ctx.Height,
+		CellAspect: cfg.CellAspect,
 	}
 }
 
@@ -128,7 +130,7 @@ func TestPeerShieldBlendsAtThirtyPercent(t *testing.T) {
 	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
 	NewShieldRenderer(gameCtx).Render(rc, buf)
 
-	cfg := &visual.ShieldConfigs[component.ShieldTypePlayer]
+	cfg := visual.ShieldConfigFor(component.ShieldTypePlayer, vmath.RefAspect)
 	alpha := 0.8 * cfg.MaxOpacity
 	wantLocal := color.Screen(visual.RgbBackground, cfg.Color, alpha)
 	wantPeer := color.Screen(visual.RgbBackground, cfg.Color, alpha*visual.PeerFieldBlend)
@@ -167,7 +169,7 @@ func TestConsolePeerFieldsAreNotDimmed(t *testing.T) {
 		cell terminal.Cell
 		want uint8
 	}{
-		"shield": {shield.CellAt(pos.X+8, pos.Y), visual.ShieldConfigs[component.ShieldTypePlayer].Palette256},
+		"shield": {shield.CellAt(pos.X+8, pos.Y), visual.ShieldConfigFor(component.ShieldTypePlayer, vmath.RefAspect).Palette256},
 		"ember":  {ember.CellAt(pos.X+5, pos.Y), heatLead256(100, rc.ScreenWidth)},
 	} {
 		if tc.cell.Attrs&terminal.AttrBg256 == 0 || tc.cell.Bg.R != tc.want {
@@ -230,7 +232,7 @@ func TestPlayerFieldsRenderLocalLast(t *testing.T) {
 
 	buf := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
 	NewShieldRenderer(gameCtx).Render(rc, buf)
-	wantShield := visual.ShieldConfigs[component.ShieldTypePlayer].Palette256Alt
+	wantShield := visual.ShieldConfigFor(component.ShieldTypePlayer, vmath.RefAspect).Palette256Alt
 	if got := buf.CellAt(pos.X+8, pos.Y); got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != wantShield {
 		t.Fatalf("overlapping shield palette = (%d, %v), want local (%d, bg256)", got.Bg.R, got.Attrs, wantShield)
 	}

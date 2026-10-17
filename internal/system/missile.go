@@ -177,7 +177,7 @@ func (s *MissileSystem) Update() {
 // detonate blasts a missile's surroundings where it stands
 func (s *MissileSystem) detonate(m *component.MissileComponent, k *component.KineticComponent) {
 	x, y := physics.GridPos(&k.Kinetic)
-	s.blast.resetOne(x, y, parameter.MissileExplosionRadius)
+	s.blast.resetOne(x, y, parameter.MissileExplosionRadius, s.world.Resources.Config.CellAspect)
 	s.world.PushLocal(event.EventExplosionVisualRequest, &event.ExplosionVisualRequestPayload{
 		X: x, Y: y, Radius: parameter.MissileExplosionRadius,
 		Type: event.ExplosionTypeMissile,

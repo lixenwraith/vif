@@ -32,6 +32,7 @@ type NavigationSystem struct {
 	groups  map[uint8]*targetGroupNav
 	retired []*targetGroupNav // removed groups, whose caches the next new group takes
 	solver  navigation.RouteSolver
+	costs   navigation.Costs // the cell aspect every field and route is weighted at
 
 	// Composite passability grid (shared, recomputed on wall changes)
 	compositePassability *navigation.CompositePassability
@@ -83,6 +84,8 @@ func NewNavigationSystem(world *engine.World) engine.System {
 }
 
 func (s *NavigationSystem) Init() {
+	s.costs = navigation.CostsFor(s.world.Resources.Config.CellAspect)
+	s.solver.Costs = s.costs
 	s.statEntities.Store(0)
 	s.statRecomputes.Store(0)
 	s.statROICells.Store(0)
@@ -475,7 +478,7 @@ func (s *NavigationSystem) Update() {
 				if isComposite {
 					fx, fy = s.getCompositeFlowDirection(preciseX, preciseY, field)
 				} else {
-					fx, fy = navigation.InterpolatedDirection(field, preciseX, preciseY)
+					fx, fy = s.costs.InterpolatedDirection(field, preciseX, preciseY)
 				}
 				// zero flow = entity outside its narrow route corridor
 				// (knockback, spawn relocation); fall through to shared field
@@ -491,7 +494,7 @@ func (s *NavigationSystem) Update() {
 		if isComposite {
 			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, s.flow(group, true))
 		} else {
-			navComp.FlowX, navComp.FlowY = navigation.InterpolatedDirection(s.flow(group, false), preciseX, preciseY)
+			navComp.FlowX, navComp.FlowY = s.costs.InterpolatedDirection(s.flow(group, false), preciseX, preciseY)
 		}
 
 	}
@@ -567,6 +570,7 @@ func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
 			),
 		}
 		g.pointFlowCache.Lazy, g.compositeFlowCache.Lazy = true, true
+		g.pointFlowCache.Field.Costs, g.compositeFlowCache.Field.Costs = s.costs, s.costs
 	}
 	s.groups[groupID] = g
 	s.buffers.Observe(0, len(s.groups))
@@ -701,7 +705,7 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 		if escDir < 0 || escDir >= navigation.DirCount {
 			return 0, 0
 		}
-		return navigation.UnitVectors[escDir][0], navigation.UnitVectors[escDir][1]
+		return s.costs.Unit[escDir][0], s.costs.Unit[escDir][1]
 	}
 
 	// Bilinear interpolation, header-anchored (no half-cell offset, unlike point entities)
@@ -715,10 +719,10 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 	w01 := invU * v
 	w11 := u * v
 
-	v00x, v00y, valid00 := navigation.FlowVector(src, x0, y0)
-	v10x, v10y, valid10 := navigation.FlowVector(src, x0+1, y0)
-	v01x, v01y, valid01 := navigation.FlowVector(src, x0, y0+1)
-	v11x, v11y, valid11 := navigation.FlowVector(src, x0+1, y0+1)
+	v00x, v00y, valid00 := s.costs.FlowVector(src, x0, y0)
+	v10x, v10y, valid10 := s.costs.FlowVector(src, x0+1, y0)
+	v01x, v01y, valid01 := s.costs.FlowVector(src, x0, y0+1)
+	v11x, v11y, valid11 := s.costs.FlowVector(src, x0+1, y0+1)
 
 	var sumX, sumY, totalWeight float64
 
@@ -835,7 +839,7 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 			cost = navigation.CostUnreachable
 			for _, d := range navigation.DirVectors {
 				if next := field.GetDistance(pos.X+d[0], pos.Y+d[1]); next >= 0 {
-					cost = min(cost, next+navigation.CostDiagonal)
+					cost = min(cost, next+int(s.costs.Diag))
 				}
 			}
 		}

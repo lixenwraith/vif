@@ -157,7 +157,7 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		radiusX = parameter.PylonDefaultRadiusX
 	}
 	if radiusY <= 0 {
-		radiusY = parameter.PylonDefaultRadiusY
+		radiusY = s.world.Resources.Config.CellAspect.YInt(parameter.PylonDefaultRadiusY)
 	}
 
 	minHP := payload.MinHP

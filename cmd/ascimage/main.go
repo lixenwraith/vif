@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/ascimage"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func main() {
@@ -27,6 +28,7 @@ func main() {
 		zoomLevel  int
 		anchorX    int
 		anchorY    int
+		aspect     float64
 	)
 
 	flag.StringVar(&modeStr, "m", "quadrant", "Render mode: 'bg' or 'quadrant'")
@@ -39,6 +41,7 @@ func main() {
 	flag.IntVar(&zoomLevel, "z", 100, "Initial zoom level percent (interactive only)")
 	flag.IntVar(&anchorX, "ax", 0, "Anchor X offset (dual-mode output)")
 	flag.IntVar(&anchorY, "ay", 0, "Anchor Y offset (dual-mode output)")
+	flag.Float64Var(&aspect, "aspect", float64(vmath.RefAspect), "Cell width over height of the target display")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -53,7 +56,7 @@ func main() {
 		runVifimgInput(inputPath, colorMode, output, noStatus)
 	} else {
 		runImageInput(inputPath, modeStr, colorMode, width, output, dualOutput,
-			fitMode, noStatus, zoomLevel, anchorX, anchorY)
+			fitMode, noStatus, zoomLevel, anchorX, anchorY, vmath.Aspect(aspect))
 	}
 }
 
@@ -91,7 +94,7 @@ func runVifimgInput(path string, colorMode terminal.ColorMode, output string, no
 }
 
 func runImageInput(path, modeStr string, colorMode terminal.ColorMode, width int,
-	output, dualOutput string, fitMode, noStatus bool, zoomLevel, anchorX, anchorY int) {
+	output, dualOutput string, fitMode, noStatus bool, zoomLevel, anchorX, anchorY int, aspect vmath.Aspect) {
 
 	img, err := loadImage(path)
 	if err != nil {
@@ -105,20 +108,20 @@ func runImageInput(path, modeStr string, colorMode terminal.ColorMode, width int
 	renderMode := parseRenderMode(modeStr)
 
 	if dualOutput != "" {
-		runDualOutput(img, renderMode, width, dualOutput, anchorX, anchorY)
+		runDualOutput(img, renderMode, width, dualOutput, anchorX, anchorY, aspect)
 	} else if output != "" {
-		runFileOutput(img, renderMode, colorMode, width, output)
+		runFileOutput(img, renderMode, colorMode, width, output, aspect)
 	} else {
-		runInteractive(img, renderMode, colorMode, fitMode, noStatus, zoomLevel)
+		runInteractive(img, renderMode, colorMode, fitMode, noStatus, zoomLevel, aspect)
 	}
 }
 
-func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string, anchorX, anchorY int) {
+func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string, anchorX, anchorY int, aspect vmath.Aspect) {
 	if width <= 0 {
 		width = 80
 	}
 
-	dual := ascimage.ConvertImageDual(img, width, renderMode)
+	dual := ascimage.ConvertImageDual(img, width, renderMode, aspect)
 	dual.AnchorX = anchorX
 	dual.AnchorY = anchorY
 
@@ -190,12 +193,12 @@ func parseColorMode(s string) terminal.ColorMode {
 	}
 }
 
-func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, width int, output string) {
+func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, width int, output string, aspect vmath.Aspect) {
 	if width <= 0 {
 		width = 80
 	}
 
-	converted := ascimage.ConvertImage(img, width, renderMode, colorMode)
+	converted := ascimage.ConvertImage(img, width, renderMode, colorMode, aspect)
 	fmt.Fprintf(os.Stderr, "Output: %dx%d cells\n", converted.Width, converted.Height)
 
 	if err := ascimage.WriteANSI(converted, output, colorMode); err != nil {
@@ -204,8 +207,8 @@ func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode te
 	}
 }
 
-func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, fitMode, noStatus bool, zoomLevel int) {
-	viewer := NewViewer(img)
+func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, fitMode, noStatus bool, zoomLevel int, aspect vmath.Aspect) {
+	viewer := NewViewer(img, aspect)
 	viewer.RenderMode = renderMode
 	viewer.ColorMode = colorMode
 	viewer.ShowStatus = !noStatus

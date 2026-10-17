@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"math"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -109,7 +110,7 @@ func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked WallChecker
 				continue
 			}
 			nIdx := int32(ny*w + nx)
-			newDist := entry.dist + dirCosts[dirIdx]
+			newDist := entry.dist + refCosts.dir[dirIdx]
 			if f.VisitedGen[nIdx] != f.CurrentGen || newDist < f.Distances[nIdx] {
 				f.Distances[nIdx] = newDist
 				f.VisitedGen[nIdx] = f.CurrentGen
@@ -132,7 +133,7 @@ func referenceSeed(f *FlowField, heap *minHeap, tx, ty int, isBlocked WallChecke
 					continue
 				}
 				idx := int32(ny*f.Width + nx)
-				cost := int32(abs(dx)*CostX + abs(dy)*CostY)
+				cost := int32(abs(dx))*refCosts.X + int32(abs(dy))*refCosts.Y
 				if f.VisitedGen[idx] != f.CurrentGen || cost < f.Distances[idx] {
 					f.Distances[idx], f.VisitedGen[idx], f.Directions[idx] = cost, f.CurrentGen, DirTarget
 					heap.push(heapEntry{idx: idx, dist: cost})
@@ -158,7 +159,7 @@ func shortestStep(f *FlowField, x, y int, isBlocked WallChecker) bool {
 		return false
 	}
 	next := f.GetDistance(x+dx, y+dy)
-	return next >= 0 && next+int(dirCosts[d]) == f.GetDistance(x, y)
+	return next >= 0 && next+int(refCosts.dir[d]) == f.GetDistance(x, y)
 }
 
 // FuzzComputeMatchesReference: on any wall layout — rooms, jagged edges left by
@@ -304,7 +305,7 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 		walls, penalty := make([]bool, w*h), make([]int32, w*h)
 		for i := range walls {
 			walls[i] = rng.IntN(256) < int(density)/2
-			penalty[i] = int32(rng.IntN(RouteGraphMaxRoutes+RouteGraphExtraAttempts+1)) * routeCellPenalty
+			penalty[i] = int32(rng.IntN(RouteGraphMaxRoutes+RouteGraphExtraAttempts+1)) * refCosts.Diag
 		}
 		isBlocked := func(x, y int) bool { return walls[y*w+x] }
 		start, goal := rng.IntN(w*h), rng.IntN(w*h)
@@ -328,7 +329,7 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 					if x < 0 || y < 0 || x >= w || y >= h || want[at] == CostUnreachable || !legal(at, y*w+x) {
 						continue
 					}
-					if nd := want[at] + dirCosts[k] + penalty[y*w+x]; nd < want[y*w+x] {
+					if nd := want[at] + refCosts.dir[k] + penalty[y*w+x]; nd < want[y*w+x] {
 						want[y*w+x], changed = nd, true
 					}
 				}
@@ -338,7 +339,7 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 		sc := new(routeScratch)
 		sc.grow(w * h)
 		sc.search.fill(w, h, isBlocked)
-		path, cost := sc.penalizedShortestPath(start, goal, w, penalty)
+		path, cost := sc.penalizedShortestPath(start, goal, w, penalty, &refCosts)
 		if path == nil {
 			if want[goal] != CostUnreachable {
 				t.Fatalf("no path, reference reaches the goal at %d", want[goal])
@@ -354,8 +355,8 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 			if !legal(path[i-1], path[i]) {
 				t.Fatalf("step %d→%d is not legal", path[i-1], path[i])
 			}
-			penalized += int32(stepCost(path[i-1], path[i], w)) + penalty[path[i]]
-			trueCost += stepCost(path[i-1], path[i], w)
+			penalized += int32(refCosts.stepCost(path[i-1], path[i], w)) + penalty[path[i]]
+			trueCost += refCosts.stepCost(path[i-1], path[i], w)
 		}
 		if penalized != want[goal] || cost != trueCost {
 			t.Fatalf("penalized cost %d (reference %d), reported cost %d for a path costing %d", penalized, want[goal], cost, trueCost)
@@ -366,6 +367,26 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 // TestASolverReusedAcrossGraphsComputesEachAfresh: the penalties, corridors and
 // searches one computation leaves must not reach the next, or a graph would depend
 // on what the solver computed before it.
+// TestCostsFollowTheAspect: the reference keeps the 10/20/22 weighting every
+// field was tuned at, a square cell costs the same on both axes, and the steering
+// vectors are unit length at either.
+func TestCostsFollowTheAspect(t *testing.T) {
+	if refCosts.X != 10 || refCosts.Y != 20 || refCosts.Diag != 22 {
+		t.Fatalf("reference costs = %d/%d/%d, want 10/20/22", refCosts.X, refCosts.Y, refCosts.Diag)
+	}
+	square := CostsFor(1)
+	if square.X != 10 || square.Y != 10 || square.Diag != 14 {
+		t.Fatalf("square costs = %d/%d/%d, want 10/10/14", square.X, square.Y, square.Diag)
+	}
+	for _, c := range []Costs{refCosts, square} {
+		for k, u := range c.Unit {
+			if d := math.Hypot(u[0], u[1]); math.Abs(d-1) > 1e-12 {
+				t.Fatalf("unit vector %d at costs %d/%d has length %v", k, c.X, c.Y, d)
+			}
+		}
+	}
+}
+
 func TestASolverReusedAcrossGraphsComputesEachAfresh(t *testing.T) {
 	rng := rand.New(rand.NewPCG(3, 5))
 	const w, h = 40, 24

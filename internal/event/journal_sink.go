@@ -71,6 +71,7 @@ func (s vlogSink) Anchor(a JournalAnchor) {
 		"map_w", a.MapWidth,
 		"map_h", a.MapHeight,
 		"crop_on_resize", a.CropOnResize,
+		"cell_aspect", a.CellAspect,
 		"session_shared", a.SessionShared,
 		"slot", a.Slot,
 		"speed", a.Speed)

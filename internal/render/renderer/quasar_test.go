@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func TestQuasarZapRangeIsClippedToMapBounds(t *testing.T) {
@@ -17,6 +18,7 @@ func TestQuasarZapRangeIsClippedToMapBounds(t *testing.T) {
 		MapOffsetY:     3,
 		MapWidth:       10,
 		MapHeight:      6,
+		CellAspect:     vmath.RefAspect,
 	}
 	minX, minY, _ := ctx.MapToScreen(0, 0)
 	maxX, maxY, _ := ctx.MapToScreen(ctx.MapWidth-1, ctx.MapHeight-1)
@@ -64,6 +66,7 @@ func TestQuasarZapRangeRespectsCameraViewport(t *testing.T) {
 		CameraY:        4,
 		MapWidth:       20,
 		MapHeight:      14,
+		CellAspect:     vmath.RefAspect,
 	}
 	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 14, 8)
 	(&QuasarRenderer{zapCell: zapCellTrueColor}).renderZapRange(ctx, buf, ctx.CameraX, ctx.CameraY+3, &component.QuasarComponent{ZapRadius: 5})
