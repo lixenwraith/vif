@@ -112,7 +112,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from t
 | Music | Strings `music.{group,tier,rhythm,melody,fill}`; `music.bpm` | `NewMusicSystem` | Update, stop and mute, from the sequencer readout | `Init` clears them | Generic only |
 | Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{drain,eye,kraken,pylon,quasar,snake,storm,swarm,tower,total,uncredited}`, `session.{any_defeated,all_defeated}`, `energy.damage_multiplier` | `NewMetaSystem` | `Update` (map, camera, placement), kill and defeat handlers, the cycle damage-multiplier events, and `LoadShared` | `Init`; kill tallies, the defeat latches and the multiplier are carried by its D-19 record | `session.any_defeated` and `kills.{drain,quasar,storm,kraken}` are shipped FSM guards, and those kill keys are also `StatusToVar` sources; the status bar reads `energy.damage_multiplier` |
 
-Audio-free builds (`vif_headless`, `vif_noaudio`, `wasm`) use `audio_none.go`. There, Audio registers only `audio.mask`, held at -1, and Music registers nothing.
+Audio-free builds (`vif_headless`, `vif_noaudio`) use `audio_none.go`. There, Audio registers only `audio.mask`, held at -1, and Music registers nothing.
 
 ## Session telemetry
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/browser"
@@ -13,7 +14,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-func init() { platformHost.Presentation = &browserHost{} }
+func init() { platformHost = app.Host{Presentation: &browserHost{}, Audio: browser.Speaker()} }
 
 // browserHost is the page as the run's Presentation. A scenario change rebuilds the
 // run, not the page: it opens on the first Init and lives as long as the Worker.

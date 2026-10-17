@@ -68,7 +68,7 @@ jobs:
             go build -trimpath -tags='novlog vif_noaudio' -ldflags='-s -w' \
             -o "stage/$p-windows-amd64/vif.exe" ./cmd/vif
           GOOS=js GOARCH=wasm \
-            go build -trimpath -tags=vif_noaudio -ldflags='-s -w' \
+            go build -trimpath -ldflags='-s -w' \
             -o "stage/$p-web/vif.wasm" ./cmd/vif
 
           for target in linux-amd64 linux-amd64-headless freebsd-amd64 windows-amd64 web; do

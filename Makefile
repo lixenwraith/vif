@@ -65,7 +65,7 @@ help:
 	@echo "  android  Build the Android debug APK as bin/vif-debug.apk (Android SDK and NDK: android/README.md)"
 	@echo "  android-install Install bin/vif-debug.apk on the device adb sees"
 	@echo "  nolog    Release build without logger"
-	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (audio and logging omitted)"
+	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted)"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  allocator Build the website-to-K3s session allocator"
@@ -161,11 +161,11 @@ android-install:
 nolog: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
-# wasm selects vlog/stub.go and the audio-free system manifest automatically.
+# wasm selects vlog/stub.go automatically; the mixer streams to the page's speakers.
 # wasm_exec.js is the loader of the Go that built the binary, so it is copied
 # from that toolchain on every build rather than kept as it was committed.
 wasm: check-go $(WEB_DIR)
-	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
+	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
 
 # windows is experimental and untested
@@ -196,9 +196,6 @@ verify: generate test
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "novlog vif_noaudio" ./...
 	@if $(GO) list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|/pkg/audio$$'; then \
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
-	fi
-	@if GOOS=js GOARCH=wasm $(GO) list -deps $(SRC) | grep -Eq '/pkg/audio$$'; then \
-		echo "FAIL: wasm imports the audio implementation"; exit 1; \
 	fi
 	$(GO) vet ./...
 	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui ./pkg/window $(SRC)

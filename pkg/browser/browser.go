@@ -1,13 +1,15 @@
 //go:build js && wasm
 
-// Package browser is a web page as the run's screen. The Go program runs in a
-// Worker; the page draws the cell grid from the frames the Worker hands it, one at
-// a time and the newest once the page has drawn the last, and reports its keys,
-// its pointer and its size as the events a terminal would.
+// Package browser is a web page as the run's screen and speakers. The Go program
+// runs in a Worker; the page draws the cell grid from the frames the Worker hands
+// it, one at a time and the newest once the page has drawn the last, plays the PCM
+// it posts, and reports its keys, its pointer and its size as the events a
+// terminal would.
 package browser
 
 import (
 	"errors"
+	"io"
 	"sync"
 	"sync/atomic"
 	"syscall/js"
@@ -21,14 +23,15 @@ import (
 const eventQueue = 256
 
 // The Worker's side of the bridge, web/worker.js: vifGrid is the grid the page
-// measured before the program started; vifAtlas, vifFrame and vifPointer post the
-// texture, a frame and the pointer mode to the page; goEvent is what the page sends
-// back, one object a message
+// measured before the program started; vifAtlas, vifFrame, vifPointer and vifAudio
+// post the texture, a frame, the pointer mode and a PCM buffer to the page; goEvent
+// is what the page sends back, one object a message
 const (
 	jsGrid    = "vifGrid"
 	jsAtlas   = "vifAtlas"
 	jsFrame   = "vifFrame"
 	jsPointer = "vifPointer"
+	jsAudio   = "vifAudio"
 	jsEvent   = "goEvent"
 )
 
@@ -155,6 +158,30 @@ func (h *Host) post(ev terminal.Event) {
 	default:
 	}
 }
+
+// Speaker is the page's speakers, the writer the mixer streams to: each buffer goes
+// to the page but a silent one, so a muted game posts nothing and the page opens no
+// AudioContext until a sound plays. Nil when the worker defines no vifAudio.
+func Speaker() io.WriteCloser {
+	if js.Global().Get(jsAudio).Type() != js.TypeFunction {
+		return nil
+	}
+	return speaker{}
+}
+
+type speaker struct{}
+
+func (speaker) Write(p []byte) (int, error) {
+	for _, b := range p {
+		if b != 0 {
+			js.Global().Call(jsAudio, bytes(p))
+			break
+		}
+	}
+	return len(p), nil
+}
+
+func (speaker) Close() error { return nil }
 
 // bytes copies b into a Uint8Array of its own, which the Worker may transfer
 func bytes(b []byte) js.Value {

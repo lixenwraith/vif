@@ -79,8 +79,8 @@ injected event groups.
 
 Build capabilities refine that policy before runtime. `vif_headless` stubs the
 presentation adapter, refuses every presenting mode and leaves the generated
-renderer registry out of the build; it, `vif_noaudio` and `wasm` also remove the
-audio service and resource while the generated builder selects lightweight event
+renderer registry out of the build; it and `vif_noaudio` also remove the audio
+service and resource while the generated builder selects lightweight event
 sinks. Runtime modes remain the simulation/lifecycle choice, while build profiles
 decide which host adapters can be selected at all. The simulation fingerprint
 excludes renderers and the local-only audio capability, so a dedicated host and a
