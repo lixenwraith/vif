@@ -21,6 +21,7 @@ SCAN_DIRS = (
     "internal/app",
     "internal/help",
     "internal/asset",
+    "internal/prof",
 )
 
 
