@@ -445,6 +445,7 @@ the Go Authors' header, which points to a LICENSE no install or archive carries
 (`Makefile:217,237` ship only vif's). Add xterm's LICENSE beside it and Go's in
 `wad/content/` (the loader reads only `.txt` and `.toml`,
 `internal/content/load.go:32-35`), and ship both, with vif's, in every archive.
+`bin/vif-gui` links purego (Apache-2.0), whose notice its archive needs too.
 
 ## Feature development push
 
@@ -499,6 +500,17 @@ keyboard, Back as Escape):
 
 Then measure on arm64 hardware, and write the GLES drawer if a device misses 60
 fps with the Canvas one.
+
+### Measure and round out the desktop window
+
+- Priority: P3
+- Affected files: `pkg/window`, `cmd/vif/gui.go`
+
+The `vif_gui` window was measured on software GL only (llvmpipe on Xvfb). Take
+`BenchmarkPresent` on a hardware driver at 120x40 and 200x60; build the per-cell
+atlas quad path only if it misses 60 fps there. Not yet done: an integer pixel
+scale for HiDPI screens, native Wayland (XWayland serves today) and paste (no
+`EventPaste` from the X selection).
 
 ### Take the position store out of the engine
 
@@ -772,16 +784,6 @@ blocks, about a quarter of the cells, where its directions mostly agree with the
 full field's away from walls; then a second Go instance in another worker computing
 fields at a fixed lead, at the cost of a second runtime and of copying the grid in
 and the field out.
-
-### Index a store by a per-domain slice
-
-- Priority: P3
-- Affected files: `internal/engine/store.go`, `position.go`
-
-Map lookups in the sparse-set index are 24 % of td's tick CPU. Entity IDs are
-per-domain counters, so a slice per domain indexed by the ID's low bits would make
-the lookup an array read; the idea is noted without analysis, and needs its own
-measurement on `main` as well as `td` ([Engine decoupling](engine-decoupling.md) §6).
 
 ### Export a backend constructor in the terminal module
 

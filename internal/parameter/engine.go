@@ -90,6 +90,16 @@ const (
 	EventBufferMask = 2047
 )
 
+// Store index: an entity's ID selects a slot in a page of 1<<StoreIndexPageBits.
+// Pages and page table stay within StoreIndexFloorBytes plus StoreIndexEntityBytes
+// per entity indexed; an entity past that bound is kept in a map, so IDs no counter
+// issues (a peer's capture) cost what a map costs instead of a page each.
+const (
+	StoreIndexPageBits    = 10
+	StoreIndexFloorBytes  = 64 << 10
+	StoreIndexEntityBytes = 256
+)
+
 // MaxEntitiesPerCell keeps a Cell at exactly 256 bytes, four cache lines:
 // 31 eight-byte entities, two counts and six bytes of padding.
 const MaxEntitiesPerCell = 31

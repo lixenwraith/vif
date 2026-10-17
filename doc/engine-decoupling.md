@@ -313,7 +313,7 @@ From the td profile (1,600 ticks, including the resets):
 | Finding | Evidence | Opportunity |
 |---|---|---|
 | `wallGrid.current` walked every wall to prove the cached wall grid current | 10 % of CPU flat, `WallTest.func1` 18 % cumulative, with 50,000 walls and two callers a tick | done: the wall epoch and the grid generation replace the scan (ECS and events §3); td 1.72 to 1.49 ms a tick, median of six interleaved runs, main unchanged within noise |
-| Map lookups in the sparse-set index | `mapaccess2_fast64` 24 % cumulative | entity IDs are per-domain counters; an index slice per domain would turn the lookup into an array read; measure before changing `Store` |
+| Map lookups in the sparse-set index | `mapaccess2_fast64` 24 % cumulative | done: a page table per domain indexed by the ID, bounded against IDs a peer chose (ECS and events §2); td 0.91 to 0.70 ms a tick, main 20.6 to 18.2 µs, median of twelve interleaved runs; the index holds 0.6 MB on td where the maps held 2.7 MB |
 | Maze spawn built a 50,000-cell payload and the batch spawn grew its slices | 145 MB and 118 MB flat over 22 spawns | done: the payload is pooled (`event.AcquireWallBatchSpawn`) and sized by a count of the maze's walls, the position batch is sized by the spawn and members are made only for a composite; the maze spawn's allocation over the run 363 to 138 MB, td 515 to 370 KB a tick |
 | Drain's exclusion map is built per spawn | 37 MB | a map the system keeps and clears |
 | `SpatialGrid.Resize` | 68 MB over the run | one allocation per level; grow-only already |
@@ -349,7 +349,8 @@ Decided after the first review of this document.
 - **D6, Android drawing: `SurfaceView` and `Canvas` for the pilot**, behind a
   Java-side cell drawer interface so a GLES drawer replaces it without touching
   the Go side; GLES if the pilot misses 60 fps on a target device.
-- **D7, store index: noted** as a todo item without further analysis.
+- **D7, store index: paged by entity ID** (§6), with a flat slice per domain
+  rejected: it is sized by the highest ID a store has held, 4.8 MB on td.
 - **D8, menu: keep `tui`.** The overlay renderer already adapts forms into cells;
   the configuration menu stays as it is, and Android gets a different
   presentation (a radial menu summoned by holding a tap), a later task with a
@@ -380,10 +381,14 @@ Each later phase is one PR.
 4. **Android host: pilot done** in `android/` ([Multi-platform](multi-platform.md)
    §8), a Canvas drawer at 60 fps on an emulator; touch mapped to intents as the
    focused input task; the radial menu after that.
-5. **Desktop GPU surface** (optional): a `vif_gui` command through purego GLES or
-   Vulkan over the same atlas, the software rasterizer as its fallback.
+5. **Desktop GPU surface: done.** `make gui` (`vif_gui`): `pkg/window` opens an X
+   window and a GLES 2 context through purego and uploads the `glyph.Raster`
+   frame whole as one texture ([Platforms](multi-platform.md) §8). On software GL
+   (llvmpipe) a frame with 15 % of cells changed takes 5 ms at 120x40 and 12 ms at
+   200x60, 7 and 19 ms with every cell changed; the per-cell atlas quad path waits
+   until a hardware driver misses 60 fps.
 6. **Performance follow-ups** from §6 in order of measured weight: the wall
-   epoch and the maze payload are done; the index slice when its measurement is in.
+   epoch, the maze payload and the store index are done.
 
 ## 8. Geometry flexibility: cell aspect and the position store
 

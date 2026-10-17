@@ -24,6 +24,7 @@ downloadable content, a non-text renderer, and Android.
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Browser terminal | Omitted | No | Stub | Solo play, or a session joined over its `wss://` route |
+| Desktop window | `make gui` / `vif_gui` (Linux, FreeBSD) | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | Play outside a terminal; cgo stays off |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
@@ -38,6 +39,7 @@ The useful commands are:
 make release                 # bin/vif
 make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
+make gui                     # bin/vif-gui
 make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
 
@@ -364,9 +366,9 @@ a frame, the events it reports in the terminal's vocabulary (`terminal.Event`,
 which a host posts for the keys and pointer cells it maps), and the pointer mode.
 One the player can leave without quitting also reports that on `Away`, and a solo
 run pauses until they return. The terminal is one (`terminalHost`); it is the
-default when `Config.Host` names none. A host also supplies its speakers as `Host.Audio`, a writer the mixer
-streams PCM to in place of a backend found by name. Adding a graphical host is
-therefore composition, not a simulation fork:
+default when `Config.Host` names none. A host also supplies its speakers as
+`Host.Audio`, a writer the mixer streams PCM to in place of a backend found by
+name. Adding a graphical host is therefore composition, not a simulation fork:
 
 1. implement `Presentation` over the window or view, drawing the cell grid with
    the embedded font atlas (`asset.DefaultFont`, `pkg/glyph`): `glyph.Raster`
@@ -376,6 +378,14 @@ therefore composition, not a simulation fork:
 3. keep graphical assets and renderer construction out of the common manifest
    builder, and leave components, systems, events, scheduler and the manifest
    fingerprint common.
+
+The desktop window is one such host: `cmd/vif/gui.go` under `vif_gui` sets
+`Host.Presentation` to a `pkg/window` window, which draws each frame with
+`glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
+pointer as the events a terminal reports. Its libraries (`libX11.so.6`,
+`libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so `bin/vif-gui` builds
+with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which
+`make gui` passes. It runs on Wayland through XWayland.
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose

@@ -150,7 +150,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						if !ok {
 							break
 						}
-						slot := w.Positions.index[e]
+						slot, _ := w.Positions.index.get(e)
 						w.Positions.RemoveEntity(e)
 						for range parameter.MaxEntitiesPerCell {
 							w.Positions.SetPosition(w.CreateEntity(core.DomainShared), pos)

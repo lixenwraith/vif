@@ -149,7 +149,7 @@ code does not have yet, described only by a design such as
 
 **browser route** (also: wss route, /vif/ws/<session>) — The public `wss://<site>/vif/ws/<id>` path: the site's nginx terminates TLS, the allocator checks origin, budget and readiness before the upgrade, then ends the WebSocket and splices its payload to the session pod's game port. [Fleet §9](kubernetes-fleet.md#9-the-session-routes) · [Platforms: The public route](multi-platform.md#the-public-route) · `tool/vif-allocator` `wsRouter`
 
-**build profile** (also: build tag, build variant) — A compile-time capability set: the full native build, `vif_headless`, `vif_noaudio`, the js/wasm browser build and the experimental Windows cross-build, with `novlog` orthogonal to all. [Platforms §1](multi-platform.md#1-current-build-profiles) · [Logging §15](logging-and-diagnostics.md#15-build-variants) · `Makefile`
+**build profile** (also: build tag, build variant) — A compile-time capability set: the full native build, `vif_headless`, `vif_noaudio`, the js/wasm browser build, the `vif_gui` desktop window (`make gui`, `pkg/window`) and the experimental Windows cross-build, with `novlog` orthogonal to all. [Platforms §1](multi-platform.md#1-current-build-profiles) · [Logging §15](logging-and-diagnostics.md#15-build-variants) · `Makefile`
 
 **bullet** (also: BulletComponent, BulletSystem) — A straight-line projectile with contact damage, stopped by walls and bounds and ended by its lifetime: a cursor's turret bullets resolve against species, and a hostile one (a mounted turret's, such as the storm's red circle) strikes cursors and shields. [Combat §2](combat.md#2-layers) · `internal/component` `BulletComponent`; `internal/system` `BulletSystem`
 
@@ -1753,7 +1753,7 @@ code does not have yet, described only by a design such as
 - *Behavior machines*: Future design: `Graph.Step`, one machine update run in fixed phases (global edges, suspend, advance and cues, timeout, pre-tick edges, tick, post-tick edges). [Machine design §6.3](machine-design.md#63-step)
 
 **store** (also: Store[T], sparse set, typed store) — two senses.
-- *ECS*: `engine.Store[T]` holds one component type as a sparse set: an entity-to-index map, a dense entity slice and a dense value slice, with swap removal; `engine.Position` is the exception, mirroring it while keeping the spatial index. [ECS §2](ecs-and-events.md#2-entities-and-typed-stores) · `internal/engine` `Store`
+- *ECS*: `engine.Store[T]` holds one component type as a sparse set: an entity-to-slot index paged by entity ID, a dense entity slice and a dense value slice, with swap removal; `engine.Position` is the exception, mirroring it while keeping the spatial index. [ECS §2](ecs-and-events.md#2-entities-and-typed-stores) · `internal/engine` `Store`
 - *Capture*: each Shared component store is one capture section (`w.<store>`), its name a wire-stable section id. [Multiplayer §4](multi-player.md#4-correction-pipeline) · `internal/engine` `SharedWorldStoreNames` · `internal/snapshot` `StoreSectionPrefix`
 
 **storm** (also: StormSystem, StormCircleComponent, storm region) — three senses.
