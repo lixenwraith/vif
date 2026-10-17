@@ -318,16 +318,13 @@ Each line folds many commits, so dates within a section are approximate.
 - FSM-graph bots could take a participant seat.
 - `vif -bot` and `:bot` seated bots in the run's session.
 - Named actions and ex commands resolved in one input layer.
-- An in-game configuration menu (`:config`) arrived with live settings, then bot and
-  multiplayer actions.
+- An in-game configuration menu (`:config`) arrived with live settings.
 - Cursors were marked by session slot, and roam and patrol merged into `default`.
 - Bots carried their holder's identity, and `:player drop` removed a player with its bots.
 - A guest's bots joined and played through the guest's own link.
-- Bot graphs reacted to their own events, saw and evaded threats, landed the pointer
-  on open cells, and were weighed by fitness.
+- Bot graphs reacted to events, evaded threats, and were weighed by fitness.
 - `-check` validated bot graphs.
-- Fleet sessions could request bots, closed by default, and a session Job ended
-  after one hour.
+- Fleet sessions could request bots and ended after one hour.
 
 ## 2026-10 — Kraken, replay navigation, and refresh
 
@@ -356,61 +353,36 @@ Each line folds many commits, so dates within a section are approximate.
 
 ## 2026-10 — Weapons, macros, timers, and the input hook
 
-- TOML macros (`pkg/tomlmacro`) expanded scenarios and bot graphs at load; td and the
-  embedded campaign's repeated blocks were rewritten in them.
-- Combat statuses moved into one slot array per target: stun, a charged pulse's burn,
-  and the ward a species raises.
-- Each orb weapon gained a charge-cap effect: arcing rod hits, a halved launcher
-  cooldown, a burning pulse, a streaming turret, and a ray held while main fire is.
-- The cleaner became the gun, an innate tracer weapon, and the sweeping cleaner was
-  removed.
-- The streaming genetic archive gained duplicate rejection, and `GeneSpread` scored
-  an archive's diversity.
-- System roots became `/usr/local/etc/vif` and `/etc/vif`, a checkout's `bin/vif` read
-  its own `wad/`, and `make install` fell back to a user install and gained `uninstall`.
-- Reused row encodings, an exact wall-grid cache, and compact replay checkpoints cut
-  the cost of corrections, td ticks, and replay at the map limit.
-- A defeat started a new game as `:n` does, and kill tallies restarted with it.
-- Dust folded into the particle system, and decay orbited a spinning or charging Kraken.
-- Timers became fixed lifetime, deadline, and cooldown slots aged first in each tick,
-  and an expired lifetime left through a death batch.
-- Each tick settled what its systems queued before it closed, and a reset raised
-  inside a tick ended that tick.
-- Glyph drift moved loose text in parallax layers, and typing, drawing, and motions
-  took a cell's top glyph.
-- Scenarios could capture keys and lay out buttons as an input hook, run only the
-  systems they named, floor the map size, and draw seeded variables; simon, a
-  four-button memory game, was built on them.
-- Component logic moved into the owning systems, no system file served another, and
-  multi-value seeds folded through `vmath.MixChain`.
-- `:d break` set standing breakpoints on events, regions, states, and status cells.
-- Navigation's flow fields were computed only when read and on a throttled cadence,
-  and flow fields and route graphs shared one bucket-queue grid search.
-- What a busy link was owed waited behind its transfer instead of being dropped.
-- Release archives each unpacked into one root-owned directory, and a site could
-  name the browser launcher's files, content-hashed ones included.
+- TOML macros expanded scenarios and bot graphs at load.
+- Combat statuses moved into one slot array per target.
+- Each orb weapon gained a charge-cap effect.
+- The cleaner became the gun, an innate tracer weapon.
+- The genetic archive rejected duplicates and scored its diversity.
+- System roots, a checkout's own wad, and user installs settled the install layout.
+- Corrections, td ticks, and replay were made cheaper at the map limit.
+- A defeat started a new game.
+- Dust folded into particles, and decay orbited the Kraken.
+- Timers became fixed slots aged first in each tick.
+- Each tick settled what its systems queued before it closed.
+- Glyph drift moved loose text in parallax layers.
+- Scenarios gained an input hook, system selection, and seeded variables; simon was built on them.
+- Component logic moved into the owning systems.
+- Standing breakpoints joined the debug command.
+- Flow fields were computed only when read, sharing one grid search with route graphs.
+- Busy links waited instead of dropping what they were owed.
+- Release archives and the browser launcher became deployable as they stand.
 
-## 2026-10 — The host model, Android and the desktop window
+## 2026-10 — The host model: window, Android, and browser
 
-- The engine's coupling was measured and found to be the package graph, not the
-  generator; `render.Surface` named the three terminal methods the orchestrator used.
-- Per-tick store reads became live pointers and navigation reused its route scratch
-  and a retired group's fields, cutting td's garbage per tick by a quarter with the
-  simulation surface unchanged.
-- `app.Presentation` and `Config.Host` made the terminal one host among others, with a
-  host's speakers as the audio sink and a solo run pausing while its player is away.
-- A bitmap font atlas (192 glyphs of 12x24) and `pkg/glyph`'s software raster became
-  the reference drawer of a graphical host.
-- The cell aspect became one parameter, `vmath.Aspect`, carried by the anchor, with
-  navigation costs and every authored radius derived from it.
-- The wall grid was proved current by an epoch, the store index became a page table
-  per domain and the maze spawn payload was pooled: td's tick fell from 1.85 to
-  0.70 ms.
-- `make gui` built the game in a desktop window through Xlib, EGL and GLES 2 loaded
-  with purego, cgo off, measured on software and hardware GL.
-- The Android host in `android/` played the game on a phone through `gomobile bind`:
-  a `SurfaceView` Canvas drawer, an `AudioTrack`, taps and drags, a cell sized by
-  the screen's density, and `make android` for the APK.
-- The configuration menu was summoned on every host by a press held on the status
-  bar and driven by taps, and the hosts' control-key tables moved into the terminal
-  module (`terminal.ControlKey`).
+- `render.Surface` named what the orchestrator needs from a terminal.
+- Live store reads and reused navigation scratch cut td's per-tick garbage.
+- `app.Presentation` made the terminal one host among others.
+- A bitmap font atlas and a software raster became the reference drawer of a graphical host.
+- The cell aspect became one simulation parameter.
+- A wall-grid epoch, a page-table store index, and pooled spawn payloads halved td's tick.
+- `make gui` drew the game in a desktop window through EGL and GLES 2, cgo off.
+- An Android host played the game on a phone through `gomobile bind`.
+- The configuration menu was summoned by a held press on every host.
+- The cell-frame protocol moved into `pkg/glyph` for every host drawing elsewhere.
+- The browser page drew cell frames on a WebGL canvas, and xterm.js was retired.
+- Without WebGL the page painted on a 2D canvas.
