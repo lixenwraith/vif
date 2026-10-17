@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"math"
 	"slices"
 	"strconv"
@@ -11,21 +12,15 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 )
 
-// FNV-1a 64, inlined so a per-tick digest allocates nothing
-const (
-	fnvOffset uint64 = 14695981039346656037
-	fnvPrime  uint64 = 1099511628211
-)
-
 // hash is a running FNV-1a hash over simulation state
 type hash uint64
 
-func newHash() hash { return hash(fnvOffset) }
+func newHash() hash { return hash(vmath.FNVOffset64) }
 
 func (h hash) u64(v uint64) hash {
 	for i := range 8 {
 		h ^= hash(byte(v >> (8 * i)))
-		h *= hash(fnvPrime)
+		h *= hash(vmath.FNVPrime64)
 	}
 	return h
 }
@@ -43,7 +38,7 @@ func (h hash) b(v bool) hash {
 func (h hash) text(v string) hash {
 	for i := range len(v) {
 		h ^= hash(v[i])
-		h *= hash(fnvPrime)
+		h *= hash(vmath.FNVPrime64)
 	}
 	return h.u64(uint64(len(v)))
 }
@@ -51,7 +46,7 @@ func (h hash) text(v string) hash {
 func (h hash) bytes(v []byte) hash {
 	for _, c := range v {
 		h ^= hash(c)
-		h *= hash(fnvPrime)
+		h *= hash(vmath.FNVPrime64)
 	}
 	return h.u64(uint64(len(v)))
 }

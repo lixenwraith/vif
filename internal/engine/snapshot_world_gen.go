@@ -1373,7 +1373,7 @@ func equalLoot(a, b *component.LootComponent) bool {
 }
 
 func equalGateway(a, b *component.GatewayComponent) bool {
-	return a.AnchorEntity == b.AnchorEntity && a.Species == b.Species && a.SubType == b.SubType && a.GroupID == b.GroupID && a.PopulationID == b.PopulationID && a.BaseInterval == b.BaseInterval && a.Accumulated == b.Accumulated && a.Active == b.Active && math.Float64bits(float64(a.RateMultiplier)) == math.Float64bits(float64(b.RateMultiplier)) && a.RateAccelInterval == b.RateAccelInterval && a.RateAccelElapsed == b.RateAccelElapsed && a.MinInterval == b.MinInterval && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY && a.RouteDistID == b.RouteDistID && a.SpawnPoolSize == b.SpawnPoolSize
+	return a.AnchorEntity == b.AnchorEntity && a.Species == b.Species && a.SubType == b.SubType && a.GroupID == b.GroupID && a.BaseInterval == b.BaseInterval && a.Accumulated == b.Accumulated && a.Active == b.Active && math.Float64bits(float64(a.RateMultiplier)) == math.Float64bits(float64(b.RateMultiplier)) && a.RateAccelInterval == b.RateAccelInterval && a.RateAccelElapsed == b.RateAccelElapsed && a.MinInterval == b.MinInterval && a.OffsetX == b.OffsetX && a.OffsetY == b.OffsetY && a.RouteDistID == b.RouteDistID && a.SpawnPoolSize == b.SpawnPoolSize
 }
 
 func equalEnergy(a, b *component.EnergyComponent) bool {

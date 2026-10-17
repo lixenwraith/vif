@@ -18,9 +18,6 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// panStep is the cells a pan key shifts the presented game area
-const panStep = 4
-
 // PlayJournal replays a recorded run on the terminal; several paths reassemble a
 // rotated set. The anchor decides everything simulated; viewer supplies what is the
 // watcher's: where the scenario it names is found, as the run's -config-dir did,
@@ -623,13 +620,13 @@ func (p *player) key(ev terminal.Event) bool {
 	case 'q':
 		return false
 	case 'h':
-		p.panX -= panStep
+		p.panX -= parameter.ReplayPanStep
 	case 'l':
-		p.panX += panStep
+		p.panX += parameter.ReplayPanStep
 	case 'k':
-		p.panY -= panStep
+		p.panY -= parameter.ReplayPanStep
 	case 'j':
-		p.panY += panStep
+		p.panY += parameter.ReplayPanStep
 	case '0':
 		p.panX, p.panY = 0, 0
 	case ' ', '.', ',', '+', '=', '-', '_':

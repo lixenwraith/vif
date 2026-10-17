@@ -415,11 +415,10 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 	}
 
 	// Exit Phase: walk UP from current leaf to LCA (exclusive)
-	for i := len(currentPath) - 1; i > lcaIndex; i-- {
-		nodeID := currentPath[i]
-		if node, exists := m.nodes[nodeID]; exists {
-			m.executeActions(ctx, region, nodeID, node.OnExit)
-		}
+	m.exitRegion(ctx, region, lcaIndex)
+	if region.terminated {
+		m.removeRegion(region.Name)
+		return
 	}
 
 	// Clear only delayed actions owned by exited states
@@ -475,12 +474,7 @@ func (m *Machine[T]) Reset(ctx T) error {
 		if !ok || region.ActiveStateID == StateNone {
 			continue
 		}
-		for i := len(region.ActivePath) - 1; i >= 0; i-- {
-			nodeID := region.ActivePath[i]
-			if node, ok := m.nodes[nodeID]; ok {
-				m.executeActions(ctx, region, nodeID, node.OnExit)
-			}
-		}
+		m.exitRegion(ctx, region, -1)
 	}
 
 	// Clear regions and variables
@@ -610,7 +604,9 @@ func (m *Machine[T]) SpawnRegion(ctx T, regionName string, initialID StateID) er
 	return m.initRegion(ctx, regionName, initialID, "spawn")
 }
 
-// TerminateRegion destroys a region, executing exit actions
+// TerminateRegion destroys a region, executing exit actions. From the region's
+// own on_exit it only marks the region; the exit phase already running removes
+// it and skips any enter phase, so the exit actions run once.
 func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 	region, ok := m.regions[regionName]
 	if !ok {
@@ -618,15 +614,29 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 	}
 
 	m.notifyRegion("terminate", regionName, region.ActiveStateID)
+	if region.exiting {
+		region.terminated = true
+		return nil
+	}
+	m.exitRegion(ctx, region, -1)
+	m.removeRegion(regionName)
+	return nil
+}
 
-	// Execute OnExit for entire path
-	for i := len(region.ActivePath) - 1; i >= 0; i-- {
+// exitRegion runs on_exit from the leaf up to the path index above floor.
+func (m *Machine[T]) exitRegion(ctx T, region *RegionState, floor int) {
+	region.exiting = true
+	for i := len(region.ActivePath) - 1; i > floor; i-- {
 		nodeID := region.ActivePath[i]
 		if node, ok := m.nodes[nodeID]; ok {
 			m.executeActions(ctx, region, nodeID, node.OnExit)
 		}
 	}
+	region.exiting = false
+}
 
+// removeRegion forgets an exited region and its delayed actions.
+func (m *Machine[T]) removeRegion(regionName string) {
 	delete(m.regions, regionName)
 	delete(m.delayedActions, regionName)
 	for i, n := range m.regionOrder {
@@ -636,7 +646,6 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 		}
 	}
 	m.refreshActive()
-	return nil
 }
 
 // PauseRegion suspends a region's evaluation

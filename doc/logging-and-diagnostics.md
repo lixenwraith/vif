@@ -944,7 +944,7 @@ the participant and authority it is installed as, since a join writes before its
 transport attaches. A replay settles only a group that queued an event, as the
 recorded run did.
 
-Every `event.DigestIntervalTicks` (20) ticks the run writes a `digest` record,
+Every `parameter.DigestIntervalTicks` (20) ticks the run writes a `digest` record,
 `jrun`, `jtick` and four hex hashes from `snapshot.DigestWorld` over both domains:
 `positions`, `kinetics`, `combat` and `entities`. It is taken last in the tick
 body, after the tick's closing settle; a replay compares

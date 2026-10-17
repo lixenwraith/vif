@@ -236,7 +236,7 @@ func (s *LootSystem) Update() {
 			// acceleration alone conserves the sideways component of an approach,
 			// which leaves a drop circling its own cursor until something else moves it.
 			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-				parameter.NavCorneringThreshold, 1.0)
+				parameter.NavCorneringBase, 1.0)
 			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.LootHoming, dtSec)
 			if turnSeverity > 0 {
 				physics.ApplyLinearDrag(&kineticComp.Kinetic,

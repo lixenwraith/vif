@@ -64,6 +64,12 @@ check_filter() {
 }
 
 check_objects() {
+	# A fresh cluster has no namespace to dry-run the namespaced objects against:
+	# they are pending, undiffed, and apply_objects creates the namespace first.
+	if ! kube get namespace vif >/dev/null 2>&1; then
+		echo "namespace vif absent: every object is pending and cannot be diffed yet"
+		return 1
+	fi
 	status=0
 	for name in 00-namespace 10-quota 20-networkpolicy 40-allocator-rbac; do
 		rc=0

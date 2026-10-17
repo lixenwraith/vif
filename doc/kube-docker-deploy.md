@@ -211,7 +211,9 @@ findmnt -no TARGET,FSTYPE,SIZE,OPTIONS /var/log/vif-fleet
 
 Expected: `tmpfs`, about `256M`, `nodev,nosuid,noexec`, mode `770`, owner `65532`.
 The cleanup timer owns retention: each session's two newest rotations (an older
-one goes once it is five minutes old), and no file untouched for five hours.
+one goes once it is five minutes old), and no file untouched for 75 minutes, just
+past the Job's hour-long deadline, so the tmpfs holds live sessions and the ones
+that just ended rather than hours of finished ones.
 
 ## 8. The session image
 
@@ -234,6 +236,10 @@ tag, or that image is missing or unpinned.
 ```sh
 ./deploy/update.sh objects wad             # namespace, quota, policy, Role; the scenario volume's files
 ```
+
+On a cluster without the `vif` namespace the script reports every object pending
+without a diff, since nothing can be dry-run against a namespace that does not
+exist, and applies them in order, the namespace first.
 
 The two local volumes are pinned to this node (`nodeAffinity` is immutable), so
 `update.sh` reports a change to them and never applies one. Create them once:
@@ -511,7 +517,7 @@ log:
 ```sh
 for check in \
   'create jobs.batch:yes' 'delete jobs.batch:yes' 'create services:yes' \
-  'list services:yes' 'get pods:yes' 'list endpointslices.discovery.k8s.io:yes' \
+  'list services:yes' 'list pods:yes' 'list endpointslices.discovery.k8s.io:yes' \
   'get secrets:no'
 do
   verb=${check%:*}; want=${check#*:}

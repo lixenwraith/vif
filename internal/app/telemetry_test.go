@@ -62,8 +62,9 @@ func TestTelemetryRegistryStaysFrozenAcrossTicksAndReset(t *testing.T) {
 }
 
 const (
-	telemetryResetIntSentinel    int64  = 31337
-	telemetryResetStringSentinel string = "telemetry-reset-sentinel"
+	telemetryResetIntSentinel    int64   = 31337
+	telemetryResetFloatSentinel  float64 = 313.37
+	telemetryResetStringSentinel string  = "telemetry-reset-sentinel"
 )
 
 func persistentTelemetryKey(kind, key string) bool {
@@ -106,7 +107,7 @@ func persistentTelemetryKey(kind, key string) bool {
 		return key == "network.host_lost"
 	case "string":
 		switch key {
-		case "context.mode", "engine.breakpoint", "engine.speed", "glyph.density", "glyph.rate_mult":
+		case "context.mode", "engine.breakpoint", "engine.speed":
 			return true
 		}
 	}
@@ -148,10 +149,16 @@ func TestTelemetrySessionCountersReset(t *testing.T) {
 	a.Tick(0)
 	reg := a.World().Resources.Status
 	baselineBools := make(map[string]bool)
+	baselineFloats := make(map[string]float64)
 	baselineStrings := make(map[string]string)
 	reg.Bools.Range(func(key string, v *atomic.Bool) {
 		if !persistentTelemetryKey("bool", key) {
 			baselineBools[key] = v.Load()
+		}
+	})
+	reg.Floats.Range(func(key string, v *status.AtomicFloat) {
+		if !persistentTelemetryKey("float", key) {
+			baselineFloats[key] = v.Get()
 		}
 	})
 	reg.Strings.Range(func(key string, v *status.AtomicString) {
@@ -170,6 +177,11 @@ func TestTelemetrySessionCountersReset(t *testing.T) {
 		reg.Bools.Range(func(key string, v *atomic.Bool) {
 			if !persistentTelemetryKey("bool", key) {
 				v.Store(!baselineBools[key])
+			}
+		})
+		reg.Floats.Range(func(key string, v *status.AtomicFloat) {
+			if !persistentTelemetryKey("float", key) {
+				v.Set(telemetryResetFloatSentinel)
 			}
 		})
 		reg.Strings.Range(func(key string, v *status.AtomicString) {
@@ -204,6 +216,14 @@ func TestTelemetrySessionCountersReset(t *testing.T) {
 		}
 		if got, want := v.Load(), baselineBools[key]; got != want {
 			stale = append(stale, fmt.Sprintf("bool:%s=%t, want %t", key, got, want))
+		}
+	})
+	reg.Floats.Range(func(key string, v *status.AtomicFloat) {
+		if persistentTelemetryKey("float", key) {
+			return
+		}
+		if got, want := v.Get(), baselineFloats[key]; got != want {
+			stale = append(stale, fmt.Sprintf("float:%s=%g, want %g", key, got, want))
 		}
 	})
 	reg.Strings.Range(func(key string, v *status.AtomicString) {

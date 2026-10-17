@@ -137,7 +137,6 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		Species:           component.SpeciesType(payload.Species),
 		SubType:           payload.SubType,
 		GroupID:           payload.GroupID,
-		PopulationID:      payload.PopulationID,
 		BaseInterval:      baseInterval,
 		Accumulated:       0,
 		Active:            true,
@@ -239,7 +238,7 @@ func (s *GatewaySystem) Update() {
 			spawnX := anchorPos.X + gw.OffsetX
 			spawnY := anchorPos.Y + gw.OffsetY
 
-			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID, gw.PopulationID)
+			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID)
 		}
 
 		activeCount++
@@ -251,7 +250,7 @@ func (s *GatewaySystem) Update() {
 
 // emitSpawnEvent routes to the appropriate species spawn request event
 // routeDistID enables per-route assignment from bandit pool
-func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32, populationID uint32) {
+func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
 	switch species {
 	case component.SpeciesEye:
 		// Sample GA if available
@@ -260,9 +259,9 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 		if s.world.Resources.Genetics != nil {
 			// Periodic probe keeps all phenotype bins under evaluation
 			if s.rng.Float64() < parameter.GAScoutRate {
-				genes, evalID = s.world.Resources.Genetics.SampleScout(uint8(species), populationID)
+				genes, evalID = s.world.Resources.Genetics.SampleScout(uint8(species))
 			} else {
-				genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), populationID)
+				genes, evalID = s.world.Resources.Genetics.Sample(uint8(species))
 			}
 		}
 

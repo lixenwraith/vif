@@ -39,5 +39,14 @@ const (
 	ContentMaxFiles = 256
 )
 
+// Bounds on a scenario in any form, read from disk or received from a peer: the
+// cost of the second is what they are for, and a scenario nobody can transfer is
+// not one worth loading either
+const (
+	ScenarioMaxFiles     = 64
+	ScenarioMaxFileBytes = 256 << 10
+	ScenarioMaxBytes     = 1 << 20
+)
+
 // ContentCommentPrefixes marks lines dropped during plain-text ingest
 var ContentCommentPrefixes = []string{"//", "#", "/*"}

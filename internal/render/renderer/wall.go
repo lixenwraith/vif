@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
 
@@ -37,6 +38,7 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 	if walls.CountEntities() == 0 {
 		return
 	}
+	buf.SetWriteMask(visual.MaskWall)
 
 	walls.Each(func(wallEntity core.Entity, wallComp *component.WallComponent) bool {
 		if !(wallComp.RenderFg || wallComp.RenderBg) {

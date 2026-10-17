@@ -22,4 +22,7 @@ const (
 	// CameraEnabled controls whether camera following is active
 	// When false, camera stays at (0,0) regardless of cursor position
 	CameraEnabled = true
+
+	// ReplayPanStep is the cells a replay's pan key shifts the presented game area
+	ReplayPanStep = 4
 )

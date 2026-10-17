@@ -121,6 +121,9 @@ q = "overlay_close"
 "/" = "overlay_filter"
 
 [overlay_keys]
+ctrl_q = "quit"
+ctrl_c = "quit"
+ctrl_s = "toggle_audio_cycle"
 ctrl_g = "config_menu"
 up = "motion_up"
 down = "motion_down"

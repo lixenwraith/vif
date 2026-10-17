@@ -10,6 +10,11 @@ import "math"
 // CellCenter is the offset from a cell origin to its center.
 const CellCenter = 0.5
 
+// DiagonalNum over DiagonalDen scales a radius to its diagonal step in integer
+// cells: 7/10 for 1/√2. A float would round a cell apart past radius 16, and the
+// simulation reproduces the integer form.
+const DiagonalNum, DiagonalDen = 7, 10
+
 // IntAbs returns the absolute value of a grid integer.
 func IntAbs(x int) int {
 	if x < 0 {

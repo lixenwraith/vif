@@ -17,7 +17,11 @@ These hold regardless of which repository is targeted first.
 - **No working-directory discovery.** A packaged binary must behave the same
   from any `cwd`. Resolution is `-flag` → `-config-dir` → user root → checkout
   `wad/` beside a `bin/` binary → system roots → embedded, and nothing else.
-  Never add a working-directory probe.
+  Never add a working-directory probe. A file a scenario names at run time, such
+  as a wall image, is a logical name under its category in those roots and must
+  be a regular file there: no absolute path and no path relative to `cwd`, even
+  for a scenario this run resolved itself, since the same scenario is served to
+  joiners and an author's host path means nothing on their machines.
 - **Honour the environment.** `DESTDIR`, `PREFIX`, `SYSCONFDIR`. No
   target may write outside `DESTDIR`, and none may require network access.
 - **The Makefile runs under GNU make and FreeBSD make.** `!=` rather than
@@ -40,9 +44,14 @@ These hold regardless of which repository is targeted first.
   `$XDG_STATE_HOME`; nothing in `/var`, nothing beside the binary.
 - **Licence stays declarable.** BSD-3-Clause, one `LICENSE` at the root. Any
   vendored or redistributed content (typing corpus, images, sound specs) must
-  be licence-checked before it enters `wad/` or a release archive. The shipped
-  corpus in `wad/content/` is Go standard-library source under the Go Authors'
-  BSD licence, and the browser bundle carries xterm.js (MIT) in `web/vendor/`.
+  be licence-checked before it enters `wad/` or a release archive, and its
+  notice travels with it: the corpus in `wad/content/` is Go standard-library
+  source under the Go Authors' BSD licence, `wad/content/LICENSE`, so the wad
+  archive and every install carry it (the content loader reads only `.txt` and
+  `.toml`); the browser bundle carries xterm.js (MIT) with its licence in
+  `web/vendor/xterm-5.5/`, which the web archive copies beside vif's; and a
+  `vif-gui` build links purego (Apache-2.0), `deploy/package/LICENSE.purego`,
+  for the archive that ships that binary.
 
 ## 2. Release surface
 
@@ -95,7 +104,7 @@ Target `vif` (release) with `vif-git` optional.
    in its order: `pulseaudio`/`pipewire-pulse` for `pacat`, `pipewire` for
    `pw-cat`, `alsa-utils` for `aplay`, `sox` for `play`, `ffmpeg` for `ffplay`.
 2. `build()` uses the repository's flags plus Arch's hardening:
-   `go build -trimpath -buildmode=pie -mod=readonly -modcacherw`.
+   `CGO_ENABLED=0 go build -trimpath -buildmode=pie -mod=readonly -modcacherw`.
    `make release GO_LDFLAGS=` does the same with Arch's `GOFLAGS` exported: plain
    `make release` sets `-s -w`, which Arch's debug packaging wants to control.
 3. `package()` runs `make install DESTDIR="$pkgdir" PREFIX=/usr SYSCONFDIR=/etc`.

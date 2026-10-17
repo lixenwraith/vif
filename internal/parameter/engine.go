@@ -79,6 +79,20 @@ const (
 	// is dropped and the spacing doubles. One holds about 6.5 MB at the map limit.
 	ReplayCheckpointSteps = 100
 	ReplayCheckpoints     = 32
+
+	// LockHoldWarn is the world-lock hold above which a hold is reported [wall];
+	// a race build instruments every access, so it reads LockHoldWarnRace
+	LockHoldWarn     = 20 * time.Millisecond
+	LockHoldWarnRace = 200 * time.Millisecond
+
+	// AnchorIntervalTicks is the tick period between journal anchor records, so a
+	// rotated file carries one within this many ticks of its first record
+	AnchorIntervalTicks = 600
+
+	// DigestIntervalTicks is the tick period between journal world digests: a
+	// replay names the tick it left its run within one period, at about 5% of a
+	// bot journal
+	DigestIntervalTicks = 20
 )
 
 // ECS & Resources Limits
@@ -88,6 +102,10 @@ const (
 
 	// EventBufferMask is the bitmask for fast modulo operations (2048 - 1)
 	EventBufferMask = 2047
+
+	// FreeAreaSearchRadius is the spiral radius FindFreeAreaSpiral walks when a
+	// caller names none
+	FreeAreaSearchRadius = 20
 )
 
 // Store index: an entity's ID selects a slot in a page of 1<<StoreIndexPageBits.

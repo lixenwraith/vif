@@ -43,6 +43,7 @@ type DrainSystem struct {
 
 	// Spawn queue for staggered materialization
 	pendingSpawns []pendingDrainSpawn
+	queued        map[uint64]bool // spawn exclusion set, rebuilt per wave
 
 	// Monotonic counter for LIFO materialize spawn ordering
 	nextSpawnOrder int
@@ -632,9 +633,14 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	return 0, 0, false
 }
 
-// buildQueuedPositionSet creates position exclusion map from all materialize spawn sources
+// buildQueuedPositionSet fills the spawn exclusion set from every materialize
+// source; one map, cleared per build, since a spawn wave calls it every tick
 func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
-	queuedPositions := make(map[uint64]bool, len(s.pendingSpawns)+s.world.Components.Drain.CountEntities()+s.world.Components.Materialize.CountEntities()/4)
+	if s.queued == nil {
+		s.queued = make(map[uint64]bool, len(s.pendingSpawns)+s.world.Components.Drain.CountEntities()+s.world.Components.Materialize.CountEntities()/4)
+	}
+	clear(s.queued)
+	queuedPositions := s.queued
 
 	// Pending spawns
 	for _, ps := range s.pendingSpawns {
@@ -1059,7 +1065,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 			// Cornering drag scales the base drag by turn severity
 			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-				parameter.NavCorneringThreshold, 1.0)
+				parameter.NavCorneringBase, 1.0)
 
 			physics.ApplyHomingScaled(&kineticComp.Kinetic, targetX, targetY,
 				&profile.DrainHoming, 1.0, dtSec, true)
