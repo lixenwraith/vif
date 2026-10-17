@@ -13,8 +13,9 @@ the game runs in-process through a `gomobile bind` library, presents on a
 ## Build
 
 Needs Go (the version in `go.mod`), the Android SDK with platform `android-36.1`
-and NDK `29.0.14206865` (`sdkmanager "ndk;29.0.14206865"`), and `ANDROID_HOME` or
-`local.properties` pointing at the SDK. Gradle provisions its own JDK 21.
+and NDK `29.0.14206865` (`sdkmanager "ndk;29.0.14206865"`), and the SDK named by
+`ANDROID_HOME` or by `sdk.dir=<path>` in `android/local.properties` (ignored by
+git; Android Studio's default is `~/Android/Sdk`). Gradle provisions its own JDK 21.
 
 ```bash
 make android           # cd android && ./gradlew assembleDebug, then bin/vif-debug.apk
