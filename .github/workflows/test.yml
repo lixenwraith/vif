@@ -30,6 +30,10 @@ jobs:
     - name: Build code
       run: go build ./...
 
+    - name: Vet and test the Android host module
+      working-directory: android
+      run: go vet ./... && go test ./...
+
     - name: Run tests with race detector
       run: go test -race -v ./...
       env:

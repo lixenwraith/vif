@@ -37,57 +37,67 @@ var androidKeys = map[int32]terminal.Key{
 	139: terminal.KeyF9, 140: terminal.KeyF10, 141: terminal.KeyF11, 142: terminal.KeyF12,
 }
 
-// keyEvent is the terminal event for an Android key: a named key, Ctrl with a
-// letter as the control byte a terminal reads, or the character it types
-func keyEvent(code int32, char rune, meta int32) (terminal.Event, bool) {
-	var mods terminal.Modifier
-	if meta&metaShift != 0 {
-		mods |= terminal.ModShift
-	}
-	if meta&metaAlt != 0 {
-		mods |= terminal.ModAlt
-	}
-	if key, ok := androidKeys[code]; ok {
-		if key == terminal.KeyTab && mods&terminal.ModShift != 0 {
-			key = terminal.KeyBacktab
-		}
-		if meta&metaCtrl != 0 {
-			mods |= terminal.ModCtrl
-		}
-		return terminal.Event{Type: terminal.EventKey, Key: key, Modifiers: mods}, true
-	}
-	if char == 0 {
-		return terminal.Event{}, false
-	}
-	if meta&metaCtrl != 0 {
-		key, ok := ctrlKey(char)
-		return terminal.Event{Type: terminal.EventKey, Key: key, Modifiers: mods &^ terminal.ModShift}, ok
-	}
-	return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: char, Modifiers: mods & terminal.ModAlt}, true
+// ctrlKeys is what a terminal reports for Ctrl and a printable key, the control
+// byte it receives parsed as the terminal module parses it; the desktop window
+// keeps the same table
+var ctrlKeys = map[rune]terminal.Key{
+	' ': terminal.KeyCtrlSpace, '@': terminal.KeyCtrlSpace, '2': terminal.KeyCtrlSpace,
+	'h': terminal.KeyBackspace, 'i': terminal.KeyTab, 'j': terminal.KeyEnter, 'm': terminal.KeyEnter,
+	'[': terminal.KeyEscape, '3': terminal.KeyEscape,
+	'\\': terminal.KeyCtrlBackslash, '4': terminal.KeyCtrlBackslash,
+	']': terminal.KeyCtrlBracketRight, '5': terminal.KeyCtrlBracketRight,
+	'^': terminal.KeyCtrlCaret, '6': terminal.KeyCtrlCaret,
+	'_': terminal.KeyCtrlUnderscore, '-': terminal.KeyCtrlUnderscore, '/': terminal.KeyCtrlUnderscore, '7': terminal.KeyCtrlUnderscore,
 }
 
-// ctrlKey is Ctrl with a character as a terminal parses its control byte: H, I, J
-// and M are Backspace, Tab and Enter there
-func ctrlKey(r rune) (terminal.Key, bool) {
-	switch r = unicode.ToLower(r); {
-	case r == 'h':
-		return terminal.KeyBackspace, true
-	case r == 'i':
-		return terminal.KeyTab, true
-	case r == 'j' || r == 'm':
-		return terminal.KeyEnter, true
-	case r >= 'a' && r <= 'z':
-		return terminal.KeyCtrlA + terminal.Key(r-'a'), true
-	case r == ' ' || r == '@':
-		return terminal.KeyCtrlSpace, true
-	case r == '[':
-		return terminal.KeyEscape, true
-	case r == '\\':
-		return terminal.KeyCtrlBackslash, true
-	case r == ']':
-		return terminal.KeyCtrlBracketRight, true
+// keyEvent is the terminal event for an Android key: a named key, Ctrl with a
+// character as the control byte a terminal reads, or the character it types. As
+// a terminal, it reports modifiers on the editing, navigation and function keys
+// only, and Alt on a character.
+func keyEvent(code int32, char rune, meta int32) (terminal.Event, bool) {
+	ev := terminal.Event{Type: terminal.EventKey}
+	if key, ok := androidKeys[code]; ok {
+		ev.Key = key
+		if key == terminal.KeyTab && meta&metaShift != 0 {
+			ev.Key, ev.Modifiers = terminal.KeyBacktab, terminal.ModShift
+		}
+		if key == terminal.KeyDelete || key >= terminal.KeyUp && key <= terminal.KeyF12 {
+			ev.Modifiers = modifiers(meta)
+		}
+		return ev, true
 	}
-	return terminal.KeyNone, false
+	if char == 0 {
+		return ev, false
+	}
+	if meta&metaCtrl != 0 {
+		lower := unicode.ToLower(char)
+		switch k, ok := ctrlKeys[lower]; {
+		case ok:
+			ev.Key = k
+		case lower >= 'a' && lower <= 'z':
+			ev.Key = terminal.KeyCtrlA + terminal.Key(lower-'a')
+		default:
+			return ev, false
+		}
+	} else {
+		ev.Key, ev.Rune = terminal.KeyRune, char
+	}
+	ev.Modifiers = modifiers(meta) & terminal.ModAlt
+	return ev, true
+}
+
+func modifiers(meta int32) terminal.Modifier {
+	var m terminal.Modifier
+	if meta&metaShift != 0 {
+		m |= terminal.ModShift
+	}
+	if meta&metaAlt != 0 {
+		m |= terminal.ModAlt
+	}
+	if meta&metaCtrl != 0 {
+		m |= terminal.ModCtrl
+	}
+	return m
 }
 
 // textEvent is one character the system keyboard committed
