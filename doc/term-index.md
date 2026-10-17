@@ -149,7 +149,7 @@ code does not have yet, described only by a design such as
 
 **browser route** (also: wss route, /vif/ws/<session>) — The public `wss://<site>/vif/ws/<id>` path: the site's nginx terminates TLS, the allocator checks origin, budget and readiness before the upgrade, then ends the WebSocket and splices its payload to the session pod's game port. [Fleet §9](kubernetes-fleet.md#9-the-session-routes) · [Platforms: The public route](multi-platform.md#the-public-route) · `tool/vif-allocator` `wsRouter`
 
-**build profile** (also: build tag, build variant) — A compile-time capability set: the full native build, `vif_headless`, `vif_noaudio`, the js/wasm browser build and the experimental Windows cross-build, with `novlog` orthogonal to all. [Platforms §1](multi-platform.md#1-current-build-profiles) · [Logging §15](logging-and-diagnostics.md#15-build-variants) · `Makefile`
+**build profile** (also: build tag, build variant) — A compile-time capability set: the full native build, `vif_headless`, `vif_noaudio`, the js/wasm browser build, the `vif_gui` desktop window (`make gui`, `pkg/window`) and the experimental Windows cross-build, with `novlog` orthogonal to all. [Platforms §1](multi-platform.md#1-current-build-profiles) · [Logging §15](logging-and-diagnostics.md#15-build-variants) · `Makefile`
 
 **bullet** (also: BulletComponent, BulletSystem) — A straight-line projectile with contact damage, stopped by walls and bounds and ended by its lifetime: a cursor's turret bullets resolve against species, and a hostile one (a mounted turret's, such as the storm's red circle) strikes cursors and shields. [Combat §2](combat.md#2-layers) · `internal/component` `BulletComponent`; `internal/system` `BulletSystem`
 

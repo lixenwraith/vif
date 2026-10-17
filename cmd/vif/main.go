@@ -305,9 +305,13 @@ func logRuntimeReport(r core.RuntimeReport) {
 	status.Trigger(status.TrigRace)
 }
 
+// platformHost is the build's platform host; empty, the run presents on the terminal
+var platformHost app.Host
+
 // buildConfig translates parsed flags into the runtime configuration
 func buildConfig() app.Config {
 	cfg := app.Config{
+		Host:          platformHost,
 		AudioBackend:  flagAudioBackend,
 		AudioMuted:    true, // -mute defaults on
 		Resources:     flagConfig.options(),
