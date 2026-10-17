@@ -49,20 +49,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Put the route bandit's floor and scout rate in parameter
-
-- Priority: P0, to review
-- Affected files: `internal/parameter/adaptation.go`, `internal/system/adaptation.go`
-
-`parameter.RouteMinWeight` (0.05, `internal/parameter/adaptation.go:16`) is
-referenced nowhere; `applyEXP3` floors at an inline `minWeight := 0.005`
-(`internal/system/adaptation.go:487`), the 0.5% that
-[AI, physics and evolution](ai-physics-and-evolution.md) §6 documents. The 10% scout
-rate (`:537`) and the corridor recovery radius 5 (`:350`) are inline too, while the
-genetic scout rate is `parameter.GAScoutRate`. Set `RouteMinWeight` to 0.005 and use
-it, and add the other two beside it; adopting 0.05 instead would retune route
-exploration.
-
 ### Move the inline simulation and render tunables into parameter
 
 - Priority: P0, to review

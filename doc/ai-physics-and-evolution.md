@@ -221,8 +221,8 @@ canonical EXP3 requires. It:
 
 - multiplies an observed route weight by `exp(RouteLearningRate * meanFitness)`;
 - normalizes all weights;
-- applies a 0.5% floor to avoid numeric extinction;
-- samples 90% proportionally by CDF and 10% as uniform scouts;
+- applies a `RouteMinWeight` (0.5%) floor to avoid numeric extinction;
+- samples proportionally by CDF, with `RouteScoutRate` (10%) as uniform scouts;
 - shuffles the result into a pool of `RoutePoolDefaultSize` (100) assignments
   that spawns pop, refilled after each update and once fewer than a quarter
   remain; an exhausted pool rotates through the routes deterministically.
