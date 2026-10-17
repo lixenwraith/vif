@@ -37,19 +37,6 @@ var androidKeys = map[int32]terminal.Key{
 	139: terminal.KeyF9, 140: terminal.KeyF10, 141: terminal.KeyF11, 142: terminal.KeyF12,
 }
 
-// ctrlKeys is what a terminal reports for Ctrl and a printable key, the control
-// byte it receives parsed as the terminal module parses it; the desktop window
-// keeps the same table
-var ctrlKeys = map[rune]terminal.Key{
-	' ': terminal.KeyCtrlSpace, '@': terminal.KeyCtrlSpace, '2': terminal.KeyCtrlSpace,
-	'h': terminal.KeyBackspace, 'i': terminal.KeyTab, 'j': terminal.KeyEnter, 'm': terminal.KeyEnter,
-	'[': terminal.KeyEscape, '3': terminal.KeyEscape,
-	'\\': terminal.KeyCtrlBackslash, '4': terminal.KeyCtrlBackslash,
-	']': terminal.KeyCtrlBracketRight, '5': terminal.KeyCtrlBracketRight,
-	'^': terminal.KeyCtrlCaret, '6': terminal.KeyCtrlCaret,
-	'_': terminal.KeyCtrlUnderscore, '-': terminal.KeyCtrlUnderscore, '/': terminal.KeyCtrlUnderscore, '7': terminal.KeyCtrlUnderscore,
-}
-
 // keyEvent is the terminal event for an Android key: a named key, Ctrl with a
 // character as the control byte a terminal reads, or the character it types. As
 // a terminal, it reports modifiers on the editing, navigation and function keys
@@ -71,14 +58,11 @@ func keyEvent(code int32, char rune, meta int32) (terminal.Event, bool) {
 	}
 	if meta&metaCtrl != 0 {
 		lower := unicode.ToLower(char)
-		switch k, ok := ctrlKeys[lower]; {
-		case ok:
-			ev.Key = k
-		case lower >= 'a' && lower <= 'z':
-			ev.Key = terminal.KeyCtrlA + terminal.Key(lower-'a')
-		default:
+		k, ok := terminal.ControlKey(lower)
+		if !ok {
 			return ev, false
 		}
+		ev.Key = k
 	} else {
 		ev.Key, ev.Rune = terminal.KeyRune, char
 	}

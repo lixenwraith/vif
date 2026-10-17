@@ -30,18 +30,6 @@ var keysymKeys = map[uint64]terminal.Key{
 	0xffc6: terminal.KeyF9, 0xffc7: terminal.KeyF10, 0xffc8: terminal.KeyF11, 0xffc9: terminal.KeyF12,
 }
 
-// ctrlKeys is what a terminal reports for Ctrl and a printable key, the control
-// byte it receives parsed as the terminal module parses it
-var ctrlKeys = map[rune]terminal.Key{
-	' ': terminal.KeyCtrlSpace, '@': terminal.KeyCtrlSpace, '2': terminal.KeyCtrlSpace,
-	'h': terminal.KeyBackspace, 'i': terminal.KeyTab, 'j': terminal.KeyEnter, 'm': terminal.KeyEnter,
-	'[': terminal.KeyEscape, '3': terminal.KeyEscape,
-	'\\': terminal.KeyCtrlBackslash, '4': terminal.KeyCtrlBackslash,
-	']': terminal.KeyCtrlBracketRight, '5': terminal.KeyCtrlBracketRight,
-	'^': terminal.KeyCtrlCaret, '6': terminal.KeyCtrlCaret,
-	'_': terminal.KeyCtrlUnderscore, '-': terminal.KeyCtrlUnderscore, '/': terminal.KeyCtrlUnderscore, '7': terminal.KeyCtrlUnderscore,
-}
-
 // keyEvent is the terminal event for a key press: keysym as the layout resolved it
 // with Shift applied, state the modifier bits. ok is false for a key a terminal
 // never sees, a modifier alone or a dead key.
@@ -67,14 +55,11 @@ func keyEvent(keysym uint64, state uint32) (terminal.Event, bool) {
 		if lower >= 'A' && lower <= 'Z' {
 			lower += 'a' - 'A'
 		}
-		switch k, ok := ctrlKeys[lower]; {
-		case ok:
-			ev.Key = k
-		case lower >= 'a' && lower <= 'z':
-			ev.Key = terminal.KeyCtrlA + terminal.Key(lower-'a')
-		default:
+		k, ok := terminal.ControlKey(lower)
+		if !ok {
 			return ev, false
 		}
+		ev.Key = k
 		if state&stateMod1 != 0 {
 			ev.Modifiers = terminal.ModAlt
 		}

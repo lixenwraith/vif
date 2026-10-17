@@ -512,18 +512,6 @@ the push stops at:
 A release-signed APK is the player's keystore and a Gradle signing block, after
 the line.
 
-### Lift the hosts' key tables into the terminal module
-
-- Priority: P3
-- Affected files: `lixenwraith/terminal`, `pkg/window/keys.go`,
-  `android/game/input.go`
-
-Both hosts hold the same table of what a terminal reports for Ctrl and a printable
-key, and the same rule that modifiers ride only the editing, navigation and
-function keys; the module parses the same control bytes in `parseControl`. One
-exported `terminal.ControlKey(r rune) (Key, bool)` and the rule beside it would
-leave each host its key-code table alone.
-
 ### Measure and round out the desktop window
 
 - Priority: P3
