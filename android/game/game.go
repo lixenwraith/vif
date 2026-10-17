@@ -113,9 +113,9 @@ func Resize(width, height int32) {
 	}
 }
 
-// Touch is a finger going down or up at the view's pixel x, y: the left button
+// Tap is a finger going down or up at the view's pixel x, y: the left button
 // pressed or released on the cell under it
-func Touch(x, y int32, down bool) {
+func Tap(x, y int32, down bool) {
 	if v := current(); v != nil {
 		if ev, ok := v.touch(int(x), int(y), down); ok {
 			v.post(ev)
@@ -126,8 +126,8 @@ func Touch(x, y int32, down bool) {
 // Key is a key the view received: Android's key code, the character it types
 // without Ctrl or Alt (0 for none) and its meta state. It reports whether the game
 // takes the key; one it does not, a volume key, is left to the system.
-func Key(code, char, meta int32) bool {
-	ev, ok := keyEvent(code, rune(char), meta)
+func Key(code, typed, meta int32) bool {
+	ev, ok := keyEvent(code, rune(typed), meta)
 	if v := current(); v != nil && ok {
 		v.post(ev)
 	}
