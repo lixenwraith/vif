@@ -42,7 +42,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
 		relX := spiritComp.StartX - spiritComp.TargetX
 		relY := spiritComp.StartY - spiritComp.TargetY
-		relYCirc := vmath.ScaleToCircular(relY)
+		relYCirc := ctx.CellAspect.Circular(relY)
 
 		// Render loop: Draw head (i=0) and trailing segments (i>0)
 		for i := range visual.SpiritTrailSteps {
@@ -66,7 +66,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			rotYCirc *= scale
 
 			// 4. Restore aspect ratio (Circular -> Elliptical)
-			rotY := vmath.ScaleFromCircular(rotYCirc)
+			rotY := ctx.CellAspect.FromCircular(rotYCirc)
 
 			// 5. Map to screen space
 

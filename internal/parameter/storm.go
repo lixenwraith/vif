@@ -1,12 +1,8 @@
 package parameter
 
-import (
-	"time"
+import "time"
 
-	"github.com/lixenwraith/vif/pkg/vmath"
-)
-
-// Storm circle dimensions (ellipse, terminal 2:1 aspect)
+// Storm circle dimensions (ellipse, Y at the reference aspect)
 const (
 	StormCircleRadiusX = 10.0
 	StormCircleRadiusY = 5.0
@@ -73,8 +69,6 @@ const (
 
 // Pre-computed
 var (
-	StormCircleCollisionInvRxSq,
-	StormCircleCollisionInvRySq = vmath.EllipseInvRadiiSq(StormCircleRadiusX, StormCircleRadiusY)
 	StormInvulnerabilityMaxDuration = time.Duration(StormInvulnerabilityMaxDurationMs) * time.Millisecond
 )
 
@@ -107,6 +101,4 @@ const (
 var (
 	StormGreenRadiusX = StormCircleRadiusX * StormGreenRadiusMultiplier
 	StormGreenRadiusY = StormCircleRadiusY * StormGreenRadiusMultiplier
-	StormGreenInvRxSq,
-	StormGreenInvRySq = vmath.EllipseInvRadiiSq(StormGreenRadiusX, StormGreenRadiusY)
 )

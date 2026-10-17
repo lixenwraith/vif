@@ -42,6 +42,7 @@ ascimage -no-status file.vifimg
 | `-dual <file>` | Write a dual-mode `.vifimg` from an image |
 | `-o <file>` | Write ANSI (`-` = stdout); omit both outputs for the viewer |
 | `-ax`, `-ay` | Anchor offset stored in a `.vifimg` |
+| `-aspect <w/h>` | Cell width over height of the display the output is for (default `0.5`) |
 | `-fit`, `-z <pct>` | Image viewer start state: fit (default on), or a zoom other than 100 |
 | `-no-status` | Start the viewer without its status bar |
 

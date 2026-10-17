@@ -339,7 +339,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	})
 
 	// Add ShieldComponent (inactive by default), uses pre-calculated config
-	cfg := &visual.ShieldConfigs[component.ShieldTypeQuasar]
+	cfg := visual.ShieldConfigFor(component.ShieldTypeQuasar, s.world.Resources.Config.CellAspect)
 	s.world.Components.Shield.SetComponent(headerEntity, component.ShieldComponent{
 		Active:  false,
 		Type:    component.ShieldTypeQuasar,
@@ -562,7 +562,7 @@ func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *
 
 	// Inside visual circle = in range (no zap)
 	dx := float64(cursorX - headerPos.X)
-	dyCirc := vmath.ScaleToCircular(float64(cursorY - headerPos.Y)) // Aspect correction
+	dyCirc := s.world.Resources.Config.CellAspect.Circular(float64(cursorY - headerPos.Y))
 	dist := vmath.Magnitude(dx, dyCirc)
 	return dist <= quasarComp.ZapRadius
 }

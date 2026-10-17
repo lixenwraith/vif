@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"net"
 	"time"
 
@@ -215,6 +216,9 @@ type Config struct {
 	// later leaves that shared cursor on the wrong cell. Zero means no latch.
 	MapWidth, MapHeight int
 	CropOnResize        bool
+	// CellAspect is the cell's width over its height the geometry runs at; zero
+	// takes the presentation's, which for a terminal is the reference
+	CellAspect vmath.Aspect
 
 	// ProbeAddress binds the liveness, readiness and metrics endpoint. Empty
 	// leaves it unbound, which is what an interactive run wants: a person watching
@@ -300,6 +304,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.MapWidth = fromAnchor.MapWidth
 	local.MapHeight = fromAnchor.MapHeight
 	local.CropOnResize = fromAnchor.CropOnResize
+	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
 	if !local.Mode.Driven() {
 		local.TimeScaleSpec = o.Anchor.Anchor.Speed

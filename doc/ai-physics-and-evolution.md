@@ -34,8 +34,9 @@ stores, for every reachable cell, the direction that descends toward a target.
 | Vertical | 20 |
 | Diagonal | 22 |
 
-The asymmetric costs compensate for a terminal cell's approximate 2:1 visual
-aspect ratio. Eight-way movement is allowed, but a diagonal cannot cut the
+The asymmetric costs come from the cell aspect (`navigation.CostsFor`): 10, 20
+and 22 at a terminal's 2:1, equal on both axes for a square cell. Eight-way
+movement is allowed, but a diagonal cannot cut the
 corner when either adjacent cardinal cell is blocked.
 
 ```mermaid
@@ -386,8 +387,8 @@ cells per second squared, all as `float64`.
 Integer `Point` and `Area` values describe discrete grid cells; they are not a
 fixed-point representation. `Point.Center` is the sanctioned grid-to-precise
 conversion and adds the half-cell offset, while `PointAt` uses floor so
-negative precise coordinates map to the correct cell. Terminal aspect
-correction remains explicit in Y radii, weighted distances, and projection
+negative precise coordinates map to the correct cell. Cell aspect correction
+remains explicit (`vmath.Aspect`) in Y radii, weighted distances and projection
 rather than being encoded in the numeric type.
 
 There is one numeric path for motion and physics: `float64` math, plus integer

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"sync/atomic"
 	"time"
 
@@ -241,6 +242,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 		CameraX:        0,
 		CameraY:        0,
 		CropOnResize:   true,
+		CellAspect:     vmath.RefAspect,
 	}
 	world.Positions.ResizeGrid(viewportWidth, viewportHeight)
 

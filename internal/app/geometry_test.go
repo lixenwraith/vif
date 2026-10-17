@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func geometryServer(t *testing.T, w, h int) *App {
@@ -117,6 +118,36 @@ func TestAnUnreportedOrUnusableGeometryChangesNothing(t *testing.T) {
 		a.adoptLobbyGeometry()
 		if w, h := mapSize(a); w != beforeW || h != beforeH {
 			t.Fatalf("report %+v moved the map from %dx%d to %dx%d", report, beforeW, beforeH, w, h)
+		}
+	}
+}
+
+// TestTheCellAspectIsPartOfTheGeometry: the run's aspect reaches the simulation
+// and the anchor a guest or a replay rebuilds its configuration from; a host that
+// reports none plays at the reference.
+func TestTheCellAspectIsPartOfTheGeometry(t *testing.T) {
+	t.Parallel()
+	for _, set := range []vmath.Aspect{0, 1} {
+		a, err := NewHeadless(Config{
+			Width: 80, Height: 24, Resources: resource.Options{Embedded: true}, Seed: 0x6E03, CellAspect: set,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(a.Close)
+		want := set
+		if want == 0 {
+			want = vmath.RefAspect
+		}
+		var got vmath.Aspect
+		a.World().RunSafe(func() { got = a.World().Resources.Config.CellAspect })
+		if got != want {
+			t.Fatalf("aspect %v: simulation runs at %v", set, got)
+		}
+		an := a.JoinAnchor().Anchor
+		cfg, err := ConfigFromAnchor(an)
+		if err != nil || an.CellAspect != float64(want) || cfg.CellAspect != want {
+			t.Fatalf("aspect %v: anchor carries %v, rebuilt as %v (%v)", set, an.CellAspect, cfg.CellAspect, err)
 		}
 	}
 }

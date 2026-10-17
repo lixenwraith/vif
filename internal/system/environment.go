@@ -302,7 +302,7 @@ func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	s.drift.Speed = min(payload.Speed, parameter.DriftMaxSpeed)
 	s.drift.Direction = vmath.NormalizeAngle(payload.Direction)
 	s.drift.Remaining = time.Duration(payload.DurationMs) * time.Millisecond
-	s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction)
+	s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction, s.world.Resources.Config.CellAspect)
 	for level := range driftLevels {
 		for axis, v := range s.driftVelocity[level] {
 			if p := &s.drift.Phase[level][axis]; !phaseFollows(*p, v) {
@@ -322,13 +322,13 @@ func (s *EnvironmentSystem) endDrift() {
 // driftVelocity uses exact trigonometry rather than the lookup tables: a table bin
 // leaves a cardinal drift a stray cross component that steps a row every minute or
 // so. Rounding to whole microcells absorbs the last bit.
-func driftVelocity(speed, direction float64) (v [driftLevels][2]int64) {
+func driftVelocity(speed, direction float64, aspect vmath.Aspect) (v [driftLevels][2]int64) {
 	sin, cos := math.Sincos(direction)
 	for level, factor := range parameter.DriftLayerFactor {
 		micro := speed * factor * 1e6
 		v[level] = [2]int64{
 			int64(math.Round(micro * cos)),
-			int64(math.Round(micro * sin * parameter.DriftAspectY)),
+			int64(math.Round(aspect.FromCircular(micro * sin))),
 		}
 	}
 	return v
@@ -473,7 +473,7 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	if snap.Active && (snap.Force <= 0 || snap.Remaining <= 0) {
 		return fmt.Errorf("environment: active wind requires positive force and duration")
 	}
-	if err := snap.Drift.validate(); err != nil {
+	if err := snap.Drift.validate(s.world.Resources.Config.CellAspect); err != nil {
 		return err
 	}
 
@@ -493,14 +493,14 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	s.endDrift()
 	if snap.Drift.Active {
 		s.drift = snap.Drift
-		s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction)
+		s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction, s.world.Resources.Config.CellAspect)
 	}
 	s.publishStatus()
 	return nil
 }
 
 // validate accepts exactly the drift states Update can leave behind
-func (d driftState) validate() error {
+func (d driftState) validate(aspect vmath.Aspect) error {
 	if !d.Active {
 		if d != (driftState{}) {
 			return fmt.Errorf("environment: inactive drift carries state")
@@ -511,7 +511,7 @@ func (d driftState) validate() error {
 		!(d.Direction >= 0 && d.Direction <= vmath.TwoPi) || d.Remaining < 0 || d.Endless != (d.Remaining == 0) {
 		return fmt.Errorf("environment: invalid drift state")
 	}
-	velocity := driftVelocity(d.Speed, d.Direction)
+	velocity := driftVelocity(d.Speed, d.Direction, aspect)
 	for level, phase := range d.Phase {
 		for axis, p := range phase {
 			if p <= -driftCell || p >= driftCell || !phaseFollows(p, velocity[level][axis]) {

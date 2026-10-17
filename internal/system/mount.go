@@ -163,13 +163,14 @@ func (s *MountSystem) Update() {
 func (s *MountSystem) aim(m *component.MountComponent, pos component.PositionComponent) core.Entity {
 	var aimed core.Entity
 	best := -1.0
+	aspect := s.world.Resources.Config.CellAspect
 	for i := range parameter.MaxPlayers {
 		cursor := s.world.Resources.Player.Slot(uint8(i))
 		cp, ok := s.world.Positions.GetPosition(cursor)
 		if !ok {
 			continue
 		}
-		distSq := vmath.CircleDistSq(float64(cp.X-pos.X), vmath.ScaleToCircular(float64(cp.Y-pos.Y)))
+		distSq := vmath.CircleDistSq(float64(cp.X-pos.X), aspect.Circular(float64(cp.Y-pos.Y)))
 		if m.Range > 0 && distSq > m.Range*m.Range {
 			continue
 		}
@@ -248,7 +249,7 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 
 	case component.DeliveryPulse:
 		var ring blastArea
-		ring.resetOne(pos.X, pos.Y, parameter.PulseRadiusX)
+		ring.resetOne(pos.X, pos.Y, parameter.PulseRadiusX, s.world.Resources.Config.CellAspect)
 		strikeCursorsIn(s.world, ring.contains, spec.HostedDamage)
 		s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{
 			X: pos.X, Y: pos.Y, Palette: component.PaletteHostile,

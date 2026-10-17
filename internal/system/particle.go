@@ -407,8 +407,9 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 		if s.rng.Intn(2) == 0 {
 			spin = -1
 		}
+		aspect := s.world.Resources.Config.CellAspect
 		centerX, centerY := vmath.Point{X: cx, Y: cy}.Center()
-		kinetic.VelX, kinetic.VelY = orbitKick(preciseX-centerX, vmath.ScaleToCircular(preciseY-centerY), prof.orbit.speed, spin)
+		kinetic.VelX, kinetic.VelY = orbitKick(preciseX-centerX, aspect.Circular(preciseY-centerY), prof.orbit.speed, spin, aspect)
 		particle.ResponseGroup = uint8(s.rng.Intn(3))
 		particle.Orbiting = true
 	}
@@ -463,9 +464,9 @@ func (s *ParticleSystem) fallSpeed() float64 {
 
 // orbitKick is a tangential velocity of speed around a centre at circular-space
 // offset (dx, dy), turning the way the Kraken's legs do for a positive spin
-func orbitKick(dx, dy, speed, spin float64) (vx, vy float64) {
+func orbitKick(dx, dy, speed, spin float64, aspect vmath.Aspect) (vx, vy float64) {
 	tx, ty := vmath.Normalize2D(vmath.Perpendicular(dx, dy))
-	return tx * speed * spin, vmath.ScaleFromCircular(ty * speed * spin)
+	return tx * speed * spin, aspect.FromCircular(ty * speed * spin)
 }
 
 // updateBehavior integrates every particle of one behavior: anchor pull or fall,
@@ -485,6 +486,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	gameHeight := s.world.Resources.Config.MapHeight
 	centers, chase := s.anchors(prof.anchor)
 	particles := s.world.Components.Particle
+	aspect := s.world.Resources.Config.CellAspect
 
 	for _, entity := range s.entities {
 		// Live pointers: the only structural change in the body is the annihilation
@@ -504,7 +506,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 			kinetic.VelX += vmath.Cos(angle) * prof.jitter
 			kinetic.VelY += vmath.Sin(angle) * prof.jitter
 		}
-		center, anchored := nearestCenter(centers, kinetic.PreciseX, kinetic.PreciseY)
+		center, anchored := nearestCenter(centers, kinetic.PreciseX, kinetic.PreciseY, aspect)
 		s.steer(prof, particle, kinetic, center, anchored, chase, dtSec)
 
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
@@ -633,10 +635,10 @@ func (s *ParticleSystem) anchors(anchor particleAnchor) (centers []orbitCenter, 
 }
 
 // nearestCenter returns the centre closest to (x, y) in circular space
-func nearestCenter(centers []orbitCenter, x, y float64) (orbitCenter, bool) {
+func nearestCenter(centers []orbitCenter, x, y float64, aspect vmath.Aspect) (orbitCenter, bool) {
 	best, bestDist := orbitCenter{}, math.Inf(1)
 	for _, c := range centers {
-		dx, dy := x-c.x, vmath.ScaleToCircular(y-c.y)
+		dx, dy := x-c.x, aspect.Circular(y-c.y)
 		if d := dx*dx + dy*dy; d < bestDist {
 			best, bestDist = c, d
 		}
@@ -650,11 +652,12 @@ func (s *ParticleSystem) steer(prof *particleProfile, p *component.ParticleCompo
 	drag := prof.drag
 	switch {
 	case anchored:
-		// Orbit physics runs in circular space so the orbit looks round on terminal cells
-		dx, dy := k.PreciseX-c.x, vmath.ScaleToCircular(k.PreciseY-c.y)
+		// Orbit physics runs in circular space so the orbit looks round on cells
+		aspect := s.world.Resources.Config.CellAspect
+		dx, dy := k.PreciseX-c.x, aspect.Circular(k.PreciseY-c.y)
 		if !p.Orbiting && prof.fall != 0 {
 			p.OrbitRadius = prof.orbit.radiusMin + s.rng.Float64()*(prof.orbit.radiusMax-prof.orbit.radiusMin)
-			k.VelX, k.VelY = orbitKick(dx, dy, prof.orbit.speed, c.spin)
+			k.VelX, k.VelY = orbitKick(dx, dy, prof.orbit.speed, c.spin, aspect)
 		}
 		if chase && p.ResponseGroup == s.staggerTick {
 			p.ChaseBoost = parameter.DustChaseBoost
@@ -664,12 +667,12 @@ func (s *ParticleSystem) steer(prof *particleProfile, p *component.ParticleCompo
 
 		ax, ay := physics.OrbitalEquilibrium(dx, dy, p.OrbitRadius, prof.orbit.stiffness*max(p.ChaseBoost, 1))
 		k.VelX += ax * dtSec
-		k.VelY += vmath.ScaleFromCircular(ay) * dtSec
+		k.VelY += aspect.FromCircular(ay) * dtSec
 
 		// Radial damping turns radial velocity into tangential
-		velYCirc := vmath.ScaleToCircular(k.VelY)
+		velYCirc := aspect.Circular(k.VelY)
 		k.VelX, velYCirc = physics.OrbitalDamp(k.VelX, velYCirc, dx, dy, prof.orbit.damping, dtSec)
-		k.VelY = vmath.ScaleFromCircular(velYCirc)
+		k.VelY = aspect.FromCircular(velYCirc)
 		drag = prof.orbit.drag
 	case p.Orbiting && prof.fall != 0:
 		k.VelX = 0
@@ -938,7 +941,7 @@ func (s *ParticleSystem) detonateDust(cursor core.Entity) {
 	if len(s.centerBuf) == 0 {
 		return
 	}
-	s.blast.reset(s.centerBuf, parameter.ExplosionFieldRadius)
+	s.blast.reset(s.centerBuf, parameter.ExplosionFieldRadius, s.world.Resources.Config.CellAspect)
 
 	// Glyphs caught in the blast seed the next detonation's dust
 	s.convertGlyphs(cursorPos.X, cursorPos.Y, &s.blast, nil)

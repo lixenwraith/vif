@@ -11,10 +11,11 @@ const (
 	ShieldTypePlayer ShieldType = iota
 	ShieldTypeQuasar
 	ShieldTypeLoot
+	ShieldTypeCount
 )
 
 // ShieldComponent holds runtime state for game mechanics
-// Visual parameters looked up via Type in visual.ShieldConfigs
+// Visual parameters come from visual.ShieldConfigFor(Type, aspect)
 type ShieldComponent struct {
 	// Player-specific runtime state
 	LastDrainTime time.Time

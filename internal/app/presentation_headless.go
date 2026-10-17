@@ -4,6 +4,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"os"
 	"time"
 
@@ -25,8 +26,12 @@ func validateBuildConfig(cfg Config) error {
 
 func (a *App) initPresentationService() error { return nil }
 
-func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode) {
-	return width, height, fallbackColorMode
+func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode, vmath.Aspect) {
+	aspect := a.cfg.CellAspect
+	if aspect == 0 {
+		aspect = vmath.RefAspect
+	}
+	return width, height, fallbackColorMode, aspect
 }
 
 func (a *App) initPresentation() {}

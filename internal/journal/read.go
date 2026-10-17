@@ -70,30 +70,31 @@ type digestFields struct {
 }
 
 type anchorFields struct {
-	Speed          string `json:"speed"`
-	ScenarioID     string `json:"scenario_id"`
-	ScenarioDigest string `json:"scenario_digest"`
-	ContentID      string `json:"content_id"`
-	ContentPin     string `json:"content_pin"`
-	Schema         uint64 `json:"schema"`
-	Seed           uint64 `json:"seed"`
-	Session        uint64 `json:"session"`
-	JSeq           uint64 `json:"jseq"`
-	Run            uint64 `json:"jrun"`
-	Tick           uint64 `json:"jtick"`
-	StartRun       uint64 `json:"start_run"`
-	StartTick      uint64 `json:"start_tick"`
-	ContentFiles   uint64 `json:"content_files"`
-	ContentBlocks  uint64 `json:"content_blocks"`
-	ContentLines   uint64 `json:"content_lines"`
-	TickInterval   int64  `json:"tick_ns"`
-	Slot           uint64 `json:"slot"`
-	Width          int    `json:"width"`
-	Height         int    `json:"height"`
-	MapWidth       int    `json:"map_w"`
-	MapHeight      int    `json:"map_h"`
-	CropOnResize   bool   `json:"crop_on_resize"`
-	SessionShared  bool   `json:"session_shared"`
+	Speed          string  `json:"speed"`
+	ScenarioID     string  `json:"scenario_id"`
+	ScenarioDigest string  `json:"scenario_digest"`
+	ContentID      string  `json:"content_id"`
+	ContentPin     string  `json:"content_pin"`
+	Schema         uint64  `json:"schema"`
+	Seed           uint64  `json:"seed"`
+	Session        uint64  `json:"session"`
+	JSeq           uint64  `json:"jseq"`
+	Run            uint64  `json:"jrun"`
+	Tick           uint64  `json:"jtick"`
+	StartRun       uint64  `json:"start_run"`
+	StartTick      uint64  `json:"start_tick"`
+	ContentFiles   uint64  `json:"content_files"`
+	ContentBlocks  uint64  `json:"content_blocks"`
+	ContentLines   uint64  `json:"content_lines"`
+	TickInterval   int64   `json:"tick_ns"`
+	Slot           uint64  `json:"slot"`
+	Width          int     `json:"width"`
+	Height         int     `json:"height"`
+	MapWidth       int     `json:"map_w"`
+	MapHeight      int     `json:"map_h"`
+	CropOnResize   bool    `json:"crop_on_resize"`
+	CellAspect     float64 `json:"cell_aspect"`
+	SessionShared  bool    `json:"session_shared"`
 }
 
 // Replicated returns the records that must appear identically in every instance's
@@ -250,7 +251,7 @@ func decodeAnchor(raw json.RawMessage) (event.JournalAnchor, error) {
 		Run: f.Run, Tick: f.Tick, StartRun: f.StartRun, StartTick: f.StartTick,
 		ContentFiles: f.ContentFiles, ContentBlocks: f.ContentBlocks, ContentLines: f.ContentLines,
 		TickInterval: f.TickInterval, Width: f.Width, Height: f.Height,
-		MapWidth: f.MapWidth, MapHeight: f.MapHeight, CropOnResize: f.CropOnResize,
+		MapWidth: f.MapWidth, MapHeight: f.MapHeight, CropOnResize: f.CropOnResize, CellAspect: f.CellAspect,
 		SessionShared: f.SessionShared, Slot: f.Slot,
 	}, nil
 }
