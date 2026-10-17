@@ -9,5 +9,6 @@ const (
 	MaskTransient uint8 = 1 << 3
 	MaskComposite uint8 = 1 << 4
 	MaskUI        uint8 = 1 << 5
+	MaskWall      uint8 = 1 << 7 // 1 << 6 is MaskHealthBar
 	MaskAll       uint8 = 0xFF
 )

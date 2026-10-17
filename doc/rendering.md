@@ -236,12 +236,13 @@ Renderers call `SetWriteMask` before drawing. Current mask categories are:
 | `MaskComposite` | Species, structures, gold, composite members. |
 | `MaskUI` | Meters, status, cursor, overlays, debug UI. |
 | `MaskHealthBar` | Dedicated high bit used by health bars. |
+| `MaskWall` | Wall cells, so pause dim reaches them whatever drew before. |
 
 Masks allow late renderers to transform selected prior layers without knowing
 which concrete renderer produced them:
 
 - grayout desaturates glyphs while excluding guidance, fields, transients,
-  composites, health bars, and UI;
+  composites, health bars, walls, and UI;
 - dim scales every category except UI while the game is paused; on a text
   console, where a halved color is mostly black, it grays them instead;
 - the truecolor finalizer dims selected occupied backgrounds under glyphs;

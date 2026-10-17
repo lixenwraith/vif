@@ -124,20 +124,6 @@ capture and passed to `GeneticResource.Sample` and `SampleScout`
 and no scenario sets the key. Options: drop the parameter, field and key (a capture
 schema bump); or give the registry per-island populations for it to select.
 
-### Give walls a write mask so pause dims them
-
-- Priority: P0, to review
-- Affected files: `internal/render/renderer/wall.go`,
-  `internal/parameter/visual/mask.go`, `doc/rendering.md`, `doc/term-index.md`
-
-`WallRenderer.Render` never calls `SetWriteMask`
-(`internal/render/renderer/wall.go:35-61`), so walls take the previous layer's mask:
-`MaskPing` when the crosshair or grid drew this frame (`ping.go:46`), else
-`MaskNone` from `Clear` (`internal/render/buffer.go:97`). Pause dim (`DimMask`,
-`internal/parameter/visual/post_process.go:24`) therefore skips walls unless ping is
-showing (reproduced). Add a wall mask bit (`0x80` is free) and set it in `Render`, or
-set `MaskNone` explicitly if walls are meant to stay bright.
-
 ### Delete the dead diagnostics entry points
 
 - Priority: P0, to review
