@@ -32,19 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Let update.sh check the objects on a fresh cluster
-
-- Priority: P0, to review
-- Affected files: `deploy/update.sh`
-
-`check_objects` runs `kubectl diff` on each object file before anything is applied
-and dies on an exit above 1 (`deploy/update.sh:66-76`). On a cluster without the
-`vif` namespace, where [Fleet deploy](kube-docker-deploy.md) §9 runs
-`./deploy/update.sh objects wad`, the server dry run of every namespaced object
-should be refused as namespace not found, so the first install stops before
-`apply_objects` (inferred, not tried on a cluster). When `kubectl get namespace vif`
-fails, report the objects pending, undiffed.
-
 ### Decide fleet log retention against the Job deadline
 
 - Priority: P0, to review
