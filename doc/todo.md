@@ -162,19 +162,6 @@ that page's Swarm row.
 0 from the roster every tick (`resolveGroupTargets`, `:323`). Every cursor move is
 still dispatched to a handler that drops it. Remove the two entries.
 
-### Check float telemetry in the reset test
-
-- Priority: P0, to review
-- Affected files: `internal/app/telemetry_test.go`
-
-`persistentTelemetryKey` lists `glyph.density` and `glyph.rate_mult` under `string`
-(`internal/app/telemetry_test.go:109`), but they are floats
-(`internal/system/glyph.go:99-100`), and `TestTelemetrySessionCountersReset` never
-ranges floats, so the entries match nothing and no float is checked across a reset.
-A float pass against the post-reset baseline passes today with the `proc.` prefix
-exemption alone (tried in a scratch test), since the glyph pair resets. Add the float
-pass and delete the two entries.
-
 ### Confine a scenario's wall image path to the roots
 
 - Priority: P0, to review
