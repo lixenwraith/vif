@@ -396,10 +396,11 @@ module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `app.Run`. The view's grid is the cells its pixels hold at a cell 12 dp tall
 (16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5). A
 Java render thread takes the newest frame at each vsync as the cells changed
-since the one it holds, which `CellDrawer.OnCanvas` paints from the atlas texture
-(`game.Atlas`) at the atlas's size, as an instrumented test checks against
-`glyph.Raster` pixel for pixel, and posts it on a hardware canvas stretched over
-the whole view, filtered, so no margin is left; a tap maps to its cell in
+since the one it holds (`glyph.Frames`, the hand-off every host drawing in another
+runtime shares), which `CellDrawer.OnCanvas` paints from the atlas as one texture
+(`glyph.Texture`, `game.Atlas`) at the atlas's size, as an instrumented test checks
+against `glyph.Raster` pixel for pixel, and posts it on a hardware canvas stretched
+over the whole view, filtered, so no margin is left; a tap maps to its cell in
 proportion. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
