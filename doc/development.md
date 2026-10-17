@@ -39,7 +39,7 @@ make dev       # generated code + race-enabled debug build
 |---|---|
 | `generate` | Run the manifest/event/input code generator. |
 | `dev` | Generate and build `cmd/vif` with the race detector/debug symbols. |
-| `release` | Generate and build a stripped `-trimpath` native binary. |
+| `release` | Build a stripped `-trimpath` native binary without CGO. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `nolog` | Release-style build with the `novlog` tag. |
 | `wasm` | Build audio- and log-free `web/vif.wasm` for the xterm.js host, with its toolchain's `web/wasm_exec.js`. |

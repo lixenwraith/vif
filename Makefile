@@ -48,6 +48,8 @@ GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=
 
 .DEFAULT_GOAL := help
 # Goals run in the order given, so make release install installs what it built.
+# Generated files are committed, so only dev, test and verify regenerate: a
+# packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
 .PHONY: help generate dev release headless gui android android-install nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
@@ -133,16 +135,16 @@ serve: wasm $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
-release: generate $(BIN_DIR)
+release: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
-headless: generate $(BIN_DIR)
+headless: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
 # gui loads Xlib, EGL and GLES 2 at run time through purego, so cgo stays off
-gui: generate $(BIN_DIR)
+gui: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
 
 # android is its own Go module and Gradle project: gomobile binds the Go host and
@@ -156,18 +158,18 @@ android-install:
 	adb install -r $(BIN_DIR)/$(BINARY)-debug.apk
 
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
-nolog: generate $(BIN_DIR)
+nolog: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go and the audio-free system manifest automatically.
 # wasm_exec.js is the loader of the Go that built the binary, so it is copied
 # from that toolchain on every build rather than kept as it was committed.
-wasm: generate $(WEB_DIR)
+wasm: check-go $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
 
 # windows is experimental and untested
-windows: generate $(BIN_DIR)
+windows: check-go $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
 tools: check-go $(BIN_DIR)

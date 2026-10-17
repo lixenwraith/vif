@@ -32,19 +32,6 @@ Options: keep this and have `-check` report both; or refuse at load, with the st
 `Op` of [Behavior machines](machine-design.md) §7. Shipped scenarios and the default
 bot graph use only known keys and ops.
 
-### Keep code generation out of the build targets
-
-- Priority: P0, to review
-- Affected files: `Makefile`, `.github/workflows/release.yml`, `doc/development.md`
-
-The binary targets `release`, `headless`, `nolog`, `wasm` and `windows` depend on
-`generate` (`Makefile:121-151`), so a packager's `make release` reruns
-`gen-manifest`, which rewrites ten committed files
-(`internal/gen-manifest/main.go:169-182`), against [Packaging](packaging.md) §1: no
-`go generate` at package time. `.github/workflows/release.yml:45` also names
-`./internal/event`, which has no directive. Keep `generate` on `dev`, `test` and
-`verify` only, and drop `./internal/event` from the workflow.
-
 ### Pass the image scenario's name and engine to make
 
 - Priority: P0, to review
