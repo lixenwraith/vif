@@ -77,6 +77,11 @@ It is the contract, not a suggestion.
 - Work that continues after its PR merged starts again from the latest main; never
   stack new commits on merged history.
 - Finish and push one commit before starting the next.
+- Once a PR is merged or closed unmerged, delete its branch on GitHub and locally
+  if this session can (`gh pr merge --delete-branch` does both; a branch a
+  worktree holds goes with that worktree, which the app that made it removes).
+  A session that cannot, because it has no remote access or works in a copy,
+  says so once in its report and leaves the branch; it never retries.
 
 ## Agents
 
