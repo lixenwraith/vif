@@ -781,7 +781,9 @@ void main() {
 
     // === Touch: key strip and system keyboard ===
     const KEYBOARD_MIN = 100;   // px of screen a soft keyboard takes at least; less is a toolbar
-    const CELL_MIN = 7;         // smallest cell the grid is drawn at to fit above the keyboard
+    // The smallest cell the grid is drawn at to fit above the keyboard: half the
+    // fitted one, 7 px at most, so a phone's 6 px grid still shrinks to fit.
+    const cellLeast = function() { return Math.min(7, cellBase / 2); };
     let keyboard = false;       // the player asked for the system keyboard
     let keyboardSeen = false;   // and it came up, so its going away is the system dismissing it
     let keyboardUp = false;     // a keyboard the player asked for covers the page, or is still leaving
@@ -838,7 +840,7 @@ void main() {
 
         /* While a keyboard covers the page the grid keeps its size, which is the solo
            map's, and is drawn at a smaller cell between the strip and the keyboard;
-           below CELL_MIN it keeps the bottom rows, where commands are typed, in view.
+           below cellLeast it keeps the bottom rows, where commands are typed, in view.
            A zoom under a keyboard refits once the keyboard is down (fit, above). */
         function drawAt(h) {
             if (cellCSS !== h) {
@@ -865,10 +867,11 @@ void main() {
             let shift = 0;
             if (up) {
                 const avail = vv.height - strip.offsetHeight;
+                const least = cellLeast();
                 let h = lastFit && lastFit.avail === avail ? lastFit.cell
-                    : Math.max(CELL_MIN, Math.min(cellBase, Math.floor(2 * cellBase * avail / fullHeight) / 2));
+                    : Math.max(least, Math.min(cellBase, Math.floor(2 * cellBase * avail / fullHeight) / 2));
                 let drawn;
-                while ((drawn = drawAt(h)) > avail && h > CELL_MIN) h -= 0.5;
+                while ((drawn = drawAt(h)) > avail && h > least) h -= 0.5;
                 lastFit = { avail: avail, cell: h };
                 shift = Math.max(0, drawn - avail);
             } else {
