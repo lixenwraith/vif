@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"github.com/lixenwraith/vif/internal/parameter"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,15 +13,14 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// LockHoldWarn [wall] is the update-mutex hold time above which a hold is reported.
-// Race builds instrument every access, so the threshold scales with them.
+// LockHoldWarn is parameter.LockHoldWarn, or LockHoldWarnRace in a race build
 var LockHoldWarn = lockHoldWarn()
 
 func lockHoldWarn() time.Duration {
 	if core.RaceEnabled {
-		return 200 * time.Millisecond
+		return parameter.LockHoldWarnRace
 	}
-	return 20 * time.Millisecond
+	return parameter.LockHoldWarn
 }
 
 // UpdateMutex wraps sync.Mutex for game tick serialization.

@@ -3,6 +3,7 @@ package resource
 import (
 	"bytes"
 	"compress/flate"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -169,9 +170,9 @@ func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
 
 	var bomb bytes.Buffer
 	w, _ := flate.NewWriter(&bomb, flate.BestCompression)
-	_, _ = w.Write(make([]byte, ScenarioMaxBytes*4))
+	_, _ = w.Write(make([]byte, parameter.ScenarioMaxBytes*4))
 	_ = w.Close()
 	if _, err := UnmarshalScenarioCompressed("bomb", bomb.Bytes()); err == nil {
-		t.Fatalf("a %d-byte body inflating to %d was accepted", bomb.Len(), ScenarioMaxBytes*4)
+		t.Fatalf("a %d-byte body inflating to %d was accepted", bomb.Len(), parameter.ScenarioMaxBytes*4)
 	}
 }

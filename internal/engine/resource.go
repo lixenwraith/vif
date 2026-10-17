@@ -670,9 +670,6 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 
 // === Target Resource ===
 
-// MaxTargetsPerGroup sets the hard limit for concurrent anchors in a single target group
-const MaxTargetsPerGroup = 8
-
 // TargetData holds coordinates and entity ID for a single target instance
 type TargetData struct {
 	Entity core.Entity
@@ -683,7 +680,7 @@ type TargetData struct {
 // TargetGroupState holds resolved navigation targets for a group
 type TargetGroupState struct {
 	Type    component.TargetType
-	Targets [MaxTargetsPerGroup]TargetData
+	Targets [parameter.MaxTargetsPerGroup]TargetData
 	Count   int
 	Valid   bool // False if target entity destroyed or uninitialized
 }
