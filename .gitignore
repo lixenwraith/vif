@@ -9,6 +9,7 @@ build.sh
 catalog.txt
 combined.txt
 web/*.wasm
+*.apk
 cmd/vif/vif
 /vif
 /vif-headless

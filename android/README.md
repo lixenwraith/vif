@@ -50,7 +50,10 @@ drops the system keyboard; Back is Escape; `:q` quits.
 `go test ./...` here covers the tap and key mapping, the frame hand-off and that a
 cell frame painted from the atlas texture is the raster's pixels. On a device or
 emulator, `./gradlew connectedDebugAndroidTest` checks `CellDrawer.OnCanvas`
-against `glyph.Raster` pixel for pixel on Android's own Canvas.
+against `glyph.Raster` pixel for pixel on Android's own Canvas. It runs on every
+device adb sees and uninstalls the app from each afterwards, its files with it:
+name one, as `ANDROID_SERIAL=emulator-5554`, when a phone you play on is plugged
+in.
 
 A headless emulator with `-gpu host` has crashed when an install killed the
 running app; `-gpu swiftshader_indirect` does not, at a slower GPU.
