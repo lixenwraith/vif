@@ -312,7 +312,7 @@ From the td profile (1,600 ticks, including the resets):
 
 | Finding | Evidence | Opportunity |
 |---|---|---|
-| `wallGrid.current` walks every wall to prove the cached wall grid current | 10 % of CPU flat, `WallTest.func1` 18 % cumulative, with 50,000 walls and two callers a tick | a wall epoch bumped by the one in-place `BlockMask` write (`handleMaskChange`) and by store mutation would make the check O(1); the scan exists only because that write is in place |
+| `wallGrid.current` walked every wall to prove the cached wall grid current | 10 % of CPU flat, `WallTest.func1` 18 % cumulative, with 50,000 walls and two callers a tick | done: the wall epoch and the grid generation replace the scan (ECS and events §3); td 1.72 to 1.49 ms a tick, median of six interleaved runs, main unchanged within noise |
 | Map lookups in the sparse-set index | `mapaccess2_fast64` 24 % cumulative | entity IDs are per-domain counters; an index slice per domain would turn the lookup into an array read; measure before changing `Store` |
 | Maze spawn builds a 50,000-cell payload and the batch spawn grows four slices | 145 MB and 118 MB flat over 22 spawns | reuse the payload cells and pre-size the batch; event payloads are pooled elsewhere (`event.pool`) |
 | Drain's exclusion map is built per spawn | 37 MB | a map the system keeps and clears |
