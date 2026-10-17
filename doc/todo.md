@@ -108,22 +108,6 @@ standard-library only ([Package map](package-map.md) §5). Options: those two ke
 local seed as a stated exception, an arbitrary seed not being the SplitMix
 increment; or they import `pkg/vmath` and that coupling rule changes.
 
-### Decide whether a gateway's population ID selects anything
-
-- Priority: P0, to review
-- Affected files: `internal/engine/resource.go`, `internal/system/gateway.go`,
-  `internal/component/gateway.go`, `internal/event/payload.go`,
-  `internal/snapshot/capture.go`, `internal/engine/snapshot_world_gen.go`,
-  `pkg/genetic/registry`
-
-A gateway's `population_id` (`internal/event/payload.go:1318`) is stored in
-`GatewayComponent.PopulationID` (`internal/component/gateway.go:19`), carried in the
-capture and passed to `GeneticResource.Sample` and `SampleScout`
-(`internal/system/gateway.go:264-266`), which ignore it
-(`internal/engine/resource.go:867`); the registry keeps one population per species
-and no scenario sets the key. Options: drop the parameter, field and key (a capture
-schema bump); or give the registry per-island populations for it to select.
-
 ### Build the Makefile's release binaries without CGO
 
 - Priority: P0, to review
