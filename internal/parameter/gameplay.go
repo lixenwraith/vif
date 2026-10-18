@@ -110,6 +110,11 @@ const (
 
 	// MenuHoldSlack is how many cells a held press may drift and still be the same hold
 	MenuHoldSlack = 1
+
+	// MouseDoubleClickWindow is how soon a second left press on the same cell fires
+	// special as well, for a finger with no right button; Android's own double-tap
+	// timeout, and a cell apart is play however fast [wall]
+	MouseDoubleClickWindow = 300 * time.Millisecond
 )
 
 // Initial input state, applied once at GameContext construction, changed state persist through game reset
