@@ -183,7 +183,7 @@ func (p *Peer) writeLoop() {
 		var msg *Message
 		select {
 		case <-p.closeCh:
-			p.flushQueued()
+			p.flushQueued(false)
 			return
 		case msg = <-p.sendCh:
 		case <-heartbeat:
@@ -207,7 +207,7 @@ func (p *Peer) writeLoop() {
 			case <-linger.C:
 				break batch
 			case <-p.closeCh:
-				p.flushQueued()
+				p.flushQueued(true)
 				return
 			}
 		}
@@ -217,8 +217,11 @@ func (p *Peer) writeLoop() {
 	}
 }
 
-// flushQueued sends what is encoded and still queued, under closeFlush.
-func (p *Peer) flushQueued() {
+// flushQueued sends what is encoded and still queued, under closeFlush. encoded
+// says a burst's frames wait in the stream; with nothing to add to them there is
+// nothing to flush, and a sync marker alone would hold the close on a peer that
+// stopped reading for the whole bound.
+func (p *Peer) flushQueued(encoded bool) {
 	_ = p.conn.SetWriteDeadline(time.Now().Add(closeFlush))
 	for {
 		select {
@@ -228,8 +231,11 @@ func (p *Peer) flushQueued() {
 			if msg.encode(p.stream, p.whdr[:]) != nil {
 				return
 			}
+			encoded = true
 		default:
-			_ = p.stream.Flush()
+			if encoded {
+				_ = p.stream.Flush()
+			}
 			return
 		}
 	}
