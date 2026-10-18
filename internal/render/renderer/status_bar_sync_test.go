@@ -230,3 +230,30 @@ func TestConsoleStatusItemsReadOnTheirBackgrounds(t *testing.T) {
 		}
 	}
 }
+
+// TestStatusBarDownBadgeLeavesAfterItsDuration: a link that went down shows for
+// StatusNetworkDownDuration and then leaves, a loss read once being noise beside a
+// solo game; a link that comes back and goes down again starts its time over.
+func TestStatusBarDownBadgeLeavesAfterItsDuration(t *testing.T) {
+	r, clock := newStatusBar(t)
+	r.statNet.Store("down")
+	if item, ok := r.networkItem(); !ok || item.text != " Net: down " {
+		t.Fatalf("a link just down shows %q %v", item.text, ok)
+	}
+	clock.Step(parameter.StatusNetworkDownDuration - time.Millisecond)
+	if _, ok := r.networkItem(); !ok {
+		t.Fatal("the badge left before its duration")
+	}
+	clock.Step(time.Millisecond)
+	if item, ok := r.networkItem(); ok {
+		t.Fatalf("the badge %q stayed past its duration", item.text)
+	}
+	r.statNet.Store("connected")
+	seatPlayers(r, 2)
+	r.networkItem()
+	r.statNet.Store("down")
+	clock.Step(parameter.StatusNetworkHoldDuration)
+	if item, ok := r.networkItem(); !ok || item.text != " Net: down " {
+		t.Fatalf("a link down again shows %q %v", item.text, ok)
+	}
+}

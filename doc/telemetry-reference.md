@@ -229,7 +229,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 
 | Key | Meaning |
 |---|---|
-| `network.state` (string) | `off`, `waiting`, `connected` or `down`. The status bar shows `Net: down` and `Net: wait`, and hides the badge when `off` |
+| `network.state` (string) | `off`, `waiting`, `connected` or `down`. The status bar shows `Net: down` for `StatusNetworkDownDuration` (10 s) and `Net: wait`, and hides the badge when `off` |
 | `network.peers`, `network.connected` | Connected session peers, and whether there is at least one |
 | `network.map_latched` (bool) | The host-authored D-14 map dimensions are latched |
 | `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors |
