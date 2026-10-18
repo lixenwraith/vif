@@ -117,6 +117,7 @@ type tuiApp struct {
 	quitArmed  bool   // one warning issued for unsaved-on-quit
 	delArmed   string // browser 'd' pressed once for this name; second press deletes
 	hintedFill bool   // slot-2 auto-fill hint shown once
+	help       bool   // the key overlay is up; any key takes it down
 }
 
 func runTUI(s *Session) error {
@@ -315,6 +316,10 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		a.requestQuit()
 		return
 	}
+	if a.help {
+		a.help = false
+		return
+	}
 
 	// Any other real key withdraws pending destructive confirms; 'd' must
 	// survive this to be its own second press.
@@ -368,8 +373,16 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 		// which is why this is not a global intercept in handle().
 		a.saveModified()
 		return
+	case r == '?':
+		a.help = true
+		return
 	case ev.Key == terminal.KeyTab:
-		a.focus = (a.focus + 1) % focusCount
+		// browser and log take turns; the inspector is an overlay Enter opens
+		if a.focus == focusBrowser {
+			a.focus = focusLog
+		} else {
+			a.focus = focusBrowser
+		}
 		return
 	}
 	switch a.focus {
@@ -542,7 +555,9 @@ func (a *tuiApp) playPattern() {
 
 // assignSlot toggles the cursor pattern in a slot: assigning the pattern a
 // slot already holds clears the slot instead, so one key both layers and
-// un-layers. Assignment auto-starts the transport — the pattern must sound.
+// un-layers, and clearing the last sounding slot stops the transport. Assignment
+// auto-starts the transport — the pattern must sound — and while it runs lands
+// on the next bar, so the new pattern enters in step with what plays.
 func (a *tuiApp) assignSlot(slot int) {
 	if a.kind != kindPattern {
 		fmt.Fprintln(a.log, "slots take patterns — space auditions a sound")
@@ -555,6 +570,7 @@ func (a *tuiApp) assignSlot(slot int) {
 	if id := audio.PatternIDByName(n); id != audio.PatternSilence {
 		if a.s.eng.SlotPattern(slot) == id {
 			a.exec(fmt.Sprintf("slot %d -", slot))
+			a.stopIfClear(slot)
 			return
 		}
 		// Enforce exclusivity: clear from any other active slots
@@ -564,7 +580,11 @@ func (a *tuiApp) assignSlot(slot int) {
 			}
 		}
 	}
-	a.exec(fmt.Sprintf("slot %d %s", slot, n))
+	if a.s.eng.IsMusicPlaying() {
+		a.exec(fmt.Sprintf("slot %d %s 250 q", slot, n))
+	} else {
+		a.exec(fmt.Sprintf("slot %d %s", slot, n))
+	}
 	if slot == 2 && !a.hintedFill {
 		a.hintedFill = true
 		fmt.Fprintln(a.log, "note: with :fill on, slot 2 auto-fill swaps once per phrase — :fill off to pin")
@@ -575,6 +595,20 @@ func (a *tuiApp) assignSlot(slot int) {
 			return
 		}
 		a.exec("music start")
+	}
+}
+
+// stopIfClear stops the transport once no slot but the one just cleared holds a
+// pattern, so a bar count never runs on over silence; m still resets it.
+func (a *tuiApp) stopIfClear(cleared int) {
+	for i := range audio.MusicSlots {
+		if i != cleared && a.s.eng.SlotPattern(i) != audio.PatternSilence {
+			return
+		}
+	}
+	if a.s.eng.IsMusicPlaying() {
+		a.exec("music stop")
+		fmt.Fprintln(a.log, "every slot clear — transport stopped; m resets the bar count")
 	}
 }
 

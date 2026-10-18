@@ -638,7 +638,8 @@ func registerDrawn(name string, r Role, group string) PatternID {
 }
 
 // TestDrawsHoldOneGroup is the cohesion rule: both drawn slots always come from one
-// group, and after GroupPhrases they move to another group together.
+// group, the melody resting only through the bar before a move, and after
+// GroupPhrases they move to another group together.
 func TestDrawsHoldOneGroup(t *testing.T) {
 	t.Cleanup(ResetRegistries)
 	ResetRegistries()
@@ -657,7 +658,7 @@ func TestDrawsHoldOneGroup(t *testing.T) {
 	bar := make([]float64, SamplesPerBar(MaxBPM))
 	for b := range GroupPhrases * PhraseBars {
 		s.Generate(bar)
-		if r, m := groupOf[s.slots[0].activeID()], groupOf[s.slots[1].activeID()]; r != m {
+		if r, m := groupOf[s.slots[0].activeID()], groupOf[s.slots[1].activeID()]; r != m && s.slots[1].activeID() != PatternSilence {
 			t.Fatalf("bar %d plays rhythm from %q under melody from %q", b, r, m)
 		}
 	}
