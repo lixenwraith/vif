@@ -81,6 +81,9 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         if (isFinishing()) {
             Game.quit();
+            if (speaker != null) {
+                speaker.close();
+            }
         }
         super.onDestroy();
     }

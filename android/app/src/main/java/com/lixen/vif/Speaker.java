@@ -16,7 +16,7 @@ final class Speaker implements com.lixen.vif.game.Speaker {
 
     private final AudioTrack track;
     private volatile boolean paused;
-    private boolean closed; // the run closes the speakers before the activity pauses
+    private volatile boolean closed; // the activity releases the track as it finishes
 
     Speaker() {
         int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
@@ -39,16 +39,19 @@ final class Speaker implements com.lixen.vif.game.Speaker {
 
     @Override
     public void write(byte[] pcm) {
-        if (!paused) {
+        if (!paused && !closed) {
             track.write(pcm, 0, pcm.length, AudioTrack.WRITE_BLOCKING);
         }
     }
 
+    /** The speakers are the activity's, not a run's: a scenario change keeps them. */
     @Override
     public synchronized void close() {
-        closed = true;
-        track.stop();
-        track.release();
+        if (!closed) {
+            closed = true;
+            track.stop();
+            track.release();
+        }
     }
 
     /** Flushing frees a write blocked on the paused track. */
