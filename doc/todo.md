@@ -383,6 +383,23 @@ Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
 which already carries the source archive and its checksum; then drop the "no final
 release" lines in `README.md` and [Packaging](packaging.md) §2.
 
+### Sign the Android build with a release key
+
+- Priority: P2
+- Affected files: `.github/workflows/release.yml`, `android/app/build.gradle.kts`,
+  `android/README.md`
+
+The nightly and a tagged build are signed with `android/debug.keystore`, which
+anyone can sign with, so a build from elsewhere installs over them. Before a
+release a device should trust: generate a release keystore (`keytool -genkeypair
+-keyalg RSA -keysize 4096 -validity 10000`), add it base64-encoded as
+`ANDROID_KEYSTORE_BASE64` with its passwords and alias as the three other secrets
+the workflow reads, and keep the keystore out of the repository; a key once
+published cannot be rotated for installed apps. The first signed build will not
+install over a debug-signed one: uninstall first, which drops the app's settings.
+A store listing (Play wants an AAB and a `targetSdk` within a year of the newest
+release) is a separate decision.
+
 ### Publish a development AUR package
 
 - Priority: P3
@@ -771,16 +788,48 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 ## Rendering
 
+### Give the configuration menu a touch target on Android
+
+- Priority: P1
+- Affected files: `internal/engine/overlay_geometry.go`, `internal/render/renderer/overlay.go`,
+  `internal/mode/config_menu.go`, `internal/app/presentation.go`, `android/game/view.go`,
+  `android/app/src/main/java/com/lixen/vif/GameView.java`
+
+A menu row is one cell, 12 dp on a phone against Android's 48 dp touch target, so
+a tap lands on a neighbour. Three ways, in rising cost:
+
+1. A row pitch on a touch host. `OverlayGeometry` gains a pitch the renderer and
+   `pointConfigMenu` share: 1 on a terminal, 3 or 4 where the presentation
+   reports touch (one method on `Presentation`, true for Android and the browser's
+   touch strip), so a row is 36 to 48 dp and the list shows a third of its rows a
+   page. The menu stays the `tui` one; every host behaves the same; smallest change.
+2. A menu the host draws. The overlay content (`core.OverlayMenu`: rows with key,
+   label, value, description and disabled reason; the form) crosses the binding as
+   it changes, through an optional `menuPresentation` on `Presentation`
+   (`ShowMenu`, `HideMenu`), and the host answers with the keys the router already
+   takes plus a select-by-key the terminal vocabulary has no event for, so a new
+   event or a call into the router under the world lock. Java draws a radial menu
+   (the console style) or a list with 48 dp targets; the browser could do the same
+   in HTML. A second renderer for one screen and a protocol for its state.
+3. A separate Activity or bottom sheet: 2 with Android's own widgets, and the
+   game's Surface left behind while it shows.
+
+Recommended: 1 now, since it serves the browser's touch strip too; 2 only if a
+radial menu is wanted for its own sake, after 1 shows what a bigger row is worth.
+The typing strip above the keyboard already repeats the status row from the same
+picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
+
 ### Configuration menu follow-up
 
 - Priority: P2
 - Affected files: `internal/mode/config_menu.go`, `internal/paths/settings.go`
-- Persist operator preferences through an explicit save action and startup
-  loading; the live menu currently changes only this run, and what `:new` keeps
-  (rate, HUD, pins, standing breakpoints) a restart or scenario change drops. Music
-  gain needs an authoritative readback before joining effects volume in the menu.
-  Keymap, backend, paths and colour depth remain startup settings; `:d break`
-  stays on the command line, since a row cannot take its arguments.
+- `[play]` persists the sound channels, effects volume, auto-fire, mouse, pointer
+  following and the HUD, and a scenario change carries them over. What `:new`
+  keeps beyond those (rate, pins, standing breakpoints) a restart or scenario
+  change still drops. Music gain needs an authoritative readback before joining
+  effects volume in the menu. Keymap, backend, paths and colour depth remain
+  startup settings; `:d break` stays on the command line, since a row cannot take
+  its arguments.
 
 ### Use sixteen console backgrounds on Linux
 

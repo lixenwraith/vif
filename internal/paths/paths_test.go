@@ -103,3 +103,49 @@ func TestSettingsRefuseAnUnknownKey(t *testing.T) {
 		t.Fatalf("error = %v, want one naming paths.logs", err)
 	}
 }
+
+// TestSaveSettingsWritesThePlayTableAlone: a file not there yet starts as the
+// embedded one; a file holding [play] has that table replaced, comments under it
+// included, and every other line kept; one without it has it appended. What was
+// written reads back.
+func TestSaveSettingsWritesThePlayTableAlone(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(SystemRootsEnv, "")
+	dir := t.TempDir()
+	file := filepath.Join(dir, SettingsFile)
+	play := Play{Effects: true, Volume: 0.35, AutoFire: "main", Mouse: true, HUD: true}
+	if err := SaveSettings(file, play); err != nil {
+		t.Fatal(err)
+	}
+	s, path, err := LoadSettings(dir)
+	if err != nil || path != file || s.Play != play || s.Audio.BufferMs != 50 {
+		t.Fatalf("saved anew: %+v from %q, %v", s.Play, path, err)
+	}
+
+	text := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# old\neffects = false\n\n[audio]\nbuffer_ms = 20\n"
+	if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	play.Music = true
+	if err := SaveSettings(file, play); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(file)
+	if !strings.HasPrefix(string(got), "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n") ||
+		!strings.HasSuffix(string(got), "\n\n[audio]\nbuffer_ms = 20\n") || strings.Contains(string(got), "# old") {
+		t.Fatalf("replaced table:\n%s", got)
+	}
+	if s, _, err = LoadSettings(dir); err != nil || s.Play != play || s.Audio.BufferMs != 20 || filepath.Base(s.Paths.Log) != "logs" {
+		t.Fatalf("after the replace: %+v %+v, %v", s.Play, s.Paths, err)
+	}
+
+	if err := os.WriteFile(file, []byte("[audio]\nbuffer_ms = 30\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveSettings(file, play); err != nil {
+		t.Fatal(err)
+	}
+	if s, _, err = LoadSettings(dir); err != nil || s.Play != play || s.Audio.BufferMs != 30 {
+		t.Fatalf("after the append: %+v, %v", s, err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/probe"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/service"
@@ -56,6 +58,9 @@ type restartRequest struct {
 
 	// Bots are the graphs of the seats this run held, which the next one seats again.
 	Bots []string
+
+	// Play is how this run was left, which the next one starts as.
+	Play paths.Play
 
 	// Journal opens a journal in the next run. A journal starts with its run, so a
 	// solo run hands over Resume, its world, which the next one writes as a join
@@ -351,6 +356,7 @@ func (a *App) initWorld() {
 		a.ctx = engine.NewGameContext(a.world, width, height)
 	}
 	a.ctx.BindLog(a.log)
+	a.applyPlay()
 	a.world.Resources.Config.ColorMode = colorMode
 	a.world.Resources.Config.CellAspect = aspect
 
@@ -413,6 +419,49 @@ func (a *App) initWorld() {
 	}
 	// This game's streams are drawn; advance so the next game differs
 	a.world.Resources.Rand.NextSession()
+}
+
+// applyPlay starts the run as its [play] says; a purge returns to these values.
+func (a *App) applyPlay() {
+	p := a.cfg.Play
+	if i := slices.Index(engine.AutoFireWords[:], p.AutoFire); i >= 0 {
+		a.ctx.StartAutoFire = uint32(i)
+	}
+	a.ctx.StartMouseFree = p.FollowMouse
+	a.ctx.AutoFire.Store(a.ctx.StartAutoFire)
+	a.ctx.MouseFreeMode.Store(p.FollowMouse)
+	a.ctx.MouseDisabled.Store(!p.Mouse)
+	a.ctx.OverlayHUD.Store(p.HUD)
+}
+
+// livePlay is the run's [play] as it stands: what the next run starts from and
+// what the settings file is kept at.
+func (a *App) livePlay() paths.Play {
+	p := a.cfg.Play
+	p.AutoFire = engine.AutoFireWords[min(a.ctx.AutoFire.Load(), engine.AutoFireBoth)]
+	p.Mouse = !a.ctx.MouseDisabled.Load()
+	p.FollowMouse = a.ctx.MouseFreeMode.Load()
+	p.HUD = a.ctx.OverlayHUD.Load()
+	a.audioPlay(&p)
+	return p
+}
+
+// persistPlay writes the settings file when the player changed a [play] value; a
+// write that fails is reported once and the file left alone.
+func (a *App) persistPlay() {
+	if a.cfg.SettingsFile == "" {
+		return
+	}
+	p := a.livePlay()
+	if p == a.cfg.Play {
+		return
+	}
+	a.cfg.Play = p
+	if err := paths.SaveSettings(a.cfg.SettingsFile, p); err != nil {
+		a.log.Warn("app", "msg", "settings not saved", "path", a.cfg.SettingsFile, "error", err.Error())
+		a.ctx.SetStatusMessage("Settings not saved: "+err.Error(), parameter.StatusAlert)
+		a.cfg.SettingsFile = ""
+	}
 }
 
 // applyMapLatch installs this run's D-14 position before any system is built and

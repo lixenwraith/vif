@@ -20,11 +20,11 @@ downloadable content, a non-text renderer, and Android.
 
 | Profile | Tags or target | Presentation | Audio | Raw socket sessions | Logging | Intended use |
 |---|---|---|---|---|---|---|
-| Full native | `make release` | Terminal renderer | Included | Yes | Included | Linux/FreeBSD client or manually run host |
+| Full native | `make release` | Terminal renderer; on Linux and FreeBSD the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
-| Desktop window | `make gui` / `vif_gui` (Linux, FreeBSD) | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | Play outside a terminal; cgo stays off |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load; cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
 
@@ -39,7 +39,8 @@ The useful commands are:
 make release                 # bin/vif
 make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
-make gui                     # bin/vif-gui
+make gui                     # bin/vif-gui, the window by default
+make cli                     # bin/vif-cli, no window
 make android                 # bin/vif-debug.apk, from android/
 make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
@@ -380,14 +381,16 @@ name. Adding a graphical host is therefore composition, not a simulation fork:
    builder, and leave components, systems, events, scheduler and the manifest
    fingerprint common.
 
-The desktop window is one such host: `cmd/vif/gui.go` under `vif_gui` sets
-`Host.Presentation` to a `pkg/window` window, which draws each frame with
+The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
+build but `vif_nogui`, sets `Host.Presentation` to a `pkg/window` window when `-g`
+asks for it, as a `vif_gui` build does by default; the window draws each frame with
 `glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
 pointer as the events a terminal reports; `-scale n` draws the texture `n` times
 its size with nearest filtering, for a HiDPI screen. Its libraries
 (`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
-`bin/vif-gui` builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which
-`make gui` passes. It runs on Wayland through XWayland.
+the binary builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built
+as std, which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on
+Wayland through XWayland.
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `pkg/browser` host. The Go program runs in a Worker, so the
@@ -429,7 +432,12 @@ through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. A tap is a left press and release on its cell and a
 finger moving while down a left drag, posted once per cell as a terminal reports
 motion, so the cursor follows it and a held one repeats fire; keys and the system
-keyboard's text are terminal key events, Back is Escape. A tap held on the status
+keyboard's text are terminal key events, Back is Escape. Two fingers tapped
+together raise or drop the system keyboard, read from the window's insets rather
+than a flag of the app's; the keyboard covers the view instead of resizing it, so a
+`crop_on_resize` map keeps its cells, and the status row is drawn again at twice
+its size above the keyboard from the same picture, as the browser scales its whole
+grid to fit above its keyboard. A tap held on the status
 bar opens the configuration menu, the hold every host shares (`MenuHoldDuration`),
 and taps drive its rows; the browser launcher sends the same hold as Ctrl-G on a
 touch screen, where a touch is never a mouse press.
@@ -454,7 +462,8 @@ emulator widget was measured at 80x the cell copy per frame;
 generated once, not a TrueType rasterized at load; Android draws on a Canvas
 behind a drawer interface, and a GLES drawer is written only if a device misses
 60 fps; the configuration menu is the `tui` one on every host, summoned by a held
-press and driven by taps, and a menu Android draws itself is a later item; the
+press and driven by taps, and a menu Android draws itself is a later item
+([todo](todo.md#give-the-configuration-menu-a-touch-target-on-android)); the
 cell aspect the presentation reports is one parameter of the simulation
 ([Rendering §2.2](rendering.md#22-the-cell-aspect)). Host adapters plug through
 `Host`; simulation modules plug through the manifest and the generator

@@ -40,8 +40,10 @@ make dev       # generated code + race-enabled debug build
 |---|---|
 | `generate` | Run the manifest/event/input code generator. |
 | `dev` | Generate and build `cmd/vif` with the race detector/debug symbols. |
-| `release` | Build a stripped `-trimpath` native binary without CGO. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
+| `release` | Build a stripped `-trimpath` native binary without CGO: the terminal and, on Linux and FreeBSD, the desktop window `-g` opens. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
+| `gui` | Build `bin/vif-gui`, the release binary opening the desktop window by default (`vif_gui`); `-g=false` is its terminal. |
+| `cli` | Build `bin/vif-cli`, the terminal alone, no desktop window (`vif_nogui`). |
 | `nolog` | Release-style build with the `novlog` tag. |
 | `wasm` | Build log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
@@ -173,8 +175,9 @@ and the audio buffer; a flag on the command line wins
 | Flag | Purpose |
 |---|---|
 | `-color auto\|256\|true` | Colour depth. `auto` (the default) detects the terminal; `256` draws for a text console's sixteen colours; `true` forces truecolor. |
-| `-scale <n>` | `vif-gui` only: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. |
-| `-mute[=false]` | Start muted, which is the default. `-mute=false` starts with sound. |
+| `-g`, `-gui[=false]` | Open the game in a desktop window (Xlib, EGL and GLES 2 loaded at run time; Linux and FreeBSD) instead of the terminal. A `vif-gui` build's default, which `-g=false` turns off; a `vif_nogui` build refuses it. |
+| `-scale <n>` | With `-g`: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. |
+| `-mute[=false]` | Start muted; `-mute=false` starts with sound. Unset, `vif.toml`'s `[play]` channels stand, muted by default and written back as the menu changes them. |
 | `-ab`, `-audio-backend <name>` | Force an audio backend: `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`. |
 
 ### Run
@@ -553,22 +556,26 @@ manual smoke test because unit tests do not reproduce every emulator.
 ## 6. CI workflows
 
 `.github/workflows/test.yml` runs on pushes to `main`, `master`, `develop` and
-`claude/*`, and on pull requests to `main`, `master` or `develop`. Its single
-Go 1.27.2 job runs `go vet ./...`, `go build ./...` and `go test -race -v ./...`
+`claude/*`, and on pull requests to `main`, `master` or `develop`. Its single job,
+on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profiles
+and targets, the window and Android module tests, and `go test -race -v ./...`
 with `GORACE` halting on the first race and writing `race.*`, which is uploaded for
 seven days on failure.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
-regenerates the registries and, on a tag, fails if that changed the tree, then
-builds CGO-free archives for `linux-amd64`, `linux-amd64-headless`,
-`freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`) and `web`, the wad archive
-through `make wad-archive`, a source archive on a tag, and `SHA256SUMS`. Off a tag
-it also pushes the headless image to GHCR and moves the `nightly` prerelease; a tag
-drafts a release. [Packaging](packaging.md) §2 lists what each publishes.
+regenerates the registries and, on a tag, fails if that changed the tree, vets
+and tests, then builds CGO-free archives for `linux-amd64`, `linux-arm64`,
+`linux-amd64-headless`, `freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`)
+and `web`, the wad archive through `make wad-archive`, a source archive on a tag,
+the Android APK through `android/toolchain.sh gradlew` on a second runner, and
+`SHA256SUMS` over everything. Off a tag it also pushes the headless image to GHCR
+and moves the `nightly` prerelease; a tag drafts a release. [Packaging](packaging.md)
+§2 lists what each publishes.
 
-Neither workflow runs the `novlog` or `vif_noaudio` native builds, the tagged test
-suites, the dependency assertions of `make verify` (§5), or terminal/audio smoke
-tests.
+The test workflow also builds the `novlog`, `vif_noaudio`, `vif_headless` and
+`vif_nogui` profiles and the FreeBSD, browser and Windows targets. Neither workflow
+runs the tagged test suites, the dependency assertions of `make verify` (§5), or
+terminal/audio smoke tests.
 
 ## 7. Platform matrix
 

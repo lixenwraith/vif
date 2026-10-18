@@ -18,9 +18,35 @@ android {
         applicationId = "com.lixen.vif"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1"
+        // The release workflow names each build; a local build is 1, "0.1".
+        versionCode = (findProperty("versionCode") as String?)?.toInt() ?: 1
+        versionName = findProperty("versionName") as String? ?: "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // The repository's debug key, so a local build and the nightly install over each
+    // other; a keystore the environment names signs a release (README.md).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+        create("release") {
+            System.getenv("VIF_KEYSTORE")?.let {
+                storeFile = file(it)
+                storePassword = System.getenv("VIF_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("VIF_KEY_ALIAS")
+                keyPassword = System.getenv("VIF_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName(if (System.getenv("VIF_KEYSTORE") != null) "release" else "debug")
+        }
     }
 
     compileOptions {

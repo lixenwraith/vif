@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
@@ -114,8 +115,12 @@ type Config struct {
 	// AudioBackend forces a named backend; "" = auto-detect priority chain
 	AudioBackend string
 
-	// AudioMuted is the initial effect mute state
-	AudioMuted bool
+	// Play is how the run starts: the sound channels, the effects volume, auto-fire,
+	// the mouse and the HUD, vif.toml's [play] as a flag amended it; one naming no
+	// auto-fire word takes the embedded table. SettingsFile is where a change the
+	// player makes is written back; "" keeps it to this run.
+	Play         paths.Play
+	SettingsFile string
 	// MusicWAV is the directory the music is recorded to as a WAV file; "" records none.
 	MusicWAV string
 
@@ -326,6 +331,9 @@ func (c Config) joining(target string) (Config, error) {
 
 // Normalize fills unset fields that carry a defined default
 func (c *Config) Normalize() {
+	if c.Play.AutoFire == "" {
+		c.Play = paths.DefaultPlay()
+	}
 	if c.Mode.OwnsGeometry() {
 		return
 	}

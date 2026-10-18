@@ -8,3 +8,8 @@ Icon=vif
 Terminal=true
 Categories=Game;ArcadeGame;
 Keywords=vi;vim;typing;
+Actions=Window;
+
+[Desktop Action Window]
+Name=Play in a window
+Exec=vif -g

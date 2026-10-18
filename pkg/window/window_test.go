@@ -1,4 +1,4 @@
-//go:build vif_gui && (linux || freebsd)
+//go:build linux || freebsd
 
 package window
 

@@ -22,6 +22,9 @@ const (
 	AutoFireBoth
 )
 
+// AutoFireWords names the three settings as :auto and vif.toml spell them
+var AutoFireWords = [...]string{"off", "main", "on"}
+
 // NavigationDebugState is one runtime's operator view of navigation internals.
 type NavigationDebugState struct {
 	Flow                 *navigation.FlowFieldCache
@@ -42,6 +45,8 @@ type SessionController interface {
 	JoinError() error
 	// False means the current scenario can reset without replacing the run.
 	ChangeScenario(name string) (bool, error)
+	// Scenarios names what ChangeScenario starts by name, and the one running.
+	Scenarios() (names []string, current string)
 	SessionSummary() string
 	// A solo run opens a loopback session for its bots.
 	AddBot(graph string) error
@@ -83,7 +88,10 @@ type GameContext struct {
 	State   *GameState   // Centralized game state; has internal lock
 	TimeCtl *TimeControl // Sole time surface: reads, rate, pause, step; registry-bound
 
-	StartScale TimeScale // the rate the run started at, which a purge returns to
+	// How the run started, which a purge returns to
+	StartScale     TimeScale
+	StartAutoFire  uint32
+	StartMouseFree bool
 
 	KeyTable        *input.KeyTable
 	Log             *vlog.Log
@@ -197,11 +205,13 @@ func NewGameContextWithClock(world *World, width, height int, clock Clock) *Game
 
 func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log) *GameContext {
 	ctx := &GameContext{
-		World:      world,
-		Width:      width,
-		Height:     height,
-		Log:        log,
-		StartScale: ScaleNormal,
+		World:          world,
+		Width:          width,
+		Height:         height,
+		Log:            log,
+		StartScale:     ScaleNormal,
+		StartAutoFire:  AutoFireBoth,
+		StartMouseFree: parameter.DefaultMouseFreeMode,
 	}
 
 	// Calculate game area
@@ -287,8 +297,8 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	ctx.lastFPSUpdate = time.Now() // [wall] see IncrementFrameNumber
 
 	// 13. Initial input state; a plain reset keeps it and a purge restores it
-	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
-	ctx.AutoFire.Store(AutoFireBoth)
+	ctx.MouseFreeMode.Store(ctx.StartMouseFree)
+	ctx.AutoFire.Store(ctx.StartAutoFire)
 
 	return ctx
 }
@@ -545,8 +555,8 @@ func (ctx *GameContext) ResetSessionState() {
 	ctx.ClearOverlayPins()
 	ctx.SetOverlayContent(nil)
 	ctx.TimeCtl.ClearBreaks(nil)
-	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
-	ctx.AutoFire.Store(AutoFireBoth)
+	ctx.MouseFreeMode.Store(ctx.StartMouseFree)
+	ctx.AutoFire.Store(ctx.StartAutoFire)
 	// The rate is refused in a live session, so a purge there leaves it as well.
 	if !ctx.World.Session().Live {
 		ctx.TimeCtl.SetScale(ctx.StartScale)

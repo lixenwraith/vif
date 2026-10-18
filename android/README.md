@@ -9,6 +9,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
+| `files/config/vif/vif.toml` | The user root's settings, read as a terminal reads `vif.toml` and written as `[play]` changes (sound, volume, auto-fire, mouse, HUD); created at the first change, with sound on, where a terminal starts muted. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs beside Go: `make android` checks it before Gradle runs, `make android-toolchain` installs it. |
 
 ## Build
@@ -42,6 +43,21 @@ for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in
 `go mod tidy` here too, since this module requires at least what the root does.
 `make verify` vets and tests this module's Go side with the rest.
 
+## Nightly
+
+The release workflow (`.github/workflows/release.yml`) builds
+`vif-nightly-android.apk` every night, and `vif-<version>-android.apk` on a tag,
+with `android/toolchain.sh gradlew assembleRelease` on the runner's SDK: arm64 and
+x86_64, Android 11 and newer, published under the repository's `nightly` release.
+Its `versionCode` is the workflow's run number, so each build installs over the one
+before it, and it is signed with `debug.keystore` here, the key `make android`
+signs with too, so a nightly and a local build install over each other; the
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
+`ANDROID_KEY_PASSWORD` secrets put a release key in its place
+([todo](../doc/todo.md#sign-the-android-build-with-a-release-key)).
+`adb install -r vif-nightly-android.apk` installs it; a phone installs it from its
+browser once that browser may install apps.
+
 ## Run
 
 ```bash
@@ -56,8 +72,12 @@ seconds: frames painted per second, mean, p95 and max of take, paint and post.
 Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
 configuration menu, whose rows a tap selects and a second tap acts on; keys, a
-hardware keyboard's or the system keyboard's, arrive as a terminal reports them; a
-two-finger tap raises or drops the system keyboard; Back is Escape; `:q` quits.
+hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
+two fingers tapped together raise or drop the system keyboard (a finger joining one
+held or dragging is play, not the gesture); Back is Escape; `:q` quits. The keyboard
+covers the picture rather than resizing it, which on a `crop_on_resize` map would
+delete what it covered, and the status row is drawn again, twice its size, just
+above it, so what is typed can be read; a rotation still resizes.
 
 ## Test
 

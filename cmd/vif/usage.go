@@ -75,8 +75,9 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		title: "Presentation and audio",
 		lines: []flagLine{
 			{names: []string{"color"}, arg: "auto|256|true", hint: "Colour depth; auto detects the terminal"},
-			{names: []string{"scale"}, arg: "<n>", hint: "Draw the desktop window's font n times its pixels, for a HiDPI screen; vif-gui only (default 1)"},
-			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, which is the default; -mute=false starts with sound"},
+			{names: []string{"g", "gui"}, arg: "[=false]", hint: "Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; a vif-gui build's default, which -g=false turns off"},
+			{names: []string{"scale"}, arg: "<n>", hint: "Draw the desktop window's font n times its pixels, for a HiDPI screen; with -g (default 1)"},
+			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, or with sound as -mute=false; unset, vif.toml's [play] channels stand, muted by default"},
 			{names: []string{"ab", "audio-backend"}, arg: "<name>", hint: "Force an audio backend instead of detecting one"},
 		},
 	}, {

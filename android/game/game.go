@@ -8,12 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/glyph"
 )
@@ -45,7 +47,8 @@ var (
 // Start runs the game on the grid the view's pixels hold in cells sized by the
 // screen's density. files is the app's own directory, holding the user root, logs
 // and journals; wad is where the APK's assets were copied, read as the system root.
-// raster paints frames with the software raster and hands the drawer pixels.
+// The user root's vif.toml is read as a terminal reads it and written as [play]
+// changes. raster paints frames with the software raster and hands the drawer pixels.
 func Start(files, wad string, width, height int32, density float32, raster bool, speaker Speaker, listener Listener) error {
 	tex, err := loadTexture()
 	if err != nil {
@@ -68,9 +71,24 @@ func Start(files, wad string, width, height int32, density float32, raster bool,
 	}
 	vlog.Configure(vlog.Config{Dir: paths.DefaultLogDir(), JournalDir: paths.DefaultJournalDir(), Spawn: core.Go})
 
+	settings, file, err := paths.LoadSettings("")
+	if err != nil {
+		return err
+	}
+	if file == "" {
+		// A phone has speakers, so a first run plays where a terminal starts muted;
+		// the user root's file is written at the first change
+		settings.Play.Effects, settings.Play.Music = true, true
+		if file, err = paths.ConfigTarget(paths.ConfigRoots(""), "", "", paths.SettingsFile); err != nil {
+			return err
+		}
+	}
 	v := newView(tex, raster, density)
 	v.setGrid(int(width), int(height))
-	cfg := app.Config{Host: app.Host{Presentation: v}}
+	p := settings.Paths
+	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, SettingsFile: file,
+		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
+		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
 	if speaker != nil {
 		cfg.Host.Audio = sink{speaker}
 	}
