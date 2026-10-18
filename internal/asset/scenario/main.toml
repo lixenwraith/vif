@@ -35,7 +35,11 @@ parent = "MainCycle"
 transitions = [
     { trigger = "EventGoldCompleted", target = "MainDecayWait" },
     { trigger = "EventGoldTimeout", target = "MainDecayWait" },
-    { trigger = "EventGoldDestroyed", target = "MainDecayWait" },
+    # A species breaking the sequence dusts every glyph, as in quasar: what gold is
+    # worth without typing it. Only a completion pays heat and energy.
+    { trigger = "EventGoldDestroyed", target = "MainDecayWait", actions = [
+        { action = "EmitEvent", event = "EventDustAllRequest" },
+    ] },
 ]
 
 # --- Decay Cycle ---

@@ -235,6 +235,39 @@ func TestGoldOutlivesTheHandoverBetweenMainAndQuasar(t *testing.T) {
 	}
 }
 
+// Main's gold broken by anything but typing dusts every glyph, as quasar's does, so
+// it is worth something to a player who never types it.
+func TestMainGoldDestroyedDustsEveryGlyph(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	w := a.World()
+	for range 100 {
+		if w.Resources.Status.Strings.Get("fsm.main.state").Load() == "MainGoldActive" {
+			break
+		}
+		a.Tick(1)
+	}
+	var member core.Entity
+	w.Components.Header.Each(func(_ core.Entity, h *component.HeaderComponent) bool {
+		if h.Behavior == component.BehaviorGold {
+			member = h.MemberEntries[0].Entity
+		}
+		return member == 0
+	})
+	if member == 0 {
+		t.Fatal("main spawned no gold")
+	}
+	dusted := false
+	a.SetDispatchTap(func(ev event.GameEvent) { dusted = dusted || ev.Type == event.EventDustAllRequest })
+	w.RunSafe(func() { w.DestroyEntity(member) })
+	a.Tick(2)
+	if !dusted || w.Resources.Status.Strings.Get("fsm.main.state").Load() != "MainDecayWait" {
+		t.Fatal("destroyed main gold did not dust every glyph before the decay wait")
+	}
+}
+
 // Clearing the tower is rewarded by an event drop, not a species roll: one gun for
 // the cursor, which collecting it turns into a second lane.
 func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
