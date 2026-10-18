@@ -275,13 +275,20 @@ where it is.
 | Disruptor | `P` | Adds a disruptor charge/orb. |
 | Turret | `B` | Adds a turret charge/orb. |
 | Emitter | `R` | Adds an emitter charge/orb. |
+| Gun | `T` | Adds a gun lane per direction, up to three. |
 | Heat | `H` | Adds the configured heat reward (currently 10). |
 | Energy | `E` | Adds the configured energy reward (currently 10,000). |
 
-Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray.
-The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
+Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray,
+tracer. The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
 documentation does not duplicate every rate because those values are expected
 to change during tuning.
+
+A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
+places one kind at a cell for every cursor the instance simulates, with no roll,
+and each drop homes on its owner as above. No species drops the gun; the
+campaign's tower victory drops one at the tower. Like any FSM entry action, the
+drop does not replay on an instance a correction moves past the state raising it.
 
 ## 7. Weapons and attacks
 
@@ -304,7 +311,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
-| Gun | Innate. One tracer per cardinal from the cursor, direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back. |
+| Gun | Innate. One tracer per cardinal from the cursor, direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back; a gun drop adds a charge. |
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity; at the cap each hit arcs to the nearest other target in range. |
 | Launcher | Homing/area missiles assigned from the nearest-target set; at the cap its cooldown halves. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
@@ -418,7 +425,8 @@ it spawns and arms the cursor before opening `main`.
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
    is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
    kills since the escalation before it; `kills.*` keeps the game's totals.
-5. Destroying the tower's pylons resumes `main`; losing the tower fails the run.
+5. Destroying the tower's pylons drops each participant a gun at the tower and
+   resumes `main`; losing the tower fails the run.
    Encounter transitions preserve uncollected loot.
 6. Any participant reaching zero heat **and** zero energy ends the run. The shared
    monitor consumes owner-authored defeat state and starts a new game, as `:n`

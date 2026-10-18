@@ -58,9 +58,10 @@ index by kind.
 
 **`weapon`** (player) owns cursor loadouts: charges and cooldowns, one orb per
 held kind that has one, and firing on main fire. A cursor is built holding one
-charge of each innate kind, the gun; loot grants the other kinds; a zero crossing of the
-cursor's energy clears those and keeps the gun; `EventWeaponRemoveRequest` takes
-any kind, the gun included, for a region fought without it. Aimed deliveries
+charge of each innate kind, the gun; loot grants the other kinds, and the
+campaign's tower victory a gun lane; a zero crossing of the cursor's energy clears
+the loot kinds and keeps the gun; `EventWeaponRemoveRequest` takes any kind, the
+gun included, for a region fought without it. Aimed deliveries
 share one nearest-target query from the cursor, sized to the largest ready
 loadout; every shot leaves from its kind's orb, or the cursor while the orb is
 unplaced or the kind has none. Spread draws from the Player stream.
