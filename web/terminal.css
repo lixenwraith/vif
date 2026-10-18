@@ -4,11 +4,9 @@
     box-sizing: border-box;
 }
 
-/* The ground is the game's field colour (terminal.js, FIELD): what shows
-   beside or under the grid is no seam. */
 html, body {
     height: 100%;
-    background: #1a1b26;
+    background: #000;
     overflow: hidden;
     overscroll-behavior: none;   /* no pull-to-refresh mid-run */
     color-scheme: dark;
@@ -110,12 +108,15 @@ html, body {
     align-items: center;
     justify-content: center;
     min-width: 44px;
-    padding: 0 10px;
+    padding: 0 10px 1px;   /* the glyphs' descender space sits below; a pixel evens it */
     border: 0;
     background: none;
     color: #bbb;
     font: 14px/1 monospace;
 }
+
+/* Inline, an icon would sit on the text baseline, below the middle. */
+#strip svg { display: block; }
 
 #strip button:active        { background: #262626; }
 #strip button[aria-pressed="true"] { background: #1d2a55; color: #fff; }
