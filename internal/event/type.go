@@ -431,7 +431,7 @@ const (
 
 	// --- Loot ---
 
-	// EventLootSpawnRequest (LootSpawnRequestPayload) [local] requests direct loot spawn at position
+	// EventLootSpawnRequest (LootSpawnRequestPayload) [local] is an event drop: one loot kind at a cell for each cursor this instance simulates
 	EventLootSpawnRequest
 
 	// --- Missile ---

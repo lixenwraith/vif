@@ -235,6 +235,52 @@ func TestGoldOutlivesTheHandoverBetweenMainAndQuasar(t *testing.T) {
 	}
 }
 
+// Clearing the tower is rewarded by an event drop, not a species roll: one gun for
+// the cursor, which collecting it turns into a second lane.
+func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 160, 50)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	w := a.World()
+	cursor := w.Resources.Player.Slot(0)
+	a.Region(event.RegionPause, "main", "")
+	a.Region(event.RegionSpawn, "tower", "TowerSetup")
+	a.Tick(12)
+	if w.Components.Pylon.CountEntities() == 0 {
+		t.Fatal("the tower encounter spawned no pylons")
+	}
+	for _, e := range w.Components.Pylon.Entities() {
+		zeroHitPoints(a, e, cursor)
+		header, _ := w.Components.Header.GetComponent(e)
+		for _, m := range header.MemberEntries {
+			zeroHitPoints(a, m.Entity, cursor)
+		}
+	}
+	a.Tick(3)
+	if w.Resources.Status.Strings.Get("fsm.tower.state").Load() != "-" {
+		t.Fatal("pylon defeats did not clear the tower")
+	}
+	guns := 0
+	w.Components.Loot.Each(func(_ core.Entity, l *component.LootComponent) bool {
+		if l.Type == component.LootGun && l.Owner == cursor {
+			guns++
+		}
+		return true
+	})
+	if guns != 1 {
+		t.Fatalf("tower victory dropped %d guns, want 1", guns)
+	}
+	lanes := func() int { wc, _ := w.Components.Weapon.GetComponent(cursor); return wc.Charges[component.WeaponGun] }
+	for range 400 {
+		if lanes() == 2 {
+			return
+		}
+		a.Tick(1)
+	}
+	t.Fatalf("the gun drop was not collected into a lane: %d", lanes())
+}
+
 // Each shipped scenario must boot a player and end the run on one participant defeat.
 func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()

@@ -231,6 +231,7 @@ var (
 	RgbLootDisruptorGlow = color.PaleMint
 	RgbLootTurretGlow    = color.LightSkyBlue
 	RgbLootEmitterGlow   = color.LightPink
+	RgbLootGunGlow       = color.PaleGold
 	RgbLootEnergyGlow    = color.HotMagenta
 	RgbLootEnergySigil   = color.LemonYellow
 	RgbLootHeatSigil     = color.Coral

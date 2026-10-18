@@ -72,7 +72,7 @@ const (
 	WeaponMaxChargeDisruptor = 2
 	WeaponMaxChargeTurret    = 5
 	WeaponMaxChargeEmitter   = 3
-	WeaponMaxChargeGun       = 3 // lanes per direction; no drop grants it, a scenario or god mode does
+	WeaponMaxChargeGun       = 3 // lanes per direction; only a scenario's event drop or god mode adds one
 )
 
 // Weapon Orb Configuration
