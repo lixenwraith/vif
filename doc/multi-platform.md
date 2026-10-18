@@ -462,7 +462,8 @@ emulator widget was measured at 80x the cell copy per frame;
 generated once, not a TrueType rasterized at load; Android draws on a Canvas
 behind a drawer interface, and a GLES drawer is written only if a device misses
 60 fps; the configuration menu is the `tui` one on every host, summoned by a held
-press and driven by taps, and a menu Android draws itself is a later item; the
+press and driven by taps, and a menu Android draws itself is a later item
+([todo](todo.md#give-the-configuration-menu-a-touch-target-on-android)); the
 cell aspect the presentation reports is one parameter of the simulation
 ([Rendering §2.2](rendering.md#22-the-cell-aspect)). Host adapters plug through
 `Host`; simulation modules plug through the manifest and the generator
