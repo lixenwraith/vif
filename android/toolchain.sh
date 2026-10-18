@@ -108,7 +108,7 @@ preflight() {
 
 fetch() {
 	if command -v curl >/dev/null 2>&1; then
-		curl -fL --proto =https -o "$2" "$1"
+		curl -fL --proto =https --progress-bar -o "$2" "$1"
 	elif command -v wget >/dev/null 2>&1; then
 		wget -O "$2" "$1"
 	else
@@ -159,6 +159,9 @@ setup() {
 	need=0
 	if [ $# -gt 0 ] || [ -n "$license" ]; then need=17; fi
 	major=$(java_major)
+	if ! have_jdk && [ "${major:-0}" -ge "$need" ] && [ -x "${JAVA_HOME:-/nonexistent}/bin/javac" ]; then
+		die "javac is not on PATH, where gomobile runs it from: export PATH=\"\$JAVA_HOME/bin:\$PATH\""
+	fi
 	if ! have_jdk || [ "${major:-0}" -lt "$need" ]; then
 		pkg=$(jdk_package)
 		[ -n "$pkg" ] || die "Install a JDK, 17 or newer, then run make android-toolchain again."
