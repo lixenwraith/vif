@@ -237,6 +237,7 @@ When terminal mouse reporting is enabled:
 | Left drag | Continue moving the cursor. A finger moving while down is this drag on a phone, one per cell. |
 | Held left | Repeat main fire at the shared repeat interval. |
 | Right press/hold | Fire/repeat special without moving first. |
+| Left press twice on one cell within `MouseDoubleClickWindow` | The second fires special as well, for a finger with no right button; both fire main, and a third press starts over. |
 | Wheel | Move the cursor using the event coordinates. |
 | Bare motion | Move only when free-mouse mode is enabled. |
 

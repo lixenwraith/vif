@@ -61,6 +61,10 @@ type Router struct {
 	mouseLeftHeld  bool
 	mouseRightHeld bool
 
+	// The last left press that fired main, for the second on its cell that fires special
+	leftPressAt   time.Time // [wall]
+	leftPressCell [2]int
+
 	// menuHold is a left press held on the status bar: it summons the menu once it
 	// has lasted MenuHoldDuration without a release or a drift past MenuHoldSlack
 	menuHold   bool
@@ -1037,6 +1041,16 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	})
 	r.mouseLeftHeld = true
 	r.lastFireMain = r.ctx.TimeCtl.Now()
+	// A second press on the cell within the window is the right button a finger
+	// has not; both presses fire main, and a third starts over
+	now, cell := time.Now(), [2]int{intent.X, intent.Y} // [wall]
+	if cell == r.leftPressCell && now.Sub(r.leftPressAt) <= parameter.MouseDoubleClickWindow {
+		r.leftPressAt = time.Time{}
+		r.handleMouseRightDown()
+		r.mouseRightHeld = false
+	} else {
+		r.leftPressAt, r.leftPressCell = now, cell
+	}
 	return true
 }
 
