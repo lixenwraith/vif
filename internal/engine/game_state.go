@@ -29,12 +29,13 @@ type GameState struct {
 	apmHistoryIndex int
 	lastAPMTime     time.Time // Last time APM was updated
 
-	// Pointer travel not yet counted, in columns, and the last cell the pointer named.
-	// Written only by dispatch, under the world lock.
-	pointerTravel      int
+	// The cell the pointer stands on, the cell it stood on when it last counted, and
+	// the pointer gestures in the current bucket. Written only by dispatch, under the
+	// world lock.
 	pointerX, pointerY int
+	anchorX, anchorY   int
 	pointerSeen        bool
-	pointerCounted     uint64 // pointer gestures in the current bucket
+	pointerCounted     uint64
 	// The last keyed gesture, when it came, and how many times it has repeated in a row
 	lastKey     uint64
 	lastKeyTick uint64
@@ -56,7 +57,7 @@ func (gs *GameState) initState() {
 	gs.apmHistory = [60]uint64{}
 	gs.apmHistoryIndex = 0
 	gs.lastAPMTime = time.Time{} // Zero value forces immediate update on first tick
-	gs.pointerTravel, gs.pointerX, gs.pointerY, gs.pointerSeen, gs.pointerCounted = 0, 0, 0, false, 0
+	gs.pointerX, gs.pointerY, gs.anchorX, gs.anchorY, gs.pointerSeen, gs.pointerCounted = 0, 0, 0, 0, false, 0
 	gs.lastKey, gs.lastKeyTick, gs.keyStreak = 0, 0, 0
 }
 
@@ -79,7 +80,7 @@ func (gs *GameState) copyFrom(src *GameState) {
 	gs.PendingActions.Store(src.PendingActions.Load())
 	gs.MusicAPM.Store(src.MusicAPM.Load())
 	gs.apmHistory, gs.apmHistoryIndex, gs.lastAPMTime = src.apmHistory, src.apmHistoryIndex, src.lastAPMTime
-	gs.pointerTravel, gs.pointerX, gs.pointerY, gs.pointerSeen = src.pointerTravel, src.pointerX, src.pointerY, src.pointerSeen
+	gs.pointerX, gs.pointerY, gs.anchorX, gs.anchorY, gs.pointerSeen = src.pointerX, src.pointerY, src.anchorX, src.anchorY, src.pointerSeen
 	gs.pointerCounted, gs.lastKey, gs.lastKeyTick, gs.keyStreak = src.pointerCounted, src.lastKey, src.lastKeyTick, src.keyStreak
 }
 
@@ -114,23 +115,30 @@ func (gs *GameState) SetGameTicks(ticks uint64) {
 	gs.GameTicks.Store(ticks)
 }
 
-// MovePointer accrues the travel of a pointer placement. A row counts two columns,
-// as a cell is twice as tall as it is wide.
+// MovePointer records where a placement put the pointer. The first placement is the
+// anchor pointer travel is measured from.
 func (gs *GameState) MovePointer(x, y int) {
-	if gs.pointerSeen {
-		gs.pointerTravel += abs(x-gs.pointerX) + 2*abs(y-gs.pointerY)
+	if !gs.pointerSeen {
+		gs.anchorX, gs.anchorY = x, y
 	}
 	gs.pointerX, gs.pointerY, gs.pointerSeen = x, y, true
 }
 
+// pointerTravel is how far the pointer stands from where it last counted, a row
+// counting two columns as a cell is twice as tall as it is wide. Distance rather
+// than path: jitter around one spot never adds up to a gesture, a sweep does.
+func (gs *GameState) pointerTravel() int {
+	return abs(gs.pointerX-gs.anchorX) + 2*abs(gs.pointerY-gs.anchorY)
+}
+
 // AdmitAction counts one gesture for a dispatch pass: a keyed input, zero for none, or
-// pointer travel once it covers APMPointerCells, which then spends all of it so one
-// flick is one action however far it went. Pointer travel fills at most
+// the pointer standing APMPointerCells from where it last counted, which moves the
+// anchor so one flick is one action however far it went. Pointer travel fills at most
 // APMPointerPerSecond of a bucket, so the top of the tempo range asks for keys too.
 func (gs *GameState) AdmitAction(key uint64) {
 	counted := key != 0 && gs.pressKey(key)
-	if gs.pointerTravel >= parameter.APMPointerCells {
-		gs.pointerTravel = 0
+	if gs.pointerTravel() >= parameter.APMPointerCells {
+		gs.anchorX, gs.anchorY = gs.pointerX, gs.pointerY
 		if !counted && gs.pointerCounted < parameter.APMPointerPerSecond {
 			gs.pointerCounted++
 			counted = true

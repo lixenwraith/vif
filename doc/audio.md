@@ -203,7 +203,7 @@ connected while disabled, and startup/reset waits for scenario gates to settle.
 
 ## 7. Music sequencer
 
-The sequencer uses a 16th-note grid (`4` steps per beat), 4/4 bars, and three
+The sequencer uses a 16th-note grid (`4` steps per beat), 4/4 bars, and four
 crossfading slots:
 
 | Slot | Conventional role |
@@ -211,36 +211,48 @@ crossfading slots:
 | 0 | Rhythm/drums. |
 | 1 | Melody/harmony-following layer. |
 | 2 | Free layer or automatic phrase fill. |
+| 3 | Bass, the group's anchor. |
 
 A pattern has up to 64 steps, 32 tracks, and 512 events per track. A track sets
 its instrument, chord-following, and humanization; its events set step position,
-velocity, scale degree, octave, duration, and probability. Tonal voices include
-bass, piano/FM, pads, and fallback synthesis; the drum kit uses cached effects.
+velocity, scale degree, octave, duration, and probability. Tonal voices are a
+table of instruments (bass, piano, pad, lead, pluck): band-limited oscillators, a
+sub or FM where the instrument asks, through a resonant low-pass under a filter
+envelope into an ADSR; the drum kit uses cached effects.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming
 pattern plays at full level from its first trigger while the outgoing one's
-ringing tails fade out, over at least 256 samples so none is hard-cut. A reveal
+ringing tails fade out, over at least 256 samples so none is hard-cut; a slot
+holds three players, so a transition arriving while the last one still fades
+retires a second tail rather than cutting the first. A reveal
 builds a rising tier up from as many tracks as the outgoing pattern sounded,
 adding one a bar, so a build-up never starts thinner than what it replaces.
 Slot 2 substitutes a seeded fill on the last bar of each eight-bar phrase and
 restores the previous pattern on the downbeat. The fill is on by default;
 `SetAutoFill(false)` turns it off, as soundlab does.
 
-Drawn music comes from groups. A pattern's `role` (rhythm, melody or fill),
-`groups` and `tiers` place it; `Start` builds each group's pool per tier and role
-from the registry, and a group shares one bass figure and kick feel, so what it
-draws follows what it drew before. The sequencer holds one group: a tier change
-draws both slots from it, moving only when it does not cover the tier; each
-phrase downbeat swaps one drawn slot, melody and rhythm in turn, within it; and
-after four phrases both slots move to another group behind the phrase's fill.
-Fills come from the same group and tier. A slot placed explicitly is left alone.
+Drawn music comes from groups. A pattern's `role` (rhythm, melody, fill or
+bass), `groups` and `tiers` place it; `Start` builds each group's pool per tier and
+role from the registry. A group's bass patterns are its anchor: a tier change
+keeps the bass that still covers the tier and redraws rhythm and melody, so what
+the group plays follows what it played before. The sequencer holds one group,
+moving only when it does not cover the tier; each phrase downbeat swaps one drawn
+slot, melody, rhythm and bass in turn, to another member of its pool, once four
+bars have passed since any drawn slot changed; and after four phrases every drawn
+slot moves to another group behind the phrase's fill. A draw takes the pool
+member played least this run, so a held tier works through its pool before
+repeating. Fills come from the same group and tier. A slot placed explicitly is
+left alone.
 
 Harmony holds root note, scale, and chord progression. Pattern degrees resolve
 through the current harmony at trigger time. With the same seed and identical
 bar-aligned command schedule, generated music is reproducible; wall-clock
-arrival relative to bars is not a recorded replay contract. The conductor seeds
-the sequencer from the run's own music stream, so each run draws its own pools.
+arrival relative to bars is not a recorded replay contract, but draws and steps
+roll on separate streams of the seed, so a bar of skew between two runs moves
+no later draw: the arrangement holds where the notes under it differ. The
+conductor seeds the sequencer from the run's own music stream, so each run draws
+its own pools.
 
 ## 8. Adaptive game conductor
 
@@ -258,14 +270,21 @@ music APM and maps it to:
 The target tempo is `100 + 100·√(APM/480)` BPM: 100 at rest, 135 at 60 APM, 150
 at 120, 168 at 220, 179 at 300, and the engine's 200 maximum only at the 480
 ceiling, which a pointer alone (six gestures a second, 187 BPM) cannot reach. The
-conductor slews rather than jumping (20 BPM/s upward, 16 BPM/s downward), ignores
+conductor slews rather than jumping (12 BPM/s upward, 6 downward), ignores
 changes smaller than three BPM until the slew settles on its target, and the
-sequencer applies each on the next beat, so tempo trails the five-second window
-by about a second. A tier change draws from the current group under
-quantization/crossfade/reveal policy, and a slot already sounding its draw keeps
-playing. The `music.*` status group (the telemetry HUD's music card, and the
-periodic stat log) names the group, tier, requested tempo and the pattern in
-each slot, and reads `-` (tempo 0) while music is muted, stopped or disabled.
+sequencer applies each on the next beat.
+
+The tier follows the APM under hysteresis (`parameter.TierTracker`): it holds
+four seconds after any change before rising, then goes straight to the APM's
+tier; it falls one tier at a time, each after the APM has sat 30 under the
+tier's floor for five seconds. A burst reaches its tier in one or two swaps
+instead of one a bar, and a lull steps down over a phrase or two instead of
+collapsing inside the five-second window. A tier change draws from the current
+group under quantization/crossfade/reveal policy, and a slot already sounding
+its draw keeps playing. The `music.*` status group (the telemetry HUD's music
+card, and the periodic stat log) names the group, tier, requested tempo and the
+pattern in each slot, and reads `-` (tempo 0) while music is muted, stopped or
+disabled.
 
 Explicit music events can start/stop, set patterns, play a melody note, change
 intensity, tempo, seed, swing, or harmony. A manually held intensity can later
@@ -295,9 +314,11 @@ document that fails, listing every invalid definition in it.
 
 The shipped banks are `internal/asset/audio/sfx.toml`, `drums.toml` and
 `music.toml`, embedded and handed to the engine as `BaseSounds` and
-`BasePatterns`; `pkg/audio` ships no authored content. `melody_gen` reserves its
-fixed ID in code and takes its bass and placement from the bank; the generator
-rewrites its second track. Group pools are fixed at `Start`. Later same-name
+`BasePatterns`; `pkg/audio` ships no authored content. Both documents may define
+`[macros]` and invoke them ([TOML macros](toml-macros.md)); the shipped bank
+writes each drum lane and note line through one. `melody_gen` reserves its fixed
+ID in code and takes its placement from the bank; the generator rewrites its last
+track. Group pools are fixed at `Start`. Later same-name
 registrations replace a definition while preserving its runtime ID, which allows
 live tooling to update a playing registry.
 

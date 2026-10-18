@@ -14,7 +14,7 @@ var motifBank = [4][4]int{
 	{0, 3, 2, 4},
 }
 
-// melodyGen rewrites the registered PatternMelodyGen lead track per bar
+// melodyGen rewrites the registered PatternMelodyGen's last track per bar
 // Mixer-goroutine confined after Start; Events alias a fixed backing array
 type melodyGen struct {
 	pat     *Pattern
@@ -24,15 +24,12 @@ type melodyGen struct {
 }
 
 // registerMelodyGen reserves the generator's fixed ID at Start, before the embedder's
-// bank, which may override it by name with its own bass and placement; the lead
-// track the generator rewrites stays the second
+// bank, which may override it by name with its own placement and any tracks it
+// likes under the lead; the generator rewrites the last track
 func registerMelodyGen() {
 	RegisterPattern(&Pattern{
 		ID: PatternMelodyGen, Name: "melody_gen", Steps: 16,
-		Tracks: []Track{
-			{Instr: InstrBass, FollowChord: true, Humanize: 0.2, Events: rollingBass()},
-			{Instr: InstrPiano, FollowChord: true, Humanize: 0.5, Events: nil},
-		},
+		Tracks: []Track{{Instr: InstrLead, FollowChord: true, Humanize: 0.3, Events: nil}},
 	})
 }
 
@@ -42,10 +39,11 @@ func newMelodyGen() *melodyGen {
 
 // regenerate produces the lead line for the given bar within the phrase
 // Chord-tone targeting on strong beats (0, 8) via FollowChord degree sets;
-// constrained interval-weighted walk fills between motif statements
+// constrained interval-weighted walk fills between motif statements. Each note
+// holds to the next onset, up to a beat, so the line sings rather than plinks.
 // Chord offset applies at resolve time via the track's FollowChord flag
 func (g *melodyGen) regenerate(phraseBar int, rng *rand.Rand) {
-	if g.pat == nil || len(g.pat.Tracks) < 2 {
+	if g.pat == nil || len(g.pat.Tracks) < 1 {
 		return
 	}
 	if phraseBar == 0 {
@@ -53,7 +51,7 @@ func (g *melodyGen) regenerate(phraseBar int, rng *rand.Rand) {
 		g.lastDeg = g.motif[0]
 	}
 
-	k := 5 + rng.IntN(3) // onset density 5–7
+	k := 4 + rng.IntN(3) // onset density 4–6
 	if phraseBar == PhraseBars-1 {
 		k = 3 // thin out under the fill bar
 	}
@@ -86,10 +84,13 @@ func (g *melodyGen) regenerate(phraseBar int, rng *rand.Rand) {
 			deg = clampDeg(d)
 			mi++
 		}
-		lead = append(lead, Step{Pos: pos, Vel: 0.5 + 0.15*rng.Float64(), Deg: deg, Oct: 2, Dur: 1})
+		lead = append(lead, Step{Pos: pos, Vel: 0.5 + 0.15*rng.Float64(), Deg: deg, Oct: 2, Dur: StepsPerBeat})
 		g.lastDeg = deg
 	}
-	g.pat.Tracks[1].Events = lead
+	for i := range lead[:len(lead)-1] {
+		lead[i].Dur = min(lead[i].Dur, lead[i+1].Pos-lead[i].Pos)
+	}
+	g.pat.Tracks[len(g.pat.Tracks)-1].Events = lead
 }
 
 func nearestChordTone(deg int) int {
@@ -131,18 +132,4 @@ func clampDeg(d int) int {
 		return 9
 	}
 	return d
-}
-
-// rollingBass is the psytrance offbeat-16th bass lane: k-b-b-b per beat
-func rollingBass() []Step {
-	ev := make([]Step, 0, 12)
-	for beat := range 4 {
-		base := beat * 4
-		ev = append(ev,
-			Step{Pos: base + 1, Vel: 0.85, Dur: 1},
-			Step{Pos: base + 2, Vel: 0.7, Dur: 1},
-			Step{Pos: base + 3, Vel: 0.7, Dur: 1},
-		)
-	}
-	return ev
 }

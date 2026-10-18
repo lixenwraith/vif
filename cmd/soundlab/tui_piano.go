@@ -80,12 +80,8 @@ func (a *tuiApp) pianoKey(ev terminal.Event) {
 		}
 		return
 	case terminal.KeyTab:
-		switch a.pianoInstr {
-		case audio.InstrBass:
-			a.pianoInstr = audio.InstrPiano
-		case audio.InstrPiano:
-			a.pianoInstr = audio.InstrPad
-		default:
+		// every tonal voice in turn, the drums skipped
+		if a.pianoInstr++; a.pianoInstr >= audio.InstrumentCount {
 			a.pianoInstr = audio.InstrBass
 		}
 		return

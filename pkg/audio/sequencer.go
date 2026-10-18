@@ -1,9 +1,11 @@
 package audio
 
 import (
-	"github.com/lixenwraith/vif/pkg/vmath"
 	"math/rand/v2"
+	"slices"
 	"sync/atomic"
+
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 type patternTransition struct {
@@ -13,16 +15,19 @@ type patternTransition struct {
 	reveal           bool // per-bar track build-up on arrival
 }
 
-// slotState owns the A/B PatternPlayer pair for one layer
-// During a fade: nxt receives step triggers at full level; cur stops receiving
-// triggers and its active voices ring out under a falling gain
+// slotPlayers is how many patterns one slot sounds at once: the live one and the
+// tails of those it replaced, so a transition arriving mid-fade cuts nothing
+const slotPlayers = 3
+
+// slotState owns one layer's players. The live player takes the step triggers; a
+// retiring one stops triggering and rings out under a falling gain.
 type slotState struct {
-	cur, nxt   *PatternPlayer
-	curID      PatternID
-	nxtID      PatternID
-	pending    *patternTransition
-	xPos, xLen int
-	fading     bool
+	players [slotPlayers]*PatternPlayer
+	ids     [slotPlayers]PatternID
+	gain    [slotPlayers]float64 // a retiring player's level; unused while live
+	step    [slotPlayers]float64 // a retiring player's fall per sample
+	live    int
+	pending *patternTransition
 
 	revealN     int       // >0: per-bar progressive track reveal on incoming pattern
 	fillSavedID PatternID // slot 2: restored after auto-fill bar
@@ -30,49 +35,90 @@ type slotState struct {
 	drawn       bool // the tier's pool chose this slot's pattern, so a phrase may vary it
 }
 
-func (ss *slotState) player() *PatternPlayer {
-	if ss.fading {
-		return ss.nxt
+func (ss *slotState) player() *PatternPlayer { return ss.players[ss.live] }
+func (ss *slotState) activeID() PatternID    { return ss.ids[ss.live] }
+
+// fading reports a retiring player still ringing out
+func (ss *slotState) fading() bool {
+	for i := range ss.players {
+		if i != ss.live && ss.gain[i] > 0 {
+			return true
+		}
 	}
-	return ss.cur
+	return false
 }
 
-func (ss *slotState) activeID() PatternID {
-	if ss.fading {
-		return ss.nxtID
-	}
-	return ss.curID
-}
-
-// snap force-completes an in-flight fade
-func (ss *slotState) snap() {
-	if !ss.fading {
-		return
-	}
-	ss.cur.Reset()
-	ss.cur, ss.nxt = ss.nxt, ss.cur
-	ss.curID = ss.nxtID
-	ss.fading = false
-}
-
-// sample renders a transition: the incoming pattern at full level from its first
-// trigger, over the outgoing one's tails fading out. The outgoing pattern stops
-// triggering when the transition starts, so a fade-in would only have swallowed
-// the incoming downbeat.
+// sample mixes the live player at full level over the retiring ones' tails. The
+// outgoing pattern stops triggering when the transition starts, so a fade-in would
+// only have swallowed the incoming downbeat.
 func (ss *slotState) sample() float64 {
-	if !ss.fading {
-		return ss.cur.Sample()
-	}
-	t := float64(ss.xPos) / float64(ss.xLen)
-	out := ss.cur.Sample()*(1-t) + ss.nxt.Sample()
-	ss.xPos++
-	if ss.xPos >= ss.xLen {
-		ss.snap()
+	out := ss.players[ss.live].Sample()
+	for i := range ss.players {
+		if i == ss.live || ss.gain[i] <= 0 {
+			continue
+		}
+		out += ss.players[i].Sample() * ss.gain[i]
+		if ss.gain[i] -= ss.step[i]; ss.gain[i] <= 0 {
+			ss.gain[i] = 0
+			ss.players[i].Reset()
+		}
 	}
 	return out
 }
 
-const seqStream = vmath.Golden64 // fixed PCG stream selector; seed varies per run
+// begin makes id the live pattern, retiring the current one over fade samples, and
+// reports whether anything retired: a silent slot has no tail to declick, so id
+// starts in place at once. When every player is still ringing the quietest is
+// taken, the one cut this design accepts.
+func (ss *slotState) begin(id PatternID, fade int) bool {
+	if ss.players[ss.live].patternData == nil {
+		ss.players[ss.live].SetPattern(id)
+		ss.ids[ss.live] = id
+		return false
+	}
+	nxt, low := -1, 2.0
+	for i := range ss.players {
+		if i != ss.live && ss.gain[i] < low {
+			nxt, low = i, ss.gain[i]
+		}
+	}
+	if low > 0 {
+		ss.players[nxt].Reset()
+	}
+	ss.gain[ss.live] = 1
+	ss.step[ss.live] = 1 / float64(max(fade, MinCrossfadeSamples))
+	ss.players[nxt].SetPattern(id)
+	ss.ids[nxt] = id
+	ss.gain[nxt] = 0
+	ss.live = nxt
+	return true
+}
+
+func (ss *slotState) reset() {
+	for i := range ss.players {
+		ss.players[i].Reset()
+		ss.ids[i] = PatternSilence
+		ss.gain[i], ss.step[i] = 0, 0
+	}
+	ss.live = 0
+	ss.pending = nil
+	ss.revealN = 0
+	ss.inFill = false
+	ss.drawn = false
+}
+
+// Fixed PCG stream selectors; the seed varies per run. Draws and steps roll on
+// separate streams so a bar of timing skew between two runs of one seed moves no
+// later draw: the arrangement holds even where the notes under it differ.
+const (
+	seqStream  = vmath.Golden64
+	stepStream = vmath.Golden64 ^ 0x5bd1e995
+)
+
+// drawnSlots are the slots a tier draws; slot 2 is the fill's
+var drawnSlots = [...]int{0, 1, 3}
+
+const slotBass = 3
 
 // Sequencer maintains tempo, harmony, and N crossfading pattern layers
 // Mixer-goroutine confined: no synchronization
@@ -88,11 +134,14 @@ type Sequencer struct {
 	currentStep int64
 	samplePos   int64
 	barCount    int64
+	swapBar     int64 // bar a drawn slot last changed on
 
 	harmony *harmony
 	slots   [MusicSlots]slotState
 	gains   [MusicSlots]float64
-	rng     *rand.Rand
+	rng     *rand.Rand // draws: pools, groups, fills
+	stepRng *rand.Rand // steps: chance, humanization, the generated lead
+	plays   map[PatternID]uint32
 	gen     *melodyGen
 	// pos is the transport readout: bar<<8 | step. Written once per step by
 	// Generate on the mixer goroutine. Relaxed on purpose — a reader that
@@ -116,26 +165,29 @@ type Sequencer struct {
 func NewSequencer(bpm int, kit *drumKit) *Sequencer {
 	s := &Sequencer{
 		harmony:  newHarmony(),
-		gains:    [MusicSlots]float64{0.7, 0.5, 0.5},
-		rng:      rand.New(rand.NewPCG(1, seqStream)),
+		gains:    [MusicSlots]float64{0.7, 0.5, 0.5, 0.55},
 		gen:      newMelodyGen(), // pattern registered at engine Start before the mixer exists
 		volume:   1.0,
 		autoFill: true,
 	}
+	s.Reseed(1)
 	for i := range s.slots {
-		s.slots[i].cur = NewPatternPlayer(kit)
-		s.slots[i].nxt = NewPatternPlayer(kit)
+		for j := range s.slots[i].players {
+			s.slots[i].players[j] = NewPatternPlayer(kit)
+		}
 	}
 	s.setGroup(-1)
 	s.SetBPM(bpm, false)
 	return s
 }
 
-// Reseed re-keys the musical rng
+// Reseed re-keys the musical rngs and forgets what has played
 // Determinism scope: same seed + same command schedule (bar-aligned) = same music;
 // wall-clock command arrival relative to bars is not replayed
 func (s *Sequencer) Reseed(seed int64) {
 	s.rng = rand.New(rand.NewPCG(uint64(seed), seqStream))
+	s.stepRng = rand.New(rand.NewPCG(uint64(seed), stepStream))
+	s.plays = make(map[PatternID]uint32)
 }
 
 func (s *Sequencer) SetBPM(bpm int, quantize bool) {
@@ -237,29 +289,18 @@ func (s *Sequencer) Generate(buf []float64) {
 
 func (s *Sequencer) triggerStep(step int) {
 	for si := range s.slots {
-		s.slots[si].player().TriggerStep(step, s.samplesPerStep, s.harmony, s.rng)
+		s.slots[si].player().TriggerStep(step, s.samplesPerStep, s.harmony, s.stepRng)
 	}
 }
 
-// startTransition begins an equal-power fade; returns false when it snapped
-// A silent source has no tail to declick — immediate full-gain entry fixes
-// attenuated first bars at music start
+// startTransition retires the slot's pattern under id; returns false when the slot
+// was silent and id started in place. A drawn slot's change dates the rest a
+// variation keeps.
 func (s *Sequencer) startTransition(slot int, id PatternID, fade int) bool {
-	ss := &s.slots[slot]
-	ss.snap()
-	if ss.cur.patternData == nil { // silent-source snap
-		ss.cur.SetPattern(id)
-		ss.curID = id
-		return false
+	if slot != 2 {
+		s.swapBar = s.barCount
 	}
-	if fade < MinCrossfadeSamples {
-		fade = MinCrossfadeSamples // declick floor: never hard-cut voice tails
-	}
-	ss.nxt.SetPattern(id)
-	ss.nxtID = id
-	ss.xPos, ss.xLen = 0, fade
-	ss.fading = true
-	return true
+	return s.slots[slot].begin(id, fade)
 }
 
 func (s *Sequencer) applyPendingTransitions() {
@@ -281,8 +322,9 @@ func (s *Sequencer) applyPendingTransitions() {
 func (s *Sequencer) beginTransition(slot int, id PatternID, fade int, reveal bool) {
 	ss := &s.slots[slot]
 	ss.revealN = 0
+	heard := ss.player().heard()
 	if s.startTransition(slot, id, fade) && reveal {
-		s.armReveal(ss, id)
+		s.armReveal(ss, id, heard)
 	}
 }
 
@@ -325,7 +367,7 @@ func (s *Sequencer) updateFill() {
 		if !ss.inFill && len(fills) > 0 {
 			ss.fillSavedID = ss.activeID()
 			ss.inFill = true
-			s.startTransition(2, fills[s.rng.IntN(len(fills))], s.beatFade())
+			s.startTransition(2, s.draw(fills), s.beatFade())
 		}
 	case 0:
 		if ss.inFill {
@@ -335,18 +377,23 @@ func (s *Sequencer) updateFill() {
 	}
 }
 
-// updateVariation moves a held tier on at each phrase downbeat. After GroupPhrases
-// in one group, both drawn slots move together to another group covering the tier,
-// behind the fill that closed the phrase; otherwise one drawn slot, melody and rhythm
+// updateVariation moves a held tier on at each phrase downbeat, once the drawn slots
+// have rested VariationGapBars since anything changed them. After GroupPhrases in one
+// group, every drawn slot moves together to another group covering the tier, behind
+// the fill that closed the phrase; otherwise one drawn slot, melody, rhythm and bass
 // in turn, swaps to another member of its pool, leaving one mid-transition alone.
 func (s *Sequencer) updateVariation() {
 	if s.barCount%PhraseBars != 0 || s.group < 0 {
 		return
 	}
-	if s.groupPhrases++; s.groupPhrases >= GroupPhrases {
+	s.groupPhrases++
+	if s.barCount-s.swapBar < VariationGapBars {
+		return
+	}
+	if s.groupPhrases >= GroupPhrases {
 		if g := s.otherGroup(s.tier); g >= 0 {
 			s.setGroup(g)
-			for slot := range 2 {
+			for _, slot := range drawnSlots {
 				if s.slots[slot].drawn {
 					s.setPattern(slot, s.draw(s.arr.pool(g, s.tier, Role(slot+1))), s.beatFade(), false, false)
 				}
@@ -354,18 +401,19 @@ func (s *Sequencer) updateVariation() {
 			return
 		}
 	}
-	slot := int(s.barCount/PhraseBars) % 2
+	slot := drawnSlots[int(s.barCount/PhraseBars)%len(drawnSlots)]
 	ss := &s.slots[slot]
 	pool := s.arr.pool(s.group, s.tier, Role(slot+1))
-	if !ss.drawn || len(pool) < 2 || ss.pending != nil || ss.fading || ss.revealN > 0 {
+	if !ss.drawn || len(pool) < 2 || ss.pending != nil || ss.fading() || ss.revealN > 0 {
 		return
 	}
-	// Uniform over the other members: the last stands in for a draw of the current
-	i := s.rng.IntN(len(pool) - 1)
-	if pool[i] == ss.activeID() {
-		i = len(pool) - 1
+	others := make([]PatternID, 0, len(pool)-1)
+	for _, id := range pool {
+		if id != ss.activeID() {
+			others = append(others, id)
+		}
 	}
-	s.startTransition(slot, pool[i], s.beatFade())
+	s.startTransition(slot, s.draw(others), s.beatFade())
 }
 
 // beatFade lets the outgoing pattern's tails ring out over one beat, as a player
@@ -401,10 +449,10 @@ func (s *Sequencer) setGroup(g int) {
 }
 
 // updateMelodyGen regenerates the generative lead once per bar while active
-// Unquantized starts play bass-only until the next bar seeds the lead
+// Unquantized starts play nothing until the next bar seeds the lead
 func (s *Sequencer) updateMelodyGen() {
 	if s.slots[1].activeID() == PatternMelodyGen {
-		s.gen.regenerate(int(s.barCount%PhraseBars), s.rng)
+		s.gen.regenerate(int(s.barCount%PhraseBars), s.stepRng)
 	}
 }
 
@@ -436,15 +484,15 @@ func (s *Sequencer) setPattern(slot int, p PatternID, fade int, quantize, reveal
 
 // armReveal masks the incoming pattern to as many tracks as the outgoing one was
 // sounding, at least one, and updateReveal admits one more per bar: a build-up only
-// ever adds to what played before it. A silent-source snap has nothing to build from.
-func (s *Sequencer) armReveal(ss *slotState, id PatternID) {
+// ever adds to what played before it. A silent-source start has nothing to build from.
+func (s *Sequencer) armReveal(ss *slotState, id PatternID, heard int) {
 	pat := GetPattern(id)
 	if pat == nil {
 		return
 	}
-	if n := max(ss.cur.heard(), 1); n < len(pat.Tracks) {
+	if n := max(heard, 1); n < len(pat.Tracks) {
 		ss.revealN = n
-		ss.nxt.SetMask(1<<n - 1)
+		ss.player().SetMask(1<<n - 1)
 	}
 }
 
@@ -481,30 +529,22 @@ func (s *Sequencer) IsRunning() bool { return s.running }
 
 func (s *Sequencer) Reset() {
 	s.running = false
-	s.currentStep, s.samplePos, s.barCount = 0, 0, 0
+	s.currentStep, s.samplePos, s.barCount, s.swapBar = 0, 0, 0, 0
 	s.pendingBPM = 0
 	s.harmony.reset()
 	s.tier = IntensityCalm
 	for si := range s.slots {
-		ss := &s.slots[si]
-		ss.cur.Reset()
-		ss.nxt.Reset()
-		ss.curID, ss.nxtID = PatternSilence, PatternSilence
-		ss.pending = nil
-		ss.fading = false
-		ss.xPos, ss.xLen = 0, 0
-		ss.revealN = 0
-		ss.inFill = false
-		ss.drawn = false
+		s.slots[si].reset()
 	}
 	s.setGroup(-1)
 	s.publish()
 }
 
-// SetIntensity draws the tier's rhythm and melody from the current group's pools,
-// moving to another group only when this one does not cover the tier. A slot already
-// sounding its draw keeps playing, rather than restarting under a crossfade and a
-// reveal that would strip it back to one track.
+// SetIntensity draws the tier's rhythm, melody and bass from the current group's
+// pools, moving to another group only when this one does not cover the tier. A slot
+// already sounding its draw keeps playing, rather than restarting under a crossfade
+// and a reveal that would strip it back to one track; the bass keeps playing
+// whenever the tier's pool still holds it, since it is what the group is.
 func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, reveal bool) {
 	if t < 0 || t >= IntensityCount {
 		return
@@ -515,10 +555,15 @@ func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, re
 			s.setGroup(g)
 		}
 	}
-	for slot := range 2 {
+	for _, slot := range drawnSlots {
 		ss := &s.slots[slot]
 		ss.drawn = true
-		if id := s.draw(s.arr.pool(s.group, t, Role(slot+1))); id != ss.activeID() {
+		pool := s.arr.pool(s.group, t, Role(slot+1))
+		id := ss.activeID()
+		if slot != slotBass || !slices.Contains(pool, id) {
+			id = s.draw(pool)
+		}
+		if id != ss.activeID() {
 			s.setPattern(slot, id, crossfadeSamples, quantize, reveal)
 		} else {
 			ss.pending = nil
@@ -526,28 +571,48 @@ func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, re
 	}
 }
 
-// draw picks one pool member; a single member costs no rng, so a fixed
-// arrangement plays the same music for a given seed as it always has
+// draw picks the pool member played least this run, the rng breaking ties, so a
+// held tier works through its pool before repeating; a single member costs no rng,
+// so a fixed arrangement plays the same music for a given seed as it always has
 func (s *Sequencer) draw(pool []PatternID) PatternID {
 	switch len(pool) {
 	case 0:
 		return PatternSilence
 	case 1:
+		s.plays[pool[0]]++
 		return pool[0]
 	}
-	return pool[s.rng.IntN(len(pool))]
+	least, n := ^uint32(0), 0
+	for _, id := range pool {
+		switch c := s.plays[id]; {
+		case c < least:
+			least, n = c, 1
+		case c == least:
+			n++
+		}
+	}
+	k := s.rng.IntN(n)
+	for _, id := range pool {
+		if s.plays[id] == least {
+			if k == 0 {
+				s.plays[id]++
+				return id
+			}
+			k--
+		}
+	}
+	return pool[0]
 }
 
-// ReloadPattern re-resolves any slot pointing at id after the registry replaced
+// ReloadPattern re-resolves any player holding id after the registry replaced
 // the pattern. Mixer-goroutine confined.
 func (s *Sequencer) ReloadPattern(id PatternID) {
 	for si := range s.slots {
 		ss := &s.slots[si]
-		if ss.curID == id {
-			ss.cur.refresh(id)
-		}
-		if ss.nxtID == id {
-			ss.nxt.refresh(id)
+		for i := range ss.players {
+			if ss.ids[i] == id && ss.players[i].patternData != nil {
+				ss.players[i].refresh(id)
+			}
 		}
 	}
 	// melodyGen writes into the registered Pattern's lead track in place, so a
@@ -557,10 +622,9 @@ func (s *Sequencer) ReloadPattern(id PatternID) {
 	}
 }
 
-// publish exports the playhead and the per-slot sounding pattern. Three
-// separate atomics: a reader can pair a step from before a transition with a
-// pattern from after it. That is skew in a readout, not a property anything
-// depends on.
+// publish exports the playhead and the per-slot sounding pattern. Separate
+// atomics: a reader can pair a step from before a transition with a pattern from
+// after it. That is skew in a readout, not a property anything depends on.
 func (s *Sequencer) publish() {
 	s.pos.Store(uint64(s.barCount)<<8 | uint64(s.currentStep)&0xff)
 	for si := range s.slots {

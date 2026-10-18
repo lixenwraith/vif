@@ -60,7 +60,7 @@ func init() {
 		"play": {"play <name> [vol]", "audition document state (canonical take); falls back to registry", 1, 2, cmdPlay},
 		"hit":  {"hit kick|snare|hihat|clap [vol]", "audition a drum", 1, 2, cmdHit},
 		"note": {"note <midi> [vel] [steps] [instr]", "tonal audition via the melody slot (needs music running)", 1, 4, cmdNote},
-		"slot": {"slot <0|1|2> <pattern|-> [fade_ms] [q]", "assign a pattern; dirty patterns auto-apply; - = silence", 2, 4, cmdSlot},
+		"slot": {"slot <0|1|2|3> <pattern|-> [fade_ms] [q]", "assign a pattern (0 rhythm, 1 melody, 2 fill, 3 bass); dirty patterns auto-apply; - = silence", 2, 4, cmdSlot},
 
 		"music": {"music start|stop|reset", "transport control", 1, 1, cmdMusic},
 		"bpm":   {"bpm <n>", "tempo, beat-quantized", 1, 1, cmdBPM},
