@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The logo's lines alone, for a themed icon the launcher tints. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.2121"
+        android:scaleY="0.2121"
+        android:translateX="11.58"
+        android:translateY="11.58">
+        <path
+            android:strokeColor="#000000"
+            android:strokeWidth="20"
+            android:pathData="M100,100 L300,100 L300,300 L100,300 Z M200,100 L200,300 M100,200 L300,200 M100,100 L300,300 M300,100 L100,300" />
+    </group>
+</vector>
