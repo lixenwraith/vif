@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
@@ -120,6 +121,15 @@ func (c sessionControl) AddBot(graph string) error {
 
 func (c sessionControl) ChangeScenario(name string) (bool, error) {
 	return c.a.changeScenarioLocked(name)
+}
+
+// The embedded scenario answers to the main name, which is how a row restarts it.
+func (c sessionControl) Scenarios() ([]string, string) {
+	current := c.a.scenario.Name
+	if current == resource.EmbeddedLabel {
+		current = paths.MainScenarioName
+	}
+	return resource.Scenarios(c.a.cfg.Resources), current
 }
 
 // Validate before teardown; a different scenario needs a new App and metric set.

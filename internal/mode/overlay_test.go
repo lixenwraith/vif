@@ -155,11 +155,11 @@ func TestAPressDrivesTheMenu(t *testing.T) {
 	row := func(i int) int { return g.Y + g.ContentY + i }
 	r.handleConfigMenu()
 
-	press(left, row(3))
+	press(left, row(4))
 	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "controls" {
 		t.Fatalf("a press on an unselected row: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}
-	press(left, row(3))
+	press(left, row(4))
 	if m := configMenu(ctx); m.Page != "controls" || ctx.GetOverlaySelection() != "auto" {
 		t.Fatalf("a press on the selected category: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}

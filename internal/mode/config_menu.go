@@ -35,6 +35,10 @@ type configPage struct {
 }
 
 var configPages = []configPage{
+	{key: "game", label: "Game", description: "Start a new game, or another scenario from its row or by name.", options: []configOption{
+		withDisabled(commandAction("new", "New game", "Restart this scenario from its first tick. In a session only the host can, and every participant restarts with it.", "new"), hostOnly),
+		configFormOption("scenario"),
+	}, extra: scenarioConfigOptions},
 	{key: "bots", label: "Bots", description: "Add bots or remove your bots. Hosts can also remove other players and bots on Multiplayer.",
 		options: []configOption{configFormOption("add")}, extra: botConfigOptions},
 	{key: "multiplayer", label: "Multiplayer", description: "Host this run, join a session or request one from an allocator.", options: []configOption{
@@ -80,20 +84,12 @@ var configPages = []configPage{
 		{key: "graph", label: "Route graph", description: "Show composite navigation routes (:graph <group> selects a target group).",
 			command: "graph", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowComposite) }},
 	}},
-	{key: "simulation", label: "Simulation", description: "Solo simulation pacing; network sessions keep their shared rate.", options: []configOption{
+	{key: "simulation", label: "Simulation", description: "Solo simulation pacing and a replay's restart; network sessions keep their shared rate.", options: []configOption{
 		{key: "speed", label: "Game speed", description: "Left slows down; Right or Enter speeds up. 1x is real time; range 1/8x to 8x.",
 			command: "speed", read: func(ctx *engine.GameContext) string { return ctx.TimeCtl.Scale().String() + "x" },
 			change: func(ctx *engine.GameContext, d int) {
 				handleSpeedCommand(ctx, []string{engine.ScaleStep(ctx.TimeCtl.Scale(), d).String()})
 			}},
-		withDisabled(commandAction("new", "New game", "Restart this scenario from its first tick. In a session only the host can, and every participant restarts with it.", "new"),
-			func(ctx *engine.GameContext) string {
-				if ctx.World.LiveSession() && !ctx.World.IsSessionCoordinator() {
-					return "Only the host can start a new game in a session"
-				}
-				return ""
-			}),
-		configFormOption("scenario"),
 		commandAction("replay", "Restart replay", "Play the recording again from its first tick. :r tick and :r time go to any other.", "replay restart"),
 	}},
 	{key: "diagnostics", label: "Diagnostics", description: "Logging, snapshots, flight recorder and profiling.", options: []configOption{
@@ -152,6 +148,33 @@ func commandAction(key, label, description, command string) configOption {
 func withDisabled(o configOption, disabled func(*engine.GameContext) string) configOption {
 	o.disabled = disabled
 	return o
+}
+
+func hostOnly(ctx *engine.GameContext) string {
+	if ctx.World.LiveSession() && !ctx.World.IsSessionCoordinator() {
+		return "Only the host can start a new game in a session"
+	}
+	return ""
+}
+
+// scenarioConfigOptions is a row per scenario the roots hold, which Enter starts
+// as :n <name> does; a phone has no name to type. The one running restarts.
+func scenarioConfigOptions(ctx *engine.GameContext) []configOption {
+	if ctx.SessionCtl == nil {
+		return nil
+	}
+	names, current := ctx.SessionCtl.Scenarios()
+	options := make([]configOption, 0, len(names))
+	for _, name := range names {
+		value := "Enter"
+		if name == current {
+			value = "current"
+		}
+		options = append(options, withDisabled(configOption{key: "start/" + name, label: name, command: "new " + name, action: true,
+			description: "Enter starts the " + name + " scenario from its first tick. In a session only the host can, and its participants rejoin it.",
+			read:        func(*engine.GameContext) string { return value }}, hostOnly))
+	}
+	return options
 }
 
 func captureDescription(what string) string {

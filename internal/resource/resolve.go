@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lixenwraith/vif/internal/asset"
@@ -99,6 +100,31 @@ func ScenarioPath(o Options) (string, error) {
 
 	r := newResolver(o)
 	return r.scenario(paths.MainScenarioName), nil
+}
+
+// Scenarios names every scenario a run with these options starts by name: the main
+// one, which the embedded copy answers for when no root holds it, then each
+// scenario/<name>/scenario.toml under the roots, sorted; a lower root never hides one.
+func Scenarios(o Options) []string {
+	names := []string{paths.MainScenarioName}
+	if o.Embedded {
+		return names
+	}
+	for _, root := range newResolver(o).roots {
+		entries, err := os.ReadDir(filepath.Join(root, paths.ScenarioDirName))
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() && !slices.Contains(names, name) &&
+				fileExists(filepath.Join(root, paths.ScenarioDirName, name, paths.ScenarioFile)) {
+				names = append(names, name)
+			}
+		}
+	}
+	slices.Sort(names[1:])
+	return names
 }
 
 // isScenarioName distinguishes the installed shorthand from an explicit path.
