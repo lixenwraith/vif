@@ -22,7 +22,8 @@ Audio sends PCM to optional host commands; see [Audio](audio.md) for runtime
 backend choices. A compiler, module download access, and a terminal are enough
 to build the normal binary. When the `GO` command is missing, a target that
 compiles proposes the Arch, Debian (snap) or FreeBSD package install and runs it
-only on a yes.
+only on a yes. Beyond Go, `make android` names each JDK or Android SDK piece it
+lacks, which `make android-toolchain` installs ([android/README.md](../android/README.md#build)).
 
 ## 2. Common build workflow
 
