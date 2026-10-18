@@ -43,6 +43,21 @@ for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in
 `go mod tidy` here too, since this module requires at least what the root does.
 `make verify` vets and tests this module's Go side with the rest.
 
+## Nightly
+
+The release workflow (`.github/workflows/release.yml`) builds
+`vif-nightly-android.apk` every night, and `vif-<version>-android.apk` on a tag,
+with `android/toolchain.sh gradlew assembleRelease` on the runner's SDK: arm64 and
+x86_64, Android 11 and newer, published under the repository's `nightly` release.
+Its `versionCode` is the workflow's run number, so each build installs over the one
+before it, and it is signed with `debug.keystore` here, the key `make android`
+signs with too, so a nightly and a local build install over each other; the
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
+`ANDROID_KEY_PASSWORD` secrets put a release key in its place
+([todo](../doc/todo.md#sign-the-android-build-with-a-release-key)).
+`adb install -r vif-nightly-android.apk` installs it; a phone installs it from its
+browser once that browser may install apps.
+
 ## Run
 
 ```bash

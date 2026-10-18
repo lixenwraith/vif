@@ -1,7 +1,7 @@
 name: Release
 
 # The schedule moves the nightly prerelease; a v* tag drafts a stable release that
-# a person publishes. Both build the same archives.
+# a person publishes. Both build the same archives and the Android APK.
 on:
   schedule:
     - cron: '17 3 * * *'
@@ -13,27 +13,25 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  packages: write
-
-env:
-  GO_VERSION: '1.27.2'
+# Each job asks for what it writes; the token can do nothing else.
+permissions: {}
 
 jobs:
   artifacts:
     name: Build downloadable artifacts
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Download dependencies
@@ -46,6 +44,11 @@ jobs:
           # A release's binaries must be what its source archive builds.
           if [ "$GITHUB_REF_TYPE" = tag ]; then git diff --exit-code; fi
 
+      # A build that fails its tests publishes nothing: the test workflow ran on a
+      # push, and the schedule builds whatever main holds by night.
+      - name: Vet and test
+        run: go vet ./... && go test ./...
+
       - name: Build archives
         shell: bash
         run: |
@@ -53,11 +56,14 @@ jobs:
           label=nightly
           if [ "$GITHUB_REF_TYPE" = tag ]; then label=${GITHUB_REF_NAME#v}; fi
           p="vif-$label"
-          mkdir -p dist "stage/$p-linux-amd64" "stage/$p-linux-amd64-headless" \
-            "stage/$p-freebsd-amd64" "stage/$p-windows-amd64" "stage/$p-web"
+          targets="linux-amd64 linux-arm64 linux-amd64-headless freebsd-amd64 windows-amd64 web"
+          for target in $targets; do mkdir -p "stage/$p-$target"; done
+          mkdir -p dist
 
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -ldflags='-s -w' -o "stage/$p-linux-amd64/vif" ./cmd/vif
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+            go build -trimpath -ldflags='-s -w' -o "stage/$p-linux-arm64/vif" ./cmd/vif
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -tags=vif_headless -ldflags='-s -w' \
             -o "stage/$p-linux-amd64-headless/vif" ./cmd/vif
@@ -73,18 +79,18 @@ jobs:
             go build -trimpath -ldflags='-s -w' \
             -o "stage/$p-web/vif.wasm" ./cmd/vif
 
-          for target in linux-amd64 linux-amd64-headless freebsd-amd64 windows-amd64 web; do
+          for target in $targets; do
             cp README.md LICENSE "stage/$p-$target/"
           done
           # The client binaries link purego for the desktop window.
-          cp deploy/package/LICENSE.purego "stage/$p-linux-amd64/" "stage/$p-freebsd-amd64/"
+          cp deploy/package/LICENSE.purego "stage/$p-linux-amd64/" "stage/$p-linux-arm64/" "stage/$p-freebsd-amd64/"
           cp -R web/. "stage/$p-web/"
           # The loader of the Go that built vif.wasm above, not the committed copy.
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "stage/$p-web/"
 
           # Each archive unpacks into one directory named for it, and root extracting
           # one gets root's files rather than the runner's uid.
-          for target in linux-amd64 linux-amd64-headless freebsd-amd64 web; do
+          for target in linux-amd64 linux-arm64 linux-amd64-headless freebsd-amd64 web; do
             tar -C stage --owner=0 --group=0 --numeric-owner \
               -czf "dist/$p-$target.tar.gz" "$p-$target"
           done
@@ -102,12 +108,82 @@ jobs:
               -o "dist/vif-$label.tar.gz" "$GITHUB_REF_NAME"
           fi
 
-          (cd dist && sha256sum vif-* > SHA256SUMS)
-
       - name: Upload release payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-payload
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Build the Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            android/go.sum
+
+      # gomobile compiles the binding with the javac on PATH; Gradle builds on a
+      # JDK 21 it fetches itself.
+      - name: Set up the JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      # The runner's SDK has a sdkmanager and its licences accepted; the platform
+      # and NDK the build names are installed as make android-toolchain installs them.
+      - name: Install the SDK platform and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform=$(sed -n 's/^ *compileSdkVersion("\(.*\)")$/\1/p' android/app/build.gradle.kts)
+          ndk=$(sed -n 's/^ *ndkVersion = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null
+          "$sdkmanager" "platforms;$platform" "ndk;$ndk"
+
+      # The keystore secrets sign a release; without them the repository's debug key
+      # does, which a local make android shares, so either installs over the other.
+      - name: Build the APK
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          VIF_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VIF_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VIF_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          label=nightly
+          if [ "$GITHUB_REF_TYPE" = tag ]; then label=${GITHUB_REF_NAME#v}; fi
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            export VIF_KEYSTORE="$RUNNER_TEMP/release.keystore"
+          fi
+          # The run number climbs across nightlies and tags alike, so a device takes
+          # each build as an update of the one before it.
+          android/toolchain.sh gradlew assembleRelease \
+            -PversionCode="$GITHUB_RUN_NUMBER" -PversionName="$label+${GITHUB_SHA::7}"
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/vif-$label-android.apk"
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-payload-android
           path: dist/
           if-no-files-found: error
           retention-days: 14
@@ -116,19 +192,22 @@ jobs:
     name: Publish headless container
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push headless image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile
@@ -150,20 +229,27 @@ jobs:
 
   release:
     name: Publish release assets
-    needs: [artifacts, image]
+    needs: [artifacts, android, image]
     if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download release payload
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
-          name: release-payload
+          pattern: release-payload*
+          merge-multiple: true
           path: dist
+
+      # Over every asset, the APK included, so one file vouches for the release.
+      - name: Sum the assets
+        run: cd dist && sha256sum vif-* > SHA256SUMS
 
       # A version with a suffix (v0.1.0-rc.1) is a pre-release and says so; only a
       # plain vX.Y.Z drafts a final release.
@@ -176,7 +262,7 @@ jobs:
           set -euo pipefail
           version=${GITHUB_REF_NAME#v}
           flags=(--draft --verify-tag)
-          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The windows-amd64 zip is an experimental, untested cross-build."
+          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window. The Android APK installs over a nightly or a local debug build (android/README.md). The windows-amd64 zip is an experimental, untested cross-build."
           case $version in
           *-*)
             flags+=(--prerelease)
@@ -197,7 +283,7 @@ jobs:
           git push origin refs/tags/nightly --force
 
           title='Nightly development build (not a release)'
-          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux server archive and GHCR image use the vif_headless profile; the windows-amd64 zip is an experimental, untested cross-build."
+          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux server archive and GHCR image use the vif_headless profile. The Android APK (Android 11 and newer, arm64 and x86_64) is signed with the repository's debug key and installs over the night before; the windows-amd64 zip is an experimental, untested cross-build."
           if gh release view nightly >/dev/null 2>&1; then
             gh release upload nightly dist/* --clobber
             # The release carries exactly this build, not a renamed or dropped asset.

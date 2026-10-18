@@ -383,6 +383,23 @@ Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
 which already carries the source archive and its checksum; then drop the "no final
 release" lines in `README.md` and [Packaging](packaging.md) §2.
 
+### Sign the Android build with a release key
+
+- Priority: P2
+- Affected files: `.github/workflows/release.yml`, `android/app/build.gradle.kts`,
+  `android/README.md`
+
+The nightly and a tagged build are signed with `android/debug.keystore`, which
+anyone can sign with, so a build from elsewhere installs over them. Before a
+release a device should trust: generate a release keystore (`keytool -genkeypair
+-keyalg RSA -keysize 4096 -validity 10000`), add it base64-encoded as
+`ANDROID_KEYSTORE_BASE64` with its passwords and alias as the three other secrets
+the workflow reads, and keep the keystore out of the repository; a key once
+published cannot be rotated for installed apps. The first signed build will not
+install over a debug-signed one: uninstall first, which drops the app's settings.
+A store listing (Play wants an AAB and a `targetSdk` within a year of the newest
+release) is a separate decision.
+
 ### Publish a development AUR package
 
 - Priority: P3

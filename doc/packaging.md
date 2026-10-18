@@ -54,12 +54,14 @@ These hold regardless of which repository is targeted first.
 
 ## 2. Release surface
 
-`.github/workflows/release.yml` builds one set of archives: Linux amd64 client and
-headless server, FreeBSD amd64 client, an experimental and untested Windows amd64
-zip, the browser bundle, the wad, and `SHA256SUMS`. Each binary and browser
-archive unpacks into one directory named for it, and every tarball's entries are
-root's, so extracting one as root neither scatters files nor hands them to the
-builder's uid.
+`.github/workflows/release.yml` builds one set of archives: Linux amd64 and arm64
+clients and the amd64 headless server, FreeBSD amd64 client, an experimental and
+untested Windows amd64 zip, the browser bundle, the wad, the Android APK, and
+`SHA256SUMS` over all of them. A build that fails `go vet ./...` or `go test ./...`
+publishes nothing. Each binary and browser archive unpacks into one directory
+named for it, and every tarball's entries are root's, so extracting one as root
+neither scatters files nor hands them to the builder's uid; a client archive
+carries `LICENSE.purego` for the desktop window its binary links.
 
 - **Nightly** (daily or on dispatch) is never a release. It replaces the assets
   of the `nightly` prerelease, titled and described as a development build,
@@ -68,6 +70,15 @@ builder's uid.
 - **A `vX.Y.Z-suffix` tag** (`v0.1.0-rc.1`) drafts a GitHub pre-release whose
   notes open by saying it is not a final release.
 - **A plain `vX.Y.Z` tag** drafts the final release. None has been pushed.
+- **The Android APK** (`vif-<label>-android.apk`; Android 11 and newer, arm64 and
+  x86_64) is built by `android/toolchain.sh gradlew assembleRelease` on the
+  runner's SDK, its `versionCode` the workflow's run number, which climbs across
+  nightlies and tags, so a device takes each build as an update of the one before.
+  It is signed with the repository's debug key, `android/debug.keystore`, which
+  `make android` shares, unless the `ANDROID_KEYSTORE_BASE64`,
+  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`
+  secrets hold a release key ([todo](todo.md#sign-the-android-build-with-a-release-key)).
+  A store listing is not on this path.
 
 A tag adds `vif-X.Y.Z.tar.gz`, a `git archive` of the tag and the byte-stable
 source archive a distribution hashes. It pushes no image, moves nothing, and
