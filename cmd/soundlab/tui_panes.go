@@ -177,12 +177,20 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 	case reflect.Slice:
 		n := fv.Len()
 		exp := a.exp.IsExpanded(full) && n > 0
+		// A list of names shows them; anything else its count, "(n)" not "[n]":
+		// bus[1] read as "routed to bus 1" when it meant "one bus defined".
+		suf := fmt.Sprintf("(%d)", n)
+		if fv.Type().Elem().Kind() == reflect.String && n > 0 {
+			words := make([]string, n)
+			for i := range n {
+				words[i] = fv.Index(i).String()
+			}
+			suf = "= " + strings.Join(words, " ")
+		}
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
 			Expandable: n > 0, Expanded: exp,
-			// "(n)" not "[n]": bus[1] read as "routed to bus 1" when it
-			// meant "one bus defined".
-			Style: st, Suffix: fmt.Sprintf("(%d)", n), SuffixStyle: sfx,
+			Style: st, Suffix: suf, SuffixStyle: sfx,
 			Data: &nodeMeta{segs: segs, slice: true},
 		})
 		if exp {
@@ -322,11 +330,11 @@ func (a *tuiApp) render() {
 		input = bottom
 	}
 	main, logR := tui.SplitVFixed(body, body.H-logPaneH)
-	brR, insR := tui.SplitHFixed(main, main.W*32/100)
+	brR, mixR := tui.SplitHFixed(main, main.W*36/100)
 
 	a.renderHeader(header)
 	a.renderBrowser(brR)
-	a.renderInspector(insR)
+	a.renderMixer(mixR)
 	a.renderLog(logR)
 	switch a.mode {
 	case modeBeat:
@@ -335,6 +343,12 @@ func (a *tuiApp) render() {
 		a.renderPiano(strip)
 	}
 	a.renderInput(input)
+	if a.focus == focusInspector {
+		a.renderInspector(root)
+	}
+	if a.help {
+		a.renderHelp(root)
+	}
 
 	a.term.Flush(cells, w, h)
 }
@@ -415,19 +429,27 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 		content.Text(0, 0, "empty — :builtin sound|pattern or :load", a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
 		return
 	}
+	// A header row names the columns; the name takes what the pane has left
+	nameW := max(content.W-16, 12)
+	head := fmt.Sprintf("  %-*s %5s %6s", nameW, "name", "steps", "tracks")
+	if a.kind == kindSound {
+		head = fmt.Sprintf("  %-*s %5s %6s", nameW, "name", "layer", "secs")
+	}
+	content.Text(0, 0, head, a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+	content = content.Sub(0, 1, content.W, content.H-1)
 	items := make([]tui.ListItem, 0, len(names))
 	for _, n := range names {
 		var it tui.ListItem
 		if a.kind == kindSound {
 			d, _ := a.s.sounds.get(n)
-			it.Text = fmt.Sprintf("%-20s %2dL %4.1fs", tui.Truncate(n, 20), len(d.Layer), soundDur(d))
+			it.Text = fmt.Sprintf("%-*s %5d %6.2f", nameW, tui.Truncate(n, nameW), len(d.Layer), soundDur(d))
 			it.Icon, it.IconFg = tui.IconBullet, a.theme.Unselected
 			if a.s.sounds.isDirty(n) {
 				it.Icon, it.IconFg = '*', a.theme.Warning
 			}
 		} else {
 			d, _ := a.s.pats.get(n)
-			it.Text = fmt.Sprintf("%-20s %2ds %2dT", tui.Truncate(n, 20), d.Steps, len(d.Track))
+			it.Text = fmt.Sprintf("%-*s %5d %6d", nameW, tui.Truncate(n, nameW), d.Steps, len(d.Track))
 			it.Icon, it.IconFg = tui.IconBullet, a.theme.Unselected
 
 			isDirty := a.s.pats.isDirty(n)
@@ -466,16 +488,118 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 	content.List(items, c, a.brScroll[a.kind], tui.ListOpts{CursorBg: cur, DefaultBg: a.theme.Bg})
 }
 
-func (a *tuiApp) renderInspector(r tui.Region) {
+// slotRoles name what each sequencer slot plays
+var slotRoles = [audio.MusicSlots]string{"rhythm", "melody", "fill", "bass"}
+
+// renderMixer shows what each slot sounds, as a mixer would: the pattern's grid for
+// the bar at the playhead under the group, motif and tiers it was drawn with.
+// Enter on the browser opens the full inspector over it.
+func (a *tuiApp) renderMixer(r tui.Region) {
+	content := r.Pane(tui.PaneOpts{
+		Title: "mixer", Border: tui.LineSingle,
+		BorderFg: a.theme.Border, TitleFg: a.theme.HeaderFg, Bg: a.theme.Bg,
+	})
+	_, step, running := a.s.eng.Transport()
+	secH := content.H / audio.MusicSlots
+	if secH < 2 {
+		return
+	}
+	for slot := range audio.MusicSlots {
+		a.renderSlot(content.Sub(0, slot*secH, content.W, secH), slot, step, running)
+	}
+}
+
+func (a *tuiApp) renderSlot(r tui.Region, slot, step int, running bool) {
+	pat := audio.GetPattern(a.s.eng.SlotPattern(slot))
+	r.Divider(0, "", tui.LineSingle, a.theme.Border)
+	title := fmt.Sprintf(" %d %s ", slot, slotRoles[slot])
+	if pat == nil {
+		r.Text(1, 0, title+" - ", a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+		return
+	}
+	var tiers []string
+	for t := range audio.IntensityCount {
+		if pat.Tiers&(1<<t) != 0 {
+			tiers = append(tiers, audio.Intensity(t).String())
+		}
+	}
+	local := step % pat.Steps
+	win := local - local%audio.StepsPerBar
+	info := fmt.Sprintf(" %s · %s · %s · %s ", pat.Name, strings.Join(pat.Groups, "+"), pat.Motif, strings.Join(tiers, " "))
+	if bars := pat.Steps / audio.StepsPerBar; bars > 1 {
+		info += fmt.Sprintf("bar %d/%d ", win/audio.StepsPerBar+1, bars)
+	}
+	r.Text(1, 0, title, a.theme.HeaderFg, a.theme.Bg, terminal.AttrBold)
+	r.Text(1+tui.RuneLen(title), 0, tui.Truncate(info, r.W-2-tui.RuneLen(title)), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+
+	rows := r.H - 1
+	for ti := range pat.Tracks {
+		if ti >= rows {
+			break
+		}
+		y := 1 + ti
+		if ti == rows-1 && len(pat.Tracks) > rows {
+			r.Text(1, y, fmt.Sprintf("+%d more", len(pat.Tracks)-rows+1), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+			break
+		}
+		tr := &pat.Tracks[ti]
+		r.Text(1, y, fmt.Sprintf("%-6s", tr.Instr), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+		for st := range audio.StepsPerBar {
+			var vel float64
+			for _, ev := range tr.Events {
+				if ev.Pos == win+st {
+					vel = max(vel, ev.Vel)
+				}
+			}
+			ch := '·'
+			switch {
+			case vel >= 0.75:
+				ch = '█'
+			case vel >= 0.5:
+				ch = '▆'
+			case vel >= 0.25:
+				ch = '▃'
+			case vel > 0:
+				ch = '▁'
+			}
+			bg := a.theme.Bg
+			if running && win+st == local {
+				bg = a.theme.CursorBg
+			}
+			r.Cell(8+st+st/4, y, ch, a.theme.Fg, bg, terminal.AttrNone)
+		}
+	}
+}
+
+// renderHelp lays the key reference over everything; any key takes it down
+func (a *tuiApp) renderHelp(root tui.Region) {
+	opts := tui.DefaultOverlayOpts("keys — any key closes")
+	opts.Bg, opts.Fg, opts.TitleBg, opts.TitleFg = a.theme.Bg, a.theme.Selected, a.theme.HeaderBg, a.theme.HeaderFg
+	w := 0
+	for _, l := range keyHelp {
+		w = max(w, tui.RuneLen(l))
+	}
+	opts.Width, opts.Height = min(w+4, root.W-2), min(len(keyHelp)+2, root.H-2)
+	content := root.Overlay(opts).Content
+	for y, l := range keyHelp {
+		if y >= content.H {
+			break
+		}
+		content.Text(1, y, tui.Truncate(l, content.W-2), a.theme.Fg, a.theme.Bg, terminal.AttrNone)
+	}
+}
+
+// renderInspector lays the selection's tree over the panes until Esc
+func (a *tuiApp) renderInspector(root tui.Region) {
 	name := a.selName()
 	title := name
 	if title == "" {
 		title = "inspector"
 	}
-	content := r.Pane(tui.PaneOpts{
-		Title: title, Border: tui.LineSingle,
-		BorderFg: a.borderFg(focusInspector), TitleFg: a.theme.HeaderFg, Bg: a.theme.Bg,
-	})
+	opts := tui.DefaultOverlayOpts(title + " — esc closes")
+	opts.Bg, opts.Fg, opts.TitleBg, opts.TitleFg = a.theme.Bg, a.theme.Selected, a.theme.HeaderBg, a.theme.HeaderFg
+	opts.Width, opts.Height = root.W*8/10, root.H*8/10
+	content := root.Overlay(opts).Content
 	if name == "" {
 		content.Text(0, 0, "select an entry in the browser (Enter)", a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
 		a.nodes = a.nodes[:0]
@@ -493,12 +617,8 @@ func (a *tuiApp) renderInspector(r tui.Region) {
 		a.tree.JumpEnd(len(a.nodes))
 	}
 	a.tree.AdjustScroll(len(a.nodes))
-	cur := a.theme.FocusBg
-	if a.focus == focusInspector {
-		cur = a.theme.CursorBg
-	}
 	content.Tree(a.nodes, a.tree.Cursor, a.tree.Scroll, tui.TreeOpts{
-		CursorBg: cur, DefaultBg: a.theme.Bg, LineMode: tui.TreeLinesNone,
+		CursorBg: a.theme.CursorBg, DefaultBg: a.theme.Bg, LineMode: tui.TreeLinesNone,
 	})
 }
 
@@ -559,20 +679,17 @@ func (a *tuiApp) renderInput(r tui.Region) {
 	}
 }
 
-// footHint forks on focus first — that is the axis that changes which keys
-// are live. The browser hint additionally forks on the active tab, because
-// space/0-2/b mean different things per kind; inspector and log hints are
-// tab-independent.
+// footHint names the keys that matter where the focus is; ? has the rest
 func (a *tuiApp) footHint() string {
 	switch a.focus {
 	case focusInspector:
-		return "j/k move  h/l fold  H/L all  enter edit  space play  a add  x del  esc back  dim=default  p piano  m reset  ^S save  : cmd  ^Q quit"
+		return "j/k move  h/l fold  enter edit  a add  x del  space play  esc close  ? keys"
 	case focusLog:
-		return "j/k scroll  g/G ends  tab focus  p piano  m reset  ^S save  : cmd  ^Q quit"
+		return "j/k scroll  g/G ends  tab browser  : cmd  ? keys  ^Q quit"
 	default: // focusBrowser
 		if a.kind == kindPattern {
-			return "j/k pgup/dn move  / find  h/l kind  space play  0-3 slot  b beat  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
+			return "j/k move  / find  space play  0-3 slot  enter inspect  b beat  p piano  : cmd  ? keys  ^Q quit"
 		}
-		return "j/k pgup/dn move  / find  h/l kind  space play  enter inspect  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
+		return "j/k move  / find  space play  enter inspect  h/l patterns  p piano  : cmd  ? keys  ^Q quit"
 	}
 }

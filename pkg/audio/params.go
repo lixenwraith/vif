@@ -37,11 +37,13 @@ const (
 	MusicDuckAttack  = 10 * time.Millisecond
 	MusicDuckRelease = 100 * time.Millisecond
 
-	// The output limiter holds the mix under LimiterCeiling by turning it down on
-	// a peak and recovering over LimiterRelease, which stacked kicks survive without
-	// the buzz a per-sample clipper makes of them
-	LimiterCeiling = 0.9
-	LimiterRelease = 80 * time.Millisecond
+	// The output limiter holds the mix under LimiterCeiling: it sees each peak
+	// LimiterLookahead samples before it sounds and ramps its gain down over that
+	// time, so stacked kicks duck without the step a gain change inside one sample
+	// puts on them, and recovers over LimiterRelease
+	LimiterCeiling   = 0.9
+	LimiterLookahead = 64
+	LimiterRelease   = 80 * time.Millisecond
 )
 
 // --- SFX policy ---
