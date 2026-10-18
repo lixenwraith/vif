@@ -28,7 +28,7 @@ var commands map[string]*command
 // init, not a var literal: cmdHelp closes over the table.
 func init() {
 	commands = map[string]*command{
-		"help": {"help [verb]", "list commands or describe one", 0, 1, cmdHelp},
+		"help": {"help [verb|keys]", "list commands or describe one", 0, 1, cmdHelp},
 		"quit": {"quit", "stop the engine and exit", 0, 0,
 			func(*Session, []string) error { return errQuit }},
 
@@ -124,7 +124,27 @@ func dispatch(s *Session, line string) error {
 	return c.fn(s, args)
 }
 
+// keyHelp is the TUI's key reference, the ? overlay and `help keys`
+var keyHelp = []string{
+	"browser    j/k PgUp/PgDn move   g/G ends   / find next   h/l sounds|patterns   enter inspect",
+	"           space play|pause   0-3 slot in|out   b beat editor   a/v/r apply validate revert",
+	"           n new   c clone   w write one   + mix into   d d delete",
+	"inspector  j/k move   h/l fold   H/L all   enter edit   a add   x delete   space play   esc close",
+	"log        j/k PgUp/PgDn scroll   g/G ends",
+	"piano (p)  z x c v b n m , and q w e r t y u i white keys   s d g h j 2 3 5 6 7 black keys",
+	"           [ ] octave   up/down velocity   tab instrument   ^S record then commit   esc exit",
+	"beat (b)   h/j/k/l move   space toggle hit   +/- 1-9 0 velocity   t instrument   a/x track",
+	"           enter apply and play in slot 0   ^S save   esc close",
+	"global     tab browser|log   p piano   m music reset   ^S save   : command   ? keys   ^Q quit",
+}
+
 func cmdHelp(s *Session, a []string) error {
+	if len(a) == 1 && a[0] == "keys" {
+		for _, l := range keyHelp {
+			fmt.Fprintln(s.out, l)
+		}
+		return nil
+	}
 	if len(a) == 1 {
 		c, ok := commands[a[0]]
 		if !ok {

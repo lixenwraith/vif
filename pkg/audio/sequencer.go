@@ -265,6 +265,7 @@ func (s *Sequencer) Generate(buf []float64) {
 				s.updateReveal()
 				s.applyPendingTransitions()
 				s.updateVariation()
+				s.planPhrase()
 				s.updateFill()
 				s.updateMelodyGen()
 			}
@@ -416,6 +417,55 @@ func (s *Sequencer) updateVariation() {
 	s.startTransition(slot, s.draw(others, ss.activeID(), false), s.beatFade())
 }
 
+// planPhrase runs on a phrase's last bar. When its downbeat will move the melody to
+// another motif, or every slot to another group, the melody rests through this bar:
+// it fades out under the fill and the new idea enters alone on the one. A step
+// along its own ladder is seamless and needs no rest. The planned draw lands as a
+// pending change, which the downbeat's variation then leaves alone.
+func (s *Sequencer) planPhrase() {
+	if s.barCount%PhraseBars != PhraseBars-1 || s.group < 0 {
+		return
+	}
+	ss := &s.slots[1]
+	if !ss.drawn || ss.pending != nil {
+		return
+	}
+	next := s.barCount + 1
+	switch {
+	case s.groupPhrases+1 >= GroupPhrases && s.coversOther(s.tier):
+	case drawnSlots[int(next/PhraseBars)%len(drawnSlots)] == 1 && next-s.swapBar >= VariationGapBars:
+		pool := s.arr.pool(s.group, s.tier, RoleMelody)
+		if len(pool) < 2 {
+			return
+		}
+		others := make([]PatternID, 0, len(pool)-1)
+		for _, id := range pool {
+			if id != ss.activeID() {
+				others = append(others, id)
+			}
+		}
+		id := s.draw(others, ss.activeID(), false)
+		if motifOf(id) == motifOf(ss.activeID()) {
+			return
+		}
+		ss.pending = &patternTransition{pattern: id, targetBar: next, crossfadeSamples: s.beatFade()}
+	default:
+		return
+	}
+	ss.begin(PatternSilence, s.samplesPerStep*StepsPerBar)
+}
+
+// coversOther reports whether another group covers the tier, which is what a group
+// move needs, without drawing one
+func (s *Sequencer) coversOther(t Intensity) bool {
+	for g := range s.arr.groups {
+		if g != s.group && s.arr.covers(g, t) {
+			return true
+		}
+	}
+	return false
+}
+
 // beatFade lets the outgoing pattern's tails ring out over one beat, as a player
 // would let a held chord go; the incoming one is at full level from its first hit
 func (s *Sequencer) beatFade() int { return s.samplesPerStep * StepsPerBeat }
@@ -478,8 +528,20 @@ func (s *Sequencer) setPattern(slot int, p PatternID, fade int, quantize, reveal
 		return
 	}
 	ss.pending = &patternTransition{
-		pattern: p, targetBar: s.barCount + 1, crossfadeSamples: fade, reveal: reveal,
+		pattern: p, targetBar: s.nextBoundary(slot), crossfadeSamples: fade, reveal: reveal,
 	}
+}
+
+// nextBoundary is the bar a quantized change lands on: the next bar, or for the
+// melody the next downbeat of its pattern's cycle, so a theme is heard through
+func (s *Sequencer) nextBoundary(slot int) int64 {
+	cycle := int64(1)
+	if slot == 1 {
+		if pat := GetPattern(s.slots[slot].activeID()); pat != nil {
+			cycle = int64(max(pat.Steps/StepsPerBar, 1))
+		}
+	}
+	return (s.barCount/cycle + 1) * cycle
 }
 
 // armReveal masks the incoming pattern to as many tracks as the outgoing one was

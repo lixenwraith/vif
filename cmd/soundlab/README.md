@@ -38,9 +38,10 @@ go run ./cmd/soundlab -headless -s script.slab
 
 The TUI is a shell over the exact same dispatch table used by the REPL and scripts. Its macros construct and execute standard command strings, so a script can reproduce them; only the piano's recording commit writes its pattern into the document directly.
 
-- **Global**: `:` enters Command mode (REPL input, `Up/Down` history). `Tab` cycles focus between browser, inspector and log. `p` enters Piano mode, starting the transport if it is stopped (music must be unmuted); `b` Beat mode on a pattern; `m` resets the transport. `^S` saves modified documents (prompting for a path when one has none). `^Q`/`^C` quits, warning once about unsaved changes.
-- **Browser (Left Pane)**: `j/k` navigate, `PgUp/PgDn` a page, `g/G` jump to ends, `/` finds the next name containing a term (`/` and Enter again walk the matches). `h/l` (or arrows) toggles Sounds vs Patterns. `Enter` opens the inspector. `space` auditions; on a pattern it assigns a free slot or toggles the transport. `0-3` assigns to (or clears from) a sequencer slot. `a/v/r` apply/validate/revert. `d` twice deletes. `n/c/w` new/clone/write. `+` mix.
-- **Inspector (Right Pane)**: `j/k` navigate, `g/G` ends. `l/h` expand/collapse, `L/H` all. `Enter` edits a leaf value. `a` adds elements to slices. `x` deletes slice elements. `space` auditions. `Esc` returns to the browser.
+- **Global**: `:` enters Command mode (REPL input, `Up/Down` history). `Tab` moves between browser and log; `?` (or `:help keys`) lays the full key reference over the screen, and any key takes it down. `p` enters Piano mode, starting the transport if it is stopped (music must be unmuted); `b` Beat mode on a pattern; `m` resets the transport. `^S` saves modified documents (prompting for a path when one has none). `^Q`/`^C` quits, warning once about unsaved changes.
+- **Browser (Left Pane)**: `j/k` navigate, `PgUp/PgDn` a page, `g/G` jump to ends, `/` finds the next name containing a term (`/` and Enter again walk the matches). `h/l` (or arrows) toggles Sounds vs Patterns. `Enter` opens the inspector as an overlay. `space` auditions; on a pattern it assigns a free slot or toggles the transport. `0-3` assigns to (or clears from) a sequencer slot, on the next bar while the transport runs so the pattern enters in step; clearing the last sounding slot stops the transport. The list's header names its columns (steps and tracks, or layers and seconds). `a/v/r` apply/validate/revert. `d` twice deletes. `n/c/w` new/clone/write. `+` mix.
+- **Mixer (Right Pane)**: one row per slot (rhythm, melody, fill, bass) showing the sounding pattern's name, group, motif and tiers over its grid for the bar at the playhead.
+- **Inspector (overlay, `Enter` on the browser)**: `j/k` navigate, `g/G` ends. `l/h` expand/collapse, `L/H` all. `Enter` edits a leaf value. `a` adds elements to slices. `x` deletes slice elements. `space` auditions. `Esc` closes it.
 - **Log**: `j/k` and `PgUp/PgDn` scroll, `g/G` top/bottom.
 - **Piano Mode (`p`)**: Tracker-style two-octave layout. `z`/`q` rows map to white keys, `s`/`2` rows map to black keys. `[`/`]` shift the octave, `Up/Down` the velocity. `Tab` cycles the tonal instruments (bass, piano, pad, lead, pluck). `^S` starts recording and `^S` again commits it, quantized to the 16th grid, as a one-bar pattern `rec_N`. `Esc` exits, committing a take in progress and stopping a transport the piano started.
 - **Beat Mode (`b` on patterns)**: Track/step grid macro editor. `h/j/k/l` move, `g/G` first/last step. `space` toggles hits. `+/-` nudge velocity, `1-9` and `0` set it. `t` cycles the track's instrument. `a/x` add/delete a track. `Enter` applies the pattern, puts it in slot 0 and starts the transport. `^S` saves. `Esc` exits.
@@ -66,7 +67,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `slot` | `slot <0\|1\|2\|3> <pat\|-> [fade_ms] [q]` | Transport assignment; dirty patterns auto-apply. |
 | `music`/`bpm`/`swing`/`fill`/`key` | `music start\|stop\|reset` | Transport, tempo, shuffle, slot-2 auto-fill, harmony. |
 | `mute`/`vol`/`wait` | `mute music\|sfx\|all\|none` | Channel mute, master volume, scripted pause. |
-| `help`/`quit` | `help [verb]` | Usage, exit. |
+| `help`/`quit` | `help [verb\|keys]` | Usage, the TUI key reference, exit. |
 
 ## Scripting & Headless Demo
 

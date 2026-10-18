@@ -50,7 +50,10 @@ type Mixer struct {
 
 	pauseGain  float64
 	duckGain   float64
-	limitEnv   float64 // the limiter's peak follower
+	limitEnv   float64   // the limiter's peak follower
+	limitGain  float64   // the gain it has ramped to
+	limitBuf   []float64 // the look-ahead delay
+	limitPos   int
 	musicBuf   []float64
 	sfxBuf     []float64
 	musicTap   io.Writer
@@ -166,6 +169,8 @@ func (m *Mixer) loop() {
 	m.musicBuf = make([]float64, n)
 	m.sfxBuf = make([]float64, n)
 	m.musicBytes = make([]byte, n*AudioBytesPerFrame)
+	m.limitBuf = make([]float64, LimiterLookahead)
+	m.limitGain = 1
 	mixBuf := make([]float64, n)
 	outBytes := make([]byte, n*AudioBytesPerFrame)
 
@@ -335,16 +340,26 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 		}
 
 		v := (m.musicBuf[i]*m.duckGain + m.sfxBuf[i]) * m.pauseGain
-		// Peak limiter: instant on the peak, releasing over LimiterRelease
+		// The limiter follows the peak now and ramps toward its gain by at most
+		// a look-ahead's worth a sample, applied to the sample a look-ahead ago
 		if a := math.Abs(v); a > m.limitEnv {
 			m.limitEnv = a
 		} else {
 			m.limitEnv *= limRel
 		}
+		target := 1.0
 		if m.limitEnv > LimiterCeiling {
-			v *= LimiterCeiling / m.limitEnv
+			target = LimiterCeiling / m.limitEnv
 		}
-		mixBuf[i] = v
+		const step = 1.0 / LimiterLookahead
+		if target < m.limitGain {
+			m.limitGain = max(target, m.limitGain-step)
+		} else {
+			m.limitGain = min(target, m.limitGain+step)
+		}
+		mixBuf[i] = m.limitBuf[m.limitPos] * m.limitGain
+		m.limitBuf[m.limitPos] = v
+		m.limitPos = (m.limitPos + 1) % LimiterLookahead
 	}
 
 	floatToBytes(mixBuf, outBytes)

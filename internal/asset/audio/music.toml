@@ -686,7 +686,7 @@ steps = 32
 role = "melody"
 groups = ["rolling"]
 tiers = ["calm", "normal"]
-motif = "bells"
+motif = "drift"
 [[pattern.track]]
 macro = "Line"
 instr = "piano"
@@ -717,43 +717,27 @@ deg = [4, 5, 4, 2, 0, 2, 4, 5, 3, 4]
 dur = [8, 6, 2, 8, 8, 8, 6, 2, 8, 8]
 
 [[pattern]]
-name = "melody_call"
-desc = "Two-bar piano call and answer, chord tones on the beats"
-steps = 32
+name = "melody_drift_pluck"
+desc = "The drifting lead over a pad triad and quiet eighth plucks"
+steps = 64
 role = "melody"
 groups = ["rolling"]
-tiers = ["normal", "elevated"]
-motif = "call"
+tiers = ["elevated"]
+motif = "drift"
 [[pattern.track]]
-macro = "LineV"
-instr = "piano"
-humanize = 0.3
-pos = [0, 3, 4, 6, 8, 16, 19, 20, 22, 24]
-deg = [0, 2, 4, 2, 0, 4, 3, 2, 1, 0]
-dur = [2, 1, 2, 2, 4, 2, 1, 2, 1, 6]
-vel = [0.55, 0.45, 0.55, 0.5, 0.5, 0.55, 0.42, 0.5, 0.4, 0.5]
-
-[[pattern]]
-name = "melody_call_pluck"
-desc = "The piano call and answer over quiet eighth plucks"
-steps = 32
-role = "melody"
-groups = ["rolling"]
-tiers = ["elevated", "intense"]
-motif = "call"
+macro = "PadTriad"
+pos = [0, 16, 32, 48]
+vel = 0.18
 [[pattern.track]]
 macro = "Arp8"
 deg = [0, 4, 7, 4, 2, 4, 7, 4]
 vel = 0.36
 [[pattern.track]]
-macro = "LineV"
-instr = "piano"
-humanize = 0.3
-pos = [0, 3, 4, 6, 8, 16, 19, 20, 22, 24]
-deg = [0, 2, 4, 2, 0, 4, 3, 2, 1, 0]
-dur = [2, 1, 2, 2, 4, 2, 1, 2, 1, 6]
-vel = [0.55, 0.45, 0.55, 0.5, 0.5, 0.55, 0.42, 0.5, 0.4, 0.5]
-
+macro = "Lead"
+vel = 0.46
+pos = [0, 8, 14, 16, 24, 32, 40, 46, 48, 56]
+deg = [4, 5, 4, 2, 0, 2, 4, 5, 3, 4]
+dur = [8, 6, 2, 8, 8, 8, 6, 2, 8, 8]
 [[pattern]]
 name = "melody_gen"
 desc = "A lead generated every bar from a phrase motif; the generator rewrites the last track"
@@ -761,7 +745,7 @@ steps = 16
 role = "melody"
 groups = ["rolling"]
 tiers = ["peak"]
-motif = "lead"
+motif = "drift"
 [[pattern.track]]
 instr = "lead"
 follow_chord = true
@@ -774,8 +758,8 @@ desc = "Two-bar descending lead over a pad, chord tones on the beats"
 steps = 32
 role = "melody"
 groups = ["rolling"]
-tiers = ["peak"]
-motif = "lead"
+tiers = ["intense", "peak"]
+motif = "drift"
 [[pattern.track]]
 macro = "PadTriad"
 pos = [0, 16]
@@ -1028,7 +1012,7 @@ steps = 32
 role = "melody"
 groups = ["offbeat"]
 tiers = ["calm"]
-motif = "bells"
+motif = "lead"
 [[pattern.track]]
 macro = "Line"
 instr = "piano"
@@ -1052,6 +1036,25 @@ macro = "PadTriad"
 pos = [0]
 vel = 0.18
 
+[[pattern]]
+name = "melody_pulse_theme_pad"
+desc = "The offbeat theme's bones, one piano tone a chord over a pad triad"
+steps = 64
+role = "melody"
+groups = ["offbeat"]
+tiers = ["calm"]
+motif = "theme"
+[[pattern.track]]
+macro = "PadTriad"
+pos = [0, 16, 32, 48]
+vel = 0.18
+[[pattern.track]]
+macro = "Lead"
+instr = "piano"
+vel = 0.34
+pos = [0, 8, 16, 24, 32, 40, 48, 56]
+deg = [4, 7, 2, 0, 5, 7, 3, 6]
+dur = [8, 8, 8, 8, 8, 8, 8, 8]
 [[pattern]]
 name = "melody_pulse_keys"
 desc = "Piano chords comping the offbeats, the voicing opening up each beat"
@@ -1173,8 +1176,8 @@ desc = "An eighth pluck arpeggio of chord tones over the offbeat bass"
 steps = 16
 role = "melody"
 groups = ["offbeat"]
-tiers = ["elevated", "intense"]
-motif = "arp"
+tiers = ["normal", "elevated"]
+motif = "lead"
 [[pattern.track]]
 macro = "Arp8"
 deg = [0, 2, 4, 7, 4, 2, 4, 7]
@@ -1186,8 +1189,8 @@ desc = "The eighth pluck arpeggio under a pad triad"
 steps = 16
 role = "melody"
 groups = ["offbeat"]
-tiers = ["intense"]
-motif = "arp"
+tiers = ["elevated", "intense"]
+motif = "lead"
 [[pattern.track]]
 macro = "PadTriad"
 pos = [0]
@@ -1204,7 +1207,7 @@ steps = 16
 role = "melody"
 groups = ["offbeat"]
 tiers = ["peak"]
-motif = "arp"
+motif = "lead"
 [[pattern.track]]
 macro = "Arp16"
 deg = [0, 4, 7, 4, 0, 4, 7, 4, 2, 4, 7, 4, 0, 4, 9, 7]
@@ -1610,7 +1613,7 @@ steps = 16
 role = "melody"
 groups = ["breaks"]
 tiers = ["calm"]
-motif = "drone"
+motif = "lead"
 [[pattern.track]]
 macro = "PadFifth"
 pos = [0]
@@ -1638,6 +1641,25 @@ pos = [0, 6, 10, 16, 22, 26]
 deg = [4, 2, 0, 2, 4, 7]
 dur = [4, 2, 6, 4, 2, 6]
 
+[[pattern]]
+name = "melody_broken_theme_pad"
+desc = "The breaks theme's bones, one piano tone a chord over a pad fifth"
+steps = 64
+role = "melody"
+groups = ["breaks"]
+tiers = ["calm"]
+motif = "theme"
+[[pattern.track]]
+macro = "PadFifth"
+pos = [0, 16, 32, 48]
+vel = 0.2
+[[pattern.track]]
+macro = "Lead"
+instr = "piano"
+vel = 0.34
+pos = [0, 8, 16, 24, 32, 40, 48, 56]
+deg = [4, 4, 0, 0, 5, 5, 6, 3]
+dur = [8, 8, 8, 8, 8, 8, 8, 8]
 [[pattern]]
 name = "melody_broken_keys"
 desc = "Halftime piano chords, open on the one, closed on the three"
@@ -1757,8 +1779,8 @@ desc = "An eighth pluck arpeggio of chord tones over the broken bass"
 steps = 16
 role = "melody"
 groups = ["breaks"]
-tiers = ["elevated", "intense"]
-motif = "arp"
+tiers = ["normal", "elevated"]
+motif = "lead"
 [[pattern.track]]
 macro = "Arp8"
 deg = [0, 4, 7, 4, 2, 4, 7, 4]
@@ -1771,7 +1793,7 @@ steps = 16
 role = "melody"
 groups = ["breaks"]
 tiers = ["peak"]
-motif = "arp"
+motif = "lead"
 [[pattern.track]]
 macro = "Arp16"
 deg = [0, 4, 7, 4, 0, 4, 7, 4, 2, 4, 7, 4, 0, 4, 9, 7]
@@ -2068,6 +2090,68 @@ instr = "piano"
 deg = [0, 2, 4, 7, 4, 2, 0, 2]
 vel = 0.4
 
+[[pattern]]
+name = "melody_pump_anthem_bones"
+desc = "The pump anthem's bones, one piano tone a chord over a pad triad"
+steps = 64
+role = "melody"
+groups = ["pump"]
+tiers = ["calm"]
+motif = "anthem"
+[[pattern.track]]
+macro = "PadTriad"
+pos = [0, 16, 32, 48]
+vel = 0.2
+[[pattern.track]]
+macro = "Lead"
+instr = "piano"
+vel = 0.34
+pos = [0, 8, 16, 24, 32, 40, 48, 56]
+deg = [4, 7, 5, 4, 5, 10, 8, 6]
+dur = [8, 8, 8, 8, 8, 8, 8, 8]
+[[pattern]]
+name = "melody_pump_keys_pluck"
+desc = "Piano breaking the chord over eighth plucks and a pad fifth"
+steps = 16
+role = "melody"
+groups = ["pump"]
+tiers = ["elevated"]
+motif = "pad"
+[[pattern.track]]
+macro = "PadFifth"
+pos = [0]
+vel = 0.16
+[[pattern.track]]
+macro = "Arp8"
+deg = [0, 4, 7, 4, 0, 4, 7, 9]
+vel = 0.36
+[[pattern.track]]
+macro = "Arp8"
+instr = "piano"
+deg = [0, 2, 4, 7, 4, 2, 0, 2]
+vel = 0.38
+[[pattern]]
+name = "melody_pump_pad_wide"
+desc = "A pad triad under a wide sixteenth pluck arpeggio and broken piano chords"
+steps = 16
+role = "melody"
+groups = ["pump"]
+tiers = ["intense", "peak"]
+motif = "pad"
+[[pattern.track]]
+macro = "PadTriad"
+pos = [0]
+vel = 0.22
+[[pattern.track]]
+macro = "Arp16"
+deg = [0, 4, 7, 9, 7, 4, 0, 4, 0, 4, 7, 9, 11, 9, 7, 4]
+vel = 0.4
+ghost = 0.26
+[[pattern.track]]
+macro = "Arp8"
+instr = "piano"
+deg = [0, 2, 4, 7, 4, 2, 0, 2]
+vel = 0.32
 [[pattern]]
 name = "melody_pump_arp_slow"
 desc = "Eighth plucks up the chord under a pad fifth"
@@ -2424,13 +2508,94 @@ deg = [7, 4]
 dur = [6, 4]
 
 [[pattern]]
+name = "melody_trance_theme_bones"
+desc = "The trance theme's bones, one piano tone a chord over a pad triad"
+steps = 64
+role = "melody"
+groups = ["trance"]
+tiers = ["calm"]
+motif = "euphoric"
+[[pattern.track]]
+macro = "PadTriad"
+pos = [0, 16, 32, 48]
+vel = 0.2
+[[pattern.track]]
+macro = "Lead"
+instr = "piano"
+vel = 0.34
+pos = [0, 8, 16, 24, 32, 40, 48, 56]
+deg = [7, 7, 4, 4, 9, 9, 8, 11]
+dur = [8, 8, 8, 8, 8, 8, 8, 8]
+[[pattern]]
+name = "melody_trance_pad_keys"
+desc = "A pad triad with piano chords on the one and the three"
+steps = 16
+role = "melody"
+groups = ["trance"]
+tiers = ["normal"]
+motif = "pad"
+[[pattern.track]]
+macro = "PadTriad"
+pos = [0]
+vel = 0.22
+[[pattern.track]]
+instr = "piano"
+follow_chord = true
+humanize = 0.3
+event = [
+  { macro = "Chord", pos = 0, deg = [0, 2, 4], dur = 4, vel = 0.36 },
+  { macro = "Chord", pos = 8, deg = [2, 4, 7], dur = 4, vel = 0.32 },
+]
+[[pattern]]
+name = "melody_trance_pad_arp"
+desc = "A pad triad over eighth plucks climbing the chord"
+steps = 16
+role = "melody"
+groups = ["trance"]
+tiers = ["elevated"]
+motif = "pad"
+[[pattern.track]]
+macro = "PadTriad"
+pos = [0]
+vel = 0.22
+[[pattern.track]]
+macro = "Arp8"
+deg = [0, 2, 4, 7, 9, 7, 4, 2]
+vel = 0.42
+[[pattern]]
+name = "melody_trance_pad_full"
+desc = "A pad triad under sixteenth plucks and high bells"
+steps = 32
+role = "melody"
+groups = ["trance"]
+tiers = ["intense", "peak"]
+motif = "pad"
+[[pattern.track]]
+macro = "PadTriad"
+pos = [0, 16]
+vel = 0.22
+[[pattern.track]]
+macro = "Arp16"
+deg = [0, 4, 7, 4, 0, 4, 7, 4, 2, 4, 7, 4, 0, 4, 9, 7]
+vel = 0.4
+ghost = 0.26
+[[pattern.track]]
+macro = "Line"
+instr = "piano"
+oct = 3
+vel = 0.3
+humanize = 0.3
+pos = [0, 12, 16, 28]
+deg = [7, 4, 9, 7]
+dur = [6, 4, 6, 4]
+[[pattern]]
 name = "melody_trance_pad_pluck"
 desc = "A pad triad over soft eighth plucks"
 steps = 16
 role = "melody"
 groups = ["trance"]
 tiers = ["calm", "normal"]
-motif = "pad"
+motif = "riff"
 [[pattern.track]]
 macro = "PadTriad"
 pos = [0]

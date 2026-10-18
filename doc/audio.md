@@ -57,9 +57,10 @@ the engine does not rewind (`system.HandOverSound`).
 
 Every mixer pass drains pending commands, renders music and effects into
 separate floating-point buses, sidechain-ducks music under effects, applies the
-pause gain ramp, holds the sum under a peak limiter (instant on a peak, 80 ms
-release, so stacked kicks duck rather than buzz), converts samples, and writes
-one PCM buffer. The output writer is the only backend-specific part of that path.
+pause gain ramp, holds the sum under a peak limiter (it sees each peak 64
+samples ahead and ramps its gain over that time, releasing over 80 ms, so
+stacked kicks duck without a click), converts samples, and writes one PCM
+buffer. The output writer is the only backend-specific part of that path.
 
 ## 3. Backend detection and failover
 
@@ -217,9 +218,10 @@ crossfading slots:
 A pattern has up to 64 steps, 32 tracks, and 512 events per track. A track sets
 its instrument, chord-following, and humanization; its events set step position,
 velocity, scale degree, octave, duration, and probability. Tonal voices are a
-table of instruments (bass, piano, pad, lead, pluck): band-limited oscillators, a
-sub or FM where the instrument asks, through a resonant low-pass under a filter
-envelope into an ADSR; the drum kit uses cached effects.
+table of instruments: band-limited oscillators (bass, pad, lead), FM at the
+fundamental with a brightness that dies before the body (piano) or a plucked
+string, a delay line a noise burst sets ringing (pluck), through a resonant
+low-pass under a filter envelope into an ADSR; the drum kit uses cached effects.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming
@@ -243,11 +245,23 @@ slot, melody, rhythm and bass in turn, to another member of its pool, once four
 bars have passed since any drawn slot changed; and after four phrases every drawn
 slot moves to another group behind the phrase's fill. A draw takes the pool
 member played least this run, so a held tier works through its pool before
-repeating; patterns sharing a `motif` are one idea at different weights, and a
-tier change takes the playing motif's member of the new pool while a phrase
-variation takes another motif's, so a theme grows and thins with the action
-instead of being swapped for a stranger. Fills come from the same group and
-tier. A slot placed explicitly is left alone.
+repeating.
+
+Three ideas organise the drawing, from the outside in:
+
+| Term | What it is | When it changes |
+|---|---|---|
+| group | A style: one bass figure and kick feel, with its own rhythms, melodies, basses and fills (`groups`). | After four phrases, every drawn slot together. |
+| tier | How much is going on, calm to peak (`tiers`); the conductor picks it from the APM. | With the action, under hysteresis (§8). |
+| motif | One melodic idea at five weights, one per tier, within a group (`motif`): the ladder a melody climbs and descends as the tier moves. | A phrase variation moves to another motif, after a rest bar. |
+
+So a tier change keeps the melody's motif and takes its member at the new tier,
+which for the shipped themes is the same line with more or fewer layers under
+it, and only a phrase variation changes the idea: the melody then fades out
+through the fill bar and the new motif enters alone on the downbeat. A melody
+change quantized to the bar lands on the end of the pattern's own cycle, so a
+four-bar theme is heard through. Fills come from the same group and tier. A slot
+placed explicitly is left alone.
 
 Harmony holds root note, scale, and chord progression. Pattern degrees resolve
 through the current harmony at trigger time. With the same seed and identical
