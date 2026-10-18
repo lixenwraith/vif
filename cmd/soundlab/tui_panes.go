@@ -457,6 +457,7 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 		c = len(items) - 1
 		a.brCursor[a.kind] = c
 	}
+	a.brPageH = content.H
 	a.brScroll[a.kind] = tui.AdjustScroll(c, a.brScroll[a.kind], content.H, len(items))
 	cur := a.theme.FocusBg
 	if a.focus == focusBrowser {
@@ -570,8 +571,8 @@ func (a *tuiApp) footHint() string {
 		return "j/k scroll  g/G ends  tab focus  p piano  m reset  ^S save  : cmd  ^Q quit"
 	default: // focusBrowser
 		if a.kind == kindPattern {
-			return "j/k move  h/l kind  space play  0-3 slot  b beat  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
+			return "j/k pgup/dn move  / find  h/l kind  space play  0-3 slot  b beat  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
 		}
-		return "j/k move  h/l kind  space play  enter inspect  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
+		return "j/k pgup/dn move  / find  h/l kind  space play  enter inspect  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
 	}
 }

@@ -279,9 +279,11 @@ replay reproduces the count from the journal:
   character) repeated within 500 ms counts only on its 1st, 2nd, 4th, 8th... press,
   so `h` and `l` in turn count in full while a held or hammered `l` counts by its log;
 - a pointer placement (`pointer` on the move record) counts one gesture when the
-  pointer stands six columns from where it last counted (a row is two), at most one
-  per placement and six a second, so a dodging pointer reads like mashed keys, a
-  slow reposition like a few presses, and jitter around one spot like nothing;
+  pointer reverses after six columns of travel (a row is two) or has travelled forty
+  one way since it last counted, at most one per placement and four a second, so a
+  dodging pointer reads like mashed keys, a sweep or a slow round of the screen like
+  a few presses, and jitter around one spot like nothing; the pointer alone reaches
+  intense, not peak;
 - a one-second bucket holds at most eight actions, a music APM of 480.
 
 `GameState` publishes a 60-second APM and a five-second music APM. The status bar

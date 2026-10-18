@@ -28,6 +28,8 @@ type Track struct {
 // the drawn arrangement: in its role's slot, in every group listed (all when none),
 // at every tier set. A pattern without a role or a tier plays only when placed. The
 // bass role is a group's anchor: it holds through every tier its pattern covers.
+// Patterns sharing a Motif are one idea at different weights: a tier change prefers
+// the motif already playing, a phrase variation another.
 type Pattern struct {
 	ID     PatternID
 	Name   string
@@ -37,6 +39,7 @@ type Pattern struct {
 	Role   Role
 	Groups []string
 	Tiers  uint8 // bit per Intensity
+	Motif  string
 }
 
 // Role is the slot a drawn pattern plays in

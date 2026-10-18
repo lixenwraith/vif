@@ -22,9 +22,10 @@ type PatternDef struct {
 	Name   string     `toml:"name"`
 	Desc   string     `toml:"desc,omitempty"`
 	Steps  int        `toml:"steps"`
-	Role   string     `toml:"role,omitempty"`   // rhythm, melody or fill
+	Role   string     `toml:"role,omitempty"`   // rhythm, melody, fill or bass
 	Groups []string   `toml:"groups,omitempty"` // none joins every group
 	Tiers  []string   `toml:"tiers,omitempty"`  // intensity names it is drawn at
+	Motif  string     `toml:"motif,omitempty"`  // the idea this pattern is a weight of
 	Track  []TrackDef `toml:"track"`
 }
 
@@ -57,7 +58,7 @@ func (d *PatternDef) Pattern() (*Pattern, error) {
 	if d.Name == "" {
 		return nil, errors.New("pattern: empty name")
 	}
-	p := &Pattern{Name: d.Name, Desc: d.Desc, Steps: d.Steps, Groups: slices.Clone(d.Groups)}
+	p := &Pattern{Name: d.Name, Desc: d.Desc, Steps: d.Steps, Groups: slices.Clone(d.Groups), Motif: d.Motif}
 	role := slices.Index(roleNames[:], d.Role)
 	if role < 0 {
 		return nil, fmt.Errorf("pattern %q: unknown role %q", d.Name, d.Role)
@@ -103,7 +104,7 @@ func (p *Pattern) Def() *PatternDef {
 	if p == nil {
 		return nil
 	}
-	d := &PatternDef{Name: p.Name, Desc: p.Desc, Steps: p.Steps, Role: p.Role.String(), Groups: slices.Clone(p.Groups)}
+	d := &PatternDef{Name: p.Name, Desc: p.Desc, Steps: p.Steps, Role: p.Role.String(), Groups: slices.Clone(p.Groups), Motif: p.Motif}
 	for _, t := range intensities() {
 		if p.Tiers&(1<<t) != 0 {
 			d.Tiers = append(d.Tiers, t.String())
@@ -152,6 +153,9 @@ func ValidatePattern(p *Pattern) error {
 	}
 	if p.Role >= roleCount || p.Tiers >= 1<<IntensityCount {
 		return e("role %d or tiers %#x out of range", p.Role, p.Tiers)
+	}
+	if len(p.Motif) > MaxPatternNameLen || strings.ContainsAny(p.Motif, "\x00\n\r\t") {
+		return e("invalid motif %q", p.Motif)
 	}
 	for _, g := range p.Groups {
 		if g == "" || len(g) > MaxPatternNameLen || strings.ContainsAny(g, "\x00\n\r\t") {
