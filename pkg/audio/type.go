@@ -20,6 +20,8 @@ const (
 	InstrBass       = model.InstrBass
 	InstrPiano      = model.InstrPiano
 	InstrPad        = model.InstrPad
+	InstrLead       = model.InstrLead
+	InstrPluck      = model.InstrPluck
 	InstrumentCount = model.InstrumentCount
 )
 

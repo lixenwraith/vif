@@ -376,25 +376,26 @@ func (a *tuiApp) renderHeader(r tui.Region) {
 
 	// Slot names shorten only when the full form does not fit: measure the
 	// fixed sections, give the slots whatever width remains.
-	names := [3]string{
-		patName(a.s.eng.SlotPattern(0)),
-		patName(a.s.eng.SlotPattern(1)),
-		patName(a.s.eng.SlotPattern(2)),
+	var names [audio.MusicSlots]string
+	full := 0
+	for i := range names {
+		names[i] = patName(a.s.eng.SlotPattern(i))
+		full += tui.RuneLen(names[i])
 	}
 	fixed := 1 + tui.RuneLen("soundlab") + 2 + tui.RuneLen(trans.Value) + 3
 	for _, s := range rest {
 		fixed += tui.RuneLen(s.Label) + tui.RuneLen(s.Value) + 3
 	}
-	budget := r.W - fixed - tui.RuneLen("slots ") - 2 // two '·' separators
-	if full := tui.RuneLen(names[0]) + tui.RuneLen(names[1]) + tui.RuneLen(names[2]); full > budget {
-		per := max(budget/3, 6)
+	budget := r.W - fixed - tui.RuneLen("slots ") - (len(names) - 1) // '·' separators
+	if full > budget {
+		per := max(budget/len(names), 6)
 		for i := range names {
 			names[i] = tui.Truncate(names[i], per)
 		}
 	}
 	secs := append([]tui.BarSection{
 		trans,
-		{Label: "slots ", Value: names[0] + "·" + names[1] + "·" + names[2], LabelStyle: lab, ValueStyle: val, Priority: 1},
+		{Label: "slots ", Value: strings.Join(names[:], "·"), LabelStyle: lab, ValueStyle: val, Priority: 1},
 	}, rest...)
 	r.StatusBar(0, secs, tui.BarOpts{Bg: a.theme.HeaderBg, Align: tui.BarAlignRight})
 }
@@ -435,7 +436,7 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 			}
 
 			if id := audio.PatternIDByName(n); id != audio.PatternSilence {
-				for si := range 3 {
+				for si := range audio.MusicSlots {
 					if a.s.eng.SlotPattern(si) == id {
 						it.Icon = rune('0' + si)
 						if isDirty {
@@ -569,7 +570,7 @@ func (a *tuiApp) footHint() string {
 		return "j/k scroll  g/G ends  tab focus  p piano  m reset  ^S save  : cmd  ^Q quit"
 	default: // focusBrowser
 		if a.kind == kindPattern {
-			return "j/k move  h/l kind  space play  0-2 slot  b beat  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
+			return "j/k move  h/l kind  space play  0-3 slot  b beat  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
 		}
 		return "j/k move  h/l kind  space play  enter inspect  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
 	}

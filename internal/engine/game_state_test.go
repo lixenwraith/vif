@@ -8,8 +8,9 @@ import (
 )
 
 // TestAPMCountsGesturesNotEvents is the rule a mouse sweep broke: a pointer placing the
-// cursor every tick counts by how far it travels, never more than once a placement;
-// varied keys faster than a player acts read the ceiling, and one key hammered does not.
+// cursor every tick counts by how far it stands from where it last counted, never more
+// than once a placement, so jitter counts nothing; varied keys faster than a player
+// acts read the ceiling, and one key hammered does not.
 func TestAPMCountsGesturesNotEvents(t *testing.T) {
 	perSecond := uint64(time.Second / parameter.GameUpdateInterval)
 	ceiling := uint64(60 * parameter.APMMaxPerSecond)
@@ -38,6 +39,13 @@ func TestAPMCountsGesturesNotEvents(t *testing.T) {
 	}
 	if got := musicAPM(pointer(0)); got != 0 {
 		t.Errorf("a pointer that never moves reads %d APM", got)
+	}
+	jitter := func(gs *GameState, i int) {
+		gs.MovePointer(i%2*(parameter.APMPointerCells-1), 0)
+		gs.AdmitAction(0)
+	}
+	if got := musicAPM(jitter); got != 0 {
+		t.Errorf("a pointer jittering short of %d columns reads %d APM, want none", parameter.APMPointerCells, got)
 	}
 	if got := musicAPM(func(gs *GameState, i int) { gs.AdmitAction(1 + uint64(i%2)) }); got != ceiling {
 		t.Errorf("two keys in turn every tick read %d APM, want the ceiling %d", got, ceiling)

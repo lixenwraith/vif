@@ -62,7 +62,7 @@ const (
 	StepsPerBar  = StepsPerBeat * BeatsPerBar
 
 	MaxPatternLen     = 64 // max steps per pattern
-	MusicSlots        = 3  // rhythm, melody, free layer
+	MusicSlots        = 4  // rhythm, melody, free layer, bass
 	MaxPolyphony      = 16 // simultaneous tonal voices per slot
 	MaxPatternNameLen = 64
 	MaxPatternTracks  = 32  // SetMask is a uint32; reveal shifts 1<<n
@@ -100,35 +100,7 @@ const (
 	PhraseBars    = 8
 	FillEveryBars = 8
 	GroupPhrases  = 4 // phrases one group holds before the music moves to another
-)
-
-// --- Instrument voices (ADSR seconds; sustain is a level) ---
-const (
-	BassAttack  = 0.005
-	BassDecay   = 0.1
-	BassSustain = 0.7
-	BassRelease = 0.15
-	// One-pole cutoff closes as the envelope decays: base - track*envLevel
-	BassFilterBase  = 0.3
-	BassFilterTrack = 0.2
-
-	PianoAttack  = 0.002
-	PianoDecay   = 0.3
-	PianoSustain = 0.0 // decay only, no sustain
-	PianoRelease = 0.25
-	// FM: harmonic modulator ratio, peak index scaled by the envelope
-	PianoModRatio = 2.0
-	PianoModIndex = 3.0
-
-	PadAttack  = 0.3
-	PadDecay   = 0.2
-	PadSustain = 0.8
-	PadRelease = 1.0
-	PadDetune  = 0.003 // ±3 cents across the three oscillators
-
-	// Fallback envelope for unmapped instruments
-	VoiceDefaultAttack  = 0.01
-	VoiceDefaultDecay   = 0.1
-	VoiceDefaultSustain = 0.5
-	VoiceDefaultRelease = 0.2
+	// VariationGapBars is the least a drawn slot rests after any slot changed before a
+	// phrase varies or moves it, so a tier change and a variation never stack
+	VariationGapBars = 4
 )

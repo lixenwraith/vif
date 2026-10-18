@@ -58,7 +58,7 @@ code does not have yet, described only by a design such as
 - *Input*: the router's fire anchors, the last main and special fire times that auto-fire and held buttons share so their requests do not stack. [Input §1](input-and-modes.md#1-input-pipeline) · `internal/mode` `Router`
 - *Clock*: `PausableClock`'s anchor, the rate segment (wall and game instants, scale, paused) game time is projected from; a rate change, pause, resume or paused step swaps in a fresh one, so game time neither jumps nor bursts to catch up. [Runtime §9](runtime.md#9-time-control) · `internal/engine` `PausableClock`
 
-**APM** (also: actions per minute, music APM) — Admitted input gestures per minute, counted to drive the adaptive music: one per dispatch pass, diminishing for one key mashed, one per six columns of pointer travel, at most eight a second; macro playback and auto-fire add nothing. `GameState` publishes a 60-second APM and a five-second music APM. [Input §8](input-and-modes.md#8-apm-signal) · [Audio §8](audio.md#8-adaptive-game-conductor) · `internal/engine` `GameState.AdmitAction`, `GameState.MusicAPM`
+**APM** (also: actions per minute, music APM) — Admitted input gestures per minute, counted to drive the adaptive music: one per dispatch pass, diminishing for one key mashed, one per six columns the pointer stands from where it last counted, at most eight a second; macro playback and auto-fire add nothing. `GameState` publishes a 60-second APM and a five-second music APM. [Input §8](input-and-modes.md#8-apm-signal) · [Audio §8](audio.md#8-adaptive-game-conductor) · `internal/engine` `GameState.AdmitAction`, `GameState.MusicAPM`
 
 **App** (also: app.App, composition root) — One wired runtime: its services, world, input, scheduler and presentation adapter, composed by `app.New` in a fixed order; play, headless, replay, script, server and bot-seat instances are each an App. [Runtime §2](runtime.md#2-composition-sequence) · [Package map §4](package-map.md#4-production-package-responsibilities) · `internal/app` `App`, `New`
 
@@ -257,7 +257,7 @@ code does not have yet, described only by a design such as
 
 **composite passability** (also: CompositePassability) — A precomputed grid of the header positions at which a composite's whole footprint fits, used as the blocked test for its flow fields and route graphs. [AI and physics §4](ai-physics-and-evolution.md#4-composite-passability) · `pkg/navigation` `CompositePassability`
 
-**conductor** (also: adaptive game conductor) — The music system's adaptive control of the sequencer: it maps music APM to an intensity tier and a target tempo (`100 + 100·√(APM/480)` BPM) slewed and applied on the beat, keeping game concepts out of `pkg/audio`. [Audio §8](audio.md#8-adaptive-game-conductor) · `internal/system` `MusicSystem`
+**conductor** (also: adaptive game conductor) — The music system's adaptive control of the sequencer: it maps music APM to an intensity tier under hysteresis (a hold before rising, one tier per hold when falling) and a target tempo (`100 + 100·√(APM/480)` BPM) slewed and applied on the beat, keeping game concepts out of `pkg/audio`. [Audio §8](audio.md#8-adaptive-game-conductor) · `internal/system` `MusicSystem`; `internal/parameter` `TierTracker`
 
 **config field** (also: ConfigIntCompare, ConfigBoolCompare, ConfigToVar) — A `ConfigResource` field an FSM script may read or compare: `map_width`, `map_height`, `viewport_width`, `viewport_height`, `camera_x`, `camera_y`, `color_mode` and `crop_on_resize`; the first read of a terminal-local one in a shared session logs a D-14 warning. [FSM reference: Config Fields](fsm-reference.md#config-fields) · [D-14](domain-design.md#d-14--map-bounds-are-shared-authority) · `internal/engine` `ConfigIntAccessor`, `ConfigBoolAccessor`
 
@@ -551,7 +551,7 @@ code does not have yet, described only by a design such as
 
 ## E
 
-**each** — A TOML macro invocation key on an array element: it names parameters bound to arrays of one length, and the macro expands once per zipped element, each result spliced into the array or appended as one element. [TOML macros §4](toml-macros.md#4-invocations) · `pkg/tomlmacro`
+**each** — A TOML macro invocation key on an array element: it names parameters bound to arrays of one length, and the macro expands once per zipped element, each result spliced into the array or appended as one element; the music bank's note lines are written this way. [TOML macros §4](toml-macros.md#4-invocations) · `pkg/tomlmacro`
 
 **echo** — two senses.
 - *Input*: the journaled local event (`EventInputPressEcho`, `EventInputReleaseEcho`) that lights and sounds a captured key's button on the pressing instance at once, a playout lead before the crossing applies on every instance (D-18). [Input §1](input-and-modes.md#1-input-pipeline) · [Domain design D-18](domain-design.md#d-18--local-prediction-is-private) · `internal/engine` `World.PushInputPress`
@@ -777,7 +777,7 @@ code does not have yet, described only by a design such as
 
 **genotype** (also: GenotypeComponent, gene, GeneBounds) — The gene vector an evaluated actor carries with its evaluation ID; for the eye, one gene in [0, 1] that `parameter.GeneBounds.Bin` decodes into one of seven eye types. A gateway samples it, or a scout, at spawn, and the actor's fitness is reported when it dies. [AI §8](ai-physics-and-evolution.md#8-game-genetic-adapter) · `internal/component` `GenotypeComponent` · `internal/parameter` `GeneBounds`
 
-**gesture** — One counted action in the APM signal: a dispatch pass of input-origin events, with a key repeated within 500 ms counted only on its 1st, 2nd, 4th, 8th... press and pointer travel counted by distance; macros, auto-fire and input while paused count nothing. [Input §8](input-and-modes.md#8-apm-signal) · `internal/engine` `GameState.AdmitAction`
+**gesture** — One counted action in the APM signal: a dispatch pass of input-origin events, with a key repeated within 500 ms counted only on its 1st, 2nd, 4th, 8th... press and the pointer counted by its distance from where it last counted, so jitter adds nothing; macros, auto-fire and input while paused count nothing. [Input §8](input-and-modes.md#8-apm-signal) · `internal/engine` `GameState.AdmitAction`
 
 **GHCR** — GitHub Container Registry, where nightly CI publishes the `vif_headless` session image as `ghcr.io/lixenwraith/vif:nightly` and `sha-<commit>`. [Packaging §2](packaging.md#2-release-surface) · [Development §6](development.md#6-ci-workflows) · `.github/workflows/release.yml`
 
@@ -810,7 +810,7 @@ code does not have yet, described only by a design such as
 - *Navigation*: a target group, a set of up to eight navigation targets sharing one flow field: group 0 is the cursor roster, script groups 1–15 hold `TargetAnchor` entities, a followed entity, a fixed cell or a roster mirror, and each cursor gets a private group while a snake head lives. [AI §3](ai-physics-and-evolution.md#3-flow-field-cache-and-target-groups) · `internal/engine` `TargetResource`
 - *Telemetry*: a status group, the bounded semantic group `status.SplitKey` maps a dotted key to; one group is one overlay card and one log record (`msg`) of at most 15 metrics, shown or hidden by its `GroupGate`. [Logging: Key convention](logging-and-diagnostics.md#key-convention) · `internal/status` `SplitKey`
 - *Replay*: a settle group, one non-empty explicit settle of injected or queued events, which advances the journal's `boundary` counter; replay keeps group boundaries. [Logging: Position lattice](logging-and-diagnostics.md#position-lattice) · `internal/journal` `SameReplayGroup`
-- *Music*: a pattern group, the patterns whose `groups` name it, which share one bass figure and kick feel; the sequencer draws both slots from one group and moves to another after four phrases. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `Pattern.Groups`
+- *Music*: a pattern group, the patterns whose `groups` name it, anchored by its bass patterns; the sequencer draws rhythm, melody and bass from one group, keeps the bass through the tiers it covers, draws the member played least, and moves to another group after four phrases. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `Pattern.Groups`, `RoleBass`
 
 **guard** — three senses.
 - *FSM*: a predicate on a transition or action: a static guard by name, or a factory guard compiled from its arguments at load (`VarCompare`, `StatusIntCompare`, `Payload*`), combined with `And`, `Or` and `Not`. Guards in a Shared region read only what every instance holds (D-20). [FSM §9](fsm-and-configuration.md#9-guards) · [FSM reference: Guards](fsm-reference.md#guards) · `internal/fsm` `GuardFunc`, `Machine.RegisterGuardFactory`
@@ -1597,7 +1597,7 @@ code does not have yet, described only by a design such as
 - *Owner sync*: each owner-state sync carries its owner's own counter, so a reordered packet is dropped, and an install leaves it alone. See **sync**. [Domain model D-13](domain-design.md#d-13--owner-authored-shared-values-have-one-writer) · `internal/event` `CursorStatePayload`
 - *Gameplay*: a gold sequence is a timed Shared composite of characters typed left to right. See **gold sequence**. [Gameplay: Gold sequences](gameplay.md#gold-sequences)
 
-**sequencer** (also: music sequencer) — The music pattern player: a 16th-note grid in 4/4 bars with three crossfading slots (rhythm, melody, free or phrase fill), tempo clamped to 80–200 BPM, pattern transitions immediate or quantized to the bar, and drawn music chosen by group and tier. See also **conductor**. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `Sequencer`
+**sequencer** (also: music sequencer) — The music pattern player: a 16th-note grid in 4/4 bars with four crossfading slots (rhythm, melody, free or phrase fill, bass), tempo clamped to 80–200 BPM, pattern transitions immediate or quantized to the bar, and drawn music chosen by group and tier. See also **conductor**. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `Sequencer`
 
 **serve** (also: -serve, ModeServer, Mode.Serves) — `-serve <address>` runs a dedicated host: an authority with no terminal, renderer, audio or cursor of its own, on the real clock. See **dedicated host**. [Runtime §1.2](runtime.md#12-the-dedicated-host) · [Runtime §1.0](runtime.md#10-the-four-session-flags) · `internal/app` `ModeServer` `RunServer` `App.Serve`
 
@@ -1659,7 +1659,7 @@ code does not have yet, described only by a design such as
 - *Telemetry*: per-slot metrics register `player.<slot>.<suffix>` for every roster slot, with a bare key mirroring the slot this instance drives. [Telemetry reference: The registry](telemetry-reference.md#the-registry) · `internal/status` `NewPlayerInt`
 - *ECS*: a `TimerSlot` is one of an entity's three countdowns (lifetime, deadline, cooldown) that `TimerSystem` ages each tick; a store's dense slot is an index into its packed arrays, and an event's queue slot (`GameEvent.Seq`) orders it at push. [ECS: Timers](ecs-and-events.md#timers) · [ECS §2](ecs-and-events.md#2-entities-and-typed-stores) · `internal/component` `TimerSlot`
 - *Combat*: a status slot is one per status kind on `CombatComponent` (stun, burn, ward), never stacked. [Combat §5](combat.md#5-resolution-statuses-and-what-crosses) · `internal/component` `StatusKind`
-- *Audio*: a music slot is one of the sequencer's three crossfading layers: 0 rhythm, 1 melody, 2 free or phrase fill. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `MusicSlots`
+- *Audio*: a music slot is one of the sequencer's four crossfading layers: 0 rhythm, 1 melody, 2 free or phrase fill, 3 bass, the group's anchor; each holds three players so a transition mid-fade cuts no tail. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `MusicSlots`, `slotPlayers`
 - *Rendering*: a `SplashSlot` names a splash's purpose (gold timer, typing magnifier) and keeps one splash per purpose. [Rendering §7](rendering.md#7-layer-inventory) · `internal/component` `SplashSlot`
 
 **slow** (also: slow!, slow policy, -slow-window, -slow-late, -slow-bytes) — two senses.

@@ -1,8 +1,9 @@
 # TOML Macros
 
 Decision record and authoring reference for macros in vif's TOML documents.
-`pkg/tomlmacro` is the one expander; scenarios and bot graphs use it today, and
-behavior programs and the map editor are meant to.
+`pkg/tomlmacro` is the one expander; scenarios, bot graphs and the audio banks
+(`sounds.toml`, `music.toml`) use it today, and behavior programs and the map
+editor are meant to.
 
 ## 1. Decision
 

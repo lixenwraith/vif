@@ -6,15 +6,20 @@ import (
 	"reflect"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/pkg/tomlmacro"
 )
 
 // LoadPatternDefs parses a music document into the authoring form without
-// converting. Unknown keys are rejected: the decoder ignores them, which would
-// turn "follow_chords" into a silent false. checkKeys reflects over the struct
-// tags, so there is no schema to keep in sync.
+// converting. A document may define [macros] and invoke them, so a bank writes a
+// drum lane or a note line once (doc/toml-macros.md). Unknown keys are rejected:
+// the decoder ignores them, which would turn "follow_chords" into a silent false.
+// checkKeys reflects over the struct tags, so there is no schema to keep in sync.
 func LoadPatternDefs(data []byte) ([]*PatternDef, error) {
 	raw, err := toml.NewParser(data).Parse()
 	if err != nil {
+		return nil, fmt.Errorf("pattern spec: %w", err)
+	}
+	if raw, err = tomlmacro.ExpandDocument(raw); err != nil {
 		return nil, fmt.Errorf("pattern spec: %w", err)
 	}
 	if err := checkKeys("", raw, reflect.TypeOf(PatternSpecFile{})); err != nil {
