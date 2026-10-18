@@ -4,18 +4,23 @@
     box-sizing: border-box;
 }
 
+/* The ground is the game's field colour (terminal.js, FIELD): what shows
+   beside or under the grid is no seam. */
 html, body {
     height: 100%;
-    background: #000;
+    background: #1a1b26;
     overflow: hidden;
     overscroll-behavior: none;   /* no pull-to-refresh mid-run */
     color-scheme: dark;
 }
 
+/* Scaled from its top middle under a keyboard (layoutKeyboard), so the grid
+   stays centred and starts right under the strip. */
 #terminal {
     position: relative;
     width: 100%;
     height: 100%;
+    transform-origin: 50% 0;
 }
 
 #screen {

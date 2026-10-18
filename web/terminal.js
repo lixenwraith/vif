@@ -74,6 +74,9 @@ void main() {
     gl_FragColor = vec4(mix(bg.rgb, fg.rgb, m), 1.0);
 }`;
     const ATLAS_COLS = 16;   // slots a row of the mask, which keeps it under every GPU's texture limit
+    // The game's field colour, the ground outside the frame (terminal.css has it too):
+    // a row's worth left under the grid, or a gutter beside a narrower one, is no seam.
+    const FIELD = [0x1a / 255, 0x1b / 255, 0x26 / 255], FIELD_CSS = '#1a1b26';
 
     /* rasterizeMask draws every glyph, white on transparent, at the cell's device size:
        FONT sized so its advance is the cell's width, then stretched to the cell's
@@ -203,7 +206,7 @@ void main() {
             gl.uniform1i(this.u[name], unit);
             this.tex[name] = t;
         });
-        gl.clearColor(0, 0, 0, 1);
+        gl.clearColor(FIELD[0], FIELD[1], FIELD[2], 1);
         this.masked = false;   // the mask holds the atlas at the cell's size
     };
 
@@ -292,7 +295,7 @@ void main() {
         const [fw, fh] = this.frame();
         this.picture.width = Math.max(1, fw);
         this.picture.height = Math.max(1, fh);
-        this.pic.fillStyle = '#000';
+        this.pic.fillStyle = FIELD_CSS;
         this.pic.fillRect(0, 0, this.picture.width, this.picture.height);
     };
 
@@ -324,7 +327,7 @@ void main() {
 
     Painter.prototype.draw = function() {
         const ctx = this.ctx;
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = FIELD_CSS;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         if (!this.cols || !this.mask) return;
         const [ox, oy] = this.origin();
@@ -333,6 +336,7 @@ void main() {
 
     // === Fitting ===
     let cellCSS = CELL;   // a cell's height in CSS pixels as drawn now; smaller under a keyboard
+    let scale = 1;        // the screen's CSS scale, below 1 only under a keyboard
 
     // cell sizes the drawer's cell to the device pixels cellCSS covers, whole ones at
     // exactly the game's aspect, rasterizing the glyphs again when that changed
@@ -346,11 +350,11 @@ void main() {
         }
     }
 
-    // size backs the canvas with the container's device pixels
+    // size backs the canvas with the container's device pixels: its layout size,
+    // which the scale a keyboard puts on it (layoutKeyboard) leaves alone
     function size() {
         const dpr = window.devicePixelRatio || 1;
-        const rect = container.getBoundingClientRect();
-        const W = Math.max(1, Math.round(rect.width * dpr)), H = Math.max(1, Math.round(rect.height * dpr));
+        const W = Math.max(1, Math.round(container.clientWidth * dpr)), H = Math.max(1, Math.round(container.clientHeight * dpr));
         if (canvas.width !== W || canvas.height !== H) {
             canvas.width = W;
             canvas.height = H;
@@ -375,10 +379,11 @@ void main() {
         if (touch) layoutKeyboard();
     }
 
-    // cellAt is the cell drawn under a pointer event, the nearest edge cell past the frame
+    // cellAt is the cell drawn under a pointer event, the nearest edge cell past the
+    // frame; the rect is the scaled one, so the scale comes off first
     function cellAt(e) {
         const rect = canvas.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = (window.devicePixelRatio || 1) / scale;
         const [ox, oy] = drawer.origin();
         const fc = drawer.cols || cols, fr = drawer.rows || rows;
         const x = Math.floor(((e.clientX - rect.left) * dpr - ox) / drawer.cw);
@@ -781,9 +786,6 @@ void main() {
 
     // === Touch: key strip and system keyboard ===
     const KEYBOARD_MIN = 100;   // px of screen a soft keyboard takes at least; less is a toolbar
-    // The smallest cell the grid is drawn at to fit above the keyboard: half the
-    // fitted one, 7 px at most, so a phone's 6 px grid still shrinks to fit.
-    const cellLeast = function() { return Math.min(7, cellBase / 2); };
     let keyboard = false;       // the player asked for the system keyboard
     let keyboardSeen = false;   // and it came up, so its going away is the system dismissing it
     let keyboardUp = false;     // a keyboard the player asked for covers the page, or is still leaving
@@ -839,9 +841,10 @@ void main() {
         }
 
         /* While a keyboard covers the page the grid keeps its size, which is the solo
-           map's, and is drawn at a smaller cell between the strip and the keyboard;
-           below cellLeast it keeps the bottom rows, where commands are typed, in view.
-           A zoom under a keyboard refits once the keyboard is down (fit, above). */
+           map's, and is drawn to fit between the strip and the keyboard: at the
+           smallest half-pixel cell whose grid still covers that height, then scaled
+           down to it exactly, so the whole grid shows, heat bar to status line, and
+           nothing is left over. A zoom under a keyboard refits once it is down. */
         function drawAt(h) {
             if (cellCSS !== h) {
                 cellCSS = h;
@@ -849,6 +852,11 @@ void main() {
                 drawer.draw();
             }
             return drawer.frame()[1] / (window.devicePixelRatio || 1);   // the grid's CSS height
+        }
+
+        function scaleTo(k) {
+            scale = k;
+            container.style.transform = k < 1 ? 'scale(' + k + ')' : '';
         }
 
         let fullHeight = 0;   // the grid's height at cellBase
@@ -864,16 +872,15 @@ void main() {
                 fullHeight = drawAt(cellBase);
                 lastFit = null;
             }
-            let shift = 0;
+            let k = 1;
             if (up) {
-                const avail = vv.height - strip.offsetHeight;
-                const least = cellLeast();
+                const avail = Math.max(1, vv.height - strip.offsetHeight);
                 let h = lastFit && lastFit.avail === avail ? lastFit.cell
-                    : Math.max(least, Math.min(cellBase, Math.floor(2 * cellBase * avail / fullHeight) / 2));
-                let drawn;
-                while ((drawn = drawAt(h)) > avail && h > least) h -= 0.5;
+                    : Math.min(cellBase, Math.max(0.5, Math.ceil(2 * cellBase * avail / fullHeight) / 2));
+                let drawn = drawAt(h);
+                while (drawn < avail && h < cellBase) drawn = drawAt(h += 0.5);
                 lastFit = { avail: avail, cell: h };
-                shift = Math.max(0, drawn - avail);
+                k = Math.min(1, avail / drawn);
             } else {
                 drawAt(cellBase);
                 // Only once the page is whole again does a put-off refit see its real size.
@@ -884,7 +891,7 @@ void main() {
             }
             // The page follows the visible area if the browser pans it to the keyboard.
             document.body.style.transform = up && vv.offsetTop ? 'translateY(' + vv.offsetTop + 'px)' : '';
-            container.style.transform = shift ? 'translateY(' + -shift + 'px)' : '';
+            scaleTo(k);
         };
 
         if (vv) {
