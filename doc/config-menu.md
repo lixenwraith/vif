@@ -35,14 +35,24 @@ starts with the reason.
 
 | Page | Controls |
 |---|---|
+| Game | A new game; a row per scenario the configuration roots hold, which starts it; another scenario by name or path. |
 | Bots | Add bots by count and policy; remove a bot held by this run or cancel its admission. |
 | Multiplayer | Host this run, join an existing session, request an allocated session, inspect status, drop a player with its bots or an individual bot (host only). |
 | Audio | Music, sound effects, effects volume in 5% steps. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
-| Simulation | Solo speed from 1/8x through 8x; a new game, or another scenario by name; a replay's restart. |
+| Simulation | Solo speed from 1/8x through 8x; a replay's restart. |
 | Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth, FSM trigger and flush, profiler, CPU/heap/mutex profiles and execution trace, telemetry snapshot, starting a replay journal. |
 | Startup settings | Guidance for paths/scenario, audio device/buffer, colour depth, key bindings and identity. |
+
+### Game
+
+**New game** restarts the running scenario from its first tick, as `:n` does. Below
+it, one row per scenario names what `:n <name>` would start: `main` and every
+`scenario/<name>/scenario.toml` the configuration roots hold, the running one marked
+`current`; a tap or Enter starts it, so a phone needs no name to type. **Scenario by
+name** takes what `-s` takes, a name or a path, for one the rows do not list. In a
+session only the host can start either, and its participants rejoin.
 
 ### Bots
 
@@ -106,8 +116,8 @@ while menu navigation uses overlay bindings.
 
 Action rows (`Enter`) run the command they name and close the menu: `:n`,
 `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`, `:journal start`
-and `:replay restart`; the Change scenario form submits `:n <scenario>` the same
-way. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the
+and `:replay restart`; a scenario row and the Scenario by name form submit
+`:n <scenario>` the same way. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the
 like), `:step`, `:d break`, `:emit`, `:system`, `:region` and `:replay tick|time`
 stay on the command line.
 

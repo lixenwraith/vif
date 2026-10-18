@@ -164,3 +164,25 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 		t.Fatalf("valid config root rejected: %v", err)
 	}
 }
+
+// TestScenariosListsMainThenEveryRootsScenario: main leads whether or not a root
+// holds it, the roots' scenario directories follow sorted and named once, and a
+// directory without an entry file or -d lists nothing beyond main.
+func TestScenariosListsMainThenEveryRootsScenario(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	dir := t.TempDir()
+	for _, name := range []string{"td", "blank", paths.MainScenarioName} {
+		writeFixture(t, filepath.Join(dir, paths.ScenarioDirName, name, paths.ScenarioFile))
+	}
+	if err := os.MkdirAll(filepath.Join(dir, paths.ScenarioDirName, "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := Scenarios(Options{Dir: dir})
+	if want := []string{paths.MainScenarioName, "blank", "td"}; strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("scenarios = %v, want %v", got, want)
+	}
+	if got := Scenarios(Options{Dir: dir, Embedded: true}); len(got) != 1 || got[0] != paths.MainScenarioName {
+		t.Fatalf("-d lists %v, want main alone", got)
+	}
+}

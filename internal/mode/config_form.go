@@ -76,9 +76,9 @@ var configForms = map[string]configFormSpec{
 		},
 	},
 	"scenario": {
-		label: "Change scenario", description: "Start another scenario. In a session only the host can, and its participants rejoin it.", command: "new",
+		label: "Scenario by name", description: "Start a scenario the rows below do not list: a name or a path, as -s takes it. In a session only the host can, and its participants rejoin it.", command: "new",
 		fields: []configFormField{
-			{"Scenario", "", "Scenario name from the config roots, as -s takes it. The current one's name starts a new game."},
+			{"Scenario", "", "Scenario name from the config roots, a scenario.toml or a scenario directory, as -s takes it. The current one's name starts a new game."},
 		},
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
 			name := strings.TrimSpace(f.Value(0))

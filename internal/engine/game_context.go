@@ -42,6 +42,8 @@ type SessionController interface {
 	JoinError() error
 	// False means the current scenario can reset without replacing the run.
 	ChangeScenario(name string) (bool, error)
+	// Scenarios names what ChangeScenario starts by name, and the one running.
+	Scenarios() (names []string, current string)
 	SessionSummary() string
 	// A solo run opens a loopback session for its bots.
 	AddBot(graph string) error
