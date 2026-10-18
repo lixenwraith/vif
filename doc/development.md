@@ -556,22 +556,26 @@ manual smoke test because unit tests do not reproduce every emulator.
 ## 6. CI workflows
 
 `.github/workflows/test.yml` runs on pushes to `main`, `master`, `develop` and
-`claude/*`, and on pull requests to `main`, `master` or `develop`. Its single
-Go 1.27.2 job runs `go vet ./...`, `go build ./...` and `go test -race -v ./...`
+`claude/*`, and on pull requests to `main`, `master` or `develop`. Its single job,
+on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profiles
+and targets, the window and Android module tests, and `go test -race -v ./...`
 with `GORACE` halting on the first race and writing `race.*`, which is uploaded for
 seven days on failure.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
-regenerates the registries and, on a tag, fails if that changed the tree, then
-builds CGO-free archives for `linux-amd64`, `linux-amd64-headless`,
-`freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`) and `web`, the wad archive
-through `make wad-archive`, a source archive on a tag, and `SHA256SUMS`. Off a tag
-it also pushes the headless image to GHCR and moves the `nightly` prerelease; a tag
-drafts a release. [Packaging](packaging.md) §2 lists what each publishes.
+regenerates the registries and, on a tag, fails if that changed the tree, vets
+and tests, then builds CGO-free archives for `linux-amd64`, `linux-arm64`,
+`linux-amd64-headless`, `freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`)
+and `web`, the wad archive through `make wad-archive`, a source archive on a tag,
+the Android APK through `android/toolchain.sh gradlew` on a second runner, and
+`SHA256SUMS` over everything. Off a tag it also pushes the headless image to GHCR
+and moves the `nightly` prerelease; a tag drafts a release. [Packaging](packaging.md)
+§2 lists what each publishes.
 
-Neither workflow runs the `novlog` or `vif_noaudio` native builds, the tagged test
-suites, the dependency assertions of `make verify` (§5), or terminal/audio smoke
-tests.
+The test workflow also builds the `novlog`, `vif_noaudio`, `vif_headless` and
+`vif_nogui` profiles and the FreeBSD, browser and Windows targets. Neither workflow
+runs the tagged test suites, the dependency assertions of `make verify` (§5), or
+terminal/audio smoke tests.
 
 ## 7. Platform matrix
 

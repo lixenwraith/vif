@@ -6,20 +6,25 @@ on:
   pull_request:
     branches: [ main, master, develop ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    name: Build and Test on Go 1.27.2
+    name: Build and test
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
-        go-version: '1.27.2'
-        cache: true
+        go-version-file: go.mod
+        cache-dependency-path: |
+          go.sum
+          android/go.sum
 
     - name: Download dependencies
       run: go mod download
@@ -29,6 +34,19 @@ jobs:
 
     - name: Build code
       run: go build ./...
+
+    # The profiles and targets the release builds, so a tag breaks here and not
+    # by night; purego's fakecgo builds as std on FreeBSD (make GUI_GCFLAGS).
+    - name: Build the other profiles
+      run: |
+        go build -tags novlog ./...
+        go build -tags vif_noaudio ./...
+        go build -tags vif_headless ./...
+        go build -tags vif_nogui ./...
+        CGO_ENABLED=0 go build -o /dev/null ./cmd/vif
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -gcflags=github.com/ebitengine/purego/internal/fakecgo=-std -o /dev/null ./cmd/vif
+        GOOS=js GOARCH=wasm go build ./...
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags 'novlog vif_noaudio' ./...
 
     - name: Test the desktop window package
       run: CGO_ENABLED=0 go test ./pkg/window
@@ -45,7 +63,7 @@ jobs:
 
     - name: Upload race detector logs on failure
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: race-detector-logs
         path: race.*
