@@ -52,7 +52,7 @@ GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless gui android android-install nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
+.PHONY: help generate dev release headless gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -62,8 +62,10 @@ help:
 	@echo "  release  Build optimized binary (stripped, trimmed)"
 	@echo "  headless Build dedicated-host binary without presentation or audio"
 	@echo "  gui      Build bin/vif-gui, the game in a desktop window (Xlib, EGL, GLES 2; Linux, FreeBSD)"
-	@echo "  android  Build the Android debug APK as bin/vif-debug.apk (Android SDK and NDK: android/README.md)"
+	@echo "  android  Build the Android debug APK as bin/vif-debug.apk; first names any JDK or SDK piece missing"
 	@echo "  android-install Install bin/vif-debug.apk on the device adb sees"
+	@echo "  android-toolchain Install what android needs: Go and a JDK (asking first), the SDK's"
+	@echo "           command-line tools, platform, NDK and platform-tools (android/README.md)"
 	@echo "  nolog    Release build without logger"
 	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted)"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
@@ -148,14 +150,17 @@ gui: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
 
 # android is its own Go module and Gradle project: gomobile binds the Go host and
-# the APK packages wad/ as its assets. Gradle fetches its own JDK; the SDK and NDK
-# are the player's (android/README.md).
+# the APK packages wad/ as its assets. toolchain.sh checks the JDK and SDK before
+# Gradle runs; only android-toolchain downloads them (android/README.md).
 android: check-go $(BIN_DIR)
-	cd android && ./gradlew assembleDebug
+	android/toolchain.sh gradlew assembleDebug
 	install -m 0644 android/app/build/outputs/apk/debug/app-debug.apk $(BIN_DIR)/$(BINARY)-debug.apk
 
 android-install:
-	adb install -r $(BIN_DIR)/$(BINARY)-debug.apk
+	android/toolchain.sh adb install -r $(BIN_DIR)/$(BINARY)-debug.apk
+
+android-toolchain: check-go
+	@android/toolchain.sh install
 
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: check-go $(BIN_DIR)

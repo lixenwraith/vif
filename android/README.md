@@ -9,18 +9,32 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
+| `toolchain.sh` | What the build needs beside Go: `make android` checks it before Gradle runs, `make android-toolchain` installs it. |
 
 ## Build
 
-Needs Go (the version in `go.mod`), the Android SDK with platform `android-36.1`
-and NDK `29.0.14206865` (`sdkmanager "ndk;29.0.14206865"`), and the SDK named by
-`ANDROID_HOME` or by `sdk.dir=<path>` in `android/local.properties` (ignored by
-git; Android Studio's default is `~/Android/Sdk`). Gradle provisions its own JDK 21.
+Needs Go (the version in `go.mod`), a JDK (Gradle's wrapper starts on its `java`,
+and gomobile compiles the binding with the `javac` on `PATH`), and an Android SDK
+holding platform `android-36.1` and NDK `29.0.14206865`, its licence accepted.
+The SDK is `sdk.dir=<path>` in `android/local.properties` (ignored by git), else
+`ANDROID_HOME`, else Android Studio's default, `~/Android/Sdk`
+(`~/Library/Android/sdk` on macOS). The first build downloads Gradle, the JDK 21
+it builds on and the SDK build tools.
 
 ```bash
-make android           # cd android && ./gradlew assembleDebug, then bin/vif-debug.apk
-make android-install   # adb install -r bin/vif-debug.apk
+make android             # names every missing piece and its fix, else bin/vif-debug.apk
+make android-toolchain   # installs the missing pieces
+make android-install     # adb install -r bin/vif-debug.apk, adb from PATH or the SDK
 ```
+
+`make android` reports the JDK and SDK pieces it lacks and installs none of them.
+`make android-toolchain` offers the system's Go and JDK packages and installs each
+on a yes; into the SDK it unpacks Google's command-line tools when it has no
+`sdkmanager` (the build `toolchain.sh` pins, checked against its published
+SHA-256), then has `sdkmanager` install the platform, NDK and `platform-tools`,
+asking to accept their licence; it records `sdk.dir` when nothing named the SDK.
+Google ships the SDK's tools for Linux, macOS and Windows only; on FreeBSD, build
+the APK on one of those.
 
 `bindGo` builds gomobile and gobind at the versions `go.mod` pins, binds `./game`
 for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in

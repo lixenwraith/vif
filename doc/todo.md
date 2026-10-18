@@ -391,6 +391,16 @@ release" lines in `README.md` and [Packaging](packaging.md) §2.
 
 Publish `vif-git` alongside the release-based AUR package.
 
+### Move the Android toolchain from sdkmanager to the Android CLI
+
+- Priority: P3
+- Affected files: `android/toolchain.sh`, `android/README.md`
+
+The command-line tools `toolchain.sh` pins (22.0) warn that `sdkmanager` is
+deprecated for `android sdk`, which ships in the same package. Switch `setup` to it
+once its install, licence and SDK-root flags are settled, bumping the pinned build
+and its three SHA-256s together.
+
 ### Provision audio to the fleet when a host needs it
 
 - Priority: P3
