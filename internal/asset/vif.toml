@@ -24,6 +24,12 @@ keymap = ""
 # to 200. Shorter reacts sooner and underruns more easily on a loaded machine.
 buffer_ms = 50
 
+[presentation]
+# Where the game is drawn when no flag says: the terminal, or with window = true
+# the desktop window -g opens (Linux and FreeBSD; a build without one refuses).
+# -g and -g=false win for that run.
+window = false
+
 # What the configuration menu changes in a run and a run with a settings file
 # writes back here, so the next starts as this one was left: the two sound
 # channels, the effects volume (0 to 1), auto-fire (off, main or on), mouse input,

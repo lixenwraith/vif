@@ -109,8 +109,13 @@ func main() {
 		writeVersion(os.Stdout)
 		return
 	}
-	// -g given either way decides; unset, the build does
-	window := windowByDefault
+	var err error
+	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(exitFailure)
+	}
+	// -g given either way decides; unset, vif.toml's [presentation] or the build does
+	window := windowByDefault || settings.Presentation.Window
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "g" || f.Name == "gui" {
 			window = *flagGUI
@@ -122,12 +127,6 @@ func main() {
 			os.Exit(exitFailure)
 		}
 		openWindow()
-	}
-
-	var err error
-	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(exitFailure)
 	}
 	requested := flagConfig.scenario // what a -join site is asked for; vif.toml's is this machine's
 	applySettings(settings)

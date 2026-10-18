@@ -35,6 +35,10 @@ type Settings struct {
 	Audio struct {
 		BufferMs int `toml:"buffer_ms"`
 	} `toml:"audio"`
+	// Presentation.Window opens the desktop window by default, as -g does
+	Presentation struct {
+		Window bool `toml:"window"`
+	} `toml:"presentation"`
 	Play Play `toml:"play"`
 }
 
