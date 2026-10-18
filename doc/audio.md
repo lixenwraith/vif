@@ -218,10 +218,18 @@ crossfading slots:
 A pattern has up to 64 steps, 32 tracks, and 512 events per track. A track sets
 its instrument, chord-following, and humanization; its events set step position,
 velocity, scale degree, octave, duration, and probability. Tonal voices are a
-table of instruments: band-limited oscillators (bass, pad, lead), FM at the
-fundamental with a brightness that dies before the body (piano) or a plucked
-string, a delay line a noise burst sets ringing (pluck), through a resonant
-low-pass under a filter envelope into an ADSR; the drum kit uses cached effects.
+table of instruments, each an oscillator stage through a resonant low-pass under
+a filter envelope into an ADSR; the drum kit uses cached effects. The pad and
+the lead are band-limited saws; the pluck a delay line a noise burst sets
+ringing. The bass and the piano are modal voices: a string as its partials, each
+a decaying phasor at `k·f0` stretched by the string's inharmonicity, at the
+amplitude the strike position's comb, the spectral tilt (1/k struck, 1/k²
+plucked) and a velocity-dependent hammer low-pass leave it, decaying faster the
+higher it sits; the lowest partials carry a second, slightly detuned string whose
+slower aftersound gives the double decay, and a few milliseconds of filtered
+noise are the hammer or finger contact. The piano has a grand's stretch and the
+soundboard's roll-off; the bass is finger-plucked into a pickup resonance and an
+amp, its note-off a 45 ms damper.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming
@@ -346,7 +354,7 @@ live tooling to update a playing registry.
 same engine. It offers:
 
 - a command REPL;
-- a full-screen TUI with browser, structural inspector, piano recording, and
+- a full-screen TUI with browser, structural inspector, keys recording, and
   beat-grid editing;
 - headless `.slab` script execution;
 - validation, live registry apply/revert, audition, sequencer slot assignment,

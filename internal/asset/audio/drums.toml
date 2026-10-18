@@ -37,35 +37,40 @@ chain = [
 
 [[sound]]
 name = "snare"
-duration = 0.2
-norm = 0.9
+desc = "wood shell: two head modes under wires that bloom a few ms after the stick"
+duration = 0.26
+norm = 0.74
 variants = 6
-pitch_walk = 0.08
+pitch_walk = 0.06
 length_walk = 0.20
-chain = [
-  { kind = "hp", freq = 160, q = 0.707 },
-  { kind = "shape", drive = 1.4 }
-]
+chain = [{ kind = "hp", freq = 130, q = 0.707 }]
+[[sound.layer]]
+gain = 0.75
+source = { kind = "sweep", wave = "sine", freq = 196, freq_end = 176, curve = "exp", curve_k = 6 }
+chain = [{ kind = "decay", tau = 0.07 }]
+[[sound.layer]]
+gain = 0.35
+source = { kind = "osc", wave = "sine", freq = 334 }
+chain = [{ kind = "decay", tau = 0.04 }]
+[[sound.layer]]
+gain = 0.4
+length = 0.005
+source = { kind = "noise" }
+chain = [{ kind = "decay", tau = 0.0012 }, { kind = "bp", freq = 4000, q = 0.7 }]
 [[sound.layer]]
 gain = 0.6
-source = { kind = "sweep", wave = "sine", freq = 196, freq_end = 150, curve = "exp", curve_k = 10 }
-chain = [{ kind = "decay", tau = 0.045 }]
-[[sound.layer]]
-gain = 0.55
+offset = 0.002
 source = { kind = "noise" }
 chain = [
-  { kind = "decay", tau = 0.07 },
-  { kind = "bp", freq = 3200, q = 0.6, track_pitch = true }
+  { kind = "decay", attack = 0.004, tau = 0.12 },
+  { kind = "hp", freq = 1000, q = 0.707 },
+  { kind = "lp", freq = 7000, q = 0.707 }
 ]
 [[sound.layer]]
 gain = 0.3
-length = 0.05
+offset = 0.002
 source = { kind = "noise" }
-chain = [
-  { kind = "decay", tau = 0.012 },
-  { kind = "lp", freq = 1400, q = 0.707 }
-]
-
+chain = [{ kind = "decay", attack = 0.003, tau = 0.08 }, { kind = "bp", freq = 1700, q = 1.0, track_pitch = true }]
 [[sound]]
 name = "clap"
 duration = 0.10
