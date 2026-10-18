@@ -429,7 +429,12 @@ through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. A tap is a left press and release on its cell and a
 finger moving while down a left drag, posted once per cell as a terminal reports
 motion, so the cursor follows it and a held one repeats fire; keys and the system
-keyboard's text are terminal key events, Back is Escape. A tap held on the status
+keyboard's text are terminal key events, Back is Escape. Two fingers tapped
+together raise or drop the system keyboard, read from the window's insets rather
+than a flag of the app's; the keyboard covers the view instead of resizing it, so a
+`crop_on_resize` map keeps its cells, and the status row is drawn again at twice
+its size above the keyboard from the same picture, as the browser scales its whole
+grid to fit above its keyboard. A tap held on the status
 bar opens the configuration menu, the hold every host shares (`MenuHoldDuration`),
 and taps drive its rows; the browser launcher sends the same hold as Ctrl-G on a
 touch screen, where a touch is never a mouse press.

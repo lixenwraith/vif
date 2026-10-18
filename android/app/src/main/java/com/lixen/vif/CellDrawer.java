@@ -23,6 +23,12 @@ interface CellDrawer {
     /** Draws what the drawer holds over the whole surface. */
     void draw(Canvas surface);
 
+    /** The strip's height on a surface this tall: the last row at twice its size. */
+    int stripHeight(int surfaceHeight);
+
+    /** Draws the last row, the status bar, again in the band above a keyboard covering the bottom pixels. */
+    void drawStrip(Canvas surface, int covered);
+
     /**
      * The picture painted so far at the atlas's size, kept between frames. The GPU
      * stretches it over the surface, filtered, so the grid leaves no margin; painting
@@ -32,7 +38,7 @@ interface CellDrawer {
         final int cellWidth, cellHeight;
         Bitmap screen;
         private final Paint pixels = new Paint();
-        private final Rect onSurface = new Rect();
+        private final Rect onSurface = new Rect(), stripSrc = new Rect(), stripDst = new Rect();
 
         Picture(byte[] atlas) {
             IntBuffer a = words(atlas, 0);
@@ -61,6 +67,22 @@ interface CellDrawer {
             }
             onSurface.set(0, 0, surface.getWidth(), surface.getHeight());
             surface.drawBitmap(screen, null, onSurface, pixels);
+        }
+
+        @Override
+        public final int stripHeight(int surfaceHeight) {
+            return screen == null ? 0 : 2 * surfaceHeight * cellHeight / screen.getHeight();
+        }
+
+        @Override
+        public final void drawStrip(Canvas surface, int covered) {
+            if (screen == null) {
+                return;
+            }
+            int bottom = surface.getHeight() - covered;
+            stripSrc.set(0, screen.getHeight() - cellHeight, screen.getWidth(), screen.getHeight());
+            stripDst.set(0, bottom - stripHeight(surface.getHeight()), surface.getWidth(), bottom);
+            surface.drawBitmap(screen, stripSrc, stripDst, pixels);
         }
     }
 

@@ -44,9 +44,11 @@ public final class MainActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.addView(view);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            Insets in = insets.getInsets(WindowInsets.Type.systemBars()
-                    | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
-            v.setPadding(in.left, in.top, in.right, in.bottom);
+            Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            // The keyboard covers the view rather than shrinking it: a resize crops a
+            // crop_on_resize map, and what it cropped is gone when the keyboard is
+            view.keyboardCovers(Math.max(0, insets.getInsets(WindowInsets.Type.ime()).bottom - bars.bottom));
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
