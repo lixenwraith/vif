@@ -559,7 +559,7 @@ func TestDefinePatternSwapsUnderPlayback(t *testing.T) {
 		t.Fatal("mix goroutine still running; slot inspection would race")
 	}
 
-	if got := len(ae.mixer.sequencer.slots[0].cur.patternData.Tracks[0].Events); got != 2 {
+	if got := len(ae.mixer.sequencer.slots[0].player().patternData.Tracks[0].Events); got != 2 {
 		t.Errorf("slot still on the old pattern: %d kick events", got)
 	}
 }
@@ -621,10 +621,10 @@ func TestHeldTierVariesDrawnSlots(t *testing.T) {
 	rhythm := s.slots[0].activeID()
 	s.Start()
 
-	// Phrase downbeats alternate melody (bar 8) and rhythm (bar 16)
-	s.Generate(make([]float64, 2*PhraseBars*SamplesPerBar(MaxBPM)+1))
+	// Phrase downbeats take melody (bar 8), rhythm (bar 16) and bass (bar 24) in turn
+	s.Generate(make([]float64, 3*PhraseBars*SamplesPerBar(MaxBPM)+1))
 	if got := s.slots[0].activeID(); got == rhythm {
-		t.Errorf("drawn rhythm still on %d after two phrases", got)
+		t.Errorf("drawn rhythm still on %d after three phrases", got)
 	}
 	if got := s.slots[1].activeID(); got != ids[2] {
 		t.Errorf("explicit melody moved to %d", got)
@@ -756,5 +756,100 @@ func TestAHostSinkReplacesBackendDetection(t *testing.T) {
 	defer sink.mu.Unlock()
 	if sink.n == 0 || !sink.closed {
 		t.Fatalf("sink took %d bytes, closed %v", sink.n, sink.closed)
+	}
+}
+
+// oneNote registers a one-note pattern for a role at the given tiers
+func oneNote(name string, r Role, tiers uint8) PatternID {
+	return RegisterPattern(&Pattern{Name: name, Steps: 16, Role: r, Groups: []string{"g"}, Tiers: tiers,
+		Tracks: []Track{{Instr: InstrBass, Events: []Step{{Pos: 0, Vel: 0.6, Dur: 8}}}}})
+}
+
+// TestTransitionMidFadeKeepsTails is the rule a quick second transition broke: a
+// slot replaced again while its last pattern still fades keeps both tails ringing.
+func TestTransitionMidFadeKeepsTails(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	a, b, c := oneNote("a", RoleNone, 0), oneNote("b", RoleNone, 0), oneNote("c", RoleNone, 0)
+	s := NewSequencer(MaxBPM, nil)
+	s.SetPattern(1, a, 0, false)
+	s.Start()
+	step := make([]float64, SamplesPerStep(MaxBPM))
+	s.Generate(step)
+	s.SetPattern(1, b, AudioSampleRate, false)
+	s.Generate(step)
+	s.SetPattern(1, c, AudioSampleRate, false)
+	ss := &s.slots[1]
+	ringing := 0
+	for i := range ss.players {
+		if i != ss.live && ss.gain[i] > 0 {
+			ringing++
+		}
+	}
+	if ss.activeID() != c || ringing != 2 {
+		t.Errorf("live %d with %d tails ringing, want %d with 2", ss.activeID(), ringing, c)
+	}
+}
+
+// TestBassHoldsThroughTiers is the anchor rule: a tier change keeps the bass whose
+// pattern still covers the tier while the other drawn slots redraw.
+func TestBassHoldsThroughTiers(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	calm, normal := uint8(1<<IntensityCalm), uint8(1<<IntensityNormal)
+	oneNote("r1", RoleRhythm, calm)
+	r2 := oneNote("r2", RoleRhythm, normal)
+	oneNote("m", RoleMelody, calm|normal)
+	b1 := oneNote("b1", RoleBass, calm|normal)
+	oneNote("b2", RoleBass, normal)
+	s := NewSequencer(MaxBPM, nil)
+	s.arr = buildArrangement()
+	s.SetIntensity(IntensityCalm, 0, false, false)
+	s.Start()
+	s.Generate(make([]float64, SamplesPerBar(MaxBPM)))
+	s.SetIntensity(IntensityNormal, 0, false, false)
+	if got := s.slots[slotBass].activeID(); got != b1 {
+		t.Errorf("bass moved to %d, want %d held", got, b1)
+	}
+	if got := s.slots[0].activeID(); got != r2 {
+		t.Errorf("rhythm on %d, want the tier's %d", got, r2)
+	}
+}
+
+// TestDrawsWorkThroughThePool is the rule that a pool's members are each drawn once
+// before any repeats, so a held tier does not replay one pattern.
+func TestDrawsWorkThroughThePool(t *testing.T) {
+	s := NewSequencer(MaxBPM, nil)
+	pool := []PatternID{101, 102, 103}
+	seen := map[PatternID]bool{}
+	for range pool {
+		seen[s.draw(pool)] = true
+	}
+	if len(seen) != len(pool) {
+		t.Errorf("three draws from three members hit %d of them", len(seen))
+	}
+}
+
+// TestPatternMacrosExpand is the rule that a music document's macros expand before
+// its keys are checked: a note line written once arrives as its notes.
+func TestPatternMacrosExpand(t *testing.T) {
+	doc := `
+[macros.Note]
+params = { pos = "int", deg = "int" }
+body = { pos = "${pos}", deg = "${deg}", vel = 0.5 }
+[[pattern]]
+name = "m"
+steps = 16
+[[pattern.track]]
+instr = "lead"
+event = [{ macro = "Note", each = { pos = [0, 4, 8], deg = [0, 2, 4] } }]
+`
+	pats, err := LoadPatternsTOML([]byte(doc))
+	if err != nil || len(pats) != 1 {
+		t.Fatalf("load: %v, %d patterns", err, len(pats))
+	}
+	ev := pats[0].Tracks[0].Events
+	if len(ev) != 3 || ev[2].Pos != 8 || ev[2].Deg != 4 {
+		t.Errorf("events %v, want three notes ending on pos 8 deg 4", ev)
 	}
 }

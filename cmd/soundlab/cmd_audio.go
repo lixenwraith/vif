@@ -82,8 +82,8 @@ func cmdNote(s *Session, a []string) error {
 
 func cmdSlot(s *Session, a []string) error {
 	slot, err := strconv.Atoi(a[0])
-	if err != nil {
-		return fmt.Errorf("slot %q: not an int", a[0])
+	if err != nil || slot < 0 || slot >= audio.MusicSlots {
+		return fmt.Errorf("slot %q: want 0 to %d", a[0], audio.MusicSlots-1)
 	}
 	fadeMS, quantize := 250, false // editor default, deliberately not game policy
 	if len(a) > 2 {
@@ -229,7 +229,7 @@ func cmdWhere(s *Session, a []string) error {
 		state = "running"
 	}
 	fmt.Fprintf(s.out, "bar %d step %d (%s)", bar, step, state)
-	for i := range 3 {
+	for i := range audio.MusicSlots {
 		fmt.Fprintf(s.out, "  slot%d=%s", i, patName(s.eng.SlotPattern(i)))
 	}
 	fmt.Fprintln(s.out)

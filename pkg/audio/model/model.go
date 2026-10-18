@@ -19,10 +19,12 @@ const (
 	InstrBass
 	InstrPiano
 	InstrPad
+	InstrLead
+	InstrPluck
 	InstrumentCount
 )
 
-var instrumentNames = [...]string{"kick", "snare", "hihat", "clap", "bass", "piano", "pad"}
+var instrumentNames = [...]string{"kick", "snare", "hihat", "clap", "bass", "piano", "pad", "lead", "pluck"}
 
 func (i InstrumentType) String() string {
 	if i >= 0 && int(i) < len(instrumentNames) {

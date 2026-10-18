@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/pkg/tomlmacro"
 )
 
 // LoadSoundsTOML parses one document held in memory, so an include, which needs
@@ -106,13 +107,16 @@ func resolveInclude(base, ref string) (string, error) {
 	return p, nil
 }
 
-// decodeSpecFile parses once to map[string]any, rejects unknown keys, then
-// decodes. The decoder ignores unknown keys, which would turn a typo into a
-// silent zero value; the strict pass reflects over the struct tags so there is
-// no schema to keep in sync.
+// decodeSpecFile parses once to map[string]any, expands the document's own macros,
+// rejects unknown keys, then decodes. The decoder ignores unknown keys, which would
+// turn a typo into a silent zero value; the strict pass reflects over the struct
+// tags so there is no schema to keep in sync.
 func decodeSpecFile(data []byte) (*SoundSpecFile, error) {
 	raw, err := toml.NewParser(data).Parse()
 	if err != nil {
+		return nil, fmt.Errorf("sound spec: %w", err)
+	}
+	if raw, err = tomlmacro.ExpandDocument(raw); err != nil {
 		return nil, fmt.Errorf("sound spec: %w", err)
 	}
 	if err := checkKeys("", raw, reflect.TypeOf(SoundSpecFile{})); err != nil {

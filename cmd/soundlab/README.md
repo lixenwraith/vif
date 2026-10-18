@@ -10,7 +10,7 @@ Supports interactive REPL, TUI, and headless script execution.
 - **Dotted Path Addressing**: The command grammar interacts directly with Go reflection over `toml` tags. Paths like `blip.layer.0.source.freq` are type-checked and routed to exactly what the TOML deserializer sees.
 - **Zero-Value Masking**: Pointer chains and zero values indicate "unset" or "package default", preserving minimal explicit TOML generation via `omitempty`.
 - **Validation Bounds**: The REPL bounds checks are purely structural (type width, float finiteness). Domain-specific validation (Nyquist bounds, envelope durations) happens synchronously at `validate` and `apply`.
-- **Slot 2 fill**: The engine's phrase auto-fill is off in soundlab so slots stay deterministic; `fill on` restores it to audition the fill bank.
+- **Slots**: 0 rhythm, 1 melody, 2 fill, 3 bass, as the game draws them; a melody pattern no longer carries its own bass, so slot 1 alone is the melody as authored. The engine's phrase auto-fill is off in soundlab so slots stay deterministic; `fill on` restores it to audition the fill bank.
 - **Audition**: `play`, `hit` and `export` render a spec as authored; vif's per-sound volume and shape table is not applied.
 
 ## Usage
@@ -39,10 +39,10 @@ go run ./cmd/soundlab -headless -s script.slab
 The TUI is a shell over the exact same dispatch table used by the REPL and scripts. Its macros construct and execute standard command strings, so a script can reproduce them; only the piano's recording commit writes its pattern into the document directly.
 
 - **Global**: `:` enters Command mode (REPL input, `Up/Down` history). `Tab` cycles focus between browser, inspector and log. `p` enters Piano mode, starting the transport if it is stopped (music must be unmuted); `b` Beat mode on a pattern; `m` resets the transport. `^S` saves modified documents (prompting for a path when one has none). `^Q`/`^C` quits, warning once about unsaved changes.
-- **Browser (Left Pane)**: `j/k` navigate, `g/G` jump to ends. `h/l` (or arrows) toggles Sounds vs Patterns. `Enter` opens the inspector. `space` auditions; on a pattern it assigns a free slot or toggles the transport. `0-2` assigns to (or clears from) a sequencer slot. `a/v/r` apply/validate/revert. `d` twice deletes. `n/c/w` new/clone/write. `+` mix.
+- **Browser (Left Pane)**: `j/k` navigate, `g/G` jump to ends. `h/l` (or arrows) toggles Sounds vs Patterns. `Enter` opens the inspector. `space` auditions; on a pattern it assigns a free slot or toggles the transport. `0-3` assigns to (or clears from) a sequencer slot. `a/v/r` apply/validate/revert. `d` twice deletes. `n/c/w` new/clone/write. `+` mix.
 - **Inspector (Right Pane)**: `j/k` navigate, `g/G` ends. `l/h` expand/collapse, `L/H` all. `Enter` edits a leaf value. `a` adds elements to slices. `x` deletes slice elements. `space` auditions. `Esc` returns to the browser.
 - **Log**: `j/k` and `PgUp/PgDn` scroll, `g/G` top/bottom.
-- **Piano Mode (`p`)**: Tracker-style two-octave layout. `z`/`q` rows map to white keys, `s`/`2` rows map to black keys. `[`/`]` shift the octave, `Up/Down` the velocity. `Tab` cycles bass, piano and pad. `^S` starts recording and `^S` again commits it, quantized to the 16th grid, as a one-bar pattern `rec_N`. `Esc` exits, committing a take in progress and stopping a transport the piano started.
+- **Piano Mode (`p`)**: Tracker-style two-octave layout. `z`/`q` rows map to white keys, `s`/`2` rows map to black keys. `[`/`]` shift the octave, `Up/Down` the velocity. `Tab` cycles the tonal instruments (bass, piano, pad, lead, pluck). `^S` starts recording and `^S` again commits it, quantized to the 16th grid, as a one-bar pattern `rec_N`. `Esc` exits, committing a take in progress and stopping a transport the piano started.
 - **Beat Mode (`b` on patterns)**: Track/step grid macro editor. `h/j/k/l` move, `g/G` first/last step. `space` toggles hits. `+/-` nudge velocity, `1-9` and `0` set it. `t` cycles the track's instrument. `a/x` add/delete a track. `Enter` applies the pattern, puts it in slot 0 and starts the transport. `^S` saves. `Esc` exits.
 
 ## Command Reference
@@ -63,7 +63,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `add` | `add <name.path>` | Append a zero-element to a slice field. |
 | `validate`/`apply`/`revert` | `apply [name\|all]` | Run domain validations, push into the live registry, or restore from it; bare or `all` = every entry for `validate`, dirty entries for `apply`/`revert`. |
 | `play`/`hit`/`note` | `play <name> [vol]` | Audition. `hit` plays a drum; `note` runs through the melodic sequencer slot. |
-| `slot` | `slot <0\|1\|2> <pat\|-> [fade_ms] [q]` | Transport assignment; dirty patterns auto-apply. |
+| `slot` | `slot <0\|1\|2\|3> <pat\|-> [fade_ms] [q]` | Transport assignment; dirty patterns auto-apply. |
 | `music`/`bpm`/`swing`/`fill`/`key` | `music start\|stop\|reset` | Transport, tempo, shuffle, slot-2 auto-fill, harmony. |
 | `mute`/`vol`/`wait` | `mute music\|sfx\|all\|none` | Channel mute, master volume, scripted pause. |
 | `help`/`quit` | `help [verb]` | Usage, exit. |

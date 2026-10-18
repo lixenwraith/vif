@@ -196,6 +196,20 @@ so `op = "ge"` tests equality (verified by reading; `:d break stat` spells `ne`,
 needs; until it lands, the guard factories could refuse an unknown `op` alone.
 Shipped scenarios and the default bot graph use only known keys and ops.
 
+### Author the tonal instruments as data
+
+- Priority: P3
+- Affected files: `pkg/audio/voice.go`, `pkg/audio/sound_spec.go`, `cmd/soundlab`
+
+The tonal voices (bass, piano, pad, lead, pluck) are a table in code, so a new
+timbre or a retuned bass is a Go change and soundlab cannot audition one. A
+`[[voice]]` table in `sounds.toml` with the same fields, loaded like a sound and
+hot-swapped like one, would put them under the author's hand; the bass voicing
+alternatives rendered for the music-smoothing review would then be a file edit.
+The offline conductor render that produced those comparisons (an APM timeline
+through the sequencer, no device) is a test-only harness in the review branch's
+scratch repository, and would be a `soundlab` or `vif-log` verb.
+
 ### Widen the input hook past order-only play
 
 - Priority: P2

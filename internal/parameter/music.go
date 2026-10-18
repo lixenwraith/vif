@@ -49,12 +49,54 @@ func TierForAPM(apm uint64) audio.Intensity {
 }
 
 // Tempo dynamics: the conductor slews toward the APM target and the sequencer
-// applies it beat-quantized, so tempo trails the five-second window by about a second
+// applies it beat-quantized. The fall is half the rise, so a lull winds the tempo
+// down over the bars the tiers take to step down rather than ahead of them.
 const (
 	BPMHysteresis = 3    // ignore smaller deltas
-	BPMRiseRate   = 20.0 // BPM per second, upward
-	BPMFallRate   = 16.0 // BPM per second, downward
+	BPMRiseRate   = 12.0 // BPM per second, upward
+	BPMFallRate   = 6.0  // BPM per second, downward
 )
+
+// Tier hysteresis. A tier holds TierRiseHold after any change before rising, then
+// goes straight to the APM's tier; it falls one tier at a time, each after the APM has
+// sat TierFallMargin under the tier's floor for TierFallHold. A burst reaches its
+// tier in one or two swaps instead of one a bar, and a lull steps down a phrase at a
+// time instead of collapsing within the five-second window.
+const (
+	TierRiseHold   = 4 * time.Second
+	TierFallHold   = 5 * time.Second
+	TierFallMargin = 30
+)
+
+// TierTracker is the conductor's tier under hysteresis
+type TierTracker struct {
+	Tier  audio.Intensity
+	held  time.Duration // since the last change
+	under time.Duration // the APM has sat under the tier's fall threshold this long
+}
+
+// Set places the tier, as a start or a manual hold does, and restarts its holds
+func (t *TierTracker) Set(tier audio.Intensity) { t.Tier, t.held, t.under = tier, 0, 0 }
+
+// Observe advances the holds by dt and reports whether the tier moved
+func (t *TierTracker) Observe(apm uint64, dt time.Duration) bool {
+	t.held += dt
+	if TierForAPM(apm+TierFallMargin) < t.Tier {
+		t.under += dt
+	} else {
+		t.under = 0
+	}
+	switch {
+	case TierForAPM(apm) > t.Tier && t.held >= TierRiseHold:
+		t.Tier = TierForAPM(apm)
+	case t.under >= TierFallHold && t.Tier > audio.IntensityCalm:
+		t.Tier--
+	default:
+		return false
+	}
+	t.held, t.under = 0, 0
+	return true
+}
 
 // Arrangement transition presets
 // Slow must span >= 1 bar at >= 120 BPM to engage the sequencer track reveal;

@@ -26,7 +26,8 @@ type Track struct {
 
 // Pattern is the unified rhythm/melody pattern. Role, Groups and Tiers place it in
 // the drawn arrangement: in its role's slot, in every group listed (all when none),
-// at every tier set. A pattern without a role or a tier plays only when placed.
+// at every tier set. A pattern without a role or a tier plays only when placed. The
+// bass role is a group's anchor: it holds through every tier its pattern covers.
 type Pattern struct {
 	ID     PatternID
 	Name   string
@@ -46,10 +47,11 @@ const (
 	RoleRhythm
 	RoleMelody
 	RoleFill
+	RoleBass
 	roleCount
 )
 
-var roleNames = [roleCount]string{"", "rhythm", "melody", "fill"}
+var roleNames = [roleCount]string{"", "rhythm", "melody", "fill", "bass"}
 
 func (r Role) String() string {
 	if r < roleCount {
@@ -58,7 +60,7 @@ func (r Role) String() string {
 	return "invalid"
 }
 
-// slot is the sequencer slot a role plays in: rhythm 0, melody 1, fill 2
+// slot is the sequencer slot a role plays in: rhythm 0, melody 1, fill 2, bass 3
 func (r Role) slot() int { return int(r) - 1 }
 
 // Clone deep-copies a pattern. Mandatory before editing anything obtained from

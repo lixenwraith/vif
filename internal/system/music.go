@@ -30,7 +30,7 @@ type MusicSystem struct {
 
 	bpmF         float64 // slewed tempo state; drifts toward APM target
 	lastBPM      int
-	tier         audio.Intensity
+	tier         parameter.TierTracker
 	manualTier   bool
 	arranged     bool // first auto-arrangement applied; slots start silent otherwise
 	stopped      bool // the run stopped its music, so an unmute does not start it
@@ -55,7 +55,7 @@ func NewMusicSystem(world *engine.World) engine.System {
 	}
 	reg := world.Resources.Status
 	s.statGroup, s.statTier = reg.Strings.Get("music.group"), reg.Strings.Get("music.tier")
-	for slot, key := range [...]string{"music.rhythm", "music.melody", "music.fill"} {
+	for slot, key := range [...]string{"music.rhythm", "music.melody", "music.fill", "music.bass"} {
 		s.statSlot[slot] = reg.Strings.Get(key)
 	}
 	s.statBPM = reg.Ints.Get("music.bpm")
@@ -70,7 +70,7 @@ func (s *MusicSystem) Init() {
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.bpmF = float64(parameter.APMToBPM(0))
 	s.lastBPM = 0
-	s.tier = audio.IntensityCalm
+	s.tier.Set(audio.IntensityCalm)
 	s.manualTier = false
 	s.arranged = false
 	s.stopped = false
@@ -172,7 +172,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 			}
 			// > 0 only: IntensityCalm is indistinguishable from the zero value
 			if p.Intensity > 0 && p.Intensity < audio.IntensityCount {
-				s.tier = p.Intensity
+				s.tier.Set(p.Intensity)
 				s.manualTier = true
 			}
 			if !muted {
@@ -234,8 +234,8 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 				return
 			}
 			if p.Intensity < audio.IntensityCount {
-				rising := p.Intensity > s.tier
-				s.tier = p.Intensity
+				rising := p.Intensity > s.tier.Tier
+				s.tier.Set(p.Intensity)
 				s.manualTier = true
 				if s.player.IsMusicPlaying() {
 					// As automatic shifts do: a calmer tier swaps in whole, never rebuilt track by track
@@ -324,7 +324,7 @@ func (s *MusicSystem) publish() {
 		return
 	}
 	s.statGroup.StoreIfChanged(cmp.Or(s.player.MusicGroup(), "-"))
-	s.statTier.StoreIfChanged(s.tier.String())
+	s.statTier.StoreIfChanged(s.tier.Tier.String())
 	s.statBPM.Store(int64(s.lastBPM))
 	for slot, stat := range s.statSlot {
 		id := s.player.SlotPattern(slot)
@@ -343,7 +343,7 @@ func (s *MusicSystem) publish() {
 // applyArrangement draws the tier from the current group
 // reveal requests the sequencer's per-bar track build-up
 func (s *MusicSystem) applyArrangement(quantize bool, fade int, reveal bool) {
-	s.player.SetIntensity(s.tier, fade, quantize, reveal)
+	s.player.SetIntensity(s.tier.Tier, fade, quantize, reveal)
 }
 
 // fadeSamples resolves a transition length: explicit request wins, else the
@@ -371,26 +371,26 @@ func (s *MusicSystem) startMusic() {
 	apm := s.world.Resources.Game.State.GetMusicAPM()
 	s.syncTempo(apm)
 	if !s.manualTier {
-		s.tier = parameter.TierForAPM(apm)
+		s.tier.Set(parameter.TierForAPM(apm))
 	}
 	s.arranged = true
 	s.applyArrangement(false, 0, false) // silent source: immediate, no build-up
 	s.player.StartMusic()
 }
 
-// syncToAPM slews tempo toward the APM target and applies auto-tier shifts
+// syncToAPM slews tempo toward the APM target and applies auto-tier shifts under
+// the tracker's hysteresis
 func (s *MusicSystem) syncToAPM() {
 	apm := s.world.Resources.Game.State.GetMusicAPM()
 	s.syncTempo(apm)
 	if s.manualTier {
 		return
 	}
-	tier := parameter.TierForAPM(apm)
-	if tier == s.tier && s.arranged {
+	was := s.tier.Tier
+	if !s.tier.Observe(apm, s.world.Resources.Time.DeltaTime) && s.arranged {
 		return
 	}
-	rising := s.arranged && tier > s.tier // first arrangement is not a build-up
-	s.tier = tier
+	rising := s.arranged && s.tier.Tier > was // first arrangement is not a build-up
 	s.arranged = true
 	s.applyArrangement(true, s.fadeSamples(0, rising), rising)
 }

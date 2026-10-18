@@ -357,6 +357,8 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 	case r == 'b':
 		if a.kind == kindPattern {
 			a.enterBeat()
+		} else {
+			fmt.Fprintln(a.log, "beat mode edits a pattern — h/l to the patterns tab first")
 		}
 		return
 	case ev.Key == terminal.KeyCtrlS:
@@ -391,14 +393,14 @@ func (a *tuiApp) toggleMusic() {
 	}
 	a.exec("music start")
 	silent := true
-	for i := range 3 {
+	for i := range audio.MusicSlots {
 		if a.s.eng.SlotPattern(i) != audio.PatternSilence {
 			silent = false
 			break
 		}
 	}
 	if silent {
-		fmt.Fprintln(a.log, "all slots silent — 0/1/2 on a pattern assigns it")
+		fmt.Fprintln(a.log, "all slots silent — 0-3 on a pattern assigns it")
 	}
 }
 
@@ -432,7 +434,7 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		}
 	case ev.Key == terminal.KeySpace || r == ' ':
 		a.auditionSel()
-	case r >= '0' && r <= '2':
+	case r >= '0' && r < '0'+audio.MusicSlots:
 		a.assignSlot(int(r - '0'))
 	case r == 'a':
 		a.nameCmd("apply")
@@ -514,20 +516,20 @@ func (a *tuiApp) playPattern() {
 		return
 	}
 	if id := audio.PatternIDByName(n); id != audio.PatternSilence {
-		for i := range 3 {
+		for i := range audio.MusicSlots {
 			if a.s.eng.SlotPattern(i) == id {
 				a.toggleMusic()
 				return
 			}
 		}
 	}
-	for i := range 3 {
+	for i := range audio.MusicSlots {
 		if a.s.eng.SlotPattern(i) == audio.PatternSilence {
 			a.assignSlot(i)
 			return
 		}
 	}
-	fmt.Fprintln(a.log, "all slots full — 0-2 replaces a slot (same key again clears it)")
+	fmt.Fprintln(a.log, "all slots full — 0-3 replaces a slot (same key again clears it)")
 }
 
 // assignSlot toggles the cursor pattern in a slot: assigning the pattern a
@@ -535,6 +537,7 @@ func (a *tuiApp) playPattern() {
 // un-layers. Assignment auto-starts the transport — the pattern must sound.
 func (a *tuiApp) assignSlot(slot int) {
 	if a.kind != kindPattern {
+		fmt.Fprintln(a.log, "slots take patterns — space auditions a sound")
 		return
 	}
 	n := a.selName()
@@ -547,7 +550,7 @@ func (a *tuiApp) assignSlot(slot int) {
 			return
 		}
 		// Enforce exclusivity: clear from any other active slots
-		for i := range 3 {
+		for i := range audio.MusicSlots {
 			if i != slot && a.s.eng.SlotPattern(i) == id {
 				a.exec(fmt.Sprintf("slot %d -", i))
 			}
