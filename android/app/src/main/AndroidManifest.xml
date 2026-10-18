@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Sessions: sockets to a host, an allocator site or a WebSocket route. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Back reaches the game through the dispatcher on every release since 13;
+         without the opt-in a parser older than Android 16 finishes the activity. -->
     <application
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
         android:label="vif"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
