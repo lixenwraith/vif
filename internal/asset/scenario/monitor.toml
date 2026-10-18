@@ -32,6 +32,12 @@ transitions = [
 parent = "Root"
 transitions = [
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "VarEquals", guard_args = { var = "level_failed", value = 1 } },
+    # Gold pays here rather than in main or quasar: a sequence outlives the handover
+    # between them, so it can end while neither holds it.
+    { trigger = "EventGoldCompleted", internal = true, capture_vars = { entity = "reward_entity" }, actions = [
+        { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 100 }, payload_vars = { entity = "reward_entity" } },
+        { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { entity = 0, delta = 1000, type = 1 }, payload_vars = { entity = "reward_entity" } },
+    ] },
 ]
 
 [states.MonitorActive]

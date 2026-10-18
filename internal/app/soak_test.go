@@ -175,6 +175,145 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 	}
 }
 
+// A gold sequence running when main hands over to quasar, or quasar back to main, is
+// adopted by the region taking over rather than cancelled, and still pays once.
+func TestGoldOutlivesTheHandoverBetweenMainAndQuasar(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	w := a.World()
+	cursor := w.Resources.Player.Slot(0)
+	state := func(region string) string { return w.Resources.Status.Strings.Get("fsm." + region + ".state").Load() }
+	tickUntil := func(region, want string) {
+		t.Helper()
+		for range 100 {
+			if state(region) == want {
+				return
+			}
+			a.Tick(1)
+		}
+		t.Fatalf("%s did not reach %s, at %s", region, want, state(region))
+	}
+	goldHeader := func() (header core.Entity) {
+		w.Components.Header.Each(func(e core.Entity, h *component.HeaderComponent) bool {
+			if h.Behavior == component.BehaviorGold {
+				header = e
+			}
+			return header == 0
+		})
+		return header
+	}
+
+	tickUntil("main", "MainGoldActive")
+	gold := goldHeader()
+	w.Resources.Status.Ints.Get("kills.drain").Store(9)
+	a.Context().PushCrossing(event.EventDrainDefeated, &event.DrainDefeatedPayload{Entity: cursor})
+	a.Settle()
+	tickUntil("quasar", "QuasarGoldActive")
+	if goldHeader() != gold {
+		t.Fatal("the quasar encounter replaced main's running gold")
+	}
+	zeroHitPoints(a, w.Components.Quasar.Entities()[0], cursor)
+	tickUntil("main", "MainGoldActive")
+	if goldHeader() != gold {
+		t.Fatal("main replaced the quasar encounter's running gold")
+	}
+
+	energy := func() int64 { e, _ := w.Components.Energy.GetComponent(cursor); return e.Current }
+	before := energy()
+	header, _ := w.Components.Header.GetComponent(gold)
+	for i, m := range header.MemberEntries {
+		a.Context().PushCrossing(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
+			HeaderEntity: gold, MemberEntity: m.Entity, Entity: cursor,
+			RemainingCount: len(header.MemberEntries) - 1 - i,
+		})
+	}
+	a.Settle()
+	if got := energy() - before; got != 1000 {
+		t.Fatalf("completing the carried gold paid %d energy, want 1000 once", got)
+	}
+}
+
+// Main's gold broken by anything but typing dusts every glyph, as quasar's does, so
+// it is worth something to a player who never types it.
+func TestMainGoldDestroyedDustsEveryGlyph(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	w := a.World()
+	for range 100 {
+		if w.Resources.Status.Strings.Get("fsm.main.state").Load() == "MainGoldActive" {
+			break
+		}
+		a.Tick(1)
+	}
+	var member core.Entity
+	w.Components.Header.Each(func(_ core.Entity, h *component.HeaderComponent) bool {
+		if h.Behavior == component.BehaviorGold {
+			member = h.MemberEntries[0].Entity
+		}
+		return member == 0
+	})
+	if member == 0 {
+		t.Fatal("main spawned no gold")
+	}
+	dusted := false
+	a.SetDispatchTap(func(ev event.GameEvent) { dusted = dusted || ev.Type == event.EventDustAllRequest })
+	w.RunSafe(func() { w.DestroyEntity(member) })
+	a.Tick(2)
+	if !dusted || w.Resources.Status.Strings.Get("fsm.main.state").Load() != "MainDecayWait" {
+		t.Fatal("destroyed main gold did not dust every glyph before the decay wait")
+	}
+}
+
+// Clearing the tower is rewarded by an event drop, not a species roll: one gun for
+// the cursor, which collecting it turns into a second lane.
+func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 160, 50)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	w := a.World()
+	cursor := w.Resources.Player.Slot(0)
+	a.Region(event.RegionPause, "main", "")
+	a.Region(event.RegionSpawn, "tower", "TowerSetup")
+	a.Tick(12)
+	if w.Components.Pylon.CountEntities() == 0 {
+		t.Fatal("the tower encounter spawned no pylons")
+	}
+	for _, e := range w.Components.Pylon.Entities() {
+		zeroHitPoints(a, e, cursor)
+		header, _ := w.Components.Header.GetComponent(e)
+		for _, m := range header.MemberEntries {
+			zeroHitPoints(a, m.Entity, cursor)
+		}
+	}
+	a.Tick(3)
+	if w.Resources.Status.Strings.Get("fsm.tower.state").Load() != "-" {
+		t.Fatal("pylon defeats did not clear the tower")
+	}
+	guns := 0
+	w.Components.Loot.Each(func(_ core.Entity, l *component.LootComponent) bool {
+		if l.Type == component.LootGun && l.Owner == cursor {
+			guns++
+		}
+		return true
+	})
+	if guns != 1 {
+		t.Fatalf("tower victory dropped %d guns, want 1", guns)
+	}
+	lanes := func() int { wc, _ := w.Components.Weapon.GetComponent(cursor); return wc.Charges[component.WeaponGun] }
+	for range 400 {
+		if lanes() == 2 {
+			return
+		}
+		a.Tick(1)
+	}
+	t.Fatalf("the gun drop was not collected into a lane: %d", lanes())
+}
+
 // Each shipped scenario must boot a player and end the run on one participant defeat.
 func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()

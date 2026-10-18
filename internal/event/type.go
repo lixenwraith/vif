@@ -144,7 +144,7 @@ const (
 	EventGoldSpawnRequest
 	// EventGoldSpawnFailed [shared] signals that a requested spawn could not be completed (e.g. no space)
 	EventGoldSpawnFailed
-	// EventGoldSpawned (GoldSpawnedPayload) [shared] signals gold sequence creation
+	// EventGoldSpawned (GoldSpawnedPayload) [shared] answers a spawn request with a new sequence, or the one already running
 	EventGoldSpawned
 	// EventGoldCompleted (GoldCompletionPayload) [shared] signals successful gold sequence completion
 	EventGoldCompleted
@@ -431,7 +431,7 @@ const (
 
 	// --- Loot ---
 
-	// EventLootSpawnRequest (LootSpawnRequestPayload) [local] requests direct loot spawn at position
+	// EventLootSpawnRequest (LootSpawnRequestPayload) [local] is an event drop: one loot kind at a cell for each cursor this instance simulates
 	EventLootSpawnRequest
 
 	// --- Missile ---

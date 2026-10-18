@@ -168,10 +168,8 @@ func (s *LootSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventLootSpawnRequest:
-		// Direct spawn names no owner; it belongs to the local cursor
 		if payload, ok := ev.Payload.(*event.LootSpawnRequestPayload); ok {
-			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y,
-				s.world.Resources.Player.Entity)
+			s.onEventDrop(payload)
 		}
 	}
 }
@@ -377,6 +375,17 @@ func (s *LootSystem) homingTarget(
 }
 
 // --- Drop Resolution ---
+
+// onEventDrop is a scenario's reward rather than a roll: one drop of the named kind
+// for every cursor this instance simulates, as each instance rolls a kill for its own
+func (s *LootSystem) onEventDrop(payload *event.LootSpawnRequestPayload) {
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		if cursor != 0 && s.world.SimulatesLocally(cursor) {
+			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y, cursor)
+		}
+	}
+}
 
 // onSpeciesKilled rolls the drop table once per locally simulated cursor; a kill
 // produces this instance's drops only, so ownership is never read across instances.

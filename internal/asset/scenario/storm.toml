@@ -12,6 +12,8 @@ on_exit = [
 [states.StormSetup]
 parent = "StormHold"
 on_enter = [
+    # Storm, Kraken and tower have no gold of their own; each setup ends a carried one
+    { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [

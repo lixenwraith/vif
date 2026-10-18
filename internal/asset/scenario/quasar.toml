@@ -30,11 +30,9 @@ transitions = [
 
 # --- Gold Cycle Parent ---
 
+# A running sequence outlives the region's exit back to main; storm clears it.
 [states.QuasarGoldCycle]
 parent = "QuasarHold"
-on_exit = [
-    { action = "EmitEvent", event = "EventGoldCancel" },
-]
 transitions = [
     # FSM dispatch precedes kill telemetry for the same event, so two prior
     # quasar kills plus this payload reaches the three-kill escalation gate.
@@ -71,32 +69,10 @@ transitions = [
 [states.QuasarGoldActive]
 parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "EventGoldCompleted", target = "QuasarGoldCompleted", capture_vars = { entity = "reward_entity" } },
-    { trigger = "EventGoldTimeout", target = "QuasarGoldTimeout" },
-    { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" },
+    { trigger = "EventGoldCompleted", target = "QuasarDustAll" },
+    { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
+    { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
     { macro = "LeftMap", active = "quasar.active", target = "QuasarExit" },
-]
-
-[states.QuasarGoldCompleted]
-parent = "QuasarGoldCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 100 }, payload_vars = { entity = "reward_entity" } },
-    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { entity = 0, delta = 1000, type = 1 }, payload_vars = { entity = "reward_entity" } },
-]
-transitions = [
-    { trigger = "Tick", target = "QuasarDustAll" },
-]
-
-[states.QuasarGoldTimeout]
-parent = "QuasarGoldCycle"
-transitions = [
-    { trigger = "Tick", target = "QuasarDustAll" },
-]
-
-[states.QuasarGoldDestroyed]
-parent = "QuasarGoldCycle"
-transitions = [
-    { trigger = "Tick", target = "QuasarDustAll" },
 ]
 
 # --- Dust ---

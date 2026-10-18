@@ -137,15 +137,15 @@ in its spin; when the Kraken stands still, they drop straight down at fresh deca
 speed.
 
 Dust is what glyphs become: a drain crossing a normal or bright glyph, a dust-all
-request (`:dust`, each gold round of a quasar encounter, or two storm circles
-colliding) converting every loose glyph while dark ones flash away, and special
-fire (§7), which converts dark ones too. It orbits the local cursor while that
-cursor's energy is nonzero, bounces off walls and bounds, nudges the drains it
-crosses, and lives 2, 4 or 8 s by its glyph's level through `TimerComponent`,
-fading a level each time its remaining life drops below the lower level's
-lifetime. All three behaviors share one deterministic Player-domain RNG stream.
-Flash, fade, splash, marker, explosion, and motion-marker systems are transient
-feedback rather than durable text state.
+request (`:dust`, each gold round of a quasar encounter, a gold sequence destroyed
+in `main`, or two storm circles colliding) converting every loose glyph while dark
+ones flash away, and special fire (§7), which converts dark ones too. It orbits
+the local cursor while that cursor's energy is nonzero, bounces off walls and
+bounds, nudges the drains it crosses, and lives 2, 4 or 8 s by its glyph's level
+through `TimerComponent`, fading a level each time its remaining life drops below
+the lower level's lifetime. All three behaviors share one deterministic
+Player-domain RNG stream. Flash, fade, splash, marker, explosion, and motion-marker
+systems are transient feedback rather than durable text state.
 
 ## 5. Energy, heat, boost, and shield
 
@@ -244,9 +244,14 @@ left-to-right member order. Gold members resist deletion and particle effects.
 energy. Completion, timeout and external damage emit `EventGoldCompleted`,
 `EventGoldTimeout` and `EventGoldDestroyed`; `EventGoldCancel` removes the
 sequence silently. Completion credits the cursor that typed the most members, the
-lowest slot on a tie. The Gold system cleans up the composite, but the active FSM
-decides what completion earns. In the embedded campaign, completion adds heat
-and energy.
+lowest slot on a tie. The Gold system cleans up the composite, but the FSM decides
+what completion earns. A spawn request while a sequence runs is answered with that
+one (`EventGoldSpawned`), so a region can adopt it. In the embedded campaign a
+sequence outlives the handover between `main` and quasar in either direction, the
+monitor pays every completion heat and energy wherever it ends, and the storm,
+Kraken and tower setups cancel it. Only completion pays: a sequence a species
+destroys dusts every glyph in `main`, as every end of a quasar round does, which
+makes gold worth something to a player who never types it.
 
 ### Species loot
 
@@ -272,13 +277,20 @@ where it is.
 | Disruptor | `P` | Adds a disruptor charge/orb. |
 | Turret | `B` | Adds a turret charge/orb. |
 | Emitter | `R` | Adds an emitter charge/orb. |
+| Gun | `T` | Adds a gun lane per direction, up to three. |
 | Heat | `H` | Adds the configured heat reward (currently 10). |
 | Energy | `E` | Adds the configured energy reward (currently 10,000). |
 
-Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray.
-The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
+Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray,
+tracer. The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
 documentation does not duplicate every rate because those values are expected
 to change during tuning.
+
+A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
+places one kind at a cell for every cursor the instance simulates, with no roll,
+and each drop homes on its owner as above. No species drops the gun; the
+campaign's tower victory drops one at the tower. Like any FSM entry action, the
+drop does not replay on an instance a correction moves past the state raising it.
 
 ## 7. Weapons and attacks
 
@@ -301,7 +313,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
-| Gun | Innate. One tracer per cardinal from the cursor, direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back. |
+| Gun | Innate. One tracer per cardinal from the cursor, direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back; a gun drop adds a charge. |
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity; at the cap each hit arcs to the nearest other target in range. |
 | Launcher | Homing/area missiles assigned from the nearest-target set; at the cap its cooldown halves. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
@@ -415,7 +427,8 @@ it spawns and arms the cursor before opening `main`.
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
    is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
    kills since the escalation before it; `kills.*` keeps the game's totals.
-5. Destroying the tower's pylons resumes `main`; losing the tower fails the run.
+5. Destroying the tower's pylons drops each participant a gun at the tower and
+   resumes `main`; losing the tower fails the run.
    Encounter transitions preserve uncollected loot.
 6. Any participant reaching zero heat **and** zero energy ends the run. The shared
    monitor consumes owner-authored defeat state and starts a new game, as `:n`

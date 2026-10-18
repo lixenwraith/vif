@@ -1001,7 +1001,7 @@ type SpeciesCreatedPayload struct {
 
 // --- Loot ---
 
-// LootSpawnRequestPayload requests direct loot spawn (bypasses drop tables)
+// LootSpawnRequestPayload names an event drop's kind and cell; no drop table is rolled
 type LootSpawnRequestPayload struct {
 	Type component.LootType `toml:"type"`
 	X    int                `toml:"x"`

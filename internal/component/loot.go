@@ -16,6 +16,7 @@ const (
 	LootEnergy
 	LootTurret
 	LootEmitter
+	LootGun
 	LootCount // Sentinel for array sizing
 )
 
@@ -45,6 +46,7 @@ var LootSpecs = [LootCount]LootSpec{
 	LootEnergy:    {Reward: RewardEnergy, Delta: parameter.LootEnergyRewardValue},
 	LootTurret:    {Reward: RewardWeapon, Weapon: WeaponTurret},
 	LootEmitter:   {Reward: RewardWeapon, Weapon: WeaponEmitter},
+	LootGun:       {Reward: RewardWeapon, Weapon: WeaponGun},
 }
 
 // LootComponent represents a collectible loot drop entity
