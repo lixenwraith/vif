@@ -107,8 +107,11 @@ Sound definition override TOML
 .B \-color auto|256|true
 Colour depth; auto detects the terminal
 .TP
+.B \-g, \-gui[=false]
+Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; a vif\-gui build's default, which \-g=false turns off
+.TP
 .B \-scale <n>
-Draw the desktop window's font n times its pixels, for a HiDPI screen; vif\-gui only (default 1)
+Draw the desktop window's font n times its pixels, for a HiDPI screen; with \-g (default 1)
 .TP
 .B \-mute[=false]
 Start muted, or with sound as \-mute=false; unset, vif.toml's [play] channels stand, muted by default

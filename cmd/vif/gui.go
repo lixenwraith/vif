@@ -1,4 +1,4 @@
-//go:build vif_gui && (linux || freebsd)
+//go:build (linux || freebsd) && !vif_headless && !vif_nogui
 
 package main
 
@@ -14,7 +14,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/window"
 )
 
-func init() { platformHost.Presentation = &windowHost{} }
+// The window is in every Linux and FreeBSD build: -g opens it, a vif_gui build
+// by default (gui_default.go), and vif_nogui leaves it out of the binary
+func init() { openWindow = func() { platformHost.Presentation = &windowHost{} } }
 
 // windowHost is a desktop window as the run's Presentation. A scenario change
 // rebuilds the run, not the window: it opens on the first Init and closes when

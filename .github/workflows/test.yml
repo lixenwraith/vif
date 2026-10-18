@@ -31,7 +31,7 @@ jobs:
       run: go build ./...
 
     - name: Test the desktop window package
-      run: CGO_ENABLED=0 go test -tags vif_gui ./pkg/window
+      run: CGO_ENABLED=0 go test ./pkg/window
 
     - name: Vet and test the Android host module
       working-directory: android

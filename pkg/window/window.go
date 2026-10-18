@@ -1,4 +1,4 @@
-//go:build vif_gui && (linux || freebsd)
+//go:build linux || freebsd
 
 // Package window is a desktop window that draws a terminal cell grid. Xlib opens it
 // and reads its input, EGL and GLES 2 draw the frame, all loaded at run time with

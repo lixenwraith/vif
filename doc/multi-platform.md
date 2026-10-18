@@ -20,11 +20,11 @@ downloadable content, a non-text renderer, and Android.
 
 | Profile | Tags or target | Presentation | Audio | Raw socket sessions | Logging | Intended use |
 |---|---|---|---|---|---|---|
-| Full native | `make release` | Terminal renderer | Included | Yes | Included | Linux/FreeBSD client or manually run host |
+| Full native | `make release` | Terminal renderer; on Linux and FreeBSD the desktop window too, which `-g` opens | Included | Yes | Included | Linux/FreeBSD client or manually run host |
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
-| Desktop window | `make gui` / `vif_gui` (Linux, FreeBSD) | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | Play outside a terminal; cgo stays off |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load; cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
 | Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
 
@@ -39,7 +39,8 @@ The useful commands are:
 make release                 # bin/vif
 make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
-make gui                     # bin/vif-gui
+make gui                     # bin/vif-gui, the window by default
+make cli                     # bin/vif-cli, no window
 make android                 # bin/vif-debug.apk, from android/
 make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
@@ -380,14 +381,16 @@ name. Adding a graphical host is therefore composition, not a simulation fork:
    builder, and leave components, systems, events, scheduler and the manifest
    fingerprint common.
 
-The desktop window is one such host: `cmd/vif/gui.go` under `vif_gui` sets
-`Host.Presentation` to a `pkg/window` window, which draws each frame with
+The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
+build but `vif_nogui`, sets `Host.Presentation` to a `pkg/window` window when `-g`
+asks for it, as a `vif_gui` build does by default; the window draws each frame with
 `glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
 pointer as the events a terminal reports; `-scale n` draws the texture `n` times
 its size with nearest filtering, for a HiDPI screen. Its libraries
 (`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
-`bin/vif-gui` builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built as std, which
-`make gui` passes. It runs on Wayland through XWayland.
+the binary builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built
+as std, which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on
+Wayland through XWayland.
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `pkg/browser` host. The Go program runs in a Worker, so the

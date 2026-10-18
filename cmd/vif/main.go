@@ -50,7 +50,8 @@ var (
 	flagSchema   = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
 	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
 	flagSeed     = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
-	flagScale    = flag.Int("scale", 1, "Desktop window pixels per font pixel; vif-gui only")
+	flagGUI      = flag.Bool("g", false, "Open the game in a desktop window instead of the terminal")
+	flagScale    = flag.Int("scale", 1, "Desktop window pixels per font pixel; with -g")
 	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
 	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
 	flagBot      = flag.String("bot", "", "Add bots: [N[:graph]|graph], default 1:default")
@@ -81,6 +82,7 @@ func init() {
 	flag.StringVar(&flagAudioBackend, "ab", "", audioHint)
 	flag.StringVar(&flagAudioBackend, "audio-backend", "", audioHint)
 	flag.BoolVar(flagHelp, "help", false, "Print the flag help and exit")
+	flag.BoolVar(flagGUI, "gui", false, "Open the game in a desktop window instead of the terminal")
 	flag.StringVar(flagReplay, "r", "", "Replay a recorded journal instead of playing")
 	journalHint := "Record a replay journal; -j=DIR overrides the user-state directory"
 	flag.Var(&flagJournal, "j", journalHint)
@@ -106,6 +108,20 @@ func main() {
 	if *flagVer {
 		writeVersion(os.Stdout)
 		return
+	}
+	// -g given either way decides; unset, the build does
+	window := windowByDefault
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "g" || f.Name == "gui" {
+			window = *flagGUI
+		}
+	})
+	if window {
+		if openWindow == nil {
+			fmt.Fprintln(os.Stderr, "-g: this build has no desktop window; one is built on Linux and FreeBSD without vif_nogui")
+			os.Exit(exitFailure)
+		}
+		openWindow()
 	}
 
 	var err error
@@ -305,8 +321,14 @@ func logRuntimeReport(r core.RuntimeReport) {
 	status.Trigger(status.TrigRace)
 }
 
-// platformHost is the build's platform host; empty, the run presents on the terminal
-var platformHost app.Host
+// platformHost is the build's platform host; empty, the run presents on the
+// terminal. openWindow makes it the desktop window, nil in a build without one;
+// windowByDefault is a vif_gui build's, which opens the window unless -g=false.
+var (
+	platformHost    app.Host
+	openWindow      func()
+	windowByDefault bool
+)
 
 // buildConfig translates parsed flags into the runtime configuration
 func buildConfig() app.Config {
