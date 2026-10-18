@@ -788,6 +788,37 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 ## Rendering
 
+### Give the configuration menu a touch target on Android
+
+- Priority: P1
+- Affected files: `internal/engine/overlay_geometry.go`, `internal/render/renderer/overlay.go`,
+  `internal/mode/config_menu.go`, `internal/app/presentation.go`, `android/game/view.go`,
+  `android/app/src/main/java/com/lixen/vif/GameView.java`
+
+A menu row is one cell, 12 dp on a phone against Android's 48 dp touch target, so
+a tap lands on a neighbour. Three ways, in rising cost:
+
+1. A row pitch on a touch host. `OverlayGeometry` gains a pitch the renderer and
+   `pointConfigMenu` share: 1 on a terminal, 3 or 4 where the presentation
+   reports touch (one method on `Presentation`, true for Android and the browser's
+   touch strip), so a row is 36 to 48 dp and the list shows a third of its rows a
+   page. The menu stays the `tui` one; every host behaves the same; smallest change.
+2. A menu the host draws. The overlay content (`core.OverlayMenu`: rows with key,
+   label, value, description and disabled reason; the form) crosses the binding as
+   it changes, through an optional `menuPresentation` on `Presentation`
+   (`ShowMenu`, `HideMenu`), and the host answers with the keys the router already
+   takes plus a select-by-key the terminal vocabulary has no event for, so a new
+   event or a call into the router under the world lock. Java draws a radial menu
+   (the console style) or a list with 48 dp targets; the browser could do the same
+   in HTML. A second renderer for one screen and a protocol for its state.
+3. A separate Activity or bottom sheet: 2 with Android's own widgets, and the
+   game's Surface left behind while it shows.
+
+Recommended: 1 now, since it serves the browser's touch strip too; 2 only if a
+radial menu is wanted for its own sake, after 1 shows what a bigger row is worth.
+The typing strip above the keyboard already repeats the status row from the same
+picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
+
 ### Configuration menu follow-up
 
 - Priority: P2
