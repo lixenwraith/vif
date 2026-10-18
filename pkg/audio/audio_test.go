@@ -66,7 +66,7 @@ func testPatterns() []*Pattern {
 			{Instr: InstrKick, Events: []Step{{Pos: 0, Vel: 1}, {Pos: 4, Vel: 1}, {Pos: 8, Vel: 1}, {Pos: 12, Vel: 1}}},
 			{Instr: InstrHihat, Humanize: 0.5, Events: []Step{{Pos: 2, Vel: 0.4, Prob: 0.8}}},
 		}},
-		{Name: "tune", Steps: 32, Role: RoleMelody, Groups: []string{"g", "h"}, Tiers: 0b1, Tracks: []Track{
+		{Name: "tune", Steps: 32, Role: RoleMelody, Groups: []string{"g", "h"}, Tiers: 0b1, Motif: "tune", Tracks: []Track{
 			{Instr: InstrBass, FollowChord: true, Events: []Step{{Pos: 1, Vel: 0.8, Dur: 1}}},
 			{Instr: InstrPiano, FollowChord: true, Events: []Step{{Pos: 16, Vel: 0.5, Deg: 4, Oct: 2, Dur: 2}}},
 		}},
@@ -823,10 +823,32 @@ func TestDrawsWorkThroughThePool(t *testing.T) {
 	pool := []PatternID{101, 102, 103}
 	seen := map[PatternID]bool{}
 	for range pool {
-		seen[s.draw(pool)] = true
+		seen[s.draw(pool, PatternSilence, true)] = true
 	}
 	if len(seen) != len(pool) {
 		t.Errorf("three draws from three members hit %d of them", len(seen))
+	}
+}
+
+// TestDrawsFollowTheMotif is the continuity rule: a tier change draws the playing
+// motif's member of the new pool, and a phrase variation draws another motif's.
+func TestDrawsFollowTheMotif(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	motif := func(name, m string) PatternID {
+		return RegisterPattern(&Pattern{Name: name, Steps: 16, Motif: m,
+			Tracks: []Track{{Instr: InstrBass, Events: []Step{{Pos: 0, Vel: 0.5}}}}})
+	}
+	a1, a2, b1, b2 := motif("a1", "a"), motif("a2", "a"), motif("b1", "b"), motif("b2", "b")
+	s := NewSequencer(MaxBPM, nil)
+	pool := []PatternID{a2, b1, b2}
+	for range 3 {
+		if got := s.draw(pool, a1, true); got != a2 {
+			t.Fatalf("a tier change on motif a drew %d, want %d", got, a2)
+		}
+		if got := s.draw(pool, a1, false); got == a2 {
+			t.Fatal("a phrase variation on motif a drew motif a again")
+		}
 	}
 }
 

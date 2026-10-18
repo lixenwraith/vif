@@ -50,6 +50,7 @@ type Mixer struct {
 
 	pauseGain  float64
 	duckGain   float64
+	limitEnv   float64 // the limiter's peak follower
 	musicBuf   []float64
 	sfxBuf     []float64
 	musicTap   io.Writer
@@ -172,6 +173,7 @@ func (m *Mixer) loop() {
 	pauseStep := 1.0 / (AudioPauseFade.Seconds() * float64(AudioSampleRate))
 	duckAtk := onePoleCoef(MusicDuckAttack)
 	duckRel := onePoleCoef(MusicDuckRelease)
+	limRel := math.Exp(-1.0 / (LimiterRelease.Seconds() * float64(AudioSampleRate)))
 
 	for {
 		select {
@@ -179,7 +181,7 @@ func (m *Mixer) loop() {
 			return
 		case <-ticker.C:
 			m.drainCmds()
-			m.renderTick(mixBuf, outBytes, n, pauseStep, duckAtk, duckRel)
+			m.renderTick(mixBuf, outBytes, n, pauseStep, duckAtk, duckRel, limRel)
 		}
 	}
 }
@@ -284,7 +286,7 @@ func (m *Mixer) startSound(st SoundID, vol float64) {
 }
 
 // renderTick renders one buffer: music bus, SFX bus, duck, pause, limit, write
-func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, duckAtk, duckRel float64) {
+func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, duckAtk, duckRel, limRel float64) {
 	isPaused := m.paused.Load()
 
 	clear(m.musicBuf)
@@ -332,7 +334,17 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 			}
 		}
 
-		mixBuf[i] = (m.musicBuf[i]*m.duckGain + m.sfxBuf[i]) * m.pauseGain
+		v := (m.musicBuf[i]*m.duckGain + m.sfxBuf[i]) * m.pauseGain
+		// Peak limiter: instant on the peak, releasing over LimiterRelease
+		if a := math.Abs(v); a > m.limitEnv {
+			m.limitEnv = a
+		} else {
+			m.limitEnv *= limRel
+		}
+		if m.limitEnv > LimiterCeiling {
+			v *= LimiterCeiling / m.limitEnv
+		}
+		mixBuf[i] = v
 	}
 
 	floatToBytes(mixBuf, outBytes)
@@ -369,18 +381,10 @@ func (m *Mixer) mixActive(buf []float64, samples int) []activeSound {
 	return remaining
 }
 
-// floatToBytes converts float64 mono to interleaved stereo int16 LE bytes
-// Applies soft limiting before hard clip
+// floatToBytes converts float64 mono to interleaved stereo int16 LE bytes, hard
+// clipping what the limiter let through
 func floatToBytes(in []float64, out []byte) {
 	for i, v := range in {
-		// Soft limiter (tanh-style)
-		if v > 0.8 {
-			v = 0.8 + 0.2*(1.0-1.0/(1.0+(v-0.8)*5.0))
-		} else if v < -0.8 {
-			v = -0.8 - 0.2*(1.0-1.0/(1.0+(-v-0.8)*5.0))
-		}
-
-		// Hard clip
 		if v > 1.0 {
 			v = 1.0
 		} else if v < -1.0 {

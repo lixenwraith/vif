@@ -80,6 +80,8 @@ type tuiApp struct {
 	kind     int
 	brCursor [2]int
 	brScroll [2]int
+	brPageH  int    // rows the browser showed last render, a page for PgUp/PgDn
+	search   string // the last / term, prefilled so / again finds the next
 
 	exp    *tui.TreeExpansion
 	tree   *tui.TreeState
@@ -412,10 +414,16 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		*c++
 	case ev.Key == terminal.KeyUp || r == 'k':
 		*c--
+	case ev.Key == terminal.KeyPageDown:
+		*c += max(a.brPageH-1, 1)
+	case ev.Key == terminal.KeyPageUp:
+		*c -= max(a.brPageH-1, 1)
 	case r == 'g':
 		*c = 0
 	case r == 'G':
 		*c = len(ns) - 1
+	case r == '/':
+		a.promptSearch()
 	case r == 'n':
 		a.promptNew()
 	case r == 'c':
@@ -796,6 +804,24 @@ func (a *tuiApp) promptKey(ev terminal.Event) {
 	default:
 		a.editField.HandleKey(ev.Key, ev.Rune, ev.Modifiers)
 	}
+}
+
+// promptSearch: '/' in the browser. The next name after the cursor containing the
+// term, case-insensitive and wrapping; the term stays prefilled, so / and Enter
+// again walk the matches.
+func (a *tuiApp) promptSearch() {
+	a.openPrompt("search: ", a.search, func(term string) {
+		a.search = term
+		ns := a.browserNames()
+		c := &a.brCursor[a.kind]
+		for i := 1; i <= len(ns); i++ {
+			if j := (*c + i) % len(ns); strings.Contains(strings.ToLower(ns[j]), strings.ToLower(term)) {
+				*c = j
+				return
+			}
+		}
+		fmt.Fprintf(a.log, "no name contains %q\n", term)
+	})
 }
 
 // promptNew: 'n' in the browser. Kind is captured at open so a later tab
