@@ -12,10 +12,12 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.ViewConfiguration;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputMethodManager;
 
 import com.lixen.vif.game.Game;
 
@@ -24,21 +26,32 @@ import java.util.Arrays;
 /**
  * The game's screen: a render thread takes the newest frame the run flushed at each
  * vsync, hands it to the drawer and posts the drawer's picture. Taps, drags and keys
- * go to the run; a two-finger tap raises or drops the system keyboard.
+ * go to the run; two fingers tapped together raise or drop the system keyboard,
+ * which covers the picture rather than resizing it, the status row drawn again
+ * above it so what is typed can be read.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
+    // Two fingers are a tap when the second lands this soon after the first, neither
+    // moves, and both lift this soon after; a finger joining a held one is play
+    private static final long PAIR_TOGETHER_MS = 150, PAIR_TAP_MS = 300;
+
     private final MainActivity activity;
     private final String files, wad;
     private final boolean raster;
     private final Speaker speaker;
     private final CellDrawer drawer;
     private final Stats stats = new Stats();
+    private final int slop;
 
     private boolean started;
-    private boolean keyboard;
     private HandlerThread thread;
     private Handler handler;
     private boolean looping; // a frame callback is posted on the render thread
+    private volatile int covered; // the surface's bottom pixels under the keyboard
+
+    private long downAt, pairAt; // when the first finger landed, and the second
+    private boolean pairDown, pairTap; // two fingers rest together; they tapped
+    private final float[] pairX = new float[2], pairY = new float[2];
 
     GameView(MainActivity activity, String files, String wad, boolean raster, Speaker speaker) {
         super(activity);
@@ -55,6 +68,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
             throw new IllegalStateException("font atlas", e);
         }
         drawer = d;
+        slop = ViewConfiguration.get(activity).getScaledTouchSlop();
         setFocusable(true);
         setFocusableInTouchMode(true);
         getHolder().addCallback(this);
@@ -125,43 +139,94 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         }
         try {
             drawer.draw(c);
+            int under = covered;
+            if (under > 0) {
+                drawer.drawStrip(c, under);
+            }
         } finally {
             holder.unlockCanvasAndPost(c);
+        }
+    }
+
+    /** The keyboard covers the bottom px of the surface; the picture keeps its grid. */
+    void keyboardCovers(int px) {
+        if (covered == px) {
+            return;
+        }
+        covered = px;
+        if (handler != null) {
+            handler.post(this::present);
         }
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
         int x = (int) e.getX(), y = (int) e.getY();
+        if (covered > 0 && y >= getHeight() - covered - drawer.stripHeight(getHeight())) {
+            return true; // the strip is a readout, not the map under it
+        }
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                pairDown = pairTap = false;
+                downAt = e.getEventTime();
                 Game.tap(x, y, true);
                 break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                // A second finger landing with the first starts a tap; one joining a
+                // finger held or dragging, as thumbs do in landscape, is nothing
+                if (e.getPointerCount() == 2 && e.getEventTime() - downAt <= PAIR_TOGETHER_MS) {
+                    pairDown = true;
+                    pairAt = e.getEventTime();
+                    for (int i = 0; i < 2; i++) {
+                        pairX[i] = e.getX(i);
+                        pairY[i] = e.getY(i);
+                    }
+                    Game.tap(x, y, false);
+                }
+                break;
             case MotionEvent.ACTION_MOVE:
-                Game.drag(x, y);
+                if (!pairDown) {
+                    Game.drag(x, y);
+                    break;
+                }
+                for (int i = 0; i < Math.min(2, e.getPointerCount()); i++) {
+                    if (Math.abs(e.getX(i) - pairX[i]) > slop || Math.abs(e.getY(i) - pairY[i]) > slop) {
+                        pairDown = false;
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_POINTER_UP:
+                pairTap = pairDown && e.getPointerCount() == 2 && e.getEventTime() - pairAt <= PAIR_TAP_MS;
+                pairDown = false;
                 break;
             case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
                 Game.tap(x, y, false);
-                break;
-            case MotionEvent.ACTION_POINTER_DOWN:
-                if (e.getPointerCount() == 2) {
-                    Game.tap(x, y, false);
+                if (pairTap && e.getEventTime() - pairAt <= PAIR_TAP_MS) {
                     toggleKeyboard();
                 }
+                pairTap = false;
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                pairDown = pairTap = false;
+                Game.tap(x, y, false);
                 break;
         }
         return true;
     }
 
+    // The window's own word on the keyboard, not a flag of ours: Back drops it
+    // without telling the app, which left a flag a toggle behind
     private void toggleKeyboard() {
-        InputMethodManager im = getContext().getSystemService(InputMethodManager.class);
-        keyboard = !keyboard;
-        if (keyboard) {
-            requestFocus();
-            im.showSoftInput(this, 0);
+        WindowInsetsController c = getWindowInsetsController();
+        WindowInsets insets = getRootWindowInsets();
+        if (c == null) {
+            return;
+        }
+        if (insets != null && insets.isVisible(WindowInsets.Type.ime())) {
+            c.hide(WindowInsets.Type.ime());
         } else {
-            im.hideSoftInputFromWindow(getWindowToken(), 0);
+            requestFocus();
+            c.show(WindowInsets.Type.ime());
         }
     }
 
