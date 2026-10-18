@@ -38,7 +38,7 @@ const (
 	modeCommand
 	modeEdit
 	modePrompt // one-shot named-input line for n/c
-	modePiano
+	modeKeys
 	modeBeat
 )
 
@@ -46,7 +46,7 @@ const (
 	kindSound   = 0
 	kindPattern = 1
 	logPaneH    = 9
-	pianoRowsH  = 2
+	keysRowsH   = 2
 	tickEvery   = 100 * time.Millisecond
 )
 
@@ -101,11 +101,11 @@ type tuiApp struct {
 
 	logScroll int
 
-	pianoOct     int
-	pianoVel     float64
-	pianoInstr   audio.InstrumentType
-	pianoLit     map[rune]int // keycap -> ticks of highlight remaining
-	pianoStarted bool         // piano auto-started the transport; Esc stops it again
+	keysOct     int
+	keysVel     float64
+	keysInstr   audio.InstrumentType
+	keysLit     map[rune]int // keycap -> ticks of highlight remaining
+	keysStarted bool         // the keys strip auto-started the transport; Esc stops it again
 
 	rec      bool
 	recSteps []audio.StepDef
@@ -172,16 +172,16 @@ func runTUI(s *Session) error {
 	a := &tuiApp{
 		s: s, term: term, log: lb, theme: defaultPalette,
 		w: w, h: h,
-		exp:        tui.NewTreeExpansion(),
-		tree:       tui.NewTreeState(10),
-		cmdField:   tui.NewTextFieldState(""),
-		editField:  tui.NewTextFieldState(""),
-		pianoOct:   3,
-		pianoVel:   0.8,
-		pianoInstr: audio.InstrPiano,
-		pianoLit:   map[rune]int{},
+		exp:       tui.NewTreeExpansion(),
+		tree:      tui.NewTreeState(10),
+		cmdField:  tui.NewTextFieldState(""),
+		editField: tui.NewTextFieldState(""),
+		keysOct:   3,
+		keysVel:   0.8,
+		keysInstr: audio.InstrPiano,
+		keysLit:   map[rune]int{},
 	}
-	fmt.Fprintln(lb, "soundlab TUI — ':' commands, p piano, b beat(pattern), m music reset, ^S save, ^Q quit")
+	fmt.Fprintln(lb, "soundlab TUI — ':' commands, p keys, b beat(pattern), m music reset, ^S save, ^Q quit")
 	if s.startErr != nil {
 		fmt.Fprintf(lb, "audio backend: %v (silent mode)\n", s.startErr)
 	}
@@ -209,7 +209,7 @@ func (a *tuiApp) exec(line string) {
 	a.execQ(line)
 }
 
-// execQ runs without echoing the command — the piano would otherwise flood
+// execQ runs without echoing the command — the keys would otherwise flood
 // the log with one line per note. Errors still surface.
 func (a *tuiApp) execQ(line string) {
 	if err := Execute(a.s, line); err != nil {
@@ -302,12 +302,12 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		return
 	}
 	if ev.Key == terminal.KeyNone {
-		// Ticker wake (or unknown escape): decay piano highlights, render.
-		for k, t := range a.pianoLit {
+		// Ticker wake (or unknown escape): decay key highlights, render.
+		for k, t := range a.keysLit {
 			if t <= 1 {
-				delete(a.pianoLit, k)
+				delete(a.keysLit, k)
 			} else {
-				a.pianoLit[k] = t - 1
+				a.keysLit[k] = t - 1
 			}
 		}
 		return
@@ -333,8 +333,8 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		a.commandKey(ev)
 	case modeEdit:
 		a.editKey(ev)
-	case modePiano:
-		a.pianoKey(ev)
+	case modeKeys:
+		a.keysKey(ev)
 	case modeBeat:
 		a.beatKey(ev)
 	case modePrompt:
@@ -356,7 +356,7 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 		a.histIdx = len(a.history)
 		return
 	case r == 'p':
-		a.enterPiano()
+		a.enterKeys()
 		return
 	case r == 'm':
 		a.exec("music reset")
@@ -369,7 +369,7 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 		}
 		return
 	case ev.Key == terminal.KeyCtrlS:
-		// Normal-mode save; the piano owns ^S for recording (mode-scoped),
+		// Normal-mode save; the keys strip owns ^S for recording (mode-scoped),
 		// which is why this is not a global intercept in handle().
 		a.saveModified()
 		return

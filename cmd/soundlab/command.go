@@ -131,11 +131,12 @@ var keyHelp = []string{
 	"           n new   c clone   w write one   + mix into   d d delete",
 	"inspector  j/k move   h/l fold   H/L all   enter edit   a add   x delete   space play   esc close",
 	"log        j/k PgUp/PgDn scroll   g/G ends",
-	"piano (p)  z x c v b n m , and q w e r t y u i white keys   s d g h j 2 3 5 6 7 black keys",
-	"           [ ] octave   up/down velocity   tab instrument   ^S record then commit   esc exit",
-	"beat (b)   h/j/k/l move   space toggle hit   +/- 1-9 0 velocity   t instrument   a/x track",
-	"           enter apply and play in slot 0   ^S save   esc close",
-	"global     tab browser|log   p piano   m music reset   ^S save   : command   ? keys   ^Q quit",
+	"keys (p)   z x c v b n m , and q w e r t y u i white keys   s d g h j 2 3 5 6 7 black keys",
+	"           [ ] octave   up/down velocity   tab next tonal voice   ^S record then commit   esc close",
+	"beat (b)   h/j/k/l move   space toggle hit   +/- 1-9 0 velocity   t next voice of the family   T other family",
+	"           a/x track   enter apply and play in slot 0   ^S save   esc close",
+	"           the frame and title in the focus color say which strip has the keys; the panes give theirs up",
+	"global     tab browser|log   p keys   m music reset   ^S save   : command   ? keys   ^Q quit",
 }
 
 func cmdHelp(s *Session, a []string) error {

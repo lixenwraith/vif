@@ -2,10 +2,10 @@
 
 package main
 
-// Piano mode: a two-row strip above the input line, tracker key layout.
-// Notes go through Execute("note ...") like everything else — quiet echo,
-// but full script parity. The strip is mode-owned and shared with the beat
-// editor, one mode active at a time.
+// The keys strip: the tonal voices on a tracker keyboard, two rows under a row
+// that names the family with the voice in hand lit. Notes go through
+// Execute("note ...") like everything else — quiet echo, but full script
+// parity. The strip is mode-owned and shared with the beat editor.
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ type pkey struct {
 // Tracker layout, two octaves: z-row whites + home-row blacks, q-row whites
 // + number-row blacks. Black x positions sit between their neighbors, with
 // the E-F and B-C gaps left empty.
-var pianoLayout = []pkey{
+var keysLayout = []pkey{
 	{1, 0, 1, 's'}, {3, 0, 3, 'd'}, {7, 0, 6, 'g'}, {9, 0, 8, 'h'}, {11, 0, 10, 'j'},
 	{19, 0, 13, '2'}, {21, 0, 15, '3'}, {25, 0, 18, '5'}, {27, 0, 20, '6'}, {29, 0, 22, '7'},
 	{0, 1, 0, 'z'}, {2, 1, 2, 'x'}, {4, 1, 4, 'c'}, {6, 1, 5, 'v'},
@@ -35,39 +35,39 @@ var pianoLayout = []pkey{
 	{26, 1, 19, 't'}, {28, 1, 21, 'y'}, {30, 1, 23, 'u'}, {32, 1, 24, 'i'},
 }
 
-var pianoOffsets = func() map[rune]int {
-	m := make(map[rune]int, len(pianoLayout))
-	for _, k := range pianoLayout {
+var keysOffsets = func() map[rune]int {
+	m := make(map[rune]int, len(keysLayout))
+	for _, k := range keysLayout {
 		m[k.cap] = k.off
 	}
 	return m
 }()
 
-func (a *tuiApp) enterPiano() {
+func (a *tuiApp) enterKeys() {
 	if !a.s.eng.IsMusicPlaying() {
 		if a.s.eng.IsMusicMuted() {
 			fmt.Fprintln(a.log, "music is muted — :mute none, then p")
 			return
 		}
 		a.exec("music start")
-		a.pianoStarted = true // piano owns this start; Esc reverts it
+		a.keysStarted = true // the strip owns this start; Esc reverts it
 	}
-	a.mode = modePiano
+	a.mode = modeKeys
 }
 
-func (a *tuiApp) pianoKey(ev terminal.Event) {
+func (a *tuiApp) keysKey(ev terminal.Event) {
 	switch ev.Key {
 	case terminal.KeyEscape:
 		if a.rec {
 			a.finishRecording()
 		}
 		a.mode = modeNormal
-		// Stop only a transport piano itself started: exiting must not kill
+		// Stop only a transport the strip itself started: exiting must not kill
 		// patterns the user had running underneath.
-		if a.pianoStarted {
+		if a.keysStarted {
 			a.exec("music stop")
 		}
-		a.pianoStarted = false
+		a.keysStarted = false
 		return
 	case terminal.KeyCtrlS:
 		if a.rec {
@@ -75,21 +75,21 @@ func (a *tuiApp) pianoKey(ev terminal.Event) {
 		} else {
 			a.rec = true
 			a.recSteps = a.recSteps[:0]
-			a.recInstr = a.pianoInstr
+			a.recInstr = a.keysInstr
 			fmt.Fprintln(a.log, "recording — notes quantize to the 16th; Ctrl+S to commit")
 		}
 		return
 	case terminal.KeyTab:
 		// every tonal voice in turn, the drums skipped
-		if a.pianoInstr++; a.pianoInstr >= audio.InstrumentCount {
-			a.pianoInstr = audio.InstrBass
+		if a.keysInstr++; a.keysInstr >= audio.InstrumentCount {
+			a.keysInstr = audio.InstrBass
 		}
 		return
 	case terminal.KeyUp:
-		a.pianoVel = min(a.pianoVel+0.05, 1.0)
+		a.keysVel = min(a.keysVel+0.05, 1.0)
 		return
 	case terminal.KeyDown:
-		a.pianoVel = max(a.pianoVel-0.05, 0.05)
+		a.keysVel = max(a.keysVel-0.05, 0.05)
 		return
 	case terminal.KeyRune:
 	default:
@@ -97,43 +97,76 @@ func (a *tuiApp) pianoKey(ev terminal.Event) {
 	}
 	switch ev.Rune {
 	case '[':
-		if a.pianoOct > 0 {
-			a.pianoOct--
+		if a.keysOct > 0 {
+			a.keysOct--
 		}
 	case ']':
 		// Cap so the top playable key (base+24) stays in sane register.
-		if a.pianoOct < 6 {
-			a.pianoOct++
+		if a.keysOct < 6 {
+			a.keysOct++
 		}
 	default:
-		off, ok := pianoOffsets[ev.Rune]
+		off, ok := keysOffsets[ev.Rune]
 		if !ok {
 			return
 		}
-		midi := audio.MIDINote(audio.NoteC, a.pianoOct) + off
+		midi := audio.MIDINote(audio.NoteC, a.keysOct) + off
 
-		a.execQ(fmt.Sprintf("note %d %.2f 2 %s", midi, a.pianoVel, a.pianoInstr))
-		a.pianoLit[ev.Rune] = 3 // ~300ms at the ticker rate
+		a.execQ(fmt.Sprintf("note %d %.2f 2 %s", midi, a.keysVel, a.keysInstr))
+		a.keysLit[ev.Rune] = 3 // ~300ms at the ticker rate
 		if a.rec {
 			a.captureNote(midi)
 		}
 	}
 }
 
-func (a *tuiApp) renderPiano(r tui.Region) {
+func (a *tuiApp) renderKeys(r tui.Region) {
 	r.Fill(a.theme.Bg)
-	for _, k := range pianoLayout {
+	x := instrFamilyRow(r, instrFamily(a.keysInstr), a.keysInstr, &a.theme)
+	info := fmt.Sprintf("C%d..C%d  vel %.2f", a.keysOct, a.keysOct+2, a.keysVel)
+	if a.rec {
+		info += "  REC ●"
+	}
+	r.Text(x+1, 0, tui.Truncate(info, max(r.W-x-2, 0)), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+	for _, k := range keysLayout {
 		fg, bg := a.theme.Fg, a.theme.FocusBg // whites: raised blocks
 		if k.row == 0 {
 			fg, bg = a.theme.HintFg, a.theme.Bg // blacks: recessed
 		}
-		if a.pianoLit[k.cap] > 0 {
+		if a.keysLit[k.cap] > 0 {
 			fg, bg = a.theme.Bg, a.theme.Selected
 		}
-		r.Cell(1+k.x, k.row, k.cap, fg, bg, terminal.AttrNone)
+		r.Cell(1+k.x, 1+k.row, k.cap, fg, bg, terminal.AttrNone)
 	}
-	r.Text(36, 1, fmt.Sprintf("C%d .. C%d", a.pianoOct, a.pianoOct+2),
-		a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+}
+
+// instrFamily is the drums or the tonal voices, whichever i belongs to
+func instrFamily(i audio.InstrumentType) []audio.InstrumentType {
+	lo, hi := audio.InstrBass, audio.InstrumentCount
+	if i.IsDrum() {
+		lo, hi = audio.InstrKick, audio.InstrBass
+	}
+	f := make([]audio.InstrumentType, 0, hi-lo)
+	for j := lo; j < hi; j++ {
+		f = append(f, j)
+	}
+	return f
+}
+
+// instrFamilyRow writes a family across the region's first row with cur lit and
+// returns the column after it
+func instrFamilyRow(r tui.Region, fam []audio.InstrumentType, cur audio.InstrumentType, th *palette) int {
+	x := 0
+	for _, i := range fam {
+		name := " " + i.String() + " "
+		fg, bg, attr := th.HintFg, th.Bg, terminal.AttrNone
+		if i == cur {
+			fg, bg, attr = th.Bg, th.Selected, terminal.AttrBold
+		}
+		r.Text(x, 0, name, fg, bg, attr)
+		x += tui.RuneLen(name) + 1
+	}
+	return x
 }
 
 // captureNote quantizes a played note onto the 16th grid. deg is relative to
@@ -148,7 +181,7 @@ func (a *tuiApp) captureNote(midi int) {
 	_ = bar
 	a.recSteps = append(a.recSteps, audio.StepDef{
 		Pos: step % audio.StepsPerBar,
-		Vel: a.pianoVel,
+		Vel: a.keysVel,
 		Deg: midi - audio.DefaultRootNote, // chromatic offset; resolve() folds octaves
 		Oct: 0,
 		Dur: 2,

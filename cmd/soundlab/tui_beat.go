@@ -3,7 +3,7 @@
 package main
 
 // Beat editor: a step grid over a document PatternDef, rendered in the strip
-// the piano also uses — one strip mode at a time. Every mutation issues a
+// the keys also use — one strip mode at a time. Every mutation issues a
 // command line through Execute (set/add/del), so the grid is a macro keyboard
 // over the same table: script parity holds, dirty tracking is free, and the
 // inspector shows each change live.
@@ -19,9 +19,8 @@ import (
 const beatDefaultVel = 0.8
 
 type beatState struct {
-	name       string
-	trk, step  int
-	instrCycle []string
+	name      string
+	trk, step int
 }
 
 func (a *tuiApp) enterBeat() {
@@ -37,11 +36,7 @@ func (a *tuiApp) enterBeat() {
 		fmt.Fprintf(a.log, "%q: steps %d — set %s.steps first\n", n, d.Steps, n)
 		return
 	}
-	cyc := make([]string, 0, int(audio.InstrumentCount))
-	for i := audio.InstrumentType(0); i < audio.InstrumentCount; i++ {
-		cyc = append(cyc, i.String())
-	}
-	a.beat = &beatState{name: n, instrCycle: cyc}
+	a.beat = &beatState{name: n}
 	a.mode = modeBeat
 }
 
@@ -121,7 +116,9 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 	case r == '0':
 		a.beatVelSet(d, 1.0)
 	case r == 't':
-		a.beatCycleInstr(d)
+		a.beatCycleInstr(d, false)
+	case r == 'T':
+		a.beatCycleInstr(d, true)
 	case r == 'a':
 		a.exec(fmt.Sprintf("add %s.track", b.name))
 		if d2 := a.beatPat(); d2 != nil {
@@ -194,24 +191,34 @@ func (a *tuiApp) beatVelSetIdx(i int, v float64) {
 	a.exec(fmt.Sprintf("set %s.track.%d.event.%d.vel %.2f", b.name, b.trk, i, v))
 }
 
-func (a *tuiApp) beatCycleInstr(d *audio.PatternDef) {
+// beatCycleInstr moves the track to the next voice of its family, drums among
+// drums and tonal voices among themselves, or with other to the other family
+func (a *tuiApp) beatCycleInstr(d *audio.PatternDef, other bool) {
 	b := a.beat
 	if len(d.Track) == 0 {
 		return
 	}
-	cur := d.Track[b.trk].Instr
-	next := b.instrCycle[0]
-	for i, n := range b.instrCycle {
-		if n == cur {
-			next = b.instrCycle[(i+1)%len(b.instrCycle)]
-			break
+	cur, _ := audio.InstrumentByName(d.Track[b.trk].Instr)
+	next := cur
+	if other {
+		next = audio.InstrBass
+		if !cur.IsDrum() {
+			next = audio.InstrKick
+		}
+	} else {
+		fam := instrFamily(cur)
+		for i, n := range fam {
+			if n == cur {
+				next = fam[(i+1)%len(fam)]
+				break
+			}
 		}
 	}
 	a.exec(fmt.Sprintf("set %s.track.%d.instr %s", b.name, b.trk, next))
 }
 
-// renderBeat draws the grid: one row per track (instrument label + cells),
-// velocity as glyph weight. The playhead column highlights only when this
+// renderBeat draws a header naming the track's family and the cursor, then the
+// grid: one row per track (instrument label + cells), velocity as glyph weight. The playhead column highlights only when this
 // pattern is what slot 0 is sounding — a grid for pattern A must not animate
 // to pattern B's clock.
 func (a *tuiApp) renderBeat(r tui.Region) {
@@ -229,7 +236,14 @@ func (a *tuiApp) renderBeat(r tui.Region) {
 	}
 
 	const labW = 7
-	vis := r.H // tracks that fit; scroll window follows the cursor
+	x0 := 0
+	if len(d.Track) > 0 {
+		cur, _ := audio.InstrumentByName(d.Track[b.trk].Instr)
+		x0 = instrFamilyRow(r, instrFamily(cur), cur, &a.theme)
+	}
+	info := fmt.Sprintf("track %d/%d  step %d/%d", b.trk+1, len(d.Track), b.step+1, d.Steps)
+	r.Text(x0+1, 0, tui.Truncate(info, max(r.W-x0-2, 0)), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+	vis := r.H - 1 // tracks that fit under the header; scroll window follows the cursor
 	top := 0
 	if b.trk >= vis {
 		top = b.trk - vis + 1
@@ -244,7 +258,7 @@ func (a *tuiApp) renderBeat(r tui.Region) {
 		if ti == b.trk {
 			labFg = a.theme.HeaderFg
 		}
-		r.Text(0, row, fmt.Sprintf("%-6s", tui.Truncate(tr.Instr, 6)), labFg, a.theme.Bg, terminal.AttrNone)
+		r.Text(0, 1+row, fmt.Sprintf("%-6s", tui.Truncate(tr.Instr, 6)), labFg, a.theme.Bg, terminal.AttrNone)
 
 		for st := range d.Steps {
 			x := labW + st + st/4 // beat gap every 4 steps
@@ -274,7 +288,7 @@ func (a *tuiApp) renderBeat(r tui.Region) {
 			if ti == b.trk && st == b.step {
 				bg = a.theme.CursorBg
 			}
-			r.Cell(x, row, ch, fg, bg, terminal.AttrNone)
+			r.Cell(x, 1+row, ch, fg, bg, terminal.AttrNone)
 		}
 	}
 }
