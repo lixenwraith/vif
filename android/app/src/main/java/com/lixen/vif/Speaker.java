@@ -4,10 +4,15 @@ import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
 
-/** The mixer's speakers: 44.1 kHz 16-bit stereo PCM into an AudioTrack, dropped while paused. */
+/**
+ * The mixer's speakers: 44.1 kHz 16-bit stereo PCM into an AudioTrack, dropped while
+ * paused. The track holds one mixer period, the latency the terminal's backends are
+ * opened at, and asks for the low-latency output path: a second period here was a
+ * game tick between a sound's cause and its hearing.
+ */
 final class Speaker implements com.lixen.vif.game.Speaker {
     private static final int RATE = 44100;
-    private static final int BUFFER = 2 * RATE * 4 / 20; // two of the mixer's 50 ms periods
+    private static final int BUFFER = RATE * 4 / 20; // the mixer's 50 ms period
 
     private final AudioTrack track;
     private volatile boolean paused;
@@ -26,6 +31,7 @@ final class Speaker implements com.lixen.vif.game.Speaker {
                         .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                         .build())
                 .setTransferMode(AudioTrack.MODE_STREAM)
+                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                 .setBufferSizeInBytes(Math.max(min, BUFFER))
                 .build();
         track.play();
