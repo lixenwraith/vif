@@ -137,15 +137,15 @@ in its spin; when the Kraken stands still, they drop straight down at fresh deca
 speed.
 
 Dust is what glyphs become: a drain crossing a normal or bright glyph, a dust-all
-request (`:dust`, each gold round of a quasar encounter, or two storm circles
-colliding) converting every loose glyph while dark ones flash away, and special
-fire (§7), which converts dark ones too. It orbits the local cursor while that
-cursor's energy is nonzero, bounces off walls and bounds, nudges the drains it
-crosses, and lives 2, 4 or 8 s by its glyph's level through `TimerComponent`,
-fading a level each time its remaining life drops below the lower level's
-lifetime. All three behaviors share one deterministic Player-domain RNG stream.
-Flash, fade, splash, marker, explosion, and motion-marker systems are transient
-feedback rather than durable text state.
+request (`:dust`, each gold round of a quasar encounter, a gold sequence destroyed
+in `main`, or two storm circles colliding) converting every loose glyph while dark
+ones flash away, and special fire (§7), which converts dark ones too. It orbits
+the local cursor while that cursor's energy is nonzero, bounces off walls and
+bounds, nudges the drains it crosses, and lives 2, 4 or 8 s by its glyph's level
+through `TimerComponent`, fading a level each time its remaining life drops below
+the lower level's lifetime. All three behaviors share one deterministic
+Player-domain RNG stream. Flash, fade, splash, marker, explosion, and motion-marker
+systems are transient feedback rather than durable text state.
 
 ## 5. Energy, heat, boost, and shield
 
@@ -249,7 +249,9 @@ what completion earns. A spawn request while a sequence runs is answered with th
 one (`EventGoldSpawned`), so a region can adopt it. In the embedded campaign a
 sequence outlives the handover between `main` and quasar in either direction, the
 monitor pays every completion heat and energy wherever it ends, and the storm,
-Kraken and tower setups cancel it.
+Kraken and tower setups cancel it. Only completion pays: a sequence a species
+destroys dusts every glyph in `main`, as every end of a quasar round does, which
+makes gold worth something to a player who never types it.
 
 ### Species loot
 
