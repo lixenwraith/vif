@@ -77,9 +77,10 @@ two fingers tapped together, twice within half a second, raise or drop the syste
 keyboard (a finger joining one held or dragging is play, not the gesture, and so is
 a single pair tap); Back is Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
-delete what it covered, and the status row is drawn again just above it at twice
-its size each way, its left half over its right as a wrapped line, so what is typed
-can be read; a rotation still resizes.
+delete what it covered; while it is up the status bar draws its mode and input
+alone, and that left half is drawn again just above the keyboard at twice its size,
+so what is typed can be read; a rotation still resizes. Back is Escape, and a second
+Back within a second and a half sends the app to the background, the game paused.
 
 ## Test
 

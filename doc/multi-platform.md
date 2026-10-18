@@ -435,9 +435,12 @@ motion, so the cursor follows it and a held one repeats fire; keys and the syste
 keyboard's text are terminal key events, Back is Escape. Two fingers tapped
 together twice raise or drop the system keyboard, read from the window's insets
 rather than a flag of the app's; the keyboard covers the view instead of resizing
-it, so a `crop_on_resize` map keeps its cells, and the status row is drawn again
-above the keyboard from the same picture at twice its size each way, on two lines,
-as the browser scales its whole grid to fit above its keyboard. A tap held on the status
+it, so a `crop_on_resize` map keeps its cells; the run hears of the keyboard
+(`Covered`, which the status bar reads as `StatusCovered`) and draws the bar's mode
+and input alone, and the view draws that left half again above the keyboard at
+twice its size from the same picture, where the browser scales its whole grid to
+fit above its keyboard. A second Back within a second and a half sends the app to
+the background. A tap held on the status
 bar opens the configuration menu, the hold every host shares (`MenuHoldDuration`),
 and taps drive its rows; the browser launcher sends the same hold as Ctrl-G on a
 touch screen, where a touch is never a mouse press.
