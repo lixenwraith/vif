@@ -103,7 +103,9 @@ of a device is not an application-start failure.
 
 A host that has its own speakers skips detection: `AudioConfig.Sink` (from
 `app.Config.Host.Audio`) is a writer the mixer streams to as the `host` backend,
-whatever name was forced, closed with the engine as the WAV and OSS sinks are.
+whatever name was forced. Unlike the WAV and OSS sinks it is not closed with the
+engine: the host's speakers outlive a run, and the next one, after a scenario
+change, streams to the same writer.
 Android's is its `AudioTrack`; the browser's posts each buffer that sounds to the
 page, which plays it through an AudioWorklet.
 

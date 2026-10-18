@@ -728,7 +728,8 @@ func (b *closeBuffer) Close() error {
 }
 
 // TestAHostSinkReplacesBackendDetection: a host that supplies its speakers gets
-// the stream whatever backend name is set, and the engine closes them with itself.
+// the stream whatever backend name is set, and keeps them when the engine stops:
+// the next run, after a scenario change, streams to the same speakers.
 func TestAHostSinkReplacesBackendDetection(t *testing.T) {
 	t.Cleanup(ResetRegistries)
 	ResetRegistries()
@@ -755,8 +756,8 @@ func TestAHostSinkReplacesBackendDetection(t *testing.T) {
 
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
-	if sink.n == 0 || !sink.closed {
-		t.Fatalf("sink took %d bytes, closed %v", sink.n, sink.closed)
+	if sink.n == 0 || sink.closed {
+		t.Fatalf("sink took %d bytes, closed %v; want written and left open", sink.n, sink.closed)
 	}
 }
 
