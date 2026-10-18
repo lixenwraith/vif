@@ -74,9 +74,6 @@ void main() {
     gl_FragColor = vec4(mix(bg.rgb, fg.rgb, m), 1.0);
 }`;
     const ATLAS_COLS = 16;   // slots a row of the mask, which keeps it under every GPU's texture limit
-    // The game's field colour, the ground outside the frame (terminal.css has it too):
-    // a row's worth left under the grid, or a gutter beside a narrower one, is no seam.
-    const FIELD = [0x1a / 255, 0x1b / 255, 0x26 / 255], FIELD_CSS = '#1a1b26';
 
     /* rasterizeMask draws every glyph, white on transparent, at the cell's device size:
        FONT sized so its advance is the cell's width, then stretched to the cell's
@@ -206,7 +203,7 @@ void main() {
             gl.uniform1i(this.u[name], unit);
             this.tex[name] = t;
         });
-        gl.clearColor(FIELD[0], FIELD[1], FIELD[2], 1);
+        gl.clearColor(0, 0, 0, 1);
         this.masked = false;   // the mask holds the atlas at the cell's size
     };
 
@@ -295,7 +292,7 @@ void main() {
         const [fw, fh] = this.frame();
         this.picture.width = Math.max(1, fw);
         this.picture.height = Math.max(1, fh);
-        this.pic.fillStyle = FIELD_CSS;
+        this.pic.fillStyle = '#000';
         this.pic.fillRect(0, 0, this.picture.width, this.picture.height);
     };
 
@@ -327,7 +324,7 @@ void main() {
 
     Painter.prototype.draw = function() {
         const ctx = this.ctx;
-        ctx.fillStyle = FIELD_CSS;
+        ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         if (!this.cols || !this.mask) return;
         const [ox, oy] = this.origin();
