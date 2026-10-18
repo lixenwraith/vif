@@ -175,6 +175,66 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 	}
 }
 
+// A gold sequence running when main hands over to quasar, or quasar back to main, is
+// adopted by the region taking over rather than cancelled, and still pays once.
+func TestGoldOutlivesTheHandoverBetweenMainAndQuasar(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	w := a.World()
+	cursor := w.Resources.Player.Slot(0)
+	state := func(region string) string { return w.Resources.Status.Strings.Get("fsm." + region + ".state").Load() }
+	tickUntil := func(region, want string) {
+		t.Helper()
+		for range 100 {
+			if state(region) == want {
+				return
+			}
+			a.Tick(1)
+		}
+		t.Fatalf("%s did not reach %s, at %s", region, want, state(region))
+	}
+	goldHeader := func() (header core.Entity) {
+		w.Components.Header.Each(func(e core.Entity, h *component.HeaderComponent) bool {
+			if h.Behavior == component.BehaviorGold {
+				header = e
+			}
+			return header == 0
+		})
+		return header
+	}
+
+	tickUntil("main", "MainGoldActive")
+	gold := goldHeader()
+	w.Resources.Status.Ints.Get("kills.drain").Store(9)
+	a.Context().PushCrossing(event.EventDrainDefeated, &event.DrainDefeatedPayload{Entity: cursor})
+	a.Settle()
+	tickUntil("quasar", "QuasarGoldActive")
+	if goldHeader() != gold {
+		t.Fatal("the quasar encounter replaced main's running gold")
+	}
+	zeroHitPoints(a, w.Components.Quasar.Entities()[0], cursor)
+	tickUntil("main", "MainGoldActive")
+	if goldHeader() != gold {
+		t.Fatal("main replaced the quasar encounter's running gold")
+	}
+
+	energy := func() int64 { e, _ := w.Components.Energy.GetComponent(cursor); return e.Current }
+	before := energy()
+	header, _ := w.Components.Header.GetComponent(gold)
+	for i, m := range header.MemberEntries {
+		a.Context().PushCrossing(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
+			HeaderEntity: gold, MemberEntity: m.Entity, Entity: cursor,
+			RemainingCount: len(header.MemberEntries) - 1 - i,
+		})
+	}
+	a.Settle()
+	if got := energy() - before; got != 1000 {
+		t.Fatalf("completing the carried gold paid %d energy, want 1000 once", got)
+	}
+}
+
 // Each shipped scenario must boot a player and end the run on one participant defeat.
 func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()
