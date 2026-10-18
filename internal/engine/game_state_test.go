@@ -8,9 +8,9 @@ import (
 )
 
 // TestAPMCountsGesturesNotEvents is the rule a mouse sweep broke: a pointer placing the
-// cursor every tick counts by how far it stands from where it last counted, never more
-// than once a placement, so jitter counts nothing; varied keys faster than a player
-// acts read the ceiling, and one key hammered does not.
+// cursor every tick counts a reversal after a dodge's worth of travel or a sweep's worth
+// one way, never more than once a placement, so a drift reads low and jitter nothing;
+// varied keys faster than a player acts read the ceiling, and one key hammered does not.
 func TestAPMCountsGesturesNotEvents(t *testing.T) {
 	perSecond := uint64(time.Second / parameter.GameUpdateInterval)
 	ceiling := uint64(60 * parameter.APMMaxPerSecond)
@@ -29,23 +29,29 @@ func TestAPMCountsGesturesNotEvents(t *testing.T) {
 		}
 	}
 
-	// A column a tick is a slow reposition: a keystroke per APMPointerCells columns
-	want := 60 * perSecond / parameter.APMPointerCells
-	if got := musicAPM(pointer(1)); got+12 < want || got > want+12 {
+	// A column a tick is a slow drift: a gesture per APMPointerSweep columns, and one
+	// more where the sweep wraps back
+	want := 60 * perSecond / parameter.APMPointerSweep
+	if got := musicAPM(pointer(1)); got+12 < want || got > want+24 {
 		t.Errorf("slow pointer reads %d APM, want about %d", got, want)
 	}
-	if got, want := musicAPM(pointer(parameter.APMPointerCells+1)), uint64(60*parameter.APMPointerPerSecond); got != want {
+	if got, want := musicAPM(pointer(parameter.APMPointerSweep)), uint64(60*parameter.APMPointerPerSecond); got != want {
 		t.Errorf("fast pointer reads %d APM, want the pointer's share %d", got, want)
 	}
 	if got := musicAPM(pointer(0)); got != 0 {
 		t.Errorf("a pointer that never moves reads %d APM", got)
 	}
-	jitter := func(gs *GameState, i int) {
-		gs.MovePointer(i%2*(parameter.APMPointerCells-1), 0)
-		gs.AdmitAction(0)
+	back := func(span int) func(*GameState, int) {
+		return func(gs *GameState, i int) {
+			gs.MovePointer(i%2*span, 0)
+			gs.AdmitAction(0)
+		}
 	}
-	if got := musicAPM(jitter); got != 0 {
+	if got := musicAPM(back(parameter.APMPointerCells - 1)); got != 0 {
 		t.Errorf("a pointer jittering short of %d columns reads %d APM, want none", parameter.APMPointerCells, got)
+	}
+	if got, want := musicAPM(back(2*parameter.APMPointerCells)), uint64(60*parameter.APMPointerPerSecond); got != want {
+		t.Errorf("a dodging pointer reads %d APM, want the pointer's share %d", got, want)
 	}
 	if got := musicAPM(func(gs *GameState, i int) { gs.AdmitAction(1 + uint64(i%2)) }); got != ceiling {
 		t.Errorf("two keys in turn every tick read %d APM, want the ceiling %d", got, ceiling)

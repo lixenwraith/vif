@@ -57,8 +57,9 @@ the engine does not rewind (`system.HandOverSound`).
 
 Every mixer pass drains pending commands, renders music and effects into
 separate floating-point buses, sidechain-ducks music under effects, applies the
-pause gain ramp, limits/converts samples, and writes one PCM buffer. The output
-writer is the only backend-specific part of that path.
+pause gain ramp, holds the sum under a peak limiter (instant on a peak, 80 ms
+release, so stacked kicks duck rather than buzz), converts samples, and writes
+one PCM buffer. The output writer is the only backend-specific part of that path.
 
 ## 3. Backend detection and failover
 
@@ -242,8 +243,11 @@ slot, melody, rhythm and bass in turn, to another member of its pool, once four
 bars have passed since any drawn slot changed; and after four phrases every drawn
 slot moves to another group behind the phrase's fill. A draw takes the pool
 member played least this run, so a held tier works through its pool before
-repeating. Fills come from the same group and tier. A slot placed explicitly is
-left alone.
+repeating; patterns sharing a `motif` are one idea at different weights, and a
+tier change takes the playing motif's member of the new pool while a phrase
+variation takes another motif's, so a theme grows and thins with the action
+instead of being swapped for a stranger. Fills come from the same group and
+tier. A slot placed explicitly is left alone.
 
 Harmony holds root note, scale, and chord progression. Pattern degrees resolve
 through the current harmony at trigger time. With the same seed and identical
@@ -269,7 +273,7 @@ music APM and maps it to:
 
 The target tempo is `100 + 100·√(APM/480)` BPM: 100 at rest, 135 at 60 APM, 150
 at 120, 168 at 220, 179 at 300, and the engine's 200 maximum only at the 480
-ceiling, which a pointer alone (six gestures a second, 187 BPM) cannot reach. The
+ceiling, which a pointer alone (four gestures a second, 171 BPM) cannot reach. The
 conductor slews rather than jumping (12 BPM/s upward, 6 downward), ignores
 changes smaller than three BPM until the slew settles on its target, and the
 sequencer applies each on the next beat.

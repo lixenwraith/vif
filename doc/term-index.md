@@ -58,7 +58,7 @@ code does not have yet, described only by a design such as
 - *Input*: the router's fire anchors, the last main and special fire times that auto-fire and held buttons share so their requests do not stack. [Input §1](input-and-modes.md#1-input-pipeline) · `internal/mode` `Router`
 - *Clock*: `PausableClock`'s anchor, the rate segment (wall and game instants, scale, paused) game time is projected from; a rate change, pause, resume or paused step swaps in a fresh one, so game time neither jumps nor bursts to catch up. [Runtime §9](runtime.md#9-time-control) · `internal/engine` `PausableClock`
 
-**APM** (also: actions per minute, music APM) — Admitted input gestures per minute, counted to drive the adaptive music: one per dispatch pass, diminishing for one key mashed, one per six columns the pointer stands from where it last counted, at most eight a second; macro playback and auto-fire add nothing. `GameState` publishes a 60-second APM and a five-second music APM. [Input §8](input-and-modes.md#8-apm-signal) · [Audio §8](audio.md#8-adaptive-game-conductor) · `internal/engine` `GameState.AdmitAction`, `GameState.MusicAPM`
+**APM** (also: actions per minute, music APM) — Admitted input gestures per minute, counted to drive the adaptive music: one per dispatch pass, diminishing for one key mashed, one per pointer reversal after six columns or forty columns swept one way, at most eight a second; macro playback and auto-fire add nothing. `GameState` publishes a 60-second APM and a five-second music APM. [Input §8](input-and-modes.md#8-apm-signal) · [Audio §8](audio.md#8-adaptive-game-conductor) · `internal/engine` `GameState.AdmitAction`, `GameState.MusicAPM`
 
 **App** (also: app.App, composition root) — One wired runtime: its services, world, input, scheduler and presentation adapter, composed by `app.New` in a fixed order; play, headless, replay, script, server and bot-seat instances are each an App. [Runtime §2](runtime.md#2-composition-sequence) · [Package map §4](package-map.md#4-production-package-responsibilities) · `internal/app` `App`, `New`
 
@@ -777,7 +777,7 @@ code does not have yet, described only by a design such as
 
 **genotype** (also: GenotypeComponent, gene, GeneBounds) — The gene vector an evaluated actor carries with its evaluation ID; for the eye, one gene in [0, 1] that `parameter.GeneBounds.Bin` decodes into one of seven eye types. A gateway samples it, or a scout, at spawn, and the actor's fitness is reported when it dies. [AI §8](ai-physics-and-evolution.md#8-game-genetic-adapter) · `internal/component` `GenotypeComponent` · `internal/parameter` `GeneBounds`
 
-**gesture** — One counted action in the APM signal: a dispatch pass of input-origin events, with a key repeated within 500 ms counted only on its 1st, 2nd, 4th, 8th... press and the pointer counted by its distance from where it last counted, so jitter adds nothing; macros, auto-fire and input while paused count nothing. [Input §8](input-and-modes.md#8-apm-signal) · `internal/engine` `GameState.AdmitAction`
+**gesture** — One counted action in the APM signal: a dispatch pass of input-origin events, with a key repeated within 500 ms counted only on its 1st, 2nd, 4th, 8th... press and the pointer counted on a reversal after six columns or forty columns swept one way, so a drift reads low and jitter adds nothing; macros, auto-fire and input while paused count nothing. [Input §8](input-and-modes.md#8-apm-signal) · `internal/engine` `GameState.AdmitAction`
 
 **GHCR** — GitHub Container Registry, where nightly CI publishes the `vif_headless` session image as `ghcr.io/lixenwraith/vif:nightly` and `sha-<commit>`. [Packaging §2](packaging.md#2-release-surface) · [Development §6](development.md#6-ci-workflows) · `.github/workflows/release.yml`
 
@@ -1272,7 +1272,7 @@ code does not have yet, described only by a design such as
 
 **pattern** — three senses.
 - *Image*: A dual-mode `.vifimg` converted to wall cells with an authored anchor offset, which `WallSystem` spawns as one composite wall. [Rendering §10](rendering.md#10-patterns-and-image-derived-assets) · [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline) · `internal/pattern` `PatternResult`, `PatternCell`
-- *Music*: A step grid of up to 64 steps and 32 tracks with a role, groups and a tier bitmask that place it in the drawn arrangement, defined in `music.toml` or `BuiltinPatterns`. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `Pattern`
+- *Music*: A step grid of up to 64 steps and 32 tracks with a role, groups and a tier bitmask that place it in the drawn arrangement, and a motif naming the idea it is one weight of, defined in `music.toml` or `BuiltinPatterns`. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `Pattern`, `Pattern.Motif`
 - *Search*: The literal text typed in Search mode, matched against the map's glyphs and remembered so `n` and `N` repeat it. [Input §5](input-and-modes.md#5-insert-search-and-command-text-editing) · `internal/mode` `PerformSearch`, `RepeatSearch`
 
 **pause** — three senses. See also **time control**.

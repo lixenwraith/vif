@@ -165,7 +165,7 @@ type Sequencer struct {
 func NewSequencer(bpm int, kit *drumKit) *Sequencer {
 	s := &Sequencer{
 		harmony:  newHarmony(),
-		gains:    [MusicSlots]float64{0.7, 0.5, 0.5, 0.55},
+		gains:    [MusicSlots]float64{0.62, 0.46, 0.46, 0.5},
 		gen:      newMelodyGen(), // pattern registered at engine Start before the mixer exists
 		volume:   1.0,
 		autoFill: true,
@@ -367,7 +367,7 @@ func (s *Sequencer) updateFill() {
 		if !ss.inFill && len(fills) > 0 {
 			ss.fillSavedID = ss.activeID()
 			ss.inFill = true
-			s.startTransition(2, s.draw(fills), s.beatFade())
+			s.startTransition(2, s.draw(fills, PatternSilence, true), s.beatFade())
 		}
 	case 0:
 		if ss.inFill {
@@ -395,7 +395,7 @@ func (s *Sequencer) updateVariation() {
 			s.setGroup(g)
 			for _, slot := range drawnSlots {
 				if s.slots[slot].drawn {
-					s.setPattern(slot, s.draw(s.arr.pool(g, s.tier, Role(slot+1))), s.beatFade(), false, false)
+					s.setPattern(slot, s.draw(s.arr.pool(g, s.tier, Role(slot+1)), PatternSilence, true), s.beatFade(), false, false)
 				}
 			}
 			return
@@ -413,7 +413,7 @@ func (s *Sequencer) updateVariation() {
 			others = append(others, id)
 		}
 	}
-	s.startTransition(slot, s.draw(others), s.beatFade())
+	s.startTransition(slot, s.draw(others, ss.activeID(), false), s.beatFade())
 }
 
 // beatFade lets the outgoing pattern's tails ring out over one beat, as a player
@@ -561,7 +561,7 @@ func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, re
 		pool := s.arr.pool(s.group, t, Role(slot+1))
 		id := ss.activeID()
 		if slot != slotBass || !slices.Contains(pool, id) {
-			id = s.draw(pool)
+			id = s.draw(pool, id, true)
 		}
 		if id != ss.activeID() {
 			s.setPattern(slot, id, crossfadeSamples, quantize, reveal)
@@ -572,9 +572,22 @@ func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, re
 }
 
 // draw picks the pool member played least this run, the rng breaking ties, so a
-// held tier works through its pool before repeating; a single member costs no rng,
-// so a fixed arrangement plays the same music for a given seed as it always has
-func (s *Sequencer) draw(pool []PatternID) PatternID {
+// held tier works through its pool before repeating. Among members that share
+// like's motif when same, or do not when not, while any do: a tier change carries
+// the idea playing into its next weight, a phrase moves on to another. A single
+// member costs no rng, so a fixed arrangement plays the same music for a given seed.
+func (s *Sequencer) draw(pool []PatternID, like PatternID, same bool) PatternID {
+	if m := motifOf(like); m != "" {
+		kin := make([]PatternID, 0, len(pool))
+		for _, id := range pool {
+			if (motifOf(id) == m) == same {
+				kin = append(kin, id)
+			}
+		}
+		if len(kin) > 0 {
+			pool = kin
+		}
+	}
 	switch len(pool) {
 	case 0:
 		return PatternSilence
@@ -602,6 +615,13 @@ func (s *Sequencer) draw(pool []PatternID) PatternID {
 		}
 	}
 	return pool[0]
+}
+
+func motifOf(id PatternID) string {
+	if p := GetPattern(id); p != nil {
+		return p.Motif
+	}
+	return ""
 }
 
 // ReloadPattern re-resolves any player holding id after the registry replaced
