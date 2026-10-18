@@ -73,11 +73,13 @@ Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
 configuration menu, whose rows a tap selects and a second tap acts on; keys, a
 hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
-two fingers tapped together raise or drop the system keyboard (a finger joining one
-held or dragging is play, not the gesture); Back is Escape; `:q` quits. The keyboard
+two fingers tapped together, twice within half a second, raise or drop the system
+keyboard (a finger joining one held or dragging is play, not the gesture, and so is
+a single pair tap); Back is Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
-delete what it covered, and the status row is drawn again, twice its size, just
-above it, so what is typed can be read; a rotation still resizes.
+delete what it covered, and the status row is drawn again just above it at twice
+its size each way, its left half over its right as a wrapped line, so what is typed
+can be read; a rotation still resizes.
 
 ## Test
 

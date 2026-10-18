@@ -227,7 +227,9 @@ func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
 		ae.sink, ae.procExit = nil, nil
 		return io.Discard, nil
 	case BackendSink:
-		ae.sink, ae.procExit = ae.config.Sink, nil
+		// The host's speakers outlive the run: a scenario change plays on through
+		// them, so the engine never closes what it did not open
+		ae.sink, ae.procExit = nil, nil
 		return ae.config.Sink, nil
 	case BackendWAV:
 		s, err := newWAVSink(c.Path)
