@@ -775,12 +775,13 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 - Priority: P2
 - Affected files: `internal/mode/config_menu.go`, `internal/paths/settings.go`
-- Persist operator preferences through an explicit save action and startup
-  loading; the live menu currently changes only this run, and what `:new` keeps
-  (rate, HUD, pins, standing breakpoints) a restart or scenario change drops. Music
-  gain needs an authoritative readback before joining effects volume in the menu.
-  Keymap, backend, paths and colour depth remain startup settings; `:d break`
-  stays on the command line, since a row cannot take its arguments.
+- `[play]` persists the sound channels, effects volume, auto-fire, mouse, pointer
+  following and the HUD, and a scenario change carries them over. What `:new`
+  keeps beyond those (rate, pins, standing breakpoints) a restart or scenario
+  change still drops. Music gain needs an authoritative readback before joining
+  effects volume in the menu. Keymap, backend, paths and colour depth remain
+  startup settings; `:d break` stays on the command line, since a row cannot take
+  its arguments.
 
 ### Use sixteen console backgrounds on Linux
 

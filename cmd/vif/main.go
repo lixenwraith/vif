@@ -45,7 +45,7 @@ const (
 // rather than these usage strings, which only have to agree with it.
 var (
 	flagColor    = flag.String("color", colourAuto, "Colour depth: auto, 256 or true")
-	flagMute     = flag.Bool("mute", true, "Start muted; -mute=false starts with sound")
+	flagMute     = flag.Bool("mute", true, "Start muted or, =false, with sound; unset, vif.toml's [play] decides")
 	flagCheck    = flag.Bool("check", false, "Validate the resolved config, then exit")
 	flagSchema   = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
 	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
@@ -67,8 +67,10 @@ var (
 	flagMusicWAV     = newSetFlag(true, parseOutputDirFlag)
 	flagDev          = newSetFlag(true, parseBoolFlag)
 
-	// settings is vif.toml as the roots of -config-dir resolved it.
-	settings paths.Settings
+	// settings is vif.toml as the roots of -config-dir resolved it, and settingsFile
+	// the file it came from, written back as [play] changes; "" is the embedded one.
+	settings     paths.Settings
+	settingsFile string
 )
 
 func init() {
@@ -106,11 +108,8 @@ func main() {
 		return
 	}
 
-	var (
-		settingsPath string
-		err          error
-	)
-	if settings, settingsPath, err = paths.LoadSettings(flagConfig.dir); err != nil {
+	var err error
+	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
@@ -133,7 +132,7 @@ func main() {
 	case *flagSchema:
 		err = manifest.Schema(os.Stdout)
 	case *flagCheck:
-		fmt.Println("settings ok:", cmp.Or(settingsPath, "embedded default"))
+		fmt.Println("settings ok:", cmp.Or(settingsFile, "embedded default"))
 		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "" && *flagHeadless:
 		err = verifyJournal(*flagReplay)
@@ -314,7 +313,6 @@ func buildConfig() app.Config {
 	cfg := app.Config{
 		Host:          platformHost,
 		AudioBackend:  flagAudioBackend,
-		AudioMuted:    true, // -mute defaults on
 		Resources:     flagConfig.options(),
 		LogScope:      flagLogs.scope.value,
 		StatTicks:     flagLogs.stat.value,
@@ -357,7 +355,13 @@ func buildConfig() app.Config {
 	extra, _ := app.BotSpecs(flagSession.bots)
 	cfg.Bots = append(cfg.Bots, extra...)
 
-	cfg.AudioMuted = *flagMute
+	cfg.Play, cfg.SettingsFile = settings.Play, settingsFile
+	// -mute either way names both channels for this run; unset, [play] stands
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "mute" {
+			cfg.Play.Effects, cfg.Play.Music = !*flagMute, !*flagMute
+		}
+	})
 	cfg.MusicWAV = musicWAVDir()
 	cfg.AudioBuffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
 

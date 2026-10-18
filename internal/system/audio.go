@@ -84,6 +84,7 @@ func (s *AudioSystem) Init() {
 		}
 		s.initialized = true
 	}
+	s.world.Resources.Audio.Pref.Store(int32(s.mask))
 	// Initial playback waits for MusicSystem's update after scenario gates settle.
 	s.player.SetEffectMuted(s.mask&parameter.AudioChanEffects == 0)
 	s.player.SetMusicMuted(s.mask&parameter.AudioChanMusic == 0)
@@ -181,6 +182,7 @@ func (s *AudioSystem) applyMask(m uint8) {
 	if s.player == nil {
 		return
 	}
+	s.world.Resources.Audio.Pref.Store(int32(m))
 	m = s.gated()
 	s.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
 	// Close the music bus immediately; MusicSystem owns sequencer start and resume.
@@ -214,6 +216,7 @@ func (s *AudioSystem) takeOver(from *AudioSystem) (m uint8, ok bool) {
 	s.player, s.mask, s.initialized = from.player, from.mask, from.initialized
 	s.basePlayed, s.baseDropped, s.baseReject = from.basePlayed, from.baseDropped, from.baseReject
 	from.player = nil
+	s.world.Resources.Audio.Pref.Store(int32(s.mask))
 	m = s.gated()
 	s.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
 	publishAudioMask(s.world, s.player)

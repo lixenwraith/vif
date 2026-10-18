@@ -23,3 +23,17 @@ keymap = ""
 # Mixer period and output latency, in milliseconds: a multiple of 10 from 10
 # to 200. Shorter reacts sooner and underruns more easily on a loaded machine.
 buffer_ms = 50
+
+# What the configuration menu changes in a run and a run with a settings file
+# writes back here, so the next starts as this one was left: the two sound
+# channels, the effects volume (0 to 1), auto-fire (off, main or on), mouse input,
+# the cursor following the pointer, and the telemetry HUD. -mute, given either
+# way, names both channels for that run.
+[play]
+effects = false
+music = false
+volume = 0.5
+auto_fire = "on"
+mouse = true
+follow_mouse = true
+hud = false

@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/resource"
 )
 
 func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
@@ -165,5 +166,41 @@ func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
 	}
 	if err := a.loadKeymap(); err == nil || !strings.Contains(err.Error(), "unknown_action") {
 		t.Fatalf("unknown action was not rejected: %v", err)
+	}
+}
+
+// TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft: [play] sets auto-fire, the
+// mouse and the HUD before the first tick; an unchanged run writes no file, a
+// change is written to the settings file, and a purge returns to the run's start.
+func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	dir := t.TempDir()
+	file := filepath.Join(dir, paths.SettingsFile)
+	a, err := NewHeadless(Config{Seed: 1, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
+		Play: paths.Play{AutoFire: "off", HUD: true, Volume: 0.5}, SettingsFile: file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	ctx := a.ctx
+	if ctx.AutoFire.Load() != engine.AutoFireOff || !ctx.MouseDisabled.Load() || ctx.MouseFreeMode.Load() || !ctx.OverlayHUD.Load() {
+		t.Fatalf("the run did not start as [play] says: auto %d mouse off %v free %v hud %v",
+			ctx.AutoFire.Load(), ctx.MouseDisabled.Load(), ctx.MouseFreeMode.Load(), ctx.OverlayHUD.Load())
+	}
+	a.persistPlay()
+	if _, err := os.Stat(file); err == nil {
+		t.Fatal("nothing changed, yet the settings file was written")
+	}
+	ctx.AutoFire.Store(engine.AutoFireMain)
+	ctx.MouseDisabled.Store(false)
+	a.persistPlay()
+	s, path, err := paths.LoadSettings(dir)
+	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || !s.Play.HUD {
+		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
+	}
+	ctx.ResetSessionState()
+	if ctx.AutoFire.Load() != engine.AutoFireOff || ctx.MouseFreeMode.Load() {
+		t.Fatal("a purge did not return to the values the run started with")
 	}
 }

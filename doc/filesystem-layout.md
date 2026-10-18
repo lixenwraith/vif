@@ -123,7 +123,12 @@ the join.
 `vif.toml` at the top of a root holds what a flag would otherwise say on every run:
 `[paths]` names another root (`root`, read as `-config-dir` is), the log,
 journal and music directories, and the scenario, content and keymap `-s`, `-f` and `-k`
-take; `[audio] buffer_ms` sets the mixer period. It is found like any resource,
+take; `[audio] buffer_ms` sets the mixer period; `[play]` is how a run starts and
+what the configuration menu changes in it: the two sound channels, the effects
+volume, auto-fire, mouse input, the cursor following the pointer and the telemetry
+HUD, which a run with a settings file writes back as it is left, so the next run
+starts the same (the one it read, or on Android the user root's, created at the
+first change). It is found like any resource,
 from `-config-dir` down to the system roots; the first file wins whole, a key it
 omits keeps the embedded default, and the `vif.toml` inside its own `root` is not
 read. Every key is a default: a flag given on the command line wins, and `-d`

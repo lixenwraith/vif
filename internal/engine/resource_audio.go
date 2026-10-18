@@ -2,15 +2,21 @@
 
 package engine
 
-import "github.com/lixenwraith/vif/pkg/audio"
+import (
+	"sync/atomic"
+
+	"github.com/lixenwraith/vif/pkg/audio"
+)
 
 type audioResources struct {
 	Audio *AudioResource
 }
 
-// AudioResource exposes the audio engine contributed by AudioService.
+// AudioResource exposes the audio engine contributed by AudioService. Pref is the
+// player's channel mask as the audio system keeps it, before the scenario's gates.
 type AudioResource struct {
 	Engine *audio.AudioEngine
+	Pref   atomic.Int32
 }
 
 func (r *Resource) EffectsVolume() float64 {

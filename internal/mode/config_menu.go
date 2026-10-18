@@ -61,7 +61,7 @@ var configPages = []configPage{
 	{key: "controls", label: "Controls", description: "Auto-fire and mouse behavior.", options: []configOption{
 		{key: "auto", label: "Auto-fire", description: "off: manual fire; main: main weapon only; on: both weapons.",
 			command: "auto", choices: []string{"off", "main", "on"},
-			read: func(ctx *engine.GameContext) string { return [...]string{"off", "main", "on"}[ctx.AutoFire.Load()] }},
+			read: func(ctx *engine.GameContext) string { return engine.AutoFireWords[ctx.AutoFire.Load()] }},
 		{key: "mouse", label: "Mouse input", description: "Enable or ignore mouse movement and buttons.",
 			command: "mouse", choices: []string{"disable", "enable"},
 			read: func(ctx *engine.GameContext) string {
