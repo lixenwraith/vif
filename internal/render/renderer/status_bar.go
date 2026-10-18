@@ -159,9 +159,11 @@ type StatusBarRenderer struct {
 	cursorBlinkOn   bool
 	lastBlinkToggle time.Time
 
-	// The session cell as last drawn, and when. See networkItem.
+	// The session cell as last drawn, and when; and since when it has said down.
+	// See networkItem.
 	netHeld   statusItem
 	netHeldAt time.Time
+	downSince time.Time
 }
 
 // NewStatusBarRenderer creates a status bar renderer
@@ -498,6 +500,14 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	item, ok := r.networkBadge()
 	now := r.gameCtx.TimeCtl.RealTime() // [wall] readability, not simulation
+	// A link that went down is news for a while, then noise beside a solo game
+	if down := ok && r.statNet.Load() == "down"; !down {
+		r.downSince = time.Time{}
+	} else if r.downSince.IsZero() {
+		r.downSince = now
+	} else if now.Sub(r.downSince) >= parameter.StatusNetworkDownDuration {
+		ok = false
+	}
 	switch {
 	case !ok:
 		r.netHeld = statusItem{}

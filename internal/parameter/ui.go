@@ -64,6 +64,10 @@ const (
 	// reflows every item beside it, so an unheld cell is unreadable.
 	StatusNetworkHoldDuration = 500 * time.Millisecond
 
+	// StatusNetworkDownDuration is how long the badge says a link went down before
+	// it leaves, as a notice does: the loss was read, and the run plays on alone
+	StatusNetworkDownDuration = 10 * time.Second
+
 	// StatusCursorChar is status bar cursor character that blinks
 	StatusCursorChar = '█'
 
