@@ -52,16 +52,17 @@ GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
 
 help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
 	@echo "  dev      Build with race detector and debug symbols"
-	@echo "  release  Build optimized binary (stripped, trimmed)"
+	@echo "  release  Build optimized binary (stripped, trimmed): the terminal, and on Linux and FreeBSD the desktop window -g opens"
 	@echo "  headless Build dedicated-host binary without presentation or audio"
-	@echo "  gui      Build bin/vif-gui, the game in a desktop window (Xlib, EGL, GLES 2; Linux, FreeBSD)"
+	@echo "  cli      Build bin/vif-cli, the terminal alone: no desktop window (vif_nogui)"
+	@echo "  gui      Build bin/vif-gui, the release binary opening the desktop window by default (-g=false: the terminal)"
 	@echo "  android  Build the Android debug APK as bin/vif-debug.apk; first names any JDK or SDK piece missing"
 	@echo "  android-install Install bin/vif-debug.apk on the device adb sees"
 	@echo "  android-toolchain Install what android needs: Go and a JDK (asking first), the SDK's"
@@ -138,16 +139,21 @@ serve: wasm $(BIN_DIR)
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
 release: check-go $(BIN_DIR)
-	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
 headless: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "vif_headless $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-headless $(SRC)
 
-# gui loads Xlib, EGL and GLES 2 at run time through purego, so cgo stays off
+# The window is in every Linux and FreeBSD build, Xlib, EGL and GLES 2 loaded at
+# run time through purego so cgo stays off: gui is the same binary opening it by
+# default, for a desktop entry; cli leaves it out, for a machine with no X to load.
 gui: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
+
+cli: check-go $(BIN_DIR)
+	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "vif_nogui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-cli $(SRC)
 
 # android is its own Go module and Gradle project: gomobile binds the Go host and
 # the APK packages wad/ as its assets. toolchain.sh checks the JDK and SDK before
@@ -164,7 +170,7 @@ android-toolchain: check-go
 
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: check-go $(BIN_DIR)
-	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go automatically; the mixer streams to the page's speakers.
 # wasm_exec.js is the loader of the Go that built the binary, so it is copied
@@ -192,11 +198,12 @@ verify: generate test
 	$(GO) build -tags novlog ./...
 	$(GO) build -tags vif_noaudio ./...
 	$(GO) build -tags vif_headless ./...
-	CGO_ENABLED=0 $(GO) build $(GUI_GCFLAGS) -tags vif_gui ./...
+	$(GO) build -tags vif_nogui ./...
+	CGO_ENABLED=0 $(GO) build $(GUI_GCFLAGS) ./...
 	$(GO) test -tags vif_noaudio ./internal/... $(SRC)
 	$(GO) test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
 	cd android && $(GO) vet ./... && $(GO) test ./...
-	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) -tags vif_gui ./pkg/window
+	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) ./pkg/window
 	GOOS=js GOARCH=wasm $(GO) build ./...
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "novlog vif_noaudio" ./...
 	@if $(GO) list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|/pkg/audio$$'; then \
@@ -262,6 +269,7 @@ install:
 	dest='$(DESTDIR)$(PREFIX)'; \
 	put 0755 $(BIN_DIR)/$(BINARY) "$$dest/bin/$(BINARY)"; \
 	put 0644 LICENSE "$$dest/share/licenses/vif/LICENSE"; \
+	put 0644 $(PKG_DIR)/LICENSE.purego "$$dest/share/licenses/vif/LICENSE.purego"; \
 	put 0644 doc/vif.6 "$$dest/share/man/man6/vif.6"; \
 	put 0644 $(PKG_DIR)/vif.desktop "$$dest/share/applications/vif.desktop"; \
 	put 0644 $(PKG_DIR)/vif.svg "$$dest/share/icons/hicolor/scalable/apps/vif.svg"; \

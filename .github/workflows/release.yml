@@ -61,8 +61,10 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
             go build -trimpath -tags=vif_headless -ldflags='-s -w' \
             -o "stage/$p-linux-amd64-headless/vif" ./cmd/vif
+          # purego's fakecgo builds as std on FreeBSD to link without cgo (make GUI_GCFLAGS).
           CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 \
-            go build -trimpath -ldflags='-s -w' -o "stage/$p-freebsd-amd64/vif" ./cmd/vif
+            go build -trimpath -gcflags=github.com/ebitengine/purego/internal/fakecgo=-std \
+            -ldflags='-s -w' -o "stage/$p-freebsd-amd64/vif" ./cmd/vif
           # Experimental and untested, with make windows's tags.
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -trimpath -tags='novlog vif_noaudio' -ldflags='-s -w' \
@@ -74,6 +76,8 @@ jobs:
           for target in linux-amd64 linux-amd64-headless freebsd-amd64 windows-amd64 web; do
             cp README.md LICENSE "stage/$p-$target/"
           done
+          # The client binaries link purego for the desktop window.
+          cp deploy/package/LICENSE.purego "stage/$p-linux-amd64/" "stage/$p-freebsd-amd64/"
           cp -R web/. "stage/$p-web/"
           # The loader of the Go that built vif.wasm above, not the committed copy.
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "stage/$p-web/"

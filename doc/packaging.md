@@ -48,8 +48,9 @@ These hold regardless of which repository is targeted first.
   notice travels with it: the corpus in `wad/content/` is Go standard-library
   source under the Go Authors' BSD licence, `wad/content/LICENSE`, so the wad
   archive and every install carry it (the content loader reads only `.txt` and
-  `.toml`); and a `vif-gui` build links purego (Apache-2.0),
-  `deploy/package/LICENSE.purego`, for the archive that ships that binary.
+  `.toml`); and a Linux or FreeBSD binary links purego (Apache-2.0) for its
+  desktop window, so `deploy/package/LICENSE.purego` travels in those archives and
+  `make install` puts it beside `LICENSE`; a `vif_nogui` build links none.
 
 ## 2. Release surface
 
