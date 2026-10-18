@@ -1,8 +1,10 @@
 # Configuration menu
 
 Press **Ctrl-G**, hold a left press (a finger) on the status bar, or enter **`:g`**
-(`:config`) during play. Settings take effect in the current run; the menu does
-not rewrite `vif.toml` or the keymap.
+(`:config`) during play. Settings take effect in the current run. The Audio and
+Controls rows and the HUD are also `vif.toml`'s `[play]`: a run that read a settings
+file writes them back as they change, and the next run starts as this one was
+left; the rest changes this run alone, and the keymap is never rewritten.
 
 ## Navigation
 
@@ -122,5 +124,11 @@ like), `:step`, `:d break`, `:emit`, `:system`, `:region` and `:replay tick|time
 stay on the command line.
 
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
-identifies options that need a restart; it does not edit files. Exact values
+identifies options that need a restart; it does not edit files. `[play]` is the
+exception: sound effects, music, effects volume, auto-fire, mouse input, Follow
+mouse and the telemetry HUD are written to the settings file the run read as they
+change, from the menu or the command line, and a scenario change carries them
+into the next run. A run with no settings file (none in any root; `-d` reads one
+still) keeps them to itself; Android writes the user root's file, creating it. The
+game speed, HUD pins and standing breakpoints stay this run's. Exact values
 outside menu presets remain available through commands such as `:log stat N`.

@@ -2,7 +2,11 @@
 
 package app
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/lixenwraith/vif/internal/paths"
+)
 
 const buildHasAudio = false
 
@@ -26,3 +30,5 @@ func (a *App) reportAudioSpec() {}
 func (a *App) recordMusic() {}
 
 func (a *App) holdMixer(bool) {}
+
+func (a *App) audioPlay(*paths.Play) {}

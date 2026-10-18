@@ -31,7 +31,7 @@ func PlayJournal(viewer Config, paths ...string) error {
 		vlog.Warn("journal", "msg", "journal incomplete", "error", err.Error())
 	}
 	an := set.Anchors[0]
-	cfg.AudioMuted, cfg.AudioBackend, cfg.AudioBuffer = viewer.AudioMuted, viewer.AudioBackend, viewer.AudioBuffer
+	cfg.Play, cfg.AudioBackend, cfg.AudioBuffer = viewer.Play, viewer.AudioBackend, viewer.AudioBuffer
 	cfg.MusicWAV, cfg.ColorMode, cfg.ColorModeSet = viewer.MusicWAV, viewer.ColorMode, viewer.ColorModeSet
 	a, err := NewReplay(cfg)
 	if err != nil {

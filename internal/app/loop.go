@@ -53,7 +53,7 @@ func Run(cfg Config) error {
 		if next == nil {
 			return nil
 		}
-		solo, cfg.notice, cfg.dialled, cfg.Bots = nil, next.Notice, nil, next.Bots
+		solo, cfg.notice, cfg.dialled, cfg.Bots, cfg.Play = nil, next.Notice, nil, next.Bots, next.Play
 		cfg.Journal, cfg.resume = cfg.Journal || next.Journal, next.Resume
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
@@ -98,7 +98,11 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 		}
 		a.Close()
 	}()
-	return a.Loop()
+	next, err = a.Loop()
+	if next != nil {
+		next.Play = a.livePlay()
+	}
+	return next, err
 }
 
 // openRun builds the App, retrying while the coordinator this participant follows
@@ -387,6 +391,7 @@ func (a *App) applyMouseMode(enabled, motion bool) { a.pres.SetPointerMode(enabl
 // before the next, so a chained motion observes the applied position.
 // Returns false when the player quit.
 func (a *App) inputTick() bool {
+	a.persistPlay()
 	before := a.pushed()
 	if a.processInputTick() || a.pushed() != before {
 		a.scheduler.DispatchEventsImmediately()

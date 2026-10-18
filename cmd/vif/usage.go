@@ -76,7 +76,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 		lines: []flagLine{
 			{names: []string{"color"}, arg: "auto|256|true", hint: "Colour depth; auto detects the terminal"},
 			{names: []string{"scale"}, arg: "<n>", hint: "Draw the desktop window's font n times its pixels, for a HiDPI screen; vif-gui only (default 1)"},
-			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, which is the default; -mute=false starts with sound"},
+			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, or with sound as -mute=false; unset, vif.toml's [play] channels stand, muted by default"},
 			{names: []string{"ab", "audio-backend"}, arg: "<name>", hint: "Force an audio backend instead of detecting one"},
 		},
 	}, {

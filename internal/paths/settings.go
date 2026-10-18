@@ -1,13 +1,16 @@
 package paths
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
@@ -17,7 +20,8 @@ import (
 const SettingsFile = "vif.toml"
 
 // Settings is vif.toml: the defaults of flags a player would otherwise repeat on
-// every run. Paths arrive resolved, so each reads as its flag's value would.
+// every run, and the [play] table a run writes back. Paths arrive resolved, so
+// each reads as its flag's value would.
 type Settings struct {
 	Paths struct {
 		Root     string `toml:"root"`
@@ -31,7 +35,41 @@ type Settings struct {
 	Audio struct {
 		BufferMs int `toml:"buffer_ms"`
 	} `toml:"audio"`
+	Play Play `toml:"play"`
 }
+
+// Play is the [play] table: how a run starts, and what the configuration menu
+// changes in it; a run with a settings file writes it back as it is left.
+type Play struct {
+	Effects     bool    `toml:"effects"`
+	Music       bool    `toml:"music"`
+	Volume      float64 `toml:"volume"`
+	AutoFire    string  `toml:"auto_fire"`
+	Mouse       bool    `toml:"mouse"`
+	FollowMouse bool    `toml:"follow_mouse"`
+	HUD         bool    `toml:"hud"`
+}
+
+func (p Play) check() error {
+	switch p.AutoFire {
+	case "off", "main", "on":
+	default:
+		return fmt.Errorf("play.auto_fire %q is not off, main or on", p.AutoFire)
+	}
+	if p.Volume < 0 || p.Volume > 1 {
+		return fmt.Errorf("play.volume %g is not between 0 and 1", p.Volume)
+	}
+	return nil
+}
+
+// DefaultPlay is the embedded [play], what a Config naming none starts from.
+var DefaultPlay = sync.OnceValue(func() Play {
+	var s Settings
+	if err := decodeSettings(asset.DefaultSettings, &s); err != nil {
+		panic("embedded " + SettingsFile + ": " + err.Error())
+	}
+	return s.Play
+})
 
 // LoadSettings reads the first vif.toml the roots of override hold, over the
 // embedded one, and names the file it read: "" when the embedded one stands alone.
@@ -73,7 +111,71 @@ func decodeSettings(data []byte, s *Settings) error {
 	if key := unknownKey(raw, reflect.TypeFor[Settings]()); key != "" {
 		return fmt.Errorf("unknown key %q", key)
 	}
-	return toml.Decode(raw, s)
+	if err := toml.Decode(raw, s); err != nil {
+		return err
+	}
+	return s.Play.check()
+}
+
+// SaveSettings writes play as the [play] table of the settings file at path and
+// keeps every other line as it stands; a file not there yet starts as the embedded
+// one, so its comments travel with the player's values.
+func SaveSettings(path string, play Play) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		data, err = asset.DefaultSettings, nil
+	}
+	if err != nil {
+		return err
+	}
+	body, err := toml.Marshal(play)
+	if err != nil {
+		return err
+	}
+	lines := strings.SplitAfter(string(data), "\n")
+	start, end := -1, len(lines)
+	for i, l := range lines {
+		switch t := strings.TrimSpace(l); {
+		case start < 0:
+			if t == "[play]" {
+				start = i
+			}
+		case strings.HasPrefix(t, "["):
+			end = i
+		}
+		if end < len(lines) {
+			break
+		}
+	}
+	var out strings.Builder
+	if start < 0 {
+		out.Write(data)
+		if len(data) > 0 && !strings.HasSuffix(string(data), "\n") {
+			out.WriteByte('\n')
+		}
+		out.WriteByte('\n')
+		start, end = len(lines), len(lines)
+	} else {
+		for _, l := range lines[:start] {
+			out.WriteString(l)
+		}
+	}
+	out.WriteString("[play]\n")
+	out.Write(body)
+	if end < len(lines) {
+		out.WriteByte('\n')
+		for _, l := range lines[end:] {
+			out.WriteString(l)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(out.String()), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // unknownKey names the first key raw holds that t has no field for, so a misspelt

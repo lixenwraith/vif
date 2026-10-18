@@ -18,16 +18,19 @@ import (
 type AudioService struct {
 	audioEngine *audio.AudioEngine
 
-	initMuted   bool
-	initBackend string
-	initBuffer  time.Duration
-	src         AudioSource
-	sink        io.WriteCloser // the host's speakers; nil finds a backend by name
+	effects, music bool    // the channels open at start
+	volume         float64 // the effects volume at start
+	initBackend    string
+	initBuffer     time.Duration
+	src            AudioSource
+	sink           io.WriteCloser // the host's speakers; nil finds a backend by name
 }
 
-func NewAudioService(muted bool, forceBackend string, buffer time.Duration, src AudioSource, sink io.WriteCloser) *AudioService {
+func NewAudioService(effects, music bool, volume float64, forceBackend string, buffer time.Duration, src AudioSource, sink io.WriteCloser) *AudioService {
 	return &AudioService{
-		initMuted:   muted,
+		effects:     effects,
+		music:       music,
+		volume:      volume,
 		initBackend: forceBackend,
 		initBuffer:  buffer,
 		src:         src,
@@ -40,7 +43,8 @@ func (s *AudioService) Dependencies() []string { return nil }
 
 func (s *AudioService) Init() error {
 	config := audio.DefaultAudioConfig()
-	config.Enabled = !s.initMuted
+	config.Enabled = s.effects || s.music
+	config.MasterVolume = s.volume
 	config.ForceBackend = s.initBackend
 	config.Buffer = s.initBuffer
 	config.Sink = s.sink
@@ -75,6 +79,8 @@ func (s *AudioService) Init() error {
 	if err != nil {
 		return fmt.Errorf("audio: %w", err) // a configuration the player wrote
 	}
+	eng.SetEffectMuted(!s.effects)
+	eng.SetMusicMuted(!s.music)
 	s.audioEngine = eng
 	return nil
 }

@@ -418,7 +418,7 @@ func handleAutoCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true}
 	}
 	ctx.AutoFire.Store(next)
-	word := [...]string{"off", "main", "on"}[next]
+	word := engine.AutoFireWords[next]
 	ctx.SetStatusMessage("Auto: "+word, parameter.StatusNotice)
 	return CommandResult{Continue: true}
 }
