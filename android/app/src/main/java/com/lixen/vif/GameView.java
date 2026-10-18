@@ -26,14 +26,15 @@ import java.util.Arrays;
 /**
  * The game's screen: a render thread takes the newest frame the run flushed at each
  * vsync, hands it to the drawer and posts the drawer's picture. Taps, drags and keys
- * go to the run; two fingers tapped together raise or drop the system keyboard,
- * which covers the picture rather than resizing it, the status row drawn again
- * above it so what is typed can be read.
+ * go to the run; two fingers tapped together twice raise or drop the system
+ * keyboard, which covers the picture rather than resizing it, the status row drawn
+ * again above it so what is typed can be read.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
     // Two fingers are a tap when the second lands this soon after the first, neither
-    // moves, and both lift this soon after; a finger joining a held one is play
-    private static final long PAIR_TOGETHER_MS = 150, PAIR_TAP_MS = 300;
+    // moves, and both lift this soon after; a finger joining a held one is play. Two
+    // such taps this close together toggle the keyboard: one still happens in play
+    private static final long PAIR_TOGETHER_MS = 150, PAIR_TAP_MS = 300, PAIR_DOUBLE_MS = 500;
 
     private final MainActivity activity;
     private final String files, wad;
@@ -50,6 +51,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private volatile int covered; // the surface's bottom pixels under the keyboard
 
     private long downAt, pairAt; // when the first finger landed, and the second
+    private long pairTapAt; // when the last pair tap ended, 0 once it was used or stale
     private boolean pairDown, pairTap; // two fingers rest together; they tapped
     private final float[] pairX = new float[2], pairY = new float[2];
 
@@ -202,7 +204,12 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
             case MotionEvent.ACTION_UP:
                 Game.tap(x, y, false);
                 if (pairTap && e.getEventTime() - pairAt <= PAIR_TAP_MS) {
-                    toggleKeyboard();
+                    if (pairTapAt != 0 && e.getEventTime() - pairTapAt <= PAIR_DOUBLE_MS) {
+                        pairTapAt = 0;
+                        toggleKeyboard();
+                    } else {
+                        pairTapAt = e.getEventTime();
+                    }
                 }
                 pairTap = false;
                 break;
