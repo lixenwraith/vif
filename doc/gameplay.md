@@ -244,9 +244,12 @@ left-to-right member order. Gold members resist deletion and particle effects.
 energy. Completion, timeout and external damage emit `EventGoldCompleted`,
 `EventGoldTimeout` and `EventGoldDestroyed`; `EventGoldCancel` removes the
 sequence silently. Completion credits the cursor that typed the most members, the
-lowest slot on a tie. The Gold system cleans up the composite, but the active FSM
-decides what completion earns. In the embedded campaign, completion adds heat
-and energy.
+lowest slot on a tie. The Gold system cleans up the composite, but the FSM decides
+what completion earns. A spawn request while a sequence runs is answered with that
+one (`EventGoldSpawned`), so a region can adopt it. In the embedded campaign a
+sequence outlives the handover between `main` and quasar in either direction, the
+monitor pays every completion heat and energy wherever it ends, and the storm,
+Kraken and tower setups cancel it.
 
 ### Species loot
 

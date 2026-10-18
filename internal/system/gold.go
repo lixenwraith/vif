@@ -136,12 +136,11 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventGoldSpawnRequest:
-		if !s.spawnEnabled || s.active {
-			s.statSpawnFailures.Add(1)
-			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
-			return
-		}
-		if !s.spawnGold() {
+		switch {
+		case s.active:
+			// A region taking over a running sequence adopts it instead of a new one
+			s.announceRunning()
+		case !s.spawnEnabled || !s.spawnGold():
 			s.statSpawnFailures.Add(1)
 			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
 		}
@@ -360,6 +359,19 @@ func (s *GoldSystem) spawnGold() bool {
 	s.requestTimerSplash(parameter.GoldDuration)
 
 	return true
+}
+
+// announceRunning answers a spawn request with the running sequence and its time left
+func (s *GoldSystem) announceRunning() {
+	var remaining time.Duration
+	if timer, ok := s.world.Components.Timer.GetPtr(s.headerEntity); ok {
+		remaining = timer.Slots[component.TimerDeadline].Remaining
+	}
+	s.world.PushEvent(event.EventGoldSpawned, &event.GoldSpawnedPayload{
+		HeaderEntity: s.headerEntity,
+		Length:       parameter.GoldSequenceLength,
+		Duration:     remaining,
+	})
 }
 
 // clearGoldSpawnArea empties the sequence footprint of player-domain occupants.
