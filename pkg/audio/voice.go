@@ -92,6 +92,29 @@ type voiceSpec struct {
 	bright  float64 // waveString: 0 a dull string, 1 a wiry one
 	ring    float64 // waveString: seconds a plucked string takes to die away
 
+	// waveModal, a struck or plucked string as its partials: partials caps the
+	// bank, strikePos is where along the string the hammer or finger lands and
+	// tilt the spectral slope (1 struck, 2 plucked); inharm is the stretch B of a
+	// middle-C string, growing with pitch by inharmTrack
+	partials    int
+	strikePos   float64
+	tilt        float64
+	inharm      float64
+	inharmTrack float64
+	// decayT is the prompt decay at middle C, growing toward the bass by
+	// decayTrack; a partial at dampHz decays twice as fast. The coupled pair is a
+	// second string pair cents away whose aftersound sits pairLevel under the
+	// prompt sound and decays pairSlow times as fast. hammerHz low-passes the
+	// excitation at full velocity; knock is the level of the contact noise.
+	decayT     float64
+	decayTrack float64
+	dampHz     float64
+	pair       float64
+	pairLevel  float64
+	pairSlow   float64
+	hammerHz   float64
+	knock      float64
+
 	cutoff   float64 // Hz at rest
 	keyTrack float64 // Hz added per Hz of the note
 	envAmt   float64 // Hz added at the filter envelope's peak
@@ -103,15 +126,17 @@ type voiceSpec struct {
 	level                           float64
 }
 
-// voiceSpecs is the instrument table; drums have none. The bass is the psytrance
-// rolling bass, a dark saw whose filter closes under a clean sub; the piano an
-// electric piano, FM at the fundamental whose brightness dies before its body; the
-// pluck a string, a delay line a noise burst sets ringing.
+// voiceSpecs is the instrument table; drums have none. The bass and the piano are
+// strings as their partials: a finger-plucked bass through a pickup resonance and
+// an amp, a hammered piano with a grand's stretch and double decay. The pluck is
+// a string a noise burst sets ringing.
 var voiceSpecs = [InstrumentCount]voiceSpec{
-	InstrBass: {wave: waveSaw, unison: 1, sub: 0.5, cutoff: 60, keyTrack: 1.0, envAmt: 550, envDecay: 0.11, q: 0.85,
-		attack: 0.004, decay: 0.14, sustain: 0.6, release: 0.1, drive: 1.3, level: 0.95},
-	InstrPiano: {wave: waveSine, unison: 2, detune: 1.0025, fmRatio: 1, fmIndex: 1.8, fmDecay: 0.18,
-		cutoff: 500, keyTrack: 4.0, q: 0.5, attack: 0.003, decay: 0.6, sustain: 0, release: 0.35, level: 0.8},
+	InstrBass: {wave: waveModal, partials: 40, strikePos: 0.2, tilt: 1.7, inharm: 0.00008, inharmTrack: 1,
+		decayT: 0.7, decayTrack: 0.5, dampHz: 900, pair: 1.2, pairLevel: 0.3, pairSlow: 0.4, hammerHz: 3000, knock: 0.08,
+		cutoff: 2200, q: 1.3, attack: 0.003, sustain: 1, release: 0.045, drive: 1.4, level: 1.0},
+	InstrPiano: {wave: waveModal, partials: 40, strikePos: 0.12, tilt: 1.0, inharm: 0.0004, inharmTrack: 1.3,
+		decayT: 0.9, decayTrack: 0.6, dampHz: 2600, pair: 1.6, pairLevel: 0.28, pairSlow: 0.3, hammerHz: 2600, knock: 0.12,
+		cutoff: 1200, keyTrack: 6, q: 0.5, attack: 0.002, sustain: 1, release: 0.09, level: 0.8},
 	InstrPad: {wave: waveSaw, unison: 3, detune: 1.006, cutoff: 200, keyTrack: 2.2, q: 0.6,
 		attack: 0.35, decay: 0.3, sustain: 0.8, release: 1.3, level: 1.0},
 	InstrLead: {wave: waveSaw, unison: 2, detune: 1.004, cutoff: 300, keyTrack: 3.0, envAmt: 1600, envDecay: 0.18, q: 0.7,
@@ -136,10 +161,19 @@ const (
 const (
 	maxUnison      = 3
 	filterCoefHold = 16 // samples between filter coefficient updates
-	// waveString is the plucked string, after generator.go's waveforms
+	// waveString is the plucked string, waveModal the partial bank, after
+	// generator.go's waveforms
 	waveString = waveNoise + 1
+	waveModal  = waveNoise + 2
 	// stringMaxLen is the delay line for the lowest note a string plays (E1)
 	stringMaxLen = AudioSampleRate / 40
+	// maxPartials caps a modal bank, pairPartials of which carry the coupled
+	// pair's second string; the series stops at modalTopHz
+	maxPartials  = 48
+	pairPartials = 8
+	modalTopHz   = 9000.0
+	modalRefHz   = 261.63
+	modalCheck   = 1024 // samples between checks that a bank has rung out
 )
 
 // TonalVoice generates pitched sounds with envelope
@@ -159,6 +193,14 @@ type TonalVoice struct {
 	strLen  int
 	strPos  int
 	strGain float64
+
+	// The modal bank: a decaying phasor per partial (and per pair string), the
+	// sum's scale, and the contact noise through a one-pole
+	mre, mim, mcr, mci []float64
+	mscale             float64
+	mcheck             int
+	knockEnv, knockLP  float64
+	knockSeed          uint32
 
 	// ADSR envelope
 	envState ADSRState
@@ -195,6 +237,8 @@ func (v *TonalVoice) Sample() float64 {
 	dt := v.freq / float64(AudioSampleRate)
 	var raw float64
 	switch {
+	case sp.wave == waveModal:
+		raw = v.modal()
 	case sp.wave == waveString:
 		raw = v.pluck()
 	case sp.fmIndex > 0:
@@ -274,6 +318,103 @@ func (v *TonalVoice) strike(sp *voiceSpec) {
 	v.strPos = 0
 	// the loss per period that takes the string to a thousandth over ring seconds
 	v.strGain = math.Pow(0.001, 1/(max(sp.ring, 0.05)*v.freq))
+}
+
+// modal advances every partial's phasor and sums them, adds the contact noise
+// while it lasts, and ends the note once the bank has rung out
+func (v *TonalVoice) modal() float64 {
+	var s float64
+	for i := range v.mre {
+		re, im := v.mre[i], v.mim[i]
+		v.mre[i] = re*v.mcr[i] - im*v.mci[i]
+		v.mim[i] = re*v.mci[i] + im*v.mcr[i]
+		s += v.mim[i]
+	}
+	s *= v.mscale
+	if v.knockEnv > 1e-4 {
+		v.knockSeed ^= v.knockSeed << 13
+		v.knockSeed ^= v.knockSeed >> 17
+		v.knockSeed ^= v.knockSeed << 5
+		n := float64(v.knockSeed)/float64(1<<32)*2 - 1
+		v.knockLP += 0.25 * (n - v.knockLP) // a 2 kHz one-pole
+		s += v.knockLP * v.knockEnv
+		v.knockEnv *= 0.9943 // 4 ms
+	}
+	if v.mcheck++; v.mcheck >= modalCheck {
+		v.mcheck = 0
+		var e float64
+		for i := range v.mre {
+			e += v.mre[i]*v.mre[i] + v.mim[i]*v.mim[i]
+		}
+		if e*v.mscale*v.mscale < 1e-10 {
+			v.Release()
+		}
+	}
+	return s
+}
+
+// excite builds the modal bank for the note: partial k sits at k·f0 stretched by
+// the inharmonicity, at the amplitude the strike position's comb, the spectral
+// tilt and the hammer's low-pass leave it, decaying faster the higher it is; the
+// lowest partials get the coupled pair's slower, slightly detuned second string
+func (v *TonalVoice) excite(sp *voiceSpec) {
+	n := max(min(sp.partials, maxPartials, int(modalTopHz/v.freq)), 4)
+	if cap(v.mre) < maxPartials+pairPartials {
+		c := maxPartials + pairPartials
+		v.mre, v.mim, v.mcr, v.mci = make([]float64, 0, c), make([]float64, 0, c), make([]float64, 0, c), make([]float64, 0, c)
+	}
+	v.mre, v.mim, v.mcr, v.mci = v.mre[:0], v.mim[:0], v.mcr[:0], v.mci[:0]
+	h := sp.strikePos
+	if h <= 0 {
+		h = 0.12
+	}
+	tilt := sp.tilt
+	if tilt <= 0 {
+		tilt = 1
+	}
+	vel := max(v.velocity, 0.05)
+	b := sp.inharm * math.Pow(v.freq/modalRefHz, sp.inharmTrack)
+	tau := max(sp.decayT, 0.05) * math.Pow(modalRefHz/v.freq, sp.decayTrack)
+	fc := sp.hammerHz * (0.3 + 0.7*vel)
+	slow := sp.pairSlow
+	if slow <= 0 {
+		slow = 0.35
+	}
+	detune := math.Pow(2, sp.pair/1200)
+	comb0 := math.Abs(math.Sin(math.Pi * h))
+	var sum float64
+	add := func(f, a, sigma float64) {
+		if f >= 0.45*AudioSampleRate {
+			return
+		}
+		d := math.Exp(-sigma / AudioSampleRate)
+		w := 2 * math.Pi * f / AudioSampleRate
+		v.mre, v.mim = append(v.mre, a), append(v.mim, 0)
+		v.mcr, v.mci = append(v.mcr, d*math.Cos(w)), append(v.mci, d*math.Sin(w))
+		sum += a
+	}
+	for k := 1; k <= n; k++ {
+		fk := float64(k)
+		f := fk * v.freq * math.Sqrt(1+b*fk*fk)
+		a := math.Abs(math.Sin(math.Pi*fk*h)) / comb0 / math.Pow(fk, tilt)
+		if fc > 0 {
+			a /= 1 + (f/fc)*(f/fc)
+		}
+		sigma := 1 / tau
+		if sp.dampHz > 0 {
+			sigma *= 1 + (f/sp.dampHz)*(f/sp.dampHz)
+		}
+		if k <= pairPartials && sp.pairLevel > 0 {
+			add(f, a/(1+sp.pairLevel), sigma)
+			add(f*detune, a*sp.pairLevel/(1+sp.pairLevel), sigma*slow)
+		} else {
+			add(f, a, sigma)
+		}
+	}
+	v.mscale = 1 / max(sum, 1e-9)
+	v.mcheck = 0
+	v.knockEnv, v.knockLP = sp.knock*vel, 0
+	v.knockSeed = uint32(v.note)*2654435761 + uint32(v.serial)*40503 + 1
 }
 
 // filter is a trapezoidal state-variable low-pass whose cutoff follows the key and
@@ -386,8 +527,11 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 	if sp.fmDecay > 0 {
 		v.ienvCoef = math.Exp(-1 / (sp.fmDecay * AudioSampleRate))
 	}
-	if sp.wave == waveString {
+	switch sp.wave {
+	case waveString:
 		v.strike(sp)
+	case waveModal:
+		v.excite(sp)
 	}
 
 	sr := float64(AudioSampleRate)

@@ -309,19 +309,21 @@ func (a *tuiApp) render() {
 	}
 
 	// The strip between the log and the input line belongs to at most one
-	// mode at a time: piano rows or the beat grid. Its height is decided
-	// here, before the vertical split, so the panes above shrink to fit.
+	// mode at a time: the keys or the beat grid, each under a family row and in
+	// a frame. Its height is decided here, before the vertical split, so the
+	// panes above shrink to fit.
 	stripH := 0
 	switch a.mode {
-	case modePiano:
-		stripH = pianoRowsH
+	case modeKeys:
+		stripH = keysRowsH + 3
 	case modeBeat:
 		if d := a.beatPat(); d != nil {
-			stripH = min(max(len(d.Track), 2), 6) // grows with tracks, capped
+			stripH = min(max(len(d.Track), 2), 6) + 3 // grows with tracks, capped
 		}
 	}
 
 	header, rest := tui.SplitVFixed(root, 1)
+	stripH = min(stripH, max(rest.H-1-logPaneH-3, 0)) // a short terminal keeps its log
 	body, bottom := tui.SplitVFixed(rest, rest.H-1-stripH)
 	var strip, input tui.Region
 	if stripH > 0 {
@@ -338,9 +340,9 @@ func (a *tuiApp) render() {
 	a.renderLog(logR)
 	switch a.mode {
 	case modeBeat:
-		a.renderBeat(strip)
-	case modePiano:
-		a.renderPiano(strip)
+		a.renderBeat(a.stripPane(strip, "beat · "+a.beat.name))
+	case modeKeys:
+		a.renderKeys(a.stripPane(strip, "keys"))
 	}
 	a.renderInput(input)
 	if a.focus == focusInspector {
@@ -353,11 +355,25 @@ func (a *tuiApp) render() {
 	a.term.Flush(cells, w, h)
 }
 
+// borderFg is the focus color on the focused pane, unless a strip has the keys
 func (a *tuiApp) borderFg(f focusArea) color.RGB {
-	if a.focus == f {
+	if a.focus == f && !a.stripActive() {
 		return a.theme.Selected
 	}
 	return a.theme.Border
+}
+
+// stripActive reports whether the keys or the beat editor has the keyboard
+func (a *tuiApp) stripActive() bool {
+	return a.mode == modeKeys || a.mode == modeBeat
+}
+
+// stripPane frames the strip in the focus color, which the panes above give up
+func (a *tuiApp) stripPane(r tui.Region, title string) tui.Region {
+	return r.Pane(tui.PaneOpts{
+		Title: title, Border: tui.LineSingle,
+		BorderFg: a.theme.Selected, TitleFg: a.theme.Selected, Bg: a.theme.Bg,
+	})
 }
 
 func (a *tuiApp) renderHeader(r tui.Region) {
@@ -482,7 +498,7 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 	a.brPageH = content.H
 	a.brScroll[a.kind] = tui.AdjustScroll(c, a.brScroll[a.kind], content.H, len(items))
 	cur := a.theme.FocusBg
-	if a.focus == focusBrowser {
+	if a.focus == focusBrowser && !a.stripActive() {
 		cur = a.theme.CursorBg
 	}
 	content.List(items, c, a.brScroll[a.kind], tui.ListOpts{CursorBg: cur, DefaultBg: a.theme.Bg})
@@ -657,18 +673,18 @@ func (a *tuiApp) renderInput(r tui.Region) {
 	case modeEdit:
 		pre := tui.Truncate(a.editPath, r.W/2) + " = "
 		r.TextField(a.editField, tui.TextFieldOpts{Prefix: pre, Focused: true, Border: tui.LineNone})
-	case modePiano:
+	case modeKeys:
 		r.Fill(a.theme.HeaderBg)
 		recBadge := ""
 		if a.rec {
 			recBadge = "REC ● "
 		}
-		msg := fmt.Sprintf("PIANO %s%s  oct %d  vel %.2f   z/q play  [ ] oct  ↑↓ vel  tab instr  ^S rec  esc exit",
-			recBadge, a.pianoInstr, a.pianoOct, a.pianoVel)
+		msg := fmt.Sprintf("KEYS %s%s  z/q rows play  [ ] octave  ↑↓ velocity  tab voice  ^S record  esc close",
+			recBadge, a.keysInstr)
 		r.Text(1, 0, tui.Truncate(msg, r.W-2), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
 	case modeBeat:
 		r.Fill(a.theme.HeaderBg)
-		msg := fmt.Sprintf("BEAT %s  hjkl move  space toggle  +/- 1-9 0 vel  t instr  a/x track  enter apply+play  esc close",
+		msg := fmt.Sprintf("BEAT %s  hjkl move  space toggle  +/- 1-9 0 vel  t/T voice|family  a/x track  enter apply+play  esc close",
 			a.beat.name)
 		r.Text(1, 0, tui.Truncate(msg, r.W-2), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
 	case modePrompt:
@@ -688,8 +704,8 @@ func (a *tuiApp) footHint() string {
 		return "j/k scroll  g/G ends  tab browser  : cmd  ? keys  ^Q quit"
 	default: // focusBrowser
 		if a.kind == kindPattern {
-			return "j/k move  / find  space play  0-3 slot  enter inspect  b beat  p piano  : cmd  ? keys  ^Q quit"
+			return "j/k move  / find  space play  0-3 slot  enter inspect  b beat  p keys  : cmd  ? keys  ^Q quit"
 		}
-		return "j/k move  / find  space play  enter inspect  h/l patterns  p piano  : cmd  ? keys  ^Q quit"
+		return "j/k move  / find  space play  enter inspect  h/l patterns  p keys  : cmd  ? keys  ^Q quit"
 	}
 }
