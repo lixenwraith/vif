@@ -330,6 +330,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		r.pal.label,
 	)
 
+	if ctx.StatusCovered {
+		rightItems = nil
+	}
+
 	// === RENDER LEFT-SIDE FIXED ELEMENTS ===
 	x := 0
 

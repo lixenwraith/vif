@@ -318,6 +318,9 @@ func (a *App) renderContext() render.RenderContext {
 		}
 		out = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
 	})
+	if p, ok := a.pres.(coveredPresentation); ok {
+		out.StatusCovered = p.Covered()
+	}
 	return out
 }
 

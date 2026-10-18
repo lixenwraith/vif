@@ -27,8 +27,9 @@ import java.util.Arrays;
  * The game's screen: a render thread takes the newest frame the run flushed at each
  * vsync, hands it to the drawer and posts the drawer's picture. Taps, drags and keys
  * go to the run; two fingers tapped together twice raise or drop the system
- * keyboard, which covers the picture rather than resizing it, the status row drawn
- * again above it so what is typed can be read.
+ * keyboard, which covers the picture rather than resizing it; the run then draws the
+ * status row's mode and input alone, and its left half is drawn again above the
+ * keyboard, twice its size, so what is typed can be read.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
     // Two fingers are a tap when the second lands this soon after the first, neither
@@ -155,6 +156,9 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         if (covered == px) {
             return;
         }
+        if ((covered > 0) != (px > 0)) {
+            Game.keyboard(px > 0);
+        }
         covered = px;
         if (handler != null) {
             handler.post(this::present);
@@ -239,6 +243,10 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
 
     @Override
     public boolean onKeyDown(int code, KeyEvent e) {
+        if (code == KeyEvent.KEYCODE_BACK && android.os.Build.VERSION.SDK_INT < 33) {
+            activity.back();
+            return true;
+        }
         int typed = e.getUnicodeChar(e.getMetaState() & ~(KeyEvent.META_CTRL_MASK | KeyEvent.META_ALT_MASK));
         if ((typed & KeyCharacterMap.COMBINING_ACCENT) != 0) {
             typed = 0;

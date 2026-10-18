@@ -23,10 +23,10 @@ interface CellDrawer {
     /** Draws what the drawer holds over the whole surface. */
     void draw(Canvas surface);
 
-    /** The strip's height on a surface this tall: the last row at twice its size, on two lines. */
+    /** The strip's height on a surface this tall: the last row at twice its size. */
     int stripHeight(int surfaceHeight);
 
-    /** Draws the last row, the status bar, again in the band above a keyboard covering the bottom pixels. */
+    /** Draws the last row's left half, the status bar's mode and input, above a keyboard covering the bottom pixels. */
     void drawStrip(Canvas surface, int covered);
 
     /**
@@ -71,23 +71,19 @@ interface CellDrawer {
 
         @Override
         public final int stripHeight(int surfaceHeight) {
-            return screen == null ? 0 : 4 * surfaceHeight * cellHeight / screen.getHeight();
+            return screen == null ? 0 : 2 * surfaceHeight * cellHeight / screen.getHeight();
         }
 
-        // Twice the size each way, so the glyphs keep their shape: the row's left half
-        // on one line and its right half under it, as a line that wrapped
+        // Twice the size each way, so the glyphs keep their shape: the left half fills
+        // the width, and the run draws nothing on the right while the keyboard is up
         @Override
         public final void drawStrip(Canvas surface, int covered) {
             if (screen == null) {
                 return;
             }
-            int w = screen.getWidth(), top = screen.getHeight() - cellHeight;
-            int line = stripHeight(surface.getHeight()) / 2, bottom = surface.getHeight() - covered;
-            stripSrc.set(0, top, w / 2, screen.getHeight());
-            stripDst.set(0, bottom - 2 * line, surface.getWidth(), bottom - line);
-            surface.drawBitmap(screen, stripSrc, stripDst, pixels);
-            stripSrc.set(w / 2, top, w, screen.getHeight());
-            stripDst.set(0, bottom - line, surface.getWidth(), bottom);
+            int bottom = surface.getHeight() - covered;
+            stripSrc.set(0, screen.getHeight() - cellHeight, screen.getWidth() / 2, screen.getHeight());
+            stripDst.set(0, bottom - stripHeight(surface.getHeight()), surface.getWidth(), bottom);
             surface.drawBitmap(screen, stripSrc, stripDst, pixels);
         }
     }

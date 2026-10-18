@@ -46,6 +46,10 @@ type RenderContext struct {
 	// Screen dimensions (terminal size)
 	ScreenWidth  int
 	ScreenHeight int
+
+	// StatusCovered: a keyboard covers the status bar and the host shows its left
+	// end again above it, so the bar draws the mode and the input alone
+	StatusCovered bool
 }
 
 // NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource

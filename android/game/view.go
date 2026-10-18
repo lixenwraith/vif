@@ -31,7 +31,8 @@ type view struct {
 	events  chan terminal.Event
 	away    chan bool
 	pointer atomic.Bool
-	finger  struct { // the cell a pressed finger last reported; the UI thread's alone
+	covered atomic.Bool // the keyboard is up: the status bar draws its left end alone
+	finger  struct {    // the cell a pressed finger last reported; the UI thread's alone
 		down bool
 		x, y int
 	}
@@ -57,6 +58,7 @@ func (v *view) Stop() error            { return nil }
 func (v *view) Surface() render.Surface       { return v }
 func (v *view) Events() <-chan terminal.Event { return v.events }
 func (v *view) Away() <-chan bool             { return v.away }
+func (v *view) Covered() bool                 { return v.covered.Load() }
 
 func (v *view) CellAspect() vmath.Aspect { return v.tex.Atlas().Aspect() }
 
