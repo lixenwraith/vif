@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"fmt"
+	"math"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -28,6 +29,25 @@ func (s statusItem) with(text string) statusItem {
 	s.text = text
 	return s
 }
+
+// statusText is one item's text as last formatted, with the values it shows, so a
+// frame formats an item only when its value changed
+type statusText struct {
+	key  int64
+	name string
+	text string
+}
+
+// hold returns the text for key and name, formatting anew only when they changed
+func (t *statusText) hold(key int64, name string, format func() string) string {
+	if t.text == "" || key != t.key || name != t.name {
+		t.key, t.name, t.text = key, name, format()
+	}
+	return t.text
+}
+
+// tenths keys a duration in seconds by the one decimal its text shows
+func tenths(seconds float64) int64 { return int64(math.Round(seconds * 10)) }
 
 // statusPalette holds the status bar's colours. TrueColor takes the theme's; a text console
 // takes fixed entries, each apart from the items beside it and with the text that reads best on
@@ -164,6 +184,14 @@ type StatusBarRenderer struct {
 	netHeld   statusItem
 	netHeldAt time.Time
 	downSince time.Time
+
+	// Scratch the bar reuses frame to frame, and each item's text as last formatted
+	items  []statusItem
+	widths []int
+	runes  []rune
+
+	phaseText, energyText, damageText, boostText, gridText statusText
+	apmText, gtText, fpsText                               statusText
 }
 
 // NewStatusBarRenderer creates a status bar renderer
@@ -234,7 +262,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// === BUILD RIGHT-SIDE ITEMS ===
 
-	var rightItems []statusItem
+	rightItems := r.items[:0]
 
 	// Priority 0: one cell for the whole session. See networkItem.
 	if item, ok := r.networkItem(); ok {
@@ -261,7 +289,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			timerVal = elapsed.Seconds()
 		}
 
-		rightItems = append(rightItems, r.pal.phase(phaseIdx, phaseTotal).with(fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal)))
+		text := r.phaseText.hold(tenths(timerVal), phaseName, func() string {
+			return fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal)
+		})
+		rightItems = append(rightItems, r.pal.phase(phaseIdx, phaseTotal).with(text))
 	}
 
 	// Priority 2: Energy
@@ -290,12 +321,16 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			energy = r.pal.blink[len(r.pal.blink)-1]
 		}
 	}
-	rightItems = append(rightItems, energy.with(fmt.Sprintf(" Energy: %s ", status.FormatCount(energyVal))))
+	rightItems = append(rightItems, energy.with(r.energyText.hold(energyVal, "", func() string {
+		return fmt.Sprintf(" Energy: %s ", status.FormatCount(energyVal))
+	})))
 
 	// Priority 3: Damage Multiplier (cycle scaling)
 	dmgMult := r.statDamageMultiplier.Load()
 	if dmgMult > 1 {
-		rightItems = append(rightItems, r.pal.alarm.with(fmt.Sprintf(" x%s ", status.FormatCount(dmgMult))))
+		rightItems = append(rightItems, r.pal.alarm.with(r.damageText.hold(dmgMult, "", func() string {
+			return fmt.Sprintf(" x%s ", status.FormatCount(dmgMult))
+		})))
 	}
 
 	// Priority 4: Boost (conditional)
@@ -305,7 +340,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if remaining < 0 {
 			remaining = 0
 		}
-		rightItems = append(rightItems, r.pal.boost.with(fmt.Sprintf(" Boost: %.1fs ", remaining)))
+		rightItems = append(rightItems, r.pal.boost.with(r.boostText.hold(tenths(remaining), "", func() string {
+			return fmt.Sprintf(" Boost: %.1fs ", remaining)
+		})))
 	}
 
 	// Priority 5: Grid (conditional)
@@ -315,7 +352,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			gridRemaining = 0
 		}
 		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" Grid: %.1fs ", gridRemaining),
+			text: r.gridText.hold(tenths(gridRemaining), "", func() string { return fmt.Sprintf(" Grid: %.1fs ", gridRemaining) }),
 			fg:   visual.RgbGridTimerFg,
 			bg:   visual.RgbBackground,
 		})
@@ -323,15 +360,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Priority 6-9: Metrics (lowest priority, dropped first, and all a message may take)
 	metricsAt := len(rightItems)
+	apm, ticks, fps := r.statAPM.Load(), r.statTicks.Load(), r.statFPS.Load()
 	rightItems = append(rightItems,
-		r.pal.apm.with(fmt.Sprintf(" APM: %d ", r.statAPM.Load())),
-		r.pal.gt.with(fmt.Sprintf(" GT: %d ", r.statTicks.Load())),
-		r.pal.fps.with(fmt.Sprintf(" FPS: %d ", r.statFPS.Load())),
+		r.pal.apm.with(r.apmText.hold(apm, "", func() string { return fmt.Sprintf(" APM: %d ", apm) })),
+		r.pal.gt.with(r.gtText.hold(ticks, "", func() string { return fmt.Sprintf(" GT: %d ", ticks) })),
+		r.pal.fps.with(r.fpsText.hold(fps, "", func() string { return fmt.Sprintf(" FPS: %d ", fps) })),
 		r.pal.label,
 	)
+	r.items = rightItems
 
 	if ctx.StatusCovered {
-		rightItems = nil
+		rightItems = rightItems[:0]
 	}
 
 	// === RENDER LEFT-SIDE FIXED ELEMENTS ===
@@ -388,11 +427,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// never shares its space or its time with the keys. Typed input starts at the gap.
 	leftEndX := x + 1
 	if !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
-		keys := []rune(r.gameCtx.GetLastCommand())
-		for i, ch := range keys[max(len(keys)-parameter.StatusKeyWidth, 0):] {
+		keys := r.gameCtx.GetLastCommand()
+		for extra := utf8.RuneCountInString(keys) - parameter.StatusKeyWidth; extra > 0; extra-- {
+			_, size := utf8.DecodeRuneInString(keys)
+			keys = keys[size:]
+		}
+		i := 0
+		for _, ch := range keys {
 			if leftEndX+i < ctx.ScreenWidth {
 				buf.SetWithBg(leftEndX+i, statusY, ch, visual.RgbLastCommandText, visual.RgbBackground)
 			}
+			i++
 		}
 		leftEndX += parameter.StatusKeyWidth + 1
 	}
@@ -423,10 +468,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// === DYNAMIC RIGHT-SIDE ALLOCATION ===
 	// Calculate widths for all right items
-	itemWidths := make([]int, len(rightItems))
-	for i, item := range rightItems {
-		itemWidths[i] = utf8.RuneCountInString(item.text)
+	itemWidths := r.widths[:0]
+	for _, item := range rightItems {
+		itemWidths = append(itemWidths, utf8.RuneCountInString(item.text))
 	}
+	r.widths = itemWidths
 
 	availableTotal := ctx.ScreenWidth - leftEndX
 
@@ -500,12 +546,13 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 // networkItem is the badge as drawn, held for StatusNetworkHoldDuration. Its
 // inputs move on the correction cadence and its width reflows every item beside
-// it, so an unheld cell repaints faster than it can be read.
+// it, so an unheld cell repaints faster than it can be read, and it is formatted
+// only when the hold lapses.
 func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
-	item, ok := r.networkBadge()
 	now := r.gameCtx.TimeCtl.RealTime() // [wall] readability, not simulation
+	state, ok := r.networkShown()
 	// A link that went down is news for a while, then noise beside a solo game
-	if down := ok && r.statNet.Load() == "down"; !down {
+	if down := ok && state == "down"; !down {
 		r.downSince = time.Time{}
 	} else if r.downSince.IsZero() {
 		r.downSince = now
@@ -517,9 +564,16 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 		r.netHeld = statusItem{}
 		return statusItem{}, false
 	case r.netHeld.text == "" || now.Sub(r.netHeldAt) >= parameter.StatusNetworkHoldDuration:
-		r.netHeld, r.netHeldAt = item, now
+		r.netHeld, _ = r.networkBadge()
+		r.netHeldAt = now
 	}
 	return r.netHeld, true
+}
+
+// networkShown reports whether the session shows a badge, and the link state it reads
+func (r *StatusBarRenderer) networkShown() (state string, ok bool) {
+	state = r.statNet.Load()
+	return state, r.statMigrating.Load() || r.statHostLost.Load() || (state != "" && state != "off")
 }
 
 // networkBadge is the session in one badge: the round trip, which is the reading
@@ -527,6 +581,10 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 // instance is keeping up, and at most one qualifier. A worse fact hides a lesser
 // one; the numbers behind them are in :session and the status snapshot.
 func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
+	state, ok := r.networkShown()
+	if !ok {
+		return statusItem{}, false
+	}
 	// A succession in progress outranks the loss that opened it, and stays a fixed
 	// number of ticks past the handoff, so the two states a player reads are either
 	// side of it. The count is the reconnect walking the candidate list.
@@ -541,10 +599,6 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	// including the link state that described the host that went.
 	if r.statHostLost.Load() {
 		return r.pal.net[severityFailing].with(" Host lost "), true
-	}
-	state := r.statNet.Load()
-	if state == "" || state == "off" {
-		return statusItem{}, false
 	}
 	switch state {
 	case "down":
@@ -623,7 +677,7 @@ func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX,
 		return startX
 	}
 
-	runes := []rune(text)
+	runes := r.runesOf(text)
 	textLen := len(runes)
 	if cursorPos > textLen {
 		cursorPos = textLen
@@ -719,13 +773,22 @@ func computeInputWindow(textLen, cursorPos, maxWidth int) (winStart, contentSlot
 	return
 }
 
+// runesOf is text as runes in the bar's scratch, valid until the next call
+func (r *StatusBarRenderer) runesOf(text string) []rune {
+	r.runes = r.runes[:0]
+	for _, ch := range text {
+		r.runes = append(r.runes, ch)
+	}
+	return r.runes
+}
+
 // renderStatusMessage renders status message with right-truncation (shows start of text)
 func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, startX, maxWidth int, text string) {
 	if maxWidth <= 0 {
 		return
 	}
 
-	runes := []rune(text)
+	runes := r.runesOf(text)
 	textLen := len(runes)
 
 	if textLen <= maxWidth {
