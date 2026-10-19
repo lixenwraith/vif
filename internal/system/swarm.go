@@ -226,7 +226,7 @@ func (s *SwarmSystem) Update() {
 			s.updateDecelerateState(headerEntity, swarmComp, combatComp, dtSec, dt)
 		}
 
-		// Interactions with cursor and shield
+		breakGoldUnder(s.world, &s.sweep, headerEntity)
 		strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesSwarm], true)
 
 		activeCount++

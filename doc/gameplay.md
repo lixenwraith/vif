@@ -238,7 +238,9 @@ nugget and spends one percent energy when a target exists.
 
 A gold encounter creates a protected, bright, 10-character alphanumeric
 composite at a free horizontal span. It lasts 10 seconds and must be typed in
-left-to-right member order. Gold members resist deletion and particle effects.
+left-to-right member order. Gold members resist deletion and particle effects,
+but any species body covering one destroys it, a drain's hit crossing as the
+member it struck (D-3), and the breach ends the sequence as destroyed.
 
 `Shift-Tab` jumps to the first remaining gold member and spends ten percent
 energy. Completion, timeout and external damage emit `EventGoldCompleted`,
@@ -342,7 +344,7 @@ a blocked tracer drains to its stop point.
 
 | Actor | Role |
 |---|---|
-| Drain | Local population is `ceil(current heat × 10 / 100)`, capped at 10 and excluding overheat: heat 0 gives 0; 1–10 gives 1; 11–20 gives 2; 91–100 gives 10. Materializes, chases, drains shield energy, removes heat on unshielded contact, and turns the glyphs it crosses into dust (§4); one that crosses a swarm or quasar is absorbed into it, healing it. |
+| Drain | Local population is `ceil(current heat × 10 / 100)`, capped at 10 and excluding overheat: heat 0 gives 0; 1–10 gives 1; 11–20 gives 2; 91–100 gives 10. Materializes, chases, drains shield energy, removes heat on unshielded contact, turns the player glyphs it crosses into dust (§4) and breaks the gold sequence it crosses; one that crosses a swarm or quasar is absorbed into it, healing it. |
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor, emits lightning when the cursor leaves its effective range, and absorbs drains. It is created by fusing drains in the default progression. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle carries a turret it fires in bursts at the nearest cursor, and the blue circle creates swarm pressure. |

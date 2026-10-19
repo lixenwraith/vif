@@ -859,6 +859,8 @@ func (s *SnakeSystem) updateShieldState(snakeComp *component.SnakeComponent, bod
 // handleInteractions strikes cursors on the head's cell, heating them only while the
 // snake is unshielded, and shields the body reaches; the body never heats.
 func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
+	breakGoldUnder(s.world, &s.sweep, snakeComp.HeadEntity)
+	breakGoldUnder(s.world, &s.sweep, snakeComp.BodyEntity)
 	damage := profile.Contact[component.SpeciesSnake]
 	head := CheckCursorOverlaps(s.world, snakeComp.HeadEntity)
 	for i := range head.Count {

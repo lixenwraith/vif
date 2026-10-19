@@ -189,6 +189,7 @@ func (s *EyeSystem) Update() {
 
 		// Physics integration and member position sync
 		s.integrateAndSync(headerEntity, kineticComp, dtSec)
+		breakGoldUnder(s.world, &s.sweep, headerEntity)
 
 		// Target contact → self-destruct + combat damage
 		if s.checkTargetContact(headerEntity) {

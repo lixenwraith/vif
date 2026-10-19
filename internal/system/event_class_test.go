@@ -64,6 +64,7 @@ var crossingPushes = map[string]string{
 	// D-3 table, drain donation and death, cursor advance and defeat state: each is
 	// a player mechanic whose shared outcome is determined by the artifact it pushes.
 	"drain:EventCombatHealRequest":  "a dying drain donating its hit points; target and amount cross",
+	"drain:EventGoldBreakRequest":   "a personal drain striking a gold member; header and member cross",
 	"drain:EventDrainDefeated":      "one personal drain death and its causal cursor advance shared progression",
 	"fuse:EventDrainDefeated":       "each fused personal drain and its causal cursor advance shared progression",
 	"typing:EventCursorMoveRequest": "the post-typing advance moves the shared cursor",

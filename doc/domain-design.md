@@ -83,6 +83,7 @@ never enters the replay suffix (D-9).
 | Shared gold member typed | header, member, and typist cursor |
 | Jump to the live gold sequence | cursor |
 | Dying drain donation | target and heal amount |
+| Drain striking a gold member | header and member |
 | Personal drain death affecting shared progression | owner cursor |
 | Motion, typing or nugget cursor advance | cursor and absolute destination cell |
 | Pointer placement | cursor and the newest cell the pointer named before the next tick or input |

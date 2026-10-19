@@ -78,6 +78,29 @@ func countSpeciesProtected(e core.Entity, shared, player *atomic.Int64) {
 	}
 }
 
+// breakGoldUnder destroys the gold members a composite's living members cover. A
+// shared glyph is a gold member, and every shared species breaks the sequence it
+// runs into whether or not its footprint clears anything else; the breach the
+// composite then reports ends the sequence.
+func breakGoldUnder(w *engine.World, sweep *cellSweep, header core.Entity) {
+	h, ok := w.Components.Header.GetPtr(header)
+	if !ok {
+		return
+	}
+	sweep.reset()
+	for _, m := range h.MemberEntries {
+		if m.Entity == 0 {
+			continue
+		}
+		if pos, ok := w.Positions.GetPosition(m.Entity); ok {
+			sweep.collect(w, pos.X, pos.Y, func(e core.Entity) bool {
+				return e.Domain() == core.DomainShared && w.Components.Glyph.HasEntity(e)
+			})
+		}
+	}
+	sweep.emit(w, event.EventFlashSpawnOneRequest)
+}
+
 // speciesClearable admits everything a spawn footprint may destroy; cursors,
 // walls, and species-protected entities survive.
 func speciesClearable(w *engine.World, e core.Entity, protectedShared, protectedPlayer *atomic.Int64) bool {
