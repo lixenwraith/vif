@@ -342,12 +342,12 @@ func (s *AdaptationSystem) processPendingDeaths() {
 		graph := s.world.Resources.RouteGraph.Get(t.GraphID)
 		if graph != nil && t.RouteID >= 0 && t.RouteID < len(graph.Routes) {
 			route := graph.Routes[t.RouteID]
-			if route.Field != nil && route.Field.Valid {
+			if route.Field != nil {
 				deathDist := route.Field.GetDistance(death.X, death.Y)
 
 				// Recover topological distance if knocked slightly out of corridor
 				if deathDist < 0 {
-					deathDist = findCorridorDistance(route.Field, death.X, death.Y, parameter.RouteCorridorRecoveryRadius)
+					deathDist = findCorridorDistance(route.Field, &route.Field.Costs, death.X, death.Y, parameter.RouteCorridorRecoveryRadius)
 				}
 
 				var fitness float64
@@ -390,7 +390,7 @@ func (s *AdaptationSystem) processPendingDeaths() {
 
 // findCorridorDistance performs a spiral search to find the nearest valid topological
 // distance in the route corridor, penalizing the gap using aspect-weighted costs.
-func findCorridorDistance(field *navigation.FlowField, startX, startY, maxRadius int) int {
+func findCorridorDistance(field navigation.Source, c *navigation.Costs, startX, startY, maxRadius int) int {
 	for r := 1; r <= maxRadius; r++ {
 		bestDist := -1
 		for dy := -r; dy <= r; dy++ {
@@ -401,7 +401,7 @@ func findCorridorDistance(field *navigation.FlowField, startX, startY, maxRadius
 				d := field.GetDistance(startX+dx, startY+dy)
 				if d >= 0 {
 					// Manhattan gap penalty at the field's axis costs
-					penalty := vmath.IntAbs(dx)*int(field.Costs.X) + vmath.IntAbs(dy)*int(field.Costs.Y)
+					penalty := vmath.IntAbs(dx)*int(c.X) + vmath.IntAbs(dy)*int(c.Y)
 					total := d + penalty
 					if bestDist < 0 || total < bestDist {
 						bestDist = total

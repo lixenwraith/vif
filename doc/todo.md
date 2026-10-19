@@ -293,14 +293,14 @@ library copies.
 
 A field is computed only for a reader, on a grid moved cell by cell as the walls
 change, a snake head measures every cursor with one search, a wall that opens
-repairs a computed field in place, and a drop reads its owner's private group.
-On td with eight walking cursors and seven snake heads a storm tick now peaks at
-37 ms against 7 ms on average, and no wall change computes more than two fields
-in a tick. Next, in order: corridor-sparse route fields, whose per-route grid
-fills and map-sized allocations are the route graph's remaining cost (the
-design's item 5); then, if a browser frame still stalls, the per-tick budget of
-item 7. A 2×2 coarse field is not planned: it changes the answer, and the shared
-grid already took the cost it would have saved.
+repairs a computed field in place, a drop reads its owner's private group, and a
+route's field is its corridor alone. On td with eight walking cursors and seven
+snake heads a storm tick peaks at 30 ms against 7 ms on average, and no
+wall change computes more than two fields in a tick. What is left is the per-tick
+budget of the design's item 7, if a browser frame still stalls, and its item 6
+when a second footprint tier is wanted. A 2×2 coarse field is not planned: it
+changes the answer, and the shared grid already took the cost it would have
+saved.
 
 ### Serve wss from vif's own listener
 
