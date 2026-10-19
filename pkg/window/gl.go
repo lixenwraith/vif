@@ -34,6 +34,7 @@ var (
 	xInternAtom         func(dpy uintptr, name string, onlyIfExists int32) uintptr
 	xSetWMProtocols     func(dpy, win uintptr, atoms *uintptr, count int32) int32
 	xSetWMNormalHints   func(dpy, win uintptr, hints *sizeHints)
+	xChangeProperty     func(dpy, win, property, typ uintptr, format, mode int32, data *uintptr, n int32) int32
 	xMapWindow          func(dpy, win uintptr) int32
 	xConnectionNumber   func(dpy uintptr) int32
 	xPending            func(dpy uintptr) int32
@@ -133,6 +134,7 @@ func load() error {
 			{"XDestroyWindow", &xDestroyWindow}, {"XSelectInput", &xSelectInput},
 			{"XStoreName", &xStoreName}, {"XInternAtom", &xInternAtom},
 			{"XSetWMProtocols", &xSetWMProtocols}, {"XSetWMNormalHints", &xSetWMNormalHints},
+			{"XChangeProperty", &xChangeProperty},
 			{"XMapWindow", &xMapWindow}, {"XConnectionNumber", &xConnectionNumber},
 			{"XPending", &xPending}, {"XNextEvent", &xNextEvent},
 			{"XLookupString", &xLookupString}, {"XFlush", &xFlush},

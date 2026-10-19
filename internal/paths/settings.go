@@ -35,9 +35,12 @@ type Settings struct {
 	Audio struct {
 		BufferMs int `toml:"buffer_ms"`
 	} `toml:"audio"`
-	// Presentation.Window opens the desktop window by default, as -g does
+	// Presentation.Window opens the desktop window by default, as -g does, and
+	// Maximized or Fullscreen the state it opens in, as the flags of those names do
 	Presentation struct {
-		Window bool `toml:"window"`
+		Window     bool `toml:"window"`
+		Maximized  bool `toml:"maximized"`
+		Fullscreen bool `toml:"fullscreen"`
 	} `toml:"presentation"`
 	Play Play `toml:"play"`
 }

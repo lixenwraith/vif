@@ -110,6 +110,15 @@ Colour depth; auto detects the terminal
 .B \-g, \-gui[=false]
 Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; the default of a vif\-gui build or with vif.toml's [presentation] window = true, which \-g=false turns off
 .TP
+.B \-cli
+Play in the terminal whatever vif.toml's [presentation] or a vif\-gui build says; wins over \-g
+.TP
+.B \-maximized[=false]
+Open the desktop window maximized; vif.toml's [presentation] maximized is the default, and a terminal run ignores it
+.TP
+.B \-fullscreen[=false]
+Open the desktop window full screen; vif.toml's [presentation] fullscreen is the default, and a terminal run ignores it
+.TP
 .B \-scale <n>
 Draw the desktop window's font n times its pixels, for a HiDPI screen; with \-g (default 1)
 .TP

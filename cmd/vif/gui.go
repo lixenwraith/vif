@@ -41,7 +41,8 @@ func (h *windowHost) Init() error {
 	}
 	h.aspect = atlas.Aspect()
 	h.win, err = window.Open(window.Config{Title: parameter.WindowTitle, Atlas: atlas,
-		Cols: parameter.WindowCols, Rows: parameter.WindowRows, Scale: *flagScale})
+		Cols: parameter.WindowCols, Rows: parameter.WindowRows, Scale: *flagScale,
+		Maximized: windowMaximized, Fullscreen: windowFullscreen})
 	return err
 }
 

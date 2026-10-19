@@ -27,8 +27,11 @@ buffer_ms = 50
 [presentation]
 # Where the game is drawn when no flag says: the terminal, or with window = true
 # the desktop window -g opens (Linux and FreeBSD; a build without one refuses).
-# -g and -g=false win for that run.
+# -g, -g=false and -cli win for that run. The window opens maximized or full
+# screen when asked, as -maximized and -fullscreen ask; a terminal run ignores both.
 window = false
+maximized = false
+fullscreen = false
 
 # What the configuration menu changes in a run and a run with a settings file
 # writes back here, so the next starts as this one was left: the two sound
