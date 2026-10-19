@@ -94,7 +94,7 @@ type FlowField struct {
 	TargetX, TargetY int  // Target position this field was computed for
 	Valid            bool // False if field needs recomputation
 
-	search gridSearch // scratch reused across recomputes, empty after a clone
+	search SearchGrid // Compute's own grid, empty after a clone; ComputeOn shares one
 }
 
 // NewFlowField creates an empty flow field for the given dimensions
@@ -185,15 +185,16 @@ type WallChecker func(x, y int) bool
 const maxSearchRadius = 8
 
 // Compute performs weighted Dijkstra from all target points across the entire
-// valid field.
+// valid field, reading the walls into the field's own grid.
 func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
-	f.computeWith(&f.search, targets, isBlocked)
+	f.search.Fill(f.Width, f.Height, isBlocked)
+	f.ComputeOn(&f.search, targets)
 }
 
-// computeWith is Compute on the search g, which a caller computing many fields
-// at once shares among them
-func (f *FlowField) computeWith(g *gridSearch, targets []vmath.Point, isBlocked WallChecker) {
-	if len(targets) == 0 {
+// ComputeOn is Compute on a grid already filled at the field's size, which every
+// field of one tier shares until the passability moves.
+func (f *FlowField) ComputeOn(g *SearchGrid, targets []vmath.Point) {
+	if len(targets) == 0 || g.w != f.Width || g.h != f.Height {
 		f.Valid = false
 		return
 	}
@@ -206,23 +207,21 @@ func (f *FlowField) computeWith(g *gridSearch, targets []vmath.Point, isBlocked 
 		}
 		f.CurrentGen = 1
 	}
-	g.fill(w, f.Height, isBlocked)
 	g.reset(f.Costs.seedSpan())
 
 	for _, t := range targets {
-		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
+		if g.Blocked(t.X, t.Y) {
+			if t.X >= 0 && t.Y >= 0 && t.X < w && t.Y < f.Height {
+				f.seedVirtualTargets(g, t.X, t.Y)
+			}
 			continue
 		}
 		targetIdx := int32(t.Y*w + t.X)
-		if !isBlocked(t.X, t.Y) {
-			if f.VisitedGen[targetIdx] != f.CurrentGen {
-				f.Distances[targetIdx] = 0
-				f.VisitedGen[targetIdx] = f.CurrentGen
-				f.Directions[targetIdx] = DirTarget
-				g.push(targetIdx, 0)
-			}
-		} else {
-			f.seedVirtualTargets(g, t.X, t.Y, isBlocked)
+		if f.VisitedGen[targetIdx] != f.CurrentGen {
+			f.Distances[targetIdx] = 0
+			f.VisitedGen[targetIdx] = f.CurrentGen
+			f.Directions[targetIdx] = DirTarget
+			g.push(targetIdx, 0)
 		}
 	}
 
@@ -235,7 +234,7 @@ func (f *FlowField) computeWith(g *gridSearch, targets []vmath.Point, isBlocked 
 		if f.Distances[idx] != d {
 			continue // a shorter distance reached it since
 		}
-		for m := g.open(idx); m != 0; m &= m - 1 {
+		for m := g.open[idx]; m != 0; m &= m - 1 {
 			k := bits.TrailingZeros8(m)
 			nIdx := idx + g.step[k]
 			nd := d + f.Costs.dir[k]
@@ -251,13 +250,16 @@ func (f *FlowField) computeWith(g *gridSearch, targets []vmath.Point, isBlocked 
 	f.Valid = true
 }
 
-// gridSearch is the scratch every Dijkstra over the grid runs on: isBlocked asked
-// once per cell into a grid with a blocked border, so a neighbour is one load and
-// no bounds test, and a ring of buckets indexed by distance, which pops in constant
-// time while no queued distance runs a whole ring ahead of the one settling.
-type gridSearch struct {
-	w       int
-	blocked []bool
+// SearchGrid is what every Dijkstra over one passability runs on: the wall test
+// asked once per cell into a grid with a blocked border, the directions open from
+// each cell as one mask with the corner rule folded in, and a ring of buckets
+// indexed by distance, which pops in constant time while no queued distance runs
+// a whole ring ahead of the one settling. One grid serves every field, route and
+// reach on its tier until the passability moves.
+type SearchGrid struct {
+	w, h    int
+	blocked []bool          // bordered, (w+2)×(h+2)
+	open    []uint8         // per cell, a bit per DirVectors index
 	step    [DirCount]int32 // to each neighbour, in field cells
 	padStep [DirCount]int   // the same, in the bordered grid
 	ring    [][]int32
@@ -265,8 +267,9 @@ type gridSearch struct {
 	at      int32
 }
 
-// fill reads the passability of a w×h field.
-func (g *gridSearch) fill(w, h int, isBlocked WallChecker) {
+// Fill reads the passability of a w×h field and the directions open from each
+// cell: into a passable cell, and along a diagonal only past both corners beside it.
+func (g *SearchGrid) Fill(w, h int, isBlocked WallChecker) {
 	pw, ph := w+2, h+2
 	if cap(g.blocked) < pw*ph {
 		g.blocked = make([]bool, pw*ph)
@@ -282,34 +285,48 @@ func (g *gridSearch) fill(w, h int, isBlocked WallChecker) {
 			row[x+1] = isBlocked(x, y)
 		}
 	}
-	g.w = w
+	g.w, g.h = w, h
 	for k := range DirCount {
 		g.step[k] = int32(DirVectors[k][1]*w + DirVectors[k][0])
 		g.padStep[k] = DirVectors[k][1]*pw + DirVectors[k][0]
 	}
+	if cap(g.open) < w*h {
+		g.open = make([]uint8, w*h)
+	}
+	g.open = g.open[:w*h]
+	for y := range h {
+		for x := range w {
+			p := (y+1)*pw + x + 1
+			var m uint8
+			if !g.blocked[p] {
+				for k := range DirCount {
+					if !g.blocked[p+g.padStep[k]] {
+						m |= 1 << k
+					}
+				}
+				m &= 0x55 | (m<<1|m>>7)&(m>>1|m<<7)
+			}
+			g.open[y*w+x] = m
+		}
+	}
+}
+
+// Size is the field size the grid was filled at.
+func (g *SearchGrid) Size() (w, h int) { return g.w, g.h }
+
+// Blocked reports whether a cell is impassable; every cell off the grid is.
+func (g *SearchGrid) Blocked(x, y int) bool {
+	return x < 0 || y < 0 || x >= g.w || y >= g.h || g.blocked[(y+1)*(g.w+2)+x+1]
 }
 
 // pad is a field cell's index in the bordered grid.
-func (g *gridSearch) pad(idx int32) int {
+func (g *SearchGrid) pad(idx int32) int {
 	return (int(idx)/g.w+1)*(g.w+2) + int(idx)%g.w + 1
-}
-
-// open is the directions a search steps along from idx, as bits: into a passable
-// cell, and along a diagonal only past both corners beside it.
-func (g *gridSearch) open(idx int32) uint8 {
-	p := g.pad(idx)
-	var m uint8
-	for k := range DirCount {
-		if !g.blocked[p+g.padStep[k]] {
-			m |= 1 << k
-		}
-	}
-	return m & (0x55 | (m<<1|m>>7)&(m>>1|m<<7))
 }
 
 // reset empties the queue and sizes its ring past span, the furthest a queued
 // distance may run ahead of the one settling.
-func (g *gridSearch) reset(span int32) {
+func (g *SearchGrid) reset(span int32) {
 	n := max(len(g.ring), 64)
 	for int32(n) <= span {
 		n *= 2
@@ -323,7 +340,7 @@ func (g *gridSearch) reset(span int32) {
 	g.pending, g.at = 0, 0
 }
 
-func (g *gridSearch) push(idx, dist int32) {
+func (g *SearchGrid) push(idx, dist int32) {
 	b := &g.ring[dist&int32(len(g.ring)-1)]
 	*b = append(*b, idx)
 	g.pending++
@@ -331,7 +348,7 @@ func (g *gridSearch) push(idx, dist int32) {
 
 // pop is the nearest queued cell and the distance it was queued at; a cell queued
 // again is popped again, and ok is false once nothing is queued.
-func (g *gridSearch) pop() (idx, dist int32, ok bool) {
+func (g *SearchGrid) pop() (idx, dist int32, ok bool) {
 	mask := int32(len(g.ring) - 1)
 	for g.pending > 0 {
 		b := &g.ring[g.at&mask]
@@ -346,20 +363,19 @@ func (g *gridSearch) pop() (idx, dist int32, ok bool) {
 	return 0, 0, false
 }
 
-// Reachable reports whether Compute would seed anything for targets, so a field
+// Reachable reports whether ComputeOn would seed anything for targets, so a field
 // whose compute is deferred can say now whether it will be valid.
-func (f *FlowField) Reachable(targets []vmath.Point, isBlocked WallChecker) bool {
+func (f *FlowField) Reachable(g *SearchGrid, targets []vmath.Point) bool {
 	for _, t := range targets {
 		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
 			continue
 		}
-		if !isBlocked(t.X, t.Y) {
+		if !g.Blocked(t.X, t.Y) {
 			return true
 		}
 		for dy := -maxSearchRadius; dy <= maxSearchRadius; dy++ {
 			for dx := -maxSearchRadius; dx <= maxSearchRadius; dx++ {
-				nx, ny := t.X+dx, t.Y+dy
-				if (dx != 0 || dy != 0) && nx >= 0 && nx < f.Width && ny >= 0 && ny < f.Height && !isBlocked(nx, ny) {
+				if (dx != 0 || dy != 0) && !g.Blocked(t.X+dx, t.Y+dy) {
 					return true
 				}
 			}
@@ -368,53 +384,35 @@ func (f *FlowField) Reachable(targets []vmath.Point, isBlocked WallChecker) bool
 	return false
 }
 
-// seedVirtualTargets finds passable cells near blocked target using spiral search
-// Seeds passable cells with weighted distance - does NOT mark blocked target
-func (f *FlowField) seedVirtualTargets(g *gridSearch, targetX, targetY int, isBlocked WallChecker) {
-	w := f.Width
+// seedVirtualTargets seeds the first ring around a blocked target with a passable
+// cell, each at its axis-weighted gap, leaving the target itself unmarked.
+func (f *FlowField) seedVirtualTargets(g *SearchGrid, targetX, targetY int) {
+	seedRing(g, &f.Costs, targetX, targetY, func(idx, cost int32) {
+		if f.VisitedGen[idx] != f.CurrentGen || cost < f.Distances[idx] {
+			f.Distances[idx] = cost
+			f.VisitedGen[idx] = f.CurrentGen
+			f.Directions[idx] = DirTarget
+			g.push(idx, cost)
+		}
+	})
+}
 
-	// DO NOT mark the blocked target cell - only seed passable neighbors
-
+// seedRing calls seed for every passable cell of the first ring around (x, y)
+// that holds one, out to maxSearchRadius, with the ring cell's gap cost.
+func seedRing(g *SearchGrid, c *Costs, x, y int, seed func(idx, cost int32)) {
 	for radius := 1; radius <= maxSearchRadius; radius++ {
-		foundAny := false
-
-		// Check ring at this radius
+		found := false
 		for dy := -radius; dy <= radius; dy++ {
 			for dx := -radius; dx <= radius; dx++ {
-				// Only check cells on the ring perimeter
-				if abs(dx) != radius && abs(dy) != radius {
+				if abs(dx) != radius && abs(dy) != radius || g.Blocked(x+dx, y+dy) {
 					continue
 				}
-
-				nx := targetX + dx
-				ny := targetY + dy
-
-				if nx < 0 || nx >= w || ny < 0 || ny >= f.Height {
-					continue
-				}
-
-				if isBlocked(nx, ny) {
-					continue
-				}
-
-				nIdx := ny*w + nx
-
-				// Seed as virtual target with distance based on manhattan distance from real target
-				// Weighted by axis costs for consistency with Dijkstra
-				cost := int32(abs(dx))*f.Costs.X + int32(abs(dy))*f.Costs.Y
-				if f.VisitedGen[nIdx] != f.CurrentGen || cost < f.Distances[nIdx] {
-					f.Distances[nIdx] = cost
-					f.VisitedGen[nIdx] = f.CurrentGen
-					f.Directions[nIdx] = DirTarget // Mark as target for direction derivation
-					g.push(int32(nIdx), cost)
-					foundAny = true
-				}
+				seed(int32((y+dy)*g.w+x+dx), int32(abs(dx))*c.X+int32(abs(dy))*c.Y)
+				found = true
 			}
 		}
-
-		// Found at least one passable cell at this radius - stop expanding
-		if foundAny {
-			break
+		if found {
+			return
 		}
 	}
 }

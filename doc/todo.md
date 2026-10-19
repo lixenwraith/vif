@@ -284,20 +284,24 @@ library copies.
 
 ## Browser sessions
 
-### Coarsen navigation fields if busy maps still stall a browser frame
+### Bound navigation's worst tick on busy maps
 
 - Priority: P2
-- Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`
+- Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`,
+  `internal/system/loot.go`
+- Guide: [Navigation design §4](navigation-design.md#4-options-in-order-of-payoff)
 
-Navigation computes a field only for a reader and, while a valid field covers the
-same number of targets, at most once per 5-tick cooldown; a 199x97 field is 3.0 ms
-under WASM, and in solo play with nothing chasing, navigation costs 0.1 ms a tick.
-A busy map pays those 3 ms for every field read when it falls due, and several
-groups' fields can fall due in one tick. Next, in order: compute a field over 2x2
-blocks, about a quarter of the cells, where its directions mostly agree with the
-full field's away from walls; then a second Go instance in another worker computing
-fields at a fixed lead, at the cost of a second runtime and of copying the grid in
-and the field out.
+A field is computed only for a reader, on a grid whose direction masks are built
+once per passability change, and a snake head measures every cursor with one
+search instead of reading a field per cursor. What remains is the wall change: one
+despawned wall invalidates every live field at once, and on td with eight walking
+cursors and seven snake heads a storm tick peaked at 69 ms against 7 ms on average.
+Next, in order: the wall-grid diff of the design's item 3, which dirties fields on
+a removal instead of invalidating them and keeps a route graph fresh until a change
+touches its corridor; loot's owner fields into navigation's private groups (item
+4); then, if a browser frame still stalls, the per-tick budget of item 7. A 2×2
+coarse field is not planned: it changes the answer, and the shared grid already
+took the cost it would have saved.
 
 ### Serve wss from vif's own listener
 
@@ -479,7 +483,10 @@ Diagnoses and what each item follows from are in
 
 Measure a td tick with 16 players at `GOMAXPROCS=1` and trim the larger of field
 derivation and `checkCursorOverlap`'s position lookups; with eager, heap-searched
-fields on a 3-tick cooldown they were about 45% and a quarter of a 2.6 ms tick. A
+fields on a 3-tick cooldown they were about 45% and a quarter of a 2.6 ms tick.
+Field derivation has since halved (lazy fields on one shared grid per tier, the
+snake lock by one search); what it still costs is in
+[Bound navigation's worst tick](#bound-navigations-worst-tick-on-busy-maps). A
 checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each must
 stay exact; per-store write counters stay rejected, since a cache compares values it
 owns.
@@ -855,13 +862,6 @@ during recede (`calcIntensity`'s recede case scaled by what is left of the phase
 `segStart` held at the edge) would make it one pass. Unchecked: whether a replayed
 tick on a guest re-emits a beacon (`RestoreState` keeps `lastSpawnAttempt`), which
 would show as a second beam at the same cell.
-
-### Draw the flow-field debug view from console glyphs
-
-- Priority: P3
-- Affected files: `internal/render/renderer/flow_debug.go`
-
-Its diagonal arrows and `◆●` are missing from console fonts, so in 256 colours the view shows their fallbacks.
 
 ## Genetic library
 

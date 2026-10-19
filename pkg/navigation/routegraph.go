@@ -66,7 +66,7 @@ type RouteGraph struct {
 type RouteSolver struct {
 	Costs       Costs // the aspect routes are weighted at; zero is the reference
 	sc          routeScratch
-	fieldSearch gridSearch // the search every route's field is computed on
+	fieldSearch SearchGrid // the grid every route's corridor field is computed on
 	penalty     []int32
 	usedDilated []bool
 	allowed     []uint32
@@ -114,7 +114,7 @@ func (rs *RouteSolver) Compute(
 	size := mapW * mapH
 	sc := &rs.sc
 	sc.grow(size)
-	sc.search.fill(mapW, mapH, isBlocked)
+	sc.search.Fill(mapW, mapH, isBlocked)
 	tolerance := 0
 	rs.penalty, rs.usedDilated = scratch(rs.penalty, size), scratch(rs.usedDilated, size)
 	penalty, usedDilated := rs.penalty, rs.usedDilated
@@ -227,7 +227,8 @@ func (rs *RouteSolver) computePathFields(rg *RouteGraph, paths [][]int, mapW, ma
 
 		field := NewFlowField(mapW, mapH)
 		field.Costs = rs.Costs
-		field.computeWith(&rs.fieldSearch, targets, routeBlocked)
+		rs.fieldSearch.Fill(mapW, mapH, routeBlocked)
+		field.ComputeOn(&rs.fieldSearch, targets)
 		rg.Routes[ri].Field = field
 	}
 }
@@ -283,7 +284,7 @@ func routeTolerance(optDist int) int {
 // routeScratch holds the buffers of a route graph computation, over one
 // passability its search reads for every route
 type routeScratch struct {
-	search         gridSearch
+	search         SearchGrid
 	dist           []int32
 	prev           []int32
 	stamp          []uint32 // dilate visited marks, generation-stamped
@@ -369,7 +370,7 @@ func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []i
 		if int(at) == goal {
 			break
 		}
-		for m := g.open(at); m != 0; m &= m - 1 {
+		for m := g.open[at]; m != 0; m &= m - 1 {
 			k := bits.TrailingZeros8(m)
 			nIdx := at + g.step[k]
 			if nd := d + c.dir[k] + penalty[nIdx]; nd < dist[nIdx] {

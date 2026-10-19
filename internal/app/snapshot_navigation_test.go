@@ -290,8 +290,12 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 			var grid []bool
 			point := w.Positions.WallTest(component.WallBlockKinetic, &grid)
 			point(-1, -1)
-			dbg.Flow.Materialize(point)
-			dbg.CompositeFlow.Materialize(dbg.CompositePassability.IsBlocked)
+			cfg := w.Resources.Config
+			var pointGrid, compositeGrid navigation.SearchGrid
+			pointGrid.Fill(cfg.MapWidth, cfg.MapHeight, point)
+			compositeGrid.Fill(cfg.MapWidth, cfg.MapHeight, dbg.CompositePassability.IsBlocked)
+			dbg.Flow.Materialize(&pointGrid)
+			dbg.CompositeFlow.Materialize(&compositeGrid)
 			for i, c := range []*navigation.FlowFieldCache{dbg.Flow, dbg.CompositeFlow} {
 				if !c.Field.Valid {
 					t.Fatal("a cursor flow field is not computed; there is nothing to keep")

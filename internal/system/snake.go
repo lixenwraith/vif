@@ -379,6 +379,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 		Width:         parameter.SnakeHeadWidth,
 		Height:        parameter.SnakeHeadHeight,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
+		LockTicks:     parameter.NavFlowMinTicksBetweenCompute,
 	})
 
 	// Create head members (5×3 grid)

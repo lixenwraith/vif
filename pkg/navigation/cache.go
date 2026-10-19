@@ -48,7 +48,7 @@ func (c *FlowFieldCache) Clone() *FlowFieldCache {
 	if c.Field != nil {
 		f := *c.Field
 		f.Directions, f.Distances, f.VisitedGen = slices.Clone(f.Directions), slices.Clone(f.Distances), slices.Clone(f.VisitedGen)
-		f.search = gridSearch{}
+		f.search = SearchGrid{}
 		n.Field = &f
 	}
 	return &n
@@ -70,11 +70,11 @@ func (c *FlowFieldCache) Resize(width, height int) {
 	c.deferred = false
 }
 
-// Update recomputes the field when it is due, or in a lazy cache records that it
-// is. It is due at once when it has no field or the target count changes; after
+// Update recomputes the field on g when it is due, or in a lazy cache records that
+// it is. It is due at once when it has no field or the target count changes; after
 // the cooldown, when marked dirty or a target drifted DirtyDistance cells; and a
 // smaller drift after SettleTicks. Returns true when the field was due.
-func (c *FlowFieldCache) Update(targets []vmath.Point, isBlocked WallChecker) bool {
+func (c *FlowFieldCache) Update(targets []vmath.Point, g *SearchGrid) bool {
 	c.TicksSinceCompute++
 	due := !c.Computed() || len(targets) != len(c.LastTargets)
 	if !due && c.TicksSinceCompute >= c.MinTicksBetweenCompute {
@@ -90,26 +90,26 @@ func (c *FlowFieldCache) Update(targets []vmath.Point, isBlocked WallChecker) bo
 	c.LastTargets = append(c.LastTargets[:0], targets...)
 	c.TicksSinceCompute = 0
 	c.PendingUpdate = false
-	c.compute(isBlocked)
+	c.compute(g)
 	return true
 }
 
 // compute derives the field for LastTargets, or in a lazy cache defers it,
 // knowing already whether it will be valid
-func (c *FlowFieldCache) compute(isBlocked WallChecker) {
+func (c *FlowFieldCache) compute(g *SearchGrid) {
 	if !c.Lazy {
-		c.Field.Compute(c.LastTargets, isBlocked)
+		c.Field.ComputeOn(g, c.LastTargets)
 		return
 	}
 	c.Field.Invalidate()
-	c.deferred = c.Field.Reachable(c.LastTargets, isBlocked)
+	c.deferred = c.Field.Reachable(g, c.LastTargets)
 }
 
-// Materialize computes a deferred field before it is read. isBlocked must answer
-// as it did when the field fell due, which holds while the observed grid is unmoved.
-func (c *FlowFieldCache) Materialize(isBlocked WallChecker) {
+// Materialize computes a deferred field before it is read. g must hold the
+// passability the field fell due on, which holds while the observed grid is unmoved.
+func (c *FlowFieldCache) Materialize(g *SearchGrid) {
 	if c.deferred {
-		c.Field.Compute(c.LastTargets, isBlocked)
+		c.Field.ComputeOn(g, c.LastTargets)
 		c.deferred = false
 	}
 }
@@ -136,8 +136,8 @@ func (c *FlowFieldCache) ObserveGrid(grid []bool, gen uint64) {
 }
 
 // Rebuild derives a restored field without advancing its captured throttle phase.
-func (c *FlowFieldCache) Rebuild(isBlocked WallChecker) {
-	c.compute(isBlocked)
+func (c *FlowFieldCache) Rebuild(g *SearchGrid) {
+	c.compute(g)
 }
 
 // Computed reports whether a field has been derived at least once. It is part of

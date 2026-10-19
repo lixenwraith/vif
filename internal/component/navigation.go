@@ -9,6 +9,9 @@ import (
 type NavigationComponent struct {
 	// Snakes keep aim and routing on the same shared cursor between switches.
 	LockedTarget core.Entity
+	// LockTicks is how long since a snake head last weighed the cursors; the
+	// spawn seeds it with the cooldown so a fresh head locks at once.
+	LockTicks int
 
 	// True when straight-line path to target is walkable
 	HasDirectPath bool

@@ -54,12 +54,14 @@ pretending its footprint can stand in the blocked cell.
 
 Generation stamps avoid clearing full distance/direction arrays on each
 recompute. Every grid Dijkstra in the package, the route search included, runs
-on one scratch type, `gridSearch`: the wall test asked once per cell into a reused
-grid with a blocked border, so a neighbour is one load; one mask of open
-directions that states the corner rule; and, since step costs are small
-integers, a ring of distance buckets rather than a heap, which settles a cell in
-constant time. Cells of equal distance settle in bucket order, so a tie may
-point either of two shortest ways. `DirNone` identifies blocked/unreachable
+on one grid, `SearchGrid`: the wall test asked once per cell into a grid with a
+blocked border, the directions open from each cell as one precomputed mask with
+the corner rule folded in, so settling a cell is one load, and, since step costs
+are small integers, a ring of distance buckets rather than a heap, which settles
+a cell in constant time. Navigation fills one grid per passability tier when the
+passability moves and computes every field of that tier on it (`ComputeOn`); a
+field reading its own walls (`Compute`) fills a private one. Cells of equal
+distance settle in bucket order, so a tie may point either of two shortest ways. `DirNone` identifies blocked/unreachable
 cells and `DirTarget` a seed/arrival cell. Navigation and loot pass
 `Position.WallTest`, a grid read from the wall store on the derivation's first
 probe, exact to `HasBlockingWallAt` under any wall change between derivations.
@@ -95,11 +97,18 @@ Group 0 contains the live cursor roster up to the eight-target navigation cap
 (`MaxTargetsPerGroup`); script groups 1–15 (`MaxTargetGroups` is 16) hold up to
 eight `TargetAnchor` entities, follow one entity, hold a fixed cell, or mirror
 the cursor roster. A field seeded from a group naturally selects the nearest
-reachable target at each cell. While any snake head lives, each cursor also gets
-a private group (`MaxTargetGroups` + roster slot): a head compares the composite
-fields of those groups to lock the cursor it reaches soonest (`LockedTarget`),
-keeps a reachable lock until another route is over a third shorter, and steers
-by its cursor's group.
+reachable target at each cell.
+
+A snake head locks the cursor it reaches soonest (`LockedTarget`). One reach
+(`navigation.Reach`) from the head over the composite grid measures every cursor
+at once — what a field seeded at each cursor would read at the head, since a step
+costs the same both ways — when the head has no reachable lock, the roster moved
+enough for its group field to fall due, or `NavFlowSettleTicks` passed
+(`LockTicks`, in the head's component, so the capture carries the phase). A
+reachable lock holds until another route is over a third shorter; a cursor the
+head cannot reach is never chosen, and a head that can reach none holds still.
+Each locked cursor gets a private group (`MaxTargetGroups` + roster slot), created
+on the lock and retired when no head holds it, and the head steers by its field.
 
 That nearest-target property is the group model's boundary. "Nearest reachable
 cursor" is the right answer for a hostile species and the wrong one for anything
@@ -162,7 +171,7 @@ between a source and target:
 5. reject paths whose corridor overlap is above the configured percentage;
 6. stop at the route limit, attempt limit, no path, or excessive true cost.
 
-A graph's searches share one `gridSearch`: passability read once per graph into
+A graph's searches share one `SearchGrid`: passability read once per graph into
 the bordered grid, which the corridor dilation reads as well, one corner rule,
 and the bucket ring, sized past the largest penalty a cell carries. The search
 is fuzzed against relaxation to a fixpoint. A graph at 200x100 costs about 10 ms
