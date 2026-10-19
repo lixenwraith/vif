@@ -30,6 +30,10 @@ type Presentation interface {
 // background: it reports leaving and returning, and a solo run pauses meanwhile
 type awayPresentation interface{ Away() <-chan bool }
 
+// coveredPresentation is one a keyboard can cover: while it does, the host shows
+// the status bar's left end again above the keyboard, and the bar draws only that
+type coveredPresentation interface{ Covered() bool }
+
 // Host is what a platform supplies to a run. A nil field is the build's own: the
 // terminal, and speakers reached by a backend's name.
 type Host struct {

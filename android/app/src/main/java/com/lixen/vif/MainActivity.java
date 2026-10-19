@@ -27,8 +27,12 @@ import java.nio.file.Files;
  */
 public final class MainActivity extends Activity {
     static final String TAG = "vif";
+    // Back within this of the last Back sends the app to the background, the game
+    // paused there; one Back is the game's Escape
+    private static final long BACK_TWICE_MS = 1500;
 
     private Speaker speaker;
+    private long backAt;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -55,7 +59,19 @@ public final class MainActivity extends Activity {
         // Back is the game's Escape, which leaves a mode; the run is quit with :q
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> Game.key(KeyEvent.KEYCODE_BACK, 0, 0));
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::back);
+        }
+    }
+
+    /** Escape to the game, and to the background on a second Back soon after. */
+    void back() {
+        Game.key(KeyEvent.KEYCODE_BACK, 0, 0);
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - backAt <= BACK_TWICE_MS) {
+            backAt = 0;
+            moveTaskToBack(true);
+        } else {
+            backAt = now;
         }
     }
 

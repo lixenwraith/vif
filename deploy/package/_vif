@@ -27,7 +27,7 @@ _arguments \
   '-config-music[Music pattern override TOML]:path:_files' \
   '-config-sounds[Sound definition override TOML]:path:_files' \
   '-color[Colour depth; auto detects the terminal]:value:(auto 256 true)' \
-  '(-g -gui)'{-g,-gui}'[Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; a vif-gui build'\''s default, which -g=false turns off]' \
+  '(-g -gui)'{-g,-gui}'[Open the game in a desktop window (Xlib, EGL, GLES 2 at run time; Linux, FreeBSD) instead of the terminal; the default of a vif-gui build or with vif.toml'\''s \[presentation\] window = true, which -g=false turns off]' \
   '-scale[Draw the desktop window'\''s font n times its pixels, for a HiDPI screen; with -g (default 1)]:n: ' \
   '-mute[Start muted, or with sound as -mute=false; unset, vif.toml'\''s \[play\] channels stand, muted by default]' \
   '(-ab -audio-backend)'{-ab,-audio-backend}'[Force an audio backend instead of detecting one]:name: ' \

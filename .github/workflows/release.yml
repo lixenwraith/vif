@@ -83,7 +83,9 @@ jobs:
             cp README.md LICENSE "stage/$p-$target/"
           done
           # The client binaries link purego for the desktop window.
-          cp deploy/package/LICENSE.purego "stage/$p-linux-amd64/" "stage/$p-linux-arm64/" "stage/$p-freebsd-amd64/"
+          for target in linux-amd64 linux-arm64 freebsd-amd64; do
+            cp deploy/package/LICENSE.purego "stage/$p-$target/"
+          done
           cp -R web/. "stage/$p-web/"
           # The loader of the Go that built vif.wasm above, not the committed copy.
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "stage/$p-web/"
@@ -153,7 +155,8 @@ jobs:
           platform=$(sed -n 's/^ *compileSdkVersion("\(.*\)")$/\1/p' android/app/build.gradle.kts)
           ndk=$(sed -n 's/^ *ndkVersion = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
           sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$sdkmanager" --licenses >/dev/null
+          # yes dies of SIGPIPE once sdkmanager stops reading, which pipefail would count
+          { yes || true; } | "$sdkmanager" --licenses >/dev/null
           "$sdkmanager" "platforms;$platform" "ndk;$ndk"
 
       # The keystore secrets sign a release; without them the repository's debug key
@@ -220,12 +223,30 @@ jobs:
             ghcr.io/${{ github.repository }}:nightly
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
 
+      # Every version but the one this run pushed, through the GraphQL mutation the
+      # delete-package-versions action used; a cleanup that fails costs nothing but
+      # registry space, never the nightly.
       - name: Clean up old container images
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: 'vif'
-          package-type: 'container'
-          min-versions-to-keep: 1
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          query='query($owner: String!, $repo: String!) {
+            repository(owner: $owner, name: $repo) {
+              packages(first: 1, names: ["vif"], packageType: CONTAINER) {
+                nodes { versions(first: 100, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { id version } } }
+              }
+            }
+          }'
+          gh api graphql -f query="$query" -f owner="${GITHUB_REPOSITORY_OWNER}" -f repo="${GITHUB_REPOSITORY#*/}" \
+            --jq '.data.repository.packages.nodes[0].versions.nodes[1:][].id' |
+            while read -r id; do
+              gh api graphql -H 'Accept: application/vnd.github.package-deletes-preview+json' \
+                -f query='mutation($id: ID!) { deletePackageVersion(input: {packageVersionId: $id}) { success } }' \
+                -f id="$id" --jq '.data.deletePackageVersion.success'
+            done
 
   release:
     name: Publish release assets

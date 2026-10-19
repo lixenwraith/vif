@@ -7,7 +7,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | Path | What |
 |---|---|
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
-| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`. |
+| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds the launcher icon, `../lixen-logo.svg` as an adaptive icon on black, with its lines alone as the themed one. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
 | `files/config/vif/vif.toml` | The user root's settings, read as a terminal reads `vif.toml` and written as `[play]` changes (sound, volume, auto-fire, mouse, HUD); created at the first change, with sound on, where a terminal starts muted. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs beside Go: `make android` checks it before Gradle runs, `make android-toolchain` installs it. |
@@ -77,9 +77,10 @@ two fingers tapped together, twice within half a second, raise or drop the syste
 keyboard (a finger joining one held or dragging is play, not the gesture, and so is
 a single pair tap); Back is Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
-delete what it covered, and the status row is drawn again just above it at twice
-its size each way, its left half over its right as a wrapped line, so what is typed
-can be read; a rotation still resizes.
+delete what it covered; while it is up the status bar draws its mode and input
+alone, and that left half is drawn again just above the keyboard at twice its size,
+so what is typed can be read; a rotation still resizes. Back is Escape, and a second
+Back within a second and a half sends the app to the background, the game paused.
 
 ## Test
 
