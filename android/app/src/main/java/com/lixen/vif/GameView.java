@@ -10,6 +10,7 @@ import android.view.Choreographer;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewConfiguration;
@@ -44,6 +45,9 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private final CellDrawer drawer;
     private final Stats stats = new Stats();
     private final int slop;
+    private final ScaleGestureDetector scaler; // a pinch zooms the cells
+    private float zoom = 1;
+    private boolean scaling; // a pinch is in progress: its fingers are no taps
 
     private boolean started;
     private HandlerThread thread;
@@ -72,6 +76,27 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         }
         drawer = d;
         slop = ViewConfiguration.get(activity).getScaledTouchSlop();
+        scaler = new ScaleGestureDetector(activity, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScaleBegin(ScaleGestureDetector d) {
+                scaling = true;
+                pairDown = pairTap = false;
+                Game.tap((int) d.getFocusX(), (int) d.getFocusY(), false);
+                return true;
+            }
+
+            @Override
+            public boolean onScale(ScaleGestureDetector d) {
+                zoom = Math.max(0.5f, Math.min(3f, zoom * d.getScaleFactor()));
+                return true;
+            }
+
+            @Override
+            public void onScaleEnd(ScaleGestureDetector d) {
+                Game.zoom(zoom);
+            }
+        });
+        scaler.setQuickScaleEnabled(false); // a double tap is special fire, not a zoom handle
         setFocusable(true);
         setFocusableInTouchMode(true);
         getHolder().addCallback(this);
@@ -170,6 +195,13 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         int x = (int) e.getX(), y = (int) e.getY();
         if (covered > 0 && y >= getHeight() - covered - drawer.stripHeight(getHeight())) {
             return true; // the strip is a readout, not the map under it
+        }
+        scaler.onTouchEvent(e);
+        if (scaling) {
+            if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                scaling = false;
+            }
+            return true;
         }
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:

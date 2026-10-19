@@ -75,7 +75,11 @@ configuration menu, whose rows a tap selects and a second tap acts on; keys, a
 hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
 two fingers tapped together, twice within half a second, raise or drop the system
 keyboard (a finger joining one held or dragging is play, not the gesture, and so is
-a single pair tap); Back is Escape; `:q` quits. The keyboard
+a single pair tap); a pinch zooms the cells between half and three times their
+12 dp, the grid refitting as it does on a rotation (a `crop_on_resize` map crops to
+it); two taps near each other within `MouseDoubleClickWindow` fire special; with
+mouse input disabled a press on the status bar still opens the menu; Back is
+Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
 delete what it covered; while it is up the status bar draws its mode and input
 alone, and that left half is drawn again just above the keyboard at twice its size,

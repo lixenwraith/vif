@@ -121,3 +121,42 @@ func TestKeysArriveAsATerminalReportsThem(t *testing.T) {
 		t.Errorf("volume up was taken as %+v", ev)
 	}
 }
+
+// TestTheStatusBarTakesATapWithThePointerOff: with the run taking no pointer a
+// press on the last row, the status bar, is reported with its release, and one
+// anywhere else is not; a release with no press taken is nothing.
+func TestTheStatusBarTakesATapWithThePointerOff(t *testing.T) {
+	v := testView(t, false, 1)
+	v.setGrid(10*12, 4*24)
+	if _, ok := v.touch(30, 30, true); ok {
+		t.Fatal("a press on the map was taken")
+	}
+	if _, ok := v.touch(30, 30, false); ok {
+		t.Fatal("a release with no press was taken")
+	}
+	if ev, ok := v.touch(30, 4*24-1, true); !ok || ev.MouseY != 3 {
+		t.Fatalf("a press on the status bar: %+v %v", ev, ok)
+	}
+	if ev, ok := v.touch(30, 10, false); !ok || ev.MouseAction != terminal.MouseActionRelease {
+		t.Fatalf("its release: %+v %v", ev, ok)
+	}
+}
+
+// TestAPinchResizesTheCellsWithinBounds: the zoom scales the cell between half and
+// three times, and the grid the same pixels hold follows.
+func TestAPinchResizesTheCellsWithinBounds(t *testing.T) {
+	v := testView(t, false, 2.625)
+	v.setGrid(1008, 2244)
+	cols, rows := v.Size()
+	v.zoom = 2
+	v.setCell()
+	v.setGrid(1008, 2244)
+	if c, r := v.Size(); c*2 != cols && c*2 != cols-1 || r >= rows {
+		t.Fatalf("at twice the cell the grid is %dx%d, was %dx%d", c, r, cols, rows)
+	}
+	v.zoom = 0.1
+	v.setCell()
+	if a := v.tex.Atlas(); v.cellW < a.Width || v.cellH < a.Height {
+		t.Fatalf("a cell %dx%d fell under the atlas's %dx%d", v.cellW, v.cellH, a.Width, a.Height)
+	}
+}
