@@ -23,12 +23,17 @@ type LightningRenderer struct {
 
 	// Mode-specific renderer selected at construction
 	renderLightning lightningBoltRenderer
+
+	// One bolt's path and the cells it crosses, reused so a frame allocates nothing
+	points   []struct{ X, Y int }
+	cellHits map[uint64]uint8
 }
 
 // NewLightningRenderer creates a new lightning renderer with mode-appropriate rendering path
 func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 	r := &LightningRenderer{
-		gameCtx: ctx,
+		gameCtx:  ctx,
+		cellHits: make(map[uint64]uint8),
 	}
 
 	if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
@@ -97,8 +102,10 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	dxF := float64(dx)
 	dyF := float64(dy)
 	dist := vmath.Magnitude(dxF, dyF)
+	points := r.points[:0]
 	if dist < 1.0 {
-		return []struct{ X, Y int }{{sx1, sy1}, {sx2, sy2}}
+		r.points = append(points, struct{ X, Y int }{sx1, sy1}, struct{ X, Y int }{sx2, sy2})
+		return r.points
 	}
 
 	// Segment count: ~1 per 10 sub-pixels, capped min and max segments
@@ -118,7 +125,6 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	// Octave 2: Per-segment detail jitter
 	detailMagnitude := 6.0 // Max 6 sub-pixel detail
 
-	points := make([]struct{ X, Y int }, 0, segments+1)
 	points = append(points, struct{ X, Y int }{sx1, sy1})
 
 	for i := 1; i < segments; i++ {
@@ -168,8 +174,8 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 		})
 	}
 
-	points = append(points, struct{ X, Y int }{sx2, sy2})
-	return points
+	r.points = append(points, struct{ X, Y int }{sx2, sy2})
+	return r.points
 }
 
 // renderLightningTrueColor draws lightning using quadrant block characters with screen blending
@@ -181,7 +187,8 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 
 	// Accumulate quadrant hits per cell
 	// Key: packed (x,y), Value: quadrant bitmap
-	cellHits := make(map[uint64]uint8)
+	cellHits := r.cellHits
+	clear(cellHits)
 
 	for i := range len(points) - 1 {
 		r.traceSubPixelLineQuadrant(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
@@ -274,7 +281,8 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 	}
 	paletteIdx := visual.Lightning256ColorLUT[colorType]
 
-	cellHits := make(map[uint64]uint8)
+	cellHits := r.cellHits
+	clear(cellHits)
 	for i := range len(points) - 1 {
 		r.traceSubPixelLineQuadrant(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 	}
