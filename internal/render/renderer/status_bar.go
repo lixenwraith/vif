@@ -34,14 +34,14 @@ func (s statusItem) with(text string) statusItem {
 // frame formats an item only when its value changed
 type statusText struct {
 	key  int64
-	name string
+	a, b string
 	text string
 }
 
-// hold returns the text for key and name, formatting anew only when they changed
-func (t *statusText) hold(key int64, name string, format func() string) string {
-	if t.text == "" || key != t.key || name != t.name {
-		t.key, t.name, t.text = key, name, format()
+// hold returns the text for key, a and b, formatting anew only when they changed
+func (t *statusText) hold(key int64, a, b string, format func() string) string {
+	if t.text == "" || key != t.key || a != t.a || b != t.b {
+		t.key, t.a, t.b, t.text = key, a, b, format()
 	}
 	return t.text
 }
@@ -191,7 +191,7 @@ type StatusBarRenderer struct {
 	runes  []rune
 
 	phaseText, energyText, damageText, boostText, gridText statusText
-	apmText, gtText, fpsText                               statusText
+	apmText, gtText, fpsText, recordText, timeText         statusText
 }
 
 // NewStatusBarRenderer creates a status bar renderer
@@ -289,7 +289,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			timerVal = elapsed.Seconds()
 		}
 
-		text := r.phaseText.hold(tenths(timerVal), phaseName, func() string {
+		text := r.phaseText.hold(tenths(timerVal), phaseName, "", func() string {
 			return fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal)
 		})
 		rightItems = append(rightItems, r.pal.phase(phaseIdx, phaseTotal).with(text))
@@ -321,14 +321,14 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			energy = r.pal.blink[len(r.pal.blink)-1]
 		}
 	}
-	rightItems = append(rightItems, energy.with(r.energyText.hold(energyVal, "", func() string {
+	rightItems = append(rightItems, energy.with(r.energyText.hold(energyVal, "", "", func() string {
 		return fmt.Sprintf(" Energy: %s ", status.FormatCount(energyVal))
 	})))
 
 	// Priority 3: Damage Multiplier (cycle scaling)
 	dmgMult := r.statDamageMultiplier.Load()
 	if dmgMult > 1 {
-		rightItems = append(rightItems, r.pal.alarm.with(r.damageText.hold(dmgMult, "", func() string {
+		rightItems = append(rightItems, r.pal.alarm.with(r.damageText.hold(dmgMult, "", "", func() string {
 			return fmt.Sprintf(" x%s ", status.FormatCount(dmgMult))
 		})))
 	}
@@ -340,7 +340,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if remaining < 0 {
 			remaining = 0
 		}
-		rightItems = append(rightItems, r.pal.boost.with(r.boostText.hold(tenths(remaining), "", func() string {
+		rightItems = append(rightItems, r.pal.boost.with(r.boostText.hold(tenths(remaining), "", "", func() string {
 			return fmt.Sprintf(" Boost: %.1fs ", remaining)
 		})))
 	}
@@ -352,7 +352,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			gridRemaining = 0
 		}
 		rightItems = append(rightItems, statusItem{
-			text: r.gridText.hold(tenths(gridRemaining), "", func() string { return fmt.Sprintf(" Grid: %.1fs ", gridRemaining) }),
+			text: r.gridText.hold(tenths(gridRemaining), "", "", func() string { return fmt.Sprintf(" Grid: %.1fs ", gridRemaining) }),
 			fg:   visual.RgbGridTimerFg,
 			bg:   visual.RgbBackground,
 		})
@@ -362,9 +362,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	metricsAt := len(rightItems)
 	apm, ticks, fps := r.statAPM.Load(), r.statTicks.Load(), r.statFPS.Load()
 	rightItems = append(rightItems,
-		r.pal.apm.with(r.apmText.hold(apm, "", func() string { return fmt.Sprintf(" APM: %d ", apm) })),
-		r.pal.gt.with(r.gtText.hold(ticks, "", func() string { return fmt.Sprintf(" GT: %d ", ticks) })),
-		r.pal.fps.with(r.fpsText.hold(fps, "", func() string { return fmt.Sprintf(" FPS: %d ", fps) })),
+		r.pal.apm.with(r.apmText.hold(apm, "", "", func() string { return fmt.Sprintf(" APM: %d ", apm) })),
+		r.pal.gt.with(r.gtText.hold(ticks, "", "", func() string { return fmt.Sprintf(" GT: %d ", ticks) })),
+		r.pal.fps.with(r.fpsText.hold(fps, "", "", func() string { return fmt.Sprintf(" FPS: %d ", fps) })),
 		r.pal.label,
 	)
 	r.items = rightItems
@@ -414,7 +414,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// Macro recording indicator
 	if r.gameCtx.MacroRecording.Load() {
 		label := r.gameCtx.MacroRecordingLabel.Load()
-		recText := fmt.Sprintf("%s: %c ", parameter.ModeTextRecord, label)
+		recText := r.recordText.hold(int64(label), "", "", func() string {
+			return fmt.Sprintf("%s: %c ", parameter.ModeTextRecord, label)
+		})
 		recX := x - len(modeText)
 		for i, ch := range recText {
 			if recX+i < ctx.ScreenWidth {
@@ -659,15 +661,15 @@ func latencySeverity(ms int64) int {
 // off real time or a step request is pending
 func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 	if step := r.statStep.Load(); step > 0 {
-		return r.pal.alarm.with(fmt.Sprintf(" STEP %d ", step)), true
+		return r.pal.alarm.with(r.timeText.hold(step, "", "", func() string { return fmt.Sprintf(" STEP %d ", step) })), true
 	}
 
 	speed := r.statSpeed.Load()
 	if brk := r.statBreak.Load(); brk != "" && brk != "-" {
-		return r.pal.alarm.with(fmt.Sprintf(" %sx>%s ", speed, brk)), true
+		return r.pal.alarm.with(r.timeText.hold(-1, speed, brk, func() string { return fmt.Sprintf(" %sx>%s ", speed, brk) })), true
 	}
 	if speed != "" && speed != "1" {
-		return r.pal.speed.with(fmt.Sprintf(" %sx ", speed)), true
+		return r.pal.speed.with(r.timeText.hold(-2, speed, "", func() string { return fmt.Sprintf(" %sx ", speed) })), true
 	}
 	return statusItem{}, false
 }

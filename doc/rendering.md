@@ -81,7 +81,8 @@ answers false. `MapToViewport` still returns the projection (`MapToScreen`
 returns zero), so a renderer anchoring a shape on an off-map centre projects it
 there and lets the clip trim the result, as the explosion field does. Area
 renderers should still intersect their iteration bounds with `VisibleMapBounds`
-to avoid the wasted work; the quasar zap ellipse does.
+to avoid the wasted work; the quasar zap ellipse does, and walks only the row's
+band of cells its test admits rather than the box, since its radius spans the map.
 
 ### 2.1 The playfield clip
 
@@ -192,6 +193,7 @@ Focused helpers preserve the other channel:
 | `SetFgOnly` | Replace rune/foreground/foreground attributes and retain background. |
 | `SetBgOnly` | Replace only background and mark it touched. |
 | `SetBgScreen` | Screen-blend a background over the cell's, or over a caller base if none was drawn yet. |
+| `SetBgAlphaOwned` | Alpha-blend a background, blank the glyph, and let the current mask replace the cell's tags: a translucent panel. |
 | `SetWithBg` | Opaque cell replacement; the current mask replaces the cell's earlier tags. |
 | `SetBg256` | Store a palette index in the background channel and set the palette attribute. |
 
@@ -334,8 +336,9 @@ instead of accumulating color, and the visible ring-buffer prefix contracts as
 a blocked tracer drains to its stop point.
 
 A cell can hold several glyphs while drift carries layers past one another. The
-glyph renderer draws only the cell's top glyph from `Position.TopGlyphAt`, the
-one typing acts on, so a nearer parallax layer covers a farther one. In 256-color
+glyph renderer draws only the cell's top glyph, the one typing acts on, so a
+nearer parallax layer covers a farther one; `Position.TopGlyphIs` settles a cell
+holding one entity by its length and asks `TopGlyphAt` only for a stacked cell. In 256-color
 mode a glyph hue has two console entries, one for dark and one shared by normal
 and bright, so only the dark layer stands apart there.
 
