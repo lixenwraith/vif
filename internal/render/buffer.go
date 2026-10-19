@@ -309,6 +309,23 @@ func (b *RenderBuffer) SetBgScreen(x, y int, bg, base color.RGB, alpha float64) 
 	b.masks[idx] |= b.currentMask
 }
 
+// SetBgAlphaOwned lays bg over the cell's background at alpha, blanks its glyph
+// and tags it with the write mask alone: a translucent panel whose cells
+// post-processing treats as this layer rather than as whatever it covers
+func (b *RenderBuffer) SetBgAlphaOwned(x, y int, bg color.RGB, alpha float64) {
+	if !b.inBounds(x, y) {
+		return
+	}
+	idx := y*b.width + x
+	dst := &b.cells[idx]
+	b.resolvePalette(dst, false, true)
+	dst.Rune = ' '
+	dst.Attrs &= terminal.AttrFg256
+	dst.Bg = color.Blend(dst.Bg, bg, alpha)
+	b.touched[idx] = true
+	b.masks[idx] = b.currentMask
+}
+
 // SetWithBg writes a cell with explicit fg and bg colors (opaque replace)
 func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg color.RGB) {
 	if !b.inBounds(x, y) {

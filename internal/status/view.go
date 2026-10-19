@@ -60,3 +60,7 @@ func (v GroupView) MetricName(i int) string { return v.members[i].name }
 
 // Value returns the formatted current reading of member i
 func (v GroupView) Value(i int) string { return v.members[i].display() }
+
+// Reading is member i's current reading as bits, so a caller can tell a change
+// without formatting: the value itself, or for a string the text's identity
+func (v GroupView) Reading(i int) uint64 { return v.members[i].bits() }
