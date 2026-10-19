@@ -125,7 +125,8 @@ The damage type picks the resolver: direct, area, or over-time, which leaves a
 status instead of taking hit points. Damage allowances are per player and attack
 family within the target's immunity window (D-3); chained effects keep their
 originating weapon's allowance. Knockback and stun immunity each cover all players
-and weapons. Species-authored invulnerability is the ward status and blocks every
+and weapons; a knockback stronger than the one that opened the kinetic window
+resets it and lands. Species-authored invulnerability is the ward status and blocks every
 weapon's damage.
 
 A status is one slot per kind on `CombatComponent`, no stacking: remaining time,

@@ -237,6 +237,7 @@ func (s *SnakeSystem) Update() {
 		if snakeComp.IsShielded {
 			headCombat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 			headCombat.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
+			headCombat.KineticStrength = 0
 		}
 
 		// Process interactions

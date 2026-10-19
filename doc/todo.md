@@ -674,32 +674,6 @@ transferred world instead of a scenario.
 
 ## Combat
 
-### Let stronger knockback override the active immunity window
-
-- Priority: P2
-- Affected files: `internal/component/combat.go`, `internal/system/combat.go`,
-  `internal/profile/combat.go`
-
-Record the strength of the knockback that opened immunity. A stronger incoming
-knockback should reset the immunity duration and apply its impulse; equal or weaker
-hits remain blocked across all weapons and players. Carry the recorded strength
-through snapshots and synchronization. Stun immunity remains target-wide.
-
-### Drop the kinetic window's dead joiner path
-
-- Priority: P2
-- Affected files: `internal/system/combat.go`, `internal/component/combat.go`,
-  `internal/snapshot/digest.go`, `doc/generic-kinetic.md`
-
-Both kinetic hit sites (`combat.go:557`, `:733`) land only while
-`RemainingKineticImmunity` is zero, so every accepted knockback opens the window:
-`spendKineticImmunity` always reports opened, `joining` never composes an impulse,
-and `KineticImmunitySpent` is written but read only by the digest. Generic kinetic
-§5 still describes a per-attacker kinetic budget whose joiners add. The target-wide
-gate is the intended rule (see the item above), so delete the joiner path, the field
-and its digest line, and correct that text; the field's removal is a capture schema
-bump.
-
 ### Let mounted weapons strike more than cursors
 
 - Priority: P3

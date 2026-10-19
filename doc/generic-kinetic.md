@@ -127,11 +127,12 @@ applies at once on its producer and a playout lead later everywhere else (D-3).
 
 `RemainingKineticImmunity` is the target's displacement window: it suppresses
 soft-collision impulses and usually suppresses homing, so an accepted knockback can
-displace the actor. Its *combat* budget is per attacker, like damage's, and the hit
-that opens a window applies the profile's own mode while every hit joining one adds.
-Both halves are what make two participants hitting one body reach the same vector:
-a shared latch let each instance keep the hit it applied first — its own — and an
-override let each keep the one it applied last.
+displace the actor. Unlike damage's, the window covers every attacker and weapon:
+a knockback lands only on a closed window, or when its impulse is stronger than
+the one that opened the window (`KineticStrength`), which it then resets with its
+own; a window a species or a soft push opened records no strength and refuses
+every knockback. Two participants hitting one body therefore keep the stronger
+push whichever order they saw the hits in, and a tie holds the first.
 `IsEnraged` suppresses kinetic attacks during protected species phases. Stun is
 stronger: combat zeros velocity and species systems skip movement while its timer
 is positive.
