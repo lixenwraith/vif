@@ -152,5 +152,5 @@ func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, 
 		BeamWidth:  beamWidth,
 		Type:       spawnType,
 	})
-	armTimer(s.world, entity, component.TimerDeadline, component.MaterializeStyles[spawnType].Duration)
+	armTimer(s.world, entity, component.TimerDeadline, component.MaterializeStyles[spawnType].Duration())
 }

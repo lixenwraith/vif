@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"math"
+	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -63,20 +64,20 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		if !ok || mat.Type < 0 || mat.Type >= component.SpawnTypeCount {
 			return true
 		}
-		progress := timer.Progress(component.TimerDeadline)
+		elapsed := timer.Elapsed(component.TimerDeadline)
 
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
 		style, c := component.MaterializeStyles[mat.Type], materializePalette[mat.Type]
 		for _, dir := range [...]beamDir{dirUp, dirDown, dirLeft, dirRight} {
-			r.renderBeam(ctx, buf, pf, mat, progress, style, c, targetVX, targetVY, dir)
+			r.renderBeam(ctx, buf, pf, mat, elapsed, style, c, targetVX, targetVY, dir)
 		}
 		return true
 	})
 }
 
-func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, progress float64, style component.MaterializeStyle, c color.RGB, targetVX, targetVY int, dir beamDir) {
+func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, elapsed time.Duration, style component.MaterializeStyle, c color.RGB, targetVX, targetVY int, dir beamDir) {
 	var edgePos, distance int
 	var spanStart, spanEnd int // Range along the target edge
 
@@ -109,21 +110,44 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 		return // Target at edge, no beam to draw
 	}
 
-	// The fill runs from the edge to its front; the hold and the recede keep the
-	// whole line, the recede fading it in place. A dark front running from the
-	// edge to the target read as a second, faster pass.
-	segEnd := distance
-	if progress < style.FillEnd {
-		segEnd = int(math.Floor(progress / style.FillEnd * float64(distance)))
-	}
-
-	// Render cells across the target edge span
-	for cellOffset := 0; cellOffset <= segEnd; cellOffset++ {
-		intensity := r.calcIntensity(style, progress, cellOffset, segEnd)
+	// The lit segment runs from the tail to the head and carries one gradient,
+	// dim at the tail and bright at the head, so no phase boundary snaps it
+	tail, head := beamSpan(style, elapsed, distance)
+	for cellOffset := tail; cellOffset <= head; cellOffset++ {
+		intensity := beamIntensity(style, elapsed, cellOffset, tail, head)
 		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
 			r.renderBeamCellSpan(ctx, buf, pf, c, dir, edgePos, cellOffset, spanPos, intensity)
 		}
 	}
+}
+
+// beamSpan is the lit segment at elapsed, as offsets from the edge: the head runs
+// to the target through the fill, both ends rest through the hold, and the tail
+// runs after the head through the recede, draining the line into the target
+func beamSpan(style component.MaterializeStyle, elapsed time.Duration, distance int) (tail, head int) {
+	switch {
+	case elapsed < style.Fill:
+		return 0, int(math.Floor(float64(distance) * float64(elapsed) / float64(style.Fill)))
+	case elapsed < style.Fill+style.Hold || style.Recede <= 0:
+		return 0, distance
+	}
+	receded := float64(elapsed-style.Fill-style.Hold) / float64(style.Recede)
+	return min(distance, int(math.Floor(float64(distance)*receded))), distance
+}
+
+// beamIntensity grades the lit segment from the tail's floor to the bright head,
+// which pulses while the fill advances it
+func beamIntensity(style component.MaterializeStyle, elapsed time.Duration, cellOffset, tail, head int) float64 {
+	intensity := 1.0
+	if head > tail {
+		floor := parameter.MaterializeTailIntensity
+		intensity = floor + (1-floor)*float64(cellOffset-tail)/float64(head-tail)
+	}
+	if elapsed < style.Fill && cellOffset >= head-2 {
+		pulseAngle := elapsed.Seconds() * parameter.MaterializePulseHz * vmath.TwoPi
+		intensity *= 0.8 + vmath.Sin(pulseAngle)/5.0
+	}
+	return intensity
 }
 
 func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, c color.RGB, dir beamDir, edgePos, cellOffset, spanPos int, intensity float64) {
@@ -159,32 +183,4 @@ func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *
 	screenX, screenY := ctx.ViewportToScreen(vx, vy)
 
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
-}
-
-// calcIntensity returns normalized intensity for a cell based on phase and position.
-func (r *MaterializeRenderer) calcIntensity(style component.MaterializeStyle, progress float64, cellOffset, segEnd int) float64 {
-	switch {
-	case progress < style.FillEnd:
-		// Fill: gradient from dim (edge) to bright (leading edge) + pulse at front
-		if segEnd <= 0 {
-			return 1.0
-		}
-		baseIntensity := float64(cellOffset) / float64(segEnd)
-		if cellOffset >= segEnd-2 {
-			pulseAngle := progress * float64(parameter.MaterializePulseHz) * vmath.TwoPi
-			return baseIntensity * (0.8 + vmath.Sin(pulseAngle)/5.0)
-		}
-		return baseIntensity
-
-	case progress < style.HoldEnd:
-		return 1.0
-
-	default:
-		// Recede: the whole line dims with what is left of the phase
-		recede := 1.0 - style.HoldEnd
-		if recede <= 0 {
-			return 0
-		}
-		return (1.0 - progress) / recede
-	}
 }
