@@ -16,8 +16,13 @@ import (
 const eventQueue = 256
 
 // cellDP is a cell's height in dp, in whole pixels at the atlas's aspect and never
-// under its own: 16x32 on a 420 dpi phone, half again as much map as 9x18 dp shows
-const cellDP = 12
+// under its own: 16x32 on a 420 dpi phone, half again as much map as 9x18 dp shows.
+// A pinch scales it between zoomMin and zoomMax.
+const (
+	cellDP  = 12
+	zoomMin = 0.5
+	zoomMax = 3
+)
 
 // view is the activity's SurfaceView as an app.Presentation. Frames wait in the
 // embedded glyph.Frames for the drawer to take them; the grid is the cells the
@@ -26,7 +31,9 @@ const cellDP = 12
 type view struct {
 	*glyph.Frames
 	tex          *glyph.Texture
-	cellW, cellH int // the pixels a cell takes at least, sized by the density
+	density      float32 // the screen's, which the zoom scales
+	zoom         float32
+	cellW, cellH int // the pixels a cell takes at least, sized by the density and the zoom
 
 	events  chan terminal.Event
 	away    chan bool
@@ -43,10 +50,17 @@ type view struct {
 }
 
 func newView(tex *glyph.Texture, raster bool, density float32) *view {
-	a := tex.Atlas()
-	w := max(a.Width, int(math.Round(float64(density)*cellDP*float64(a.Width)/float64(a.Height))))
-	return &view{Frames: glyph.NewFrames(tex, raster), tex: tex, cellW: w, cellH: w * a.Height / a.Width,
+	v := &view{Frames: glyph.NewFrames(tex, raster), tex: tex, density: density, zoom: 1,
 		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
+	v.setCell()
+	return v
+}
+
+// setCell sizes a cell by the density and the zoom; the UI thread's, as setGrid is
+func (v *view) setCell() {
+	a := v.tex.Atlas()
+	w := max(a.Width, int(math.Round(float64(v.density*v.zoom)*cellDP*float64(a.Width)/float64(a.Height))))
+	v.cellW, v.cellH = w, w*a.Height/a.Width
 }
 
 func (v *view) Name() string           { return "android" }

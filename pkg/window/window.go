@@ -28,6 +28,9 @@ type Config struct {
 	Atlas      *glyph.Atlas
 	Cols, Rows int
 	Scale      int
+	// Maximized or Fullscreen is the state the window opens in, asked of the window
+	// manager; the grid follows the size it gives, as it follows any resize
+	Maximized, Fullscreen bool
 }
 
 // Window is a Surface over an X window. Frames, Sync and the pointer mode may be
@@ -83,6 +86,8 @@ const (
 	xConfigureNotify = 22
 	xClientMessage   = 33
 	xEventMask       = 1<<0 | 1<<2 | 1<<3 | 1<<6 | 1<<15 | 1<<17
+	xaAtom           = 4 // the ATOM property type
+	propModeReplace  = 0
 )
 
 // xEvent is Xlib's XEvent union, 24 longs; fields are read at their LP64 offsets
@@ -251,6 +256,16 @@ func (w *Window) open(cfg Config) error {
 	xSetWMProtocols(w.dpy, w.win, &w.deleteAtom, 1)
 	xSetWMNormalHints(w.dpy, w.win, &sizeHints{flags: hintMinSize | hintResizeInc | hintBaseSize,
 		minW: int32(cw), minH: int32(ch), incW: int32(cw), incH: int32(ch)})
+	// _NET_WM_STATE set before the map is the state the window manager opens with
+	if cfg.Fullscreen || cfg.Maximized {
+		states := []uintptr{xInternAtom(w.dpy, "_NET_WM_STATE_FULLSCREEN", 0)}
+		if !cfg.Fullscreen {
+			states = []uintptr{xInternAtom(w.dpy, "_NET_WM_STATE_MAXIMIZED_VERT", 0),
+				xInternAtom(w.dpy, "_NET_WM_STATE_MAXIMIZED_HORZ", 0)}
+		}
+		xChangeProperty(w.dpy, w.win, xInternAtom(w.dpy, "_NET_WM_STATE", 0), xaAtom, 32, propModeReplace,
+			&states[0], int32(len(states)))
+	}
 	xMapWindow(w.dpy, w.win)
 	g, err := newGPU(w.dpy, w.win, w.scale)
 	if err != nil {
