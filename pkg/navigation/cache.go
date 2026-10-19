@@ -7,9 +7,7 @@ import (
 
 // FlowFieldCache manages flow field recomputation with throttling
 type FlowFieldCache struct {
-	Field   *FlowField
-	grid    []bool // passability used by this cache
-	gridGen uint64 // the generation grid was last observed at, zero for none
+	Field *FlowField
 
 	// Recomputation throttling
 	LastTargets            []vmath.Point // Tracks previously requested target coords
@@ -44,11 +42,11 @@ func NewFlowFieldCache(width, height, minTicks, dirtyDist, settleTicks int) *Flo
 // the field c holds instead of computing one; the search is scratch.
 func (c *FlowFieldCache) Clone() *FlowFieldCache {
 	n := *c
-	n.grid, n.LastTargets = slices.Clone(c.grid), slices.Clone(c.LastTargets)
+	n.LastTargets = slices.Clone(c.LastTargets)
 	if c.Field != nil {
 		f := *c.Field
 		f.Directions, f.Distances, f.VisitedGen = slices.Clone(f.Directions), slices.Clone(f.Distances), slices.Clone(f.VisitedGen)
-		f.search = SearchGrid{}
+		f.search, f.changed = SearchGrid{}, nil
 		n.Field = &f
 	}
 	return &n
@@ -58,7 +56,6 @@ func (c *FlowFieldCache) Clone() *FlowFieldCache {
 // its storage for a group that replaces one removed
 func (c *FlowFieldCache) Reset(width, height int) {
 	c.Resize(width, height)
-	c.grid, c.gridGen = c.grid[:0], 0
 	c.TicksSinceCompute = c.MinTicksBetweenCompute
 }
 
@@ -119,19 +116,24 @@ func (c *FlowFieldCache) MarkDirty() {
 	c.PendingUpdate = true
 }
 
-// ObserveGrid invalidates routes immediately when their passability changes.
-// The slice may describe blocked or passable cells; only equality matters. A nonzero
-// gen is the caller's name for grid's content, moving whenever it may have changed,
-// so a grid observed at the same gen is not compared again.
-func (c *FlowFieldCache) ObserveGrid(grid []bool, gen uint64) {
-	if gen != 0 && gen == c.gridGen {
+// Closed drops the field after a cell became impassable, since a direction may
+// now point into it; the next Update finds it due at once.
+func (c *FlowFieldCache) Closed() {
+	c.Field.Invalidate()
+	c.deferred = false
+}
+
+// Moved hands the cache one tick's change of its grid: a cell closed drops the
+// field, cells opened alone repair a computed field in place. One a repair would
+// reseed computes again, deferred or not as the cache is, and a deferred field
+// computes on the grid as it stands when read.
+func (c *FlowFieldCache) Moved(g *SearchGrid, closed, opened []vmath.Point) {
+	if len(closed) > 0 {
+		c.Closed()
 		return
 	}
-	c.gridGen = gen
-	if !slices.Equal(c.grid, grid) {
-		c.grid = append(c.grid[:0], grid...)
-		c.Field.Invalidate()
-		c.deferred = false
+	if c.Field.Valid && !c.Field.Opened(g, opened, c.LastTargets) {
+		c.compute(g)
 	}
 }
 

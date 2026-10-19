@@ -4,7 +4,7 @@ Working analysis of whether the flow fields and the route graphs should fold int
 one structure, and where navigation's time actually goes. §1 is the verdict, §2
 what the code did before this work against the questions that prompted it, §3 the
 measurements, §4 the program with what has landed, §5 the snake lock, §6 what
-custom maps will meet, §7 the decisions. Items 1 and 2 of §4 have landed; the
+custom maps will meet, §7 the decisions. Items 1 to 3 of §4 have landed; the
 rest are the next branches, in order.
 
 ## 1. Decision proposed
@@ -141,6 +141,19 @@ three to seven of them. Loot's per-owner fields, which eight local cursors
 overstate, are most of what remains, and the worst tick is still the wall change
 invalidating every live field at once (item 3).
 
+### 3.4 The same run after item 3
+
+| Phase | ms/tick | worst tick | field computes |
+|---|---:|---:|---:|
+| play, 600 ticks | 4.4 | 23 ms | 480 (2 at most) |
+| storm, 2,400 ticks | 6.8 | 47 ms (was 69) | 1,920 (2 at most; was 16) |
+
+Fifty-four wall-change ticks moved the composite passability on a handful of
+header cells in all, and no wall change computed more than two fields in a tick;
+the 47 ms tick is no longer a field recompute. In the storm tick: loot's owner
+fields 47% (eight local cursors), the snake reaches 15%, composite line of sight
+8%, route graph rebuilds with their per-route grid fills 3%.
+
 ## 4. Options, in order of payoff
 
 1. **Lock a snake by one search from its head** (landed). One composite-tier Dijkstra
@@ -161,15 +174,20 @@ invalidating every live field at once (item 3).
    index translation go as well. About half of a field compute whenever the grid
    has not moved, which is every recompute a moving target causes. The route
    solver keeps its own fill: a graph is rebuilt at most once in twenty ticks.
-3. **One wall-change mechanism.** Diff the wall slice once per tick, cell by
-   cell, in place of both the event-driven region recompute and `noteWalls`'
-   whole-grid recompute: update each tier's passability around the changed cells
-   only, and hand the changed set to the consumers. A tick that only removed walls
-   dirties fields (recompute after the cooldown, when read); a tick that added one
-   invalidates. A route graph goes stale only when a changed cell lies in one of
-   its corridors, which the solver already enumerates and can keep as a mask, so a
-   storm on one side of the map stops detaching every eye every twenty ticks.
-   Bounds the 32-in-one-tick case to the cooldown cadence.
+3. **One wall-change mechanism** (landed). The wall slice is diffed once per
+   tick, cell by cell, in place of both the event-driven region recompute and
+   `noteWalls`' whole-grid recompute: passability is recomputed around the
+   changed cells only, each tier has its own generation, and the composite tier
+   moves only where a footprint's fit changed, which a storm's single-cell holes
+   rarely do. Cells that opened repair a computed field in place
+   (`FlowField.Opened`), exactly as a recompute would, ties broken canonically so
+   a repaired field and a recomputed one agree bit for bit; a cell closed still
+   drops the field. Dirtying instead was rejected: a field left standing on an
+   older grid has no reproducible input at an install, so a joiner would steer
+   differently until the cooldown passed. A route graph is stamped with the
+   composite generation and stays fresh across any change that fits no footprint
+   differently; staleness by corridor mask was rejected for the same reason,
+   since a joiner computes on the grid it has.
 4. **Loot reads navigation's private groups.** Its owner field becomes the point
    tier of the owner cursor's private group: lazy, generation-guarded, phase in
    the navigation carrier. `LootSystem.ownerRoutes` and its per-tick wall-slice
@@ -249,5 +267,7 @@ with no composite-valid cell within it is unreachable for every head.
    wanted. Each is one branch, one PR, with the capture schema bumped where the
    carrier or a component changes.
 3. Taken: the lock stays sticky and sight stays out of it (§5).
-4. Pending: whether loot folds into navigation's private groups (item 4) or keeps
-   its own cache, now on the shared grid.
+4. Taken: an opened cell repairs a field in place rather than dirtying it, and a
+   graph's freshness is its tier's generation (§4 item 3).
+5. Pending: whether loot folds into navigation's private groups (item 4) or keeps
+   its own cache, now on the shared grid and the same wall diff.

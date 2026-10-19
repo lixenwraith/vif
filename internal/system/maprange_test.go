@@ -25,6 +25,7 @@ var lintDirs = []string{
 // The detector matches identifier names, not resolved types, so a slice
 // sharing a name with a map field is flagged; such entries are marked.
 var allowedMapRanges = map[string]string{
+	"NavigationSystem.applyWalls:groups": "each group's caches take the tick's change on their own",
 	// --- Collect-then-sort ---
 	"sortedKeys:m":                              "collects keys for sorting",
 	"Machine.LoadScenarioFromMap:States":        "collects state names, sorted before ID assignment",

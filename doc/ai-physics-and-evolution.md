@@ -58,11 +58,15 @@ on one grid, `SearchGrid`: the wall test asked once per cell into a grid with a
 blocked border, the directions open from each cell as one precomputed mask with
 the corner rule folded in, so settling a cell is one load, and, since step costs
 are small integers, a ring of distance buckets rather than a heap, which settles
-a cell in constant time. Navigation fills one grid per passability tier when the
-passability moves and computes every field of that tier on it (`ComputeOn`); a
-field reading its own walls (`Compute`) fills a private one. Cells of equal
-distance settle in bucket order, so a tie may point either of two shortest ways. `DirNone` identifies blocked/unreachable
-cells and `DirTarget` a seed/arrival cell. Navigation and loot pass
+a cell in constant time. Navigation fills one grid per passability tier, moves
+it cell by cell as the walls change (`Set`), and computes every field of that
+tier on it (`ComputeOn`); a field reading its own walls (`Compute`) fills a
+private one. A cell reached two shortest ways takes the lower-numbered direction,
+so a direction is a function of the distances alone, and a field repaired in
+place after cells opened (`Opened`) is the field a recompute would give, settling
+only what the openings improve; it declines where an opening would reseed a
+target. `DirNone` identifies blocked/unreachable cells and `DirTarget` a
+seed/arrival cell. Navigation and loot pass
 `Position.WallTest`, a grid read from the wall store on the derivation's first
 probe, exact to `HasBlockingWallAt` under any wall change between derivations.
 The field is fuzzed against a reference heap search: equal distances
@@ -75,13 +79,13 @@ Computing a field over a large map every 50 ms tick is too expensive, so
 `FlowFieldCache` latches dirty state and throttles recomputation. A field falls
 due:
 
-- at once when it has no field or the target count changes. `ObserveGrid` drops
-  the field when the passability it was computed on changes; navigation names
-  that grid by a generation that moves with any wall or passability change, so a
-  grid seen at the same generation is not compared again;
+- at once when it has no field or the target count changes, or a cell of its
+  tier closed (`Closed`), since a direction may now point into it; cells that
+  only opened repair a computed field in place (`Moved`), which is not a
+  recompute and leaves the phase alone;
 - after a cooldown (`NavFlowMinTicksBetweenCompute`, 5 ticks), when marked dirty
-  (a target group update, and for composite fields a wall or regraph event) or
-  a target drifted the Manhattan dirty distance (`NavFlowDirtyDistance`, 5 cells);
+  (a target group update, and for composite fields a regraph event) or a target
+  drifted the Manhattan dirty distance (`NavFlowDirtyDistance`, 5 cells);
 - after `NavFlowSettleTicks` (20) for a smaller drift: a field a few cells off
   points the same way everywhere but beside the target, where sight takes over.
 
@@ -151,9 +155,14 @@ flowchart LR
     Grid --> Field["flow field or route graph"]
 ```
 
-It supports full rebuilds and region-of-interest rebuilds after local changes.
-Its `IsBlocked` callback can be handed directly to flow-field and route-graph
-algorithms. As a result, a path guarantees footprint clearance at sampled
+Navigation reads the walls once a tick and diffs them against the walls
+everything stands on: a changed cell moves the point tier, and passability is
+recomputed only for the headers whose footprint covers it (`ComputeROI`), so the
+composite tier moves only where a footprint's fit changed. Each tier has a
+generation a field or route graph is stamped with when computed, and an install
+keeps what stands at its tier's current one. A wholesale change — the first
+derivation, a resize, a maze — derives everything whole. Its `IsBlocked`
+callback can be handed directly to flow-field and route-graph algorithms. As a result, a path guarantees footprint clearance at sampled
 header cells, rather than requiring the species to correct point paths after
 the fact. Navigation keeps one grid, for the eye's 5×3 footprint that the quasar
 and snake head share; every composite navigator, the 4×2 swarm included, steers
@@ -188,16 +197,17 @@ flowchart TD
 Each accepted route stores decimated waypoints, true weighted distance, a
 normalized inverse-distance initial weight, and a flow field constrained to its
 dilated corridor. The graph also records the footprint/header offsets used to
-compute it and the passability generation it was computed on.
+compute it and the composite generation it was computed on.
 
 A gateway spawned to route by graph requests one at once
 (`EventRouteGraphRequest`). Graphs live in `RouteGraphResource`, keyed by the
 gateway's `RouteDistID`, and each computed graph (`EventRouteGraphComputed`)
 starts its adaptation entry. Gateways attach the graph ID and a route ID popped
 from the adaptation pool to spawned eyes. A route steers only while its graph
-is fresh — computed on the current generation, toward a cell a live group target
-still occupies — and only while the actor is inside its corridor; otherwise the
-actor steers by its group field. Navigation rebuilds at most one stale gateway
+is fresh — computed at the composite tier's current generation, so a wall change
+that fits no footprint differently leaves it fresh, toward a cell a live group
+target still occupies — and only while the actor is inside its corridor;
+otherwise the actor steers by its group field. Navigation rebuilds at most one stale gateway
 graph per `NavRouteRebuildInterval` (20 ticks), and `EventNavigationRegraph`
 drops every graph and route assignment for that budget to rebuild. `:graph` and
 `:flow` expose the structures through the debug renderer.
