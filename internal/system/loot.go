@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -65,7 +66,10 @@ type LootSystem struct {
 	// target slice its recompute is fed from
 	ownerRoutes map[core.Entity]*ownerRoute
 	routeGoal   [1]vmath.Point
-	walls       []bool        // the WallTest grid a recompute reads
+	walls       []bool // the WallTest grid a recompute reads
+	seenWalls   []bool // the walls grid was last filled from
+	grid        navigation.SearchGrid
+	gridGen     uint64        // moves with each fill, so an owner's cache compares no walls
 	loots       []core.Entity // the tick's loot, detached: collectLoot destroys mid-iteration
 
 	// Telemetry
@@ -304,6 +308,11 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 	}
 	blocked := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
 	blocked(-1, -1) // Build once, shared by all owner caches this tick.
+	if w, h := s.grid.Size(); w != config.MapWidth || h != config.MapHeight || !slices.Equal(s.walls, s.seenWalls) {
+		s.seenWalls = append(s.seenWalls[:0], s.walls...)
+		s.gridGen++
+		s.grid.Fill(config.MapWidth, config.MapHeight, blocked)
+	}
 
 	var recomputes int64
 	for owner, r := range s.ownerRoutes {
@@ -331,9 +340,9 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
 			r.cache.Resize(config.MapWidth, config.MapHeight)
 		}
-		r.cache.ObserveGrid(s.walls, 0)
+		r.cache.ObserveGrid(s.walls, s.gridGen)
 		s.routeGoal[0] = r.cell
-		if r.cache.Update(s.routeGoal[:], blocked) {
+		if r.cache.Update(s.routeGoal[:], &s.grid) {
 			recomputes++
 		}
 	}
@@ -710,6 +719,7 @@ func (s *LootSystem) RestoreState(v any) error {
 	c := v.(lootState)
 	clear(s.pity)
 	clear(s.ownerRoutes)
+	s.seenWalls, s.gridGen = s.seenWalls[:0], 0
 	for k, p := range c.pity {
 		s.pity[k] = &p
 	}

@@ -21,6 +21,7 @@ type targetGroupNav struct {
 	pointFlowCache       *navigation.FlowFieldCache // For point entities (1×1)
 	compositeFlowCache   *navigation.FlowFieldCache // For composite entities (footprint-aware)
 	pointAt, compositeAt uint64
+	due                  bool // the composite field fell due this tick: its targets moved enough to matter
 }
 
 // NavigationSystem resolves target groups, maintains per-group point and composite
@@ -55,9 +56,11 @@ type NavigationSystem struct {
 	// Ticks since last gateway route graph recompute (rebuild budget)
 	routeRebuildTicks int
 
-	// The wall checkers of the Update in progress, which a lazy field is computed
-	// against when something first reads it
-	blockedPoint, blockedComposite navigation.WallChecker
+	// The grids every field and reach of a tier runs on, filled at generation filledAt
+	pointGrid, compositeGrid navigation.SearchGrid
+	filledAt                 uint64
+	reach                    navigation.Reach
+	recomputes               int64 // fields that fell due this tick
 
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
@@ -94,6 +97,7 @@ func (s *NavigationSystem) Init() {
 	s.groups = make(map[uint8]*targetGroupNav)
 	clear(s.targets[:])
 	s.routeRebuildTicks = 0
+	s.filledAt = 0
 
 	s.getOrCreateGroup(0)
 
@@ -333,39 +337,13 @@ func (s *NavigationSystem) Update() {
 		s.passStale = false
 	}
 	s.refreshRouteGraphs()
-
-	// Wall checker for composites (uses pre-computed passability)
-	isBlockedComposite := s.compositePassability.IsBlocked
-	s.blockedPoint, s.blockedComposite = isBlockedPoint, isBlockedComposite
+	s.fillGrids(isBlockedPoint)
 
 	// Build routes before choosing a pursuit target.
-	totalRecomputes := int64(0)
-	var targetsBuffer [parameter.MaxTargetsPerGroup]vmath.Point
-
+	s.recomputes = 0
 	for groupID, g := range s.groups {
-		groupState := s.targets[groupID]
-		if !groupState.Valid || groupState.Count == 0 {
-			continue
-		}
-
-		for i := range groupState.Count {
-			targetsBuffer[i] = vmath.Point{X: groupState.Targets[i].PosX, Y: groupState.Targets[i].PosY}
-		}
-		targetsSlice := targetsBuffer[:groupState.Count]
-
-		g.pointFlowCache.ObserveGrid(s.walls, s.grid)
-		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid, s.grid)
-		if g.pointFlowCache.Update(targetsSlice, isBlockedPoint) {
-			totalRecomputes++
-			g.pointAt = s.grid
-		}
-
-		if g.compositeFlowCache.Update(targetsSlice, isBlockedComposite) {
-			totalRecomputes++
-			g.compositeAt = s.grid
-		}
+		s.refresh(groupID, g)
 	}
-	s.statRecomputes.Store(totalRecomputes)
 
 	// Classify entities and check LOS to the same target their route follows.
 	navigations := s.world.Components.Navigation
@@ -496,6 +474,7 @@ func (s *NavigationSystem) Update() {
 		}
 
 	}
+	s.statRecomputes.Store(s.recomputes)
 
 	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
 		if g, ok := s.groups[dbg.GroupID]; ok {
@@ -583,14 +562,48 @@ func (s *NavigationSystem) retire(groupID uint8) {
 	}
 }
 
+// fillGrids reads each tier's passability into its grid once per generation.
+func (s *NavigationSystem) fillGrids(isBlockedPoint navigation.WallChecker) {
+	if s.filledAt == s.grid {
+		return
+	}
+	config := s.world.Resources.Config
+	s.pointGrid.Fill(config.MapWidth, config.MapHeight, isBlockedPoint)
+	s.compositeGrid.Fill(config.MapWidth, config.MapHeight, s.compositePassability.IsBlocked)
+	s.filledAt = s.grid
+}
+
+// refresh lets a group's fields fall due on this tick's targets and grids.
+func (s *NavigationSystem) refresh(groupID uint8, g *targetGroupNav) {
+	g.due = false
+	groupState := s.targets[groupID]
+	if !groupState.Valid || groupState.Count == 0 {
+		return
+	}
+	var targets [parameter.MaxTargetsPerGroup]vmath.Point
+	for i := range groupState.Count {
+		targets[i] = vmath.Point{X: groupState.Targets[i].PosX, Y: groupState.Targets[i].PosY}
+	}
+	g.pointFlowCache.ObserveGrid(s.walls, s.grid)
+	g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid, s.grid)
+	if g.pointFlowCache.Update(targets[:groupState.Count], &s.pointGrid) {
+		s.recomputes++
+		g.pointAt = s.grid
+	}
+	if g.compositeFlowCache.Update(targets[:groupState.Count], &s.compositeGrid) {
+		s.recomputes++
+		g.compositeAt, g.due = s.grid, true
+	}
+}
+
 // flow is a group's field for an entity of this shape, computed now if its
-// throttle let it wait for a reader. Only Update may call it: the checkers are its.
+// throttle let it wait for a reader. Only Update may call it: the grids are its.
 func (s *NavigationSystem) flow(g *targetGroupNav, composite bool) *navigation.FlowFieldCache {
 	if composite {
-		g.compositeFlowCache.Materialize(s.blockedComposite)
+		g.compositeFlowCache.Materialize(&s.compositeGrid)
 		return g.compositeFlowCache
 	}
-	g.pointFlowCache.Materialize(s.blockedPoint)
+	g.pointFlowCache.Materialize(&s.pointGrid)
 	return g.pointFlowCache
 }
 
@@ -783,28 +796,50 @@ func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int, groupI
 	return field
 }
 
-// snapshotTargets caches resolved group state for the tick
+// snapshotTargets caches resolved group state for the tick, and keeps a private
+// group for each cursor a snake head is locked on.
 func (s *NavigationSystem) snapshotTargets() {
 	tr := s.world.Resources.Target
 	for gid := range component.MaxTargetGroups {
 		s.targets[gid] = tr.GetGroup(uint8(gid))
 	}
-	// Private cache slots reuse the normal field/snapshot path without taking script groups.
+	var locked [parameter.MaxPlayers]bool
+	for _, e := range s.world.Components.SnakeHead.Entities() {
+		if nav, ok := s.world.Components.Navigation.GetPtr(e); ok && nav.LockedTarget != 0 {
+			if slot, ok := s.world.CursorSlot(nav.LockedTarget); ok {
+				locked[slot] = true
+			}
+		}
+	}
 	for slot := range parameter.MaxPlayers {
-		gid := uint8(component.MaxTargetGroups + slot)
-		e := s.world.Resources.Player.Slot(uint8(slot))
-		pos, ok := s.world.Positions.GetPosition(e)
-		if !ok || s.world.Components.SnakeHead.CountEntities() == 0 {
+		if !locked[slot] || !s.pursue(uint8(slot)) {
+			gid := uint8(component.MaxTargetGroups + slot)
 			s.targets[gid] = engine.TargetGroupState{}
 			s.retire(gid)
-			continue
 		}
-		s.targets[gid] = engine.TargetGroupState{Type: component.TargetCursor, Count: 1, Valid: true}
-		s.targets[gid].Targets[0] = engine.TargetData{Entity: e, PosX: pos.X, PosY: pos.Y}
-		s.getOrCreateGroup(gid)
 	}
 }
 
+// pursue publishes the private group of one cursor's slot, which steers the heads
+// locked on it, and reports whether the cursor stands on the map.
+func (s *NavigationSystem) pursue(slot uint8) bool {
+	e := s.world.Resources.Player.Slot(slot)
+	pos, ok := s.world.Positions.GetPosition(e)
+	if !ok {
+		return false
+	}
+	gid := uint8(component.MaxTargetGroups) + slot
+	s.targets[gid] = engine.TargetGroupState{Type: component.TargetCursor, Count: 1, Valid: true}
+	s.targets[gid].Targets[0] = engine.TargetData{Entity: e, PosX: pos.X, PosY: pos.Y}
+	s.getOrCreateGroup(gid)
+	return true
+}
+
+// lockSnakeTarget holds a head on the cursor it reaches soonest. One reach from
+// the head over the composite grid measures every cursor at once, when the head
+// has no reachable lock, the roster moved enough for its field to fall due, or
+// the settle interval passed; a lock holds until another route is over a third
+// shorter, and a cursor the head cannot reach is never chosen.
 func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.NavigationComponent) {
 	groupID := uint8(0)
 	if target, ok := s.world.Components.Target.GetPtr(entity); ok {
@@ -812,7 +847,7 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 	}
 	state := s.world.Resources.Target.GetGroup(groupID)
 	if !state.Valid || state.Count == 0 {
-		state = s.targets[0]
+		state, groupID = s.targets[0], 0
 	}
 	if state.Type != component.TargetCursor {
 		nav.LockedTarget = 0
@@ -823,37 +858,50 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 		nav.LockedTarget = 0
 		return
 	}
-	best, bestCost, heldCost := core.Entity(0), navigation.CostUnreachable, navigation.CostUnreachable
+	var cursors [parameter.MaxPlayers]core.Entity
+	var goals [parameter.MaxPlayers]vmath.Point
+	n, held := 0, -1
 	for slot := range parameter.MaxPlayers {
-		gid := uint8(component.MaxTargetGroups + slot)
-		g := s.groups[gid]
-		if g == nil || !s.targets[gid].Valid {
+		e := s.world.Resources.Player.Slot(uint8(slot))
+		p, ok := s.world.Positions.GetPosition(e)
+		if !ok {
 			continue
 		}
-		field := s.flow(g, true)
-		cost := field.GetDistance(pos.X, pos.Y)
-		// Rotated heads can straddle the fixed footprint's blocked edge.
-		if cost < 0 {
-			cost = navigation.CostUnreachable
-			for _, d := range navigation.DirVectors {
-				if next := field.GetDistance(pos.X+d[0], pos.Y+d[1]); next >= 0 {
-					cost = min(cost, next+int(s.costs.Diag))
-				}
-			}
+		if e == nav.LockedTarget {
+			held = n
 		}
-		target := s.targets[gid].Targets[0].Entity
-		if target == nav.LockedTarget {
+		cursors[n], goals[n] = e, vmath.Point{X: p.X, Y: p.Y}
+		n++
+	}
+	nav.LockTicks++
+	g := s.groups[groupID]
+	if !(held < 0 && nav.LockTicks >= parameter.NavFlowMinTicksBetweenCompute ||
+		g != nil && g.due || nav.LockTicks >= parameter.NavFlowSettleTicks) {
+		return
+	}
+	nav.LockTicks = 0
+	var costs [parameter.MaxPlayers]int32
+	s.reach.Measure(&s.compositeGrid, &s.costs, pos.X, pos.Y, goals[:n], costs[:n])
+	best, bestCost, heldCost := core.Entity(0), navigation.CostUnreachable, navigation.CostUnreachable
+	for i := range n {
+		cost := int(costs[i])
+		if i == held {
 			heldCost = cost
 		}
 		if cost < bestCost {
-			best, bestCost = target, cost
+			best, bestCost = cursors[i], cost
 		}
 	}
-	// A reachable target stays locked until an alternative route is over a third shorter.
 	if heldCost < navigation.CostUnreachable && bestCost*3 >= heldCost*2 {
 		return
 	}
 	nav.LockedTarget = best
+	if slot, ok := s.world.CursorSlot(best); ok {
+		gid := uint8(component.MaxTargetGroups) + slot
+		if _, exists := s.groups[gid]; !exists && s.pursue(slot) {
+			s.refresh(gid, s.groups[gid])
+		}
+	}
 }
 
 // routeGraphFresh reports whether a graph's goal still matches a live target of the group
@@ -1157,8 +1205,7 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 	}
 	s.routeRebuildTicks = snap.RouteRebuildTicks
 
-	isBlockedPoint := s.recomputeCompositePassability()
-	isBlockedComposite := s.compositePassability.IsBlocked
+	s.fillGrids(s.recomputeCompositePassability())
 	for id := range uint8(len(s.targets)) {
 		if !slices.ContainsFunc(snap.Groups, func(phase navGroupPhase) bool { return phase.GroupID == id }) {
 			delete(s.groups, id)
@@ -1174,9 +1221,9 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 		}
 		g.pointFlowCache.ObserveGrid(s.walls, s.grid)
 		g.compositeFlowCache.ObserveGrid(s.compositePassability.Valid, s.grid)
-		g.pointAt = s.restoreField(g.pointFlowCache, g.pointAt, isBlockedPoint,
+		g.pointAt = s.restoreField(g.pointFlowCache, g.pointAt, &s.pointGrid,
 			phase.PointTicks, phase.PointPending, phase.PointComputed, phase.PointLastTargets)
-		g.compositeAt = s.restoreField(g.compositeFlowCache, g.compositeAt, isBlockedComposite,
+		g.compositeAt = s.restoreField(g.compositeFlowCache, g.compositeAt, &s.compositeGrid,
 			phase.CompositeTicks, phase.CompositePending, phase.CompositeComputed, phase.CompositeLastTargets)
 	}
 	s.deriveRouteGraphs(snap.Routes)
@@ -1187,7 +1234,7 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 // field now stands at. The field is rebuilt from the phase's targets unless the one
 // held was computed from them on this grid; a phase with no field clears the stamp,
 // since the targets it leaves are no longer the field's.
-func (s *NavigationSystem) restoreField(c *navigation.FlowFieldCache, at uint64, isBlocked navigation.WallChecker,
+func (s *NavigationSystem) restoreField(c *navigation.FlowFieldCache, at uint64, grid *navigation.SearchGrid,
 	ticks int, pending, computed bool, targets []vmath.Point) uint64 {
 	if c == nil {
 		return 0
@@ -1201,7 +1248,7 @@ func (s *NavigationSystem) restoreField(c *navigation.FlowFieldCache, at uint64,
 	case held:
 		return at
 	}
-	c.Rebuild(isBlocked)
+	c.Rebuild(grid)
 	return s.grid
 }
 
@@ -1247,6 +1294,7 @@ func (s *NavigationSystem) RestoreState(v any) error {
 		dbg.CompositePassability = s.compositePassability
 	}
 	s.walls, s.seenWalls, s.grid, s.passStale = slices.Clone(c.walls), slices.Clone(c.seenWalls), c.grid, c.passStale
+	s.filledAt = 0
 	s.targets, s.routeRebuildTicks = c.targets, c.routeRebuildTicks
 	s.world.Resources.RouteGraph.SetGraphs(c.graphs)
 	return nil
