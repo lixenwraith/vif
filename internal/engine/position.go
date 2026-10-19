@@ -704,6 +704,16 @@ func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
 	return top, top != 0
 }
 
+// TopGlyphIs reports whether e is the glyph typing acts on at (x, y). Alone in
+// its cell it is, which spares the lookup; a stacked cell asks TopGlyphAt.
+func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
+	if cell := p.grid.EntitiesAt(x, y, ScopeBoth); len(cell) == 1 {
+		return cell[0] == e
+	}
+	top, _ := p.TopGlyphAt(x, y)
+	return top == e
+}
+
 // --- Batch Implementation ---
 
 type PositionBatch struct {

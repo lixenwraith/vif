@@ -804,23 +804,29 @@ picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
-### Trim the renderers' remaining per-frame work
+### Spare the overlay cards their per-frame titles
 
-- Priority: P2
-- Affected files: `internal/render/renderer/explosion.go`, `storm.go`, `kraken.go`,
-  `overlay.go`, `pinned_state.go`, `status_bar.go`
+- Priority: P3
+- Affected files: `internal/render/renderer/overlay.go`
 
-What `:d prof` would show next, none of it changing a pixel:
-- Explosion clears its three viewport-sized accumulation buffers whole every frame
-  an explosion exists; clearing last frame's dirty rectangles instead is the
-  same visual at a fraction of the memset.
-- Storm's member shading calls `math.Pow(spec, 20)` per body cell, and kraken's
-  legs `math.Hypot` per cell; repeated squaring and `math.Sqrt` differ by an ulp.
-- The overlay menu and form build their row slices and strings every frame they
-  show, and the pinned HUD collects its lines likewise; both are UI a player
-  reads while the game runs behind them.
-- The status bar still formats the time-control item and the macro-recording
-  label every frame they show.
+The help and telemetry overlays run with the game live, and `renderCard` builds
+each visible card's padded title string every frame, a dozen small allocations
+a frame. Keeping the titles beside the masonry items at relayout, where the
+layout is already cached, removes them. The menu and form overlays allocate
+likewise but show while `PauseForInput` holds the simulation, so they cost play
+nothing.
+
+### Take the ember further only with a visual trade-off
+
+- Priority: P3
+- Affected files: `internal/render/renderer/ember.go`
+
+The painter's remaining cost is the ring pass, about two fifths of a low-heat
+paint, and the per-frame 256-bucket jagged table; both are exact today. What is
+left needs a compromise: a coarser table for the ring Gaussian keyed by the
+squared plane distance, fewer jagged buckets, or ring evaluation only inside the
+band the pulse can light. None is visible in principle, none is bit-identical.
+Revisit only if `:d prof` ranks `draw ember` high again.
 
 ## Genetic library
 

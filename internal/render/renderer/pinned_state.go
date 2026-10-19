@@ -33,6 +33,12 @@ type hudColumn struct {
 	height int
 }
 
+// hudValue is one metric's text, kept with the reading it was formatted from
+type hudValue struct {
+	raw  uint64
+	text string
+}
+
 // PinnedStatsRenderer draws pinned metric groups over the game area, reading
 // live registry values rather than the overlay's content snapshot
 type PinnedStatsRenderer struct {
@@ -41,6 +47,7 @@ type PinnedStatsRenderer struct {
 
 	bound   *[]string // Pin snapshot the views were built from
 	views   []status.GroupView
+	values  [][]hudValue // per view, per metric
 	lines   []hudLine
 	groups  []hudGroup
 	columns []hudColumn
@@ -121,11 +128,7 @@ func pinnedHUDOrigin(ctx render.RenderContext) (x, y int) {
 func fillHUDRect(buf *render.RenderBuffer, x, y, width, height int) {
 	for row := range height {
 		for col := range width {
-			buf.Set(x+col, y+row, ' ', color.RGB{}, visual.RgbHudBg,
-				render.BlendAlphaBg, parameter.HudBgAlpha, terminal.AttrNone)
-			buf.ResetMask(x+col, y+row)
-			buf.Set(x+col, y+row, ' ', color.RGB{}, visual.RgbHudBg,
-				render.BlendAlphaBg, parameter.HudBgAlpha, terminal.AttrNone)
+			buf.SetBgAlphaOwned(x+col, y+row, visual.RgbHudBg, parameter.HudBgAlpha)
 		}
 	}
 }
@@ -137,7 +140,7 @@ func (r *PinnedStatsRenderer) rebind() {
 		return
 	}
 	r.bound = pins
-	r.views = r.views[:0]
+	r.views, r.values = r.views[:0], r.values[:0]
 	r.panelWidth, r.shrinkWidth, r.shrinkFrames = 0, 0, 0
 	if pins == nil {
 		return
@@ -145,8 +148,18 @@ func (r *PinnedStatsRenderer) rebind() {
 	for _, key := range *pins {
 		if v, ok := r.reg.GroupView(key); ok {
 			r.views = append(r.views, v)
+			r.values = append(r.values, make([]hudValue, v.Len()))
 		}
 	}
+}
+
+// value is metric i of view vi as text, formatted again only when its reading moved
+func (r *PinnedStatsRenderer) value(vi, i int) string {
+	c := &r.values[vi][i]
+	if raw := r.views[vi].Reading(i); c.text == "" || raw != c.raw {
+		c.raw, c.text = raw, r.views[vi].Value(i)
+	}
+	return c.text
 }
 
 // collect reads current values, stabilizes width, and packs whole groups into columns.
@@ -170,7 +183,7 @@ func (r *PinnedStatsRenderer) collect(maxW, maxH int) int {
 		desiredWidth = max(desiredWidth, tui.RuneLen(v.Name()))
 
 		for i := range v.Len() {
-			name, val := v.MetricName(i), v.Value(i)
+			name, val := v.MetricName(i), r.value(vi, i)
 			r.lines = append(r.lines, hudLine{key: name, value: val})
 			desiredWidth = max(desiredWidth, tui.RuneLen(name)+parameter.HudColumnGap+tui.RuneLen(val))
 		}

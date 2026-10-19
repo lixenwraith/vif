@@ -240,5 +240,5 @@ const (
 	HudWidthShrinkFrames = 90
 
 	// HudBgAlpha is the panel background opacity over the game area
-	HudBgAlpha = 0.8
+	HudBgAlpha = 0.96
 )
