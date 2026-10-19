@@ -4,8 +4,8 @@ Working analysis of whether the flow fields and the route graphs should fold int
 one structure, and where navigation's time actually goes. §1 is the verdict, §2
 what the code did before this work against the questions that prompted it, §3 the
 measurements, §4 the program with what has landed, §5 the snake lock, §6 what
-custom maps will meet, §7 the decisions. Items 1 to 4 of §4 have landed; the
-rest are the next branches, in order.
+custom maps will meet, §7 the decisions. Items 1 to 5 of §4 have landed; 6 and
+7 wait for a need.
 
 ## 1. Decision proposed
 
@@ -166,6 +166,18 @@ resource for the drops out of sight of their owner: 46% of the storm tick with
 eight local cursors, which is one local cursor's share eight times over. The wall
 compares are gone from the profile.
 
+### 3.6 The same run after item 5
+
+| Phase | ms/tick | worst tick |
+|---|---:|---:|
+| play, 600 ticks | 4.4 | 28 ms |
+| storm, 2,400 ticks | 6.4 | 30 ms (was 37) |
+
+Route graph rebuilds fell from 3.6% of the storm tick to 1.4%, and the heap in
+use after a collection at the storm's high water is 71 MiB. Over the five items
+the storm's worst tick went from 132 ms to 30 and its average from 11.4 ms to
+6.4, on the same seed and walk.
+
 ## 4. Options, in order of payoff
 
 1. **Lock a snake by one search from its head** (landed). One composite-tier Dijkstra
@@ -212,13 +224,14 @@ compares are gone from the profile.
    own caches, wall copy and per-tick compare are gone, and navigation's own
    compare is gated by `Position.WallGeneration`, so a tick without a wall change
    compares nothing.
-5. **Corridor-sparse route fields.** A route field covers 2–3% of the map and is
-   reallocated whole at every rebuild; store corridor cells only (per graph a
-   route mask byte per cell, per route a compact cell-to-distance table), which
+5. **Corridor-sparse route fields** (landed). A route's field is its corridor's
+   cells alone (`CorridorField`): distance and step per cell, searched on the
+   graph's one grid with everything outside the corridor a wall, a diagonal's
+   corners included, and stored sorted by cell for a binary-search read, which
    serves `GetDirection`, `GetDistance`, the neighbour escape and the adaptation
-   recovery ring unchanged. On td about 50 MB per instance, and the rebuild stops
-   allocating map-sized arrays, which is the likely source of the 47 ms play
-   spike (unproven).
+   recovery ring unchanged. A td route is about 36 kB in place of 1.1 MB, the
+   per-route grid fill is gone, and a td graph computes in 3.8 ms where it took
+   7.8 (a tower graph 1.5 ms for 3.0).
 6. **A footprint tier registry.** Navigation derives the set of footprints from
    the live `NavigationComponent`s and keeps one passability grid and one field
    slot per group per tier in use, computed on first read like today's two. A

@@ -1,9 +1,9 @@
 package navigation
 
 import (
+	"cmp"
 	"math/bits"
-
-	"github.com/lixenwraith/vif/pkg/vmath"
+	"slices"
 )
 
 // Route graph tuning. It lives here rather than in the game's parameter package
@@ -42,12 +42,59 @@ type Waypoint struct {
 
 // Route is a distinct path from source to target through the maze
 type Route struct {
-	Field         *FlowField // Per-route constrained flow field
+	Field         *CorridorField // the route's flow field, over its corridor alone
 	Waypoints     []Waypoint
 	ID            int     // Route index within graph; bandit arm index
 	TotalDistance int     // Weighted path distance (Costs)
 	Weight        float64 // Normalized sampling weight (inverse distance, floored)
 }
+
+// CorridorField is a route's flow field over its corridor alone: each corridor
+// cell the target reaches, with its distance along the route and its downhill
+// direction, sorted by cell, so a route costs its corridor rather than the map.
+// A cell outside reads as a field's unreached one: DirNone, and no distance.
+type CorridorField struct {
+	Width, Height int
+	Costs         Costs
+	cells         []corridorCell
+}
+
+type corridorCell struct {
+	idx, dist int32
+	dir       int8
+}
+
+func (f *CorridorField) find(x, y int) (corridorCell, bool) {
+	if x < 0 || y < 0 || x >= f.Width || y >= f.Height {
+		return corridorCell{}, false
+	}
+	i, ok := slices.BinarySearchFunc(f.cells, int32(y*f.Width+x), func(c corridorCell, idx int32) int { return cmp.Compare(c.idx, idx) })
+	if !ok {
+		return corridorCell{}, false
+	}
+	return f.cells[i], true
+}
+
+// GetDirection is the step a corridor cell takes toward the target, DirNone outside
+func (f *CorridorField) GetDirection(x, y int) int8 {
+	c, ok := f.find(x, y)
+	if !ok {
+		return DirNone
+	}
+	return c.dir
+}
+
+// GetDistance is a corridor cell's weighted distance to the target, -1 outside
+func (f *CorridorField) GetDistance(x, y int) int {
+	c, ok := f.find(x, y)
+	if !ok {
+		return -1
+	}
+	return int(c.dist)
+}
+
+// Len is the number of corridor cells the field covers
+func (f *CorridorField) Len() int { return len(f.cells) }
 
 // RouteGraph holds all viable routes between a source-target pair
 type RouteGraph struct {
@@ -66,10 +113,11 @@ type RouteGraph struct {
 type RouteSolver struct {
 	Costs       Costs // the aspect routes are weighted at; zero is the reference
 	sc          routeScratch
-	fieldSearch SearchGrid // the grid every route's corridor field is computed on
 	penalty     []int32
 	usedDilated []bool
-	allowed     []uint32
+	allowed     []uint32 // the corridor each cell was last dilated into, by generation
+	dir         []int8   // a corridor field's directions while it is searched
+	corridor    []int32  // the cells of the corridor being searched
 }
 
 // ComputeRouteGraph computes routes using iterative penalized Dijkstra
@@ -173,7 +221,7 @@ func (rs *RouteSolver) Compute(
 	}
 
 	computeRouteWeights(rg)
-	rs.computePathFields(rg, acceptedPaths, mapW, mapH, isBlocked)
+	rs.corridorFields(rg, acceptedPaths, mapW, mapH)
 	return rg
 }
 
@@ -205,30 +253,55 @@ func decimateWaypoints(path []int, mapW int) []Waypoint {
 	return wps
 }
 
-// computePathFields computes per-route flow fields constrained to each route's
-// dilated corridor; every accepted route receives a valid Field
-func (rs *RouteSolver) computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked WallChecker) {
+// corridorFields computes each route's field over its dilated corridor on the
+// graph's search, settling corridor cells alone from the target, ties to the
+// lower-numbered step as a field breaks them; every accepted route receives one.
+func (rs *RouteSolver) corridorFields(rg *RouteGraph, paths [][]int, mapW, mapH int) {
 	sc := &rs.sc
-	targets := []vmath.Point{{X: rg.TargetX, Y: rg.TargetY}}
-	rs.allowed = scratch(rs.allowed, mapW*mapH)
-	allowed := rs.allowed
+	g, c := &sc.search, &rs.Costs
+	rs.allowed, rs.dir = scratch(rs.allowed, mapW*mapH), grow(rs.dir, mapW*mapH)
+	allowed, dist, dir := rs.allowed, sc.dist, rs.dir
+	target := int32(rg.TargetY*mapW + rg.TargetX)
 	var gen uint32
 
 	for ri, path := range paths {
 		gen++
-		g := gen
+		rs.corridor = rs.corridor[:0]
 		sc.dilate(path, RouteCorridorRadius, func(idx int) {
-			allowed[idx] = g
+			allowed[idx], dist[idx] = gen, CostUnreachable
+			rs.corridor = append(rs.corridor, int32(idx))
 		})
-
-		routeBlocked := func(x, y int) bool {
-			return isBlocked(x, y) || allowed[y*mapW+x] != g
+		g.reset(0, c.Diag)
+		dist[target], dir[target] = 0, DirTarget
+		g.push(target, 0)
+		for idx, d, ok := g.pop(); ok; idx, d, ok = g.pop() {
+			if dist[idx] != d {
+				continue
+			}
+			for m := g.open[idx]; m != 0; m &= m - 1 {
+				k := bits.TrailingZeros8(m)
+				n := idx + g.step[k]
+				// Inside the corridor only, a diagonal's corners included: what lies
+				// outside is a wall to the route.
+				if allowed[n] != gen || k&1 == 1 && (allowed[idx+g.step[(k+7)&7]] != gen || allowed[idx+g.step[(k+1)&7]] != gen) {
+					continue
+				}
+				switch nd := d + c.dir[k]; {
+				case nd < dist[n]:
+					dist[n], dir[n] = nd, DirOpposite[k]
+					g.push(n, nd)
+				case nd == dist[n] && dir[n] != DirTarget && DirOpposite[k] < dir[n]:
+					dir[n] = DirOpposite[k]
+				}
+			}
 		}
-
-		field := NewFlowField(mapW, mapH)
-		field.Costs = rs.Costs
-		rs.fieldSearch.Fill(mapW, mapH, routeBlocked)
-		field.ComputeOn(&rs.fieldSearch, targets)
+		slices.Sort(rs.corridor)
+		field := &CorridorField{Width: mapW, Height: mapH, Costs: rs.Costs, cells: make([]corridorCell, 0, len(rs.corridor))}
+		for _, idx := range rs.corridor {
+			if dist[idx] < CostUnreachable {
+				field.cells = append(field.cells, corridorCell{idx: idx, dist: dist[idx], dir: dir[idx]})
+			}
+		}
 		rg.Routes[ri].Field = field
 	}
 }

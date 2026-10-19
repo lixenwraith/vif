@@ -781,29 +781,21 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 	return 0, 0
 }
 
-// resolveRouteField returns the per-route flow field for an entity's route assignment
-// Returns nil for invalid routes or graphs whose goal no longer matches the group
-// target (retargeted tower), forcing fallback to the shared group flow field
-func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int, groupID uint8) *navigation.FlowField {
+// resolveRouteField returns the field of an entity's route, or nil for an invalid
+// route or a graph whose goal no longer matches a group target (a retargeted
+// tower), which sends the entity to the shared group field
+func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int, groupID uint8) navigation.Source {
 	if graphID == 0 {
 		return nil
 	}
-
 	graph := s.world.Resources.RouteGraph.Get(graphID)
-	if graph == nil || routeID < 0 || routeID >= len(graph.Routes) {
+	if graph == nil || routeID < 0 || routeID >= len(graph.Routes) || !s.routeGraphFresh(graph, groupID) {
 		return nil
 	}
-
-	if !s.routeGraphFresh(graph, groupID) {
-		return nil
+	if field := graph.Routes[routeID].Field; field != nil {
+		return field
 	}
-
-	field := graph.Routes[routeID].Field
-	if field == nil || !field.Valid {
-		return nil
-	}
-
-	return field
+	return nil
 }
 
 // snapshotTargets caches resolved group state for the tick, and keeps a private
