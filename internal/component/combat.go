@@ -116,8 +116,9 @@ type CombatComponent struct {
 	// displaced", so it stays the whole target's window whoever opened it.
 	RemainingKineticImmunity time.Duration
 
-	// Records accepted displacement sources; immunity itself covers every attacker.
-	KineticImmunitySpent uint32
+	// KineticStrength is the impulse that opened the window; only a stronger one
+	// lands while it runs. Zero, a window a species or soft push opened, refuses all.
+	KineticStrength float64
 
 	// Status is indexed by StatusKind
 	Status [StatusCount]Status

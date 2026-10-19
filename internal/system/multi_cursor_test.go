@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
 )
 
 func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T) {
@@ -863,6 +864,8 @@ func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 	}
 	state, _ := w.Components.Combat.GetPtr(target)
 	state.RemainingKineticImmunity /= 2
+	// The strongest impulse these profiles draw: every later hit is weaker
+	state.KineticStrength = parameter.CollisionKineticImpulseMax * profile.MassTracer / profile.MassSwarm
 	remaining := state.RemainingKineticImmunity
 	for _, owner := range []core.Entity{first, second} {
 		direct(owner)

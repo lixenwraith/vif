@@ -1421,7 +1421,7 @@ func equalNavigation(a, b *component.NavigationComponent) bool {
 }
 
 func equalCombat(a, b *component.CombatComponent) bool {
-	return *a == *b
+	return a.OwnerEntity == b.OwnerEntity && a.LastDamagedBy == b.LastDamagedBy && a.CombatEntityType == b.CombatEntityType && a.HitPoints == b.HitPoints && a.IsEnraged == b.IsEnraged && a.RemainingDamageImmunity == b.RemainingDamageImmunity && a.DamageImmunitySpent == b.DamageImmunitySpent && a.RemainingHitFlash == b.RemainingHitFlash && a.RemainingKineticImmunity == b.RemainingKineticImmunity && math.Float64bits(float64(a.KineticStrength)) == math.Float64bits(float64(b.KineticStrength)) && a.Status == b.Status
 }
 
 func equalGenotype(a, b *component.GenotypeComponent) bool {
