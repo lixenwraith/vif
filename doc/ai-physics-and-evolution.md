@@ -1,9 +1,10 @@
-# Navigation, Physics, Adaptation, and Evolution
+# AI, Physics, and Evolution
 
 vif's moving actors share reusable math and algorithm packages, while
-systems retain game-specific policy. This document covers four related layers:
-grid navigation, continuous movement/collision, route adaptation, and genetic
-parameter evolution.
+systems retain game-specific policy. This document covers continuous
+movement/collision, route adaptation, and genetic parameter evolution; grid
+navigation — fields, passability, target groups, the snake lock, route graphs —
+is [Navigation](navigation-design.md).
 
 ## 1. Package relationships
 
@@ -19,204 +20,12 @@ flowchart TD
 
 `pkg/navigation` and `pkg/vmath/physics` accept data/callbacks instead of reaching
 directly into the ECS where practical. `NavigationSystem` adapts wall/target
-resources to those APIs. `GeneticSystem` adapts entity lifetime events to the
-generic evolutionary registry. `AdaptationSystem` is separate from genetics:
-it learns route selection, not actor parameters.
+resources to those APIs ([Navigation §1](navigation-design.md#1-structures)).
+`GeneticSystem` adapts entity lifetime events to the generic evolutionary
+registry. `AdaptationSystem` is separate from genetics: it learns route
+selection, not actor parameters.
 
-## 2. Flow fields
-
-A `FlowField` runs weighted Dijkstra outward from one or more target cells and
-stores, for every reachable cell, the direction that descends toward a target.
-
-| Step | Weighted cost |
-|---|---|
-| Horizontal | 10 |
-| Vertical | 20 |
-| Diagonal | 22 |
-
-The asymmetric costs come from the cell aspect (`navigation.CostsFor`): 10, 20
-and 22 at a terminal's 2:1, equal on both axes for a square cell. Eight-way
-movement is allowed, but a diagonal cannot cut the
-corner when either adjacent cardinal cell is blocked.
-
-```mermaid
-flowchart TD
-    Targets["one or more targets"] --> Seed["seed passable target cells"]
-    Seed --> Dijkstra["weighted reverse Dijkstra"]
-    Dijkstra --> Distance["per-cell distance"]
-    Dijkstra --> Direction["per-cell downhill direction"]
-```
-
-If a requested target cell is blocked, the field searches outward up to eight
-cells and seeds the first passable ring as virtual targets with axis-weighted
-gap costs. This lets a large actor navigate toward an occupied anchor without
-pretending its footprint can stand in the blocked cell.
-
-Generation stamps avoid clearing full distance/direction arrays on each
-recompute. Every grid Dijkstra in the package, the route search included, runs
-on one grid, `SearchGrid`: the wall test asked once per cell into a grid with a
-blocked border, the directions open from each cell as one precomputed mask with
-the corner rule folded in, so settling a cell is one load, and, since step costs
-are small integers, a ring of distance buckets rather than a heap, which settles
-a cell in constant time. Navigation fills one grid per passability tier, moves
-it cell by cell as the walls change (`Set`), and computes every field of that
-tier on it (`ComputeOn`); a field reading its own walls (`Compute`) fills a
-private one. A cell reached two shortest ways takes the lower-numbered direction,
-so a direction is a function of the distances alone, and a field repaired in
-place after cells opened (`Opened`) is the field a recompute would give, settling
-only what the openings improve; it declines where an opening would reseed a
-target. `DirNone` identifies blocked/unreachable cells and `DirTarget` a
-seed/arrival cell. Navigation and loot pass
-`Position.WallTest`, a grid read from the wall store on the derivation's first
-probe, exact to `HasBlockingWallAt` under any wall change between derivations.
-The field is fuzzed against a reference heap search: equal distances
-everywhere, and every direction a shortest step. At 199x97 a field computes in
-about 1.1 ms native and 3.0 ms under WASM.
-
-## 3. Flow-field cache and target groups
-
-Computing a field over a large map every 50 ms tick is too expensive, so
-`FlowFieldCache` latches dirty state and throttles recomputation. A field falls
-due:
-
-- at once when it has no field or the target count changes, or a cell of its
-  tier closed (`Closed`), since a direction may now point into it; cells that
-  only opened repair a computed field in place (`Moved`), which is not a
-  recompute and leaves the phase alone;
-- after a cooldown (`NavFlowMinTicksBetweenCompute`, 5 ticks), when marked dirty
-  (a target group update, and for composite fields a regraph event) or a target
-  drifted the Manhattan dirty distance (`NavFlowDirtyDistance`, 5 cells);
-- after `NavFlowSettleTicks` (20) for a smaller drift: a field a few cells off
-  points the same way everywhere but beside the target, where sight takes over.
-
-A cursor's motion reaches the field only through that drift. Navigation's group
-caches are lazy: a field that falls due is computed when something first reads
-it that Update — a pursuer without sight of its target, a snake choosing whom to
-lock, the debug view — so a group nobody chases costs a cheap reachability check.
-The throttle decides exactly as it would eagerly, which is what keeps the D-17
-phase identical between an instance whose drains read a field and one with none.
-
-Target groups allow multiple actors/structures to define one navigation goal.
-Group 0 contains the live cursor roster up to the eight-target navigation cap
-(`MaxTargetsPerGroup`); script groups 1–15 (`MaxTargetGroups` is 16) hold up to
-eight `TargetAnchor` entities, follow one entity, hold a fixed cell, or mirror
-the cursor roster. A field seeded from a group naturally selects the nearest
-reachable target at each cell.
-
-A snake head locks the cursor it reaches soonest (`LockedTarget`). One reach
-(`navigation.Reach`) from the head over the composite grid measures every cursor
-at once — what a field seeded at each cursor would read at the head, since a step
-costs the same both ways — when the head has no reachable lock, the roster moved
-enough for its group field to fall due, or `NavFlowSettleTicks` passed
-(`LockTicks`, in the head's component, so the capture carries the phase). A
-reachable lock holds until another route is over a third shorter; a cursor the
-head cannot reach is never chosen, and a head that can reach none holds still.
-Each locked cursor gets a private group (`MaxTargetGroups` + roster slot), created
-on the lock and retired when no head holds it, and the head steers by its field.
-
-That nearest-target property is the group model's boundary. "Nearest reachable
-cursor" is the right answer for a hostile species and the wrong one for anything
-that belongs to a *particular* participant. Loot is the case: a drop is owned by
-the cursor whose kill produced it, it is player-domain, and only that cursor may
-collect it. Steered by group 0 it would walk to whichever cursor is nearer and
-stall there, and a line-of-sight flag computed against that nearest cursor while
-the movement homes at the owner would read "direct path" beside somebody else's
-cursor and drive the drop into the wall between it and its own.
-
-A drop therefore steers by its owner's private group: navigation keeps one per
-cursor on the map, the same groups on every instance so the phase each carries
-agrees, and publishes the point tier through `PursuitResource`, where loot reads
-its owner's slot and does its own line-of-sight check against the same cursor.
-A field is computed when first read, so only the instance holding a cursor's
-drops ever materializes it, and it goes with the cursor. No field covers a wall
-cell, so a drop a wall lands on without displacing it — a correction installs
-shared walls under player-domain loot — is pushed out as a spawn displaces it.
-Anything else that becomes owned rather than contested reads the same resource;
-do not add a target group per participant.
-
-`NavigationComponent` records whether an actor follows a group flow field or a
-route graph, the graph/route IDs, a snake head's locked cursor, and each tick's
-output: `HasDirectPath` when the target is in sight (area line of sight for a
-composite), otherwise the flow vector. Species systems turn that output into a
-homing target through `ResolveMovementTarget` (`targeting.go`) — the target
-itself in sight, else a point `FlowLookahead` cells along the flow — and integrate
-their own motion. Loot carries no `NavigationComponent`: its route is its
-owner's, not its group's.
-
-## 4. Composite passability
-
-Point passability is insufficient for a 5-by-3 eye or other composite.
-`CompositePassability` precomputes whether the entire footprint fits at every
-candidate header coordinate, using header-to-top-left offsets.
-
-```mermaid
-flowchart LR
-    Walls["wall callback"] --> Footprint["test every footprint cell"]
-    Footprint --> Grid["valid header-position grid"]
-    Grid --> Field["flow field or route graph"]
-```
-
-Navigation reads the walls once a tick and diffs them against the walls
-everything stands on: a changed cell moves the point tier, and passability is
-recomputed only for the headers whose footprint covers it (`ComputeROI`), so the
-composite tier moves only where a footprint's fit changed. Each tier has a
-generation a field or route graph is stamped with when computed, and an install
-keeps what stands at its tier's current one. A wholesale change — the first
-derivation, a resize, a maze — derives everything whole. Its `IsBlocked`
-callback can be handed directly to flow-field and route-graph algorithms. As a result, a path guarantees footprint clearance at sampled
-header cells, rather than requiring the species to correct point paths after
-the fact. Navigation keeps one grid, for the eye's 5×3 footprint that the quasar
-and snake head share; every composite navigator, the 4×2 swarm included, steers
-by it.
-
-## 5. Route graphs
-
-A route graph generates several meaningfully distinct, near-optimal corridors
-between a source and target:
-
-1. run a normal weighted Dijkstra to establish the optimal distance;
-2. accept the path if within the configured tolerance;
-3. dilate its corridor and penalize those cells;
-4. rerun penalized Dijkstra to push the next candidate elsewhere;
-5. reject paths whose corridor overlap is above the configured percentage;
-6. stop at the route limit, attempt limit, no path, or excessive true cost.
-
-A graph's searches share one `SearchGrid`: passability read once per graph into
-the bordered grid, which the corridor dilation reads as well, one corner rule,
-and the bucket ring, sized past the largest penalty a cell carries. The search
-is fuzzed against relaxation to a fixpoint. A graph at 200x100 costs about 10 ms
-native.
-
-```mermaid
-flowchart TD
-    Shortest["shortest path"] --> Accept["accept distinct in-tolerance route"]
-    Accept --> Penalize["penalize dilated corridor"]
-    Penalize --> Next["find next penalized shortest path"]
-    Next --> Accept
-```
-
-Each accepted route stores decimated waypoints, true weighted distance, a
-normalized inverse-distance initial weight, and its field over its dilated
-corridor alone (`CorridorField`): the corridor's cells with their distance and
-step, searched on the graph's grid with everything outside the corridor a wall,
-and kept sorted by cell, so a route costs its corridor rather than the map. The
-graph also records the footprint/header offsets used to compute it and the
-composite generation it was computed on.
-
-A gateway spawned to route by graph requests one at once
-(`EventRouteGraphRequest`). Graphs live in `RouteGraphResource`, keyed by the
-gateway's `RouteDistID`, and each computed graph (`EventRouteGraphComputed`)
-starts its adaptation entry. Gateways attach the graph ID and a route ID popped
-from the adaptation pool to spawned eyes. A route steers only while its graph
-is fresh — computed at the composite tier's current generation, so a wall change
-that fits no footprint differently leaves it fresh, toward a cell a live group
-target still occupies — and only while the actor is inside its corridor;
-otherwise the actor steers by its group field. Navigation rebuilds at most one stale gateway
-graph per `NavRouteRebuildInterval` (20 ticks), and `EventNavigationRegraph`
-drops every graph and route assignment for that budget to rebuild. `:graph` and
-`:flow` expose the structures through the debug renderer.
-
-## 6. Online route adaptation
+## 2. Online route adaptation
 
 `AdaptationSystem` maintains an independent route population for each
 `(routeGraphID, species subtype)`; the subtype is the eye type, which the gateway
@@ -261,7 +70,7 @@ pools and consumer heads travel in the D-19 capture (`engine.AdaptationState`),
 with the route each live eye took and the deaths not yet scored, so a join or
 correction pops the same next route and scores the same deaths.
 
-## 7. Genetic library
+## 3. Genetic library
 
 `pkg/genetic` offers two engines over generic solution and numeric fitness
 types:
@@ -305,7 +114,7 @@ normalized gene-spread diversity metric. The optional fitness/tracking packages
 scalarize multi-metric lifetimes, and the optional persistence package provides
 atomic store/codecs without coupling the core engine to disk.
 
-## 8. Game genetic adapter
+## 4. Game genetic adapter
 
 The live game constructs `registry.NewRegistry(nil)`, so population state is
 in memory only. Species register gene count, bounds, perturbation, probe bins,
@@ -344,7 +153,7 @@ declarations; an install registers or drops species to match them first, since
 continues with the same next genotype and the same pending evaluation IDs; it
 does not restart evolution from the scored archive.
 
-## 9. Physics primitives
+## 5. Physics primitives
 
 `pkg/vmath/physics` owns a `float64` `Kinetic` value that
 `component.KineticComponent` embeds:
@@ -400,7 +209,7 @@ never reads drain positions. A shared target's impulse draws from a stream
 reseeded from the tick and the pair (D-8); a player-domain target's from this
 instance's player stream.
 
-## 10. Numeric model and determinism
+## 6. Numeric model and determinism
 
 `pkg/vmath` is a `float64` numeric and geometry package and holds the named math
 constants (`TwoPi`, `Golden64`). It provides scalar and vector operations,
@@ -431,7 +240,7 @@ source runs. Floating point still prevents treating that as a cross-platform
 lockstep guarantee, and a live journal reconstructs input rather than promising
 an identical world.
 
-## 11. Maze generation
+## 7. Maze generation
 
 `pkg/maze` generates odd-sized stochastic mazes using a recursive backtracker,
 and:
@@ -450,16 +259,11 @@ PCG stream, derived from the shared root and carried in the capture. On
 one wall batch and clears the requested rooms; the start, end, solution path and
 room entries serve `sandbox/maze`.
 
-## 12. Extension guidance
+## 8. Extension guidance
 
-- Use a shared flow field for many actors with the same footprint/targets; do
-  not compute one per entity. Steer an actor whose goal is *one participant's*
-  cursor by that cursor's private group (`PursuitResource`): a group field
-  selects the nearest target, which is a different question.
 - Pair every homing profile with a damping term that acts at cruise speed — the
   cornering brake, in this codebase. Arrival damping alone leaves an orbit at
   `cruise² / accel` that nothing removes.
-- Build composite passability before routing a large footprint.
 - Choose route adaptation for path policy and genetics for continuous actor
   parameters; do not mix their fitness meanings.
 - Cache entity metadata needed after death because component stores are wiped
@@ -471,17 +275,10 @@ room entries serve `sandbox/maze`.
 - If persistence is enabled, version the gene schema and do not rely on
   process-local IDs.
 
-## 13. Source map
+## 9. Source map
 
 | Concern | Primary source |
 |---|---|
-| Flow fields/cache | `pkg/navigation/flowfield.go`, `cache.go` |
-| Flow steering (interpolation, escape) | `pkg/navigation/steering.go` |
-| Owner-scoped loot routing | `internal/system/loot.go` |
-| Composite navigation | `pkg/navigation/composite.go` |
-| Route generation | `pkg/navigation/routegraph.go` |
-| ECS navigation adapter | `internal/system/navigation.go` |
-| Movement target from navigation output | `internal/system/targeting.go` |
 | Route learning | `internal/system/adaptation.go`, `internal/engine/resource.go`, `adaptation_state.go` |
 | Genetic engines | `pkg/genetic/*.go`, `pkg/genetic/README.md` |
 | Registry/tracking/persistence | `pkg/genetic/{registry,tracking,fitness,persistence}` |

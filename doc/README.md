@@ -32,7 +32,8 @@ reader can start with the application shape and then descend into a subsystem.
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
 | [Audio](audio.md) | Domain detail | How are effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
-| [AI, navigation, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do flow fields, route learning, genetics, float64 geometry, and collision/steering work together? |
+| [Navigation](navigation-design.md) | Domain detail | How do flow fields, passability tiers, target groups, the snake lock, loot's pursuit and route graphs move species, and what does each cost? |
+| [AI, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Generic kinetic analysis](generic-kinetic.md) | Future design | Which kinetic paths exist, why one universal motion system is unsafe today, and how could they be consolidated incrementally? A design for future implementation. |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, how does a session's transport start, frame, relay, poll, time out and disconnect, and what does a supervised run's endpoint answer? |

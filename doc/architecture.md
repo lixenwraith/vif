@@ -346,7 +346,7 @@ is no fixed-point API beside them. Floating-point state and live play's
 concurrent scheduling prevent treating the engine as a cross-platform
 bitwise-deterministic simulation.
 
-See [AI, navigation, physics, and evolution](ai-physics-and-evolution.md).
+See [Navigation](navigation-design.md) and [AI, physics, and evolution](ai-physics-and-evolution.md).
 
 ## 11. Externalized module boundaries
 

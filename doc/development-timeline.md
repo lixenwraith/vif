@@ -1,7 +1,7 @@
 # vif Development Timeline
 
 High-level progress collapsed from commit messages and `doc/`, April 2025 through
-2026-10-17. The project was vi-fighter until it was renamed vif in September 2026.
+2026-10-19. The project was vi-fighter until it was renamed vif in September 2026.
 Each line folds many commits, so dates within a section are approximate.
 
 ## 2025-04 to 2025-11 — Prototype and core game
@@ -386,3 +386,4 @@ Each line folds many commits, so dates within a section are approximate.
 - The cell-frame protocol moved into `pkg/glyph` for every host drawing elsewhere.
 - The browser page drew cell frames on a WebGL canvas, and xterm.js was retired.
 - Without WebGL the page painted on a 2D canvas.
+- Navigation was measured and taken apart in five steps — one search grid per tier with the snake locking by one reach, walls diffed once a tick and fields repaired where cells open, a private group per cursor that loot reads, route fields over their corridors alone — and td's worst storm tick fell from 132 ms to 30; the navigation design became its own document.

@@ -289,7 +289,7 @@ library copies.
 - Priority: P2
 - Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`,
   `internal/system/loot.go`
-- Guide: [Navigation design §4](navigation-design.md#4-options-in-order-of-payoff)
+- Guide: [Navigation §10](navigation-design.md#10-costs)
 
 A field is computed only for a reader, on a grid moved cell by cell as the walls
 change, a snake head measures every cursor with one search, a wall that opens
