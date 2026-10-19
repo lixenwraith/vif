@@ -10,7 +10,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds the launcher icon, `../lixen-logo.svg` as an adaptive icon on black, with its lines alone as the themed one. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
 | `files/config/vif/vif.toml` | The user root's settings, read as a terminal reads `vif.toml` and written as `[play]` changes (sound, volume, auto-fire, mouse, HUD); created at the first change, with sound on, where a terminal starts muted. No permission: the app's own directory. |
-| `toolchain.sh` | What the build needs beside Go: `make android` checks it before Gradle runs, `make android-toolchain` installs it. |
+| `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
 
 ## Build
 
@@ -39,8 +39,9 @@ the APK on one of those.
 
 `bindGo` builds gomobile and gobind at the versions `go.mod` pins, binds `./game`
 for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in
-`app/build/outputs/apk/debug/`. A dependency bump at the repository root needs
-`go mod tidy` here too, since this module requires at least what the root does.
+`app/build/outputs/apk/debug/`. This module requires at least what the root's
+`go.mod` does, so a dependency bump there runs `go -C android mod tidy` in the same
+commit; until it does, `make android` names each module behind and what requires it.
 `make verify` vets and tests this module's Go side with the rest.
 
 ## Nightly

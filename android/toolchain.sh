@@ -1,8 +1,9 @@
 #!/bin/sh
-# What make android needs beside Go: a JDK, and an Android SDK holding the platform
-# and NDK app/build.gradle.kts names. "gradlew ARGS" names every missing piece or
-# runs the wrapper, "adb ARGS" runs adb from PATH or the SDK, and "install" sets
-# the missing pieces up: the only command here that downloads (README.md).
+# What make android needs: Go, a JDK, and an Android SDK holding the platform and
+# NDK app/build.gradle.kts names. "gradlew ARGS" names every missing piece and
+# every module go.mod lists below its build, else runs the wrapper; "adb ARGS"
+# runs adb from PATH or the SDK; "install" sets the missing pieces up: the only
+# command here that downloads (README.md).
 set -eu
 cd "$(dirname "$0")"
 
@@ -85,6 +86,7 @@ gap() {
 
 preflight() {
 	sdk_host
+	command -v go >/dev/null 2>&1 || gap "Go, which builds gomobile and the binding"
 	if ! have_jdk; then
 		if command -v "$java" >/dev/null 2>&1 && [ -x "${JAVA_HOME:-/nonexistent}/bin/javac" ]; then
 			gap "javac on PATH, where gomobile runs it from" "export PATH=\"\$JAVA_HOME/bin:\$PATH\""
@@ -104,6 +106,54 @@ preflight() {
 	# The build fetches the build tools its plugin wants under this licence.
 	[ -f "$sdk/licenses/android-sdk-license" ] || gap "the SDK licence, accepted in $sdk" "${sdkmanager:+$sdkmanager --licenses}"
 	[ -z "$gaps" ]
+}
+
+# go.mod here lists every module the binding builds from, at no version below the
+# root's go.mod raises it to through the replace; one it misses stops go, as
+# gomobile loads the packages, with a tidy hint naming neither module nor
+# directory. gomod has go update a scratch copy and names each module it changed.
+gomod() {
+	err=$(GOOS=android go list -deps ./... 2>&1 >/dev/null) && return 0
+	tmp=$(mktemp -d)
+	cp go.mod go.sum "$tmp"
+	drift=
+	if GOOS=android go list -modfile="$tmp/go.mod" -mod=mod -deps ./... >/dev/null 2>&1 &&
+		go mod graph -modfile="$tmp/go.mod" >"$tmp/graph" 2>/dev/null; then
+		diff go.mod "$tmp/go.mod" >"$tmp/diff" || :
+		drift=$(awk -v d="$tmp/diff" '
+			FILENAME == d {
+				if (!/^[<>] /) next
+				s = substr($0, 3)
+				sub(/^[ \t]*(require[ \t]+)?/, "", s)
+				if (split(s, f, /[ \t]+/) < 2) next
+				if (/^</) { was[f[1]] = f[2]; next }
+				now[f[1]] = f[2]; mods[++n] = f[1]; want[f[1] "@" f[2]] = f[1]
+				next
+			}
+			index($1, "@") && ($2 in want) {
+				m = want[$2]; r = $1; sub(/@.*/, "", r)
+				by[m] = by[m] (by[m] == "" ? " required by " : ", ") r
+			}
+			END {
+				for (i = 1; i <= n; i++) {
+					m = mods[i]
+					if ((m in was) && was[m] == now[m]) continue
+					printf "  %s: %s here, %s%s\n", m, ((m in was) ? was[m] : "not listed"), now[m], ((by[m] == "") ? " selected" : by[m])
+				}
+			}' "$tmp/diff" "$tmp/graph")
+	fi
+	rm -rf "$tmp"
+	if [ -n "$drift" ]; then
+		echo "android/go.mod is behind the modules its build requires:" >&2
+		printf '%s\n' "$drift" >&2
+		echo "Every go command in android/, gomobile's too, stops until it is level; from the repository root:" >&2
+		echo "  go -C android mod tidy" >&2
+	else
+		echo "go stops in android/ before the build:" >&2
+		printf '%s\n' "$err" | sed 's/^/  /' >&2
+		echo "A command go suggests runs in android/: go -C android <command>, from the repository root." >&2
+	fi
+	return 1
 }
 
 fetch() {
@@ -199,6 +249,7 @@ verb=${1:-}
 case $verb in
 gradlew)
 	preflight || die "make android-toolchain sets these up, asking before it installs a JDK."
+	gomod || exit 1
 	export ANDROID_HOME="${ANDROID_HOME:-$sdk}"
 	exec ./gradlew "$@"
 	;;
