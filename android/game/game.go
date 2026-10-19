@@ -186,6 +186,21 @@ func Resume() {
 	}
 }
 
+// Zoom scales the cell as a pinch asked, between half and three times cellDP; a
+// grid that changes is reported as a resize, which a crop_on_resize map follows
+func Zoom(scale float32) {
+	v := current()
+	if v == nil {
+		return
+	}
+	v.zoom = min(max(scale, zoomMin), zoomMax)
+	v.setCell()
+	v.mu.Lock()
+	w, h := v.w, v.h
+	v.mu.Unlock()
+	Resize(int32(w), int32(h))
+}
+
 // Keyboard says whether the system keyboard covers the view: while it does, the
 // status bar draws its mode and input alone, which the view repeats above it
 func Keyboard(shown bool) {
