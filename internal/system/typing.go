@@ -74,10 +74,6 @@ func (s *TypingSystem) Name() string { return "typing" }
 // Priority returns the system's priority
 func (s *TypingSystem) Priority() int { return parameter.PriorityTyping }
 
-// typedMemberTicks is the latest a typed member's crossing can apply: the longest
-// lead it may be stamped with, then as late as the authority still commits it.
-const typedMemberTicks = parameter.NetworkBarrierMaxDelayTicks + parameter.NetworkCommitLateTicks
-
 // Update forgets typed members once their crossing applied or can no longer apply
 func (s *TypingSystem) Update() {
 	if len(s.typed) == 0 {
@@ -85,7 +81,7 @@ func (s *TypingSystem) Update() {
 	}
 	now := s.world.Resources.Game.State.GetGameTicks()
 	for e, at := range s.typed {
-		if !s.world.Components.Member.HasEntity(e) || now > at+typedMemberTicks {
+		if !s.world.Components.Member.HasEntity(e) || now > at+crossingApplyTicks {
 			delete(s.typed, e)
 		}
 	}
