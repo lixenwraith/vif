@@ -359,9 +359,14 @@ they compose at `visual.PeerFieldBlend` (30%) of local intensity over the
 existing or theme background; in 256-color they are drawn undimmed, since the
 console would show a dimmed rim as black. Ember walks the fixed roster instead
 of every shield, keeps one heat cache per slot, and commits its layers in one
-background write. Both field renderers compose peers first and the local cursor
-last, without sorting or changing store/slot order. The distinction remains
-render-only; no transported state changes.
+background write. Its per-cell work is lookups: the angle of every cell offset
+it can visit is tabled once per painter, each radial step of the glow is composed
+over the theme background when heat or blend changes, so only a cell something
+else painted blends live, and a ring skips the cells its Gaussian cannot light.
+The box is clipped to the visible map before any per-frame table is built. Both
+field renderers compose peers first and the local cursor last, without sorting
+or changing store/slot order. The distinction remains render-only; no
+transported state changes.
 
 ## 8. Renderer responsibilities
 
