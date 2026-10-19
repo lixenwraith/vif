@@ -60,3 +60,26 @@ func TestTimerWithoutItsAnchorHoldsNoSpace(t *testing.T) {
 		t.Fatalf("countdown without its anchor holds %v", boxes)
 	}
 }
+
+// The magnifier shows the glyph under the cursor whichever domain holds it: a gold
+// member is a shared glyph, and it is the one the typist is about to type.
+func TestMagnifierShowsAGoldMember(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	splash := NewSplashSystem(w).(*SplashSystem)
+	member := w.CreateEntity(core.DomainShared)
+	w.Components.Glyph.SetComponent(member, component.GlyphComponent{Rune: 'G', Type: component.GlyphGold})
+	w.Positions.SetPosition(member, component.PositionComponent{X: 5, Y: 5})
+
+	splash.handleCursorMoved(&event.CursorMovedPayload{X: 5, Y: 5})
+	entities := w.Components.Splash.Entities()
+	if len(entities) != 1 {
+		t.Fatalf("splashes = %d, want the magnifier", len(entities))
+	}
+	c, _ := w.Components.Splash.GetComponent(entities[0])
+	if c.Slot != component.SlotMagnifier || c.Content[0] != 'G' {
+		t.Fatalf("splash = slot %d %q, want the magnifier showing G", c.Slot, c.Content[0])
+	}
+	if !splash.validateMagnifier(entities[0], &c) {
+		t.Fatal("the magnifier over a gold member was retired")
+	}
+}
