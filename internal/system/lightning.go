@@ -63,16 +63,10 @@ func (s *LightningSystem) EventTypes() []event.EventType {
 		event.EventLightningUpdateRequest,
 		event.EventLightningDespawnRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.destroyAll()
-		s.Init()
-		return
-	}
 
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {

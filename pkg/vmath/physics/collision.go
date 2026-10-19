@@ -38,7 +38,12 @@ func ApplyCollision(k *Kinetic, dirX, dirY float64, profile *CollisionProfile, r
 		rng,
 	)
 
-	switch profile.Mode {
+	ApplyImpulseMode(k, impulseX, impulseY, profile.Mode)
+}
+
+// ApplyImpulseMode applies a computed impulse in a profile's mode
+func ApplyImpulseMode(k *Kinetic, impulseX, impulseY float64, mode ImpulseMode) {
+	switch mode {
 	case ImpulseAdditive:
 		ApplyImpulse(k, impulseX, impulseY)
 	case ImpulseOverride:
@@ -68,13 +73,7 @@ func ApplyOffsetCollision(
 		profile.ImpulseMin, profile.ImpulseMax,
 		rng,
 	)
-
-	switch profile.Mode {
-	case ImpulseAdditive:
-		ApplyImpulse(k, impulseX, impulseY)
-	case ImpulseOverride:
-		SetImpulse(k, impulseX, impulseY)
-	}
+	ApplyImpulseMode(k, impulseX, impulseY, profile.Mode)
 }
 
 // CheckSoftCollision tests ellipse containment and computes radial direction

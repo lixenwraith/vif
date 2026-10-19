@@ -76,16 +76,10 @@ func (s *SnakeSystem) EventTypes() []event.EventType {
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *SnakeSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
@@ -237,6 +231,7 @@ func (s *SnakeSystem) Update() {
 		if snakeComp.IsShielded {
 			headCombat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 			headCombat.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
+			headCombat.KineticStrength = 0
 		}
 
 		// Process interactions
@@ -859,6 +854,8 @@ func (s *SnakeSystem) updateShieldState(snakeComp *component.SnakeComponent, bod
 // handleInteractions strikes cursors on the head's cell, heating them only while the
 // snake is unshielded, and shields the body reaches; the body never heats.
 func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
+	breakGoldUnder(s.world, &s.sweep, snakeComp.HeadEntity)
+	breakGoldUnder(s.world, &s.sweep, snakeComp.BodyEntity)
 	damage := profile.Contact[component.SpeciesSnake]
 	head := CheckCursorOverlaps(s.world, snakeComp.HeadEntity)
 	for i := range head.Count {

@@ -886,11 +886,12 @@ world lock:
 
 1. drain and discard stale queued events;
 2. reset deadlines and elapsed-time anchors;
-3. settle an unpause with the HFSM held out, so entry actions below sound;
-4. reset all initially configured HFSM regions, variables, and delayed actions;
-5. reapply global and active-region system toggles, then settle the entry-action
+3. re-initialize every system in dependency order (`World.InitSystems`);
+4. settle an unpause with the HFSM held out, so entry actions below sound;
+5. reset all initially configured HFSM regions, variables, and delayed actions;
+6. reapply global and active-region system toggles, then settle the entry-action
    and toggle events;
-6. advance the RNG session and emit a fresh journal anchor.
+7. advance the RNG session and emit a fresh journal anchor.
 
 Simulation state is rebuilt; operator state describes how that simulation is
 being driven or observed and survives plain `:new`. Its explicit contract is:

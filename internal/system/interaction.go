@@ -9,6 +9,11 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
+// crossingApplyTicks is the latest a crossing can apply: the longest lead it may
+// be stamped with, then as late as the authority still commits it. A producer
+// remembering what it crossed forgets it after this many ticks.
+const crossingApplyTicks = parameter.NetworkBarrierMaxDelayTicks + parameter.NetworkCommitLateTicks
+
 // CursorOverlap describes one cursor's spatial contact with an entity.
 type CursorOverlap struct {
 	Cursor        core.Entity   // Cursor identifies the contacted player.

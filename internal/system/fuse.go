@@ -79,19 +79,10 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 		event.EventFuseQuasarRequest,
 		event.EventFuseSwarmRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		if s.hasQuasarFusion() {
-			s.world.PushEventDomain(event.EventSpiritDespawnRequest, nil, core.DomainPlayer)
-		}
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

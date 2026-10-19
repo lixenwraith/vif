@@ -262,17 +262,11 @@ func (s *ParticleSystem) EventTypes() []event.EventType {
 		event.EventDustAllRequest,
 		event.EventFireSpecialRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent resolves generic particle requests by their behavior field.
 func (s *ParticleSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

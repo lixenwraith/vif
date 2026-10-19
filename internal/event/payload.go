@@ -283,6 +283,12 @@ type GoldCompletionPayload struct {
 	Entity       core.Entity `toml:"entity"`
 }
 
+// GoldBreakRequestPayload names the gold member a personal species struck and its header.
+type GoldBreakRequestPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+	Entity       core.Entity `toml:"entity"`
+}
+
 // GoldJumpRequestPayload names the cursor jumping to the active gold sequence.
 type GoldJumpRequestPayload struct {
 	Entity core.Entity `toml:"entity"`

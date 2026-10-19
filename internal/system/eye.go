@@ -69,16 +69,10 @@ func (s *EyeSystem) EventTypes() []event.EventType {
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
@@ -189,6 +183,7 @@ func (s *EyeSystem) Update() {
 
 		// Physics integration and member position sync
 		s.integrateAndSync(headerEntity, kineticComp, dtSec)
+		breakGoldUnder(s.world, &s.sweep, headerEntity)
 
 		// Target contact → self-destruct + combat damage
 		if s.checkTargetContact(headerEntity) {

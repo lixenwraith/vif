@@ -82,16 +82,10 @@ func (s *SwarmSystem) EventTypes() []event.EventType {
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
@@ -226,7 +220,7 @@ func (s *SwarmSystem) Update() {
 			s.updateDecelerateState(headerEntity, swarmComp, combatComp, dtSec, dt)
 		}
 
-		// Interactions with cursor and shield
+		breakGoldUnder(s.world, &s.sweep, headerEntity)
 		strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesSwarm], true)
 
 		activeCount++

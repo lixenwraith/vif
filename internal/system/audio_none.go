@@ -35,15 +35,10 @@ func (*unavailableAudioSystem) EventTypes() []event.EventType {
 		event.EventGamePauseChanged,
 		event.EventSoundMuteToggle,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
-func (s *unavailableAudioSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-	}
-}
+func (*unavailableAudioSystem) HandleEvent(event.GameEvent) {}
 
 // HandOverSound has no speakers to move.
 func HandOverSound(to, from *engine.World) {}
@@ -70,7 +65,6 @@ func (*unavailableMusicSystem) EventTypes() []event.EventType {
 		event.EventMusicSeedRequest,
 		event.EventMusicSwingRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 

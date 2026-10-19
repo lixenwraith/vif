@@ -48,15 +48,11 @@ func (s *ButtonSystem) EventTypes() []event.EventType {
 		event.EventInputPressEcho,
 		event.EventInputReleaseEcho,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *ButtonSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
-	case event.EventGameResetRequest:
-		s.Init()
-		return
 	case event.EventMetaSystemCommandRequest:
 		if p, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && p.SystemName == s.Name() {
 			s.enabled = p.Enabled

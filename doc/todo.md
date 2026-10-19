@@ -674,32 +674,6 @@ transferred world instead of a scenario.
 
 ## Combat
 
-### Let stronger knockback override the active immunity window
-
-- Priority: P2
-- Affected files: `internal/component/combat.go`, `internal/system/combat.go`,
-  `internal/profile/combat.go`
-
-Record the strength of the knockback that opened immunity. A stronger incoming
-knockback should reset the immunity duration and apply its impulse; equal or weaker
-hits remain blocked across all weapons and players. Carry the recorded strength
-through snapshots and synchronization. Stun immunity remains target-wide.
-
-### Drop the kinetic window's dead joiner path
-
-- Priority: P2
-- Affected files: `internal/system/combat.go`, `internal/component/combat.go`,
-  `internal/snapshot/digest.go`, `doc/generic-kinetic.md`
-
-Both kinetic hit sites (`combat.go:557`, `:733`) land only while
-`RemainingKineticImmunity` is zero, so every accepted knockback opens the window:
-`spendKineticImmunity` always reports opened, `joining` never composes an impulse,
-and `KineticImmunitySpent` is written but read only by the digest. Generic kinetic
-§5 still describes a per-attacker kinetic budget whose joiners add. The target-wide
-gate is the intended rule (see the item above), so delete the joiner path, the field
-and its digest line, and correct that text; the field's removal is a capture schema
-bump.
-
 ### Let mounted weapons strike more than cursors
 
 - Priority: P3
@@ -722,26 +696,12 @@ PvP: a hit on a remote cursor crosses as its impact and the victim's owner appli
 
 Arc reward (an arc pays the lightning's full energy reward; halve it if the cap doubles the rod's income too far), the sustained ray's scale (three damage per covered member per immunity window, continuously), the burn figures and whether the charged pulse's stun should shorten to offset them, `LightningArcRange`, `WeaponStreamInterval` and `TurretStream`, the gun's lane offsets at two charges, `LightningZapDuration` for an arc, and a burn tint on species renderers, which show only the hit flash per tick now.
 
-### Drop the gun's charges as loot
-
-- Priority: P2
-- Affected files: `internal/component/loot.go`, `internal/profile/loot.go`
-
-Only a scenario's `EventWeaponAddRequest` or god mode raises the gun past one charge; a loot row with a drop tier would let play do it.
-
 ### Direct the gun by scenario
 
 - Priority: P3
 - Affected files: `internal/component/weapon.go`, `internal/system/weapon.go`, `internal/fsm`
 
 `WeaponSpec.Directions` is a cardinal mask the spawn already reads; a side-scroller needs a level to set one direction, which waits on scenario authoring.
-
-### Fan a fully charged ray into spokes
-
-- Priority: P3
-- Affected files: `internal/system/weapon.go`, `internal/component/ray.go`
-
-Charges beyond the ray could add rays 360°/n apart, one through the sustained orb ray; a sweep already passes each target once a turn, so spokes trade coverage for crossings.
 
 ### Move storm's green circle onto a disruptor mount
 
@@ -844,24 +804,6 @@ picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
-### Make the nugget beam read as one pass
-
-- Priority: P3
-- Affected files: `internal/render/renderer/materialize.go`
-
-A nugget beacon sometimes looks drawn twice, a flicker and then a second fast
-sweep, plainest from a corner. The nugget, timer and materialize systems emit one
-beam per spawn and one every `NuggetBeaconInterval`, never two alive (a 300-tick
-harness over the three systems confirmed it), so the second pass is the beam's own
-recede: after the 60 ms hold the dark front runs from the edge to the target while
-the bright end shrinks toward it, the direction the fill ran, in 240 ms quantized to
-five ticks; and the 8 Hz pulse at the fill's front, sampled at the 20 Hz tick,
-flickers. On a long beam the two passes are plain. Fading the whole beam in place
-during recede (`calcIntensity`'s recede case scaled by what is left of the phase,
-`segStart` held at the edge) would make it one pass. Unchecked: whether a replayed
-tick on a guest re-emits a beacon (`RestoreState` keeps `lastSpawnAttempt`), which
-would show as a second beam at the same cell.
-
 ## Genetic library
 
 ### Spin off `pkg/genetic` as its own module
@@ -889,19 +831,18 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
 
-### Initialize systems in dependency order from the engine
+### Initialize systems from the engine at startup too
 
 - Priority: P3
-- Affected files: `internal/engine/world.go` (`CheckSystemDependencies`),
-  `internal/app/app.go` (`initScheduler`), each system's constructor and
-  `EventGameResetRequest` handler in `internal/system`
+- Affected files: `internal/app/app.go` (`initWorld`, `initScheduler`), each
+  system's constructor in `internal/system`, the system tests
 
-Half of this exists: the manifest declares each system's `Requires` and startup
-checks the graph for unknown names and cycles. The other half does not: each
-system still calls its own `Init` in its constructor (manifest order) and again
-on reset (handler order). The engine would instead call `Init` once per system
-in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
-calls would go.
+A reset re-initializes every system through `World.InitSystems` in dependency
+order; at startup each constructor still calls its own `Init`. Moving that call
+into the engine has to keep three things: the journal anchor reads the RNG session
+the construction-time draws advance, before the scheduler exists; `MetaSystem` is
+added once the context exists; and the system tests construct systems standalone
+and expect them usable.
 
 ### Give the composite lifecycle methods a user
 
@@ -915,18 +856,6 @@ scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
 
 ## Tests
-
-### Cut the app package's test time
-
-- Priority: P2
-- Affected files: the socket tests in `internal/app` (`bot_test.go`, `host_test.go`,
-  `join_test.go`, `migration_test.go`, `script_test.go`)
-
-Without `-race` the package's wall time is set by its 47 serial tests, about 23 s
-of 33 s on 4 cores: each drives a real socket against the shipped wall-clock
-deadlines (heartbeat loss, succession, join readiness), so none can share the
-machine. Test-only deadlines a fraction of the shipped ones, or the in-process mesh
-where a socket is not the rule under test, would cut them.
 
 ### Fuzz the join handshake
 

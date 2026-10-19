@@ -136,7 +136,6 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		// Purge is operator-local. A crossed coordinator reset restarts every
 		// participant, but it must not erase each peer's own command history.
 		s.handleGameReset(p != nil && p.Purge && ev.Origin != event.OriginNetwork)
-		s.Init()
 
 	case event.EventMetaStatusMessageRequest:
 		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {

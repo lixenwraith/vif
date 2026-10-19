@@ -364,3 +364,54 @@ func TestDrainPlacementBackoffDoublesAndResets(t *testing.T) {
 		t.Fatal("successful placement did not reset backoff")
 	}
 }
+
+// A drain's hit on a gold member crosses once per member rather than landing: the
+// gold system kills the member everywhere at the crossing's tick, and a drain
+// sitting on the member does not cross it again until that applies.
+func TestDrainCrossesTheGoldMemberItHits(t *testing.T) {
+	w, _, _, drains, _ := testDrainInteractionWorld(t, 2, 2, 10, 10)
+	gold := NewGoldSystem(w).(*GoldSystem)
+	header := w.CreateEntity(core.DomainShared)
+	member := w.CreateEntity(core.DomainShared)
+	w.Components.Glyph.SetComponent(member, component.GlyphComponent{Rune: 'A', Type: component.GlyphGold})
+	w.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: header})
+	w.Components.Header.SetComponent(header, component.HeaderComponent{Behavior: component.BehaviorGold, MemberEntries: []component.MemberEntry{{Entity: member}}})
+	w.Components.Protection.SetComponent(header, component.ProtectionComponent{Mask: component.ProtectAll ^ component.ProtectFromDeath})
+	w.Positions.SetPosition(header, component.PositionComponent{X: 10, Y: 10})
+	w.Positions.SetPosition(member, component.PositionComponent{X: 10, Y: 10})
+	gold.headerEntity, gold.active = header, true
+
+	var crossings []event.GameEvent
+	for range 2 {
+		beginDrainTick(t, drains)
+		drains.handleEntityCollisions()
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch ev.Type {
+			case event.EventGoldBreakRequest:
+				crossings = append(crossings, ev)
+			case event.EventDeathBatch:
+				t.Fatal("the drain landed a death on a shared member itself")
+			}
+		}
+	}
+	if len(crossings) != 1 || crossings[0].Domain != core.DomainPlayer {
+		t.Fatalf("crossings = %d, want one stamped from the player domain", len(crossings))
+	}
+	if p := crossings[0].Payload.(*event.GoldBreakRequestPayload); p.HeaderEntity != header || p.Entity != member {
+		t.Fatalf("crossing = %+v, want header %d member %d", p, header, member)
+	}
+
+	gold.HandleEvent(crossings[0])
+	deaths := 0
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
+			if len(p.Entities) != 1 || p.Entities[0] != member || p.EffectEvent != event.EventFlashSpawnOneRequest {
+				t.Fatalf("death = %+v, want the member with a flash", p)
+			}
+			deaths++
+		}
+	}
+	if deaths != 1 {
+		t.Fatalf("deaths = %d, want 1", deaths)
+	}
+}
