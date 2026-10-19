@@ -37,16 +37,10 @@ func (s *MarkerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMarkerSpawnRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *MarkerSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.destroyAllMarkers()
-		s.Init()
-		return
-	}
 
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {

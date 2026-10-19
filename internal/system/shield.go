@@ -61,17 +61,11 @@ func (s *ShieldSystem) EventTypes() []event.EventType {
 		event.EventShieldDrainRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes shield commands, each naming the cursor it acts on
 func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

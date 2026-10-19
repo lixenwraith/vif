@@ -45,16 +45,10 @@ func (s *SpiritSystem) EventTypes() []event.EventType {
 		event.EventSpiritSpawnRequest,
 		event.EventSpiritDespawnRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.destroyAllSpirits()
-		s.Init()
-		return
-	}
 
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {

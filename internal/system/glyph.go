@@ -118,7 +118,7 @@ func (s *GlyphSystem) Init() {
 	s.placement = s.placement[:0]
 	s.statEnabled.Store(true)
 	s.statDensity.Set(0)
-	s.statRateMult.Set(0)
+	s.statRateMult.Set(1.0)
 	s.statNextSpawnMS.Store(0)
 	s.statOrphanGlyph.Store(0)
 	s.buffers.Reset()
@@ -139,18 +139,11 @@ func (s *GlyphSystem) Priority() int {
 func (s *GlyphSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes spawn configuration events
 func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		s.statRateMult.Set(1.0)
-		s.statDensity.Set(0.0)
-		return
-	}
 
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {

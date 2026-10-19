@@ -141,7 +141,6 @@ func (s *NavigationSystem) Priority() int {
 
 func (s *NavigationSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventLevelSetup,
 		event.EventTargetGroupUpdate,
@@ -152,11 +151,6 @@ func (s *NavigationSystem) EventTypes() []event.EventType {
 }
 
 func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

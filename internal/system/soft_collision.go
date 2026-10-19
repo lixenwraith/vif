@@ -218,17 +218,11 @@ func (s *SoftCollisionSystem) Priority() int {
 
 func (s *SoftCollisionSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
 
 func (s *SoftCollisionSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

@@ -137,7 +137,6 @@ func (s *GeneticSystem) Priority() int { return parameter.PriorityGenetic }
 
 func (s *GeneticSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGeneticRegisterSpecies,
 		event.EventGeneticAbandonEval,
@@ -148,11 +147,6 @@ func (s *GeneticSystem) EventTypes() []event.EventType {
 }
 
 func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

@@ -1196,7 +1196,14 @@ func (s *Scheduler) executeReset() {
 		s.tickInterval,
 	)
 
-	// 4. Unpause via the single owner so clock, context, and audio move together,
+	// 4. Every system starts over in dependency order: after the dispatch that
+	//    cleared the world, before the FSM re-enters, and before the session
+	//    advances, so the streams drawn here are this game's
+	if err := s.world.InitSystems(); err != nil {
+		s.world.Log().Error("app", "msg", "systems not re-initialised", "error", err.Error())
+	}
+
+	// 5. Unpause via the single owner so clock, context, and audio move together,
 	//    settled before the FSM re-enters: an entry action's sound reaching
 	//    AudioSystem under the reset's own pause would be dropped. The last game's
 	//    machine is held out, so a transition on the unpause cannot act in this one.
@@ -1205,22 +1212,22 @@ func (s *Scheduler) executeReset() {
 	s.dispatchAndProcessEvents("reset")
 	s.fsmHeld = false
 
-	// 5. Reset FSM state - This will trigger OnEnter actions
+	// 6. Reset FSM state - This will trigger OnEnter actions
 	if err := s.fsm.Reset(s.world); err != nil {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}
 
-	// 6. Re-apply global system configuration (mirrors the scenario load)
+	// 7. Re-apply global system configuration (mirrors the scenario load)
 	if err := s.applySystemConfig(); err != nil {
 		s.world.Log().Error("fsm", "msg", "system config not applied", "error", err.Error())
 	}
 
-	// 7. Settle FSM-reset events before releasing the lock. No boundary bump: this
+	// 8. Settle FSM-reset events before releasing the lock. No boundary bump: this
 	//    is a phase of the reset, reached identically by a run and its replay.
 	s.dispatchAndProcessEvents("reset")
 
-	// 8. Systems re-Init on the reset dispatch that preceded this call, so the
-	//    next game's streams differ while staying a function of the root seed
+	// 9. This game's streams are drawn, so the next game's differ while staying a
+	//    function of the root seed
 	session := s.world.Resources.Rand.NextSession()
 	s.world.Log().Info("app", "msg", "rng session advanced", "session", session)
 	s.world.Resources.Event.Queue.AnchorJournal(s.anchorLive(session))

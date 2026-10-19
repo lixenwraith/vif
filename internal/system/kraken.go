@@ -53,14 +53,11 @@ func (s *KrakenSystem) Init() {
 
 func (s *KrakenSystem) EventTypes() []event.EventType {
 	return []event.EventType{event.EventKrakenSpawnRequest, event.EventKrakenCancelRequest,
-		event.EventGameResetRequest, event.EventMetaSystemCommandRequest}
+		event.EventMetaSystemCommandRequest}
 }
 
 func (s *KrakenSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
-	case event.EventGameResetRequest:
-		s.terminateAll()
-		s.Init()
 	case event.EventMetaSystemCommandRequest:
 		if p, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && p.SystemName == s.Name() {
 			s.enabled = p.Enabled

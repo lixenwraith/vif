@@ -53,17 +53,11 @@ func (s *PingSystem) EventTypes() []event.EventType {
 		event.EventPingGridRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes ping-related events
 func (s *PingSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

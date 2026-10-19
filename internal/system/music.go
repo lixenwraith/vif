@@ -35,6 +35,7 @@ type MusicSystem struct {
 	arranged     bool // first auto-arrangement applied; slots start silent otherwise
 	stopped      bool // the run stopped its music, so an unmute does not start it
 	startPending bool // Defer startup until scenario enable/disable events settle.
+	resume       bool // Music was playing at the reset; the next Init starts it again
 
 	// What the sequencer sounds, for the telemetry HUD's music card; a slot's name is
 	// looked up only when its pattern changes
@@ -74,7 +75,7 @@ func (s *MusicSystem) Init() {
 	s.manualTier = false
 	s.arranged = false
 	s.stopped = false
-	s.startPending = false
+	s.startPending, s.resume = s.resume, false
 	s.enabled = true
 	s.audioEnabled = true
 	s.statGroup.Store("")
@@ -123,9 +124,7 @@ func (s *MusicSystem) EventTypes() []event.EventType {
 // HandleEvent processes music events
 func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
-		wasPlaying := s.player != nil && s.player.IsMusicPlaying()
-		s.Init()
-		s.startPending = wasPlaying
+		s.resume = s.player != nil && s.player.IsMusicPlaying()
 		return
 	}
 

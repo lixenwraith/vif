@@ -110,17 +110,11 @@ func (s *HeatSystem) EventTypes() []event.EventType {
 		event.EventCursorArmRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes heat commands, each naming the cursor it acts on
 func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

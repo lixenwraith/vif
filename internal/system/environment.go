@@ -105,16 +105,10 @@ func (s *EnvironmentSystem) EventTypes() []event.EventType {
 		event.EventDriftStart,
 		event.EventDriftCancel,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *EnvironmentSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && payload.SystemName == s.Name() {
 			s.enabled = payload.Enabled

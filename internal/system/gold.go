@@ -97,17 +97,11 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 		event.EventCompositeMemberDestroyed,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes gold events
 func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

@@ -64,7 +64,6 @@ func (s *CursorSystem) Update() {}
 // would strand every cursor, so it carries no toggle.
 func (s *CursorSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameResetRequest,
 		event.EventCursorSpawnRequest,
 		event.EventCursorDespawnRequest,
 		event.EventCursorMoveRequest,
@@ -74,10 +73,6 @@ func (s *CursorSystem) EventTypes() []event.EventType {
 
 // HandleEvent routes cursor lifecycle and placement requests
 func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
 	switch ev.Type {
 	case event.EventCursorSpawnRequest:
 		if p, ok := ev.Payload.(*event.CursorSpawnRequestPayload); ok {

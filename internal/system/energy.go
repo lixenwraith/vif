@@ -93,17 +93,11 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 		event.EventEnergyBlinkStop,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes energy events; each command names the cursor it acts on
 func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
