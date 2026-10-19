@@ -109,38 +109,17 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 		return // Target at edge, no beam to draw
 	}
 
-	dist := float64(distance)
-
-	// Calculate segment bounds based on phase.
-	var segStartF, segEndF float64
-
-	switch {
-	case progress < style.FillEnd:
-		// Fill: edge to leading edge
-		segStartF = 0.0
-		segEndF = progress / style.FillEnd * dist
-
-	case progress < style.HoldEnd:
-		// Hold: full line
-		segStartF = 0.0
-		segEndF = dist
-
-	default:
-		// Recede: darkness from edge toward target
-		recede := 1.0 - style.HoldEnd
-		if recede <= 0 {
-			return
-		}
-		segStartF = (progress - style.HoldEnd) / recede * dist
-		segEndF = dist
+	// The fill runs from the edge to its front; the hold and the recede keep the
+	// whole line, the recede fading it in place. A dark front running from the
+	// edge to the target read as a second, faster pass.
+	segEnd := distance
+	if progress < style.FillEnd {
+		segEnd = int(math.Floor(progress / style.FillEnd * float64(distance)))
 	}
 
-	segStart := int(math.Floor(segStartF))
-	segEnd := int(math.Floor(segEndF))
-
 	// Render cells across the target edge span
-	for cellOffset := segStart; cellOffset <= segEnd; cellOffset++ {
-		intensity := r.calcIntensity(style, progress, cellOffset, segStart, segEnd)
+	for cellOffset := 0; cellOffset <= segEnd; cellOffset++ {
+		intensity := r.calcIntensity(style, progress, cellOffset, segEnd)
 		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
 			r.renderBeamCellSpan(ctx, buf, pf, c, dir, edgePos, cellOffset, spanPos, intensity)
 		}
@@ -183,36 +162,29 @@ func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *
 }
 
 // calcIntensity returns normalized intensity for a cell based on phase and position.
-func (r *MaterializeRenderer) calcIntensity(style component.MaterializeStyle, progress float64, cellOffset, segStart, segEnd int) float64 {
-	if segEnd <= segStart {
-		return 1.0
-	}
-
-	segLen := segEnd - segStart
-	cellPos := cellOffset - segStart // Positions within segment
-
+func (r *MaterializeRenderer) calcIntensity(style component.MaterializeStyle, progress float64, cellOffset, segEnd int) float64 {
 	switch {
 	case progress < style.FillEnd:
 		// Fill: gradient from dim (edge) to bright (leading edge) + pulse at front
-		// Base gradient: cellPos / segLen
-		baseIntensity := float64(cellPos) / float64(segLen)
-
-		// Pulse at leading edge (last few cells)
-		if cellOffset >= segEnd-2 && segEnd > 0 {
-			// Sine pulse: 0.8 + 0.2 * sin(progress * pulseHz * 2π)
+		if segEnd <= 0 {
+			return 1.0
+		}
+		baseIntensity := float64(cellOffset) / float64(segEnd)
+		if cellOffset >= segEnd-2 {
 			pulseAngle := progress * float64(parameter.MaterializePulseHz) * vmath.TwoPi
-			pulseIntensity := 0.8 + vmath.Sin(pulseAngle)/5.0
-			return baseIntensity * pulseIntensity
+			return baseIntensity * (0.8 + vmath.Sin(pulseAngle)/5.0)
 		}
 		return baseIntensity
 
 	case progress < style.HoldEnd:
-		// Hold: max brightness
 		return 1.0
 
 	default:
-		// Recede: bright at target end, fading toward receding edge
-		// Invert: cells closer to target (higher cellPos) stay brighter
-		return float64(cellPos) / float64(segLen)
+		// Recede: the whole line dims with what is left of the phase
+		recede := 1.0 - style.HoldEnd
+		if recede <= 0 {
+			return 0
+		}
+		return (1.0 - progress) / recede
 	}
 }
