@@ -121,23 +121,55 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 		return
 	}
 
+	// The radius spans the map and the band is two cells wide, so each row walks
+	// only the cells the band test admits rather than every cell of the box
 	for mapY := mapMinY; mapY <= mapMaxY; mapY++ {
-		for mapX := mapMinX; mapX <= mapMaxX; mapX++ {
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-			if !visible {
-				continue
-			}
+		dyCirc := ctx.CellAspect.Circular(float64(mapY - headerY))
+		lo, hi, ok := zapBand(dyCirc, quasar.ZapRadius, innerThreshold, outerThreshold)
+		if !ok {
+			continue
+		}
+		if lo == 0 {
+			r.zapRow(ctx, buf, mapY, max(headerX-hi, mapMinX), min(headerX+hi, mapMaxX), armed)
+			continue
+		}
+		r.zapRow(ctx, buf, mapY, max(headerX-hi, mapMinX), min(headerX-lo, mapMaxX), armed)
+		r.zapRow(ctx, buf, mapY, max(headerX+lo, mapMinX), min(headerX+hi, mapMaxX), armed)
+	}
+}
 
-			dx := float64(mapX - headerX)
-			dy := float64(mapY - headerY)
-			dyCirc := ctx.CellAspect.Circular(dy)
-			dist := vmath.Magnitude(dx, dyCirc)
+// zapBand is the range of |dx| the band test admits on a row dyCirc from the
+// centre. The test is monotone in |dx|, so the ellipse's crossing, taken as an
+// estimate, is corrected a step at a time against the test itself.
+func zapBand(dyCirc, radius, inner, outer float64) (lo, hi int, ok bool) {
+	norm := func(dx int) float64 { return vmath.Magnitude(float64(dx), dyCirc) / radius }
+	hi = int(math.Sqrt(max(outer*outer*radius*radius-dyCirc*dyCirc, 0)))
+	for hi >= 0 && norm(hi) > outer {
+		hi--
+	}
+	for norm(hi+1) <= outer {
+		hi++
+	}
+	if hi < 0 {
+		return 0, -1, false
+	}
+	if in := inner * radius; in*in > dyCirc*dyCirc {
+		lo = int(math.Sqrt(in*in - dyCirc*dyCirc))
+	}
+	for lo > 0 && norm(lo-1) >= inner {
+		lo--
+	}
+	for lo <= hi && norm(lo) < inner {
+		lo++
+	}
+	return lo, hi, lo <= hi
+}
 
-			normDist := dist / quasar.ZapRadius
-
-			if normDist >= innerThreshold && normDist <= outerThreshold {
-				r.zapCell(buf, screenX, screenY, armed)
-			}
+// zapRow draws the band's cells of one row from x0 to x1 inclusive
+func (r *QuasarRenderer) zapRow(ctx render.RenderContext, buf *render.RenderBuffer, mapY, x0, x1 int, armed bool) {
+	for mapX := x0; mapX <= x1; mapX++ {
+		if screenX, screenY, visible := ctx.MapToScreen(mapX, mapY); visible {
+			r.zapCell(buf, screenX, screenY, armed)
 		}
 	}
 }
