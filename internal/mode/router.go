@@ -173,8 +173,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		r.ctx.MacroPlaying.Store(false)
 	}
 
-	// Pointer admission gate. Dropped input is not an action
-	if isMouseIntent(intent.Type) && (r.ctx.MouseDisabled.Load() || r.inputSuspended()) {
+	// Pointer admission gate. Dropped input is not an action. The status bar keeps
+	// its hold with the mouse disabled: a phone has no key for the menu, and the
+	// menu is where the mouse is enabled again
+	if isMouseIntent(intent.Type) && (r.inputSuspended() || r.ctx.MouseDisabled.Load() && !r.menuPointer(intent)) {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
 			r.mouseLeftHeld, r.menuHold = false, false
@@ -1041,10 +1043,13 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	})
 	r.mouseLeftHeld = true
 	r.lastFireMain = r.ctx.TimeCtl.Now()
-	// A second press on the cell within the window is the right button a finger
+	// A second press near the first within the window is the right button a finger
 	// has not; both presses fire main, and a third starts over
 	now, cell := time.Now(), [2]int{intent.X, intent.Y} // [wall]
-	if cell == r.leftPressCell && now.Sub(r.leftPressAt) <= parameter.MouseDoubleClickWindow {
+	slack := max(1, r.ctx.Width*parameter.MouseDoubleClickSlackPercent/100)
+	near := max(cell[0]-r.leftPressCell[0], r.leftPressCell[0]-cell[0]) <= slack &&
+		max(cell[1]-r.leftPressCell[1], r.leftPressCell[1]-cell[1]) <= slack
+	if near && now.Sub(r.leftPressAt) <= parameter.MouseDoubleClickWindow {
 		r.leftPressAt = time.Time{}
 		r.handleMouseRightDown()
 		r.mouseRightHeld = false
@@ -1092,6 +1097,11 @@ func (r *Router) onStatusBar(intent *input.Intent) bool {
 	return !intent.MapCell && intent.Y >= r.ctx.GameYOffset+r.ctx.World.Resources.Config.ViewportHeight
 }
 
+// menuPointer is a press that may open the menu, or the release that ends one
+func (r *Router) menuPointer(intent *input.Intent) bool {
+	return intent.Type == input.IntentMouseLeftUp || intent.Type == input.IntentMouseLeftDown && r.onStatusBar(intent)
+}
+
 func (r *Router) handleMouseWheelMove(intent *input.Intent) bool {
 	r.moveMouseCursor(intent)
 	return true
@@ -1122,7 +1132,8 @@ func (r *Router) syncMouseMode() {
 	if r.applyMouseMode == nil {
 		return
 	}
-	enabled := !r.ctx.MouseDisabled.Load()
+	// The menu takes the pointer whatever the setting: a tap is all a phone has
+	enabled := !r.ctx.MouseDisabled.Load() || r.ctx.IsOverlayMode()
 	motion := enabled && r.ctx.MouseFreeMode.Load()
 
 	if r.mouseMode.applied && r.mouseMode.enabled == enabled && r.mouseMode.motion == motion {
