@@ -291,17 +291,16 @@ library copies.
   `internal/system/loot.go`
 - Guide: [Navigation design §4](navigation-design.md#4-options-in-order-of-payoff)
 
-A field is computed only for a reader, on a grid whose direction masks are built
-once per passability change, and a snake head measures every cursor with one
-search instead of reading a field per cursor. What remains is the wall change: one
-despawned wall invalidates every live field at once, and on td with eight walking
-cursors and seven snake heads a storm tick peaked at 69 ms against 7 ms on average.
-Next, in order: the wall-grid diff of the design's item 3, which dirties fields on
-a removal instead of invalidating them and keeps a route graph fresh until a change
-touches its corridor; loot's owner fields into navigation's private groups (item
-4); then, if a browser frame still stalls, the per-tick budget of item 7. A 2×2
-coarse field is not planned: it changes the answer, and the shared grid already
-took the cost it would have saved.
+A field is computed only for a reader, on a grid moved cell by cell as the walls
+change, a snake head measures every cursor with one search, and a wall that
+opens repairs a computed field in place. On td with eight walking cursors and
+seven snake heads a storm tick now peaks at 47 ms against 7 ms on average, and no
+wall change computes more than two fields in a tick. Next, in order: loot's owner
+fields into navigation's private groups (the design's item 4); corridor-sparse
+route fields, whose per-route grid fills and map-sized allocations are the route
+graph's remaining cost (item 5); then, if a browser frame still stalls, the
+per-tick budget of item 7. A 2×2 coarse field is not planned: it changes the
+answer, and the shared grid already took the cost it would have saved.
 
 ### Serve wss from vif's own listener
 

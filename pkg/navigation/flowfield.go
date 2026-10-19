@@ -94,7 +94,8 @@ type FlowField struct {
 	TargetX, TargetY int  // Target position this field was computed for
 	Valid            bool // False if field needs recomputation
 
-	search SearchGrid // Compute's own grid, empty after a clone; ComputeOn shares one
+	search  SearchGrid // Compute's own grid, empty after a clone; ComputeOn shares one
+	changed []int32    // the cells a repair moved, scratch
 }
 
 // NewFlowField creates an empty flow field for the given dimensions
@@ -207,7 +208,7 @@ func (f *FlowField) ComputeOn(g *SearchGrid, targets []vmath.Point) {
 		}
 		f.CurrentGen = 1
 	}
-	g.reset(f.Costs.seedSpan())
+	g.reset(0, f.Costs.seedSpan())
 
 	for _, t := range targets {
 		if g.Blocked(t.X, t.Y) {
@@ -229,7 +230,15 @@ func (f *FlowField) ComputeOn(g *SearchGrid, targets []vmath.Point) {
 		f.Valid = false
 		return
 	}
+	f.settle(g, false)
+	f.Valid = true
+}
 
+// settle runs the queued cells down, relaxing each neighbour: a cell reached
+// shorter takes that step, one reached equally the lower-numbered step, so a
+// direction is a function of the distances alone and a repair agrees with a
+// recompute. track records every cell whose distance moved.
+func (f *FlowField) settle(g *SearchGrid, track bool) {
 	for idx, d, ok := g.pop(); ok; idx, d, ok = g.pop() {
 		if f.Distances[idx] != d {
 			continue // a shorter distance reached it since
@@ -238,16 +247,86 @@ func (f *FlowField) ComputeOn(g *SearchGrid, targets []vmath.Point) {
 			k := bits.TrailingZeros8(m)
 			nIdx := idx + g.step[k]
 			nd := d + f.Costs.dir[k]
-			if f.VisitedGen[nIdx] != f.CurrentGen || nd < f.Distances[nIdx] {
+			switch {
+			case f.VisitedGen[nIdx] != f.CurrentGen || nd < f.Distances[nIdx]:
 				f.Distances[nIdx] = nd
 				f.VisitedGen[nIdx] = f.CurrentGen
 				f.Directions[nIdx] = DirOpposite[k]
 				g.push(nIdx, nd)
+				if track {
+					f.changed = append(f.changed, nIdx)
+				}
+			case nd == f.Distances[nIdx] && f.Directions[nIdx] != DirTarget && DirOpposite[k] < f.Directions[nIdx]:
+				f.Directions[nIdx] = DirOpposite[k]
 			}
 		}
 	}
+}
 
-	f.Valid = true
+// Opened repairs a computed field after cells became passable, settling only what
+// the openings improve: the distances and directions a recompute would give. It
+// declines, for a recompute, when an opening lies on or within the seed ring of a
+// target, which would reseed the field.
+func (f *FlowField) Opened(g *SearchGrid, cells, targets []vmath.Point) bool {
+	if !f.Valid || g.w != f.Width || g.h != f.Height {
+		return false
+	}
+	for _, o := range cells {
+		for _, t := range targets {
+			if o == t || g.Blocked(t.X, t.Y) && max(abs(o.X-t.X), abs(o.Y-t.Y)) <= maxSearchRadius {
+				return false
+			}
+		}
+	}
+	c := &f.Costs
+	f.changed = f.changed[:0]
+	for _, o := range cells {
+		if g.Blocked(o.X, o.Y) {
+			continue
+		}
+		idx := int32(o.Y*f.Width + o.X)
+		best, from := int32(CostUnreachable), DirNone
+		for m := g.open[idx]; m != 0; m &= m - 1 {
+			k := bits.TrailingZeros8(m)
+			if n := idx + g.step[k]; f.VisitedGen[n] == f.CurrentGen && f.Distances[n]+c.dir[k] < best {
+				best, from = f.Distances[n]+c.dir[k], int8(k)
+			}
+		}
+		if best >= CostUnreachable {
+			continue // nothing reaches the opening, so it opens nothing
+		}
+		if f.VisitedGen[idx] != f.CurrentGen || best < f.Distances[idx] {
+			f.Distances[idx], f.VisitedGen[idx], f.Directions[idx] = best, f.CurrentGen, from
+			f.changed = append(f.changed, idx)
+		}
+		// Only the opening and the neighbours within a step of it can improve
+		// anything through the edges it added.
+		d := f.Distances[idx]
+		g.reset(max(0, d-c.Y), 2*c.Y+c.Diag)
+		g.push(idx, d)
+		for k := DirN; k < DirCount; k += 2 {
+			if n := idx + g.step[k]; g.open[idx]&(1<<k) != 0 && f.VisitedGen[n] == f.CurrentGen && f.Distances[n] <= d+c.Y {
+				g.push(n, f.Distances[n])
+			}
+		}
+		f.settle(g, true)
+	}
+	for _, idx := range f.changed {
+		f.Directions[idx] = f.canonical(g, idx)
+	}
+	return true
+}
+
+// canonical is the step a cell takes toward the goal: the lowest direction to a
+// neighbour whose distance plus the step is the cell's own, DirTarget when none.
+func (f *FlowField) canonical(g *SearchGrid, idx int32) int8 {
+	for m := g.open[idx]; m != 0; m &= m - 1 {
+		k := bits.TrailingZeros8(m)
+		if n := idx + g.step[k]; f.VisitedGen[n] == f.CurrentGen && f.Distances[n]+f.Costs.dir[k] == f.Distances[idx] {
+			return int8(k)
+		}
+	}
+	return DirTarget
 }
 
 // SearchGrid is what every Dijkstra over one passability runs on: the wall test
@@ -296,23 +375,51 @@ func (g *SearchGrid) Fill(w, h int, isBlocked WallChecker) {
 	g.open = g.open[:w*h]
 	for y := range h {
 		for x := range w {
-			p := (y+1)*pw + x + 1
-			var m uint8
-			if !g.blocked[p] {
-				for k := range DirCount {
-					if !g.blocked[p+g.padStep[k]] {
-						m |= 1 << k
-					}
-				}
-				m &= 0x55 | (m<<1|m>>7)&(m>>1|m<<7)
-			}
-			g.open[y*w+x] = m
+			g.open[y*w+x] = g.mask((y+1)*pw + x + 1)
+		}
+	}
+}
+
+// mask is the directions open from the cell at bordered index p.
+func (g *SearchGrid) mask(p int) uint8 {
+	if g.blocked[p] {
+		return 0
+	}
+	var m uint8
+	for k := range DirCount {
+		if !g.blocked[p+g.padStep[k]] {
+			m |= 1 << k
+		}
+	}
+	return m & (0x55 | (m<<1|m>>7)&(m>>1|m<<7))
+}
+
+// Set moves one cell's passability and the directions open around it.
+func (g *SearchGrid) Set(x, y int, blocked bool) {
+	if x < 0 || y < 0 || x >= g.w || y >= g.h {
+		return
+	}
+	pw := g.w + 2
+	g.blocked[(y+1)*pw+x+1] = blocked
+	for ny := max(0, y-1); ny <= min(g.h-1, y+1); ny++ {
+		for nx := max(0, x-1); nx <= min(g.w-1, x+1); nx++ {
+			g.open[ny*g.w+nx] = g.mask((ny+1)*pw + nx + 1)
 		}
 	}
 }
 
 // Size is the field size the grid was filled at.
 func (g *SearchGrid) Size() (w, h int) { return g.w, g.h }
+
+// Diff calls fn with the new state of every cell whose passability differs
+// between prev and next, two w-wide grids of one size.
+func Diff(prev, next []bool, w int, fn func(x, y int, blocked bool)) {
+	for i := range next {
+		if prev[i] != next[i] {
+			fn(i%w, i/w, next[i])
+		}
+	}
+}
 
 // Blocked reports whether a cell is impassable; every cell off the grid is.
 func (g *SearchGrid) Blocked(x, y int) bool {
@@ -324,9 +431,9 @@ func (g *SearchGrid) pad(idx int32) int {
 	return (int(idx)/g.w+1)*(g.w+2) + int(idx)%g.w + 1
 }
 
-// reset empties the queue and sizes its ring past span, the furthest a queued
-// distance may run ahead of the one settling.
-func (g *SearchGrid) reset(span int32) {
+// reset empties the queue to start popping at distance at, and sizes its ring
+// past span, the furthest a queued distance may run ahead of the one settling.
+func (g *SearchGrid) reset(at, span int32) {
 	n := max(len(g.ring), 64)
 	for int32(n) <= span {
 		n *= 2
@@ -337,7 +444,7 @@ func (g *SearchGrid) reset(span int32) {
 	for i := range g.ring {
 		g.ring[i] = g.ring[i][:0]
 	}
-	g.pending, g.at = 0, 0
+	g.pending, g.at = 0, at
 }
 
 func (g *SearchGrid) push(idx, dist int32) {
