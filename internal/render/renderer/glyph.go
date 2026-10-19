@@ -57,7 +57,7 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		if !visible {
 			return true
 		}
-		if top, _ := positions.TopGlyphAt(pos.X, pos.Y); top != entity {
+		if !positions.TopGlyphIs(entity, pos.X, pos.Y) {
 			return true
 		}
 
