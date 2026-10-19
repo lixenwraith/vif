@@ -1,8 +1,9 @@
 package renderer
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -196,12 +197,10 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 	}
 
 	// Sort by Z descending (Far first, Near last) so near circles overlay far ones
-	sort.Slice(r.sortBuffer, func(i, j int) bool {
-		return r.sortBuffer[i].z > r.sortBuffer[j].z
-	})
+	slices.SortFunc(r.sortBuffer, func(a, b stormCircleRender) int { return cmp.Compare(b.z, a.z) })
 
-	for _, circle := range r.sortBuffer {
-		r.renderCircle(ctx, buf, &circle)
+	for i := range r.sortBuffer {
+		r.renderCircle(ctx, buf, &r.sortBuffer[i])
 	}
 }
 
