@@ -223,9 +223,9 @@ jobs:
             ghcr.io/${{ github.repository }}:nightly
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
 
-      # Every version but the one this run pushed, through the GraphQL mutation the
-      # delete-package-versions action used; a cleanup that fails costs nothing but
-      # registry space, never the nightly.
+      # Every version but the newest, which this run pushed, through the REST
+      # packages API (GraphQL has no container packages); a cleanup that fails costs
+      # nothing but registry space, never the nightly.
       - name: Clean up old container images
         continue-on-error: true
         env:
@@ -233,19 +233,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          query='query($owner: String!, $repo: String!) {
-            repository(owner: $owner, name: $repo) {
-              packages(first: 1, names: ["vif"], packageType: CONTAINER) {
-                nodes { versions(first: 100, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { id version } } }
-              }
-            }
-          }'
-          gh api graphql -f query="$query" -f owner="${GITHUB_REPOSITORY_OWNER}" -f repo="${GITHUB_REPOSITORY#*/}" \
-            --jq '.data.repository.packages.nodes[0].versions.nodes[1:][].id' |
+          owner=$GITHUB_REPOSITORY_OWNER
+          base=/users/$owner
+          if [ "$(gh api "/users/$owner" --jq .type)" = Organization ]; then base=/orgs/$owner; fi
+          gh api --paginate --slurp "$base/packages/container/vif/versions?per_page=100" \
+            --jq 'add | sort_by(.created_at) | reverse | .[1:][] | .id' |
             while read -r id; do
-              gh api graphql -H 'Accept: application/vnd.github.package-deletes-preview+json' \
-                -f query='mutation($id: ID!) { deletePackageVersion(input: {packageVersionId: $id}) { success } }' \
-                -f id="$id" --jq '.data.deletePackageVersion.success'
+              gh api -X DELETE "$base/packages/container/vif/versions/$id" && echo "deleted $id"
             done
 
   release:
@@ -262,7 +256,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download release payload
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: release-payload*
           merge-multiple: true
