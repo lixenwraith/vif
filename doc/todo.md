@@ -804,6 +804,24 @@ picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
+### Trim the renderers' remaining per-frame work
+
+- Priority: P2
+- Affected files: `internal/render/renderer/explosion.go`, `storm.go`, `kraken.go`,
+  `overlay.go`, `pinned_state.go`, `status_bar.go`
+
+What `:d prof` would show next, none of it changing a pixel:
+- Explosion clears its three viewport-sized accumulation buffers whole every frame
+  an explosion exists; clearing last frame's dirty rectangles instead is the
+  same visual at a fraction of the memset.
+- Storm's member shading calls `math.Pow(spec, 20)` per body cell, and kraken's
+  legs `math.Hypot` per cell; repeated squaring and `math.Sqrt` differ by an ulp.
+- The overlay menu and form build their row slices and strings every frame they
+  show, and the pinned HUD collects its lines likewise; both are UI a player
+  reads while the game runs behind them.
+- The status bar still formats the time-control item and the macro-recording
+  label every frame they show.
+
 ## Genetic library
 
 ### Spin off `pkg/genetic` as its own module
