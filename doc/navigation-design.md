@@ -4,7 +4,7 @@ Working analysis of whether the flow fields and the route graphs should fold int
 one structure, and where navigation's time actually goes. §1 is the verdict, §2
 what the code did before this work against the questions that prompted it, §3 the
 measurements, §4 the program with what has landed, §5 the snake lock, §6 what
-custom maps will meet, §7 the decisions. Items 1 to 3 of §4 have landed; the
+custom maps will meet, §7 the decisions. Items 1 to 4 of §4 have landed; the
 rest are the next branches, in order.
 
 ## 1. Decision proposed
@@ -154,6 +154,18 @@ the 47 ms tick is no longer a field recompute. In the storm tick: loot's owner
 fields 47% (eight local cursors), the snake reaches 15%, composite line of sight
 8%, route graph rebuilds with their per-route grid fills 3%.
 
+### 3.5 The same run after item 4
+
+| Phase | ms/tick | worst tick |
+|---|---:|---:|
+| play, 600 ticks | 4.2 | 21 ms |
+| storm, 2,400 ticks | 6.6 | 37 ms (was 47) |
+
+The owner fields cost what they did, now materialized through the pursuit
+resource for the drops out of sight of their owner: 46% of the storm tick with
+eight local cursors, which is one local cursor's share eight times over. The wall
+compares are gone from the profile.
+
 ## 4. Options, in order of payoff
 
 1. **Lock a snake by one search from its head** (landed). One composite-tier Dijkstra
@@ -188,11 +200,18 @@ fields 47% (eight local cursors), the snake reaches 15%, composite line of sight
    composite generation and stays fresh across any change that fits no footprint
    differently; staleness by corridor mask was rejected for the same reason,
    since a joiner computes on the grid it has.
-4. **Loot reads navigation's private groups.** Its owner field becomes the point
-   tier of the owner cursor's private group: lazy, generation-guarded, phase in
-   the navigation carrier. `LootSystem.ownerRoutes` and its per-tick wall-slice
-   compare go. Only the instance that holds a cursor's drops ever materializes
-   that field, so the capture carries phases and not fields, as now.
+4. **Loot reads navigation's private groups** (landed). Navigation keeps a
+   private group for every cursor on the map, not only the locked ones: the
+   groups, and so the phases the carrier holds, are then the same on every
+   instance, which a group whose existence followed this instance's drops could
+   not be, since loot is player-domain. A field's arrays are allocated by its
+   first compute, so the sixteen groups cost nothing until read. Navigation
+   publishes each slot's point field through `engine.PursuitResource`; loot reads
+   its owner's slot, materializing the field on the instance that holds the drops
+   and nowhere else (D-17: when a field is computed is local). `LootSystem`'s
+   own caches, wall copy and per-tick compare are gone, and navigation's own
+   compare is gated by `Position.WallGeneration`, so a tick without a wall change
+   compares nothing.
 5. **Corridor-sparse route fields.** A route field covers 2–3% of the map and is
    reallocated whole at every rebuild; store corridor cells only (per graph a
    route mask byte per cell, per route a compact cell-to-distance table), which
@@ -269,5 +288,5 @@ with no composite-valid cell within it is unreachable for every head.
 3. Taken: the lock stays sticky and sight stays out of it (§5).
 4. Taken: an opened cell repairs a field in place rather than dirtying it, and a
    graph's freshness is its tier's generation (§4 item 3).
-5. Pending: whether loot folds into navigation's private groups (item 4) or keeps
-   its own cache, now on the shared grid and the same wall diff.
+5. Taken: loot folds into navigation's private groups, kept for every cursor so
+   the carrier agrees across instances (§4 item 4).

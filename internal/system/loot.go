@@ -1,7 +1,6 @@
 package system
 
 import (
-	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -43,13 +42,6 @@ type pityKey struct {
 	slot    uint8
 }
 
-// Loot routes are private and lead only to the cursor that owns each drop.
-type ownerRoute struct {
-	cache *navigation.FlowFieldCache
-	cell  vmath.Point
-	live  bool // some loot named this owner during this tick
-}
-
 type LootSystem struct {
 	world *engine.World
 
@@ -62,24 +54,12 @@ type LootSystem struct {
 	// Pity tracking per species type and roster slot
 	pity map[pityKey]*pityState
 
-	// One route per owner that currently has loot in flight, and the single-element
-	// target slice its recompute is fed from
-	ownerRoutes map[core.Entity]*ownerRoute
-	routeGoal   [1]vmath.Point
-	walls       []bool // the WallTest grid a recompute reads
-	seenWalls   []bool // the walls grid and every owner field stand on
-	grid        navigation.SearchGrid
-	filled      bool          // grid was filled from seenWalls
-	opened      []vmath.Point // the cells a tick's wall change moved
-	closed      []vmath.Point
-	loots       []core.Entity // the tick's loot, detached: collectLoot destroys mid-iteration
+	loots []core.Entity // the tick's loot, detached: collectLoot destroys mid-iteration
 
 	// Telemetry
 	statDrops       *atomic.Int64
 	statActive      *atomic.Int64
 	statCollects    *atomic.Int64
-	statRoutes      *atomic.Int64
-	statRecomputes  *atomic.Int64
 	statUnreachable *atomic.Int64
 	buffers         bufferTelemetry
 	motion          bounceTelemetry
@@ -97,10 +77,8 @@ func NewLootSystem(world *engine.World) engine.System {
 	s.statCollects = world.Resources.Status.Ints.Get("loot.collects")
 	// Owner routes: how many are live, how often they are rebuilt, and how many
 	// drops are walled off from the cursor that owns them
-	s.statRoutes = world.Resources.Status.Ints.Get("loot.routes")
-	s.statRecomputes = world.Resources.Status.Ints.Get("loot.route_recomputes")
 	s.statUnreachable = world.Resources.Status.Ints.Get("loot.unreachable")
-	s.buffers = newBufferTelemetry(world.Resources.Status, "loot", "pity", "routes")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "loot", "pity")
 	s.motion = newBounceTelemetry(world.Resources.Status, "loot")
 
 	s.Init()
@@ -111,12 +89,9 @@ func (s *LootSystem) Init() {
 	s.costs = navigation.CostsFor(s.world.Resources.Config.CellAspect)
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.pity = make(map[pityKey]*pityState)
-	s.ownerRoutes = make(map[core.Entity]*ownerRoute)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
 	s.statCollects.Store(0)
-	s.statRoutes.Store(0)
-	s.statRecomputes.Store(0)
 	s.statUnreachable.Store(0)
 	s.buffers.Reset()
 	s.motion.Reset()
@@ -194,8 +169,6 @@ func (s *LootSystem) Update() {
 
 	config := s.world.Resources.Config
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
-
-	s.refreshOwnerRoutes(s.loots)
 
 	var activeCount int64
 	var unreachable int64
@@ -280,101 +253,6 @@ func (s *LootSystem) Update() {
 	s.statUnreachable.Store(unreachable)
 }
 
-// Owners keep idle caches, so a later drop must validate walls as well as its goal.
-func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
-	for _, r := range s.ownerRoutes {
-		r.live = false
-	}
-
-	for _, lootEntity := range loots {
-		lootComp, ok := s.world.Components.Loot.GetComponent(lootEntity)
-		if !ok {
-			continue
-		}
-		pos, ok := s.world.Positions.GetPosition(lootComp.Owner)
-		if !ok {
-			continue // owner despawned; its drops bleed to rest
-		}
-		r, ok := s.ownerRoutes[lootComp.Owner]
-		if !ok {
-			r = &ownerRoute{}
-			s.ownerRoutes[lootComp.Owner] = r
-		}
-		r.live = true
-		r.cell = vmath.Point{X: pos.X, Y: pos.Y}
-	}
-
-	config := s.world.Resources.Config
-	if config.MapWidth <= 0 || config.MapHeight <= 0 {
-		return
-	}
-	blocked := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
-	blocked(-1, -1) // Build once, shared by all owner caches this tick.
-	s.opened, s.closed = s.opened[:0], s.closed[:0]
-	whole := len(s.walls) != len(s.seenWalls)
-	if !whole && !slices.Equal(s.walls, s.seenWalls) {
-		gw, _ := s.world.Positions.GridDimensions()
-		navigation.Diff(s.seenWalls, s.walls, min(config.MapWidth, gw), func(x, y int, wall bool) {
-			if wall {
-				s.closed = append(s.closed, vmath.Point{X: x, Y: y})
-			} else {
-				s.opened = append(s.opened, vmath.Point{X: x, Y: y})
-			}
-		})
-		for _, c := range s.closed {
-			s.grid.Set(c.X, c.Y, true)
-		}
-		for _, c := range s.opened {
-			s.grid.Set(c.X, c.Y, false)
-		}
-	}
-	if w, h := s.grid.Size(); whole || !s.filled || w != config.MapWidth || h != config.MapHeight {
-		s.grid.Fill(config.MapWidth, config.MapHeight, blocked)
-		s.filled = true
-	}
-	s.seenWalls = append(s.seenWalls[:0], s.walls...)
-
-	var recomputes int64
-	for owner, r := range s.ownerRoutes {
-		if !s.world.Positions.HasPosition(owner) {
-			// The cursor is gone; so is any reason to hold a field aimed at it.
-			delete(s.ownerRoutes, owner)
-			continue
-		}
-		if !r.live {
-			// A field is a map-sized allocation and a cursor keeps dropping loot,
-			// so an idle owner keeps its field and stops paying for it: the next
-			// drop finds the throttle where it left it, and Update recomputes
-			// because the cursor has moved since.
-			continue
-		}
-		switch {
-		case r.cache == nil:
-			r.cache = navigation.NewFlowFieldCache(
-				config.MapWidth, config.MapHeight,
-				parameter.NavFlowMinTicksBetweenCompute,
-				parameter.NavFlowDirtyDistance,
-				parameter.NavFlowSettleTicks,
-			)
-			r.cache.Field.Costs = s.costs
-		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
-			r.cache.Resize(config.MapWidth, config.MapHeight)
-		}
-		if whole {
-			r.cache.Closed()
-		} else {
-			r.cache.Moved(&s.grid, s.closed, s.opened)
-		}
-		s.routeGoal[0] = r.cell
-		if r.cache.Update(s.routeGoal[:], &s.grid) {
-			recomputes++
-		}
-	}
-	s.statRoutes.Store(int64(len(s.ownerRoutes)))
-	s.statRecomputes.Add(recomputes)
-	s.buffers.Observe(1, len(s.ownerRoutes))
-}
-
 // A drop follows its owner directly when visible, otherwise its private field.
 func (s *LootSystem) homingTarget(
 	lootComp *component.LootComponent,
@@ -392,11 +270,15 @@ func (s *LootSystem) homingTarget(
 		return ownerCenterX, ownerCenterY, true
 	}
 
-	r, ok := s.ownerRoutes[lootComp.Owner]
-	if !ok || r.cache == nil {
+	slot, ok := s.world.CursorSlot(lootComp.Owner)
+	if !ok {
 		return 0, 0, false
 	}
-	flowX, flowY := s.costs.InterpolatedDirection(r.cache, kineticComp.PreciseX, kineticComp.PreciseY)
+	field := s.world.Resources.Pursuit.Field(slot)
+	if field == nil {
+		return 0, 0, false
+	}
+	flowX, flowY := s.costs.InterpolatedDirection(field, kineticComp.PreciseX, kineticComp.PreciseY)
 	if flowX == 0 && flowY == 0 {
 		return 0, 0, false
 	}
@@ -724,19 +606,13 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 }
 
 type lootState struct {
-	pity      map[pityKey]pityState
-	owners    map[core.Entity]ownerRoute
-	seenWalls []bool
+	pity map[pityKey]pityState
 }
 
 func (s *LootSystem) CopyState() any {
-	c := lootState{pity: make(map[pityKey]pityState, len(s.pity)), owners: make(map[core.Entity]ownerRoute, len(s.ownerRoutes)),
-		seenWalls: slices.Clone(s.seenWalls)}
+	c := lootState{pity: make(map[pityKey]pityState, len(s.pity))}
 	for k, p := range s.pity {
 		c.pity[k] = *p
-	}
-	for k, r := range s.ownerRoutes {
-		c.owners[k] = ownerRoute{cache: r.cache.Clone(), cell: r.cell, live: r.live}
 	}
 	return c
 }
@@ -744,13 +620,8 @@ func (s *LootSystem) CopyState() any {
 func (s *LootSystem) RestoreState(v any) error {
 	c := v.(lootState)
 	clear(s.pity)
-	clear(s.ownerRoutes)
-	s.seenWalls, s.filled = slices.Clone(c.seenWalls), false
 	for k, p := range c.pity {
 		s.pity[k] = &p
-	}
-	for k, r := range c.owners {
-		s.ownerRoutes[k] = &ownerRoute{cache: r.cache.Clone(), cell: r.cell, live: r.live}
 	}
 	return nil
 }

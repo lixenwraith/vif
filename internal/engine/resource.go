@@ -41,6 +41,9 @@ type Resource struct {
 	// Route graphs for multi-path navigation
 	RouteGraph *RouteGraphResource
 
+	// Navigation's field toward each cursor, for what one cursor owns
+	Pursuit *PursuitResource
+
 	// Bandit adaptation resource for route distribution
 	Adaptation *AdaptationResource
 
@@ -731,6 +734,35 @@ func (tr *TargetResource) SetGroupValidity(groupID uint8, valid bool) {
 }
 
 // === RouteGraph ===
+
+// PursuitResource is navigation's point field toward each cursor, which a
+// player-domain system steering something one cursor owns reads for its owner's
+// slot. Navigation publishes it every tick; a field is computed at its first
+// read, which is local and leaves the shared throttle phase alone (D-17).
+type PursuitResource struct {
+	grid   *navigation.SearchGrid
+	fields [parameter.MaxPlayers]*navigation.FlowFieldCache
+}
+
+// Publish names the tick's grid and one slot's field, nil where no cursor stands.
+func (r *PursuitResource) Publish(grid *navigation.SearchGrid, slot uint8, c *navigation.FlowFieldCache) {
+	if int(slot) < len(r.fields) {
+		r.grid, r.fields[slot] = grid, c
+	}
+}
+
+// Field is the field toward the cursor in slot, or nil while it reaches nothing.
+func (r *PursuitResource) Field(slot uint8) navigation.Source {
+	if r == nil || r.grid == nil || int(slot) >= len(r.fields) || r.fields[slot] == nil {
+		return nil
+	}
+	c := r.fields[slot]
+	c.Materialize(r.grid)
+	if !c.IsValid() {
+		return nil
+	}
+	return c
+}
 
 // RouteGraphResource provides route graph geometry and constrained flow fields.
 // Written by NavigationSystem, read by AdaptationSystem and movement logic.
