@@ -76,7 +76,7 @@ changing a subsystem, update the source that actually owns its shape.
 |---|---|---|
 | Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `build_audio_gen.go`, `build_noaudio_gen.go`, `render_gen.go`, `internal/engine/component_store_gen.go`, `component_domain_gen.go` |
 | Build capabilities | `vif_headless`, `vif_noaudio`, `novlog` and `wasm` build constraints, on files such as `internal/app/presentation_*`, `audio*` and `network_*`, `internal/system/audio*`, `internal/service/adapter_audio.go` and `adapter_terminal.go`, `internal/network/websocket_*` and `internal/vlog/stub.go` | Makefile profiles and generated capability-specific builders |
-| System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.CheckSystemDependencies`, `World.AllowSystemDisable`, `resource.checkSystems` |
+| System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.CheckSystemDependencies`, `World.InitSystems`, `World.AllowSystemDisable`, `resource.checkSystems` |
 | Event names, payload association, replication class | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go`, `serve.go` | `App`, `Scheduler`, services |
 | Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go` |

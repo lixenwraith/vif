@@ -278,6 +278,30 @@ func (w *World) HasSystem(name string) bool {
 // cycle. The graph orders nothing: each system initializes itself, in its
 // constructor and on reset, and AddSystem fixes the tick order from Priority().
 func (w *World) CheckSystemDependencies() error {
+	_, err := core.TopoSort(w.systemGraph())
+	return err
+}
+
+// InitSystems re-initialises every registered system in dependency order, a
+// required system before the ones naming it. The scheduler runs it on a game
+// reset once the world is cleared, in place of each system answering the request.
+func (w *World) InitSystems() error {
+	order, err := core.TopoSort(w.systemGraph())
+	if err != nil {
+		return err
+	}
+	byName := make(map[string]System, len(w.systems))
+	for i := range w.systems {
+		byName[w.systems[i].sys.Name()] = w.systems[i].sys
+	}
+	for _, name := range order {
+		byName[name].Init()
+	}
+	return nil
+}
+
+// systemGraph is the declared dependency graph by system name
+func (w *World) systemGraph() map[string][]string {
 	deps := make(map[string][]string, len(w.systems))
 	for i := range w.systems {
 		required := w.systems[i].profile.Requires
@@ -287,8 +311,7 @@ func (w *World) CheckSystemDependencies() error {
 		}
 		deps[w.systems[i].sys.Name()] = names
 	}
-	_, err := core.TopoSort(deps)
-	return err
+	return deps
 }
 
 // SetSystemBaseline installs the scenario's [systems] baseline before the first tick

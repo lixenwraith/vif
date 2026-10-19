@@ -831,19 +831,18 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
 
-### Initialize systems in dependency order from the engine
+### Initialize systems from the engine at startup too
 
 - Priority: P3
-- Affected files: `internal/engine/world.go` (`CheckSystemDependencies`),
-  `internal/app/app.go` (`initScheduler`), each system's constructor and
-  `EventGameResetRequest` handler in `internal/system`
+- Affected files: `internal/app/app.go` (`initWorld`, `initScheduler`), each
+  system's constructor in `internal/system`, the system tests
 
-Half of this exists: the manifest declares each system's `Requires` and startup
-checks the graph for unknown names and cycles. The other half does not: each
-system still calls its own `Init` in its constructor (manifest order) and again
-on reset (handler order). The engine would instead call `Init` once per system
-in the graph's `core.TopoSort` order, at startup and on reset, and the per-system
-calls would go.
+A reset re-initializes every system through `World.InitSystems` in dependency
+order; at startup each constructor still calls its own `Init`. Moving that call
+into the engine has to keep three things: the journal anchor reads the RNG session
+the construction-time draws advance, before the scheduler exists; `MetaSystem` is
+added once the context exists; and the system tests construct systems standalone
+and expect them usable.
 
 ### Give the composite lifecycle methods a user
 

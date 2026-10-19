@@ -46,17 +46,11 @@ func (s *MaterializeSystem) EventTypes() []event.EventType {
 		event.EventMaterializeRequest,
 		event.EventMaterializeAreaRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes requests to spawn visual effects
 func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

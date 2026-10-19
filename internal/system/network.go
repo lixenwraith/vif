@@ -546,7 +546,6 @@ func (s *NetworkSystem) Priority() int { return parameter.PriorityNetwork }
 // strands every peer, and only_systems must not do that by omission.
 func (s *NetworkSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameResetRequest,
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
 		event.EventPlayoutLead,
@@ -556,8 +555,6 @@ func (s *NetworkSystem) EventTypes() []event.EventType {
 
 func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
-	case event.EventGameResetRequest:
-		s.Init()
 	case event.EventParticipantJoined:
 		if p, ok := ev.Payload.(*event.ParticipantJoinedPayload); ok {
 			s.addParticipant(p)

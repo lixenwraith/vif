@@ -54,7 +54,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 
 ## System telemetry
 
-Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from the constructor and again when the system handles `EventGameResetRequest`.
+Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from the constructor and again from the engine on a game reset, in dependency order.
 
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|

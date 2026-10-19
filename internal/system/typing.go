@@ -94,17 +94,11 @@ func (s *TypingSystem) EventTypes() []event.EventType {
 		event.EventDeleteRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes typing and deletion requests
 func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

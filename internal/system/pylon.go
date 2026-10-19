@@ -66,16 +66,10 @@ func (s *PylonSystem) EventTypes() []event.EventType {
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *PylonSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {

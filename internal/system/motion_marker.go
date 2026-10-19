@@ -62,16 +62,10 @@ func (s *MotionMarkerSystem) EventTypes() []event.EventType {
 		event.EventMotionMarkerShowColored,
 		event.EventMotionMarkerClearColored,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 func (s *MotionMarkerSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
