@@ -229,32 +229,99 @@ func FuzzComputeMatchesReference(f *testing.F) {
 	})
 }
 
+// FuzzReachMeasuresWhatTheFieldsRead: from any cell, on any walls, a reach reports
+// for every goal what a field seeded at that goal holds at the cell, and where the
+// cell holds nothing the least over its neighbours a diagonal away, as the snake
+// lock read the fields; the scratch one measure leaves does not reach the next.
+func FuzzReachMeasuresWhatTheFieldsRead(f *testing.F) {
+	for seed := range uint64(16) {
+		f.Add(seed, uint8(seed*5))
+	}
+	f.Fuzz(func(t *testing.T, seed uint64, density uint8) {
+		rng := rand.New(rand.NewPCG(seed, uint64(density)))
+		w, h := 2+rng.IntN(40), 2+rng.IntN(20)
+		walls := make([]bool, w*h)
+		for range rng.IntN(8) {
+			x0, y0 := rng.IntN(w), rng.IntN(h)
+			for y := y0; y < min(h, y0+1+rng.IntN(6)); y++ {
+				for x := x0; x < min(w, x0+1+rng.IntN(10)); x++ {
+					walls[y*w+x] = true
+				}
+			}
+		}
+		for i := range walls {
+			if rng.IntN(256) < int(density)/2 {
+				walls[i] = !walls[i]
+			}
+		}
+		isBlocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
+		goals := make([]vmath.Point, 1+rng.IntN(4))
+		for i := range goals {
+			goals[i] = vmath.Point{X: rng.IntN(w+2) - 1, Y: rng.IntN(h+2) - 1}
+		}
+		g, got := new(SearchGrid), make([]int32, len(goals))
+		var r Reach
+		for round := range 2 {
+			if round == 1 {
+				for i := range walls {
+					if walls[i] && rng.IntN(4) == 0 {
+						walls[i] = false
+					}
+				}
+			}
+			g.Fill(w, h, isBlocked)
+			from := vmath.Point{X: rng.IntN(w), Y: rng.IntN(h)}
+			r.Measure(g, &refCosts, from.X, from.Y, goals, got)
+			for j, goal := range goals {
+				field := NewFlowField(w, h)
+				field.Compute([]vmath.Point{goal}, isBlocked)
+				want := field.GetDistance(from.X, from.Y)
+				if want < 0 {
+					want = CostUnreachable
+					for _, d := range DirVectors {
+						if next := field.GetDistance(from.X+d[0], from.Y+d[1]); next >= 0 {
+							want = min(want, next+int(refCosts.Diag))
+						}
+					}
+				}
+				if int(got[j]) != want {
+					t.Fatalf("round %d: goal %v from %v measured %d, field reads %d", round, goal, from, got[j], want)
+				}
+			}
+		}
+	})
+}
+
 // TestCacheRefreshesSmallTargetMovesAndChangedWalls: a target a cell off waits the
 // settle interval rather than the cooldown, and a wall change recomputes at once.
 func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 	c := NewFlowFieldCache(8, 6, 3, 4, 6)
 	walls := make([]bool, 48)
 	blocked := func(x, y int) bool { return walls[y*8+x] }
+	g := new(SearchGrid)
+	g.Fill(8, 6, blocked)
 	goal := []vmath.Point{{X: 1, Y: 1}}
 	c.ObserveGrid(walls, 1)
-	c.Update(goal, blocked)
+	c.Update(goal, g)
 	goal[0].X++
 	for range 5 {
-		if c.Update(goal, blocked) {
+		if c.Update(goal, g) {
 			t.Fatal("a one-cell move recomputed inside the settle interval")
 		}
 	}
-	if !c.Update(goal, blocked) || c.GetDistance(2, 1) != 0 {
+	if !c.Update(goal, g) || c.GetDistance(2, 1) != 0 {
 		t.Fatal("one-cell motion never refreshed the goal")
 	}
 	walls[1*8+3] = true
+	g.Fill(8, 6, blocked)
 	c.ObserveGrid(walls, 2)
-	if !c.Update(goal, blocked) || c.GetDistance(3, 1) != -1 {
+	if !c.Update(goal, g) || c.GetDistance(3, 1) != -1 {
 		t.Fatal("changed walls left a stale route")
 	}
 	walls[1*8+3] = false
+	g.Fill(8, 6, blocked)
 	c.ObserveGrid(walls, 3)
-	c.Update(goal, blocked)
+	c.Update(goal, g)
 	if c.GetDistance(3, 1) < 0 {
 		t.Fatal("a removed wall stayed blocked")
 	}
@@ -270,18 +337,20 @@ func TestALazyCacheKeepsTheEagerPhase(t *testing.T) {
 		walls[i] = rng.IntN(5) == 0
 	}
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= 30 || y >= 12 || walls[y*30+x] }
+	g := new(SearchGrid)
+	g.Fill(30, 12, blocked)
 	eager, lazy := NewFlowFieldCache(30, 12, 3, 4, 8), NewFlowFieldCache(30, 12, 3, 4, 8)
 	lazy.Lazy = true
 	goal := []vmath.Point{{X: 15, Y: 6}}
 	for tick := range 200 {
 		goal[0].X = max(0, min(29, goal[0].X+rng.IntN(3)-1))
 		goal[0].Y = max(-1, min(12, goal[0].Y+rng.IntN(3)-1)) // out of bounds now and then
-		if eager.Update(goal, blocked) != lazy.Update(goal, blocked) ||
+		if eager.Update(goal, g) != lazy.Update(goal, g) ||
 			eager.TicksSinceCompute != lazy.TicksSinceCompute || eager.Computed() != lazy.Computed() {
 			t.Fatalf("tick %d: the lazy cache left the eager phase", tick)
 		}
 		if tick%7 == 0 {
-			lazy.Materialize(blocked)
+			lazy.Materialize(g)
 			for i := range eager.Field.Distances {
 				if x, y := i%30, i/30; eager.GetDistance(x, y) != lazy.GetDistance(x, y) {
 					t.Fatalf("tick %d: materialized distance at (%d,%d) is %d, eager %d", tick, x, y, lazy.GetDistance(x, y), eager.GetDistance(x, y))
@@ -338,7 +407,7 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 
 		sc := new(routeScratch)
 		sc.grow(w * h)
-		sc.search.fill(w, h, isBlocked)
+		sc.search.Fill(w, h, isBlocked)
 		path, cost := sc.penalizedShortestPath(start, goal, w, penalty, &refCosts)
 		if path == nil {
 			if want[goal] != CostUnreachable {
@@ -431,15 +500,17 @@ func TestAResetCacheIsANewCache(t *testing.T) {
 	walls := make([]bool, 8*6)
 	walls[2*8+3] = true
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= 8 || y >= 6 || walls[y*8+x] }
+	g := new(SearchGrid)
+	g.Fill(8, 6, blocked)
 	used := NewFlowFieldCache(8, 6, 3, 4, 6)
 	used.Lazy = true
 	used.ObserveGrid(walls, 1)
 	goal := []vmath.Point{{X: 1, Y: 1}}
 	for range 5 {
-		used.Update(goal, blocked)
+		used.Update(goal, g)
 		goal[0].X++
 	}
-	used.Materialize(blocked)
+	used.Materialize(g)
 	used.Reset(8, 6)
 	fresh := NewFlowFieldCache(8, 6, 3, 4, 6)
 	fresh.Lazy = true
@@ -447,7 +518,7 @@ func TestAResetCacheIsANewCache(t *testing.T) {
 	for tick := range 12 {
 		used.ObserveGrid(walls, uint64(tick+1))
 		fresh.ObserveGrid(walls, uint64(tick+1))
-		if used.Update(goal, blocked) != fresh.Update(goal, blocked) ||
+		if used.Update(goal, g) != fresh.Update(goal, g) ||
 			used.TicksSinceCompute != fresh.TicksSinceCompute || used.Computed() != fresh.Computed() {
 			t.Fatalf("tick %d: the reset cache left the fresh cache's phase", tick)
 		}
@@ -455,8 +526,8 @@ func TestAResetCacheIsANewCache(t *testing.T) {
 			goal[0].X--
 		}
 	}
-	used.Materialize(blocked)
-	fresh.Materialize(blocked)
+	used.Materialize(g)
+	fresh.Materialize(g)
 	for i := range 48 {
 		if x, y := i%8, i/8; used.GetDistance(x, y) != fresh.GetDistance(x, y) {
 			t.Fatalf("distance at (%d,%d) is %d, fresh %d", x, y, used.GetDistance(x, y), fresh.GetDistance(x, y))
