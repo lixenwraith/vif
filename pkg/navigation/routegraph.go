@@ -359,7 +359,7 @@ func (sc *routeScratch) penalizedShortestPath(start, goal, mapW int, penalty []i
 	// walk only visits cells relaxed this pass (start terminates the walk)
 
 	g := &sc.search
-	g.reset(c.Diag + most)
+	g.reset(0, c.Diag+most)
 	dist[start] = 0
 	g.push(int32(start), 0)
 

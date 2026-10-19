@@ -103,7 +103,7 @@ func (r *Reach) search(g *SearchGrid, c *Costs, startCost int32, out []int32) bo
 	if pending == 0 {
 		return true
 	}
-	g.reset(c.Diag)
+	g.reset(0, c.Diag)
 	for _, s := range r.starts {
 		r.dist[s], r.seen[s] = startCost, r.gen
 		g.push(s, startCost)

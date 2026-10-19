@@ -282,11 +282,13 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 		graphs map[uint32]*navigation.RouteGraph
 		gens   [2]uint32
 		fields [2][]int
+		comp   []bool
 	}
 	read := func() (d derived) {
 		d.graphs = routeGraphs(origin)
 		origin.World().RunSafe(func() {
 			w, dbg := origin.World(), origin.World().Resources.NavigationDebug
+			d.comp = slices.Clone(dbg.CompositePassability.Valid)
 			var grid []bool
 			point := w.Positions.WallTest(component.WallBlockKinetic, &grid)
 			point(-1, -1)
@@ -344,12 +346,18 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 	})
 	install(mustRoundTrip(t, origin))
 	before, again := install(cap)
-	if before.gens[0] == again.gens[0] || before.gens[1] == again.gens[1] {
-		t.Fatal("a flow field was kept over walls that moved")
+	if before.gens[0] == again.gens[0] {
+		t.Fatal("the point field was kept over walls that moved")
+	}
+	// The composite tier moves only where a footprint's fit changed: what runs
+	// on it is kept exactly when the installed passability equals the one held.
+	compMoved := !slices.Equal(before.comp, again.comp)
+	if (before.gens[1] != again.gens[1]) != compMoved {
+		t.Fatalf("the composite field was derived again: %t; its passability moved: %t", before.gens[1] != again.gens[1], compMoved)
 	}
 	for id, rg := range again.graphs {
-		if before.graphs[id] == rg {
-			t.Fatalf("route graph %d was kept over walls that moved", id)
+		if (before.graphs[id] != rg) != compMoved {
+			t.Fatalf("route graph %d was derived again: %t; the composite passability moved: %t", id, before.graphs[id] != rg, compMoved)
 		}
 	}
 	if !slices.Equal(kept.fields[0], again.fields[0]) || !slices.Equal(kept.fields[1], again.fields[1]) {
@@ -360,9 +368,9 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 	}
 }
 
-// TestAnInstallDerivesPassabilityFromTheWallsItInstalls: a wall event between ticks
-// moves passability before the walls are next read, so an install restoring the
-// walls that were last read derives passability again rather than keeping the event's.
+// TestAnInstallDerivesPassabilityFromTheWallsItInstalls: a wall spawned after the
+// capture moves passability at the next tick, so an install restoring the walls the
+// capture holds derives passability again rather than keeping the tick's.
 func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	t.Parallel()
 	origin, cap := navRouteOrigin(t)
@@ -385,6 +393,7 @@ func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	origin.Context().PushEventOrigin(event.EventWallSpawnRequest, &event.WallSpawnRequestPayload{
 		X: hx, Y: hy, Char: '#', BlockMask: component.WallBlockKinetic}, event.OriginDebug)
 	origin.Settle()
+	origin.Tick(1)
 	var moved bool
 	origin.World().RunSafe(func() { moved = !passability().IsValid(hx, hy) })
 	if !moved {

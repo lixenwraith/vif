@@ -292,8 +292,87 @@ func FuzzReachMeasuresWhatTheFieldsRead(f *testing.F) {
 	})
 }
 
+// FuzzOpenedRepairsAsARecomputeWould: on any walls, opening any cells leaves a
+// repaired field with the distances and directions a recompute on the new grid
+// gives, or declines where an opening would reseed a target; and a grid moved cell
+// by cell is the grid filled whole.
+func FuzzOpenedRepairsAsARecomputeWould(f *testing.F) {
+	for seed := range uint64(16) {
+		f.Add(seed, uint8(seed*9))
+	}
+	f.Fuzz(func(t *testing.T, seed uint64, density uint8) {
+		rng := rand.New(rand.NewPCG(seed, uint64(density)))
+		w, h := 2+rng.IntN(40), 2+rng.IntN(20)
+		walls := make([]bool, w*h)
+		for range rng.IntN(8) {
+			x0, y0 := rng.IntN(w), rng.IntN(h)
+			for y := y0; y < min(h, y0+1+rng.IntN(6)); y++ {
+				for x := x0; x < min(w, x0+1+rng.IntN(10)); x++ {
+					walls[y*w+x] = true
+				}
+			}
+		}
+		for i := range walls {
+			if rng.IntN(256) < int(density)/2 {
+				walls[i] = !walls[i]
+			}
+		}
+		isBlocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
+		goals := make([]vmath.Point, 1+rng.IntN(3))
+		for i := range goals {
+			goals[i] = vmath.Point{X: rng.IntN(w+2) - 1, Y: rng.IntN(h+2) - 1}
+		}
+		g := new(SearchGrid)
+		g.Fill(w, h, isBlocked)
+		field := NewFlowField(w, h)
+		field.ComputeOn(g, goals)
+		if !field.Valid {
+			return
+		}
+		var opened []vmath.Point
+		for range 1 + rng.IntN(4) {
+			if i := rng.IntN(w * h); walls[i] {
+				walls[i] = false
+				opened = append(opened, vmath.Point{X: i % w, Y: i / w})
+			}
+		}
+		if len(opened) == 0 {
+			return
+		}
+		for _, o := range opened {
+			g.Set(o.X, o.Y, false)
+		}
+		fresh := new(SearchGrid)
+		fresh.Fill(w, h, isBlocked)
+		if !slices.Equal(g.open, fresh.open) || !slices.Equal(g.blocked, fresh.blocked) {
+			t.Fatal("a grid moved cell by cell differs from one filled whole")
+		}
+		want := NewFlowField(w, h)
+		want.ComputeOn(fresh, goals)
+		if !field.Opened(g, opened, goals) {
+			for _, o := range opened {
+				for _, goal := range goals {
+					if o == goal || isBlocked(goal.X, goal.Y) && max(abs(o.X-goal.X), abs(o.Y-goal.Y)) <= maxSearchRadius {
+						return
+					}
+				}
+			}
+			t.Fatal("the repair declined with no opening near a target")
+		}
+		for y := range h {
+			for x := range w {
+				if field.GetDistance(x, y) != want.GetDistance(x, y) || field.GetDirection(x, y) != want.GetDirection(x, y) {
+					t.Fatalf("(%d,%d): repaired %d/%d, recomputed %d/%d", x, y,
+						field.GetDistance(x, y), field.GetDirection(x, y), want.GetDistance(x, y), want.GetDirection(x, y))
+				}
+			}
+		}
+	})
+}
+
 // TestCacheRefreshesSmallTargetMovesAndChangedWalls: a target a cell off waits the
-// settle interval rather than the cooldown, and a wall change recomputes at once.
+// settle interval rather than the cooldown, a closed cell recomputes at once, and
+// an opened one repairs the field in place without a recompute.
 func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 	c := NewFlowFieldCache(8, 6, 3, 4, 6)
 	walls := make([]bool, 48)
@@ -301,7 +380,6 @@ func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 	g := new(SearchGrid)
 	g.Fill(8, 6, blocked)
 	goal := []vmath.Point{{X: 1, Y: 1}}
-	c.ObserveGrid(walls, 1)
 	c.Update(goal, g)
 	goal[0].X++
 	for range 5 {
@@ -312,18 +390,15 @@ func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 	if !c.Update(goal, g) || c.GetDistance(2, 1) != 0 {
 		t.Fatal("one-cell motion never refreshed the goal")
 	}
-	walls[1*8+3] = true
-	g.Fill(8, 6, blocked)
-	c.ObserveGrid(walls, 2)
+	g.Set(3, 1, true)
+	c.Closed()
 	if !c.Update(goal, g) || c.GetDistance(3, 1) != -1 {
-		t.Fatal("changed walls left a stale route")
+		t.Fatal("a closed cell left a stale route")
 	}
-	walls[1*8+3] = false
-	g.Fill(8, 6, blocked)
-	c.ObserveGrid(walls, 3)
-	c.Update(goal, g)
-	if c.GetDistance(3, 1) < 0 {
-		t.Fatal("a removed wall stayed blocked")
+	g.Set(3, 1, false)
+	c.Moved(g, nil, []vmath.Point{{X: 3, Y: 1}})
+	if c.Update(goal, g) || c.GetDistance(3, 1) != 10 {
+		t.Fatal("an opened cell recomputed instead of repairing, or stayed blocked")
 	}
 }
 
@@ -504,7 +579,6 @@ func TestAResetCacheIsANewCache(t *testing.T) {
 	g.Fill(8, 6, blocked)
 	used := NewFlowFieldCache(8, 6, 3, 4, 6)
 	used.Lazy = true
-	used.ObserveGrid(walls, 1)
 	goal := []vmath.Point{{X: 1, Y: 1}}
 	for range 5 {
 		used.Update(goal, g)
@@ -516,8 +590,6 @@ func TestAResetCacheIsANewCache(t *testing.T) {
 	fresh.Lazy = true
 	goal = []vmath.Point{{X: 6, Y: 4}}
 	for tick := range 12 {
-		used.ObserveGrid(walls, uint64(tick+1))
-		fresh.ObserveGrid(walls, uint64(tick+1))
 		if used.Update(goal, g) != fresh.Update(goal, g) ||
 			used.TicksSinceCompute != fresh.TicksSinceCompute || used.Computed() != fresh.Computed() {
 			t.Fatalf("tick %d: the reset cache left the fresh cache's phase", tick)

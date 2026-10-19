@@ -67,9 +67,11 @@ type LootSystem struct {
 	ownerRoutes map[core.Entity]*ownerRoute
 	routeGoal   [1]vmath.Point
 	walls       []bool // the WallTest grid a recompute reads
-	seenWalls   []bool // the walls grid was last filled from
+	seenWalls   []bool // the walls grid and every owner field stand on
 	grid        navigation.SearchGrid
-	gridGen     uint64        // moves with each fill, so an owner's cache compares no walls
+	filled      bool          // grid was filled from seenWalls
+	opened      []vmath.Point // the cells a tick's wall change moved
+	closed      []vmath.Point
 	loots       []core.Entity // the tick's loot, detached: collectLoot destroys mid-iteration
 
 	// Telemetry
@@ -308,11 +310,29 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 	}
 	blocked := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
 	blocked(-1, -1) // Build once, shared by all owner caches this tick.
-	if w, h := s.grid.Size(); w != config.MapWidth || h != config.MapHeight || !slices.Equal(s.walls, s.seenWalls) {
-		s.seenWalls = append(s.seenWalls[:0], s.walls...)
-		s.gridGen++
-		s.grid.Fill(config.MapWidth, config.MapHeight, blocked)
+	s.opened, s.closed = s.opened[:0], s.closed[:0]
+	whole := len(s.walls) != len(s.seenWalls)
+	if !whole && !slices.Equal(s.walls, s.seenWalls) {
+		gw, _ := s.world.Positions.GridDimensions()
+		navigation.Diff(s.seenWalls, s.walls, min(config.MapWidth, gw), func(x, y int, wall bool) {
+			if wall {
+				s.closed = append(s.closed, vmath.Point{X: x, Y: y})
+			} else {
+				s.opened = append(s.opened, vmath.Point{X: x, Y: y})
+			}
+		})
+		for _, c := range s.closed {
+			s.grid.Set(c.X, c.Y, true)
+		}
+		for _, c := range s.opened {
+			s.grid.Set(c.X, c.Y, false)
+		}
 	}
+	if w, h := s.grid.Size(); whole || !s.filled || w != config.MapWidth || h != config.MapHeight {
+		s.grid.Fill(config.MapWidth, config.MapHeight, blocked)
+		s.filled = true
+	}
+	s.seenWalls = append(s.seenWalls[:0], s.walls...)
 
 	var recomputes int64
 	for owner, r := range s.ownerRoutes {
@@ -340,7 +360,11 @@ func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
 		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
 			r.cache.Resize(config.MapWidth, config.MapHeight)
 		}
-		r.cache.ObserveGrid(s.walls, s.gridGen)
+		if whole {
+			r.cache.Closed()
+		} else {
+			r.cache.Moved(&s.grid, s.closed, s.opened)
+		}
 		s.routeGoal[0] = r.cell
 		if r.cache.Update(s.routeGoal[:], &s.grid) {
 			recomputes++
@@ -700,12 +724,14 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 }
 
 type lootState struct {
-	pity   map[pityKey]pityState
-	owners map[core.Entity]ownerRoute
+	pity      map[pityKey]pityState
+	owners    map[core.Entity]ownerRoute
+	seenWalls []bool
 }
 
 func (s *LootSystem) CopyState() any {
-	c := lootState{pity: make(map[pityKey]pityState, len(s.pity)), owners: make(map[core.Entity]ownerRoute, len(s.ownerRoutes))}
+	c := lootState{pity: make(map[pityKey]pityState, len(s.pity)), owners: make(map[core.Entity]ownerRoute, len(s.ownerRoutes)),
+		seenWalls: slices.Clone(s.seenWalls)}
 	for k, p := range s.pity {
 		c.pity[k] = *p
 	}
@@ -719,7 +745,7 @@ func (s *LootSystem) RestoreState(v any) error {
 	c := v.(lootState)
 	clear(s.pity)
 	clear(s.ownerRoutes)
-	s.seenWalls, s.gridGen = s.seenWalls[:0], 0
+	s.seenWalls, s.filled = slices.Clone(c.seenWalls), false
 	for k, p := range c.pity {
 		s.pity[k] = &p
 	}
