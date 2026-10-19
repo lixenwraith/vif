@@ -161,17 +161,11 @@ func (s *DrainSystem) EventTypes() []event.EventType {
 		event.EventDrainResume,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes events
 func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameResetRequest {
-		s.Init()
-		return
-	}
-
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
@@ -1220,7 +1214,7 @@ func (s *DrainSystem) strikeGold(member core.Entity) {
 	if _, pending := s.struck[member]; pending {
 		return
 	}
-	m, ok := s.world.Components.Member.GetPtr(member)
+	m, ok := s.world.Components.Member.GetComponent(member)
 	if !ok {
 		return
 	}
