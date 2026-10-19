@@ -303,12 +303,15 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 			nz = -nz
 		}
 
-		// Blinn-Phong specular
+		// Blinn-Phong specular, spec^20 by squaring rather than a Pow per body cell
 		spec := nx*halfX + ny*halfY + nz*halfZ
 		if spec < 0 {
 			spec = 0
 		}
-		spec = math.Pow(spec, 20.0) * 0.9
+		spec2 := spec * spec
+		spec4 := spec2 * spec2
+		spec8 := spec4 * spec4
+		spec = spec8 * spec8 * spec4 * 0.9
 
 		// Lambertian diffuse
 		diff := nx*lightX + ny*lightY + nz*lightZ
@@ -716,8 +719,8 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 				continue
 			}
 
-			// Tight glow with power curve
-			alpha := math.Pow(dot, 1.5) * edgeFactor * intensityMult * 0.85
+			// Tight glow with power curve, dot^1.5 without a Pow per ring cell
+			alpha := dot * math.Sqrt(dot) * edgeFactor * intensityMult * 0.85
 			if alpha < 0.05 {
 				continue
 			}

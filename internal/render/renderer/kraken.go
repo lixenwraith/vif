@@ -50,7 +50,7 @@ func (r *KrakenRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			for cy := max(minY, int(math.Ceil(y-(radius+1.8)/2-0.5))); cy <= min(maxY, int(math.Floor(y+(radius+1.8)/2-0.5))); cy++ {
 				for cx := max(minX, int(math.Ceil(x-radius-1.8-0.5))); cx <= min(maxX, int(math.Floor(x+radius+1.8-0.5))); cx++ {
 					dx, dy := float64(cx)+0.5-x, (float64(cy)+0.5-y)*2
-					distance := math.Hypot(dx, dy)
+					distance := math.Sqrt(dx*dx + dy*dy)
 					cell := &r.cells[(cy-minY)*width+cx-minX]
 					if distance <= radius {
 						*cell = terminal.Cell{Rune: ' ', Fg: c, Bg: c}
@@ -77,7 +77,8 @@ func (r *KrakenRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		rx, ry := parameter.KrakenBodyRadius*2, parameter.KrakenBodyRadius
 		for cy := max(minY, int(math.Ceil(y-ry-0.5))); cy <= min(maxY, int(y+ry-0.5)); cy++ {
 			for cx := max(minX, int(math.Ceil(x-rx-0.5))); cx <= min(maxX, int(x+rx-0.5)); cx++ {
-				distance := math.Hypot((float64(cx)+0.5-x)/rx, (float64(cy)+0.5-y)/ry)
+				nx, ny := (float64(cx)+0.5-x)/rx, (float64(cy)+0.5-y)/ry
+				distance := math.Sqrt(nx*nx + ny*ny)
 				if distance > 1 {
 					continue
 				}

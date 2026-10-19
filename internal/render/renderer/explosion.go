@@ -26,7 +26,8 @@ type ExplosionRenderer struct {
 	bufHeight        int
 	bufCapacity      int
 
-	// Dirty rects per type (screen coordinates relative to GameX/Y)
+	// Dirty rects per type in viewport coordinates, which is all a frame wrote
+	// and all the next frame has to clear
 	dustMinX, dustMaxX, dustMinY, dustMaxY             int
 	missileMinX, missileMaxX, missileMinY, missileMaxY int
 	eyeMinX, eyeMaxX, eyeMinY, eyeMaxY                 int
@@ -80,21 +81,27 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		return
 	}
 
-	// Resize check
+	// Outside last frame's dirty rects the buffers are already zero; a new
+	// stride moves those cells, so a resize clears both areas whole
 	requiredSize := ctx.ViewportWidth * ctx.ViewportHeight
-	if requiredSize > r.bufCapacity {
+	switch {
+	case requiredSize > r.bufCapacity:
 		r.bufCapacity = requiredSize
 		r.accBufferDust = make([]float64, r.bufCapacity)
 		r.accBufferMissile = make([]float64, r.bufCapacity)
 		r.accBufferEye = make([]float64, r.bufCapacity)
+	case ctx.ViewportWidth != r.bufWidth || ctx.ViewportHeight != r.bufHeight:
+		size := max(requiredSize, r.bufWidth*r.bufHeight)
+		clear(r.accBufferDust[:size])
+		clear(r.accBufferMissile[:size])
+		clear(r.accBufferEye[:size])
+	default:
+		r.clearRect(r.accBufferDust, r.dustMinX, r.dustMaxX, r.dustMinY, r.dustMaxY)
+		r.clearRect(r.accBufferMissile, r.missileMinX, r.missileMaxX, r.missileMinY, r.missileMaxY)
+		r.clearRect(r.accBufferEye, r.eyeMinX, r.eyeMaxX, r.eyeMinY, r.eyeMaxY)
 	}
 	r.bufWidth = ctx.ViewportWidth
 	r.bufHeight = ctx.ViewportHeight
-
-	// Clear buffers and reset dirty rects
-	clear(r.accBufferDust[:requiredSize])
-	clear(r.accBufferMissile[:requiredSize])
-	clear(r.accBufferEye[:requiredSize])
 	r.resetDirtyRects()
 
 	// Accumulation pass: rasterize centers into type-specific buffers
@@ -152,6 +159,14 @@ func (r *ExplosionRenderer) render256(ctx render.RenderContext, buf *render.Rend
 			buf.SetFgOnly(screenX, screenY, visual.Density256Chars[min(int(val*4), 3)],
 				color.RGB{R: stages[min(int(val*3), 2)]}, terminal.AttrFg256)
 		}
+	}
+}
+
+// clearRect zeroes one type's dirty rect at the current stride
+func (r *ExplosionRenderer) clearRect(acc []float64, minX, maxX, minY, maxY int) {
+	for vy := minY; vy <= maxY; vy++ {
+		row := vy * r.bufWidth
+		clear(acc[row+minX : row+maxX+1])
 	}
 }
 
