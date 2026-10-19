@@ -1,10 +1,12 @@
 package status
 
 import (
+	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -251,6 +253,25 @@ func (r *Registry) buildIndex() []statGroup {
 
 // display renders the current reading for a UI consumer; int metrics resolve
 // their unit through the key convention
+// bits is the reading as a change detector; a string's is the address of the
+// text its atomic holds, which every Store replaces
+func (m *metricRef) bits() uint64 {
+	switch m.kind {
+	case kindBool:
+		if m.b.Load() {
+			return 1
+		}
+		return 0
+	case kindInt:
+		return uint64(m.i.Load())
+	case kindFloat:
+		return math.Float64bits(m.f.Get())
+	case kindString:
+		return uint64(uintptr(unsafe.Pointer(m.s.ptr.Load())))
+	}
+	return 0
+}
+
 func (m *metricRef) display() string {
 	switch m.kind {
 	case kindBool:
