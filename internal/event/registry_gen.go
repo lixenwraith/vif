@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 188
+const EventTypeCount = 187
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -60,7 +60,6 @@ func InitRegistry() {
 	RegisterType("EventGoldDestroyed", EventGoldDestroyed, &GoldCompletionPayload{})
 	RegisterType("EventGoldCancel", EventGoldCancel, nil)
 	RegisterType("EventGoldJumpRequest", EventGoldJumpRequest, &GoldJumpRequestPayload{})
-	RegisterType("EventGoldBreakRequest", EventGoldBreakRequest, &GoldBreakRequestPayload{})
 	RegisterType("EventSplashTimerRequest", EventSplashTimerRequest, &SplashTimerRequestPayload{})
 	RegisterType("EventSplashTimerCancel", EventSplashTimerCancel, &SplashTimerCancelPayload{})
 	RegisterType("EventEnergyAddRequest", EventEnergyAddRequest, &EnergyAddPayload{})
@@ -254,7 +253,6 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventGoldDestroyed:                   ClassShared,
 	EventGoldCancel:                      ClassShared,
 	EventGoldJumpRequest:                 ClassBus,
-	EventGoldBreakRequest:                ClassBus,
 	EventSplashTimerRequest:              ClassLocal,
 	EventSplashTimerCancel:               ClassLocal,
 	EventEnergyAddRequest:                ClassLocal,

@@ -33,19 +33,18 @@ const (
 	SpawnTypeCount
 )
 
-// MaterializeStyle is one spawn type's beam timing
+// MaterializeStyle is one spawn type's beam timing: the fill runs the head from
+// the edge to the target, the hold keeps the line, the recede runs the tail after it
 type MaterializeStyle struct {
-	Duration time.Duration
-	FillEnd  float64 // fraction of Duration at which the fill ends and the hold begins
-	HoldEnd  float64 // fraction at which the hold ends and the recede begins
+	Fill, Hold, Recede time.Duration
 }
+
+// Duration is the whole beam, which its deadline timer runs
+func (s MaterializeStyle) Duration() time.Duration { return s.Fill + s.Hold + s.Recede }
 
 // MaterializeStyles is indexed by SpawnType
 var MaterializeStyles = [SpawnTypeCount]MaterializeStyle{
-	SpawnTypeDrain: {Duration: parameter.MaterializeAnimationDuration,
-		FillEnd: parameter.MaterializeFillEnd, HoldEnd: parameter.MaterializeHoldEnd},
-	SpawnTypeSwarm: {Duration: parameter.MaterializeAnimationDuration,
-		FillEnd: parameter.MaterializeFillEnd, HoldEnd: parameter.MaterializeHoldEnd},
-	SpawnTypeNugget: {Duration: parameter.MaterializeNuggetDuration,
-		FillEnd: parameter.MaterializeNuggetFillEnd, HoldEnd: parameter.MaterializeNuggetHoldEnd},
+	SpawnTypeDrain:  {Fill: parameter.MaterializeFill, Hold: parameter.MaterializeHold, Recede: parameter.MaterializeRecede},
+	SpawnTypeSwarm:  {Fill: parameter.MaterializeFill, Hold: parameter.MaterializeHold, Recede: parameter.MaterializeRecede},
+	SpawnTypeNugget: {Fill: parameter.MaterializeNuggetFill, Hold: parameter.MaterializeNuggetHold, Recede: parameter.MaterializeNuggetRecede},
 }

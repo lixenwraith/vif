@@ -6,21 +6,23 @@ import (
 
 // Materialization Effect
 const (
-	// MaterializeAnimationDuration is the time for spawners to converge
-	MaterializeAnimationDuration = 1 * time.Second
+	// A spawn's beam: the head runs from the map edge to the target through the
+	// fill, the line holds, then the tail runs after it through the recede, the
+	// slow trail of something being ported in
+	MaterializeFill   = 400 * time.Millisecond
+	MaterializeHold   = 200 * time.Millisecond
+	MaterializeRecede = 400 * time.Millisecond
 
-	// Materialize phase thresholds (normalized 0.0-1.0)
-	MaterializeFillEnd = 0.4 // Fill phase ends, hold begins
-	MaterializeHoldEnd = 0.6 // Hold phase ends, recede begins
-	MaterializePulseHz = 4   // Pulse at the fill's front; 8 Hz aliased at the 20 Hz tick into a flicker
+	// The nugget beacon's beams: quicker, and at one speed in and out, so the
+	// beam reads as one pass rather than a sweep and a faster second one
+	MaterializeNuggetFill   = 270 * time.Millisecond
+	MaterializeNuggetHold   = 60 * time.Millisecond
+	MaterializeNuggetRecede = 270 * time.Millisecond
 
 	// Materialize visual parameters
-	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width beams
-
-	// The nugget beacon's beams: shorter than a spawn's, with a brief hold
-	MaterializeNuggetDuration = 600 * time.Millisecond
-	MaterializeNuggetFillEnd  = 0.5
-	MaterializeNuggetHoldEnd  = 0.6
+	MaterializeTailIntensity = 0.35 // The lit segment's dim end; the gradient never falls to black
+	MaterializePulseHz       = 4    // Pulse at the fill's head; 8 Hz aliased at the 20 Hz tick into a flicker
+	MaterializeWidthFalloff  = 0.5  // Side-line intensity for multi-width beams
 )
 
 // Lightning Entity

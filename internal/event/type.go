@@ -156,8 +156,6 @@ const (
 	EventGoldCancel
 	// EventGoldJumpRequest (GoldJumpRequestPayload) [bus] signals player intent to jump to active gold sequence
 	EventGoldJumpRequest
-	// EventGoldBreakRequest (GoldBreakRequestPayload) [bus] crosses a personal species' hit on one gold member
-	EventGoldBreakRequest
 
 	// --- Splash ---
 

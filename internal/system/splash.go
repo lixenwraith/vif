@@ -193,9 +193,8 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 		return false
 	}
 
-	// Glyph mechanics are player-domain; a shared top glyph is a gold member
 	glyphEntity, ok := s.world.Positions.TopGlyphAt(cursorPos.X, cursorPos.Y)
-	if !ok || glyphEntity.Domain() != core.DomainPlayer {
+	if !ok {
 		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		return false
 	}
@@ -321,9 +320,8 @@ func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot,
 func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	cursorX, cursorY := payload.X, payload.Y
 
-	// Glyph mechanics are player-domain; a shared top glyph is a gold member
 	entity, ok := s.world.Positions.TopGlyphAt(cursorX, cursorY)
-	if !ok || entity.Domain() != core.DomainPlayer {
+	if !ok {
 		// No glyph entity - clear magnifier
 		s.cleanupSplashesBySlot(component.SlotMagnifier)
 		return

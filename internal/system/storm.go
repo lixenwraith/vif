@@ -1343,7 +1343,7 @@ func (s *StormSystem) processBlueAttack(
 		s.pendingBlueSpawns = append(s.pendingBlueSpawns, pendingBlueSpawn{
 			TargetX: circleComp.AttackTargetX,
 			TargetY: circleComp.AttackTargetY,
-			Timer:   parameter.MaterializeAnimationDuration,
+			Timer:   component.MaterializeStyles[component.SpawnTypeSwarm].Duration(),
 		})
 		s.buffers.Observe(2, len(s.pendingBlueSpawns))
 	}
