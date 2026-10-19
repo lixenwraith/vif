@@ -123,15 +123,16 @@ stall there, and a line-of-sight flag computed against that nearest cursor while
 the movement homes at the owner would read "direct path" beside somebody else's
 cursor and drive the drop into the wall between it and its own.
 
-`LootSystem` therefore keeps one single-goal field per owner cursor, built from
-the same `FlowFieldCache` and the same shared walls, and does its own
-line-of-sight check against the same cursor it steers toward. No field covers a
-wall cell, so a drop a wall lands on without displacing it — a correction installs
-shared walls under player-domain loot — is pushed out as a spawn displaces it. A
-field is built the first time a cursor drops something and released when that
-cursor goes; a tick with none of its drops in flight recomputes nothing. Anything
-else that becomes owned rather than contested belongs on the same seam: give it a
-private single-goal field, do not add a target group per participant.
+A drop therefore steers by its owner's private group: navigation keeps one per
+cursor on the map, the same groups on every instance so the phase each carries
+agrees, and publishes the point tier through `PursuitResource`, where loot reads
+its owner's slot and does its own line-of-sight check against the same cursor.
+A field is computed when first read, so only the instance holding a cursor's
+drops ever materializes it, and it goes with the cursor. No field covers a wall
+cell, so a drop a wall lands on without displacing it — a correction installs
+shared walls under player-domain loot — is pushed out as a spawn displaces it.
+Anything else that becomes owned rather than contested reads the same resource;
+do not add a target group per participant.
 
 `NavigationComponent` records whether an actor follows a group flow field or a
 route graph, the graph/route IDs, a snake head's locked cursor, and each tick's
@@ -449,9 +450,9 @@ room entries serve `sandbox/maze`.
 ## 12. Extension guidance
 
 - Use a shared flow field for many actors with the same footprint/targets; do
-  not compute one per entity. Do give an actor whose goal is *one participant's*
-  entity its own single-goal field: a group field selects the nearest target,
-  which is a different question.
+  not compute one per entity. Steer an actor whose goal is *one participant's*
+  cursor by that cursor's private group (`PursuitResource`): a group field
+  selects the nearest target, which is a different question.
 - Pair every homing profile with a damping term that acts at cruise speed — the
   cornering brake, in this codebase. Arrival damping alone leaves an orbit at
   `cruise² / accel` that nothing removes.

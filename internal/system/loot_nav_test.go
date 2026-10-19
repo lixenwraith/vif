@@ -272,8 +272,12 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 	}
 
 	loot := NewLootSystem(w).(*LootSystem)
+	nav := NewNavigationSystem(w).(*NavigationSystem)
 	warmDrop := dropLoot(w, loot, 65, 20, owner)
-	loot.refreshOwnerRoutes([]core.Entity{warmDrop})
+	nav.Update()
+	if w.Resources.Pursuit.Field(0) == nil {
+		t.Fatal("no field toward the owner on the open map; the maze replaces nothing")
+	}
 	w.DestroyEntity(warmDrop)
 
 	walls := NewWallSystem(w).(*WallSystem)
@@ -290,7 +294,6 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 		t.Fatalf("the maze produced %d walls; the crossing proves nothing", walls)
 	}
 
-	nav := NewNavigationSystem(w).(*NavigationSystem)
 	deaths := NewDeathSystem(w).(*DeathSystem)
 
 	rng := w.Rand(core.DomainPlayer, "loot_maze_probe")
@@ -364,35 +367,24 @@ func TestLootWalledOffComesToRest(t *testing.T) {
 	}
 }
 
-// TestLootRoutesFollowTheirOwnersLifetime pins what the fields cost: one per cursor
-// that has dropped something, held while that cursor lives and released with it.
-func TestLootRoutesFollowTheirOwnersLifetime(t *testing.T) {
-	w, first, second := testCursorWorld(t)
-	loot := NewLootSystem(w).(*LootSystem)
-
-	dropLoot(w, loot, 8, 8, first)
-	loot.Update()
-	if got := len(loot.ownerRoutes); got != 1 {
-		t.Fatalf("one owner with loot holds %d routes, want 1", got)
+// TestADropsFieldIsItsOwnersPrivateGroup: navigation keeps a point field toward
+// every cursor on the map, which a drop reads for its owner's slot, and retires
+// it with the cursor; nothing of it lives in the loot system.
+func TestADropsFieldIsItsOwnersPrivateGroup(t *testing.T) {
+	w, _, second := testCursorWorld(t)
+	nav := NewNavigationSystem(w).(*NavigationSystem)
+	nav.Update()
+	if w.Resources.Pursuit.Field(0) == nil || w.Resources.Pursuit.Field(1) == nil {
+		t.Fatal("a cursor on the map has no field toward it")
+	}
+	if got := len(nav.groups); got != 3 {
+		t.Fatalf("two cursors and the roster hold %d groups, want 3", got)
 	}
 
-	dropLoot(w, loot, 18, 8, second)
-	loot.Update()
-	if got := len(loot.ownerRoutes); got != 2 {
-		t.Fatalf("two owners with loot hold %d routes, want 2", got)
-	}
-	if got := w.Resources.Status.Ints.Get("loot.routes").Load(); got != 2 {
-		t.Fatalf("loot.routes = %d, want 2", got)
-	}
-
-	// A cursor that leaves takes its route with it; the other keeps its own.
 	w.Positions.RemoveEntity(second)
-	loot.Update()
-	if got := len(loot.ownerRoutes); got != 1 {
-		t.Fatalf("a departed cursor left %d routes, want the survivor's alone", got)
-	}
-	if _, held := loot.ownerRoutes[first]; !held {
-		t.Fatal("the surviving cursor lost its route")
+	nav.Update()
+	if w.Resources.Pursuit.Field(1) != nil || w.Resources.Pursuit.Field(0) == nil {
+		t.Fatal("a departed cursor kept its field, or took the survivor's")
 	}
 }
 
