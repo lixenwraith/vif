@@ -12,7 +12,7 @@ const (
 	// Materialize phase thresholds (normalized 0.0-1.0)
 	MaterializeFillEnd = 0.4 // Fill phase ends, hold begins
 	MaterializeHoldEnd = 0.6 // Hold phase ends, recede begins
-	MaterializePulseHz = 8   // Sine wave cycles during fill phase
+	MaterializePulseHz = 4   // Pulse at the fill's front; 8 Hz aliased at the 20 Hz tick into a flicker
 
 	// Materialize visual parameters
 	MaterializeWidthFalloff = 0.5 // Side-line intensity for multi-width beams
