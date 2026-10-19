@@ -51,6 +51,9 @@ var (
 	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
 	flagSeed     = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 	flagGUI      = flag.Bool("g", false, "Open the game in a desktop window instead of the terminal")
+	flagCLI      = flag.Bool("cli", false, "Play in the terminal, whatever vif.toml or the build says")
+	flagMaxim    = flag.Bool("maximized", false, "Open the desktop window maximized; a terminal run ignores it")
+	flagFull     = flag.Bool("fullscreen", false, "Open the desktop window full screen; a terminal run ignores it")
 	flagScale    = flag.Int("scale", 1, "Desktop window pixels per font pixel; with -g")
 	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
 	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
@@ -114,13 +117,26 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
-	// -g given either way decides; unset, vif.toml's [presentation] or the build does
+	// -g given either way decides, and -cli over it; unset, vif.toml's
+	// [presentation] or the build does. The window's state follows the same rule.
 	window := windowByDefault || settings.Presentation.Window
+	windowMaximized, windowFullscreen = settings.Presentation.Maximized, settings.Presentation.Fullscreen
+	cli := false
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "g" || f.Name == "gui" {
+		switch f.Name {
+		case "g", "gui":
 			window = *flagGUI
+		case "cli":
+			cli = *flagCLI
+		case "maximized":
+			windowMaximized = *flagMaxim
+		case "fullscreen":
+			windowFullscreen = *flagFull
 		}
 	})
+	if cli {
+		window = false
+	}
 	if window {
 		if openWindow == nil {
 			fmt.Fprintln(os.Stderr, "-g: this build has no desktop window; one is built on Linux and FreeBSD without vif_nogui")
@@ -322,11 +338,13 @@ func logRuntimeReport(r core.RuntimeReport) {
 
 // platformHost is the build's platform host; empty, the run presents on the
 // terminal. openWindow makes it the desktop window, nil in a build without one;
-// windowByDefault is a vif_gui build's, which opens the window unless -g=false.
+// windowByDefault is a vif_gui build's, which opens the window unless -g=false;
+// windowMaximized and windowFullscreen are the state it opens in.
 var (
-	platformHost    app.Host
-	openWindow      func()
-	windowByDefault bool
+	platformHost                      app.Host
+	openWindow                        func()
+	windowByDefault                   bool
+	windowMaximized, windowFullscreen bool
 )
 
 // buildConfig translates parsed flags into the runtime configuration

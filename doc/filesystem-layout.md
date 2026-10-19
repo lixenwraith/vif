@@ -124,7 +124,8 @@ the join.
 `[paths]` names another root (`root`, read as `-config-dir` is), the log,
 journal and music directories, and the scenario, content and keymap `-s`, `-f` and `-k`
 take; `[audio] buffer_ms` sets the mixer period; `[presentation] window = true` opens
-the desktop window by default, as `-g` does; `[play]` is how a run starts and
+the desktop window by default, as `-g` does, and `maximized` or `fullscreen` the
+state it opens in, as those flags do; `[play]` is how a run starts and
 what the configuration menu changes in it: the two sound channels, the effects
 volume, auto-fire, mouse input, the cursor following the pointer and the telemetry
 HUD, which a run with a settings file writes back as it is left, so the next run

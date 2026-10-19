@@ -383,7 +383,9 @@ name. Adding a graphical host is therefore composition, not a simulation fork:
 
 The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
 build but `vif_nogui`, sets `Host.Presentation` to a `pkg/window` window when `-g`
-asks for it, as a `vif_gui` build does by default; the window draws each frame with
+asks for it, as a `vif_gui` build or `vif.toml`'s `[presentation] window` does by
+default and `-cli` refuses; it opens maximized or full screen on `-maximized` or
+`-fullscreen` (`_NET_WM_STATE` set before the map); the window draws each frame with
 `glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
 pointer as the events a terminal reports; `-scale n` draws the texture `n` times
 its size with nearest filtering, for a HiDPI screen. Its libraries
