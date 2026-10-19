@@ -93,7 +93,6 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 		event.EventGoldSpawnRequest,
 		event.EventGoldCancel,
 		event.EventGoldJumpRequest,
-		event.EventGoldBreakRequest,
 		event.EventCompositeMemberDestroyed,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
@@ -128,11 +127,6 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 			} else {
 				s.rejects.cursor.Add(1)
 			}
-		}
-
-	case event.EventGoldBreakRequest:
-		if payload, ok := ev.Payload.(*event.GoldBreakRequestPayload); ok {
-			s.breakMember(payload)
 		}
 
 	case event.EventGoldSpawnRequest:
@@ -399,17 +393,6 @@ func (s *GoldSystem) requestTimerSplash(remaining time.Duration) {
 		MarginBottom: 1, // One line height
 		Duration:     remaining,
 	})
-}
-
-// breakMember lands a personal species' crossed hit on one member, which leaves
-// as it would under a shared body; the breach the composite reports ends the run
-func (s *GoldSystem) breakMember(p *event.GoldBreakRequestPayload) {
-	if p.HeaderEntity != s.headerEntity {
-		return
-	}
-	if m, ok := s.world.Components.Member.GetPtr(p.Entity); ok && m.HeaderEntity == s.headerEntity {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, p.Entity)
-	}
 }
 
 // handleMemberTyped processes a gold character being typed

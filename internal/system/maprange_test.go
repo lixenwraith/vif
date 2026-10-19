@@ -70,7 +70,6 @@ var allowedMapRanges = map[string]string{
 	"AdaptationSystem.pruneDrained:Entries":         "deletes only",
 	"AdaptationSystem.handleGraphComputed:tracking": "deletes only",
 	"TypingSystem.Update:typed":                     "deletes only",
-	"DrainSystem.forgetStruck:struck":               "deletes only",
 	"AdaptationSystem.updateTelemetry:Entries":      "collects keys, sorted before use",
 	"NavigationSystem.Init:groups":                  "per-group resize; independent",
 	"NavigationSystem.HandleEvent:groups":           "per-group dirty flag; independent",

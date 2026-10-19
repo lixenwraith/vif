@@ -93,12 +93,15 @@ func breakGoldUnder(w *engine.World, sweep *cellSweep, header core.Entity) {
 			continue
 		}
 		if pos, ok := w.Positions.GetPosition(m.Entity); ok {
-			sweep.collect(w, pos.X, pos.Y, func(e core.Entity) bool {
-				return e.Domain() == core.DomainShared && w.Components.Glyph.HasEntity(e)
-			})
+			sweep.collect(w, pos.X, pos.Y, func(e core.Entity) bool { return goldMember(w, e) })
 		}
 	}
 	sweep.emit(w, event.EventFlashSpawnOneRequest)
+}
+
+// goldMember reports a shared glyph, which only a gold sequence holds
+func goldMember(w *engine.World, e core.Entity) bool {
+	return e.Domain() == core.DomainShared && w.Components.Glyph.HasEntity(e)
 }
 
 // speciesClearable admits everything a spawn footprint may destroy; cursors,

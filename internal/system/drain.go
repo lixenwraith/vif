@@ -55,10 +55,6 @@ type DrainSystem struct {
 	// Per-tick cache to avoid repeated queries
 	drainCache []drainCacheEntry
 
-	// struck holds the gold members this instance's drains hit whose crossing has
-	// not applied, by the tick each was hit, so a drain sitting on one crosses once
-	struck map[core.Entity]uint64
-
 	// Cached metric pointers
 	statCount               *atomic.Int64
 	statPending             *atomic.Int64
@@ -92,7 +88,6 @@ func NewDrainSystem(world *engine.World) engine.System {
 	s.pendingSpawns = make([]pendingDrainSpawn, parameter.DrainMaxCount)
 	s.drainCache = make([]drainCacheEntry, 0, parameter.DrainMaxCount)
 	s.pausedFor = make([]core.Entity, 0, parameter.MaxPlayers)
-	s.struck = make(map[core.Entity]uint64, 4)
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
@@ -127,7 +122,6 @@ func (s *DrainSystem) Init() {
 	s.spawnBackoff = 0
 	s.pausedAll = false
 	s.pausedFor = s.pausedFor[:0]
-	clear(s.struck)
 	s.statCount.Store(0)
 	s.statPending.Store(0)
 	s.statCollisions.Store(0)
@@ -233,8 +227,6 @@ func (s *DrainSystem) Update() {
 	if !s.enabled {
 		return
 	}
-
-	s.forgetStruck()
 
 	// Cache all drain data for this tick, not covered by SpeciesCache, internal drain logic use
 	s.cacheDrainData()
@@ -1167,10 +1159,11 @@ func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wa
 // carry ProtectFromSpecies, but a drain collision is now a one-way event
 // boundary rather than shared-side collision physics.
 func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity core.Entity) {
-	// A shared glyph is a gold member; the drain is this instance's alone, so the
-	// hit crosses rather than lands (D-3)
-	if entity.Domain() != core.DomainPlayer && s.world.Components.Glyph.HasEntity(entity) {
-		s.strikeGold(entity)
+	// A shared glyph is a gold member: it dies as under any species body and the
+	// breach ends the sequence. The drain is this instance's alone, so in a session
+	// the authority's next correction decides the loss.
+	if goldMember(s.world, entity) {
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entity)
 		return
 	}
 
@@ -1206,36 +1199,6 @@ func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity c
 
 	// Destroy the entity
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
-}
-
-// strikeGold crosses a drain's hit on a gold member, once per member until the
-// crossing applies; the gold system lands it everywhere at the crossing's tick
-func (s *DrainSystem) strikeGold(member core.Entity) {
-	if _, pending := s.struck[member]; pending {
-		return
-	}
-	m, ok := s.world.Components.Member.GetComponent(member)
-	if !ok {
-		return
-	}
-	s.struck[member] = s.world.Resources.Game.State.GetGameTicks()
-	s.world.PushCrossing(event.EventGoldBreakRequest, &event.GoldBreakRequestPayload{
-		HeaderEntity: m.HeaderEntity,
-		Entity:       member,
-	})
-}
-
-// forgetStruck drops struck members once their crossing applied or can no longer apply
-func (s *DrainSystem) forgetStruck() {
-	if len(s.struck) == 0 {
-		return
-	}
-	now := s.world.Resources.Game.State.GetGameTicks()
-	for e, at := range s.struck {
-		if !s.world.Components.Member.HasEntity(e) || now > at+crossingApplyTicks {
-			delete(s.struck, e)
-		}
-	}
 }
 
 // consumeIntoSharedSpecies converts a drain collision with a swarm or quasar

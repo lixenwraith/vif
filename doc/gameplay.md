@@ -239,8 +239,8 @@ nugget and spends one percent energy when a target exists.
 A gold encounter creates a protected, bright, 10-character alphanumeric
 composite at a free horizontal span. It lasts 10 seconds and must be typed in
 left-to-right member order. Gold members resist deletion and particle effects,
-but any species body covering one destroys it, a drain's hit crossing as the
-member it struck (D-3), and the breach ends the sequence as destroyed.
+but any species body covering one destroys it, a drain's included, and the
+breach ends the sequence as destroyed.
 
 `Shift-Tab` jumps to the first remaining gold member and spends ten percent
 energy. Completion, timeout and external damage emit `EventGoldCompleted`,

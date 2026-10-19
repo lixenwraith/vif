@@ -365,12 +365,10 @@ func TestDrainPlacementBackoffDoublesAndResets(t *testing.T) {
 	}
 }
 
-// A drain's hit on a gold member crosses once per member rather than landing: the
-// gold system kills the member everywhere at the crossing's tick, and a drain
-// sitting on the member does not cross it again until that applies.
-func TestDrainCrossesTheGoldMemberItHits(t *testing.T) {
+// A drain destroys the gold member it crosses as any species body does: one flash
+// death for the member, through which the composite's breach ends the sequence.
+func TestDrainBreaksTheGoldMemberItCrosses(t *testing.T) {
 	w, _, _, drains, _ := testDrainInteractionWorld(t, 2, 2, 10, 10)
-	gold := NewGoldSystem(w).(*GoldSystem)
 	header := w.CreateEntity(core.DomainShared)
 	member := w.CreateEntity(core.DomainShared)
 	w.Components.Glyph.SetComponent(member, component.GlyphComponent{Rune: 'A', Type: component.GlyphGold})
@@ -379,29 +377,9 @@ func TestDrainCrossesTheGoldMemberItHits(t *testing.T) {
 	w.Components.Protection.SetComponent(header, component.ProtectionComponent{Mask: component.ProtectAll ^ component.ProtectFromDeath})
 	w.Positions.SetPosition(header, component.PositionComponent{X: 10, Y: 10})
 	w.Positions.SetPosition(member, component.PositionComponent{X: 10, Y: 10})
-	gold.headerEntity, gold.active = header, true
 
-	var crossings []event.GameEvent
-	for range 2 {
-		beginDrainTick(t, drains)
-		drains.handleEntityCollisions()
-		for _, ev := range w.Resources.Event.Queue.Consume() {
-			switch ev.Type {
-			case event.EventGoldBreakRequest:
-				crossings = append(crossings, ev)
-			case event.EventDeathBatch:
-				t.Fatal("the drain landed a death on a shared member itself")
-			}
-		}
-	}
-	if len(crossings) != 1 || crossings[0].Domain != core.DomainPlayer {
-		t.Fatalf("crossings = %d, want one stamped from the player domain", len(crossings))
-	}
-	if p := crossings[0].Payload.(*event.GoldBreakRequestPayload); p.HeaderEntity != header || p.Entity != member {
-		t.Fatalf("crossing = %+v, want header %d member %d", p, header, member)
-	}
-
-	gold.HandleEvent(crossings[0])
+	beginDrainTick(t, drains)
+	drains.handleEntityCollisions()
 	deaths := 0
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
