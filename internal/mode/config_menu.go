@@ -466,7 +466,7 @@ func configOptionFor(ctx *engine.GameContext, page, key string) (configOption, b
 // row already selected it acts as Enter does, or as Left on a setting's left half.
 func (r *Router) pointConfigMenu(intent *input.Intent) bool {
 	m := configMenu(r.ctx)
-	if m == nil || r.ctx.MouseDisabled.Load() {
+	if m == nil {
 		return true
 	}
 	g := r.ctx.OverlayGeometry()
