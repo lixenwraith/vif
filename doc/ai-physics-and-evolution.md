@@ -196,9 +196,12 @@ flowchart TD
 ```
 
 Each accepted route stores decimated waypoints, true weighted distance, a
-normalized inverse-distance initial weight, and a flow field constrained to its
-dilated corridor. The graph also records the footprint/header offsets used to
-compute it and the composite generation it was computed on.
+normalized inverse-distance initial weight, and its field over its dilated
+corridor alone (`CorridorField`): the corridor's cells with their distance and
+step, searched on the graph's grid with everything outside the corridor a wall,
+and kept sorted by cell, so a route costs its corridor rather than the map. The
+graph also records the footprint/header offsets used to compute it and the
+composite generation it was computed on.
 
 A gateway spawned to route by graph requests one at once
 (`EventRouteGraphRequest`). Graphs live in `RouteGraphResource`, keyed by the

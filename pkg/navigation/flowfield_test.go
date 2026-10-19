@@ -569,6 +569,63 @@ func TestASolverReusedAcrossGraphsComputesEachAfresh(t *testing.T) {
 	}
 }
 
+// TestACorridorFieldIsTheFieldConfinedToItsCorridor: a route's field holds its
+// corridor and only it — every waypoint inside, nothing impassable — and over
+// those cells the distances and directions a flow field confined to them gives.
+func TestACorridorFieldIsTheFieldConfinedToItsCorridor(t *testing.T) {
+	rng := rand.New(rand.NewPCG(5, 9))
+	const w, h = 60, 30
+	walls := make([]bool, w*h)
+	for i := range walls {
+		walls[i] = rng.IntN(4) == 0
+	}
+	for i := range w { // open rows and columns keep the ends reachable
+		walls[1*w+i], walls[15*w+i] = false, false
+	}
+	for i := range h {
+		walls[i*w+1], walls[i*w+58] = false, false
+	}
+	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
+	rg := ComputeRouteGraph(1, 1, 58, 15, w, h, 1, 1, 0, 0, blocked)
+	if rg == nil || len(rg.Routes) < 2 {
+		t.Fatalf("graph %v has too few routes to compare", rg)
+	}
+	for ri, route := range rg.Routes {
+		corridor := make(map[int]bool)
+		for y := range h {
+			for x := range w {
+				if route.Field.GetDistance(x, y) < 0 {
+					continue
+				}
+				if blocked(x, y) {
+					t.Fatalf("route %d: (%d,%d) is a wall with a distance", ri, x, y)
+				}
+				corridor[y*w+x] = true
+			}
+		}
+		if route.Field.Len() != len(corridor) {
+			t.Fatalf("route %d: %d cells stored, %d read", ri, route.Field.Len(), len(corridor))
+		}
+		for _, wp := range route.Waypoints {
+			if !corridor[wp.Y*w+wp.X] {
+				t.Fatalf("route %d: waypoint %v lies outside its corridor", ri, wp)
+			}
+		}
+		want := NewFlowField(w, h)
+		want.Compute([]vmath.Point{{X: rg.TargetX, Y: rg.TargetY}}, func(x, y int) bool {
+			return blocked(x, y) || !corridor[y*w+x]
+		})
+		for y := range h {
+			for x := range w {
+				if route.Field.GetDistance(x, y) != want.GetDistance(x, y) || route.Field.GetDirection(x, y) != want.GetDirection(x, y) {
+					t.Fatalf("route %d (%d,%d): corridor %d/%d, confined field %d/%d", ri, x, y,
+						route.Field.GetDistance(x, y), route.Field.GetDirection(x, y), want.GetDistance(x, y), want.GetDirection(x, y))
+				}
+			}
+		}
+	}
+}
+
 // TestAResetCacheIsANewCache: a cache a removed group leaves, reset for the next
 // group, falls due and computes exactly as a freshly built one, so recycling moves
 // no instance out of the D-17 phase.
