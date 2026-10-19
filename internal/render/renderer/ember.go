@@ -16,11 +16,15 @@ import (
 // radToJaggedIdx maps radians to the 256-bucket jagged/radii LUT index
 const radToJaggedIdx = 256.0 / vmath.TwoPi
 
-// emberLayerColors holds pre-blended intensities for cached 1D mapping
+// emberRingThreshold is the ring visibility under which a cell shows no ring
+const emberRingThreshold = 0.001
+
+// emberLayerColors is one radial step of the glow: each layer's colour, and the lit
+// layers composed over the theme background, which is what most cells start from
 type emberLayerColors struct {
-	Core color.RGB
-	Mid  color.RGB
-	Edge color.RGB
+	Core, Mid, Edge color.RGB
+	Base            color.RGB
+	Active          bool
 }
 
 // emberRingState holds per-ring precomputed values for current frame
@@ -32,8 +36,8 @@ type emberRingState struct {
 // emberCellFunc renders a single cell within the ember ellipse
 type emberCellFunc func(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy float64)
 
-// emberFrameFunc prepares the colour state one Paint needs, rebuilding heat caches when heat changed
-type emberFrameFunc func(p *EmberPainter, ctx render.RenderContext, heatChanged bool)
+// emberFrameFunc prepares the colour state one Paint needs, rebuilding its caches when told to
+type emberFrameFunc func(p *EmberPainter, ctx render.RenderContext, rebuild bool)
 
 // EmberPainter handles per-cell rendering with color mode dispatch
 type EmberPainter struct {
@@ -47,6 +51,8 @@ type EmberPainter struct {
 	aspect     vmath.Aspect
 	radiusX    float64
 	radiusY    float64
+	radiusXInt int
+	radiusYInt int
 	blendScale float64
 
 	// Ring rotation state (computed once per paint)
@@ -56,11 +62,16 @@ type EmberPainter struct {
 	ringAlpha        float64
 	ringVisibleInvSq float64 // 1/ringVisible² for edge fade
 	ringInvWidthSq   float64
+	ringSkipDistSq   float64 // squared plane distance past which a ring cannot show
 
 	// Caching and Precalculation States
 	lastHeat      int
+	lutBlend      float64 // the blend the colour LUT was composed at
 	colorLUT      [256]emberLayerColors
 	invRadiiSqLUT [256]struct{ invRxSq, invRySq float64 }
+	angleIdx      []uint8 // jagged LUT bucket per cell offset, over the widest box
+	angleW        int
+	halfW, halfH  int
 	palette256    uint8
 }
 
@@ -164,6 +175,9 @@ func NewEmberPainter(colorMode terminal.ColorMode, aspect vmath.Aspect) *EmberPa
 		radiusY:  aspect.Y(visual.EmberRadiusY),
 		lastHeat: -1, // Force cache rebuild on first frame
 	}
+	p.radiusXInt = int(math.Floor(p.radiusX))
+	p.radiusYInt = int(math.Floor(p.radiusY))
+	p.buildAngleTable()
 	if colorMode == terminal.ColorMode256 {
 		p.renderCell, p.prepareFrame = emberCell256, emberFrame256
 	} else {
@@ -172,44 +186,56 @@ func NewEmberPainter(colorMode terminal.ColorMode, aspect vmath.Aspect) *EmberPa
 	return p
 }
 
+// emberMargin is the cell margin a jagged amplitude adds around the ellipse
+func emberMargin(amp float64) int { return int(math.Floor(amp)) + 2 }
+
+// buildAngleTable maps every cell offset a Paint can visit to its jagged LUT bucket,
+// so the per-cell atan2 becomes a load. The box is the ellipse at its widest margin;
+// the amplitude is interpolated, so an end of the heat range holds it.
+func (p *EmberPainter) buildAngleTable() {
+	margin := max(emberMargin(visual.InterpolateEmberParams(0).JaggedAmp), emberMargin(visual.InterpolateEmberParams(100).JaggedAmp))
+	p.halfW, p.halfH = p.radiusXInt+margin, p.radiusYInt+margin
+	p.angleW = 2*p.halfW + 1
+	p.angleIdx = make([]uint8, p.angleW*(2*p.halfH+1))
+	for dy := -p.halfH; dy <= p.halfH; dy++ {
+		for dx := -p.halfW; dx <= p.halfW; dx++ {
+			// Atan2 depends only on the ratio, so raw cell deltas are sufficient
+			theta := vmath.Atan2(float64(dy), float64(dx))
+			p.angleIdx[(dy+p.halfH)*p.angleW+dx+p.halfW] = uint8(int(theta*radToJaggedIdx) & 255)
+		}
+	}
+}
+
 // Paint renders the ember effect centered at (centerX, centerY) in map coordinates
 func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, heat int, skipX, skipY int, blendScale float64) {
 	if blendScale <= 0 {
 		return
 	}
-	p.blendScale = blendScale
-	p.gameTime = float64(ctx.GameTime.UnixNano()) / 1e9
-
 	heatChanged := heat != p.lastHeat
 	if heatChanged {
 		p.lastHeat = heat
 		p.params = visual.InterpolateEmberParams(heat)
 	}
-	p.prepareFrame(p, ctx, heatChanged)
+	p.blendScale = blendScale
+	p.gameTime = float64(ctx.GameTime.UnixNano()) / 1e9
+	p.prepareFrame(p, ctx, heatChanged || blendScale != p.lutBlend)
 
-	// Precalculate jagged radii and ellipse reciprocals for the frame.
-	timePhase := p.gameTime * p.params.JaggedSpeed
-	for i := range 256 {
-		theta := float64(i) * vmath.TwoPi / 256.0
-		disp := p.computeJaggedDisplacement(theta, timePhase)
-		adjRx := p.radiusX + disp
-		adjRy := p.radiusY + p.aspect.FromCircular(disp)
-		invRxSq, invRySq := vmath.EllipseInvRadiiSq(adjRx, adjRy)
-		p.invRadiiSqLUT[i].invRxSq = invRxSq
-		p.invRadiiSqLUT[i].invRySq = invRySq
+	// Bounding box in map coords with margin for jagged edges, within the visible map
+	margin := emberMargin(p.params.JaggedAmp)
+	visMinX, visMinY, visMaxX, visMaxY := ctx.VisibleMapBounds()
+	mapStartX := max(visMinX, centerX-p.radiusXInt-margin)
+	mapEndX := min(visMaxX, centerX+p.radiusXInt+margin)
+	mapStartY := max(visMinY, centerY-p.radiusYInt-margin)
+	mapEndY := min(visMaxY, centerY+p.radiusYInt+margin)
+	if mapStartX > mapEndX || mapStartY > mapEndY {
+		return
 	}
-
-	// Bounding box in map coords with margin for jagged edges
-	margin := int(math.Floor(p.params.JaggedAmp)) + 2
-	radiusXInt := int(math.Floor(p.radiusX))
-	radiusYInt := int(math.Floor(p.radiusY))
-
-	mapStartX := max(0, centerX-radiusXInt-margin)
-	mapEndX := min(ctx.MapWidth-1, centerX+radiusXInt+margin)
-	mapStartY := max(0, centerY-radiusYInt-margin)
-	mapEndY := min(ctx.MapHeight-1, centerY+radiusYInt+margin)
+	p.buildRadiiLUT()
 
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
+		cellDY := mapY - centerY
+		dy := float64(cellDY)
+		angleRow := (cellDY+p.halfH)*p.angleW + p.halfW
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
 			if mapX == skipX && mapY == skipY {
 				continue
@@ -221,17 +247,9 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 			}
 
 			cellDX := mapX - centerX
-			cellDY := mapY - centerY
-
-			// Atan2 depends only on the ratio, so raw cell deltas are sufficient.
-			theta := vmath.Atan2(float64(cellDY), float64(cellDX))
-			lutIdx := int(theta*radToJaggedIdx) & 255
-			invRxSq := p.invRadiiSqLUT[lutIdx].invRxSq
-			invRySq := p.invRadiiSqLUT[lutIdx].invRySq
-
+			radii := &p.invRadiiSqLUT[p.angleIdx[angleRow+cellDX]]
 			dx := float64(cellDX)
-			dy := float64(cellDY)
-			normDistSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
+			normDistSq := vmath.EllipseDistSq(dx, dy, radii.invRxSq, radii.invRySq)
 
 			if normDistSq > 1.25 {
 				continue
@@ -242,10 +260,30 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 	}
 }
 
-// emberFrameTrueColor rebuilds the layer LUT on heat change and advances the rings
-func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, heatChanged bool) {
-	if heatChanged {
+// buildRadiiLUT sets the frame's jagged ellipse reciprocals per angle bucket
+func (p *EmberPainter) buildRadiiLUT() {
+	if p.params.JaggedAmp == 0 {
+		// A still edge is one ellipse at every angle
+		invRxSq, invRySq := vmath.EllipseInvRadiiSq(p.radiusX, p.radiusY)
+		for i := range p.invRadiiSqLUT {
+			p.invRadiiSqLUT[i].invRxSq, p.invRadiiSqLUT[i].invRySq = invRxSq, invRySq
+		}
+		return
+	}
+	timePhase := p.gameTime * p.params.JaggedSpeed
+	for i := range 256 {
+		theta := float64(i) * vmath.TwoPi / 256.0
+		disp := p.computeJaggedDisplacement(theta, timePhase)
+		invRxSq, invRySq := vmath.EllipseInvRadiiSq(p.radiusX+disp, p.radiusY+p.aspect.FromCircular(disp))
+		p.invRadiiSqLUT[i].invRxSq, p.invRadiiSqLUT[i].invRySq = invRxSq, invRySq
+	}
+}
+
+// emberFrameTrueColor rebuilds the colour LUT when heat or blend changed and advances the rings
+func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, rebuild bool) {
+	if rebuild {
 		p.colors = interpolateEmberColors(p.params.HeatFactor)
+		p.lutBlend = p.blendScale
 		p.buildColorLUT()
 	}
 
@@ -262,6 +300,9 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, heatChanged bo
 	} else {
 		p.ringVisibleInvSq = 0
 	}
+	if rebuild {
+		p.ringSkipDistSq = p.ringSkipDist()
+	}
 
 	// Compute ring rotation and pulse state once per frame.
 	for i := range visual.EmberRingCount {
@@ -274,13 +315,29 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, heatChanged bo
 	}
 }
 
+// ringSkipDist is the squared distance from a ring's plane past which its Gaussian,
+// at the pulse's peak, stays under emberRingThreshold, so a cell skips the lookup.
+// One step of slack covers the rounding between this quotient and a cell's product.
+func (p *EmberPainter) ringSkipDist() float64 {
+	k := p.ringInvWidthSq * visual.ExpLUTDecayK
+	if k <= 0 {
+		return math.Inf(1)
+	}
+	peak := p.ringAlpha + visual.PulseAmplitude
+	li := 0
+	for li < vmath.ExpLUTMaxInput && vmath.ExpDecay(li)*peak > emberRingThreshold {
+		li++
+	}
+	return float64(li+1) / k
+}
+
 // emberFrame256 takes the heat bar's leading colour at the owner's heat, undimmed for a peer
 // like its shield
 func emberFrame256(p *EmberPainter, ctx render.RenderContext, _ bool) {
 	p.palette256 = heatLead256(p.lastHeat, ctx.ScreenWidth)
 }
 
-// buildColorLUT populates the 1D color/power map array (invoked on heat change)
+// buildColorLUT populates the 1D color/power map array (invoked on heat or blend change)
 func (p *EmberPainter) buildColorLUT() {
 	params := &p.params
 	colors := &p.colors
@@ -297,12 +354,29 @@ func (p *EmberPainter) buildColorLUT() {
 		edgeT := max(1.0-normDist, 0.0)
 		coronaInt := p.powApprox(edgeT, params.EdgePower) * params.EdgeIntensity
 
-		p.colorLUT[i] = emberLayerColors{
-			Core: scaleRGB(colors.Core, coreInt),
-			Mid:  scaleRGB(colors.Mid, midInt),
-			Edge: scaleRGB(colors.Edge, coronaInt),
-		}
+		layer := &p.colorLUT[i]
+		layer.Core = scaleRGB(colors.Core, coreInt)
+		layer.Mid = scaleRGB(colors.Mid, midInt)
+		layer.Edge = scaleRGB(colors.Edge, coronaInt)
+		layer.Base, layer.Active = p.composeLayers(visual.RgbBackground, layer)
 	}
+}
+
+// composeLayers lays a step's lit layers over bg at the painter's blend; false when none is lit
+func (p *EmberPainter) composeLayers(bg color.RGB, layer *emberLayerColors) (color.RGB, bool) {
+	edgeActive := layer.Edge.R|layer.Edge.G|layer.Edge.B != 0
+	midActive := layer.Mid.R|layer.Mid.G|layer.Mid.B != 0
+	coreActive := layer.Core.R|layer.Core.G|layer.Core.B != 0
+	if edgeActive {
+		bg = color.Add(bg, layer.Edge, p.blendScale)
+	}
+	if midActive {
+		bg = color.Screen(bg, layer.Mid, p.blendScale)
+	}
+	if coreActive {
+		bg = color.Add(bg, layer.Core, p.blendScale)
+	}
+	return bg, edgeActive || midActive || coreActive
 }
 
 // computeRingVisibility calculates combined ring visibility
@@ -313,7 +387,7 @@ func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float6
 		return 0
 	}
 
-	dzF := math.Sqrt(math.Max(0, 1.0-normDistF*normDistF))
+	dzF := math.Sqrt(max(0, 1.0-normDistF*normDistF))
 
 	var maxVis float64
 	for i := range visual.EmberRingCount {
@@ -323,6 +397,9 @@ func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float6
 		// Ring distance using raw dx, dy
 		rz := dxF*rs.sinA*norms[0] + dyF*rs.sinA*norms[1] + dzF*rs.cosA*norms[2]
 		ringDistSq := rz * rz
+		if ringDistSq >= p.ringSkipDistSq {
+			continue
+		}
 
 		// Gaussian visibility via ExpDecay LUT
 		lutInput := int(ringDistSq * p.ringInvWidthSq * visual.ExpLUTDecayK)
@@ -346,32 +423,25 @@ func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, scre
 	normDist := min(math.Sqrt(normDistSq), 1.0)
 
 	// Query 1D color mapping cache
-	lutIdx := min(int(normDist*255.0), 255)
-	layerColors := &p.colorLUT[lutIdx]
+	layer := &p.colorLUT[min(int(normDist*255.0), 255)]
 
 	ringVis := 0.0
 	if p.ringAlpha > 0 {
 		ringVis = p.computeRingVisibility(normDist, dx, dy)
 	}
-
-	edgeActive := layerColors.Edge.R|layerColors.Edge.G|layerColors.Edge.B != 0
-	midActive := layerColors.Mid.R|layerColors.Mid.G|layerColors.Mid.B != 0
-	coreActive := layerColors.Core.R|layerColors.Core.G|layerColors.Core.B != 0
-	if !edgeActive && !midActive && !coreActive && ringVis <= 0.001 {
+	ringLit := ringVis > emberRingThreshold
+	if !layer.Active && !ringLit {
 		return
 	}
 
+	// A cell at the theme background takes the step's composite as cached
 	bg := buf.BackgroundAt(screenX, screenY, visual.RgbBackground)
-	if edgeActive {
-		bg = color.Add(bg, layerColors.Edge, p.blendScale)
+	if bg == visual.RgbBackground {
+		bg = layer.Base
+	} else if layer.Active {
+		bg, _ = p.composeLayers(bg, layer)
 	}
-	if midActive {
-		bg = color.Screen(bg, layerColors.Mid, p.blendScale)
-	}
-	if coreActive {
-		bg = color.Add(bg, layerColors.Core, p.blendScale)
-	}
-	if ringVis > 0.001 {
+	if ringLit {
 		ringColor := scaleRGB(p.colors.Ring, ringVis)
 		bg = color.Overlay(bg, ringColor, ringVis*0.7*p.blendScale)
 	}
@@ -380,10 +450,6 @@ func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, scre
 
 // computeJaggedDisplacement returns radius displacement for an angle and phase.
 func (p *EmberPainter) computeJaggedDisplacement(theta, timePhase float64) float64 {
-	if p.params.JaggedAmp == 0 {
-		return 0
-	}
-
 	// Multi-octave sine noise
 	angle1 := theta*p.params.JaggedFreq + timePhase
 	noise := vmath.Sin(angle1) / 2.0
@@ -394,12 +460,7 @@ func (p *EmberPainter) computeJaggedDisplacement(theta, timePhase float64) float
 	angle3 := theta*(p.params.JaggedFreq/2.0) + timePhase*0.7
 	noise += vmath.Sin(angle3) * p.params.Octave3
 
-	// Eruption spikes
-	eruptAngle := theta*3.0 + timePhase*1.5
-	eruptBase := min(vmath.Sin(eruptAngle), 0.0)
-	eruption := p.powApprox(eruptBase, p.params.EruptionPower) * 1.2
-
-	return (noise + eruption) * p.params.JaggedAmp
+	return noise * p.params.JaggedAmp
 }
 
 // emberCell256 renders solid ellipse with heat-mapped color

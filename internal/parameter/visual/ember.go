@@ -30,12 +30,11 @@ var (
 // Colors excluded - interpolated at render time to avoid cyclic dependency
 type EmberParams struct {
 	// Jagged edge
-	JaggedAmp     float64
-	JaggedFreq    float64
-	JaggedSpeed   float64
-	Octave2       float64
-	Octave3       float64
-	EruptionPower float64
+	JaggedAmp   float64
+	JaggedFreq  float64
+	JaggedSpeed float64
+	Octave2     float64
+	Octave3     float64
 
 	// Glow layers
 	CoreFalloff   float64
@@ -58,12 +57,11 @@ type EmberParams struct {
 
 // Ember parameter bounds [low heat, high heat]
 var (
-	emberJaggedAmp     = [2]float64{0.0, 2.0}
-	emberJaggedFreq    = [2]float64{4.0, 32.0}
-	emberJaggedSpeed   = [2]float64{math.Pi, 6.0 * vmath.TwoPi}
-	emberOctave2       = [2]float64{1.0, 1.0}
-	emberOctave3       = [2]float64{1.0, 1.0}
-	emberEruptionPower = [2]float64{1.5, 16.0}
+	emberJaggedAmp   = [2]float64{0.0, 2.0}
+	emberJaggedFreq  = [2]float64{4.0, 32.0}
+	emberJaggedSpeed = [2]float64{math.Pi, 6.0 * vmath.TwoPi}
+	emberOctave2     = [2]float64{1.0, 1.0}
+	emberOctave3     = [2]float64{1.0, 1.0}
 
 	emberCoreFalloff   = [2]float64{1.6, 1.5}
 	emberCorePower     = [2]float64{1.5, 1.5}
@@ -126,12 +124,11 @@ func InterpolateEmberParams(heat int) EmberParams {
 	t := float64(heat) / 100.0
 
 	return EmberParams{
-		JaggedAmp:     vmath.Lerp(emberJaggedAmp[0], emberJaggedAmp[1], t),
-		JaggedFreq:    vmath.Lerp(emberJaggedFreq[0], emberJaggedFreq[1], t),
-		JaggedSpeed:   vmath.Lerp(emberJaggedSpeed[0], emberJaggedSpeed[1], t),
-		Octave2:       vmath.Lerp(emberOctave2[0], emberOctave2[1], t),
-		Octave3:       vmath.Lerp(emberOctave3[0], emberOctave3[1], t),
-		EruptionPower: vmath.Lerp(emberEruptionPower[0], emberEruptionPower[1], t),
+		JaggedAmp:   vmath.Lerp(emberJaggedAmp[0], emberJaggedAmp[1], t),
+		JaggedFreq:  vmath.Lerp(emberJaggedFreq[0], emberJaggedFreq[1], t),
+		JaggedSpeed: vmath.Lerp(emberJaggedSpeed[0], emberJaggedSpeed[1], t),
+		Octave2:     vmath.Lerp(emberOctave2[0], emberOctave2[1], t),
+		Octave3:     vmath.Lerp(emberOctave3[0], emberOctave3[1], t),
 
 		CoreFalloff:   vmath.Lerp(emberCoreFalloff[0], emberCoreFalloff[1], t),
 		CorePower:     vmath.Lerp(emberCorePower[0], emberCorePower[1], t),
