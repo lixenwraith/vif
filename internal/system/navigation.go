@@ -46,6 +46,7 @@ type NavigationSystem struct {
 	// derived is false until passability and the grids were derived whole.
 	grid, comp uint64
 	derived    bool
+	wallsGen   uint64 // the wall grid rebuild the walls were last diffed at
 
 	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
 	targets [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
@@ -97,7 +98,7 @@ func (s *NavigationSystem) Init() {
 	s.groups = make(map[uint8]*targetGroupNav)
 	clear(s.targets[:])
 	s.routeRebuildTicks = 0
-	s.gridsAt, s.derived = 0, false
+	s.gridsAt, s.wallsGen, s.derived = 0, 0, false
 
 	s.getOrCreateGroup(0)
 
@@ -116,6 +117,9 @@ func (s *NavigationSystem) Init() {
 
 	if s.world.Resources.RouteGraph == nil {
 		s.world.Resources.RouteGraph = &engine.RouteGraphResource{}
+	}
+	if s.world.Resources.Pursuit == nil {
+		s.world.Resources.Pursuit = &engine.PursuitResource{}
 	}
 
 	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
@@ -239,7 +243,8 @@ func (s *NavigationSystem) applyWalls() {
 	isWall(-1, -1) // the first call builds the grid
 	config := s.world.Resources.Config
 	w, h := config.MapWidth, config.MapHeight
-	if s.derived && slices.Equal(s.walls, s.seenWalls) {
+	gen := s.world.Positions.WallGeneration(component.WallBlockKinetic)
+	if s.derived && gen == s.wallsGen {
 		if s.gridsAt != s.grid {
 			s.pointGrid.Fill(w, h, isWall)
 			s.compositeGrid.Fill(w, h, s.compositePassability.IsBlocked)
@@ -247,6 +252,7 @@ func (s *NavigationSystem) applyWalls() {
 		}
 		return
 	}
+	s.wallsGen = gen
 	s.pointOpened, s.pointClosed = s.pointOpened[:0], s.pointClosed[:0]
 	s.compOpened, s.compClosed = s.compOpened[:0], s.compClosed[:0]
 	whole := !s.derived || len(s.walls) != len(s.seenWalls)
@@ -263,6 +269,9 @@ func (s *NavigationSystem) applyWalls() {
 				s.pointOpened = append(s.pointOpened, vmath.Point{X: x, Y: y})
 			}
 		})
+		if changed == 0 {
+			return // rebuilt to the same walls
+		}
 		whole = changed > bulk
 	}
 	s.seenWalls = append(s.seenWalls[:0], s.walls...)
@@ -350,6 +359,13 @@ func (s *NavigationSystem) Update() {
 	s.recomputes = 0
 	for groupID, g := range s.groups {
 		s.refresh(groupID, g)
+	}
+	for slot := range parameter.MaxPlayers {
+		var c *navigation.FlowFieldCache
+		if g := s.groups[uint8(component.MaxTargetGroups+slot)]; g != nil {
+			c = g.pointFlowCache
+		}
+		s.world.Resources.Pursuit.Publish(&s.pointGrid, uint8(slot), c)
 	}
 
 	// Classify entities and check LOS to the same target their route follows.
@@ -791,22 +807,15 @@ func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int, groupI
 }
 
 // snapshotTargets caches resolved group state for the tick, and keeps a private
-// group for each cursor a snake head is locked on.
+// group for every cursor on the map: the same groups on every instance, so the
+// phase each carries agrees, and a field only its readers' instance computes.
 func (s *NavigationSystem) snapshotTargets() {
 	tr := s.world.Resources.Target
 	for gid := range component.MaxTargetGroups {
 		s.targets[gid] = tr.GetGroup(uint8(gid))
 	}
-	var locked [parameter.MaxPlayers]bool
-	for _, e := range s.world.Components.SnakeHead.Entities() {
-		if nav, ok := s.world.Components.Navigation.GetPtr(e); ok && nav.LockedTarget != 0 {
-			if slot, ok := s.world.CursorSlot(nav.LockedTarget); ok {
-				locked[slot] = true
-			}
-		}
-	}
 	for slot := range parameter.MaxPlayers {
-		if !locked[slot] || !s.pursue(uint8(slot)) {
+		if !s.pursue(uint8(slot)) {
 			gid := uint8(component.MaxTargetGroups + slot)
 			s.targets[gid] = engine.TargetGroupState{}
 			s.retire(gid)
@@ -815,7 +824,7 @@ func (s *NavigationSystem) snapshotTargets() {
 }
 
 // pursue publishes the private group of one cursor's slot, which steers the heads
-// locked on it, and reports whether the cursor stands on the map.
+// locked on it and the drops it owns, and reports whether the cursor stands on the map.
 func (s *NavigationSystem) pursue(slot uint8) bool {
 	e := s.world.Resources.Player.Slot(slot)
 	pos, ok := s.world.Positions.GetPosition(e)
@@ -890,12 +899,6 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 		return
 	}
 	nav.LockedTarget = best
-	if slot, ok := s.world.CursorSlot(best); ok {
-		gid := uint8(component.MaxTargetGroups) + slot
-		if _, exists := s.groups[gid]; !exists && s.pursue(slot) {
-			s.refresh(gid, s.groups[gid])
-		}
-	}
 }
 
 // routeGraphFresh reports whether a graph's goal still matches a live target of the group
@@ -1287,7 +1290,7 @@ func (s *NavigationSystem) RestoreState(v any) error {
 		dbg.CompositePassability = s.compositePassability
 	}
 	s.walls, s.seenWalls, s.grid, s.comp, s.derived = slices.Clone(c.walls), slices.Clone(c.seenWalls), c.grid, c.comp, c.derived
-	s.gridsAt = 0
+	s.gridsAt, s.wallsGen = 0, 0
 	s.targets, s.routeRebuildTicks = c.targets, c.routeRebuildTicks
 	s.world.Resources.RouteGraph.SetGraphs(c.graphs)
 	return nil

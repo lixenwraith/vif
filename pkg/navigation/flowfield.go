@@ -98,51 +98,29 @@ type FlowField struct {
 	changed []int32    // the cells a repair moved, scratch
 }
 
-// NewFlowField creates an empty flow field for the given dimensions
+// NewFlowField creates an empty flow field for the given dimensions; the first
+// compute allocates its arrays, so a field nothing reads costs nothing.
 func NewFlowField(width, height int) *FlowField {
-	size := width * height
-	dirs := make([]int8, size)
-	for i := range dirs {
-		dirs[i] = DirNone
-	}
-	return &FlowField{
-		Width:      width,
-		Height:     height,
-		Directions: dirs,
-		Costs:      refCosts,
-		Distances:  make([]int32, size),
-		VisitedGen: make([]uint32, size),
-		CurrentGen: 0,
-		TargetX:    -1,
-		TargetY:    -1,
-		Valid:      false,
-	}
+	return &FlowField{Width: width, Height: height, Costs: refCosts, TargetX: -1, TargetY: -1}
 }
 
 // Resize adjusts field dimensions, invalidates cache
 func (f *FlowField) Resize(width, height int) {
-	size := width * height
-	if cap(f.Directions) < size {
-		f.Directions = make([]int8, size)
-		f.Distances = make([]int32, size)
-		f.VisitedGen = make([]uint32, size)
-	} else {
-		f.Directions = f.Directions[:size]
-		f.Distances = f.Distances[:size]
-		f.VisitedGen = f.VisitedGen[:size]
-		// Clear stale generation markers to prevent collision after CurrentGen reset
-		for i := range f.VisitedGen {
-			f.VisitedGen[i] = 0
-		}
-	}
-	// Ensure no stale valid-looking directions survive resize
-	for i := range f.Directions {
-		f.Directions[i] = DirNone
-	}
-	f.Width = width
-	f.Height = height
+	f.Directions, f.Distances, f.VisitedGen = nil, nil, nil
+	f.Width, f.Height = width, height
 	f.CurrentGen = 0
 	f.Valid = false
+}
+
+// alloc sizes the arrays to the field, fresh when they are not its size yet.
+func (f *FlowField) alloc() {
+	if size := f.Width * f.Height; len(f.Directions) != size {
+		f.Directions = make([]int8, size)
+		for i := range f.Directions {
+			f.Directions[i] = DirNone
+		}
+		f.Distances, f.VisitedGen, f.CurrentGen = make([]int32, size), make([]uint32, size), 0
+	}
 }
 
 // Invalidate marks field for recomputation
@@ -201,6 +179,7 @@ func (f *FlowField) ComputeOn(g *SearchGrid, targets []vmath.Point) {
 	}
 
 	w := f.Width
+	f.alloc()
 	f.CurrentGen++
 	if f.CurrentGen == 0 {
 		for i := range f.VisitedGen {

@@ -67,6 +67,7 @@ func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked WallChecker
 		return
 	}
 	w := f.Width
+	f.alloc()
 	f.CurrentGen++
 	if f.CurrentGen == 0 {
 		clear(f.VisitedGen)

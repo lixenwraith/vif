@@ -359,7 +359,14 @@ type wallGrid struct {
 	mask         component.WallBlockMask
 	w, h         int
 	epoch, built uint64
+	rebuilds     uint64
 	cells        []bool
+}
+
+// WallGeneration counts the rebuilds of mask's grid: two equal readings bracket
+// no change HasBlockingWallAt would answer differently.
+func (p *Position) WallGeneration(mask component.WallBlockMask) uint64 {
+	return p.wallGridFor(mask).rebuilds
 }
 
 // wallGridFor returns mask's grid, rebuilt only when the walls or the grid changed.
@@ -383,6 +390,7 @@ func (p *Position) wallGridFor(mask component.WallBlockMask) *wallGrid {
 	}
 	ws := p.world.Components.Wall
 	g.w, g.h, g.epoch, g.built = w, h, p.wallEpoch, p.grid.generation
+	g.rebuilds++
 	g.cells = sized(g.cells, w*h, w*h)
 	clear(g.cells)
 	for i, e := range ws.entities {

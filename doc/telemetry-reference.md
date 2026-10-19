@@ -73,7 +73,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from t
 | Wall | `wall.{enabled,count,push_events,buf_pending_push_checks_hwm}` | `NewWallSystem` | Wall handlers, update and buffer observation | `Init` | Generic only |
 | Tower | `tower.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewTowerSystem` | Spawn, cancel and death handlers; update | `Init` | Generic only |
 | Gateway | `gateway.{active,count}` | `NewGatewaySystem` | `Update` | `Init` | Generic only |
-| Loot | `loot.{drops,active,collects,routes,route_recomputes,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm,buf_routes_hwm}` | `NewLootSystem` | Drop and collect handlers; per-tick `active` and `unreachable`; owner-route maintenance; bounce integration | `Init` | Generic only |
+| Loot | `loot.{drops,active,collects,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm}` | `NewLootSystem` | Drop and collect handlers; per-tick `active` and `unreachable`; owner-route maintenance; bounce integration | `Init` | Generic only |
 | Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,buf_placement_hwm}`; floats `glyph.{density,rate_mult}` | `NewGlyphSystem` | Spawn pacing in update and the enable command | `Init` | Generic only. The spawner reads `environment.drift_*` |
 | Nugget | `nugget.{active,spawned,collected,jumps,spawn_failures,cursor_rejects,disabled_rejects}` | `NewNuggetSystem` | Resolved nugget handlers and update | `Init` | Generic only |
 | Particle | `{dust,decay,blossom}.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`; `dust.{created,destroyed,centers_dropped,buf_{centers,flash,impulses,transform}_hwm}`; `particle.{cursor_rejects,disabled_rejects}` | `NewParticleSystem` | Behavior-selected spawn, apply, update and detonation paths | `Init` | Generic only |
@@ -210,8 +210,6 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `nav.recomputes` (int) | Flow fields rebuilt on the last tick (a gauge) |
 | `nav.roi_cells` (int) | Cumulative composite-passability cells recomputed after wall changes: each change's bounds widened by the composite footprint and clamped to the map |
 | `nav.entities` (int) | Entities holding a Navigation component on the last tick. Outside the shared surface |
-| `loot.routes` (int) | Owner flow fields held: one per cursor that has dropped something and still exists |
-| `loot.route_recomputes` (int) | Owner flow fields rebuilt, cumulative. Rises with owner movement while loot is out |
 | `loot.unreachable` (int) | Drops with no route home this tick, because their owner is gone or walls seal them off. They bleed to rest |
 | `weapon.orbs_reaped` (int) | Orbs the store held that no loadout justified: a duplicate, an orb of a kind that fires from the cursor, one whose owner is not a rostered cursor this instance simulates, or one whose weapon has no charges |
 | `weapon.kind_rejects` (int) | Grants or removals naming a kind outside `WeaponSpecs` |

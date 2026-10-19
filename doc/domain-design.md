@@ -535,9 +535,9 @@ is the Shared placement gate.
 
 Gold is contested Shared state: typing contribution is tallied per roster slot and
 ties resolve to the lowest slot. Nuggets and loot are personal and cannot be
-claimed by a remote cursor. Loot owns a private single-goal route to its cursor;
-the Shared navigation field answers nearest-target questions and cannot answer
-"mine".
+claimed by a remote cursor. Loot steers by its owner's private group, the field
+navigation keeps toward each cursor; the roster's field answers nearest-target
+questions and cannot answer "mine".
 
 ## 4. Transport and ordering
 
