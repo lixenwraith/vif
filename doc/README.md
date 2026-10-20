@@ -90,6 +90,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound and music banks | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`/`BuiltinPatterns`, `AudioConfig.BaseSounds`/`BasePatterns` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
+| Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |
 
 Run `make generate` after changing a manifest or generator input, and
