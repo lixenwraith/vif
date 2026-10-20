@@ -2,8 +2,8 @@
 
 This document describes the multiplayer domain model as implemented. Rules D-1
 through D-24 define simulation ownership, transport, correction, admission, and
-authority continuity. The operational overview and remaining roadmap are in
-[Multiplayer architecture and remaining work](multi-player.md).
+authority continuity. The operational overview is in [Multiplayer](multi-player.md);
+planned work is in [todo](todo.md#multiplayer).
 
 Terminology is deliberately orthogonal:
 
@@ -154,7 +154,12 @@ decide a Shared outcome.
 An effect keyed to a Shared entity retires with it. An install writes the world
 rather than replaying the lifecycle that ends such effects, so the owner's absence
 is the signal its own system acts on; an effect with no lifetime of its own and no
-owner left would otherwise draw for the rest of the session.
+owner left would otherwise draw for the rest of the session. The converse holds
+for an effect the entity's spawn raises: an install brings the entity without the
+spawn, so the system carrying it raises the effect again. A gold sequence an
+install brings gets its countdown splash for the time it has left, and an install
+that replaces a sequence's header cancels the old header's countdown, since the
+install may have given that id to another composite.
 
 Player-domain does not mean that only one participant sees an effect. A shared FSM
 may raise a local effect on every instance. Effects intended for one participant
@@ -670,9 +675,9 @@ Newer corrections and keyframes recover state.
 
 At 20 ticks/s the event stream is small relative to authoritative state: an empty
 epoch is 44 bytes, four cursor moves are about 567 bytes, and one owner-state sync
-is about 703 bytes. At the storm high-water fixture, a plain capture is about
-172 KiB, a compressed keyframe about 15.4 KiB, a compressed delta about 7.1 KiB,
-and a converged manifest exchange about 1.5 KiB.
+is about 703 bytes. At the storm high-water fixture (`TestCostAtTheStormHighWater`
+logs these), a plain capture is about 299 KiB, a compressed keyframe about 16.1 KiB,
+a compressed delta about 6.8 KiB, and a converged manifest exchange 546 bytes.
 
 ## 5. Telemetry and snapshot views
 
@@ -736,7 +741,7 @@ through older absolute positions. Resize must not move the map, host reset must
 preserve the roster, guest reset must be refused, disconnect must remove only the
 departing cursor, and reconnect must take a current world.
 
-## 7. Current limits and next work
+## 7. Current limits
 
 | Area | Current limit |
 |---|---|
@@ -747,7 +752,7 @@ departing cursor, and reconnect must take a current world.
 | Partition | The **first survivor in the succession chain**, else the lowest independent roster identity, succeeds without a vote; losing that successor once it holds the term runs the next succession, but losing it together with the authority elects nobody, because the roster still names it, and the survivors fork. A survivor with no link walks the succession list, and one that hears no record within the succession window forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
-| Presentation | Small terminals clip the map; remote cursor presentation has no interpolation beyond receive scheduling. |
+| Presentation | A presentation smaller than the map is a viewport the camera scrolls; remote cursor presentation has no interpolation beyond receive scheduling. |
 | Portability | `float64` determinism is a same-build guarantee, not arbitrary cross-platform bit-exact lockstep. |
 
 Domain-boundary debt is named rather than merely present:
@@ -755,9 +760,9 @@ Domain-boundary debt is named rather than merely present:
 - a shared system pushing a Local-class event is a per-instance effect (D-6) and is
   not checked; the reverse, a player-domain push of a replicated event, must name its
   crossing in `crossingPushes` or `TestEventClassMatchesSystemProfile` fails;
-- splitting mixed combat telemetry so Shared results compare directly is what
-  remains, and it is a telemetry redesign rather than a boundary fix;
-- tower and per-cursor progression ownership still have to be defined together.
+- combat telemetry mixes Shared results with per-instance ones, so Shared results
+  do not compare directly ([todo](todo.md#split-combat-telemetry-by-domain)).
 
-Authentication is the next security-shaped change. Adaptive playout and
+Authentication is deferred by decision
+([Multiplayer](multi-player.md#deferred-by-decision) §8). Adaptive playout and
 presentation interpolation must remain outside Shared simulation decisions.

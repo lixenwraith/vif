@@ -13,8 +13,8 @@ and it ends itself when nobody is in it.
 K3s objects, scenario volume, session image, allocator, LogWisp's configuration and
 unit — and LogWisp's binary to upstream `main`, skipping what is current and showing
 each change as a diff first. [The fleet design](kubernetes-fleet.md) holds the
-design and its open work; where each host artifact lands and how to back one out is
-[`deploy/guest/README.md`](../deploy/guest/README.md).
+design and [todo](todo.md#fleet) its open work; where each host artifact lands and
+how to back one out is [`deploy/guest/README.md`](../deploy/guest/README.md).
 
 The production node is an Arch Linux guest behind a host that owns routing and
 packet filtering. The host and the site's nginx are site configuration kept outside
@@ -255,16 +255,17 @@ sudo kubectl get pv vif-fleet-logs vif-fleet-wad    # values: ["<node>"], Availa
 
 `WaitForFirstConsumer` leaves both claims `Pending` until something mounts them.
 Bind them with the checked-in probe, which loads a scenario through the wad claim
-and writes a record through the log claim:
+(`td`: `main` is the image's own and would prove nothing) and writes a record
+through the log claim:
 
 ```sh
 VIF_TAG=$(git rev-parse --short=8 HEAD)
-sed -e "s|\${IMAGE}|docker.io/library/vif:$VIF_TAG|g" -e "s|\${SCENARIO}|main|g" \
+sed -e "s|\${IMAGE}|docker.io/library/vif:$VIF_TAG|g" -e "s|\${SCENARIO}|td|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
   pod/vif-log-volume-check --timeout=90s
 sudo jq -r 'select(.fields.msg == "scenario loaded") | .fields | "\(.name) \(.digest)"' \
-  /var/log/vif-fleet/volume-check.jsonl                # main <digest>, not embedded
+  /var/log/vif-fleet/volume-check.jsonl                # td <digest>, not embedded
 sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
 sudo find /var/log/vif-fleet -maxdepth 1 -name 'volume-check*.jsonl' -delete
 ```
@@ -467,8 +468,7 @@ session and names why:
 `drain deadline … reached holding N guest(s)`, or an operator's cause. Sessions
 expiring with `no guest connected` far more often than players report failed joins
 is a broken path between the page and the forwarded ports; start at the
-EndpointSlice and walk outward with §16. Open work is the fleet design's
-[work list](kubernetes-fleet.md#3-work-list).
+EndpointSlice and walk outward with §16. Open work is in [todo](todo.md#fleet).
 
 ## 16. Troubleshooting
 

@@ -129,7 +129,7 @@ var configPages = []configPage{
 			command: "journal", choices: []string{"off", "on"}, read: journalValue, disabled: journalUnavailable},
 	}},
 	{key: "startup", label: "Startup settings", description: "Settings that require restarting, and where to configure them.", options: []configOption{
-		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. Simulation / Change scenario starts another one now.", read: startupValue},
+		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. The Game page starts another scenario now.", read: startupValue},
 		{key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at startup.", read: startupValue},
 		{key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at startup.", read: startupValue},
 		{key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. config_menu is the action bound to Ctrl+G.", read: startupValue},

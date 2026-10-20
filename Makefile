@@ -24,6 +24,19 @@ CLEAN ?= 0
 WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
+RELEASE_TARGET ?= linux-amd64
+RELEASE_LABEL ?= nightly
+# Keeps each if-to-end block of the README source one of whose tags is the target's,
+# drops other comments, squeezes blank lines and fills in the target's names.
+RELEASE_README_AWK = BEGIN { keep = 1 }; \
+	/^<!-- if [a-z ]+ -->$$/ { if (open) { print "nested if at line " NR > "/dev/stderr"; exit 1 }; \
+		open = 1; keep = 0; n = split($$0, w, " "); for (i = 3; i < n; i++) if (index(tags, " " w[i] " ")) keep = 1; next }; \
+	/^<!-- end -->$$/ { if (!open) { print "end without if at line " NR > "/dev/stderr"; exit 1 }; open = 0; keep = 1; next }; \
+	/^<!--/, /-->$$/ { next }; \
+	!keep { next }; \
+	/^$$/ { gap = printed; next }; \
+	{ if (gap) print ""; gap = 0; printed = 1; gsub(/@LABEL@/, label); gsub(/@TARGET@/, target); gsub(/@PLATFORM@/, name); print }; \
+	END { if (open) { print "if without end" > "/dev/stderr"; exit 1 } }
 # Root extracting an archive restores its owners, so its entries are root's rather
 # than the packer's uid. GNU tar and bsdtar name that differently.
 TAR_ROOT_OWNER != tar --version 2>/dev/null | grep -q GNU && echo '--owner=0 --group=0 --numeric-owner' || echo '--uid 0 --gid 0'
@@ -45,6 +58,15 @@ GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\)
 GO ?= $(GO_DEFAULT)
 # purego's FreeBSD port builds its fakecgo as std to link without cgo
 GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std' || true
+# purego, which the desktop window links, builds with cgo off on fewer platforms
+# than the terminal does (not under Termux), so a client build tries it first and
+# names the terminal-only builds rather than leaving purego's errors to explain it.
+WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep -q '/pkg/window$$' && \
+	! err=$$(CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) ./pkg/window 2>&1); then \
+	printf '%s\n' "The desktop window does not build for $$($(GO) env GOOS)/$$($(GO) env GOARCH) with cgo off:" \
+		"  $$(printf '%s\n' "$$err" | grep -v '^\#' | head -n 1)" "Build the terminal alone instead:" \
+		"  make cli                     bin/vif-cli" \
+		"  make release TAGS=vif_nogui  bin/vif, the binary make install installs" >&2; exit 1; fi
 
 .DEFAULT_GOAL := help
 # Goals run in the order given, so make release install installs what it built.
@@ -52,7 +74,7 @@ GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive release-readme image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -82,6 +104,7 @@ help:
 	@echo "  install-config Install the wad, default keymap, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
 	@echo "           (both: CLEAN=1 first removes what an earlier install put there)"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
+	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
@@ -139,6 +162,7 @@ serve: wasm $(BIN_DIR)
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
 release: check-go $(BIN_DIR)
+	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
@@ -148,8 +172,10 @@ headless: check-go $(BIN_DIR)
 
 # The window is in every Linux and FreeBSD build, Xlib, EGL and GLES 2 loaded at
 # run time through purego so cgo stays off: gui is the same binary opening it by
-# default, for a desktop entry; cli leaves it out, for a machine with no X to load.
+# default, for a desktop entry; cli leaves it out, for a machine with no X to load
+# or none that purego builds for.
 gui: check-go $(BIN_DIR)
+	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
 
 cli: check-go $(BIN_DIR)
@@ -170,6 +196,7 @@ android-toolchain: check-go
 
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: check-go $(BIN_DIR)
+	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go automatically; the mixer streams to the page's speakers.
@@ -179,7 +206,7 @@ wasm: check-go $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
 
-# windows is experimental and untested
+# windows is experimental; doc/multi-platform.md §4 lists its known issues
 windows: check-go $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
@@ -251,6 +278,22 @@ wad-archive: $(BIN_DIR)
 	install -m 0644 LICENSE "$$root/LICENSE"; \
 	tar -C "$$stage" $(TAR_ROOT_OWNER) -czf $(WAD_ARCHIVE) vif; \
 	echo "packed $(WAD_ARCHIVE)"
+
+# release-readme prints the README a release archive carries, rendered from
+# deploy/package/release-readme.md with the blocks tagged for RELEASE_TARGET.
+release-readme:
+	@case '$(RELEASE_TARGET)' in \
+	linux-amd64) tags='linux client' name='Linux amd64' ;; \
+	linux-arm64) tags='linux client' name='Linux arm64' ;; \
+	linux-amd64-headless) tags=headless name='Linux amd64, the game server' ;; \
+	freebsd-amd64) tags='freebsd client' name='FreeBSD amd64' ;; \
+	windows-amd64) tags=windows name='Windows amd64' ;; \
+	web) tags=web name='the browser' ;; \
+	*) echo "release-readme: no README for RELEASE_TARGET=$(RELEASE_TARGET)" >&2; exit 1 ;; \
+	esac; \
+	case '$(RELEASE_LABEL)' in nightly) tags="$$tags nightly" ;; esac; \
+	awk -v tags=" $$tags " -v label='$(RELEASE_LABEL)' -v target='$(RELEASE_TARGET)' -v name="$$name" \
+		'$(RELEASE_README_AWK)' $(PKG_DIR)/release-readme.md
 
 # install puts the binary, the wad as the config root $(SYSCONFDIR)/vif, the
 # licence, the manual, the desktop entry and icons, shell completion and the

@@ -16,13 +16,13 @@ flowchart TD
     Lock --> Layers["render stable priority layers, clipped per layer"]
     Layers --> Unlock["unlock World"]
     Unlock --> Finalize["background, occlusion, void, and console finalize"]
-    Finalize --> Flush["terminal Flush"]
+    Finalize --> Flush["Surface Flush"]
 ```
 
 The app draws a frame every third of a tick, 60 per second, so each tick shows for
 three frames. `RenderOrchestrator` owns one reusable `RenderBuffer`, clears it,
 acquires the world lock, invokes visible renderers in ascending priority, and
-releases the lock. Finalization and terminal flushing
+releases the lock. Finalization and the flush to the surface
 happen outside the world lock, and the terminal writes on a goroutine of its own:
 `Flush` never waits, holding only the newest frame while a write is out. A terminal
 that stops reading (a hidden tab, a multiplexer client that went away) therefore
@@ -32,8 +32,9 @@ stopped taking output; drawing paused`, and resumes with a matching record when 
 write returns; the tick handshake runs throughout.
 
 The frame leaves through `render.Surface`: color mode, `Flush` of the cell grid and
-`Sync`. The terminal satisfies it, and it is all a graphical or Android host has to
-provide to draw the same cells ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+`Sync`. The terminal, the desktop window, the browser page and the Android view
+satisfy it, and it is all a host has to provide to draw the same cells
+([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 
 Before the lock the orchestrator derives the frame's playfield rectangle and
 declares the void around it; each simulation layer then draws clipped to the
@@ -294,8 +295,7 @@ contrast ratio, takes the nearest entry that shows. Styles are resolved rather
 than sent, because the Linux console recolors dim, italic and underlined text
 and FreeBSD brightens bold.
 
-Finalization is immediately followed by the terminal module's full-buffer
-`Flush`.
+Finalization is immediately followed by the surface's full-buffer `Flush`.
 
 The CLI can force 256-color (`-color 256`) or truecolor (`-color true`);
 `-color auto`, the default, lets the terminal capability select the mode, and a
@@ -386,7 +386,7 @@ Concrete renderers should:
 4. select a semantic write mask and explicit blend/channel behavior;
 5. derive animation from game time/delta without mutating simulation data;
 6. keep reusable scratch buffers/caches on the renderer instance;
-7. leave terminal flushing and buffer lifetime to the orchestrator.
+7. leave surface flushing and buffer lifetime to the orchestrator.
 
 Rendering must not publish gameplay events or alter components. If a visual
 requires durable simulation state, a system should compute/store that state and
@@ -448,7 +448,7 @@ retains only game-specific asset interpretation and layering.
    (`TestConsoleGlyphsAreInEveryConsoleFont`).
 6. Verify behavior under camera cropping, centered small maps, terminal resize,
    pause, grayout/dim/strobe, and overlapping fields.
-7. Check that terminal flush remains outside the world lock and that no
+7. Check that the surface flush remains outside the world lock and that no
    renderer retains store pointers across frames.
 
 ## 12. Source map

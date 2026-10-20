@@ -209,7 +209,7 @@ moving goals, graphs for fixed ones.
 `:flow [group]` draws a group's point or composite field and `:graph` a gateway's
 routes through the debug renderer; neither is a feature. `nav.entities` counts
 navigators, `nav.recomputes` the fields that fell due this tick, `nav.roi_cells`
-the header cells rechecked for wall changes, and `buffers.nav.groups` the
+the header cells rechecked for wall changes, and `nav.buf_groups_hwm` the most
 groups held.
 
 ## 10. Costs
@@ -226,24 +226,22 @@ and towers healed, 100–340 eyes, two to seven snake heads, a storm raised.
 | route graph | 1.5 ms | 3.8 ms |
 | route storage | 22 kB a route | 36 kB a route |
 
-| td run | before | after |
-|---|---:|---:|
-| play, ms a tick | 8.5 | 4.4 |
-| storm, ms a tick | 11.4 | 6.4 |
-| storm, worst tick | 132 ms | 30 ms |
-| fields computed in the worst tick | 32 | 2 |
+| td run | Reading |
+|---|---:|
+| play, a tick on average | 4.4 ms |
+| storm, a tick on average | 6.4 ms |
+| storm, the worst tick | 30 ms |
+| fields computed in the worst tick | 2 |
 
-The cost model after this: a group field toward static anchors is computed once
+The cost model: a group field toward static anchors is computed once
 and repaired or rebuilt only as its tier's passability moves; group 0's fields
 and each cursor's private field recompute as cursors move, at the cooldown; the
 snake lock scales with heads, one reach each on its throttle; a drop's field
 costs its owner's instance alone; a route graph is rebuilt only when the
 composite passability changes and at most one per twenty ticks. What the storm
 tick still holds is one point field per local cursor with drops in flight, the
-reaches, and composite line of sight. Two items remain for a need rather than a
-measurement: a footprint tier registry deriving the grids to keep from the live
-navigators, so a data-driven species' footprint costs one row, and a per-tick
-field budget in canonical group order if a browser frame still stalls.
+reaches, and composite line of sight. What would bound it further is in
+[todo](todo.md#bound-navigations-worst-tick-on-busy-maps).
 
 ## 11. Custom maps
 
@@ -253,8 +251,9 @@ field budget in canonical group order if a browser frame still stalls.
 - A group with several anchors gets routes to its first anchor only
   (`resolveTargetPosition`); the field picks the nearest, so an eye off its
   corridor may change goal.
-- Footprints beyond 5×3 and 1×1 ride the 5×3 grid today; the tier registry above
-  is what makes another footprint cost a row.
+- Footprints beyond 5×3 and 1×1 ride the 5×3 grid; a footprint tier registry
+  ([todo](todo.md#bound-navigations-worst-tick-on-busy-maps)) is what would make
+  another footprint cost a row.
 - Eight targets a group, sixteen groups, sixteen private groups; a map's size
   scales every field, and every instance computes the same ones.
 

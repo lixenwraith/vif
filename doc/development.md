@@ -16,7 +16,8 @@ The modules it requires:
 | `github.com/lixenwraith/color` | RGB/palette values and blend functions. |
 | `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing, and genetics persistence. |
 | `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
-| `golang.org/x/sys`, `x/term` | Indirect platform/terminal support. |
+| `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window, with cgo off. |
+| `golang.org/x/sys`; `x/term` (indirect) | The desktop window's Unix calls; terminal support for the terminal module. |
 
 Audio sends PCM to optional host commands; see [Audio](audio.md) for runtime
 backend choices. A compiler, module download access, and a terminal are enough
@@ -40,27 +41,31 @@ make dev       # generated code + race-enabled debug build
 |---|---|
 | `generate` | Run the manifest/event/input code generator. |
 | `dev` | Generate and build `cmd/vif` with the race detector/debug symbols. |
-| `release` | Build a stripped `-trimpath` native binary without CGO: the terminal and, on Linux and FreeBSD, the desktop window `-g` opens. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
+| `release` | Build a stripped `-trimpath` native binary without CGO: the terminal and, on Linux and FreeBSD, the desktop window `-g` opens. Where purego, which the window links, does not build (Termux), `release`, `nolog` and `gui` stop before compiling and name `make cli` and `TAGS=vif_nogui`. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `gui` | Build `bin/vif-gui`, the release binary opening the desktop window by default (`vif_gui`); `-g=false` is its terminal. |
-| `cli` | Build `bin/vif-cli`, the terminal alone, no desktop window (`vif_nogui`). |
+| `cli` | Build `bin/vif-cli`, the terminal alone, no desktop window (`vif_nogui`), for Termux or a machine without X. |
 | `nolog` | Release-style build with the `novlog` tag. |
 | `wasm` | Build log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
-| `verify` | Generate, test, vet, and compile full/`novlog`/audio-free/headless/WASM/Windows variants. |
+| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, and vet and test the `android` module (§5). |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root, the last two only when absent; `CLEAN=1` (here and for `install`) removes the previous install first. |
 | `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
+| `release-readme` | Print the README of one release archive (`RELEASE_TARGET`, `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`. |
 | `install` | Install the binary, manual, desktop entry, icons, shell completion, licence and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
 | `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
 | `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
-| `clean` | Remove `bin/`. |
+| `android` | Build the debug APK as `bin/vif-debug.apk`, first naming any JDK or Android SDK piece missing. |
+| `android-install` | Install `bin/vif-debug.apk` on the device `adb` sees. |
+| `android-toolchain` | Install what `android` needs, asking first ([android/README.md](../android/README.md#build)). |
+| `clean` | Remove `bin/` and the Android build directories. |
 
 `TAGS` appends build tags to each `cmd/vif` build and `PORT` changes the WASM
 server port. `GO` names the toolchain command (on FreeBSD, the versioned package
@@ -427,10 +432,11 @@ and the same script geometry, so the presented and headless forms simulate
 identically. A presented run that is in a session offers pan and quit only: pause,
 step and rate are instance-local and half a session cannot be paused.
 
-`script/test.sh pair` runs both halves headless in one command. For a mid-run
-join, start the host half without `-host` and give its script a `command` action
-`:host <addr>`; it runs solo until then, and the guest dials once the host logs
-`hosting opened mid-run`.
+The two halves also play each other headless: start the host half as above and
+run `./bin/vif -script script/sparring-guest.toml -join 127.0.0.1:7777` beside it.
+For a mid-run join, start the host half without `-host` and give its script a
+`command` action `:host <addr>`; it runs solo until then, and the guest dials once
+the host logs `hosting opened mid-run`.
 
 In a session the driver schedules actions on the ticks it has issued, not on the
 world's position: a join, a correction's jump or a reset moves the world and not the
@@ -458,13 +464,14 @@ reproduce.
 process; a host's bots join over loopback, a guest's through its own link.
 Commands, compositions and examples are in [Bots](bots.md).
 
-### End-to-end setups
+### End-to-end checks
 
-`script/test.sh` is the command reference for running a setup by hand. It files
-each setup as interactive (`solo`, `host`, `join`, `serve`, `pair`, ...), observed
-(`host-loss`, `vacant`, `load`, ...) or automated (asserts and prints PASS or FAIL);
-`all` runs the automated set except `maxmap`, and `image` needs a container engine
-and stays out of it.
+`script/test.sh` holds the checks no Go test makes, because they need a built
+binary on a real terminal, `make` or the deploy scripts: the release wad archive
+(`bundle`), a scenario change through `app.Run`'s restart loop and a guest following
+it (`scenario`, `follow`), the session template against the allocator (`fleet`) and
+what a node needs before a pod starts (`deploy`). `all` runs those and prints PASS
+or FAIL; `botfitness` and `load` measure and stay out of it.
 
 ```sh
 ./script/test.sh list
@@ -483,14 +490,16 @@ A change behind a build constraint also builds that target:
 
 `make verify`, `go test ./...`, `go vet ./...` and `script/test.sh all` are sweeps
 the project owner runs, not per-change steps. `make verify` regenerates, runs
-`go test -race ./...`, builds `./...` plain and under `novlog`, `vif_noaudio` and
-`vif_headless`, tests `./internal/...` under `vif_noaudio` and the manifest and
-system suites under `vif_headless`, `cmd/vif` under both, cross-builds `js/wasm` and
-`windows/amd64` (`novlog vif_noaudio`), fails if the headless command imports the
-renderer or audio implementation or the browser command the audio implementation,
-and runs `go vet ./...`. It does not execute a Windows artifact or a real
-terminal/audio backend; Windows is a best-effort cross-build, not a supported
-release target.
+`go test -race ./...`, builds `./...` plain, with cgo off and under `novlog`,
+`vif_noaudio`, `vif_headless` and `vif_nogui`, tests `./internal/...` under
+`vif_noaudio` and the manifest and system suites under `vif_headless`, `cmd/vif`
+under both, vets and tests the `android` module, tests `pkg/window` with cgo off,
+cross-builds `js/wasm` and `windows/amd64` (`novlog vif_noaudio`), fails if the
+headless command imports the renderer or audio implementation, and runs
+`go vet ./...` and the `vif_gui` vet of `pkg/window` and `cmd/vif`. It does not
+execute a Windows artifact or a real terminal/audio backend; Windows is played by
+hand, not a supported release target, and its known issues are in [Build profiles
+§4](multi-platform.md#4-platform-matrix).
 
 Tests cover `cmd/vif`, `cmd/soundlab`, the headless/replay application harness
 (seeded soak, mutation, bisect, reset, journal density, replay, operator-state
@@ -587,8 +596,9 @@ terminal/audio smoke tests.
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
 | `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
-| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as an untested zip and removable if field reports show it is broken. |
-| Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
+| Windows amd64 | Experimental | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as a zip that plays in a terminal, with the known issues in [Build profiles §4](multi-platform.md#4-platform-matrix). |
+| Android | Native target, a debug-signed APK | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` cell drawer and `AudioTrack`; the wad as its system root ([android/README.md](../android/README.md)). |
+| Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification; no 32-bit target compiles. |
 
 ### WASM host
 
@@ -607,8 +617,8 @@ picture, slower on a large grid.
 On a touch-first screen (phone, tablet) a tap raises no system
 keyboard; a strip along the top toggles it, sends Tab (and Esc while it is up) and
 goes fullscreen where the browser can. Neither the strip nor the keyboard refits
-the grid, so only the page resizing (a rotation, a window, fullscreen) crops the
-solo map. Before launch it maps
+the grid; the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch,
+or Ctrl and the wheel) do, and a solo map follows. Before launch it maps
 `window.VIF_ARGS` and repeated `arg` query parameters into the program's argv; a
 site that renames the files says so with `data-wasm`, `data-worker` and
 `data-exec` on the script element
@@ -621,7 +631,7 @@ Copy the directory; do not rewrite a path in it.
 
 The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;
-audio and logging compile out. Browser JavaScript cannot open the framed TCP
+logging compiles out. Browser JavaScript cannot open the framed TCP
 socket used by native `-join`, so a browser joins over the session's `wss://`
 route instead — the page's own WebSocket wrapped as a `net.Conn` — and `-host`,
 `-serve` and a `host:port` target fail validation. Arguments can select embedded
@@ -757,7 +767,7 @@ across instances is the invariant the domain model rests on.
 | CLI and filesystem policy | `cmd/vif/main.go`, `cmd/vif/usage.go`, `internal/app/config.go`, `internal/resource/resolve.go`, `internal/paths` |
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml`, `release.yml` |
-| End-to-end setups | `script/test.sh`, `script/*.toml` |
+| End-to-end checks | `script/test.sh`, `script/*.toml` |
 | Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |

@@ -7,14 +7,15 @@ vif has two independent kinds of variation:
 - a **build profile** chooses which host capabilities exist in the binary at all.
 
 Keeping those choices separate matters. `ModeServer` avoids initializing a
-terminal, renderer, or audio service at runtime, while the `vif_headless` build
+presentation, renderer, or audio service at runtime, while the `vif_headless` build
 also removes their constructors and implementations from the dependency graph.
 The same simulation can therefore run in a full client and a dedicated server
 without presentation becoming part of multiplayer identity.
 
 This document records the current profile contract, what each supported platform
-can actually do, how a browser joins a session, and the extension seams for
-downloadable content, a non-text renderer, and Android.
+can actually do, how a browser joins a session, the extension seam for
+downloadable content, and how the desktop window, the browser page and Android
+host the game.
 
 ## 1. Current build profiles
 
@@ -24,9 +25,9 @@ downloadable content, a non-text renderer, and Android.
 | Audio-free native | `vif_noaudio` | Terminal renderer | Omitted | Yes | Included unless `novlog` | Platforms or packages that do not ship audio |
 | Dedicated server | `make headless` / `vif_headless` | Omitted | Omitted | Yes | Included unless `novlog` | `-serve`, headless scripts, containers |
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
-| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load; cgo stays off either way |
+| Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
-| Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
+| Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
 `vif_noaudio` removes audio while retaining terminal presentation. The browser
@@ -61,17 +62,18 @@ The build split follows capabilities rather than operating-system names:
 
 | Capability | Build-specific seam | What stays common |
 |---|---|---|
-| Presentation | `internal/app/presentation_*`, generated `manifest/render_gen.go`, terminal service | World, systems, semantic input, scheduler |
+| Presentation | `internal/app/presentation_*`, generated `manifest/render_gen.go`, the host's `Presentation` or the terminal service | World, systems, semantic input, scheduler |
 | Audio | `internal/app/audio*`, `engine/resource_audio*`, audio service/systems, generated audio builder | Event payload identifiers in `pkg/audio/model` |
 | Socket network | `internal/app/network_*` | Network protocol and simulation-facing `engine.NetworkPort` |
 | Logging | existing `internal/vlog` build variants | Call sites and status collection |
 | Resources | `engine.FileProvider` and `ContentProvider` | Parsed config/content models |
 
-`App` embeds a build-specific presentation state. The terminal variant owns the
-terminal service and render orchestrator; the headless variant is empty. Renderer
-construction is generated into its own `!vif_headless` file, so the dedicated
-build does not compile `internal/render` or `internal/render/renderer` merely to
-leave their values unused.
+`App` embeds a build-specific presentation state. The presenting variant owns the
+run's `Presentation`, the host's or else the terminal (§8), and the render
+orchestrator; the headless variant is empty. Renderer construction is generated
+into its own `!vif_headless` file, so the dedicated build does not compile
+`internal/render` or `internal/render/renderer` merely to leave their values
+unused.
 
 Audio follows the same shape. Mixer, synthesis, backend, service, configuration,
 and full audio systems compile only when audio is available. Protocol and event
@@ -91,16 +93,11 @@ of the negotiated simulation identity.
 
 ### What headless still carries
 
-The dedicated build removes renderer and audio packages, but it does not yet
-remove every terminal-shaped value. Terminal types still appear in semantic input
-bindings, color configuration, wall/image cells, crash recovery, and some
-simulation resources. `internal/pattern` also reads terminal-cell image data.
-Removing the external terminal module altogether would require a renderer-neutral
-cell/color and key model, not more build constraints around individual files.
-
-That extraction is useful before a graphical or Android renderer, but it is not
-required to prevent renderer initialization or rendering work in server pods.
-Build constraints should continue to guard adapters and constructors, not fork
+The dedicated build removes renderer and audio packages and keeps the terminal
+module's value types, which semantic input bindings, color configuration,
+wall/image cells, crash recovery, some simulation resources and `internal/pattern`
+use. They are the renderer-neutral vocabulary every host speaks (§8), so the build
+carries them by decision. Build constraints guard adapters and constructors, not
 gameplay code by platform.
 
 ## 3. Reference artifact measurements
@@ -111,10 +108,10 @@ not release budgets; toolchain and source changes move them.
 
 | Artifact | Bytes | MiB | Comparison |
 |---|---:|---:|---:|
-| Full native | 16,580,768 | 15.81 | baseline for native profiles |
-| `vif_noaudio` native | 16,195,744 | 15.45 | 2.32% smaller than full |
-| `vif_headless` native | 15,130,784 | 14.43 | 8.74% smaller than full |
-| Browser (`js/wasm`) | 29,378,949 | 28.02 | — |
+| Full native | 17,219,847 | 16.42 | baseline for native profiles |
+| `vif_noaudio` native | 16,810,247 | 16.03 | 2.38% smaller than full |
+| `vif_headless` native | 15,704,224 | 14.98 | 8.80% smaller than full |
+| Browser (`js/wasm`) | 29,683,569 | 28.31 | — |
 
 Size is the visible result, not the primary invariant. The stronger checks are
 that this command prints no renderer or audio-engine package:
@@ -133,9 +130,23 @@ It should produce no output. The container is one static binary in
 |---|---|---|
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
-| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; published as an untested zip, not a development focus, and may be removed if field reports show it is broken |
+| Windows amd64 | Experimental; plays in Alacritty, with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
+| Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer and `AudioTrack` (§8); the wad as the system root |
 | `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas and plays the mixer's PCM (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
-| Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
+| Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix. No 32-bit target compiles: `parameter.GodEnergyAmount` overflows a 32-bit `int` |
+
+Played on Windows in Alacritty, the zip runs, with three known issues:
+
+- **The mouse does nothing.** The terminal module's Windows backend reads the
+  console as VT input, so a click reaches the game only if the console host passes
+  the terminal's SGR mouse reports through; that is the first thing to check.
+- **No audio.** The build leaves the engine out. The engine compiles for Windows,
+  and ffplay, one of its pipe players, has a Windows build, so audio there is
+  untried rather than impossible.
+- **Status bar cells flicker on redraw.** The terminal module writes a frame
+  without synchronized output (DEC mode 2026), and the Windows console host
+  repaints what a program writes on its own schedule; neither is confirmed as the
+  cause.
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
 Different targets are not promised bit-exact lockstep even when their manifest
@@ -176,7 +187,8 @@ when every goroutine is idle, and a socket message is a browser event. An arrivi
 epoch or echo therefore waits for the tick, frame or correction install in progress,
 and a busy world adds latency a native client does not pay. A link's writer flushes
 at once rather than lingering for a burst, because a browser timer is clamped to
-4 ms or coarser. Measured against a local host, round trip as the host reads it:
+4 ms or coarser. Measured against a local host on 2026-09-29, round trip as the
+host reads it:
 
 | Guest | `main` at 120x40 | `td` at 500x250 |
 |---|---|---|
@@ -251,8 +263,8 @@ does it answer the upgrade, and it never accepts an upstream a caller named.
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The route is same-origin with the page, so a
 `connect-src 'self'` policy permits it. Ordinary CORS headers are not a substitute
-for the `Origin` check. Browser admission credentials are open control-plane work
-and should be short-lived and session-scoped.
+for the `Origin` check. Browser admission credentials, short-lived and
+session-scoped, are [open work](todo.md#add-browser-admission-authentication).
 
 Native clients use raw TCP, through the allocator's front door or the session's
 own NodePort ([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this
@@ -392,7 +404,9 @@ its size with nearest filtering, for a HiDPI screen. Its libraries
 (`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
 the binary builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built
 as std, which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on
-Wayland through XWayland.
+Wayland through XWayland. purego's `fakecgo` links the binary to the system libc,
+so a Linux client binary needs glibc and runs neither on musl nor under Termux;
+`vif_nogui` and `vif_headless` binaries stay static.
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `pkg/browser` host. The Go program runs in a Worker, so the
@@ -481,9 +495,10 @@ the same omission or adapter.
 
 ## 9. Verification and release concerns
 
-`make verify` compiles the full, `novlog`, audio-free, dedicated, browser, and
-Windows variants, tests the audio-free and dedicated profiles, and runs the §3
-dependency checks in addition to the normal test and vet gates. A release should
+`make verify` compiles the full (also with cgo off), `novlog`, audio-free,
+dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
+dedicated profiles, the `android` module and `pkg/window`, and runs the §3
+dependency check in addition to the normal test and vet gates. A release should
 also run:
 
 ```bash
@@ -499,11 +514,11 @@ Compilation is not runtime certification. What the browser route still has to
 show is a tab that leaves, hidden or suspended, and a session whose last guest was
 a browser ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)). Linux and FreeBSD release
 checks should include a real terminal; audio-capable artifacts also need at least
-one real or `null`/WAV backend smoke test. Windows remains an unpromised
-cross-build and has no runtime certification work on the release path.
+one real or `null`/WAV backend smoke test. Windows is played by hand, not
+certified on the release path; its known issues are in §4.
 
-The remaining policy decisions are deliberately separate from transport:
-
-- browser authentication and whether the expanded allocator is renamed or split;
-- publisher trust, allowed origins and cache policy for a fetched container (§7);
-- exact renderer-neutral model boundaries needed for the one-month Android target.
+Two policy decisions stay separate from transport, and both are open in todo:
+[browser admission](todo.md#add-browser-admission-authentication), with whether the
+allocator stays its credential boundary, and the publisher trust, allowed origins
+and cache policy of [a fetched container](todo.md#fetch-a-content-addressed-bundle-over-http)
+(§7).

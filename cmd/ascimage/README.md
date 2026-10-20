@@ -86,13 +86,11 @@ bin/ascimage -dual wad/image/backdrop.vifimg -w 140 -m quadrant ~/image/test.jpe
 Game command to drop the shipped sample as a non-blocking wall background:
 `event WallPatternSpawnRequest {path="test.vifimg",x=0,y=0,block_mask=0}`
 
-An existing absolute or relative path is used directly. Otherwise the name is
-looked up below `image/` in each configuration root: `-config-dir`, the user
-root, the checkout `wad/` beside a `bin/` binary, then the system roots. A
+The name is looked up below `image/` in each configuration root: `-config-dir`,
+the user root, the checkout `wad/` beside a `bin/` binary, then the system roots.
+Only a regular file there opens, never a host path, absolute or relative. A
 checkout's `bin/vif`, or `-config-dir wad`, resolves the example to
-`wad/image/test.vifimg`, and the same event works after installation. Prefer
-this logical-name form (or an absolute path); an existing relative process path
-is a compatibility fallback.
+`wad/image/test.vifimg`, and the same event works after installation.
 
 `.vifimg` files carry a versioned header and a deflate-compressed cell body; the
 reader also accepts the legacy unversioned, uncompressed format. Both carry the

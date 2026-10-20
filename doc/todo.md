@@ -272,16 +272,13 @@ library copies.
   `internal/system/loot.go`
 - Guide: [Navigation §10](navigation-design.md#10-costs)
 
-A field is computed only for a reader, on a grid moved cell by cell as the walls
-change, a snake head measures every cursor with one search, a wall that opens
-repairs a computed field in place, a drop reads its owner's private group, and a
-route's field is its corridor alone. On td with eight walking cursors and seven
-snake heads a storm tick peaks at 30 ms against 7 ms on average, and no
-wall change computes more than two fields in a tick. What is left is the per-tick
-budget of the design's item 7, if a browser frame still stalls, and its item 6
-when a second footprint tier is wanted. A 2×2 coarse field is not planned: it
-changes the answer, and the shared grid already took the cost it would have
-saved.
+On td with eight walking cursors and seven snake heads a storm tick peaks at 30 ms
+against 6.4 ms on average, and no wall change computes more than two fields in a
+tick. What is left, for a need rather than a measurement: a per-tick field budget
+in canonical group order, if a browser frame still stalls, and a footprint tier
+registry deriving the grids to keep from the live navigators, so a data-driven
+species' footprint costs one row. A 2×2 coarse field is not planned: it changes
+the answer, and the shared grid already took the cost it would have saved.
 
 ### Serve wss from vif's own listener
 
@@ -345,7 +342,7 @@ and how long a fetched container is kept.
 - Priority: P2
 - Affected files: `web/terminal.js`, `web/worker.js`, `internal/app/loop.go`,
   `internal/lifecycle`
-- Guide: [Build profiles](multi-platform.md#a-hidden-tab), fleet item W1
+- Guide: [Build profiles](multi-platform.md#a-hidden-tab)
 
 A hidden tab draws nothing and repaints once on return. What remains is a tab that
 leaves: one hidden or suspended for five minutes must cost the other players
@@ -402,17 +399,28 @@ deprecated for `android sdk`, which ships in the same package. Switch `setup` to
 once its install, licence and SDK-root flags are settled, bumping the pinned build
 and its three SHA-256s together.
 
-### Provision audio to the fleet when a host needs it
+### Fix the Windows zip's mouse, sound and status bar flicker
 
 - Priority: P3
-- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-allocator/manifest.go`,
-  `deploy/k3s/30-session.yaml`
+- Affected files: `Makefile`, `.github/workflows/release.yml`, the terminal
+  module's Windows backend
+- Guide: [Build profiles](multi-platform.md) §4
 
-What a fleet session reads from the node volume is one list in three places —
-`categories` in the installer, `wadCategories` in the allocator, and the mounts in
-the template. `scenario` and `image` are on it. `audio` goes on it the day a
-dedicated host renders anything, and `content` never does. Nothing else changes;
-the volume already carries whatever the installer puts there.
+Played in Alacritty, the zip ignores the mouse, has no sound and flickers status
+bar cells on redraw. Try the mouse in Windows Terminal, whose console host is newer
+than the system's, to tell a console-host gap from a backend one; try a build
+without `vif_noaudio` with ffplay on `PATH`; and try the flicker with the frame
+wrapped in synchronized output.
+
+### Build for 32-bit targets
+
+- Priority: P3
+- Affected files: `internal/parameter/gameplay.go`, `internal/mode/commands.go`
+
+`parameter.GodEnergyAmount` (10^11) overflows a 32-bit `int` in `:god`, so no
+32-bit target compiles, 32-bit Termux included. Keep it within 2^31 or carry the
+energy as `int64`, then add a 32-bit cross-build to `make verify` if it should stay
+that way.
 
 ### Cache a received scenario to the user root
 
@@ -424,6 +432,39 @@ rejoining the same session downloads it again. Writing it under the user root
 behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
+
+## Fleet
+
+The design and what it cost are in [The session fleet](kubernetes-fleet.md), and
+the procedure in [Fleet deploy](kube-docker-deploy.md).
+
+### Hand off a deployment a stranger can install
+
+- Priority: P1
+- Affected files: `doc/kube-docker-deploy.md`, `deploy/`
+- Guide: [Fleet deploy](kube-docker-deploy.md#13-first-session) §13
+
+Rehearse the procedure from bare Arch Linux and from bare Ubuntu, record their
+package and service differences, and fix every command that assumes the
+production node. Done when both reach a first session with no step their operator
+had to invent, and every resource value in `deploy/k3s/30-session.yaml` cites a
+number from [Measure a full roster](#measure-a-full-roster).
+
+### Measure a full roster
+
+- Priority: P1
+- Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/10-quota.yaml`,
+  `tool/vif-allocator/manifest.go`
+- Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
+
+Drive nine sessions with headless joiners for the fleet-level readings (CPU,
+memory, tmpfs, log rate, rotations), plus one real four-player session over real
+links, through a tower and a storm and on `wad/scenario/td`, for the hour the
+Job's deadline allows, which tick slips and correction magnitude need. Requests,
+limits and the quota totals then come from that measurement rather than from
+single-guest history and estimates. It passes with no OOM, liveness restart,
+sustained tick slip or growing correction magnitude, the deadline ending each
+session.
 
 ### Apply the fleet log retention on the node
 
@@ -442,7 +483,7 @@ hour of play.
 - Priority: P2
 - Affected files: `deploy/guest/update-vif-image.sh`, `.github/workflows/release.yml`,
   `deploy/k3s/30-session.yaml`, `tool/vif-allocator`
-- Guide: [Session fleet](kubernetes-fleet.md#3-work-list) §3, fleet item H16
+- Guide: [Fleet deploy](kube-docker-deploy.md#8-the-session-image) §8
 
 Nightly CI publishes the headless image to GHCR under moving and commit-addressed
 tags, and the node builds and imports its own. What remains is choosing the
@@ -450,10 +491,42 @@ node's registry and promotion policy, authenticating pulls without a long-lived
 off-node deployment credential, and moving new sessions to a verified digest while
 existing ones finish on theirs.
 
-## Multiplayer
+### Put a cluster through its failures
 
-Diagnoses and what each item follows from are in
-[Troubleshooting](troubleshooting.md).
+- Priority: P2
+- Affected files: `doc/kube-docker-deploy.md`
+- Guide: [Session fleet](kubernetes-fleet.md#7-verification) §7
+
+Not yet tried on a cluster: `tc netem` latency, loss and reordering, which should
+recover at the next bounded correction or keyframe; a pod delete or a node
+failure, whose connected-client behaviour should be recorded, with no replacement
+advertised as the same match; and a full log tmpfs, which should lose a bounded
+amount of log without ending a game.
+
+### Provision audio to the fleet when a host needs it
+
+- Priority: P3
+- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-allocator/manifest.go`,
+  `deploy/k3s/30-session.yaml`
+
+What a fleet session reads from the node volume is one list in three places —
+`categories` in the installer, `wadCategories` in the allocator, and the mounts in
+the template. `scenario` and `image` are on it. `audio` goes on it the day a
+dedicated host renders anything, and `content` never does. Nothing else changes;
+the volume already carries whatever the installer puts there.
+
+### Shrink the spatial grid on ceiling-sized maps
+
+- Priority: P3
+- Affected files: `internal/engine/spatial_grid.go`
+- Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
+
+The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250)
+reserves about 30.5 MiB per world, and a guest's staging world a second. Deferred
+until density matters: on `td` the grid is a minority of what a session was
+measured to cost.
+
+## Multiplayer
 
 ### Trim what remains of a tick and a checkpoint at the map limit
 
@@ -499,20 +572,19 @@ convergence and the authority's per-link fan-out.
 A star's authority sends every participant's epochs and owner syncs down to every
 other, the producer's own copy included: at 16 players 4,444 epochs and 736 syncs a
 second, 1.4 MB/s framed on the tower map and 2.8 MB/s on td before deflate. Rounds
-follow the union of peer deadlines, 7.2 a second at td, and whole bodies add
-2.2 MB/s there. On one guest with two seats over a 110 ms link
-([Troubleshooting](troubleshooting.md) §19) the command stream was nine tenths of
-about 64 kB/s both ways before deflate: owner syncs, a 595-byte TOML of 27 fields
-of which 17 were zero, every six ticks per cursor and twice over, a fifth; the
-explosion batch crossings a quarter; the producer's own committed echo, which a
-guest with nothing behind it reads only the marker of, a quarter of the downlink.
-Candidates, each a message-set or cadence change that cuts constants where relays
-(`-relay`) move the quadratic term off the host: one bundle per link per tick
-carrying every source's committed frames with their epoch markers, which pacing
-and fences read, as `MsgBundle` already does upstream; owner syncs as deltas, or
-first `omitempty` on `CursorStatePayload` as other payloads carry; a frames-less
-committed copy to a producer with nothing behind it; shard sets without the
-section summary the receiver already holds; and rounds aligned across peers.
+follow the union of peer deadlines, 7.2 a second at td, and whole bodies add 2.2 MB/s
+there. On one guest with two seats over a 110 ms link (a fleet run on 2026-10-15) the
+command stream was nine tenths of about 64 kB/s both ways before deflate: owner
+syncs, a 595-byte TOML of 27 fields of which 17 were zero, every six ticks per cursor
+and twice over, a fifth; the explosion batch crossings a quarter; the producer's own
+committed echo, which a guest with nothing behind it reads only the marker of, a
+quarter of the downlink. Candidates, each a message-set or cadence change that cuts
+constants where relays (`-relay`) move the quadratic term off the host: one bundle
+per link per tick carrying every source's committed frames with their epoch markers,
+which pacing and fences read, as `MsgBundle` already does upstream; owner syncs as
+deltas, or first `omitempty` on `CursorStatePayload` as other payloads carry; a
+frames-less committed copy to a producer with nothing behind it; shard sets without
+the section summary the receiver already holds; and rounds aligned across peers.
 
 ### Project a correction outside the live lock
 
@@ -551,26 +623,38 @@ A bind or dial names the player's next step; these gaps remain:
 A repair set waits for a busy link in the per-peer queue a body uses, but leaves as
 one frame of up to `SnapshotShardBytesMax` (48 kB), so on a link at the tower's floor
 it can hold the epochs behind it for two seconds, where an epoch waits behind at most
-one 4 KiB body chunk ([Troubleshooting](troubleshooting.md) §16). Sending it in
-`SnapshotCorrectionChunkBytes` chunks, as a body is, bounds that too. Repairs at
-20 kB/s have so far been a few kilobytes.
+one 4 KiB body chunk ([Multi-player](multi-player.md#4-correction-pipeline) §4).
+Sending it in `SnapshotCorrectionChunkBytes` chunks, as a body is, bounds that too.
+Repairs at 20 kB/s have so far been a few kilobytes.
 
 ### Find why a storm spawn diverges on a guest
 
 - Priority: P1
 - Affected files: `internal/system/storm.go`, `internal/converge/correction.go`
 
-A guest's only large corrections followed its storm spawns in [Troubleshooting](troubleshooting.md)
-§18 and none did in §19, where both storms spawned at one tick on the guest and its
-two seats, the blue attack never fired in either round and the §18 corrections came
-before one could have, so the divergent input is at the spawn itself: the FSM
-tick on a predicted quasar kill (`machine.go` dispatches a `PhasePredicted`
-`EventSpeciesKilled` like any other), the sweep's victims, or the three z-jitter
-draws. The repair logs now name the sections a repair carries; the next §18-shaped
-recording says which. The seats' recurring one-page, eight-cell repairs are a
-section of exactly eight rows, `streams` or `systems`, and not the storm. If it is
-inherent, a forced keyframe at the spawn tick lands the snap once and early
-instead of as a repair.
+In a fleet run over a 160 ms link (2026-10-15), each of a guest's three storm spawns
+was followed within 19-66 ticks by one of the run's only large corrections (321
+entities, a 678-cell repair, 208 entities), while every other install wrote nothing.
+In a second run over 110 ms none did: both storms spawned at one tick on the guest
+and its two seats. The blue attack never fired in either run, and the first run's
+corrections came before one could have, so the divergent input is at the spawn
+itself: the FSM tick on a predicted quasar kill (`machine.go` dispatches a
+`PhasePredicted` `EventSpeciesKilled` like any other), the sweep's victims, or the
+three z-jitter draws. The repair logs now name the sections a repair carries; the
+next recording of that shape says which. The seats' recurring one-page, eight-cell
+repairs are a section of exactly eight rows, `streams` or `systems`, and not the
+storm. If it is inherent, a forced keyframe at the spawn tick lands the snap once and
+early instead of as a repair.
+
+### Split combat telemetry by domain
+
+- Priority: P3
+- Affected files: `internal/system/combat.go`, `internal/status/key.go`
+- Guide: [Domain model §7](domain-design.md#7-current-limits)
+
+Combat's counters mix Shared results with per-instance ones, so two instances'
+Shared combat outcomes do not compare directly. Splitting them is a telemetry
+redesign rather than a domain-boundary fix.
 
 ## Session membership
 
@@ -856,7 +940,7 @@ another system may not call them directly.
 
 - Priority: P1
 - Affected files: `internal/network` (join and peer-link handshakes, admission)
-- Guide: [Session fleet](kubernetes-fleet.md#4-security-posture) §4, fleet item H1
+- Guide: [Session fleet](kubernetes-fleet.md#4-security-posture) §4
 
 The game port is unauthenticated by decision and reachable from the Internet, and
 §4 lists what bounds a stranger on it. What it lacks is a fuzz target in

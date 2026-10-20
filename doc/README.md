@@ -25,7 +25,6 @@ reader can start with the application shape and then descend into a subsystem.
 | [Telemetry reference](telemetry-reference.md) | Detail | Which metric keys does each system, the session layer, the engine and the event queue register, where is each written and reset, and what reads them by name? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
 | [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
-| [Troubleshooting](troubleshooting.md) | Medium/detail | What did each dated diagnosis round, 2026-09-10 to 2026-10-13, find in host, guest, fleet and browser runs, and what closed each defect? |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Combat and weapons](combat.md) | Domain detail | How are weapon kinds defined, fired by cursors and by mounts on Shared hosts, resolved against species and cursors, which statuses a hit leaves, and what crosses? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
@@ -42,9 +41,9 @@ reader can start with the application shape and then descend into a subsystem.
 | [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, how does a browser join a session over WebSocket, how could external assets be added, and how do the desktop window and the Android view host the game beside the terminal? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested and diagnosed on native and WASM targets, and what does every command-line flag do? |
 | [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the allocator installed, in order? **Start here to deploy a node.** |
-| [The session fleet: design and work list](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
+| [The session fleet](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, and what was decided? |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
-| [End-to-end setups](../script/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
+| [End-to-end checks](../script/README.md) | Operational detail | Which checks need a built binary, a terminal or the deploy scripts, and what does each assert or measure? |
 | [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph and compare graphs? |
 | [Configuration menu](config-menu.md) | User guide | What does each page of the Ctrl-G menu control? |
 
@@ -75,7 +74,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Concern | Authoritative source | Generated or runtime consumer |
 |---|---|---|
 | Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `build_audio_gen.go`, `build_noaudio_gen.go`, `render_gen.go`, `internal/engine/component_store_gen.go`, `component_domain_gen.go` |
-| Build capabilities | `vif_headless`, `vif_noaudio`, `novlog` and `wasm` build constraints, on files such as `internal/app/presentation_*`, `audio*` and `network_*`, `internal/system/audio*`, `internal/service/adapter_audio.go` and `adapter_terminal.go`, `internal/network/websocket_*` and `internal/vlog/stub.go` | Makefile profiles and generated capability-specific builders |
+| Build capabilities | `vif_headless`, `vif_noaudio`, `vif_gui`, `vif_nogui`, `novlog` and `wasm` build constraints, on files such as `internal/app/presentation_*`, `audio*` and `network_*`, `cmd/vif/gui.go` and `gui_default.go`, `internal/system/audio*`, `internal/service/adapter_audio.go` and `adapter_terminal.go`, `internal/network/websocket_*` and `internal/vlog/stub.go` | Makefile profiles and generated capability-specific builders |
 | System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.CheckSystemDependencies`, `World.InitSystems`, `World.AllowSystemDisable`, `resource.checkSystems` |
 | Event names, payload association, replication class | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go`, `serve.go` | `App`, `Scheduler`, services |
@@ -90,6 +89,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound and music banks | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`/`BuiltinPatterns`, `AudioConfig.BaseSounds`/`BasePatterns` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
+| Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |
 
 Run `make generate` after changing a manifest or generator input, and

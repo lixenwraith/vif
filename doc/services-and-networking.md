@@ -65,7 +65,7 @@ an arbitrary order.
 | Service | `Init` | `Start` | Resource contribution |
 |---|---|---|---|
 | `file` | No-op; the service is built over the ordered configuration roots. | No-op. | `FileResource.Provider`, a generic categorized open capability. |
-| `terminal` | Construct terminal, enter raw/alternate-screen state, detect/force color mode. | Start blocking poll loop. | Exposed directly to app/render/input rather than as an ECS resource. |
+| presentation | The host's (`window`, `browser`, `android`), else `terminal`, which constructs the terminal, enters raw/alternate-screen state and detects or forces the color mode. | The terminal starts its blocking poll loop. | Exposed directly to app/render/input as `app.Presentation` rather than as an ECS resource. |
 | `content` | Resolve, load, sanitize, and freeze corpus/cursor. | No-op. | `ContentResource.Provider`. |
 | `audio` | Build engine/config and load optional documents. | Freeze/register sounds, probe backend, start mixer/supervisor. | `AudioResource.Engine` when available. |
 | `network` | If enabled, build transport/handlers. | Listen or connect. | `NetworkResource.Port`; absent under `RoleNone`. |
@@ -74,13 +74,13 @@ Assembly is mode-dependent:
 
 | App mode | Registered services |
 |---|---|
-| `ModePlay` | file, terminal, content, audio, and network; `RoleNone` unless `-join` makes it `RolePeer`. `-host` and `:host` open a port of their own once the clock runs (§6) |
+| `ModePlay` | file, presentation, content, audio, and network; `RoleNone` unless `-join` makes it `RolePeer`. `-host` and `:host` open a port of their own once the clock runs (§6) |
 | `ModeHeadless` | file and content for ordinary harnesses; a script or bot run (`app.RunScript`, `app.RunBot`, a holder's bot seat) additionally registers `RoleHost`/`RolePeer` network when given an address |
-| `ModeReplay` | file, terminal, content, and audio |
-| `ModeScript` | file, terminal, content, audio, and the same `RoleHost`/`RolePeer` network a headless script registers |
-| `ModeServer` | file, content, and `RoleHost` network; no terminal and no audio |
+| `ModeReplay` | file, presentation, content, and audio |
+| `ModeScript` | file, presentation, content, audio, and the same `RoleHost`/`RolePeer` network a headless script registers |
+| `ModeServer` | file, content, and `RoleHost` network; no presentation and no audio |
 
-The predicates in `internal/app/config.go` are authoritative for terminal and
+The predicates in `internal/app/config.go` are authoritative for presentation and
 audio capabilities, then build capabilities constrain them further. A
 `vif_headless` build has no terminal or audio adapter; `vif_noaudio` has no audio
 adapter. Native networking is role-selected separately:
@@ -281,7 +281,7 @@ terminal-equivalent geometry, the address it listens on for the succession chain
 and a bot's holder. It travels with the reply rather than the dial because only
 after construction does a joiner know the terminal it got. The geometry is
 advisory: only a dedicated host given no `-size` reads it, sizing a cropping map
-from the first person that reports one, never a bot's holder (see
+from the first person that reports one, never a bot seat (see
 [Runtime](runtime.md) §1.2).
 
 ### 7.2 Join identity, and who decides it
@@ -490,7 +490,7 @@ enters a 10-byte bounded compression envelope:
 reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
 at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
 ratio is large and world-dependent: the storm high water compresses from about
-176 KiB to 15.4 KiB, and the largest map the grid holds — 500x250 walled, which
+299 KiB to 16.1 KiB, and the largest map the grid holds — 500x250 walled, which
 `wad/scenario/td` approaches — from 24.3 MiB to 1.1 MiB. One cap for both would
 refuse at the encoder a world whose bytes fit on the wire four times over.
 
@@ -716,10 +716,10 @@ the links behind it, as it does committed epochs, so the authority reaches a
 participant the host is not linked to directly. A guest queues what arrives and installs the newest
 that resolves between two ticks, into a staging world built once and re-used; the
 `snapshot.correction` group carries what it cost and how far its prediction had
-drifted. Measured at the storm high water, the
-schema's 29 KiB delta and 176 KiB keyframe compress to about 7.1 KiB and 15.4 KiB.
-With one keyframe in ten that is about 39.6 KiB/s at the 5 Hz nominal cadence;
-full compressed keyframes would be about 76.9 KiB/s.
+drifted. Measured at the storm high water (`TestCostAtTheStormHighWater`), the
+schema's 25 KiB delta and 299 KiB keyframe compress to about 6.8 KiB and 16.1 KiB.
+With one keyframe in ten that is about 38.6 KiB/s at the 5 Hz nominal cadence;
+full compressed keyframes would be about 80.5 KiB/s.
 
 **The cadence is chosen, not fixed.** `SnapshotCorrectionTicks` and
 `SnapshotKeyframeCorrections` are the *nominal* operating point; what a peer
@@ -909,11 +909,6 @@ The relay role's are `TestARelayedParticipantKeepsTheSelectiveStream`,
 `TestARelayedAnswerProvesTheAuthoritysRoot`, `TestARelayThatDroppedTheManifestSaysSo`
 and `TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies`.
 
-`script/test.sh host-loss [n]` is the operator form over real processes: a scripted
-host and `n` scripted guests, then the host is killed and each guest's conclusion
-— a handoff or a local continuation — is printed, under `AUTHORITY=migrate` (the
-default) or `AUTHORITY=host`.
-
 The mid-run join has its own set. `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun`
 runs the whole thing over a socket — a solo run opens a port hundreds of ticks in,
 a joiner installs the world it is sent, closes the tick gap the transfer opened and
@@ -963,15 +958,14 @@ To open a session on a run already in progress, type `:host :7777` instead of
 passing the flag; the guest dials it the same way. `:session` on either side
 reports what it is part of.
 
-For a repeatable no-terminal run, combine the flags with the paired authored
-scripts in `script/sparring-host.toml` and `script/sparring-guest.toml`, which
-`script/test.sh pair` runs together. Their manual clocks are wall-paced after the
-ready gate so socket delivery observes the same tick cadence as play mode. A
-mid-run pair starts the host half without `-host` and gives its script a `command`
-action `:host <addr>`: it runs flat out until then, opens hosting, and is
-wall-paced from that point — pacing is a property of the run rather than of the
-flags, so a script that opens a session starts keeping step with its peer the
-moment it has one. See
+For a repeatable no-terminal run, combine the flags with the paired authored scripts
+in `script/sparring-host.toml` and `script/sparring-guest.toml`, which also play
+each other headless. Their manual clocks are wall-paced after the ready gate so
+socket delivery observes the same tick cadence as play mode. A mid-run pair starts
+the host half without `-host` and gives its script a `command` action
+`:host <addr>`: it runs flat out until then, opens hosting, and is wall-paced from
+that point — pacing is a property of the run rather than of the flags, so a script
+that opens a session starts keeping step with its peer the moment it has one. See
 [Development](development.md) for the exact commands and script schema.
 
 ## 12. The supervised run's endpoint
