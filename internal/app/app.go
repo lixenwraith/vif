@@ -62,9 +62,10 @@ type restartRequest struct {
 	// Play is how this run was left, which the next one starts as.
 	Play paths.Play
 
-	// Journal opens a journal in the next run. A journal starts with its run, so a
-	// solo run hands over Resume, its world, which the next one writes as a join
-	// writes the session's; a guest rejoins instead.
+	// Journal opens a journal in the next run: :journal start asked, or this run
+	// was journaling when replaced. A journal starts with its run, so a solo run
+	// hands over Resume, its world, which the next one writes as a join writes the
+	// session's; a guest rejoins instead.
 	Journal bool
 	Resume  *snapshot.SharedCapture
 }
@@ -622,6 +623,31 @@ func (a *App) startJournalLocked() error {
 	return nil
 }
 
+// stopJournalLocked closes the journal where the run stands; a later start opens
+// another file. Caller MUST hold updateMutex.
+func (a *App) stopJournalLocked() error {
+	if a.recorder == nil {
+		return errors.New("no journal is open")
+	}
+	a.closeJournal()
+	return nil
+}
+
+// closeJournal writes the end record and releases the file. Call it with queue
+// producers quiescent: under updateMutex, or once the scheduler has stopped.
+func (a *App) closeJournal() {
+	if a.recorder == nil {
+		return
+	}
+	stats, err := a.recorder.Close()
+	a.recorder = nil
+	a.log.Info("journal", "msg", "journal closed",
+		"path", stats.Path, "records", stats.Emitted, "encode_failed", stats.EncodeFailed)
+	if err != nil {
+		a.log.Error("journal", "msg", "journal not closed", "error", err.Error())
+	}
+}
+
 // resumeWorld writes the world a replaced run handed over, as a join writes the
 // session's: staged, then committed, which journals it. The player domain starts
 // here, as a joiner's does, and so does a replay of the journal.
@@ -681,15 +707,7 @@ func (a *App) Close() {
 	a.closeMidRunPort()
 	a.discardStagingWorld()
 	a.hub.StopAll()
-
-	if a.recorder != nil {
-		stats, err := a.recorder.Close()
-		a.log.Info("journal", "msg", "journal closed",
-			"path", stats.Path, "records", stats.Emitted, "encode_failed", stats.EncodeFailed)
-		if err != nil {
-			a.log.Error("journal", "msg", "journal not closed", "error", err.Error())
-		}
-	}
+	a.closeJournal()
 
 	a.log.Info("app", "msg", "shutdown completed", "us", time.Since(begin).Microseconds())
 }

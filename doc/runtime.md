@@ -858,7 +858,9 @@ per run, and the command validates the name and latches which one comes next;
 naming the scenario already loaded resets in place instead. The same loop replaces
 the run for a `:join`, a `:journal start`, a session restart and a removal by the
 host; the scenario change, the restart and the journal seat the run's bots again.
-Everything operator-owned restarts with it. See
+Everything operator-owned restarts with it. The terminal does not: `Run` opens one
+for the process and every run presents on it, so a replacement redraws the screen
+rather than leaving and re-entering it. See
 [HFSM and configuration](fsm-and-configuration.md) §2.
 
 In a session every participant does this together. Only the coordinator may ask;
@@ -970,7 +972,8 @@ Crash handling is designed around terminal restoration:
 - race/fatal/panic text written to stderr can be redirected and drained into
   structured diagnostics on supported native builds;
 - terminal finalization is unconditional if terminal initialization succeeded,
-  even when service startup did not.
+  even when service startup did not: `Run` releases the terminal it opened when
+  it returns, and a single presented run's hub releases its own.
 
 The audio engine bounds its wait for a blocked backend writer so shutdown does
 not indefinitely leave the terminal in raw mode.
