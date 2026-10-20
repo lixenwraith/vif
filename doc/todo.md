@@ -758,6 +758,20 @@ Arc reward (an arc pays the lightning's full energy reward; halve it if the cap 
 
 `WeaponSpec.Directions` is a cardinal mask the spawn already reads; a side-scroller needs a level to set one direction, which waits on scenario authoring.
 
+### Settle the snake's cornering brake against fast prey
+
+- Priority: P1
+- Affected files: `internal/system/snake.go`, `internal/parameter/snake.go`
+
+The shared cornering brake and `SnakeHomingAccel` 34 cure the corner wiggle (a 5×3
+maze T junction entered in 1.2 s, was never in 120 s) but cut the direct-path peak
+from about 20 to 16.3 cells/s. A headless sweep, interrupted, found a cursor fleeing
+at 14 cells/s caught at 12.85 s against 9.05, a small fast circle (4 s period) never
+touched against eight times, a fast zigzag first touched at 22.8 s against 4.1, and
+knockback carried 4-6× less. Still open: raise the accel or exempt knockback (eye
+skips homing during `RemainingKineticImmunity`) and re-measure wide corridors, body
+stretch, determinism, stun and wind.
+
 ### Move storm's green circle onto a disruptor mount
 
 - Priority: P3
