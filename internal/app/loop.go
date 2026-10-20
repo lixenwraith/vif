@@ -62,7 +62,7 @@ func Run(cfg Config) error {
 			return nil
 		}
 		solo, cfg.notice, cfg.dialled, cfg.Bots, cfg.Play = nil, next.Notice, nil, next.Bots, next.Play
-		cfg.Journal, cfg.resume = next.Journal, next.Resume
+		cfg.Journal = next.Journal
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
 		}
@@ -109,7 +109,7 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 	next, err = a.Loop()
 	if next != nil {
 		next.Play = a.livePlay()
-		next.Journal = next.Journal || a.recorder != nil
+		next.Journal = a.recorder.Load() != nil
 	}
 	return next, err
 }
@@ -179,13 +179,6 @@ func (a *App) Loop() (*restartRequest, error) {
 		a.ctx.TimeCtl.SetPaused(false)
 	}
 
-	if a.cfg.resume != nil {
-		if err := a.resumeWorld(*a.cfg.resume); err != nil {
-			a.log.Warn("journal", "msg", "world not resumed; playing a new game", "error", err.Error())
-			a.ctx.SetStatusMessage("Journal: world not resumed: "+err.Error(), parameter.StatusAlert)
-		}
-	}
-
 	// Prime the first tick, then start the game clock
 	a.frameReady <- struct{}{}
 	a.scheduler.Start()
@@ -233,6 +226,7 @@ func (a *App) Loop() (*restartRequest, error) {
 		if req := a.restart.Load(); req != nil {
 			return req, nil
 		}
+		a.serveJournal()
 		select {
 		case sig := <-sigChan:
 			a.log.Info("app", "msg", "signal received", "signal", sig.String())

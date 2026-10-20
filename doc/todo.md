@@ -105,15 +105,6 @@ serves that map. A person's seats could take the holder's terminal instead, with
 120x40 left for a `-serve` with defaulted geometry: perception parity with the
 person beside them, against bot behaviour that reproduces across terminals.
 
-### Journal a seat's play
-
-- Priority: P3
-- Affected files: `internal/app/seat.go`, `internal/vlog`
-
-Under `-j` only the front instance is journaled, since the vlog journal is one per
-process, so a seat's play cannot be replayed. Option: named journal sessions, one
-per seat.
-
 ### Judge a relayed bot's lateness
 
 - Priority: P3
@@ -612,29 +603,6 @@ timeout, and continues as its own authority. A guest takes the local-fork path i
 takes on losing its host ([Multi-player](multi-player.md) §5.1) without the
 `Host lost` badge; an authority closes its listener first, and its guests succeed
 or fork as its `-authority` policy says.
-
-### Start a journal without replacing the run
-
-- Priority: P3
-- Affected files: `internal/app/app.go`, `internal/app/replay.go`, `internal/snapshot`
-
-`:journal start` replaces the run because a replay reproduces both domains from a
-fresh world plus the shared capture the first write carries, and nothing carries
-the player domain: its entities, RNG streams and system state. Starting in place
-would reset that domain to its fresh-boot state under the lock, or write it, and
-let `ConfigFromAnchor` take a mid-run anchor whose first written world is whole.
-The run would keep its local effects and seats; the restart keeps the one install
-path a join uses.
-
-### Start a host's journal mid-session
-
-- Priority: P3
-- Affected files: `internal/app/app.go`, `internal/app/loop.go`
-
-`:journal start` replaces the run, and a host's world holds its guests' cursors, so a
-resumed host would carry them into a run they are not in. A host would resume with
-those participants departed and reopen its door, as a scenario change does, for its
-guests to rejoin.
 
 ### Let an authority drop a participant
 

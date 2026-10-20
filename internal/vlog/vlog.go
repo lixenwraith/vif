@@ -1,16 +1,18 @@
 //go:build !wasm && !novlog
 
 // Package vlog is the process's log facade: one session sink written through a
-// handle per runtime, plus the ungated journal file and standalone snapshot and
+// handle per runtime, plus the ungated journal files and standalone snapshot and
 // recorder files. A leaf: it imports only the standard library and lixenwraith/log.
 // Records format asynchronously, up to a full queue after the call, so pass value
 // copies only, never Store.GetPtr pointers, pooled payloads or scratch slices.
 package vlog
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -133,12 +135,12 @@ var (
 	path  atomic.Pointer[string]
 	level atomic.Int64
 
-	// Journal session: a second logger instance with its own file, deliberately
-	// outside the session's level and scope so a replay capture cannot be
-	// silenced by a debug command
-	jsink atomic.Pointer[log.Logger]
-	jpath atomic.Pointer[string]
-	jlast atomic.Pointer[string]
+	// Journal files: a logger instance each, deliberately outside the session's
+	// level and scope so a replay capture cannot be silenced by a debug command.
+	// journals is replaced whole under mu, so a crash flushes without taking it;
+	// written is every path this process opened, in order.
+	journals atomic.Pointer[[]*JournalFile]
+	written  atomic.Pointer[[]string]
 
 	// lastErr holds the most recent internal diagnostic; the terminal belongs
 	// to the game, so it is reported on shutdown instead
@@ -352,14 +354,14 @@ func Shutdown(timeout time.Duration) {
 	mu.Lock()
 	l := sink.Swap(nil)
 	path.Store(nil)
-	j := jsink.Swap(nil)
-	if p := jpath.Swap(nil); p != nil {
-		jlast.Store(p)
+	var open []*JournalFile
+	if p := journals.Swap(nil); p != nil {
+		open = *p
 	}
 	mu.Unlock()
 
-	if j != nil {
-		if err := j.Shutdown(timeout); err != nil {
+	for _, j := range open {
+		if err := j.l.Shutdown(timeout); err != nil {
 			fmt.Fprintf(os.Stderr, "journal shutdown: %v\n", err)
 		}
 	}
@@ -463,8 +465,10 @@ func CrashHook(r any, stack []byte) {
 	if p := crashFlush.Load(); p != nil {
 		(*p)()
 	}
-	if j := jsink.Load(); j != nil {
-		_ = j.Flush(crashFlushTimeout)
+	if p := journals.Load(); p != nil {
+		for _, j := range *p {
+			_ = j.l.Flush(crashFlushTimeout)
+		}
 	}
 	l := sink.Load()
 	if l == nil {
@@ -490,21 +494,38 @@ func recordInternalError(msg string) { lastErr.Store(&msg) }
 
 // === Journal ===
 
-// StartJournal opens a dedicated journal file and begins processing.
+// JournalFile is one open replay journal. A process holds one per run it journals:
+// its own, and each bot seat's it was asked to.
+type JournalFile struct {
+	l    *log.Logger
+	path string
+}
+
+// JournalUnavailable says why OpenJournal cannot open a file before one is tried:
+// nil once a journal directory is configured.
+func JournalUnavailable() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if cfg.JournalDir == "" {
+		return errNoJournalDir
+	}
+	return nil
+}
+
+var errNoJournalDir = errors.New("vlog: no journal directory configured")
+
+// OpenJournal opens a dedicated journal file and begins processing.
 // Performs disk I/O; startup or operator command only.
-func StartJournal() (string, error) {
+func OpenJournal() (*JournalFile, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if jsink.Load() != nil {
-		return currentJournalPath(), fmt.Errorf("vlog: journal already running")
-	}
 	if cfg.JournalDir == "" {
-		return "", fmt.Errorf("vlog: no directory configured")
+		return nil, errNoJournalDir
 	}
 
-	// A run replacing another inside one second must not append to its file: a
-	// reader keeps one record per jseq, so the second run's would be dropped.
+	// A journal opened inside the second another was must not append to its file:
+	// a reader keeps one record per jseq, so the second one's would be dropped.
 	base := journalPrefix + time.Now().Format(fileTimeFormat)
 	name := base
 	for n := 2; journalTaken(name); n++ {
@@ -512,7 +533,7 @@ func StartJournal() (string, error) {
 	}
 	l, p, err := buildLogger(cfg.JournalDir, name, journalLevel, false)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	l.SetErrorHandler(recordInternalError)
@@ -521,74 +542,71 @@ func StartJournal() (string, error) {
 	}
 	if err := l.Start(); err != nil {
 		_ = l.Shutdown(time.Second)
-		return "", err
+		return nil, err
 	}
 
-	jpath.Store(&p)
-	jsink.Store(l)
-	return p, nil
+	f := &JournalFile{l: l, path: p}
+	var open []*JournalFile
+	if cur := journals.Load(); cur != nil {
+		open = slices.Clone(*cur)
+	}
+	open = append(open, f)
+	journals.Store(&open)
+	var paths []string
+	if cur := written.Load(); cur != nil {
+		paths = slices.Clone(*cur)
+	}
+	paths = append(paths, p)
+	written.Store(&paths)
+	return f, nil
 }
 
 // journalTaken reports whether a journal named name already exists, on disk or as
-// the file this process last wrote. Caller MUST hold mu.
+// a file this process opened. Caller MUST hold mu.
 func journalTaken(name string) bool {
 	p, err := filepath.Abs(filepath.Join(cfg.JournalDir, name+"."+fileExtension))
 	if err != nil {
 		return false
 	}
-	if last := jlast.Load(); last != nil && *last == p {
+	if cur := written.Load(); cur != nil && slices.Contains(*cur, p) {
 		return true
 	}
 	_, err = os.Stat(p)
 	return err == nil
 }
 
-// StopJournal drains and closes the journal file
-func StopJournal() error {
+// Path is the file this journal writes.
+func (f *JournalFile) Path() string { return f.path }
+
+// Close drains and closes the file; a second Close does nothing.
+func (f *JournalFile) Close() error {
 	mu.Lock()
-	l := jsink.Swap(nil)
-	if p := jpath.Swap(nil); p != nil {
-		jlast.Store(p)
+	cur := journals.Load()
+	open := false
+	if cur != nil {
+		left := slices.DeleteFunc(slices.Clone(*cur), func(j *JournalFile) bool { return j == f })
+		open = len(left) < len(*cur)
+		journals.Store(&left)
 	}
 	mu.Unlock()
 
-	if l == nil {
+	if !open {
 		return nil
 	}
-	return l.Shutdown(journalDrainTimeout)
+	return f.l.Shutdown(journalDrainTimeout)
 }
 
-// JournalEnabled reports whether a journal session is running
-func JournalEnabled() bool { return jsink.Load() != nil }
-
-// JournalPath returns the active journal file, empty when stopped
-func JournalPath() string { return currentJournalPath() }
-
-func currentJournalPath() string {
-	if p := jpath.Load(); p != nil {
-		return *p
-	}
-	return ""
+// Write writes one record stamped with l's run and tick: a driven run ticks a
+// handle of its own. No level or scope gate: a replay capture is not debug output.
+func (f *JournalFile) Write(l *Log, sub string, args ...any) {
+	f.l.LogContext(l.context(sub), f.l.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
 }
 
-// Journal writes one record stamped with this handle's run and tick: a driven
-// run ticks a handle of its own. No level or scope gate: a replay capture is not
-// debug output.
-func (l *Log) Journal(sub string, args ...any) {
-	j := jsink.Load()
-	if j == nil {
-		return
+// JournalPaths returns every journal file this process opened, open or closed, in
+// the order it opened them.
+func JournalPaths() []string {
+	if cur := written.Load(); cur != nil {
+		return slices.Clone(*cur)
 	}
-	j.LogContext(l.context(sub), j.Flags()|log.FlagKV, LevelInfo, 0, sessionArgs(args)...)
-}
-
-// LastJournalPath returns the journal file, live or most recently closed
-func LastJournalPath() string {
-	if p := jpath.Load(); p != nil {
-		return *p
-	}
-	if p := jlast.Load(); p != nil {
-		return *p
-	}
-	return ""
+	return nil
 }

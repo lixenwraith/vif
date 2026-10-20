@@ -1021,40 +1021,48 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true}
 }
 
-// handleJournalCommand reports the journal, starts one from the current world, or
-// closes the one recording.
-// Usage: :journal [start|stop]
+// handleJournalCommand reports the journals, starts one where the run stands, or
+// closes one: this instance's, or with a slot the one of the bot seat this run
+// holds there. A start opens once the command has settled; the status line says where.
+// Usage: :journal [start|stop] [slot]
 func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult {
+	const usage = "Usage: :journal [start|stop] [slot]"
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime cannot start a journal")
 		return CommandResult{Continue: true}
 	}
-	arg := ""
-	if len(args) == 1 {
-		arg = args[0]
+	if len(args) == 0 {
+		ctx.SetStatusMessage(ctx.SessionCtl.JournalSummary(), parameter.StatusNotice)
+		return CommandResult{Continue: true}
 	}
+	slot := -1
 	switch {
-	case len(args) == 0:
-		msg := "No journal; :journal start records from here"
-		if path := ctx.SessionCtl.JournalPath(); path != "" {
-			msg = "Journaling to " + path + "; :journal stop closes it"
-		}
-		ctx.SetStatusMessage(msg, parameter.StatusNotice)
-	case arg == "start" || arg == "on":
-		if err := ctx.SessionCtl.StartJournal(); err != nil {
+	case len(args) > 2:
+		setCommandError(ctx, usage)
+		return CommandResult{Continue: true}
+	case len(args) == 2:
+		n, err := parsePlayerSlot(args[1])
+		if err != nil {
 			setCommandError(ctx, "Journal: "+err.Error())
 			return CommandResult{Continue: true}
 		}
-		ctx.MacroClearFlag.Store(true)
-	case arg == "stop" || arg == "off":
+		slot = n
+	}
+	var err error
+	switch args[0] {
+	case "start", "on":
+		err = ctx.SessionCtl.StartJournal(slot)
+	case "stop", "off":
 		path := ctx.SessionCtl.JournalPath()
-		if err := ctx.SessionCtl.StopJournal(); err != nil {
-			setCommandError(ctx, "Journal: "+err.Error())
-			return CommandResult{Continue: true}
+		if err = ctx.SessionCtl.StopJournal(slot); err == nil && slot < 0 {
+			ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
 		}
-		ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
 	default:
-		setCommandError(ctx, "Usage: :journal [start|stop]")
+		setCommandError(ctx, usage)
+		return CommandResult{Continue: true}
+	}
+	if err != nil {
+		setCommandError(ctx, "Journal: "+err.Error())
 	}
 	return CommandResult{Continue: true}
 }

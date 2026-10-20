@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -21,6 +22,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // playBot runs one embedded graph solo for n ticks on a fresh headless instance,
@@ -315,6 +317,66 @@ func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 	waitForCursors(t, host, 4)
 	leave()
 	waitForCursors(t, host, 2)
+}
+
+// TestARunAndItsBotsJournalMidSession: a run that seated a bot after it started
+// opens a journal where it stands, and so does the bot seat it holds, by slot; each
+// closes and opens again, and every journal replays from the world it opened on.
+func TestARunAndItsBotsJournalMidSession(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines, and the journal
+	// directory is the process's.
+	dir, level := t.TempDir(), vlog.LevelName()
+	vlog.Configure(vlog.Config{JournalDir: dir, Level: level})
+	t.Cleanup(func() { vlog.Configure(vlog.Config{Level: level}) })
+	until := func(what string, done func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(socketWait); !done(); time.Sleep(20 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+		}
+	}
+	holder, stop := driveBot(t, Config{}, "patrol", nil)
+	ctl := holder.Context().SessionCtl
+	var err error
+	holder.World().RunSafe(func() { err = ctl.AddBot("roam") })
+	if err != nil {
+		t.Fatalf("add bot: %v", err)
+	}
+	waitForCursors(t, holder, 2)
+	var s *seat
+	until("the bot to be seated", func() bool {
+		holder.seatsMu.Lock()
+		defer holder.seatsMu.Unlock()
+		if len(holder.seats) == 1 && holder.seats[0].app.Load() != nil {
+			s = holder.seats[0]
+		}
+		return s != nil
+	})
+	slot := int(s.slot.Load())
+	var paths []string
+	for range 2 {
+		holder.World().RunSafe(func() { err = errors.Join(ctl.StartJournal(-1), ctl.StartJournal(slot)) })
+		if err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		b := s.app.Load()
+		until("both journals to open", func() bool { return holder.recorder.Load() != nil && b.recorder.Load() != nil })
+		paths = append(paths, holder.recorder.Load().Path(), b.recorder.Load().Path())
+		from := b.Position().Tick
+		until("the bot to play on", func() bool { return b.Position().Tick > from+3*parameter.DigestIntervalTicks })
+		holder.World().RunSafe(func() { err = errors.Join(ctl.StopJournal(-1), ctl.StopJournal(slot)) })
+		if err != nil {
+			t.Fatalf("stop: %v", err)
+		}
+		until("the bot's journal to close", func() bool { return b.recorder.Load() == nil })
+	}
+	stop()
+	for _, p := range paths {
+		if st, err := VerifyJournal(Config{}, p); err != nil || st.Digests == 0 {
+			t.Fatalf("%s reproduced %d digests: %v", p, st.Digests, err)
+		}
+	}
 }
 
 // TestAHeadlessBotEndsWhenItsSessionDoes: a guest bot whose pinned host leaves is

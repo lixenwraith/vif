@@ -284,10 +284,14 @@ are the baseline to beat. It appends a `stop` region (states `StopWait` and
 
 ## Recording and replaying
 
-`-j` journals the front instance; seats write no journal. The journal records what
-the router produced, so `vif -replay <journal>` needs no graph and never restarts
-one. Playback runs to the recorded end, quiet trailing ticks included, and shows
-`END`. `vif -replay <journal> -headless` verifies its digests unattended.
+`-j` journals the front instance from its start and `:journal start` from where
+it stands; `:journal start <slot>` journals a seat of this process's the same way,
+`:journal stop [slot]` closes either, and `:journal` names every file open
+([Logging and diagnostics §9](logging-and-diagnostics.md#opening-mid-run)). A
+journal records what the router produced, so `vif -replay <journal>` needs no graph
+and never restarts one. Playback runs to the recorded end, quiet trailing ticks
+included, and shows `END`. `vif -replay <journal> -headless` verifies its digests
+unattended.
 
 ## Limits
 
@@ -299,7 +303,7 @@ one. Playback runs to the recorded end, quiet trailing ticks included, and shows
 - It reaches only what its view shows, and a seat's view is 120x40.
 - It plays cooperatively: cursor weapons do not strike cursors.
 - A solo bot run is reproducible from its seed. In a session only a journal
-  reproduces a run, and only the front instance has one.
+  reproduces a run: the front instance's, or a seat's this process journals.
 - Graph state is in no capture: a correction or a reset reaches a graph only
   through the world it reads next.
 - A guest's bot has no link of its own, so it shows no throughput and is not
@@ -330,7 +334,6 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 - [Limit the commands a bot graph may issue](todo.md#limit-the-commands-a-bot-graph-may-issue)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
 - [Decide a seat's geometry](todo.md#decide-a-seats-geometry)
-- [Journal a seat's play](todo.md#journal-a-seats-play)
 - [Judge a relayed bot's lateness](todo.md#judge-a-relayed-bots-lateness)
 - [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)

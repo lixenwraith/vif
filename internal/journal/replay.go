@@ -222,6 +222,9 @@ func (d *ReplayDriver) dueCapture() bool {
 // writes it; the install moves the clock, so the position is read back.
 func (d *ReplayDriver) install() (bool, error) {
 	c := d.s.captures[d.nextCap]
+	if c.Opens {
+		return d.open(c)
+	}
 	at := d.target.Position()
 	if d.awaitRun(c.Run) {
 		return true, nil
@@ -241,6 +244,24 @@ func (d *ReplayDriver) install() (bool, error) {
 	p := d.target.Position()
 	d.cur = groupKey{run: p.Run, tick: p.Tick, boundary: p.Boundary}
 	d.landed = true
+	d.nextCap++
+	d.stats.Installed++
+	return true, nil
+}
+
+// open writes the world a journal opened on mid-run, the first thing it holds. The
+// run's history before it is in no record, so nothing ticks to it: the replay's
+// boot settles and the world is written over it, which moves the clock there.
+func (d *ReplayDriver) open(c event.JournalCapture) (bool, error) {
+	if d.nextCap != 0 || d.next != 0 {
+		return false, fmt.Errorf("replay: a journal's opening world follows jseq %d", c.JSeq)
+	}
+	d.target.Settle()
+	if err := d.target.Install(c); err != nil {
+		return false, fmt.Errorf("replay: opening world: %w", err)
+	}
+	p := d.target.Position()
+	d.cur = groupKey{run: p.Run, tick: p.Tick, boundary: p.Boundary}
 	d.nextCap++
 	d.stats.Installed++
 	return true, nil
