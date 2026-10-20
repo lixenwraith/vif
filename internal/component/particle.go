@@ -20,9 +20,11 @@ type ParticleComponent struct {
 	Rune     rune
 	Behavior ParticleBehavior
 
-	// Orbiting holds while the behavior's anchor pulls the particle
+	// Orbiting holds while an anchor pulls the particle. OrbitRadius is drawn for the
+	// orbit of the anchor kind Anchor names, so entering another kind draws it anew.
 	Orbiting      bool
-	OrbitRadius   float64 // circular-space cells
+	OrbitRadius   float64 // cells in the orbit's own space
+	Anchor        uint8   // ParticleSystem's anchor kind
 	ChaseBoost    float64 // stiffness multiplier after a cursor jump; 1 is none
 	ResponseGroup uint8   // chase stagger group, 0-2
 }
