@@ -588,11 +588,13 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		return
 	}
 
-	// Group-based target resolution + navigation routing
-	// (direct path vs flow field vs stuck fallback)
 	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headEntity, kineticComp)
 
-	// Apply homing
+	// Homing drag is off on the flow field, so the cornering brake is what bounds the
+	// cruise there and spends the overshoot where the route turns
+	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
+		parameter.NavCorneringBase, 1.0)
+
 	physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
 		targetX, targetY,
@@ -602,16 +604,19 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		usingDirectPath,
 	)
 
-	// Cap velocity
+	if turnSeverity > 0 {
+		physics.ApplyLinearDrag(&kineticComp.Kinetic,
+			turnSeverity*parameter.NavCorneringBrake, dtSec)
+	}
+
 	kineticComp.VelX, kineticComp.VelY = physics.CapSpeed(kineticComp.VelX, kineticComp.VelY, parameter.SnakeMaxSpeed)
 
-	// Update facing direction from velocity
+	// A near-stopped head keeps its last facing rather than jittering
 	velMag := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
 	if velMag > 0.5 {
 		headComp.FacingX, headComp.FacingY = vmath.Normalize2D(kineticComp.VelX, kineticComp.VelY)
 	}
 
-	// Wall collision check
 	config := s.world.Resources.Config
 	wallCheck := func(topLeftX, topLeftY int) bool {
 		return s.world.Positions.HasBlockingWallInArea(
