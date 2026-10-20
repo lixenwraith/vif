@@ -255,16 +255,17 @@ sudo kubectl get pv vif-fleet-logs vif-fleet-wad    # values: ["<node>"], Availa
 
 `WaitForFirstConsumer` leaves both claims `Pending` until something mounts them.
 Bind them with the checked-in probe, which loads a scenario through the wad claim
-and writes a record through the log claim:
+(`td`: `main` is the image's own and would prove nothing) and writes a record
+through the log claim:
 
 ```sh
 VIF_TAG=$(git rev-parse --short=8 HEAD)
-sed -e "s|\${IMAGE}|docker.io/library/vif:$VIF_TAG|g" -e "s|\${SCENARIO}|main|g" \
+sed -e "s|\${IMAGE}|docker.io/library/vif:$VIF_TAG|g" -e "s|\${SCENARIO}|td|g" \
   deploy/k3s/06-log-volume-check.yaml | sudo kubectl apply -f -
 sudo kubectl -n vif wait --for=jsonpath='{.status.phase}'=Succeeded \
   pod/vif-log-volume-check --timeout=90s
 sudo jq -r 'select(.fields.msg == "scenario loaded") | .fields | "\(.name) \(.digest)"' \
-  /var/log/vif-fleet/volume-check.jsonl                # main <digest>, not embedded
+  /var/log/vif-fleet/volume-check.jsonl                # td <digest>, not embedded
 sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
 sudo find /var/log/vif-fleet -maxdepth 1 -name 'volume-check*.jsonl' -delete
 ```

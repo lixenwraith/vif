@@ -134,8 +134,8 @@ Start with the [documentation index](doc/README.md): architecture, package and
 runtime maps, and references for gameplay, ECS and events, input, state
 machines, rendering, audio, navigation and evolution, content, networking,
 multiplayer, deployment and development. `cmd/soundlab` and `cmd/ascimage`
-author sounds and wall images, and [script/](script/README.md) holds end-to-end
-setups the Go tests do not cover.
+author sounds and wall images, and [script/](script/README.md) holds the
+end-to-end checks Go tests cannot make.
 
 ## License
 

@@ -6,7 +6,7 @@ for a game, one container appears, and it ends itself when nobody is in it.
 This is what the design is, what it cost when it was measured, and what was
 decided; its open work is in [todo](todo.md#fleet). The procedure for installing it
 is [Deploying the session fleet](kube-docker-deploy.md); the objects are in
-[`deploy/`](../deploy/README.md); the scenarios that verify the process by hand are
+[`deploy/`](../deploy/README.md); the checks that verify the process by hand are
 in [`script/`](../script/README.md).
 
 ## 1. What is deployed
@@ -215,17 +215,21 @@ per-match leak.
 Automated, in the repository:
 
 ```sh
-go test ./...        # includes lifecycle, identity refusal, probe and fingerprint
+go test ./...        # includes lifecycle, drain, bots, identity refusal, probe and fingerprint
 make verify          # plus vet and the build-tag matrix
 ```
 
 By hand, on a dev machine — see [`script/README.md`](../script/README.md):
 
 ```sh
-./script/test.sh all          # includes fleet, deploy, lifetime, drain, bot, identity
-./script/test.sh serve-fleet  # the flag set the containers run
-./script/test.sh probe        # /health and /metrics
+./script/test.sh all          # includes fleet and deploy
 ./script/test.sh load 2 3 60  # hosts with their own bots and a bot joiner: cost, slips, evictions
+
+# the flag set the containers run; from another terminal, its probe and a join
+./bin/vif -serve 127.0.0.1:7777 -probe 127.0.0.1:7778 -name 0123456789abcdef \
+    -authority host -d -size 120x40 -players 4 -first-join 90s -empty 90s -drain 20s
+curl -s http://127.0.0.1:7778/health          # and /metrics
+./bin/vif -join vif://127.0.0.1:7777/0123456789abcdef
 ```
 
 Against a cluster, [§13 of the procedure](kube-docker-deploy.md#13-first-session) is

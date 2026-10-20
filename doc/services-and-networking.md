@@ -909,11 +909,6 @@ The relay role's are `TestARelayedParticipantKeepsTheSelectiveStream`,
 `TestARelayedAnswerProvesTheAuthoritysRoot`, `TestARelayThatDroppedTheManifestSaysSo`
 and `TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies`.
 
-`script/test.sh host-loss [n]` is the operator form over real processes: a scripted
-host and `n` scripted guests, then the host is killed and each guest's conclusion
-— a handoff or a local continuation — is printed, under `AUTHORITY=migrate` (the
-default) or `AUTHORITY=host`.
-
 The mid-run join has its own set. `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun`
 runs the whole thing over a socket — a solo run opens a port hundreds of ticks in,
 a joiner installs the world it is sent, closes the tick gap the transfer opened and
@@ -963,15 +958,14 @@ To open a session on a run already in progress, type `:host :7777` instead of
 passing the flag; the guest dials it the same way. `:session` on either side
 reports what it is part of.
 
-For a repeatable no-terminal run, combine the flags with the paired authored
-scripts in `script/sparring-host.toml` and `script/sparring-guest.toml`, which
-`script/test.sh pair` runs together. Their manual clocks are wall-paced after the
-ready gate so socket delivery observes the same tick cadence as play mode. A
-mid-run pair starts the host half without `-host` and gives its script a `command`
-action `:host <addr>`: it runs flat out until then, opens hosting, and is
-wall-paced from that point — pacing is a property of the run rather than of the
-flags, so a script that opens a session starts keeping step with its peer the
-moment it has one. See
+For a repeatable no-terminal run, combine the flags with the paired authored scripts
+in `script/sparring-host.toml` and `script/sparring-guest.toml`, which also play
+each other headless. Their manual clocks are wall-paced after the ready gate so
+socket delivery observes the same tick cadence as play mode. A mid-run pair starts
+the host half without `-host` and gives its script a `command` action
+`:host <addr>`: it runs flat out until then, opens hosting, and is wall-paced from
+that point — pacing is a property of the run rather than of the flags, so a script
+that opens a session starts keeping step with its peer the moment it has one. See
 [Development](development.md) for the exact commands and script schema.
 
 ## 12. The supervised run's endpoint

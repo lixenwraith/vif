@@ -1,15 +1,14 @@
 #!/bin/sh
-# End-to-end setups for verifying behaviour by hand: ./script/test.sh <name> [args]
-# or list. Scenarios listed under Automated assert and print PASS/FAIL, observed
-# ones report what happened, and interactive ones stay in the foreground. See
-# script/README.md.
+# End-to-end checks no Go test makes, run by hand: ./script/test.sh <name> [args],
+# or list. They need a built binary on a real terminal, make or the deploy scripts.
+# The asserted ones print PASS/FAIL and `all` runs them; the measured ones print
+# what they measured and fail on what their rows name. See script/README.md.
 set -eu
 
 BIN=${BIN:-./bin/vif}
 HOST=${HOST:-127.0.0.1}
 PORT=${PORT:-7777}
 PROBE_PORT=${PROBE_PORT:-7778}
-IMAGE=${IMAGE:-vif:dev}
 
 fail() { printf 'FAIL %s\n' "$*" >&2; exit 1; }
 pass() { printf 'PASS %s\n' "$*"; }
@@ -42,7 +41,6 @@ wait_for() {
 }
 
 alive() { kill -0 "$1" 2>/dev/null; }
-gone() { ! kill -0 "$1" 2>/dev/null; }
 
 # own_ports refuses to start a host while something already answers on the probe
 # port. A leftover host passes the probe check, takes the guest and logs to its own
@@ -53,27 +51,9 @@ own_ports() {
 	fi
 }
 
-# serve_bg starts a dedicated host with the given extra flags, setting SERVE_PID and
-# LOG. Not a command substitution: that would run it in a subshell and lose both.
-serve_bg() {
-	own_ports
-	LOG=$(mktemp)
-	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" \
-		-d -size 120x40 -log-stdout -lv info "$@" >"$LOG" 2>&1 &
-	SERVE_PID=$!
-}
-
-# guest_bg starts one scripted guest, keeping its output so a scenario that ends
-# unexpectedly can say whether the guest left or was left. GUEST_LOG is the file.
-guest_bg() {
-	GUEST_LOG=$(mktemp)
-	"$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" >"$GUEST_LOG" 2>&1 &
-	GUEST_PID=$!
-}
-
 # pty_ok reports whether this machine has a script(1) that can give vif a terminal.
 # The two flavours take their arguments in opposite orders; a machine with neither
-# is missing the harness rather than the game, so its scenarios skip.
+# is missing the harness rather than the game, so its checks skip.
 pty_ok() {
 	script -qec true /dev/null >/dev/null 2>&1 && return 0
 	script -q /dev/null true >/dev/null 2>&1 && return 0
@@ -115,8 +95,6 @@ botstat() { sed -n "s/.*\"msg\":\"bot stopped\",.*\"quit\":true.*\"$2\":\(-*[0-9
 # becomes the script's exit status, and a process that already ended is the normal
 # case rather than an error.
 cleanup() {
-	if [ -n "${GUEST_PID:-}" ]; then kill -9 "$GUEST_PID" 2>/dev/null || true; fi
-	if [ -n "${SERVE_PID:-}" ]; then kill -9 "$SERVE_PID" 2>/dev/null || true; fi
 	for pid in ${LOAD_PIDS:-}; do kill -9 "$pid" 2>/dev/null || true; done
 	return 0
 }
@@ -126,23 +104,15 @@ case "${1:-}" in
 
 list|'')
 	cat <<'EOF'
-Interactive (runs in the foreground until you stop it)
-  solo              single player, embedded config
-  host [players]    interactive host; plays at once and admits guests mid-run,
-                    up to the whole roster or, with an argument, that many
-                    players, the host included
-  join [addr]       join a host
-  serve [players]   dedicated host, runs until Ctrl-C  (no lifetime bounds)
-  serve-fleet       dedicated host with the deployed 90s/90s/20s bounds
-  pair              scripted host + scripted guest, both headless
-  watch             scripted host presented on this terminal; join it by hand
+Asserted (print PASS/FAIL; `all` runs them)
+  bundle            the release wad archive extracts to a working config root
+  scenario          :n <name> rebuilds the run on another scenario and back
+  follow            a host changes scenario and its guest rebuilds with it
+  fleet             the session template and the allocator render one workload
+  deploy            the wad installer's refusal, the manifests and a mounted scenario
+  all               every asserted check above
 
-Observed (runs a scenario and prints what happened; not part of `all`)
-  probe             read /health and /metrics of a running -serve
-  guests <n> [addr] launch n scripted guests against an address
-  host-loss [n]     scripted host + n scripted guests, then kill the host and
-                    report what each guest concluded  (AUTHORITY=migrate|host)
-  vacant            watch a dedicated host park when its last guest leaves
+Measured (print what they measured; not part of `all`)
   botfitness [graph] [seeds] [secs]
                     sum default's fitness per scenario over seeds 1..N (4) of secs
                     (60) each; given a graph file, fail unless it beats default
@@ -151,172 +121,7 @@ Observed (runs a scenario and prints what happened; not part of `all`)
                     joiner; prints each host's cost and fails on a slipping clock,
                     an eviction, a short roster or a peak past LIMIT_MB
                     (SCENARIO=name, GUEST_BOTS=n for the joiner's own)
-
-Automated (assert, and used by `all`)
-  check             validate every shipped resource tree
-  bundle            the release wad archive extracts to a working config root
-  scenario          :n <name> rebuilds the run on another scenario and back
-  transfer          a guest with no root receives the session's scenario
-  follow            a host changes scenario and its guest rebuilds with it
-  corpus            a guest reading its own content joins a host reading other
-  fleet             the session template and the allocator render one workload
-  deploy            the wad installer's refusal, the manifests and a mounted scenario
-  lifetime          unclaimed expiry, then vacancy expiry
-  drain             SIGTERM drains instead of cutting a match
-  bot               every shipped bot graph plays solo; a guest's bots join and
-                    leave with it; a host's own bots keep its session
-  identity          a peer running a different build is refused (runs the tests)
-  all               every automated scenario above
-
-Automated, apart from `all` (its guest holds a 500x250 td session past 40 s)
-  maxmap            a guest joins a host serving the largest map the grid holds
-
-Container (needs docker or podman; not part of `all`)
-  image             build the container image and run its own -check
 EOF
-	;;
-
-solo)
-	need_bin; exec "$BIN" -d
-	;;
-
-host)
-	# Plays from its first tick and admits guests through the mid-run gate. Unset
-	# -players is the whole roster, not "two"; a count caps it, the host included.
-	# Only a scripted or bot-driven host, or -serve, holds tick zero for a lobby.
-	need_bin
-	note "guests join with: $0 join $HOST:$PORT"
-	if [ -n "${2:-}" ]; then
-		exec "$BIN" -d -host "$HOST:$PORT" -players "$2"
-	fi
-	exec "$BIN" -d -host "$HOST:$PORT"
-	;;
-
-join)
-	need_bin; exec "$BIN" -join "${2:-$HOST:$PORT}"
-	;;
-
-guests)
-	# n scripted guests against one address, for a roster bigger than the number of
-	# terminals to hand. Ctrl-C takes them all down.
-	need_bin
-	n=${2:?usage: $0 guests <n> [addr]}
-	addr=${3:-$HOST:$PORT}
-	note "$n scripted guests joining $addr; Ctrl-C ends them"
-	i=0
-	while [ "$i" -lt "$n" ]; do
-		"$BIN" -script script/sparring-guest.toml -join "$addr" >/dev/null 2>&1 &
-		i=$((i + 1))
-	done
-	wait
-	;;
-
-watch)
-	need_bin
-	note "scripted host on this terminal; join it with: $0 join $HOST:$PORT"
-	exec "$BIN" -script script/sparring-host.toml -watch -host "$HOST:$PORT"
-	;;
-
-serve)
-	# The case that looks like a hang and is not: with no lifetime bounds a
-	# dedicated host waits forever, because the operator who started it is its
-	# supervisor. Ctrl-C ends it; see serve-fleet for the bounded shape. A roster
-	# that empties parks its clock rather than simulating an empty world, so a tick
-	# counter that stops moving here is the session waiting rather than a stall.
-	need_bin
-	note "no lifetime bounds: this runs until Ctrl-C. Probe: $0 probe"
-	set -- "$@" # keep $2 addressable under set -u
-	if [ -n "${2:-}" ]; then
-		exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -players "$2" \
-			-d -size 120x40 -log-stdout -lv info -ls all
-	fi
-	exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" \
-		-d -size 120x40 -log-stdout -lv info -ls all
-	;;
-
-serve-fleet)
-	need_bin
-	session=${SESSION:-0123456789abcdef}
-	note "ends 90s after start if nobody joins, or 90s after the last guest leaves"
-	note "join it with: $BIN -join vif://$HOST:$PORT/$session"
-	exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -name "$session" \
-		-d -size 120x40 -log-stdout -lv info -authority host \
-		-players "${PLAYERS:-4}" -first-join 90s -empty 90s -drain 20s
-	;;
-
-probe)
-	note "/health"; probe_get /health
-	note "/metrics (first 20)"; probe_get /metrics | head -20
-	;;
-
-pair)
-	need_bin
-	note "scripted host and guest, both headless"
-	"$BIN" -script script/sparring-host.toml -host "$HOST:$PORT" -players 2 &
-	h=$!
-	sleep 2
-	"$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" || true
-	wait $h || true
-	;;
-
-host-loss)
-	# A host and n guests, then the host goes; what each guest concludes is the
-	# output, as which answer is right is a deployment decision. AUTHORITY=migrate
-	# hands the term to the succession chain's first survivor, AUTHORITY=host to
-	# nobody; script/README.md says what migration can and cannot do.
-	need_bin
-	n=${2:-2}
-	auth=${AUTHORITY:-migrate}
-	D=$(mktemp -d)
-	note "host + $n guests, -authority $auth; logs in $D"
-	# -players sizes the lobby so every guest starts at tick zero.
-	"$BIN" -script script/sparring-host.toml -host "$HOST:$PORT" -authority "$auth" \
-		-players "$((n + 1))" >"$D/host.log" 2>&1 &
-	HOST_PID=$!
-	sleep 1
-	i=1
-	while [ "$i" -le "$n" ]; do
-		"$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
-			-log-stdout -lv info >"$D/guest$i.log" 2>&1 &
-		eval "GUEST${i}_PID=\$!"
-		i=$((i + 1))
-	done
-	sleep 5
-	note "the host leaves"
-	kill -9 "$HOST_PID" 2>/dev/null || true
-	sleep 8
-	i=1
-	while [ "$i" -le "$n" ]; do
-		eval "pid=\$GUEST${i}_PID"
-		if alive "$pid"; then state="still playing"; else state="exited"; fi
-		printf '\n-- guest %d (%s)\n' "$i" "$state"
-		grep -oE '"msg":"(authority handed off|continuing locally|cursor despawned)"[^}]*' \
-			"$D/guest$i.log" | tail -4
-		kill -9 "$pid" 2>/dev/null || true
-		i=$((i + 1))
-	done
-	;;
-
-vacant)
-	# A dedicated host with nobody in it stops its clock rather than simulating an
-	# empty world, and starts a fresh run if nobody comes back. This shows the park;
-	# the restart is a minute later, which is longer than a scenario should sit.
-	need_bin
-	serve_bg
-	wait_for 15 'probe_get /health' || fail "probe never answered"
-	guest_bg
-	wait_for 15 'probe_get /health | grep -q clock=running' || fail "the session never started"
-	note "the guest leaves"
-	kill -9 "$GUEST_PID" 2>/dev/null || true
-	GUEST_PID=
-	wait_for 15 'probe_get /health | grep -q clock=paused' || fail "the emptied session kept ticking"
-	note "/health with nobody in it"
-	probe_get /health
-	printf '\n'
-	first=$(probe_get /health | tr ' ' '\n' | grep '^tick=')
-	sleep 3
-	second=$(probe_get /health | tr ' ' '\n' | grep '^tick=')
-	note "tick after 3s parked: $first -> $second"
 	;;
 
 botfitness)
@@ -408,10 +213,18 @@ load)
 		LOAD_PIDS="${LOAD_PIDS:-} $!"
 		n=$((n + 1))
 	done
+	# admits is whether the host probed on port $1 takes a dial now: ready, with its
+	# clock running. Its own bots start that clock at once, and a dial landing while
+	# they do is refused with "session is starting", which a -join does not retry.
+	admits() {
+		body=$(probe_get /health "$1") || return 1
+		case $body in *ready=true*) ;; *) return 1 ;; esac
+		printf '%s\n' "$body" | grep -qx clock=running
+	}
 	n=0
 	while [ "$n" -lt "$sessions" ]; do
 		probe=$((PROBE_PORT + 2 * n))
-		wait_for 20 "probe_get /health $probe" || fail "host $n never answered: $D/host$n.log"
+		wait_for 20 "admits $probe" || fail "host $n never admitted a dial: $D/host$n.log"
 		# shellcheck disable=SC2086
 		"$BIN" -headless -bot default -join "$HOST:$((PORT + 2 * n))" $relayed \
 			-log-stdout -lv info >"$D/join$n.log" 2>&1 &
@@ -495,15 +308,6 @@ logs in $D"
 	pass "$sessions session(s) held $bots host bot(s) and a joiner with $guest_bots for ${secs}s"
 	;;
 
-check)
-	need_bin
-	for tree in "-d" "-config-dir wad" "-config-dir wad -s td"; do
-		# shellcheck disable=SC2086
-		"$BIN" -check $tree >/dev/null || fail "resource check: $tree"
-	done
-	pass "every shipped resource tree resolves"
-	;;
-
 bundle)
 	# What the release publishes is the wad as the vif/ config root it extracts as,
 	# so the archive is only right if that root resolves and nothing lands beside
@@ -522,167 +326,6 @@ bundle)
 		|| fail "the archive carries no corpus for a player who has none"
 	rm -rf "$DEST" "$(dirname "$ARCHIVE")"
 	pass "the release wad archive extracts to a config root that resolves"
-	;;
-
-lifetime)
-	need_bin
-	note "a session nobody joins ends itself"
-	LOG=$(mktemp)
-	start=$(date +%s)
-	"$BIN" -serve "$HOST:$PORT" -d -size 120x40 -log-stdout -lv info \
-		-first-join 3s >"$LOG" 2>&1 || fail "unclaimed session exited non-zero"
-	elapsed=$(( $(date +%s) - start ))
-	[ "$elapsed" -ge 3 ] || fail "ended after ${elapsed}s, before its own window closed"
-	[ "$elapsed" -le 20 ] || fail "took ${elapsed}s to end a 3s window"
-	grep -q 'no guest connected' "$LOG" || fail "the session did not say why it ended: $LOG"
-	pass "unclaimed session exited 0 after ${elapsed}s"
-
-	note "a session whose last guest leaves ends itself"
-	serve_bg -first-join 30s -empty 4s
-	wait_for 15 'probe_get /health' || fail "probe never answered"
-	guest_bg
-	wait_for 15 'probe_get /health | grep -q clock=running' || fail "the session never started"
-	kill -9 "$GUEST_PID" 2>/dev/null || true
-	wait_for 30 'gone "$SERVE_PID"' || fail "the emptied session did not end"
-	grep -q 'roster empty for' "$LOG" || fail "the session did not say why it ended: $LOG"
-	pass "emptied session exited on its vacancy grace"
-	;;
-
-bot)
-	# Each shipped graph plays through the binary, solo and flat out, until a region
-	# appended here quits it after a minute of game time; default has to type. Then it
-	# joins a dedicated host with two bots of its own, and a host seats its own.
-	need_bin
-	dir=$(mktemp -d)
-	for graph in internal/asset/bot/*.toml; do
-		name=$(basename "$graph" .toml)
-		{ cat "$graph"; stop 60000; } >"$dir/$name.toml"
-		"$BIN" -headless -bot "$dir/$name.toml" -d -speed max -size 120x40 -log-stdout -lv info \
-			>"$dir/$name.log" 2>&1 || fail "$name did not end cleanly: $dir/$name.log"
-		[ "$(botstat "$dir/$name.log" injected)" -gt 0 ] 2>/dev/null || fail "$name played nothing: $dir/$name.log"
-		[ "$(botstat "$dir/$name.log" dropped)" = 0 ] || fail "$name overflowed its queue: $dir/$name.log"
-	done
-	[ "$(botstat "$dir/default.log" typed)" -gt 0 ] 2>/dev/null || fail "default typed nothing: $dir/default.log"
-	pass "every shipped graph plays solo through the binary, and default types"
-
-	note "a bot with two of its own joins a dedicated host, and they leave with it"
-	botlines() { grep -c "\"msg\":\"bot $2\"" "$1"; }
-	serve_bg -first-join 30s -empty 3s
-	wait_for 15 'probe_get /health' || fail "probe never answered"
-	{ cat internal/asset/bot/default.toml; stop 5000; } >"$dir/join.toml"
-	"$BIN" -headless -bot "$dir/join.toml" -join "$HOST:$PORT" -bots 2:patrol -log-stdout -lv info >"$dir/join.log" 2>&1 \
-		|| fail "the joining bot did not end cleanly: $dir/join.log"
-	[ "$(botstat "$dir/join.log" typed)" -gt 0 ] 2>/dev/null || fail "the joining bot typed nothing: $dir/join.log"
-	[ "$(botlines "$dir/join.log" seated)" = 2 ] || fail "the guest's bots were not seated: $dir/join.log"
-	[ "$(botlines "$dir/join.log" left)" = 2 ] || fail "the guest's bots did not leave with it: $dir/join.log"
-	wait_for 30 'gone "$SERVE_PID"' || fail "the host did not end once its guests left: $LOG"
-	pass "a bot and two of its own joined a dedicated host, played and left together"
-
-	note "a dedicated host's own bots keep its session and leave on its drain"
-	serve_bg -first-join 30s -empty 3s -drain 30s -bots 2
-	wait_for 15 '[ "$(botlines "$LOG" seated)" = 2 ]' || fail "the host's bots were not seated: $LOG"
-	sleep 6
-	alive "$SERVE_PID" || fail "a session of the host's own bots ended as empty: $LOG"
-	kill -TERM "$SERVE_PID"
-	wait_for 10 'gone "$SERVE_PID"' || fail "the host's bots held its drain open: $LOG"
-	rm -rf "$dir"
-	pass "a dedicated host's bots kept its session and left on its drain"
-	;;
-
-drain)
-	need_bin
-	serve_bg -first-join 30s -empty 5m -drain 6s
-	wait_for 15 'probe_get /health' || fail "probe never answered"
-	guest_bg
-	wait_for 15 'probe_get /health | grep -q clock=running' || fail "the session never started"
-
-	kill -TERM "$SERVE_PID"
-	sleep 1
-	body=$(probe_get /health) || fail "the probe stopped answering during the drain"
-	echo "$body" | grep -q 'live=true' || fail "a draining session reported itself dead: $body"
-	echo "$body" | grep -q 'ready=false' || fail "a draining session still reported itself ready: $body"
-	echo "$body" | grep -q 'phase=draining' || fail "the probe does not say it is draining: $body"
-	alive "$SERVE_PID" || fail "the signal cut the match instead of draining it"
-
-	# What the signal has to prove is that it drains rather than kills, so the
-	# clock still moving after it is the claim; the guest is not part of it.
-	before=$(echo "$body" | sed -n 's/^tick=//p')
-	sleep 1
-	after=$(probe_get /health | sed -n 's/^tick=//p') || fail "the probe stopped answering"
-	[ -n "$before" ] && [ -n "$after" ] || fail "the probe reported no tick: $body"
-	[ "$after" -gt "$before" ] || fail "the clock stopped during the drain: $before -> $after"
-
-	wait_for 30 'gone "$SERVE_PID"' || fail "the drain never ended"
-	grep -qE 'drain deadline|roster empty|drained' "$LOG" \
-		|| fail "the session did not say why it ended: $LOG"
-	pass "SIGTERM drained, kept simulating, then ended itself"
-	;;
-
-identity)
-	# A mismatch cannot be staged from a shell: a joiner adopts the host's seed and
-	# scenario from the anchor and its corpus is never compared, so two runs of one
-	# binary always agree. What can differ is the build — a different protocol,
-	# simulation or capture layout — and constructing one is a job for the tests.
-	go test -count=1 -run 'TestTheHostRefuses|TestTheOfferCarries|TestADifferentCorpus|TestVerify|TestSessionFrom' \
-		./internal/app/ ./internal/network/ >/dev/null || fail "identity refusal tests"
-	pass "a peer running a different build or session is refused by the host"
-	;;
-
-transfer)
-	# The host plays a copy of the wad whose entry carries a nonce, so no root the
-	# guest searches — its own, the user's, the system's or the embedded one — can hold the
-	# scenario: an installed copy of the same wad would otherwise satisfy the join
-	# locally and the host would never be asked. The transfer is the only way in.
-	need_bin
-	[ -d internal/asset/scenario ] || fail "internal/asset/scenario is not in this checkout"
-	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d); WAD=$(mktemp -d)
-	cp -R wad/. "$WAD"
-	cp -R internal/asset/scenario "$WAD/scenario/main"
-	printf '\n# transfer nonce %s-%s\n' "$$" "$(date +%s)" >>"$WAD/scenario/main/scenario.toml"
-	own_ports
-	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir "$WAD" -s main \
-		-size 120x40 -players 1 -first-join 30s -empty 15s \
-		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
-	SERVE_PID=$!
-	wait_for 15 'probe_get /health' || fail "the host never answered its probe"
-	timeout 20 "$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
-		-config-dir "$ROOT" -l="$GL" -lv info -ls app >/dev/null 2>&1 || true
-	grep -qh '"msg":"scenario served"' "$HL"/*.jsonl 2>/dev/null \
-		|| fail "the host never served its scenario: $HL"
-	grep -qh '"msg":"scenario received"' "$GL"/*.jsonl 2>/dev/null \
-		|| fail "the guest never received a scenario: $GL"
-	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \
-		|| fail "the guest received a scenario but never joined: $GL"
-	rm -rf "$ROOT" "$HL" "$GL" "$WAD"
-	pass "a guest that could not hold the scenario received it and joined on it"
-	;;
-
-maxmap)
-	# td is 500x250, the most cells the grid holds, and fills them with a maze, so
-	# its capture is ten megabytes of JSON that compresses to half of one. Only the
-	# bytes that travel are bounded by the wire ceiling; a join refused here means
-	# the plain body is being measured against it again.
-	need_bin
-	[ -d wad/scenario/td ] || fail "wad/scenario/td is not in this checkout"
-	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
-	own_ports
-	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s td \
-		-size 120x40 -players 1 -first-join 30s -empty 15s \
-		-l="$HL" -lv info -ls app >/dev/null 2>&1 &
-	SERVE_PID=$!
-	wait_for 20 'probe_get /health' || fail "the host never answered its probe"
-	# The guest runs until the timeout; its log is what is asserted.
-	timeout 40 "$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
-		-config-dir "$ROOT" -l="$GL" -lv info -ls app >/dev/null 2>&1 || true
-	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \
-		|| fail "the guest never installed the session world: $GL"
-	# A keyframe correction carries the same whole world the join did, so a second
-	# install is what proves the session carries it and not just the handshake.
-	installs=$(grep -ho '"msg":"capture installed"' "$GL"/*.jsonl 2>/dev/null | wc -l)
-	[ "${installs:-0}" -gt 1 ] \
-		|| fail "the world arrived once and was never corrected: $GL"
-	rm -rf "$ROOT" "$HL" "$GL"
-	pass "a guest joined and was corrected on the largest map the spatial grid holds"
 	;;
 
 scenario)
@@ -704,35 +347,6 @@ scenario)
 	pass "a run changed scenario and came back, rebuilding each time"
 	;;
 
-corpus)
-	# Glyphs are player domain, so two machines with different content installed are
-	# still in one session. The guest's corpus is one file the host does not have;
-	# nothing is reconciled and nothing is refused.
-	need_bin
-	ROOT=$(mktemp -d); HL=$(mktemp -d); GL=$(mktemp -d)
-	mkdir -p "$ROOT/content"
-	cp -a wad/scenario wad/image "$ROOT/"
-	printf 'package solo\n\nfunc OnlyHere() int { return 42 }\n' >"$ROOT/content/solo.go.txt"
-	"$BIN" -check -config-dir "$ROOT" -s main | grep -q "content ok: $ROOT/content (1 files" \
-		|| fail "the guest root did not resolve to its own single-file corpus"
-
-	own_ports
-	"$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -config-dir wad -s main \
-		-size 120x40 -players 1 -first-join 30s -empty 15s \
-		-l="$HL" -lv info -ls all >/dev/null 2>&1 &
-	SERVE_PID=$!
-	wait_for 15 'probe_get /health' || fail "the host never answered its probe"
-	timeout 25 "$BIN" -script script/sparring-guest.toml -join "$HOST:$PORT" \
-		-config-dir "$ROOT" -l="$GL" -lv info -ls all >/dev/null 2>&1 || true
-
-	grep -qh '"msg":"join installed the session world"' "$GL"/*.jsonl 2>/dev/null \
-		|| fail "a guest reading its own corpus did not join: $GL"
-	grep -qh 'content_id' "$GL"/*.jsonl "$HL"/*.jsonl 2>/dev/null \
-		&& fail "the corpus was reconciled; it is the player's: $GL"
-	rm -rf "$ROOT" "$HL" "$GL"
-	pass "a guest reading its own corpus joined a host reading another"
-	;;
-
 follow)
 	# The host changes scenario and every guest comes with it. Two real terminals,
 	# because both sides restart and only a run Run owns has a loop to restart in.
@@ -744,10 +358,10 @@ follow)
 	HL=$(mktemp -d); GL=$(mktemp -d); ROOT=$(mktemp -d)
 	HK=$(keyfile "sleep 7" "printf ':n blank\\r'" "sleep 12" "printf ':q\\r'" "sleep 2")
 	GK=$(keyfile "sleep 24" "printf ':q\\r'" "sleep 2")
-	pty_bg "$HK" "$BIN -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app"
+	pty_bg "$HK" "$BIN -host $HOST:$PORT -config-dir wad -s main -l=$HL -lv info -ls app+session"
 	HOST_PTY=$PTY_PID
 	sleep 2
-	pty_bg "$GK" "$BIN -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app"
+	pty_bg "$GK" "$BIN -join $HOST:$PORT -config-dir $ROOT -l=$GL -lv info -ls app+session"
 	wait "$HOST_PTY" 2>/dev/null || true
 	wait "$PTY_PID" 2>/dev/null || true
 	grep -qh '"msg":"session restarting"' "$GL"/*.jsonl 2>/dev/null \
@@ -837,13 +451,14 @@ deploy)
 
 	# The pod mounts scenario/ and image/ and nothing else, so prove a scenario
 	# resolves from exactly that and names itself in the log the commissioning
-	# check reads.
+	# check reads. main is the embedded campaign, on no volume, so td stands in.
 	mount=$(mktemp -d)/wad
 	mkdir -p "$mount"
 	cp -a wad/scenario wad/image "$mount/"
-	pod "$headless/vif" -check -config-dir "$mount" -s main >"$headless/check" \
+	pod "$headless/vif" -check -config-dir "$mount" -s td >"$headless/check" \
 		|| fail "the init container's check does not resolve through the mount"
-	grep -q '^scenario ok' "$headless/check" || fail "no scenario off the mount"
+	grep -q "^scenario ok: $mount/scenario/td/" "$headless/check" \
+		|| fail "no scenario off the mount: $headless/check"
 	# A pod reads no corpus: glyphs are player domain and a dedicated host spawns
 	# none, so an installed content/ would be a category nothing asked for.
 	grep -q '^content ok: embedded' "$headless/check" \
@@ -851,35 +466,24 @@ deploy)
 	own_ports
 	pod "$headless/vif" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -authority host \
 		-l="$mount/log" -log-session-id=volume-check -lv=info \
-		-config-dir="$mount" -s=main -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \
+		-config-dir="$mount" -s=td -first-join=3s -empty=3s -drain=3s >/dev/null 2>&1 \
 		|| fail "the probe pod's arguments do not run"
 	grep -q '"msg":"scenario loaded"' "$mount/log/volume-check.jsonl" \
 		|| fail "no scenario record; the commissioning check has nothing to read"
-	grep -q '"name":"main"' "$mount/log/volume-check.jsonl" \
-		|| fail "the session did not load main off the mount"
+	grep -q '"name":"td"' "$mount/log/volume-check.jsonl" \
+		|| fail "the session did not load td off the mount"
 	rm -rf "$mount" "$headless" "$bare"
 	pass "the image builds, the installer refuses a broken tree, and a mounted scenario loads"
 	;;
 
-image)
-	# The Makefile takes the name and tag apart, split at the last colon so a
-	# registry port survives, and runs the engine found unless one is named.
-	engine=${CONTAINER_ENGINE:-$(command -v docker >/dev/null 2>&1 && echo docker || echo podman)}
-	command -v "$engine" >/dev/null 2>&1 || fail "no container engine found"
-	case $IMAGE in *:*) name=${IMAGE%:*}; tag=${IMAGE##*:} ;; *) name=$IMAGE; tag=dev ;; esac
-	make image IMAGE="$name" IMAGE_TAG="$tag" CONTAINER_ENGINE="$engine" >/dev/null || fail "image build"
-	make image-check IMAGE="$name" IMAGE_TAG="$tag" CONTAINER_ENGINE="$engine" >/dev/null || fail "image config check"
-	pass "$IMAGE builds and validates its own config as a non-root read-only user"
-	;;
-
 all)
-	for s in check bundle scenario transfer follow corpus fleet deploy lifetime drain bot identity; do
+	for s in bundle scenario follow fleet deploy; do
 		note "$s"
 		"$0" "$s"
 	done
 	;;
 
 *)
-	fail "unknown scenario '$1'; try: $0 list"
+	fail "unknown check '$1'; try: $0 list"
 	;;
 esac

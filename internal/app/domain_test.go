@@ -564,8 +564,8 @@ func TestParticipantsKeepTheirOwnCorpus(t *testing.T) {
 	if _, err := os.Stat(corpusDir); err != nil {
 		t.Skipf("multi-file corpus %s not present", corpusDir)
 	}
-	// One file against the whole corpus: every content cell differs, which is the
-	// pair script/test.sh corpus certifies as a legal session.
+	// One file against the whole corpus: every content cell differs, and the two
+	// still make one legal session.
 	lone := filepath.Join(t.TempDir(), "content")
 	if err := os.MkdirAll(lone, 0o755); err != nil {
 		t.Fatal(err)
