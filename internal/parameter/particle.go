@@ -70,3 +70,17 @@ const (
 	// DecayOrbitDrag is quadratic drag while orbiting (1/cell); a falling particle has none
 	DecayOrbitDrag = 0.005
 )
+
+// Decay particles a vortex draws around a button
+const (
+	// DecayVortexStiffness pulls toward the orbit radius (1/s²)
+	DecayVortexStiffness = 60.0
+	// DecayVortexRadiusMin/Max lie past the button's edge, at its proportions (cells)
+	DecayVortexRadiusMin = 1.0
+	DecayVortexRadiusMax = 5.0
+	// DecayVortexDamping settles a particle drawn from across the map without overshoot (1/sec)
+	DecayVortexDamping = 7.0
+	// DecayVortexSpeed is the tangential speed on entering orbit; a far particle gains
+	// speed as it closes, keeping its angular momentum (cells/sec)
+	DecayVortexSpeed = 12.0
+)

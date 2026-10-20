@@ -132,9 +132,13 @@ bright green, a dark green one bright red, and a dark red one flashes away; it
 also destroys nuggets. Blossom raises a glyph's level up to bright and is spent on
 a red glyph. A decay and a blossom that meet annihilate. Both respect
 `ProtectFromParticle`, die on walls and bounds, and have no lifetime. Every decay
-particle orbits the nearest Kraken while it spins or charges, entering with a kick
-in its spin; when the Kraken stands still, they drop straight down at fresh decay
-speed.
+particle orbits the nearest Kraken while it spins or charges, or a vortex's button,
+entering with a kick in its spin; with no anchor left it drops straight down at
+fresh decay speed. A vortex (`EventParticleVortex`) turns every Player glyph to
+decay, as a Kraken turns what it covers, and holds all decay for its duration in a
+ring just clear of one button, round at the button's proportions. Each anchor kind
+has its own orbit; the vortex's is damped hard, since it draws decay from across the
+map.
 
 Dust is what glyphs become: a drain crossing a normal or bright glyph, a dust-all
 request (`:dust`, each gold round of a quasar encounter, a gold sequence destroyed
@@ -185,7 +189,9 @@ Heat is clamped from `0` to `100`. Positive additions beyond the cap accumulate
 overheat. Reaching the overheat threshold emits a heat burst, flashes the meter,
 and activates the ember phase. Ember decays heat periodically and protects
 ordinary energy penalties while active. A heat penalty also clears the
-overheat accumulation.
+overheat accumulation. A scenario lights or puts out the ember with
+`EventCursorArmRequest`, and an ember that burns its heat out crosses
+`EventEmberSpent`, which a scenario can time a turn by.
 
 Special-attack heat spending consumes overheat before current heat without
 resetting the remaining overheat or triggering the penalty sound.

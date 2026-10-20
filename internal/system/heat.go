@@ -86,9 +86,11 @@ func (s *HeatSystem) Update() {
 			heatComp.Current -= parameter.EmberDecayAmount
 			heatComp.EmberDecayTime = now
 
+			// Crossed, so a scenario timing a turn by the ember ends it on every instance
 			if heatComp.Current <= 0 {
 				heatComp.Current = 0
 				heatComp.EmberActive = false
+				s.world.PushCrossing(event.EventEmberSpent, &event.HeatBurstPayload{Entity: e})
 			}
 			// Enforce invariant: heat < max → no overheat
 			if heatComp.Current < parameter.HeatMax {
@@ -170,6 +172,10 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCursorArmRequest:
 		if p, ok := ev.Payload.(*event.CursorArmRequestPayload); ok {
 			if cursor := s.world.Resources.Player.Entity; cursor != 0 {
+				// An ember already lit keeps its decay phase
+				if heat, ok := s.world.Components.Heat.GetPtr(cursor); ok && heat.EmberActive != p.Ember {
+					heat.EmberActive, heat.EmberDecayTime = p.Ember, s.world.Resources.Time.GameTime
+				}
 				s.setHeat(cursor, p.Heat)
 			}
 		}
