@@ -5,7 +5,7 @@
 | Deploy a change to the node | `git pull && ./deploy/update.sh --diff`, then `./deploy/update.sh` |
 | Operate it | [`runbook.md`](runbook.md) |
 | Commission a new node | [`doc/kube-docker-deploy.md`](../doc/kube-docker-deploy.md) |
-| Read the design and open work | [`doc/kubernetes-fleet.md`](../doc/kubernetes-fleet.md) |
+| Read the design, or the open work | [`doc/kubernetes-fleet.md`](../doc/kubernetes-fleet.md), [`doc/todo.md`](../doc/todo.md#fleet) |
 
 | Path | What it is |
 |---|---|

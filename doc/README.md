@@ -41,7 +41,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, how does a browser join a session over WebSocket, how could external assets be added, and how do the desktop window and the Android view host the game beside the terminal? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested and diagnosed on native and WASM targets, and what does every command-line flag do? |
 | [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the allocator installed, in order? **Start here to deploy a node.** |
-| [The session fleet: design and work list](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, what is still open, and what was decided against? Holds the work list. |
+| [The session fleet](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, and what was decided? |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
 | [End-to-end setups](../script/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
 | [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph and compare graphs? |
