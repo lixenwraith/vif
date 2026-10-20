@@ -320,8 +320,9 @@ func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 }
 
 // TestARunAndItsBotsJournalMidSession: a run that seated a bot after it started
-// opens a journal where it stands, and so does the bot seat it holds, by slot; each
-// closes and opens again, and every journal replays from the world it opened on.
+// opens a journal where it stands, and so does the bot seat it holds, by slot, which
+// goes on driving its own cursor; each closes and opens again, and every journal
+// replays from the world it opened on.
 func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines, and the journal
 	// directory is the process's.
@@ -354,14 +355,23 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		return s != nil
 	})
 	slot := int(s.slot.Load())
+	drives := func(a *App) (e core.Entity) {
+		a.World().RunSafe(func() { e = a.World().Resources.Player.Entity })
+		return e
+	}
 	var paths []string
 	for range 2 {
+		b := s.app.Load()
+		holderCursor, seatCursor := drives(holder), drives(b)
 		holder.World().RunSafe(func() { err = errors.Join(ctl.StartJournal(-1), ctl.StartJournal(slot)) })
 		if err != nil {
 			t.Fatalf("start: %v", err)
 		}
-		b := s.app.Load()
 		until("both journals to open", func() bool { return holder.recorder.Load() != nil && b.recorder.Load() != nil })
+		if drives(holder) != holderCursor || drives(b) != seatCursor || int(b.localSlot()) != slot {
+			t.Fatalf("the holder drives %d and its seat %d on slot %d after the openings, %d and %d on slot %d before",
+				drives(holder), drives(b), b.localSlot(), holderCursor, seatCursor, slot)
+		}
 		paths = append(paths, holder.recorder.Load().Path(), b.recorder.Load().Path())
 		from := b.Position().Tick
 		until("the bot to play on", func() bool { return b.Position().Tick > from+3*parameter.DigestIntervalTicks })

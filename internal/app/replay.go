@@ -183,19 +183,20 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		if _, err = a.writeSharedLocked(cap, &before, true); err == nil && c.Opens {
+		if _, err = a.writeSharedLocked(cap, &before, true, c.Opens); err == nil && c.Opens {
 			a.openedLocked(c)
 		}
 	})
 	return err
 }
 
-// openedLocked settles what writing a journal's opening world queued, then takes
-// up the operator state the run stood in when it opened: after the settle, which
-// dispatches the toggles the FSM import re-derived. The crossing barrier engages at
-// once, as the run's was engaged: a crossing raised before the next tick is the
-// run's to apply, by record. Caller MUST hold updateMutex.
+// openedLocked settles what writing a journal's opening world queued, with input
+// bound to the slot the run followed, then takes up the operator state the run
+// stood in, after the settle that dispatches the toggles the FSM import re-derived.
+// The crossing barrier engages at once, as the run's was: a crossing raised before
+// the next tick is the run's to apply, by record. Caller MUST hold updateMutex.
 func (a *App) openedLocked(c event.JournalCapture) {
+	a.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
 	a.scheduler.SettleLocked()
 	a.ctx.SetMode(c.Mode)
 	a.world.UpdateBoundsRadius()

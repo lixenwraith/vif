@@ -149,7 +149,7 @@ func (s *StagedInstall) Commit() error {
 			before, err = live.captureSharedLocked()
 		}
 		if err == nil {
-			s.difference, err = live.writeSharedLocked(projected, &before, true)
+			s.difference, err = live.writeSharedLocked(projected, &before, true, false)
 		}
 		if err == nil {
 			m := live.telemetry

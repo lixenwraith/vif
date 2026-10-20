@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -652,6 +653,105 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 	}
 	replayMatches(t, hostRec, hostWant, guestSurface)
 	replayMatches(t, guestRec, guestWant, guestSurface)
+}
+
+// TestAnOpeningKeepsTheRunsOwnCursor: a journal opened mid-session leaves each
+// participant on its own slot, driving its own cursor with the energy and heat it
+// held, and each journal replays on that slot.
+func TestAnOpeningKeepsTheRunsOwnCursor(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x3017, 2, [][2]int{{1, 2}})
+	own := localCursors(t, apps)
+	rng := vmath.NewFastRand(9)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	want := map[*App]map[event.Stamp][]string{apps[0]: {}, apps[1]: {}}
+	play := func(ticks int, record bool) {
+		for range ticks {
+			for _, a := range apps {
+				if rng.Intn(3) == 0 {
+					inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+				}
+			}
+			tickAll(apps)
+			apps[1].ApplyPendingCorrections()
+			if record {
+				for _, a := range apps {
+					p := a.Position()
+					want[a][event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(a)
+				}
+			}
+		}
+	}
+	type cursor struct {
+		slot         uint8
+		drives       core.Entity
+		energy, heat int64
+	}
+	read := func(a *App, e core.Entity) (c cursor) {
+		a.World().RunSafe(func() {
+			w := a.World()
+			en, _ := w.Components.Energy.GetComponent(e)
+			h, _ := w.Components.Heat.GetComponent(e)
+			c = cursor{w.Resources.Player.LocalSlot(), w.Resources.Player.Entity, en.Current, int64(h.Current)}
+		})
+		return c
+	}
+	play(200, false)
+	for i, a := range apps {
+		a.World().RunSafe(func() {
+			w := a.World()
+			w.Components.Energy.SetComponent(own[i], component.EnergyComponent{Current: 4321 + int64(i)})
+			h, _ := w.Components.Heat.GetComponent(own[i])
+			h.Current = 37 + i
+			w.Components.Heat.SetComponent(own[i], h)
+		})
+	}
+	recs := map[*App]*journal.Capture{}
+	for i, a := range apps {
+		recs[a] = journal.NewCapture()
+		a.cfg.JournalSink = recs[a]
+		before := read(a, own[i])
+		if _, err := a.openJournal(); err != nil {
+			t.Fatalf("participant %d: open: %v", i+1, err)
+		}
+		if after := read(a, own[i]); after != before || before.drives != own[i] {
+			t.Fatalf("participant %d drove %+v before the opening and %+v after it", i+1, before, after)
+		}
+	}
+	play(400, true)
+	for _, a := range apps {
+		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		replayMatches(t, recs[a], want[a], guestSurface)
+	}
+}
+
+// TestNoJournalOpensWhileANewGameStarts: between a reset's cleanup and the boot spawn
+// that brings the roster back, an opening is refused, and once the game has started
+// it opens on every cursor.
+func TestNoJournalOpensWhileANewGameStarts(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x7E5, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	spawnCursor(t, a)
+	a.Tick(30)
+	if !a.Reset(false) {
+		t.Fatal("reset refused")
+	}
+	a.cfg.JournalSink = journal.NewCapture()
+	if _, err := a.openJournal(); err == nil {
+		t.Fatal("a journal opened while the new game was starting")
+	}
+	a.Tick(1)
+	if _, err := a.openJournal(); err != nil {
+		t.Fatalf("open after the new game started: %v", err)
+	}
+	a.Tick(40)
+	var n int
+	a.World().RunSafe(func() { n = a.World().Resources.Player.Count() })
+	if n != 2 {
+		t.Fatalf("%d cursors after the new game, want 2", n)
+	}
 }
 
 // TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal at the

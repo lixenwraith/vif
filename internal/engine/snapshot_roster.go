@@ -75,6 +75,13 @@ func (w *World) CaptureCursorControl() LocalControl {
 	return out
 }
 
+// Assignment is c without the owner-authored state it holds back, for a write of
+// this instance's own world, whose cursor cells the capture already carries.
+func (c LocalControl) Assignment() LocalControl {
+	c.owned = nil
+	return c
+}
+
 // readOwnedCursorState reads one cursor's owner-authored set.
 // Caller MUST hold updateMutex.
 func (w *World) readOwnedCursorState(e core.Entity) ownedCursorState {

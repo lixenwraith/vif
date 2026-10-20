@@ -69,6 +69,10 @@ func (a *App) journalErrorLocked() error {
 		return errors.New("a journal is already opening")
 	case a.restart.Load() != nil:
 		return errors.New("this run is being replaced")
+	case a.scheduler.ResetPending():
+		// The reset's cleanup has run and its boot spawn has not: the roster the
+		// spawn restores is in no world a twin can take on.
+		return errors.New("a new game is starting")
 	case a.cfg.JournalSink == nil:
 		return vlog.JournalUnavailable()
 	}
@@ -220,16 +224,17 @@ func (a *App) journalTwin(an event.JournalAnchor) (*App, error) {
 // what that left, and only then does the journal attach, so it records from a state
 // its replay reproduces. Caller MUST hold updateMutex.
 func (a *App) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Recorder, error) {
+	// Nothing pending: the run takes on twin's queue, so an event held here is lost.
+	// The checks read what that settle leaves, a reset it asked for included.
+	a.scheduler.SettleLocked()
 	if err := a.journalErrorLocked(); err != nil {
 		return nil, err
 	}
-	// The twin is the boot of the identity the anchor read; a reset, a resize or a
-	// rate change since it was built is a world it is not the boot of.
+	// The twin is the boot of the identity the anchor read; a reset, a resize, a
+	// rate change or a rebind since it was built is a world it is not the boot of.
 	if a.buildAnchor() != an {
 		return nil, errors.New("the run changed while the journal was opening; start it again")
 	}
-	// Nothing pending: the run takes on twin's queue, so an event held here is lost.
-	a.scheduler.SettleLocked()
 	opening, err := a.openingLocked(twin)
 	if err != nil {
 		return nil, err
@@ -288,6 +293,7 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 		Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
 		Participant: a.world.LocalParticipant(), Authority: cap.Header.Authority, Body: body,
 		Opens: true, Mode: a.ctx.GetMode(), Paused: a.ctx.TimeCtl.IsPaused(), Off: off,
+		Slot: a.world.Resources.Player.LocalSlot(),
 	}, nil
 }
 
@@ -380,6 +386,7 @@ func (a *App) buildAnchor() event.JournalAnchor {
 		CropOnResize:   cfg.CropOnResize,
 		CellAspect:     float64(cfg.CellAspect),
 		SessionShared:  a.world.SessionShared(),
+		Slot:           uint64(a.world.Resources.Player.LocalSlot()),
 	}
 }
 

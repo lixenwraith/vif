@@ -17,6 +17,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Set is one parsed journal: its anchors and records in jseq order, the worlds it
@@ -63,6 +64,7 @@ type captureFields struct {
 	Mode        uint64 `json:"mode"`
 	Paused      bool   `json:"paused"`
 	Off         string `json:"off"` // system names, comma-separated
+	Slot        uint64 `json:"slot"`
 }
 
 type digestFields struct {
@@ -233,10 +235,13 @@ func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
 	if f.Mode >= uint64(len(core.ModeNames)) {
 		return event.JournalCapture{}, fmt.Errorf("cseq %d: unknown mode %d", f.CSeq, f.Mode)
 	}
+	if f.Slot >= parameter.MaxPlayers && f.Slot != uint64(parameter.NoPlayerSlot) {
+		return event.JournalCapture{}, fmt.Errorf("cseq %d: no roster slot %d", f.CSeq, f.Slot)
+	}
 	c := event.JournalCapture{
 		JSeq: f.JSeq, CSeq: f.CSeq, Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Participant: f.Participant, Authority: f.Authority, Body: f.Body,
-		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused,
+		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Slot: uint8(f.Slot),
 	}
 	if f.Off != "" {
 		c.Off = strings.Split(f.Off, ",")
