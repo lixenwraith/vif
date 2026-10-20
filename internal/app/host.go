@@ -44,6 +44,7 @@ func (c sessionControl) Bots() []engine.BotSeat    { return c.a.botSeats() }
 func (c sessionControl) HostError() error          { return c.a.hostErrorLocked() }
 func (c sessionControl) JoinError() error          { return c.a.joinErrorLocked() }
 func (c sessionControl) StartJournal() error       { return c.a.startJournalLocked() }
+func (c sessionControl) StopJournal() error        { return c.a.stopJournalLocked() }
 func (c sessionControl) JournalError() error       { return c.a.journalErrorLocked() }
 func (c sessionControl) JournalPath() string       { return c.a.recorder.Path() }
 

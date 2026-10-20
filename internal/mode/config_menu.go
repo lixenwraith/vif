@@ -125,8 +125,8 @@ var configPages = []configPage{
 		commandAction("mutex", "Mutex profile", captureDescription("a mutex profile"), "debug mutex"),
 		commandAction("trace", "Execution trace", captureDescription("an execution trace"), "debug trace"),
 		commandAction("snap", "Telemetry snapshot", "Write every metric with the view and session state to a snapshot file in the log directory.", "t save"),
-		{key: "journal", label: "Replay journal", description: "Enter records a replay journal from here. A solo run restarts on its own world and a guest rejoins, so local glyphs and effects start fresh, as on a join.",
-			command: "journal start", action: true, read: journalValue, disabled: journalUnavailable},
+		{key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. Starting one restarts a solo run on its own world and rejoins a guest, so local glyphs and effects start fresh, as on a join.",
+			command: "journal", choices: []string{"off", "on"}, read: journalValue, disabled: journalUnavailable},
 	}},
 	{key: "startup", label: "Startup settings", description: "Settings that require restarting, and where to configure them.", options: []configOption{
 		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. Simulation / Change scenario starts another one now.", read: startupValue},
@@ -192,15 +192,16 @@ func recorderUnavailable(ctx *engine.GameContext) string {
 }
 
 func journalValue(ctx *engine.GameContext) string {
-	if ctx.SessionCtl != nil && ctx.SessionCtl.JournalPath() != "" {
-		return "on"
-	}
-	return "Enter"
+	return toggleWord(ctx.SessionCtl != nil && ctx.SessionCtl.JournalPath() != "")
 }
 
+// A journal recording can always be closed; starting one has the run's conditions.
 func journalUnavailable(ctx *engine.GameContext) string {
 	if ctx.SessionCtl == nil {
 		return "This runtime cannot start a journal"
+	}
+	if ctx.SessionCtl.JournalPath() != "" {
+		return ""
 	}
 	if err := ctx.SessionCtl.JournalError(); err != nil {
 		return "Unavailable: " + err.Error()

@@ -44,7 +44,7 @@ starts with the reason.
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
 | Simulation | Solo speed from 1/8x through 8x; a replay's restart. |
-| Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth, FSM trigger and flush, profiler, CPU/heap/mutex profiles and execution trace, telemetry snapshot, starting a replay journal. |
+| Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth, FSM trigger and flush, profiler, CPU/heap/mutex profiles and execution trace, telemetry snapshot, the replay journal toggle. |
 | Startup settings | Guidance for paths/scenario, audio device/buffer, colour depth, key bindings and identity. |
 
 ### Game
@@ -117,7 +117,7 @@ change its shortcut; `:g` remains available. Forms use the text-key bindings,
 while menu navigation uses overlay bindings.
 
 Action rows (`Enter`) run the command they name and close the menu: `:n`,
-`:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`, `:journal start`
+`:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`
 and `:replay restart`; a scenario row and the Scenario by name form submit
 `:n <scenario>` the same way. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the
 like), `:step`, `:d break`, `:emit`, `:system`, `:region` and `:replay tick|time`

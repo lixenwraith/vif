@@ -613,6 +613,19 @@ takes on losing its host ([Multi-player](multi-player.md) §5.1) without the
 `Host lost` badge; an authority closes its listener first, and its guests succeed
 or fork as its `-authority` policy says.
 
+### Start a journal without replacing the run
+
+- Priority: P3
+- Affected files: `internal/app/app.go`, `internal/app/replay.go`, `internal/snapshot`
+
+`:journal start` replaces the run because a replay reproduces both domains from a
+fresh world plus the shared capture the first write carries, and nothing carries
+the player domain: its entities, RNG streams and system state. Starting in place
+would reset that domain to its fresh-boot state under the lock, or write it, and
+let `ConfigFromAnchor` take a mid-run anchor whose first written world is whole.
+The run would keep its local effects and seats; the restart keeps the one install
+path a join uses.
+
 ### Start a host's journal mid-session
 
 - Priority: P3

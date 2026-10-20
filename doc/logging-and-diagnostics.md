@@ -289,7 +289,7 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `journal opened` / `journal closed` | INFO | `path`, plus `records`, `encode_failed` | `app.initJournal`, `app.Close` |
+| `journal opened` / `journal closed` | INFO | `path`, plus `records`, `encode_failed` | `app.initJournal`; `app.Close` and `:journal stop` |
 | `journal not closed` / `journal capture not recorded` | ERROR / WARN | `error`, plus `tick` on the capture | `app.Close`; a written world the journal could not take |
 | `journal incomplete` | WARN | `error` | `PlayJournal` playing on past a sequence gap (§9) |
 | `world not resumed; playing a new game` | WARN | `error` | a run `:journal start` replaced, whose handed-over world did not install |
@@ -909,12 +909,16 @@ scenario digest, tick interval, the content source, pin and fingerprint, and
 geometry.
 
 Since a journal must start with its run, `:journal start` (Diagnostics →
-Replay journal) starts one mid-game the way a join does: it replaces the run. A
-solo run hands its shared world to the next run, which writes it before its clock
-starts and journals that write; a guest rejoins its session, so its journal opens
-at the join. The local player domain starts fresh there in both, as a joiner's
-does. A session's host refuses, since its guests' cursors would carry into a run
-they are not in.
+Replay journal) starts one mid-game the way a join does: it replaces the run, on
+the terminal the process keeps ([Runtime §10](runtime.md#10-reset-and-operator-state)).
+A solo run hands its shared world to the next run, which writes it before its
+clock starts and journals that write; a guest rejoins its session, so its journal
+opens at the join. The local player domain starts fresh there in both, as a
+joiner's does. A session's host refuses, since its guests' cursors would carry
+into a run they are not in. `:journal stop` closes the journal where the run
+stands, writing its `end` record and releasing the file; a later `:journal start`
+opens another file, replacing the run again. A run journaling when a scenario
+change or a join replaces it journals on in the next run's file.
 
 ### Written worlds and notes
 
@@ -1103,7 +1107,7 @@ use their independently configured journal directory.
 | `:log rec flush` | Request a window flush on the next tick |
 | `:log rec fsm [on\|off]` | Toggle the FSM transition trigger |
 | `:t save` | Write a standalone snapshot (§7) |
-| `:journal`, `:journal start` | Report the journal, or start one that replaces the run (§9) |
+| `:journal`, `:journal start\|stop` | Report the journal, start one that replaces the run, or close it where the run stands (§9) |
 | `:d`, `:d prof [on\|off]` | Profiler report; start or stop the profiler (§11) |
 | `:d cpu [s]`, `:d heap`, `:d mutex [s]`, `:d trace [s]` | Write a CPU, heap or mutex profile, or an execution trace (§11) |
 | `:d break ...` | Set, list or clear standing breakpoints that pause on the command line ([Input](input-and-modes.md)) |

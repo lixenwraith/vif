@@ -103,12 +103,15 @@ Content and audio details are covered in
 The external `lixenwraith/terminal` module owns OS terminal capabilities. The
 adapter in this repository owns application lifecycle:
 
-- `Init` creates the terminal and calls its initialization exactly once;
+- `Init` creates the terminal and calls its initialization once; a run replacing
+  another on a retained terminal finds it open;
 - `Start` spawns one poll goroutine;
-- terminal events enter a buffered 256-element channel;
-- Stop closes the loop by posting a synthetic closed event, waits for the
-  goroutine, and always finalizes the terminal—even when Init succeeded but
-  Start did not;
+- terminal events enter a buffered 256-element channel, which outlives a run on
+  a retained terminal, so nothing typed during a replacement is lost;
+- `Stop` releases the terminal unless `Retain` said the process keeps it across
+  its runs, as `app.Run` does; `Release` then closes the loop by posting a
+  synthetic closed event, waits for the goroutine, and always finalizes the
+  terminal, even when Init succeeded but Start did not;
 - a panic in the poll loop performs an emergency terminal reset, flushes stdio,
   prints a stack, and exits to avoid leaving the shell unusable.
 

@@ -1021,28 +1021,40 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true}
 }
 
-// handleJournalCommand reports the journal, or starts one from the current world.
-// Usage: :journal [start]
+// handleJournalCommand reports the journal, starts one from the current world, or
+// closes the one recording.
+// Usage: :journal [start|stop]
 func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
 		setCommandError(ctx, "This runtime cannot start a journal")
 		return CommandResult{Continue: true}
 	}
+	arg := ""
+	if len(args) == 1 {
+		arg = args[0]
+	}
 	switch {
 	case len(args) == 0:
 		msg := "No journal; :journal start records from here"
 		if path := ctx.SessionCtl.JournalPath(); path != "" {
-			msg = "Journaling to " + path
+			msg = "Journaling to " + path + "; :journal stop closes it"
 		}
 		ctx.SetStatusMessage(msg, parameter.StatusNotice)
-	case len(args) == 1 && (args[0] == "start" || args[0] == "on"):
+	case arg == "start" || arg == "on":
 		if err := ctx.SessionCtl.StartJournal(); err != nil {
 			setCommandError(ctx, "Journal: "+err.Error())
 			return CommandResult{Continue: true}
 		}
 		ctx.MacroClearFlag.Store(true)
+	case arg == "stop" || arg == "off":
+		path := ctx.SessionCtl.JournalPath()
+		if err := ctx.SessionCtl.StopJournal(); err != nil {
+			setCommandError(ctx, "Journal: "+err.Error())
+			return CommandResult{Continue: true}
+		}
+		ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
 	default:
-		setCommandError(ctx, "Usage: :journal [start]")
+		setCommandError(ctx, "Usage: :journal [start|stop]")
 	}
 	return CommandResult{Continue: true}
 }

@@ -11,6 +11,9 @@ import (
 	"github.com/lixenwraith/terminal"
 )
 
+// TerminalService opens the tty and polls its events. A process that runs several
+// Apps on one terminal retains it: each run's hub then starts and stops nothing,
+// and Release ends it.
 type TerminalService struct {
 	term      terminal.Terminal
 	colorMode terminal.ColorMode
@@ -19,6 +22,7 @@ type TerminalService struct {
 	doneCh    chan struct{}
 	mu        sync.Mutex
 	running   bool
+	retained  bool
 	finiOnce  sync.Once
 }
 
@@ -34,11 +38,20 @@ func NewTerminalService(colorMode terminal.ColorMode) *TerminalService {
 func (s *TerminalService) Name() string           { return "terminal" }
 func (s *TerminalService) Dependencies() []string { return nil }
 
+// Retain keeps the terminal across runs: Stop leaves it polling and in raw mode,
+// its events buffered for the next run, until Release.
+func (s *TerminalService) Retain() { s.retained = true }
+
+// Init opens the tty; a run replacing another finds it open.
 func (s *TerminalService) Init() error {
-	s.term = terminal.New(s.colorMode)
-	if err := s.term.Init(); err != nil {
+	if s.term != nil {
+		return nil
+	}
+	term := terminal.New(s.colorMode)
+	if err := term.Init(); err != nil {
 		return fmt.Errorf("terminal init: %w", err)
 	}
+	s.term = term
 	return nil
 }
 
@@ -87,7 +100,17 @@ func (s *TerminalService) pollLoop() {
 	}
 }
 
+// Stop releases the terminal unless the process retains it across its runs.
 func (s *TerminalService) Stop() error {
+	if !s.retained {
+		s.Release()
+	}
+	return nil
+}
+
+// Release ends polling and restores the tty. Unconditional on the tty: Init may
+// have succeeded without Start, and a failed startup must not leave it in raw mode.
+func (s *TerminalService) Release() {
 	s.mu.Lock()
 	wasRunning := s.running
 	s.running = false
@@ -100,15 +123,11 @@ func (s *TerminalService) Stop() error {
 		}
 		<-s.doneCh
 	}
-
-	// Unconditional: Init may have succeeded without Start, and a failed
-	// startup must not leave the tty in raw mode.
 	s.finiOnce.Do(func() {
 		if s.term != nil {
 			s.term.Fini()
 		}
 	})
-	return nil
 }
 
 func (s *TerminalService) Terminal() terminal.Terminal   { return s.term }

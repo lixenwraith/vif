@@ -36,6 +36,14 @@ func Run(cfg Config) error {
 		defer ln.Close() // the run's port closes it first; one that never served it must not keep it
 		cfg.hostListener = ln
 	}
+	// One terminal for every run: a replacement redraws on it instead of leaving
+	// and re-entering the screen. The first run's hub opens it; Run releases it.
+	if cfg.Host.Presentation == nil {
+		term := newTerminal(cfg)
+		term.Retain()
+		defer term.Release()
+		cfg.Host.Presentation = term
+	}
 	rejoin := false
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
@@ -54,7 +62,7 @@ func Run(cfg Config) error {
 			return nil
 		}
 		solo, cfg.notice, cfg.dialled, cfg.Bots, cfg.Play = nil, next.Notice, nil, next.Bots, next.Play
-		cfg.Journal, cfg.resume = cfg.Journal || next.Journal, next.Resume
+		cfg.Journal, cfg.resume = next.Journal, next.Resume
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
 		}
@@ -101,6 +109,7 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 	next, err = a.Loop()
 	if next != nil {
 		next.Play = a.livePlay()
+		next.Journal = next.Journal || a.recorder != nil
 	}
 	return next, err
 }

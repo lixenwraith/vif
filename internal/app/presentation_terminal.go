@@ -35,13 +35,18 @@ func (a *App) initPresentationService() error {
 		return nil
 	}
 	if a.pres = a.cfg.Host.Presentation; a.pres == nil {
-		colorMode := terminal.DetectColorMode()
-		if a.cfg.ColorModeSet {
-			colorMode = a.cfg.ColorMode
-		}
-		a.pres = terminalHost{service.NewTerminalService(colorMode)}
+		a.pres = newTerminal(a.cfg)
 	}
 	return a.hub.Register(a.pres)
+}
+
+// newTerminal is the build's own presentation, in the colour mode cfg asks for.
+func newTerminal(cfg Config) terminalHost {
+	colorMode := terminal.DetectColorMode()
+	if cfg.ColorModeSet {
+		colorMode = cfg.ColorMode
+	}
+	return terminalHost{service.NewTerminalService(colorMode)}
 }
 
 func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode, vmath.Aspect) {
