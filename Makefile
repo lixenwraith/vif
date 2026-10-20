@@ -192,7 +192,7 @@ wasm: check-go $(WEB_DIR)
 	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
 
-# windows is experimental and untested
+# windows is experimental; doc/multi-platform.md §4 lists its known issues
 windows: check-go $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 

@@ -402,6 +402,29 @@ deprecated for `android sdk`, which ships in the same package. Switch `setup` to
 once its install, licence and SDK-root flags are settled, bumping the pinned build
 and its three SHA-256s together.
 
+### Fix the Windows zip's mouse, sound and status bar flicker
+
+- Priority: P3
+- Affected files: `Makefile`, `.github/workflows/release.yml`, the terminal
+  module's Windows backend
+- Guide: [Build profiles](multi-platform.md) §4
+
+Played in Alacritty, the zip ignores the mouse, has no sound and flickers status
+bar cells on redraw. Try the mouse in Windows Terminal, whose console host is newer
+than the system's, to tell a console-host gap from a backend one; try a build
+without `vif_noaudio` with ffplay on `PATH`; and try the flicker with the frame
+wrapped in synchronized output.
+
+### Build for 32-bit targets
+
+- Priority: P3
+- Affected files: `internal/parameter/gameplay.go`, `internal/mode/commands.go`
+
+`parameter.GodEnergyAmount` (10^11) overflows a 32-bit `int` in `:god`, so no
+32-bit target compiles, 32-bit Termux included. Keep it within 2^31 or carry the
+energy as `int64`, then add a 32-bit cross-build to `make verify` if it should stay
+that way.
+
 ### Provision audio to the fleet when a host needs it
 
 - Priority: P3

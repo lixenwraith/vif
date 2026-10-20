@@ -71,7 +71,7 @@ jobs:
           CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 \
             go build -trimpath -gcflags=github.com/ebitengine/purego/internal/fakecgo=-std \
             -ldflags='-s -w' -o "stage/$p-freebsd-amd64/vif" ./cmd/vif
-          # Experimental and untested, with make windows's tags.
+          # Experimental, with make windows's tags; doc/multi-platform.md §4 has its known issues.
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
             go build -trimpath -tags='novlog vif_noaudio' -ldflags='-s -w' \
             -o "stage/$p-windows-amd64/vif.exe" ./cmd/vif
@@ -277,7 +277,7 @@ jobs:
           set -euo pipefail
           version=${GITHUB_REF_NAME#v}
           flags=(--draft --verify-tag)
-          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window. The Android APK installs over a nightly or a local debug build (android/README.md). The windows-amd64 zip is an experimental, untested cross-build."
+          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window. The Android APK installs over a nightly or a local debug build (android/README.md). The windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
           case $version in
           *-*)
             flags+=(--prerelease)
@@ -298,7 +298,7 @@ jobs:
           git push origin refs/tags/nightly --force
 
           title='Nightly development build (not a release)'
-          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux server archive and GHCR image use the vif_headless profile. The Android APK (Android 11 and newer, arm64 and x86_64) is signed with the repository's debug key and installs over the night before; the windows-amd64 zip is an experimental, untested cross-build."
+          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux server archive and GHCR image use the vif_headless profile. The Android APK (Android 11 and newer, arm64 and x86_64) is signed with the repository's debug key and installs over the night before; the windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
           if gh release view nightly >/dev/null 2>&1; then
             gh release upload nightly dist/* --clobber
             # The release carries exactly this build, not a renamed or dropped asset.

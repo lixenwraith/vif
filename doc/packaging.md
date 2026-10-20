@@ -55,8 +55,8 @@ These hold regardless of which repository is targeted first.
 ## 2. Release surface
 
 `.github/workflows/release.yml` builds one set of archives: Linux amd64 and arm64
-clients and the amd64 headless server, FreeBSD amd64 client, an experimental and
-untested Windows amd64 zip, the browser bundle, the wad, the Android APK, and
+clients and the amd64 headless server, FreeBSD amd64 client, an experimental
+Windows amd64 zip, the browser bundle, the wad, the Android APK, and
 `SHA256SUMS` over all of them. A build that fails `go vet ./...` or `go test ./...`
 publishes nothing. Each binary and browser archive unpacks into one directory
 named for it, and every tarball's entries are root's, so extracting one as root
