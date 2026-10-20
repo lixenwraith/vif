@@ -187,7 +187,7 @@ settings explain why. Rebind the `config_menu` action in the keymap.
   audio and no cursor of its own. It starts on its first guest and admits the rest
   as they arrive, where `-players <n>` is a ceiling rather than a requirement.
   `-size <WxH>` gives it the geometry it has no terminal to derive; without it the
-  first guest's terminal sizes the session.
+  first person's terminal sizes the session, or 120x40 when it seats bots of its own.
 - `-probe <bind-address>` serves `/health` and Prometheus `/metrics` for a `-serve`
   run, and `-log-stdout` writes the session log to stdout as JSON.
 - `-first-join <d>`, `-empty <d>` and `-drain <d>` bound a `-serve` session that was

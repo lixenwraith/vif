@@ -315,7 +315,8 @@ What a cluster has not yet been asked:
   nowhere to migrate a match that lives in one process's memory.
 - **Dedicated lobby:** quorum is one, `-players` is capacity.
 - **Map bounds:** a scenario that sets up its own map (td) keeps it; otherwise an
-  explicit `-size` wins, and without one the first guest sets the shared map.
+  explicit `-size` wins, and without one the first person sets the shared map, or
+  the session's own bots at 120x40 when it seats any.
 - **Correction:** Shared capture is authoritative; Player-domain state is excluded
   and only explicit persistent local FSM lifecycle is re-derived.
 

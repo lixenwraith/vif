@@ -281,7 +281,8 @@ terminal-equivalent geometry, the address it listens on for the succession chain
 and a bot's holder. It travels with the reply rather than the dial because only
 after construction does a joiner know the terminal it got. The geometry is
 advisory: only a dedicated host given no `-size` reads it, sizing a cropping map
-from the first guest that reports one (see [Runtime](runtime.md) §1.2).
+from the first person that reports one, never a bot's holder (see
+[Runtime](runtime.md) §1.2).
 
 ### 7.2 Join identity, and who decides it
 

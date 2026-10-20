@@ -29,7 +29,8 @@ var (
 // defaultWadDir is where deploy/guest/update-vif-wad.sh installs the volume.
 const defaultWadDir = "/var/db/vif/wad"
 
-// sizeFirst asks for no -size, so the host takes its first guest's terminal.
+// sizeFirst asks for no -size, so the host takes its first person's terminal, or a
+// bot's 120x40 when it seats bots.
 const sizeFirst = "first"
 
 // checkSize admits sizeFirst, or a WxH screen whose game area (the screen less the
@@ -97,7 +98,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&logLevelMin, "log-level-min", "debug",
 		"most verbose session log level a request may select")
 	set.StringVar(&cfg.Allocator.Workload.Size, "size", sizeFirst,
-		"default session screen WxH, the host's -size, or first: the first guest's terminal")
+		"default session screen WxH, the host's -size, or first: the first person's terminal")
 	set.StringVar(&cfg.Allocator.Workload.Scenario, "scenario", "main", "default scenario name")
 	set.StringVar(&cfg.Allocator.WadDir, "wad", defaultWadDir,
 		"node resource volume, scanned for the scenarios a request may select")

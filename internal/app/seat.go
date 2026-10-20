@@ -128,7 +128,8 @@ func (a *App) addSeatLocked(spec string) error {
 // own because its peer listener accepts only already-rostered identities.
 // Caller holds updateMutex.
 func (a *App) seatConfigLocked() (Config, error) {
-	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: BotWidth, Height: BotHeight,
+	width, height := a.seatScreenLocked()
+	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: width, Height: height,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
 	if a.cfg.JoinAddress != "" && !a.world.IsSessionCoordinator() {
 		// The name too: the relay acceptor is this run's own and waits for it.
@@ -163,6 +164,16 @@ func (a *App) seatConfigLocked() (Config, error) {
 		target += "/" + a.cfg.SessionName
 	}
 	return cfg.joining(target)
+}
+
+// seatScreenLocked is the screen a new seat plays in: its holder's, so a person's bots
+// see what that person sees, or a bot's own for a holder that names none, a server or
+// headless run given no -size. Caller holds updateMutex.
+func (a *App) seatScreenLocked() (int, int) {
+	if a.cfg.geometryDefaulted || !engine.ViewportFits(a.ctx.Width, a.ctx.Height) {
+		return BotWidth, BotHeight
+	}
+	return a.ctx.Width, a.ctx.Height
 }
 
 // ownListener is the address this run's session listener bound, "" when it has none.
@@ -222,7 +233,8 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				s.app.Store(b)
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"peer", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
-				return seatSource{botSource{d}, forkCell(a)}, nil
+				return &seatSource{botSource: botSource{d}, holder: forkCell(a), screen: &a.seatScreen,
+					run: b, shown: screen{cfg.Width, cfg.Height}}, nil
 			})
 		s.app.Store(nil)
 		if driver == nil && err != nil && retryableJoin(err) && time.Now().Before(deadline) &&
@@ -254,16 +266,27 @@ func retryableJoin(err error) bool {
 // nobody took the session over.
 func forkCell(a *App) *atomic.Bool { return a.world.Resources.Status.Bools.Get("network.fork") }
 
+// screen is a terminal's size in cells.
+type screen struct{ w, h int }
+
 // seatSource ends a seat once its holder is left with no session: a holder that
-// left its session takes its bots along.
+// left its session takes its bots along. A seat follows its holder's screen as it
+// is published, between two of its steps.
 type seatSource struct {
 	botSource
 	holder *atomic.Bool
+	screen *atomic.Pointer[screen]
+	run    *App
+	shown  screen
 }
 
-func (s seatSource) Step() (bool, error) {
+func (s *seatSource) Step() (bool, error) {
 	if s.holder.Load() {
 		return false, nil
+	}
+	if sc := s.screen.Load(); sc != nil && *sc != s.shown {
+		s.shown = *sc
+		s.run.Resize(sc.w, sc.h)
 	}
 	return s.botSource.Step()
 }

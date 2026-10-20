@@ -33,7 +33,7 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 		t.Fatalf("ready timeout = %s", cfg.Allocator.ReadyTimeout)
 	}
 	if cfg.Allocator.Workload.Size != sizeFirst {
-		t.Fatalf("size = %q by default, want the first guest's", cfg.Allocator.Workload.Size)
+		t.Fatalf("size = %q by default, want the first person's", cfg.Allocator.Workload.Size)
 	}
 }
 
