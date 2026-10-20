@@ -345,7 +345,7 @@ and how long a fetched container is kept.
 - Priority: P2
 - Affected files: `web/terminal.js`, `web/worker.js`, `internal/app/loop.go`,
   `internal/lifecycle`
-- Guide: [Build profiles](multi-platform.md#a-hidden-tab), fleet item W1
+- Guide: [Build profiles](multi-platform.md#a-hidden-tab)
 
 A hidden tab draws nothing and repaints once on return. What remains is a tab that
 leaves: one hidden or suspended for five minutes must cost the other players
@@ -425,18 +425,6 @@ wrapped in synchronized output.
 energy as `int64`, then add a 32-bit cross-build to `make verify` if it should stay
 that way.
 
-### Provision audio to the fleet when a host needs it
-
-- Priority: P3
-- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-allocator/manifest.go`,
-  `deploy/k3s/30-session.yaml`
-
-What a fleet session reads from the node volume is one list in three places —
-`categories` in the installer, `wadCategories` in the allocator, and the mounts in
-the template. `scenario` and `image` are on it. `audio` goes on it the day a
-dedicated host renders anything, and `content` never does. Nothing else changes;
-the volume already carries whatever the installer puts there.
-
 ### Cache a received scenario to the user root
 
 - Priority: P3
@@ -447,6 +435,39 @@ rejoining the same session downloads it again. Writing it under the user root
 behind an explicit opt-in would keep it, and needs a trust decision first: the
 bytes came from a peer, and nothing about a plaintext link says they are the
 operator's.
+
+## Fleet
+
+The design and what it cost are in [The session fleet](kubernetes-fleet.md), and
+the procedure in [Fleet deploy](kube-docker-deploy.md).
+
+### Hand off a deployment a stranger can install
+
+- Priority: P1
+- Affected files: `doc/kube-docker-deploy.md`, `deploy/`
+- Guide: [Fleet deploy](kube-docker-deploy.md#13-first-session) §13
+
+Rehearse the procedure from bare Arch Linux and from bare Ubuntu, record their
+package and service differences, and fix every command that assumes the
+production node. Done when both reach a first session with no step their operator
+had to invent, and every resource value in `deploy/k3s/30-session.yaml` cites a
+number from [Measure a full roster](#measure-a-full-roster).
+
+### Measure a full roster
+
+- Priority: P1
+- Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/10-quota.yaml`,
+  `tool/vif-allocator/manifest.go`
+- Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
+
+Drive nine sessions with headless joiners for the fleet-level readings (CPU,
+memory, tmpfs, log rate, rotations), plus one real four-player session over real
+links, through a tower and a storm and on `wad/scenario/td`, for the hour the
+Job's deadline allows, which tick slips and correction magnitude need. Requests,
+limits and the quota totals then come from that measurement rather than from
+single-guest history and estimates. It passes with no OOM, liveness restart,
+sustained tick slip or growing correction magnitude, the deadline ending each
+session.
 
 ### Apply the fleet log retention on the node
 
@@ -465,13 +486,48 @@ hour of play.
 - Priority: P2
 - Affected files: `deploy/guest/update-vif-image.sh`, `.github/workflows/release.yml`,
   `deploy/k3s/30-session.yaml`, `tool/vif-allocator`
-- Guide: [Session fleet](kubernetes-fleet.md#3-work-list) §3, fleet item H16
+- Guide: [Fleet deploy](kube-docker-deploy.md#8-the-session-image) §8
 
 Nightly CI publishes the headless image to GHCR under moving and commit-addressed
 tags, and the node builds and imports its own. What remains is choosing the
 node's registry and promotion policy, authenticating pulls without a long-lived
 off-node deployment credential, and moving new sessions to a verified digest while
 existing ones finish on theirs.
+
+### Put a cluster through its failures
+
+- Priority: P2
+- Affected files: `doc/kube-docker-deploy.md`
+- Guide: [Session fleet](kubernetes-fleet.md#7-verification) §7
+
+Not yet tried on a cluster: `tc netem` latency, loss and reordering, which should
+recover at the next bounded correction or keyframe; a pod delete or a node
+failure, whose connected-client behaviour should be recorded, with no replacement
+advertised as the same match; and a full log tmpfs, which should lose a bounded
+amount of log without ending a game.
+
+### Provision audio to the fleet when a host needs it
+
+- Priority: P3
+- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-allocator/manifest.go`,
+  `deploy/k3s/30-session.yaml`
+
+What a fleet session reads from the node volume is one list in three places —
+`categories` in the installer, `wadCategories` in the allocator, and the mounts in
+the template. `scenario` and `image` are on it. `audio` goes on it the day a
+dedicated host renders anything, and `content` never does. Nothing else changes;
+the volume already carries whatever the installer puts there.
+
+### Shrink the spatial grid on ceiling-sized maps
+
+- Priority: P3
+- Affected files: `internal/engine/spatial_grid.go`
+- Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
+
+The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250)
+reserves about 30.5 MiB per world, and a guest's staging world a second. Deferred
+until density matters: on `td` the grid is a minority of what a session was
+measured to cost.
 
 ## Multiplayer
 
@@ -877,7 +933,7 @@ another system may not call them directly.
 
 - Priority: P1
 - Affected files: `internal/network` (join and peer-link handshakes, admission)
-- Guide: [Session fleet](kubernetes-fleet.md#4-security-posture) §4, fleet item H1
+- Guide: [Session fleet](kubernetes-fleet.md#4-security-posture) §4
 
 The game port is unauthenticated by decision and reachable from the Internet, and
 §4 lists what bounds a stranger on it. What it lacks is a fuzz target in

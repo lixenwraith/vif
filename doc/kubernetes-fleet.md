@@ -1,11 +1,11 @@
-# The session fleet: design and work list
+# The session fleet
 
 vif dedicated servers run one session per container on K3s. A website asks
 for a game, one container appears, and it ends itself when nobody is in it.
 
-This is what the design is, what it cost when it was measured, and what is left.
-The procedure for installing it is
-[Deploying the session fleet](kube-docker-deploy.md); the objects are in
+This is what the design is, what it cost when it was measured, and what was
+decided; its open work is in [todo](todo.md#fleet). The procedure for installing it
+is [Deploying the session fleet](kube-docker-deploy.md); the objects are in
 [`deploy/`](../deploy/README.md); the scenarios that verify the process by hand are
 in [`script/`](../script/README.md).
 
@@ -61,40 +61,16 @@ Kubernetes restart and replication do not create game-level high availability.
 Authority succession helps already-connected participants after a host disappears;
 it does not move an in-memory session into an unrelated pod.
 
-## 3. Work list
+## 3. Open work
 
-### Open
-
-| ID | Priority | Item | Done when |
-|---|---|---|---|
-| G | next | **Hand off a deployment a stranger can install.** | Both rehearsals below reach a first session with no undocumented step, and every resource value in `deploy/k3s/30-session.yaml` cites a number from H3. |
-| G1 | next | **Rehearse from bare Arch Linux and from bare Ubuntu.** Record package and service differences, and fix every command that assumes the production node. | A second node reaches [§13 of the procedure](kube-docker-deploy.md#13-first-session) without a step its operator had to invent. |
-| H3 | next | **Measure a full roster.** Nine sessions driven by headless joiners for the fleet-level readings — CPU, memory, tmpfs, log rate, rotations — plus one real four-player session over real links, through a tower and a storm and on `wad/scenario/td`, for the hour the Job's deadline allows, which tick slips and correction magnitude need. | Requests and limits in `30-session.yaml`, and the quota totals, come from the four-player measurement rather than from single-guest history and estimates. |
-| H5 | later | **Spatial grid on ceiling-sized maps.** The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250) reserves about 30.5 MiB per world, and a guest's staging world a second. | Deferred until density matters; on `td` the grid is a minority of what a session was measured to cost. |
-
-### Partly done
-
-Each of these has landed in part; what remains is a [TODO](todo.md) item.
-
-| ID | Done | Remaining |
-|---|---|---|
-| W1 | **Commission the browser path.** A hidden tab draws nothing and repaints once on return ([multi-platform §5](multi-platform.md#a-hidden-tab)). | [Let a browser tab leave and come back](todo.md#let-a-browser-tab-leave-and-come-back) |
-| H1 | **Harden the open port.** The game port is unauthenticated by decision and reachable from the Internet; everything a stranger can do on it is bounded as §4 lists. | [Fuzz the join handshake](todo.md#fuzz-the-join-handshake) |
-| H16 | **Automate image delivery.** Nightly CI publishes the headless image to GHCR under moving and commit-addressed tags; the node builds and imports its own with `deploy/guest/update-vif-image.sh`. | [Promote verified images to the node](todo.md#promote-verified-images-to-the-node) |
-| H4 | **Renderer-neutral builds.** `vif_headless`, which the image runs, leaves out the renderer and audio packages. | [Extract the renderer-neutral Android host model](todo.md#extract-the-renderer-neutral-android-host-model) |
-
-The deployment keeps a session's own bots closed (`VIF_ALLOCATOR_BOTS_MAX=0`) until
-[Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) holds, and its
-per-address budgets loose until
-[Tighten the per-address budgets](todo.md#tighten-the-per-address-budgets).
-
-### Dropped, with the reason
-
-| Was | Reason |
-|---|---|
-| F11 `SIGHUP` reload | No reload contract is planned. `SIGHUP` terminates like any other signal, which is the documented behaviour. |
-| F12 match-complete exit | There is no gameplay terminal state and none is planned. A session ends on emptiness. If one ever exists it attaches to `lifecycle.Controller.Expire` and nothing else changes. |
-| H9 per-session LogWisp | The ten-session fan-in uses one standalone node service. The sidecar template, renderer branch and ConfigMap are removed; so are the pod-log follower, the allocator JSON splicer and the allocator-owned LogWisp. None of them is a fallback. |
+What stands between this deployment and one a stranger can install is in
+[todo](todo.md#fleet): rehearsing the install on bare Arch Linux and Ubuntu, a
+full-roster measurement for the resource values, the failures a cluster has not
+yet been put through, and promoting verified images to the node. Until
+[Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) and
+[Tighten the per-address budgets](todo.md#tighten-the-per-address-budgets) hold,
+the deployment keeps a session's own bots closed (`VIF_ALLOCATOR_BOTS_MAX=0`) and
+its per-address budgets loose.
 
 ## 4. Security posture
 
@@ -214,7 +190,7 @@ defaults:
 | Reading | One session |
 |---|---|
 | CPU | 144m |
-| Memory | 59 MiB against a 96 MiB request and a 192 MiB limit |
+| Memory | 59 MiB against a 96 MiB request |
 | tmpfs | 12 MiB of 256 MiB |
 | Log rate | 89 KiB in 30 s, about 3 KiB/s |
 
@@ -222,7 +198,7 @@ Ten of these is roughly 30 KiB/s into the 256 MiB tmpfs, which the 8 MB rotation
 the cleanup timer carry: a file untouched for 75 minutes, past the Job's deadline,
 is an ended session's and goes, so a full fleet holds about 140 MiB of the tmpfs
 rather than filling it in two and a half hours. Do not scale the CPU and memory
-figures from here; H3
+figures from here; [Measure a full roster](todo.md#measure-a-full-roster)
 measures a four-player world, which is the shape the manifest's values are for. The
 quota totals in `10-quota.yaml` are ten times the game container without bots; the
 config-check init container counts only against its own peak.
@@ -260,14 +236,8 @@ the empty steady state in one pass. Run it after every change to a live workload
 allocator binary, Role, mount or logging service, and after
 [its reboot gate](kube-docker-deploy.md#14-the-reboot-gate).
 
-What a cluster has not yet been asked:
-
-| Check | Expected |
-|---|---|
-| Full roster until the Job's one-hour deadline (H3) | No OOM, liveness restart, sustained tick slips, or growing correction magnitude, and the deadline ends each session. |
-| `tc netem` latency, loss, reordering | Recovers at the next bounded correction or keyframe. |
-| Pod delete / node failure | Connected-client behaviour is recorded; no replacement is advertised as the same match. |
-| A full tmpfs | Bounded log loss without ending a game. |
+What a cluster has not yet been put through is
+[in todo](todo.md#put-a-cluster-through-its-failures).
 
 ## 8. Decisions
 
@@ -313,6 +283,9 @@ What a cluster has not yet been asked:
   which splices the browser route to the pod as the front door does (§9).
 - **Drain waits for the roster with a deadline.** No participant migration: there is
   nowhere to migrate a match that lives in one process's memory.
+- **`SIGHUP` terminates like any other signal.** No reload contract is planned.
+- **A session ends on emptiness.** There is no gameplay terminal state; if one ever
+  exists it attaches to `lifecycle.Controller.Expire` and nothing else changes.
 - **Dedicated lobby:** quorum is one, `-players` is capacity.
 - **Map bounds:** a scenario that sets up its own map (td) keeps it; otherwise an
   explicit `-size` wins, and without one the first person sets the shared map, or
@@ -369,7 +342,7 @@ through the front door, and nginx with TLS added about 0.3 ms; in the field a na
 
 ## 10. Acceptance and rollback boundary
 
-The deployment is complete when all of these hold, and the open items in §3 are what
+The deployment is complete when all of these hold, and the open work of §3 is what
 stands between here and there:
 
 - ten concurrent files have distinct names and matching self-tags;

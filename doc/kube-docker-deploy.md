@@ -13,8 +13,8 @@ and it ends itself when nobody is in it.
 K3s objects, scenario volume, session image, allocator, LogWisp's configuration and
 unit — and LogWisp's binary to upstream `main`, skipping what is current and showing
 each change as a diff first. [The fleet design](kubernetes-fleet.md) holds the
-design and its open work; where each host artifact lands and how to back one out is
-[`deploy/guest/README.md`](../deploy/guest/README.md).
+design and [todo](todo.md#fleet) its open work; where each host artifact lands and
+how to back one out is [`deploy/guest/README.md`](../deploy/guest/README.md).
 
 The production node is an Arch Linux guest behind a host that owns routing and
 packet filtering. The host and the site's nginx are site configuration kept outside
@@ -467,8 +467,7 @@ session and names why:
 `drain deadline … reached holding N guest(s)`, or an operator's cause. Sessions
 expiring with `no guest connected` far more often than players report failed joins
 is a broken path between the page and the forwarded ports; start at the
-EndpointSlice and walk outward with §16. Open work is the fleet design's
-[work list](kubernetes-fleet.md#3-work-list).
+EndpointSlice and walk outward with §16. Open work is in [todo](todo.md#fleet).
 
 ## 16. Troubleshooting
 
