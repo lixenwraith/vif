@@ -161,9 +161,17 @@ func (a *App) journalDigestLocked() event.JournalDigest {
 // holds, as the participant it wrote it as: identity first, because the write binds
 // cursors by it, and a join writes before its transport attaches or notes anything.
 func (t replayTarget) Install(c event.JournalCapture) error {
-	var d snapshot.WrittenDelta
+	var (
+		d   snapshot.WrittenDelta
+		own ownState
+	)
 	if err := snapshot.DecodeJSON(c.Body, &d); err != nil {
 		return err
+	}
+	if c.Opens {
+		if err := snapshot.DecodeJSON(c.Own, &own); err != nil {
+			return fmt.Errorf("the run's own side: %w", err)
+		}
 	}
 	a := t.a
 	var err error
@@ -183,20 +191,24 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		if _, err = a.writeSharedLocked(cap, &before, true); err == nil && c.Opens {
-			a.openedLocked(c)
+		if _, err = a.writeSharedLocked(cap, &before, true, c.Opens); err == nil && c.Opens {
+			err = a.openedLocked(c, own)
 		}
 	})
 	return err
 }
 
-// openedLocked settles what writing a journal's opening world queued, then takes
-// up the operator state the run stood in when it opened: after the settle, which
-// dispatches the toggles the FSM import re-derived. The crossing barrier engages at
-// once, as the run's was engaged: a crossing raised before the next tick is the
+// openedLocked settles what writing a journal's opening world queued, with input
+// bound to the slot the run followed, writes the run's own side over what that
+// derived, then takes up the operator state the run stood in. The crossing barrier
+// engages at once, as the run's was: a crossing raised before the next tick is the
 // run's to apply, by record. Caller MUST hold updateMutex.
-func (a *App) openedLocked(c event.JournalCapture) {
+func (a *App) openedLocked(c event.JournalCapture, own ownState) error {
+	a.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
 	a.scheduler.SettleLocked()
+	if err := a.installOwnLocked(own); err != nil {
+		return err
+	}
 	a.ctx.SetMode(c.Mode)
 	a.world.UpdateBoundsRadius()
 	a.ctx.TimeCtl.SetPaused(c.Paused)
@@ -206,6 +218,7 @@ func (a *App) openedLocked(c event.JournalCapture) {
 		}
 	}
 	a.activateNetworkSessionLocked()
+	return nil
 }
 
 // loadJournal reads a journal set and the configuration that reproduces it. The

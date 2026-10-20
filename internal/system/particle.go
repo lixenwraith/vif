@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
 	"sync/atomic"
 	"time"
@@ -1122,21 +1124,26 @@ func (s *ParticleSystem) convertGlyphs(cursorX, cursorY int, area *blastArea, ma
 	s.statDustCreated.Add(int64(len(s.transformBuf)))
 }
 
-type particleState struct {
-	cursorX, cursorY int
-	stagger          uint8
-	vortexBehavior   component.ParticleBehavior
-	vortexButton     int
-	vortexRemaining  time.Duration
+type particleLocal struct {
+	CursorX         int                        `json:"cursor_x"`
+	CursorY         int                        `json:"cursor_y"`
+	Stagger         uint8                      `json:"stagger"`
+	VortexBehavior  component.ParticleBehavior `json:"vortex_behavior"`
+	VortexButton    int                        `json:"vortex_button"`
+	VortexRemaining time.Duration              `json:"vortex_remaining"`
 }
 
-func (s *ParticleSystem) CopyState() any {
-	return particleState{s.lastCursorX, s.lastCursorY, s.staggerTick, s.vortexBehavior, s.vortexButton, s.vortexRemaining}
+func (s *ParticleSystem) SaveLocal() ([]byte, error) {
+	return json.Marshal(particleLocal{CursorX: s.lastCursorX, CursorY: s.lastCursorY, Stagger: s.staggerTick,
+		VortexBehavior: s.vortexBehavior, VortexButton: s.vortexButton, VortexRemaining: s.vortexRemaining})
 }
 
-func (s *ParticleSystem) RestoreState(v any) error {
-	c := v.(particleState)
-	s.lastCursorX, s.lastCursorY, s.staggerTick = c.cursorX, c.cursorY, c.stagger
-	s.vortexBehavior, s.vortexButton, s.vortexRemaining = c.vortexBehavior, c.vortexButton, c.vortexRemaining
+func (s *ParticleSystem) LoadLocal(data []byte) error {
+	var l particleLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("particle: %w", err)
+	}
+	s.lastCursorX, s.lastCursorY, s.staggerTick = l.CursorX, l.CursorY, l.Stagger
+	s.vortexBehavior, s.vortexButton, s.vortexRemaining = l.VortexBehavior, l.VortexButton, max(l.VortexRemaining, 0)
 	return nil
 }

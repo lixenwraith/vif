@@ -113,10 +113,10 @@ func (s *ContentService) CursorState() content.CursorState {
 }
 
 // SetCursorState resumes a walk read from a service over the same corpus.
-func (s *ContentService) SetCursorState(st content.CursorState) {
+func (s *ContentService) SetCursorState(st content.CursorState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cursor.SetState(st)
+	return s.cursor.SetState(st)
 }
 
 // PublishStatus registers corpus telemetry.

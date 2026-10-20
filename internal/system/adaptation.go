@@ -717,40 +717,30 @@ func (s *AdaptationSystem) LoadShared(data []byte) error {
 	return nil
 }
 
-type adaptationCopy struct {
-	saved     []byte
-	err       error
-	outcomes  map[uint32]map[uint8][]routeOutcome
-	telemetry int
+type adaptationLocal struct {
+	Saved     json.RawMessage                     `json:"saved"`
+	Outcomes  map[uint32]map[uint8][]routeOutcome `json:"outcomes,omitempty"`
+	Telemetry int                                 `json:"telemetry"`
 }
 
-// CopyState is the capture plus what it leaves to a tick boundary: the outcomes not
+// SaveLocal is the capture plus what it leaves to a tick boundary: the outcomes not
 // yet applied, which a copy between two settles still needs.
-func (s *AdaptationSystem) CopyState() any {
+func (s *AdaptationSystem) SaveLocal() ([]byte, error) {
 	saved, err := s.SaveShared()
-	c := adaptationCopy{saved: saved, err: err, outcomes: make(map[uint32]map[uint8][]routeOutcome, len(s.outcomes)),
-		telemetry: s.telemetryTicks}
-	for g, subs := range s.outcomes {
-		c.outcomes[g] = make(map[uint8][]routeOutcome, len(subs))
-		for sub, o := range subs {
-			c.outcomes[g][sub] = slices.Clone(o)
-		}
+	if err != nil {
+		return nil, err
 	}
-	return c
+	return json.Marshal(adaptationLocal{Saved: saved, Outcomes: s.outcomes, Telemetry: s.telemetryTicks})
 }
 
-func (s *AdaptationSystem) RestoreState(v any) error {
-	c := v.(adaptationCopy)
-	if c.err != nil {
-		return c.err
+func (s *AdaptationSystem) LoadLocal(data []byte) error {
+	var l adaptationLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("adaptation: %w", err)
 	}
-	clear(s.outcomes)
-	for g, subs := range c.outcomes {
-		s.outcomes[g] = make(map[uint8][]routeOutcome, len(subs))
-		for sub, o := range subs {
-			s.outcomes[g][sub] = slices.Clone(o)
-		}
+	s.outcomes, s.telemetryTicks = l.Outcomes, l.Telemetry
+	if s.outcomes == nil {
+		s.outcomes = make(map[uint32]map[uint8][]routeOutcome)
 	}
-	s.telemetryTicks = c.telemetry
-	return s.LoadShared(c.saved)
+	return s.LoadShared(l.Saved)
 }

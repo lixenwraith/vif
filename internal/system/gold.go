@@ -620,21 +620,24 @@ func (s *GoldSystem) LoadShared(data []byte) error {
 	return nil
 }
 
-type goldState struct {
-	header                core.Entity
-	contrib               [parameter.MaxPlayers]int
-	active, spawn, splash bool
+type goldLocal struct {
+	goldSnapshot
+	SplashDue bool `json:"splash_due"`
 }
 
-// CopyState carries the sequence as it stands, including the timer splash still
+// SaveLocal carries the sequence as it stands, including the timer splash still
 // owed, which LoadShared re-derives as a joiner would.
-func (s *GoldSystem) CopyState() any {
-	return goldState{s.headerEntity, s.contrib, s.active, s.spawnEnabled, s.splashDue}
+func (s *GoldSystem) SaveLocal() ([]byte, error) {
+	return json.Marshal(goldLocal{goldSnapshot: goldSnapshot{Active: s.active, SpawnEnabled: s.spawnEnabled,
+		HeaderEntity: s.headerEntity, Contrib: s.contrib}, SplashDue: s.splashDue})
 }
 
-func (s *GoldSystem) RestoreState(v any) error {
-	c := v.(goldState)
-	s.headerEntity, s.contrib = c.header, c.contrib
-	s.active, s.spawnEnabled, s.splashDue = c.active, c.spawn, c.splash
+func (s *GoldSystem) LoadLocal(data []byte) error {
+	var l goldLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("gold: %w", err)
+	}
+	s.headerEntity, s.contrib = l.HeaderEntity, l.Contrib
+	s.active, s.spawnEnabled, s.splashDue = l.Active, l.SpawnEnabled, l.SplashDue
 	return nil
 }

@@ -595,6 +595,9 @@ func (s *Scheduler) RunTicks(n int) {
 // run's first tick is 1 however its reset was asked for.
 func (s *Scheduler) resetPending() bool { return len(s.resetChan) > 0 }
 
+// ResetPending reports a reset asked for that has not run yet.
+func (s *Scheduler) ResetPending() bool { return s.resetPending() }
+
 // drainReset services a pending reset request without blocking
 func (s *Scheduler) drainReset() {
 	select {

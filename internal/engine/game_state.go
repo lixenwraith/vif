@@ -73,19 +73,55 @@ func NewGameState() *GameState {
 
 // copyFrom takes src's whole state, for a replay copy restored where another stood.
 func (gs *GameState) copyFrom(src *GameState) {
-	src.mu.RLock()
-	defer src.mu.RUnlock()
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
 	gs.Mode.Store(src.Mode.Load())
 	gs.GameTicks.Store(src.GameTicks.Load())
-	gs.CurrentAPM.Store(src.CurrentAPM.Load())
-	gs.PendingActions.Store(src.PendingActions.Load())
-	gs.MusicAPM.Store(src.MusicAPM.Load())
-	gs.apmHistory, gs.apmHistoryIndex, gs.lastAPMTime = src.apmHistory, src.apmHistoryIndex, src.lastAPMTime
-	gs.pointerX, gs.pointerY, gs.anchorX, gs.anchorY, gs.pointerSeen = src.pointerX, src.pointerY, src.anchorX, src.anchorY, src.pointerSeen
-	gs.moveDX, gs.moveDY, gs.pointerTurn = src.moveDX, src.moveDY, src.pointerTurn
-	gs.pointerCounted, gs.lastKey, gs.lastKeyTick, gs.keyStreak = src.pointerCounted, src.lastKey, src.lastKeyTick, src.keyStreak
+	gs.SetAPM(src.APM())
+}
+
+// APMState is the action rate and the gesture tracking that feeds it, which a
+// journal's opening carries so the run's rate and streaks go on as they were.
+type APMState struct {
+	Current, Pending, Music uint64
+	History                 [60]uint64
+	Index                   int
+	Last                    time.Time
+	PointerX, PointerY      int
+	AnchorX, AnchorY        int
+	MoveDX, MoveDY          int
+	PointerTurn             bool
+	PointerSeen             bool
+	PointerCounted          uint64
+	LastKey, LastKeyTick    uint64
+	KeyStreak               uint64
+}
+
+// APM reads the action rate and gesture tracking
+func (gs *GameState) APM() APMState {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return APMState{
+		Current: gs.CurrentAPM.Load(), Pending: gs.PendingActions.Load(), Music: gs.MusicAPM.Load(),
+		History: gs.apmHistory, Index: gs.apmHistoryIndex, Last: gs.lastAPMTime,
+		PointerX: gs.pointerX, PointerY: gs.pointerY, AnchorX: gs.anchorX, AnchorY: gs.anchorY,
+		MoveDX: gs.moveDX, MoveDY: gs.moveDY, PointerTurn: gs.pointerTurn, PointerSeen: gs.pointerSeen,
+		PointerCounted: gs.pointerCounted, LastKey: gs.lastKey, LastKeyTick: gs.lastKeyTick, KeyStreak: gs.keyStreak,
+	}
+}
+
+// SetAPM resumes them; an index outside the history, which a file may hold, restarts it
+func (gs *GameState) SetAPM(s APMState) {
+	if s.Index < 0 || s.Index >= len(s.History) {
+		s.Index = 0
+	}
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.CurrentAPM.Store(s.Current)
+	gs.PendingActions.Store(s.Pending)
+	gs.MusicAPM.Store(s.Music)
+	gs.apmHistory, gs.apmHistoryIndex, gs.lastAPMTime = s.History, s.Index, s.Last
+	gs.pointerX, gs.pointerY, gs.anchorX, gs.anchorY = s.PointerX, s.PointerY, s.AnchorX, s.AnchorY
+	gs.moveDX, gs.moveDY, gs.pointerTurn, gs.pointerSeen = s.MoveDX, s.MoveDY, s.PointerTurn, s.PointerSeen
+	gs.pointerCounted, gs.lastKey, gs.lastKeyTick, gs.keyStreak = s.PointerCounted, s.LastKey, s.LastKeyTick, s.KeyStreak
 }
 
 // Reset clears and resets the game state for a new game without recreation

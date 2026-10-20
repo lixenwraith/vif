@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"errors"
+	"slices"
+
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 )
@@ -299,4 +302,174 @@ func reconcilePositions(p *Position, entries []StoreEntry[component.PositionComp
 	for _, en := range entries {
 		p.SetPosition(en.Entity, en.Value)
 	}
+}
+
+// captureRows reads one domain's rows of a store in dense order, detached from it.
+func captureRows[T any](dense []T, entities []core.Entity, d core.Domain) []StoreEntry[T] {
+	var out []StoreEntry[T]
+	for i, e := range entities {
+		if e.Domain() == d {
+			out = append(out, StoreEntry[T]{Entity: e, Value: DetachSnapshotValue(dense[i])})
+		}
+	}
+	return out
+}
+
+// installPlayerRows writes a capture's player rows into a store in capture order,
+// passing over any naming a shared entity, which only the shared world writes.
+func installPlayerRows[T any](s *Store[T], entries []StoreEntry[T]) {
+	for _, en := range entries {
+		if en.Entity.Domain() == core.DomainPlayer {
+			s.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+		}
+	}
+}
+
+// capturePlayer reads the player placements in dense order, and the ones the
+// spatial index holds out of their cell.
+func (p *Position) capturePlayer() ([]StoreEntry[component.PositionComponent], []core.Entity) {
+	placed := captureRows(p.dense, p.entities, core.DomainPlayer)
+	var out []core.Entity
+	for _, en := range placed {
+		if !p.grid.containsEntityAt(en.Entity, en.Value.X, en.Value.Y) {
+			out = append(out, en.Entity)
+		}
+	}
+	return placed, out
+}
+
+// installPlayer places captured player entities in capture order, holding out of
+// the spatial index the ones out names, as the capture's cells did.
+func (p *Position) installPlayer(placed []StoreEntry[component.PositionComponent], out []core.Entity) {
+	held := make(map[core.Entity]struct{}, len(out))
+	for _, e := range out {
+		held[e] = struct{}{}
+	}
+	for _, en := range placed {
+		if en.Entity.Domain() != core.DomainPlayer {
+			continue
+		}
+		if _, ok := held[en.Entity]; ok && !p.HasPosition(en.Entity) {
+			p.insert(en.Entity, en.Value)
+			continue
+		}
+		p.SetPosition(en.Entity, en.Value)
+	}
+}
+
+// CellOrder is one grid cell's occupants in order, the cell named by its grid index.
+type CellOrder struct {
+	Index    int           `json:"i"`
+	Entities []core.Entity `json:"e"`
+}
+
+var errOrderMismatch = errors.New("the order names other entities than the world holds")
+
+// orderOf is a store's dense sequence, where two or more rows give it one.
+func orderOf(entities []core.Entity) []core.Entity {
+	if len(entities) < 2 {
+		return nil
+	}
+	return slices.Clone(entities)
+}
+
+// permuted reads dense in order through index, refusing an order that repeats an
+// entity or names one index lacks: either leaves a row of the store out.
+func permuted[T any](index *sparseIndex, dense []T, order []core.Entity) ([]T, error) {
+	out := make([]T, len(order))
+	seen := make(map[core.Entity]struct{}, len(order))
+	for i, e := range order {
+		j, ok := index.get(e)
+		if _, dup := seen[e]; !ok || dup {
+			return nil, errOrderMismatch
+		}
+		seen[e] = struct{}{}
+		out[i] = dense[j]
+	}
+	return out, nil
+}
+
+// reorderStore puts a store's rows in the order orderOf read.
+func reorderStore[T any](s *Store[T], order []core.Entity) error {
+	if len(order) == 0 && len(s.entities) < 2 {
+		return nil
+	}
+	if len(order) != len(s.entities) {
+		return errOrderMismatch
+	}
+	dense, err := permuted(&s.index, s.dense, order)
+	if err != nil {
+		return err
+	}
+	copy(s.dense, dense)
+	copy(s.entities, order)
+	for i, e := range order {
+		s.index.set(e, int32(i))
+	}
+	return nil
+}
+
+// reorder puts the placements in order and each cell's occupants in its own.
+func (p *Position) reorder(order []core.Entity, cells []CellOrder) error {
+	if len(order) > 0 || len(p.entities) >= 2 {
+		if len(order) != len(p.entities) {
+			return errOrderMismatch
+		}
+		dense, err := permuted(&p.index, p.dense, order)
+		if err != nil {
+			return err
+		}
+		copy(p.dense, dense)
+		copy(p.entities, order)
+		for i, e := range order {
+			p.index.set(e, int32(i))
+		}
+	}
+	return p.grid.reorderCells(cells)
+}
+
+// cellOrder reads the occupants of every cell holding two or more.
+func (g *SpatialGrid) cellOrder() []CellOrder {
+	var out []CellOrder
+	for i := range g.Cells {
+		if c := &g.Cells[i]; c.Count >= 2 {
+			out = append(out, CellOrder{Index: i, Entities: slices.Clone(c.Entities[:c.Count])})
+		}
+	}
+	return out
+}
+
+// reorderCells puts each listed cell's occupants in order, refusing a list that
+// names other occupants, breaks the shared-first partition or leaves a cell of two
+// or more out.
+func (g *SpatialGrid) reorderCells(cells []CellOrder) error {
+	listed := make(map[int]struct{}, len(cells))
+	for _, co := range cells {
+		if _, twice := listed[co.Index]; twice || co.Index < 0 || co.Index >= len(g.Cells) {
+			return errOrderMismatch
+		}
+		listed[co.Index] = struct{}{}
+		c := &g.Cells[co.Index]
+		held := c.Entities[:c.Count]
+		if c.Count < 2 || len(co.Entities) != len(held) {
+			return errOrderMismatch
+		}
+		for k, e := range co.Entities {
+			shared := k < int(c.SharedCount)
+			if shared != (e.Domain() == core.DomainShared) || !slices.Contains(held, e) || slices.Contains(co.Entities[:k], e) {
+				return errOrderMismatch
+			}
+		}
+		copy(held, co.Entities)
+	}
+	crowded := 0
+	for i := range g.Cells {
+		if g.Cells[i].Count >= 2 {
+			crowded++
+		}
+	}
+	if crowded != len(cells) {
+		return errOrderMismatch
+	}
+	return nil
 }

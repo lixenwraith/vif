@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -298,9 +300,16 @@ func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
 	s.statStrobeActive.Store(true)
 }
 
-func (s *TransientSystem) CopyState() any { return s.evictNext }
+func (s *TransientSystem) SaveLocal() ([]byte, error) { return json.Marshal(s.evictNext) }
 
-func (s *TransientSystem) RestoreState(v any) error {
-	s.evictNext = v.(int)
+func (s *TransientSystem) LoadLocal(data []byte) error {
+	var next int
+	if err := json.Unmarshal(data, &next); err != nil {
+		return fmt.Errorf("transient: %w", err)
+	}
+	if next < 0 || next >= parameter.ExplosionCenterCap {
+		return fmt.Errorf("transient: eviction slot %d past the explosion cap", next)
+	}
+	s.evictNext = next
 	return nil
 }

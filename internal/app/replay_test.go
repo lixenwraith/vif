@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -551,6 +552,67 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 	}
 }
 
+// TestAJournalOpenedMidRunDoesNotPerturb drives one input sequence twice, opening a
+// journal mid-run on one of them, and requires the two to stand alike at the opening
+// and on every tick after: the opening carries the run's own side, so nothing a
+// fresh boot would have decided for it shows, then or later.
+func TestAJournalOpenedMidRunDoesNotPerturb(t *testing.T) {
+	t.Parallel()
+	plain, journaled := mustHeadless(t, 0x7E5, 120, 40), mustHeadless(t, 0x7E5, 120, 40)
+	defer plain.Close()
+	defer journaled.Close()
+	rng := vmath.NewFastRand(9)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	alike := func(when string) {
+		t.Helper()
+		want, got := plain.SnapshotSimulation(), journaled.SnapshotSimulation()
+		if i, _, _, ok := snapshot.FirstDiff(want, got); ok {
+			t.Fatalf("%s the runs differ at line %d:\n%s", when, i, strings.Join(snapshot.Diff(want, got, 12), "\n"))
+		}
+		for id := range uint8(component.MaxTargetGroups) {
+			if want, got := plain.World().Resources.Target.GetGroup(id), journaled.World().Resources.Target.GetGroup(id); want != got {
+				t.Fatalf("%s target group %d differs: want %+v, got %+v", when, id, want, got)
+			}
+		}
+	}
+	drive := func(ticks int, check bool) {
+		for range ticks {
+			var in []*input.Intent
+			switch rng.Intn(6) {
+			case 0, 1:
+				in = append(in, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			case 2:
+				in = append(in, &input.Intent{Type: input.IntentFireMain, Count: 1})
+			case 3:
+				in = append(in, intentModeSwitch(input.ModeTargetInsert), intentTextChar(rune('a'+rng.Intn(26))), intentEscape())
+			}
+			for _, a := range []*App{plain, journaled} {
+				inject(t, a, in...)
+				a.Tick(1)
+			}
+			if check {
+				alike(fmt.Sprintf("at tick %d", plain.Position().Tick))
+			}
+		}
+	}
+	drive(900, false)
+	// A group an update set and no anchor holds, which only the run itself remembers
+	for _, a := range []*App{plain, journaled} {
+		a.World().RunSafe(func() {
+			a.World().PushEventDomain(event.EventTargetGroupUpdate,
+				&event.TargetGroupUpdatePayload{GroupID: 3, Type: component.TargetPosition, PosX: 7, PosY: 5}, core.DomainShared)
+		})
+		a.Tick(1)
+	}
+	alike("before the opening")
+	journaled.cfg.JournalSink = journal.NewCapture()
+	if _, err := journaled.openJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	alike("at the opening")
+	drive(400, true)
+}
+
 // replayMatches replays rec on a fresh run, which must reproduce every digest rec
 // holds and, on each tick nothing was recorded on, the surface want holds for it.
 func replayMatches(t *testing.T, rec *journal.Capture, want map[event.Stamp][]string, surface func(*App) []string) {
@@ -654,6 +716,105 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 	replayMatches(t, guestRec, guestWant, guestSurface)
 }
 
+// TestAnOpeningKeepsTheRunsOwnCursor: a journal opened mid-session leaves each
+// participant on its own slot, driving its own cursor with the energy and heat it
+// held, and each journal replays on that slot.
+func TestAnOpeningKeepsTheRunsOwnCursor(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x3017, 2, [][2]int{{1, 2}})
+	own := localCursors(t, apps)
+	rng := vmath.NewFastRand(9)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	want := map[*App]map[event.Stamp][]string{apps[0]: {}, apps[1]: {}}
+	play := func(ticks int, record bool) {
+		for range ticks {
+			for _, a := range apps {
+				if rng.Intn(3) == 0 {
+					inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+				}
+			}
+			tickAll(apps)
+			apps[1].ApplyPendingCorrections()
+			if record {
+				for _, a := range apps {
+					p := a.Position()
+					want[a][event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(a)
+				}
+			}
+		}
+	}
+	type cursor struct {
+		slot         uint8
+		drives       core.Entity
+		energy, heat int64
+	}
+	read := func(a *App, e core.Entity) (c cursor) {
+		a.World().RunSafe(func() {
+			w := a.World()
+			en, _ := w.Components.Energy.GetComponent(e)
+			h, _ := w.Components.Heat.GetComponent(e)
+			c = cursor{w.Resources.Player.LocalSlot(), w.Resources.Player.Entity, en.Current, int64(h.Current)}
+		})
+		return c
+	}
+	play(200, false)
+	for i, a := range apps {
+		a.World().RunSafe(func() {
+			w := a.World()
+			w.Components.Energy.SetComponent(own[i], component.EnergyComponent{Current: 4321 + int64(i)})
+			h, _ := w.Components.Heat.GetComponent(own[i])
+			h.Current = 37 + i
+			w.Components.Heat.SetComponent(own[i], h)
+		})
+	}
+	recs := map[*App]*journal.Capture{}
+	for i, a := range apps {
+		recs[a] = journal.NewCapture()
+		a.cfg.JournalSink = recs[a]
+		before := read(a, own[i])
+		if _, err := a.openJournal(); err != nil {
+			t.Fatalf("participant %d: open: %v", i+1, err)
+		}
+		if after := read(a, own[i]); after != before || before.drives != own[i] {
+			t.Fatalf("participant %d drove %+v before the opening and %+v after it", i+1, before, after)
+		}
+	}
+	play(400, true)
+	for _, a := range apps {
+		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		replayMatches(t, recs[a], want[a], guestSurface)
+	}
+}
+
+// TestNoJournalOpensWhileANewGameStarts: between a reset's cleanup and the boot spawn
+// that brings the roster back, an opening is refused, and once the game has started
+// it opens on every cursor.
+func TestNoJournalOpensWhileANewGameStarts(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x7E5, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	spawnCursor(t, a)
+	a.Tick(30)
+	if !a.Reset(false) {
+		t.Fatal("reset refused")
+	}
+	a.cfg.JournalSink = journal.NewCapture()
+	if _, err := a.openJournal(); err == nil {
+		t.Fatal("a journal opened while the new game was starting")
+	}
+	a.Tick(1)
+	if _, err := a.openJournal(); err != nil {
+		t.Fatalf("open after the new game started: %v", err)
+	}
+	a.Tick(40)
+	var n int
+	a.World().RunSafe(func() { n = a.World().Resources.Player.Count() })
+	if n != 2 {
+		t.Fatalf("%d cursors after the new game, want 2", n)
+	}
+}
+
 // TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal at the
 // run's position; the run then records nothing and reports no journal.
 func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
@@ -688,6 +849,56 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	a.World().RunSafe(func() { stopErr = a.stopJournalLocked(-1) })
 	if stopErr == nil {
 		t.Fatal("a second stop found a journal")
+	}
+}
+
+// TestAStopCancelsAStartNotYetServed: a stop asked before the run's loop serves a
+// start wins, so no journal opens.
+func TestAStopCancelsAStartNotYetServed(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 7, 80, 24)
+	defer a.Close()
+	a.cfg.JournalSink = journal.NewCapture()
+	a.Tick(5)
+	var startErr, stopErr error
+	a.World().RunSafe(func() { startErr, stopErr = a.startJournalLocked(-1), a.stopJournalLocked(-1) })
+	if startErr != nil || stopErr != nil {
+		t.Fatalf("start: %v, stop: %v", startErr, stopErr)
+	}
+	a.serveJournal()
+	if a.recorder.Load() != nil {
+		t.Fatal("a start the stop overtook opened a journal")
+	}
+}
+
+// TestAJournalMissingAWrittenWorldCloses: a journal a write could not reach is
+// closed and the player told, while a journal opened since that write stays open.
+func TestAJournalMissingAWrittenWorldCloses(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 7, 80, 24)
+	defer a.Close()
+	a.cfg.JournalSink = journal.NewCapture()
+	a.Tick(5)
+	var err error
+	a.World().RunSafe(func() { err = a.startJournalLocked(-1) })
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	a.serveJournal()
+	if a.recorder.Load() == nil {
+		t.Fatal("no journal opened")
+	}
+	lost := errors.New("too large")
+	a.World().RunSafe(func() { a.journalLostLocked(event.NewJournal(journal.NewCapture()), lost) })
+	if a.recorder.Load() == nil {
+		t.Fatal("a write missing another journal closed this one")
+	}
+	a.World().RunSafe(func() { a.journalLostLocked(a.world.Resources.Event.Queue.Journal(), lost) })
+	if a.recorder.Load() != nil {
+		t.Fatal("the journal stayed open past a world it could not record")
+	}
+	if msg := a.Context().GetStatusMessage(); !strings.Contains(msg, "could not be recorded (too large)") {
+		t.Fatalf("status %q does not say why the journal closed", msg)
 	}
 }
 

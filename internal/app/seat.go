@@ -60,6 +60,16 @@ type seat struct {
 
 func (s *seat) halt() { s.once.Do(func() { close(s.stop) }) }
 
+// halted reports whether the seat was told to leave
+func (s *seat) halted() bool {
+	select {
+	case <-s.stop:
+		return true
+	default:
+		return false
+	}
+}
+
 // seatHalted reports whether participant id is a seat this run told to leave, so
 // its link closing is the drop that was asked for. A seat forgets itself before
 // its link closes, so the drop is remembered by identity until then.
@@ -216,9 +226,13 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 	defer a.forgetSeat(s)
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
 	for {
-		var driver *bot.Driver
+		var (
+			driver *bot.Driver
+			run    *App
+		)
 		finished, err := drive(cfg, "bot", s.graph.Name, s.stop, hold,
 			func(b *App) (pacedSource, error) {
+				run = b
 				d, err := bot.NewDriver(b, b.ctx, s.graph, b.Seed(), b.localParticipant())
 				if err != nil {
 					return nil, err
@@ -236,7 +250,13 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				return &seatSource{botSource: botSource{d}, holder: forkCell(a), screen: &a.seatScreen,
 					run: b, shown: screen{cfg.Width, cfg.Height}}, nil
 			})
+		// Under seatsMu, so an ask lands before this or finds no run
+		a.seatsMu.Lock()
 		s.app.Store(nil)
+		a.seatsMu.Unlock()
+		if run != nil {
+			a.seatJournalLeft(int(s.slot.Load()), run)
+		}
 		if driver == nil && err != nil && retryableJoin(err) && time.Now().Before(deadline) &&
 			waitScriptTick(s.stop, parameter.SessionRejoinInterval) {
 			continue
@@ -351,19 +371,36 @@ func (a *App) stopSeat(match func(*seat) bool) bool {
 // A seat is a run of its own, so it journals its own player domain, which no other
 // instance can: another participant's never leaves its machine.
 func (a *App) askSeatJournal(slot int, start bool) error {
+	// Held to the ask, so a seat leaving takes it up or this finds no run
 	a.seatsMu.Lock()
-	i := slices.IndexFunc(a.seats, func(s *seat) bool { return s.app.Load() != nil && int(s.slot.Load()) == slot })
+	defer a.seatsMu.Unlock()
 	var b *App
-	if i >= 0 {
-		b = a.seats[i].app.Load()
+	leaving := false
+	for _, s := range a.seats {
+		if run := s.app.Load(); run != nil && int(s.slot.Load()) == slot {
+			// A leaving seat's loop serves no more asks, and a live one may share its slot
+			if !s.halted() {
+				b = run
+				break
+			}
+			leaving = true
+		}
 	}
-	a.seatsMu.Unlock()
 	switch {
+	case b == nil && leaving && start:
+		return fmt.Errorf("the bot on slot %X is leaving", slot)
+	case b == nil && leaving:
+		return fmt.Errorf("the bot on slot %X is leaving; its journal closes with it", slot)
 	case b == nil:
 		return fmt.Errorf("no bot of this run's is on slot %X", slot)
 	case start && b.recorder.Load() != nil:
 		return fmt.Errorf("slot %X already journals to %s", slot, b.recorder.Load().Path())
 	case !start && b.recorder.Load() == nil:
+		// The later command wins over a start not yet served
+		if ask := b.journalAsk.Load(); ask != nil && ask.start && b.journalAsk.CompareAndSwap(ask, nil) {
+			ask.report("", errors.New("cancelled by :journal stop"))
+			return nil
+		}
 		return fmt.Errorf("slot %X keeps no journal", slot)
 	}
 	report := func(path string, err error) { a.reportSeatJournal(slot, start, path, err) }
@@ -371,6 +408,23 @@ func (a *App) askSeatJournal(slot int, start bool) error {
 		return fmt.Errorf("slot %X is already opening or closing a journal", slot)
 	}
 	return nil
+}
+
+// seatJournalLeft tells this run's player what became of a seat's journal as its run
+// closed, which only the seat's Close saw: the journal it shut, or a start its loop
+// never served. Called on the seat's goroutine once its run has closed.
+func (a *App) seatJournalLeft(slot int, run *App) {
+	if ask := run.journalAsk.Swap(nil); ask != nil && ask.start {
+		ask.report("", errors.New("the bot left before it opened"))
+	}
+	switch {
+	case run.closedAtExitAs != nil:
+		a.log.Warn("journal", "msg", "seat journal not closed", "slot", slot, "error", run.closedAtExitAs.Error())
+		a.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal %s", slot, run.closedAtExitAs), parameter.StatusAlert)
+	case run.closedAtExit != "":
+		a.log.Info("journal", "msg", "seat journal closed", "slot", slot, "path", run.closedAtExit, "reason", "bot left")
+		a.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal closed: %s", slot, run.closedAtExit), parameter.StatusNotice)
+	}
 }
 
 // reportSeatJournal tells this run's player how a seat's journal start or stop went.
@@ -389,6 +443,21 @@ func (a *App) reportSeatJournal(slot int, start bool, path string, err error) {
 	}
 }
 
+// seatJournalNotices names each journal a seat of this run keeps, which closes with it.
+func (a *App) seatJournalNotices() []string {
+	a.seatsMu.Lock()
+	defer a.seatsMu.Unlock()
+	var out []string
+	for _, s := range a.seats {
+		if b := s.app.Load(); b != nil {
+			if r := b.recorder.Load(); r != nil {
+				out = append(out, fmt.Sprintf("slot %X journal closed: %s", s.slot.Load(), r.Path()))
+			}
+		}
+	}
+	return out
+}
+
 // seatGraphs are the graphs of the seats this run holds, in the order they came.
 func (a *App) seatGraphs() []string {
 	a.seatsMu.Lock()
@@ -405,13 +474,8 @@ func (a *App) botSeats() []engine.BotSeat {
 	defer a.seatsMu.Unlock()
 	bots := make([]engine.BotSeat, 0, len(a.seats))
 	for _, s := range a.seats {
-		b := engine.BotSeat{ID: s.number, Joining: s.id.Load() == 0, Slot: uint8(s.slot.Load()), Graph: s.graph.Name}
-		select {
-		case <-s.stop:
-			b.Stopping = true
-		default:
-		}
-		bots = append(bots, b)
+		bots = append(bots, engine.BotSeat{ID: s.number, Joining: s.id.Load() == 0, Slot: uint8(s.slot.Load()),
+			Graph: s.graph.Name, Stopping: s.halted()})
 	}
 	return bots
 }

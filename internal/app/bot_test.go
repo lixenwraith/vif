@@ -22,6 +22,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
@@ -320,8 +321,9 @@ func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 }
 
 // TestARunAndItsBotsJournalMidSession: a run that seated a bot after it started
-// opens a journal where it stands, and so does the bot seat it holds, by slot; each
-// closes and opens again, and every journal replays from the world it opened on.
+// opens a journal where it stands, and so does the bot seat it holds, by slot, which
+// goes on driving its own cursor; each closes and opens again, and every journal
+// replays from the world it opened on.
 func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines, and the journal
 	// directory is the process's.
@@ -354,14 +356,32 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		return s != nil
 	})
 	slot := int(s.slot.Load())
+	drives := func(a *App) (e core.Entity) {
+		a.World().RunSafe(func() { e = a.World().Resources.Player.Entity })
+		return e
+	}
+	// The seat binds its cursor a tick after it is seated
+	bound := func(b *App) (ok bool) {
+		b.World().RunSafe(func() {
+			p := b.World().Resources.Player
+			ok = p.Entity != 0 && p.Entity == p.Slot(uint8(slot))
+		})
+		return ok
+	}
 	var paths []string
 	for range 2 {
+		b := s.app.Load()
+		until("the bot to drive its own cursor", func() bool { return bound(b) })
+		holderCursor, seatCursor := drives(holder), drives(b)
 		holder.World().RunSafe(func() { err = errors.Join(ctl.StartJournal(-1), ctl.StartJournal(slot)) })
 		if err != nil {
 			t.Fatalf("start: %v", err)
 		}
-		b := s.app.Load()
 		until("both journals to open", func() bool { return holder.recorder.Load() != nil && b.recorder.Load() != nil })
+		if drives(holder) != holderCursor || drives(b) != seatCursor || int(b.localSlot()) != slot {
+			t.Fatalf("the holder drives %d and its seat %d on slot %d after the openings, %d and %d on slot %d before",
+				drives(holder), drives(b), b.localSlot(), holderCursor, seatCursor, slot)
+		}
 		paths = append(paths, holder.recorder.Load().Path(), b.recorder.Load().Path())
 		from := b.Position().Tick
 		until("the bot to play on", func() bool { return b.Position().Tick > from+3*parameter.DigestIntervalTicks })
@@ -376,6 +396,109 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		if st, err := VerifyJournal(Config{}, p); err != nil || st.Digests == 0 {
 			t.Fatalf("%s reproduced %d digests: %v", p, st.Digests, err)
 		}
+	}
+}
+
+// TestASeatsOpeningLeavesItsRunAsItWas: a bot seat's journal opening, on a slot
+// other than its holder's, leaves the seat's run as it stood, so the bot plays on.
+func TestASeatsOpeningLeavesItsRunAsItWas(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines, and the journal
+	// directory is the process's.
+	dir, level := t.TempDir(), vlog.LevelName()
+	vlog.Configure(vlog.Config{JournalDir: dir, Level: level})
+	t.Cleanup(func() { vlog.Configure(vlog.Config{Level: level}) })
+	holder, stop := driveBot(t, Config{}, "patrol", nil)
+	defer stop()
+	ctl := holder.Context().SessionCtl
+	var err error
+	holder.World().RunSafe(func() { err = ctl.AddBot("roam") })
+	if err != nil {
+		t.Fatalf("add bot: %v", err)
+	}
+	var b *App
+	for deadline := time.Now().Add(socketWait); b == nil || b.Position().Tick < 3*parameter.DigestIntervalTicks; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the bot to play")
+		}
+		holder.seatsMu.Lock()
+		if len(holder.seats) == 1 {
+			b = holder.seats[0].app.Load()
+		}
+		holder.seatsMu.Unlock()
+	}
+	// Under the seat's own lock throughout, so its loop takes no step in between
+	var before, after []string
+	b.World().RunSafe(func() {
+		var twin *App
+		an := b.buildAnchor()
+		if twin, err = b.journalTwin(an); err != nil {
+			return
+		}
+		defer twin.Close()
+		b.scheduler.SettleLocked()
+		before = snapshot.Lines(b.ctx, b.world, true)
+		if _, err = b.openJournalLocked(an, twin); err == nil {
+			after = snapshot.Lines(b.ctx, b.world, true)
+		}
+	})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if i, _, _, ok := snapshot.FirstDiff(before, after); ok {
+		t.Fatalf("the seat's run differs across its opening at line %d:\n%s", i, strings.Join(snapshot.Diff(before, after, 12), "\n"))
+	}
+}
+
+// TestASeatsJournalClosesWithItsBot: a bot dropped while its seat journals takes the
+// journal with it, closed and replayable, and its holder says so.
+func TestASeatsJournalClosesWithItsBot(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines, and the journal
+	// directory is the process's.
+	dir, level := t.TempDir(), vlog.LevelName()
+	vlog.Configure(vlog.Config{JournalDir: dir, Level: level})
+	t.Cleanup(func() { vlog.Configure(vlog.Config{Level: level}) })
+	until := func(what string, done func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(socketWait); !done(); time.Sleep(20 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+		}
+	}
+	holder, stop := driveBot(t, Config{}, "patrol", nil)
+	defer stop()
+	ctl := holder.Context().SessionCtl
+	var err error
+	holder.World().RunSafe(func() { err = ctl.AddBot("roam") })
+	if err != nil {
+		t.Fatalf("add bot: %v", err)
+	}
+	var s *seat
+	until("the bot to be seated", func() bool {
+		holder.seatsMu.Lock()
+		defer holder.seatsMu.Unlock()
+		if len(holder.seats) == 1 && holder.seats[0].app.Load() != nil {
+			s = holder.seats[0]
+		}
+		return s != nil
+	})
+	slot, b := int(s.slot.Load()), s.app.Load()
+	holder.World().RunSafe(func() { err = ctl.StartJournal(slot) })
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	until("the journal to open", func() bool { return b.recorder.Load() != nil })
+	path := b.recorder.Load().Path()
+	holder.World().RunSafe(func() { err = ctl.DropBot(slot) })
+	if err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	until("the bot to leave", func() bool { return len(holder.botSeats()) == 0 })
+	if msg := holder.Context().GetStatusMessage(); !strings.Contains(msg, "journal closed: "+path) {
+		t.Fatalf("the holder shows %q once its journaling bot left", msg)
+	}
+	if st, err := VerifyJournal(Config{}, path); err != nil {
+		t.Fatalf("%s reproduced %d digests: %v", path, st.Digests, err)
 	}
 }
 

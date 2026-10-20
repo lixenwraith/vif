@@ -45,6 +45,7 @@ var allowedMapRanges = map[string]string{
 	"World.clearSharedEntities:componentMask":   "collects shared entities, sorted before removal",
 	"World.ReconcileSharedWorld:componentMask":  "collects shared entities the correction drops, sorted before removal",
 	"MacroManager.StartAllPlayback:buffers":     "collects labels, sorted before playback start",
+	"LootSystem.SaveLocal:pity":                 "collects pity streaks, sorted before export",
 
 	// --- Writes target a map or distinct keys; order cannot change the result ---
 	"Machine.CompilePaths:nodes":                 "writes each node's own Path",
@@ -56,12 +57,6 @@ var allowedMapRanges = map[string]string{
 	"Machine.capturePayloadVars:captureVars":     "distinct payload fields to distinct variables",
 	"ApplyPayloadVars:vars":                      "distinct dot-paths to distinct payload fields",
 	"ParticleSystem.applyDrainImpulses:impulses": "one write per distinct entity; accumulation is dense-ordered",
-	"AdaptationSystem.CopyState:outcomes":        "copies each entry under its own key",
-	"AdaptationSystem.RestoreState:outcomes":     "copies each entry under its own key",
-	"LootSystem.CopyState:pity":                  "copies each entry under its own key",
-	"LootSystem.CopyState:ownerRoutes":           "copies each entry under its own key",
-	"LootSystem.RestoreState:pity":               "copies each entry under its own key",
-	"LootSystem.RestoreState:owners":             "copies each entry under its own key",
 	"NavigationSystem.CopyState:groups":          "copies each entry under its own key",
 	"NavigationSystem.RestoreState:groups":       "copies each entry under its own key",
 

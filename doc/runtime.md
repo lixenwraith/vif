@@ -467,8 +467,9 @@ For a render frame, the application:
 and geometry from the first anchor, verifies the config/corpus fingerprint, and
 drives a `ModeReplay` App with `journal.ReplayDriver`. The reader accepts several
 files and sorts/deduplicates them by `jseq`; the CLI passes one path. A set whose
-first anchor says `StartRun != 0` or `StartTick != 0` is refused: records alone
-cannot rebuild a world that began elsewhere. The record format is
+first anchor says `StartRun != 0` or `StartTick != 0` replays from its opening, the
+world it began on; one whose files lack it is refused, since records alone cannot
+rebuild a world that began elsewhere. The record format is
 [Logging and diagnostics](logging-and-diagnostics.md) §9.
 
 The playback keys are fixed; any other key is parsed by the keymap in NORMAL,
@@ -525,13 +526,13 @@ drops every other and doubles its spacing past `parameter.ReplayCheckpoints` (32
 A checkpoint holds every store and occupied grid cell's entities in their own order
 and both domains' allocators (`engine.WorldCopy`), RNG streams, FSM position,
 scheduler and queue with its pending events, every registry cell, each system's FSM
-toggle and its private state (`engine.StateCopier`, or `SharedStateSaver` for a
-carrier without one), the corpus cursor, the latched session (`engine.SessionState`,
-from the journal) and the driver's place. One costs about 1 ms at 146×34, and 10 ms
-and 6.3 MB on td's 500×250 map with 16 players, where a restore takes about 35 ms
-with the copy's construction. A checkpoint the ring lets go, unless the ladder keeps
-it or a move restores from it, lends its storage to the next, which then allocates
-1.7 MB there.
+toggle and its private state (`engine.LocalStateSaver`, `engine.StateCopier` for
+caches, or `SharedStateSaver` for a carrier with neither), the corpus cursor, the
+latched session (`engine.SessionState`, from the journal) and the driver's place.
+One costs about 1 ms at 146×34, and 10 ms and 6.3 MB on td's 500×250 map with 16
+players, where a restore takes about 35 ms with the copy's construction. A
+checkpoint the ring lets go, unless the ladder keeps it or a move restores from
+it, lends its storage to the next, which then allocates 1.7 MB there.
 
 Every move goes to the first step at or past a tick of the run shown: `,` to the
 step before, one a frame, as `.` steps on; `:r` to the tick asked; a restart to the

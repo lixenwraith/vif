@@ -1,6 +1,10 @@
 package system
 
 import (
+	"cmp"
+	"encoding/json"
+	"fmt"
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -599,23 +603,31 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 	s.statCollects.Add(1)
 }
 
-type lootState struct {
-	pity map[pityKey]pityState
+type lootPityLocal struct {
+	Species component.SpeciesType    `json:"species"`
+	Slot    uint8                    `json:"slot"`
+	Misses  [component.LootCount]int `json:"misses"`
 }
 
-func (s *LootSystem) CopyState() any {
-	c := lootState{pity: make(map[pityKey]pityState, len(s.pity))}
+func (s *LootSystem) SaveLocal() ([]byte, error) {
+	rows := make([]lootPityLocal, 0, len(s.pity))
 	for k, p := range s.pity {
-		c.pity[k] = *p
+		rows = append(rows, lootPityLocal{Species: k.species, Slot: k.slot, Misses: p.misses})
 	}
-	return c
+	slices.SortFunc(rows, func(a, b lootPityLocal) int {
+		return cmp.Or(cmp.Compare(a.Species, b.Species), cmp.Compare(a.Slot, b.Slot))
+	})
+	return json.Marshal(rows)
 }
 
-func (s *LootSystem) RestoreState(v any) error {
-	c := v.(lootState)
+func (s *LootSystem) LoadLocal(data []byte) error {
+	var rows []lootPityLocal
+	if err := json.Unmarshal(data, &rows); err != nil {
+		return fmt.Errorf("loot: %w", err)
+	}
 	clear(s.pity)
-	for k, p := range c.pity {
-		s.pity[k] = &p
+	for _, p := range rows {
+		s.pity[pityKey{species: p.Species, slot: p.Slot}] = &pityState{misses: p.Misses}
 	}
 	return nil
 }

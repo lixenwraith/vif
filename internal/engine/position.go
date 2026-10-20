@@ -119,14 +119,19 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 		p.grid.RemoveEntityAt(e, old.X, old.Y)
 		p.dense[i] = pos
 	} else {
-		p.index.set(e, int32(len(p.dense)))
-		p.dense = append(p.dense, pos)
-		p.entities = append(p.entities, e)
-		p.world.AddComponentMask(e, p.bit)
-		storeAtomicMax(p.statPositionsHWM, int64(len(p.entities)))
-		p.wallMoved(e)
+		p.insert(e, pos)
 	}
 	p.setGrid(e, pos.X, pos.Y, countSaturation)
+}
+
+// insert places an entity new to the store, leaving the spatial index to the caller.
+func (p *Position) insert(e core.Entity, pos component.PositionComponent) {
+	p.index.set(e, int32(len(p.dense)))
+	p.dense = append(p.dense, pos)
+	p.entities = append(p.entities, e)
+	p.world.AddComponentMask(e, p.bit)
+	storeAtomicMax(p.statPositionsHWM, int64(len(p.entities)))
+	p.wallMoved(e)
 }
 
 // setGrid preserves soft clipping while exposing saturation, budget rejection, and
