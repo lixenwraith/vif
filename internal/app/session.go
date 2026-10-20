@@ -863,7 +863,7 @@ func (a *App) startJoinSession(signals <-chan os.Signal) error {
 	if a.pendingJoin == nil {
 		return errors.New("join session has no pending stream")
 	}
-	a.showStartupStatus("Join accepted; waiting for host start gate")
+	a.showJoinStatus("Join accepted; waiting for host start gate")
 	final, err := a.awaitStartGate(signals)
 	if err != nil {
 		return err
@@ -880,7 +880,7 @@ func (a *App) startJoinSession(signals <-chan os.Signal) error {
 	if err != nil {
 		return err
 	}
-	a.showStartupStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)",
+	a.showJoinStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)",
 		cap.Header.Tick, len(body)))
 	if err := a.JoinSessionAt(final, cap); err != nil {
 		return fmt.Errorf("join roster: %w", err)

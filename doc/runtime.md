@@ -301,7 +301,10 @@ sequenceDiagram
 `-join` adds a pre-composition step: `newSessionApp` dials, receives the host's
 offer and `JournalAnchor`, adopts its seed, configuration identity and map latch,
 takes the scenario's bytes from the coordinator when no root here holds them, and
-only then calls `New`. A dedicated host or a scripted or bot-driven `-host`
+only then calls `New`. Until the start gate installs the session's world, a
+presenting joiner draws its status line alone: the world it composed stands in on
+the map its dial was offered, which a server sizing its session from its first
+guest changes at the gate. A dedicated host or a scripted or bot-driven `-host`
 composes first, so its acceptor can capture the live tick-zero world, then waits in
 its lobby and completes the start/ready gate before it ticks. Every run that waits
 on that gate has its clock frozen during construction, before the HFSM creates

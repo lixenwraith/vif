@@ -3,11 +3,16 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -68,6 +73,85 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstGuest(t *testing.T) {
 	if a.Context().Width != 160 || a.Context().Height != 45 {
 		t.Fatalf("the run's geometry is %dx%d, want the guest's 160x45",
 			a.Context().Width, a.Context().Height)
+	}
+}
+
+// framePresentation is a screen of a fixed size that keeps every frame flushed to it.
+type framePresentation struct {
+	w, h   int
+	frames [][]terminal.Cell
+}
+
+func (p *framePresentation) Name() string                  { return "frames" }
+func (p *framePresentation) Dependencies() []string        { return nil }
+func (p *framePresentation) Init() error                   { return nil }
+func (p *framePresentation) Start() error                  { return nil }
+func (p *framePresentation) Stop() error                   { return nil }
+func (p *framePresentation) Surface() render.Surface       { return p }
+func (p *framePresentation) Size() (int, int)              { return p.w, p.h }
+func (p *framePresentation) Blocked() time.Duration        { return 0 }
+func (p *framePresentation) CellAspect() vmath.Aspect      { return vmath.RefAspect }
+func (p *framePresentation) Events() <-chan terminal.Event { return nil }
+func (p *framePresentation) SetPointerMode(bool, bool)     {}
+func (p *framePresentation) ColorMode() terminal.ColorMode { return terminal.ColorModeTrueColor }
+func (p *framePresentation) Sync()                         {}
+func (p *framePresentation) Flush(cells []terminal.Cell, _, _ int) {
+	p.frames = append(p.frames, slices.Clone(cells))
+}
+
+// TestAJoinerDrawsNoWorldBeforeItsSessions: a joiner builds its world on the map its
+// dial was offered, which a server sized by its first guest changes at the gate.
+// Until the gate installs the session's world, only the status line is drawn, so
+// the stand-in's smaller map never shows; the session's then fills the game area.
+func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
+	// Not parallel: this binds a real socket.
+	host, err := newSessionApp(Config{Mode: ModeServer, HostAddress: "127.0.0.1:0",
+		Resources: resource.Options{Embedded: true}, Seed: 0x6E04})
+	if err != nil {
+		t.Fatalf("server: %v", err)
+	}
+	t.Cleanup(host.Close)
+	if err := host.hub.StartAll(); err != nil {
+		t.Fatalf("server services: %v", err)
+	}
+	host.life.Start(time.Now())
+	port, err := host.socketPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := make(chan error, 1)
+	go func() { gate <- host.startHostSession(nil) }()
+
+	const w, h = 160, 45
+	screen := &framePresentation{w: w, h: h}
+	guest, err := newSessionApp(Config{Mode: ModePlay, JoinAddress: port.Addr().String(),
+		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}})
+	if err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	t.Cleanup(guest.Close)
+	area := render.RectWH(parameter.LeftMargin, parameter.TopMargin,
+		w-parameter.LeftMargin, h-parameter.TopMargin-parameter.BottomMargin)
+	if mw, mh := mapSize(guest); mw >= area.Width() && mh >= area.Height() {
+		t.Fatalf("the joiner built on a %dx%d map, not the smaller one a sizing server offers", mw, mh)
+	}
+	if err := guest.startJoinSession(nil); err != nil {
+		t.Fatalf("join gate: %v", err)
+	}
+	if err := <-gate; err != nil {
+		t.Fatalf("server gate: %v", err)
+	}
+
+	for i, f := range screen.frames {
+		installed := i == len(screen.frames)-1
+		for y := area.Y0; y < area.Y1; y++ {
+			for x := area.X0; x < area.X1; x++ {
+				if void := f[y*w+x].Bg == visual.RgbVoid; void == installed {
+					t.Fatalf("frame %d of %d: cell (%d,%d) void=%v, want void only before the install",
+						i+1, len(screen.frames), x, y, void)
+				}
+			}
+		}
 	}
 }
 
