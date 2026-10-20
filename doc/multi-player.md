@@ -866,6 +866,12 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
    own bots, keeps every roster entry, and a participant it has no path to stays a
    cursor nothing moves.
 
+6. **A browser guest once kept the previous region's glyphs.** Entering the tower
+   region, it kept the region before's glyphs, or kept the glyph system running
+   although the tower disables it. It was seen once, on 2026-09-24, and has not
+   recurred. *To see the remainder:* a second sighting should record whether that
+   guest installed a capture across the region change.
+
 ## 9. Verification
 
 The automated suite covers domain boundaries, deterministic continuation,

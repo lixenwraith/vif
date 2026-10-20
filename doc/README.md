@@ -25,7 +25,6 @@ reader can start with the application shape and then descend into a subsystem.
 | [Telemetry reference](telemetry-reference.md) | Detail | Which metric keys does each system, the session layer, the engine and the event queue register, where is each written and reset, and what reads them by name? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
 | [Multiplayer](multi-player.md) | Medium/detail | What a session guarantees, how a correction is ordered and contained, how authorship moves, what is still missing, and why this protocol rather than another. **Start here for multiplayer.** |
-| [Troubleshooting](troubleshooting.md) | Medium/detail | What did each dated diagnosis round, 2026-09-10 to 2026-10-13, find in host, guest, fleet and browser runs, and what closed each defect? |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Combat and weapons](combat.md) | Domain detail | How are weapon kinds defined, fired by cursors and by mounts on Shared hosts, resolved against species and cursors, which statuses a hit leaves, and what crosses? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
