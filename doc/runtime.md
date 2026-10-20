@@ -467,8 +467,9 @@ For a render frame, the application:
 and geometry from the first anchor, verifies the config/corpus fingerprint, and
 drives a `ModeReplay` App with `journal.ReplayDriver`. The reader accepts several
 files and sorts/deduplicates them by `jseq`; the CLI passes one path. A set whose
-first anchor says `StartRun != 0` or `StartTick != 0` is refused: records alone
-cannot rebuild a world that began elsewhere. The record format is
+first anchor says `StartRun != 0` or `StartTick != 0` replays from its opening, the
+world it began on; one whose files lack it is refused, since records alone cannot
+rebuild a world that began elsewhere. The record format is
 [Logging and diagnostics](logging-and-diagnostics.md) §9.
 
 The playback keys are fixed; any other key is parsed by the keymap in NORMAL,

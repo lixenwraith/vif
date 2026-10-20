@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"maps"
@@ -27,6 +28,44 @@ type journalAsk struct {
 	start  bool
 	report func(path string, err error)
 }
+
+// joinNotice adds one line to what the next run's status line opens with.
+func joinNotice(notice, line string) string {
+	if notice == "" {
+		return line
+	}
+	return notice + "; " + line
+}
+
+// lineHolds refuses a capture whose payloads one journal line could not hold, as no
+// reader would then take the journal.
+func lineHolds(payloads ...[]byte) error {
+	n := 0
+	for _, p := range payloads {
+		n += base64.StdEncoding.EncodedLen(len(p))
+	}
+	if n > parameter.JournalLineBytes-parameter.JournalLineHeadroom {
+		return fmt.Errorf("the world is %d MiB, more than a journal line holds", n>>20)
+	}
+	return nil
+}
+
+// journalLostLocked closes j where it is still true once a world this run wrote
+// could not be recorded in it: past that write, nothing it holds would verify. A
+// journal opened since holds that world already. Caller MUST hold updateMutex.
+func (a *App) journalLostLocked(j *event.Journal, err error) {
+	if j == nil || a.world.Resources.Event.Queue.Journal() != j {
+		return
+	}
+	path, _ := a.closeJournal()
+	at := a.Position().Tick
+	a.log.Error("journal", "msg", "journal closed: a written world was not recorded", "path", path, "tick", at, "error", err.Error())
+	a.ctx.SetStatusMessage(fmt.Sprintf("Journal closed at tick %d: a written world could not be recorded (%s)", at, err), parameter.StatusAlert)
+}
+
+// errRunReplaced refuses a journal start in a run about to be replaced, which the
+// replacing run serves instead: it opens a journal from its start.
+var errRunReplaced = errors.New("this run is being replaced")
 
 // ownedSystems are this instance's own I/O, which taking on another world's state
 // leaves as they are: the transport and the speakers. Their status groups stay too.
@@ -55,8 +94,15 @@ func (a *App) initJournal() error {
 	}
 
 	r, err := journal.Start(a.world.Resources.Event.Queue, a.buildAnchor(), a.cfg.JournalSink, a.log)
-	if err != nil {
+	switch {
+	case err != nil && a.cfg.journalCarried:
+		a.log.Warn("journal", "msg", "journal not reopened", "error", err.Error())
+		a.cfg.notice = joinNotice(a.cfg.notice, "Journal not reopened: "+err.Error())
+		return nil
+	case err != nil:
 		return err
+	case a.cfg.journalCarried:
+		a.cfg.notice = joinNotice(a.cfg.notice, "Journaling on to "+r.Path())
 	}
 	a.recorder.Store(r)
 	a.log.Info("journal", "msg", "journal opened", "path", r.Path())
@@ -75,7 +121,7 @@ func (a *App) journalErrorLocked() error {
 	case a.journalAsk.Load() != nil:
 		return errors.New("a journal is already opening")
 	case a.restart.Load() != nil:
-		return errors.New("this run is being replaced")
+		return errRunReplaced
 	case a.scheduler.ResetPending():
 		// The reset's cleanup has run and its boot spawn has not: the roster the
 		// spawn restores is in no world a twin can take on.
@@ -93,7 +139,7 @@ func (a *App) startJournalLocked(slot int) error {
 	if slot >= 0 {
 		return a.askSeatJournal(slot, true)
 	}
-	if err := a.journalErrorLocked(); err != nil {
+	if err := a.journalErrorLocked(); err != nil && !errors.Is(err, errRunReplaced) {
 		return err
 	}
 	a.journalAsk.Store(&journalAsk{start: true, report: a.reportJournal})
@@ -108,25 +154,33 @@ func (a *App) stopJournalLocked(slot int) error {
 		return a.askSeatJournal(slot, false)
 	}
 	if a.recorder.Load() == nil {
+		// The later command wins over a start not yet served
+		if ask := a.journalAsk.Load(); ask != nil && ask.start && a.journalAsk.CompareAndSwap(ask, nil) {
+			ask.report("", errors.New("cancelled by :journal stop"))
+			return nil
+		}
 		return errors.New("no journal is open")
 	}
-	a.closeJournal()
-	return nil
+	_, err := a.closeJournal()
+	return err
 }
 
-// closeJournal writes the end record and releases the file. Call it with queue
+// closeJournal writes the end record and releases the file, returning its path, or
+// "" with none open, and why its tail may not have reached it. Call it with queue
 // producers quiescent: under updateMutex, or once the scheduler has stopped.
-func (a *App) closeJournal() {
+func (a *App) closeJournal() (string, error) {
 	r := a.recorder.Swap(nil)
 	if r == nil {
-		return
+		return "", nil
 	}
 	stats, err := r.Close()
 	a.log.Info("journal", "msg", "journal closed",
 		"path", stats.Path, "records", stats.Emitted, "encode_failed", stats.EncodeFailed)
 	if err != nil {
 		a.log.Error("journal", "msg", "journal not closed", "error", err.Error())
+		return stats.Path, fmt.Errorf("%s closed incomplete: %w", stats.Path, err)
 	}
+	return stats.Path, nil
 }
 
 // serveJournal serves the journal start or stop asked of this run, on the loop that
@@ -142,11 +196,14 @@ func (a *App) serveJournal() {
 	)
 	if ask.start {
 		path, err = a.openJournal()
+		if errors.Is(err, errRunReplaced) {
+			a.journalAsk.CompareAndSwap(nil, ask) // left for the replacing run
+			return
+		}
 	} else {
 		a.world.RunSafe(func() {
-			if r := a.recorder.Load(); r != nil {
-				path = r.Path()
-				a.closeJournal()
+			if a.recorder.Load() != nil {
+				path, err = a.closeJournal()
 				return
 			}
 			err = errors.New("no journal is open")
@@ -165,12 +222,10 @@ func (a *App) reportJournal(path string, err error) {
 	a.ctx.SetStatusMessage("Journaling to "+path+"; :journal stop closes it", parameter.StatusNotice)
 }
 
-// openJournal starts a journal where this run stands, without replacing the run.
-// A replay of a journal opened mid-run boots afresh and writes the world it opened
-// on over that boot, so the run takes on what the replay will hold there: the
-// shared world is the run's own, and the player domain and everything else a boot
-// decides are the boot's, as they are after a join. Call it outside the world lock,
-// from the goroutine that owns the run's loop.
+// openJournal starts a journal where this run stands, without replacing the run. A
+// replay of it boots afresh and writes the opening's world and own side over that
+// boot, and the run takes on what the replay then holds, which is the run as it
+// stood. Call it outside the world lock, from the goroutine that owns the run's loop.
 func (a *App) openJournal() (string, error) {
 	var (
 		an  event.JournalAnchor
@@ -246,6 +301,9 @@ func (a *App) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Rec
 	if err != nil {
 		return nil, err
 	}
+	if err := lineHolds(opening.Body, opening.Own); err != nil {
+		return nil, err
+	}
 	d, err := newReplayDriver(twin, journal.Set{Captures: []event.JournalCapture{opening}}.Stream())
 	if err != nil {
 		return nil, err
@@ -254,6 +312,8 @@ func (a *App) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Rec
 		return nil, err
 	}
 	if err := a.adoptLocked(twin, d); err != nil {
+		// Past its first write the run holds part of the twin's world: a defect to find
+		a.log.Error("journal", "msg", "run may hold part of an opening it does not match", "error", err.Error())
 		return nil, err
 	}
 	r, err := journal.Start(a.world.Resources.Event.Queue, an, a.cfg.JournalSink, a.log)
@@ -315,7 +375,8 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 // ownState is the run's own side, which a journal's opening carries beside the shared
 // world so its replay plays on as this participant rather than as a fresh boot of
 // one: the player world, the player's resources, each system's own state, where the
-// corpus walk stands, the event tallies, and every status cell but the ownedSystems'.
+// corpus walk stands, the event tallies, every status cell but the ownedSystems', and
+// the order the run holds both domains' entities in.
 type ownState struct {
 	World   engine.PlayerWorldState      `json:"world"`
 	Side    engine.PlayerSide            `json:"side"`
@@ -323,6 +384,7 @@ type ownState struct {
 	Content content.CursorState          `json:"content"`
 	Events  event.QueueTelemetry         `json:"events"`
 	Status  snapshot.StatusState         `json:"status"`
+	Order   engine.WorldOrder            `json:"order"`
 }
 
 // ownStateLocked reads the run's own side. Caller MUST hold updateMutex.
@@ -333,6 +395,7 @@ func (a *App) ownStateLocked() (ownState, error) {
 		Content: service.MustGet[*service.ContentService](a.hub, "content").CursorState(),
 		Events:  a.world.Resources.Event.Queue.Telemetry(),
 		Status:  a.statusCellsLocked(a.statusKeysLocked(func(k string) bool { return !ownedStatusKey(k) })),
+		Order:   a.world.CaptureOrder(),
 	}
 	own.Side.Streams = slices.DeleteFunc(own.Side.Streams, ownedStream)
 	for _, sys := range a.world.Systems() {
@@ -382,6 +445,10 @@ func (a *App) installOwnLocked(own ownState) error {
 	}
 	a.world.Resources.Event.Queue.SetTelemetry(own.Events)
 	a.installStatusLocked(own.Status)
+	// Last, once both domains' rows stand: the shared write and the settle placed theirs
+	if err := a.world.InstallOrder(own.Order); err != nil {
+		return fmt.Errorf("the run's order: %w", err)
+	}
 	return nil
 }
 

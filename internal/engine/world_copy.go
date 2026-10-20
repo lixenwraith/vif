@@ -186,7 +186,9 @@ func (w *World) InstallPlayerSide(s PlayerSide) []string {
 	r.Config.CameraX, r.Config.CameraY, r.Config.pointer = s.CameraX, s.CameraY, s.Pointer
 	r.Game.State.SetAPM(s.APM)
 	r.Transient.ExplosionCount = copy(r.Transient.ExplosionBacking[:], s.Explosions)
-	r.Transient.PulseCount = copy(r.Transient.PulseBacking[:], s.Pulses)
+	// As addPulse does, a palette the renderer has no ramp for is dropped
+	pulses := slices.DeleteFunc(slices.Clone(s.Pulses), func(p PulseEffect) bool { return p.Palette >= component.PaletteCount })
+	r.Transient.PulseCount = copy(r.Transient.PulseBacking[:], pulses)
 	*r.View = s.View
 	r.Player.SetPrediction(s.Prediction)
 	return r.Rand.LoadStreams(core.DomainPlayer, s.Streams)

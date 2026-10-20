@@ -158,8 +158,9 @@ func (s *Set) readFile(path string) error {
 	defer f.Close()
 
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64<<10), 8<<20) // a payload can be large
-	for n := 1; sc.Scan(); n++ {
+	sc.Buffer(make([]byte, 0, 64<<10), parameter.JournalLineBytes) // a payload can be large
+	n := 1
+	for ; sc.Scan(); n++ {
 		var l line
 		if json.Unmarshal(sc.Bytes(), &l) != nil {
 			continue // heartbeat or foreign line
@@ -200,7 +201,10 @@ func (s *Set) readFile(path string) error {
 			s.Captures = append(s.Captures, c)
 		}
 	}
-	return sc.Err()
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("%s:%d: %w", path, n, err)
+	}
+	return nil
 }
 
 func decodeRecord(raw json.RawMessage) (event.JournalRecord, error) {

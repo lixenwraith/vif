@@ -3,6 +3,7 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -305,6 +306,12 @@ func (s *MotionMarkerSystem) LoadLocal(data []byte) error {
 	var l motionMarkerLocal
 	if err := json.Unmarshal(data, &l); err != nil {
 		return fmt.Errorf("motion_marker: %w", err)
+	}
+	// A marker is this player's own, and the system destroys every one it names
+	for _, e := range slices.Concat(l.Base, l.Colored) {
+		if e.Domain() != core.DomainPlayer {
+			return fmt.Errorf("motion_marker: marker %d is not a player entity", e)
+		}
 	}
 	s.baseMarkers = append(s.baseMarkers[:0], l.Base...)
 	s.basePositions = append(s.basePositions[:0], l.Positions...)

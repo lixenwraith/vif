@@ -642,7 +642,11 @@ func (r *RandResource) LoadStreams(d core.Domain, states []StreamState) []string
 	for _, st := range states {
 		g, ok := r.streams[streamKey{domain: st.Domain, label: st.Label}]
 		if !ok || st.Domain != d {
-			unknown = append(unknown, core.DomainNames[st.Domain]+":"+st.Label)
+			name := strconv.Itoa(int(st.Domain))
+			if st.Domain < core.DomainCount {
+				name = core.DomainNames[st.Domain]
+			}
+			unknown = append(unknown, name+":"+st.Label)
 			continue
 		}
 		g.SetState(st.State)
@@ -714,17 +718,17 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 
 // TargetData holds coordinates and entity ID for a single target instance
 type TargetData struct {
-	Entity core.Entity
-	PosX   int
-	PosY   int
+	Entity core.Entity `json:"entity"`
+	PosX   int         `json:"pos_x"`
+	PosY   int         `json:"pos_y"`
 }
 
 // TargetGroupState holds resolved navigation targets for a group
 type TargetGroupState struct {
-	Type    component.TargetType
-	Targets [parameter.MaxTargetsPerGroup]TargetData
-	Count   int
-	Valid   bool // False if target entity destroyed or uninitialized
+	Type    component.TargetType                     `json:"type"`
+	Targets [parameter.MaxTargetsPerGroup]TargetData `json:"targets"`
+	Count   int                                      `json:"count"`
+	Valid   bool                                     `json:"valid"` // False if target entity destroyed or uninitialized
 }
 
 // TargetResource provides per-group target resolution accessible by all systems

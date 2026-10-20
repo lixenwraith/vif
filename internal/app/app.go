@@ -63,7 +63,7 @@ type restartRequest struct {
 	Play paths.Play
 
 	// Journal opens a journal in the next run from its start: this run was
-	// journaling when it was replaced.
+	// journaling, or asked to start, when it was replaced.
 	Journal bool
 }
 
@@ -92,9 +92,13 @@ type App struct {
 
 	// recorder is the journal this run keeps, nil when it keeps none; atomic, as a
 	// holder reads its seats' from its own goroutine. journalAsk is a start or stop
-	// the command line asked for that the run's loop has not served yet.
-	recorder   atomic.Pointer[journal.Recorder]
-	journalAsk atomic.Pointer[journalAsk]
+	// the command line asked for that the run's loop has not served yet. closedAtExit
+	// is the journal Close shut and why its tail may be lost, which a seat's holder
+	// reports on the same goroutine.
+	recorder       atomic.Pointer[journal.Recorder]
+	journalAsk     atomic.Pointer[journalAsk]
+	closedAtExit   string
+	closedAtExitAs error
 
 	scheduler      *engine.Scheduler
 	frameReady     chan struct{}
@@ -585,7 +589,7 @@ func (a *App) Close() {
 	a.closeMidRunPort()
 	a.discardStagingWorld()
 	a.hub.StopAll()
-	a.closeJournal()
+	a.closedAtExit, a.closedAtExitAs = a.closeJournal()
 
 	a.log.Info("app", "msg", "shutdown completed", "us", time.Since(begin).Microseconds())
 }

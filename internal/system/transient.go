@@ -303,8 +303,13 @@ func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
 func (s *TransientSystem) SaveLocal() ([]byte, error) { return json.Marshal(s.evictNext) }
 
 func (s *TransientSystem) LoadLocal(data []byte) error {
-	if err := json.Unmarshal(data, &s.evictNext); err != nil {
+	var next int
+	if err := json.Unmarshal(data, &next); err != nil {
 		return fmt.Errorf("transient: %w", err)
 	}
+	if next < 0 || next >= parameter.ExplosionCenterCap {
+		return fmt.Errorf("transient: eviction slot %d past the explosion cap", next)
+	}
+	s.evictNext = next
 	return nil
 }

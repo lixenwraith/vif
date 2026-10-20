@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"slices"
 
@@ -456,6 +457,300 @@ func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 	w.createdCount[core.DomainPlayer].Store(s.Created)
 	w.destroyedCount[core.DomainPlayer].Store(s.Destroyed)
 	w.Positions.PublishTelemetry()
+}
+
+// WorldOrder is the order a world holds its entities in, by store and by cell, where
+// two or more give it one. Systems visit them in it, and a world rebuilt by insertion
+// holds another, so a journal's opening carries it: the run it opens on, and every
+// replay of it, then play on in the run's own order.
+type WorldOrder struct {
+	Positions    []core.Entity `json:"positions,omitempty"`
+	Cells        []CellOrder   `json:"cells,omitempty"`
+	Glyph        []core.Entity `json:"glyph,omitempty"`
+	Sigil        []core.Entity `json:"sigil,omitempty"`
+	Nugget       []core.Entity `json:"nugget,omitempty"`
+	Cursor       []core.Entity `json:"cursor,omitempty"`
+	Protection   []core.Entity `json:"protection,omitempty"`
+	Kinetic      []core.Entity `json:"kinetic,omitempty"`
+	Wall         []core.Entity `json:"wall,omitempty"`
+	Loot         []core.Entity `json:"loot,omitempty"`
+	Gateway      []core.Entity `json:"gateway,omitempty"`
+	Energy       []core.Entity `json:"energy,omitempty"`
+	Heat         []core.Entity `json:"heat,omitempty"`
+	Shield       []core.Entity `json:"shield,omitempty"`
+	Boost        []core.Entity `json:"boost,omitempty"`
+	Weapon       []core.Entity `json:"weapon,omitempty"`
+	Orb          []core.Entity `json:"orb,omitempty"`
+	Ping         []core.Entity `json:"ping,omitempty"`
+	CursorView   []core.Entity `json:"cursorview,omitempty"`
+	Particle     []core.Entity `json:"particle,omitempty"`
+	Tracer       []core.Entity `json:"tracer,omitempty"`
+	Navigation   []core.Entity `json:"navigation,omitempty"`
+	Combat       []core.Entity `json:"combat,omitempty"`
+	Genotype     []core.Entity `json:"genotype,omitempty"`
+	Lightning    []core.Entity `json:"lightning,omitempty"`
+	Missile      []core.Entity `json:"missile,omitempty"`
+	Mount        []core.Entity `json:"mount,omitempty"`
+	Ray          []core.Entity `json:"ray,omitempty"`
+	Spirit       []core.Entity `json:"spirit,omitempty"`
+	Materialize  []core.Entity `json:"materialize,omitempty"`
+	Target       []core.Entity `json:"target,omitempty"`
+	TargetAnchor []core.Entity `json:"targetanchor,omitempty"`
+	Drain        []core.Entity `json:"drain,omitempty"`
+	Quasar       []core.Entity `json:"quasar,omitempty"`
+	Swarm        []core.Entity `json:"swarm,omitempty"`
+	Storm        []core.Entity `json:"storm,omitempty"`
+	StormCircle  []core.Entity `json:"stormcircle,omitempty"`
+	Bullet       []core.Entity `json:"bullet,omitempty"`
+	Pylon        []core.Entity `json:"pylon,omitempty"`
+	Snake        []core.Entity `json:"snake,omitempty"`
+	SnakeHead    []core.Entity `json:"snakehead,omitempty"`
+	SnakeBody    []core.Entity `json:"snakebody,omitempty"`
+	SnakeMember  []core.Entity `json:"snakemember,omitempty"`
+	Eye          []core.Entity `json:"eye,omitempty"`
+	Tower        []core.Entity `json:"tower,omitempty"`
+	Kraken       []core.Entity `json:"kraken,omitempty"`
+	Header       []core.Entity `json:"header,omitempty"`
+	Member       []core.Entity `json:"member,omitempty"`
+	Flash        []core.Entity `json:"flash,omitempty"`
+	Fadeout      []core.Entity `json:"fadeout,omitempty"`
+	Splash       []core.Entity `json:"splash,omitempty"`
+	Marker       []core.Entity `json:"marker,omitempty"`
+	Button       []core.Entity `json:"button,omitempty"`
+	Death        []core.Entity `json:"death,omitempty"`
+	Timer        []core.Entity `json:"timer,omitempty"`
+}
+
+// CaptureOrder reads the order this world holds its entities in.
+//
+// Caller MUST hold updateMutex.
+func (w *World) CaptureOrder() WorldOrder {
+	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.grid.cellOrder()}
+	o.Glyph = orderOf(w.Components.Glyph.entities)
+	o.Sigil = orderOf(w.Components.Sigil.entities)
+	o.Nugget = orderOf(w.Components.Nugget.entities)
+	o.Cursor = orderOf(w.Components.Cursor.entities)
+	o.Protection = orderOf(w.Components.Protection.entities)
+	o.Kinetic = orderOf(w.Components.Kinetic.entities)
+	o.Wall = orderOf(w.Components.Wall.entities)
+	o.Loot = orderOf(w.Components.Loot.entities)
+	o.Gateway = orderOf(w.Components.Gateway.entities)
+	o.Energy = orderOf(w.Components.Energy.entities)
+	o.Heat = orderOf(w.Components.Heat.entities)
+	o.Shield = orderOf(w.Components.Shield.entities)
+	o.Boost = orderOf(w.Components.Boost.entities)
+	o.Weapon = orderOf(w.Components.Weapon.entities)
+	o.Orb = orderOf(w.Components.Orb.entities)
+	o.Ping = orderOf(w.Components.Ping.entities)
+	o.CursorView = orderOf(w.Components.CursorView.entities)
+	o.Particle = orderOf(w.Components.Particle.entities)
+	o.Tracer = orderOf(w.Components.Tracer.entities)
+	o.Navigation = orderOf(w.Components.Navigation.entities)
+	o.Combat = orderOf(w.Components.Combat.entities)
+	o.Genotype = orderOf(w.Components.Genotype.entities)
+	o.Lightning = orderOf(w.Components.Lightning.entities)
+	o.Missile = orderOf(w.Components.Missile.entities)
+	o.Mount = orderOf(w.Components.Mount.entities)
+	o.Ray = orderOf(w.Components.Ray.entities)
+	o.Spirit = orderOf(w.Components.Spirit.entities)
+	o.Materialize = orderOf(w.Components.Materialize.entities)
+	o.Target = orderOf(w.Components.Target.entities)
+	o.TargetAnchor = orderOf(w.Components.TargetAnchor.entities)
+	o.Drain = orderOf(w.Components.Drain.entities)
+	o.Quasar = orderOf(w.Components.Quasar.entities)
+	o.Swarm = orderOf(w.Components.Swarm.entities)
+	o.Storm = orderOf(w.Components.Storm.entities)
+	o.StormCircle = orderOf(w.Components.StormCircle.entities)
+	o.Bullet = orderOf(w.Components.Bullet.entities)
+	o.Pylon = orderOf(w.Components.Pylon.entities)
+	o.Snake = orderOf(w.Components.Snake.entities)
+	o.SnakeHead = orderOf(w.Components.SnakeHead.entities)
+	o.SnakeBody = orderOf(w.Components.SnakeBody.entities)
+	o.SnakeMember = orderOf(w.Components.SnakeMember.entities)
+	o.Eye = orderOf(w.Components.Eye.entities)
+	o.Tower = orderOf(w.Components.Tower.entities)
+	o.Kraken = orderOf(w.Components.Kraken.entities)
+	o.Header = orderOf(w.Components.Header.entities)
+	o.Member = orderOf(w.Components.Member.entities)
+	o.Flash = orderOf(w.Components.Flash.entities)
+	o.Fadeout = orderOf(w.Components.Fadeout.entities)
+	o.Splash = orderOf(w.Components.Splash.entities)
+	o.Marker = orderOf(w.Components.Marker.entities)
+	o.Button = orderOf(w.Components.Button.entities)
+	o.Death = orderOf(w.Components.Death.entities)
+	o.Timer = orderOf(w.Components.Timer.entities)
+	return o
+}
+
+// InstallOrder puts this world's entities in o's order. It refuses an order naming
+// other entities than a store or cell holds, leaving the world part-ordered for the
+// caller to abandon.
+//
+// Caller MUST hold updateMutex.
+func (w *World) InstallOrder(o WorldOrder) error {
+	if err := w.Positions.reorder(o.Positions, o.Cells); err != nil {
+		return fmt.Errorf("positions: %w", err)
+	}
+	if err := reorderStore(w.Components.Glyph, o.Glyph); err != nil {
+		return fmt.Errorf("glyph: %w", err)
+	}
+	if err := reorderStore(w.Components.Sigil, o.Sigil); err != nil {
+		return fmt.Errorf("sigil: %w", err)
+	}
+	if err := reorderStore(w.Components.Nugget, o.Nugget); err != nil {
+		return fmt.Errorf("nugget: %w", err)
+	}
+	if err := reorderStore(w.Components.Cursor, o.Cursor); err != nil {
+		return fmt.Errorf("cursor: %w", err)
+	}
+	if err := reorderStore(w.Components.Protection, o.Protection); err != nil {
+		return fmt.Errorf("protection: %w", err)
+	}
+	if err := reorderStore(w.Components.Kinetic, o.Kinetic); err != nil {
+		return fmt.Errorf("kinetic: %w", err)
+	}
+	if err := reorderStore(w.Components.Wall, o.Wall); err != nil {
+		return fmt.Errorf("wall: %w", err)
+	}
+	if err := reorderStore(w.Components.Loot, o.Loot); err != nil {
+		return fmt.Errorf("loot: %w", err)
+	}
+	if err := reorderStore(w.Components.Gateway, o.Gateway); err != nil {
+		return fmt.Errorf("gateway: %w", err)
+	}
+	if err := reorderStore(w.Components.Energy, o.Energy); err != nil {
+		return fmt.Errorf("energy: %w", err)
+	}
+	if err := reorderStore(w.Components.Heat, o.Heat); err != nil {
+		return fmt.Errorf("heat: %w", err)
+	}
+	if err := reorderStore(w.Components.Shield, o.Shield); err != nil {
+		return fmt.Errorf("shield: %w", err)
+	}
+	if err := reorderStore(w.Components.Boost, o.Boost); err != nil {
+		return fmt.Errorf("boost: %w", err)
+	}
+	if err := reorderStore(w.Components.Weapon, o.Weapon); err != nil {
+		return fmt.Errorf("weapon: %w", err)
+	}
+	if err := reorderStore(w.Components.Orb, o.Orb); err != nil {
+		return fmt.Errorf("orb: %w", err)
+	}
+	if err := reorderStore(w.Components.Ping, o.Ping); err != nil {
+		return fmt.Errorf("ping: %w", err)
+	}
+	if err := reorderStore(w.Components.CursorView, o.CursorView); err != nil {
+		return fmt.Errorf("cursorview: %w", err)
+	}
+	if err := reorderStore(w.Components.Particle, o.Particle); err != nil {
+		return fmt.Errorf("particle: %w", err)
+	}
+	if err := reorderStore(w.Components.Tracer, o.Tracer); err != nil {
+		return fmt.Errorf("tracer: %w", err)
+	}
+	if err := reorderStore(w.Components.Navigation, o.Navigation); err != nil {
+		return fmt.Errorf("navigation: %w", err)
+	}
+	if err := reorderStore(w.Components.Combat, o.Combat); err != nil {
+		return fmt.Errorf("combat: %w", err)
+	}
+	if err := reorderStore(w.Components.Genotype, o.Genotype); err != nil {
+		return fmt.Errorf("genotype: %w", err)
+	}
+	if err := reorderStore(w.Components.Lightning, o.Lightning); err != nil {
+		return fmt.Errorf("lightning: %w", err)
+	}
+	if err := reorderStore(w.Components.Missile, o.Missile); err != nil {
+		return fmt.Errorf("missile: %w", err)
+	}
+	if err := reorderStore(w.Components.Mount, o.Mount); err != nil {
+		return fmt.Errorf("mount: %w", err)
+	}
+	if err := reorderStore(w.Components.Ray, o.Ray); err != nil {
+		return fmt.Errorf("ray: %w", err)
+	}
+	if err := reorderStore(w.Components.Spirit, o.Spirit); err != nil {
+		return fmt.Errorf("spirit: %w", err)
+	}
+	if err := reorderStore(w.Components.Materialize, o.Materialize); err != nil {
+		return fmt.Errorf("materialize: %w", err)
+	}
+	if err := reorderStore(w.Components.Target, o.Target); err != nil {
+		return fmt.Errorf("target: %w", err)
+	}
+	if err := reorderStore(w.Components.TargetAnchor, o.TargetAnchor); err != nil {
+		return fmt.Errorf("targetanchor: %w", err)
+	}
+	if err := reorderStore(w.Components.Drain, o.Drain); err != nil {
+		return fmt.Errorf("drain: %w", err)
+	}
+	if err := reorderStore(w.Components.Quasar, o.Quasar); err != nil {
+		return fmt.Errorf("quasar: %w", err)
+	}
+	if err := reorderStore(w.Components.Swarm, o.Swarm); err != nil {
+		return fmt.Errorf("swarm: %w", err)
+	}
+	if err := reorderStore(w.Components.Storm, o.Storm); err != nil {
+		return fmt.Errorf("storm: %w", err)
+	}
+	if err := reorderStore(w.Components.StormCircle, o.StormCircle); err != nil {
+		return fmt.Errorf("stormcircle: %w", err)
+	}
+	if err := reorderStore(w.Components.Bullet, o.Bullet); err != nil {
+		return fmt.Errorf("bullet: %w", err)
+	}
+	if err := reorderStore(w.Components.Pylon, o.Pylon); err != nil {
+		return fmt.Errorf("pylon: %w", err)
+	}
+	if err := reorderStore(w.Components.Snake, o.Snake); err != nil {
+		return fmt.Errorf("snake: %w", err)
+	}
+	if err := reorderStore(w.Components.SnakeHead, o.SnakeHead); err != nil {
+		return fmt.Errorf("snakehead: %w", err)
+	}
+	if err := reorderStore(w.Components.SnakeBody, o.SnakeBody); err != nil {
+		return fmt.Errorf("snakebody: %w", err)
+	}
+	if err := reorderStore(w.Components.SnakeMember, o.SnakeMember); err != nil {
+		return fmt.Errorf("snakemember: %w", err)
+	}
+	if err := reorderStore(w.Components.Eye, o.Eye); err != nil {
+		return fmt.Errorf("eye: %w", err)
+	}
+	if err := reorderStore(w.Components.Tower, o.Tower); err != nil {
+		return fmt.Errorf("tower: %w", err)
+	}
+	if err := reorderStore(w.Components.Kraken, o.Kraken); err != nil {
+		return fmt.Errorf("kraken: %w", err)
+	}
+	if err := reorderStore(w.Components.Header, o.Header); err != nil {
+		return fmt.Errorf("header: %w", err)
+	}
+	if err := reorderStore(w.Components.Member, o.Member); err != nil {
+		return fmt.Errorf("member: %w", err)
+	}
+	if err := reorderStore(w.Components.Flash, o.Flash); err != nil {
+		return fmt.Errorf("flash: %w", err)
+	}
+	if err := reorderStore(w.Components.Fadeout, o.Fadeout); err != nil {
+		return fmt.Errorf("fadeout: %w", err)
+	}
+	if err := reorderStore(w.Components.Splash, o.Splash); err != nil {
+		return fmt.Errorf("splash: %w", err)
+	}
+	if err := reorderStore(w.Components.Marker, o.Marker); err != nil {
+		return fmt.Errorf("marker: %w", err)
+	}
+	if err := reorderStore(w.Components.Button, o.Button); err != nil {
+		return fmt.Errorf("button: %w", err)
+	}
+	if err := reorderStore(w.Components.Death, o.Death); err != nil {
+		return fmt.Errorf("death: %w", err)
+	}
+	if err := reorderStore(w.Components.Timer, o.Timer); err != nil {
+		return fmt.Errorf("timer: %w", err)
+	}
+	return nil
 }
 
 // SharedWorldDelta is one shared world expressed against another, store by store.

@@ -45,7 +45,7 @@ type StateCopier interface {
 }
 
 // Toggled is a system with an FSM-driven enable flag, which a replay copy carries
-// beside its StateCopier state.
+// beside the system's own state.
 type Toggled interface {
 	Enabled() bool
 	SetEnabled(bool)

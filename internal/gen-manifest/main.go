@@ -1017,6 +1017,7 @@ var snapshotWorldTemplate = template.Must(template.New("snapshotWorld").Funcs(te
 package engine
 
 import (
+	"fmt"
 	"math"
 	"slices"
 
@@ -1150,6 +1151,46 @@ func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 	w.createdCount[core.DomainPlayer].Store(s.Created)
 	w.destroyedCount[core.DomainPlayer].Store(s.Destroyed)
 	w.Positions.PublishTelemetry()
+}
+
+// WorldOrder is the order a world holds its entities in, by store and by cell, where
+// two or more give it one. Systems visit them in it, and a world rebuilt by insertion
+// holds another, so a journal's opening carries it: the run it opens on, and every
+// replay of it, then play on in the run's own order.
+type WorldOrder struct {
+	Positions []core.Entity ` + "`json:\"positions,omitempty\"`" + `
+	Cells     []CellOrder   ` + "`json:\"cells,omitempty\"`" + `
+{{- range .Components }}
+	{{ .Field }} []core.Entity ` + "`json:\"{{ .Field | lower }},omitempty\"`" + `
+{{- end }}
+}
+
+// CaptureOrder reads the order this world holds its entities in.
+//
+// Caller MUST hold updateMutex.
+func (w *World) CaptureOrder() WorldOrder {
+	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.grid.cellOrder()}
+{{- range .Components }}
+	o.{{ .Field }} = orderOf(w.Components.{{ .Field }}.entities)
+{{- end }}
+	return o
+}
+
+// InstallOrder puts this world's entities in o's order. It refuses an order naming
+// other entities than a store or cell holds, leaving the world part-ordered for the
+// caller to abandon.
+//
+// Caller MUST hold updateMutex.
+func (w *World) InstallOrder(o WorldOrder) error {
+	if err := w.Positions.reorder(o.Positions, o.Cells); err != nil {
+		return fmt.Errorf("positions: %w", err)
+	}
+{{- range .Components }}
+	if err := reorderStore(w.Components.{{ .Field }}, o.{{ .Field }}); err != nil {
+		return fmt.Errorf("{{ .Field | lower }}: %w", err)
+	}
+{{- end }}
+	return nil
 }
 
 // SharedWorldDelta is one shared world expressed against another, store by store.

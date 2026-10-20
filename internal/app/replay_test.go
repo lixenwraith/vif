@@ -569,6 +569,11 @@ func TestAJournalOpenedMidRunDoesNotPerturb(t *testing.T) {
 		if i, _, _, ok := snapshot.FirstDiff(want, got); ok {
 			t.Fatalf("%s the runs differ at line %d:\n%s", when, i, strings.Join(snapshot.Diff(want, got, 12), "\n"))
 		}
+		for id := range uint8(component.MaxTargetGroups) {
+			if want, got := plain.World().Resources.Target.GetGroup(id), journaled.World().Resources.Target.GetGroup(id); want != got {
+				t.Fatalf("%s target group %d differs: want %+v, got %+v", when, id, want, got)
+			}
+		}
 	}
 	drive := func(ticks int, check bool) {
 		for range ticks {
@@ -590,7 +595,15 @@ func TestAJournalOpenedMidRunDoesNotPerturb(t *testing.T) {
 			}
 		}
 	}
-	drive(300, false)
+	drive(900, false)
+	// A group an update set and no anchor holds, which only the run itself remembers
+	for _, a := range []*App{plain, journaled} {
+		a.World().RunSafe(func() {
+			a.World().PushEventDomain(event.EventTargetGroupUpdate,
+				&event.TargetGroupUpdatePayload{GroupID: 3, Type: component.TargetPosition, PosX: 7, PosY: 5}, core.DomainShared)
+		})
+		a.Tick(1)
+	}
 	alike("before the opening")
 	journaled.cfg.JournalSink = journal.NewCapture()
 	if _, err := journaled.openJournal(); err != nil {
@@ -836,6 +849,56 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	a.World().RunSafe(func() { stopErr = a.stopJournalLocked(-1) })
 	if stopErr == nil {
 		t.Fatal("a second stop found a journal")
+	}
+}
+
+// TestAStopCancelsAStartNotYetServed: a stop asked before the run's loop serves a
+// start wins, so no journal opens.
+func TestAStopCancelsAStartNotYetServed(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 7, 80, 24)
+	defer a.Close()
+	a.cfg.JournalSink = journal.NewCapture()
+	a.Tick(5)
+	var startErr, stopErr error
+	a.World().RunSafe(func() { startErr, stopErr = a.startJournalLocked(-1), a.stopJournalLocked(-1) })
+	if startErr != nil || stopErr != nil {
+		t.Fatalf("start: %v, stop: %v", startErr, stopErr)
+	}
+	a.serveJournal()
+	if a.recorder.Load() != nil {
+		t.Fatal("a start the stop overtook opened a journal")
+	}
+}
+
+// TestAJournalMissingAWrittenWorldCloses: a journal a write could not reach is
+// closed and the player told, while a journal opened since that write stays open.
+func TestAJournalMissingAWrittenWorldCloses(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 7, 80, 24)
+	defer a.Close()
+	a.cfg.JournalSink = journal.NewCapture()
+	a.Tick(5)
+	var err error
+	a.World().RunSafe(func() { err = a.startJournalLocked(-1) })
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	a.serveJournal()
+	if a.recorder.Load() == nil {
+		t.Fatal("no journal opened")
+	}
+	lost := errors.New("too large")
+	a.World().RunSafe(func() { a.journalLostLocked(event.NewJournal(journal.NewCapture()), lost) })
+	if a.recorder.Load() == nil {
+		t.Fatal("a write missing another journal closed this one")
+	}
+	a.World().RunSafe(func() { a.journalLostLocked(a.world.Resources.Event.Queue.Journal(), lost) })
+	if a.recorder.Load() != nil {
+		t.Fatal("the journal stayed open past a world it could not record")
+	}
+	if msg := a.Context().GetStatusMessage(); !strings.Contains(msg, "could not be recorded (too large)") {
+		t.Fatalf("status %q does not say why the journal closed", msg)
 	}
 }
 
