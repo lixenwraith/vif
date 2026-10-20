@@ -8,7 +8,8 @@ vif \- a modal\-motion arcade game
 .SH DESCRIPTION
 Without flags,
 .B vif
-starts a solo game in the terminal.
+starts a solo game in the terminal, or in a desktop window when a vif-gui build
+or the window key of vif.toml's [presentation] asks for one.
 The flags below also host, join or serve a networked session,
 replay or script a run, play a bot, and validate the installed configuration.
 .PP
@@ -22,8 +23,8 @@ holds the binary, then each system root,
 and finally the copy compiled into the binary.
 The first root holding a
 .I vif.toml
-supplies the defaults of the path flags and the audio buffer;
-a flag given on the command line wins.
+supplies the defaults of the path flags, the audio buffer, the desktop window and
+the [play] settings; a flag given on the command line wins.
 .SH OPTIONS
 .SS Session
 .TP
@@ -200,10 +201,15 @@ Print the module version and commit a package should report
   Adjust    lead with + or \- to add to or remove from the set already selected
 .fi
 .SH IN-GAME CONFIGURATION
-Ctrl-G or :g (:config) opens the configuration menu. Select a category or setting
-with Up/Down or j/k. Left/Right or h/l changes values; Enter/Space chooses.
-Escape or q returns to categories, then closes; Ctrl-G closes from any page.
-Home/End and PageUp/PageDown navigate longer pages.
+Ctrl-G, :g (:config) or a press held on the status bar opens the configuration
+menu. Select a category or setting with Up/Down or j/k. Left/Right or h/l changes
+values; Enter/Space chooses. A press selects a row, and on the selected row acts
+as Enter. Escape or q returns to categories, then closes; Ctrl-G closes from any
+page. Home/End and PageUp/PageDown navigate longer pages.
+.PP
+Game starts a new game, as :n does, or another scenario: a row for each one the
+configuration roots hold, or one given by name or path. In a session only the
+host can, and its participants rejoin.
 .PP
 Bots adds local bots by count and policy graph, and removes this run's admitted
 bots by cursor slot, or cancels a joining bot. Leaving bots show their state.
@@ -213,8 +219,8 @@ bots open a loopback session.
 .PP
 Multiplayer hosts this run, joins an address/link, or requests a session from
 an HTTP(S) vif-allocator site with a player count and scenario. Player count 0
-and a blank scenario use server defaults. The request asks for no bots; an
-allocator seats bots only for a request that names them, up to its \-bots\-max.
+and a blank scenario use server defaults. The request asks for no bots of the
+session's own; the Bots page adds bots held by this run once it has joined.
 Hosts can remove individual bots or players with all their bots
 on the Multiplayer page. :player lists slots; :player drop <slot> removes a player
 and its bots. :bot drop <slot> removes your bot, or any bot when hosting. Slots
@@ -228,16 +234,18 @@ in the status bar. A failed join preserves the current run.
 .PP
 Audio controls music, sound effects and effects volume. Controls adjusts mouse
 input, pointer following and auto-fire. Display controls the telemetry HUD and
-navigation overlays. Simulation changes solo speed, starts a new game, changes
-the scenario and restarts a replay. Diagnostics controls logging, log level and
+navigation overlays. Simulation changes solo speed and restarts a replay. Diagnostics controls logging, log level and
 scope presets, snapshot interval, flight-recorder depth, FSM trigger and flush,
 and the runtime profiler, and captures profiles, an execution trace, a telemetry
 snapshot and a replay journal. Values in brackets are unavailable or read only; the
 selected row explains why. Startup settings explains the relevant file or flag.
 .PP
-Changes apply to the current run and are not saved to disk. Solo play pauses;
-network play retains its existing pause policy. The menu shares the command
-line's replay and session restrictions. The config_menu keymap action can be
+The Audio and Controls settings and the HUD are vif.toml's [play]: a run that read
+a vif.toml writes them back to it as they change, so the next run starts as this
+one was left. Every other change lasts the run. Solo play pauses while the menu is
+open, and so may a host whose only other participants are its own bots; any other
+session keeps running. The menu shares the command line's replay and session
+restrictions. The config_menu keymap action can be
 rebound in normal_keys, text_keys and overlay_keys.
 .SH FILES
 .TP
@@ -247,7 +255,8 @@ User configuration root, normally
 .TP
 .I vif.toml
 Settings at the top of a configuration root: another root, the log, journal,
-music, scenario, content and keymap paths, and the audio mixer buffer.
+music, scenario, content and keymap paths, the audio mixer buffer, whether the
+desktop window opens and how, and the [play] settings the menu writes back.
 .TP
 .I bot/<name>.toml
 Bot graphs that \-bot, \-bots and :bot add name; a path also works. The default
@@ -262,4 +271,4 @@ names others in their place, separated by colons.
 Logs, journals and music recordings, normally
 .IR ~/.local/state/vif .
 .SH SEE ALSO
-https://github.com/lixenwraith/vif
+https://lixen.com/vif/, https://github.com/lixenwraith/vif

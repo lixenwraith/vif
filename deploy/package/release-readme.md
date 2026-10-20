@@ -21,7 +21,8 @@ whose flags, files and formats may change without notice.
 
 <!-- end -->
 <!-- if headless -->
-- `vif`: the dedicated game server, with no terminal, window or sound
+- `vif`: the dedicated game server, a static binary with no terminal, window or
+  sound
 - `LICENSE`: vif's licence, BSD-3-Clause
 
 <!-- end -->
@@ -48,6 +49,15 @@ cd vif-@LABEL@-@TARGET@
 ```
 
 To keep it, copy `vif` onto your `PATH`, as in `install -m 0755 vif ~/.local/bin/`.
+
+<!-- end -->
+<!-- if linux -->
+It needs glibc, since it links libc to load the desktop window's libraries: on
+musl (Alpine) or under Termux, build the terminal alone from the source with
+`make cli`.
+
+<!-- end -->
+<!-- if client -->
 `./vif -g` opens a desktop window instead of playing in the terminal, on X11 or on
 Wayland through XWayland. It loads `libX11.so.6`, `libEGL.so.1` and
 `libGLESv2.so.2` when it opens, and `-scale 2` doubles its font for a HiDPI

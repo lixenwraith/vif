@@ -102,8 +102,9 @@ extracts, still needs its trust, origin and cache policy decided.
 ## 3. Gaps to close before a first submission
 
 `make install` stages everything a package review expects: the binary, the system
-config root, the licence, `man6/vif.6`, a `Terminal=true` desktop entry with
-scalable and symbolic icons, and bash, zsh and fish completion. What remains is a
+config root, the licence, `man6/vif.6`, a `Terminal=true` desktop entry whose
+second action plays in the window (`vif -g`), scalable and symbolic icons, and
+bash, zsh and fish completion. What remains is a
 stable tagged release: tag a verified nightly commit `v0.1.0` and publish the
 draft §2 creates.
 
@@ -111,10 +112,12 @@ draft §2 creates.
 
 Target `vif` (release) with `vif-git` optional.
 
-1. `depends=()` — the binary is static Go with no runtime library dependency.
-   `makedepends=('go')`. `optdepends` for the audio players the engine probes,
-   in its order: `pulseaudio`/`pipewire-pulse` for `pacat`, `pipewire` for
-   `pw-cat`, `alsa-utils` for `aplay`, `sox` for `play`, `ffmpeg` for `ffplay`.
+1. `depends=('glibc')`: the binary links libc to load the desktop window's
+   libraries at run time (a `vif_nogui` build is static). `makedepends=('go')`.
+   `optdepends` for the window, `libx11` and `libglvnd` with a Mesa or vendor
+   driver, and for the audio players the engine probes, in its order:
+   `pulseaudio`/`pipewire-pulse` for `pacat`, `pipewire` for `pw-cat`,
+   `alsa-utils` for `aplay`, `sox` for `play`, `ffmpeg` for `ffplay`.
 2. `build()` uses the repository's flags plus Arch's hardening:
    `CGO_ENABLED=0 go build -trimpath -buildmode=pie -mod=readonly -modcacherw`.
    `make release GO_LDFLAGS=` does the same with Arch's `GOFLAGS` exported: plain
@@ -134,7 +137,11 @@ Target `games/vif`. FreeBSD is a first-class runtime target: the OSS
 audio backend exists for it.
 
 1. `USES=go:modules`, `GO_MODULE=github.com/lixenwraith/vif`,
-   `GO_TARGET=./cmd/vif`.
+   `GO_TARGET=./cmd/vif`, and
+   `GO_BUILDFLAGS+=-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std`,
+   which `make release` passes as `GUI_GCFLAGS`: without it purego's `fakecgo`,
+   which the desktop window links, stops the build (`go:cgo_export_dynamic ...
+   only allowed in cgo-generated code`).
 2. Ports staging sets `DESTDIR` and `PREFIX`; `SYSCONFDIR` defaults to
    `$(PREFIX)/etc`. The system root is `/usr/local/etc/vif`, which every Unix
    binary searches, so no `pkg-message` is needed.
