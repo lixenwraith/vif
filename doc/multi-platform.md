@@ -405,7 +405,9 @@ its size with nearest filtering, for a HiDPI screen. Its libraries
 (`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
 the binary builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built
 as std, which the Makefile's release targets pass (`GUI_GCFLAGS`). It runs on
-Wayland through XWayland.
+Wayland through XWayland. purego's `fakecgo` links the binary to the system libc,
+so a Linux client binary needs glibc and runs neither on musl nor under Termux;
+`vif_nogui` and `vif_headless` binaries stay static.
 
 The browser is another: `cmd/vif/browser.go` under `js/wasm` sets
 `Host.Presentation` to a `pkg/browser` host. The Go program runs in a Worker, so the
