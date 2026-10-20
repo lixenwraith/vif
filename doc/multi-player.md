@@ -672,9 +672,6 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 
 | Players | Tower, 2 | Tower, 16 | td, 2 | td, 16 |
 |---|---:|---:|---:|---:|
-| Host CPU-ms/s: simulation + protocol | 18 + 77 | 38 + 121 | 146 + 267 | 188 + 1,181 |
-| Mean guest CPU-ms/s: simulation + protocol | 23 + 32 | 43 + 60 | 159 + 251 | 219 + 312 |
-| Simulation tick mean, host / guest | 0.9 / 1.2 ms | 1.9 / 2.1 ms | 7.3 / 7.9 ms | 9.4 / 10.9 ms |
 | Publication rounds a second | 4.5 | 4.6 | 1.5 | 7.2 |
 | Manifests answered hash-only | 94% | 94% | 78% | 95% |
 | Host egress, framed before deflate | 20 kB/s | 1.64 MB/s | 0.28 MB/s | 5.05 MB/s |
@@ -683,15 +680,13 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 | Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-seals the capture (9 / 65 ms) and indexes it (4.5 / 30 ms); a keyframe is 80 / 516 kB
-compressed and 9 / 65 ms to encode. The seal, the index and a keyframe reuse the
-bytes and hash of every row whose owned copy still compares equal, and navigation
-rebuilds its wall grid only when a wall moved and compares grids only when their
-generation moved. The table and those seal, index and encode times were measured
-without either, so they and the table's protocol and td simulation figures are high.
-With both, at 16 players, rounds four ticks apart and on a slower container, the seal
-costs 1.8 ms on the tower map and 5 ms on td, the index 2.4 and 12 ms, a keyframe
-7.6 and 58 ms (mostly deflate), and a simulation tick 1.1 and 2.6 ms. An install that projects nothing
+then seals and indexes the capture; a keyframe is 80 / 516 kB compressed. The seal,
+the index and a keyframe reuse the bytes and hash of every row whose owned copy
+still compares equal, and navigation rebuilds its wall grid only when a wall moved
+and compares grids only when their generation moved. At 16 players, rounds four
+ticks apart (on a slower container than the table's), the seal costs 1.8 ms on the
+tower map and 5 ms on td, the index 2.4 and 12 ms, a keyframe 7.6 and 58 ms (mostly
+deflate), and a simulation tick 1.1 and 2.6 ms. An install that projects nothing
 holds the live lock 7–10 / 40–70 ms, and each projected tick adds up to a simulation
 tick. Sealing, indexing and encoding run outside the lock, but on the one thread a
 browser guest has.
@@ -705,14 +700,14 @@ participant's epochs and owner syncs to every other, (N−1)² of each: at 16 pl
 
 What that means for scaling:
 
-- **Protocol, not simulation, bounded the map limit.** At td with 16 players the host
-  needed about 1.4 cores, 86% of it protocol: rounds of capture, seal and index cost
-  about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies most of the rest.
-  Row reuse takes about nine tenths off the seal and index, which leaves the capture
-  under the lock the largest part of a round. The fleet pod's 500m CPU and 160 MiB
-  `GOMEMLIMIT` held the tower map at 16 players and not td.
-- **A td guest costs 0.4–0.5 CPU-s/s natively,** which a browser's single WASM thread
-  cannot hold; the tower map costs a guest about 0.1.
+- **Protocol, not simulation, bounds the map limit.** Before row reuse, td with 16
+  players needed about 1.4 cores of a host, 86% of it protocol: rounds of capture,
+  seal and index cost about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies
+  most of the rest; the fleet pod's 500m CPU held the tower map at 16 players and
+  not td. Row reuse takes about nine tenths off the seal and index, which leaves the
+  capture under the lock the largest part of a round.
+- **A td guest cost 0.4–0.5 CPU-s/s natively before row reuse,** more than a
+  browser's single WASM thread holds; the tower map cost a guest about 0.1.
 - **Bandwidth is quadratic before it is anything else.** Epoch and owner-sync fan-out
   is 85% of the tower host's egress at 16 players; at td whole bodies come close.
 - **The live lock is held by the O(E) capture and comparison** before any projection,
@@ -823,20 +818,19 @@ it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
 
 ### Open
 
-2. **Presentation is clipped, not wrong.** A terminal smaller than the session's
-   map shows less of the map. It does not produce a different world or a
-   misplaced cursor: `applyMapLatch` installs the session bounds before the FSM
-   boot script spawns cursor slot zero, and `LockMap` latches the world shared for
-   the whole run. Remote cursor motion is drawn at simulation arrival ticks, so
-   it steps rather than glides.
+2. **Remote cursors step rather than glide.** Remote cursor motion is drawn at
+   simulation arrival ticks, and nothing interpolates between them. A terminal
+   smaller than the session's map is a viewport the camera scrolls after the local
+   cursor, not a different world or a misplaced cursor: `applyMapLatch` installs
+   the session bounds before the FSM boot script spawns cursor slot zero, and
+   `LockMap` latches the world shared for the whole run.
 
    *To see the remainder:* `-serve :7777 -size 200x60`, then join from an 80x24
-   terminal. The view is a correct 80x24 window onto a 200x60 world; every cursor
-   is where the authority says it is. What is missing is a windowed composite that
-   scrolls and optional presentation interpolation, both of which are presentation
-   work independent of simulation ordering. If a *wrong* cursor position is ever
-   observed across terminal sizes, that is a regression in the map latch and not
-   this item.
+   terminal. The view is an 80x24 viewport the camera scrolls over the 200x60
+   world, and every cursor is where the authority says it is. What is missing is
+   optional presentation interpolation, which is presentation work independent of
+   simulation ordering. If a *wrong* cursor position is ever observed across
+   terminal sizes, that is a regression in the map latch and not this item.
 
 3. **Cross-platform float drift is repaired live but not in replay.** A correction
    carries every shared component whole, float fields included, and a delta is
@@ -972,13 +966,13 @@ second is elected instead.
 
 ## 10. Where this came from
 
-This section is the record of the decision, condensed from the 2026-08-30
-desynchronisation diagnosis it replaces. It is history and the option space, not a
-description of the runtime; §1–§9 are that.
+This section records why the protocol has its shape: the incident that prompted
+it, the options it was chosen against, and the patterns it draws on. It describes
+no runtime; §1–§9 do.
 
 ### 10.1 The incident
 
-One instance's log, `vif-log-260830-192013.jsonl`, over 2,186 ticks:
+One instance's log of a session on 2026-08-30, over 2,186 ticks:
 
 | First reported tick | First category | Outcome in the trace |
 |---:|---|---|

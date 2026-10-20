@@ -16,7 +16,8 @@ The modules it requires:
 | `github.com/lixenwraith/color` | RGB/palette values and blend functions. |
 | `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing, and genetics persistence. |
 | `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
-| `golang.org/x/sys`, `x/term` | Indirect platform/terminal support. |
+| `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window, with cgo off. |
+| `golang.org/x/sys`; `x/term` (indirect) | The desktop window's Unix calls; terminal support for the terminal module. |
 
 Audio sends PCM to optional host commands; see [Audio](audio.md) for runtime
 backend choices. A compiler, module download access, and a terminal are enough
@@ -49,7 +50,7 @@ make dev       # generated code + race-enabled debug build
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
-| `verify` | Generate, test, vet, and compile full/`novlog`/audio-free/headless/WASM/Windows variants. |
+| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, and vet and test the `android` module (§5). |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
@@ -61,7 +62,10 @@ make dev       # generated code + race-enabled debug build
 | `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
 | `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
-| `clean` | Remove `bin/`. |
+| `android` | Build the debug APK as `bin/vif-debug.apk`, first naming any JDK or Android SDK piece missing. |
+| `android-install` | Install `bin/vif-debug.apk` on the device `adb` sees. |
+| `android-toolchain` | Install what `android` needs, asking first ([android/README.md](../android/README.md#build)). |
+| `clean` | Remove `bin/` and the Android build directories. |
 
 `TAGS` appends build tags to each `cmd/vif` build and `PORT` changes the WASM
 server port. `GO` names the toolchain command (on FreeBSD, the versioned package
@@ -484,14 +488,16 @@ A change behind a build constraint also builds that target:
 
 `make verify`, `go test ./...`, `go vet ./...` and `script/test.sh all` are sweeps
 the project owner runs, not per-change steps. `make verify` regenerates, runs
-`go test -race ./...`, builds `./...` plain and under `novlog`, `vif_noaudio` and
-`vif_headless`, tests `./internal/...` under `vif_noaudio` and the manifest and
-system suites under `vif_headless`, `cmd/vif` under both, cross-builds `js/wasm` and
-`windows/amd64` (`novlog vif_noaudio`), fails if the headless command imports the
-renderer or audio implementation or the browser command the audio implementation,
-and runs `go vet ./...`. It does not execute a Windows artifact or a real
-terminal/audio backend; Windows is played by hand, not a supported release target,
-and its known issues are in [Build profiles §4](multi-platform.md#4-platform-matrix).
+`go test -race ./...`, builds `./...` plain, with cgo off and under `novlog`,
+`vif_noaudio`, `vif_headless` and `vif_nogui`, tests `./internal/...` under
+`vif_noaudio` and the manifest and system suites under `vif_headless`, `cmd/vif`
+under both, vets and tests the `android` module, tests `pkg/window` with cgo off,
+cross-builds `js/wasm` and `windows/amd64` (`novlog vif_noaudio`), fails if the
+headless command imports the renderer or audio implementation, and runs
+`go vet ./...` and the `vif_gui` vet of `pkg/window` and `cmd/vif`. It does not
+execute a Windows artifact or a real terminal/audio backend; Windows is played by
+hand, not a supported release target, and its known issues are in [Build profiles
+§4](multi-platform.md#4-platform-matrix).
 
 Tests cover `cmd/vif`, `cmd/soundlab`, the headless/replay application harness
 (seeded soak, mutation, bisect, reset, journal density, replay, operator-state
@@ -589,6 +595,7 @@ terminal/audio smoke tests.
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
 | `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
 | Windows amd64 | Experimental | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as a zip that plays in a terminal, with the known issues in [Build profiles §4](multi-platform.md#4-platform-matrix). |
+| Android | Native target, a debug-signed APK | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` cell drawer and `AudioTrack`; the wad as its system root ([android/README.md](../android/README.md)). |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification; no 32-bit target compiles. |
 
 ### WASM host
@@ -608,8 +615,8 @@ picture, slower on a large grid.
 On a touch-first screen (phone, tablet) a tap raises no system
 keyboard; a strip along the top toggles it, sends Tab (and Esc while it is up) and
 goes fullscreen where the browser can. Neither the strip nor the keyboard refits
-the grid, so only the page resizing (a rotation, a window, fullscreen) crops the
-solo map. Before launch it maps
+the grid; the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch,
+or Ctrl and the wheel) do, and a solo map follows. Before launch it maps
 `window.VIF_ARGS` and repeated `arg` query parameters into the program's argv; a
 site that renames the files says so with `data-wasm`, `data-worker` and
 `data-exec` on the script element
@@ -622,7 +629,7 @@ Copy the directory; do not rewrite a path in it.
 
 The browser build does not perform native config-root discovery for `scenario.toml`,
 keymap, content, audio overrides, or logs. Embedded assets make it playable;
-audio and logging compile out. Browser JavaScript cannot open the framed TCP
+logging compiles out. Browser JavaScript cannot open the framed TCP
 socket used by native `-join`, so a browser joins over the session's `wss://`
 route instead — the page's own WebSocket wrapped as a `net.Conn` — and `-host`,
 `-serve` and a `host:port` target fail validation. Arguments can select embedded

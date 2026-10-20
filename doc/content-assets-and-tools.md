@@ -312,7 +312,7 @@ narrower validation or experimental dependencies.
 | Authored TOML | `internal/content/toml.go` |
 | Selection cursor | `internal/content/cursor.go` |
 | Service/resolution | `internal/service/adapter_content.go`, `internal/resource/resolve.go`, `internal/paths` |
-| Embedded assets | `internal/asset/asset.go`, its `scenario`, `content`, `input`, `audio` and `bot` directories, `vif.toml`, `version.txt`, `splash_font.go` |
+| Embedded assets | `internal/asset/asset.go`, its `scenario`, `content`, `input`, `audio`, `bot` and `font` directories, `font.go`, `vif.toml`, `version.txt`, `splash_font.go` |
 | Pattern conversion | `internal/pattern/pattern.go` |
 | Image open and spawn | `internal/system/wall.go` through `internal/service/adapter_file.go` |
 | Image codec | `pkg/ascimage` |

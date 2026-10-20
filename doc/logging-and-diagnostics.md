@@ -253,7 +253,7 @@ greps for rather than enumerating every refusal.
 | `participant evicted as too slow` / `participant evicted for what its link sends` | WARN | `peer`, `late_per_s`, `bytes_per_s`, `window` / `peer`, `bytes_per_s`, `carried`, `window` | the authority's slow and ingress policies (multi-player.md §3.5) |
 | `authority handed off` / `authority lost; succession opened` | WARN | `term`, `authority`, `predecessor`, `roster`, `evidence_tick`, `local` / `peer`, `term`, `local` | `Authority` |
 | `authoring under a new term` / `following a new authority` / `continuing locally` | WARN / INFO / WARN | `term`, `seeded_from_tick`, `have_baseline` / `term`, `authority` / `held_term`, `contested_term`, `lost`, `reason` | the successor; every other survivor; a survivor left playing alone, with no reachable successor or under a pinned authority |
-| `uncommitted crossings dropped at handoff` | INFO | `crossings` | a guest following a new authority |
+| `uncommitted crossings resent at handoff` | INFO | `crossings`, `dropped` | a guest resending to the new authority the crossings no authority committed (`NetworkSystem.ResendUncommitted`); `dropped` are those past one frame, which the next correction takes back |
 | `join installed the session world` | INFO | `tick`, `run`, `stage_us`, `commit_us` | `App.JoinSessionAt` |
 | `mid-run participant admitted` / `join caught up` | INFO | `peer`, `slot`, `snapshot_tick`, `bytes` / `held_frames`, `caught_up_ticks`, `tick`, `lag_ticks` | the authority's mid-run gate; the joiner once its catch-up closes |
 | `session parked` / `session ended` | INFO | `tick`, plus `expires_in` or `restart_in` / `phase`, `reason`, `guests`, `address` | the `-serve` loop |

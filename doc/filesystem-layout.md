@@ -26,6 +26,7 @@ wad/                            internal/asset/
 ├── content/    typing corpus    ├── input/     default keymap
 └── image/      .vifimg assets   ├── audio/     sound and music banks
                                  ├── bot/       shipped bot graphs
+                                 ├── font/      cell font atlas
                                  ├── vif.toml   default settings
                                  ├── version.txt source-archive stamp
                                  └── splash_font.go
@@ -97,12 +98,11 @@ the checkout first. A resource absent from every root uses the embedded fallback
 An explicit scenario directory means one whose entry is directly at
 `<directory>/scenario.toml`. A named scenario is searched under
 `scenario/<name>/` in root priority order. An explicit content file pins delivery to that file. For a wall
-image, an existing absolute or relative path is explicit; otherwise the event's
-path is a logical name below each root's `image/` directory, and it may include
-nested directories but not `..`. New configurations should use a logical name or
-an absolute path; the relative-path check remains for compatibility. Missing
-explicit paths or names other than the built-in `main` are errors; absent
-discovered overrides are normal.
+image, the event's path is a logical name below each root's `image/` directory,
+opened only as a regular file there; it may include nested directories but not
+`..`, and a host path, absolute or relative, is never opened, since the scenario
+naming it may have come from a peer. Missing explicit paths or names other than
+the built-in `main` are errors; absent discovered overrides are normal.
 
 `-d` bypasses scenario and content discovery only, and refuses `-s` and `-f`.
 Keymap, audio and bot-graph overrides remain local participant preferences and
@@ -199,8 +199,8 @@ roots and nothing else; systems do not open host paths directly.
 carries no specs or patterns of its own: `internal/parameter.BuiltinSounds` and
 `BuiltinPatterns` parse the embedded banks and the audio service hands them to the
 engine as `AudioConfig.BaseSounds` and `BasePatterns`, which is what keeps `pkg/`
-free of `internal/` imports. Audio-free and browser builds omit those loaders and
-the audio engine.
+free of `internal/` imports. Audio-free builds omit those loaders and the audio
+engine.
 
 A `js/wasm` build performs no host-directory discovery, so it remains playable
 from the embedded scenario, content, and keymap, and as a guest it is served the

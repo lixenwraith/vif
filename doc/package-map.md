@@ -51,17 +51,17 @@ must refuse hits sets a ward status combat reads, rather than calling combat.
 
 ```mermaid
 flowchart TD
-    Terminal["external terminal module"] --> Input["internal/input"]
+    Presentation["app.Presentation: terminal, window, page or Android view"] --> Input["internal/input"]
     Input --> Mode["internal/mode"]
     Mode --> World["internal/engine World"]
     World --> Renderers["internal/render/renderer"]
     Renderers --> Buffer["internal/render"]
-    Buffer --> Terminal
+    Buffer --> Presentation
 ```
 
 Input parsing is engine-independent; mode routing is engine-aware. Rendering
 reverses that direction: renderers read engine state and write only to the
-render abstraction, while the orchestrator owns the terminal capability.
+render abstraction, while the orchestrator owns the presentation's surface.
 
 ## 4. Production package responsibilities
 
@@ -69,9 +69,9 @@ render abstraction, while the orchestrator owns the terminal capability.
 |---|---|
 | `cmd/vif` | Flags and the one help table that also renders `doc/vif.6` and the shell completions in `deploy/package/`; `vif.toml` defaults; logging/journal/runtime-capture setup; play/serve/replay/script/bot/check/schema selection; the session request a `-join` site answers; process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, open a journal where a run stands, verify anchor/config identity, and run a dedicated host's lifetime and probe. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, open a journal where a run stands, verify anchor/config identity, and run a dedicated host's lifetime and probe. A presenting run presents through the host's `Presentation` and speakers (`app.Host`), the terminal when the host supplies none. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements. |
 | `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, slow-participant eviction, the answers a relay serves the participants behind it, and the listening port and succession chain a survivor dials down. It holds no world: `converge.Instance` is the whole of what it asks the run for, and every method on it takes the world lock itself except `CaptureSharedLocked`, which `TickClosed` calls from inside a tick — which is also what lets its own criteria drive it against a stub world instead of a composition root. |
-| `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, built-in sound and music banks, the source-archive version stamp — plus the splash bitmap font. The only package with an `embed` directive. |
+| `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, built-in sound and music banks, the source-archive version stamp — plus the splash bitmap font and the cell font atlas the window, page and Android view draw with. The only package with an `embed` directive. |
 | `internal/component` | Pure ECS component data, enums/masks and per-kind tables; logic over them lives in the owning system (exceptions in [ECS](ecs-and-events.md#4-component-catalog)). Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver `service` orders its lifecycle with and `engine` checks the system graph with, crash and stderr-capture support. |
 | `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking, world copies, the shared-world state and paged delta a capture is built from, the shared-death prediction ledger, and the roster/control re-derivation an install performs over the cursor store. |
@@ -123,9 +123,9 @@ flowchart TD
 | Package | Public purpose | Important coupling |
 |---|---|---|
 | `pkg/ascimage` | Convert images to terminal cells and read/write dual-mode `.vifimg` assets. | External terminal/color types only. The interactive viewer lives in `cmd/ascimage` because it needs the in-repo render buffer. |
-| `pkg/glyph` | Parse the bitmap font atlas and draw a frame of terminal cells into RGBA, changed cells only: the reference drawer of a graphical host. The protocol a drawer in another runtime paints from: the atlas as one texture (`Texture`), frames as the cells changed since the one it holds (`Frames`), and the probe that checks such a drawer against the raster. | External terminal, color and TOML modules only; the atlas comes from the caller (`internal/asset`). |
-| `pkg/window` | A desktop window that draws a cell grid: Xlib, EGL and GLES 2 loaded at run time with purego, keys and pointer posted as terminal events. Built only under `vif_gui` on Linux and FreeBSD. | `pkg/glyph` draws the frame; external terminal module and purego. |
-| `pkg/browser` | A web page as the screen on `js/wasm`: frames handed to the page one at a time as the cells changed since the one it holds, keys, text, the pointer and resizes taken back as terminal events. | `pkg/glyph` encodes the frames; external terminal module and `syscall/js`. The page is `web/`. |
+| `pkg/glyph` | Parse the bitmap font atlas and draw a frame of terminal cells into RGBA, changed cells only: the reference drawer of a graphical host. The protocol a drawer in another runtime paints from: the atlas as one texture (`Texture`), frames as the cells changed since the one it holds (`Frames`), and the probe that checks such a drawer against the raster. | External terminal, color and TOML modules and `pkg/vmath` only; the atlas comes from the caller (`internal/asset`). |
+| `pkg/window` | A desktop window that draws a cell grid: Xlib, EGL and GLES 2 loaded at run time with purego, keys and pointer posted as terminal events. Built on Linux and FreeBSD; `cmd/vif` links it unless `vif_nogui` or `vif_headless`, and `vif_gui` opens it by default. | `pkg/glyph` draws the frame; external terminal module and purego. |
+| `pkg/browser` | A web page as the screen and speakers on `js/wasm`: frames handed to the page one at a time as the cells changed since the one it holds, the mixer's PCM posted to the page (`Speaker`), keys, text, the pointer and resizes taken back as terminal events. | `pkg/glyph` encodes the frames; external terminal module and `syscall/js`. The page is `web/`. |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the sound bank* are injected; the package ships no specs and imports nothing under `internal/`. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | Core package uses the standard library only; its default seed restates `vmath.Golden64` rather than importing it. |
@@ -208,6 +208,7 @@ The practical dependency rules are:
 | `lixenwraith/toml` | content, FSM and std, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the allocator | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
+| `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
 duplicating version strings that would become stale.

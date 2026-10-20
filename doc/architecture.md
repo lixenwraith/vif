@@ -18,7 +18,7 @@ cross-platform lockstep guarantee.
 flowchart TD
     Player["Player"] --> App["vif application"]
     Author["Scenario or content author"] --> App
-    App --> Terminal["Terminal or browser terminal"]
+    App --> Presentation["Terminal, desktop window, browser page or Android view"]
     App --> Audio["System audio process or sink"]
     App --> Files["TOML, text, logs, and optional WAV files"]
     App <--> Peers["Other vif instances, directly or through the fleet allocator"]
@@ -38,7 +38,7 @@ flowchart TD
     App --> Converge["internal/converge: authority protocol"]
     App --> Journal["internal/journal: deterministic run streams"]
     App --> Runtime["World, scheduler, FSM, input router, bots"]
-    App --> IO["Service hub: files, terminal, content, audio, network"]
+    App --> IO["Service hub: files, presentation, content, audio, network"]
     Runtime --> Presentation["Render orchestrator and renderers"]
     Runtime --> Libraries["audio, navigation, vmath, physics, genetics"]
 ```
@@ -53,7 +53,7 @@ The main architectural planes are:
 | Interaction | `internal/input`, `internal/mode`, `internal/bot` | Parse terminal events, or step a bot graph, into semantic intents and apply them under the world lock. |
 | Authority and convergence | `internal/converge`, `internal/snapshot` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. `converge` reads and writes the live world only through the seam the composition root supplies; `snapshot` is the capture wire model and comparison surface. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
-| Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
+| Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the presentation's surface. |
 | I/O boundaries | `internal/service`, `internal/content`, `internal/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed TCP or WebSocket sessions. |
 | Supervision and diagnostics | `internal/lifecycle`, `internal/probe`, `internal/vlog`, `internal/status`, `internal/prof` | An allocated session's lifetime and `/health`/`/metrics` endpoint; the log sink, metric registry, flight recorder and profiler. |
 | Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, link pacing, TOML macros, WebSocket framing, and terminal-image conversion. |
@@ -66,10 +66,10 @@ See [Package map](package-map.md) for the medium-level dependency view.
 
 | Shape | I/O and presentation | Clock/owner |
 |---|---|---|
-| `ModePlay` | files, terminal, content, audio, and optional host/join networking, at startup or mid-run; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
+| `ModePlay` | files, presentation, content, audio, and optional host/join networking, at startup or mid-run; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
 | `ModeHeadless` | files and content; caller supplies geometry and events; authored scripts and bots may add host/join networking | manual clock advanced by a harness, `journal.ScriptDriver` or `bot.Driver` |
-| `ModeReplay` | files, terminal, content, audio; recorded input and geometry | manual clock advanced by `journal.ReplayDriver` |
-| `ModeScript` | files, terminal, content, audio, and the same optional host/join networking as a headless script; scripted input and geometry | manual clock advanced by `journal.ScriptDriver` or a watched `bot.Driver`, wall-paced |
+| `ModeReplay` | files, presentation, content, audio; recorded input and geometry | manual clock advanced by `journal.ReplayDriver` |
+| `ModeScript` | files, presentation, content, audio, and the same optional host/join networking as a headless script; scripted input and geometry | manual clock advanced by `journal.ScriptDriver` or a watched `bot.Driver`, wall-paced |
 | `ModeServer` | files, content, and network only; `-size` or first-guest geometry, no input, no local cursor | pause/rate-aware clock; scheduler and event goroutines, as `ModePlay` |
 
 The `Presents`, `Driven`, `Serves`, `OwnsGeometry`, `OwnsInput`, and `Audio`
@@ -89,24 +89,24 @@ full terminal guest retain one session identity. See
 
 Interactive play has four cooperating execution paths:
 
-1. The main goroutine selects terminal events, an input ticker, and a render
-   ticker. It routes input and performs terminal output.
+1. The main goroutine selects presentation events, an input ticker, and a render
+   ticker. It routes input and flushes frames to the presentation.
 2. The scheduler goroutine advances simulation at a nominal 50 ms fixed step,
    gated by frame readiness.
 3. The event goroutine settles queued events between simulation ticks and
    remains active while the game is paused.
-4. Service-owned goroutines poll the terminal, mix audio, or, in a session,
+4. Service-owned goroutines poll the presentation, mix audio, or, in a session,
    perform network I/O.
 
 ```mermaid
 flowchart TD
-    Input["Terminal event or input timer"] --> Intent["Input machine and mode router"]
+    Input["Presentation event or input timer"] --> Intent["Input machine and mode router"]
     Intent --> Queue["MPSC game-event queue"]
     Queue --> Settle["FSM first, then registered handlers"]
     Settle --> World["Locked ECS world"]
     World --> Systems["Priority-ordered system update"]
     World --> Render["Priority-ordered render pass"]
-    Render --> Flush["Terminal flush outside world lock"]
+    Render --> Flush["Surface flush outside world lock"]
 ```
 
 Queued events are not simply processed once per frame. The scheduler performs
@@ -161,7 +161,7 @@ are per-value atomics; the periodic snapshot and the flight-recorder sample
 both run after the world lock is released, so asynchronous logging can never
 extend a critical section. See [Logging and diagnostics](logging-and-diagnostics.md).
 
-Terminal output and other potentially blocking I/O happen outside the world
+Presentation output and other potentially blocking I/O happen outside the world
 lock. Code reachable from `mode.Router.Handle` must not acquire that lock again,
 because it is already held by the application and is non-reentrant.
 
@@ -253,14 +253,15 @@ See [HFSM and configuration](fsm-and-configuration.md) and the detailed
 
 ## 7. Input as a semantic boundary
 
-The external terminal emits keys, mouse reports, resize notifications, and
-close/error events. `internal/input.Machine` converts them into pure-data
-`Intent` values. It understands counts, operators, motions, character waits,
-`g` prefixes, search/command text, overlays, and macro control. Printable keys a
-scenario captures outrank that grammar and become key presses, which the router
-crosses as input events a button can show. It has no ECS dependency. A bot's
-graph produces the same intents, keys and mouse alike, and reaches the world
-through the same router ([Bots](bots.md)).
+The presentation emits keys, mouse reports, resize notifications, and
+close/error events in the terminal module's vocabulary, whether it is the
+terminal or a window, page or view posting them. `internal/input.Machine`
+converts them into pure-data `Intent` values. It understands counts, operators,
+motions, character waits, `g` prefixes, search/command text, overlays, and macro
+control. Printable keys a scenario captures outrank that grammar and become key
+presses, which the router crosses as input events a button can show. It has no
+ECS dependency. A bot's graph produces the same intents, keys and mouse alike,
+and reaches the world through the same router ([Bots](bots.md)).
 
 `internal/mode.Router` is the authoritative owner of game mode. Under the world
 lock, it interprets intents against the current map and components, requests
@@ -272,11 +273,11 @@ See [Input and modes](input-and-modes.md).
 
 ## 8. Rendering boundary
 
-Renderers read ECS state but never write directly to the terminal. The
+Renderers read ECS state but never write directly to the presentation. The
 application first snapshots time, dimensions, camera, and the local cursor into
 a value `RenderContext`. The orchestrator then clears a `RenderBuffer`, locks
 the world, runs renderers in stable priority order, unlocks, finalizes
-compositing, and flushes cells through the external terminal module.
+compositing, and flushes cells to the presentation's `render.Surface`.
 
 The buffer supports foreground/background-specific blending, write masks,
 dirty/touched tracking, deferred background overlays, TrueColor and palette
@@ -302,8 +303,8 @@ and `wav:path` sinks support automation and offline capture. Missing backends
 degrade to silence rather than aborting gameplay.
 
 Audio service assembly is both mode- and build-dependent: an audio-capable build
-registers it for play, replay, and presented scripts; headless, audio-free, and
-browser builds do not contain the service or full audio systems. Small null systems
+registers it for play, replay, and presented scripts; headless and audio-free
+builds do not contain the service or full audio systems. Small null systems
 consume local audio events and publish the unavailable state so telemetry and
 system identity remain stable. Event IDs live in the lightweight `pkg/audio/model`
 package, so omitting the engine does not change protocol types. Terminal playback
@@ -358,9 +359,10 @@ These boundaries belong to separately maintained modules.
 | `github.com/lixenwraith/toml` | Parsing, reflection-based decoding, and encoding used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored scripts, audio specs, commands, and optional genetic persistence. |
 | `github.com/lixenwraith/color` | RGB values, interpolation, blend operations, grayscale, and palette-related color manipulation. |
 | `github.com/lixenwraith/log` | Buffered asynchronous structured-log sink, rotation, retention, and transport below `internal/vlog`. |
+| `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window (`pkg/window`), with cgo off. |
 
-`golang.org/x/sys` and `golang.org/x/term` are indirect dependencies of this
-module graph. vif has no application CGO requirement, although external
+`golang.org/x/sys` serves the window's Unix calls, and `golang.org/x/term` is an
+indirect dependency. vif has no application CGO requirement, although external
 audio executables or an OSS device are runtime dependencies when sound is
 enabled.
 
@@ -368,26 +370,29 @@ enabled.
 
 The primary build targets Linux and FreeBSD terminals. On those builds the same
 composition root supports interactive play, deterministic harnesses, authored
-headless scripts and bots, and terminal journal playback. `make headless` builds
-the `vif_headless` profile, which removes terminal presentation and audio code
-while keeping TCP and WebSocket sessions. It is what the K3s fleet runs: one
-`-serve` container per session, which `tool/vif-allocator` creates on request and
-routes joins to ([Session fleet](kubernetes-fleet.md)). A headless script or bot
-has no terminal or audio, but may attach the network service with `-host`/`-join`.
+headless scripts and bots, and terminal journal playback, and it carries the
+desktop window too, which `-g` opens (`make gui` opens it by default).
+`android/` builds an APK running the game in-process behind a `SurfaceView`.
+`make headless` builds the `vif_headless` profile, which removes terminal
+presentation and audio code while keeping TCP and WebSocket sessions. It is what
+the K3s fleet runs: one `-serve` container per session, which
+`tool/vif-allocator` creates on request and routes joins to ([Session
+fleet](kubernetes-fleet.md)). A headless script or bot has no terminal or audio,
+but may attach the network service with `-host`/`-join`.
 
-A WASM build runs in a Worker behind the bundled page, which draws its cell frames
-on a WebGL canvas (`pkg/browser`), uses embedded
-FSM/content/keymap assets without host-directory discovery, and omits audio and
-logging. It cannot open a socket, so it joins a session over the same-origin route
-`wss://<site>/vif/ws/<session>`: the page's own WebSocket wrapped as a `net.Conn`,
-carrying the protocol unchanged through the allocator to the session's game port.
-`-host`, `-serve` and a join by anything but a WebSocket link are rejected,
-because a browser can bind nothing and dial nothing else. The page can supply
-ordinary arguments through `Go.argv`, but external `wad/` content needs an
-HTTP-backed resource provider rather than a file argument. The Makefile also
-contains an explicitly experimental Windows cross-build. The exact profile and
-browser extension strategy are in
-[Build profiles and platform boundaries](multi-platform.md).
+A WASM build runs in a Worker behind the bundled page, which draws its cell
+frames on a WebGL canvas (`pkg/browser`), uses embedded FSM/content/keymap
+assets without host-directory discovery, streams its sound to an AudioWorklet on
+the page, and omits logging. It cannot open a socket, so it joins a session over
+the same-origin route `wss://<site>/vif/ws/<session>`: the page's own WebSocket
+wrapped as a `net.Conn`, carrying the protocol unchanged through the allocator
+to the session's game port. `-host`, `-serve` and a join by anything but a
+WebSocket link are rejected, because a browser can bind nothing and dial nothing
+else. The page can supply ordinary arguments through `Go.argv`, but external
+`wad/` content needs an HTTP-backed resource provider rather than a file
+argument. The Makefile also contains an explicitly experimental Windows
+cross-build. The exact profile and browser extension strategy are in [Build
+profiles and platform boundaries](multi-platform.md).
 
 A trusted-peer game of up to `parameter.MaxPlayers` cursors, over framed TCP or
 WebSocket, is exposed through `-host`, `-join`, `-serve` and `-players`, and in a

@@ -104,9 +104,8 @@ extracts, still needs its trust, origin and cache policy decided.
 `make install` stages everything a package review expects: the binary, the system
 config root, the licence, `man6/vif.6`, a `Terminal=true` desktop entry whose
 second action plays in the window (`vif -g`), scalable and symbolic icons, and
-bash, zsh and fish completion. What remains is a
-stable tagged release: tag a verified nightly commit `v0.1.0` and publish the
-draft §2 creates.
+bash, zsh and fish completion. What remains is
+[the first stable release](todo.md#promote-a-nightly-build-to-the-first-stable-release).
 
 ## 4. Arch (AUR)
 
