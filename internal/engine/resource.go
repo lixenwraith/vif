@@ -492,6 +492,45 @@ func (pr *PlayerResource) Reconcile(pos component.PositionComponent, own bool) {
 	}
 }
 
+// PredictionState is the D-18 queue's cells, oldest first, for a journal's opening to
+// carry: they are in flight, and land in its replay by record. The pointer placement
+// not yet crossed is not among them, since the run crosses it next tick, by record too.
+type PredictionState struct {
+	Cells  []component.PositionComponent `json:"cells,omitempty"`
+	Shed   int                           `json:"shed"`
+	Latest component.PositionComponent   `json:"latest"`
+}
+
+// Prediction reads the D-18 queue
+func (pr *PlayerResource) Prediction() PredictionState {
+	q := &pr.prediction
+	s := PredictionState{Shed: q.shed, Latest: q.latest}
+	for i := range q.count {
+		s.Cells = append(s.Cells, q.cells[(q.head+i)%len(q.cells)])
+	}
+	return s
+}
+
+// SetPrediction resumes a D-18 queue beside the pending pointer placement; cells past
+// the ring, which a file may hold, are shed as a sweep that outran it would be.
+func (pr *PlayerResource) SetPrediction(s PredictionState) {
+	q := cursorPrediction{shed: max(s.Shed, 0), latest: s.Latest, pointer: pr.prediction.pointer}
+	if over := len(s.Cells) - len(q.cells); over > 0 {
+		q.shed += over
+		s.Cells = s.Cells[over:]
+	}
+	q.count = copy(q.cells[:], s.Cells)
+	pr.prediction = q
+}
+
+// KeepPointer takes prior's pointer placement not yet crossed when this roster still
+// drives the cursor prior did, for a write of a world that left it out.
+func (pr *PlayerResource) KeepPointer(prior *PlayerResource) {
+	if pr.Entity != 0 && pr.Entity == prior.Entity {
+		pr.prediction.pointer = prior.prediction.pointer
+	}
+}
+
 // DropPrediction abandons every outstanding prediction, so the local cell reads
 // the store again. Paired with anything that rebinds or retires the local cursor:
 // a queue outliving the entity it described would place its successor.

@@ -65,6 +65,7 @@ type captureFields struct {
 	Paused      bool   `json:"paused"`
 	Off         string `json:"off"` // system names, comma-separated
 	Slot        uint64 `json:"slot"`
+	Own         []byte `json:"own"`
 }
 
 type digestFields struct {
@@ -241,7 +242,7 @@ func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
 	c := event.JournalCapture{
 		JSeq: f.JSeq, CSeq: f.CSeq, Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Participant: f.Participant, Authority: f.Authority, Body: f.Body,
-		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Slot: uint8(f.Slot),
+		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Slot: uint8(f.Slot), Own: f.Own,
 	}
 	if f.Off != "" {
 		c.Off = strings.Split(f.Off, ",")

@@ -1,7 +1,8 @@
 package system
 
 import (
-	"slices"
+	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -346,9 +347,13 @@ func (s *FuseSystem) completeFusion(f pendingFusion) {
 	}
 }
 
-func (s *FuseSystem) CopyState() any { return slices.Clone(s.fusions) }
+func (s *FuseSystem) SaveLocal() ([]byte, error) { return json.Marshal(s.fusions) }
 
-func (s *FuseSystem) RestoreState(v any) error {
-	s.fusions = append(s.fusions[:0], v.([]pendingFusion)...)
+func (s *FuseSystem) LoadLocal(data []byte) error {
+	var fusions []pendingFusion
+	if err := json.Unmarshal(data, &fusions); err != nil {
+		return fmt.Errorf("fuse: %w", err)
+	}
+	s.fusions = append(s.fusions[:0], fusions...)
 	return nil
 }

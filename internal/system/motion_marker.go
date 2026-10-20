@@ -1,7 +1,8 @@
 package system
 
 import (
-	"slices"
+	"encoding/json"
+	"fmt"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -290,20 +291,23 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 	}
 }
 
-type motionMarkerState struct {
-	base      []core.Entity
-	positions []vmath.Point
-	colored   []core.Entity
+type motionMarkerLocal struct {
+	Base      []core.Entity `json:"base,omitempty"`
+	Positions []vmath.Point `json:"positions,omitempty"`
+	Colored   []core.Entity `json:"colored,omitempty"`
 }
 
-func (s *MotionMarkerSystem) CopyState() any {
-	return motionMarkerState{slices.Clone(s.baseMarkers), slices.Clone(s.basePositions), slices.Clone(s.coloredMarkers)}
+func (s *MotionMarkerSystem) SaveLocal() ([]byte, error) {
+	return json.Marshal(motionMarkerLocal{Base: s.baseMarkers, Positions: s.basePositions, Colored: s.coloredMarkers})
 }
 
-func (s *MotionMarkerSystem) RestoreState(v any) error {
-	c := v.(motionMarkerState)
-	s.baseMarkers = append(s.baseMarkers[:0], c.base...)
-	s.basePositions = append(s.basePositions[:0], c.positions...)
-	s.coloredMarkers = append(s.coloredMarkers[:0], c.colored...)
+func (s *MotionMarkerSystem) LoadLocal(data []byte) error {
+	var l motionMarkerLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("motion_marker: %w", err)
+	}
+	s.baseMarkers = append(s.baseMarkers[:0], l.Base...)
+	s.basePositions = append(s.basePositions[:0], l.Positions...)
+	s.coloredMarkers = append(s.coloredMarkers[:0], l.Colored...)
 	return nil
 }

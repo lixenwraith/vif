@@ -2,6 +2,7 @@ package engine
 
 import (
 	"maps"
+	"slices"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -146,4 +147,47 @@ func (c *WorldCopy) LoadStreams(r *RandResource) []string {
 		unknown = append(unknown, r.LoadStreams(core.Domain(d), states)...)
 	}
 	return unknown
+}
+
+// PlayerSide is what this instance's own player holds in the world's resources: the
+// camera, the action rate and gesture tracking, the timed effects, the player
+// domain's streams and the cells its input has in flight. A journal's opening
+// carries it beside the player world.
+type PlayerSide struct {
+	CameraX    int               `json:"camera_x"`
+	CameraY    int               `json:"camera_y"`
+	Pointer    bool              `json:"pointer"`
+	APM        APMState          `json:"apm"`
+	Explosions []ExplosionCenter `json:"explosions,omitempty"`
+	Pulses     []PulseEffect     `json:"pulses,omitempty"`
+	View       ViewResource      `json:"view"`
+	Streams    []StreamState     `json:"streams,omitempty"`
+	Prediction PredictionState   `json:"prediction"`
+}
+
+// CapturePlayerSide reads it. Caller MUST hold updateMutex.
+func (w *World) CapturePlayerSide() PlayerSide {
+	r := w.Resources
+	return PlayerSide{
+		CameraX: r.Config.CameraX, CameraY: r.Config.CameraY, Pointer: r.Config.pointer,
+		APM:        r.Game.State.APM(),
+		Explosions: slices.Clone(r.Transient.ExplosionBacking[:r.Transient.ExplosionCount]),
+		Pulses:     slices.Clone(r.Transient.PulseBacking[:r.Transient.PulseCount]),
+		View:       *r.View,
+		Streams:    r.Rand.SaveStreams(core.DomainPlayer),
+		Prediction: r.Player.Prediction(),
+	}
+}
+
+// InstallPlayerSide writes it, reporting any stream this world never issued.
+// Caller MUST hold updateMutex.
+func (w *World) InstallPlayerSide(s PlayerSide) []string {
+	r := w.Resources
+	r.Config.CameraX, r.Config.CameraY, r.Config.pointer = s.CameraX, s.CameraY, s.Pointer
+	r.Game.State.SetAPM(s.APM)
+	r.Transient.ExplosionCount = copy(r.Transient.ExplosionBacking[:], s.Explosions)
+	r.Transient.PulseCount = copy(r.Transient.PulseBacking[:], s.Pulses)
+	*r.View = s.View
+	r.Player.SetPrediction(s.Prediction)
+	return r.Rand.LoadStreams(core.DomainPlayer, s.Streams)
 }

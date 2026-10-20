@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
 	"sync/atomic"
 	"time"
@@ -403,18 +405,21 @@ func (s *GlyphSystem) placementRange(lineLength int) (rowLo, rowHi, colLo, colHi
 	return rowLo, rowHi, colLo, colHi
 }
 
-type glyphState struct {
-	census    glyphCensus
-	nextSpawn time.Duration
-	rate      float64
+type glyphLocal struct {
+	Census    glyphCensus   `json:"census"`
+	NextSpawn time.Duration `json:"next_spawn"`
+	Rate      float64       `json:"rate"`
 }
 
-func (s *GlyphSystem) CopyState() any {
-	return glyphState{s.census, s.nextSpawnTimer, s.rateMultiplier}
+func (s *GlyphSystem) SaveLocal() ([]byte, error) {
+	return json.Marshal(glyphLocal{Census: s.census, NextSpawn: s.nextSpawnTimer, Rate: s.rateMultiplier})
 }
 
-func (s *GlyphSystem) RestoreState(v any) error {
-	c := v.(glyphState)
-	s.census, s.nextSpawnTimer, s.rateMultiplier = c.census, c.nextSpawn, c.rate
+func (s *GlyphSystem) LoadLocal(data []byte) error {
+	var l glyphLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("glyph: %w", err)
+	}
+	s.census, s.nextSpawnTimer, s.rateMultiplier = l.Census, l.NextSpawn, l.Rate
 	return nil
 }

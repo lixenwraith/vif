@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -210,9 +212,11 @@ func (s *ShieldSystem) Update() {
 	})
 }
 
-func (s *ShieldSystem) CopyState() any { return s.lastHitSound }
+func (s *ShieldSystem) SaveLocal() ([]byte, error) { return json.Marshal(s.lastHitSound) }
 
-func (s *ShieldSystem) RestoreState(v any) error {
-	s.lastHitSound = v.(time.Time)
+func (s *ShieldSystem) LoadLocal(data []byte) error {
+	if err := json.Unmarshal(data, &s.lastHitSound); err != nil {
+		return fmt.Errorf("shield: %w", err)
+	}
 	return nil
 }

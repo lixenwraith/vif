@@ -12,7 +12,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 25
+const JournalSchema = 26
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -124,6 +124,7 @@ type JournalCapture struct {
 	Paused bool
 	Off    []string
 	Slot   uint8
+	Own    []byte // the run's own side, which the boot would otherwise decide too
 }
 
 // JournalDigest is the world a run held after a tick's body, before anything

@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -532,9 +534,11 @@ func (s *SoftCollisionSystem) calculateFlockingAccel(
 	return dirX * accelMag, dirY * accelMag, true
 }
 
-func (s *SoftCollisionSystem) CopyState() any { return s.sharedRoot }
+func (s *SoftCollisionSystem) SaveLocal() ([]byte, error) { return json.Marshal(s.sharedRoot) }
 
-func (s *SoftCollisionSystem) RestoreState(v any) error {
-	s.sharedRoot = v.(uint64)
+func (s *SoftCollisionSystem) LoadLocal(data []byte) error {
+	if err := json.Unmarshal(data, &s.sharedRoot); err != nil {
+		return fmt.Errorf("soft_collision: %w", err)
+	}
 	return nil
 }

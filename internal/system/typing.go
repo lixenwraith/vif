@@ -1,7 +1,8 @@
 package system
 
 import (
-	"maps"
+	"encoding/json"
+	"fmt"
 
 	"math"
 	"sync/atomic"
@@ -448,16 +449,21 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 	}
 }
 
-type typingState struct {
-	typed  map[core.Entity]uint64
-	streak [parameter.MaxPlayers]int64
+type typingLocal struct {
+	Typed  map[core.Entity]uint64      `json:"typed,omitempty"`
+	Streak [parameter.MaxPlayers]int64 `json:"streak"`
 }
 
-func (s *TypingSystem) CopyState() any { return typingState{maps.Clone(s.typed), s.currentStreak} }
+func (s *TypingSystem) SaveLocal() ([]byte, error) {
+	return json.Marshal(typingLocal{Typed: s.typed, Streak: s.currentStreak})
+}
 
-func (s *TypingSystem) RestoreState(v any) error {
-	c := v.(typingState)
-	s.typed, s.currentStreak = maps.Clone(c.typed), c.streak
+func (s *TypingSystem) LoadLocal(data []byte) error {
+	var l typingLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("typing: %w", err)
+	}
+	s.typed, s.currentStreak = l.Typed, l.Streak
 	if s.typed == nil {
 		s.typed = make(map[core.Entity]uint64)
 	}

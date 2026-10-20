@@ -2,6 +2,8 @@ package system
 
 import (
 	"cmp"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"sync/atomic"
 
@@ -1262,24 +1264,46 @@ func (e *drainCacheEntry) killPos() (int, int) {
 	return e.pos.X, e.pos.Y
 }
 
-type drainState struct {
-	pending                []pendingDrainSpawn
-	order                  int
-	cooldownUntil, backoff uint64
-	pausedAll              bool
-	pausedFor              []core.Entity
+type drainLocal struct {
+	Pending       []drainSpawnLocal `json:"pending,omitempty"`
+	Order         int               `json:"order"`
+	CooldownUntil uint64            `json:"cooldown_until"`
+	Backoff       uint64            `json:"backoff"`
+	PausedAll     bool              `json:"paused_all"`
+	PausedFor     []core.Entity     `json:"paused_for,omitempty"`
 }
 
-func (s *DrainSystem) CopyState() any {
-	return drainState{slices.Clone(s.pendingSpawns), s.nextSpawnOrder, s.spawnCooldownUntil, s.spawnBackoff,
-		s.pausedAll, slices.Clone(s.pausedFor)}
+type drainSpawnLocal struct {
+	X       int    `json:"x"`
+	Y       int    `json:"y"`
+	Tick    uint64 `json:"tick"`
+	Started bool   `json:"started"`
 }
 
-func (s *DrainSystem) RestoreState(v any) error {
-	c := v.(drainState)
-	s.pendingSpawns, s.nextSpawnOrder = append(s.pendingSpawns[:0], c.pending...), c.order
-	s.spawnCooldownUntil, s.spawnBackoff = c.cooldownUntil, c.backoff
+func (s *DrainSystem) SaveLocal() ([]byte, error) {
+	l := drainLocal{Order: s.nextSpawnOrder, CooldownUntil: s.spawnCooldownUntil, Backoff: s.spawnBackoff,
+		PausedAll: s.pausedAll, PausedFor: s.pausedFor}
+	for _, p := range s.pendingSpawns {
+		l.Pending = append(l.Pending, drainSpawnLocal{X: p.targetX, Y: p.targetY, Tick: p.scheduledTick, Started: p.materializeStarted})
+	}
+	return json.Marshal(l)
+}
+
+func (s *DrainSystem) LoadLocal(data []byte) error {
+	var l drainLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("drain: %w", err)
+	}
 	// Into its own backing: a hold past its capacity reads as a leak
-	s.pausedAll, s.pausedFor = c.pausedAll, append(s.pausedFor[:0], c.pausedFor...)
+	if len(l.PausedFor) > cap(s.pausedFor) {
+		return fmt.Errorf("drain: %d pause holds, more than the %d cursors that can hold one", len(l.PausedFor), cap(s.pausedFor))
+	}
+	s.pendingSpawns = s.pendingSpawns[:0]
+	for _, p := range l.Pending {
+		s.pendingSpawns = append(s.pendingSpawns, pendingDrainSpawn{
+			targetX: p.X, targetY: p.Y, scheduledTick: p.Tick, materializeStarted: p.Started})
+	}
+	s.nextSpawnOrder, s.spawnCooldownUntil, s.spawnBackoff = l.Order, l.CooldownUntil, l.Backoff
+	s.pausedAll, s.pausedFor = l.PausedAll, append(s.pausedFor[:0], l.PausedFor...)
 	return nil
 }

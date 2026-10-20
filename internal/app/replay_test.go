@@ -552,6 +552,54 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 	}
 }
 
+// TestAJournalOpenedMidRunDoesNotPerturb drives one input sequence twice, opening a
+// journal mid-run on one of them, and requires the two to stand alike at the opening
+// and on every tick after: the opening carries the run's own side, so nothing a
+// fresh boot would have decided for it shows, then or later.
+func TestAJournalOpenedMidRunDoesNotPerturb(t *testing.T) {
+	t.Parallel()
+	plain, journaled := mustHeadless(t, 0x7E5, 120, 40), mustHeadless(t, 0x7E5, 120, 40)
+	defer plain.Close()
+	defer journaled.Close()
+	rng := vmath.NewFastRand(9)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	alike := func(when string) {
+		t.Helper()
+		want, got := plain.SnapshotSimulation(), journaled.SnapshotSimulation()
+		if i, _, _, ok := snapshot.FirstDiff(want, got); ok {
+			t.Fatalf("%s the runs differ at line %d:\n%s", when, i, strings.Join(snapshot.Diff(want, got, 12), "\n"))
+		}
+	}
+	drive := func(ticks int, check bool) {
+		for range ticks {
+			var in []*input.Intent
+			switch rng.Intn(6) {
+			case 0, 1:
+				in = append(in, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			case 2:
+				in = append(in, &input.Intent{Type: input.IntentFireMain, Count: 1})
+			case 3:
+				in = append(in, intentModeSwitch(input.ModeTargetInsert), intentTextChar(rune('a'+rng.Intn(26))), intentEscape())
+			}
+			for _, a := range []*App{plain, journaled} {
+				inject(t, a, in...)
+				a.Tick(1)
+			}
+			if check {
+				alike(fmt.Sprintf("at tick %d", plain.Position().Tick))
+			}
+		}
+	}
+	drive(300, false)
+	alike("before the opening")
+	journaled.cfg.JournalSink = journal.NewCapture()
+	if _, err := journaled.openJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	alike("at the opening")
+	drive(400, true)
+}
+
 // replayMatches replays rec on a fresh run, which must reproduce every digest rec
 // holds and, on each tick nothing was recorded on, the surface want holds for it.
 func replayMatches(t *testing.T, rec *journal.Capture, want map[event.Stamp][]string, surface func(*App) []string) {

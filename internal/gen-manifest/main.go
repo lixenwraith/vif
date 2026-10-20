@@ -25,6 +25,9 @@ type ComponentDef struct {
 	Domain string
 }
 
+// HoldsPlayer reports whether the store can hold a player-domain entity
+func (c ComponentDef) HoldsPlayer() bool { return c.Domain != "shared" }
+
 // DomainConst renders the core.Domain constant, empty when the bit attaches in either
 func (c ComponentDef) DomainConst() string {
 	switch c.Domain {
@@ -1065,23 +1068,9 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 	s.Created = w.createdCount[core.DomainShared].Load()
 	s.Destroyed = w.destroyedCount[core.DomainShared].Load()
 
-	for _, e := range w.Positions.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Positions.GetPosition(e); ok {
-			s.Positions = append(s.Positions, StoreEntry[component.PositionComponent]{Entity: e, Value: v})
-		}
-	}
+	s.Positions = captureRows(w.Positions.dense, w.Positions.entities, core.DomainShared)
 {{- range .Components }}
-	for _, e := range w.Components.{{ .Field }}.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.{{ .Field }}.GetComponent(e); ok {
-			s.{{ .Field }} = append(s.{{ .Field }}, StoreEntry[component.{{ .Type }}]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
+	s.{{ .Field }} = captureRows(w.Components.{{ .Field }}.dense, w.Components.{{ .Field }}.entities, core.DomainShared)
 {{- end }}
 	return s
 }
@@ -1111,6 +1100,55 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	// The spatial index is derived, not shipped: SetPosition above rebuilt it.
 	// Its gauges are published on the status cadence, so republish them here —
 	// they describe what was just installed, and they are in the compared surface.
+	w.Positions.PublishTelemetry()
+}
+
+// PlayerWorldState is this instance's player domain, by store, beside its placements
+// and allocator counters: what a journal's opening carries so its replay plays on as
+// the run's own participant. Unindexed names the placements a full cell held out,
+// which a re-insertion would otherwise take in.
+type PlayerWorldState struct {
+	NextEntity uint64 ` + "`json:\"next_entity\"`" + `
+	Created    int64  ` + "`json:\"created\"`" + `
+	Destroyed  int64  ` + "`json:\"destroyed\"`" + `
+
+	Positions []StoreEntry[component.PositionComponent] ` + "`json:\"positions,omitempty\"`" + `
+	Unindexed []core.Entity                             ` + "`json:\"unindexed,omitempty\"`" + `
+{{- range .Components }}{{ if .HoldsPlayer }}
+	{{ .Field }} []StoreEntry[component.{{ .Type }}] ` + "`json:\"{{ .Field | lower }},omitempty\"`" + `
+{{- end }}{{ end }}
+}
+
+// CapturePlayerWorld reads every player entity's components in store order.
+//
+// Caller MUST hold updateMutex.
+func (w *World) CapturePlayerWorld() PlayerWorldState {
+	s := PlayerWorldState{
+		NextEntity: w.nextEntityID[core.DomainPlayer],
+		Created:    w.createdCount[core.DomainPlayer].Load(),
+		Destroyed:  w.destroyedCount[core.DomainPlayer].Load(),
+	}
+	s.Positions, s.Unindexed = w.Positions.capturePlayer()
+{{- range .Components }}{{ if .HoldsPlayer }}
+	s.{{ .Field }} = captureRows(w.Components.{{ .Field }}.dense, w.Components.{{ .Field }}.entities, core.DomainPlayer)
+{{- end }}{{ end }}
+	return s
+}
+
+// InstallPlayerWorld replaces this world's player domain with a capture under the
+// IDs it was read with, which a system's own state names. Written after the shared
+// world, so each cell's player run follows its final shared one.
+//
+// Caller MUST hold updateMutex.
+func (w *World) InstallPlayerWorld(s PlayerWorldState) {
+	w.DestroyDomainEntities(core.DomainPlayer)
+	w.Positions.installPlayer(s.Positions, s.Unindexed)
+{{- range .Components }}{{ if .HoldsPlayer }}
+	installPlayerRows(w.Components.{{ .Field }}, s.{{ .Field }})
+{{- end }}{{ end }}
+	w.nextEntityID[core.DomainPlayer] = max(s.NextEntity, 1)
+	w.createdCount[core.DomainPlayer].Store(s.Created)
+	w.destroyedCount[core.DomainPlayer].Store(s.Destroyed)
 	w.Positions.PublishTelemetry()
 }
 

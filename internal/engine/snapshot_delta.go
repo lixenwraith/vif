@@ -300,3 +300,56 @@ func reconcilePositions(p *Position, entries []StoreEntry[component.PositionComp
 		p.SetPosition(en.Entity, en.Value)
 	}
 }
+
+// captureRows reads one domain's rows of a store in dense order, detached from it.
+func captureRows[T any](dense []T, entities []core.Entity, d core.Domain) []StoreEntry[T] {
+	var out []StoreEntry[T]
+	for i, e := range entities {
+		if e.Domain() == d {
+			out = append(out, StoreEntry[T]{Entity: e, Value: DetachSnapshotValue(dense[i])})
+		}
+	}
+	return out
+}
+
+// installPlayerRows writes a capture's player rows into a store in capture order,
+// passing over any naming a shared entity, which only the shared world writes.
+func installPlayerRows[T any](s *Store[T], entries []StoreEntry[T]) {
+	for _, en := range entries {
+		if en.Entity.Domain() == core.DomainPlayer {
+			s.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+		}
+	}
+}
+
+// capturePlayer reads the player placements in dense order, and the ones the
+// spatial index holds out of their cell.
+func (p *Position) capturePlayer() ([]StoreEntry[component.PositionComponent], []core.Entity) {
+	placed := captureRows(p.dense, p.entities, core.DomainPlayer)
+	var out []core.Entity
+	for _, en := range placed {
+		if !p.grid.containsEntityAt(en.Entity, en.Value.X, en.Value.Y) {
+			out = append(out, en.Entity)
+		}
+	}
+	return placed, out
+}
+
+// installPlayer places captured player entities in capture order, holding out of
+// the spatial index the ones out names, as the capture's cells did.
+func (p *Position) installPlayer(placed []StoreEntry[component.PositionComponent], out []core.Entity) {
+	held := make(map[core.Entity]struct{}, len(out))
+	for _, e := range out {
+		held[e] = struct{}{}
+	}
+	for _, en := range placed {
+		if en.Entity.Domain() != core.DomainPlayer {
+			continue
+		}
+		if _, ok := held[en.Entity]; ok && !p.HasPosition(en.Entity) {
+			p.insert(en.Entity, en.Value)
+			continue
+		}
+		p.SetPosition(en.Entity, en.Value)
+	}
+}

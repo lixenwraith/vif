@@ -911,22 +911,22 @@ interval, the content source, pin and fingerprint, and geometry.
 ### Opening mid-run
 
 `:journal start` (Diagnostics → Replay journal) opens a journal where the run
-stands, solo, hosting or joined, and the run plays on. Its replay boots afresh
-from the anchor (non-zero `start_run` or `start_tick`), and no written world
-carries this instance's player domain, so the run takes on what that replay will
-hold. The opening builds the boot as a muted headless twin, writes the live shared
-world over it as the journal's first `capture`, flagged `opens` and carrying the
-operator state (`mode`, `paused`, the toggled systems that are `off`, the `slot`
-input follows), and the run adopts the twin's result before the journal attaches.
-The shared world stays as it was, this instance's own cursors keep their
-owner-authored cells, since the opening is this instance's own world, and input
-stays on its slot; the local player domain (own shots, effects, glyphs), telemetry
-counters, APM and the corpus feed start fresh, as a joiner's do. The transport,
-audio and music keep their own state. A start is refused while a new game is
-starting, between a reset's cleanup and its boot spawn. A replay writes the
-opening as any written world, binds its slot, takes up the operator state and
-engages its crossing barrier at once, as the run's was; `app.loadJournal` refuses
-a mid-run journal whose files lack the opening.
+stands, solo, hosting or joined, and the run plays on as it was. Its replay boots
+afresh from the anchor (non-zero `start_run` or `start_tick`), so the journal's
+first `capture`, flagged `opens`, carries everything that boot would otherwise
+decide: the live shared world, the operator state (`mode`, `paused`, the toggled
+systems that are `off`, the `slot` input follows) and the run's own side (`own`).
+That is its player domain under the same entity IDs, the camera, APM and gesture
+tracking, timed effects, the player domain's streams, the cells its input has in
+flight, each system's own state (`engine.LocalStateSaver`), the corpus position,
+the event tallies and every status cell. The opening writes it over a muted
+headless twin of the boot as a replay does, and the run adopts the twin's result,
+itself, before the journal attaches; only the transport, audio and music keep
+their own state. A start is refused while a new game is starting, between a
+reset's cleanup and its boot spawn. A replay writes the opening as any written
+world, binds its slot, writes the own side over what that settle derived, takes up
+the operator state and engages its crossing barrier at once, as the run's was;
+`app.loadJournal` refuses a mid-run journal whose files lack the opening.
 
 `:journal stop` closes the journal where the run stands, writing its `end` record
 and releasing the file; a later `:journal start` opens another. With a slot,

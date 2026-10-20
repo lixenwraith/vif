@@ -640,24 +640,26 @@ func (s *GeneticSystem) publishTypeFit() {
 	s.statTypeFit.Store(string(buf))
 }
 
-type geneticCopy struct {
-	saved    []byte
-	seedRoot uint64
-	err      error
+type geneticLocal struct {
+	Saved    json.RawMessage `json:"saved"`
+	SeedRoot uint64          `json:"seed_root"`
 }
 
-// CopyState is the capture plus the root this game's registrations seed from,
+// SaveLocal is the capture plus the root this game's registrations seed from,
 // which a joiner shares with its authority and a copy across a reset does not.
-func (s *GeneticSystem) CopyState() any {
+func (s *GeneticSystem) SaveLocal() ([]byte, error) {
 	saved, err := s.SaveShared()
-	return geneticCopy{saved: saved, seedRoot: s.seedRoot, err: err}
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(geneticLocal{Saved: saved, SeedRoot: s.seedRoot})
 }
 
-func (s *GeneticSystem) RestoreState(v any) error {
-	c := v.(geneticCopy)
-	if c.err != nil {
-		return c.err
+func (s *GeneticSystem) LoadLocal(data []byte) error {
+	var l geneticLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("genetic: %w", err)
 	}
-	s.seedRoot = c.seedRoot
-	return s.LoadShared(c.saved)
+	s.seedRoot = l.SeedRoot
+	return s.LoadShared(l.Saved)
 }

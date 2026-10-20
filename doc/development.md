@@ -100,7 +100,7 @@ input enum declarations. `go generate ./internal/manifest/...` runs
 |---|---|---|
 | `internal/engine/component_store_gen.go` | manifest components | typed component fields, mask bits, initialization, per-entity/batch removal/wipe |
 | `internal/engine/component_domain_gen.go` | `ComponentDef.Domain` | `componentDomains`, the replication-domain audit table |
-| `internal/engine/snapshot_world_gen.go` | manifest components | the shared-world capture, its delta, and the install/reconcile passes over every store |
+| `internal/engine/snapshot_world_gen.go` | manifest components | the shared-world capture, its delta, the install/reconcile passes over every store, and the player-world capture a journal's opening carries |
 | `internal/engine/snapshot_pages_gen.go` | manifest components | the canonical page rows a correction manifest is hashed over, and the writer one repaired page is applied through |
 | `internal/manifest/build_gen.go` | manifest systems | core constructors, active-name list, profiles, and snapshot declarations |
 | `internal/manifest/build_audio_gen.go` | systems with the `audio` capability | audio-capable constructors and names |

@@ -3,9 +3,12 @@ package app
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
+	"github.com/lixenwraith/vif/internal/content"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -38,6 +41,10 @@ func ownedStatusKey(key string) bool {
 	group, _, _ := strings.Cut(key, ".")
 	return slices.Contains(ownedSystems, group)
 }
+
+// ownedStream reports a stream one of ownedSystems draws, which stays this
+// instance's own and which a build without audio never issues.
+func ownedStream(s engine.StreamState) bool { return slices.Contains(ownedSystems, s.Label) }
 
 // initJournal opens the replay journal a run starts with and installs it on the
 // event queue: for the life of the run it records every event of a journaled origin
@@ -262,10 +269,18 @@ func (a *App) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Rec
 }
 
 // openingLocked is the capture a journal opens with: the shared world the run stands
-// in, written against twin's settled boot, with the operator state beside it.
-// Caller MUST hold updateMutex.
+// in, written against twin's settled boot, with the operator state and the run's own
+// side beside it. Caller MUST hold updateMutex.
 func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 	cap, err := a.captureSharedLocked()
+	if err != nil {
+		return event.JournalCapture{}, err
+	}
+	own, err := a.ownStateLocked()
+	if err != nil {
+		return event.JournalCapture{}, err
+	}
+	ownBody, err := snapshot.EncodeJSON(own)
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
@@ -293,15 +308,88 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 		Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
 		Participant: a.world.LocalParticipant(), Authority: cap.Header.Authority, Body: body,
 		Opens: true, Mode: a.ctx.GetMode(), Paused: a.ctx.TimeCtl.IsPaused(), Off: off,
-		Slot: a.world.Resources.Player.LocalSlot(),
+		Slot: a.world.Resources.Player.LocalSlot(), Own: ownBody,
 	}, nil
+}
+
+// ownState is the run's own side, which a journal's opening carries beside the shared
+// world so its replay plays on as this participant rather than as a fresh boot of
+// one: the player world, the player's resources, each system's own state, where the
+// corpus walk stands, the event tallies, and every status cell but the ownedSystems'.
+type ownState struct {
+	World   engine.PlayerWorldState      `json:"world"`
+	Side    engine.PlayerSide            `json:"side"`
+	Systems []snapshot.SystemStateRecord `json:"systems,omitempty"`
+	Content content.CursorState          `json:"content"`
+	Events  event.QueueTelemetry         `json:"events"`
+	Status  snapshot.StatusState         `json:"status"`
+}
+
+// ownStateLocked reads the run's own side. Caller MUST hold updateMutex.
+func (a *App) ownStateLocked() (ownState, error) {
+	own := ownState{
+		World:   a.world.CapturePlayerWorld(),
+		Side:    a.world.CapturePlayerSide(),
+		Content: service.MustGet[*service.ContentService](a.hub, "content").CursorState(),
+		Events:  a.world.Resources.Event.Queue.Telemetry(),
+		Status:  a.statusCellsLocked(a.statusKeysLocked(func(k string) bool { return !ownedStatusKey(k) })),
+	}
+	own.Side.Streams = slices.DeleteFunc(own.Side.Streams, ownedStream)
+	for _, sys := range a.world.Systems() {
+		s, ok := sys.(engine.LocalStateSaver)
+		if !ok || slices.Contains(ownedSystems, sys.Name()) {
+			continue
+		}
+		data, err := s.SaveLocal()
+		if err != nil {
+			return ownState{}, fmt.Errorf("%s: %w", sys.Name(), err)
+		}
+		own.Systems = append(own.Systems, snapshot.SystemStateRecord{System: sys.Name(), Data: data})
+	}
+	return own, nil
+}
+
+// installOwnLocked writes the run's own side over a replay's opening world, after
+// the settle that bound its input, so nothing that settle derived for the boot's
+// player stands in for it. Caller MUST hold updateMutex.
+func (a *App) installOwnLocked(own ownState) error {
+	a.world.InstallPlayerWorld(own.World)
+	if unknown := a.world.InstallPlayerSide(own.Side); len(unknown) > 0 {
+		return fmt.Errorf("RNG streams this replay does not issue: %v", unknown)
+	}
+	savers := make(map[string]engine.LocalStateSaver, len(own.Systems))
+	for _, sys := range a.world.Systems() {
+		if s, ok := sys.(engine.LocalStateSaver); ok && !slices.Contains(ownedSystems, sys.Name()) {
+			savers[sys.Name()] = s
+		}
+	}
+	for _, rec := range own.Systems {
+		s, ok := savers[rec.System]
+		if !ok {
+			return fmt.Errorf("no system %q carries its own state", rec.System)
+		}
+		if err := s.LoadLocal(rec.Data); err != nil {
+			return err
+		}
+		delete(savers, rec.System)
+	}
+	// One left without a record would play on from the boot's state, unseen
+	if len(savers) > 0 {
+		return fmt.Errorf("the opening carries no state for %v", slices.Sorted(maps.Keys(savers)))
+	}
+	if err := service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(own.Content); err != nil {
+		return err
+	}
+	a.world.Resources.Event.Queue.SetTelemetry(own.Events)
+	a.installStatusLocked(own.Status)
+	return nil
 }
 
 // adoptLocked takes on twin's simulated state where its driver d stands, as a
 // replay copy restored from a checkpoint does, and refuses a run that does not then
 // hold twin's world. What stays is this instance's own: the terminal's colour, the
-// wall clock and pacing, the ownedSystems with their status, and every counter a
-// replay does not compare. Caller MUST hold updateMutex; twin's is taken here.
+// wall clock and pacing, the pointer placement it crosses next tick, and the
+// ownedSystems with their streams and status. Caller MUST hold updateMutex.
 func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 	var (
 		c   *checkpoint
@@ -311,13 +399,20 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 	if err != nil {
 		return err
 	}
+	if err := service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(c.content); err != nil {
+		return err
+	}
 	cfg := a.world.Resources.Config
 	color, palette, wall := cfg.ColorMode, cfg.ConsolePalette, a.world.Resources.Time.RealTime
+	held := *a.world.Resources.Player
+	kept := slices.DeleteFunc(a.world.Resources.Rand.SaveStreams(core.DomainPlayer), func(s engine.StreamState) bool { return !ownedStream(s) })
 	a.world.CopyIn(c.world)
 	cfg.ColorMode, cfg.ConsolePalette, a.world.Resources.Time.RealTime = color, palette, wall
+	a.world.Resources.Player.KeepPointer(&held)
 	if unknown := c.world.LoadStreams(a.world.Resources.Rand); len(unknown) > 0 {
 		return fmt.Errorf("RNG streams this run does not issue: %v", unknown)
 	}
+	a.world.Resources.Rand.LoadStreams(core.DomainPlayer, kept)
 	savers := a.sharedStateSaversLocked()
 	for _, rec := range c.systems {
 		if slices.Contains(ownedSystems, rec.System) {
@@ -331,10 +426,8 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 		if slices.Contains(ownedSystems, sys.Name()) {
 			continue
 		}
-		if cp, ok := sys.(engine.StateCopier); ok {
-			if err := cp.RestoreState(c.local[sys.Name()]); err != nil {
-				return fmt.Errorf("adopt %s: %w", sys.Name(), err)
-			}
+		if err := loadLocalState(sys, c.local[sys.Name()]); err != nil {
+			return fmt.Errorf("adopt %s: %w", sys.Name(), err)
 		}
 	}
 	if err := a.scheduler.ImportFSM(c.scheduler.FSM(), false); err != nil {
@@ -347,7 +440,6 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 			t.SetEnabled(c.toggles[sys.Name()])
 		}
 	}
-	service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(c.content)
 	c.status = snapshot.StatusState{
 		Ints:    slices.DeleteFunc(c.status.Ints, func(s snapshot.IntCell) bool { return ownedStatusKey(s.Key) }),
 		Bools:   slices.DeleteFunc(c.status.Bools, func(s snapshot.BoolCell) bool { return ownedStatusKey(s.Key) }),
