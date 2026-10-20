@@ -2,8 +2,9 @@ description = "Simon: listen to the notes, then repeat them with keys 1-4 or by 
 
 # Four buttons on keys 1-4, lowest note on 1, so the game plays with eyes closed:
 # every press and every shown note sounds its button's tone. A level adds one note
-# to the sequence, up to 100. The glyph field drifts behind the buttons. Heat stays
-# full with its system off; energy reads the level.
+# to the sequence, up to 100. The glyph field drifts behind the buttons. Energy reads
+# the level; heat is the clock an ember burns from the first turn, and special fire
+# spends it too.
 
 # Room for four buttons ten cells square, each holding its key's splash digit
 [map]
@@ -11,7 +12,7 @@ min_width = 50
 min_height = 20
 
 [systems]
-only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio", "cursor", "energy"]
+only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio", "cursor", "energy", "heat"]
 
 [regions.simon]
 initial = "Intro"
@@ -27,10 +28,10 @@ background = true
 # --- Macros ---
 
 [macros.Say]
-doc = "Status message; each {} in it reads variable `var`."
-params = { message = "string", var = "string" }
-defaults = { var = "level" }
-body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" }, payload_vars = { message = "${var}" } }
+doc = "Status message after `delay_ms`; each {} in it reads variable `var`."
+params = { message = "string", var = "string", delay_ms = "int" }
+defaults = { var = "level", delay_ms = 0 }
+body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" }, payload_vars = { message = "${var}" }, delay_ms = "${delay_ms}" }
 
 [macros.Cue]
 doc = "Play the named sound after `delay_ms`."
@@ -52,7 +53,7 @@ body = { action = "EmitEvent", event = "EventButtonSpawnRequest", payload = { ke
 [macros.Show]
 doc = "Light button `button`, sounding its note, after `delay_ms`."
 params = { button = "int", delay_ms = "int" }
-body = { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = "${button}", duration_ms = 400 }, delay_ms = "${delay_ms}" }
+body = { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = "${button}", duration_ms = 250 }, delay_ms = "${delay_ms}" }
 
 [macros.Note]
 doc = "color = note i of this game's sequence, a pure function of the game and i."
@@ -91,10 +92,19 @@ body = { trigger = "EventInputPressed", internal = true, guard = "And", guard_ar
     { macro = "Note" },
 ] }
 
+[macros.Miss]
+doc = "In Repeat, a press of button `k` that Correct did not take loses the game with `k` at fault."
+params = { k = "int", key = "string" }
+body = { trigger = "EventInputPressed", target = "Wrong", guard = "And", guard_args = { guards = [
+    { name = "PayloadStringEquals", args = { field = "key", value = "${key}" } },
+    { name = "VarCompareVar", args = { var_a = "i", op = "lt", var_b = "level" } },
+] }, actions = [{ action = "SetVar", payload = { name = "fault", value = "${k}" } }] }
+
 [macros.Score]
-doc = "Set the cursor this instance drives to full heat and the level as energy."
-params = {}
-body = { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 100, energy = 0 }, payload_vars = { energy = "level" } }
+doc = "Arm the cursor this instance drives with `heat`, the level as energy, and the ember while variable ember is set."
+params = { heat = "int" }
+defaults = { heat = 100 }
+body = { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = "${heat}", energy = 0, ember = false }, payload_vars = { energy = "level", ember = "ember" } }
 
 [macros.Heading]
 doc = "Drift towards `rad` when variable heading is `idx`."
@@ -103,49 +113,57 @@ body = { action = "EmitEvent", event = "EventDriftStart", payload = { direction 
 
 # --- Simon ---
 
-# Buttons ascend in pitch left to right: the A major notes of the classic game. The
-# legend plays through with keys closed, after the reset's board is drawn.
-[states.Intro]
+# Keys open with the board: a press cuts the legend short and starts the first game,
+# which the bell and a flash open
+[states.Start]
 parent = "Root"
+on_enter = [{ macro = "Take" }]
+on_exit = [{ macro = "Free" }]
+transitions = [
+    { trigger = "EventInputPressed", target = "NewGame", actions = [
+        { macro = "Flash", color = { r = 255, g = 255, b = 255 }, ms = 300 },
+        { macro = "Cue", sound = "bell" },
+    ] },
+]
+
+# Buttons ascend in pitch left to right: the A major notes of the classic game. The
+# legend runs up them once, after the reset's board is drawn.
+[states.Intro]
+parent = "Start"
 on_enter = [
     { macro = "Button", key = "1", color = { r = 230, g = 200, b = 0 }, sound = "tone_cs4" },
     { macro = "Button", key = "2", color = { r = 0, g = 90, b = 255 }, sound = "tone_e4" },
     { macro = "Button", key = "3", color = { r = 220, g = 0, b = 0 }, sound = "tone_a4" },
     { macro = "Button", key = "4", color = { r = 0, g = 200, b = 0 }, sound = "tone_e5" },
-    { macro = "Show", each = { button = [1, 2, 3, 4], delay_ms = [400, 900, 1400, 1900] } },
+    { macro = "Show", each = { button = [1, 2, 3, 4], delay_ms = [300, 500, 700, 900] } },
     { macro = "Say", message = "Simon: listen, then repeat the notes" },
 ]
 transitions = [
-    { trigger = "Tick", target = "Ready", guard = "StateTimeExceeds", guard_args = { ms = 2600 } },
+    { trigger = "Tick", target = "Ready", guard = "StateTimeExceeds", guard_args = { ms = 1200 } },
 ]
 
 [states.Ready]
-parent = "Root"
+parent = "Start"
 on_enter = [
-    { macro = "Take" },
     { macro = "Say", message = "Press 1-4 or click a button to start" },
 ]
-on_exit = [{ macro = "Free" }]
-transitions = [
-    { trigger = "EventInputPressed", target = "NewGame" },
-]
 
-# A snapshot that lands mid-game moves the level without replaying its Score, so the
-# game re-arms it as energy whenever the level it entered with changes
+# A snapshot that lands mid-game moves the level and the ember without replaying their
+# Score, so the game re-arms whenever either it entered with changes
 [states.Game]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 100, energy = 0 }, payload_vars = { energy = "level" }, reconcile = true },
+    { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 100, energy = 0, ember = false }, payload_vars = { energy = "level", ember = "ember" }, reconcile = true },
 ]
 
+# After a lost game the falling decay and the lifting grayout open the next one, so it
+# has no cue of its own
 [states.NewGame]
 parent = "Game"
 on_enter = [
     { action = "IncrementVar", payload = { name = "game" } },
     { action = "SetVar", payload = { name = "level", value = 1 } },
     { macro = "Score" },
-    { macro = "Flash", color = { r = 255, g = 255, b = 255 }, ms = 300 },
-    { macro = "Cue", sound = "bell" },
     { macro = "Say", message = "New game" },
 ]
 transitions = [
@@ -153,7 +171,8 @@ transitions = [
 ]
 
 # One note every note_ticks, the first half a second after the message; Turn starts
-# tail_ticks after the last note starts
+# tail_ticks after the last note starts. Each note refills the heat, however long the
+# sequence plays.
 [states.Listen]
 parent = "Game"
 on_enter = [
@@ -179,6 +198,7 @@ transitions = [
         { macro = "Note" },
         { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 0 }, payload_vars = { button = "color", duration_ms = "lit_ms" } },
         { action = "IncrementVar", payload = { name = "i" } },
+        { macro = "Score" },
     ] },
 ]
 
@@ -194,68 +214,72 @@ transitions = [
     { trigger = "Tick", target = "Repeat", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
-# The buttons light and sound every press themselves; the machine only judges it
+# The buttons light and sound every press themselves; the machine only judges it. The
+# ember lights with the first turn and burns until the game is lost.
 [states.Repeat]
 parent = "Game"
 on_enter = [
     { macro = "Take" },
     { action = "SetVar", payload = { name = "i", value = 0 } },
     { macro = "Note" },
+    { action = "SetVar", payload = { name = "ember", value = 1 } },
+    { macro = "Score" },
     { macro = "Cue", sound = "turn" },
     { macro = "Say", message = "Your turn: repeat the notes" },
 ]
 on_exit = [{ macro = "Free" }]
 transitions = [
     { macro = "Correct", each = { k = [1, 2, 3, 4], key = ["1", "2", "3", "4"] } },
-    { trigger = "EventInputPressed", target = "Wrong", guard = "VarCompareVar", guard_args = { var_a = "i", op = "lt", var_b = "level" } },
+    { macro = "Miss", each = { k = [1, 2, 3, 4], key = ["1", "2", "3", "4"] } },
+    { trigger = "EventEmberSpent", target = "Late", guard = "VarCompareVar", guard_args = { var_a = "i", op = "lt", var_b = "level" }, actions = [
+        { action = "CopyVar", payload = { name = "fault", source_var = "color" } },
+    ] },
     { trigger = "Tick", target = "Cleared", guard = "VarCompareVar", guard_args = { var_a = "i", op = "gte", var_b = "level" } },
 ]
 
-# Cues wait out the last pressed tone
+# Cues wait out the last pressed tone; the heat refills at once
 [states.Cleared]
 parent = "Game"
 on_enter = [
     { macro = "Flash", each = { delay_ms = [400, 700, 1000] }, color = { r = 0, g = 255, b = 0 }, ms = 150 },
     { macro = "Cue", sound = "chime", delay_ms = 400 },
     { macro = "Say", message = "Level {} cleared" },
+    { action = "IncrementVar", payload = { name = "level", max = 100 } },
+    { macro = "Score" },
 ]
 transitions = [
-    { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1600 }, actions = [
-        { action = "IncrementVar", payload = { name = "level", max = 100 } },
-        { macro = "Score" },
-    ] },
+    { trigger = "Tick", target = "Listen", guard = "StateTimeExceeds", guard_args = { ms = 1600 } },
 ]
 
-# A lost game grays the field through the buzz and the reveal of the note that was due
+# A lost game puts the ember out, grays the field and turns it to decay circling the
+# button at fault: the one pressed or, out of time, the one due. The due note lights
+# clear of the buzz, and the decay falls away as the next game starts.
 [states.Lost]
 parent = "Game"
 on_enter = [
     { action = "EmitEvent", event = "EventGrayoutStart", reconcile = true },
+    { action = "SetVar", payload = { name = "ember", value = 0 } },
+    { macro = "Score", heat = 0 },
+    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
+    { action = "EmitEvent", event = "EventParticleVortex", payload = { button = 0, duration_ms = 1000 }, payload_vars = { button = "fault" } },
+    { macro = "Cue", sound = "buzz" },
+    { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 550 }, payload_vars = { button = "color" }, delay_ms = 450 },
+    { macro = "Say", message = "The note was {}", var = "color", delay_ms = 450 },
 ]
 on_exit = [
     { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
 ]
+transitions = [
+    { trigger = "Tick", target = "NewGame", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
+]
 
 [states.Wrong]
 parent = "Lost"
-on_enter = [
-    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
-    { macro = "Cue", sound = "buzz" },
-    { macro = "Say", message = "Wrong note: game over at level {}" },
-]
-transitions = [
-    { trigger = "Tick", target = "Reveal", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
-]
+on_enter = [{ macro = "Say", message = "Wrong note: game over at level {}" }]
 
-[states.Reveal]
+[states.Late]
 parent = "Lost"
-on_enter = [
-    { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 800 }, payload_vars = { button = "color" } },
-    { macro = "Say", message = "The note was {}", var = "color" },
-]
-transitions = [
-    { trigger = "Tick", target = "NewGame", guard = "StateTimeExceeds", guard_args = { ms = 1200 } },
-]
+on_enter = [{ macro = "Say", message = "Out of time: game over at level {}" }]
 
 # --- Player: a cursor below the buttons, and a new game on any defeat ---
 # A cursor arriving mid-game reads the level at once rather than at the next one

@@ -451,15 +451,18 @@ entry has a short `description` for scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its
-button lights. Each button plays once before the first game. A level plays the
-sequence, one note longer than the last; after a short pause the player
-repeats it by key or by clicking the buttons. Every note shown or pressed sounds,
-so the game can be played with eyes closed once sound is on (sound starts muted;
-`Ctrl-S` cycles it). A correct press blooms over its button, a cleared level
-flashes green, and a wrong note grays the field and rains decay over it, then plays
-the note that was due before a new game. The level stops rising at 100, and the
-energy cell reads it while heat stays full. Glyphs drift behind the buttons as a
-moving backdrop, and music stays off.
+button lights. The buttons run up once before the first game, and any press cuts
+that short. A level plays the sequence, one note longer than the last; after a
+short pause the player repeats it by key or by clicking the buttons. Every note
+shown or pressed sounds, so the game can be played with eyes closed once sound is
+on (sound starts muted; `Ctrl-S` cycles it). A correct press blooms over its button
+and a cleared level flashes green. From the first turn an ember burns the heat
+down as the turn's clock; each shown note and each cleared level refill it, and
+special fire spends it too. A wrong note or a burnt-out ember loses the game: the
+field grays and turns to decay circling the button at fault, the one pressed or
+the one due, while the due note lights and sounds; the next game starts as the
+decay falls away. The level stops rising at 100 and the energy cell reads it.
+Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 
 ## 11. System inventory
 

@@ -303,15 +303,16 @@ length = 0.45
 source = { kind = "osc", wave = "sine", freq = 880 }
 chain = [{ kind = "decay", attack = 0.004, tau = 0.18 }]
 
-# Wrong note: two detuned low saws, the beating is the razz.
+# Wrong note: two detuned low saws, the beating is the razz. Short, so the note that
+# was due sounds clear of it.
 [[sound]]
 name = "buzz"
-duration = 1.0
+duration = 0.4
 fixed_length = true
 norm = 0.8
 chain = [
   { kind = "lp", freq = 700, q = 0.9 },
-  { kind = "ar", attack = 0.01, release = 0.3 }
+  { kind = "ar", attack = 0.01, release = 0.12 }
 ]
 [[sound.layer]]
 source = { kind = "osc", wave = "saw", freq = 98 }
