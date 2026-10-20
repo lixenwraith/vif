@@ -272,16 +272,13 @@ library copies.
   `internal/system/loot.go`
 - Guide: [Navigation §10](navigation-design.md#10-costs)
 
-A field is computed only for a reader, on a grid moved cell by cell as the walls
-change, a snake head measures every cursor with one search, a wall that opens
-repairs a computed field in place, a drop reads its owner's private group, and a
-route's field is its corridor alone. On td with eight walking cursors and seven
-snake heads a storm tick peaks at 30 ms against 7 ms on average, and no
-wall change computes more than two fields in a tick. What is left is the per-tick
-budget of the design's item 7, if a browser frame still stalls, and its item 6
-when a second footprint tier is wanted. A 2×2 coarse field is not planned: it
-changes the answer, and the shared grid already took the cost it would have
-saved.
+On td with eight walking cursors and seven snake heads a storm tick peaks at 30 ms
+against 6.4 ms on average, and no wall change computes more than two fields in a
+tick. What is left, for a need rather than a measurement: a per-tick field budget
+in canonical group order, if a browser frame still stalls, and a footprint tier
+registry deriving the grids to keep from the live navigators, so a data-driven
+species' footprint costs one row. A 2×2 coarse field is not planned: it changes
+the answer, and the shared grid already took the cost it would have saved.
 
 ### Serve wss from vif's own listener
 
@@ -648,6 +645,16 @@ next recording of that shape says which. The seats' recurring one-page, eight-ce
 repairs are a section of exactly eight rows, `streams` or `systems`, and not the
 storm. If it is inherent, a forced keyframe at the spawn tick lands the snap once and
 early instead of as a repair.
+
+### Split combat telemetry by domain
+
+- Priority: P3
+- Affected files: `internal/system/combat.go`, `internal/status/key.go`
+- Guide: [Domain model §7](domain-design.md#7-current-limits)
+
+Combat's counters mix Shared results with per-instance ones, so two instances'
+Shared combat outcomes do not compare directly. Splitting them is a telemetry
+redesign rather than a domain-boundary fix.
 
 ## Session membership
 

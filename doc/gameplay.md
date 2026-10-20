@@ -374,10 +374,11 @@ between map, viewport, and screen coordinates.
 `EventMazeSpawnRequest` divides the map into maze cells of `cell_width` by
 `cell_height`, carves a maze with open borders, optional braiding and random or
 placed rooms, and fills the remaining cells with walls; a placed room is cleared
-with a margin of one maze cell. Pattern assets can also become wall layouts.
-Navigation then uses either flow fields toward a target or precomputed
-multi-route graphs. More detail is in
-[AI, physics, and evolution](ai-physics-and-evolution.md).
+with a margin of one maze cell. Pattern assets can also become wall layouts. The
+maze generator is in [AI, physics, and
+evolution](ai-physics-and-evolution.md#7-maze-generation) §7. Navigation then
+uses either flow fields toward a target or precomputed multi-route graphs
+([Navigation](navigation-design.md)).
 
 `EnvironmentSystem` owns map-wide gameplay effects rather than rendering
 post-process effects. Its first effect is wind: `EventWindStart` supplies force,

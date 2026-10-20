@@ -12,7 +12,6 @@ import (
 )
 
 // FileSource supplies categorized configuration roots in lookup order.
-// Existing paths remain explicit compatibility overrides.
 type FileSource struct {
 	Roots []string
 }

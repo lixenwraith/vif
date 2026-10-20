@@ -10,11 +10,11 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 
 | Mode | Presents | Driven | Geometry/input owner | Audio | Execution |
 |---|---:|---:|---|---:|---|
-| `ModePlay` | Yes | No | terminal / terminal | If built | `PausableClock`; scheduler and event goroutines |
+| `ModePlay` | Yes | No | presentation / presentation | If built | `PausableClock`; scheduler and event goroutines |
 | `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; a harness, `journal.ScriptDriver`, `bot.Driver`, or `journal.ReplayDriver` verifying a journal invokes ticks and injections; a script or bot in a session attaches network I/O |
 | `ModeReplay` | Yes | Yes | journal / playback controls | If built | `ManualClock`; `journal.ReplayDriver` invokes ticks and injections |
-| `ModeScript` | Yes | Yes | script, or terminal for a watched bot / playback controls | If built | `ManualClock`; `journal.ScriptDriver` or `bot.Driver` invokes ticks and injections; the presented form of a `ModeHeadless` script or bot, network I/O included |
-| `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no terminal and no local cursor |
+| `ModeScript` | Yes | Yes | script, or the presentation for a watched bot / playback controls | If built | `ManualClock`; `journal.ScriptDriver` or `bot.Driver` invokes ticks and injections; the presented form of a `ModeHeadless` script or bot, network I/O included |
+| `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no presentation and no local cursor |
 
 The six predicates in `internal/app/config.go` are the policy boundary:
 `Presents`, `Driven`, `Serves`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly
@@ -319,18 +319,21 @@ The detailed construction order is significant:
 
 1. Normalize and validate the config, resolve the seed (a drawn one is logged)
    and apply any embedder-provided log scope.
-2. Read the scenario, so one that does not resolve fails before the terminal is
-   taken and before the journal anchor names it.
+2. Read the scenario, so one that does not resolve fails before the presentation
+   is taken and before the journal anchor names it.
 3. Initialize the generated event registry. FSM trigger resolution and `:emit`
    depend on it.
-4. Register services by mode and build: terminal for presenting modes; network
-   for native `ModePlay` in every role and for any mode given `-host` or `-join`
-   (a wasm build: a join only); audio when the mode has it; files and content
-   always. A replay copy borrows its lender's terminal and opens no audio.
+4. Register services by mode and build: a presentation for presenting modes, the
+   host's (the desktop window, the browser page, the Android view) or else the
+   terminal ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host));
+   network for native `ModePlay` in every role and for any mode given `-host` or
+   `-join` (a wasm build: a join only); audio when the mode has it; files and
+   content always. A replay copy borrows its lender's presentation and opens no
+   audio.
    `InitAll` then initializes them in deterministic topological order.
 5. Create the world and its RNG, let services contribute typed resources, and
    mark the run session-shared when a network endpoint exists.
-6. Resolve geometry from the terminal or config and create `GameContext` (with
+6. Resolve geometry from the presentation or config and create `GameContext` (with
    `ManualClock` for a driven mode), which initializes the status registry,
    map/camera config, clock, event queue, game state, transient state, empty
    player roster, and target resource.
@@ -346,8 +349,8 @@ The detailed construction order is significant:
     in.
 12. For a presenting mode, construct and priority-sort renderers.
 13. Create the input parser, merge the keymap and build the mode router for
-    semantic injection in every mode; bind terminal mouse control only when the
-    terminal owns simulation input.
+    semantic injection in every mode; bind pointer control only when the
+    presentation owns simulation input.
 14. Create frame synchronization channels and the scheduler, then load the
     scenario into the HFSM, initialize its regions, enqueue their entry actions
     (including the shipped cursor spawn request), and apply global/region system
@@ -370,7 +373,7 @@ only clock.
 | Path | Default interval | Owner | Purpose |
 |---|---:|---|---|
 | Render frame | 16.7 ms (a third of a tick) | main goroutine | Snapshot frame state, render, flush, and release the next simulation tick. |
-| Input tick | 16 ms | main goroutine | Reconcile terminal mouse mode, open the command line after a breakpoint hit, repeat held/automatic fire, and advance macros. |
+| Input tick | 16 ms | main goroutine | Reconcile the presentation's pointer mode, open the command line after a breakpoint hit, repeat held/automatic fire, and advance macros. |
 | Simulation tick | 50 ms | scheduler goroutine | Advance pause-aware game time, FSM, systems, APM, and telemetry. |
 | Event attempt | 4 ms | event goroutine | Settle queued events between simulation ticks, including while paused. |
 | Audio buffer | 50 ms | audio mixer goroutine | Drain audio commands, synthesize/mix the next PCM buffer, and write it. |
@@ -408,7 +411,7 @@ none of it enters a simulation snapshot:
 | `vlog` journal files | one per journal | the front App's, and a seat's that `:journal start <slot>` opened; each closes with its run |
 | `engine.divergentReads` | one warning latch per config key | harmless across Apps |
 | `internal/prof` captures | the process | a profile covers the holder and its seats |
-| signals, terminal, audio, probe | the front App only | seats are headless and stop when their holder halts them |
+| signals, presentation, audio, probe | the front App only | seats are headless and stop when their holder halts them |
 | corpus, scenario, keymap, graph parse | per App | per seat |
 
 ## 4. Play, playback, and authored-script loops
@@ -417,24 +420,24 @@ none of it enters a simulation snapshot:
 
 ```mermaid
 flowchart TD
-    Select["Select signal, terminal, input tick, frame tick"] --> Terminal{"Terminal event?"}
-    Terminal -->|yes| Parse["Parse intent and run router under world lock"]
+    Select["Select signal, presentation, input tick, frame tick"] --> Presentation{"Presentation event?"}
+    Presentation -->|yes| Parse["Parse intent and run router under world lock"]
     Parse --> Settle["Immediate bounded event settling"]
-    Terminal -->|resize| Resize["Push EventScreenResize under the lock, settle, resize render buffer"]
+    Presentation -->|resize| Resize["Push EventScreenResize under the lock, settle, resize render buffer"]
     Select --> Input["Input tick: mouse, repeat fire, macros"]
     Input --> Settle
     Select --> Frame["Snapshot, render, flush, signal frame ready"]
 ```
 
-Terminal key and mouse events flow through the input machine. A complete intent
-is handled under `World.RunSafe`; if it pushed anything, the scheduler settles at
-once so the next frame sees its effects. A pointer placement moves the view at
-once but its cursor move waits for the next tick: `World.PushPointerMove` keeps
-only the newest cell, and `FlushPointerMove` pushes it before each tick and before
-any other journaled push, so placements keep their order and a sweep crosses one
-cell a tick. A resize pushes `EventScreenResize` under the world lock like any
-input, settles it, then resizes the render buffer to the dimensions the handler
-wrote.
+Key and mouse events from the presentation flow through the input machine. A
+complete intent is handled under `World.RunSafe`; if it pushed anything, the
+scheduler settles at once so the next frame sees its effects. A pointer placement
+moves the view at once but its cursor move waits for the next tick:
+`World.PushPointerMove` keeps only the newest cell, and `FlushPointerMove` pushes
+it before each tick and before any other journaled push, so placements keep their
+order and a sweep crosses one cell a tick. A resize pushes `EventScreenResize`
+under the world lock like any input, settles it, then resizes the render buffer to
+the dimensions the handler wrote.
 
 The input ticker is independent of rendering so held-button fire and macro
 playback have stable cadence even when frames fluctuate. Macro intents re-enter
@@ -452,7 +455,8 @@ For a render frame, the application:
    and real time, local-cursor position, map, viewport, and camera data into a
    value `RenderContext` (a hidden wasm page skips this step and the next);
 3. invokes the orchestrator, which separately locks the world while concrete
-   renderers read components, then flushes terminal cells outside the lock;
+   renderers read components, then flushes the cells to the presentation's
+   surface outside the lock;
 4. while paused, stops there: the pause overlay renders but no tick is released;
 5. otherwise, when the previous simulation update is complete, sends a
    non-blocking `frameReady` token.

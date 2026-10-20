@@ -189,9 +189,9 @@ differs, and each behavior's contact rule and collision bookkeeping are its own.
 Resources carry state that has exactly one instance per world or coordinates
 services shared by many systems. `GameContext` creates the world resources, the
 app seeds `Rand` with the run seed, the systems that write `RouteGraph`,
-`Adaptation` and `Genetics` create them, services contribute `Files`, `Content`
-and `Audio`, and `Network` comes from the network service or a transport the app
-attaches.
+`Pursuit`, `Adaptation` and `Genetics` create them, services contribute `Files`,
+`Content` and `Audio`, and `Network` comes from the network service or a
+transport the app attaches.
 
 | Resource | Role |
 |---|---|
@@ -203,6 +203,7 @@ attaches.
 | `Rand` | Root seed and the labelled per-domain RNG streams systems draw in `Init` (D-8). |
 | `Target` | Resolved navigation target groups, written by `NavigationSystem`. |
 | `RouteGraph` | Navigation graph instances and route distributions. |
+| `Pursuit` | Navigation's field toward each cursor, published every tick and read for what one cursor owns (loot); a field is computed at its first read, which leaves the shared throttle phase alone (D-17). |
 | `Adaptation` | Per-gateway route-selection learner weights and pre-sampled route pools. |
 | `Genetics` | Population registry spawners sample genotypes from. |
 | `Transient` | Player-domain explosion and pulse presentation. |
