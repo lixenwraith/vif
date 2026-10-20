@@ -1409,7 +1409,7 @@ func equalCursorView(a, b *component.CursorViewComponent) bool {
 }
 
 func equalParticle(a, b *component.ParticleComponent) bool {
-	return a.LastIntX == b.LastIntX && a.LastIntY == b.LastIntY && a.Rune == b.Rune && a.Behavior == b.Behavior && a.Orbiting == b.Orbiting && math.Float64bits(float64(a.OrbitRadius)) == math.Float64bits(float64(b.OrbitRadius)) && math.Float64bits(float64(a.ChaseBoost)) == math.Float64bits(float64(b.ChaseBoost)) && a.ResponseGroup == b.ResponseGroup
+	return a.LastIntX == b.LastIntX && a.LastIntY == b.LastIntY && a.Rune == b.Rune && a.Behavior == b.Behavior && a.Orbiting == b.Orbiting && math.Float64bits(float64(a.OrbitRadius)) == math.Float64bits(float64(b.OrbitRadius)) && a.Anchor == b.Anchor && math.Float64bits(float64(a.ChaseBoost)) == math.Float64bits(float64(b.ChaseBoost)) && a.ResponseGroup == b.ResponseGroup
 }
 
 func equalTracer(a, b *component.TracerComponent) bool {

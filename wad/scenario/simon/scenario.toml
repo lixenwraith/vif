@@ -261,7 +261,7 @@ on_enter = [
     { action = "SetVar", payload = { name = "ember", value = 0 } },
     { macro = "Score", heat = 0 },
     { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
-    { action = "EmitEvent", event = "EventParticleVortex", payload = { button = 0, duration_ms = 1000 }, payload_vars = { button = "fault" } },
+    { action = "EmitEvent", event = "EventParticleVortex", payload = { behavior = 1, button = 0, duration_ms = 1000 }, payload_vars = { button = "fault" } },
     { macro = "Cue", sound = "buzz" },
     { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 550 }, payload_vars = { button = "color" }, delay_ms = 450 },
     { macro = "Say", message = "The note was {}", var = "color", delay_ms = 450 },

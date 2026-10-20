@@ -287,7 +287,7 @@ const (
 	EventParticleSpawnBatch
 	// EventParticleWave (ParticleWavePayload) [local] signals a wave selected by behavior, across the map or one button
 	EventParticleWave
-	// EventParticleVortex (ParticleVortexPayload) [local] turns every glyph to decay and draws all decay around one button
+	// EventParticleVortex (ParticleVortexPayload) [local] turns every glyph into particles of a behavior and draws all of that behavior around one button
 	EventParticleVortex
 
 	// --- Death ---

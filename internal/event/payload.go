@@ -631,11 +631,12 @@ type ParticleWavePayload struct {
 	Button   int                        `toml:"button"`
 }
 
-// ParticleVortexPayload names the button decay circles, by its place in the row, and
-// for how long before the decay falls away
+// ParticleVortexPayload selects the behavior glyphs turn into and the vortex holds, the
+// button it circles, by its place in the row, and for how long before it lets go
 type ParticleVortexPayload struct {
-	Button     int   `toml:"button"`
-	DurationMs int64 `toml:"duration_ms"`
+	Behavior   component.ParticleBehavior `toml:"behavior"`
+	Button     int                        `toml:"button"`
+	DurationMs int64                      `toml:"duration_ms"`
 }
 
 // --- Death ---

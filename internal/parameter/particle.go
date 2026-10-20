@@ -71,16 +71,29 @@ const (
 	DecayOrbitDrag = 0.005
 )
 
-// Decay particles a vortex draws around a button
+// Decay and blossom a vortex holds round a button
 const (
-	// DecayVortexStiffness pulls toward the orbit radius (1/s²)
-	DecayVortexStiffness = 60.0
-	// DecayVortexRadiusMin/Max lie past the button's edge, at its proportions (cells)
-	DecayVortexRadiusMin = 1.0
-	DecayVortexRadiusMax = 5.0
-	// DecayVortexDamping settles a particle drawn from across the map without overshoot (1/sec)
-	DecayVortexDamping = 7.0
-	// DecayVortexSpeed is the tangential speed on entering orbit; a far particle gains
+	// VortexStiffness pulls toward the orbit radius (1/s²)
+	VortexStiffness = 60.0
+	// VortexRadiusMin/Max lie past the button's edge, at its proportions (cells)
+	VortexRadiusMin = 1.0
+	VortexRadiusMax = 5.0
+	// VortexDamping settles a particle drawn from across the map without overshoot (1/sec)
+	VortexDamping = 7.0
+	// VortexSpeed is the tangential speed on entering orbit; a far particle gains
 	// speed as it closes, keeping its angular momentum (cells/sec)
-	DecayVortexSpeed = 12.0
+	VortexSpeed = 12.0
+	// VortexDrag is quadratic drag while orbiting (1/cell)
+	VortexDrag = 0.005
+)
+
+// Dust a vortex holds round a button: drag that bleeds off the speed it closes with,
+// so it swirls at a pace near its cursor orbit's
+const (
+	DustVortexStiffness = 60.0
+	DustVortexRadiusMin = 1.0
+	DustVortexRadiusMax = 5.0
+	DustVortexDamping   = 7.0
+	DustVortexSpeed     = 20.0
+	DustVortexDrag      = 0.01
 )
