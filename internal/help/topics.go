@@ -253,7 +253,7 @@ var topics = []topicDef{
 			{Keys: ":log rec <ticks>", Desc: "Flight recorder ring depth in game ticks; 0 disables. Flushes need 'rec' in the log scope"},
 			{Keys: ":log rec flush", Desc: "Write the current recorder window on the next tick"},
 			{Keys: ":log rec fsm [on|off]", Desc: "Flush the recorder on every FSM transition"},
-			{Keys: ":journal [start]", Desc: "Name the replay journal, or record one from here: a solo run restarts on its own world, a guest rejoins"},
+			{Keys: ":journal [start|stop]", Desc: "Name the replay journal, record one from here, or close it: a start restarts a solo run on its own world, a guest rejoins"},
 		},
 	},
 }

@@ -323,7 +323,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:replay restart\|tick <n>\|time <[[h:]m:]s>`, `:r` | In a replay only, where `:r` means it rather than `:region`: play again from the start, or go to a tick or 1x game time of the run shown. |
 | `:log ...`, `:l` | Start/stop logging; set level/scope and snapshot period. |
 | `:log rec [ticks\|flush\|fsm [on\|off]]` | Configure, request, or transition-trigger the flight recorder. |
-| `:journal [start]` | Name the replay journal, or start one from here: a solo run restarts on its own world and a guest rejoins; a session's host journals from its start with `-j`. |
+| `:journal [start\|stop]` | Name the replay journal, start one from here, or close it: a start restarts a solo run on its own world and rejoins a guest; a session's host journals from its start with `-j`. |
 | `:telemetry [save\|hud\|unpin]`, `:t` | Open the telemetry overlay; `save` writes a point-in-time status snapshot, `unpin` clears pins. |
 | `:hud [on\|off]` | Toggle or set the pinned-card HUD; `:t hud` is the same. |
 | `:debug`, `:d [prof [on\|off]\|cpu [s]\|heap\|mutex [s]\|trace [s]]` | Open the profiler report, toggle the profiler, or write a CPU, heap or mutex profile or an execution trace; see [Logging and diagnostics](logging-and-diagnostics.md) §11. |

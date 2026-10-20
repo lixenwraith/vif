@@ -589,6 +589,43 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 	}
 }
 
+// TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal at the
+// run's position; the run then records nothing and reports no journal.
+func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
+	t.Parallel()
+	rec := journal.NewCapture()
+	a, err := NewHeadless(Config{Seed: 7, Width: 80, Height: 24,
+		Resources: resource.Options{Embedded: true}, Journal: true, JournalSink: rec})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	a.Tick(5)
+	inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
+
+	var stopErr error
+	a.World().RunSafe(func() { stopErr = a.stopJournalLocked() })
+	if stopErr != nil {
+		t.Fatalf("stop: %v", stopErr)
+	}
+	if end, at := rec.End(), a.Position(); end != at {
+		t.Fatalf("end record at %+v, the run at %+v", end, at)
+	}
+	before := len(rec.Records())
+	inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
+	a.Tick(5)
+	if n := len(rec.Records()) - before; n != 0 {
+		t.Fatalf("%d records after the stop", n)
+	}
+	if emitted, _ := a.JournalStats(); emitted != 0 || a.ctx.SessionCtl.JournalPath() != "" {
+		t.Fatal("a stopped journal is still reported")
+	}
+	a.World().RunSafe(func() { stopErr = a.stopJournalLocked() })
+	if stopErr == nil {
+		t.Fatal("a second stop found a journal")
+	}
+}
+
 // guestSurface is the simulation surface less what the recorded run's link did: a
 // replay has none, so its traffic and connect events are not the simulation's. The
 // session the simulation read, and the pause it decided, are compared in their place.
