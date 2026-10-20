@@ -360,9 +360,18 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		a.World().RunSafe(func() { e = a.World().Resources.Player.Entity })
 		return e
 	}
+	// The seat binds its cursor a tick after it is seated
+	bound := func(b *App) (ok bool) {
+		b.World().RunSafe(func() {
+			p := b.World().Resources.Player
+			ok = p.Entity != 0 && p.Entity == p.Slot(uint8(slot))
+		})
+		return ok
+	}
 	var paths []string
 	for range 2 {
 		b := s.app.Load()
+		until("the bot to drive its own cursor", func() bool { return bound(b) })
 		holderCursor, seatCursor := drives(holder), drives(b)
 		holder.World().RunSafe(func() { err = errors.Join(ctl.StartJournal(-1), ctl.StartJournal(slot)) })
 		if err != nil {
