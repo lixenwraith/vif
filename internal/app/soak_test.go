@@ -426,7 +426,7 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 	key := func(k rune) *input.Intent {
 		return a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: k})
 	}
-	// Energy reads the level and heat stays full
+	// Energy reads the level, and each arm refills the heat the turn's ember burns
 	score := func(level int64) {
 		t.Helper()
 		cursor := w.Resources.Player.Entity
@@ -437,7 +437,7 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 		}
 	}
 
-	await("Ready") // after the legend, which plays with keys closed
+	await("Ready") // the legend runs out unless a press cuts it short
 	press(key('1'), 1)
 	await("Listen")
 	shown = nil
