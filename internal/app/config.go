@@ -16,7 +16,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
-	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
@@ -25,8 +24,9 @@ const (
 	DefaultWidth  = 80
 	DefaultHeight = 24
 
-	// BotWidth and BotHeight size a headless bot given no -size: the terminal the
-	// fleet serves a session as, so a bot's map is the one a site session has.
+	// BotWidth and BotHeight are a bot's screen where nothing names another: a
+	// headless bot given no -size, a seat whose holder names none, and so the map a
+	// server's own bots start alone.
 	BotWidth  = 120
 	BotHeight = 40
 )
@@ -263,9 +263,6 @@ type Config struct {
 	// log is a secondary runtime's handle: a seat's or a staging world's is tagged,
 	// a replay copy's muted until presented. Nil takes the process's or, driven, its own.
 	log *vlog.Log
-
-	// resume is the world the run this one replaces handed over (restartRequest).
-	resume *snapshot.SharedCapture
 
 	// borrow is another replay's presentation, whose terminal a replay rebuilt
 	// behind its viewer draws on; it has no speakers, since two mixers would open

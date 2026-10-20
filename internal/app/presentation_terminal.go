@@ -120,3 +120,14 @@ func (a *App) showStartupStatus(message string) {
 		a.frame()
 	}
 }
+
+// showJoinStatus is showStartupStatus before the gate hands a joiner its session's
+// world. The one it holds is a stand-in on the map its dial was offered, which a
+// host sizing its session from its first person changes at the gate, so only the
+// status line is drawn.
+func (a *App) showJoinStatus(message string) {
+	a.ctx.SetStatusMessage(message, parameter.StatusNotice)
+	if a.orchestrator != nil && !pageHidden() && a.terminalTaking() {
+		a.orchestrator.RenderStatus(a.renderContext(), a.world)
+	}
+}

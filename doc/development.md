@@ -148,7 +148,7 @@ line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
 | `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` hands it to the first surviving member of the succession chain, else the lowest surviving identity, never a bot's. Default `host` with `-serve`, `migrate` otherwise. |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second over the window, on a link carrying at least this many bytes per second. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
 | `-listen <addr>`, `-no-advertise` | With `-join`, the address the other participants reach this one at in a migrate session, or none at all, which keeps it a leaf, elected only when no chain member survives ([Multiplayer](multi-player.md) §5.3). |
-| `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first guest's terminal sizes the session. |
+| `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first person's terminal sizes the session, or a bot's 120x40 when the server seats bots of its own. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
 | `-first-join <dur>` | End a `-serve` run if no guest has connected within `dur`; zero waits forever. |
 | `-empty <dur>` | End a `-serve` run `dur` after the last guest leaves; zero keeps the session. Also the window a dropped guest has to reclaim its slot. |
@@ -362,8 +362,9 @@ and its slot is `parameter.NoPlayerSlot`.
 ```
 
 A server has no terminal to derive geometry from, so `-size` fixes the D-14 map
-latch every joiner adopts; without it the first guest's terminal sizes the map
-before the lobby closes (`adoptLobbyGeometry`, `internal/app/session.go`). A
+latch every joiner adopts; without it the first person's terminal sizes the map
+before the lobby closes (`adoptLobbyGeometry`, `internal/app/session.go`), or a
+bot's 120x40 when it seats bots of its own, as those start the game at once. A
 scenario that sets up its own map keeps it either way. It logs a session summary
 periodically rather than drawing a status bar, so `-l -lv info` is how the run is
 watched. A server whose roster empties parks: it stops its clock at once, so the

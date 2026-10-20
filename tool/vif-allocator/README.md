@@ -208,7 +208,7 @@ their defaults; `vif-allocator -h` lists every flag.
 | `-bots-max` | `0` | the most bots a request may seat (at most 6) |
 | `-log-level`, `-log-level-min` | `info`, `debug` | the default session level and the most verbose a request may select |
 | `-scenario`, `-wad` | `main`, `/var/db/vif/wad` | the default scenario and the volume scanned for the others |
-| `-size` | `first` | the default session screen, the host's `-size`: `WxH`, or `first` for the first guest's terminal; a scenario may or may not make it its map |
+| `-size` | `first` | the default session screen, the host's `-size`: `WxH`, or `first` for the first person's terminal, which a session seating bots plays at 120x40 instead; a scenario may or may not make it its map |
 | `-first-join`, `-empty`, `-drain` | `90s`, `90s`, `20s` | the session's lifetime bounds, passed to its pod |
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |

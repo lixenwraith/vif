@@ -107,10 +107,13 @@ func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) bo
 
 // Resize records a terminal dimension change and settles the reflow. Headless has no
 // terminal, so this is its only resize path; a live run records the same event from
-// App.Loop, which is what makes a resize replayable.
+// App.Loop, which is what makes a resize replayable. The push takes the lock as that
+// one does, since a seat resizes while its session's traffic lands beside it.
 func (a *App) Resize(width, height int) {
-	a.ctx.PushLocalOrigin(event.EventScreenResize,
-		&event.ScreenResizePayload{Width: width, Height: height}, event.OriginDebug)
+	a.world.RunSafe(func() {
+		a.ctx.PushLocalOrigin(event.EventScreenResize,
+			&event.ScreenResizePayload{Width: width, Height: height}, event.OriginDebug)
+	})
 	a.scheduler.Settle()
 }
 
@@ -162,10 +165,7 @@ func (a *App) pushed() uint64 { return a.world.Resources.Event.Queue.Pushed() }
 // JournalStats returns the emitted record count and encode failure count;
 // zero when journaling is off
 func (a *App) JournalStats() (emitted, encodeFailed uint64) {
-	if a.recorder == nil {
-		return 0, 0
-	}
-	st := a.recorder.Stats()
+	st := a.recorder.Load().Stats()
 	return st.Emitted, st.EncodeFailed
 }
 

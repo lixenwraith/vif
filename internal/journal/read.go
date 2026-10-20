@@ -13,6 +13,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
@@ -58,6 +59,10 @@ type captureFields struct {
 	Participant uint32 `json:"participant"`
 	Authority   uint32 `json:"authority"`
 	Body        []byte `json:"body"` // base64, which encoding/json decodes into []byte
+	Opens       bool   `json:"opens"`
+	Mode        uint64 `json:"mode"`
+	Paused      bool   `json:"paused"`
+	Off         string `json:"off"` // system names, comma-separated
 }
 
 type digestFields struct {
@@ -185,11 +190,11 @@ func (s *Set) readFile(path string) error {
 			}
 			s.Digests = append(s.Digests, d)
 		case event.SubJournalCapture:
-			var f captureFields
-			if err := json.Unmarshal(l.Fields, &f); err != nil {
+			c, err := decodeCapture(l.Fields)
+			if err != nil {
 				return fmt.Errorf("%s:%d: %w", path, n, err)
 			}
-			s.Captures = append(s.Captures, event.JournalCapture(f))
+			s.Captures = append(s.Captures, c)
 		}
 	}
 	return sc.Err()
@@ -218,6 +223,25 @@ func decodeRecord(raw json.RawMessage) (event.JournalRecord, error) {
 		Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Type: et, Origin: origin, Domain: domain,
 	}, nil
+}
+
+func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
+	var f captureFields
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return event.JournalCapture{}, err
+	}
+	if f.Mode >= uint64(len(core.ModeNames)) {
+		return event.JournalCapture{}, fmt.Errorf("cseq %d: unknown mode %d", f.CSeq, f.Mode)
+	}
+	c := event.JournalCapture{
+		JSeq: f.JSeq, CSeq: f.CSeq, Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
+		Participant: f.Participant, Authority: f.Authority, Body: f.Body,
+		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused,
+	}
+	if f.Off != "" {
+		c.Off = strings.Split(f.Off, ",")
+	}
+	return c, nil
 }
 
 func decodeDigest(raw json.RawMessage) (event.JournalDigest, error) {

@@ -38,15 +38,16 @@ func (c sessionControl) DropBot(slot int) error {
 	}
 	return c.a.dropPlayerLocked(e)
 }
-func (c sessionControl) RemoveBot(id uint64) error { return c.a.removeSeat(id) }
-func (c sessionControl) BotSummary() string        { return c.a.seatsSummary() }
-func (c sessionControl) Bots() []engine.BotSeat    { return c.a.botSeats() }
-func (c sessionControl) HostError() error          { return c.a.hostErrorLocked() }
-func (c sessionControl) JoinError() error          { return c.a.joinErrorLocked() }
-func (c sessionControl) StartJournal() error       { return c.a.startJournalLocked() }
-func (c sessionControl) StopJournal() error        { return c.a.stopJournalLocked() }
-func (c sessionControl) JournalError() error       { return c.a.journalErrorLocked() }
-func (c sessionControl) JournalPath() string       { return c.a.recorder.Path() }
+func (c sessionControl) RemoveBot(id uint64) error   { return c.a.removeSeat(id) }
+func (c sessionControl) BotSummary() string          { return c.a.seatsSummary() }
+func (c sessionControl) Bots() []engine.BotSeat      { return c.a.botSeats() }
+func (c sessionControl) HostError() error            { return c.a.hostErrorLocked() }
+func (c sessionControl) JoinError() error            { return c.a.joinErrorLocked() }
+func (c sessionControl) StartJournal(slot int) error { return c.a.startJournalLocked(slot) }
+func (c sessionControl) StopJournal(slot int) error  { return c.a.stopJournalLocked(slot) }
+func (c sessionControl) JournalError() error         { return c.a.journalErrorLocked() }
+func (c sessionControl) JournalPath() string         { return c.a.recorder.Load().Path() }
+func (c sessionControl) JournalSummary() string      { return c.a.journalSummary() }
 
 func (c sessionControl) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {

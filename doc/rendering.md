@@ -38,6 +38,8 @@ provide to draw the same cells ([Multi-platform §8](multi-platform.md#8-adding-
 Before the lock the orchestrator derives the frame's playfield rectangle and
 declares the void around it; each simulation layer then draws clipped to the
 playfield and each screen-space layer to the whole buffer. See section 2.1.
+`RenderStatus` draws the status bar alone over a void screen, for a world not yet
+the one to show: a joiner's, until the start gate installs its session's.
 
 Renderers are registered during application assembly. Insertion sort preserves
 priority order, and registration index is the stable tie-breaker. A renderer
@@ -90,7 +92,7 @@ A map smaller than the viewport is centered inside it, and the margin that
 leaves belongs to no cell any entity, effect, or field can occupy. It appears
 whenever the render area outgrows the simulation: a `crop_on_resize = false`
 scenario such as `wad/scenario/td`, a multi-participant session whose bounds were
-latched by the first joiner, or a tmux pane zoomed after the map was fixed.
+latched by the first person to join, or a tmux pane zoomed after the map was fixed.
 
 Four rectangles describe it, all derived from `RenderContext`:
 

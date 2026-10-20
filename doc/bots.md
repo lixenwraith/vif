@@ -28,7 +28,7 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`. Not with `-watch` or `-serve`. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
-| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given. Seats always take 120x40. With `-serve` it sizes the map, which otherwise the first joiner sets. |
+| `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |
 | `-seed <n>` | Root seed. A solo bot run depends only on it and the configuration. |
 | `-serve <addr>` | A dedicated host with no player of its own; `-bot` seats its bots. |
 | `-host`, `-join` | Keep your player; bots join beside you. |
@@ -284,10 +284,14 @@ are the baseline to beat. It appends a `stop` region (states `StopWait` and
 
 ## Recording and replaying
 
-`-j` journals the front instance; seats write no journal. The journal records what
-the router produced, so `vif -replay <journal>` needs no graph and never restarts
-one. Playback runs to the recorded end, quiet trailing ticks included, and shows
-`END`. `vif -replay <journal> -headless` verifies its digests unattended.
+`-j` journals the front instance from its start and `:journal start` from where
+it stands; `:journal start <slot>` journals a seat of this process's the same way,
+`:journal stop [slot]` closes either, and `:journal` names every file open
+([Logging and diagnostics §9](logging-and-diagnostics.md#opening-mid-run)). A
+journal records what the router produced, so `vif -replay <journal>` needs no graph
+and never restarts one. Playback runs to the recorded end, quiet trailing ticks
+included, and shows `END`. `vif -replay <journal> -headless` verifies its digests
+unattended.
 
 ## Limits
 
@@ -296,10 +300,11 @@ one. Playback runs to the recorded end, quiet trailing ticks included, and shows
   pending delayed actions, the prediction ledger or network state. A keystroke can
   miss, as a person's can.
 - Nothing limits which commands a graph may issue, `:q` and `:bot add` included.
-- It reaches only what its view shows, and a seat's view is 120x40.
+- It reaches only what its view shows. A seat's view is its holder's screen, so a
+  person's bots see what that person sees and play differently across terminals.
 - It plays cooperatively: cursor weapons do not strike cursors.
 - A solo bot run is reproducible from its seed. In a session only a journal
-  reproduces a run, and only the front instance has one.
+  reproduces a run: the front instance's, or a seat's this process journals.
 - Graph state is in no capture: a correction or a reset reaches a graph only
   through the world it reads next.
 - A guest's bot has no link of its own, so it shows no throughput and is not
@@ -329,8 +334,6 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 - [Let a bot graph use operators and marks](todo.md#let-a-bot-graph-use-operators-and-marks)
 - [Limit the commands a bot graph may issue](todo.md#limit-the-commands-a-bot-graph-may-issue)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Decide a seat's geometry](todo.md#decide-a-seats-geometry)
-- [Journal a seat's play](todo.md#journal-a-seats-play)
 - [Judge a relayed bot's lateness](todo.md#judge-a-relayed-bots-lateness)
 - [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)

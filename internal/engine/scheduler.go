@@ -347,6 +347,10 @@ type SchedulerCopy struct {
 // side signals on its own reset channel.
 func (c SchedulerCopy) ResetPending() bool { return c.resetPending }
 
+// FSM is the FSM position the copy was read at, for a run taking on the copy's
+// world while keeping its own scheduler's counters.
+func (c SchedulerCopy) FSM() fsm.MachineState { return c.fsm }
+
 // CopyOut reads the scheduler. Caller MUST hold updateMutex.
 func (s *Scheduler) CopyOut() SchedulerCopy {
 	return SchedulerCopy{fsm: s.fsm.Export(), evBackoffs: s.evBackoffs, tickSlips: s.tickSlips,
@@ -606,6 +610,10 @@ func (s *Scheduler) drainReset() {
 func (s *Scheduler) Settle() {
 	s.world.RunSafe(func() { s.settleLocked("settle") })
 }
+
+// SettleLocked is Settle for a caller already holding the world lock, which reads
+// or writes a world that must have nothing pending around it.
+func (s *Scheduler) SettleLocked() { s.settleLocked("settle") }
 
 // settleLocked dispatches pending events and closes the settle group when it
 // consumed any. Caller MUST hold the world lock.

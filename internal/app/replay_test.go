@@ -505,14 +505,16 @@ func TestAReplayNamesTheFirstDigestItDoesNotReproduce(t *testing.T) {
 	}
 }
 
-// TestAJournalStartedMidRunReplaysFromItsWorld: a run that journals from the world
-// another left, as :journal start makes one, replays from the journal alone.
+// TestAJournalStartedMidRunReplaysFromItsWorld: :journal start opens a journal where
+// the run stands without touching the shared world, the journal alone replays what
+// the run played next, and a stop and a second start do it again.
 func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 	t.Parallel()
 	rng := vmath.NewFastRand(5)
 	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
-	want := map[event.Stamp][]string{}
-	drive := func(a *App, ticks int) {
+	a := mustHeadless(t, 0x7E5, 120, 40)
+	defer a.Close()
+	drive := func(ticks int, want map[event.Stamp][]string) {
 		for range ticks {
 			if rng.Intn(3) == 0 {
 				inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
@@ -521,40 +523,44 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 				inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
 			}
 			a.Tick(1)
-			p := a.Position()
-			want[event.Stamp{Run: p.Run, Tick: p.Tick}] = a.SnapshotSimulation()
+			if want != nil {
+				p := a.Position()
+				want[event.Stamp{Run: p.Run, Tick: p.Tick}] = a.SnapshotSimulation()
+			}
 		}
 	}
-	old := mustHeadless(t, 0x7E5, 120, 40)
-	defer old.Close()
-	drive(old, 400)
-	var cap snapshot.SharedCapture
-	var err error
-	old.World().RunSafe(func() {
-		if cap, err = old.captureSharedLocked(); err == nil {
-			err = old.sealCapture(&cap)
+	for round, lead := range []int{12, 300} {
+		drive(lead, nil)
+		rec, want := journal.NewCapture(), map[event.Stamp][]string{}
+		a.cfg.JournalSink = rec
+		shared := a.SnapshotShared()
+		if _, err := a.openJournal(); err != nil {
+			t.Fatalf("round %d: open: %v", round, err)
 		}
-	})
-	if err != nil {
-		t.Fatalf("capture: %v", err)
+		if i, _, _, ok := snapshot.FirstDiff(shared, a.SnapshotShared()); ok {
+			t.Fatalf("round %d: the opening moved the shared world at line %d:\n%s", round, i,
+				strings.Join(snapshot.Diff(shared, a.SnapshotShared(), 12), "\n"))
+		}
+		drive(400, want)
+		var err error
+		a.World().RunSafe(func() { err = a.stopJournalLocked(-1) })
+		if err != nil {
+			t.Fatalf("round %d: stop: %v", round, err)
+		}
+		replayMatches(t, rec, want, func(rep *App) []string { return rep.SnapshotSimulation() })
 	}
+}
 
-	rec := journal.NewCapture()
-	a, err := NewHeadless(Config{Width: 120, Height: 40, Resources: old.cfg.Resources,
-		Journal: true, JournalSink: rec, resume: &cap})
-	if err != nil {
-		t.Fatalf("resumed app: %v", err)
-	}
-	defer a.Close()
-	if err := a.resumeWorld(cap); err != nil {
-		t.Fatalf("resume: %v", err)
-	}
-	clear(want)
-	drive(a, 600)
-
+// replayMatches replays rec on a fresh run, which must reproduce every digest rec
+// holds and, on each tick nothing was recorded on, the surface want holds for it.
+func replayMatches(t *testing.T, rec *journal.Capture, want map[event.Stamp][]string, surface func(*App) []string) {
+	t.Helper()
 	busy := map[event.Stamp]bool{}
 	for _, r := range rec.Records() {
 		busy[event.Stamp{Run: r.Run, Tick: r.Tick}] = true
+	}
+	for _, c := range rec.Captures() {
+		busy[event.Stamp{Run: c.Run, Tick: c.Tick}] = true
 	}
 	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
 	if err != nil {
@@ -565,12 +571,14 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 		t.Fatalf("replay app: %v", err)
 	}
 	defer rep.Close()
-	d, err := newReplayDriver(rep, journal.Set{Records: rec.Records(), Captures: rec.Captures()}.Stream())
+	end := rec.End()
+	d, err := newReplayDriver(rep, journal.Set{Records: rec.Records(), Captures: rec.Captures(),
+		Digests: rec.Digests(), End: &end}.Stream())
 	if err != nil {
 		t.Fatalf("replay driver: %v", err)
 	}
 	compared := 0
-	for more := true; more; {
+	for more := true; more && d.Stats().Diverged == nil; {
 		if more, err = d.Step(); err != nil {
 			t.Fatalf("replay: %v", err)
 		}
@@ -578,15 +586,72 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 		at := event.Stamp{Run: p.Run, Tick: p.Tick}
 		if w, ok := want[at]; ok && !busy[at] {
 			compared++
-			if i, _, _, ok := snapshot.FirstDiff(w, rep.SnapshotSimulation()); ok {
-				t.Fatalf("diverged at tick %d at line %d:\n%s", p.Tick, i,
-					strings.Join(snapshot.Diff(w, rep.SnapshotSimulation(), 12), "\n"))
+			if got := surface(rep); !slices.Equal(w, got) {
+				i, _, _, _ := snapshot.FirstDiff(w, got)
+				t.Fatalf("diverged at tick %d at line %d:\n%s", p.Tick, i, strings.Join(snapshot.Diff(w, got, 12), "\n"))
 			}
 		}
 	}
-	if compared < 100 {
-		t.Fatalf("compared %d ticks: the run exercised too little", compared)
+	if st := d.Stats(); st.Diverged != nil || st.Digests == 0 || compared < 50 {
+		t.Fatalf("reproduced %d digests and compared %d ticks: %v", st.Digests, compared, st.Diverged)
 	}
+}
+
+// TestASessionJournalsMidRunOnEitherSide: a host and its guest each open a journal
+// where the session stands, and each journal replays from the world it opened on.
+func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	const seed = 0x3017
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(240)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	stop := tickInBackground(host)
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40)
+	stop()
+	waitForRosterPair(t, host, guest)
+
+	rng := vmath.NewFastRand(9)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	hostWant, guestWant := map[event.Stamp][]string{}, map[event.Stamp][]string{}
+	play := func(ticks int, record bool) {
+		for range ticks {
+			for _, a := range []*App{host, guest} {
+				if rng.Intn(3) == 0 {
+					inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+				}
+				if rng.Intn(5) == 0 {
+					inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
+				}
+			}
+			host.Tick(1)
+			guest.Tick(1)
+			guest.ApplyPendingCorrections()
+			if record {
+				for a, want := range map[*App]map[event.Stamp][]string{host: hostWant, guest: guestWant} {
+					p := a.Position()
+					want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(a)
+				}
+			}
+		}
+	}
+	play(60, false)
+	hostRec, guestRec := journal.NewCapture(), journal.NewCapture()
+	host.cfg.JournalSink, guest.cfg.JournalSink = hostRec, guestRec
+	for _, a := range []*App{host, guest} {
+		if _, err := a.openJournal(); err != nil {
+			t.Fatalf("open: %v", err)
+		}
+	}
+	play(400, true)
+	for _, a := range []*App{host, guest} {
+		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+	}
+	replayMatches(t, hostRec, hostWant, guestSurface)
+	replayMatches(t, guestRec, guestWant, guestSurface)
 }
 
 // TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal at the
@@ -604,7 +669,7 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
 
 	var stopErr error
-	a.World().RunSafe(func() { stopErr = a.stopJournalLocked() })
+	a.World().RunSafe(func() { stopErr = a.stopJournalLocked(-1) })
 	if stopErr != nil {
 		t.Fatalf("stop: %v", stopErr)
 	}
@@ -620,7 +685,7 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	if emitted, _ := a.JournalStats(); emitted != 0 || a.ctx.SessionCtl.JournalPath() != "" {
 		t.Fatal("a stopped journal is still reported")
 	}
-	a.World().RunSafe(func() { stopErr = a.stopJournalLocked() })
+	a.World().RunSafe(func() { stopErr = a.stopJournalLocked(-1) })
 	if stopErr == nil {
 		t.Fatal("a second stop found a journal")
 	}

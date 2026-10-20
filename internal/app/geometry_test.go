@@ -3,11 +3,19 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -45,8 +53,8 @@ func mapSize(a *App) (int, int) {
 	return w, h
 }
 
-// Without an operator size, the first admitted guest supplies the real geometry.
-func TestAServerWithNoSizeTakesItsMapFromItsFirstGuest(t *testing.T) {
+// Without an operator size, the first admitted person supplies the real geometry.
+func TestAServerWithNoSizeTakesItsMapFromItsFirstPerson(t *testing.T) {
 	t.Parallel()
 	a := geometryServer(t, 0, 0)
 
@@ -68,6 +76,85 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstGuest(t *testing.T) {
 	if a.Context().Width != 160 || a.Context().Height != 45 {
 		t.Fatalf("the run's geometry is %dx%d, want the guest's 160x45",
 			a.Context().Width, a.Context().Height)
+	}
+}
+
+// framePresentation is a screen of a fixed size that keeps every frame flushed to it.
+type framePresentation struct {
+	w, h   int
+	frames [][]terminal.Cell
+}
+
+func (p *framePresentation) Name() string                  { return "frames" }
+func (p *framePresentation) Dependencies() []string        { return nil }
+func (p *framePresentation) Init() error                   { return nil }
+func (p *framePresentation) Start() error                  { return nil }
+func (p *framePresentation) Stop() error                   { return nil }
+func (p *framePresentation) Surface() render.Surface       { return p }
+func (p *framePresentation) Size() (int, int)              { return p.w, p.h }
+func (p *framePresentation) Blocked() time.Duration        { return 0 }
+func (p *framePresentation) CellAspect() vmath.Aspect      { return vmath.RefAspect }
+func (p *framePresentation) Events() <-chan terminal.Event { return nil }
+func (p *framePresentation) SetPointerMode(bool, bool)     {}
+func (p *framePresentation) ColorMode() terminal.ColorMode { return terminal.ColorModeTrueColor }
+func (p *framePresentation) Sync()                         {}
+func (p *framePresentation) Flush(cells []terminal.Cell, _, _ int) {
+	p.frames = append(p.frames, slices.Clone(cells))
+}
+
+// TestAJoinerDrawsNoWorldBeforeItsSessions: a joiner builds its world on the map its
+// dial was offered, which a server sized by its first person changes at the gate.
+// Until the gate installs the session's world, only the status line is drawn, so
+// the stand-in's smaller map never shows; the session's then fills the game area.
+func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
+	// Not parallel: this binds a real socket.
+	host, err := newSessionApp(Config{Mode: ModeServer, HostAddress: "127.0.0.1:0",
+		Resources: resource.Options{Embedded: true}, Seed: 0x6E04})
+	if err != nil {
+		t.Fatalf("server: %v", err)
+	}
+	t.Cleanup(host.Close)
+	if err := host.hub.StartAll(); err != nil {
+		t.Fatalf("server services: %v", err)
+	}
+	host.life.Start(time.Now())
+	port, err := host.socketPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := make(chan error, 1)
+	go func() { gate <- host.startHostSession(nil) }()
+
+	const w, h = 160, 45
+	screen := &framePresentation{w: w, h: h}
+	guest, err := newSessionApp(Config{Mode: ModePlay, JoinAddress: port.Addr().String(),
+		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}})
+	if err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	t.Cleanup(guest.Close)
+	area := render.RectWH(parameter.LeftMargin, parameter.TopMargin,
+		w-parameter.LeftMargin, h-parameter.TopMargin-parameter.BottomMargin)
+	if mw, mh := mapSize(guest); mw >= area.Width() && mh >= area.Height() {
+		t.Fatalf("the joiner built on a %dx%d map, not the smaller one a sizing server offers", mw, mh)
+	}
+	if err := guest.startJoinSession(nil); err != nil {
+		t.Fatalf("join gate: %v", err)
+	}
+	if err := <-gate; err != nil {
+		t.Fatalf("server gate: %v", err)
+	}
+
+	for i, f := range screen.frames {
+		installed := i == len(screen.frames)-1
+		for y := area.Y0; y < area.Y1; y++ {
+			for x := area.X0; x < area.X1; x++ {
+				if void := f[y*w+x].Bg == visual.RgbVoid; void == installed {
+					t.Fatalf("frame %d of %d: cell (%d,%d) void=%v, want void only before the install",
+						i+1, len(screen.frames), x, y, void)
+				}
+			}
+		}
 	}
 }
 
@@ -112,11 +199,11 @@ func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
 	}
 }
 
-// TestFirstGuestWins holds the choice still. Guests arrive throughout the run
+// TestTheFirstPersonWins holds the choice still. Guests arrive throughout the run
 // through the mid-run gate, so sizing from the smallest would mean shrinking the
 // map under participants already playing on it — which D-14 forbids for the same
 // reason a terminal may not crop a shared map.
-func TestFirstGuestWins(t *testing.T) {
+func TestTheFirstPersonWins(t *testing.T) {
 	t.Parallel()
 	a := geometryServer(t, 0, 0)
 
@@ -125,7 +212,7 @@ func TestFirstGuestWins(t *testing.T) {
 	a.adoptLobbyGeometry()
 
 	if got := a.Context().Width; got != 160 {
-		t.Fatalf("geometry = %d, want the first guest's 160", got)
+		t.Fatalf("geometry = %d, want the first person's 160", got)
 	}
 }
 
@@ -201,13 +288,7 @@ func TestTheCellAspectIsPartOfTheGeometry(t *testing.T) {
 // operator's size and the first run played on it.
 func TestAScenarioThatSetsItsOwnMapIsServedOnIt(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	dir := writeScenario(t, root, "fixed", "A map of its own size.")
-	main := "[states]\nMainStart = { parent = \"Root\", on_enter = [{ action = \"EmitEvent\", " +
-		"event = \"EventLevelSetup\", payload = { width = 90, height = 30, crop_on_resize = false } }] }\n"
-	if err := os.WriteFile(filepath.Join(dir, "main.toml"), []byte(main), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	root := fixedMapScenario(t)
 	for _, size := range [][2]int{{120, 40}, {0, 0}} {
 		a, err := newSessionApp(Config{
 			Mode: ModeServer, HostAddress: "127.0.0.1:0", Width: size[0], Height: size[1],
@@ -226,5 +307,157 @@ func TestAScenarioThatSetsItsOwnMapIsServedOnIt(t *testing.T) {
 			t.Fatalf("-size %dx%d: guests are offered %dx%d crop=%v, want 90x30 uncropped",
 				size[0], size[1], an.MapWidth, an.MapHeight, an.CropOnResize)
 		}
+	}
+}
+
+// fixedMapScenario writes a scenario whose boot sets up a map of its own, 90x30 and
+// uncropped as td's is, and returns the root holding it.
+func fixedMapScenario(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := writeScenario(t, root, "fixed", "A map of its own size.")
+	main := "[states]\nMainStart = { parent = \"Root\", on_enter = [{ action = \"EmitEvent\", " +
+		"event = \"EventLevelSetup\", payload = { width = 90, height = 30, crop_on_resize = false } }] }\n"
+	if err := os.WriteFile(filepath.Join(dir, "main.toml"), []byte(main), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// serveWithBots runs a dedicated host as Serve does up to its lobby: one bot of its
+// own seated first, then the lobby waiting in the background, its outcome sent on
+// the channel returned.
+func serveWithBots(t *testing.T, cfg Config) (*App, <-chan error) {
+	t.Helper()
+	cfg.Mode, cfg.HostAddress, cfg.Seed, cfg.Bots = ModeServer, "127.0.0.1:0", 0x6E05, []string{"roam"}
+	a, err := newSessionApp(cfg)
+	if err != nil {
+		t.Fatalf("server: %v", err)
+	}
+	t.Cleanup(a.Close)
+	if err := a.hub.StartAll(); err != nil {
+		t.Fatalf("server services: %v", err)
+	}
+	a.life.Start(time.Now())
+	if err := a.seatBots(); err != nil {
+		t.Fatalf("server bots: %v", err)
+	}
+	gate := make(chan error, 1)
+	go func() { gate <- a.startHostSession(nil) }()
+	return a, gate
+}
+
+// TestASeatNeverSizesTheMap: a server sizes its map from a person's terminal and never
+// from a seat's, which is its holder's screen; a lobby of seats alone plays on the
+// screen a bot is given, whatever they report.
+func TestASeatNeverSizesTheMap(t *testing.T) {
+	t.Parallel()
+	seat := network.JoinerReport{Holder: engine.CoordinatorParticipant, Width: 200, Height: 60}
+
+	alone := geometryServer(t, 0, 0)
+	reportGeometry(t, alone, seat)
+	alone.adoptLobbyGeometry()
+	if got := alone.Context().Width; got != BotWidth {
+		t.Fatalf("geometry = %d after a 200-wide seat alone, want a bot's %d", got, BotWidth)
+	}
+
+	joined := geometryServer(t, 0, 0)
+	reportGeometry(t, joined, seat)
+	reportGeometry(t, joined, network.JoinerReport{Width: 160, Height: 45})
+	joined.adoptLobbyGeometry()
+	if got := joined.Context().Width; got != 160 {
+		t.Fatalf("geometry = %d, want the person's 160 over the seat's 200", got)
+	}
+}
+
+// TestAServersOwnBotsStartItsGameAtOnce: a server seats its own bots before its
+// lobby and they close it at once, first-join window or not, on the map -size or its
+// scenario sets, or else on the screen a bot is given.
+func TestAServersOwnBotsStartItsGameAtOnce(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	root := fixedMapScenario(t)
+	botW, botH := BotWidth-parameter.LeftMargin, BotHeight-parameter.TopMargin-parameter.BottomMargin
+	for _, tt := range []struct {
+		name string
+		cfg  Config
+		w, h int
+	}{
+		{"no size", Config{Resources: resource.Options{Embedded: true}}, botW, botH},
+		{"size", Config{Width: 100, Height: 30, Resources: resource.Options{Embedded: true}},
+			100 - parameter.LeftMargin, 30 - parameter.TopMargin - parameter.BottomMargin},
+		{"fixed map", Config{Resources: resource.Options{Dir: root, Scenario: "fixed"}}, 90, 30},
+	} {
+		tt.cfg.Lifetime = lifecycle.Policy{FirstJoin: time.Minute}
+		host, gate := serveWithBots(t, tt.cfg)
+		select {
+		case err := <-gate:
+			if err != nil {
+				t.Fatalf("%s: server gate: %v", tt.name, err)
+			}
+		case <-time.After(socketWait):
+			t.Fatalf("%s: the server's bot did not start its game", tt.name)
+		}
+		if mw, mh := mapSize(host); mw != tt.w || mh != tt.h {
+			t.Fatalf("%s: the bots play on %dx%d, want %dx%d", tt.name, mw, mh, tt.w, tt.h)
+		}
+	}
+}
+
+// TestASeatPlaysInItsHoldersScreen: a seat takes the screen of the run holding it, a
+// person's terminal or a run's -size, and a bot's when the run names none; a person's
+// run publishes its terminal as it resizes, and its seats take it between steps.
+func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	person, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true},
+		Host: Host{Presentation: &framePresentation{w: 160, h: 45}}})
+	if err != nil {
+		t.Fatalf("person: %v", err)
+	}
+	t.Cleanup(person.Close)
+	headless, err := NewHeadless(Config{Resources: resource.Options{Embedded: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(headless.Close)
+	sized := mustHeadless(t, fixtureSeed, 90, 28)
+	t.Cleanup(sized.Close)
+	for _, tt := range []struct {
+		name string
+		a    *App
+		w, h int
+	}{
+		{"a person", person, 160, 45},
+		{"a server", geometryServer(t, 0, 0), BotWidth, BotHeight},
+		{"a sized server", geometryServer(t, 100, 30), 100, 30},
+		{"a headless run", headless, BotWidth, BotHeight},
+		{"a sized headless run", sized, 90, 28},
+	} {
+		var w, h int
+		tt.a.World().RunSafe(func() { w, h = tt.a.seatScreenLocked() })
+		if w != tt.w || h != tt.h {
+			t.Errorf("%s seats its bots on %dx%d, want %dx%d", tt.name, w, h, tt.w, tt.h)
+		}
+	}
+
+	person.handleResize(170, 50)
+	seated := mustHeadless(t, fixtureSeed, 160, 45)
+	t.Cleanup(seated.Close)
+	graph, err := loadBotGraph(resource.Options{Embedded: true}, "roam")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.localParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := &seatSource{botSource: botSource{d}, holder: new(atomic.Bool), screen: &person.seatScreen,
+		run: seated, shown: screen{160, 45}}
+	if _, err := src.Step(); err != nil {
+		t.Fatal(err)
+	}
+	var w, h int
+	seated.World().RunSafe(func() { w, h = seated.ctx.Width, seated.ctx.Height })
+	if w != 170 || h != 50 {
+		t.Fatalf("the seat plays on %dx%d after its holder's terminal became 170x50", w, h)
 	}
 }

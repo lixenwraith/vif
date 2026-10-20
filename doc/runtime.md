@@ -141,13 +141,16 @@ Every later guest arrives through the mid-run gate. An interactive `-host` is
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
 
-Without it the server takes that geometry from its **first guest**. Otherwise a run
+Without it the server takes that geometry from its **first person**. Otherwise a run
 with no `-size` would fall back to `app.DefaultWidth` x `DefaultHeight` (80x24), a
 79x21 map — and because the joiner adopts the host's latch, every participant would
 then play on it however large its own terminal is. The joiner's acceptance therefore
 carries its own geometry (`network.JoinerReport`), and `App.adoptLobbyGeometry` applies the
-first one before the roster closes, so the bounds it produces are the ones the
-offer names and the tick-zero capture contains.
+first person's before the roster closes, so the bounds it produces are the ones the
+offer names and the tick-zero capture contains. A seat's report names its holder and
+sizes nothing. A server that seats bots of its own starts on them at once, on a bot's
+screen (`app.BotWidth` x `BotHeight`, 120x40, a 119x37 map), and a person who joins
+later plays on that map.
 
 First rather than smallest, and the difference is the mid-run gate: guests arrive
 throughout the run, so sizing from the smallest would mean shrinking the map under
@@ -301,7 +304,10 @@ sequenceDiagram
 `-join` adds a pre-composition step: `newSessionApp` dials, receives the host's
 offer and `JournalAnchor`, adopts its seed, configuration identity and map latch,
 takes the scenario's bytes from the coordinator when no root here holds them, and
-only then calls `New`. A dedicated host or a scripted or bot-driven `-host`
+only then calls `New`. Until the start gate installs the session's world, a
+presenting joiner draws its status line alone: the world it composed stands in on
+the map its dial was offered, which a server sizing its session from its first
+guest changes at the gate. A dedicated host or a scripted or bot-driven `-host`
 composes first, so its acceptor can capture the live tick-zero world, then waits in
 its lobby and completes the start/ready gate before it ticks. Every run that waits
 on that gate has its clock frozen during construction, before the HFSM creates
@@ -399,7 +405,7 @@ none of it enters a simulation snapshot:
 |---|---|---|
 | `status.active` flight recorder hook | the last registry to enable a recorder | seats enable none and take no status snapshots |
 | `vlog` sink and scopes | one per process; each App logs through its own handle | a seat's records carry its own run, tick and `instance` `seat N` |
-| `vlog` journal | one per process | only the front App journals; seats write none |
+| `vlog` journal files | one per journal | the front App's, and a seat's that `:journal start <slot>` opened; each closes with its run |
 | `engine.divergentReads` | one warning latch per config key | harmless across Apps |
 | `internal/prof` captures | the process | a profile covers the holder and its seats |
 | signals, terminal, audio, probe | the front App only | seats are headless and stop when their holder halts them |
@@ -433,6 +439,11 @@ wrote.
 The input ticker is independent of rendering so held-button fire and macro
 playback have stable cadence even when frames fluctuate. Macro intents re-enter
 the same locked `handleIntent` path as physical input.
+
+A `:journal start` is served between two of the loop's waits, outside the world
+lock, since its opening builds a whole world first
+([Logging and diagnostics §9](logging-and-diagnostics.md#opening-mid-run)); a
+script's, bot's or seat's loop serves it between two steps.
 
 For a render frame, the application:
 
@@ -610,9 +621,12 @@ A seat (`internal/app/seat.go`) is that driver on another headless instance in t
 holder's process, on its own goroutine and paced against the authority like any
 guest. `seatConfigLocked` routes its join: a still-guest relays it on its own link,
 a run in no session first hosts on loopback, an authority is dialled on loopback,
-and a successor opens an admission listener of its own. A play-mode holder's seats
-stand still while it is paused; a driven holder's step on. A headless bot or seat
-ends once its instance forks, and a seat also once its holder does.
+and a successor opens an admission listener of its own. A seat plays in its
+holder's screen: a person's terminal, which `App.handleResize` publishes as it
+changes and the seat takes between two steps, or the holder's `-size`, else a
+bot's 120x40. A play-mode holder's seats stand still while it is paused; a driven
+holder's step on. A headless bot or seat ends once its instance forks, and a seat
+also once its holder does.
 
 ## 5. Simulation tick steps
 
@@ -856,8 +870,8 @@ the FSM metric set, and `Scheduler.Prepare` freezes that set for the life of a
 run, so another scenario needs another run: `Run` owns a loop that builds one App
 per run, and the command validates the name and latches which one comes next;
 naming the scenario already loaded resets in place instead. The same loop replaces
-the run for a `:join`, a `:journal start`, a session restart and a removal by the
-host; the scenario change, the restart and the journal seat the run's bots again.
+the run for a `:join`, a session restart and a removal by the host; the scenario
+change and the restart seat the run's bots again.
 Everything operator-owned restarts with it. The terminal does not: `Run` opens one
 for the process and every run presents on it, so a replacement redraws the screen
 rather than leaving and re-entering it. See

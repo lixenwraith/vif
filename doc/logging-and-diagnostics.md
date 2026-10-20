@@ -26,7 +26,7 @@ flowchart TD
     Vlog --> Sink["lixenwraith/log sink"]
     Sink --> File["vif-log-*.jsonl"]
     Recorder -.no session log.-> Side["vif-rec-*.jsonl"]
-    Journal["journaled events and own crossings"] --> JSink["dedicated journal sink"]
+    Journal["journaled events and own crossings"] --> JSink["a dedicated sink per journal"]
     JSink --> JFile["vif-jrn-*.jsonl"]
 ```
 
@@ -289,10 +289,11 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `journal opened` / `journal closed` | INFO | `path`, plus `records`, `encode_failed` | `app.initJournal`; `app.Close` and `:journal stop` |
+| `journal opened` / `journal closed` | INFO | `path`, plus `run`, `tick` on a mid-run opening, `records`, `encode_failed` on a close | `app.initJournal` and `:journal start`; `app.Close` and `:journal stop` |
+| `journal not opened` | WARN | `error` | a `:journal start` the run refused or could not open (§9) |
+| `seat journal opened` / `seat journal closed` / `seat journal not changed` | INFO / INFO / WARN | `slot`, plus `path`, or `start` and `error` | the holder, for a `:journal start\|stop <slot>` its bot seat served |
 | `journal not closed` / `journal capture not recorded` | ERROR / WARN | `error`, plus `tick` on the capture | `app.Close`; a written world the journal could not take |
 | `journal incomplete` | WARN | `error` | `PlayJournal` playing on past a sequence gap (§9) |
-| `world not resumed; playing a new game` | WARN | `error` | a run `:journal start` replaced, whose handed-over world did not install |
 | `replay opened` | INFO | `records`, `digests`, `seed`, `speed` | `PlayJournal` |
 | `replay moved` | INFO | `run`, `tick`, `from_run`, `from_tick`, `delta` | each jump of the presented tick |
 | `replay diverged` | WARN | `run`, `tick`, `error` | the first digest the replay does not reproduce (§9) |
@@ -797,8 +798,10 @@ correlated by `run` and `tick`.
 
 `-j[=DIR]` / `-journal[=DIR]` asks `internal/journal.Recorder` to attach an
 `event.Journal` to the event queue and open a dedicated `vif-jrn-*.jsonl`
-logger; a second journal opened within the same second takes a `-2`, `-3`…
-suffix. The Recorder owns attachment, final counters, and file drain; an injected
+logger, one per journal the process keeps: its own run's and each bot seat's. A
+journal opened within the second another was takes a `-2`, `-3`… suffix, and the
+process prints every path it opened when it exits. The Recorder owns attachment,
+final counters, and file drain; an injected
 in-memory `journal.Capture` remains caller-owned. Capture records every event
 whose origin is `Journaled` (all but `system` and `device`) and every own crossing
 whatever its origin. The journal logger is separate from the session logger and
@@ -899,32 +902,44 @@ same file list, while `-replay` passes one file. `PlayJournal` warns
 (`-replay -headless`) refuses one.
 
 `ConfigFromAnchor` rebuilds the run's configuration: it checks schema, tick
-interval and a non-zero seed, and refuses an anchor with non-zero `start_run` or
-`start_tick`, since a journal beginning mid-run would need this instance's
-player-domain world, which no written world carries. The scenario is asked for by
-name, a lookup hint only, so a journal recorded against one that is not installed
-replays under the same `-config-dir` the run used. After construction,
-`App.VerifyAnchor` proves what loaded is what ran: schema, seed, RNG session,
-scenario digest, tick interval, the content source, pin and fingerprint, and
-geometry.
+interval and a non-zero seed. The scenario is asked for by name, a lookup hint
+only, so a journal recorded against one that is not installed replays under the
+same `-config-dir` the run used. After construction, `App.VerifyAnchor` proves
+what loaded is what ran: schema, seed, RNG session, scenario digest, tick
+interval, the content source, pin and fingerprint, and geometry.
 
-Since a journal must start with its run, `:journal start` (Diagnostics →
-Replay journal) starts one mid-game the way a join does: it replaces the run, on
-the terminal the process keeps ([Runtime §10](runtime.md#10-reset-and-operator-state)).
-A solo run hands its shared world to the next run, which writes it before its
-clock starts and journals that write; a guest rejoins its session, so its journal
-opens at the join. The local player domain starts fresh there in both, as a
-joiner's does. A session's host refuses, since its guests' cursors would carry
-into a run they are not in. `:journal stop` closes the journal where the run
-stands, writing its `end` record and releasing the file; a later `:journal start`
-opens another file, replacing the run again. A run journaling when a scenario
-change or a join replaces it journals on in the next run's file.
+### Opening mid-run
+
+`:journal start` (Diagnostics → Replay journal) opens a journal where the run
+stands, solo, hosting or joined, and the run plays on. Its replay boots afresh
+from the anchor (non-zero `start_run` or `start_tick`), and no written world
+carries this instance's player domain, so the run takes on what that replay will
+hold. The opening builds the boot as a muted headless twin, writes the live shared
+world over it as the journal's first `capture`, flagged `opens` and carrying the
+operator state (`mode`, `paused`, the toggled systems that are `off`), and the run
+adopts the twin's result before the journal attaches. The shared world stays as
+it was; the local player domain (own shots, effects, glyphs), telemetry counters,
+APM and the corpus feed start fresh, as a joiner's do. The transport, audio and
+music keep their own state. A replay writes the opening as any written world,
+then takes up the operator state and engages its crossing barrier at once, as
+the run's was; `app.loadJournal` refuses a mid-run journal whose files lack the
+opening.
+
+`:journal stop` closes the journal where the run stands, writing its `end` record
+and releasing the file; a later `:journal start` opens another. With a slot,
+`:journal start|stop <slot>` does the same for a bot seat this process runs: the
+seat's loop opens its journal in its own run, the holder's status line reports
+the path, and the journal closes when the seat leaves or its holder's run ends. A
+remote participant's run is not journaled here, since its player domain never
+leaves its machine. A run journaling when a scenario change or a join replaces it
+journals on in the next run's file, from its start.
 
 ### Written worlds and notes
 
 A participant writes worlds it did not simulate: the capture its join installed
 and each correction after it, and a host the world it opened its session on — the
-owners, latch and lead that `:host`, and `-host` once its clock runs, write.
+owners, latch and lead that `:host`, and `-host` once its clock runs, write. A
+journal opened mid-run begins with one more, its opening.
 Each is a `capture` record carrying `jseq` (the records before it), `cseq` (the
 writes up to it, since two with no record between share a `jseq` and can match in
 every other field), its lattice position, the local `participant`, the
@@ -1107,7 +1122,7 @@ use their independently configured journal directory.
 | `:log rec flush` | Request a window flush on the next tick |
 | `:log rec fsm [on\|off]` | Toggle the FSM transition trigger |
 | `:t save` | Write a standalone snapshot (§7) |
-| `:journal`, `:journal start\|stop` | Report the journal, start one that replaces the run, or close it where the run stands (§9) |
+| `:journal`, `:journal start\|stop [slot]` | Report the journals, open one where the run stands or close it; with a slot, a bot seat's (§9) |
 | `:d`, `:d prof [on\|off]` | Profiler report; start or stop the profiler (§11) |
 | `:d cpu [s]`, `:d heap`, `:d mutex [s]`, `:d trace [s]` | Write a CPU, heap or mutex profile, or an execution trace (§11) |
 | `:d break ...` | Set, list or clear standing breakpoints that pause on the command line ([Input](input-and-modes.md)) |
@@ -1158,7 +1173,7 @@ total and since the last one. A dropped record is lost; there is no retry.
 The 50 ms flush interval matches the simulation tick, so a crash loses at most
 one tick of buffered records.
 
-Each logger instance is independent: the session log, replay journal, an
+Each logger instance is independent: the session log, each replay journal, an
 on-demand snapshot, and a recorder sidecar can be open simultaneously without
 contending for one buffer.
 
@@ -1224,8 +1239,9 @@ entry points are no-ops, a session or journal start and a standalone file report
 `vlog.ErrDisabled`, and `lixenwraith/log` is not linked. Scope constants remain,
 and `ParseScopes` accepts any spec without checking it. `status` still functions:
 metrics are registered and updated, while snapshot/recorder writes resolve to
-no-ops. Asking such a build to log exits with `73` at startup, and `-j` fails
-the run's construction, so a recording requires a logging-enabled native build.
+no-ops. Asking such a build to log exits with `73` at startup, `-j` fails the
+run's construction and `:journal start` refuses, so a recording requires a
+logging-enabled native build.
 
 `make nolog` produces a release build with the tag; the experimental
 `make windows` build carries it too.
@@ -1287,6 +1303,7 @@ both the snapshot and the recorder.
 | Flight recorder | `internal/status/recorder.go` |
 | Journal record/anchor schema and queue sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
 | Recording lifecycle, capture, loading, replay/fuzz/script drivers | `internal/journal` |
+| Journal start and stop mid-run, the opening and its adoption, seat journals | `internal/app/journal.go`, `seat.go` |
 | Replay/config verification and presentation, replay checkpoints | `internal/app/replay.go`, `play.go`, `clone.go` |
 | Comparison surfaces and world digests | `internal/app/surface.go`, `internal/snapshot/surface.go`, `digest.go` |
 | Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/scheduler.go` |

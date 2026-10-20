@@ -67,7 +67,8 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 		"-empty", cfg.Empty,
 		"-drain", cfg.Drain,
 	}
-	// Without -size the host takes its first guest's terminal (adoptLobbyGeometry).
+	// Without -size the host takes its first person's terminal, or its bots' 120x40
+	// (adoptLobbyGeometry).
 	if cfg.Size != sizeFirst {
 		args = append(args, "-size", cfg.Size)
 	}
