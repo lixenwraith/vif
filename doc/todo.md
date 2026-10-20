@@ -95,16 +95,6 @@ such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and th
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
 
-### Decide a seat's geometry
-
-- Priority: P3
-- Affected files: `internal/app/seat.go`, `internal/app/config.go`
-
-Seats take 120x40, so a `-serve` with no `-size` whose first joiner is its own bot
-serves that map. A person's seats could take the holder's terminal instead, with
-120x40 left for a `-serve` with defaulted geometry: perception parity with the
-person beside them, against bot behaviour that reproduces across terminals.
-
 ### Judge a relayed bot's lateness
 
 - Priority: P3

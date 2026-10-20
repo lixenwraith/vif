@@ -58,7 +58,7 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	if got := strings.Count(text, `"mountPath":"/var/log/vif-fleet"`); got != 1 {
 		t.Errorf("fleet log volume is mounted %d times, want exactly once", got)
 	}
-	// First passes no -size, which is what hands the map to the first guest.
+	// First passes no -size, which is what hands the map to the first person.
 	first := cfg
 	first.Size = sizeFirst
 	if encoded, err := json.Marshal(buildJob("abc123", first)); err != nil || strings.Contains(string(encoded), `"-size"`) {

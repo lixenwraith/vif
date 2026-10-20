@@ -254,8 +254,11 @@ func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) e
 		return errors.New("participant left during admission")
 	}
 	a.sessionRoster[i].Holder = report.Holder
-	if !a.firstJoiner.Sized() && report.Sized() {
-		a.firstJoiner = report
+	if report.Holder == 0 {
+		a.personJoined = true
+		if !a.firstPerson.Sized() && report.Sized() {
+			a.firstPerson = report
+		}
 	}
 	a.reach.NoteDeclared(id, report)
 	a.log.Info("admit", "msg", "peer admitted", "peer", uint64(id), "holder", uint64(report.Holder),
@@ -263,18 +266,22 @@ func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) e
 	return nil
 }
 
-// adoptLobbyGeometry sizes a dedicated host's map from its first guest, since a
-// server has no terminal of its own and would otherwise serve Normalize's 80x24. The
-// operator's -size still wins. It runs before the roster closes, so these bounds are
-// the ones the offer names and every later guest adopts; a scenario that fixes its
-// own map (crop off) is left alone.
+// adoptLobbyGeometry sizes a dedicated host's map from the first person to join, as a
+// server has no terminal of its own and would serve Normalize's 80x24, or from a bot's
+// screen when its own bots start its game. An operator's -size, or a scenario fixing
+// its own map (crop off), wins. It runs before the roster closes, so these bounds are
+// the ones the offer names and every later guest adopts.
 func (a *App) adoptLobbyGeometry() {
 	if !a.cfg.Mode.Serves() || !a.cfg.geometryDefaulted {
 		return
 	}
 	a.sessionMu.Lock()
-	report := a.firstJoiner
+	report, person := a.firstPerson, a.personJoined
 	a.sessionMu.Unlock()
+	bots := len(a.cfg.Bots) > 0 || !person
+	if bots {
+		report = network.JoinerReport{Width: BotWidth, Height: BotHeight}
+	}
 	if !report.Sized() || !engine.ViewportFits(report.Width, report.Height) {
 		return
 	}
@@ -302,7 +309,11 @@ func (a *App) adoptLobbyGeometry() {
 	a.ctx.PushEventOrigin(event.EventLevelSetup,
 		&event.LevelSetupPayload{Width: vw, Height: vh, CropOnResize: true}, event.OriginDebug)
 	a.scheduler.Settle()
-	a.log.Info("session", "msg", "session sized from its first guest",
+	by := "person"
+	if bots {
+		by = "bots"
+	}
+	a.log.Info("session", "msg", "session sized", "by", by,
 		"terminal_w", report.Width, "terminal_h", report.Height, "map_w", vw, "map_h", vh)
 }
 

@@ -274,7 +274,8 @@ func (a *App) Loop() (*restartRequest, error) {
 // handleResize records the terminal change and dispatches it synchronously, so the
 // orchestrator (main-loop state) resizes against dimensions the handler wrote. The
 // push takes the lock like any input: a journaled record landing mid-tick would
-// settle inside that tick, where a reproduction cannot put it.
+// settle inside that tick, where a reproduction cannot put it. A run whose terminal
+// is its geometry publishes it for its seats to follow.
 func (a *App) handleResize(width, height int) {
 	a.world.RunSafe(func() {
 		a.ctx.PushLocalOrigin(event.EventScreenResize,
@@ -282,6 +283,9 @@ func (a *App) handleResize(width, height int) {
 	})
 	a.scheduler.DispatchEventsImmediately()
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
+	if a.cfg.Mode.OwnsGeometry() {
+		a.seatScreen.Store(&screen{a.ctx.Width, a.ctx.Height})
+	}
 }
 
 // setAway pauses a solo run while its player is away and resumes it on return; a

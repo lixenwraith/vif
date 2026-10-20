@@ -24,8 +24,9 @@ const (
 	DefaultWidth  = 80
 	DefaultHeight = 24
 
-	// BotWidth and BotHeight size a headless bot given no -size: the terminal the
-	// fleet serves a session as, so a bot's map is the one a site session has.
+	// BotWidth and BotHeight are a bot's screen where nothing names another: a
+	// headless bot given no -size, a seat whose holder names none, and so the map a
+	// server's own bots start alone.
 	BotWidth  = 120
 	BotHeight = 40
 )

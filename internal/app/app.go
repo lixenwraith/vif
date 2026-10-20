@@ -132,10 +132,12 @@ type App struct {
 	// joiner confirmed.
 	midRunGate sync.Mutex
 
-	// firstJoiner is the geometry the first guest reported, guarded by sessionMu.
-	// A dedicated host with no -size takes its map from it: it is the only real
-	// terminal the session ever sees.
-	firstJoiner network.JoinerReport
+	// firstPerson is the geometry the first person to join reported, and personJoined
+	// whether one has, both guarded by sessionMu. A dedicated host with no -size takes
+	// its map from that report, the only real terminal the session ever sees: a seat
+	// reports its holder's screen or a bot's default, and sizes nothing.
+	firstPerson  network.JoinerReport
+	personJoined bool
 
 	// probe is the supervised run's endpoint, nil when none was configured.
 	// probeTick and probeAt are its stall detector: the last tick a probe read and
@@ -195,7 +197,10 @@ type App struct {
 	dropped     []uint32 // seats told to leave, until their links close
 	seatSerial  uint64
 	seatAddress string // extra loopback join listener after succession; world lock
-	relay       relayDesk
+	// seatScreen is this run's terminal as its seats follow it, published on each
+	// resize by a run whose terminal is its geometry; nil until the first.
+	seatScreen atomic.Pointer[screen]
+	relay      relayDesk
 	// joinedThrough is the relay this run joined the session through, zero on a
 	// dial to the authority; the barrier reaches the authority through it.
 	joinedThrough network.PeerID

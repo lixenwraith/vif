@@ -141,13 +141,16 @@ Every later guest arrives through the mid-run gate. An interactive `-host` is
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
 
-Without it the server takes that geometry from its **first guest**. Otherwise a run
+Without it the server takes that geometry from its **first person**. Otherwise a run
 with no `-size` would fall back to `app.DefaultWidth` x `DefaultHeight` (80x24), a
 79x21 map — and because the joiner adopts the host's latch, every participant would
 then play on it however large its own terminal is. The joiner's acceptance therefore
 carries its own geometry (`network.JoinerReport`), and `App.adoptLobbyGeometry` applies the
-first one before the roster closes, so the bounds it produces are the ones the
-offer names and the tick-zero capture contains.
+first person's before the roster closes, so the bounds it produces are the ones the
+offer names and the tick-zero capture contains. A seat's report names its holder and
+sizes nothing. A server that seats bots of its own starts on them at once, on a bot's
+screen (`app.BotWidth` x `BotHeight`, 120x40, a 119x37 map), and a person who joins
+later plays on that map.
 
 First rather than smallest, and the difference is the mid-run gate: guests arrive
 throughout the run, so sizing from the smallest would mean shrinking the map under
@@ -618,9 +621,12 @@ A seat (`internal/app/seat.go`) is that driver on another headless instance in t
 holder's process, on its own goroutine and paced against the authority like any
 guest. `seatConfigLocked` routes its join: a still-guest relays it on its own link,
 a run in no session first hosts on loopback, an authority is dialled on loopback,
-and a successor opens an admission listener of its own. A play-mode holder's seats
-stand still while it is paused; a driven holder's step on. A headless bot or seat
-ends once its instance forks, and a seat also once its holder does.
+and a successor opens an admission listener of its own. A seat plays in its
+holder's screen: a person's terminal, which `App.handleResize` publishes as it
+changes and the seat takes between two steps, or the holder's `-size`, else a
+bot's 120x40. A play-mode holder's seats stand still while it is paused; a driven
+holder's step on. A headless bot or seat ends once its instance forks, and a seat
+also once its holder does.
 
 ## 5. Simulation tick steps
 
