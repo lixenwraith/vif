@@ -40,10 +40,10 @@ make dev       # generated code + race-enabled debug build
 |---|---|
 | `generate` | Run the manifest/event/input code generator. |
 | `dev` | Generate and build `cmd/vif` with the race detector/debug symbols. |
-| `release` | Build a stripped `-trimpath` native binary without CGO: the terminal and, on Linux and FreeBSD, the desktop window `-g` opens. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
+| `release` | Build a stripped `-trimpath` native binary without CGO: the terminal and, on Linux and FreeBSD, the desktop window `-g` opens. Where purego, which the window links, does not build (Termux), `release`, `nolog` and `gui` stop before compiling and name `make cli` and `TAGS=vif_nogui`. Only `dev`, `test` and `verify` regenerate: the binary targets build the committed generated files, as a packager does. |
 | `headless` | Build `bin/vif-headless` without terminal presentation, renderers, or audio. |
 | `gui` | Build `bin/vif-gui`, the release binary opening the desktop window by default (`vif_gui`); `-g=false` is its terminal. |
-| `cli` | Build `bin/vif-cli`, the terminal alone, no desktop window (`vif_nogui`). |
+| `cli` | Build `bin/vif-cli`, the terminal alone, no desktop window (`vif_nogui`), for Termux or a machine without X. |
 | `nolog` | Release-style build with the `novlog` tag. |
 | `wasm` | Build log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
