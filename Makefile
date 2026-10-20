@@ -24,6 +24,19 @@ CLEAN ?= 0
 WAD_DIR := wad
 PKG_DIR := deploy/package
 WAD_ARCHIVE ?= $(BIN_DIR)/vif-wad.tar.gz
+RELEASE_TARGET ?= linux-amd64
+RELEASE_LABEL ?= nightly
+# Keeps each if-to-end block of the README source one of whose tags is the target's,
+# drops other comments, squeezes blank lines and fills in the target's names.
+RELEASE_README_AWK = BEGIN { keep = 1 }; \
+	/^<!-- if [a-z ]+ -->$$/ { if (open) { print "nested if at line " NR > "/dev/stderr"; exit 1 }; \
+		open = 1; keep = 0; n = split($$0, w, " "); for (i = 3; i < n; i++) if (index(tags, " " w[i] " ")) keep = 1; next }; \
+	/^<!-- end -->$$/ { if (!open) { print "end without if at line " NR > "/dev/stderr"; exit 1 }; open = 0; keep = 1; next }; \
+	/^<!--/, /-->$$/ { next }; \
+	!keep { next }; \
+	/^$$/ { gap = printed; next }; \
+	{ if (gap) print ""; gap = 0; printed = 1; gsub(/@LABEL@/, label); gsub(/@TARGET@/, target); gsub(/@PLATFORM@/, name); print }; \
+	END { if (open) { print "if without end" > "/dev/stderr"; exit 1 } }
 # Root extracting an archive restores its owners, so its entries are root's rather
 # than the packer's uid. GNU tar and bsdtar name that differently.
 TAR_ROOT_OWNER != tar --version 2>/dev/null | grep -q GNU && echo '--owner=0 --group=0 --numeric-owner' || echo '--uid 0 --gid 0'
@@ -61,7 +74,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive release-readme image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -91,6 +104,7 @@ help:
 	@echo "  install-config Install the wad, default keymap, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
 	@echo "           (both: CLEAN=1 first removes what an earlier install put there)"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
+	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"
 	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
 	@echo "  image-check Run the image's own config validation as its numeric user"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
@@ -264,6 +278,22 @@ wad-archive: $(BIN_DIR)
 	install -m 0644 LICENSE "$$root/LICENSE"; \
 	tar -C "$$stage" $(TAR_ROOT_OWNER) -czf $(WAD_ARCHIVE) vif; \
 	echo "packed $(WAD_ARCHIVE)"
+
+# release-readme prints the README a release archive carries, rendered from
+# deploy/package/release-readme.md with the blocks tagged for RELEASE_TARGET.
+release-readme:
+	@case '$(RELEASE_TARGET)' in \
+	linux-amd64) tags='linux client' name='Linux amd64' ;; \
+	linux-arm64) tags='linux client' name='Linux arm64' ;; \
+	linux-amd64-headless) tags=headless name='Linux amd64, the game server' ;; \
+	freebsd-amd64) tags='freebsd client' name='FreeBSD amd64' ;; \
+	windows-amd64) tags=windows name='Windows amd64' ;; \
+	web) tags=web name='the browser' ;; \
+	*) echo "release-readme: no README for RELEASE_TARGET=$(RELEASE_TARGET)" >&2; exit 1 ;; \
+	esac; \
+	case '$(RELEASE_LABEL)' in nightly) tags="$$tags nightly" ;; esac; \
+	awk -v tags=" $$tags " -v label='$(RELEASE_LABEL)' -v target='$(RELEASE_TARGET)' -v name="$$name" \
+		'$(RELEASE_README_AWK)' $(PKG_DIR)/release-readme.md
 
 # install puts the binary, the wad as the config root $(SYSCONFDIR)/vif, the
 # licence, the manual, the desktop entry and icons, shell completion and the

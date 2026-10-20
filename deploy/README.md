@@ -24,7 +24,7 @@
 | `runbook.md` | Day-to-day node operations: status, emptying the fleet before an update, the updates themselves, why a helper refused, and where to watch the stream. |
 | `guest/` | The node's identities, mounts, units and update helpers, and how to back one out. See [`guest/README.md`](guest/README.md). |
 | `logwisp/aggregator.toml` | Standalone raw file-source pipeline over `/var/log/vif-fleet/*.jsonl`, with bounded flow/clients, TRACE and `admit` records left out, and a loopback-only HTTP sink. |
-| `package/` | Distribution files `make install` puts outside the config root: the desktop entry, icons, and bash, zsh and fish completion. |
+| `package/` | Distribution files: what `make install` puts outside the config root (the desktop entry, icons, purego's licence, and bash, zsh and fish completion), and the source of each release archive's README. |
 | `website/vif.nginx.example` | Public edge for the allocator API, the SSE route and the browser session Upgrade route, with the edge rate limits that route needs. Placeholders only; the probe endpoints are not published. |
 | `website/vif-log-viewer.html` / `.js` | Bounded same-origin browser reference for `/vif/api/logs`. Caps rendered rows, its pending render queue, and its duplicate fingerprint set; it reaches nothing but its own origin. The script is a separate file because a site that forbids inline script would otherwise silently not run it. |
 

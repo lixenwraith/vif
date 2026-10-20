@@ -56,6 +56,7 @@ make dev       # generated code + race-enabled debug build
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root, the last two only when absent; `CLEAN=1` (here and for `install`) removes the previous install first. |
 | `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
+| `release-readme` | Print the README of one release archive (`RELEASE_TARGET`, `RELEASE_LABEL`), rendered from `deploy/package/release-readme.md`. |
 | `install` | Install the binary, manual, desktop entry, icons, shell completion, licence and docs under `PREFIX`, and the wad as `$(SYSCONFDIR)/vif`; a user who cannot write `/usr/local/bin` gets `~/.local` and the user root. Compiles nothing: `make release install` builds first. |
 | `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |

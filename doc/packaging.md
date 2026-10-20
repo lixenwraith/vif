@@ -61,7 +61,9 @@ Windows amd64 zip, the browser bundle, the wad, the Android APK, and
 publishes nothing. Each binary and browser archive unpacks into one directory
 named for it, and every tarball's entries are root's, so extracting one as root
 neither scatters files nor hands them to the builder's uid; a client archive
-carries `LICENSE.purego` for the desktop window its binary links.
+carries `LICENSE.purego` for the desktop window its binary links. Each archive's
+`README.md` is written for its platform: `make release-readme` renders
+`deploy/package/release-readme.md`, one source whose blocks are tagged by target.
 
 - **Nightly** (daily or on dispatch) is never a release. It replaces the assets
   of the `nightly` prerelease, titled and described as a development build,
