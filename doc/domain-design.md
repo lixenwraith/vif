@@ -154,7 +154,12 @@ decide a Shared outcome.
 An effect keyed to a Shared entity retires with it. An install writes the world
 rather than replaying the lifecycle that ends such effects, so the owner's absence
 is the signal its own system acts on; an effect with no lifetime of its own and no
-owner left would otherwise draw for the rest of the session.
+owner left would otherwise draw for the rest of the session. The converse holds
+for an effect the entity's spawn raises: an install brings the entity without the
+spawn, so the system carrying it raises the effect again. A gold sequence an
+install brings gets its countdown splash for the time it has left, and an install
+that replaces a sequence's header cancels the old header's countdown, since the
+install may have given that id to another composite.
 
 Player-domain does not mean that only one participant sees an effect. A shared FSM
 may raise a local effect on every instance. Effects intended for one participant

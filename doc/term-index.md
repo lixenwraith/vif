@@ -1506,6 +1506,8 @@ code does not have yet, described only by a design such as
 - *Log sink*: Every file-writing logger deletes other `*.jsonl` files in its directory older than 24 hours and the oldest first while over budget. [Logging §13](logging-and-diagnostics.md#13-sink-policy) · `internal/vlog`
 - *Fleet logs*: The node's cleanup timer, acting only on the tmpfs log mount, keeps each session's two newest rotations, removes an older one once five minutes old, and removes any file untouched for five hours. [Kube deploy §7](kube-docker-deploy.md#7-the-nodes-log-tmpfs) · `deploy/guest/vif-fleet-log-cleanup.py`
 
+**retry state** (also: `StormSetupRetry`, `MainSpawnGoldRetry`, `StSpawnRetry`) — An FSM state a spawn's setup falls to when the spawn was refused, which waits briefly and re-enters the setup to ask again, so the active state's defensive timeout never retires a region whose spawn did not happen. [FSM §11](fsm-and-configuration.md#11-authoring-pattern) · `internal/asset/scenario` `storm.toml`, `main.toml`
+
 **reveal** — A music build-up on a rising tier: the incoming pattern starts from as many tracks as the outgoing one sounded and adds one a bar, so a build-up never starts thinner than what it replaces. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `sequencer.go`
 
 **RNG stream** (also: `RandResource.Stream`) — A labelled deterministic generator derived from (session root, domain, label) and inventoried by `RandResource`; captures carry the Shared streams' positions, Player streams stay local, and a conditional draw seeds from the tick and the entities instead (`MixChain`). [Domain design D-8](domain-design.md#d-8--rng-streams-are-domain-separated-and-restorable) · `internal/engine` `RandResource.Stream`, `SaveStreams`; `pkg/vmath` `DeriveSeed`, `MixChain`
@@ -1723,7 +1725,7 @@ code does not have yet, described only by a design such as
 
 **spirit** (also: SpiritComponent, SpiritPattern) — A transient converging effect entity that travels from where it spawned to a target cell over its lifetime along a pattern (spiral, linear, wave, bounce, orbit), raised by the stamped `EventSpiritSpawnRequest`. [Rendering §7](rendering.md#7-layer-inventory) · [Domain model §3](domain-design.md#3-spatial-and-entity-classification) · `internal/component` `SpiritComponent` · `internal/system` `SpiritSystem`
 
-**splash** (also: SplashComponent, SplashSlot) — A Player-domain overlay of large bitmap text drawn at an absolute position or anchored to an entity, used for the gold timer and the typing magnifier, one per splash slot. [Rendering §7](rendering.md#7-layer-inventory) · [Troubleshooting §2](troubleshooting.md#2-issue-1--the-gold-timer-splash-disappears-on-the-guest) · `internal/component` `SplashComponent` · `internal/system` `SplashSystem`
+**splash** (also: SplashComponent, SplashSlot) — A Player-domain overlay of large bitmap text drawn at an absolute position or anchored to an entity, used for the gold timer and the typing magnifier, one per splash slot. [Rendering §7](rendering.md#7-layer-inventory) · [Domain model D-6](domain-design.md#d-6--presentation-and-personal-effects-are-player-domain) · `internal/component` `SplashComponent` · `internal/system` `SplashSystem`
 
 **splice** — three senses.
 - *Fleet*: the allocator copies bytes both ways between a player's connection and the session pod with half-close, ending a direction whose write stalls ten seconds. [Fleet design §9](kubernetes-fleet.md#9-the-session-routes) · `tool/vif-allocator/tcp_proxy.go` `splice`
