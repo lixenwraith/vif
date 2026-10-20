@@ -234,6 +234,40 @@ func (eq *EventQueue) SnapshotTelemetry(dispatch, dead *[EventTypeCount]int64) {
 	}
 }
 
+// QueueTelemetry is the queue's tallies by event name, which a journal's opening
+// carries so the run's diagnostics go on from where they stood.
+type QueueTelemetry struct {
+	Dispatched  map[string]int64 `json:"dispatched,omitempty"`
+	Dead        map[string]int64 `json:"dead,omitempty"`
+	Overwritten uint64           `json:"overwritten"`
+}
+
+// Telemetry reads the tallies. Caller MUST hold the world lock.
+func (eq *EventQueue) Telemetry() QueueTelemetry {
+	t := QueueTelemetry{Dispatched: map[string]int64{}, Dead: map[string]int64{}, Overwritten: eq.overwritten.Load()}
+	for i := 1; i < EventTypeCount; i++ {
+		name := GetEventName(EventType(i))
+		if n := eq.dispatched[i].Load(); n != 0 {
+			t.Dispatched[name] = n
+		}
+		if n := eq.deadLetter[i].Load(); n != 0 {
+			t.Dead[name] = n
+		}
+	}
+	return t
+}
+
+// SetTelemetry resumes them; a name this build does not dispatch counts nothing.
+// Caller MUST hold the world lock.
+func (eq *EventQueue) SetTelemetry(t QueueTelemetry) {
+	eq.overwritten.Store(t.Overwritten)
+	for i := 1; i < EventTypeCount; i++ {
+		name := GetEventName(EventType(i))
+		eq.dispatched[i].Store(t.Dispatched[name])
+		eq.deadLetter[i].Store(t.Dead[name])
+	}
+}
+
 // ResetTelemetry starts queue diagnostics for a new game session.
 // Caller MUST hold the world lock and have drained stale queued events.
 func (eq *EventQueue) ResetTelemetry() {

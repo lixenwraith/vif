@@ -93,6 +93,12 @@ const (
 	// replay names the tick it left its run within one period, at about 5% of a
 	// bot journal
 	DigestIntervalTicks = 20
+
+	// JournalLineBytes is the longest journal line a reader takes; an opening one
+	// line could not hold is refused when the journal starts, its payloads held to
+	// JournalLineHeadroom under it for the record's other fields
+	JournalLineBytes    = 8 << 20
+	JournalLineHeadroom = 64 << 10
 )
 
 // ECS & Resources Limits

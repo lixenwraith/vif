@@ -112,8 +112,9 @@ view — so a group nobody chases costs a cheap reachability check. The throttle
 decides exactly as it would eagerly, which is what keeps the phase identical
 between an instance that reads a field and one that does not (D-17). The
 carrier (`SaveShared`) holds each group's counters, pending flag, computed flag
-and last targets, the route rebuild budget and each gateway graph's endpoints;
-an install re-derives passability and the grids from the installed walls,
+and last targets, the route rebuild budget, each gateway graph's endpoints and
+every resolved target group, since one an update set and no anchor holds is in
+no other state; an install re-derives passability and the grids from the installed walls,
 rebuilds every field whose stamp is not its tier's current generation or whose
 targets differ, keeps the rest, and derives the named graphs. The fields
 themselves are never carried.

@@ -18,8 +18,8 @@ const acceptRetryDelay = 10 * time.Millisecond
 // Transport handles network I/O for a specific role
 type Transport struct {
 	config         *Config
+	listenMu       sync.Mutex // the listeners, which Addr reads from any goroutine
 	listener       net.Listener
-	listenMu       sync.Mutex
 	extraListeners []net.Listener
 	peers          *PeerManager
 
@@ -124,7 +124,9 @@ func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error), s
 			return err
 		}
 	}
+	t.listenMu.Lock()
 	t.listener = ln
+	t.listenMu.Unlock()
 	t.wg.Add(1)
 	go t.acceptLoop(ln, accept, t.config.OnAdmit, served)
 	return nil
@@ -368,6 +370,8 @@ func (t *Transport) Disconnect(id PeerID) bool { return t.peers.Disconnect(id) }
 
 // Addr returns the bound listener address, nil for a client or before Start.
 func (t *Transport) Addr() net.Addr {
+	t.listenMu.Lock()
+	defer t.listenMu.Unlock()
 	if t.listener == nil {
 		return nil
 	}
@@ -392,11 +396,10 @@ func (t *Transport) Stop() error {
 	for _, ln := range t.extraListeners {
 		_ = ln.Close()
 	}
-	t.listenMu.Unlock()
-
 	if t.listener != nil {
 		t.listener.Close()
 	}
+	t.listenMu.Unlock()
 
 	// Before the peers, because a handshake in flight is not a peer yet and would
 	// otherwise hold the wait below for its own read deadline.

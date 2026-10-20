@@ -21,9 +21,6 @@ import (
 type SwarmSystem struct {
 	world *engine.World
 
-	// Runtime state
-	active bool
-
 	// Telemetry
 	statActive          *atomic.Bool
 	statCount           *atomic.Int64
@@ -55,7 +52,6 @@ func NewSwarmSystem(world *engine.World) engine.System {
 }
 
 func (s *SwarmSystem) Init() {
-	s.active = false
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statProtected.Store(0)
@@ -779,11 +775,4 @@ func (s *SwarmSystem) resetSwarmState(swarmComp *component.SwarmComponent) {
 	swarmComp.LockRemaining = 0
 	swarmComp.ChargeRemaining = 0
 	swarmComp.DecelRemaining = 0
-}
-
-func (s *SwarmSystem) CopyState() any { return s.active }
-
-func (s *SwarmSystem) RestoreState(v any) error {
-	s.active = v.(bool)
-	return nil
 }

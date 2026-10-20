@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -335,15 +337,20 @@ func (s *NuggetSystem) collectionCursor(nuggetX, nuggetY int) core.Entity {
 	return 0
 }
 
-type nuggetState struct {
-	lastSpawnAttempt time.Time
-	active           core.Entity
+type nuggetLocal struct {
+	LastSpawnAttempt time.Time   `json:"last_spawn_attempt"`
+	Active           core.Entity `json:"active"`
 }
 
-func (s *NuggetSystem) CopyState() any { return nuggetState{s.lastSpawnAttempt, s.activeNuggetEntity} }
+func (s *NuggetSystem) SaveLocal() ([]byte, error) {
+	return json.Marshal(nuggetLocal{LastSpawnAttempt: s.lastSpawnAttempt, Active: s.activeNuggetEntity})
+}
 
-func (s *NuggetSystem) RestoreState(v any) error {
-	c := v.(nuggetState)
-	s.lastSpawnAttempt, s.activeNuggetEntity = c.lastSpawnAttempt, c.active
+func (s *NuggetSystem) LoadLocal(data []byte) error {
+	var l nuggetLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("nugget: %w", err)
+	}
+	s.lastSpawnAttempt, s.activeNuggetEntity = l.LastSpawnAttempt, l.Active
 	return nil
 }

@@ -112,10 +112,12 @@ func (s *StagedInstall) Commit() error {
 	)
 	started := time.Now() // [wall] telemetry only
 	live, staging, header := s.live, s.staging, s.capture.Header
-	journal := live.world.Resources.Event.Queue.Journal()
+	var journal *event.Journal
 
 	live.world.RunSafe(func() {
 		// Placed before the settlement below: its confirmations dispatch after the write.
+		// The journal too, which an opening may have attached while this waited
+		journal = live.world.Resources.Event.Queue.Journal()
 		place, mark, participant = live.Position(), journal.Mark(), live.world.LocalParticipant()
 
 		// The ledger is settled against the authority's world as installed, before
@@ -149,7 +151,7 @@ func (s *StagedInstall) Commit() error {
 			before, err = live.captureSharedLocked()
 		}
 		if err == nil {
-			s.difference, err = live.writeSharedLocked(projected, &before, true)
+			s.difference, err = live.writeSharedLocked(projected, &before, true, false)
 		}
 		if err == nil {
 			m := live.telemetry
@@ -167,7 +169,9 @@ func (s *StagedInstall) Commit() error {
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
 	if journal != nil {
-		live.journalWritten(journal, place, mark, participant, before, projected)
+		if err := live.journalWritten(journal, place, mark, participant, before, projected); err != nil {
+			live.world.RunSafe(func() { live.journalLostLocked(journal, err) })
+		}
 	}
 	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
 	live.telemetry.CommitUS.Store(s.commitDur.Microseconds())
@@ -184,15 +188,17 @@ func (s *StagedInstall) Commit() error {
 // replay holding the same world writes it at the same place as the same
 // participant. A join writes before its transport attaches, so the identity then
 // is the one the offer assigned.
-func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, before, cap snapshot.SharedCapture) {
+func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, before, cap snapshot.SharedCapture) error {
 	d, err := a.encoder.DiffWritten(before, cap)
 	var body []byte
 	if err == nil {
 		body, err = snapshot.EncodeJSON(d)
 	}
+	if err == nil {
+		err = lineHolds(body)
+	}
 	if err != nil {
-		a.log.Warn("journal", "msg", "journal capture not recorded", "tick", cap.Header.Tick, "error", err.Error())
-		return
+		return err
 	}
 	if participant == 0 {
 		a.sessionMu.Lock()
@@ -203,6 +209,7 @@ func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, part
 		JSeq: mark, Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
 		Participant: participant, Authority: cap.Header.Authority, Body: body,
 	})
+	return nil
 }
 
 // prepareProjectionLocked makes the staging world this instance's predictor: it

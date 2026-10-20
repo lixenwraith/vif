@@ -260,6 +260,10 @@ type Config struct {
 	dialled *joinDial
 	notice  string
 
+	// journalCarried says Journal came from the run this one replaces, which was
+	// journaling: one that fails to reopen leaves this run unjournaled, not unstarted.
+	journalCarried bool
+
 	// log is a secondary runtime's handle: a seat's or a staging world's is tagged,
 	// a replay copy's muted until presented. Nil takes the process's or, driven, its own.
 	log *vlog.Log

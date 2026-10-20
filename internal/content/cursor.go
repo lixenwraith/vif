@@ -1,6 +1,8 @@
 package content
 
 import (
+	"fmt"
+
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -26,18 +28,26 @@ func NewCursor(c *Corpus, rng *vmath.FastRand) *Cursor {
 
 // CursorState is where a walk stands, which a cursor over the same corpus resumes.
 type CursorState struct {
-	rng      uint64
-	src, blk int
-	pinned   bool
+	RNG    uint64 `json:"rng"`
+	Src    int    `json:"src"`
+	Blk    int    `json:"blk"`
+	Pinned bool   `json:"pinned"`
 }
 
 func (cu *Cursor) State() CursorState {
-	return CursorState{rng: cu.rng.State(), src: cu.src, blk: cu.blk, pinned: cu.pinned}
+	return CursorState{RNG: cu.rng.State(), Src: cu.src, Blk: cu.blk, Pinned: cu.pinned}
 }
 
-func (cu *Cursor) SetState(st CursorState) {
-	cu.rng.SetState(st.rng)
-	cu.src, cu.blk, cu.pinned = st.src, st.blk, st.pinned
+// SetState resumes st, refusing a place this corpus does not have: a state read
+// from a file may name one.
+func (cu *Cursor) SetState(st CursorState) error {
+	if !cu.corpus.IsEmpty() && (st.Src < 0 || st.Src >= len(cu.corpus.Sources) ||
+		st.Blk < 0 || st.Blk > len(cu.corpus.Sources[st.Src].Blocks)) {
+		return fmt.Errorf("content: no block %d in source %d of %d", st.Blk, st.Src, len(cu.corpus.Sources))
+	}
+	cu.rng.SetState(st.RNG)
+	cu.src, cu.blk, cu.pinned = st.Src, st.Blk, st.Pinned
+	return nil
 }
 
 // Pin restricts the walk to one source, cycling it indefinitely

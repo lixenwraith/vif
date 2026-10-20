@@ -279,7 +279,7 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 			}
 			held = &cur
 		}
-		diff, err = a.writeSharedLocked(cap, held, reconcileLocal)
+		diff, err = a.writeSharedLocked(cap, held, reconcileLocal, false)
 	})
 	return diff, err
 }
@@ -289,7 +289,9 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 // that already equals cap on the compared surface and in every other part is written
 // as a hash-only answer is, clock and barrier alone. Without held it replaces them.
 // Everything else is identical and has to be: that is what makes the world the sender's.
-func (a *App) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.SharedCapture, reconcileLocal bool) (diff engine.WorldDifference, err error) {
+// own marks a world this instance wrote itself, a journal's opening, whose cursor
+// cells are already this instance's own, so none are held back from it.
+func (a *App) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.SharedCapture, reconcileLocal, own bool) (diff engine.WorldDifference, err error) {
 	if held != nil {
 		diff = engine.SharedWorldDifference(held.World.WithoutLocalCursorState(), cap.World.WithoutLocalCursorState())
 		if diff.Entries == 0 && snapshot.HoldsBesideWorld(*held, cap) {
@@ -320,6 +322,9 @@ func (a *App) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.Share
 		// The roster and every cursor's control assignment are re-derived from this
 		// instance's own position after the stores are written, not adopted (D-13).
 		local := a.world.CaptureCursorControl()
+		if own {
+			local = local.Assignment()
+		}
 		if held != nil {
 			a.world.ReconcileSharedWorld(cap.World)
 		} else {

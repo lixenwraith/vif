@@ -25,18 +25,27 @@ type SharedStateChecker interface {
 	CheckShared(data []byte) error
 }
 
-// StateCopier is implemented by a system holding state outside the stores that a
-// replay copy restored from a checkpoint must take from its source to continue as
-// the source would: player-domain state, pending work, timers. It carries the whole
-// of the system, so the restore skips LoadShared, which re-derives as a joiner
-// would. CopyState's value shares no storage with the system.
+// LocalStateSaver is implemented by a system holding state outside the stores that a
+// copy of it must take from its source to continue as the source would: player-domain
+// state, pending work, timers. A journal's opening carries it from the run, a
+// checkpoint from a replay copy. It is the whole of the system, so a restore skips
+// LoadShared, which re-derives as a joiner would. LoadLocal pushes no events.
+type LocalStateSaver interface {
+	SaveLocal() ([]byte, error)
+	LoadLocal(data []byte) error
+}
+
+// StateCopier is LocalStateSaver for state that does not encode: caches a copy would
+// otherwise rebuild, and a transport. A checkpoint carries it in memory; a journal's
+// opening does not, and its replay re-derives it. CopyState's value shares no storage
+// with the system.
 type StateCopier interface {
 	CopyState() any
 	RestoreState(any) error
 }
 
 // Toggled is a system with an FSM-driven enable flag, which a replay copy carries
-// beside its StateCopier state.
+// beside the system's own state.
 type Toggled interface {
 	Enabled() bool
 	SetEnabled(bool)

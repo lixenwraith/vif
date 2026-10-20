@@ -1,6 +1,7 @@
 package system
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -1160,24 +1161,26 @@ func (s *WallSystem) LoadShared(data []byte) error {
 	return nil
 }
 
-type wallCopy struct {
-	maze      []byte
-	err       error
-	pending   []vmath.Point
-	everyTick bool
+type wallLocal struct {
+	Maze      []byte        `json:"maze"`
+	Pending   []vmath.Point `json:"pending,omitempty"`
+	EveryTick bool          `json:"every_tick"`
 }
 
-// CopyState is the maze generator plus the push checks still owed.
-func (s *WallSystem) CopyState() any {
+// SaveLocal is the maze generator plus the push checks still owed.
+func (s *WallSystem) SaveLocal() ([]byte, error) {
 	maze, err := s.SaveShared()
-	return wallCopy{maze: maze, err: err, pending: slices.Clone(s.pendingPushChecks), everyTick: s.pushCheckEveryTick}
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(wallLocal{Maze: maze, Pending: s.pendingPushChecks, EveryTick: s.pushCheckEveryTick})
 }
 
-func (s *WallSystem) RestoreState(v any) error {
-	c := v.(wallCopy)
-	if c.err != nil {
-		return c.err
+func (s *WallSystem) LoadLocal(data []byte) error {
+	var l wallLocal
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("wall: %w", err)
 	}
-	s.pendingPushChecks, s.pushCheckEveryTick = append(s.pendingPushChecks[:0], c.pending...), c.everyTick
-	return s.LoadShared(c.maze)
+	s.pendingPushChecks, s.pushCheckEveryTick = append(s.pendingPushChecks[:0], l.Pending...), l.EveryTick
+	return s.LoadShared(l.Maze)
 }

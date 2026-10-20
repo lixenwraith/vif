@@ -17,6 +17,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Set is one parsed journal: its anchors and records in jseq order, the worlds it
@@ -63,6 +64,8 @@ type captureFields struct {
 	Mode        uint64 `json:"mode"`
 	Paused      bool   `json:"paused"`
 	Off         string `json:"off"` // system names, comma-separated
+	Slot        uint64 `json:"slot"`
+	Own         []byte `json:"own"`
 }
 
 type digestFields struct {
@@ -155,8 +158,9 @@ func (s *Set) readFile(path string) error {
 	defer f.Close()
 
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64<<10), 8<<20) // a payload can be large
-	for n := 1; sc.Scan(); n++ {
+	sc.Buffer(make([]byte, 0, 64<<10), parameter.JournalLineBytes) // a payload can be large
+	n := 1
+	for ; sc.Scan(); n++ {
 		var l line
 		if json.Unmarshal(sc.Bytes(), &l) != nil {
 			continue // heartbeat or foreign line
@@ -197,7 +201,10 @@ func (s *Set) readFile(path string) error {
 			s.Captures = append(s.Captures, c)
 		}
 	}
-	return sc.Err()
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("%s:%d: %w", path, n, err)
+	}
+	return nil
 }
 
 func decodeRecord(raw json.RawMessage) (event.JournalRecord, error) {
@@ -233,10 +240,13 @@ func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
 	if f.Mode >= uint64(len(core.ModeNames)) {
 		return event.JournalCapture{}, fmt.Errorf("cseq %d: unknown mode %d", f.CSeq, f.Mode)
 	}
+	if f.Slot >= parameter.MaxPlayers && f.Slot != uint64(parameter.NoPlayerSlot) {
+		return event.JournalCapture{}, fmt.Errorf("cseq %d: no roster slot %d", f.CSeq, f.Slot)
+	}
 	c := event.JournalCapture{
 		JSeq: f.JSeq, CSeq: f.CSeq, Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Participant: f.Participant, Authority: f.Authority, Body: f.Body,
-		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused,
+		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Slot: uint8(f.Slot), Own: f.Own,
 	}
 	if f.Off != "" {
 		c.Off = strings.Split(f.Off, ",")

@@ -1041,6 +1041,16 @@ type navSnapshot struct {
 	// Routes names each gateway route graph held and the cells it was computed
 	// between, so a receiver derives the sender's graphs rather than keeping its own.
 	Routes []navRouteGraph `json:"routes,omitempty"`
+
+	// Targets is every resolved target group: one an update set and no anchor holds
+	// is in no other state, and nothing rebuilds it.
+	Targets []navTargetGroup `json:"targets,omitempty"`
+}
+
+// navTargetGroup is one target group's resolved targets, named by group ID.
+type navTargetGroup struct {
+	GroupID uint8                   `json:"group_id"`
+	State   engine.TargetGroupState `json:"state"`
 }
 
 // navRouteGraph is one gateway route graph's derivation inputs, named by the graph
@@ -1098,6 +1108,11 @@ func (s *NavigationSystem) SaveShared() ([]byte, error) {
 		snap.Groups = append(snap.Groups, phase)
 	}
 	snap.Routes = s.saveRouteGraphs()
+	for id := range uint8(component.MaxTargetGroups) {
+		if st := s.world.Resources.Target.GetGroup(id); st != (engine.TargetGroupState{}) {
+			snap.Targets = append(snap.Targets, navTargetGroup{GroupID: id, State: st})
+		}
+	}
 	return json.Marshal(snap)
 }
 
@@ -1209,6 +1224,15 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 			phase.CompositeTicks, phase.CompositePending, phase.CompositeComputed, phase.CompositeLastTargets)
 	}
 	s.deriveRouteGraphs(snap.Routes)
+	for id := range uint8(component.MaxTargetGroups) {
+		s.world.Resources.Target.SetGroup(id, engine.TargetGroupState{})
+	}
+	for _, g := range snap.Targets {
+		if int(g.GroupID) >= component.MaxTargetGroups || g.State.Count < 0 || g.State.Count > len(g.State.Targets) {
+			return fmt.Errorf("navigation: invalid target group %d", g.GroupID)
+		}
+		s.world.Resources.Target.SetGroup(g.GroupID, g.State)
+	}
 	return nil
 }
 

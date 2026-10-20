@@ -125,7 +125,7 @@ var configPages = []configPage{
 		commandAction("mutex", "Mutex profile", captureDescription("a mutex profile"), "debug mutex"),
 		commandAction("trace", "Execution trace", captureDescription("an execution trace"), "debug trace"),
 		commandAction("snap", "Telemetry snapshot", "Write every metric with the view and session state to a snapshot file in the log directory.", "t save"),
-		{key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The run plays on; your own glyphs and effects start fresh, as on a join. :journal start <slot> records a bot of yours.",
+		{key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The run plays on as it was. :journal start <slot> records a bot of yours.",
 			command: "journal", choices: []string{"off", "on"}, read: journalValue, disabled: journalUnavailable},
 	}},
 	{key: "startup", label: "Startup settings", description: "Settings that require restarting, and where to configure them.", options: []configOption{

@@ -392,8 +392,12 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	// alone pays a ticker and no world reads.
 	a.corrections.StartPump()
 	if journal != nil {
-		if after, err := a.captureSharedLocked(); err == nil {
-			a.journalWritten(journal, place, mark, a.world.LocalParticipant(), before, after)
+		after, err := a.captureSharedLocked()
+		if err == nil {
+			err = a.journalWritten(journal, place, mark, a.world.LocalParticipant(), before, after)
+		}
+		if err != nil {
+			a.journalLostLocked(journal, err)
 		}
 	}
 

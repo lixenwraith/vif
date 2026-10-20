@@ -292,7 +292,7 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 | `journal opened` / `journal closed` | INFO | `path`, plus `run`, `tick` on a mid-run opening, `records`, `encode_failed` on a close | `app.initJournal` and `:journal start`; `app.Close` and `:journal stop` |
 | `journal not opened` | WARN | `error` | a `:journal start` the run refused or could not open (§9) |
 | `seat journal opened` / `seat journal closed` / `seat journal not changed` | INFO / INFO / WARN | `slot`, plus `path`, or `start` and `error` | the holder, for a `:journal start\|stop <slot>` its bot seat served |
-| `journal not closed` / `journal capture not recorded` | ERROR / WARN | `error`, plus `tick` on the capture | `app.Close`; a written world the journal could not take |
+| `journal not closed` / `journal closed: a written world was not recorded` | ERROR | `error`, plus `path`, `tick` on the second | `app.Close` and `:journal stop`; a written world the journal could not take, which closes it there |
 | `journal incomplete` | WARN | `error` | `PlayJournal` playing on past a sequence gap (§9) |
 | `replay opened` | INFO | `records`, `digests`, `seed`, `speed` | `PlayJournal` |
 | `replay moved` | INFO | `run`, `tick`, `from_run`, `from_tick`, `delta` | each jump of the presented tick |
@@ -911,28 +911,41 @@ interval, the content source, pin and fingerprint, and geometry.
 ### Opening mid-run
 
 `:journal start` (Diagnostics → Replay journal) opens a journal where the run
-stands, solo, hosting or joined, and the run plays on. Its replay boots afresh
-from the anchor (non-zero `start_run` or `start_tick`), and no written world
-carries this instance's player domain, so the run takes on what that replay will
-hold. The opening builds the boot as a muted headless twin, writes the live shared
-world over it as the journal's first `capture`, flagged `opens` and carrying the
-operator state (`mode`, `paused`, the toggled systems that are `off`), and the run
-adopts the twin's result before the journal attaches. The shared world stays as
-it was; the local player domain (own shots, effects, glyphs), telemetry counters,
-APM and the corpus feed start fresh, as a joiner's do. The transport, audio and
-music keep their own state. A replay writes the opening as any written world,
-then takes up the operator state and engages its crossing barrier at once, as
-the run's was; `app.loadJournal` refuses a mid-run journal whose files lack the
-opening.
+stands, solo, hosting or joined, and the run plays on as it was. Its replay boots
+afresh from the anchor (non-zero `start_run` or `start_tick`), so the journal's
+first `capture`, flagged `opens`, carries everything that boot would otherwise
+decide: the live shared world, the operator state (`mode`, `paused`, the toggled
+systems that are `off`, the `slot` input follows) and the run's own side (`own`).
+That is its player domain under the same entity IDs, the camera, APM and gesture
+tracking, timed effects, the player domain's streams, the cells its input has in
+flight, each system's own state (`engine.LocalStateSaver`), the corpus position,
+the event tallies, every status cell, and the order the run holds both domains'
+entities in by store and by cell (`engine.WorldOrder`), which systems visit them
+in and a re-insertion would not keep. The opening writes it over a muted
+headless twin of the boot as a replay does, and the run adopts the twin's result,
+itself, before the journal attaches; only the transport, audio and music keep
+their own state. A start is refused while a new game is starting, between a
+reset's cleanup and its boot spawn. A replay writes the opening as any written
+world, binds its slot, writes the own side over what that settle derived, takes up
+the operator state and engages its crossing barrier at once, as the run's was;
+`app.loadJournal` refuses a mid-run journal whose files lack the opening.
 
 `:journal stop` closes the journal where the run stands, writing its `end` record
-and releasing the file; a later `:journal start` opens another. With a slot,
-`:journal start|stop <slot>` does the same for a bot seat this process runs: the
-seat's loop opens its journal in its own run, the holder's status line reports
-the path, and the journal closes when the seat leaves or its holder's run ends. A
-remote participant's run is not journaled here, since its player domain never
-leaves its machine. A run journaling when a scenario change or a join replaces it
-journals on in the next run's file, from its start.
+and releasing the file; a later `:journal start` opens another, and a stop before
+a start is served cancels it. With a slot, `:journal start|stop <slot>` does the
+same for a bot seat this process runs: the seat's loop opens its journal in its
+own run and the holder's status line reports the path. The journal closes, its
+`end` written, when the seat leaves, whether dropped, quitting or left with no
+session, and the holder says so; a start the seat never served is refused then,
+and one asked of a leaving seat at once. A remote participant's run is not
+journaled here, since its player domain never leaves its machine. A run
+journaling, or asked to start, when a scenario change or a join replaces it
+journals on in the next run's file from its start, as the next run's status line
+says, and plays on unjournaled if that file cannot open; its seats' journals
+close with it, named on the same line. An opening too large for one journal line
+(`parameter.JournalLineBytes`) is refused before the run is touched; a later
+written world it cannot record closes the journal where it still verifies, as
+the status line says.
 
 ### Written worlds and notes
 

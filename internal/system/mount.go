@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -319,9 +321,11 @@ func (s *MountSystem) shotRand(host core.Entity) *vmath.FastRand {
 	return &s.rng
 }
 
-func (s *MountSystem) CopyState() any { return s.sharedRoot }
+func (s *MountSystem) SaveLocal() ([]byte, error) { return json.Marshal(s.sharedRoot) }
 
-func (s *MountSystem) RestoreState(v any) error {
-	s.sharedRoot = v.(uint64)
+func (s *MountSystem) LoadLocal(data []byte) error {
+	if err := json.Unmarshal(data, &s.sharedRoot); err != nil {
+		return fmt.Errorf("mount: %w", err)
+	}
 	return nil
 }

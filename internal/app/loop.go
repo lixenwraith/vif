@@ -62,7 +62,7 @@ func Run(cfg Config) error {
 			return nil
 		}
 		solo, cfg.notice, cfg.dialled, cfg.Bots, cfg.Play = nil, next.Notice, nil, next.Bots, next.Play
-		cfg.Journal = next.Journal
+		cfg.Journal, cfg.journalCarried = next.Journal, next.Journal
 		if next.Scenario != "" {
 			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
 		}
@@ -109,7 +109,12 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 	next, err = a.Loop()
 	if next != nil {
 		next.Play = a.livePlay()
-		next.Journal = a.recorder.Load() != nil
+		ask := a.journalAsk.Load()
+		next.Journal = a.recorder.Load() != nil || (ask != nil && ask.start)
+		// A seat's journal closes with this run, which is the last its holder hears of it
+		for _, line := range a.seatJournalNotices() {
+			next.Notice = joinNotice(next.Notice, line)
+		}
 	}
 	return next, err
 }

@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"slices"
 
@@ -104,438 +105,60 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 	s.Created = w.createdCount[core.DomainShared].Load()
 	s.Destroyed = w.destroyedCount[core.DomainShared].Load()
 
-	for _, e := range w.Positions.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Positions.GetPosition(e); ok {
-			s.Positions = append(s.Positions, StoreEntry[component.PositionComponent]{Entity: e, Value: v})
-		}
-	}
-	for _, e := range w.Components.Glyph.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Glyph.GetComponent(e); ok {
-			s.Glyph = append(s.Glyph, StoreEntry[component.GlyphComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Sigil.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Sigil.GetComponent(e); ok {
-			s.Sigil = append(s.Sigil, StoreEntry[component.SigilComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Nugget.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Nugget.GetComponent(e); ok {
-			s.Nugget = append(s.Nugget, StoreEntry[component.NuggetComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Cursor.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Cursor.GetComponent(e); ok {
-			s.Cursor = append(s.Cursor, StoreEntry[component.CursorComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Protection.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Protection.GetComponent(e); ok {
-			s.Protection = append(s.Protection, StoreEntry[component.ProtectionComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Kinetic.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Kinetic.GetComponent(e); ok {
-			s.Kinetic = append(s.Kinetic, StoreEntry[component.KineticComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Wall.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Wall.GetComponent(e); ok {
-			s.Wall = append(s.Wall, StoreEntry[component.WallComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Loot.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Loot.GetComponent(e); ok {
-			s.Loot = append(s.Loot, StoreEntry[component.LootComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Gateway.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Gateway.GetComponent(e); ok {
-			s.Gateway = append(s.Gateway, StoreEntry[component.GatewayComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Energy.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Energy.GetComponent(e); ok {
-			s.Energy = append(s.Energy, StoreEntry[component.EnergyComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Heat.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Heat.GetComponent(e); ok {
-			s.Heat = append(s.Heat, StoreEntry[component.HeatComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Shield.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Shield.GetComponent(e); ok {
-			s.Shield = append(s.Shield, StoreEntry[component.ShieldComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Boost.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Boost.GetComponent(e); ok {
-			s.Boost = append(s.Boost, StoreEntry[component.BoostComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Weapon.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Weapon.GetComponent(e); ok {
-			s.Weapon = append(s.Weapon, StoreEntry[component.WeaponComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Orb.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Orb.GetComponent(e); ok {
-			s.Orb = append(s.Orb, StoreEntry[component.OrbComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Ping.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Ping.GetComponent(e); ok {
-			s.Ping = append(s.Ping, StoreEntry[component.PingComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.CursorView.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.CursorView.GetComponent(e); ok {
-			s.CursorView = append(s.CursorView, StoreEntry[component.CursorViewComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Particle.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Particle.GetComponent(e); ok {
-			s.Particle = append(s.Particle, StoreEntry[component.ParticleComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Tracer.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Tracer.GetComponent(e); ok {
-			s.Tracer = append(s.Tracer, StoreEntry[component.TracerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Navigation.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Navigation.GetComponent(e); ok {
-			s.Navigation = append(s.Navigation, StoreEntry[component.NavigationComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Combat.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Combat.GetComponent(e); ok {
-			s.Combat = append(s.Combat, StoreEntry[component.CombatComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Genotype.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Genotype.GetComponent(e); ok {
-			s.Genotype = append(s.Genotype, StoreEntry[component.GenotypeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Lightning.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Lightning.GetComponent(e); ok {
-			s.Lightning = append(s.Lightning, StoreEntry[component.LightningComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Missile.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Missile.GetComponent(e); ok {
-			s.Missile = append(s.Missile, StoreEntry[component.MissileComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Mount.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Mount.GetComponent(e); ok {
-			s.Mount = append(s.Mount, StoreEntry[component.MountComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Ray.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Ray.GetComponent(e); ok {
-			s.Ray = append(s.Ray, StoreEntry[component.RayComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Spirit.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Spirit.GetComponent(e); ok {
-			s.Spirit = append(s.Spirit, StoreEntry[component.SpiritComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Materialize.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Materialize.GetComponent(e); ok {
-			s.Materialize = append(s.Materialize, StoreEntry[component.MaterializeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Target.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Target.GetComponent(e); ok {
-			s.Target = append(s.Target, StoreEntry[component.TargetComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.TargetAnchor.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.TargetAnchor.GetComponent(e); ok {
-			s.TargetAnchor = append(s.TargetAnchor, StoreEntry[component.TargetAnchorComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Drain.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Drain.GetComponent(e); ok {
-			s.Drain = append(s.Drain, StoreEntry[component.DrainComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Quasar.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Quasar.GetComponent(e); ok {
-			s.Quasar = append(s.Quasar, StoreEntry[component.QuasarComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Swarm.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Swarm.GetComponent(e); ok {
-			s.Swarm = append(s.Swarm, StoreEntry[component.SwarmComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Storm.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Storm.GetComponent(e); ok {
-			s.Storm = append(s.Storm, StoreEntry[component.StormComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.StormCircle.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.StormCircle.GetComponent(e); ok {
-			s.StormCircle = append(s.StormCircle, StoreEntry[component.StormCircleComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Bullet.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Bullet.GetComponent(e); ok {
-			s.Bullet = append(s.Bullet, StoreEntry[component.BulletComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Pylon.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Pylon.GetComponent(e); ok {
-			s.Pylon = append(s.Pylon, StoreEntry[component.PylonComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Snake.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Snake.GetComponent(e); ok {
-			s.Snake = append(s.Snake, StoreEntry[component.SnakeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.SnakeHead.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.SnakeHead.GetComponent(e); ok {
-			s.SnakeHead = append(s.SnakeHead, StoreEntry[component.SnakeHeadComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.SnakeBody.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.SnakeBody.GetComponent(e); ok {
-			s.SnakeBody = append(s.SnakeBody, StoreEntry[component.SnakeBodyComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.SnakeMember.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.SnakeMember.GetComponent(e); ok {
-			s.SnakeMember = append(s.SnakeMember, StoreEntry[component.SnakeMemberComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Eye.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Eye.GetComponent(e); ok {
-			s.Eye = append(s.Eye, StoreEntry[component.EyeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Tower.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Tower.GetComponent(e); ok {
-			s.Tower = append(s.Tower, StoreEntry[component.TowerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Kraken.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Kraken.GetComponent(e); ok {
-			s.Kraken = append(s.Kraken, StoreEntry[component.KrakenComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Header.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Header.GetComponent(e); ok {
-			s.Header = append(s.Header, StoreEntry[component.HeaderComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Member.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Member.GetComponent(e); ok {
-			s.Member = append(s.Member, StoreEntry[component.MemberComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Flash.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Flash.GetComponent(e); ok {
-			s.Flash = append(s.Flash, StoreEntry[component.FlashComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Fadeout.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Fadeout.GetComponent(e); ok {
-			s.Fadeout = append(s.Fadeout, StoreEntry[component.FadeoutComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Splash.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Splash.GetComponent(e); ok {
-			s.Splash = append(s.Splash, StoreEntry[component.SplashComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Marker.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Marker.GetComponent(e); ok {
-			s.Marker = append(s.Marker, StoreEntry[component.MarkerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Button.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Button.GetComponent(e); ok {
-			s.Button = append(s.Button, StoreEntry[component.ButtonComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Death.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Death.GetComponent(e); ok {
-			s.Death = append(s.Death, StoreEntry[component.DeathComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
-	for _, e := range w.Components.Timer.Entities() {
-		if e.Domain() != core.DomainShared {
-			continue
-		}
-		if v, ok := w.Components.Timer.GetComponent(e); ok {
-			s.Timer = append(s.Timer, StoreEntry[component.TimerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
-		}
-	}
+	s.Positions = captureRows(w.Positions.dense, w.Positions.entities, core.DomainShared)
+	s.Glyph = captureRows(w.Components.Glyph.dense, w.Components.Glyph.entities, core.DomainShared)
+	s.Sigil = captureRows(w.Components.Sigil.dense, w.Components.Sigil.entities, core.DomainShared)
+	s.Nugget = captureRows(w.Components.Nugget.dense, w.Components.Nugget.entities, core.DomainShared)
+	s.Cursor = captureRows(w.Components.Cursor.dense, w.Components.Cursor.entities, core.DomainShared)
+	s.Protection = captureRows(w.Components.Protection.dense, w.Components.Protection.entities, core.DomainShared)
+	s.Kinetic = captureRows(w.Components.Kinetic.dense, w.Components.Kinetic.entities, core.DomainShared)
+	s.Wall = captureRows(w.Components.Wall.dense, w.Components.Wall.entities, core.DomainShared)
+	s.Loot = captureRows(w.Components.Loot.dense, w.Components.Loot.entities, core.DomainShared)
+	s.Gateway = captureRows(w.Components.Gateway.dense, w.Components.Gateway.entities, core.DomainShared)
+	s.Energy = captureRows(w.Components.Energy.dense, w.Components.Energy.entities, core.DomainShared)
+	s.Heat = captureRows(w.Components.Heat.dense, w.Components.Heat.entities, core.DomainShared)
+	s.Shield = captureRows(w.Components.Shield.dense, w.Components.Shield.entities, core.DomainShared)
+	s.Boost = captureRows(w.Components.Boost.dense, w.Components.Boost.entities, core.DomainShared)
+	s.Weapon = captureRows(w.Components.Weapon.dense, w.Components.Weapon.entities, core.DomainShared)
+	s.Orb = captureRows(w.Components.Orb.dense, w.Components.Orb.entities, core.DomainShared)
+	s.Ping = captureRows(w.Components.Ping.dense, w.Components.Ping.entities, core.DomainShared)
+	s.CursorView = captureRows(w.Components.CursorView.dense, w.Components.CursorView.entities, core.DomainShared)
+	s.Particle = captureRows(w.Components.Particle.dense, w.Components.Particle.entities, core.DomainShared)
+	s.Tracer = captureRows(w.Components.Tracer.dense, w.Components.Tracer.entities, core.DomainShared)
+	s.Navigation = captureRows(w.Components.Navigation.dense, w.Components.Navigation.entities, core.DomainShared)
+	s.Combat = captureRows(w.Components.Combat.dense, w.Components.Combat.entities, core.DomainShared)
+	s.Genotype = captureRows(w.Components.Genotype.dense, w.Components.Genotype.entities, core.DomainShared)
+	s.Lightning = captureRows(w.Components.Lightning.dense, w.Components.Lightning.entities, core.DomainShared)
+	s.Missile = captureRows(w.Components.Missile.dense, w.Components.Missile.entities, core.DomainShared)
+	s.Mount = captureRows(w.Components.Mount.dense, w.Components.Mount.entities, core.DomainShared)
+	s.Ray = captureRows(w.Components.Ray.dense, w.Components.Ray.entities, core.DomainShared)
+	s.Spirit = captureRows(w.Components.Spirit.dense, w.Components.Spirit.entities, core.DomainShared)
+	s.Materialize = captureRows(w.Components.Materialize.dense, w.Components.Materialize.entities, core.DomainShared)
+	s.Target = captureRows(w.Components.Target.dense, w.Components.Target.entities, core.DomainShared)
+	s.TargetAnchor = captureRows(w.Components.TargetAnchor.dense, w.Components.TargetAnchor.entities, core.DomainShared)
+	s.Drain = captureRows(w.Components.Drain.dense, w.Components.Drain.entities, core.DomainShared)
+	s.Quasar = captureRows(w.Components.Quasar.dense, w.Components.Quasar.entities, core.DomainShared)
+	s.Swarm = captureRows(w.Components.Swarm.dense, w.Components.Swarm.entities, core.DomainShared)
+	s.Storm = captureRows(w.Components.Storm.dense, w.Components.Storm.entities, core.DomainShared)
+	s.StormCircle = captureRows(w.Components.StormCircle.dense, w.Components.StormCircle.entities, core.DomainShared)
+	s.Bullet = captureRows(w.Components.Bullet.dense, w.Components.Bullet.entities, core.DomainShared)
+	s.Pylon = captureRows(w.Components.Pylon.dense, w.Components.Pylon.entities, core.DomainShared)
+	s.Snake = captureRows(w.Components.Snake.dense, w.Components.Snake.entities, core.DomainShared)
+	s.SnakeHead = captureRows(w.Components.SnakeHead.dense, w.Components.SnakeHead.entities, core.DomainShared)
+	s.SnakeBody = captureRows(w.Components.SnakeBody.dense, w.Components.SnakeBody.entities, core.DomainShared)
+	s.SnakeMember = captureRows(w.Components.SnakeMember.dense, w.Components.SnakeMember.entities, core.DomainShared)
+	s.Eye = captureRows(w.Components.Eye.dense, w.Components.Eye.entities, core.DomainShared)
+	s.Tower = captureRows(w.Components.Tower.dense, w.Components.Tower.entities, core.DomainShared)
+	s.Kraken = captureRows(w.Components.Kraken.dense, w.Components.Kraken.entities, core.DomainShared)
+	s.Header = captureRows(w.Components.Header.dense, w.Components.Header.entities, core.DomainShared)
+	s.Member = captureRows(w.Components.Member.dense, w.Components.Member.entities, core.DomainShared)
+	s.Flash = captureRows(w.Components.Flash.dense, w.Components.Flash.entities, core.DomainShared)
+	s.Fadeout = captureRows(w.Components.Fadeout.dense, w.Components.Fadeout.entities, core.DomainShared)
+	s.Splash = captureRows(w.Components.Splash.dense, w.Components.Splash.entities, core.DomainShared)
+	s.Marker = captureRows(w.Components.Marker.dense, w.Components.Marker.entities, core.DomainShared)
+	s.Button = captureRows(w.Components.Button.dense, w.Components.Button.entities, core.DomainShared)
+	s.Death = captureRows(w.Components.Death.dense, w.Components.Death.entities, core.DomainShared)
+	s.Timer = captureRows(w.Components.Timer.dense, w.Components.Timer.entities, core.DomainShared)
 	return s
 }
 
@@ -719,6 +342,415 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	// Its gauges are published on the status cadence, so republish them here —
 	// they describe what was just installed, and they are in the compared surface.
 	w.Positions.PublishTelemetry()
+}
+
+// PlayerWorldState is this instance's player domain, by store, beside its placements
+// and allocator counters: what a journal's opening carries so its replay plays on as
+// the run's own participant. Unindexed names the placements a full cell held out,
+// which a re-insertion would otherwise take in.
+type PlayerWorldState struct {
+	NextEntity uint64 `json:"next_entity"`
+	Created    int64  `json:"created"`
+	Destroyed  int64  `json:"destroyed"`
+
+	Positions   []StoreEntry[component.PositionComponent]    `json:"positions,omitempty"`
+	Unindexed   []core.Entity                                `json:"unindexed,omitempty"`
+	Glyph       []StoreEntry[component.GlyphComponent]       `json:"glyph,omitempty"`
+	Sigil       []StoreEntry[component.SigilComponent]       `json:"sigil,omitempty"`
+	Nugget      []StoreEntry[component.NuggetComponent]      `json:"nugget,omitempty"`
+	Protection  []StoreEntry[component.ProtectionComponent]  `json:"protection,omitempty"`
+	Kinetic     []StoreEntry[component.KineticComponent]     `json:"kinetic,omitempty"`
+	Loot        []StoreEntry[component.LootComponent]        `json:"loot,omitempty"`
+	Shield      []StoreEntry[component.ShieldComponent]      `json:"shield,omitempty"`
+	Orb         []StoreEntry[component.OrbComponent]         `json:"orb,omitempty"`
+	Particle    []StoreEntry[component.ParticleComponent]    `json:"particle,omitempty"`
+	Tracer      []StoreEntry[component.TracerComponent]      `json:"tracer,omitempty"`
+	Navigation  []StoreEntry[component.NavigationComponent]  `json:"navigation,omitempty"`
+	Combat      []StoreEntry[component.CombatComponent]      `json:"combat,omitempty"`
+	Lightning   []StoreEntry[component.LightningComponent]   `json:"lightning,omitempty"`
+	Missile     []StoreEntry[component.MissileComponent]     `json:"missile,omitempty"`
+	Ray         []StoreEntry[component.RayComponent]         `json:"ray,omitempty"`
+	Spirit      []StoreEntry[component.SpiritComponent]      `json:"spirit,omitempty"`
+	Materialize []StoreEntry[component.MaterializeComponent] `json:"materialize,omitempty"`
+	Drain       []StoreEntry[component.DrainComponent]       `json:"drain,omitempty"`
+	Bullet      []StoreEntry[component.BulletComponent]      `json:"bullet,omitempty"`
+	Flash       []StoreEntry[component.FlashComponent]       `json:"flash,omitempty"`
+	Fadeout     []StoreEntry[component.FadeoutComponent]     `json:"fadeout,omitempty"`
+	Splash      []StoreEntry[component.SplashComponent]      `json:"splash,omitempty"`
+	Marker      []StoreEntry[component.MarkerComponent]      `json:"marker,omitempty"`
+	Death       []StoreEntry[component.DeathComponent]       `json:"death,omitempty"`
+	Timer       []StoreEntry[component.TimerComponent]       `json:"timer,omitempty"`
+}
+
+// CapturePlayerWorld reads every player entity's components in store order.
+//
+// Caller MUST hold updateMutex.
+func (w *World) CapturePlayerWorld() PlayerWorldState {
+	s := PlayerWorldState{
+		NextEntity: w.nextEntityID[core.DomainPlayer],
+		Created:    w.createdCount[core.DomainPlayer].Load(),
+		Destroyed:  w.destroyedCount[core.DomainPlayer].Load(),
+	}
+	s.Positions, s.Unindexed = w.Positions.capturePlayer()
+	s.Glyph = captureRows(w.Components.Glyph.dense, w.Components.Glyph.entities, core.DomainPlayer)
+	s.Sigil = captureRows(w.Components.Sigil.dense, w.Components.Sigil.entities, core.DomainPlayer)
+	s.Nugget = captureRows(w.Components.Nugget.dense, w.Components.Nugget.entities, core.DomainPlayer)
+	s.Protection = captureRows(w.Components.Protection.dense, w.Components.Protection.entities, core.DomainPlayer)
+	s.Kinetic = captureRows(w.Components.Kinetic.dense, w.Components.Kinetic.entities, core.DomainPlayer)
+	s.Loot = captureRows(w.Components.Loot.dense, w.Components.Loot.entities, core.DomainPlayer)
+	s.Shield = captureRows(w.Components.Shield.dense, w.Components.Shield.entities, core.DomainPlayer)
+	s.Orb = captureRows(w.Components.Orb.dense, w.Components.Orb.entities, core.DomainPlayer)
+	s.Particle = captureRows(w.Components.Particle.dense, w.Components.Particle.entities, core.DomainPlayer)
+	s.Tracer = captureRows(w.Components.Tracer.dense, w.Components.Tracer.entities, core.DomainPlayer)
+	s.Navigation = captureRows(w.Components.Navigation.dense, w.Components.Navigation.entities, core.DomainPlayer)
+	s.Combat = captureRows(w.Components.Combat.dense, w.Components.Combat.entities, core.DomainPlayer)
+	s.Lightning = captureRows(w.Components.Lightning.dense, w.Components.Lightning.entities, core.DomainPlayer)
+	s.Missile = captureRows(w.Components.Missile.dense, w.Components.Missile.entities, core.DomainPlayer)
+	s.Ray = captureRows(w.Components.Ray.dense, w.Components.Ray.entities, core.DomainPlayer)
+	s.Spirit = captureRows(w.Components.Spirit.dense, w.Components.Spirit.entities, core.DomainPlayer)
+	s.Materialize = captureRows(w.Components.Materialize.dense, w.Components.Materialize.entities, core.DomainPlayer)
+	s.Drain = captureRows(w.Components.Drain.dense, w.Components.Drain.entities, core.DomainPlayer)
+	s.Bullet = captureRows(w.Components.Bullet.dense, w.Components.Bullet.entities, core.DomainPlayer)
+	s.Flash = captureRows(w.Components.Flash.dense, w.Components.Flash.entities, core.DomainPlayer)
+	s.Fadeout = captureRows(w.Components.Fadeout.dense, w.Components.Fadeout.entities, core.DomainPlayer)
+	s.Splash = captureRows(w.Components.Splash.dense, w.Components.Splash.entities, core.DomainPlayer)
+	s.Marker = captureRows(w.Components.Marker.dense, w.Components.Marker.entities, core.DomainPlayer)
+	s.Death = captureRows(w.Components.Death.dense, w.Components.Death.entities, core.DomainPlayer)
+	s.Timer = captureRows(w.Components.Timer.dense, w.Components.Timer.entities, core.DomainPlayer)
+	return s
+}
+
+// InstallPlayerWorld replaces this world's player domain with a capture under the
+// IDs it was read with, which a system's own state names. Written after the shared
+// world, so each cell's player run follows its final shared one.
+//
+// Caller MUST hold updateMutex.
+func (w *World) InstallPlayerWorld(s PlayerWorldState) {
+	w.DestroyDomainEntities(core.DomainPlayer)
+	w.Positions.installPlayer(s.Positions, s.Unindexed)
+	installPlayerRows(w.Components.Glyph, s.Glyph)
+	installPlayerRows(w.Components.Sigil, s.Sigil)
+	installPlayerRows(w.Components.Nugget, s.Nugget)
+	installPlayerRows(w.Components.Protection, s.Protection)
+	installPlayerRows(w.Components.Kinetic, s.Kinetic)
+	installPlayerRows(w.Components.Loot, s.Loot)
+	installPlayerRows(w.Components.Shield, s.Shield)
+	installPlayerRows(w.Components.Orb, s.Orb)
+	installPlayerRows(w.Components.Particle, s.Particle)
+	installPlayerRows(w.Components.Tracer, s.Tracer)
+	installPlayerRows(w.Components.Navigation, s.Navigation)
+	installPlayerRows(w.Components.Combat, s.Combat)
+	installPlayerRows(w.Components.Lightning, s.Lightning)
+	installPlayerRows(w.Components.Missile, s.Missile)
+	installPlayerRows(w.Components.Ray, s.Ray)
+	installPlayerRows(w.Components.Spirit, s.Spirit)
+	installPlayerRows(w.Components.Materialize, s.Materialize)
+	installPlayerRows(w.Components.Drain, s.Drain)
+	installPlayerRows(w.Components.Bullet, s.Bullet)
+	installPlayerRows(w.Components.Flash, s.Flash)
+	installPlayerRows(w.Components.Fadeout, s.Fadeout)
+	installPlayerRows(w.Components.Splash, s.Splash)
+	installPlayerRows(w.Components.Marker, s.Marker)
+	installPlayerRows(w.Components.Death, s.Death)
+	installPlayerRows(w.Components.Timer, s.Timer)
+	w.nextEntityID[core.DomainPlayer] = max(s.NextEntity, 1)
+	w.createdCount[core.DomainPlayer].Store(s.Created)
+	w.destroyedCount[core.DomainPlayer].Store(s.Destroyed)
+	w.Positions.PublishTelemetry()
+}
+
+// WorldOrder is the order a world holds its entities in, by store and by cell, where
+// two or more give it one. Systems visit them in it, and a world rebuilt by insertion
+// holds another, so a journal's opening carries it: the run it opens on, and every
+// replay of it, then play on in the run's own order.
+type WorldOrder struct {
+	Positions    []core.Entity `json:"positions,omitempty"`
+	Cells        []CellOrder   `json:"cells,omitempty"`
+	Glyph        []core.Entity `json:"glyph,omitempty"`
+	Sigil        []core.Entity `json:"sigil,omitempty"`
+	Nugget       []core.Entity `json:"nugget,omitempty"`
+	Cursor       []core.Entity `json:"cursor,omitempty"`
+	Protection   []core.Entity `json:"protection,omitempty"`
+	Kinetic      []core.Entity `json:"kinetic,omitempty"`
+	Wall         []core.Entity `json:"wall,omitempty"`
+	Loot         []core.Entity `json:"loot,omitempty"`
+	Gateway      []core.Entity `json:"gateway,omitempty"`
+	Energy       []core.Entity `json:"energy,omitempty"`
+	Heat         []core.Entity `json:"heat,omitempty"`
+	Shield       []core.Entity `json:"shield,omitempty"`
+	Boost        []core.Entity `json:"boost,omitempty"`
+	Weapon       []core.Entity `json:"weapon,omitempty"`
+	Orb          []core.Entity `json:"orb,omitempty"`
+	Ping         []core.Entity `json:"ping,omitempty"`
+	CursorView   []core.Entity `json:"cursorview,omitempty"`
+	Particle     []core.Entity `json:"particle,omitempty"`
+	Tracer       []core.Entity `json:"tracer,omitempty"`
+	Navigation   []core.Entity `json:"navigation,omitempty"`
+	Combat       []core.Entity `json:"combat,omitempty"`
+	Genotype     []core.Entity `json:"genotype,omitempty"`
+	Lightning    []core.Entity `json:"lightning,omitempty"`
+	Missile      []core.Entity `json:"missile,omitempty"`
+	Mount        []core.Entity `json:"mount,omitempty"`
+	Ray          []core.Entity `json:"ray,omitempty"`
+	Spirit       []core.Entity `json:"spirit,omitempty"`
+	Materialize  []core.Entity `json:"materialize,omitempty"`
+	Target       []core.Entity `json:"target,omitempty"`
+	TargetAnchor []core.Entity `json:"targetanchor,omitempty"`
+	Drain        []core.Entity `json:"drain,omitempty"`
+	Quasar       []core.Entity `json:"quasar,omitempty"`
+	Swarm        []core.Entity `json:"swarm,omitempty"`
+	Storm        []core.Entity `json:"storm,omitempty"`
+	StormCircle  []core.Entity `json:"stormcircle,omitempty"`
+	Bullet       []core.Entity `json:"bullet,omitempty"`
+	Pylon        []core.Entity `json:"pylon,omitempty"`
+	Snake        []core.Entity `json:"snake,omitempty"`
+	SnakeHead    []core.Entity `json:"snakehead,omitempty"`
+	SnakeBody    []core.Entity `json:"snakebody,omitempty"`
+	SnakeMember  []core.Entity `json:"snakemember,omitempty"`
+	Eye          []core.Entity `json:"eye,omitempty"`
+	Tower        []core.Entity `json:"tower,omitempty"`
+	Kraken       []core.Entity `json:"kraken,omitempty"`
+	Header       []core.Entity `json:"header,omitempty"`
+	Member       []core.Entity `json:"member,omitempty"`
+	Flash        []core.Entity `json:"flash,omitempty"`
+	Fadeout      []core.Entity `json:"fadeout,omitempty"`
+	Splash       []core.Entity `json:"splash,omitempty"`
+	Marker       []core.Entity `json:"marker,omitempty"`
+	Button       []core.Entity `json:"button,omitempty"`
+	Death        []core.Entity `json:"death,omitempty"`
+	Timer        []core.Entity `json:"timer,omitempty"`
+}
+
+// CaptureOrder reads the order this world holds its entities in.
+//
+// Caller MUST hold updateMutex.
+func (w *World) CaptureOrder() WorldOrder {
+	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.grid.cellOrder()}
+	o.Glyph = orderOf(w.Components.Glyph.entities)
+	o.Sigil = orderOf(w.Components.Sigil.entities)
+	o.Nugget = orderOf(w.Components.Nugget.entities)
+	o.Cursor = orderOf(w.Components.Cursor.entities)
+	o.Protection = orderOf(w.Components.Protection.entities)
+	o.Kinetic = orderOf(w.Components.Kinetic.entities)
+	o.Wall = orderOf(w.Components.Wall.entities)
+	o.Loot = orderOf(w.Components.Loot.entities)
+	o.Gateway = orderOf(w.Components.Gateway.entities)
+	o.Energy = orderOf(w.Components.Energy.entities)
+	o.Heat = orderOf(w.Components.Heat.entities)
+	o.Shield = orderOf(w.Components.Shield.entities)
+	o.Boost = orderOf(w.Components.Boost.entities)
+	o.Weapon = orderOf(w.Components.Weapon.entities)
+	o.Orb = orderOf(w.Components.Orb.entities)
+	o.Ping = orderOf(w.Components.Ping.entities)
+	o.CursorView = orderOf(w.Components.CursorView.entities)
+	o.Particle = orderOf(w.Components.Particle.entities)
+	o.Tracer = orderOf(w.Components.Tracer.entities)
+	o.Navigation = orderOf(w.Components.Navigation.entities)
+	o.Combat = orderOf(w.Components.Combat.entities)
+	o.Genotype = orderOf(w.Components.Genotype.entities)
+	o.Lightning = orderOf(w.Components.Lightning.entities)
+	o.Missile = orderOf(w.Components.Missile.entities)
+	o.Mount = orderOf(w.Components.Mount.entities)
+	o.Ray = orderOf(w.Components.Ray.entities)
+	o.Spirit = orderOf(w.Components.Spirit.entities)
+	o.Materialize = orderOf(w.Components.Materialize.entities)
+	o.Target = orderOf(w.Components.Target.entities)
+	o.TargetAnchor = orderOf(w.Components.TargetAnchor.entities)
+	o.Drain = orderOf(w.Components.Drain.entities)
+	o.Quasar = orderOf(w.Components.Quasar.entities)
+	o.Swarm = orderOf(w.Components.Swarm.entities)
+	o.Storm = orderOf(w.Components.Storm.entities)
+	o.StormCircle = orderOf(w.Components.StormCircle.entities)
+	o.Bullet = orderOf(w.Components.Bullet.entities)
+	o.Pylon = orderOf(w.Components.Pylon.entities)
+	o.Snake = orderOf(w.Components.Snake.entities)
+	o.SnakeHead = orderOf(w.Components.SnakeHead.entities)
+	o.SnakeBody = orderOf(w.Components.SnakeBody.entities)
+	o.SnakeMember = orderOf(w.Components.SnakeMember.entities)
+	o.Eye = orderOf(w.Components.Eye.entities)
+	o.Tower = orderOf(w.Components.Tower.entities)
+	o.Kraken = orderOf(w.Components.Kraken.entities)
+	o.Header = orderOf(w.Components.Header.entities)
+	o.Member = orderOf(w.Components.Member.entities)
+	o.Flash = orderOf(w.Components.Flash.entities)
+	o.Fadeout = orderOf(w.Components.Fadeout.entities)
+	o.Splash = orderOf(w.Components.Splash.entities)
+	o.Marker = orderOf(w.Components.Marker.entities)
+	o.Button = orderOf(w.Components.Button.entities)
+	o.Death = orderOf(w.Components.Death.entities)
+	o.Timer = orderOf(w.Components.Timer.entities)
+	return o
+}
+
+// InstallOrder puts this world's entities in o's order. It refuses an order naming
+// other entities than a store or cell holds, leaving the world part-ordered for the
+// caller to abandon.
+//
+// Caller MUST hold updateMutex.
+func (w *World) InstallOrder(o WorldOrder) error {
+	if err := w.Positions.reorder(o.Positions, o.Cells); err != nil {
+		return fmt.Errorf("positions: %w", err)
+	}
+	if err := reorderStore(w.Components.Glyph, o.Glyph); err != nil {
+		return fmt.Errorf("glyph: %w", err)
+	}
+	if err := reorderStore(w.Components.Sigil, o.Sigil); err != nil {
+		return fmt.Errorf("sigil: %w", err)
+	}
+	if err := reorderStore(w.Components.Nugget, o.Nugget); err != nil {
+		return fmt.Errorf("nugget: %w", err)
+	}
+	if err := reorderStore(w.Components.Cursor, o.Cursor); err != nil {
+		return fmt.Errorf("cursor: %w", err)
+	}
+	if err := reorderStore(w.Components.Protection, o.Protection); err != nil {
+		return fmt.Errorf("protection: %w", err)
+	}
+	if err := reorderStore(w.Components.Kinetic, o.Kinetic); err != nil {
+		return fmt.Errorf("kinetic: %w", err)
+	}
+	if err := reorderStore(w.Components.Wall, o.Wall); err != nil {
+		return fmt.Errorf("wall: %w", err)
+	}
+	if err := reorderStore(w.Components.Loot, o.Loot); err != nil {
+		return fmt.Errorf("loot: %w", err)
+	}
+	if err := reorderStore(w.Components.Gateway, o.Gateway); err != nil {
+		return fmt.Errorf("gateway: %w", err)
+	}
+	if err := reorderStore(w.Components.Energy, o.Energy); err != nil {
+		return fmt.Errorf("energy: %w", err)
+	}
+	if err := reorderStore(w.Components.Heat, o.Heat); err != nil {
+		return fmt.Errorf("heat: %w", err)
+	}
+	if err := reorderStore(w.Components.Shield, o.Shield); err != nil {
+		return fmt.Errorf("shield: %w", err)
+	}
+	if err := reorderStore(w.Components.Boost, o.Boost); err != nil {
+		return fmt.Errorf("boost: %w", err)
+	}
+	if err := reorderStore(w.Components.Weapon, o.Weapon); err != nil {
+		return fmt.Errorf("weapon: %w", err)
+	}
+	if err := reorderStore(w.Components.Orb, o.Orb); err != nil {
+		return fmt.Errorf("orb: %w", err)
+	}
+	if err := reorderStore(w.Components.Ping, o.Ping); err != nil {
+		return fmt.Errorf("ping: %w", err)
+	}
+	if err := reorderStore(w.Components.CursorView, o.CursorView); err != nil {
+		return fmt.Errorf("cursorview: %w", err)
+	}
+	if err := reorderStore(w.Components.Particle, o.Particle); err != nil {
+		return fmt.Errorf("particle: %w", err)
+	}
+	if err := reorderStore(w.Components.Tracer, o.Tracer); err != nil {
+		return fmt.Errorf("tracer: %w", err)
+	}
+	if err := reorderStore(w.Components.Navigation, o.Navigation); err != nil {
+		return fmt.Errorf("navigation: %w", err)
+	}
+	if err := reorderStore(w.Components.Combat, o.Combat); err != nil {
+		return fmt.Errorf("combat: %w", err)
+	}
+	if err := reorderStore(w.Components.Genotype, o.Genotype); err != nil {
+		return fmt.Errorf("genotype: %w", err)
+	}
+	if err := reorderStore(w.Components.Lightning, o.Lightning); err != nil {
+		return fmt.Errorf("lightning: %w", err)
+	}
+	if err := reorderStore(w.Components.Missile, o.Missile); err != nil {
+		return fmt.Errorf("missile: %w", err)
+	}
+	if err := reorderStore(w.Components.Mount, o.Mount); err != nil {
+		return fmt.Errorf("mount: %w", err)
+	}
+	if err := reorderStore(w.Components.Ray, o.Ray); err != nil {
+		return fmt.Errorf("ray: %w", err)
+	}
+	if err := reorderStore(w.Components.Spirit, o.Spirit); err != nil {
+		return fmt.Errorf("spirit: %w", err)
+	}
+	if err := reorderStore(w.Components.Materialize, o.Materialize); err != nil {
+		return fmt.Errorf("materialize: %w", err)
+	}
+	if err := reorderStore(w.Components.Target, o.Target); err != nil {
+		return fmt.Errorf("target: %w", err)
+	}
+	if err := reorderStore(w.Components.TargetAnchor, o.TargetAnchor); err != nil {
+		return fmt.Errorf("targetanchor: %w", err)
+	}
+	if err := reorderStore(w.Components.Drain, o.Drain); err != nil {
+		return fmt.Errorf("drain: %w", err)
+	}
+	if err := reorderStore(w.Components.Quasar, o.Quasar); err != nil {
+		return fmt.Errorf("quasar: %w", err)
+	}
+	if err := reorderStore(w.Components.Swarm, o.Swarm); err != nil {
+		return fmt.Errorf("swarm: %w", err)
+	}
+	if err := reorderStore(w.Components.Storm, o.Storm); err != nil {
+		return fmt.Errorf("storm: %w", err)
+	}
+	if err := reorderStore(w.Components.StormCircle, o.StormCircle); err != nil {
+		return fmt.Errorf("stormcircle: %w", err)
+	}
+	if err := reorderStore(w.Components.Bullet, o.Bullet); err != nil {
+		return fmt.Errorf("bullet: %w", err)
+	}
+	if err := reorderStore(w.Components.Pylon, o.Pylon); err != nil {
+		return fmt.Errorf("pylon: %w", err)
+	}
+	if err := reorderStore(w.Components.Snake, o.Snake); err != nil {
+		return fmt.Errorf("snake: %w", err)
+	}
+	if err := reorderStore(w.Components.SnakeHead, o.SnakeHead); err != nil {
+		return fmt.Errorf("snakehead: %w", err)
+	}
+	if err := reorderStore(w.Components.SnakeBody, o.SnakeBody); err != nil {
+		return fmt.Errorf("snakebody: %w", err)
+	}
+	if err := reorderStore(w.Components.SnakeMember, o.SnakeMember); err != nil {
+		return fmt.Errorf("snakemember: %w", err)
+	}
+	if err := reorderStore(w.Components.Eye, o.Eye); err != nil {
+		return fmt.Errorf("eye: %w", err)
+	}
+	if err := reorderStore(w.Components.Tower, o.Tower); err != nil {
+		return fmt.Errorf("tower: %w", err)
+	}
+	if err := reorderStore(w.Components.Kraken, o.Kraken); err != nil {
+		return fmt.Errorf("kraken: %w", err)
+	}
+	if err := reorderStore(w.Components.Header, o.Header); err != nil {
+		return fmt.Errorf("header: %w", err)
+	}
+	if err := reorderStore(w.Components.Member, o.Member); err != nil {
+		return fmt.Errorf("member: %w", err)
+	}
+	if err := reorderStore(w.Components.Flash, o.Flash); err != nil {
+		return fmt.Errorf("flash: %w", err)
+	}
+	if err := reorderStore(w.Components.Fadeout, o.Fadeout); err != nil {
+		return fmt.Errorf("fadeout: %w", err)
+	}
+	if err := reorderStore(w.Components.Splash, o.Splash); err != nil {
+		return fmt.Errorf("splash: %w", err)
+	}
+	if err := reorderStore(w.Components.Marker, o.Marker); err != nil {
+		return fmt.Errorf("marker: %w", err)
+	}
+	if err := reorderStore(w.Components.Button, o.Button); err != nil {
+		return fmt.Errorf("button: %w", err)
+	}
+	if err := reorderStore(w.Components.Death, o.Death); err != nil {
+		return fmt.Errorf("death: %w", err)
+	}
+	if err := reorderStore(w.Components.Timer, o.Timer); err != nil {
+		return fmt.Errorf("timer: %w", err)
+	}
+	return nil
 }
 
 // SharedWorldDelta is one shared world expressed against another, store by store.

@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"sync/atomic"
@@ -49,8 +50,15 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy)
 	}
 	local, toggles := map[string]any{}, map[string]bool{}
 	for _, sys := range a.world.Systems() {
-		if cp, ok := sys.(engine.StateCopier); ok {
-			local[sys.Name()] = cp.CopyState()
+		switch s := sys.(type) {
+		case engine.LocalStateSaver:
+			data, err := s.SaveLocal()
+			if err != nil {
+				return nil, fmt.Errorf("checkpoint %s: %w", sys.Name(), err)
+			}
+			local[sys.Name()] = data
+		case engine.StateCopier:
+			local[sys.Name()] = s.CopyState()
 		}
 		if t, ok := sys.(engine.Toggled); ok {
 			toggles[sys.Name()] = t.Enabled()
@@ -115,10 +123,8 @@ func (a *App) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
 		}
 	}
 	for _, sys := range a.world.Systems() {
-		if cp, ok := sys.(engine.StateCopier); ok {
-			if err := cp.RestoreState(c.local[sys.Name()]); err != nil {
-				return fmt.Errorf("restore %s: %w", sys.Name(), err)
-			}
+		if err := loadLocalState(sys, c.local[sys.Name()]); err != nil {
+			return fmt.Errorf("restore %s: %w", sys.Name(), err)
 		}
 	}
 	if err := a.scheduler.CopyIn(c.scheduler); err != nil {
@@ -143,9 +149,30 @@ func (a *App) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
 	a.ctx.TimeCtl.SetPaused(c.paused)
 	a.ctx.TimeCtl.SetScale(c.scale)
 	a.ctx.Width, a.ctx.Height = c.width, c.height
-	service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(c.content)
+	if err := service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(c.content); err != nil {
+		return err
+	}
 	a.installStatusLocked(c.status)
 	d.Resume(c.driver)
+	return nil
+}
+
+// loadLocalState hands a system what a checkpoint carried of it whole: the bytes of
+// a LocalStateSaver, the value of a StateCopier.
+func loadLocalState(sys engine.System, v any) error {
+	switch s := sys.(type) {
+	case engine.LocalStateSaver:
+		data, ok := v.([]byte)
+		if !ok {
+			return errors.New("no state carried")
+		}
+		return s.LoadLocal(data)
+	case engine.StateCopier:
+		if v == nil {
+			return errors.New("no state carried")
+		}
+		return s.RestoreState(v)
+	}
 	return nil
 }
 
