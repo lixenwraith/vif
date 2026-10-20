@@ -220,7 +220,7 @@ duplicating version strings that would become stale.
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
-| `script/*` | `test.sh`, the named end-to-end setups ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person, and that the setups also run. |
+| `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |
 | `tool/font-editor` | Edit the bitmap splash font. |

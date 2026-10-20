@@ -432,10 +432,11 @@ and the same script geometry, so the presented and headless forms simulate
 identically. A presented run that is in a session offers pan and quit only: pause,
 step and rate are instance-local and half a session cannot be paused.
 
-`script/test.sh pair` runs both halves headless in one command. For a mid-run
-join, start the host half without `-host` and give its script a `command` action
-`:host <addr>`; it runs solo until then, and the guest dials once the host logs
-`hosting opened mid-run`.
+The two halves also play each other headless: start the host half as above and
+run `./bin/vif -script script/sparring-guest.toml -join 127.0.0.1:7777` beside it.
+For a mid-run join, start the host half without `-host` and give its script a
+`command` action `:host <addr>`; it runs solo until then, and the guest dials once
+the host logs `hosting opened mid-run`.
 
 In a session the driver schedules actions on the ticks it has issued, not on the
 world's position: a join, a correction's jump or a reset moves the world and not the
@@ -463,13 +464,14 @@ reproduce.
 process; a host's bots join over loopback, a guest's through its own link.
 Commands, compositions and examples are in [Bots](bots.md).
 
-### End-to-end setups
+### End-to-end checks
 
-`script/test.sh` is the command reference for running a setup by hand. It files
-each setup as interactive (`solo`, `host`, `join`, `serve`, `pair`, ...), observed
-(`host-loss`, `vacant`, `load`, ...) or automated (asserts and prints PASS or FAIL);
-`all` runs the automated set except `maxmap`, and `image` needs a container engine
-and stays out of it.
+`script/test.sh` holds the checks no Go test makes, because they need a built
+binary on a real terminal, `make` or the deploy scripts: the release wad archive
+(`bundle`), a scenario change through `app.Run`'s restart loop and a guest following
+it (`scenario`, `follow`), the session template against the allocator (`fleet`) and
+what a node needs before a pod starts (`deploy`). `all` runs those and prints PASS
+or FAIL; `botfitness` and `load` measure and stay out of it.
 
 ```sh
 ./script/test.sh list
@@ -765,7 +767,7 @@ across instances is the invariant the domain model rests on.
 | CLI and filesystem policy | `cmd/vif/main.go`, `cmd/vif/usage.go`, `internal/app/config.go`, `internal/resource/resolve.go`, `internal/paths` |
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml`, `release.yml` |
-| End-to-end setups | `script/test.sh`, `script/*.toml` |
+| End-to-end checks | `script/test.sh`, `script/*.toml` |
 | Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |

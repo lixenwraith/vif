@@ -43,7 +43,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the allocator installed, in order? **Start here to deploy a node.** |
 | [The session fleet](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, and what was decided? |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
-| [End-to-end setups](../script/README.md) | Operational detail | Which command runs which game setup, and which ones assert? |
+| [End-to-end checks](../script/README.md) | Operational detail | Which checks need a built binary, a terminal or the deploy scripts, and what does each assert or measure? |
 | [Bots](bots.md) | User guide | How do you play beside, watch or host bots, remove them, write a graph and compare graphs? |
 | [Configuration menu](config-menu.md) | User guide | What does each page of the Ctrl-G menu control? |
 
