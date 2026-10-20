@@ -45,6 +45,15 @@ GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\)
 GO ?= $(GO_DEFAULT)
 # purego's FreeBSD port builds its fakecgo as std to link without cgo
 GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std' || true
+# purego, which the desktop window links, builds with cgo off on fewer platforms
+# than the terminal does (not under Termux), so a client build tries it first and
+# names the terminal-only builds rather than leaving purego's errors to explain it.
+WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep -q '/pkg/window$$' && \
+	! err=$$(CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) ./pkg/window 2>&1); then \
+	printf '%s\n' "The desktop window does not build for $$($(GO) env GOOS)/$$($(GO) env GOARCH) with cgo off:" \
+		"  $$(printf '%s\n' "$$err" | grep -v '^\#' | head -n 1)" "Build the terminal alone instead:" \
+		"  make cli                     bin/vif-cli" \
+		"  make release TAGS=vif_nogui  bin/vif, the binary make install installs" >&2; exit 1; fi
 
 .DEFAULT_GOAL := help
 # Goals run in the order given, so make release install installs what it built.
@@ -139,6 +148,7 @@ serve: wasm $(BIN_DIR)
 	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
 
 release: check-go $(BIN_DIR)
+	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
@@ -148,8 +158,10 @@ headless: check-go $(BIN_DIR)
 
 # The window is in every Linux and FreeBSD build, Xlib, EGL and GLES 2 loaded at
 # run time through purego so cgo stays off: gui is the same binary opening it by
-# default, for a desktop entry; cli leaves it out, for a machine with no X to load.
+# default, for a desktop entry; cli leaves it out, for a machine with no X to load
+# or none that purego builds for.
 gui: check-go $(BIN_DIR)
+	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
 
 cli: check-go $(BIN_DIR)
@@ -170,6 +182,7 @@ android-toolchain: check-go
 
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: check-go $(BIN_DIR)
+	@$(WINDOW_CHECK)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go automatically; the mixer streams to the page's speakers.

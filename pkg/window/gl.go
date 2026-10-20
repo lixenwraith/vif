@@ -169,7 +169,7 @@ func load() error {
 	for _, lib := range libs {
 		h, err := purego.Dlopen(lib.path, purego.RTLD_NOW|purego.RTLD_GLOBAL)
 		if err != nil {
-			loaded.err = fmt.Errorf("window: %s: %w", lib.path, err)
+			loaded.err = fmt.Errorf("window: %w", err) // dlerror names the library
 			return loaded.err
 		}
 		for _, s := range lib.syms {

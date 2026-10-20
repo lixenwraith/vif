@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -43,7 +44,10 @@ func (h *windowHost) Init() error {
 	h.win, err = window.Open(window.Config{Title: parameter.WindowTitle, Atlas: atlas,
 		Cols: parameter.WindowCols, Rows: parameter.WindowRows, Scale: *flagScale,
 		Maximized: windowMaximized, Fullscreen: windowFullscreen})
-	return err
+	if err != nil {
+		return fmt.Errorf("%w (-cli plays in the terminal)", err)
+	}
+	return nil
 }
 
 func (h *windowHost) Surface() render.Surface             { return h.win }
