@@ -489,8 +489,8 @@ system suites under `vif_headless`, `cmd/vif` under both, cross-builds `js/wasm`
 `windows/amd64` (`novlog vif_noaudio`), fails if the headless command imports the
 renderer or audio implementation or the browser command the audio implementation,
 and runs `go vet ./...`. It does not execute a Windows artifact or a real
-terminal/audio backend; Windows is a best-effort cross-build, not a supported
-release target.
+terminal/audio backend; Windows is played by hand, not a supported release target,
+and its known issues are in [Build profiles §4](multi-platform.md#4-platform-matrix).
 
 Tests cover `cmd/vif`, `cmd/soundlab`, the headless/replay application harness
 (seeded soak, mutation, bisect, reset, journal density, replay, operator-state
@@ -587,8 +587,8 @@ terminal/audio smoke tests.
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
 | `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
-| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as an untested zip and removable if field reports show it is broken. |
-| Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
+| Windows amd64 | Experimental | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as a zip that plays in a terminal, with the known issues in [Build profiles §4](multi-platform.md#4-platform-matrix). |
+| Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification; no 32-bit target compiles. |
 
 ### WASM host
 

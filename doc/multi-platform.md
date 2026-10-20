@@ -26,7 +26,7 @@ downloadable content, a non-text renderer, and Android.
 | Browser | `make wasm` / `GOOS=js GOARCH=wasm` | Page: a WebGL canvas drawn from cell frames (`pkg/browser`) | Page: an AudioWorklet fed from the Worker | No | Stub | Solo play, or a session joined over its `wss://` route |
 | Desktop window | `make gui` / `vif_gui`: the full native binary opening the window by default; `make cli` / `vif_nogui` leaves the window out | Window: Xlib, EGL, GLES 2 loaded at run time | Included | Yes | Included | A desktop entry, or a machine with no X libraries to load or none purego builds for (Termux); cgo stays off either way |
 | Android | `make android` (`android/`, its own module) | `SurfaceView`, a Canvas cell drawer | `AudioTrack` | Yes | Included | A phone or tablet, the game in-process through `gomobile bind` |
-| Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` artifact |
+| Windows cross-build | `make windows` | Terminal renderer | Omitted | Yes | Stub | Experimental `windows/amd64` zip, with the known issues in §4 |
 
 `novlog` is orthogonal to the other profiles. `vif_headless` implies no audio;
 `vif_noaudio` removes audio while retaining terminal presentation. The browser
@@ -133,9 +133,22 @@ It should produce no output. The container is one static binary in
 |---|---|---|
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
-| Windows amd64 | Experimental cross-build only | `CGO_ENABLED=0`; audio and logging omitted; published as an untested zip, not a development focus, and may be removed if field reports show it is broken |
+| Windows amd64 | Experimental; plays in Alacritty, with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
 | `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas and plays the mixer's PCM (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
-| Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
+| Other native Go targets | No support claim | May compile through generic files, but are not in the verification matrix. No 32-bit target compiles: `parameter.GodEnergyAmount` overflows a 32-bit `int` |
+
+Played on Windows in Alacritty, the zip runs, with three known issues:
+
+- **The mouse does nothing.** The terminal module's Windows backend reads the
+  console as VT input, so a click reaches the game only if the console host passes
+  the terminal's SGR mouse reports through; that is the first thing to check.
+- **No audio.** The build leaves the engine out. The engine compiles for Windows,
+  and ffplay, one of its pipe players, has a Windows build, so audio there is
+  untried rather than impossible.
+- **Status bar cells flicker on redraw.** The terminal module writes a frame
+  without synchronized output (DEC mode 2026), and the Windows console host
+  repaints what a program writes on its own schedule; neither is confirmed as the
+  cause.
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
 Different targets are not promised bit-exact lockstep even when their manifest
@@ -499,8 +512,8 @@ Compilation is not runtime certification. What the browser route still has to
 show is a tab that leaves, hidden or suspended, and a session whose last guest was
 a browser ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)). Linux and FreeBSD release
 checks should include a real terminal; audio-capable artifacts also need at least
-one real or `null`/WAV backend smoke test. Windows remains an unpromised
-cross-build and has no runtime certification work on the release path.
+one real or `null`/WAV backend smoke test. Windows is played by hand, not
+certified on the release path; its known issues are in §4.
 
 The remaining policy decisions are deliberately separate from transport:
 
