@@ -24,45 +24,26 @@ var particleBehaviorOrder = [...]component.ParticleBehavior{
 	component.ParticleBlossom,
 }
 
-// particleAnchor names what particles orbit; the nearest anchor of a behavior's kinds
-// holds each particle
+// particleAnchor names what particles orbit. A behavior's profile holds an orbit for
+// each kind that pulls it; the nearest such anchor holds each particle, except that a
+// vortex holds all of a behavior with a vortex orbit while it lasts.
 type particleAnchor uint8
 
 const (
 	anchorCursor particleAnchor = iota // the local cursor while its energy is nonzero
 	anchorKraken                       // a Kraken while it spins or charges
-	anchorVortex                       // the button a vortex names, while it lasts
+	anchorVortex                       // the button a vortex names
 	anchorCount
 )
 
-// particleOrbit tunes the spring holding a particle on its orbit
+// particleOrbit tunes the spring holding a particle on its orbit; zero stiffness is an
+// anchor kind that does not pull the behavior
 type particleOrbit struct {
 	stiffness            float64 // pull toward the orbit radius (1/s²)
 	radiusMin, radiusMax float64 // cells past the anchor's edge, in its orbit's space
 	damping              float64 // radial damping (1/s)
 	drag                 float64 // quadratic drag while orbiting (1/cell)
 	speed                float64 // tangential speed on entering orbit (cells/s)
-}
-
-// particleOrbits is the orbit each anchor holds. A vortex draws decay in from across
-// the map, so its orbit takes a slow entry and is damped hard: the angular momentum a
-// far particle brings in would otherwise fling it off the map.
-var particleOrbits = [anchorCount]particleOrbit{
-	anchorCursor: {
-		stiffness: parameter.DustAttractionBase,
-		radiusMin: parameter.DustOrbitRadiusMin, radiusMax: parameter.DustOrbitRadiusMax,
-		damping: parameter.DustDamping, drag: parameter.DustGlobalDrag, speed: parameter.DustInitialSpeed,
-	},
-	anchorKraken: {
-		stiffness: parameter.DecayOrbitStiffness,
-		radiusMin: parameter.DecayOrbitRadiusMin, radiusMax: parameter.DecayOrbitRadiusMax,
-		damping: parameter.DecayOrbitDamping, drag: parameter.DecayOrbitDrag, speed: parameter.DecayOrbitSpeed,
-	},
-	anchorVortex: {
-		stiffness: parameter.DecayVortexStiffness,
-		radiusMin: parameter.DecayVortexRadiusMin, radiusMax: parameter.DecayVortexRadiusMax,
-		damping: parameter.DecayVortexDamping, drag: parameter.DecayOrbitDrag, speed: parameter.DecayVortexSpeed,
-	},
 }
 
 // particleProfile is everything that differs between behaviors. A falling
@@ -78,34 +59,63 @@ type particleProfile struct {
 	bounce   float64 // restitution off walls and bounds; 0 destroys the particle instead
 	jitter   float64 // random velocity added every tick (cells/s)
 	drag     float64 // quadratic drag while not orbiting (1/cell)
-	anchors  []particleAnchor
+	orbits   [anchorCount]particleOrbit
 }
 
-var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
-	component.ParticleDecay: {
-		name:     "decay",
-		fall:     1,
-		color:    [3]color.RGB{visual.RgbDecay, visual.RgbDecay, visual.RgbDecay},
-		runeSwap: parameter.ParticleChangeChance,
-		anchors:  []particleAnchor{anchorKraken, anchorVortex},
-	},
-	component.ParticleBlossom: {
-		name:     "blossom",
-		fall:     -1,
-		color:    [3]color.RGB{visual.RgbBlossom, visual.RgbBlossom, visual.RgbBlossom},
-		runeSwap: parameter.ParticleChangeChance,
-	},
-	component.ParticleDust: {
-		name:     "dust",
-		color:    [3]color.RGB{visual.RgbDustDark, visual.RgbDustNormal, visual.RgbDustBright},
-		lifetime: [3]time.Duration{parameter.DustTimerDark, parameter.DustTimerNormal, parameter.DustTimerBright},
-		protect:  component.ProtectFromSpecies,
-		bounce:   parameter.DustWallRestitution,
-		jitter:   parameter.DustJitter,
-		drag:     parameter.DustGlobalDrag,
-		anchors:  []particleAnchor{anchorCursor},
-	},
-}
+// A vortex draws its particles in from across the map, so its orbits take a slow
+// entry and are damped hard: the angular momentum a far particle brings in would
+// otherwise fling it off the map. Decay and blossom fall alike and share one.
+var (
+	fallVortexOrbit = particleOrbit{
+		stiffness: parameter.VortexStiffness,
+		radiusMin: parameter.VortexRadiusMin, radiusMax: parameter.VortexRadiusMax,
+		damping: parameter.VortexDamping, drag: parameter.VortexDrag, speed: parameter.VortexSpeed,
+	}
+	particleProfiles = [component.ParticleBehaviorCount]particleProfile{
+		component.ParticleDecay: {
+			name:     "decay",
+			fall:     1,
+			color:    [3]color.RGB{visual.RgbDecay, visual.RgbDecay, visual.RgbDecay},
+			runeSwap: parameter.ParticleChangeChance,
+			orbits: [anchorCount]particleOrbit{
+				anchorKraken: {
+					stiffness: parameter.DecayOrbitStiffness,
+					radiusMin: parameter.DecayOrbitRadiusMin, radiusMax: parameter.DecayOrbitRadiusMax,
+					damping: parameter.DecayOrbitDamping, drag: parameter.DecayOrbitDrag, speed: parameter.DecayOrbitSpeed,
+				},
+				anchorVortex: fallVortexOrbit,
+			},
+		},
+		component.ParticleBlossom: {
+			name:     "blossom",
+			fall:     -1,
+			color:    [3]color.RGB{visual.RgbBlossom, visual.RgbBlossom, visual.RgbBlossom},
+			runeSwap: parameter.ParticleChangeChance,
+			orbits:   [anchorCount]particleOrbit{anchorVortex: fallVortexOrbit},
+		},
+		component.ParticleDust: {
+			name:     "dust",
+			color:    [3]color.RGB{visual.RgbDustDark, visual.RgbDustNormal, visual.RgbDustBright},
+			lifetime: [3]time.Duration{parameter.DustTimerDark, parameter.DustTimerNormal, parameter.DustTimerBright},
+			protect:  component.ProtectFromSpecies,
+			bounce:   parameter.DustWallRestitution,
+			jitter:   parameter.DustJitter,
+			drag:     parameter.DustGlobalDrag,
+			orbits: [anchorCount]particleOrbit{
+				anchorCursor: {
+					stiffness: parameter.DustAttractionBase,
+					radiusMin: parameter.DustOrbitRadiusMin, radiusMax: parameter.DustOrbitRadiusMax,
+					damping: parameter.DustDamping, drag: parameter.DustGlobalDrag, speed: parameter.DustInitialSpeed,
+				},
+				anchorVortex: {
+					stiffness: parameter.DustVortexStiffness,
+					radiusMin: parameter.DustVortexRadiusMin, radiusMax: parameter.DustVortexRadiusMax,
+					damping: parameter.DustVortexDamping, drag: parameter.DustVortexDrag, speed: parameter.DustVortexSpeed,
+				},
+			},
+		},
+	}
+)
 
 // validParticle reports a behavior ParticleSystem implements; zero is invalid so an
 // omitted event discriminator cannot create the wrong particle
@@ -128,13 +138,13 @@ type particleBehaviorState struct {
 	buffers              bufferTelemetry
 }
 
-// orbitCenter is one anchor this tick, in precise cells, and the orbit it holds: round
-// at aspect, its radii counted from edge, and spin the turn a falling particle takes
-// on entering it
+// orbitCenter is one anchor this tick, in precise cells, and its orbit: round at
+// aspect, its radii counted from edge, and spin the turn a particle takes on entering
+// it, a random one where zero
 type orbitCenter struct {
 	x, y, spin, edge float64
 	aspect           vmath.Aspect
-	orbit            *particleOrbit
+	anchor           particleAnchor
 }
 
 type impulseAcc struct {
@@ -160,7 +170,8 @@ type ParticleSystem struct {
 	lastCursorX, lastCursorY int
 	staggerTick              uint8
 
-	// The button decay circles, by slot, until the vortex lapses
+	// The behavior a vortex holds round the button in slot vortexButton until it lapses
+	vortexBehavior  component.ParticleBehavior
 	vortexButton    int
 	vortexRemaining time.Duration
 
@@ -240,7 +251,7 @@ func (s *ParticleSystem) Init() {
 	s.centers = s.centers[:0]
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.lastCursorX, s.lastCursorY, s.staggerTick = 0, 0, 0
-	s.vortexButton, s.vortexRemaining = 0, 0
+	s.vortexBehavior, s.vortexButton, s.vortexRemaining = component.ParticleNone, 0, 0
 	clear(s.drains)
 	clear(s.impulses)
 	for _, behavior := range particleBehaviorOrder {
@@ -424,12 +435,10 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 		kinetic.AccelY = prof.fall * parameter.ParticleAcceleration
 	} else {
 		// Draw order: radius, turn, stagger group
-		orbit := &particleOrbits[anchorCursor]
+		orbit := &prof.orbits[anchorCursor]
 		particle.OrbitRadius = orbit.radiusMin + s.rng.Float64()*(orbit.radiusMax-orbit.radiusMin)
-		spin := 1.0
-		if s.rng.Intn(2) == 0 {
-			spin = -1
-		}
+		particle.Anchor = uint8(anchorCursor)
+		spin := s.turn()
 		aspect := s.world.Resources.Config.CellAspect
 		centerX, centerY := vmath.Point{X: cx, Y: cy}.Center()
 		kinetic.VelX, kinetic.VelY = orbitKick(preciseX-centerX, aspect.Circular(preciseY-centerY), orbit.speed, spin, aspect)
@@ -473,10 +482,15 @@ func (s *ParticleSystem) spawnWave(p *event.ParticleWavePayload) {
 	}
 }
 
-// vortex turns the glyph field to decay, as a Kraken turns what it covers, and draws
-// all decay around one button until the duration lapses
+// vortex turns the glyph field into particles of one behavior, as a Kraken turns what
+// it covers into decay, and holds all of that behavior round one button until the
+// duration lapses, if its profile has a vortex orbit; a new vortex replaces the last
 func (s *ParticleSystem) vortex(p *event.ParticleVortexPayload) {
-	s.vortexButton, s.vortexRemaining = p.Button, time.Duration(p.DurationMs)*time.Millisecond
+	if !validParticle(p.Behavior) {
+		return
+	}
+	s.vortexBehavior, s.vortexButton = p.Behavior, p.Button
+	s.vortexRemaining = time.Duration(p.DurationMs) * time.Millisecond
 	s.destroyBuf = s.destroyBuf[:0]
 	for _, e := range s.world.Components.Glyph.Entities() {
 		// Glyph mechanics are player-domain; a shared glyph is a gold member
@@ -484,7 +498,7 @@ func (s *ParticleSystem) vortex(p *event.ParticleVortexPayload) {
 			s.destroyBuf = append(s.destroyBuf, e)
 		}
 	}
-	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleDecay, s.destroyBuf...)
+	event.EmitParticleDeath(s.world.Resources.Event.Queue, p.Behavior, s.destroyBuf...)
 	s.destroyBuf = s.destroyBuf[:0]
 }
 
@@ -501,6 +515,14 @@ func (s *ParticleSystem) buttonRect(slot int) (x, y, w, h int, ok bool) {
 		return false
 	})
 	return x, y, w, h, ok
+}
+
+// turn draws a particle's direction round its orbit
+func (s *ParticleSystem) turn() float64 {
+	if s.rng.Intn(2) == 0 {
+		return -1
+	}
+	return 1
 }
 
 func (s *ParticleSystem) fallSpeed() float64 {
@@ -529,7 +551,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 	gameWidth := s.world.Resources.Config.MapWidth
 	gameHeight := s.world.Resources.Config.MapHeight
-	centers, chase := s.anchors(prof)
+	centers, chase := s.anchors(behavior)
 	particles := s.world.Components.Particle
 
 	for _, entity := range s.entities {
@@ -640,13 +662,25 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	state.buffers.Observe(1, len(state.processedGridCells))
 }
 
-// anchors resolves this tick's orbit centres for a behavior's anchor kinds; chase
-// reports a cursor jump, which boosts the stagger group it selects
-func (s *ParticleSystem) anchors(prof *particleProfile) (centers []orbitCenter, chase bool) {
+// anchors resolves this tick's orbit centres for one behavior; chase reports a cursor
+// jump, which boosts the stagger group it selects
+func (s *ParticleSystem) anchors(behavior component.ParticleBehavior) (centers []orbitCenter, chase bool) {
 	s.centers = s.centers[:0]
+	prof := &particleProfiles[behavior]
+	// A live vortex holds all of its behavior, round at the button's own proportions
+	// so the orbit hugs the block
+	if s.vortexRemaining > 0 && s.vortexBehavior == behavior && prof.orbits[anchorVortex].stiffness > 0 {
+		if x, y, w, h, ok := s.buttonRect(s.vortexButton); ok {
+			s.centers = append(s.centers, orbitCenter{x: float64(x) + float64(w)/2, y: float64(y) + float64(h)/2,
+				spin: 1, edge: float64(w) / 2, aspect: vmath.Aspect(float64(h) / float64(w)), anchor: anchorVortex})
+			return s.centers, false
+		}
+	}
 	aspect := s.world.Resources.Config.CellAspect
-	for _, anchor := range prof.anchors {
-		orbit := &particleOrbits[anchor]
+	for anchor := range anchorCount {
+		if prof.orbits[anchor].stiffness == 0 {
+			continue
+		}
 		switch anchor {
 		case anchorCursor:
 			// The visible cursor: the D-18 prediction while this instance's placements are outstanding
@@ -663,7 +697,7 @@ func (s *ParticleSystem) anchors(prof *particleProfile) (centers []orbitCenter, 
 			// Energy of either sign pulls, as it raises the shield
 			if energy, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok && energy.Current != 0 {
 				x, y := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.Center()
-				s.centers = append(s.centers, orbitCenter{x: x, y: y, aspect: aspect, orbit: orbit})
+				s.centers = append(s.centers, orbitCenter{x: x, y: y, aspect: aspect, anchor: anchor})
 			}
 		case anchorKraken:
 			for _, e := range s.world.Components.Kraken.Entities() {
@@ -676,16 +710,7 @@ func (s *ParticleSystem) anchors(prof *particleProfile) (centers []orbitCenter, 
 					continue
 				}
 				s.centers = append(s.centers, orbitCenter{x: body.PreciseX, y: body.PreciseY, spin: kraken.TurnDir,
-					aspect: aspect, orbit: orbit})
-			}
-		case anchorVortex:
-			if s.vortexRemaining == 0 {
-				continue
-			}
-			// Round at the button's own proportions, the orbit hugs the block
-			if x, y, w, h, ok := s.buttonRect(s.vortexButton); ok {
-				s.centers = append(s.centers, orbitCenter{x: float64(x) + float64(w)/2, y: float64(y) + float64(h)/2,
-					spin: 1, edge: float64(w) / 2, aspect: vmath.Aspect(float64(h) / float64(w)), orbit: orbit})
+					aspect: aspect, anchor: anchor})
 			}
 		}
 	}
@@ -711,11 +736,18 @@ func (s *ParticleSystem) steer(prof *particleProfile, p *component.ParticleCompo
 	switch {
 	case anchored:
 		// Orbit physics runs in the anchor's space, where its orbit is round
-		aspect, orbit := c.aspect, c.orbit
+		aspect, orbit := c.aspect, &prof.orbits[c.anchor]
 		dx, dy := k.PreciseX-c.x, aspect.Circular(k.PreciseY-c.y)
-		if !p.Orbiting && prof.fall != 0 {
+		// A falling particle enters each time an anchor catches it; any particle enters
+		// an orbit of another kind, which its radius was not drawn for
+		if !p.Orbiting && prof.fall != 0 || p.Anchor != uint8(c.anchor) {
 			p.OrbitRadius = c.edge + orbit.radiusMin + s.rng.Float64()*(orbit.radiusMax-orbit.radiusMin)
-			k.VelX, k.VelY = orbitKick(dx, dy, orbit.speed, c.spin, aspect)
+			p.Anchor = uint8(c.anchor)
+			spin := c.spin
+			if spin == 0 {
+				spin = s.turn()
+			}
+			k.VelX, k.VelY = orbitKick(dx, dy, orbit.speed, spin, aspect)
 		}
 		if chase && p.ResponseGroup == s.staggerTick {
 			p.ChaseBoost = parameter.DustChaseBoost
@@ -1093,17 +1125,18 @@ func (s *ParticleSystem) convertGlyphs(cursorX, cursorY int, area *blastArea, ma
 type particleState struct {
 	cursorX, cursorY int
 	stagger          uint8
+	vortexBehavior   component.ParticleBehavior
 	vortexButton     int
 	vortexRemaining  time.Duration
 }
 
 func (s *ParticleSystem) CopyState() any {
-	return particleState{s.lastCursorX, s.lastCursorY, s.staggerTick, s.vortexButton, s.vortexRemaining}
+	return particleState{s.lastCursorX, s.lastCursorY, s.staggerTick, s.vortexBehavior, s.vortexButton, s.vortexRemaining}
 }
 
 func (s *ParticleSystem) RestoreState(v any) error {
 	c := v.(particleState)
 	s.lastCursorX, s.lastCursorY, s.staggerTick = c.cursorX, c.cursorY, c.stagger
-	s.vortexButton, s.vortexRemaining = c.vortexButton, c.vortexRemaining
+	s.vortexBehavior, s.vortexButton, s.vortexRemaining = c.vortexBehavior, c.vortexButton, c.vortexRemaining
 	return nil
 }
