@@ -313,7 +313,7 @@ func shutdownDiagnostics() {
 
 	vlog.Shutdown(logShutdownTimeout)
 
-	if path := vlog.LastJournalPath(); path != "" {
+	for _, path := range vlog.JournalPaths() {
 		fmt.Fprintf(os.Stderr, "replay journal: %s\n", path)
 	}
 	if path := core.CloseCapture(); path != "" && core.CaptureCount() > 0 {

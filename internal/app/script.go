@@ -186,6 +186,8 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		if a.dismissed.Load() || kind == "bot" && forkCell(a).Load() {
 			return false, nil
 		}
+		// Between two steps, as a presenting run's loop serves it between two waits
+		a.serveJournal()
 		if hold != nil && hold() {
 			if !waitScriptTick(signals, parameter.PausedPollInterval) {
 				return false, nil

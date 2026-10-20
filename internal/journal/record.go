@@ -17,21 +17,21 @@ type RecordStats struct {
 }
 
 // Recorder owns the attachment between an event queue and its journal sink. If
-// Start opened the dedicated vlog file, Close also drains that file; injected
-// sinks remain owned by their caller.
+// Start opened a vlog journal file, Close also drains that file; injected sinks
+// remain owned by their caller.
 type Recorder struct {
-	mu       sync.Mutex
-	queue    *event.EventQueue
-	journal  *event.Journal
-	path     string
-	ownsFile bool
-	closed   bool
-	stats    RecordStats
+	mu      sync.Mutex
+	queue   *event.EventQueue
+	journal *event.Journal
+	file    *vlog.JournalFile // nil for an injected sink
+	path    string
+	closed  bool
+	stats   RecordStats
 }
 
-// Start attaches a replay journal and emits its initial anchor. A nil sink opens
-// the dedicated vif-jrn file, its envelopes stamped by log, the run's own handle
-// (nil for the process default); harnesses pass an in-memory Capture instead.
+// Start attaches a replay journal and emits its initial anchor. A nil sink opens a
+// vif-jrn file of the recorder's own, its envelopes stamped by log, the run's own
+// handle (nil for the process default); harnesses pass an in-memory Capture instead.
 func Start(queue *event.EventQueue, anchor event.JournalAnchor, sink event.JournalSink, log *vlog.Log) (*Recorder, error) {
 	if queue == nil {
 		return nil, errors.New("journal: event queue is nil")
@@ -42,21 +42,27 @@ func Start(queue *event.EventQueue, anchor event.JournalAnchor, sink event.Journ
 
 	r := &Recorder{queue: queue}
 	if sink == nil {
-		path, err := vlog.StartJournal()
+		f, err := vlog.OpenJournal()
 		if err != nil {
 			return nil, fmt.Errorf("journal: %w", err)
 		}
-		r.path, r.ownsFile = path, true
+		r.file, r.path = f, f.Path()
 		if log == nil {
 			log = vlog.Default()
 		}
-		sink = event.VlogSink(log)
+		sink = event.VlogSink(f, log)
 	}
 
 	r.journal = event.NewJournal(sink)
 	queue.SetJournal(r.journal)
 	r.journal.SetAnchor(anchor, queue.Stamp())
 	return r, nil
+}
+
+// Capture records a world the run wrote, placed after the records emitted so far.
+func (r *Recorder) Capture(c event.JournalCapture) {
+	c.JSeq = r.journal.Mark()
+	r.journal.Capture(c)
 }
 
 // Path returns the dedicated journal path, or an empty string for an injected sink.
@@ -100,8 +106,8 @@ func (r *Recorder) Close() (RecordStats, error) {
 	r.stats.Emitted, r.stats.EncodeFailed = r.journal.Stats()
 	r.stats.Path = r.path
 	r.closed = true
-	if r.ownsFile {
-		return r.stats, vlog.StopJournal()
+	if r.file != nil {
+		return r.stats, r.file.Close()
 	}
 	return r.stats, nil
 }

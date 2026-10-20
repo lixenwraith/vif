@@ -195,6 +195,7 @@ func (p *player) run() error {
 		if p.a.dismissed.Load() {
 			return p.failure()
 		}
+		p.a.serveJournal()
 		// A batch holds the presented copy: keys wait for it, and so does the frame
 		lent := p.rw != nil && p.rw.lent
 		evs := events

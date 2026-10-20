@@ -3,6 +3,7 @@ package event
 import (
 	"encoding/base64"
 	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -16,12 +17,15 @@ const (
 	SubJournalEnd     = "end"
 )
 
-// vlogSink writes journal output to the dedicated vlog journal session, each
+// vlogSink writes journal output to one dedicated vlog journal file, each
 // record's envelope stamped by the run's own log handle.
-type vlogSink struct{ log *vlog.Log }
+type vlogSink struct {
+	file *vlog.JournalFile
+	log  *vlog.Log
+}
 
-// VlogSink returns the sink backed by the vlog journal file, stamping through l.
-func VlogSink(l *vlog.Log) JournalSink { return vlogSink{log: l} }
+// VlogSink returns the sink backed by a vlog journal file, stamping through l.
+func VlogSink(f *vlog.JournalFile, l *vlog.Log) JournalSink { return vlogSink{file: f, log: l} }
 
 // Record writes one event record; every argument is an immutable value, as
 // vlog formats asynchronously on its own goroutine. encode_err and crossing are
@@ -44,12 +48,12 @@ func (s vlogSink) Record(r JournalRecord) {
 	if r.Crossing != 0 {
 		kv = append(kv, "crossing", r.Crossing)
 	}
-	s.log.Journal(SubJournalRecord, kv...)
+	s.file.Write(s.log, SubJournalRecord, kv...)
 }
 
 // Anchor writes one header record
 func (s vlogSink) Anchor(a JournalAnchor) {
-	s.log.Journal(SubJournalAnchor,
+	s.file.Write(s.log, SubJournalAnchor,
 		"schema", a.Schema,
 		"jseq", a.JSeq,
 		"jrun", a.Run,
@@ -77,9 +81,11 @@ func (s vlogSink) Anchor(a JournalAnchor) {
 		"speed", a.Speed)
 }
 
-// Capture writes one installed world, its body base64 in a JSON string
+// Capture writes one installed world, its body base64 in a JSON string. The
+// operator state is written only beside a journal's opening world, the one
+// capture that carries it.
 func (s vlogSink) Capture(c JournalCapture) {
-	s.log.Journal(SubJournalCapture,
+	kv := []any{
 		"jseq", c.JSeq,
 		"cseq", c.CSeq,
 		"jrun", c.Run,
@@ -87,12 +93,17 @@ func (s vlogSink) Capture(c JournalCapture) {
 		"boundary", c.Boundary,
 		"participant", uint64(c.Participant),
 		"authority", uint64(c.Authority),
-		"body", base64.StdEncoding.EncodeToString(c.Body))
+		"body", base64.StdEncoding.EncodeToString(c.Body),
+	}
+	if c.Opens {
+		kv = append(kv, "opens", true, "mode", uint64(c.Mode), "paused", c.Paused, "off", strings.Join(c.Off, ","))
+	}
+	s.file.Write(s.log, SubJournalCapture, kv...)
 }
 
 // Digest writes one world digest, its hashes in hex as a snapshot line carries them
 func (s vlogSink) Digest(d JournalDigest) {
-	s.log.Journal(SubJournalDigest, "jrun", d.Run, "jtick", d.Tick,
+	s.file.Write(s.log, SubJournalDigest, "jrun", d.Run, "jtick", d.Tick,
 		"positions", strconv.FormatUint(d.Positions, 16),
 		"kinetics", strconv.FormatUint(d.Kinetics, 16),
 		"combat", strconv.FormatUint(d.Combat, 16),
@@ -100,5 +111,5 @@ func (s vlogSink) Digest(d JournalDigest) {
 }
 
 func (s vlogSink) Finish(st Stamp) {
-	s.log.Journal(SubJournalEnd, "jrun", st.Run, "jtick", st.Tick, "boundary", st.Boundary)
+	s.file.Write(s.log, SubJournalEnd, "jrun", st.Run, "jtick", st.Tick, "boundary", st.Boundary)
 }

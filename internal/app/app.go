@@ -62,12 +62,9 @@ type restartRequest struct {
 	// Play is how this run was left, which the next one starts as.
 	Play paths.Play
 
-	// Journal opens a journal in the next run: :journal start asked, or this run
-	// was journaling when replaced. A journal starts with its run, so a solo run
-	// hands over Resume, its world, which the next one writes as a join writes the
-	// session's; a guest rejoins instead.
+	// Journal opens a journal in the next run from its start: this run was
+	// journaling when it was replaced.
 	Journal bool
-	Resume  *snapshot.SharedCapture
 }
 
 // App owns the wired runtime: services, world, input, scheduler, and the selected
@@ -92,7 +89,12 @@ type App struct {
 	dialling     atomic.Bool // a :join is being dialled while this run plays on
 	inputMachine *input.Machine
 	router       *mode.Router
-	recorder     *journal.Recorder
+
+	// recorder is the journal this run keeps, nil when it keeps none; atomic, as a
+	// holder reads its seats' from its own goroutine. journalAsk is a start or stop
+	// the command line asked for that the run's loop has not served yet.
+	recorder   atomic.Pointer[journal.Recorder]
+	journalAsk atomic.Pointer[journalAsk]
 
 	scheduler      *engine.Scheduler
 	frameReady     chan struct{}
@@ -202,11 +204,6 @@ type App struct {
 // New wires the runtime, releasing anything already started on failure. Errors are
 // returned rather than panicked: the map editor and the wasm entry need them.
 func New(cfg Config) (*App, error) {
-	if c := cfg.resume; c != nil {
-		// The world it resumes decides what a joiner's offer would: roots and bounds.
-		h := c.Header
-		cfg.Seed, cfg.Session, cfg.MapWidth, cfg.MapHeight = h.Seed, h.Session, h.MapWidth, h.MapHeight
-	}
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -561,130 +558,6 @@ func (a *App) initScheduler() error {
 		}
 	}
 	return nil
-}
-
-// initJournal opens the replay journal and installs it on the event queue.
-// Opt-in: for the life of the run it records every event of a journaled origin
-// (all but system and device) and every own crossing.
-func (a *App) initJournal() error {
-	if !a.cfg.Journal {
-		return nil
-	}
-
-	r, err := journal.Start(a.world.Resources.Event.Queue, a.buildAnchor(), a.cfg.JournalSink, a.log)
-	if err != nil {
-		return err
-	}
-	a.recorder = r
-	a.log.Info("journal", "msg", "journal opened", "path", r.Path())
-	return nil
-}
-
-// journalErrorLocked says why this run cannot start a journal from here. A solo run
-// resumes its own world; a guest rejoins an authority that has not moved; a host
-// would hand its guests' cursors to a run they are not in. Caller MUST hold updateMutex.
-func (a *App) journalErrorLocked() error {
-	port := a.sessionTransportLocked()
-	guest := a.cfg.JoinAddress != "" && port != nil && port.IsRunning() && port.PeerCount() > 0 &&
-		!a.world.IsSessionCoordinator() && a.authorityID() == engine.CoordinatorParticipant
-	switch {
-	case a.cfg.Mode != ModePlay:
-		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
-	case a.recorder != nil:
-		return errors.New("already journaling to " + a.recorder.Path())
-	case a.dialling.Load() || a.restart.Load() != nil:
-		return errors.New("this run is already being replaced")
-	case !guest && a.world.SessionShared():
-		return errors.New("a session's host journals from its start (-j); a guest or a solo run can start one")
-	}
-	return nil
-}
-
-// startJournalLocked replaces this run with one that journals from its world.
-// Caller MUST hold updateMutex.
-func (a *App) startJournalLocked() error {
-	if err := a.journalErrorLocked(); err != nil {
-		return err
-	}
-	req := &restartRequest{Journal: true, Bots: a.seatGraphs(), Notice: "Journaling from here; :journal names the file"}
-	if a.cfg.JoinAddress != "" {
-		req.Rejoin = true
-	} else {
-		cap, err := a.captureSharedLocked()
-		if err == nil {
-			err = a.sealCapture(&cap)
-		}
-		if err != nil {
-			return err
-		}
-		req.Resume = &cap
-	}
-	a.restart.Store(req)
-	return nil
-}
-
-// stopJournalLocked closes the journal where the run stands; a later start opens
-// another file. Caller MUST hold updateMutex.
-func (a *App) stopJournalLocked() error {
-	if a.recorder == nil {
-		return errors.New("no journal is open")
-	}
-	a.closeJournal()
-	return nil
-}
-
-// closeJournal writes the end record and releases the file. Call it with queue
-// producers quiescent: under updateMutex, or once the scheduler has stopped.
-func (a *App) closeJournal() {
-	if a.recorder == nil {
-		return
-	}
-	stats, err := a.recorder.Close()
-	a.recorder = nil
-	a.log.Info("journal", "msg", "journal closed",
-		"path", stats.Path, "records", stats.Emitted, "encode_failed", stats.EncodeFailed)
-	if err != nil {
-		a.log.Error("journal", "msg", "journal not closed", "error", err.Error())
-	}
-}
-
-// resumeWorld writes the world a replaced run handed over, as a join writes the
-// session's: staged, then committed, which journals it. The player domain starts
-// here, as a joiner's does, and so does a replay of the journal.
-func (a *App) resumeWorld(cap snapshot.SharedCapture) error {
-	a.scheduler.Settle()
-	staged, err := a.StageShared(cap)
-	if err != nil {
-		return err
-	}
-	return staged.Commit()
-}
-
-// buildAnchor describes what a replay must reproduce. Reads the telemetry
-// ContentService published during initWorld, so anchor and verification share a source.
-func (a *App) buildAnchor() event.JournalAnchor {
-	reg := a.world.Resources.Status
-	cfg := a.world.Resources.Config
-	return event.JournalAnchor{
-		Speed:          a.ctx.TimeCtl.Scale().String(),
-		ScenarioID:     a.scenario.Name,
-		ScenarioDigest: a.scenario.Digest(),
-		ContentID:      reg.Strings.Get("content.source").Load(),
-		ContentPin:     service.MustGet[*service.ContentService](a.hub, "content").Pin(),
-		ContentFiles:   uint64(reg.Ints.Get("content.files").Load()),
-		ContentBlocks:  uint64(reg.Ints.Get("content.blocks").Load()),
-		ContentLines:   uint64(reg.Ints.Get("content.lines").Load()),
-		Seed:           a.world.Resources.Rand.Root(),
-		Session:        a.world.Resources.Rand.Session(),
-		TickInterval:   int64(parameter.GameUpdateInterval),
-		Width:          a.ctx.Width,
-		Height:         a.ctx.Height,
-		MapWidth:       cfg.MapWidth,
-		MapHeight:      cfg.MapHeight,
-		CropOnResize:   cfg.CropOnResize,
-		CellAspect:     float64(cfg.CellAspect),
-		SessionShared:  a.world.SessionShared(),
-	}
 }
 
 // Close stops the scheduler before the services it depends on

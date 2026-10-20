@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"path/filepath"
+	"slices"
 
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -20,6 +21,8 @@ import (
 // replay runs the manual clock, which a headless config rejects a rate for. The
 // scenario is asked for by name, so a journal recorded against one outside the
 // config roots needs -config-dir; VerifyAnchor proves what resolved is what ran.
+// A journal opened mid-run boots the same way: its first capture writes the world
+// it opened on over that boot.
 func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	if a.Schema != event.JournalSchema {
 		return Config{}, fmt.Errorf("journal schema %d, this build reads %d", a.Schema, event.JournalSchema)
@@ -27,10 +30,6 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	if a.TickInterval != int64(parameter.GameUpdateInterval) {
 		return Config{}, fmt.Errorf("journal tick interval %dns, this build ticks at %dns",
 			a.TickInterval, int64(parameter.GameUpdateInterval))
-	}
-	if a.StartRun != 0 || a.StartTick != 0 {
-		return Config{}, fmt.Errorf("journal opened mid-run at run %d tick %d; replaying one needs a world snapshot",
-			a.StartRun, a.StartTick)
 	}
 	if a.Seed == 0 {
 		return Config{}, errors.New("anchor carries no seed")
@@ -176,7 +175,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		if err != nil {
 			return
 		}
-		// Participant zero wrote it solo, resuming a run it replaced, with no session.
+		// Participant zero wrote it solo, with no session.
 		if c.Participant != 0 {
 			s := a.world.Session()
 			s.Participant, s.Authority = c.Participant, c.Authority
@@ -184,9 +183,29 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		_, err = a.writeSharedLocked(cap, &before, true)
+		if _, err = a.writeSharedLocked(cap, &before, true); err == nil && c.Opens {
+			a.openedLocked(c)
+		}
 	})
 	return err
+}
+
+// openedLocked settles what writing a journal's opening world queued, then takes
+// up the operator state the run stood in when it opened: after the settle, which
+// dispatches the toggles the FSM import re-derived. The crossing barrier engages at
+// once, as the run's was engaged: a crossing raised before the next tick is the
+// run's to apply, by record. Caller MUST hold updateMutex.
+func (a *App) openedLocked(c event.JournalCapture) {
+	a.scheduler.SettleLocked()
+	a.ctx.SetMode(c.Mode)
+	a.world.UpdateBoundsRadius()
+	a.ctx.TimeCtl.SetPaused(c.Paused)
+	for _, sys := range a.world.Systems() {
+		if t, ok := sys.(engine.Toggled); ok {
+			t.SetEnabled(!slices.Contains(c.Off, sys.Name()))
+		}
+	}
+	a.activateNetworkSessionLocked()
 }
 
 // loadJournal reads a journal set and the configuration that reproduces it. The
@@ -201,7 +220,12 @@ func loadJournal(viewer Config, paths []string) (journal.Set, Config, error) {
 	if len(set.Anchors) == 0 {
 		return set, Config{}, errors.New("journal carries no anchor")
 	}
-	cfg, err := ConfigFromAnchor(set.Anchors[0])
+	an := set.Anchors[0]
+	if (an.StartRun != 0 || an.StartTick != 0) && (len(set.Captures) == 0 || !set.Captures[0].Opens) {
+		return set, Config{}, fmt.Errorf("journal opened at run %d tick %d, and the world it opened on is in none of these files",
+			an.StartRun, an.StartTick)
+	}
+	cfg, err := ConfigFromAnchor(an)
 	cfg.Resources.Dir = viewer.Resources.Dir
 	return set, cfg, err
 }

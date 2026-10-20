@@ -280,24 +280,33 @@ func TestAHandleWritesItsOwnStampAndTagAndMutedOnlyItsFailures(t *testing.T) {
 	}
 }
 
-// TestAJournalNeverAppendsToTheOneBeforeIt: a run replaced within the second it
-// started journals to a file of its own.
+// TestAJournalNeverAppendsToTheOneBeforeIt: a journal opened within the second
+// another was, closed or still open, writes a file of its own.
 func TestAJournalNeverAppendsToTheOneBeforeIt(t *testing.T) {
 	Configure(Config{Dir: t.TempDir(), JournalDir: t.TempDir()})
-	first, err := StartJournal()
+	first, err := OpenJournal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := StopJournal(); err != nil {
+	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
-	second, err := StartJournal()
+	second, err := OpenJournal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = StopJournal() })
-	if first == second {
-		t.Fatalf("both runs journal to %s", first)
+	t.Cleanup(func() { _ = second.Close() })
+	third, err := OpenJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = third.Close() })
+	paths := []string{first.Path(), second.Path(), third.Path()}
+	if distinct := slices.Compact(slices.Sorted(slices.Values(paths))); len(distinct) != len(paths) {
+		t.Fatalf("journals share a file: %q", paths)
+	}
+	if got := JournalPaths(); len(got) < len(paths) || !slices.Equal(got[len(got)-len(paths):], paths) {
+		t.Fatalf("JournalPaths = %q, want it to end with %q", got, paths)
 	}
 }
 
@@ -307,18 +316,19 @@ func TestAJournalNeverAppendsToTheOneBeforeIt(t *testing.T) {
 func TestJournalRecordsCarryTheHandlesStamp(t *testing.T) {
 	dir := t.TempDir()
 	Configure(Config{Dir: dir, JournalDir: dir, Level: "info", Scope: "all"})
-	path, err := StartJournal()
+	f, err := OpenJournal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = StopJournal() })
+	t.Cleanup(func() { _ = f.Close() })
 	l := NewLog("")
 	l.SetRun(3)
 	l.SetTick(7)
-	l.Journal("journal", "jseq", 1)
-	if err := StopJournal(); err != nil {
+	f.Write(l, "journal", "jseq", 1)
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
+	path := f.Path()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

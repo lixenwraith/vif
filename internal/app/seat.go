@@ -55,6 +55,7 @@ type seat struct {
 	once   sync.Once
 	id     atomic.Uint32 // the participant it was admitted as, zero until then
 	slot   atomic.Uint32
+	app    atomic.Pointer[App] // the seat's own run, nil until seated and once it leaves
 }
 
 func (s *seat) halt() { s.once.Do(func() { close(s.stop) }) }
@@ -218,10 +219,12 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				b.sessionMu.Unlock()
 				s.slot.Store(uint32(entry.Slot))
 				s.id.Store(uint32(entry.ID))
+				s.app.Store(b)
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"peer", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
 				return seatSource{botSource{d}, forkCell(a)}, nil
 			})
+		s.app.Store(nil)
 		if driver == nil && err != nil && retryableJoin(err) && time.Now().Before(deadline) &&
 			waitScriptTick(s.stop, parameter.SessionRejoinInterval) {
 			continue
@@ -318,6 +321,49 @@ func (a *App) stopSeat(match func(*seat) bool) bool {
 		}
 	}
 	return false
+}
+
+// askSeatJournal asks the seat on slot to open or close its journal, which its own
+// loop serves between two of its steps; the outcome reaches this run's status line.
+// A seat is a run of its own, so it journals its own player domain, which no other
+// instance can: another participant's never leaves its machine.
+func (a *App) askSeatJournal(slot int, start bool) error {
+	a.seatsMu.Lock()
+	i := slices.IndexFunc(a.seats, func(s *seat) bool { return s.app.Load() != nil && int(s.slot.Load()) == slot })
+	var b *App
+	if i >= 0 {
+		b = a.seats[i].app.Load()
+	}
+	a.seatsMu.Unlock()
+	switch {
+	case b == nil:
+		return fmt.Errorf("no bot of this run's is on slot %X", slot)
+	case start && b.recorder.Load() != nil:
+		return fmt.Errorf("slot %X already journals to %s", slot, b.recorder.Load().Path())
+	case !start && b.recorder.Load() == nil:
+		return fmt.Errorf("slot %X keeps no journal", slot)
+	}
+	report := func(path string, err error) { a.reportSeatJournal(slot, start, path, err) }
+	if !b.journalAsk.CompareAndSwap(nil, &journalAsk{start: start, report: report}) {
+		return fmt.Errorf("slot %X is already opening or closing a journal", slot)
+	}
+	return nil
+}
+
+// reportSeatJournal tells this run's player how a seat's journal start or stop went.
+// It runs on the seat's goroutine; the status line and the log take that.
+func (a *App) reportSeatJournal(slot int, start bool, path string, err error) {
+	switch {
+	case err != nil:
+		a.log.Warn("journal", "msg", "seat journal not changed", "slot", slot, "start", start, "error", err.Error())
+		a.ctx.SetStatusMessage(fmt.Sprintf("Journal on slot %X: %s", slot, err), parameter.StatusAlert)
+	case start:
+		a.log.Info("journal", "msg", "seat journal opened", "slot", slot, "path", path)
+		a.ctx.SetStatusMessage(fmt.Sprintf("Slot %X journaling to %s", slot, path), parameter.StatusNotice)
+	default:
+		a.log.Info("journal", "msg", "seat journal closed", "slot", slot, "path", path)
+		a.ctx.SetStatusMessage(fmt.Sprintf("Slot %X journal closed: %s", slot, path), parameter.StatusNotice)
+	}
 }
 
 // seatGraphs are the graphs of the seats this run holds, in the order they came.

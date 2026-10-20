@@ -399,7 +399,7 @@ none of it enters a simulation snapshot:
 |---|---|---|
 | `status.active` flight recorder hook | the last registry to enable a recorder | seats enable none and take no status snapshots |
 | `vlog` sink and scopes | one per process; each App logs through its own handle | a seat's records carry its own run, tick and `instance` `seat N` |
-| `vlog` journal | one per process | only the front App journals; seats write none |
+| `vlog` journal files | one per journal | the front App's, and a seat's that `:journal start <slot>` opened; each closes with its run |
 | `engine.divergentReads` | one warning latch per config key | harmless across Apps |
 | `internal/prof` captures | the process | a profile covers the holder and its seats |
 | signals, terminal, audio, probe | the front App only | seats are headless and stop when their holder halts them |
@@ -433,6 +433,11 @@ wrote.
 The input ticker is independent of rendering so held-button fire and macro
 playback have stable cadence even when frames fluctuate. Macro intents re-enter
 the same locked `handleIntent` path as physical input.
+
+A `:journal start` is served between two of the loop's waits, outside the world
+lock, since its opening builds a whole world first
+([Logging and diagnostics §9](logging-and-diagnostics.md#opening-mid-run)); a
+script's, bot's or seat's loop serves it between two steps.
 
 For a render frame, the application:
 
@@ -856,8 +861,8 @@ the FSM metric set, and `Scheduler.Prepare` freezes that set for the life of a
 run, so another scenario needs another run: `Run` owns a loop that builds one App
 per run, and the command validates the name and latches which one comes next;
 naming the scenario already loaded resets in place instead. The same loop replaces
-the run for a `:join`, a `:journal start`, a session restart and a removal by the
-host; the scenario change, the restart and the journal seat the run's bots again.
+the run for a `:join`, a session restart and a removal by the host; the scenario
+change and the restart seat the run's bots again.
 Everything operator-owned restarts with it. The terminal does not: `Run` opens one
 for the process and every run presents on it, so a replacement redraws the screen
 rather than leaving and re-entering it. See

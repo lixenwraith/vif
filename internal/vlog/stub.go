@@ -34,30 +34,34 @@ type Config struct {
 	Console    bool
 }
 
-func Init(Config) (string, error)   { return "", ErrDisabled }
-func Configure(Config)              {}
-func Start() (string, error)        { return "", ErrDisabled }
-func Stop()                         {}
-func Enabled() bool                 { return false }
-func Path() string                  { return "" }
-func Dir() string                   { return "" }
-func LevelName() string             { return "OFF" }
-func SetLevelName(string) error     { return ErrDisabled }
-func On(string, int64) bool         { return false }
-func Debug(string, ...any)          {}
-func Info(string, ...any)           {}
-func Warn(string, ...any)           {}
-func Error(string, ...any)          {}
-func SetLevel(int64)                {}
-func CrashHook(any, []byte)         {}
-func Shutdown(time.Duration)        {}
-func Detail(string, ...any)         {}
-func StartJournal() (string, error) { return "", ErrDisabled }
-func StopJournal() error            { return nil }
-func JournalEnabled() bool          { return false }
-func JournalPath() string           { return "" }
-func (*Log) Journal(string, ...any) {}
-func LastJournalPath() string       { return "" }
+func Init(Config) (string, error) { return "", ErrDisabled }
+func Configure(Config)            {}
+func Start() (string, error)      { return "", ErrDisabled }
+func Stop()                       {}
+func Enabled() bool               { return false }
+func Path() string                { return "" }
+func Dir() string                 { return "" }
+func LevelName() string           { return "OFF" }
+func SetLevelName(string) error   { return ErrDisabled }
+func On(string, int64) bool       { return false }
+func Debug(string, ...any)        {}
+func Info(string, ...any)         {}
+func Warn(string, ...any)         {}
+func Error(string, ...any)        {}
+func SetLevel(int64)              {}
+func CrashHook(any, []byte)       {}
+func Shutdown(time.Duration)      {}
+func Detail(string, ...any)       {}
+
+// JournalFile mirrors the real build's open journal; none is ever opened.
+type JournalFile struct{}
+
+func OpenJournal() (*JournalFile, error)        { return nil, ErrDisabled }
+func JournalUnavailable() error                 { return ErrDisabled }
+func (*JournalFile) Path() string               { return "" }
+func (*JournalFile) Close() error               { return nil }
+func (*JournalFile) Write(*Log, string, ...any) {}
+func JournalPaths() []string                    { return nil }
 
 func ScopeOf(string) Scope { return ScopeTap }
 func Scopes() Scope        { return ScopeNone }
