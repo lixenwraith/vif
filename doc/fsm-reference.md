@@ -447,8 +447,8 @@ A player-scoped command names its cursor in `entity`; zero names none. The
 owner-authored ones (energy, heat, boost, shield, weapon; D-13) act only on a cursor
 this instance owns, the rest (move, ping, typing, gold jump, tower) on any live one.
 A captured entity names the first cursor on every instance, so to set each
-participant's own heat and energy emit `EventCursorArmRequest { heat, energy }`,
-which acts on the cursor this instance drives, as `wad/scenario/simon` does.
+participant's own heat, energy and ember emit `EventCursorArmRequest { heat, energy,
+ember }`, which acts on the cursor this instance drives, as `wad/scenario/simon` does.
 
 ---
 

@@ -88,6 +88,7 @@ never enters the replay suffix (D-9).
 | Pointer placement | cursor and the newest cell the pointer named before the next tick or input |
 | Owned shield or ray striking shared species | target/member set and owner cursor |
 | Cursor entering or leaving combined defeat state | cursor and state |
+| Ember burning its cursor's heat out | cursor |
 | Scenario-captured key pressed or its button released | cursor, key, and key or pointer source |
 
 Effects on Player targets do not cross. Shared follow-up events derived from a

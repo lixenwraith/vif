@@ -69,6 +69,7 @@ var crossingPushes = map[string]string{
 	"typing:EventCursorMoveRequest": "the post-typing advance moves the shared cursor",
 	"energy:EventCursorDefeatState": "the owner's combined energy/heat lifecycle state crosses",
 	"heat:EventCursorDefeatState":   "the owner's combined energy/heat lifecycle state crosses",
+	"heat:EventEmberSpent":          "the owner's ember burning its heat out, which a scenario times a turn by, crosses",
 
 	// A species' owner-resolved shield impact crosses from strikeContacts, a helper no
 	// system file owns; TestSpeciesContactStrikesOnlyOwnedCursors checks its stamp.

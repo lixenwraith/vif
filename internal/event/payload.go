@@ -424,7 +424,7 @@ type HeatSpendRequestPayload struct {
 	Amount int         `toml:"amount"`
 }
 
-// HeatBurstPayload names the cursor that overheated
+// HeatBurstPayload names the cursor whose ember lit, or burnt its heat out
 type HeatBurstPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
@@ -631,6 +631,13 @@ type ParticleWavePayload struct {
 	Button   int                        `toml:"button"`
 }
 
+// ParticleVortexPayload names the button decay circles, by its place in the row, and
+// for how long before the decay falls away
+type ParticleVortexPayload struct {
+	Button     int   `toml:"button"`
+	DurationMs int64 `toml:"duration_ms"`
+}
+
 // --- Death ---
 
 // DeathRequestPayload contains a death request for one or more entities.
@@ -723,13 +730,14 @@ type CursorSpawnRequestPayload struct {
 	Center  bool   `toml:"center"`
 }
 
-// CursorArmRequestPayload sets heat and energy on the cursor this instance drives:
-// the configured starting resources at a join, or a scenario's own values. It is
-// local by design: heat and energy are D-13 owner-authored state after the shared
-// cursor has been created.
+// CursorArmRequestPayload sets heat, energy and the ember on the cursor this instance
+// drives: the configured starting resources at a join, or a scenario's own values. It
+// is local by design: these are D-13 owner-authored state after the shared cursor has
+// been created.
 type CursorArmRequestPayload struct {
-	Heat   int `toml:"heat"`
-	Energy int `toml:"energy"`
+	Heat   int  `toml:"heat"`
+	Energy int  `toml:"energy"`
+	Ember  bool `toml:"ember"`
 }
 
 // CursorSpawnedPayload announces a created cursor
