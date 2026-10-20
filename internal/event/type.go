@@ -211,6 +211,8 @@ const (
 	EventHeatSpendRequest
 	// EventHeatBurst (HeatBurstPayload) [local] signals heat burst notification
 	EventHeatBurst
+	// EventEmberSpent (HeatBurstPayload) [bus] carries an owner's ember burning its heat out
+	EventEmberSpent
 
 	// --- Boost ---
 
@@ -285,6 +287,8 @@ const (
 	EventParticleSpawnBatch
 	// EventParticleWave (ParticleWavePayload) [local] signals a wave selected by behavior, across the map or one button
 	EventParticleWave
+	// EventParticleVortex (ParticleVortexPayload) [local] turns every glyph to decay and draws all decay around one button
+	EventParticleVortex
 
 	// --- Death ---
 
@@ -308,7 +312,7 @@ const (
 	EventCursorSpawned
 	// EventCursorSpawnFailed [shared] signals no roster slot or no free cell was available
 	EventCursorSpawnFailed
-	// EventCursorArmRequest (CursorArmRequestPayload) [local] sets the heat and energy of the cursor this instance drives
+	// EventCursorArmRequest (CursorArmRequestPayload) [local] sets the heat, energy and ember of the cursor this instance drives
 	EventCursorArmRequest
 	// EventCursorDespawnRequest (CursorDespawnRequestPayload) [shared] asks CursorSystem to destroy cursors
 	EventCursorDespawnRequest

@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 187
+const EventTypeCount = 189
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -80,6 +80,7 @@ func InitRegistry() {
 	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetRequestPayload{})
 	RegisterType("EventHeatSpendRequest", EventHeatSpendRequest, &HeatSpendRequestPayload{})
 	RegisterType("EventHeatBurst", EventHeatBurst, &HeatBurstPayload{})
+	RegisterType("EventEmberSpent", EventEmberSpent, &HeatBurstPayload{})
 	RegisterType("EventBoostActivate", EventBoostActivate, &BoostActivatePayload{})
 	RegisterType("EventBoostDeactivate", EventBoostDeactivate, &BoostDeactivatePayload{})
 	RegisterType("EventBoostExtend", EventBoostExtend, &BoostExtendPayload{})
@@ -106,6 +107,7 @@ func InitRegistry() {
 	RegisterType("EventParticleSpawnOne", EventParticleSpawnOne, &ParticleSpawnPayload{})
 	RegisterType("EventParticleSpawnBatch", EventParticleSpawnBatch, nil)
 	RegisterType("EventParticleWave", EventParticleWave, &ParticleWavePayload{})
+	RegisterType("EventParticleVortex", EventParticleVortex, &ParticleVortexPayload{})
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 	RegisterType("EventCompositeMemberDestroyed", EventCompositeMemberDestroyed, &CompositeMemberDestroyedPayload{})
 	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})
@@ -273,6 +275,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventHeatSetRequest:                  ClassLocal,
 	EventHeatSpendRequest:                ClassLocal,
 	EventHeatBurst:                       ClassLocal,
+	EventEmberSpent:                      ClassBus,
 	EventBoostActivate:                   ClassLocal,
 	EventBoostDeactivate:                 ClassLocal,
 	EventBoostExtend:                     ClassLocal,
@@ -299,6 +302,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventParticleSpawnOne:                ClassLocal,
 	EventParticleSpawnBatch:              ClassLocal,
 	EventParticleWave:                    ClassLocal,
+	EventParticleVortex:                  ClassLocal,
 	EventDeathBatch:                      ClassStamped,
 	EventCompositeMemberDestroyed:        ClassBus,
 	EventCompositeIntegrityBreach:        ClassShared,

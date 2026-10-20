@@ -24,27 +24,50 @@ var particleBehaviorOrder = [...]component.ParticleBehavior{
 	component.ParticleBlossom,
 }
 
-// particleAnchor names what a behavior's particles orbit
+// particleAnchor names what particles orbit; the nearest anchor of a behavior's kinds
+// holds each particle
 type particleAnchor uint8
 
 const (
-	anchorNone   particleAnchor = iota
-	anchorCursor                // the local cursor while its energy is nonzero
-	anchorKraken                // the nearest Kraken while it spins or charges
+	anchorCursor particleAnchor = iota // the local cursor while its energy is nonzero
+	anchorKraken                       // a Kraken while it spins or charges
+	anchorVortex                       // the button a vortex names, while it lasts
+	anchorCount
 )
 
 // particleOrbit tunes the spring holding a particle on its orbit
 type particleOrbit struct {
 	stiffness            float64 // pull toward the orbit radius (1/s²)
-	radiusMin, radiusMax float64 // circular-space cells
+	radiusMin, radiusMax float64 // cells past the anchor's edge, in its orbit's space
 	damping              float64 // radial damping (1/s)
 	drag                 float64 // quadratic drag while orbiting (1/cell)
 	speed                float64 // tangential speed on entering orbit (cells/s)
 }
 
+// particleOrbits is the orbit each anchor holds. A vortex draws decay in from across
+// the map, so its orbit takes a slow entry and is damped hard: the angular momentum a
+// far particle brings in would otherwise fling it off the map.
+var particleOrbits = [anchorCount]particleOrbit{
+	anchorCursor: {
+		stiffness: parameter.DustAttractionBase,
+		radiusMin: parameter.DustOrbitRadiusMin, radiusMax: parameter.DustOrbitRadiusMax,
+		damping: parameter.DustDamping, drag: parameter.DustGlobalDrag, speed: parameter.DustInitialSpeed,
+	},
+	anchorKraken: {
+		stiffness: parameter.DecayOrbitStiffness,
+		radiusMin: parameter.DecayOrbitRadiusMin, radiusMax: parameter.DecayOrbitRadiusMax,
+		damping: parameter.DecayOrbitDamping, drag: parameter.DecayOrbitDrag, speed: parameter.DecayOrbitSpeed,
+	},
+	anchorVortex: {
+		stiffness: parameter.DecayVortexStiffness,
+		radiusMin: parameter.DecayVortexRadiusMin, radiusMax: parameter.DecayVortexRadiusMax,
+		damping: parameter.DecayVortexDamping, drag: parameter.DecayOrbitDrag, speed: parameter.DecayVortexSpeed,
+	},
+}
+
 // particleProfile is everything that differs between behaviors. A falling
 // behavior enters orbit with a tangential kick and leaves it back into its fall;
-// dust orbits from spawn and only loses the pull while its anchor lapses.
+// dust orbits the cursor from spawn and only loses the pull while its anchor lapses.
 type particleProfile struct {
 	name     string           // telemetry key prefix
 	fall     float64          // spawn and gravity direction: 1 down, -1 up, 0 none
@@ -55,8 +78,7 @@ type particleProfile struct {
 	bounce   float64 // restitution off walls and bounds; 0 destroys the particle instead
 	jitter   float64 // random velocity added every tick (cells/s)
 	drag     float64 // quadratic drag while not orbiting (1/cell)
-	anchor   particleAnchor
-	orbit    particleOrbit
+	anchors  []particleAnchor
 }
 
 var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
@@ -65,12 +87,7 @@ var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
 		fall:     1,
 		color:    [3]color.RGB{visual.RgbDecay, visual.RgbDecay, visual.RgbDecay},
 		runeSwap: parameter.ParticleChangeChance,
-		anchor:   anchorKraken,
-		orbit: particleOrbit{
-			stiffness: parameter.DecayOrbitStiffness,
-			radiusMin: parameter.DecayOrbitRadiusMin, radiusMax: parameter.DecayOrbitRadiusMax,
-			damping: parameter.DecayOrbitDamping, drag: parameter.DecayOrbitDrag, speed: parameter.DecayOrbitSpeed,
-		},
+		anchors:  []particleAnchor{anchorKraken, anchorVortex},
 	},
 	component.ParticleBlossom: {
 		name:     "blossom",
@@ -86,12 +103,7 @@ var particleProfiles = [component.ParticleBehaviorCount]particleProfile{
 		bounce:   parameter.DustWallRestitution,
 		jitter:   parameter.DustJitter,
 		drag:     parameter.DustGlobalDrag,
-		anchor:   anchorCursor,
-		orbit: particleOrbit{
-			stiffness: parameter.DustAttractionBase,
-			radiusMin: parameter.DustOrbitRadiusMin, radiusMax: parameter.DustOrbitRadiusMax,
-			damping: parameter.DustDamping, drag: parameter.DustGlobalDrag, speed: parameter.DustInitialSpeed,
-		},
+		anchors:  []particleAnchor{anchorCursor},
 	},
 }
 
@@ -116,10 +128,13 @@ type particleBehaviorState struct {
 	buffers              bufferTelemetry
 }
 
-// orbitCenter is one anchor this tick, in precise cells; spin is the turn a
-// falling particle takes on entering its orbit
+// orbitCenter is one anchor this tick, in precise cells, and the orbit it holds: round
+// at aspect, its radii counted from edge, and spin the turn a falling particle takes
+// on entering it
 type orbitCenter struct {
-	x, y, spin float64
+	x, y, spin, edge float64
+	aspect           vmath.Aspect
+	orbit            *particleOrbit
 }
 
 type impulseAcc struct {
@@ -144,6 +159,10 @@ type ParticleSystem struct {
 	// The dust chase boost follows cursor jumps, one stagger group (0-2) per jump
 	lastCursorX, lastCursorY int
 	staggerTick              uint8
+
+	// The button decay circles, by slot, until the vortex lapses
+	vortexButton    int
+	vortexRemaining time.Duration
 
 	// Dust's drain contacts: one drain per cell, as co-located drains destroy each other
 	drains   map[uint64]core.Entity
@@ -221,6 +240,7 @@ func (s *ParticleSystem) Init() {
 	s.centers = s.centers[:0]
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.lastCursorX, s.lastCursorY, s.staggerTick = 0, 0, 0
+	s.vortexButton, s.vortexRemaining = 0, 0
 	clear(s.drains)
 	clear(s.impulses)
 	for _, behavior := range particleBehaviorOrder {
@@ -257,6 +277,7 @@ func (s *ParticleSystem) Priority() int {
 func (s *ParticleSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventParticleWave,
+		event.EventParticleVortex,
 		event.EventParticleSpawnOne,
 		event.EventParticleSpawnBatch,
 		event.EventDustAllRequest,
@@ -288,6 +309,11 @@ func (s *ParticleSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventParticleWave:
 		if payload, ok := ev.Payload.(*event.ParticleWavePayload); ok {
 			s.spawnWave(payload)
+		}
+
+	case event.EventParticleVortex:
+		if payload, ok := ev.Payload.(*event.ParticleVortexPayload); ok {
+			s.vortex(payload)
 		}
 
 	case event.EventParticleSpawnOne:
@@ -344,6 +370,8 @@ func (s *ParticleSystem) Update() {
 		}
 	}
 
+	s.vortexRemaining = max(s.vortexRemaining-s.world.Resources.Time.DeltaTime, 0)
+
 	var counts [component.ParticleBehaviorCount]int64
 	for _, entity := range particles.Entities() {
 		particle, ok := particles.GetComponent(entity)
@@ -396,14 +424,15 @@ func (s *ParticleSystem) spawnOne(e event.ParticleSpawnEntry, cx, cy int) {
 		kinetic.AccelY = prof.fall * parameter.ParticleAcceleration
 	} else {
 		// Draw order: radius, turn, stagger group
-		particle.OrbitRadius = prof.orbit.radiusMin + s.rng.Float64()*(prof.orbit.radiusMax-prof.orbit.radiusMin)
+		orbit := &particleOrbits[anchorCursor]
+		particle.OrbitRadius = orbit.radiusMin + s.rng.Float64()*(orbit.radiusMax-orbit.radiusMin)
 		spin := 1.0
 		if s.rng.Intn(2) == 0 {
 			spin = -1
 		}
 		aspect := s.world.Resources.Config.CellAspect
 		centerX, centerY := vmath.Point{X: cx, Y: cy}.Center()
-		kinetic.VelX, kinetic.VelY = orbitKick(preciseX-centerX, aspect.Circular(preciseY-centerY), prof.orbit.speed, spin, aspect)
+		kinetic.VelX, kinetic.VelY = orbitKick(preciseX-centerX, aspect.Circular(preciseY-centerY), orbit.speed, spin, aspect)
 		particle.ResponseGroup = uint8(s.rng.Intn(3))
 		particle.Orbiting = true
 	}
@@ -435,21 +464,43 @@ func (s *ParticleSystem) spawnWave(p *event.ParticleWavePayload) {
 	}
 	from, to := 0, config.MapWidth
 	if p.Button != 0 {
-		from, to = 0, 0
-		buttons := s.world.Components.Button
-		buttons.Each(func(_ core.Entity, b *component.ButtonComponent) bool {
-			if b.Slot != p.Button {
-				return true
-			}
-			x, _, w, _ := component.ButtonRect(b.Slot, buttons.CountEntities(), config.MapWidth, config.MapHeight)
-			from, to = max(x, 0), min(x+w, config.MapWidth)
-			return false
-		})
+		x, _, w, _, _ := s.buttonRect(p.Button)
+		from, to = max(x, 0), min(x+w, config.MapWidth)
 	}
 	for column := from; column < to; column++ {
 		char := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnOne(event.ParticleSpawnEntry{Behavior: behavior, X: column, Y: y, Char: char}, 0, 0)
 	}
+}
+
+// vortex turns the glyph field to decay, as a Kraken turns what it covers, and draws
+// all decay around one button until the duration lapses
+func (s *ParticleSystem) vortex(p *event.ParticleVortexPayload) {
+	s.vortexButton, s.vortexRemaining = p.Button, time.Duration(p.DurationMs)*time.Millisecond
+	s.destroyBuf = s.destroyBuf[:0]
+	for _, e := range s.world.Components.Glyph.Entities() {
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if e.Domain() == core.DomainPlayer && !s.world.Components.Death.HasEntity(e) {
+			s.destroyBuf = append(s.destroyBuf, e)
+		}
+	}
+	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleDecay, s.destroyBuf...)
+	s.destroyBuf = s.destroyBuf[:0]
+}
+
+// buttonRect places the button in slot on this map; ok is false when none is there
+func (s *ParticleSystem) buttonRect(slot int) (x, y, w, h int, ok bool) {
+	buttons := s.world.Components.Button
+	buttons.Each(func(_ core.Entity, b *component.ButtonComponent) bool {
+		if b.Slot != slot {
+			return true
+		}
+		config := s.world.Resources.Config
+		x, y, w, h = component.ButtonRect(slot, buttons.CountEntities(), config.MapWidth, config.MapHeight)
+		ok = true
+		return false
+	})
+	return x, y, w, h, ok
 }
 
 func (s *ParticleSystem) fallSpeed() float64 {
@@ -478,9 +529,8 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 	gameWidth := s.world.Resources.Config.MapWidth
 	gameHeight := s.world.Resources.Config.MapHeight
-	centers, chase := s.anchors(prof.anchor)
+	centers, chase := s.anchors(prof)
 	particles := s.world.Components.Particle
-	aspect := s.world.Resources.Config.CellAspect
 
 	for _, entity := range s.entities {
 		// Live pointers: the only structural change in the body is the annihilation
@@ -500,7 +550,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 			kinetic.VelX += vmath.Cos(angle) * prof.jitter
 			kinetic.VelY += vmath.Sin(angle) * prof.jitter
 		}
-		center, anchored := nearestCenter(centers, kinetic.PreciseX, kinetic.PreciseY, aspect)
+		center, anchored := nearestCenter(centers, kinetic.PreciseX, kinetic.PreciseY)
 		s.steer(prof, particle, kinetic, center, anchored, chase, dtSec)
 
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
@@ -590,49 +640,63 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 	state.buffers.Observe(1, len(state.processedGridCells))
 }
 
-// anchors resolves this tick's orbit centres for one anchor rule; chase reports
-// a cursor jump, which boosts the stagger group it selects
-func (s *ParticleSystem) anchors(anchor particleAnchor) (centers []orbitCenter, chase bool) {
+// anchors resolves this tick's orbit centres for a behavior's anchor kinds; chase
+// reports a cursor jump, which boosts the stagger group it selects
+func (s *ParticleSystem) anchors(prof *particleProfile) (centers []orbitCenter, chase bool) {
 	s.centers = s.centers[:0]
-	switch anchor {
-	case anchorCursor:
-		// The visible cursor: the D-18 prediction while this instance's placements are outstanding
-		cursorPos, ok := s.world.LocalCursor()
-		if !ok {
-			return s.centers, false
-		}
-		dx, dy := cursorPos.X-s.lastCursorX, cursorPos.Y-s.lastCursorY
-		s.lastCursorX, s.lastCursorY = cursorPos.X, cursorPos.Y
-		if vmath.Magnitude(float64(dx), float64(dy)) > parameter.DustChaseThreshold {
-			chase = true
-			s.staggerTick = (s.staggerTick + 1) % 3
-		}
-		// Energy of either sign pulls, as it raises the shield
-		if energy, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok && energy.Current != 0 {
-			x, y := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.Center()
-			s.centers = append(s.centers, orbitCenter{x: x, y: y})
-		}
-	case anchorKraken:
-		for _, e := range s.world.Components.Kraken.Entities() {
-			kraken, ok := s.world.Components.Kraken.GetComponent(e)
-			if !ok || (kraken.State != component.KrakenSpin && kraken.State != component.KrakenMove) {
-				continue
-			}
-			body, ok := s.world.Components.Kinetic.GetComponent(e)
+	aspect := s.world.Resources.Config.CellAspect
+	for _, anchor := range prof.anchors {
+		orbit := &particleOrbits[anchor]
+		switch anchor {
+		case anchorCursor:
+			// The visible cursor: the D-18 prediction while this instance's placements are outstanding
+			cursorPos, ok := s.world.LocalCursor()
 			if !ok {
 				continue
 			}
-			s.centers = append(s.centers, orbitCenter{x: body.PreciseX, y: body.PreciseY, spin: kraken.TurnDir})
+			dx, dy := cursorPos.X-s.lastCursorX, cursorPos.Y-s.lastCursorY
+			s.lastCursorX, s.lastCursorY = cursorPos.X, cursorPos.Y
+			if vmath.Magnitude(float64(dx), float64(dy)) > parameter.DustChaseThreshold {
+				chase = true
+				s.staggerTick = (s.staggerTick + 1) % 3
+			}
+			// Energy of either sign pulls, as it raises the shield
+			if energy, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok && energy.Current != 0 {
+				x, y := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.Center()
+				s.centers = append(s.centers, orbitCenter{x: x, y: y, aspect: aspect, orbit: orbit})
+			}
+		case anchorKraken:
+			for _, e := range s.world.Components.Kraken.Entities() {
+				kraken, ok := s.world.Components.Kraken.GetComponent(e)
+				if !ok || (kraken.State != component.KrakenSpin && kraken.State != component.KrakenMove) {
+					continue
+				}
+				body, ok := s.world.Components.Kinetic.GetComponent(e)
+				if !ok {
+					continue
+				}
+				s.centers = append(s.centers, orbitCenter{x: body.PreciseX, y: body.PreciseY, spin: kraken.TurnDir,
+					aspect: aspect, orbit: orbit})
+			}
+		case anchorVortex:
+			if s.vortexRemaining == 0 {
+				continue
+			}
+			// Round at the button's own proportions, the orbit hugs the block
+			if x, y, w, h, ok := s.buttonRect(s.vortexButton); ok {
+				s.centers = append(s.centers, orbitCenter{x: float64(x) + float64(w)/2, y: float64(y) + float64(h)/2,
+					spin: 1, edge: float64(w) / 2, aspect: vmath.Aspect(float64(h) / float64(w)), orbit: orbit})
+			}
 		}
 	}
 	return s.centers, chase
 }
 
-// nearestCenter returns the centre closest to (x, y) in circular space
-func nearestCenter(centers []orbitCenter, x, y float64, aspect vmath.Aspect) (orbitCenter, bool) {
+// nearestCenter returns the centre closest to (x, y) in its own orbit's space
+func nearestCenter(centers []orbitCenter, x, y float64) (orbitCenter, bool) {
 	best, bestDist := orbitCenter{}, math.Inf(1)
 	for _, c := range centers {
-		dx, dy := x-c.x, aspect.Circular(y-c.y)
+		dx, dy := x-c.x, c.aspect.Circular(y-c.y)
 		if d := dx*dx + dy*dy; d < bestDist {
 			best, bestDist = c, d
 		}
@@ -646,12 +710,12 @@ func (s *ParticleSystem) steer(prof *particleProfile, p *component.ParticleCompo
 	drag := prof.drag
 	switch {
 	case anchored:
-		// Orbit physics runs in circular space so the orbit looks round on cells
-		aspect := s.world.Resources.Config.CellAspect
+		// Orbit physics runs in the anchor's space, where its orbit is round
+		aspect, orbit := c.aspect, c.orbit
 		dx, dy := k.PreciseX-c.x, aspect.Circular(k.PreciseY-c.y)
 		if !p.Orbiting && prof.fall != 0 {
-			p.OrbitRadius = prof.orbit.radiusMin + s.rng.Float64()*(prof.orbit.radiusMax-prof.orbit.radiusMin)
-			k.VelX, k.VelY = orbitKick(dx, dy, prof.orbit.speed, c.spin, aspect)
+			p.OrbitRadius = c.edge + orbit.radiusMin + s.rng.Float64()*(orbit.radiusMax-orbit.radiusMin)
+			k.VelX, k.VelY = orbitKick(dx, dy, orbit.speed, c.spin, aspect)
 		}
 		if chase && p.ResponseGroup == s.staggerTick {
 			p.ChaseBoost = parameter.DustChaseBoost
@@ -659,15 +723,15 @@ func (s *ParticleSystem) steer(prof *particleProfile, p *component.ParticleCompo
 			p.ChaseBoost = max(p.ChaseBoost-parameter.DustChaseDecay*dtSec, 1)
 		}
 
-		ax, ay := physics.OrbitalEquilibrium(dx, dy, p.OrbitRadius, prof.orbit.stiffness*max(p.ChaseBoost, 1))
+		ax, ay := physics.OrbitalEquilibrium(dx, dy, p.OrbitRadius, orbit.stiffness*max(p.ChaseBoost, 1))
 		k.VelX += ax * dtSec
 		k.VelY += aspect.FromCircular(ay) * dtSec
 
 		// Radial damping turns radial velocity into tangential
 		velYCirc := aspect.Circular(k.VelY)
-		k.VelX, velYCirc = physics.OrbitalDamp(k.VelX, velYCirc, dx, dy, prof.orbit.damping, dtSec)
+		k.VelX, velYCirc = physics.OrbitalDamp(k.VelX, velYCirc, dx, dy, orbit.damping, dtSec)
 		k.VelY = aspect.FromCircular(velYCirc)
-		drag = prof.orbit.drag
+		drag = orbit.drag
 	case p.Orbiting && prof.fall != 0:
 		k.VelX = 0
 		k.VelY = prof.fall * s.fallSpeed()
@@ -1029,14 +1093,17 @@ func (s *ParticleSystem) convertGlyphs(cursorX, cursorY int, area *blastArea, ma
 type particleState struct {
 	cursorX, cursorY int
 	stagger          uint8
+	vortexButton     int
+	vortexRemaining  time.Duration
 }
 
 func (s *ParticleSystem) CopyState() any {
-	return particleState{s.lastCursorX, s.lastCursorY, s.staggerTick}
+	return particleState{s.lastCursorX, s.lastCursorY, s.staggerTick, s.vortexButton, s.vortexRemaining}
 }
 
 func (s *ParticleSystem) RestoreState(v any) error {
 	c := v.(particleState)
 	s.lastCursorX, s.lastCursorY, s.staggerTick = c.cursorX, c.cursorY, c.stagger
+	s.vortexButton, s.vortexRemaining = c.vortexButton, c.vortexRemaining
 	return nil
 }

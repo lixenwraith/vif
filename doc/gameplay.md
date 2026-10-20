@@ -132,9 +132,13 @@ bright green, a dark green one bright red, and a dark red one flashes away; it
 also destroys nuggets. Blossom raises a glyph's level up to bright and is spent on
 a red glyph. A decay and a blossom that meet annihilate. Both respect
 `ProtectFromParticle`, die on walls and bounds, and have no lifetime. Every decay
-particle orbits the nearest Kraken while it spins or charges, entering with a kick
-in its spin; when the Kraken stands still, they drop straight down at fresh decay
-speed.
+particle orbits the nearest Kraken while it spins or charges, or a vortex's button,
+entering with a kick in its spin; with no anchor left it drops straight down at
+fresh decay speed. A vortex (`EventParticleVortex`) turns every Player glyph to
+decay, as a Kraken turns what it covers, and holds all decay for its duration in a
+ring just clear of one button, round at the button's proportions. Each anchor kind
+has its own orbit; the vortex's is damped hard, since it draws decay from across the
+map.
 
 Dust is what glyphs become: a drain crossing a normal or bright glyph, a dust-all
 request (`:dust`, each gold round of a quasar encounter, a gold sequence destroyed
@@ -185,7 +189,9 @@ Heat is clamped from `0` to `100`. Positive additions beyond the cap accumulate
 overheat. Reaching the overheat threshold emits a heat burst, flashes the meter,
 and activates the ember phase. Ember decays heat periodically and protects
 ordinary energy penalties while active. A heat penalty also clears the
-overheat accumulation.
+overheat accumulation. A scenario lights or puts out the ember with
+`EventCursorArmRequest`, and an ember that burns its heat out crosses
+`EventEmberSpent`, which a scenario can time a turn by.
 
 Special-attack heat spending consumes overheat before current heat without
 resetting the remaining overheat or triggering the penalty sound.
@@ -445,15 +451,18 @@ entry has a short `description` for scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its
-button lights. Each button plays once before the first game. A level plays the
-sequence, one note longer than the last; after a short pause the player
-repeats it by key or by clicking the buttons. Every note shown or pressed sounds,
-so the game can be played with eyes closed once sound is on (sound starts muted;
-`Ctrl-S` cycles it). A correct press blooms over its button, a cleared level
-flashes green, and a wrong note grays the field and rains decay over it, then plays
-the note that was due before a new game. The level stops rising at 100, and the
-energy cell reads it while heat stays full. Glyphs drift behind the buttons as a
-moving backdrop, and music stays off.
+button lights. The buttons run up once before the first game, and any press cuts
+that short. A level plays the sequence, one note longer than the last; after a
+short pause the player repeats it by key or by clicking the buttons. Every note
+shown or pressed sounds, so the game can be played with eyes closed once sound is
+on (sound starts muted; `Ctrl-S` cycles it). A correct press blooms over its button
+and a cleared level flashes green. From the first turn an ember burns the heat
+down as the turn's clock; each shown note and each cleared level refill it, and
+special fire spends it too. A wrong note or a burnt-out ember loses the game: the
+field grays and turns to decay circling the button at fault, the one pressed or
+the one due, while the due note lights and sounds; the next game starts as the
+decay falls away. The level stops rising at 100 and the energy cell reads it.
+Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 
 ## 11. System inventory
 
