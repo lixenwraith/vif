@@ -200,7 +200,8 @@ a call before the plan is written.
   gateway carries it. With a fixed dt and tick-multiple durations, nothing
   drifts today. Proposal: phases move to `Instance`, and cycles move to a carried
   accumulator as they are touched. Drain's absolute ticks stay: they are
-  player-domain and never captured.
+  player-domain, and only a journal's opening or a checkpoint carries them, each
+  installed at the tick it was read.
 - **S16. Three hand-rolled spawn queues.** Fuse (`fusions`), storm
   (`pendingBlueSpawns`) and drain (`pendingSpawns`) each defer a spawn behind a
   materialize. Drain completes on `EventMaterializeComplete`. Fuse and storm run

@@ -261,7 +261,8 @@ type Config struct {
 	notice  string
 
 	// journalCarried says Journal came from the run this one replaces, which was
-	// journaling: one that fails to reopen leaves this run unjournaled, not unstarted.
+	// journaling or asked to start: one that fails to open leaves this run
+	// unjournaled, not unstarted.
 	journalCarried bool
 
 	// log is a secondary runtime's handle: a seat's or a staging world's is tagged,

@@ -97,7 +97,7 @@ func (a *App) initJournal() error {
 	switch {
 	case err != nil && a.cfg.journalCarried:
 		a.log.Warn("journal", "msg", "journal not reopened", "error", err.Error())
-		a.cfg.notice = joinNotice(a.cfg.notice, "Journal not reopened: "+err.Error())
+		a.cfg.notice = joinNotice(a.cfg.notice, "Journal not opened in this run: "+err.Error())
 		return nil
 	case err != nil:
 		return err
@@ -154,15 +154,24 @@ func (a *App) stopJournalLocked(slot int) error {
 		return a.askSeatJournal(slot, false)
 	}
 	if a.recorder.Load() == nil {
-		// The later command wins over a start not yet served
-		if ask := a.journalAsk.Load(); ask != nil && ask.start && a.journalAsk.CompareAndSwap(ask, nil) {
-			ask.report("", errors.New("cancelled by :journal stop"))
+		if a.cancelJournalStart() {
 			return nil
 		}
 		return errors.New("no journal is open")
 	}
 	_, err := a.closeJournal()
 	return err
+}
+
+// cancelJournalStart lets a stop win over a start not yet served, reporting it
+// cancelled; it reports whether there was one
+func (a *App) cancelJournalStart() bool {
+	ask := a.journalAsk.Load()
+	if ask == nil || !ask.start || !a.journalAsk.CompareAndSwap(ask, nil) {
+		return false
+	}
+	ask.report("", errors.New("cancelled by :journal stop"))
+	return true
 }
 
 // closeJournal writes the end record and releases the file, returning its path, or
@@ -375,8 +384,8 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 // ownState is the run's own side, which a journal's opening carries beside the shared
 // world so its replay plays on as this participant rather than as a fresh boot of
 // one: the player world, the player's resources, each system's own state, where the
-// corpus walk stands, the event tallies, every status cell but the ownedSystems', and
-// the order the run holds both domains' entities in.
+// corpus walk stands, the event tallies, every status cell but this instance's own
+// (ownedStatusKey), and the order the run holds both domains' entities in.
 type ownState struct {
 	World   engine.PlayerWorldState      `json:"world"`
 	Side    engine.PlayerSide            `json:"side"`
