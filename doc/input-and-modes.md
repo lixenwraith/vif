@@ -50,6 +50,10 @@ A captured key is the scenario's one input hook, whatever produces it:
   button, 2 the right, 3 and 4 the wheel up and down, 5 a finger, and `tick` the
   `engine.ticks` it was made at, which the barrier holds within the lead and late
   commit of its apply tick.
+- **Timing.** A scenario judges a press by its `tick`, not by when it arrives: a
+  press made at a window's close can arrive up to `engine.input_horizon` ticks
+  later, none solo and `NetworkApplyHorizonTicks` (2 s) in a session, so a miss
+  waits that long ([FSM reference](fsm-reference.md#payloadintcomparevar)).
 - **Release.** Every press crosses one `EventInputReleased` from its slot. A key's
   own comes where the keyboard reports releases: a terminal with the key event
   protocol, asked for at startup and kept for the run (Alacritty 0.13 and later,

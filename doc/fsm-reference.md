@@ -598,6 +598,22 @@ struct tag first, then Go field name — identical to `capture_vars` and
 { trigger = "EventSpeciesKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 } }
 ```
 
+### PayloadIntCompareVar
+
+```toml
+{ trigger = "EventInputPressed", target = "Hit", guard = "PayloadIntCompareVar", guard_args = { field = "tick", op = "lte", var = "close" } }
+```
+
+Compares a payload field with an FSM variable, as a press's `tick`, the
+`engine.ticks` it was made at, with a window's marks, so a press counts however late
+it arrives. A window takes `engine.ticks` into `open` with `StatusToVar` and sets
+`close` to `open` plus its length; a press with `open < tick <= close` hits (two of
+these in an `And`). A press made at the close can arrive up to
+`engine.input_horizon` ticks later (none solo, 40 in a session), so the miss waits:
+take that key into `deadline`, `IncrementVar` it with `source_var = "close"`, and
+miss on `StatusIntCompare` of `engine.ticks` with `since = "deadline"`,
+`op = "gte"`, `value = 0`.
+
 ### PayloadBoolEquals
 
 ```toml
@@ -628,9 +644,9 @@ transitions = [
 ]
 ```
 
-Each press is followed by one `EventInputReleased` with its `slot` and `key`: the
-key's own release where the slot's keyboard reports one, at once with `lost = true`
-where it taps. `releases = true` on the capture asks a console keyboard for releases
+A press and its release carry `slot`, `key`, `source` and `tick`, a release also
+`lost`. Each press is followed by one `EventInputReleased`: the key's own release
+where the slot's keyboard reports one, at once with `lost = true` where it taps. `releases = true` on the capture asks a console keyboard for releases
 too, and `EventInputReport { slot, releases }` says which a slot does while keys are
 captured.
 

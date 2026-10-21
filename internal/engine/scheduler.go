@@ -68,6 +68,7 @@ type Scheduler struct {
 
 	// Cached metric pointers
 	statTicks           *atomic.Int64
+	statInputHorizon    *atomic.Int64
 	statAPM             *atomic.Int64
 	statMusicAPM        *atomic.Int64
 	statEvBackoffs      *atomic.Int64
@@ -175,6 +176,7 @@ func NewScheduler(
 		eventLoopBackoffMax: parameter.EventLoopBackoffMax,
 
 		statTicks:           statusReg.Ints.Get("engine.ticks"),
+		statInputHorizon:    statusReg.Ints.Get("engine.input_horizon"),
 		statAPM:             statusReg.Ints.Get("engine.apm"),
 		statMusicAPM:        statusReg.Ints.Get("engine.music_apm"),
 		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
@@ -414,11 +416,23 @@ func (s *Scheduler) LoadScenarioFromFS(fsys fs.FS, entry string, registerCompone
 func (s *Scheduler) initLoadedScenario() error {
 	// Before Init: the initial region entries must reach the observer
 	s.bindFSMTelemetry()
+	s.publishInputHorizon()
 
 	if err := s.fsm.Init(s.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
 	return s.applySystemConfig()
+}
+
+// publishInputHorizon stores how many ticks after the one it was made at an input can
+// still reach the machine: none solo, the barrier's lead and late commit once shared.
+// Before each tick and machine entry, as the latch can change between them.
+func (s *Scheduler) publishInputHorizon() {
+	horizon := int64(0)
+	if s.world.SessionBarrier() {
+		horizon = parameter.NetworkApplyHorizonTicks
+	}
+	s.statInputHorizon.Store(horizon)
 }
 
 // applySystemConfig sets the systems to what the running regions want. A missing
@@ -1214,6 +1228,7 @@ func (s *Scheduler) executeReset() {
 	s.fsmHeld = false
 
 	// 6. Reset FSM state - This will trigger OnEnter actions
+	s.publishInputHorizon()
 	if err := s.fsm.Reset(s.world); err != nil {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}
@@ -1291,6 +1306,7 @@ func (s *Scheduler) processTick() {
 		defer p.BeginPhase(prof.PhaseTick).End()
 
 		s.world.LatchSession()
+		s.publishInputHorizon()
 		// Pointer reports since the last tick cross as one placement, settled as the
 		// input they are before the barrier opens the tick
 		if s.world.FlushPointerMove() {

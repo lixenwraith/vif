@@ -56,6 +56,84 @@ transitions = [{ trigger = "Tick", target = "Count" }]
 	}
 }
 
+// TestAnInputIsJudgedByTheTickItWasMadeAt: a window marks its open and close ticks,
+// a press counts by the tick it carries, however late it arrives, and the miss waits
+// out the horizon a press made at the close could still arrive within.
+func TestAnInputIsJudgedByTheTickItWasMadeAt(t *testing.T) {
+	const doc = `
+[regions.round]
+initial = "Open"
+
+[states.Open]
+parent = "Root"
+on_enter = [
+    { action = "StatusToVar", payload = { key = "engine.ticks", name = "open" } },
+    { action = "CopyVar", payload = { name = "close", source_var = "open" } },
+    { action = "IncrementVar", payload = { name = "close", delta = 5 } },
+    { action = "StatusToVar", payload = { key = "engine.input_horizon", name = "deadline" } },
+    { action = "IncrementVar", payload = { name = "deadline", source_var = "close" } },
+]
+transitions = [
+    { trigger = "EventInputPressed", target = "Hit", guard = "And", guard_args = { guards = [
+        { name = "PayloadIntCompareVar", args = { field = "tick", op = "gt", var = "open" } },
+        { name = "PayloadIntCompareVar", args = { field = "tick", op = "lte", var = "close" } },
+    ] } },
+    { trigger = "Tick", target = "Miss", guard = "StatusIntCompare", guard_args = { key = "engine.ticks", since = "deadline", op = "gte", value = 0 } },
+]
+
+[states.Hit]
+parent = "Root"
+
+[states.Miss]
+parent = "Root"
+`
+	event.EnsureRegistry()
+	for _, c := range []struct {
+		name    string
+		horizon int64
+		at      int64  // engine.ticks the press arrives at, none for zero
+		tick    uint64 // the tick the press was made at
+		want    string
+	}{
+		{"made at the close", 0, 15, 15, "Hit"},
+		{"made at the open", 0, 12, 10, "Miss"},
+		{"made past the close", 0, 15, 16, "Miss"},
+		{"none", 0, 0, 0, "Miss"},
+		{"made at the close, arriving late", 40, 55, 15, "Hit"},
+		{"made past the close, arriving late", 40, 30, 16, "Miss"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			status := map[string]int64{"engine.ticks": 10, "engine.input_horizon": c.horizon}
+			m := fsm.NewMachine[map[string]int64]()
+			std.Register(m, std.Host[map[string]int64]{
+				StatusInt: func(s map[string]int64, key string) (int64, bool) {
+					v, ok := s[key]
+					return v, ok
+				},
+			})
+			if err := m.LoadScenario([]byte(doc)); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.Init(status); err != nil {
+				t.Fatal(err)
+			}
+			state := func() string { name, _, _ := m.GetActiveRegionTelemetry(); return name }
+			for ; status["engine.ticks"] <= 15+c.horizon && state() == "Open"; status["engine.ticks"]++ {
+				if status["engine.ticks"] == c.at {
+					m.HandleEvent(status, event.GameEvent{Type: event.EventInputPressed, Payload: &event.InputPayload{Tick: c.tick}})
+				}
+				m.Update(status, time.Millisecond)
+				if state() == "Miss" && status["engine.ticks"] != 15+c.horizon {
+					t.Fatalf("missed at %d, before the horizon closed at %d", status["engine.ticks"], 15+c.horizon)
+				}
+			}
+			if got := state(); got != c.want {
+				t.Fatalf("judged %s, want %s", got, c.want)
+			}
+		})
+	}
+}
+
 // TestARandomDrawIsAFunctionOfItsSeedAndIndex: a sequence drawn by index replays from
 // its seed alone, stays in range, and moves with the host's seed.
 func TestARandomDrawIsAFunctionOfItsSeedAndIndex(t *testing.T) {
