@@ -201,11 +201,12 @@ Print the module version and commit a package should report
   Adjust    lead with + or \- to add to or remove from the set already selected
 .fi
 .SH IN-GAME CONFIGURATION
-Ctrl-G, :g (:config) or a press held on the status bar opens the configuration
-menu. Select a category or setting with Up/Down or j/k. Left/Right or h/l changes
-values; Enter/Space chooses. A press selects a row, and on the selected row acts
-as Enter. Escape or q returns to categories, then closes; Ctrl-G closes from any
-page. Home/End and PageUp/PageDown navigate longer pages.
+Ctrl-G or F10, :g (:config) or a press held on the status bar opens the
+configuration menu, and F1 or :help the help. Select a category or setting with
+Up/Down or j/k. Left/Right or h/l changes values; Enter/Space chooses. A press
+selects a row, and on the selected row acts as Enter. Escape or q returns to
+categories, then closes; Ctrl-G or F10 closes from any page. Home/End and
+PageUp/PageDown navigate longer pages.
 .PP
 Game starts a new game, as :n does, or another scenario: a row for each one the
 configuration roots hold, or one given by name or path. In a session only the
@@ -245,8 +246,8 @@ a vif.toml writes them back to it as they change, so the next run starts as this
 one was left. Every other change lasts the run. Solo play pauses while the menu is
 open, and so may a host whose only other participants are its own bots; any other
 session keeps running. The menu shares the command line's replay and session
-restrictions. The config_menu keymap action can be
-rebound in normal_keys, text_keys and overlay_keys.
+restrictions. The keymap binds config_menu and help in normal_keys, text_keys and
+overlay_keys; a key names one action, and an action can have several keys.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/vif

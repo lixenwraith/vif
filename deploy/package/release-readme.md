@@ -88,13 +88,13 @@ corpus it carries.
 
 <!-- end -->
 <!-- if client windows -->
-`:help` lists the keys, `Ctrl-G` (or `:g`) opens the settings menu, `:q` quits,
-and `vif -h` prints every flag.
+`F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the settings
+menu, `:q` quits, and `vif -h` prints every flag.
 
 <!-- end -->
 <!-- if web -->
-`:help` lists the keys, `Ctrl-G` (or `:g`) opens the settings menu, and `:q`
-quits.
+`F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the settings
+menu, and `:q` quits.
 
 <!-- end -->
 <!-- if linux -->
