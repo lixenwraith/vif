@@ -191,26 +191,24 @@ The offline conductor render that produced those comparisons (an APM timeline
 through the sequencer, no device) is a test-only harness in the review branch's
 scratch repository, and would be a `soundlab` or `vif-log` verb.
 
-### Widen the input hook past order-only play
+### Release keys on the graphical hosts, and let bots hold and click
 
 - Priority: P2
-- Affected files: `internal/event/payload.go`, `internal/mode/router.go`,
-  `internal/input/machine.go`, `internal/bot`, `internal/system/button.go`
+- Affected files: `pkg/window`, `pkg/browser`, `web/terminal.js`, `android/`,
+  `internal/bot`
 
-Presses of captured keys and clicks on buttons cross as `EventInputPressed` and
-`EventInputReleased` ([Input and modes](input-and-modes.md) §1). Simon judges
-order only, so what an order-only game never needed is open:
+A captured key holds until its release where the terminal reports one and taps
+elsewhere, and every input names its slot and the tick it was made at
+([Input and modes](input-and-modes.md) §1). What remains:
 
-- Timing: a press applies a playout lead after it was pressed (D-3). A rhythm or
-  reaction game judges by the press's production tick: carry the tick in
-  `InputPayload`, or widen each window by the lead?
-- Sources: right button, wheel, touch, and key release (kitty keyboard protocol)
-  have room in `InputSource`. Does a held key mean anything before terminals
-  report releases?
-- Cursorless play: a press names its cursor. Should a scenario without one still
-  take presses, and whose would they be?
-- Bots press by key; a `button` `PointAt` target matters only if a bot should
-  click.
+- Hosts: the desktop window, the page and Android post presses alone, so a key
+  taps there. X11 `KeyRelease` with detectable autorepeat
+  (`XkbSetDetectableAutoRepeat`), the page's `keyup` and repeat flag, and
+  Android's `onKeyUp` would answer releases from the host source, and a lost
+  focus would end holds. Soft keyboards commit text and stay taps.
+- Bots press and release at once. A hold in ticks on the press and a release
+  action, ended on a person's exit paths; a `button` target for `PointAt`,
+  `HasTarget` and `OnTarget`, which `click = true` presses as a pointer.
 
 ### Build the map and scenario editor
 

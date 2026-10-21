@@ -1,9 +1,10 @@
 # Can it run Doom?
 
-Not today. Yes, as a program of its own drawn through vif's hosts, for about two
-thousand lines to first play, most of them outside this repository; Doom as a vif
-scenario inside a session is out of scope. A design for future implementation:
-nothing here is built.
+Not today. Yes, as a program of its own drawn through vif's hosts, for about one
+and a half thousand more lines to first play, most of them outside this
+repository; Doom as a vif scenario inside a session is out of scope. A design for
+future implementation: of its plan only the terminal module's key releases (§3.1)
+are built.
 
 ## 1. Three readings
 
@@ -38,7 +39,7 @@ alternative and is tens of thousands of lines: out of scope.
 
 | Blocker | Where it is today | What closes it | Size |
 |---|---|---|---|
-| No key release | A terminal reports none ([Input and modes](input-and-modes.md) §1) and `terminal.Event` has no field for one; `pkg/window` handles only `KeyPress`, and the page and Android post keys as a terminal would | The kitty keyboard protocol in the terminal module and a key action on `Event`; each host posts its release (§3.1) | ~500 lines |
+| No key release on the graphical hosts | The terminal module reports releases where the terminal or console does (§3.1); `pkg/window` handles only `KeyPress`, and the page and Android post presses alone | Each host posts its release (§3.1) | ~100 lines |
 | Cells, not pixels | `render.Surface` and every host draw a cell grid ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)) | A half-block frame converter in `pkg/ascimage` (§3.2); a pixel path for graphical hosts later | ~150; pixel path ~400 |
 | Effects | The mixer is synthesized and 44.1 kHz stereo | Resample each 8-bit lump to float once, at `CacheSound`, and play it through `AudioEngine.PlayBuffer`; centered and unstoppable, since that call has no pan and no voice handle | ~100 |
 | Music | Doom's is MUS played on OPL2 FM from the `GENMIDI` bank | An OPL2 emulator in Go, or MUS channels mapped onto the sequencer's voices; deferred, as gore defers it | ~1,000–1,500 |
@@ -50,21 +51,22 @@ Doom's 35 Hz tic needs nothing from vif: `vif-doom` runs gore's own loop and nev
 ### 3.1 Key release
 
 Doom moves while a key is held (`ev_keydown`/`ev_keyup`); gore's own terminal
-frontend makes the player tap repeatedly. The terminal module pushes the kitty
-protocol's progressive enhancement with event types and every key as an escape
-(flags 1, 2 and 8: `CSI > 11 u` on start, `CSI < u` on exit and suspend), so a
-letter's press and release both arrive as `CSI code ; mods:event u`, where 1 is
-press, 2 repeat and 3 release, and parses that into a `KeyAction` on `Event` beside
-`MouseAction`. kitty, foot, Ghostty, Alacritty and WezTerm (behind its
-`enable_kitty_keyboard` setting) report it; xterm does not, and a multiplexer has
-to pass it through. Without it the fallback holds a key
-until no repeat arrives within the repeat interval, which stutters for the first
-repeat's delay (250–600 ms): a fallback, not play. The window posts X11
-`KeyRelease`, the page `keyup` and Android the key's `ACTION_UP`, a few lines each.
+frontend makes the player tap repeatedly. The terminal module reports a key's
+press, repeat and release as `Event.Action` once a program asks with
+`SetKeyReport`, which `EventKeyReport` answers with the source it took. One source
+is the CSI u key event protocol (`CSI > 31 u`, popped on exit and suspend), used
+only where the terminal answers its query, never by name: Alacritty 0.13 and later
+is the reference, locally or over ssh. The other is the Linux or FreeBSD text
+console's raw keyboard, held only while asked, with a guard process that restores
+the console if the program dies. tmux, VTE and xterm report no releases, and a key
+taps there. A lost focus or source releases every held key, marked `Lost`. Where
+no release arrives, `vif-doom` holds a key until no repeat follows within the
+repeat interval, which stutters for the first repeat's delay (250–600 ms): a
+fallback, not play. The window posts X11 `KeyRelease`, the page `keyup` and
+Android the key's `ACTION_UP`, a few lines each.
 
-The same foundation is what vif's input hook lacks for held keys
-([todo](todo.md#widen-the-input-hook-past-order-only-play)), so step 1 of §5
-serves vif as well.
+vif's input hook holds a captured key on the same releases
+([Input and modes](input-and-modes.md) §1), so step 1 of §5 serves vif as well.
 
 ### 3.2 Frames as cells
 
@@ -104,7 +106,7 @@ storage.
 
 | Host | First cut | Missing for good play |
 |---|---|---|
-| Terminal | Plays wherever vif's does | Held keys only on kitty-protocol terminals |
+| Terminal | Plays wherever vif's does | Held keys only where releases arrive: protocol terminals and the text consoles |
 | Desktop window | Plays as cells; Linux and FreeBSD | `KeyRelease`; the pixel path for resolution |
 | Browser | gore in the Worker under `js/wasm`, with its own copy of `web/` and the IWAD picker | A measurement: Go wasm speed for Doom's renderer is unmeasured |
 | Android | A `gomobile` module of its own, as `android/` is | Touch controls: the strip sends keys, not a stick |
@@ -115,15 +117,16 @@ storage.
 Each step is one PR; the first three are BSD changes in vif and the terminal module,
 useful without Doom.
 
-1. Terminal module: kitty event types and `Event.KeyAction`, restored on exit and
-   suspend. ~500 lines with tests.
+1. Terminal module: key actions from the key event protocol and the text consoles,
+   restored on exit and suspend. Built (terminal v0.5.0, the consoles in v0.5.1).
 2. Hosts: window `KeyRelease`, page `keyup`, Android key up. ~100 lines.
 3. `pkg/ascimage`: a half-block converter into a caller's cells. ~150 lines.
 4. `vif-doom` (GPL-2.0): a gore frontend per host (frame to cells to `Flush`, host
    events to Doom keys, effects to `PlayBuffer`), IWAD resolution, the hold
    fallback, and a keymap with vi keys beside Doom's. ~800–1,200 lines.
 
-That is about 1,500 to 2,000 lines to first play in a terminal, window and browser.
+That leaves about 1,000 to 1,500 lines to first play in a terminal, window and
+browser.
 Music, the pixel path and Android touch controls follow, about 2,000 more.
 
 ## 6. Why not inside a session
