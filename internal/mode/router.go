@@ -593,19 +593,17 @@ func (r *Router) handleKeyPress(intent *input.Intent) bool {
 	return true
 }
 
-// pressInput crosses a press of a captured key, typed or clicked on its button. The
-// capture and the modes the parser captures in gate every source, bots and scripts
-// included. A macro replays none: a recorded round is the wrong answer to the next.
+// pressInput crosses a press of a captured key, typed or clicked on its button, from
+// this instance's roster slot. The capture and the modes the parser captures in gate
+// every source, bots and scripts included. A macro replays none: a recorded round is
+// the wrong answer to the next.
 func (r *Router) pressInput(intent *input.Intent, key rune, source event.InputSource) {
 	playing := r.ctx.IsNormalMode() || r.ctx.IsVisualMode() || r.ctx.IsInsertMode()
-	if intent.MacroPlayback || !playing || r.inputSuspended() || !r.ctx.KeyCapture.Has(key) {
+	seated := int(r.ctx.World.Resources.Player.LocalSlot()) < parameter.MaxPlayers
+	if intent.MacroPlayback || !playing || !seated || r.inputSuspended() || !r.ctx.KeyCapture.Has(key) {
 		return
 	}
-	r.ctx.World.PushInputPress(&event.InputPayload{
-		Entity: r.ctx.World.Resources.Player.Entity,
-		Key:    string(key),
-		Source: source,
-	})
+	r.ctx.World.PushInputPress(r.input(key, source))
 	if source == event.InputPointer {
 		r.heldButton = key
 	}
@@ -616,12 +614,19 @@ func (r *Router) releaseButton() {
 	if r.heldButton == 0 {
 		return
 	}
-	r.ctx.World.PushInputRelease(&event.InputPayload{
-		Entity: r.ctx.World.Resources.Player.Entity,
-		Key:    string(r.heldButton),
-		Source: event.InputPointer,
-	})
+	r.ctx.World.PushInputRelease(r.input(r.heldButton, event.InputPointer))
 	r.heldButton = 0
+}
+
+// input is an input of key made now from this instance's roster slot
+func (r *Router) input(key rune, source event.InputSource) *event.InputPayload {
+	world := r.ctx.World
+	return &event.InputPayload{
+		Slot:   world.Resources.Player.LocalSlot(),
+		Key:    string(key),
+		Source: source,
+		Tick:   world.Resources.Game.State.GetGameTicks(),
+	}
 }
 
 // --- Mode Switch Handler ---

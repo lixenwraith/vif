@@ -42,8 +42,10 @@ A captured key is the scenario's one input hook, whatever produces it:
 
 - **Sources.** A typed key, a left press on the button of that key (§7), and a bot
   or script naming the `press` action with the key as its `char` all reach the
-  router, which crosses `EventInputPressed { entity, key, source }` so the shared
-  FSM sees it on every instance. `source` is 0 for a key, 1 for a pointer.
+  router, which crosses `EventInputPressed { slot, key, source, tick }` so the
+  shared FSM sees it on every instance: `slot` is the presser's roster slot,
+  `source` 0 for a key and 1 for a pointer, and `tick` the `engine.ticks` it was
+  made at, which the barrier holds within the lead and late commit of its apply tick.
 - **Release.** A terminal reports no key release, so only a pointer press has one:
   the router remembers the button a left press holds and crosses
   `EventInputReleased` when the pointer lets go, when reporting stops, or before

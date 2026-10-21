@@ -62,6 +62,11 @@ const (
 	// void: an action that old would land on a world its player no longer saw.
 	NetworkCommitLateTicks = 20
 
+	// NetworkApplyHorizonTicks is how many ticks after the one it was made at a
+	// crossing can still apply: the longest lead it may be stamped with, then as late
+	// as the authority still commits it
+	NetworkApplyHorizonTicks = NetworkBarrierMaxDelayTicks + NetworkCommitLateTicks
+
 	// NetworkHoldTicks is how far ahead of the clock a correction or manifest is
 	// worth waiting for; further ahead is a guest behind, which takes it at once.
 	NetworkHoldTicks = NetworkPaceStepTicks + NetworkPaceBandTicks

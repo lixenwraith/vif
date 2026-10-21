@@ -68,7 +68,7 @@ func (s *ButtonSystem) HandleEvent(ev event.GameEvent) {
 		s.spawn(p)
 	case *event.ButtonLightRequestPayload:
 		if e := s.bySlot(p.Button); e != 0 {
-			s.light(e, 0, false, time.Duration(p.DurationMs)*time.Millisecond, true)
+			s.light(e, parameter.NoPlayerSlot, false, time.Duration(p.DurationMs)*time.Millisecond, true)
 		}
 	case *event.InputPayload:
 		key, _ := utf8.DecodeRuneInString(p.Key)
@@ -86,9 +86,9 @@ func (s *ButtonSystem) input(ev event.GameEvent, p *event.InputPayload, key rune
 	echo := &s.world.Resources.View.ButtonEcho
 	switch ev.Type {
 	case event.EventInputPressed:
-		s.light(e, p.Entity, p.Source == event.InputPointer, parameter.ButtonPressLight, ev.Origin == event.OriginNetwork)
+		s.light(e, p.Slot, p.Source == event.InputPointer, parameter.ButtonPressLight, ev.Origin == event.OriginNetwork)
 	case event.EventInputReleased:
-		if b, _ := s.world.Components.Button.GetPtr(e); b.PressedBy == p.Entity {
+		if b, _ := s.world.Components.Button.GetPtr(e); b.PressedBy == p.Slot {
 			b.Held = false
 		}
 	case event.EventInputPressEcho:
@@ -117,15 +117,17 @@ func (s *ButtonSystem) spawn(p *event.ButtonSpawnRequestPayload) {
 	}
 	e := s.world.CreateEntity(core.DomainShared)
 	s.world.Components.Button.SetComponent(e, component.ButtonComponent{
-		Slot:  s.world.Components.Button.CountEntities() + 1,
-		Key:   key,
-		Color: p.Color,
-		Sound: p.Sound,
+		Slot:      s.world.Components.Button.CountEntities() + 1,
+		Key:       key,
+		Color:     p.Color,
+		Sound:     p.Sound,
+		PressedBy: parameter.NoPlayerSlot,
 	})
 }
 
-// light lights a button for d, pressed by a cursor or by the scenario when by is zero
-func (s *ButtonSystem) light(e, by core.Entity, held bool, d time.Duration, audible bool) {
+// light lights a button for d, pressed by a roster slot or by the scenario when by is
+// parameter.NoPlayerSlot
+func (s *ButtonSystem) light(e core.Entity, by uint8, held bool, d time.Duration, audible bool) {
 	b, ok := s.world.Components.Button.GetPtr(e)
 	if !ok || d <= 0 {
 		return

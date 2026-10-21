@@ -233,7 +233,7 @@ const (
 	EventDeleteRequest
 	// EventKeyCaptureRequest (KeyCapturePayload) [local] replaces the keys a scenario takes from Normal, Visual and Insert parsing
 	EventKeyCaptureRequest
-	// EventInputPressed (InputPayload) [bus] signals a captured key pressed by a cursor, typed or clicked on its button
+	// EventInputPressed (InputPayload) [bus] signals a captured key pressed from a roster slot, typed or clicked on its button
 	EventInputPressed
 	// EventInputReleased (InputPayload) [bus] signals the release of a pointer press on a button
 	EventInputReleased

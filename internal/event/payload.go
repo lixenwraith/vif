@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/audio/model"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -484,12 +485,21 @@ const (
 	InputPointer
 )
 
-// InputPayload names the cursor that pressed or released a captured key, the key, and
-// whether it was typed or clicked on the key's button
+// InputPayload names the roster slot that pressed or released a captured key, the key,
+// what made the input, and the tick it was made at: engine.ticks on the instance
+// that made it, which a scenario judges timing by however late it applies
 type InputPayload struct {
-	Entity core.Entity `toml:"entity"`
+	Slot   uint8       `toml:"slot"`
 	Key    string      `toml:"key"`
 	Source InputSource `toml:"source"`
+	Tick   uint64      `toml:"tick"`
+}
+
+// BoundTick keeps a crossed input's tick to the ones its crossing could have left at:
+// before the tick it applies at, and within the longest lead and latest commit of it
+func (p *InputPayload) BoundTick(applyTick uint64) {
+	latest := max(applyTick, 1) - 1
+	p.Tick = min(max(p.Tick, latest-min(latest, parameter.NetworkApplyHorizonTicks)), latest)
 }
 
 // DeleteRangeType defines the scope of deletion

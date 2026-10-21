@@ -112,6 +112,41 @@ func TestTheAuthorityChoosesTheTickALateCrossingApplies(t *testing.T) {
 	}
 }
 
+// TestTheBarrierHoldsAnInputToTheTicksItCouldBeMadeAt: no receiver can check the
+// tick a peer stamps its press with, so the tick it applies at bounds it: before that
+// tick, and no earlier than the longest lead and the latest commit allow.
+func TestTheBarrierHoldsAnInputToTheTicksItCouldBeMadeAt(t *testing.T) {
+	t.Parallel()
+	s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
+	claims := []uint64{0, 90, 500}
+	frames := make([]event.ScheduledWireFrame, len(claims))
+	for i, tick := range claims {
+		f, msg := event.NewWireFrame(event.GameEvent{Type: event.EventInputPressed, Domain: core.DomainPlayer,
+			Payload: &event.InputPayload{Key: "1", Tick: tick}})
+		if msg != "" {
+			t.Fatalf("encode press: %s", msg)
+		}
+		f.Seq = uint64(i + 1)
+		frames[i] = event.ScheduledWireFrame{Frame: f, ApplyTick: 101}
+	}
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: 2, ProducedTick: 99, Frames: frames})
+	if err != nil {
+		t.Fatalf("encode batch: %v", err)
+	}
+	s.scheduleCrossings(2, body)
+	s.applyDue(101)
+
+	var got []uint64
+	for _, ev := range s.world.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.InputPayload); ok {
+			got = append(got, p.Tick)
+		}
+	}
+	if want := []uint64{100 - parameter.NetworkApplyHorizonTicks, 90, 100}; !slices.Equal(got, want) {
+		t.Fatalf("presses applied at 101 claiming ticks %v carry %v, want %v", claims, got, want)
+	}
+}
+
 // TestACommittedCopyRestartsItsHopCount: the authority originates the copy it
 // commits, so a raw path that spent most of the hop limit cannot strand it on the
 // way back to the relays behind it.
