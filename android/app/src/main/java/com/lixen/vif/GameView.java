@@ -29,8 +29,8 @@ import java.util.Arrays;
  * vsync, hands it to the drawer and posts the drawer's picture. Taps, drags and keys
  * go to the run; two fingers tapped together twice raise or drop the system
  * keyboard, which covers the picture rather than resizing it; the left half of the
- * status bar's rows, its items above its mode and input, is then drawn again above
- * the keyboard, twice its size, so what is typed and the answer to it can be read.
+ * status bar's bottom row, its mode and input, is then drawn again above the
+ * keyboard, twice its size, so what is typed can be read.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
     // Two fingers are a tap when the second lands this soon after the first, neither
@@ -70,8 +70,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         CellDrawer d;
         try {
             byte[] atlas = Game.atlas();
-            int bar = Game.barRows();
-            d = raster ? new CellDrawer.FromRaster(atlas, bar) : new CellDrawer.OnCanvas(atlas, bar);
+            d = raster ? new CellDrawer.FromRaster(atlas) : new CellDrawer.OnCanvas(atlas);
         } catch (Exception e) {
             throw new IllegalStateException("font atlas", e);
         }

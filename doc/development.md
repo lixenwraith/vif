@@ -618,7 +618,7 @@ On a touch-first screen (phone, tablet) a tap raises no system
 keyboard; two fingers tapped together twice toggle it, as on Android, and so does a
 strip along the top, which also sends Tab (and Esc while it is up) and goes
 fullscreen where the browser can. Neither the strip nor the keyboard refits the
-grid: the keyboard covers it, and the status bar's rows are drawn again above
+grid: the keyboard covers it, and the status bar's bottom row is drawn again above
 it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host));
 the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch, or Ctrl
 and the wheel, within the range Go names, Android's too) do, and a solo map

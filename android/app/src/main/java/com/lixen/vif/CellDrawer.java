@@ -23,10 +23,10 @@ interface CellDrawer {
     /** Draws what the drawer holds over the whole surface. */
     void draw(Canvas surface);
 
-    /** The strip's height on a surface this tall: the status bar's rows at twice their size. */
+    /** The strip's height on a surface this tall: the last row at twice its size. */
     int stripHeight(int surfaceHeight);
 
-    /** Draws the left half of the status bar's rows, its items, mode and input, above a keyboard covering the bottom pixels. */
+    /** Draws the last row's left half, the status bar's mode and input, above a keyboard covering the bottom pixels. */
     void drawStrip(Canvas surface, int covered);
 
     /**
@@ -36,16 +36,14 @@ interface CellDrawer {
      */
     abstract class Picture implements CellDrawer {
         final int cellWidth, cellHeight;
-        private final int bar; // the status bar's rows, at the bottom
         Bitmap screen;
         private final Paint pixels = new Paint();
         private final Rect onSurface = new Rect(), stripSrc = new Rect(), stripDst = new Rect();
 
-        Picture(byte[] atlas, int bar) {
+        Picture(byte[] atlas) {
             IntBuffer a = words(atlas, 0);
             cellWidth = a.get(0);
             cellHeight = a.get(1);
-            this.bar = bar;
             pixels.setFilterBitmap(true);
         }
 
@@ -73,18 +71,18 @@ interface CellDrawer {
 
         @Override
         public final int stripHeight(int surfaceHeight) {
-            return screen == null ? 0 : 2 * bar * surfaceHeight * cellHeight / screen.getHeight();
+            return screen == null ? 0 : 2 * surfaceHeight * cellHeight / screen.getHeight();
         }
 
         // Twice the size each way, so the glyphs keep their shape: the left half fills
-        // the width, and the run keeps the bar to that half while the keyboard is up
+        // the width, and the run keeps its input to that half while the keyboard is up
         @Override
         public final void drawStrip(Canvas surface, int covered) {
             if (screen == null) {
                 return;
             }
             int bottom = surface.getHeight() - covered;
-            stripSrc.set(0, screen.getHeight() - bar * cellHeight, screen.getWidth() / 2, screen.getHeight());
+            stripSrc.set(0, screen.getHeight() - cellHeight, screen.getWidth() / 2, screen.getHeight());
             stripDst.set(0, bottom - stripHeight(surface.getHeight()), surface.getWidth(), bottom);
             surface.drawBitmap(screen, stripSrc, stripDst, pixels);
         }
@@ -97,8 +95,8 @@ interface CellDrawer {
         private final Rect src = new Rect(), dst = new Rect();
         private Canvas canvas;
 
-        OnCanvas(byte[] atlas, int bar) {
-            super(atlas, bar);
+        OnCanvas(byte[] atlas) {
+            super(atlas);
             int glyphs = words(atlas, 0).get(2);
             this.atlas = Bitmap.createBitmap(cellWidth, Math.max(1, glyphs * cellHeight), Bitmap.Config.ALPHA_8);
             this.atlas.copyPixelsFromBuffer(ByteBuffer.wrap(atlas, 12, cellWidth * cellHeight * glyphs));
@@ -134,8 +132,8 @@ interface CellDrawer {
 
     /** Shows the RGBA picture Go's raster painted. */
     final class FromRaster extends Picture {
-        FromRaster(byte[] atlas, int bar) {
-            super(atlas, bar);
+        FromRaster(byte[] atlas) {
+            super(atlas);
         }
 
         @Override

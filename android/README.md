@@ -84,10 +84,9 @@ rotation (a `crop_on_resize` map crops to it) and the cell kept in `vif.toml`'s
 `MouseDoubleClickWindow` fire special; with mouse input disabled a press on the
 status bar still opens the menu; Back is Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
-delete what it covered; while it is up the left half of the status bar's two
-rows, its items above its mode and input, is drawn again just above the keyboard at
-twice its size, the bar kept to that half so what is typed and the answer to it can
-be read; a rotation still resizes. Back is Escape, and a second
+delete what it covered; while it is up the left half of the status bar's bottom
+row, its mode and input, is drawn again just above the keyboard at twice its size,
+the input kept to that half so what is typed can be read; a rotation still resizes. Back is Escape, and a second
 Back within a second and a half sends the app to the background, the game paused.
 
 ## Test

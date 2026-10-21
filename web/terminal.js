@@ -144,18 +144,15 @@ void main() {
     function frameOf(d) { return [d.cols * d.cw, d.rows * d.ch]; }
     function originOf(d) { return [Math.max(0, Math.floor((canvas.width - d.cols * d.cw) / 2)), 0]; }
 
-    /* While a keyboard covers the canvas's bottom `covered` device pixels, the status
-       bar, the frame's last `bar` rows as Go names them, is drawn again just above it
-       at twice its size, as Android draws it: its left half fills the frame's width,
-       and the run, told of the keyboard, keeps the bar to that half. Null with no
-       keyboard. */
-    let covered = 0, bar = 0;
+    /* While a keyboard covers the canvas's bottom `covered` device pixels, the last
+       row, the status bar's mode and input, is drawn again just above it at twice its
+       size, as Android draws it: its left half fills the frame's width, and the run,
+       told of the keyboard, keeps its input to that half. Null with no keyboard. */
+    let covered = 0;
     function stripOf(d) {
-        if (!covered || !bar || !d.cols) return null;
-        const half = Math.floor(d.cols / 2), rows = Math.min(bar, d.rows);
-        const [ox] = originOf(d), bottom = canvas.height - covered;
-        return { cols: half, row: d.rows - rows, rows: rows, x: ox, y: bottom - 2 * rows * d.ch,
-                 w: 2 * half * d.cw, h: 2 * rows * d.ch };
+        if (!covered || !d.cols) return null;
+        const half = Math.floor(d.cols / 2), [ox] = originOf(d), bottom = canvas.height - covered;
+        return { cols: half, row: d.rows - 1, x: ox, y: bottom - 2 * d.ch, w: 2 * half * d.cw, h: 2 * d.ch };
     }
 
     // setCovered keeps the device pixels a keyboard covers, tells Go when one comes or
@@ -281,7 +278,7 @@ void main() {
         const s = stripOf(this);
         if (s) {
             gl.uniform4f(this.u.u_quad, -1 + 2 * s.x / W, 1 - 2 * s.y / H, 2 * s.w / W, -2 * s.h / H);
-            gl.uniform4f(this.u.u_src, 0, s.row, s.cols, s.rows);
+            gl.uniform4f(this.u.u_src, 0, s.row, s.cols, 1);
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }
     };
@@ -364,7 +361,7 @@ void main() {
         const s = stripOf(this);
         if (s) {
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(this.picture, 0, s.row * this.ch, s.cols * this.cw, s.rows * this.ch, s.x, s.y, s.w, s.h);
+            ctx.drawImage(this.picture, 0, s.row * this.ch, s.cols * this.cw, this.ch, s.x, s.y, s.w, s.h);
         }
     };
 
@@ -553,9 +550,6 @@ void main() {
             switch (msg.type) {
             case 'atlas':
                 drawer.setAtlas(msg.data);
-                break;
-            case 'bar':
-                bar = msg.rows;
                 break;
             case 'frame':
                 loading.classList.add('hidden');   // compiled and drawing
@@ -987,8 +981,8 @@ void main() {
         toggleKeyboard = function() { setKeyboard(!keyboard, true); };
 
         /* While a keyboard covers the page the grid keeps its size, which is the solo
-           map's, and the status strip shows the status bar above the keyboard, as on
-           Android; the run is told, and keeps the bar to the strip's half. */
+           map's, and the status strip shows the last row above the keyboard, as on
+           Android; the run is told, and keeps its input to the strip's half. */
         layoutKeyboard = function() {
             if (pageChanged()) return;   // measured against the old page; the refit lays out again
             const up = !!vv && fitH - vv.height * vv.scale > KEYBOARD_MIN;
