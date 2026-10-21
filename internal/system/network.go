@@ -1251,6 +1251,10 @@ func (s *NetworkSystem) NewestPeerEpoch() uint64 {
 // would arrive after the tick they name.
 func (s *NetworkSystem) ReportJoinLag(ticks uint64) { s.statJoinLag.Store(int64(ticks)) }
 
+// BarrierActive reports whether the barrier owns this run's crossings, as the last
+// refresh of the link left it.
+func (s *NetworkSystem) BarrierActive() bool { return s.barrierActive.Load() }
+
 // ActivateSession closes the pre-first-tick input window after startup gates.
 // The regular tick path keeps the same state current after disconnects.
 func (s *NetworkSystem) ActivateSession() {

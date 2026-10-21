@@ -375,7 +375,8 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 	at := a.Position()
 	return event.JournalCapture{
 		Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
-		Participant: a.world.LocalParticipant(), Authority: cap.Header.Authority, Body: body,
+		Participant: a.world.LocalParticipant(), Authority: cap.Header.Authority,
+		Barrier: a.barrierLocked(), Body: body,
 		Opens: true, Mode: a.ctx.GetMode(), Paused: a.ctx.TimeCtl.IsPaused(), Off: off,
 		Slot: a.world.Resources.Player.LocalSlot(), Own: ownBody,
 	}, nil

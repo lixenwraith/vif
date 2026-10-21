@@ -109,6 +109,7 @@ func (s *StagedInstall) Commit() error {
 		place       event.Stamp
 		mark        uint64
 		participant uint32
+		barrier     bool
 	)
 	started := time.Now() // [wall] telemetry only
 	live, staging, header := s.live, s.staging, s.capture.Header
@@ -152,6 +153,7 @@ func (s *StagedInstall) Commit() error {
 		}
 		if err == nil {
 			s.difference, err = live.writeSharedLocked(projected, &before, true, false)
+			barrier = live.barrierLocked()
 		}
 		if err == nil {
 			m := live.telemetry
@@ -169,7 +171,7 @@ func (s *StagedInstall) Commit() error {
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
 	if journal != nil {
-		if err := live.journalWritten(journal, place, mark, participant, before, projected); err != nil {
+		if err := live.journalWritten(journal, place, mark, participant, barrier, before, projected); err != nil {
 			live.world.RunSafe(func() { live.journalLostLocked(journal, err) })
 		}
 	}
@@ -186,9 +188,9 @@ func (s *StagedInstall) Commit() error {
 
 // journalWritten records a world this instance wrote, as what it changed, so a
 // replay holding the same world writes it at the same place as the same
-// participant. A join writes before its transport attaches, so the identity then
-// is the one the offer assigned.
-func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, before, cap snapshot.SharedCapture) error {
+// participant, with the barrier it left. A join writes before its transport
+// attaches, so the identity then is the one the offer assigned.
+func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, barrier bool, before, cap snapshot.SharedCapture) error {
 	d, err := a.encoder.DiffWritten(before, cap)
 	var body []byte
 	if err == nil {
@@ -207,7 +209,7 @@ func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, part
 	}
 	j.Capture(event.JournalCapture{
 		JSeq: mark, Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
-		Participant: participant, Authority: cap.Header.Authority, Body: body,
+		Participant: participant, Authority: cap.Header.Authority, Barrier: barrier, Body: body,
 	})
 	return nil
 }

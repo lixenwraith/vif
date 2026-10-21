@@ -12,7 +12,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 27
+const JournalSchema = 28
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -110,6 +110,11 @@ type JournalCapture struct {
 	// which a replay adopts before installing: the install binds cursors by it.
 	Participant uint32
 	Authority   uint32
+
+	// Barrier is the crossing barrier the write left on: a host's write engages it
+	// in the same hold, before anything still queued dispatches, and a replay of any
+	// write does the same rather than at its next tick.
+	Barrier bool
 
 	Body []byte // snapshot.WrittenDelta: the world written, against the one before it
 
