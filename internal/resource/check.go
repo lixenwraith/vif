@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lixenwraith/vif/internal/asset"
@@ -134,6 +135,7 @@ func checkSystems(m *fsm.Machine[*engine.World]) error {
 		}
 		check("region "+r, cfg.EnabledSystems)
 		check("region "+r, cfg.DisabledSystems)
+		check("region "+r, cfg.OnlySystems)
 	}
 	if len(unknown) > 0 {
 		return fmt.Errorf("unknown system names:\n  %s", strings.Join(unknown, "\n  "))
@@ -143,9 +145,9 @@ func checkSystems(m *fsm.Machine[*engine.World]) error {
 }
 
 // checkSystemDependencies reports every enabled system whose required
-// dependency the config disables. Each region is evaluated against the global
-// baseline alone, which is the set ApplyRegionSystemConfigs leaves behind when
-// that region spawns or resumes.
+// dependency the config disables. Each region is evaluated alone, on its
+// only_systems or the global baseline: running beside others, the union stays
+// closed and ApplySystems keeps a disabled requirement on.
 func checkSystemDependencies(m *fsm.Machine[*engine.World], profiles []manifest.SystemProfile,
 	global *fsm.SystemsConfig) error {
 
@@ -175,6 +177,11 @@ func checkSystemDependencies(m *fsm.Machine[*engine.World], profiles []manifest.
 			continue
 		}
 		enabled := maps.Clone(base)
+		if cfg.OnlySystems != nil {
+			for _, p := range profiles {
+				enabled[p.Name] = slices.Contains(cfg.OnlySystems, p.Name)
+			}
+		}
 		for _, n := range cfg.DisabledSystems {
 			enabled[n] = false
 		}

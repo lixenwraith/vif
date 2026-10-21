@@ -186,7 +186,7 @@ func registerRegionActions[T any](m *fsm.Machine[T], h Host[T]) {
 		if err := m.SpawnRegion(ctx, rcArgs.RegionName, rcArgs.InitialID); err != nil {
 			return
 		}
-		applyRegionSystemConfig(ctx, m, h, rcArgs.RegionName)
+		reconcileSystems(ctx, m, h)
 	})
 
 	m.RegisterAction("TerminateRegion", func(ctx T, args any) {
@@ -194,7 +194,9 @@ func registerRegionActions[T any](m *fsm.Machine[T], h Host[T]) {
 		if !ok {
 			return
 		}
-		_ = m.TerminateRegion(ctx, rcArgs.RegionName)
+		if m.TerminateRegion(ctx, rcArgs.RegionName) == nil {
+			reconcileSystems(ctx, m, h)
+		}
 	})
 
 	m.RegisterAction("PauseRegion", func(ctx T, args any) {
@@ -203,6 +205,7 @@ func registerRegionActions[T any](m *fsm.Machine[T], h Host[T]) {
 			return
 		}
 		m.PauseRegion(rcArgs.RegionName)
+		reconcileSystems(ctx, m, h)
 	})
 
 	m.RegisterAction("ResumeRegion", func(ctx T, args any) {
@@ -211,26 +214,14 @@ func registerRegionActions[T any](m *fsm.Machine[T], h Host[T]) {
 			return
 		}
 		m.ResumeRegion(rcArgs.RegionName)
-
-		// Re-apply the region's declared system toggles, as SpawnRegion does
-		applyRegionSystemConfig(ctx, m, h, rcArgs.RegionName)
+		reconcileSystems(ctx, m, h)
 	})
 }
 
-// applyRegionSystemConfig reconciles systems declared in the region config
-func applyRegionSystemConfig[T any](ctx T, m *fsm.Machine[T], h Host[T], regionName string) {
-	if h.SetSystem == nil {
-		return
-	}
-	cfg := m.GetRegionConfig(regionName)
-	if cfg == nil {
-		return
-	}
-	for _, name := range cfg.DisabledSystems {
-		h.SetSystem(ctx, name, false)
-	}
-	for _, name := range cfg.EnabledSystems {
-		h.SetSystem(ctx, name, true)
+// reconcileSystems sets the toggled systems to what the running regions want
+func reconcileSystems[T any](ctx T, m *fsm.Machine[T], h Host[T]) {
+	if h.ApplySystems != nil {
+		h.ApplySystems(ctx, m.SystemWanted, m.SystemDecided)
 	}
 }
 
@@ -240,8 +231,7 @@ func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
 	unhooked := h.SetSystem == nil
 	hooked(m, h, unhooked, "EnableSystem", decodePayload[T, SystemControlArgs])
 	hooked(m, h, unhooked, "DisableSystem", decodePayload[T, SystemControlArgs])
-	hooked(m, h, unhooked, "ApplyGlobalSystemConfig", nil)
-	hooked(m, h, unhooked, "ApplyRegionSystemConfigs", nil)
+	hooked(m, h, h.ApplySystems == nil, "ReconcileSystems", nil)
 
 	m.RegisterAction("EnableSystem", func(ctx T, args any) {
 		sysArgs, ok := args.(*SystemControlArgs)
@@ -259,40 +249,10 @@ func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
 		h.SetSystem(ctx, sysArgs.SystemName, false)
 	})
 
-	// ApplyGlobalSystemConfig applies the root [systems] toggles. Invoked by
-	// name after init, reset and capture import, before the per-region pass.
-	m.RegisterAction("ApplyGlobalSystemConfig", func(ctx T, args any) {
-		if h.SetSystem == nil {
-			return
-		}
-		cfg := m.GetSystemsConfig()
-		if cfg == nil {
-			return
-		}
-		for _, name := range cfg.DisabledSystems {
-			h.SetSystem(ctx, name, false)
-		}
-		if cfg.OnlySystems == nil || h.Systems == nil {
-			return
-		}
-		for _, name := range h.Systems(ctx) {
-			if !cfg.Enabled(name) {
-				h.SetSystem(ctx, name, false)
-			}
-		}
-	})
-
-	// ApplyRegionSystemConfigs reconciles declared toggles for every active
-	// region. Invoked by name after init, reset and capture import, following the
-	// global pass so per-region declarations win, and after each :region op that
-	// changes regions; none of these passes through the SpawnRegion action.
-	m.RegisterAction("ApplyRegionSystemConfigs", func(ctx T, args any) {
-		if h.SetSystem == nil {
-			return
-		}
-		for _, name := range m.ActiveRegions() {
-			applyRegionSystemConfig(ctx, m, h, name)
-		}
+	// Invoked by name after init, reset and capture import, and after each
+	// :region op, none of which passes through a region action
+	m.RegisterAction("ReconcileSystems", func(ctx T, args any) {
+		reconcileSystems(ctx, m, h)
 	})
 }
 

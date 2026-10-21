@@ -3,6 +3,8 @@ package fsm
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"time"
 
@@ -40,6 +42,11 @@ func (m *Machine[T]) LoadScenarioFromMap(doc map[string]any) error {
 	}
 	if c := config.Systems; c != nil && c.OnlySystems != nil && len(c.DisabledSystems) > 0 {
 		return fmt.Errorf("[systems]: only_systems already disables every system it does not name; drop disabled_systems")
+	}
+	for _, name := range slices.Sorted(maps.Keys(config.Regions)) {
+		if r := config.Regions[name]; r.OnlySystems != nil && len(r.DisabledSystems) > 0 {
+			return fmt.Errorf("region %q: only_systems already disables every system it does not name; drop disabled_systems", name)
+		}
 	}
 
 	// 2. Clear existing graph

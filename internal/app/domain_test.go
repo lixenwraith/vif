@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -263,6 +264,141 @@ func TestOnlySystemsRunsOnlyWhatTheScenarioNames(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestARegionNarrowsTheSystemsWhileItRuns: a running region's only_systems turns
+// off every toggled system that neither it nor a region beside it names, keeps on
+// whatever a running system requires, and hands the rest back once it pauses or ends.
+func TestARegionNarrowsTheSystemsWhileItRuns(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	doc := "[regions.main]\ninitial = \"Main\"\nenabled_systems = [\"particle\"]\n" +
+		"[regions.puzzle]\nonly_systems = [\"cursor\", \"typing\"]\n" +
+		"[states.Main]\nparent = \"Root\"\n[states.Puzzle]\nparent = \"Root\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24,
+		Resources: resource.Options{Scenario: dir}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	a.Settle()
+
+	puzzle := func(op string) {
+		a.Context().PushEventOrigin(event.EventFSMRegionRequest,
+			&event.FSMRegionPayload{Op: op, Region: "puzzle", State: "Puzzle"}, event.OriginDebug)
+		a.Settle()
+	}
+	expect := func(when string, narrowed bool) {
+		a.World().RunSafe(func() {
+			on := make(map[string]bool)
+			for _, sys := range a.World().Systems() {
+				tg, ok := sys.(engine.Toggled)
+				on[sys.Name()] = !ok || tg.Enabled()
+			}
+			for _, name := range []string{"typing", "particle", "glyph"} {
+				if want := !narrowed || name != "glyph"; on[name] != want {
+					t.Errorf("%s: %s running = %v, want %v", when, name, on[name], want)
+				}
+			}
+			for name, running := range on {
+				for _, dep := range manifest.ProfileFor(name).Requires {
+					if running && dep.Strength == engine.DepRequired && !on[dep.Name] {
+						t.Errorf("%s: %s runs without %s", when, name, dep.Name)
+					}
+				}
+			}
+		})
+	}
+	expect("before", false)
+	puzzle(event.RegionSpawn)
+	expect("spawned", true)
+	puzzle(event.RegionPause)
+	expect("paused", false)
+	puzzle(event.RegionResume)
+	expect("resumed", true)
+	puzzle(event.RegionTerminate)
+	expect("ended", false)
+}
+
+// TestARunningSystemHoldsWhatItRequires: a system a command turned on outside the
+// baseline keeps its required dependency on against a region's disabled_systems
+// and refuses its disable; once a command stops it, the region's list applies and
+// no reconcile turns it back on. A system a region turns on brings back what it
+// requires, even from a command's disable.
+func TestARunningSystemHoldsWhatItRequires(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	doc := "[systems]\ndisabled_systems = [\"explosion\"]\n" +
+		"[regions.main]\ninitial = \"Main\"\n" +
+		"[regions.calm]\ndisabled_systems = [\"combat\"]\n" +
+		"[regions.boom]\nenabled_systems = [\"explosion\"]\n" +
+		"[states.Main]\nparent = \"Root\"\n[states.Calm]\nparent = \"Root\"\n[states.Boom]\nparent = \"Root\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24,
+		Resources: resource.Options{Scenario: dir}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	a.Settle()
+
+	set := func(name string, enabled bool) {
+		a.Context().PushEventOrigin(event.EventMetaSystemCommandRequest,
+			&event.MetaSystemCommandPayload{SystemName: name, Enabled: enabled}, event.OriginDebug)
+		a.Settle()
+	}
+	region := func(op, name, state string) {
+		a.Context().PushEventOrigin(event.EventFSMRegionRequest,
+			&event.FSMRegionPayload{Op: op, Region: name, State: state}, event.OriginDebug)
+		a.Settle()
+	}
+	calm := func(op string) { region(op, "calm", "Calm") }
+	running := func(name string) (on bool) {
+		a.World().RunSafe(func() {
+			for _, sys := range a.World().Systems() {
+				if tg, ok := sys.(engine.Toggled); ok && sys.Name() == name {
+					on = tg.Enabled()
+				}
+			}
+		})
+		return on
+	}
+
+	set("explosion", true)
+	calm(event.RegionSpawn)
+	if !running("combat") {
+		t.Error("calm turned combat off under a running explosion")
+	}
+	var allowed bool
+	a.World().RunSafe(func() { allowed = a.World().AllowSystemDisable("combat") })
+	if allowed {
+		t.Error("combat may be disabled under a running explosion")
+	}
+
+	set("explosion", false)
+	calm(event.RegionPause)
+	if !running("combat") {
+		t.Error("combat stays off with calm paused")
+	}
+	calm(event.RegionResume)
+	if running("combat") {
+		t.Error("combat runs with calm resumed and nothing requiring it")
+	}
+	if running("explosion") {
+		t.Error("a reconcile turned explosion back on against the command")
+	}
+
+	calm(event.RegionTerminate)
+	set("combat", false)
+	region(event.RegionSpawn, "boom", "Boom")
+	if !running("explosion") || !running("combat") {
+		t.Errorf("boom runs explosion = %v without combat = %v", running("explosion"), running("combat"))
+	}
 }
 
 // TestBusPayloadsNameOnlySharedEntities asserts D-4 over a soak: a record that

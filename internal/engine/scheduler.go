@@ -274,10 +274,7 @@ func (s *Scheduler) applyRegionOp(p *event.FSMRegionPayload) error {
 	}
 
 	// Every op changes the active set, so every op reconciles
-	if !s.fsm.ExecuteAction(s.world, "ApplyRegionSystemConfigs", nil) {
-		return fmt.Errorf("fsm: action ApplyRegionSystemConfigs is not registered")
-	}
-	return nil
+	return s.applySystemConfig()
 }
 
 // report surfaces a scheduler-side message in the status bar
@@ -421,18 +418,14 @@ func (s *Scheduler) initLoadedScenario() error {
 	if err := s.fsm.Init(s.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
-	s.world.SetSystemBaseline(s.fsm.GetSystemsConfig().Enabled)
 	return s.applySystemConfig()
 }
 
-// applySystemConfig reconciles global then per-region toggles, so a region
-// declaration wins over the root list. A missing action is a wiring
-// regression, not a runtime condition.
+// applySystemConfig sets the systems to what the running regions want. A missing
+// action is a wiring regression, not a runtime condition.
 func (s *Scheduler) applySystemConfig() error {
-	for _, name := range [...]string{"ApplyGlobalSystemConfig", "ApplyRegionSystemConfigs"} {
-		if !s.fsm.ExecuteAction(s.world, name, nil) {
-			return fmt.Errorf("fsm: action %s is not registered", name)
-		}
+	if !s.fsm.ExecuteAction(s.world, "ReconcileSystems", nil) {
+		return fmt.Errorf("fsm: action ReconcileSystems is not registered")
 	}
 	return nil
 }

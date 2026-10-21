@@ -34,8 +34,9 @@ type RegionConfig struct {
 	Initial         string   `toml:"initial"`
 	File            string   `toml:"file,omitempty"`             // External file path, relative to the entry's directory
 	Background      bool     `toml:"background,omitempty"`       // Kept out of the foreground fsm.state summary, not fsm.<region>.*
-	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // Enabled on spawn and resume, reapplied while the region is active
-	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Disabled on spawn and resume, reapplied while the region is active
+	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // On while the region runs
+	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Off while the region runs, unless a running system requires it
+	OnlySystems     []string `toml:"only_systems,omitempty"`     // While the region runs, every toggled system not named here or by another running region is off
 }
 
 // StateConfig represents a single state definition
