@@ -6,7 +6,8 @@ it as `input/keymap.toml` in the user config root (`$XDG_CONFIG_HOME/vif` on Lin
 unless one is already there.
 
 User documents may remain sparse: only supplied keys override the embedded
-table, and `"none"` removes a binding. For example:
+table, and `"none"` removes a binding. Each key names one action, and several keys
+may name the same one (`f2` below joins Ctrl+G and F10 on the menu). For example:
 
 ```toml
 [normal]
@@ -17,6 +18,7 @@ v = "none"
 
 [normal_keys]
 backspace = "undo"
+f2 = "config_menu"
 
 [prefix_g]
 m = "motion_origin"

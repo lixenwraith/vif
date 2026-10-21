@@ -75,10 +75,11 @@ const (
 	IntentMouseMove      // Free mouse movement (no button held)
 
 	// Appended so recorded intent numbers keep their meaning.
-	IntentConfigMenu   // Ctrl+G
+	IntentConfigMenu   // Ctrl+G, F10
 	IntentKeyPress     // A key the scenario captured from Normal, Visual and Insert
 	IntentOverlayPoint // Left press while an overlay or its form has the keys: X, Y
 	IntentKeyRelease   // A captured key let go of, or a hold the terminal ended: Lost
+	IntentHelp         // F1
 )
 
 // MotionOp identifies motion algorithm

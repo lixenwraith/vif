@@ -135,8 +135,9 @@ func RuneKeyName(r rune) string {
 	return string(r)
 }
 
-// specialNames is the display vocabulary for named keys; an unlisted key falls
-// back to a numeric form so a new binding is visible rather than silent
+// specialNames is the display vocabulary for named keys outside the F and Ctrl+letter
+// runs; an unlisted key falls back to a numeric form so a new binding is visible
+// rather than silent
 var specialNames = map[terminal.Key]string{
 	terminal.KeyUp:        "Up",
 	terminal.KeyDown:      "Down",
@@ -146,25 +147,24 @@ var specialNames = map[terminal.Key]string{
 	terminal.KeyEnd:       "End",
 	terminal.KeyPageUp:    "PgUp",
 	terminal.KeyPageDown:  "PgDn",
+	terminal.KeyInsert:    "Insert",
 	terminal.KeyTab:       "Tab",
 	terminal.KeyBacktab:   "Shift+Tab",
 	terminal.KeyEnter:     "Enter",
 	terminal.KeyBackspace: "Backspace",
 	terminal.KeyDelete:    "Delete",
 	terminal.KeyEscape:    "ESC",
-	terminal.KeyCtrlA:     "Ctrl+A",
-	terminal.KeyCtrlC:     "Ctrl+C",
-	terminal.KeyCtrlE:     "Ctrl+E",
-	terminal.KeyCtrlK:     "Ctrl+K",
-	terminal.KeyCtrlQ:     "Ctrl+Q",
-	terminal.KeyCtrlS:     "Ctrl+S",
-	terminal.KeyCtrlU:     "Ctrl+U",
-	terminal.KeyCtrlW:     "Ctrl+W",
 	terminal.KeyCtrlSpace: "Ctrl+Space",
 }
 
 // SpecialKeyName returns the display form of a named-key binding
 func SpecialKeyName(k terminal.Key) string {
+	switch {
+	case k >= terminal.KeyF1 && k <= terminal.KeyF12:
+		return "F" + strconv.Itoa(int(k-terminal.KeyF1)+1)
+	case k >= terminal.KeyCtrlA && k <= terminal.KeyCtrlZ:
+		return "Ctrl+" + string(rune('A'+k-terminal.KeyCtrlA))
+	}
 	if s, ok := specialNames[k]; ok {
 		return s
 	}

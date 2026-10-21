@@ -104,6 +104,8 @@ func (i IntentType) String() string {
 		return "IntentOverlayPoint"
 	case IntentKeyRelease:
 		return "IntentKeyRelease"
+	case IntentHelp:
+		return "IntentHelp"
 	default:
 		return fmt.Sprintf("IntentType(%d)", i)
 	}

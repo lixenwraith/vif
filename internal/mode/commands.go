@@ -973,10 +973,11 @@ func diagnosticsDir() string {
 	return paths.DefaultLogDir()
 }
 
-// handleHelpCommand triggers help overlay event
+// handleHelpCommand asks for the help overlay in place of any overlay shown
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.PauseForInput()
+	ctx.SetOverlayContent(nil)
 	ctx.PushLocal(event.EventMetaHelpRequest, nil)
 	return CommandResult{Continue: true}
 }

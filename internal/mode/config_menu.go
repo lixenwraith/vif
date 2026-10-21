@@ -132,7 +132,7 @@ var configPages = []configPage{
 		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. The Game page starts another scenario now.", read: startupValue},
 		{key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at startup.", read: startupValue},
 		{key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at startup.", read: startupValue},
-		{key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. config_menu is the action bound to Ctrl+G.", read: startupValue},
+		{key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. A key names one action, and an action can have several keys: config_menu has Ctrl+G and F10, help has F1.", read: startupValue},
 		{key: "session", label: "Identity", description: "Session identity and seed are startup options. Use the Multiplayer and Bots pages for live session actions, Diagnostics to start a replay journal.", read: startupValue},
 	}},
 }
@@ -325,13 +325,8 @@ func (r *Router) handleConfigMenu() bool {
 	if configMenu(r.ctx) != nil {
 		return r.closeOverlay()
 	}
-	r.mouseLeftHeld, r.mouseRightHeld = false, false
-	r.ctx.SetCommandText("")
-	r.ctx.SetSearchText("")
-	r.ctx.SetCommandCursorPos(0)
-	r.resetCommandHistoryBrowse()
+	r.enterOverlay()
 	handleConfigCommand(r.ctx, nil)
-	r.machine.SetMode(input.ModeOverlay)
 	return true
 }
 
