@@ -98,22 +98,24 @@ menu, and `:q` quits.
 
 <!-- end -->
 <!-- if linux -->
-Sound starts muted: `Ctrl-S` cycles through the channels, and `-mute=false` starts
-with sound. It plays through the first of `pacat` (PulseAudio or PipeWire),
+Sound is on: `Ctrl-S` cycles through the channels, and `-mute` starts muted. It
+plays through the first of `pacat` (PulseAudio or PipeWire),
 `pw-cat`, `aplay`, SoX's `play` or `ffplay` on `PATH`; with none, the game is
 silent.
 
 <!-- end -->
 <!-- if freebsd -->
-Sound starts muted: `Ctrl-S` cycles through the channels, and `-mute=false` starts
-with sound. It plays through the first of `pacat`, `pw-cat`, `aplay`, SoX's `play`
-or `ffplay` on `PATH`, or else OSS on `/dev/dsp`.
+Sound is on: `Ctrl-S` cycles through the channels, and `-mute` starts muted. It
+plays through the first of `pacat`, `pw-cat`, `aplay`, SoX's `play` or `ffplay` on
+`PATH`, or else OSS on `/dev/dsp`.
 
 <!-- end -->
 <!-- if web -->
-Sound starts muted: `Ctrl-S` cycles through the channels, and `?arg=-mute=false`
-starts with sound. A browser plays sound only on a secure page, which localhost
-is; served to other machines, the page needs HTTPS for sound.
+Sound is on once the page is first touched or typed in, as a browser asks:
+`Ctrl-S` cycles through the channels, and `?arg=-mute` starts muted. The settings
+menu's choices are kept in the browser's storage for the next visit. A browser
+plays sound only on a secure page, which localhost is; served to other machines,
+the page needs HTTPS for sound.
 
 <!-- end -->
 
@@ -172,14 +174,15 @@ tar -xzf vif-@LABEL@-wad.tar.gz -C $env:APPDATA
 <!-- end -->
 <!-- if client -->
 Then `-s td` plays the tower defense map, and the settings menu saves its sound,
-mouse and HUD choices to the `vif.toml` the game read; with none installed, they
-last the run. Logs (`-l`), replay journals (`-j`) and recorded music (`-mw`) go
-under `~/.local/state/vif/`.
+mouse and HUD choices to `~/.config/vif/vif.toml`, created at the first change
+from the one installed under `/usr/local/etc`, if any, which stays as it is. Logs
+(`-l`), replay journals (`-j`) and recorded music (`-mw`) go under
+`~/.local/state/vif/`.
 
 <!-- end -->
 <!-- if windows -->
 Then `-s td` plays the tower defense map, and the settings menu saves its choices
-to the `vif.toml` the game read; with none installed, they last the run.
+to `%AppData%\vif\vif.toml`, created at the first change.
 
 <!-- end -->
 <!-- if headless -->

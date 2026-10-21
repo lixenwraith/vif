@@ -32,15 +32,20 @@ buffer_ms = 50
 window = false
 maximized = false
 fullscreen = false
+# A cell's height in dp, a CSS pixel in a browser, as a pinch on Android or a zoom
+# in a browser left it, from 4 to 40, written back like [play]; 0 is the screen's
+# own size. The terminal and the desktop window ignore it.
+cell = 0
 
-# What the configuration menu changes in a run and a run with a settings file
-# writes back here, so the next starts as this one was left: the two sound
-# channels, the effects volume (0 to 1), auto-fire (off, main or on), mouse input,
-# the cursor following the pointer, and the telemetry HUD. -mute, given either
-# way, names both channels for that run.
+# What the configuration menu changes in a run, written back so the next starts
+# as this one was left: the two sound channels, the effects volume (0 to 1),
+# auto-fire (off, main or on), mouse input, the cursor following the pointer, and
+# the telemetry HUD. A run writes this file when it is in the user root or the
+# -config-dir root, and otherwise the user root's, made from this one at the first
+# change. -mute, given either way, names both channels for that run.
 [play]
-effects = false
-music = false
+effects = true
+music = true
 volume = 0.5
 auto_fire = "on"
 mouse = true

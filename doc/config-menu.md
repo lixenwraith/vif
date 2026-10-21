@@ -2,10 +2,9 @@
 
 Press **Ctrl-G** or **F10**, hold a left press (a finger) on the status bar, or
 enter **`:g`** (`:config`) during play. Settings take effect in the current run.
-The Audio and Controls rows and the HUD are also `vif.toml`'s `[play]`: a run that
-read a settings file writes them back as they change, and the next run starts as
-this one was left; the rest changes this run alone, and the keymap is never
-rewritten.
+The Audio and Controls rows and the HUD are also `vif.toml`'s `[play]`: a run
+writes them back as they change, and the next run starts as this one was left;
+the rest changes this run alone, and the keymap is never rewritten.
 
 ## Navigation
 
@@ -32,7 +31,8 @@ participants are its own bots; a guest or a session with other players keeps
 running. A new arrival resumes a paused host. Replay viewers retain their
 inspection-only command restrictions. A bracketed value marks a row that is
 unavailable or read only; for an unavailable row the description below the list
-starts with the reason.
+starts with the reason, the sentence its command gives (`Logging unavailable in a
+browser`, `Audio unavailable in this run`).
 
 ## Pages
 
@@ -90,7 +90,8 @@ departure.
 `ws://:4242`. Authority may be blank to keep the startup policy, `host` to end
 the session when its authority leaves, or `migrate` to allow a successor. The
 status bar reports the bound address. Share an address reachable by your guests;
-the menu does not change network reachability. Browser builds cannot host.
+the menu does not change network reachability. A browser can join a session but
+not host one.
 
 **Join a session** accepts `host:port[/name]`, `vif://` and `tcp://` links or
 `ws(s)://` URLs. An `http(s)://` site requests a new session with server defaults.
@@ -127,9 +128,12 @@ stay on the command line.
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
 identifies options that need a restart; it does not edit files. `[play]` is the
 exception: sound effects, music, effects volume, auto-fire, mouse input, Follow
-mouse and the telemetry HUD are written to the settings file the run read as they
-change, from the menu or the command line, and a scenario change carries them
-into the next run. A run with no settings file (none in any root; `-d` reads one
-still) keeps them to itself; Android writes the user root's file, creating it. The
+mouse and the telemetry HUD are written back as they change, from the menu or the
+command line, and a scenario change carries them into the next run. Every
+platform writes them the same way: the `vif.toml` the run read when it is the
+player's own, else the user root's, created at the first change; a browser keeps
+them in the site's storage
+([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)). Only a run
+with no user root, or a browser refused its storage, keeps them to itself. The
 game speed, HUD pins and standing breakpoints stay this run's. Exact values
 outside menu presets remain available through commands such as `:log stat N`.

@@ -31,7 +31,7 @@ complete -c vif -o cli -d 'Play in the terminal whatever vif.toml\'s [presentati
 complete -c vif -o maximized -d 'Open the desktop window maximized; vif.toml\'s [presentation] maximized is the default, and a terminal run ignores it'
 complete -c vif -o fullscreen -d 'Open the desktop window full screen; vif.toml\'s [presentation] fullscreen is the default, and a terminal run ignores it'
 complete -c vif -o scale -x -d 'Draw the desktop window\'s font n times its pixels, for a HiDPI screen; with -g (default 1)'
-complete -c vif -o mute -d 'Start muted, or with sound as -mute=false; unset, vif.toml\'s [play] channels stand, muted by default'
+complete -c vif -o mute -d 'Start muted, or with sound as -mute=false; unset, vif.toml\'s [play] channels stand, sound on by default'
 complete -c vif -o ab -o audio-backend -x -d 'Force an audio backend instead of detecting one'
 complete -c vif -o seed -x -d 'Root RNG seed; 0 draws one and logs it'
 complete -c vif -o speed -x -d 'Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing'

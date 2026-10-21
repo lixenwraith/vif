@@ -9,7 +9,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds the launcher icon, `../lixen-logo.svg` as an adaptive icon on black, with its lines alone as the themed one. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
-| `files/config/vif/vif.toml` | The user root's settings, read as a terminal reads `vif.toml` and written as `[play]` changes (sound, volume, auto-fire, mouse, HUD); created at the first change, with sound on, where a terminal starts muted. No permission: the app's own directory. |
+| `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sound, volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
 
 ## Build
@@ -65,10 +65,11 @@ browser once that browser may install apps.
 adb shell am start -n com.lixen.vif/.MainActivity
 ```
 
-A cell is 12 dp tall (`cellDP`), and the grid the view holds is stretched over the
-view edge to edge. Add `--ez raster true` to paint with Go's software raster instead
-of the Canvas drawer. `adb logcat -s vif` prints the render thread's frame time every five
-seconds: frames painted per second, mean, p95 and max of take, paint and post.
+A cell is 12 dp tall (`cellDP`) until a pinch zooms it, and the grid the view
+holds is stretched over the view edge to edge. Add `--ez raster true` to paint with
+Go's software raster instead of the Canvas drawer. `adb logcat -s vif` prints the
+render thread's frame time every five seconds: frames painted per second, mean, p95
+and max of take, paint and post.
 
 Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
@@ -76,15 +77,16 @@ configuration menu, whose rows a tap selects and a second tap acts on; keys, a
 hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
 two fingers tapped together, twice within half a second, raise or drop the system
 keyboard (a finger joining one held or dragging is play, not the gesture, and so is
-a single pair tap); a pinch zooms the cells between half and three times their
-12 dp, the grid refitting as it does on a rotation (a `crop_on_resize` map crops to
-it); two taps near each other within `MouseDoubleClickWindow` fire special; with
-mouse input disabled a press on the status bar still opens the menu; Back is
-Escape; `:q` quits. The keyboard
+a single pair tap); a pinch zooms the cell from 4 to 40 dp, the browser's range
+too, never under the atlas's 12x24 pixels, the grid refitting as it does on a
+rotation (a `crop_on_resize` map crops to it) and the cell kept in `vif.toml`'s
+`[presentation] cell` for the next run; two taps near each other within
+`MouseDoubleClickWindow` fire special; with mouse input disabled a press on the
+status bar still opens the menu; Back is Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
-delete what it covered; while it is up the status bar draws its mode and input
-alone, and that left half is drawn again just above the keyboard at twice its size,
-so what is typed can be read; a rotation still resizes. Back is Escape, and a second
+delete what it covered; while it is up the left half of the status bar's bottom
+row, its mode and input, is drawn again just above the keyboard at twice its size,
+the input kept to that half so what is typed can be read; a rotation still resizes. Back is Escape, and a second
 Back within a second and a half sends the app to the background, the game paused.
 
 ## Test

@@ -132,7 +132,7 @@ It should produce no output. The container is one static binary in
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental; plays in Alacritty, with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer and `AudioTrack` (§8); the wad as the system root |
-| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas and plays the mixer's PCM (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets, each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `pkg/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
@@ -339,7 +339,10 @@ visibility change cannot replace that reason.
 
 A browser has no config root: solo, it plays the embedded scenario, content and
 keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
-build resolves.
+build resolves. What a native run writes back to `vif.toml`'s `[play]` the page
+keeps in the site's storage (`localStorage`, handed to the Worker at the start,
+since a Worker has none), so each visit starts as the last was left; a private
+window, or a site whose storage is blocked, keeps them to the run.
 
 A guest already receives custom maps. When the scenario it resolves does not have
 the session's digest, the coordinator serves it during the join, between the offer
@@ -421,11 +424,13 @@ queue and shows as `Blocked`. The page (`web/terminal.js`) draws the grid with o
 WebGL quad whose fragment shader finds its cell in two data textures and mixes the
 cell's colors by a glyph mask, rasterized from a monospace font at the cell's device
 size, so glyphs are crisp at any zoom; the mask is drawn again only when that size
-changes. Without WebGL (a Chromium build on a blocklisted GPU) it paints each
-changed cell on a 2D canvas from the same mask, slower on a large grid, and says
-so once. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
-(a touch is the left button marked as a finger's, as on Android) and its size as the terminal events the
-host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
+changes; a pinch, or Ctrl and the wheel, zooms the cell live within the range
+`browser.Open` hands the page, Android's, and the page reports the cell once it
+holds still, for the run to keep as Android's. Without WebGL (a Chromium build on a
+blocklisted GPU) it paints each changed cell on a 2D canvas from the same mask,
+slower on a large grid, and says so once. It reports keys, a soft keyboard's text
+and pastes, the pointer at its cell (a touch is the left button marked as a
+finger's, as on Android) and its size as the terminal events the host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
 hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
 hidden tab ends every hold. A hidden tab draws nothing and is handed the whole screen on return; the
 run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
@@ -434,14 +439,18 @@ opens an `AudioContext` at the first and plays them through an AudioWorklet
 (`web/audio-worklet.js`) that holds two buffers ahead and goes silent when the
 Worker falls behind, as a tick longer than a mixer period makes it; rendering a
 50 ms buffer with music and effects playing costs the Worker's thread about 1.3 ms.
-A muted game, the default, posts nothing; the touch strip's speaker button sends
-Ctrl-S, as a keyboard would, to cycle the channels.
+A muted game posts nothing; the touch strip's speaker button sends Ctrl-S, as a
+keyboard would, to cycle the channels.
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
 `app.Run`. The view's grid is the cells its pixels hold at a cell 12 dp tall
-(16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5). A
+(16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
+which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
+`CellMost` (4 to 40 dp, the page's range too) in `CellStep` steps, never under the
+atlas, and the run keeps it in `vif.toml`'s `[presentation] cell` as it keeps
+`[play]` (`paths.SaveCell`), so the next run opens at it. A
 Java render thread takes the newest frame at each vsync as the cells changed
 since the one it holds (`glyph.Frames`, the hand-off every host drawing in another
 runtime shares), which `CellDrawer.OnCanvas` paints from the atlas as one texture
@@ -457,18 +466,19 @@ motion, so the cursor follows it and a held one repeats fire; keys and the syste
 keyboard's text are terminal key events, Back is Escape. A hardware key's
 `onKeyUp` ends the hold its `onKeyDown` began and `getRepeatCount` marks its
 repeats; the system keyboard's text, its delete and Back tap; the window losing
-focus ends every hold. Two fingers tapped
-together twice raise or drop the system keyboard, read from the window's insets
-rather than a flag of the app's; the keyboard covers the view instead of resizing
-it, so a `crop_on_resize` map keeps its cells; the run hears of the keyboard
-(`Covered`, which the status bar reads as `StatusCovered`) and draws the bar's mode
-and input alone, and the view draws that left half again above the keyboard at
-twice its size from the same picture, where the browser scales its whole grid to
-fit above its keyboard. A second Back within a second and a half sends the app to
-the background. A tap held on the status
-bar opens the configuration menu, the hold every host shares (`MenuHoldDuration`),
-and taps drive its rows; the browser launcher sends the same hold as Ctrl-G on a
-touch screen, where a touch is never a mouse press.
+focus ends every hold. Two fingers tapped together twice raise or drop the system
+keyboard, read from the window's insets rather than a flag of the app's; the
+keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
+its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
+`StatusCovered`) and keeps its input to the left half of the bar's bottom row,
+which the view draws again above the keyboard at twice its size from the same
+picture. A second Back within a second and a half sends the app to the
+background. A tap held on the status bar opens the configuration menu, the hold
+every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse input
+off a press on the bar's rows still reaches the run, and the open menu takes the
+pointer. The page does each of these on a touch screen, timed alike: the double
+tap (or the key strip's button), a keyboard measured from `visualViewport`, the
+bottom row drawn again above it, and the hold.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its

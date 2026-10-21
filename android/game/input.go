@@ -4,6 +4,7 @@ import (
 	"unicode"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Android's KeyEvent meta state bits
@@ -94,14 +95,14 @@ func textEvent(r rune) terminal.Event {
 
 // touch is the left button pressed or released by a finger on the cell drawn under
 // pixel x, y, the nearest edge cell for one past the view's edge. With the pointer
-// off the status bar, the last row, still takes a press: the hold that opens the
+// off the status bar, the last rows, still takes a press: the hold that opens the
 // menu, where the mouse is enabled again; a release follows a press that was taken.
 func (v *view) touch(x, y int, down bool) (terminal.Event, bool) {
 	cx, cy := v.cellAt(x, y)
 	v.mu.Lock()
 	rows := v.rows
 	v.mu.Unlock()
-	if !v.pointer.Load() && (down && cy < rows-1 || !down && !v.finger.down) {
+	if !v.pointer.Load() && (down && cy < rows-parameter.StatusRows || !down && !v.finger.down) {
 		return terminal.Event{}, false
 	}
 	v.finger.down, v.finger.x, v.finger.y = down, cx, cy

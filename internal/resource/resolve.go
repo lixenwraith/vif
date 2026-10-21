@@ -86,8 +86,17 @@ func ScenarioPath(o Options) (string, error) {
 			}
 			return o.Scenario, nil // explicit file: entry filename override
 		}
-		if !errors.Is(err, os.ErrNotExist) || !isScenarioName(o.Scenario) {
-			return "", err
+		if !paths.ExternalFiles() {
+			if o.Scenario == paths.MainScenarioName {
+				return "", nil
+			}
+			return "", fmt.Errorf("scenario %q not found: a browser holds only the embedded %s", o.Scenario, paths.MainScenarioName)
+		}
+		switch {
+		case !errors.Is(err, os.ErrNotExist):
+			return "", fmt.Errorf("scenario %q: %w", o.Scenario, err)
+		case !isScenarioName(o.Scenario):
+			return "", fmt.Errorf("scenario %q not found", o.Scenario)
 		}
 		if p := newResolver(o).scenario(o.Scenario); p != "" {
 			return p, nil
@@ -149,8 +158,8 @@ func BotGraph(o Options, spec string) ([]byte, string, error) {
 		data, err := os.ReadFile(spec)
 		return data, strings.TrimSuffix(filepath.Base(spec), ".toml"), err
 	}
-	if spec == "" || !isScenarioName(spec) {
-		return nil, "", fmt.Errorf("bot graph %q: no such file", spec)
+	if spec == "" || !isScenarioName(spec) && paths.ExternalFiles() {
+		return nil, "", fmt.Errorf("bot graph %q not found", spec)
 	}
 	file := spec + ".toml"
 	if p := paths.FindFile(newResolver(o).roots, paths.BotDirName, file); p != "" {
@@ -162,10 +171,13 @@ func BotGraph(o Options, spec string) ([]byte, string, error) {
 		file, spec = "default.toml", "default"
 	}
 	data, err := fs.ReadFile(asset.DefaultBots, file)
-	if err != nil {
-		return nil, "", fmt.Errorf("bot graph %q not found as a path, in a configuration root or embedded", spec)
+	switch {
+	case err == nil:
+		return data, spec, nil
+	case !paths.ExternalFiles():
+		return nil, "", fmt.Errorf("bot graph %q not found: a browser holds only the embedded graphs", spec)
 	}
-	return data, spec, nil
+	return nil, "", fmt.Errorf("bot graph %q not found as a path, in a configuration root or embedded", spec)
 }
 
 // Files supplies the ordered configuration roots to FileService. Resolution

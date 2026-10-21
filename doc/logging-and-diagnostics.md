@@ -1258,13 +1258,15 @@ in the registry. A value that describes a *transition* belongs in the log.
 
 ## 15. Build variants
 
-`internal/vlog` is build-tagged. On `wasm` or with the `novlog` tag, emission
-entry points are no-ops, a session or journal start and a standalone file report
-`vlog.ErrDisabled`, and `lixenwraith/log` is not linked. Scope constants remain,
+`internal/vlog` is build-tagged. On `wasm` or with the `novlog` tag, `vlog.Linked`
+is false, emission entry points are no-ops, a session or journal start and a
+standalone file report `vlog.ErrDisabled` (`logging unavailable in this build`, or
+`in a browser`), and `lixenwraith/log` is not linked. Scope constants remain,
 and `ParseScopes` accepts any spec without checking it. `status` still functions:
 metrics are registered and updated, while snapshot/recorder writes resolve to
-no-ops. Asking such a build to log exits with `73` at startup, `-j` fails the
-run's construction and `:journal start` refuses, so a recording requires a
+no-ops. Asking such a build to log exits with `73` at startup and `-j` fails the
+run's construction; `:log on`, `:t save` and `:journal start` check `vlog.Linked`
+and refuse with their menu rows' reason, so a recording requires a
 logging-enabled native build.
 
 `make nolog` produces a release build with the tag; the experimental

@@ -4,8 +4,12 @@ import "time"
 
 // Layout & Margins
 const (
-	// BottomMargin for status bar (1 line for X coords, 1 line for status bar)
-	BottomMargin = 2
+	// BottomMargin is the column gutter and the status bar below the map
+	BottomMargin = 1 + StatusRows
+
+	// StatusRows is the status bar on every host: the status items' row, then the
+	// line of mode, keys, input and messages, the bottom row a keyboard strip repeats
+	StatusRows = 2
 
 	// TopMargin for status bar (1 line for heat meter)
 	TopMargin = 1
@@ -20,6 +24,15 @@ const (
 	WindowCols  = 120
 	WindowRows  = 40
 	WindowTitle = "vif"
+)
+
+// CellLeast and CellMost bound the cell a zoom reaches, its height in dp (a CSS
+// pixel in a browser), in steps of CellStep: the range of Android's pinch and the
+// page's alike, and of vif.toml's [presentation] cell
+const (
+	CellLeast = 4.0
+	CellMost  = 40.0
+	CellStep  = 0.5
 )
 
 // AudioText is the audio indicator by channel mask (muted, effects, music, both): a letter

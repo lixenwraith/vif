@@ -47,8 +47,8 @@ type RenderContext struct {
 	ScreenWidth  int
 	ScreenHeight int
 
-	// StatusCovered: a keyboard covers the status bar and the host shows its left
-	// end again above it, so the bar draws the mode and the input alone
+	// StatusCovered: a keyboard covers the status bar and the host shows the left
+	// half of its bottom row again above it, so the bar keeps its input to that half
 	StatusCovered bool
 }
 

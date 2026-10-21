@@ -94,7 +94,7 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 			receiver.cfg.ColorMode = tc.mode
 			receiver.cfg.ColorModeSet = true
 			receiver.cfg.AudioBackend = "local-audio"
-			receiver.cfg.Play.Effects = true
+			receiver.cfg.Play.Effects, receiver.cfg.Play.Volume = false, 0.125
 			receiver.cfg.LogScope = "afs"
 			receiver.cfg.Resources.Keymap = "local-keymap.toml"
 			receiver.cfg.Resources.Music = "local-music.toml"
@@ -109,7 +109,7 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 				t.Fatalf("stage with explicit local options: %v", err)
 			}
 			stageCfg := staged.StagingWorld().cfg
-			if stageCfg.ColorModeSet || stageCfg.AudioBackend != "" || stageCfg.Play.Effects ||
+			if stageCfg.ColorModeSet || stageCfg.AudioBackend != "" || stageCfg.Play != paths.DefaultPlay() ||
 				stageCfg.LogScope != "" || stageCfg.Resources.Keymap != "" ||
 				stageCfg.Resources.Music != "" || stageCfg.Resources.Sounds != "" ||
 				stageCfg.SessionName != "" || stageCfg.ListenAddress != "" ||

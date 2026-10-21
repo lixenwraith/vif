@@ -188,9 +188,11 @@ mistyped one is silent and counts only as a bad-ID rejection.
 ## 6. Mixer buses, mute, and pause
 
 Effects and music have independent mute bits. `Ctrl-S` cycles the composed game
-mask through silence, effects-only, music-only, and both. The CLI starts muted
-by default, and `-mute=false` starts with sound; system and config events can
-change channels independently.
+mask through silence, effects-only, music-only, and both. Every build starts with
+both on, as the embedded `vif.toml`'s `[play]` says, until the player's own
+settings say otherwise; `-mute` starts a run muted. Each change is written back
+for the next run, and system and config events can change channels
+independently.
 
 Pause is a device/output state, not merely a gameplay-system toggle. It applies
 even if `AudioSystem` is disabled and ramps the master gain over 250 ms; music

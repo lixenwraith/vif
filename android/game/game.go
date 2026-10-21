@@ -4,6 +4,7 @@
 package game
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"path/filepath"
@@ -47,8 +48,8 @@ var (
 // Start runs the game on the grid the view's pixels hold in cells sized by the
 // screen's density. files is the app's own directory, holding the user root, logs
 // and journals; wad is where the APK's assets were copied, read as the system root.
-// The user root's vif.toml is read as a terminal reads it and written as [play]
-// changes. raster paints frames with the software raster and hands the drawer pixels.
+// vif.toml is read and written back as a terminal run does. raster paints frames
+// with the software raster and hands the drawer pixels.
 func Start(files, wad string, width, height int32, density float32, raster bool, speaker Speaker, listener Listener) error {
 	tex, err := loadTexture()
 	if err != nil {
@@ -69,24 +70,16 @@ func Start(files, wad string, width, height int32, density float32, raster bool,
 			return err
 		}
 	}
-	vlog.Configure(vlog.Config{Dir: paths.DefaultLogDir(), JournalDir: paths.DefaultJournalDir(), Spawn: core.Go})
-
 	settings, file, err := paths.LoadSettings("")
 	if err != nil {
 		return err
 	}
-	if file == "" {
-		// A phone has speakers, so a first run plays where a terminal starts muted;
-		// the user root's file is written at the first change
-		settings.Play.Effects, settings.Play.Music = true, true
-		if file, err = paths.ConfigTarget(paths.ConfigRoots(""), "", "", paths.SettingsFile); err != nil {
-			return err
-		}
-	}
-	v := newView(tex, raster, density)
-	v.setGrid(int(width), int(height))
 	p := settings.Paths
-	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, SettingsFile: file,
+	vlog.Configure(vlog.Config{Dir: cmp.Or(p.Log, paths.DefaultLogDir()),
+		JournalDir: cmp.Or(p.Journal, paths.DefaultJournalDir()), Spawn: core.Go})
+	v := newView(tex, raster, density, settings.Presentation.Cell)
+	v.setGrid(int(width), int(height))
+	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
 	if speaker != nil {
@@ -213,15 +206,15 @@ func Resume() {
 	}
 }
 
-// Zoom scales the cell as a pinch asked, between half and three times cellDP; a
-// grid that changes is reported as a resize, which a crop_on_resize map follows
+// Zoom scales the cell by a pinch's scale, within the range the browser's zoom
+// keeps too; a grid that changes is reported as a resize, which a crop_on_resize
+// map follows, and the run keeps the cell in vif.toml for the next
 func Zoom(scale float32) {
 	v := current()
 	if v == nil {
 		return
 	}
-	v.zoom = min(max(scale, zoomMin), zoomMax)
-	v.setCell()
+	v.zoom(float64(scale))
 	v.mu.Lock()
 	w, h := v.w, v.h
 	v.mu.Unlock()
@@ -229,7 +222,8 @@ func Zoom(scale float32) {
 }
 
 // Keyboard says whether the system keyboard covers the view: while it does, the
-// status bar draws its mode and input alone, which the view repeats above it
+// status bar keeps its input to the bottom row's left half, which the view repeats
+// above it
 func Keyboard(shown bool) {
 	if v := current(); v != nil {
 		v.covered.Store(shown)

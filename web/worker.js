@@ -43,6 +43,13 @@ globalThis.vifAudio = function(data) {
 globalThis.vifPointer = function(enabled, motion) {
     postMessage({ type: 'pointer', enabled: enabled, motion: motion });
 };
+globalThis.vifZoom = function(cell, least, most, step) {
+    postMessage({ type: 'zoom', cell: cell, least: least, most: most, step: step });
+};
+// A Worker has no localStorage: the page reads and keeps the settings document.
+globalThis.vifKeepSettings = function(text) {
+    postMessage({ type: 'settings', text: text });
+};
 
 async function start(msg) {
     try {
@@ -52,6 +59,7 @@ async function start(msg) {
         return;
     }
     globalThis.vifGrid = { cols: msg.cols, rows: msg.rows };
+    globalThis.vifSettings = msg.settings || '';
     const go = new Go();
     go.argv = msg.argv;
     go.exit = function(code) {

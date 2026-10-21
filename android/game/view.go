@@ -1,11 +1,13 @@
 package game
 
 import (
+	"cmp"
 	"math"
 	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/glyph"
 	"github.com/lixenwraith/vif/pkg/hostkey"
@@ -16,14 +18,10 @@ import (
 // waits, since the poster is Android's UI thread
 const eventQueue = 256
 
-// cellDP is a cell's height in dp, in whole pixels at the atlas's aspect and never
-// under its own: 16x32 on a 420 dpi phone, half again as much map as 9x18 dp shows.
-// A pinch scales it between zoomMin and zoomMax.
-const (
-	cellDP  = 12
-	zoomMin = 0.5
-	zoomMax = 3
-)
+// cellDP is a cell's height in dp until a pinch zooms it, in whole pixels at the
+// atlas's aspect and never under its own: 16x32 on a 420 dpi phone, half again as
+// much map as 9x18 dp shows.
+const cellDP = 12
 
 // view is the activity's SurfaceView as an app.Presentation. Frames wait in the
 // embedded glyph.Frames for the drawer to take them; the grid is the cells the
@@ -33,26 +31,27 @@ type view struct {
 	*glyph.Frames
 	tex          *glyph.Texture
 	density      float32 // the screen's, which the zoom scales
-	zoom         float32
-	cellW, cellH int // the pixels a cell takes at least, sized by the density and the zoom
+	cellW, cellH int     // the pixels a cell takes at least, sized by the density and the zoom
 
 	events  chan terminal.Event
 	away    chan bool
 	keys    hostkey.Report
 	pointer atomic.Bool
-	covered atomic.Bool // the keyboard is up: the status bar draws its left end alone
+	covered atomic.Bool // the keyboard is up: the status bar keeps to the half it repeats
 	finger  struct {    // the cell a pressed finger last reported; the UI thread's alone
 		down bool
 		x, y int
 	}
 
 	mu         sync.Mutex
-	cols, rows int // the grid the view's pixels hold
-	w, h       int // those pixels
+	cols, rows int     // the grid the view's pixels hold
+	w, h       int     // those pixels
+	cell       float64 // the zoom: a cell's height in dp, 0 for cellDP
 }
 
-func newView(tex *glyph.Texture, raster bool, density float32) *view {
-	v := &view{Frames: glyph.NewFrames(tex, raster), tex: tex, density: density, zoom: 1,
+// newView opens the view at cell, a zoom vif.toml kept, 0 for none
+func newView(tex *glyph.Texture, raster bool, density float32, cell float64) *view {
+	v := &view{Frames: glyph.NewFrames(tex, raster), tex: tex, density: density, cell: cell,
 		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
 	v.keys.Post = v.post
 	v.setCell()
@@ -62,8 +61,28 @@ func newView(tex *glyph.Texture, raster bool, density float32) *view {
 // setCell sizes a cell by the density and the zoom; the UI thread's, as setGrid is
 func (v *view) setCell() {
 	a := v.tex.Atlas()
-	w := max(a.Width, int(math.Round(float64(v.density*v.zoom)*cellDP*float64(a.Width)/float64(a.Height))))
+	w := max(a.Width, int(math.Round(float64(v.density)*cmp.Or(v.Cell(), cellDP)*float64(a.Width)/float64(a.Height))))
 	v.cellW, v.cellH = w, w*a.Height/a.Width
+}
+
+// zoom scales the cell by a pinch's scale, in parameter.CellStep steps within the
+// range every host shares, and never under the atlas; the UI thread's
+func (v *view) zoom(scale float64) {
+	step := parameter.CellStep
+	least := max(parameter.CellLeast, math.Ceil(float64(v.tex.Atlas().Height)/float64(v.density)/step)*step)
+	cell := min(max(math.Round(cmp.Or(v.Cell(), cellDP)*scale/step)*step, least), parameter.CellMost)
+	v.mu.Lock()
+	v.cell = cell
+	v.mu.Unlock()
+	v.setCell()
+}
+
+// Cell is the zoom the player left the view at, 0 for cellDP, which the run
+// writes back to vif.toml
+func (v *view) Cell() float64 {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.cell
 }
 
 func (v *view) Name() string           { return "android" }
