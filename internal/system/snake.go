@@ -171,9 +171,10 @@ func (s *SnakeSystem) Update() {
 			s.processSpawnSequence(snakeComp, headComp)
 		}
 
-		// Update head movement (stun check)
+		// A stunned head stays put; a displaced one coasts without steering, as the
+		// other composite movers do, so a knockback carries
 		if headCombat.Status[component.StatusStun].Remaining <= 0 {
-			s.updateHeadMovement(snakeComp.HeadEntity, headComp, dtSec)
+			s.updateHeadMovement(snakeComp.HeadEntity, headComp, headCombat.RemainingKineticImmunity == 0, dtSec)
 		}
 
 		// Sync head members to header position (CompositeSystem already ran this tick)
@@ -227,12 +228,12 @@ func (s *SnakeSystem) Update() {
 			}
 		}
 
-		// Sync head immunity based on shield
+		// A shield wards the head and, as enrage does, refuses every knockback; the
+		// kinetic window then means only displacement, which steering reads
 		if snakeComp.IsShielded {
 			headCombat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
-			headCombat.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
-			headCombat.KineticStrength = 0
 		}
+		headCombat.IsEnraged = snakeComp.IsShielded
 
 		// Process interactions
 		s.handleInteractions(snakeComp)
@@ -577,7 +578,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 	return createdAny
 }
 
-func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *component.SnakeHeadComponent, dtSec float64) {
+func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *component.SnakeHeadComponent, steer bool, dtSec float64) {
 	headPos, ok := s.world.Positions.GetPosition(headEntity)
 	if !ok {
 		return
@@ -588,25 +589,27 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		return
 	}
 
-	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headEntity, kineticComp)
+	if steer {
+		targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headEntity, kineticComp)
 
-	// Homing drag is off on the flow field, so the cornering brake is what bounds the
-	// cruise there and spends the overshoot where the route turns
-	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-		parameter.NavCorneringBase, 1.0)
+		// Homing drag is off on the flow field, so the cornering brake is what bounds
+		// the cruise there and spends the overshoot where the route turns
+		turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
+			parameter.NavCorneringBase, 1.0)
 
-	physics.ApplyHomingScaled(
-		&kineticComp.Kinetic,
-		targetX, targetY,
-		&profile.SnakeHoming,
-		1.0,
-		dtSec,
-		usingDirectPath,
-	)
+		physics.ApplyHomingScaled(
+			&kineticComp.Kinetic,
+			targetX, targetY,
+			&profile.SnakeHoming,
+			1.0,
+			dtSec,
+			usingDirectPath,
+		)
 
-	if turnSeverity > 0 {
-		physics.ApplyLinearDrag(&kineticComp.Kinetic,
-			turnSeverity*parameter.NavCorneringBrake, dtSec)
+		if turnSeverity > 0 {
+			physics.ApplyLinearDrag(&kineticComp.Kinetic,
+				turnSeverity*parameter.NavCorneringBrake, dtSec)
+		}
 	}
 
 	kineticComp.VelX, kineticComp.VelY = physics.CapSpeed(kineticComp.VelX, kineticComp.VelY, parameter.SnakeMaxSpeed)
