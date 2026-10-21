@@ -1,49 +1,32 @@
-# The dedicated-session image.
-#
-# One process is one session, so this image contains one thing: the statically
-# linked `vif` binary. Nothing else is in the final layer — no shell, no libc, no
-# package manager, no configuration tree — because everything a session needs at
-# runtime is either compiled in (the embedded scenario and corpus) or mounted
-# read-only by the workload that runs it. What is not there cannot be executed by
-# a peer that finds a way to make the game run something, and a session pod is
-# reachable by whoever can reach the game port.
-#
-# Build from the repository root, which is the context this expects:
-#
-#   docker build -f deploy/docker/Dockerfile -t vif:dev .
-#   make image                      # the same, with the revision label filled in
-#
-# The result is one layer containing the dedicated build. See
-# doc/kube-docker-deploy.md and doc/multi-platform.md.
+# The dedicated-session image: the static `vif_headless` binary on scratch, with no
+# shell, libc or configuration tree; a session's data is compiled in or mounted
+# read-only. Build from the repository root with BuildKit, which the caches need:
+#   docker buildx build -f deploy/docker/Dockerfile -t vif:dev .    # or: make image
+# See doc/kube-docker-deploy.md.
 
-# Keep this pin equal to the go directive in ../../go.mod. The dependency layer
-# downloads before an older builder reports the mismatch, so drift fails late.
-ARG GO_VERSION=1.27.2
+# By digest, so a cached base is never re-resolved and downloads once per pin. Keep
+# its version equal to the go directive in ../../go.mod.
+ARG GO_IMAGE=docker.io/library/golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d
 
 # --- builder -------------------------------------------------------------------
 # The builder is not thin and does not need to be; nothing from it is shipped
 # except /out/vif. git is installed so the Go toolchain can stamp the commit into
 # the binary's own build info, which is what makes a running pod attributable to a
 # revision without trusting a label somebody could have written by hand.
-FROM docker.io/library/golang:${GO_VERSION}-alpine AS build
+FROM ${GO_IMAGE} AS build
 
 RUN apk add --no-cache git
 WORKDIR /src
-
-# Module graph first: it changes far less often than the source, so an ordinary
-# code change reuses this layer instead of re-downloading the dependencies.
-COPY go.mod go.sum ./
-RUN go mod download
-
 COPY . .
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 
-# CGO off is what makes the binary static, and static is what lets the final stage
-# be scratch. -trimpath removes the builder's paths from the binary; -s -w drop the
-# symbol table and DWARF, and leave the Go build info the run is identified by.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+# CGO off makes the binary static, so the final stage can be scratch; -s -w keep the
+# build info the run is identified by. The module and build caches outlive the build
+# in BuildKit's store: a rebuild fetches only new modules and compiles only changes.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -tags=vif_headless -ldflags="-s -w" -o /out/vif ./cmd/vif
 
 # Prove the artifact in the builder rather than discovering it in a pod: a binary

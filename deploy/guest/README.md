@@ -37,17 +37,18 @@ even testing that it exists, needs `sudo`.
 Each builds or validates before it replaces anything. The allocator and LogWisp
 updaters keep one rollback set at `.previous` and restore it if verification fails;
 the wad helper keeps the tree it replaced at `/var/db/vif/wad.previous`. The image
-and LogWisp builds leave Docker, its socket and the distribution containerd disabled
-with `FORWARD ACCEPT` restored. Where Docker was already running, they use it in
-place and leave it running with `FORWARD` as it was; they remove their own image and
-keep the bases and build cache they pulled.
+and LogWisp builds remove their own image and keep the bases and build cache for the
+next build. On the node they leave Docker, its socket and the distribution containerd
+disabled with `FORWARD ACCEPT` restored, after pruning the cache least recently used
+first to `VIF_BUILD_CACHE_LIMIT` (default `3gb`). Where Docker was already running,
+they use it in place and leave it running with `FORWARD` and its cache as they were.
 
 | Helper | What it replaces | What it refuses |
 |---|---|---|
 | `install-logwisp.sh [revision]` | first install of the binary, identity, configuration and unit | an existing installation; a node without the `vif-fleet` identity; a revision that is not on upstream `main`; Docker without buildx, or stopped but not disabled |
 | `update-logwisp.sh [revision]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same revision and Docker refusals |
 | `update-vif-allocator.sh [--render]` | the allocator binary, unit, and env from `vif-allocator.env`; `--render` prints that env and changes nothing | a dirty worktree; a stopped `vif-allocator.service`; an installed env without `VIF_ALLOCATOR_IMAGE`; a non-empty fleet |
-| `update-vif-image.sh [tag]` | the headless session image, imported pinned, and an installed allocator's `VIF_ALLOCATOR_IMAGE` with it, with allocation paused meanwhile; removes older `vif` tags from K3s and empties Docker's store afterwards; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet |
+| `update-vif-image.sh [tag]` | the headless session image, imported pinned, and an installed allocator's `VIF_ALLOCATOR_IMAGE` with it, with allocation paused meanwhile; removes older `vif` tags from K3s; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet; Docker without buildx |
 | `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 
 The LogWisp helpers build upstream `main`'s head, or the revision given, through

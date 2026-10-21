@@ -123,7 +123,8 @@ sudo usermod -aG docker "$USER"            # log out and back in
 sudo systemctl disable --now docker.service docker.socket containerd.service
 ```
 
-That is the baseline the image and LogWisp builds restore (D2). Docker sets the
+That is the baseline the image and LogWisp builds restore (D2); Docker's store keeps
+their bases and caches between builds, up to 3 GB (§8). Docker sets the
 `FORWARD` policy to `DROP` on start, which severs NodePort traffic, and a stop does
 not undo it; the helpers set it back to `ACCEPT`. A host whose Docker is already
 running, as on a development machine, keeps it: the helpers build with it and leave
@@ -224,9 +225,12 @@ that just ended rather than hours of finished ones.
 It builds the `vif_headless` profile once with Docker, refuses an image without the
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
 imports it into K3s pinned, records it as an installed allocator's
-`VIF_ALLOCATOR_IMAGE` (§11 writes the first), removes older tags, empties Docker's
-store, and restores the Docker baseline; a Docker that was already running only has
-that image removed. Pinned, because the kubelet deletes images no pod uses once the
+`VIF_ALLOCATOR_IMAGE` (§11 writes the first), removes older tags, and restores the
+Docker baseline. Docker's store keeps the digest-pinned Go base and BuildKit's Go
+module and build caches, pruned least recently used first to `VIF_BUILD_CACHE_LIMIT`
+(default `3gb`), so a rebuild downloads only new modules and compiles only what
+changed; a Docker that was already running only has the image removed and keeps its
+own cache policy. Pinned, because the kubelet deletes images no pod uses once the
 disk passes 85%, and between matches none does. Later runs rebuild only when `cmd`,
 `internal`, `pkg`, `go.mod`, `go.sum` or the Dockerfile changed since the installed
 tag, or that image is missing or unpinned.

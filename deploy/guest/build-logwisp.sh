@@ -35,7 +35,7 @@ revision=${2:-}
 # LogWisp's Dockerfile needs BuildKit, and buildx reaches it with no fallback to the
 # legacy builder; checked before Docker starts.
 sudo docker buildx version >/dev/null || {
-	echo "$0: Docker has no buildx plugin, which LogWisp's build needs; install docker-buildx" >&2
+	echo "$0: Docker has no buildx plugin, which this build needs; install docker-buildx" >&2
 	exit 1
 }
 
@@ -57,6 +57,7 @@ else
 	done
 fi
 
+build_cache_limit=${VIF_BUILD_CACHE_LIMIT:-3gb}
 tmp_parent=${TMPDIR:-/tmp}
 tmp_parent=$(CDPATH= cd -- "$tmp_parent" && pwd)
 build_root=$(mktemp -d "$tmp_parent/vif-logwisp-build.XXXXXX")
@@ -81,14 +82,14 @@ cleanup() {
 	if [ -n "$container" ]; then
 		sudo docker rm -f "$container" >/dev/null 2>&1 || cleanup_status=$?
 	fi
-	if [ "$docker_started" = true ]; then
-		# Everything, not just the image: --pull leaves each earlier base behind, and
-		# BuildKit its cache.
-		sudo docker system prune --all --force >/dev/null 2>&1 || cleanup_status=$?
-	elif [ "$docker_running" = true ] && [ -n "$image" ] &&
-		sudo docker image inspect "$image" >/dev/null 2>&1; then
-		# A store that holds other work loses only this build's image.
+	if [ -n "$image" ] && sudo docker image inspect "$image" >/dev/null 2>&1; then
 		sudo docker image rm "$image" >/dev/null || cleanup_status=$?
+	fi
+	# The session image's base and caches stay for its next build; an earlier base
+	# --pull left behind goes first once the store passes the cap.
+	if [ "$docker_started" = true ]; then
+		sudo docker buildx prune --force --max-used-space "$build_cache_limit" \
+			>/dev/null || cleanup_status=$?
 	fi
 	case "$build_root" in
 		"$tmp_parent"/vif-logwisp-build.*) rm -rf -- "$build_root" || cleanup_status=$? ;;

@@ -10,7 +10,7 @@
 | Path | What it is |
 |---|---|
 | `update.sh` | The node's one deploy command: diffs every component against HEAD and LogWisp's binary against upstream `main` (installed green, incoming red), gates on an empty fleet where a component needs it, and runs the helpers below in dependency order, skipping what is current. |
-| `docker/Dockerfile` | Multi-stage build: pinned Go builder, `scratch` final layer holding the static non-root `vif_headless` binary and nothing else. Built from the repository root by `./deploy/update.sh image` on the node, or `make image`. |
+| `docker/Dockerfile` | Multi-stage build: digest-pinned Go builder whose module and build caches persist in BuildKit, `scratch` final layer holding the static non-root `vif_headless` binary and nothing else. Built from the repository root by `./deploy/update.sh image` on the node, or `make image`. |
 | `k3s/00-namespace.yaml` | The `vif` namespace with `restricted` Pod Security enforced, and the permissionless service account a session runs as. |
 | `k3s/05-log-volume.yaml` | The no-provisioner StorageClass, node-affine local PV, and one shared volatile PVC. Render `${NODE_NAME}` before applying. |
 | `k3s/06-log-volume-check.yaml` | A Restricted probe that binds both claims on a fresh node: it writes a record through the log claim and loads a scenario through the wad claim. Render `${IMAGE}` and `${SCENARIO}`, verify its JSONL, then delete the pod and the file. |
