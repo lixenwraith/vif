@@ -1001,6 +1001,17 @@ func (a *App) activateNetworkSessionLocked() {
 	}
 }
 
+// barrierLocked reports whether this run's crossing barrier owns its crossings.
+// Caller MUST hold updateMutex.
+func (a *App) barrierLocked() bool {
+	for _, sys := range a.world.Systems() {
+		if b, ok := sys.(interface{ BarrierActive() bool }); ok {
+			return b.BarrierActive()
+		}
+	}
+	return false
+}
+
 func logSessionError(err error) {
 	if err != nil {
 		vlog.Warn("session", "msg", "session not run", "error", err.Error())

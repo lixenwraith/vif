@@ -394,7 +394,7 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	if journal != nil {
 		after, err := a.captureSharedLocked()
 		if err == nil {
-			err = a.journalWritten(journal, place, mark, a.world.LocalParticipant(), before, after)
+			err = a.journalWritten(journal, place, mark, a.world.LocalParticipant(), a.barrierLocked(), before, after)
 		}
 		if err != nil {
 			a.journalLostLocked(journal, err)

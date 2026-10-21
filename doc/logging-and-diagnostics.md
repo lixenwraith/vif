@@ -956,13 +956,19 @@ journal opened mid-run begins with one more, its opening.
 Each is a `capture` record carrying `jseq` (the records before it), `cseq` (the
 writes up to it, since two with no record between share a `jseq` and can match in
 every other field), its lattice position, the local `participant`, the
-`authority` and, as base64 `body`, a `snapshot.WrittenDelta`: what the write
-changed against the world held just before it, sealed with the written world's
-integrity hash. Replay rebuilds it from its own world at that place, refuses a
-rebuild whose hash differs (it diverged before the write) and installs it under
-that identity, so a guest's journal replays from its join. A correction that
-changed nothing costs a few hundred bytes. Owner syncs and kill confirmations are
-records; the authority's worlds that proved them are not.
+`authority`, `barrier` (whether the write left the crossing barrier on) and, as
+base64 `body`, a `snapshot.WrittenDelta`: what the write changed against the world
+held just before it, sealed with the written world's integrity hash. Replay
+rebuilds it from its own world at that place, refuses a rebuild whose hash differs
+(it diverged before the write) and installs it under that identity, so a guest's
+journal replays from its join. A host's write engages the barrier in the same
+hold, so replay engages its own there too rather than at its next tick, or crossings
+dispatched after the write would apply at once and again where the journal records
+them. A write can also land between ticks while records of its settle group are
+still queued, as a seat added from another goroutine does between a keystroke's
+push and its settle: every non-empty settle advances the boundary, so replay pushes
+the whole group around the write and settles it once, after. A correction that changed nothing costs a few hundred bytes. Owner syncs and kill
+confirmations are records; the authority's worlds that proved them are not.
 
 Two events are notes, journaled and applied by replay but never dispatched:
 `EventCursorPredicted`, the D-18 placement a keystroke made, and

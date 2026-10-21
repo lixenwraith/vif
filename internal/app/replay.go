@@ -191,8 +191,17 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		if _, err = a.writeSharedLocked(cap, &before, true, c.Opens); err == nil && c.Opens {
+		_, err = a.writeSharedLocked(cap, &before, true, c.Opens)
+		switch {
+		case err != nil:
+		case c.Opens:
 			err = a.openedLocked(c, own)
+		case c.Barrier && !a.barrierLocked():
+			// Before anything the run held queued dispatches, as its own write did
+			a.activateNetworkSessionLocked()
+			if !a.barrierLocked() {
+				err = errors.New("the run's write engaged its crossing barrier, which this replay cannot")
+			}
 		}
 	})
 	return err
