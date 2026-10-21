@@ -3,7 +3,7 @@ module github.com/lixenwraith/vif/android
 go 1.27.2
 
 require (
-	github.com/lixenwraith/terminal v0.4.3
+	github.com/lixenwraith/terminal v0.5.0
 	github.com/lixenwraith/vif v0.0.0
 )
 
