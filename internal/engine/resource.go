@@ -493,8 +493,9 @@ func (pr *PlayerResource) Reconcile(pos component.PositionComponent, own bool) {
 }
 
 // PredictionState is the D-18 queue's cells, oldest first, for a journal's opening to
-// carry: they are in flight, and land in its replay by record. The pointer placement
-// not yet crossed is not among them, since the run crosses it next tick, by record too.
+// carry: they are in flight, and land in its replay by record. A pointer placement not
+// yet crossed is carried as its cell, the newest, not as a request: the run crosses it
+// next tick, by record too.
 type PredictionState struct {
 	Cells  []component.PositionComponent `json:"cells,omitempty"`
 	Shed   int                           `json:"shed"`

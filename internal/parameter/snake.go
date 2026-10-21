@@ -39,9 +39,12 @@ const (
 
 // Snake physics (floats for parameter definition)
 const (
-	SnakeBaseSpeed   = 12.0
-	SnakeMaxSpeed    = 25.0
-	SnakeHomingAccel = 8.0
+	SnakeBaseSpeed = 12.0
+	SnakeMaxSpeed  = 25.0
+	// SnakeHomingAccel is sized against the cornering brake, which drags even on
+	// course and so sets the cruise: about 19 cells/s on a direct path, 24 on the
+	// flow field
+	SnakeHomingAccel = 42.0
 	SnakeDrag        = 0.94
 
 	// Arrival steering: within SnakeArrivalRadius cells the drag is boosted
