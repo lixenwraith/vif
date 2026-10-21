@@ -1234,8 +1234,9 @@ func (r *Router) SetMouseModeApplier(fn MouseModeApplier) {
 	r.applyMouseMode = fn
 }
 
-// SetKeyReportApplier installs the presentation's sink for key release asks. Without
-// one, keys report presses alone.
+// SetKeyReportApplier installs the sink for key release asks: the presentation's,
+// or a bot's, which lets go of each key it presses. Without one, keys report
+// presses alone.
 func (r *Router) SetKeyReportApplier(fn KeyReportApplier) {
 	r.applyKeyReport = fn
 }
@@ -1261,7 +1262,7 @@ func (r *Router) syncKeyReport() {
 	r.applyKeyReport(console)
 }
 
-// KeyReported takes the presentation's answer to an ask: whether keys release now.
+// KeyReported takes the answer to an ask: whether keys release now.
 // While keys are captured, it crosses for this instance's slot.
 func (r *Router) KeyReported(releases bool) {
 	r.releases = releases

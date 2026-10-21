@@ -61,11 +61,13 @@ A captured key is the scenario's one input hook, whatever produces it:
   or over ssh, and any terminal answering alike), and the hardware keys of the
   desktop window, the page and Android; and a Linux or FreeBSD console while a
   capture with `releases` holds, its Alt+F*n*, dead keys and compose then the
-  game's to forgo. Elsewhere a key press is a tap, released at once, and a held key
-  repeats taps, as is a soft keyboard's text everywhere; a pointer press lets go
-  with the pointer. The router ends a hold as `lost` when its key leaves the
-  capture, play leaves Normal, Visual and Insert or is suspended, focus or the
-  report's source goes, or its key presses again; a tap's release is `lost` too.
+  game's to forgo. A bot lets go of each key it presses itself, at once or after
+  the hold its graph names ([Bots](bots.md#actions)); a script's presses tap.
+  Elsewhere a key press is a tap, released at once, and a held key repeats taps,
+  as is a soft keyboard's text everywhere; a pointer press lets go with the
+  pointer. The router ends a hold as `lost` when its key leaves the capture, play
+  leaves Normal, Visual and Insert or is suspended, focus or the report's source
+  goes, or its key presses again; a tap's release is `lost` too.
 - **Report.** `EventInputReport { slot, releases }` crosses as keys come to be
   captured and with each answer about releases while they are, so a scenario can
   play a slot that taps differently; that player sees a notice when the capture

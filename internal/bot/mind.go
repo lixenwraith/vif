@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
@@ -43,12 +44,14 @@ const (
 	targetSpecies
 	targetCursor
 	targetThreat
+	targetButton
 	targetRandom
 	targetCount
 )
 
 // targets is indexed by target: the name a graph uses and the scan that visits
-// every entity of the class. Random has no scan; it is a cell, not an entity.
+// every entity of the class. A button is a rectangle a scenario lays out, sighted
+// by button, and random a cell; neither is an entity to scan.
 var targets = [targetCount]struct {
 	name string
 	scan func(m *mind, visit func(core.Entity))
@@ -100,6 +103,7 @@ var targets = [targetCount]struct {
 			return true
 		})
 	}},
+	targetButton: {name: "button"},
 	targetRandom: {name: "random"},
 }
 
@@ -113,23 +117,79 @@ func scanSpecies(m *mind, visit func(core.Entity)) {
 	})
 }
 
-// parseTarget resolves a graph's target name; a random cell is refused where an
-// entity is needed.
-func parseTarget(raw any, entity bool) (target, error) {
+// parseTarget resolves a graph's target name, refusing those its user can't take
+func parseTarget(raw any, refused ...target) (target, error) {
 	name, _ := raw.(string)
 	for t := range targetCount {
-		if targets[t].name == name && (!entity || targets[t].scan != nil) {
+		if targets[t].name == name && !slices.Contains(refused, t) {
 			return t, nil
 		}
 	}
 	return 0, fmt.Errorf("unknown target %q", name)
 }
 
-// sighting is the nearest entity of one class to the bot's own cursor
+// buttonKey reads the key that picks one button; only the button target takes it
+func buttonKey(t target, raw any) (rune, error) {
+	if raw == nil || raw == "" {
+		return 0, nil
+	}
+	if t != targetButton {
+		return 0, errors.New("key applies only to the button target")
+	}
+	text, _ := raw.(string)
+	key, size := utf8.DecodeRuneInString(text)
+	if size == 0 || size != len(text) {
+		return 0, fmt.Errorf("key must be one character, got %v", raw)
+	}
+	return key, nil
+}
+
+// sighting is the nearest target of one class to the bot's own cursor
 type sighting struct {
-	x, y  int
-	dist2 int // squared cell distance, rows counted twice as the terminal draws them
+	x, y int
+	// dist2 is the squared cell distance, rows counted twice as the terminal draws
+	// them; -1 for a button on a map with no cursor
+	dist2 int
 	found bool
+}
+
+// sight is the nearest target of a class, a button by its key
+func (m *mind) sight(t target, key rune) sighting {
+	if t == targetButton {
+		cfg := m.ctx.World.Resources.Config
+		return m.button(key, 0, 0, cfg.MapWidth-1, cfg.MapHeight-1)
+	}
+	return m.nearest(t)
+}
+
+// button sights the button on key, or any button for key zero, by its cells from
+// x0, y0 to x1, y1: the one nearest the cursor, where dist2 zero is the cursor on
+// the button, ties to the left. With no cursor on the map it is the leftmost
+// button's middle cell, at no distance.
+func (m *mind) button(key rune, x0, y0, x1, y1 int) sighting {
+	from, cursor := m.ctx.World.LocalCursor()
+	cfg := m.ctx.World.Resources.Config
+	buttons := m.ctx.World.Components.Button
+	count := buttons.CountEntities()
+	var s sighting
+	slot := 0
+	buttons.Each(func(_ core.Entity, b *component.ButtonComponent) bool {
+		x, y, w, h := component.ButtonRect(b.Slot, count, cfg.MapWidth, cfg.MapHeight)
+		left, top, right, bottom := max(x, x0), max(y, y0), min(x+w-1, x1), min(y+h-1, y1)
+		if key != 0 && b.Key != key || left > right || top > bottom {
+			return true
+		}
+		c := sighting{x: (left + right) / 2, y: (top + bottom) / 2, dist2: -1, found: true}
+		if cursor {
+			c.x, c.y = min(max(from.X, left), right), min(max(from.Y, top), bottom)
+			c.dist2 = dist2(c.x-from.X, c.y-from.Y)
+		}
+		if !s.found || c.dist2 < s.dist2 || c.dist2 == s.dist2 && b.Slot < slot {
+			s, slot = c, b.Slot
+		}
+		return true
+	})
+	return s
 }
 
 // nearest finds the entity of a class closest to the cursor's predicted cell, the
@@ -178,9 +238,14 @@ func (m *mind) glyphAt(x, y int, standalone bool) (rune, bool) {
 // push queues intents in order, spending the step's room
 func (m *mind) push(intents ...input.Intent) {
 	for _, intent := range intents {
-		m.queue.push(intent)
+		m.pushHeld(intent, 0)
 	}
-	m.room -= len(intents)
+}
+
+// pushHeld queues one intent; a press keeps its key down for hold
+func (m *mind) pushHeld(intent input.Intent, hold int) {
+	m.queue.push(queued{intent: intent, hold: hold})
+	m.room--
 }
 
 // pointAt queues the pointer at the nearest target of a class, clamped to the cells
@@ -195,9 +260,14 @@ func (m *mind) pointAt(p pointArgs) {
 		return
 	}
 	var x, y int
-	if p.target == targetRandom {
+	switch p.target {
+	case targetRandom:
 		x, y = minX+m.rng.Intn(maxX-minX+1), minY+m.rng.Intn(maxY-minY+1)
-	} else {
+	case targetButton:
+		if x, y, ok = m.aimButton(p, minX, minY, maxX, maxY); !ok {
+			return
+		}
+	default:
 		s := m.nearest(p.target)
 		if !s.found || p.away && s.dist2 == 0 {
 			return
@@ -240,6 +310,27 @@ func (m *mind) pointAt(p pointArgs) {
 	m.push(input.Intent{Type: input.IntentMouseMove, X: x, Y: y, MapCell: true})
 }
 
+// aimButton is the cell PointAt aims at for a button: of its shown cells, the one
+// nearest the cursor, which a click presses wherever the cursor is. A move heads
+// for a button the view does not show; a click there would fire where it landed,
+// and a map with no cursor has none to move.
+func (m *mind) aimButton(p pointArgs, minX, minY, maxX, maxY int) (int, int, bool) {
+	s := m.button(p.key, minX, minY, maxX, maxY)
+	if p.fire {
+		return s.x, s.y, s.found
+	}
+	if _, cursor := m.ctx.World.LocalCursor(); !cursor {
+		return 0, 0, false
+	}
+	if !s.found {
+		s = m.sight(targetButton, p.key)
+	}
+	if !s.found {
+		return 0, 0, false
+	}
+	return m.land(min(max(s.x, minX), maxX), min(max(s.y, minY), maxY), s.x, s.y)
+}
+
 // land keeps x, y unless the cursor may not enter it, as the router refuses that
 // move and the bot would re-queue it every update; it then takes the shown open cell
 // nearest the goal.
@@ -268,10 +359,11 @@ func (m *mind) openCell(rank func(x, y int) int) (x, y int, found bool) {
 // dist2 is a squared cell distance with rows counted twice, as the terminal draws them
 func dist2(dx, dy int) int { return dx*dx + 4*dy*dy }
 
-// pointArgs is a compiled PointAt payload; away aims at the target's mirror
-// through the cursor
+// pointArgs is a compiled PointAt payload; key picks a button, and away aims at the
+// target's mirror through the cursor
 type pointArgs struct {
 	target     target
+	key        rune
 	fire, away bool
 }
 
@@ -312,7 +404,10 @@ func register(m *fsm.Machine[*mind]) {
 	})
 
 	queueAll := func(m *mind, args any) { m.push(args.([]input.Intent)...) }
-	m.RegisterAction("Intent", func(m *mind, args any) { m.push(args.(intentChoice).draw(m.rng)) })
+	m.RegisterAction("Intent", func(m *mind, args any) {
+		c := args.(intentChoice)
+		m.pushHeld(c.draw(m.rng), c.hold)
+	})
 	m.RegisterActionArgs("Intent", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
 		return compileIntent(cfg.Payload)
 	})
@@ -348,17 +443,26 @@ func register(m *fsm.Machine[*mind]) {
 	m.RegisterActionArgs("PointAt", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
 		var p struct {
 			Target string `toml:"target"`
+			Key    string `toml:"key"`
 			Fire   bool   `toml:"fire"`
 			Away   bool   `toml:"away"`
 		}
-		if err := decodePayload(cfg.Payload, &p, "target", "fire", "away"); err != nil {
+		if err := decodePayload(cfg.Payload, &p, "target", "key", "fire", "away"); err != nil {
 			return nil, err
 		}
 		if p.Fire && p.Away {
 			return nil, errors.New("fire and away do not combine")
 		}
-		t, err := parseTarget(p.Target, p.Away)
-		return pointArgs{target: t, fire: p.Fire, away: p.Away}, err
+		var refused []target
+		if p.Away {
+			refused = []target{targetButton, targetRandom}
+		}
+		t, err := parseTarget(p.Target, refused...)
+		if err != nil {
+			return nil, err
+		}
+		key, err := buttonKey(t, p.Key)
+		return pointArgs{target: t, key: key, fire: p.Fire, away: p.Away}, err
 	})
 
 	guard := func(name string, args []string, build func(map[string]any) (fsm.GuardFunc[*mind], error)) {
@@ -369,18 +473,18 @@ func register(m *fsm.Machine[*mind]) {
 			return build(given)
 		})
 	}
-	guard("HasTarget", []string{"target", "within"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
-		t, err := parseTarget(args["target"], true)
+	guard("HasTarget", []string{"target", "key", "within"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
+		t, key, err := guardTarget(args)
 		within := std.ParseIntArg(args, "within")
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
-			s := m.nearest(t)
-			return s.found && (within <= 0 || s.dist2 <= int(within*within))
+			s := m.sight(t, key)
+			return s.found && (within <= 0 || s.dist2 >= 0 && s.dist2 <= int(within*within))
 		}, err
 	})
-	guard("OnTarget", []string{"target"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
-		t, err := parseTarget(args["target"], true)
+	guard("OnTarget", []string{"target", "key"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
+		t, key, err := guardTarget(args)
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
-			s := m.nearest(t)
+			s := m.sight(t, key)
 			return s.found && s.dist2 == 0
 		}, err
 	})
@@ -416,6 +520,17 @@ func register(m *fsm.Machine[*mind]) {
 	})
 }
 
+// guardTarget reads the target a guard measures from the cursor, which a random
+// cell is not, and the key of a button
+func guardTarget(args map[string]any) (target, rune, error) {
+	t, err := parseTarget(args["target"], targetRandom)
+	if err != nil {
+		return 0, 0, err
+	}
+	key, err := buttonKey(t, args["key"])
+	return t, key, err
+}
+
 // owns reports whether an event payload's field names the bot's own cursor. Until a
 // joiner's slot binds, Player.Entity names another's cursor, which it does not drive.
 func (m *mind) owns(payload any, field string) bool {
@@ -425,11 +540,13 @@ func (m *mind) owns(payload any, field string) bool {
 }
 
 // intentChoice is a compiled Intent payload: one keymap action or a list drawn
-// from, with a fixed count or a [min, max] range drawn from. A payload with no
-// choice draws nothing, so a fixed sequence leaves the bot's stream alone.
+// from, with a fixed count or a [min, max] range drawn from, and the hold of a
+// press. A payload with no choice draws nothing, so a fixed sequence leaves the
+// bot's stream alone.
 type intentChoice struct {
 	intents  []input.Intent
 	min, max int // the count range; max zero keeps each intent's own count
+	hold     int
 }
 
 func (c intentChoice) draw(rng *vmath.FastRand) input.Intent {
@@ -444,10 +561,12 @@ func (c intentChoice) draw(rng *vmath.FastRand) input.Intent {
 }
 
 // compileIntent reads an Intent payload: name is one action or a list of them,
-// count one number or a [min, max] range, char the rune a char-wait action targets.
+// count one number or a [min, max] range, char the rune a char-wait action, press
+// or release targets, and hold how many ticks a press keeps its key down, or true
+// until a release.
 func compileIntent(payload any) (intentChoice, error) {
 	table, _ := payload.(map[string]any)
-	if key := unknownKey(table, "name", "count", "char"); key != "" {
+	if key := unknownKey(table, "name", "count", "char", "hold"); key != "" {
 		return intentChoice{}, fmt.Errorf("unknown payload field %q", key)
 	}
 	var names []string
@@ -489,15 +608,48 @@ func compileIntent(payload any) (intentChoice, error) {
 		}
 		c.min = n
 	}
+	switch v := table["hold"].(type) {
+	case nil:
+	case bool:
+		if !v {
+			return intentChoice{}, errors.New("hold must be a number of ticks or true, got false")
+		}
+		c.hold = holdOpen
+	default:
+		n, ok := intValue(v)
+		if !ok || n < 1 {
+			return intentChoice{}, fmt.Errorf("hold must be a number of ticks or true, got %v", v)
+		}
+		c.hold = n
+	}
 	char, _ := table["char"].(string)
 	for _, name := range names {
-		intent, err := input.IntentFor(name, c.min, char)
+		if c.hold != 0 && name != input.PressAction {
+			return intentChoice{}, fmt.Errorf("hold applies only to %s", input.PressAction)
+		}
+		intent, err := intentFor(name, c.min, char)
 		if err != nil {
 			return intentChoice{}, err
 		}
 		c.intents = append(c.intents, intent)
 	}
 	return c, nil
+}
+
+// releaseAction lets go of a key the bot holds. Only a bot names it: a script's
+// presses tap.
+const releaseAction = "release"
+
+// intentFor is input.IntentFor with the release of a key the bot holds
+func intentFor(name string, count int, char string) (input.Intent, error) {
+	if name != releaseAction {
+		return input.IntentFor(name, count, char)
+	}
+	key, size := utf8.DecodeRuneInString(char)
+	if size == 0 || size != len(char) || !input.Capturable(key) {
+		return input.Intent{}, fmt.Errorf("intent %q requires one printable ASCII char", name)
+	}
+	return input.Intent{Type: input.IntentKeyRelease, Char: key, Count: 1}, nil
 }
 
 // intValue reads a whole number as the TOML parser produces one

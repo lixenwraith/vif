@@ -181,3 +181,13 @@ func (a *App) Region(op, region, state string) bool {
 // App reads its own dispatch through it, and a harness on an App no bot drives makes
 // assertions the journal cannot, as system-origin events are never journaled.
 func (a *App) SetDispatchTap(fn func(event.GameEvent)) { a.scheduler.SetDispatchTap(fn) }
+
+// ReportReleases has every key this App presses hold until its release, answering
+// each ask for releases itself: a bot lets go of each key it presses. Its slot
+// crosses as releasing, and a press made before the first input tick holds too.
+func (a *App) ReportReleases() {
+	a.world.RunSafe(func() {
+		a.router.SetKeyReportApplier(func(bool) { a.router.KeyReported(true) })
+		a.router.KeyReported(true)
+	})
+}

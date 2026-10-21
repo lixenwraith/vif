@@ -191,17 +191,6 @@ The offline conductor render that produced those comparisons (an APM timeline
 through the sequencer, no device) is a test-only harness in the review branch's
 scratch repository, and would be a `soundlab` or `vif-log` verb.
 
-### Let bots hold keys and click buttons
-
-- Priority: P2
-- Affected files: `internal/bot`
-
-A captured key holds until its release on every host that reports one, and every
-input names its slot and the tick it was made at ([Input and modes](input-and-modes.md)
-§1). Bots still press and release at once. A hold in ticks on the press and a
-release action, ended on a person's exit paths; a `button` target for `PointAt`,
-`HasTarget` and `OnTarget`, which `click = true` presses as a pointer.
-
 ### Build the map and scenario editor
 
 - Priority: P2
