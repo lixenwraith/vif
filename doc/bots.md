@@ -344,7 +344,6 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 ## Not built yet
 
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
-- [Let a bot graph use operators and marks](todo.md#let-a-bot-graph-use-operators-and-marks)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
 - [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)

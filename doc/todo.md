@@ -36,19 +36,6 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 - Digest mismatches watched as networked bot load grows; that run counted 0–5 per
   host.
 
-### Let a bot graph use operators and marks
-
-- Priority: P3
-- Affected files: `internal/input/actionnames.go`, `internal/bot/mind.go`
-
-`input.IntentFor` refuses the actions that only open a key sequence
-(`operator_delete`, `prefix_g`, `prefix_macro_play`, `marker_glyph_*`), so a graph
-cannot delete a word or jump to a coloured glyph. Options: a `motion` operand
-on `Intent` that applies an operator to a named motion, which keeps graphs
-semantic; or a `Keys` action parsed through the keymap, which reaches everything a
-keymap binds but depends on the bindings. A right press carries no position, so
-special fire stays `Intent fire_special` where the cursor stands.
-
 ### Expose a bot difficulty knob
 
 - Priority: P3
