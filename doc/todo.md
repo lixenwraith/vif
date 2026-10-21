@@ -73,17 +73,6 @@ semantic; or a `Keys` action parsed through the keymap, which reaches everything
 keymap binds but depends on the bindings. A right press carries no position, so
 special fire stays `Intent fire_special` where the cursor stands.
 
-### Limit the commands a bot graph may issue
-
-- Priority: P3
-- Affected files: `internal/bot/mind.go`
-
-`Command` accepts any ex-command, `:bot add`, `:host`, `:q` and `:d cpu` included,
-so a graph from elsewhere can seat bots, open a listener or profile its holder's
-process. Decide an allowlist (the commands play needs, such as `:n`) or a refusal
-set (session, bot, journal and diagnostic commands), checked at load as the
-world-writing actions are.
-
 ### Expose a bot difficulty knob
 
 - Priority: P3

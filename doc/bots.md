@@ -142,12 +142,12 @@ is dropped and counted. Allowance left idle builds up to one second's worth.
 |---|---|---|
 | `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from, or `press` or `release`; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action, or the key `press` presses and `release` lets go; `hold` for `press`: ticks, or `true` until its `release` | one key press or release |
 | `Text` | `text` | one character per rune |
-| `Command` | `text`: an ex-command, the leading `:` optional, not empty | the command-line round trip |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
-`prefix_g`, `prefix_macro_play`, `marker_glyph_*`); `quit` ends the run. `press`
+`prefix_g`, `prefix_macro_play`, `marker_glyph_*`) or that opens the command line
+or the menu (`mode_command`, `config_menu`); `quit` ends the run. `press`
 presses a key a scenario captured, as a typed key or a click on its button would,
 and does nothing while the key is not captured. The bot lets go of every key it
 presses, at once, after `hold` ticks, or with `hold = true` at a `release` of the
@@ -229,8 +229,8 @@ guards over its own view. Actions that write the world are refused at load:
 
 - A graph updates once a tick, every 50 ms of game time.
 - `PointAt` and `TypeGlyph` read the world, so each acts only when all it queues
-  is sent before the next tick. `Intent`, `Text` and `Command` queue
-  regardless; wait for them with `Idle`.
+  is sent before the next tick. `Intent` and `Text` queue regardless; wait for
+  them with `Idle`.
 - Draws come from the bot's own stream, seeded from the session seed and its
   participant. A payload with no choice draws nothing, so a fixed sequence leaves
   the stream alone.
@@ -313,7 +313,7 @@ unattended.
   never the event queue, crossings the session still holds, RNG positions,
   pending delayed actions, the prediction ledger or network state. A keystroke can
   miss, as a person's can.
-- Nothing limits which commands a graph may issue, `:q` and `:bot add` included.
+- It issues no commands.
 - It reaches only what its view shows. A seat's view is its holder's screen, so a
   person's bots see what that person sees and play differently across terminals.
 - It plays cooperatively: cursor weapons do not strike cursors.
@@ -346,7 +346,6 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
 - [Beat the default graph](todo.md#beat-the-default-graph)
 - [Let a bot graph use operators and marks](todo.md#let-a-bot-graph-use-operators-and-marks)
-- [Limit the commands a bot graph may issue](todo.md#limit-the-commands-a-bot-graph-may-issue)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
 - [Judge a relayed bot's lateness](todo.md#judge-a-relayed-bots-lateness)
 - [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
