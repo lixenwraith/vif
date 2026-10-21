@@ -36,54 +36,6 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 - Digest mismatches watched as networked bot load grows; that run counted 0–5 per
   host.
 
-### Beat the default graph
-
-- Priority: P2
-- Affected files: `internal/bot`, `internal/asset/bot/default.toml`,
-  `internal/system/nugget.go`, `script/test.sh`
-- Guide: [Bots](bots.md#fitness-and-comparing-graphs)
-
-Exit: a graph beats `default` under `./script/test.sh botfitness` over seeds 1–8
-on the embedded scenario, td and kraken. Baseline, `default` over 4 seeds of 60 s:
-embedded 3493, td 1479, kraken −4800 (kraken has no text, gold or nuggets, so
-`default` is weighed only on its defeats there). Candidates:
-- a `Best` utility guard, added once a graph uses it: a weight per target class,
-  utility `weight*1024/(1+isqrt(dist²))` in integers, ties to the lower class;
-- threat evasion in `default` (`HasTarget threat`, `PointAt away`);
-- kill engagement on kraken;
-- a motor layer: a goal the view does not show reached by clicks along a
-  `pkg/navigation` route rather than the clamp.
-
-Decide whether an improved graph replaces `default`, keeping a pinned copy as the
-baseline, or ships beside it. A collected nugget weighs nothing: nothing pushes
-`EventNuggetCollected`; push it in `NuggetSystem.collectNugget` and drop the
-duplicate `statCollected` increment there. Threats are unweighted; weighting them
-by `profile.Contact` needs a `CombatEntityType`-to-`SpeciesType` table.
-
-### Let a bot graph use operators and marks
-
-- Priority: P3
-- Affected files: `internal/input/actionnames.go`, `internal/bot/mind.go`
-
-`input.IntentFor` refuses the actions that only open a key sequence
-(`operator_delete`, `prefix_g`, `prefix_macro_play`, `marker_glyph_*`), so a graph
-cannot delete a word or jump to a coloured glyph. Options: a `motion` operand
-on `Intent` that applies an operator to a named motion, which keeps graphs
-semantic; or a `Keys` action parsed through the keymap, which reaches everything a
-keymap binds but depends on the bindings. A right press carries no position, so
-special fire stays `Intent fire_special` where the cursor stands.
-
-### Limit the commands a bot graph may issue
-
-- Priority: P3
-- Affected files: `internal/bot/mind.go`
-
-`Command` accepts any ex-command, `:bot add`, `:host`, `:q` and `:d cpu` included,
-so a graph from elsewhere can seat bots, open a listener or profile its holder's
-process. Decide an allowlist (the commands play needs, such as `:n`) or a refusal
-set (session, bot, journal and diagnostic commands), checked at load as the
-world-writing actions are.
-
 ### Expose a bot difficulty knob
 
 - Priority: P3
@@ -95,27 +47,15 @@ such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and th
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
 
-### Judge a relayed bot's lateness
+### Host a session opened for bots
 
 - Priority: P3
-- Affected files: `internal/converge/authority.go`, `internal/app/converge.go`
+- Affected files: `internal/app/host.go`, `internal/network/transport.go`
 
-A guest's bot is never evicted as slow on its own: it has no link to the
-authority, so `LinkMetric` reads zero throughput for it, and `DropParticipant` is
-a disconnect, which would take its holder. Options: charge its lateness to the
-holder's link; evict the bot alone through a dismissal crossing; or keep this
-and document it.
-
-### Seat a host's bots without a listener
-
-- Priority: P3
-- Affected files: `internal/app/seat.go`, `internal/app/relay.go`, `internal/network`
-
-A host's bots dial a loopback listener, which a run in no session opens first.
-Serving them on the in-process stream a guest's bots use would remove that
-listener and the loopback exemption from the join budget (which also exempts local
-people), let `:host` add a listener to a session opened only for bots instead of
-refusing, and let a browser seat bots solo.
+A run in no session opens one with no listener for its bots, and `:host` then
+refuses it as already in a session, so a player who wants others in hosts first.
+Binding a listener onto that session's port instead would let bots come first; the
+authority policy stays the one the session opened with.
 
 ### Let a watched holder pause with only its own bots
 
@@ -140,8 +80,8 @@ reach late joiners, and a trust decision, since each peer would choose its own.
 ### Train bot graphs offline
 
 - Priority: P3
-- Affected files: `internal/bot`, `pkg/genetic`
-- Prerequisite: [Beat the default graph](#beat-the-default-graph)'s harness
+- Affected files: `internal/bot`, `pkg/genetic`, `internal/system/nugget.go`
+- Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
 First decide how a graph declares bounded tunable numbers: a `[bot.params]` table,
 or bounded macro parameters shared with the editor's macro metadata. A genome is
@@ -149,7 +89,9 @@ those numbers as a bounded vector; `pkg/genetic`'s `Engine` evaluates whole
 headless runs over a matrix of scenarios and seeds, and `pkg/genetic/fitness`
 scalarises the result. A solo run depends only on its seed, so evaluation needs no
 mesh. Decide where trained values ship. Bot genomes never enter the in-game
-genetic registry, which captures carry.
+genetic registry, which captures carry. Fitness weighs no nugget, since nothing
+pushes `EventNuggetCollected`: push it in `NuggetSystem.collectNugget` and drop
+that function's own `statCollected` increment, which the event's handler repeats.
 
 ### Adapt bots to the session's players
 

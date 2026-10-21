@@ -278,7 +278,7 @@ Bots adds local bots by count and policy graph, and removes this run's admitted
 bots by cursor slot, or cancels a joining bot. Leaving bots show their state.
 :bot lists this run's bots; :bot add [N[:graph]|graph] seats more.
 Host before adding bots to solo play if remote players should join; otherwise
-bots open a loopback session.
+bots open a session only they can join.
 .PP
 Multiplayer hosts this run, joins an address/link, or requests a session from
 an HTTP(S) vif-allocator site with a player count and scenario. Player count 0

@@ -518,6 +518,13 @@ func Pipe() (net.Conn, net.Conn) {
 	return spool(a), spool(b)
 }
 
+// inProcess is the far end of a Pipe as its near end sees it: no dialler, so no
+// address to spend a join budget for.
+type inProcess struct{}
+
+func (inProcess) Network() string { return "pipe" }
+func (inProcess) String() string  { return "pipe" }
+
 // spooled reads its pipe end ahead into memory, as a kernel reads a socket.
 type spooled struct {
 	net.Conn
@@ -592,6 +599,8 @@ func (s *spooled) Read(p []byte) (int, error) {
 		}
 	}
 }
+
+func (s *spooled) RemoteAddr() net.Addr { return inProcess{} }
 
 func (s *spooled) SetReadDeadline(t time.Time) error {
 	s.mu.Lock()

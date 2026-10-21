@@ -29,21 +29,6 @@ type relayDesk struct {
 	reports map[network.PeerID]network.JoinerReport
 }
 
-// relayLink opens a stream to this run for one of its bots and serves the join
-// handshake on the near end; local is this run's own participant.
-func (a *App) relayLink(local network.PeerID) (net.Conn, error) {
-	port, err := a.socketPort()
-	if err != nil {
-		return nil, err
-	}
-	near, far := network.Pipe()
-	if err := port.ServeConn(near, a.relayAcceptor(local), a.releaseRelayedJoiner); err != nil {
-		_ = far.Close()
-		return nil, err
-	}
-	return far, nil
-}
-
 // serveRelay opens the address -relay named, once this run is in a session: a
 // person who cannot reach the host joins there and this run carries its traffic.
 func (a *App) serveRelay() {
@@ -71,7 +56,7 @@ func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID
 	return network.HostAcceptor(network.Coordinator{
 		Assign:   func() (network.SessionOffer, error) { return a.relayAssign(local) },
 		Release:  a.relayRelease,
-		Admit:    a.admitDial,
+		Admit:    a.admissions.Admit,
 		Report:   func(id network.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
 		Name:     a.cfg.SessionName,
 		Scenario: a.scenarioBody,

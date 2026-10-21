@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
 	"time"
 
@@ -163,14 +164,14 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if port != nil {
 		// Where this run's participants come back to. The address it already
 		// listens on when it opened the session; the one it advertised when it
-		// inherited the session from somebody else. A successor with neither has no
-		// door to offer, and saying so is better than sending its peers to an
-		// address that stopped answering.
+		// inherited the session from somebody else. A run with neither has no door
+		// to offer, and saying so is better than sending its peers to an address
+		// that stopped answering; its own bots need none, the next run reseats them.
 		req.Host = a.cfg.HostAddress
 		if req.Host == "" {
 			req.Host = a.reach.DeclaredAddr()
 		}
-		if req.Host == "" && port.PeerCount() > 0 {
+		if req.Host == "" && !a.seatsOnly() {
 			return false, errors.New("this participant has no address its session can return to")
 		}
 		// Said before this run's transport goes, because afterwards there is nobody
@@ -304,17 +305,6 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	if addr == "" {
 		return errors.New("host: no address")
 	}
-	// Opening a session writes the world — owners, the latch, the lead — so a
-	// journal records the write as it records a join's, and a replay makes it.
-	journal := a.world.Resources.Event.Queue.Journal()
-	place, mark := a.Position(), journal.Mark()
-	var before snapshot.SharedCapture
-	if journal != nil {
-		var err error
-		if before, err = a.captureSharedLocked(); err != nil {
-			return fmt.Errorf("host: %w", err)
-		}
-	}
 	e, err := network.ParseEndpoint(addr)
 	if err == nil {
 		err = e.Listenable()
@@ -340,6 +330,28 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 		if ln, err = network.Listen(addr, network.DebugConfig(network.RoleHost, addr)); err != nil {
 			a.cfg.FixedAuthority = fixed
 			return fmt.Errorf("host %s: %w", addr, err)
+		}
+	}
+	if err := a.openSessionLocked(addr, ln); err != nil {
+		_ = ln.Close()
+		a.cfg.FixedAuthority = fixed
+		return err
+	}
+	return nil
+}
+
+// openSessionLocked opens a session this run coordinates on ln, or on no listener at
+// all for its bots alone, whose streams it opens itself. Caller MUST hold updateMutex.
+func (a *App) openSessionLocked(addr string, ln net.Listener) error {
+	// Opening a session writes the world — owners, the latch, the lead — so a
+	// journal records the write as it records a join's, and a replay makes it.
+	journal := a.world.Resources.Event.Queue.Journal()
+	place, mark := a.Position(), journal.Mark()
+	var before snapshot.SharedCapture
+	if journal != nil {
+		var err error
+		if before, err = a.captureSharedLocked(); err != nil {
+			return fmt.Errorf("host: %w", err)
 		}
 	}
 
@@ -405,13 +417,13 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 		}
 	}
 
-	bound := addr
-	if b := port.Addr(); b != nil {
-		bound = b.String()
+	if ln == nil {
+		a.log.Info("session", "msg", "session opened for bots", "tick", a.Position().Tick)
+		return nil
 	}
 	a.log.Info("session", "msg", "hosting opened mid-run",
-		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
-	a.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
+		"address", ln.Addr().String(), "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
+	a.ctx.SetStatusMessage("Hosting on "+ln.Addr().String(), parameter.StatusNotice)
 	return nil
 }
 
@@ -813,9 +825,9 @@ func (a *App) injectPort() (interface {
 	return injector, nil
 }
 
-// HostAddr is the address this run is hosting on, empty when it is not hosting one
-// it opened itself. The bound form is reported, so a run opened on port zero names
-// the port it actually got.
+// HostAddr is the address this run is hosting on, empty when it listens on none it
+// opened itself. The bound form is reported, so a run opened on port zero names the
+// port it actually got.
 func (a *App) HostAddr() string {
 	a.sessionMu.Lock()
 	port := a.midRunPort

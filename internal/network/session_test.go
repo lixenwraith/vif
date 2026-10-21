@@ -291,6 +291,21 @@ func TestAdmissionIgnoresThePort(t *testing.T) {
 	}
 }
 
+// TestAnInProcessStreamSpendsNoBudget: a holder opens one for each of its bots, and
+// it has no dialler whose budget it could spend.
+func TestAnInProcessStreamSpendsNoBudget(t *testing.T) {
+	t.Parallel()
+	l := NewAdmissionLimiter()
+	near, far := Pipe()
+	defer near.Close()
+	defer far.Close()
+	for i := range parameter.NetworkAdmitBurst + 1 {
+		if err := l.Admit(near.RemoteAddr()); err != nil {
+			t.Fatalf("in-process admission %d was refused: %v", i+1, err)
+		}
+	}
+}
+
 // TestAdmissionRefillsWithItsWindow is the non-vacuous half: a budget that never
 // refilled would turn one crash-and-reconnect into a permanent exclusion.
 func TestAdmissionRefillsWithItsWindow(t *testing.T) {
