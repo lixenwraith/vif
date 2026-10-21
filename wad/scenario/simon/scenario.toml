@@ -1,4 +1,6 @@
 description = "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons."
+min_players = 1
+max_players = 16
 
 # Four buttons on keys 1-4, lowest note on 1, so the game plays with eyes closed:
 # every press and every shown note sounds its button's tone. A level adds one note

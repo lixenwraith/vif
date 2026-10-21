@@ -1,4 +1,6 @@
 description = "Practice fighting a Kraken in an open arena with repeating encounters."
+min_players = 1
+max_players = 16
 
 # Kraken collision sandbox. Restart each fight three seconds after the kill.
 

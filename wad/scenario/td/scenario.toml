@@ -1,4 +1,6 @@
 description = "Defend two central towers in a sprawling maze against escalating enemy waves."
+min_players = 1
+max_players = 16
 
 # Standalone tower-defense map: fixed 500x250, twin towers, escalating pylons, storm finale
 
