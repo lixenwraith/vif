@@ -444,6 +444,36 @@ func TestASessionRequestOutsideTheOpenedBoundsIsRefused(t *testing.T) {
 	}
 }
 
+// TestAScenarioPlayerRangeBoundsTheRequest: a requested roster outside what the
+// scenario states is refused, as one outside what the operator opened is, and an
+// omitted one is the default moved into the scenario's range.
+func TestAScenarioPlayerRangeBoundsTheRequest(t *testing.T) {
+	cfg := testAllocatorConfig(t)
+	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
+	entry := filepath.Join(cfg.WadDir, "scenario", "td", "scenario.toml")
+	if err := os.WriteFile(entry, []byte("min_players = 2\nmax_players = 3\n[regions]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range []sessionRequest{
+		{Scenario: "td", Players: 1},
+		{Scenario: "td", Players: 4},
+		{Scenario: "td", Players: 3, Bots: 3},
+	} {
+		if _, err := controller.resolve(request); !errors.Is(err, errRequestRefused) {
+			t.Errorf("resolve(%+v) returned %v, want a refusal", request, err)
+		}
+	}
+	if w, err := controller.resolve(sessionRequest{Scenario: "td", Bots: 2}); err != nil || w.Players != 3 {
+		t.Errorf("an omitted roster on td resolved to %d players (%v); want the default 4 brought to 3", w.Players, err)
+	}
+	if err := os.WriteFile(entry, []byte("min_players = 9\n[regions]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := controller.resolve(sessionRequest{Scenario: "td"}); !errors.Is(err, errRequestRefused) {
+		t.Errorf("a scenario needing more players than the fleet opens resolved: %v", err)
+	}
+}
+
 // TestScenarioDescriptionsComeFromTheirEntries reads each one from the file the
 // game reads, the embedded fallback standing in for a main the volume lacks. An
 // entry that states none, or whose preamble overruns the scan, is still offered.
@@ -461,13 +491,16 @@ func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("td", "# towers\ndescription = \"  Hold the line.  \"\n\n[map]\nfixed = \"500x250\"\n\n"+
-		"[regions.td]\ndescription = \"not this\"\nfixed = \"9x9\"\n")
+	write("td", "# towers\ndescription = \"  Hold the line.  \"\nmin_players = 0\n\n[map]\nfixed = \"500x250\"\n\n"+
+		"[regions.td]\ndescription = \"not this\"\nfixed = \"9x9\"\nmax_players = 2\n")
 	if got := controller.limits().Descriptions; len(got) != 1 || got["td"] != "Hold the line." {
 		t.Fatalf("descriptions = %v; want td's own, trimmed", got)
 	}
 	if got := controller.limits().FixedMaps; len(got) != 1 || got["td"] != "500x250" {
 		t.Fatalf("fixed maps = %v; want td's [map] fixed alone", got)
+	}
+	if limits := controller.limits(); len(limits.MinPlayers) != 1 || limits.MinPlayers["td"] != 0 || limits.MaxPlayers != nil {
+		t.Fatalf("player ranges = %v..%v; want td's top-level min_players alone", limits.MinPlayers, limits.MaxPlayers)
 	}
 
 	if err := os.RemoveAll(filepath.Join(cfg.WadDir, "scenario", "main")); err != nil {
@@ -477,7 +510,7 @@ func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := preambleDescription(embedded)
+	want, _ := preamble(embedded)["description"].(string)
 	if want == "" {
 		t.Fatal("the embedded scenario states no description")
 	}

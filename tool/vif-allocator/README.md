@@ -113,17 +113,22 @@ be granted, and can name the defaults, rather than discovering either by refusal
     "simon": "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
   },
-  "scenario_fixed_maps": {"td": "500x250"}
+  "scenario_fixed_maps": {"td": "500x250"},
+  "scenario_min_players": {"main": 1, "blank": 1, "kraken": 1, "simon": 1, "td": 1},
+  "scenario_max_players": {"main": 16, "blank": 16, "kraken": 16, "simon": 16, "td": 16}
 }
 ```
 
-`scenario_descriptions` is each scenario's top-level `description`, and
-`scenario_fixed_maps` its `[map] fixed`, the size it says its map holds throughout,
-so the screen a request names does not size it. Both are read from its
-`scenario.toml` on every request as the names are; `main` off the volume is the
-game's embedded fallback, described by that. A scenario that states either one
-past the file's first 4 KiB, the description after any table, is absent from that
-object and still offered; with none at all the key is omitted. `-players-max`
+`scenario_descriptions` is each scenario's top-level `description`,
+`scenario_min_players` and `scenario_max_players` its `min_players` and
+`max_players`, and `scenario_fixed_maps` its `[map] fixed`, the size it says its map
+holds throughout, so the screen a request names does not size it. All are read from
+its `scenario.toml` on every request as the names are; `main` off the volume is the
+game's embedded fallback, described by that. A scenario that states one past the
+file's first 4 KiB, or a top-level one after any table, is absent from that object
+and still offered; with none at all the key is omitted. `players` must also fall in
+the scenario's range, which an omitted one is moved into from the default, and a
+scenario needing more than `-players-max` is refused. `-players-max`
 defaults to `-players`, `-bots-max` to `0` and `-log-level-min` to `debug`:
 publishing the API must not hand an anonymous caller a sixteen-player world, the
 fleet's CPU or its shared log rate, so each opens only as far as an operator sets
