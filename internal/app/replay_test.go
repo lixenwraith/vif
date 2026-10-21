@@ -1031,7 +1031,7 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 
 // TestJournalAsksApplyInTheOrderAsked: asks the run's loop has not served yet apply
 // in order, so a stop cancels a start before it and a start after a stop opens
-// another journal once the stop has closed.
+// another journal once the stop has closed; the status line tells what was served.
 func TestJournalAsksApplyInTheOrderAsked(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 7, 80, 24)
@@ -1053,15 +1053,15 @@ func TestJournalAsksApplyInTheOrderAsked(t *testing.T) {
 		a.serveJournal()
 		return a.recorder.Load()
 	}
-	if ask(start, stop) != nil {
-		t.Fatal("a start the stop overtook opened a journal")
-	}
 	first := ask(start)
 	if r := ask(stop, start); r == nil || r == first {
 		t.Fatal("a start after a stop opened no other journal")
 	}
-	if ask(stop, start, stop) != nil {
-		t.Fatal("a stop after a start that followed a stop left a journal open")
+	if ask(stop, start, stop) != nil || !strings.HasPrefix(a.ctx.GetStatusMessage(), "Journal closed") {
+		t.Fatalf("a stop after a start that followed a stop: journal open %v, status %q", a.recorder.Load() != nil, a.ctx.GetStatusMessage())
+	}
+	if ask(start, stop) != nil {
+		t.Fatal("a start the stop overtook opened a journal")
 	}
 }
 

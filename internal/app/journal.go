@@ -202,8 +202,9 @@ func (a *App) journaling() bool {
 	return ask.opening() != nil || ask == nil && a.recorder.Load() != nil
 }
 
-// cancelJournalStart lets a stop win over a start not yet served, reporting it
-// cancelled, and leaves the stop it was to follow; it reports whether there was one
+// cancelJournalStart lets a stop win over a start not yet served and reports whether
+// there was one. A start alone is reported cancelled; one that followed a stop leaves
+// that stop, whose close is then all there is to tell.
 func (a *App) cancelJournalStart() bool {
 	ask := a.journalAsk.Load()
 	start := ask.opening()
@@ -217,7 +218,9 @@ func (a *App) cancelJournalStart() bool {
 	if !a.journalAsk.CompareAndSwap(ask, left) {
 		return false
 	}
-	start.report("", errors.New("cancelled by :journal stop"))
+	if left == nil {
+		start.report("", errors.New("cancelled by :journal stop"))
+	}
 	return true
 }
 
