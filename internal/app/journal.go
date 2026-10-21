@@ -23,10 +23,39 @@ import (
 // journalAsk is a journal start or stop asked for from the command line, which the
 // loop owning the run serves once the command has settled: an opening takes on a
 // world wholesale, under which a command's own events still queued would be lost.
-// report says how it went, on the status line of whoever asked.
+// report says how it went, on the status line of whoever asked; then is a start
+// asked while this stop waited, which opens once it has closed.
 type journalAsk struct {
 	start  bool
 	report func(path string, err error)
+	then   *journalAsk
+}
+
+// opening is the start asked, alone or after a stop, or nil
+func (k *journalAsk) opening() *journalAsk {
+	if k != nil && !k.start {
+		return k.then
+	}
+	return k
+}
+
+// queueJournalAsk leaves ask for this run's loop; a start asked while a stop waits
+// follows it, so a journal stopped and started before the loop came round closes and
+// another opens. It reports false when an ask already waits that ask cannot follow.
+func (a *App) queueJournalAsk(ask *journalAsk) bool {
+	for {
+		cur, next := a.journalAsk.Load(), ask
+		switch {
+		case cur == nil:
+		case ask.start && cur.opening() == nil:
+			next = &journalAsk{report: cur.report, then: ask}
+		default:
+			return false
+		}
+		if a.journalAsk.CompareAndSwap(cur, next) {
+			return true
+		}
+	}
 }
 
 // joinNotice adds one line to what the next run's status line opens with.
@@ -116,10 +145,10 @@ func (a *App) journalErrorLocked() error {
 	switch {
 	case a.world.FollowsJournal():
 		return errors.New("a replay records nothing of its own")
-	case a.recorder.Load() != nil:
-		return errors.New("already journaling to " + a.recorder.Load().Path())
-	case a.journalAsk.Load() != nil:
+	case a.journalAsk.Load().opening() != nil:
 		return errors.New("a journal is already opening")
+	case a.recorder.Load() != nil && a.journalAsk.Load() == nil:
+		return errors.New("already journaling to " + a.recorder.Load().Path())
 	case a.restart.Load() != nil:
 		return errRunReplaced
 	case a.scheduler.ResetPending():
@@ -142,35 +171,56 @@ func (a *App) startJournalLocked(slot int) error {
 	if err := a.journalErrorLocked(); err != nil && !errors.Is(err, errRunReplaced) {
 		return err
 	}
-	a.journalAsk.Store(&journalAsk{start: true, report: a.reportJournal})
+	if !a.queueJournalAsk(&journalAsk{start: true, report: a.reportJournal}) {
+		return errors.New("a journal is already opening")
+	}
 	return nil
 }
 
-// stopJournalLocked closes this instance's journal where the run stands, or asks
-// the bot seat on slot to close its own; a later start opens another file.
-// Caller MUST hold updateMutex.
+// stopJournalLocked asks for this instance's journal to close, or the bot seat's on
+// slot; a later start opens another file. The loop owning the run closes it once the
+// run is back in play, so the journal ends there rather than on the command line or
+// a menu. Caller MUST hold updateMutex.
 func (a *App) stopJournalLocked(slot int) error {
-	if slot >= 0 {
+	switch {
+	case slot >= 0:
 		return a.askSeatJournal(slot, false)
-	}
-	if a.recorder.Load() == nil {
-		if a.cancelJournalStart() {
-			return nil
-		}
+	case a.cancelJournalStart():
+		return nil
+	case a.recorder.Load() == nil:
 		return errors.New("no journal is open")
+	case !a.queueJournalAsk(&journalAsk{report: a.reportJournalClosed}):
+		return errors.New("the journal is already closing")
 	}
-	_, err := a.closeJournal()
-	return err
+	return nil
 }
 
-// cancelJournalStart lets a stop win over a start not yet served, reporting it
-// cancelled; it reports whether there was one
+// journaling reports whether this instance records once its asks are served: a stop
+// not yet served wins over the journal it would close, and a start over its absence.
+func (a *App) journaling() bool {
+	ask := a.journalAsk.Load()
+	return ask.opening() != nil || ask == nil && a.recorder.Load() != nil
+}
+
+// cancelJournalStart lets a stop win over a start not yet served and reports whether
+// there was one. A start alone is reported cancelled; one that followed a stop leaves
+// that stop, whose close is then all there is to tell.
 func (a *App) cancelJournalStart() bool {
 	ask := a.journalAsk.Load()
-	if ask == nil || !ask.start || !a.journalAsk.CompareAndSwap(ask, nil) {
+	start := ask.opening()
+	if start == nil {
 		return false
 	}
-	ask.report("", errors.New("cancelled by :journal stop"))
+	var left *journalAsk
+	if start != ask {
+		left = &journalAsk{report: ask.report}
+	}
+	if !a.journalAsk.CompareAndSwap(ask, left) {
+		return false
+	}
+	if left == nil {
+		start.report("", errors.New("cancelled by :journal stop"))
+	}
 	return true
 }
 
@@ -193,23 +243,20 @@ func (a *App) closeJournal() (string, error) {
 }
 
 // serveJournal serves the journal start or stop asked of this run, on the loop that
-// owns it and outside the world lock.
+// owns it and outside the world lock. A stop waits while the run is paused on an
+// overlay or the command line, whose frames a replay would end on, and stays asked
+// until it has closed, so a start asked meanwhile, maybe from another goroutine,
+// follows it rather than finding the journal still open.
 func (a *App) serveJournal() {
-	ask := a.journalAsk.Swap(nil)
-	if ask == nil {
+	ask := a.journalAsk.Load()
+	if ask == nil || !ask.start && a.pausedForInput() {
 		return
 	}
-	var (
-		path string
-		err  error
-	)
-	if ask.start {
-		path, err = a.openJournal()
-		if errors.Is(err, errRunReplaced) {
-			a.journalAsk.CompareAndSwap(nil, ask) // left for the replacing run
-			return
-		}
-	} else {
+	if !ask.start {
+		var (
+			path string
+			err  error
+		)
 		a.world.RunSafe(func() {
 			if a.recorder.Load() != nil {
 				path, err = a.closeJournal()
@@ -217,8 +264,37 @@ func (a *App) serveJournal() {
 			}
 			err = errors.New("no journal is open")
 		})
+		ask.report(path, err)
+		// Whatever waits now is this stop, a start having joined it or left it since
+		for ask = a.journalAsk.Load(); !a.journalAsk.CompareAndSwap(ask, nil); ask = a.journalAsk.Load() {
+		}
+		if ask = ask.then; ask == nil {
+			return
+		}
+	} else if !a.journalAsk.CompareAndSwap(ask, nil) {
+		return
+	}
+	path, err := a.openJournal()
+	if errors.Is(err, errRunReplaced) {
+		a.journalAsk.CompareAndSwap(nil, ask) // left for the replacing run
+		return
 	}
 	ask.report(path, err)
+}
+
+// pausedForInput reports whether the run stands paused on an overlay or the command line
+func (a *App) pausedForInput() bool {
+	m := a.ctx.GetMode()
+	return a.ctx.TimeCtl.IsPaused() && (m == core.ModeOverlay || m == core.ModeCommand)
+}
+
+// reportJournalClosed tells this run's player how its own journal stop went.
+func (a *App) reportJournalClosed(path string, err error) {
+	if err != nil {
+		a.ctx.SetStatusMessage("Journal: "+err.Error(), parameter.StatusAlert)
+		return
+	}
+	a.ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
 }
 
 // reportJournal tells this run's player how its own journal start went.

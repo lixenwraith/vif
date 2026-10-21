@@ -109,8 +109,7 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 	next, err = a.Loop()
 	if next != nil {
 		next.Play = a.livePlay()
-		ask := a.journalAsk.Load()
-		next.Journal = a.recorder.Load() != nil || (ask != nil && ask.start)
+		next.Journal = a.journaling()
 		// A seat's journal closes with this run, which is the last its holder hears of it
 		for _, line := range a.seatJournalNotices() {
 			next.Notice = joinNotice(next.Notice, line)

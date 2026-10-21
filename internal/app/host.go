@@ -46,7 +46,7 @@ func (c sessionControl) JoinError() error            { return c.a.joinErrorLocke
 func (c sessionControl) StartJournal(slot int) error { return c.a.startJournalLocked(slot) }
 func (c sessionControl) StopJournal(slot int) error  { return c.a.stopJournalLocked(slot) }
 func (c sessionControl) JournalError() error         { return c.a.journalErrorLocked() }
-func (c sessionControl) JournalPath() string         { return c.a.recorder.Load().Path() }
+func (c sessionControl) Journaling() bool            { return c.a.journaling() }
 func (c sessionControl) JournalSummary() string      { return c.a.journalSummary() }
 
 func (c sessionControl) DropPlayer(slot int) error {

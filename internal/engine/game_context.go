@@ -58,14 +58,14 @@ type SessionController interface {
 	DropPlayer(slot int) error
 	RemovePlayer(entity core.Entity) error
 	// StartJournal asks for a journal from where the run stands, this instance's
-	// with slot -1 or else the bot seat's this run holds on slot; the run's loop
-	// opens it once the command has settled and the status line says where.
-	// StopJournal closes one. JournalPath is this instance's, empty when none, and
-	// JournalSummary names it with every seat's.
+	// with slot -1 or else the bot seat's this run holds on slot, and StopJournal
+	// for one to close; the run's loop serves either once the command has settled
+	// and the status line says how it went. Journaling is whether this instance
+	// records once its asks are served, and JournalSummary names its journal and seats'.
 	StartJournal(slot int) error
 	StopJournal(slot int) error
 	JournalError() error
-	JournalPath() string
+	Journaling() bool
 	JournalSummary() string
 }
 

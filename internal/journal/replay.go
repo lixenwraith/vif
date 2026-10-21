@@ -211,6 +211,23 @@ func (d *ReplayDriver) streamDone() bool {
 	return d.next >= len(d.s.records) && d.nextCap >= len(d.s.captures)
 }
 
+// MidTick reports whether the replay stands inside a tick: the stream holds a world
+// written on it, or a group stamped on it or landing on the last write, still to apply.
+func (d *ReplayDriver) MidTick() bool {
+	if d.dueCapture() {
+		c, at := d.s.captures[d.nextCap], d.target.Position()
+		return c.Opens || c.Run == at.Run && c.Tick == at.Tick
+	}
+	if d.next >= len(d.s.records) {
+		return false
+	}
+	k := keyOf(d.s.records[d.next])
+	if k.before(d.cur) {
+		return d.landed
+	}
+	return k.run == d.cur.run && k.tick == d.cur.tick
+}
+
 // dueCapture reports whether the next thing in the stream is a written world: one
 // whose place is before the next record, or any left after the last. Every record
 // of the part opening at next lies on one side of each world, so any one answers.
