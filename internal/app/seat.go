@@ -393,16 +393,15 @@ func (a *App) askSeatJournal(slot int, start bool) error {
 		return fmt.Errorf("the bot on slot %X is leaving; its journal closes with it", slot)
 	case b == nil:
 		return fmt.Errorf("no bot of this run's is on slot %X", slot)
-	case start && b.recorder.Load() != nil:
+	case start && b.recorder.Load() != nil && b.journalAsk.Load() == nil:
 		return fmt.Errorf("slot %X already journals to %s", slot, b.recorder.Load().Path())
+	case !start && b.cancelJournalStart():
+		return nil
 	case !start && b.recorder.Load() == nil:
-		if b.cancelJournalStart() {
-			return nil
-		}
 		return fmt.Errorf("slot %X keeps no journal", slot)
 	}
 	report := func(path string, err error) { a.reportSeatJournal(slot, start, path, err) }
-	if !b.journalAsk.CompareAndSwap(nil, &journalAsk{start: start, report: report}) {
+	if !b.queueJournalAsk(&journalAsk{start: start, report: report}) {
 		return fmt.Errorf("slot %X is already opening or closing a journal", slot)
 	}
 	return nil
@@ -412,7 +411,7 @@ func (a *App) askSeatJournal(slot int, start bool) error {
 // closed, which only the seat's Close saw: the journal it shut, or a start its loop
 // never served. Called on the seat's goroutine once its run has closed.
 func (a *App) seatJournalLeft(slot int, run *App) {
-	if ask := run.journalAsk.Swap(nil); ask != nil && ask.start {
+	if ask := run.journalAsk.Swap(nil).opening(); ask != nil {
 		ask.report("", errors.New("the bot left before it opened"))
 	}
 	switch {

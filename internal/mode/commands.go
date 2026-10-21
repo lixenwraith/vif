@@ -1023,7 +1023,7 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 // handleJournalCommand reports the journals, starts one where the run stands, or
 // closes one: this instance's, or with a slot the one of the bot seat this run
-// holds there. A start opens once the command has settled; the status line says where.
+// holds there. The run's loop serves either later; the status line says how it went.
 // Usage: :journal [start|stop] [slot]
 func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult {
 	const usage = "Usage: :journal [start|stop] [slot]"

@@ -192,7 +192,7 @@ func recorderUnavailable(ctx *engine.GameContext) string {
 }
 
 func journalValue(ctx *engine.GameContext) string {
-	return toggleWord(ctx.SessionCtl != nil && ctx.SessionCtl.JournalPath() != "")
+	return toggleWord(ctx.SessionCtl != nil && ctx.SessionCtl.Journaling())
 }
 
 // A journal recording can always be closed; starting one has the run's conditions.
@@ -200,7 +200,7 @@ func journalUnavailable(ctx *engine.GameContext) string {
 	if ctx.SessionCtl == nil {
 		return "This runtime cannot start a journal"
 	}
-	if ctx.SessionCtl.JournalPath() != "" {
+	if ctx.SessionCtl.Journaling() {
 		return ""
 	}
 	if err := ctx.SessionCtl.JournalError(); err != nil {
