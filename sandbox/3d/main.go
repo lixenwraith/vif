@@ -706,6 +706,38 @@ func (g *gbuf) blit(cells []terminal.Cell, w, h int) {
 	}
 }
 
+// --- Alternative blit functions for tty implementation, to be tested
+
+// Standard ASCII characters from dark to light
+var asciiDensity = []rune{' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'}
+
+// func (g *gbuf) blit(cells []terminal.Cell, w, h int) {
+// 	for y := range h {
+// 		for x := range w {
+// 			c := g.col[2*y*w+x]
+// 			// Calculate luminance (0.0 to 1.0)
+// 			lum := clamp01(c.x*0.299 + c.y*0.587 + c.z*0.114)
+// 			// Map luminance to an ASCII character
+// 			idx := int(lum * float64(len(asciiDensity)-1))
+// 			char := asciiDensity[idx]
+// 			// Provide standard terminal colors if possible, else rely on the rune
+// 			cells[y*w+x] = terminal.Cell{Rune: char, Fg: vecRGB(c), Bg: panelBg}
+// 		}
+// 	}
+// }
+
+// func (g *gbuf) blit(cells []terminal.Cell, w, h int) {
+// 	for y := range h {
+// 		for x := range w {
+// 			// Just use the top pixel's color for the whole block
+// 			// Alternatively, you could mathematically average top & bot
+// 			col := vecRGB(g.col[2*y*w+x])
+// 			// Use a space character. Fg doesn't matter, Bg paints the whole cell.
+// 			cells[y*w+x] = terminal.Cell{Rune: ' ', Fg: col, Bg: col}
+// 		}
+// 	}
+// }
+
 func render(g *gbuf, sc *scene, rk *renderKnobs, now float64) {
 	g.clear()
 	yaw := (sc.yaw + sc.spin*now + sc.wobble*math.Sin(0.8*now)) * math.Pi / 180
