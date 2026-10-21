@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -171,24 +172,47 @@ func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	}
 }
 
+// statusContext is a 24-row screen whose status bar is its last two rows
+func statusContext(width int) render.RenderContext {
+	return render.RenderContext{ScreenWidth: width, ScreenHeight: 24, ViewportWidth: width,
+		ViewportHeight: 24 - parameter.BottomMargin}
+}
+
+// statusRow renders the bar and reads one of its rows: its text and its backgrounds
+func statusRow(r *StatusBarRenderer, rc render.RenderContext, y int) (string, []color.RGB) {
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, rc.ScreenWidth, rc.ScreenHeight)
+	r.Render(rc, buf)
+	var line strings.Builder
+	bgs := make([]color.RGB, rc.ScreenWidth)
+	for x := range rc.ScreenWidth {
+		line.WriteRune(buf.CellAt(x, y).Rune)
+		bgs[x] = buf.BackgroundAt(x, y, visual.RgbBackground)
+	}
+	return line.String(), bgs
+}
+
+// edges is where each run of one background starts
+func edges(bgs []color.RGB) []int {
+	var at []int
+	for x := range bgs {
+		if x == 0 || bgs[x] != bgs[x-1] {
+			at = append(at, x)
+		}
+	}
+	return at
+}
+
 // TestStatusBarKeysAndAMessageKeepTheirOwnCells is the split: the keys and a message
-// are drawn together, the message starts where it always does whatever the keys say,
-// and at 80 columns the metrics make room for it.
+// share the bottom row, and the message starts where it always does whatever the
+// keys say.
 func TestStatusBarKeysAndAMessageKeepTheirOwnCells(t *testing.T) {
 	r, _ := newStatusBar(t)
-	rc := render.RenderContext{ScreenWidth: 80, ScreenHeight: 24, ViewportWidth: 80, ViewportHeight: 22}
 	msg := "host :777: ports below 1024 need root"
 	r.gameCtx.SetStatusMessage(msg, parameter.StatusAlert)
 	at := -1
 	for _, keys := range []string{"", "2d", "d3fwx"} {
 		r.gameCtx.SetLastCommand(keys)
-		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
-		r.Render(rc, buf)
-		var line strings.Builder
-		for x := range 80 {
-			line.WriteRune(buf.CellAt(x, 23).Rune)
-		}
-		bar := line.String()
+		bar, _ := statusRow(r, statusContext(80), 23)
 		i := strings.Index(bar, msg)
 		switch {
 		case i < 0 || !strings.Contains(bar[:max(i, 0)], keys):
@@ -197,6 +221,30 @@ func TestStatusBarKeysAndAMessageKeepTheirOwnCells(t *testing.T) {
 			t.Fatalf("the message moved from %d to %d with keys %q", at, i, keys)
 		}
 		at = i
+	}
+}
+
+// TestStatusItemsSpanTheirRowByPriority: the items take the row above the line edge
+// to edge, in priority order, a narrower screen dropping the lowest first, and their
+// edges hold while a value grows by a digit.
+func TestStatusItemsSpanTheirRowByPriority(t *testing.T) {
+	r, _ := newStatusBar(t)
+	r.statFPS.Store(9)
+	wide, bgs := statusRow(r, statusContext(120), 22)
+	energy, fps, tc := strings.Index(wide, "Energy"), strings.Index(wide, "FPS"), strings.LastIndex(wide, "TC")
+	if energy < 0 || fps < energy || tc < fps {
+		t.Fatalf("the items read %q", wide)
+	}
+	if i := slices.Index(bgs, visual.RgbBackground); i >= 0 {
+		t.Fatalf("cell %d of %q is the bar's own background", i, wide)
+	}
+	r.statFPS.Store(10)
+	if _, now := statusRow(r, statusContext(120), 22); !slices.Equal(edges(now), edges(bgs)) {
+		t.Fatalf("the edges moved from %v to %v", edges(bgs), edges(now))
+	}
+	narrow, bgs := statusRow(r, statusContext(36), 22)
+	if strings.Contains(narrow, "TC") || !strings.Contains(narrow, "Energy") || slices.Contains(bgs, visual.RgbBackground) {
+		t.Fatalf("at 36 columns the items read %q", narrow)
 	}
 }
 

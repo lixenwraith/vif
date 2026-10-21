@@ -464,10 +464,10 @@ focus ends every hold. Two fingers tapped
 together twice raise or drop the system keyboard, read from the window's insets
 rather than a flag of the app's; the keyboard covers the view instead of resizing
 it, so a `crop_on_resize` map keeps its cells; the run hears of the keyboard
-(`Covered`, which the status bar reads as `StatusCovered`) and draws the bar's mode
-and input alone, and the view draws that left half again above the keyboard at
-twice its size from the same picture, where the browser scales its whole grid to
-fit above its keyboard. A second Back within a second and a half sends the app to
+(`Covered`, which the status bar reads as `StatusCovered`) and keeps its input to
+the left half of the bar's bottom row, which the view draws again above the
+keyboard at twice its size from the same picture, where the browser scales its
+whole grid to fit above its keyboard. A second Back within a second and a half sends the app to
 the background. A tap held on the status
 bar opens the configuration menu, the hold every host shares (`MenuHoldDuration`),
 and taps drive its rows; the browser launcher sends the same hold as Ctrl-G on a

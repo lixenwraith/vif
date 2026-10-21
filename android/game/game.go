@@ -222,7 +222,8 @@ func Zoom(scale float32) {
 }
 
 // Keyboard says whether the system keyboard covers the view: while it does, the
-// status bar draws its mode and input alone, which the view repeats above it
+// status bar keeps its input to the bottom row's left half, which the view repeats
+// above it
 func Keyboard(shown bool) {
 	if v := current(); v != nil {
 		v.covered.Store(shown)

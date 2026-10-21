@@ -258,7 +258,7 @@ func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
 	}
 	expect("at boot", 50, 100)
 	a.Resize(200, 110)
-	expect("on a larger terminal", 199, 107)
+	expect("on a larger terminal", 200-parameter.LeftMargin, 110-parameter.TopMargin-parameter.BottomMargin)
 	a.Resize(40, 15)
 	expect("on a smaller terminal", 50, 100)
 	a.Reset(false)

@@ -31,7 +31,8 @@ type Presentation interface {
 type awayPresentation interface{ Away() <-chan bool }
 
 // coveredPresentation is one a keyboard can cover: while it does, the host shows
-// the status bar's left end again above the keyboard, and the bar draws only that
+// the left half of the status bar's bottom row again above the keyboard, and the
+// bar keeps its input to that half
 type coveredPresentation interface{ Covered() bool }
 
 // keyReportPresentation is one that can report key releases when asked, answering

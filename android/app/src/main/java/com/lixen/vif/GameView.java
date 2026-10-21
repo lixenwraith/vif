@@ -28,8 +28,8 @@ import java.util.Arrays;
  * The game's screen: a render thread takes the newest frame the run flushed at each
  * vsync, hands it to the drawer and posts the drawer's picture. Taps, drags and keys
  * go to the run; two fingers tapped together twice raise or drop the system
- * keyboard, which covers the picture rather than resizing it; the run then draws the
- * status row's mode and input alone, and its left half is drawn again above the
+ * keyboard, which covers the picture rather than resizing it; the left half of the
+ * status bar's bottom row, its mode and input, is then drawn again above the
  * keyboard, twice its size, so what is typed can be read.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {

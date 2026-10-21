@@ -40,7 +40,7 @@ type view struct {
 	away    chan bool
 	keys    hostkey.Report
 	pointer atomic.Bool
-	covered atomic.Bool // the keyboard is up: the status bar draws its left end alone
+	covered atomic.Bool // the keyboard is up: the status bar keeps to the half it repeats
 	finger  struct {    // the cell a pressed finger last reported; the UI thread's alone
 		down bool
 		x, y int

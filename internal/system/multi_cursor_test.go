@@ -1079,13 +1079,14 @@ func TestOwnPlacementsInFlightNeverWalkTheViewBack(t *testing.T) {
 
 	// A foreign placement snaps the view, and a newer prediction survives the own
 	// placements that were already in flight when it came.
+	bottom := w.Resources.Config.MapHeight - 1
 	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorMoveRequest,
-		Payload: &event.CursorMoveRequestPayload{Entity: local, X: 35, Y: 20}})
-	viewAt("foreign placement", 35, 20)
-	w.PushCursorMove(local, 36, 20)
+		Payload: &event.CursorMoveRequestPayload{Entity: local, X: 35, Y: bottom}})
+	viewAt("foreign placement", 35, bottom)
+	w.PushCursorMove(local, 36, bottom)
 	w.Resources.Event.Queue.Consume()
 	for _, ev := range inFlight[half:] {
 		cursors.HandleEvent(ev)
-		viewAt("an older own placement landed after a newer prediction", 36, 20)
+		viewAt("an older own placement landed after a newer prediction", 36, bottom)
 	}
 }

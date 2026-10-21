@@ -75,7 +75,7 @@ interface CellDrawer {
         }
 
         // Twice the size each way, so the glyphs keep their shape: the left half fills
-        // the width, and the run draws nothing on the right while the keyboard is up
+        // the width, and the run keeps its input to that half while the keyboard is up
         @Override
         public final void drawStrip(Canvas surface, int covered) {
             if (screen == null) {
