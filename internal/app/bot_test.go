@@ -277,14 +277,10 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 	addr := freeAddress(t)
 	holder, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, holder, 2)
-	// A bot is rostered before its seat learns its participant, and until then its
-	// link is a stranger's to the pause gate
-	seated := func() bool {
-		holder.seatsMu.Lock()
-		defer holder.seatsMu.Unlock()
-		return len(holder.seats) == 1 && holder.seats[0].id.Load() != 0
-	}
-	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	// A bot is rostered before its seat learns its participant, and until a tick
+	// latches that, its link is a stranger's to the pause gate. A host's bots join
+	// its lobby, so the roster holds them before the holder has ticked at all.
+	for deadline := time.Now().Add(socketWait); !holder.world.Session().SeatsOnly && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	pauses := func() bool {
 		holder.Context().SetPaused(true)
