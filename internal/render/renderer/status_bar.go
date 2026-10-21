@@ -134,7 +134,8 @@ func statusPalette256(c *render.Console) *statusPalette {
 
 // StatusBarRenderer draws the status bar, the two rows at the bottom on every host:
 // the status items across the whole width, then the mode, the key cell and the line
-// a player types on and reads messages from, which no item ever narrows
+// a player types on and reads messages from, which no item ever narrows. Under a
+// keyboard both keep to the left half, which the host repeats above it.
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
 	pal     *statusPalette
@@ -192,6 +193,7 @@ type StatusBarRenderer struct {
 	widths []int
 	slots  []int
 	runes  []rune
+	lines  [][]rune
 
 	phaseText, energyText, damageText, boostText, gridText statusText
 	apmText, gtText, fpsText, recordText, timeText         statusText
@@ -253,6 +255,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		for x := range ctx.ScreenWidth {
 			buf.SetWithBg(x, y, ' ', visual.RgbBackground, visual.RgbBackground)
 		}
+	}
+	// A keyboard covering the bar leaves the left half the host repeats above it
+	width := ctx.ScreenWidth
+	if ctx.StatusCovered {
+		width /= 2
 	}
 
 	// Cursor blink runs on wall time: it must continue while the world is paused
@@ -369,14 +376,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		r.pal.label,
 	)
 	r.items = items
-	r.renderItems(buf, itemsY, ctx.ScreenWidth, items)
+	r.renderItems(buf, itemsY, width, items)
 
 	// === THE LINE: AUDIO, MODE, KEYS, THEN INPUT OR A MESSAGE ===
-	// A keyboard covering it leaves the left half the host repeats above it
-	width := ctx.ScreenWidth
-	if ctx.StatusCovered {
-		width /= 2
-	}
 	x := 0
 
 	// Audio state indicator; -1 = no audio resource
@@ -458,36 +460,57 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		r.renderInput(buf, lineY, leftEndX, textWidth, text, visual.RgbCommandInputText, r.gameCtx.GetCommandCursorPos()+1)
 	default:
 		msg := r.runesOf(r.gameCtx.ShownStatusMessage(realNow.UnixNano()))
-		// One longer than its room rises onto the items' row while it shows, as vim's
-		// long message rises over the window, and ends here; a keyboard hides that row
-		if len(msg) > textWidth && !ctx.StatusCovered {
-			head := spill(msg, ctx.ScreenWidth, textWidth)
-			for x := range ctx.ScreenWidth {
-				ch := ' '
-				if x < len(head) {
-					ch = head[x]
-				}
-				buf.SetWithBg(x, itemsY, ch, visual.RgbStatusMessageText, visual.RgbBackground)
+		// One longer than its room rises over the rows above while it shows, as vim's
+		// long message scrolls up over the window, and ends here: over the items' row,
+		// then the map's bottom rows, though not under a keyboard, whose strip repeats
+		// the bar's rows alone. The cursors still draw over it.
+		if len(msg) > textWidth && width > 0 {
+			most := 1
+			if !ctx.StatusCovered {
+				most += min(parameter.StatusMessageRise, itemsY)
 			}
-			msg = msg[len(head):]
+			msg = r.rise(msg, width, textWidth, most)
+			for i, line := range r.lines {
+				y := itemsY - len(r.lines) + 1 + i
+				for x := range width {
+					ch := ' '
+					if x < len(line) {
+						ch = line[x]
+					}
+					buf.SetWithBg(x, y, ch, visual.RgbStatusMessageText, visual.RgbBackground)
+				}
+			}
 		}
 		r.renderStatusMessage(buf, lineY, leftEndX, textWidth, msg)
 	}
 }
 
-// spill is the head of a message for a row width wide, the rest going where room
-// is left: all of it when it fits, else up to the last space or slash whose rest
-// still fits the room, so a path breaks between directories, else the row full
-func spill(msg []rune, width, room int) []rune {
-	if len(msg) <= width {
-		return msg
-	}
-	for i := width; i > 0 && len(msg)-i <= room; i-- {
-		if msg[i-1] == ' ' || msg[i-1] == '/' {
-			return msg[:i]
+// rise lays a message too long for room, the bottom row's, over the rows above it
+// into r.lines, top first, each width wide: as few rows as hold it with the rest in
+// room, most at most. A row breaks after its last space or slash whose rest still
+// fits the rows left, so a path breaks between directories, else holds width runes;
+// all that is left fits one row ends there. The rest is the bottom row's, cut there
+// when even most rows are too few.
+func (r *StatusBarRenderer) rise(msg []rune, width, room, most int) []rune {
+	room = max(room, 0)
+	rows := min(max((len(msg)-room+width-1)/width, 1), most)
+	r.lines = r.lines[:0]
+	for left := rows; left > 0 && len(msg) > 0; left-- {
+		if len(msg) <= width {
+			r.lines = append(r.lines, msg)
+			return nil
 		}
+		at, fits := width, (left-1)*width+room
+		for i := width; i > 0 && len(msg)-i <= fits; i-- {
+			if msg[i-1] == ' ' || msg[i-1] == '/' {
+				at = i
+				break
+			}
+		}
+		r.lines = append(r.lines, msg[:at])
+		msg = msg[at:]
 	}
-	return msg[:width]
+	return msg
 }
 
 // renderInput is typed input and, unless an overlay holds the keys, its blinking cursor

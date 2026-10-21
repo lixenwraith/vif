@@ -743,8 +743,8 @@ a tap lands on a neighbour. Three ways, in rising cost:
 
 Recommended: 1 now, since it serves the browser's touch strip too; 2 only if a
 radial menu is wanted for its own sake, after 1 shows what a bigger row is worth.
-The typing strip above the keyboard already repeats the status row from the same
-picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
+The typing strip above the keyboard already repeats the status bar's rows from the
+same picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
 
 ### Configuration menu follow-up
 

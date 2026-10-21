@@ -250,7 +250,9 @@ func TestStatusItemsSpanTheirRowByPriority(t *testing.T) {
 
 // TestALongMessageRisesOverTheItems: a message longer than its room on the bottom
 // row starts on the items' row, broken after a slash, and ends on the bottom row,
-// whole; under a keyboard, which hides the items' row, it stays on the bottom row.
+// whole; narrower, it rises over the map's bottom rows as well, as many as it needs;
+// under a keyboard it keeps to the left half of the bar's two rows, which the strip
+// repeats, and is cut at the end of the bottom row's.
 func TestALongMessageRisesOverTheItems(t *testing.T) {
 	r, _ := newStatusBar(t)
 	msg := "Logging to /data/user/0/com.lixen.vif/files/state/vif/log/vif-log-261021-221500.jsonl"
@@ -263,9 +265,42 @@ func TestALongMessageRisesOverTheItems(t *testing.T) {
 		!strings.HasSuffix(strings.TrimRight(line, " "), " "+msg[len(head):]) {
 		t.Fatalf("the message reads %q over %q", items, line)
 	}
+
+	rc = statusContext(45)
+	var rows []string
+	for y := 20; y <= 23; y++ {
+		row, _ := statusRow(r, rc, y)
+		rows = append(rows, strings.TrimRight(row, " \x00"))
+	}
+	if !slices.Equal(rows[:3], []string{"", msg[:44], msg[44:]}) || strings.Contains(rows[3], "jsonl") {
+		t.Fatalf("at 45 columns the rows read %q", rows)
+	}
+
+	rc = statusContext(63)
 	rc.StatusCovered = true
-	if items, _ := statusRow(r, rc, 22); strings.Contains(items, "Logging") {
-		t.Fatalf("under a keyboard the items' row reads %q", items)
+	items, _ = statusRow(r, rc, 22)
+	line, _ = statusRow(r, rc, 23)
+	if half := len(items) / 2; items[:half] != msg[:half] || strings.TrimSpace(items[half:]) != "" ||
+		!strings.HasSuffix(strings.TrimRight(line[:half], " "), ">") || strings.TrimSpace(line[half:]) != "" {
+		t.Fatalf("under a keyboard the message reads %q over %q", items, line)
+	}
+}
+
+// TestAMessageRisesNoFurtherThanItsLimit: one longer than every row it may take
+// fills them, parameter.StatusMessageRise above the items, and is cut at the end.
+func TestAMessageRisesNoFurtherThanItsLimit(t *testing.T) {
+	r, _ := newStatusBar(t)
+	r.gameCtx.SetStatusMessage(strings.Repeat("0123456789", 60), parameter.StatusNotice)
+	rc := statusContext(45)
+	top := 22 - parameter.StatusMessageRise
+	if above, _ := statusRow(r, rc, top-1); strings.Contains(above, "0123") {
+		t.Fatalf("the message rose to row %d: %q", top-1, above)
+	}
+	if first, _ := statusRow(r, rc, top); first != "012345678901234567890123456789012345678901234" {
+		t.Fatalf("its first row reads %q", first)
+	}
+	if line, _ := statusRow(r, rc, 23); !strings.HasSuffix(strings.TrimRight(line, " "), ">") {
+		t.Fatalf("its bottom row reads %q, uncut", line)
 	}
 }
 

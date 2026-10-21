@@ -26,13 +26,15 @@ const eventQueue = 256
 
 // The Worker's side of the bridge, web/worker.js: vifGrid is the grid the page
 // measured before the program started and vifSettings the settings document it
-// kept; vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio and vifKeepSettings post
-// the texture, the zoom, a frame, the pointer mode, a PCM buffer and the settings
-// to keep to the page; goEvent is what the page sends back, one object a message
+// kept; vifAtlas, vifBar, vifZoom, vifFrame, vifPointer, vifAudio and
+// vifKeepSettings post the texture, the status bar's rows, the zoom, a frame, the
+// pointer mode, a PCM buffer and the settings to keep to the page; goEvent is what
+// the page sends back, one object a message
 const (
 	jsGrid     = "vifGrid"
 	jsSettings = "vifSettings"
 	jsAtlas    = "vifAtlas"
+	jsBar      = "vifBar"
 	jsZoom     = "vifZoom"
 	jsFrame    = "vifFrame"
 	jsPointer  = "vifPointer"
@@ -42,8 +44,9 @@ const (
 )
 
 // Config is what the run tells the page: the status bar's rows, whose hold a
-// finger starts even with the pointer off, and the zoom, a cell's height in CSS
-// pixels the page opens at (0 for its own) and the range and step a zoom keeps to
+// finger starts even with the pointer off and which the page repeats above a
+// keyboard, and the zoom, a cell's height in CSS pixels the page opens at (0 for
+// its own) and the range and step a zoom keeps to
 type Config struct {
 	BarRows                             int
 	Cell, CellLeast, CellMost, CellStep float64
@@ -68,14 +71,14 @@ type Host struct {
 	inflight bool // a frame the page has not reported drawn
 }
 
-// Open presents on the page: the texture and the zoom go over first, then frames
-// as the page takes them. The host lives as long as the Worker, so nothing closes it.
+// Open presents on the page: the texture, the bar and the zoom go over first, then
+// frames as the page takes them. The host lives as long as the Worker, so nothing closes it.
 func Open(a *glyph.Atlas, c Config) (*Host, error) {
 	if a == nil {
 		return nil, errors.New("browser: an atlas is required")
 	}
 	g := js.Global()
-	for _, name := range []string{jsAtlas, jsZoom, jsFrame, jsPointer} {
+	for _, name := range []string{jsAtlas, jsBar, jsZoom, jsFrame, jsPointer} {
 		if g.Get(name).Type() != js.TypeFunction {
 			return nil, errors.New("browser: the worker defines no " + name)
 		}
@@ -92,6 +95,7 @@ func Open(a *glyph.Atlas, c Config) (*Host, error) {
 	h.event = js.FuncOf(h.handle)
 	g.Set(jsEvent, h.event)
 	g.Call(jsAtlas, bytes(h.tex.Bytes()))
+	g.Call(jsBar, c.BarRows)
 	g.Call(jsZoom, c.Cell, c.CellLeast, c.CellMost, c.CellStep)
 	return h, nil
 }
@@ -130,7 +134,7 @@ func (h *Host) SetPointerMode(enabled, motion bool) {
 }
 
 // Covered reports a keyboard over the page's bottom rows, where the page draws the
-// last row's left half again above it
+// left half of the status bar's rows again above it
 func (h *Host) Covered() bool { return h.covered.Load() }
 
 // Cell is the zoom the page was left at, a cell's height in CSS pixels, 0 for its own

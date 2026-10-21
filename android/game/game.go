@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
@@ -222,13 +223,16 @@ func Zoom(scale float32) {
 }
 
 // Keyboard says whether the system keyboard covers the view: while it does, the
-// status bar keeps its input to the bottom row's left half, which the view repeats
-// above it
+// status bar keeps to the left half of its rows, which the view repeats above it
 func Keyboard(shown bool) {
 	if v := current(); v != nil {
 		v.covered.Store(shown)
 	}
 }
+
+// BarRows is the status bar's height in rows, the bottom ones of the grid, which
+// the view repeats above a keyboard
+func BarRows() int32 { return parameter.StatusRows }
 
 // Quit ends the run as a terminal closing does
 func Quit() {

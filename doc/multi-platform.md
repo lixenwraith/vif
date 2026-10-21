@@ -470,15 +470,15 @@ focus ends every hold. Two fingers tapped together twice raise or drop the syste
 keyboard, read from the window's insets rather than a flag of the app's; the
 keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
 its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
-`StatusCovered`) and keeps its input to the left half of the bar's bottom row,
-which the view draws again above the keyboard at twice its size from the same
-picture. A second Back within a second and a half sends the app to the
+`StatusCovered`) and keeps the bar to the left half of its two rows, which the view
+draws again above the keyboard at twice their size from the same picture
+(`Game.barRows` names them). A second Back within a second and a half sends the app to the
 background. A tap held on the status bar opens the configuration menu, the hold
 every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse input
 off a press on the bar's rows still reaches the run, and the open menu takes the
 pointer. The page does each of these on a touch screen, timed alike: the double
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
-bottom row drawn again above it, and the hold.
+bar's rows drawn again above it (`vifBar` names them), and the hold.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its

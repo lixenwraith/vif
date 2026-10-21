@@ -43,6 +43,9 @@ globalThis.vifAudio = function(data) {
 globalThis.vifPointer = function(enabled, motion) {
     postMessage({ type: 'pointer', enabled: enabled, motion: motion });
 };
+globalThis.vifBar = function(rows) {
+    postMessage({ type: 'bar', rows: rows });
+};
 globalThis.vifZoom = function(cell, least, most, step) {
     postMessage({ type: 'zoom', cell: cell, least: least, most: most, step: step });
 };

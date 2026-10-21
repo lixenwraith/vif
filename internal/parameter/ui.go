@@ -8,7 +8,7 @@ const (
 	BottomMargin = 1 + StatusRows
 
 	// StatusRows is the status bar on every host: the status items' row, then the
-	// line of mode, keys, input and messages, the bottom row a keyboard strip repeats
+	// line of mode, keys, input and messages; a keyboard strip repeats both
 	StatusRows = 2
 
 	// TopMargin for status bar (1 line for heat meter)
@@ -68,6 +68,11 @@ const (
 	// StatusKeyWidth is the key cell after the mode label: the keys of a pending
 	// sequence or the last one completed, newest last, in a place no message takes.
 	StatusKeyWidth = 5
+
+	// StatusMessageRise is the most rows above the status items a message too long
+	// for the bar rises over while it shows, the map's bottom rows among them; one
+	// longer still is cut at the end of the bottom row
+	StatusMessageRise = 6
 
 	// StatusCursorBlinkDuration is the blink duration of the cursor when visible in status bar in search and command modes
 	StatusCursorBlinkDuration = 250 * time.Millisecond

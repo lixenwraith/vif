@@ -31,8 +31,8 @@ type Presentation interface {
 type awayPresentation interface{ Away() <-chan bool }
 
 // coveredPresentation is one a keyboard can cover: while it does, the host shows
-// the left half of the status bar's bottom row again above the keyboard, and the
-// bar keeps its input to that half
+// the left half of the status bar's rows again above the keyboard, and the bar
+// keeps to that half
 type coveredPresentation interface{ Covered() bool }
 
 // zoomPresentation is one the player zooms: Cell is a cell's height in dp as they
