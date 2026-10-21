@@ -67,6 +67,7 @@ only_systems = ["system_name", ...]     # Or (not both): every other toggled sys
 min_width = 50                      # Floor under the map's size (optional)
 min_height = 20
 fixed = "500x250"                   # Size the map holds throughout, for front-ends (optional)
+cursors = false                     # Players hold slots, no cursor on the map (optional)
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
@@ -441,6 +442,12 @@ names `all`, an `entity` or a `slot`. `EventCursorSpawned` carries `entity`, `sl
 `x`, `y`; `EventCursorSpawnFailed` signals a full roster, a taken slot or a blocked
 map. A cursor-less configuration is legal.
 
+With `[map] cursors = false` a spawn, a joiner's arrival included, rosters its slot
+with no cursor on the map: only its slot, owner and control, so nothing draws,
+moves, targets or drains it, and `EventCursorSpawned` carries `x = -1`, `y = -1`.
+Its player plays through the keys the scenario captures and their buttons, each
+press from that slot, and counts in `player.count`.
+
 Capture the entity to address that cursor in later actions:
 
 ```toml
@@ -466,7 +473,7 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 |----------------------------------|----------------------------|
 | `player.<n>.entity`              | Entity id, 0 when empty    |
 | `player.<n>.control`             | 0=this instance drives it (a person or a bot), 2=remote, -1=empty |
-| `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty    |
+| `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty or off the map |
 | `player.<n>.energy.current`      | Energy                     |
 | `player.<n>.heat.current`        | Heat                       |
 | `player.<n>.heat.overheat`       | Overheat accumulator       |

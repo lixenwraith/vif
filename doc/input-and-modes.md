@@ -49,7 +49,8 @@ A captured key is the scenario's one input hook, whatever produces it:
   instance: `slot` is the presser's roster slot, `source` 0 a key, 1 the left
   button, 2 the right, 3 and 4 the wheel up and down, 5 a finger, and `tick` the
   `engine.ticks` it was made at, which the barrier holds within the lead and late
-  commit of its apply tick.
+  commit of its apply tick. On a map with `cursors = false` the slot has no cursor
+  at all, and these are the player's only inputs.
 - **Timing.** A scenario judges a press by its `tick`, not by when it arrives: a
   press made at a window's close can arrive up to `engine.input_horizon` ticks
   later, none solo and `NetworkApplyHorizonTicks` (2 s) in a session, so a miss

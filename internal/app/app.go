@@ -368,9 +368,10 @@ func (a *App) initWorld() {
 	a.world.Resources.Config.CellAspect = aspect
 
 	// The floor applies before the latch and the boot script, which places the
-	// first cursor from the map's size
+	// first cursor from the map's size, or puts it on no cell at all
 	cfg := a.world.Resources.Config
 	cfg.MapMinWidth, cfg.MapMinHeight = a.scenario.MapMinWidth, a.scenario.MapMinHeight
+	cfg.CursorsOffMap = a.scenario.CursorsOffMap
 	if w, h := cfg.FloorMapSize(cfg.MapWidth, cfg.MapHeight); w != cfg.MapWidth || h != cfg.MapHeight {
 		a.world.SetupLevel(w, h, false, cfg.CropOnResize, false)
 	}

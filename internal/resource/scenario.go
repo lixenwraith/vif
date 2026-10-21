@@ -45,6 +45,9 @@ type Scenario struct {
 	// MapFixedWidth and MapFixedHeight are [map] fixed, the size the scenario says
 	// its map holds throughout, for front-ends; its level setups are what hold it
 	MapFixedWidth, MapFixedHeight int
+	// CursorsOffMap is [map] cursors = false: a player holds a roster slot with no
+	// cursor on the map, and plays through the keys and buttons the scenario takes
+	CursorsOffMap bool
 
 	entry  string
 	files  []scenarioFile
@@ -263,15 +266,23 @@ func (s *Scenario) validate() error {
 	return nil
 }
 
-// readMap reads [map] min_width, min_height and fixed. A size the grid cannot hold
-// is refused rather than clamped: it names what the scenario's layout needs, and it
-// arrives from a peer as readily as from disk.
+// readMap reads [map] min_width, min_height, fixed and cursors. A size the grid
+// cannot hold is refused rather than clamped: it names what the scenario's layout
+// needs, and it arrives from a peer as readily as from disk.
 func (s *Scenario) readMap(v any) error {
 	table, ok := v.(map[string]any)
 	if !ok {
 		return errors.New("map must be a table")
 	}
 	for key, value := range table {
+		if key == "cursors" {
+			cursors, ok := value.(bool)
+			if !ok {
+				return errors.New("map.cursors must be true or false")
+			}
+			s.CursorsOffMap = !cursors
+			continue
+		}
 		if key == "fixed" {
 			text, _ := value.(string)
 			if _, err := fmt.Sscanf(text, "%dx%d", &s.MapFixedWidth, &s.MapFixedHeight); err != nil ||
