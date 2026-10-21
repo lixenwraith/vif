@@ -453,21 +453,21 @@ func (a *App) livePlay() paths.Play {
 	return p
 }
 
-// persistPlay writes the settings file when the player changed a [play] value; a
-// write that fails is reported once and the file left alone.
+// persistPlay writes back each [play] value the player changed; a write that
+// fails is reported once and the settings left alone.
 func (a *App) persistPlay() {
-	if a.cfg.SettingsFile == "" {
+	if a.cfg.Settings == nil {
 		return
 	}
-	p := a.livePlay()
-	if p == a.cfg.Play {
+	p, was := a.livePlay(), a.cfg.Play
+	if p == was {
 		return
 	}
 	a.cfg.Play = p
-	if err := paths.SaveSettings(a.cfg.SettingsFile, p); err != nil {
-		a.log.Warn("app", "msg", "settings not saved", "path", a.cfg.SettingsFile, "error", err.Error())
+	if err := paths.SavePlay(a.cfg.Settings, was, p); err != nil {
+		a.log.Warn("app", "msg", "settings not saved", "error", err.Error())
 		a.ctx.SetStatusMessage("Settings not saved: "+err.Error(), parameter.StatusAlert)
-		a.cfg.SettingsFile = ""
+		a.cfg.Settings = nil
 	}
 }
 

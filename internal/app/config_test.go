@@ -170,15 +170,16 @@ func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
 }
 
 // TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft: [play] sets auto-fire, the
-// mouse and the HUD before the first tick; an unchanged run writes no file, a
-// change is written to the settings file, and a purge returns to the run's start.
+// mouse and the HUD before the first tick; an unchanged run writes no file, each
+// value changed is written to the settings file and nothing else, and a purge
+// returns to the run's start.
 func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(paths.SystemRootsEnv, "")
 	dir := t.TempDir()
 	file := filepath.Join(dir, paths.SettingsFile)
 	a, err := NewHeadless(Config{Seed: 1, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
-		Play: paths.Play{AutoFire: "off", HUD: true, Volume: 0.5}, SettingsFile: file})
+		Play: paths.Play{AutoFire: "off", HUD: true, Volume: 0.5}, Settings: paths.FileStore{Path: file}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +197,7 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	ctx.MouseDisabled.Store(false)
 	a.persistPlay()
 	s, path, err := paths.LoadSettings(dir)
-	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || !s.Play.HUD {
+	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.HUD != paths.DefaultPlay().HUD {
 		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
 	}
 	ctx.ResetSessionState()

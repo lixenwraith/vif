@@ -339,7 +339,10 @@ visibility change cannot replace that reason.
 
 A browser has no config root: solo, it plays the embedded scenario, content and
 keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
-build resolves.
+build resolves. What a native run writes back to `vif.toml`'s `[play]` the page
+keeps in the site's storage (`localStorage`, handed to the Worker at the start,
+since a Worker has none), so each visit starts as the last was left; a private
+window, or a site whose storage is blocked, keeps them to the run.
 
 A guest already receives custom maps. When the scenario it resolves does not have
 the session's digest, the coordinator serves it during the join, between the offer
@@ -434,8 +437,8 @@ opens an `AudioContext` at the first and plays them through an AudioWorklet
 (`web/audio-worklet.js`) that holds two buffers ahead and goes silent when the
 Worker falls behind, as a tick longer than a mixer period makes it; rendering a
 50 ms buffer with music and effects playing costs the Worker's thread about 1.3 ms.
-A muted game, the default, posts nothing; the touch strip's speaker button sends
-Ctrl-S, as a keyboard would, to cycle the channels.
+A muted game posts nothing; the touch strip's speaker button sends Ctrl-S, as a
+keyboard would, to cycle the channels.
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose

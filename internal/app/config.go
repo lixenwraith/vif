@@ -117,10 +117,10 @@ type Config struct {
 
 	// Play is how the run starts: the sound channels, the effects volume, auto-fire,
 	// the mouse and the HUD, vif.toml's [play] as a flag amended it; one naming no
-	// auto-fire word takes the embedded table. SettingsFile is where a change the
-	// player makes is written back; "" keeps it to this run.
-	Play         paths.Play
-	SettingsFile string
+	// auto-fire word takes the embedded table. Settings is where a change the player
+	// makes is written back; nil keeps it to this run.
+	Play     paths.Play
+	Settings paths.SettingsStore
 	// MusicWAV is the directory the music is recorded to as a WAV file; "" records none.
 	MusicWAV string
 

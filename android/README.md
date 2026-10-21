@@ -9,7 +9,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds the launcher icon, `../lixen-logo.svg` as an adaptive icon on black, with its lines alone as the themed one. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
-| `files/config/vif/vif.toml` | The user root's settings, read as a terminal reads `vif.toml` and written as `[play]` changes (sound, volume, auto-fire, mouse, HUD); created at the first change, with sound on, where a terminal starts muted. No permission: the app's own directory. |
+| `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sound, volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
 
 ## Build

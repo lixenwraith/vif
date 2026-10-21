@@ -71,10 +71,12 @@ var (
 	flagMusicWAV     = newSetFlag(true, parseOutputDirFlag)
 	flagDev          = newSetFlag(true, parseBoolFlag)
 
-	// settings is vif.toml as the roots of -config-dir resolved it, and settingsFile
-	// the file it came from, written back as [play] changes; "" is the embedded one.
-	settings     paths.Settings
-	settingsFile string
+	// settings is vif.toml as the roots of -config-dir resolved it, settingsFile the
+	// file it came from ("" the embedded one), and settingsStore where the run
+	// writes it back as [play] changes.
+	settings      paths.Settings
+	settingsFile  string
+	settingsStore paths.SettingsStore
 )
 
 func init() {
@@ -116,6 +118,10 @@ func main() {
 	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
+	}
+	settingsStore = paths.SettingsFor(flagConfig.dir, settingsFile)
+	if pageSettings != nil {
+		settingsStore = pageSettings(&settings)
 	}
 	// -g given either way decides, and -cli over it; unset, vif.toml's
 	// [presentation] or the build does. The window's state follows the same rule.
@@ -339,12 +345,15 @@ func logRuntimeReport(r core.RuntimeReport) {
 // platformHost is the build's platform host; empty, the run presents on the
 // terminal. openWindow makes it the desktop window, nil in a build without one;
 // windowByDefault is a vif_gui build's, which opens the window unless -g=false;
-// windowMaximized and windowFullscreen are the state it opens in.
+// windowMaximized and windowFullscreen are the state it opens in. pageSettings,
+// in a browser, reads the settings the page kept over the embedded ones and is
+// where the run writes them back, a browser having no vif.toml.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
 	windowByDefault                   bool
 	windowMaximized, windowFullscreen bool
+	pageSettings                      func(*paths.Settings) paths.SettingsStore
 )
 
 // buildConfig translates parsed flags into the runtime configuration
@@ -394,7 +403,7 @@ func buildConfig() app.Config {
 	extra, _ := app.BotSpecs(flagSession.bots)
 	cfg.Bots = append(cfg.Bots, extra...)
 
-	cfg.Play, cfg.SettingsFile = settings.Play, settingsFile
+	cfg.Play, cfg.Settings = settings.Play, settingsStore
 	// -mute either way names both channels for this run; unset, [play] stands
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "mute" {

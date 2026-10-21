@@ -430,6 +430,27 @@ void main() {
         return ['vif'].concat(args);
     }
 
+    /* A browser has no vif.toml: the settings a run writes back are kept in this
+       site's storage, so the next visit starts as this one was left. A private
+       window or a site whose storage is blocked refuses them; they last the run. */
+    const SETTINGS_KEY = 'vif.settings';
+
+    function keptSettings() {
+        try {
+            return localStorage.getItem(SETTINGS_KEY) || '';
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function keepSettings(text) {
+        try {
+            localStorage.setItem(SETTINGS_KEY, text);
+        } catch (err) {
+            notice('Settings not saved: ' + err.message.replace(/\.$/, '') + '.');
+        }
+    }
+
     function showExit(code, reason) {
         if (code === 0) {
             showMessage('vif has exited. Reload to start again.', false);
@@ -518,6 +539,9 @@ void main() {
             case 'audio':
                 onAudio(msg.data);
                 break;
+            case 'settings':
+                keepSettings(msg.text);
+                break;
             case 'exit':
                 showExit(msg.code, msg.reason);
                 stop();
@@ -530,7 +554,7 @@ void main() {
         };
         // Resolved here: the worker would resolve a relative name against its own URL.
         program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href,
-            bytes: bytes.buffer, argv: argv, cols: cols, rows: rows }, [bytes.buffer]);
+            bytes: bytes.buffer, argv: argv, cols: cols, rows: rows, settings: keptSettings() }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });
             if (document.hidden) send({ type: 'blur' });
@@ -549,8 +573,8 @@ void main() {
     }
 
     // === Sound ===
-    /* The Worker posts the mixer's PCM once a sound plays; a muted game, the
-       default, posts nothing. The first buffer opens an AudioContext at the mixer's
+    /* The Worker posts the mixer's PCM once a sound plays; a muted game posts
+       nothing. The first buffer opens an AudioContext at the mixer's
        rate and loads the worklet (AUDIO_PATH) that plays what follows through a ring.
        A context opened outside a gesture stays suspended, so each key or pointer
        resumes it; a buffer that arrives before it runs is dropped. */

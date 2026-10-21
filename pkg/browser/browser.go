@@ -24,16 +24,19 @@ import (
 const eventQueue = 256
 
 // The Worker's side of the bridge, web/worker.js: vifGrid is the grid the page
-// measured before the program started; vifAtlas, vifFrame, vifPointer and vifAudio
-// post the texture, a frame, the pointer mode and a PCM buffer to the page; goEvent
-// is what the page sends back, one object a message
+// measured before the program started and vifSettings the settings document it
+// kept; vifAtlas, vifFrame, vifPointer, vifAudio and vifKeepSettings post the
+// texture, a frame, the pointer mode, a PCM buffer and the settings to keep to the
+// page; goEvent is what the page sends back, one object a message
 const (
-	jsGrid    = "vifGrid"
-	jsAtlas   = "vifAtlas"
-	jsFrame   = "vifFrame"
-	jsPointer = "vifPointer"
-	jsAudio   = "vifAudio"
-	jsEvent   = "goEvent"
+	jsGrid     = "vifGrid"
+	jsSettings = "vifSettings"
+	jsAtlas    = "vifAtlas"
+	jsFrame    = "vifFrame"
+	jsPointer  = "vifPointer"
+	jsAudio    = "vifAudio"
+	jsKeep     = "vifKeepSettings"
+	jsEvent    = "goEvent"
 )
 
 // Host is a Surface over the page. Frames and Sync may be called from any
@@ -201,6 +204,21 @@ func (speaker) Write(p []byte) (int, error) {
 }
 
 func (speaker) Close() error { return nil }
+
+// Settings is the settings document the page kept from an earlier visit, nil for none
+func Settings() []byte {
+	if doc := js.Global().Get(jsSettings); doc.Type() == js.TypeString && doc.String() != "" {
+		return []byte(doc.String())
+	}
+	return nil
+}
+
+// KeepSettings hands the page the settings document to keep for the next visit
+func KeepSettings(doc []byte) {
+	if keep := js.Global().Get(jsKeep); keep.Type() == js.TypeFunction {
+		keep.Invoke(string(doc))
+	}
+}
 
 // bytes copies b into a Uint8Array of its own, which the Worker may transfer
 func bytes(b []byte) js.Value {

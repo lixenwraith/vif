@@ -184,7 +184,7 @@ and the audio buffer; a flag on the command line wins
 | `-cli` | Play in the terminal whatever `vif.toml` or a `vif-gui` build says; wins over `-g`. |
 | `-maximized[=false]`, `-fullscreen[=false]` | The state the desktop window opens in, asked of the window manager (`_NET_WM_STATE`); `vif.toml`'s `[presentation] maximized` and `fullscreen` set the default, and a terminal run ignores both. |
 | `-scale <n>` | With `-g`: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. |
-| `-mute[=false]` | Start muted; `-mute=false` starts with sound. Unset, `vif.toml`'s `[play]` channels stand, muted by default and written back as the menu changes them. |
+| `-mute[=false]` | Start muted; `-mute=false` starts with sound. Unset, `vif.toml`'s `[play]` channels stand, sound on by default and written back as the player changes them; a channel the flag set and the player left alone is never written. |
 | `-ab`, `-audio-backend <name>` | Force an audio backend: `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`. |
 
 ### Run

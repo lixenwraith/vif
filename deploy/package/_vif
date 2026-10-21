@@ -32,7 +32,7 @@ _arguments \
   '-maximized[Open the desktop window maximized; vif.toml'\''s \[presentation\] maximized is the default, and a terminal run ignores it]' \
   '-fullscreen[Open the desktop window full screen; vif.toml'\''s \[presentation\] fullscreen is the default, and a terminal run ignores it]' \
   '-scale[Draw the desktop window'\''s font n times its pixels, for a HiDPI screen; with -g (default 1)]:n: ' \
-  '-mute[Start muted, or with sound as -mute=false; unset, vif.toml'\''s \[play\] channels stand, muted by default]' \
+  '-mute[Start muted, or with sound as -mute=false; unset, vif.toml'\''s \[play\] channels stand, sound on by default]' \
   '(-ab -audio-backend)'{-ab,-audio-backend}'[Force an audio backend instead of detecting one]:name: ' \
   '-seed[Root RNG seed; 0 draws one and logs it]:n: ' \
   '-speed[Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing]:rate: ' \

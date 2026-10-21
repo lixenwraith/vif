@@ -80,7 +80,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"maximized"}, arg: "[=false]", hint: "Open the desktop window maximized; vif.toml's [presentation] maximized is the default, and a terminal run ignores it"},
 			{names: []string{"fullscreen"}, arg: "[=false]", hint: "Open the desktop window full screen; vif.toml's [presentation] fullscreen is the default, and a terminal run ignores it"},
 			{names: []string{"scale"}, arg: "<n>", hint: "Draw the desktop window's font n times its pixels, for a HiDPI screen; with -g (default 1)"},
-			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, or with sound as -mute=false; unset, vif.toml's [play] channels stand, muted by default"},
+			{names: []string{"mute"}, arg: "[=false]", hint: "Start muted, or with sound as -mute=false; unset, vif.toml's [play] channels stand, sound on by default"},
 			{names: []string{"ab", "audio-backend"}, arg: "<name>", hint: "Force an audio backend instead of detecting one"},
 		},
 	}, {
@@ -303,9 +303,11 @@ and the runtime profiler, and captures profiles, an execution trace, a telemetry
 snapshot and a replay journal. Values in brackets are unavailable or read only; the
 selected row explains why. Startup settings explains the relevant file or flag.
 .PP
-The Audio and Controls settings and the HUD are vif.toml's [play]: a run that read
-a vif.toml writes them back to it as they change, so the next run starts as this
-one was left. Every other change lasts the run. Solo play pauses while the menu is
+The Audio and Controls settings and the HUD are vif.toml's [play]: a run writes
+each back as it changes, so the next run starts as this one was left: to the
+vif.toml it read when that is in the user root or the \-config-dir root, else to
+the user root's, created at the first change from the one read. Every other change
+lasts the run. Solo play pauses while the menu is
 open, and so may a host whose only other participants are its own bots; any other
 session keeps running. The menu shares the command line's replay and session
 restrictions. The keymap binds config_menu and help in normal_keys, text_keys and

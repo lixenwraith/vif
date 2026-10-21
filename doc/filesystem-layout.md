@@ -125,12 +125,9 @@ the join.
 journal and music directories, and the scenario, content and keymap `-s`, `-f` and `-k`
 take; `[audio] buffer_ms` sets the mixer period; `[presentation] window = true` opens
 the desktop window by default, as `-g` does, and `maximized` or `fullscreen` the
-state it opens in, as those flags do; `[play]` is how a run starts and
-what the configuration menu changes in it: the two sound channels, the effects
-volume, auto-fire, mouse input, the cursor following the pointer and the telemetry
-HUD, which a run with a settings file writes back as it is left, so the next run
-starts the same (the one it read, or on Android the user root's, created at the
-first change). It is found like any resource,
+state it opens in; `[play]` is how a run starts and what the configuration menu
+changes in it: the sound channels, the effects volume, auto-fire, mouse input,
+pointer following and the telemetry HUD. It is found like any resource,
 from `-config-dir` down to the system roots; the first file wins whole, a key it
 omits keeps the embedded default, and the `vif.toml` inside its own `root` is not
 read. Every key is a default: a flag given on the command line wins, and `-d`
@@ -139,6 +136,14 @@ file (a bare scenario name stays a name the roots resolve), `~/` is the home
 directory, and an unknown key is refused. `-check` names
 the file it read. Music and sound overrides stay out of it, because a run that
 creates no audio refuses them and a default must not break `-serve`.
+
+A run writes each `[play]` value back as the player changes it, so the next starts
+the same: into the `vif.toml` it read when that is the player's own, in the user
+root or the `-config-dir` root, else into the user root's, created at the first
+change as a copy of the one it read (relative paths made absolute) that shadows it
+from then on. A checkout's or a system root's file is never written, and a channel
+`-mute` set for the run stays out unless the player changes it. A browser keeps
+them in the site's storage ([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
 
 ## 4. Installation
 
