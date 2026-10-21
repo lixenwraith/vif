@@ -396,9 +396,7 @@ func (a *App) askSeatJournal(slot int, start bool) error {
 	case start && b.recorder.Load() != nil:
 		return fmt.Errorf("slot %X already journals to %s", slot, b.recorder.Load().Path())
 	case !start && b.recorder.Load() == nil:
-		// The later command wins over a start not yet served
-		if ask := b.journalAsk.Load(); ask != nil && ask.start && b.journalAsk.CompareAndSwap(ask, nil) {
-			ask.report("", errors.New("cancelled by :journal stop"))
+		if b.cancelJournalStart() {
 			return nil
 		}
 		return fmt.Errorf("slot %X keeps no journal", slot)
@@ -428,7 +426,8 @@ func (a *App) seatJournalLeft(slot int, run *App) {
 }
 
 // reportSeatJournal tells this run's player how a seat's journal start or stop went.
-// It runs on the seat's goroutine; the status line and the log take that.
+// It runs on the seat's goroutine, or the holder's for a start a stop cancelled; the
+// status line and the log take either.
 func (a *App) reportSeatJournal(slot int, start bool, path string, err error) {
 	switch {
 	case err != nil:

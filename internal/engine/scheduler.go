@@ -590,13 +590,10 @@ func (s *Scheduler) RunTicks(n int) {
 	s.drainReset()
 }
 
-// resetPending reports a reset a settle dispatched and executeReset has not run.
+// ResetPending reports a reset a settle dispatched and executeReset has not run.
 // One a tick's settle dispatches ends that tick, as one between ticks does, so a
 // run's first tick is 1 however its reset was asked for.
-func (s *Scheduler) resetPending() bool { return len(s.resetChan) > 0 }
-
-// ResetPending reports a reset asked for that has not run yet.
-func (s *Scheduler) ResetPending() bool { return s.resetPending() }
+func (s *Scheduler) ResetPending() bool { return len(s.resetChan) > 0 }
 
 // drainReset services a pending reset request without blocking
 func (s *Scheduler) drainReset() {
@@ -1326,7 +1323,7 @@ func (s *Scheduler) processTick() {
 		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
 			s.settleLocked("wire")
 		}
-		if ended = s.resetPending(); ended {
+		if ended = s.ResetPending(); ended {
 			return
 		}
 
@@ -1355,7 +1352,7 @@ func (s *Scheduler) processTick() {
 
 		// Ensures FSM and Systems start with a consistent, settled world
 		s.dispatchAndProcessEvents("pre")
-		if ended = s.resetPending(); ended {
+		if ended = s.ResetPending(); ended {
 			return
 		}
 
@@ -1377,7 +1374,7 @@ func (s *Scheduler) processTick() {
 
 		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
 		s.dispatchAndProcessEvents("post")
-		if ended = s.resetPending(); ended {
+		if ended = s.ResetPending(); ended {
 			return
 		}
 
@@ -1388,7 +1385,7 @@ func (s *Scheduler) processTick() {
 		// crossing and digest that reads this tick reads its outcomes, not their
 		// pending events. A tick phase like pre and post: no group of its own.
 		s.dispatchAndProcessEvents("close")
-		if ended = s.resetPending(); ended {
+		if ended = s.ResetPending(); ended {
 			return
 		}
 

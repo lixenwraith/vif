@@ -391,39 +391,34 @@ func permuted[T any](index *sparseIndex, dense []T, order []core.Entity) ([]T, e
 
 // reorderStore puts a store's rows in the order orderOf read.
 func reorderStore[T any](s *Store[T], order []core.Entity) error {
-	if len(order) == 0 && len(s.entities) < 2 {
+	return reorderRows(&s.index, s.dense, s.entities, order)
+}
+
+// reorderRows puts dense rows, their entities and index in order; an empty order
+// leaves fewer than two rows as they are
+func reorderRows[T any](index *sparseIndex, dense []T, entities, order []core.Entity) error {
+	if len(order) == 0 && len(entities) < 2 {
 		return nil
 	}
-	if len(order) != len(s.entities) {
+	if len(order) != len(entities) {
 		return errOrderMismatch
 	}
-	dense, err := permuted(&s.index, s.dense, order)
+	rows, err := permuted(index, dense, order)
 	if err != nil {
 		return err
 	}
-	copy(s.dense, dense)
-	copy(s.entities, order)
+	copy(dense, rows)
+	copy(entities, order)
 	for i, e := range order {
-		s.index.set(e, int32(i))
+		index.set(e, int32(i))
 	}
 	return nil
 }
 
 // reorder puts the placements in order and each cell's occupants in its own.
 func (p *Position) reorder(order []core.Entity, cells []CellOrder) error {
-	if len(order) > 0 || len(p.entities) >= 2 {
-		if len(order) != len(p.entities) {
-			return errOrderMismatch
-		}
-		dense, err := permuted(&p.index, p.dense, order)
-		if err != nil {
-			return err
-		}
-		copy(p.dense, dense)
-		copy(p.entities, order)
-		for i, e := range order {
-			p.index.set(e, int32(i))
-		}
+	if err := reorderRows(&p.index, p.dense, p.entities, order); err != nil {
+		return err
 	}
 	return p.grid.reorderCells(cells)
 }

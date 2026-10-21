@@ -290,8 +290,9 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
 | `journal opened` / `journal closed` | INFO | `path`, plus `run`, `tick` on a mid-run opening, `records`, `encode_failed` on a close | `app.initJournal` and `:journal start`; `app.Close` and `:journal stop` |
-| `journal not opened` | WARN | `error` | a `:journal start` the run refused or could not open (§9) |
-| `seat journal opened` / `seat journal closed` / `seat journal not changed` | INFO / INFO / WARN | `slot`, plus `path`, or `start` and `error` | the holder, for a `:journal start\|stop <slot>` its bot seat served |
+| `journal not opened` / `journal not reopened` | WARN | `error` | a `:journal start` the run refused or could not open (§9); a journal a replaced run carried that the next run could not open |
+| `run may hold part of an opening it does not match` | ERROR | `error` | a `:journal start` whose adoption of the opening failed after it wrote: a defect |
+| `seat journal opened` / `seat journal closed` / `seat journal not changed` / `seat journal not closed` | INFO / INFO / WARN / WARN | `slot`, plus `path`, or `start` and `error`; `reason` on a close as the bot leaves | the holder, for a `:journal start\|stop <slot>` its bot seat served, and for a seat whose bot left |
 | `journal not closed` / `journal closed: a written world was not recorded` | ERROR | `error`, plus `path`, `tick` on the second | `app.Close` and `:journal stop`; a written world the journal could not take, which closes it there |
 | `journal incomplete` | WARN | `error` | `PlayJournal` playing on past a sequence gap (§9) |
 | `replay opened` | INFO | `records`, `digests`, `seed`, `speed` | `PlayJournal` |
@@ -919,7 +920,7 @@ systems that are `off`, the `slot` input follows) and the run's own side (`own`)
 That is its player domain under the same entity IDs, the camera, APM and gesture
 tracking, timed effects, the player domain's streams, the cells its input has in
 flight, each system's own state (`engine.LocalStateSaver`), the corpus position,
-the event tallies, every status cell, and the order the run holds both domains'
+the event tallies, every status cell but this instance's own, and the order the run holds both domains'
 entities in by store and by cell (`engine.WorldOrder`), which systems visit them
 in and a re-insertion would not keep. The opening writes it over a muted
 headless twin of the boot as a replay does, and the run adopts the twin's result,
