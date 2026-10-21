@@ -32,28 +32,55 @@ the parser testable without constructing an ECS world.
 
 A scenario can take printable ASCII keys away from the play grammar, for a game
 whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
-(empty `keys` releases them; `entity` scopes the capture to one cursor's instance)
-and `MetaSystem` stores the set in `GameContext.KeyCapture`, which the parser reads
-without the world lock. In Normal, Visual and Insert a captured key cancels any
-pending count or operator and becomes `IntentKeyPress`. Search and Command text,
-Escape and other special keys are untouched, and a reset releases the capture.
+(empty `keys` releases them; `entity` scopes the capture to one cursor's instance;
+`releases = true` asks a console keyboard for releases too) and `MetaSystem` stores
+the set in `GameContext.KeyCapture`, which the parser reads without the world lock.
+In Normal, Visual and Insert a captured key cancels any pending count or operator
+and becomes `IntentKeyPress`, its release `IntentKeyRelease` in any mode, and its
+repeat nothing while it is held. Search and Command text, Escape and other special
+keys are untouched, and a reset releases the capture.
 
 A captured key is the scenario's one input hook, whatever produces it:
 
-- **Sources.** A typed key, a left press on the button of that key (§7), and a bot
-  or script naming the `press` action with the key as its `char` all reach the
-  router, which crosses `EventInputPressed { entity, key, source }` so the shared
-  FSM sees it on every instance. `source` is 0 for a key, 1 for a pointer.
-- **Release.** A terminal reports no key release, so only a pointer press has one:
-  the router remembers the button a left press holds and crosses
-  `EventInputReleased` when the pointer lets go, when reporting stops, or before
-  the next press.
+- **Sources.** A typed key, a press of the left or right button, a finger or a
+  wheel notch on the button of that key (§7), and a bot or script naming the
+  `press` action with the key as its `char` all reach the router, which crosses
+  `EventInputPressed { slot, key, source, tick }` so the shared FSM sees it on every
+  instance: `slot` is the presser's roster slot, `source` 0 a key, 1 the left
+  button, 2 the right, 3 and 4 the wheel up and down, 5 a finger, and `tick` the
+  `engine.ticks` it was made at, which the barrier holds within the lead and late
+  commit of its apply tick. On a map with `cursors = false` the slot has no cursor
+  at all, and these are the player's only inputs.
+- **Timing.** A scenario judges a press by its `tick`, not by when it arrives: a
+  press made at a window's close can arrive up to `engine.input_horizon` ticks
+  later, none solo and `NetworkApplyHorizonTicks` (2 s) in a session, so a miss
+  waits that long ([FSM reference](fsm-reference.md#payloadintcomparevar)).
+- **Release.** Every press crosses one `EventInputReleased` from its slot. A key's
+  own comes where the keyboard reports releases, asked for at startup and kept for
+  the run: a terminal with the key event protocol (Alacritty 0.13 and later, local
+  or over ssh, and any terminal answering alike), and the hardware keys of the
+  desktop window, the page and Android; and a Linux or FreeBSD console while a
+  capture with `releases` holds, which keeps its layout, dead keys, compose and
+  Alt+F*n* but not Ctrl+Alt+Del, Scroll Lock or its mouse, with a `console-guard`
+  copy of vif standing by to restore it
+  ([Development §10](development.md#10-crash-and-runtime-capture)). A bot lets go
+  of each key it presses itself, at once or after the hold its graph names
+  ([Bots](bots.md#actions)); a script's presses tap. Elsewhere a key press is a
+  tap, released at once, and a held key repeats taps, as is a soft keyboard's text
+  everywhere; a pointer press lets go with the pointer. The router ends a hold as
+  `lost` when its key leaves the capture, play leaves Normal, Visual and Insert or
+  is suspended, focus or the report's source goes, or its key presses again; a
+  tap's release is `lost` too.
+- **Report.** `EventInputReport { slot, releases }` crosses as keys come to be
+  captured and with each answer about releases while they are, so a scenario can
+  play a slot that taps differently; that player sees a notice when the capture
+  asked for releases.
 - **Gate.** The router presses only a captured key, only in Normal, Visual and
   Insert, never while input is suspended, and never from macro playback: a
   recorded round of a memory game is the wrong answer to the next one.
 - **Echo.** `World.PushInputPress` sends each crossing with a local echo
   (`EventInputPressEcho`, `EventInputReleaseEcho`), which lights and sounds the
-  button on the pressing instance at once. The crossing applies a playout lead
+  button on the pressing instance at once and holds it lit until the release. The crossing applies a playout lead
   later; it lights the shared button for everyone else and sounds only presses
   from peers, so a session can be played with eyes closed (D-18).
 
@@ -230,15 +257,16 @@ When terminal mouse reporting is enabled:
 | Input | Behavior |
 |---|---|
 | Left press | Move the cursor to the translated map cell and fire main. |
-| Left press on a button | Press the button's key (§1); never moves or fires. |
+| Left or right press, or a finger, on a button | Press the button's key (§1), held until that button or finger lets go; never moves or fires. |
+| Wheel over a button | Press the button's key for one notch, released at once (§1); never moves. |
 | Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on a phone, in the browser through its launcher. The hold, and the menu's rows, take the pointer with mouse input disabled too, so a phone can enable it again. |
 | Left release | End held fire; release a held button. Passed on from every mode. |
 | Left press in the configuration menu | Select and act on its rows, focus a form field, or go back from outside its window ([Config menu](config-menu.md#navigation)). |
 | Left drag | Continue moving the cursor. A finger moving while down is this drag on a phone, one per cell. |
 | Held left | Repeat main fire at the shared repeat interval. |
-| Right press/hold | Fire/repeat special without moving first. |
+| Right press/hold | Fire/repeat special without moving first, off a button. |
 | Left press twice within `MouseDoubleClickWindow`, `MouseDoubleClickSlackPercent` of the screen apart at most | The second fires special as well, for a finger with no right button; both fire main, and a third press starts over. |
-| Wheel | Move the cursor using the event coordinates. |
+| Wheel | Move the cursor using the event coordinates, off a button. |
 | Bare motion | Move only when free-mouse mode is enabled. |
 
 Translation runs terminal to viewport by the game-area offsets, then viewport to
@@ -258,7 +286,7 @@ reaches no further than a mouse on the same screen would.
 short toggle for free mouse motion, on by default. The parser passes pointer input
 on only in Normal, Visual and Insert, and the router drops it while the mouse is
 disabled or input is suspended (paused, Command or Overlay); a release still ends
-the hold of a press made before.
+the held fire of a press made before, and a held button ends as play stops (§1).
 
 Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
 cycles both weapons → off → main only → both weapons. `:auto on`, `:auto off`,

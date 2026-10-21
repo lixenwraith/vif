@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -174,5 +175,36 @@ func TestATransferCarriesBytesByLengthNotByScanning(t *testing.T) {
 	_ = w.Close()
 	if _, err := UnmarshalScenarioCompressed("bomb", bomb.Bytes()); err == nil {
 		t.Fatalf("a %d-byte body inflating to %d was accepted", bomb.Len(), parameter.ScenarioMaxBytes*4)
+	}
+}
+
+// TestAMapPlacesCursorsUnlessItSaysNot: [map] cursors = false takes the cursors off
+// the map, true or no key leaves them on it, and anything but a boolean is refused.
+func TestAMapPlacesCursorsUnlessItSaysNot(t *testing.T) {
+	for _, c := range []struct {
+		table   string
+		offMap  bool
+		refused bool
+	}{
+		{"", false, false},
+		{"[map]\ncursors = true\n", false, false},
+		{"[map]\ncursors = false\n", true, false},
+		{"[map]\ncursors = 0\n", false, true},
+	} {
+		entry := "[regions.main]\nfile = \"main.toml\"\n" + c.table
+		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
+		s, err := ReadScenario("cursors", fsys, "scenario.toml")
+		if c.refused {
+			if err == nil {
+				t.Errorf("%q was taken", c.table)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%q: %v", c.table, err)
+		}
+		if s.CursorsOffMap != c.offMap {
+			t.Errorf("%q: cursors off the map %t, want %t", c.table, s.CursorsOffMap, c.offMap)
+		}
 	}
 }

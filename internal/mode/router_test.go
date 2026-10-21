@@ -1,10 +1,14 @@
 package mode
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
@@ -104,5 +108,128 @@ func TestTheMenuKeepsThePointerWithTheMouseDisabled(t *testing.T) {
 	down(g.X+g.ContentX, g.Y+g.ContentY+2)
 	if ctx.GetOverlaySelection() != "multiplayer" {
 		t.Fatalf("a press on the third row selected %q", ctx.GetOverlaySelection())
+	}
+}
+
+// TestAHeldKeyCrossesOneReleaseHoweverItEnds: a captured key held where keys release
+// crosses its own release; play stopping, or the capture giving the key back, ends a
+// hold as lost, and a keyboard reporting presses alone taps. Keys coming to be
+// captured, and each answer while they are, cross the slot's report.
+func TestAHeldKeyCrossesOneReleaseHoweverItEnds(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	var asks []bool
+	r.SetKeyReportApplier(func(console bool) { asks = append(asks, console) })
+	crossed := func() (out []string) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.InputPayload:
+				if ev.Type == event.EventInputPressed {
+					out = append(out, "press "+p.Key)
+				} else if ev.Type == event.EventInputReleased {
+					out = append(out, fmt.Sprintf("release %s lost=%v", p.Key, p.Lost))
+				}
+			case *event.InputReportPayload:
+				out = append(out, fmt.Sprintf("report releases=%v", p.Releases))
+			}
+		}
+		return out
+	}
+	expect := func(step string, want ...string) {
+		t.Helper()
+		if got := crossed(); !slices.Equal(got, want) {
+			t.Fatalf("%s crossed %q, want %q", step, got, want)
+		}
+	}
+	key := func(k rune, action terminal.KeyAction) {
+		if in := machine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: k, Action: action}); in != nil {
+			r.Handle(in)
+		}
+	}
+
+	ctx.KeyCapture.Set("12", true)
+	r.ProcessInputTick()
+	r.KeyReported(true)
+	expect("the answer to the console ask", "report releases=true")
+	key('1', terminal.KeyPress)
+	key('1', terminal.KeyRepeat)
+	key('1', terminal.KeyRelease)
+	expect("a press held and let go", "press 1", "release 1 lost=false")
+
+	key('2', terminal.KeyPress)
+	r.Handle(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetCommand, Count: 1})
+	r.ProcessInputTick()
+	key('2', terminal.KeyRelease)
+	expect("a hold as the command line opens", "press 2", "release 2 lost=true")
+
+	r.transitionMode(core.ModeNormal)
+	key('1', terminal.KeyPress)
+	ctx.KeyCapture.Set("2", true)
+	r.ProcessInputTick()
+	expect("a hold the capture gives back", "press 1", "release 1 lost=true")
+
+	r.KeyReported(false)
+	key('2', terminal.KeyPress)
+	expect("a press with presses alone reported", "report releases=false", "press 2", "release 2 lost=true")
+
+	ctx.KeyCapture.Set("", false)
+	r.ProcessInputTick()
+	if !slices.Equal(asks, []bool{true, false}) {
+		t.Fatalf("asked for the console keyboard %v, want it while the capture asked and not after", asks)
+	}
+}
+
+// TestEveryPointerPressesAButton: the right button and a finger press a button's key
+// and hold it as the left button does, and a wheel notch presses it released at
+// once; away from a button the wheel moves and the right button fires as before.
+func TestEveryPointerPressesAButton(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	r := NewRouter(ctx, input.NewMachine())
+	w.Components.Button.SetComponent(w.CreateEntity(core.DomainShared), component.ButtonComponent{Slot: 1, Key: '1'})
+	ctx.KeyCapture.Set("1", false)
+	config := w.Resources.Config
+	bx, by, bw, bh := component.ButtonRect(1, 1, config.MapWidth, config.MapHeight)
+	on := func(kind input.IntentType) *input.Intent {
+		return &input.Intent{Type: kind, X: bx + bw/2, Y: by + bh/2, MapCell: true}
+	}
+	crossed := func() (out []string) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.InputPayload:
+				if ev.Type == event.EventInputPressed {
+					out = append(out, fmt.Sprintf("press source=%d", p.Source))
+				} else if ev.Type == event.EventInputReleased {
+					out = append(out, fmt.Sprintf("release source=%d lost=%v", p.Source, p.Lost))
+				}
+			case *event.FireSpecialRequestPayload:
+				out = append(out, "special")
+			}
+		}
+		return out
+	}
+
+	r.Handle(on(input.IntentMouseRightDown))
+	r.Handle(&input.Intent{Type: input.IntentMouseRightUp})
+	touch := on(input.IntentMouseLeftDown)
+	touch.Touch = true
+	r.Handle(touch)
+	r.Handle(&input.Intent{Type: input.IntentMouseLeftUp})
+	wheel := on(input.IntentMouseWheelMove)
+	wheel.ScrollDir = input.ScrollDown
+	r.Handle(wheel)
+	r.Handle(&input.Intent{Type: input.IntentMouseWheelMove, X: 1, Y: 1, MapCell: true})
+	r.Handle(&input.Intent{Type: input.IntentMouseRightDown, X: 1, Y: 1, MapCell: true})
+
+	want := []string{
+		"press source=2", "release source=2 lost=false",
+		"press source=5", "release source=5 lost=false",
+		"press source=4", "release source=4 lost=true",
+		"special",
+	}
+	if got := crossed(); !slices.Equal(got, want) {
+		t.Fatalf("crossed %q, want %q", got, want)
 	}
 }

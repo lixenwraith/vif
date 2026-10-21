@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 189
+const EventTypeCount = 190
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -92,6 +92,7 @@ func InitRegistry() {
 	RegisterType("EventInputReleased", EventInputReleased, &InputPayload{})
 	RegisterType("EventInputPressEcho", EventInputPressEcho, &InputPayload{})
 	RegisterType("EventInputReleaseEcho", EventInputReleaseEcho, &InputPayload{})
+	RegisterType("EventInputReport", EventInputReport, &InputReportPayload{})
 	RegisterType("EventPingGridRequest", EventPingGridRequest, &PingGridRequestPayload{})
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &MaterializeCompletedPayload{})
@@ -287,6 +288,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventInputReleased:                   ClassBus,
 	EventInputPressEcho:                  ClassLocal,
 	EventInputReleaseEcho:                ClassLocal,
+	EventInputReport:                     ClassBus,
 	EventPingGridRequest:                 ClassLocal,
 	EventMaterializeRequest:              ClassStamped,
 	EventMaterializeComplete:             ClassStamped,

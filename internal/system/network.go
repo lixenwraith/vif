@@ -2491,6 +2491,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 			// a guest running ahead of its band; its next correction repairs it.
 			s.statLate.Add(1)
 		}
+		event.BoundTick(payload, a.applyTick)
 		ev := event.GameEvent{Type: et, Payload: payload, Origin: a.origin, Domain: domain}
 		if a.source == localSource {
 			// The local fence closes at dispatch: a capture read between the

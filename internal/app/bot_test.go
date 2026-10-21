@@ -983,3 +983,61 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 		t.Fatalf("the other guest holds %d links and the person %d, want the person behind the other guest", o, p)
 	}
 }
+
+// TestABotsPressHoldsUntilItLetsGo: a bot's instance takes its keys as releasing,
+// so a press of a captured key holds for the ticks its graph asked and a tap lets go
+// at once, each let go rather than lost, and its slot crosses as releasing.
+func TestABotsPressHoldsUntilItLetsGo(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeOffMapScenario(t, root)
+	a, err := NewHeadless(Config{Seed: 0xF103, Width: 80, Height: 24, Resources: resource.Options{Dir: root, Scenario: "keys"}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+	g, err := bot.ParseGraph("holds", []byte(`
+[bot]
+actions_per_second = 1000
+
+[regions.play]
+initial = "Play"
+
+[states.Play]
+on_enter = [
+    { action = "Intent", payload = { name = "press", char = "1", hold = 4 } },
+    { action = "Intent", payload = { name = "press", char = "2" } },
+]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.localParticipant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The graph reads no events, so this tap may stand in for the driver's own
+	var got []string
+	start := a.world.Resources.Game.State.GetGameTicks()
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		switch p := ev.Payload.(type) {
+		case *event.InputPayload:
+			if ev.Type == event.EventInputPressed || ev.Type == event.EventInputReleased {
+				got = append(got, fmt.Sprintf("%s %s +%d lost=%v", event.GetEventName(ev.Type), p.Key, p.Tick-start, p.Lost))
+			}
+		case *event.InputReportPayload:
+			got = append(got, fmt.Sprintf("report slot %d releases=%v", p.Slot, p.Releases))
+		}
+	})
+	for range 8 {
+		if more, err := d.Step(); !more || err != nil {
+			t.Fatalf("more %v, err %v", more, err)
+		}
+	}
+	want := []string{"EventInputPressed 1 +0 lost=false", "EventInputPressed 2 +0 lost=false",
+		"EventInputReleased 2 +0 lost=false", "report slot 0 releases=true", "EventInputReleased 1 +4 lost=false"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("crossed %q, want %q", got, want)
+	}
+}

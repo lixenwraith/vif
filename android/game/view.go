@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/glyph"
+	"github.com/lixenwraith/vif/pkg/hostkey"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -37,6 +38,7 @@ type view struct {
 
 	events  chan terminal.Event
 	away    chan bool
+	keys    hostkey.Report
 	pointer atomic.Bool
 	covered atomic.Bool // the keyboard is up: the status bar draws its left end alone
 	finger  struct {    // the cell a pressed finger last reported; the UI thread's alone
@@ -52,6 +54,7 @@ type view struct {
 func newView(tex *glyph.Texture, raster bool, density float32) *view {
 	v := &view{Frames: glyph.NewFrames(tex, raster), tex: tex, density: density, zoom: 1,
 		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
+	v.keys.Post = v.post
 	v.setCell()
 	return v
 }
@@ -79,6 +82,13 @@ func (v *view) CellAspect() vmath.Aspect { return v.tex.Atlas().Aspect() }
 // SetPointerMode drops touches while the run takes no pointer; a finger has no
 // motion of its own to report
 func (v *view) SetPointerMode(enabled, _ bool) { v.pointer.Store(enabled) }
+
+// SetKeyReport asks for each key's release, which a hardware key's up gives; the
+// system keyboard's text and the keys the view makes let go as they press
+func (v *view) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
+	v.keys.Ask(report, allow, true)
+	return nil
+}
 
 func (v *view) Size() (int, int) {
 	v.mu.Lock()

@@ -68,16 +68,17 @@ const (
 	// Mouse
 	IntentMouseLeftDown  // Left press: move cursor + fire main
 	IntentMouseLeftUp    // Left release
-	IntentMouseRightDown // Right press: fire special (no cursor move)
+	IntentMouseRightDown // Right press: fire special without moving, or press a button: X, Y
 	IntentMouseRightUp   // Right release
 	IntentMouseDrag      // Drag: update cursor if left held
-	IntentMouseWheelMove // Wheel: move cursor only
+	IntentMouseWheelMove // Wheel: move the cursor, or press a button one notch: X, Y, ScrollDir
 	IntentMouseMove      // Free mouse movement (no button held)
 
 	// Appended so recorded intent numbers keep their meaning.
 	IntentConfigMenu   // Ctrl+G
 	IntentKeyPress     // A key the scenario captured from Normal, Visual and Insert
 	IntentOverlayPoint // Left press while an overlay or its form has the keys: X, Y
+	IntentKeyRelease   // A captured key let go of, or a hold the terminal ended: Lost
 )
 
 // MotionOp identifies motion algorithm
@@ -180,7 +181,9 @@ type Intent struct {
 	Char          rune // Target char for f/t motions or typed char
 	X, Y          int  // Pointer cell of a mouse intent, in terminal coordinates
 	MapCell       bool // X, Y name a map cell instead, as a bot's pointer does
+	Touch         bool // A left press a finger made, on a host that reports one
 	MacroPlayback bool // True if intent originated from macro playback
+	Lost          bool // IntentKeyRelease made for a hold whose own release can't arrive
 }
 
 // AppendCommand appends one ex command's intents: the switch to command mode, which

@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/audio/model"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -469,27 +470,51 @@ var CharacterTypedPayloadPool = sync.Pool{
 }
 
 // KeyCapturePayload names the keys to capture, empty to release them. Entity scopes
-// it to the instance driving that cursor, every instance when zero.
+// it to the instance driving that cursor, every instance when zero. Releases asks a
+// console keyboard for releases too, switching it raw while the capture holds.
 type KeyCapturePayload struct {
-	Keys   string      `toml:"keys"`
-	Entity core.Entity `toml:"entity"`
+	Keys     string      `toml:"keys"`
+	Entity   core.Entity `toml:"entity"`
+	Releases bool        `toml:"releases"`
 }
 
-// InputSource says what made an input: a typed key has no release, a pointer press
-// on a button is released when the pointer lets go
+// InputSource says what made an input. Every press is released: by its own release
+// where the source reports one, at once where it reports presses alone.
 type InputSource uint8
 
 const (
-	InputKey InputSource = iota
-	InputPointer
+	InputKey          InputSource = iota
+	InputPointer                  // the left button
+	InputPointerRight             // the right button
+	InputWheelUp                  // a wheel notch, released as it presses
+	InputWheelDown                // a wheel notch, released as it presses
+	InputTouch                    // a finger, on a host that reports one
 )
 
-// InputPayload names the cursor that pressed or released a captured key, the key, and
-// whether it was typed or clicked on the key's button
+// InputPayload names the roster slot that pressed or released a captured key, the key,
+// what made the input, and the tick it was made at: engine.ticks on the instance
+// that made it, which a scenario judges timing by however late it applies. Lost
+// marks a release no player made: the press was a tap, or play took the hold away.
 type InputPayload struct {
-	Entity core.Entity `toml:"entity"`
+	Slot   uint8       `toml:"slot"`
 	Key    string      `toml:"key"`
 	Source InputSource `toml:"source"`
+	Tick   uint64      `toml:"tick"`
+	Lost   bool        `toml:"lost"`
+}
+
+// BoundTick keeps a crossed input's tick to the ones its crossing could have left at:
+// before the tick it applies at, and within the longest lead and latest commit of it
+func (p *InputPayload) BoundTick(applyTick uint64) {
+	latest := max(applyTick, 1) - 1
+	p.Tick = min(max(p.Tick, latest-min(latest, parameter.NetworkApplyHorizonTicks)), latest)
+}
+
+// InputReportPayload says what a roster slot's keyboard reports while keys are
+// captured: releases, or presses alone, each a tap released as it is pressed
+type InputReportPayload struct {
+	Slot     uint8 `toml:"slot"`
+	Releases bool  `toml:"releases"`
 }
 
 // DeleteRangeType defines the scope of deletion

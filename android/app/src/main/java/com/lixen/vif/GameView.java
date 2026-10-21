@@ -279,11 +279,30 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
             activity.back();
             return true;
         }
-        int typed = e.getUnicodeChar(e.getMetaState() & ~(KeyEvent.META_CTRL_MASK | KeyEvent.META_ALT_MASK));
-        if ((typed & KeyCharacterMap.COMBINING_ACCENT) != 0) {
-            typed = 0;
+        return Game.keyDown(code, typed(e), e.getMetaState(), e.getRepeatCount() > 0) || super.onKeyDown(code, e);
+    }
+
+    @Override
+    public boolean onKeyUp(int code, KeyEvent e) {
+        if (code == KeyEvent.KEYCODE_BACK && android.os.Build.VERSION.SDK_INT < 33) {
+            return true;
         }
-        return Game.key(code, typed, e.getMetaState()) || super.onKeyDown(code, e);
+        return Game.keyUp(code, typed(e), e.getMetaState()) || super.onKeyUp(code, e);
+    }
+
+    /** The character a key types without Ctrl or Alt, 0 for none or a dead key. */
+    private static int typed(KeyEvent e) {
+        int typed = e.getUnicodeChar(e.getMetaState() & ~(KeyEvent.META_CTRL_MASK | KeyEvent.META_ALT_MASK));
+        return (typed & KeyCharacterMap.COMBINING_ACCENT) != 0 ? 0 : typed;
+    }
+
+    // Keys held when the window loses focus send their ups elsewhere
+    @Override
+    public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if (!focused) {
+            Game.focusLost();
+        }
     }
 
     @Override

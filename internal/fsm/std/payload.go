@@ -138,6 +138,25 @@ func registerPayloadGuards[T any](m *fsm.Machine[T]) {
 		}, nil
 	})
 
+	// PayloadIntCompareVar compares a payload field with an FSM variable, as an input's
+	// tick with the marks a window took
+	m.RegisterGuardFactory("PayloadIntCompareVar", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
+		field, _ := args["field"].(string)
+		varName, _ := args["var"].(string)
+		if field == "" || varName == "" {
+			return nil, fmt.Errorf("PayloadIntCompareVar requires 'field' and 'var'")
+		}
+		op, _ := args["op"].(string)
+
+		return func(ctx T, region *fsm.RegionState, payload any) bool {
+			fieldVal, ok := ExtractIntField(payload, field)
+			if !ok {
+				return false
+			}
+			return CompareInt(fieldVal, op, machine.GetVar(varName))
+		}, nil
+	})
+
 	m.RegisterGuardFactory("PayloadBoolEquals", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
 		field, _ := args["field"].(string)
 		if field == "" {

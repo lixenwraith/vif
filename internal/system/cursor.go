@@ -169,6 +169,10 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 	}
 
 	config := s.world.Resources.Config
+	if config.CursorsOffMap {
+		s.rosterOffMap(slot, p)
+		return
+	}
 	x, y := p.X, p.Y
 	if p.Center {
 		x, y = config.MapWidth/2, config.MapHeight/2
@@ -191,6 +195,21 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 	s.world.Log().Info("app", "msg", "cursor spawned", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
 	s.world.PushEvent(event.EventCursorSpawned, &event.CursorSpawnedPayload{Entity: e, X: x, Y: y, Slot: slot})
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
+}
+
+// rosterOffMap rosters a cursor that is its slot, owner and control alone, for a map
+// that places none: nothing draws, moves, targets or drains it, and a player holding
+// it plays through the keys and buttons the scenario takes. It announces no cell.
+func (s *CursorSystem) rosterOffMap(slot uint8, p *event.CursorSpawnRequestPayload) {
+	e := s.world.CreateEntity(core.DomainShared)
+	s.world.Components.Cursor.SetComponent(e, component.CursorComponent{
+		Slot: slot, Control: component.ControlKind(p.Control), PeerID: p.PeerID, Holder: p.Holder})
+	s.world.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll})
+	s.world.Resources.Player.Bind(slot, e)
+	s.publishRoster()
+
+	s.world.Log().Info("app", "msg", "cursor rostered off the map", "entity", uint64(e), "slot", int(slot))
+	s.world.PushEvent(event.EventCursorSpawned, &event.CursorSpawnedPayload{Entity: e, X: -1, Y: -1, Slot: slot})
 }
 
 // despawn destroys the cursors a request selects
