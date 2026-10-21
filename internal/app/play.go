@@ -682,8 +682,8 @@ func (p *player) control(r rune) {
 }
 
 // offer parses a key as the game would, in NORMAL, and keeps only what a viewer
-// owns: its speakers, its exit and, off a live session, the command line.
-// Everything else the keymap makes of a key is the recorded player's to do.
+// owns: its speakers, its exit and, off a live session, the command line, the menu
+// and help. Everything else the keymap makes of a key is the recorded player's to do.
 func (p *player) offer(ev terminal.Event) bool {
 	p.a.inputMachine.SetMode(input.ModeNormal)
 	intent := p.a.inputMachine.Process(ev)
@@ -695,8 +695,8 @@ func (p *player) offer(ev terminal.Event) bool {
 		return false
 	case input.IntentToggleAudioCycle:
 		return p.route(intent)
-	case input.IntentModeSwitch, input.IntentConfigMenu:
-		if (intent.Type == input.IntentConfigMenu || intent.ModeTarget == input.ModeTargetCommand) && (p.interactive || !p.live) {
+	case input.IntentModeSwitch, input.IntentConfigMenu, input.IntentHelp:
+		if (intent.Type != input.IntentModeSwitch || intent.ModeTarget == input.ModeTargetCommand) && (p.interactive || !p.live) {
 			a := p.a
 			p.cmd = &viewerCommand{mode: a.ctx.GetMode(), paused: a.ctx.TimeCtl.IsPaused()}
 			a.ctx.Viewer.Store(!p.interactive)

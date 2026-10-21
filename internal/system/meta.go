@@ -613,7 +613,7 @@ func (s *MetaSystem) handleHelpRequest() {
 	topics := help.Topics(s.ctx.KeyTable)
 
 	content := &core.OverlayContent{
-		Title:  "HELP",
+		Title:  core.OverlayHelpTitle,
 		Layout: core.OverlayLayoutDoc,
 		Items:  make([]core.OverlayItem, 0, len(topics)),
 	}

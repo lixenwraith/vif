@@ -10,6 +10,9 @@ const (
 	OverlayLayoutMenu                       // Live configuration
 )
 
+// OverlayHelpTitle heads the help overlay, which the help key closes by it
+const OverlayHelpTitle = "HELP"
+
 // OverlayContent holds typed overlay data, extensible via OverlayItem interface
 // Immutable once published to GameContext
 type OverlayContent struct {

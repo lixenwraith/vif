@@ -83,8 +83,9 @@ A bot belongs to the run that started it, its holder.
 Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
 [configuration menu](config-menu.md#bots) offers the same operations.
 
-A watched bot takes `:` and Ctrl-G. While you hold its command line or the menu,
-its graph supplies no input: a run in a session keeps ticking, a solo run waits.
+A watched bot takes `:`, the menu keys and the help key. While you hold its command
+line, the menu or help, its graph supplies no input: a run in a session keeps
+ticking, a solo run waits.
 `:n`, `:bot add`, `:bot drop` and `:player` work there.
 
 ## Telling cursors apart

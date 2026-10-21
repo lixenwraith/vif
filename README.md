@@ -86,7 +86,7 @@ Uninstalled, `./bin/vif` plays the checkout's `wad/`. The
 
 ## Playing
 
-`:help` lists the keys, `Ctrl-G` (or `:g`) opens the
+`F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the
 [configuration menu](doc/config-menu.md), and `:q` quits. Sound starts muted:
 `Ctrl-S` cycles through the channels, and `-mute=false` starts with sound. The
 menu's sound, controls and HUD settings are written back to the `vif.toml` the

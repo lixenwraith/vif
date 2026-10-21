@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
@@ -334,6 +335,64 @@ func TestConfigMenuHonorsCommandRestrictionsAtActivation(t *testing.T) {
 		if configMenu(ctx).Rows[1].Disabled != "" || ctx.GetOverlaySelection() != "speed" {
 			t.Fatal("refresh failed to unlock speed or lost selection")
 		}
+	}
+}
+
+// TestTheHelpKeyOpensHelpOverAnyModeAndClosesIt: F1 asks for help from NORMAL and
+// from a text mode, takes the place of the menu and drops its form, and closes help
+// where help is shown; F10 opens the menu over help as Ctrl-G does.
+func TestTheHelpKeyOpensHelpOverAnyModeAndClosesIt(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &menuSession{}
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	key := func(k terminal.Key, ch rune) {
+		t.Helper()
+		intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch})
+		if intent == nil || !r.Handle(intent) {
+			t.Fatalf("unhandled key %v %q", k, ch)
+		}
+	}
+	asked := func() bool {
+		return slices.ContainsFunc(w.Resources.Event.Queue.Consume(), func(ev event.GameEvent) bool {
+			return ev.Type == event.EventMetaHelpRequest
+		})
+	}
+	// What MetaSystem shows for the ask
+	shown := func() {
+		ctx.SetOverlayContent(&core.OverlayContent{Title: core.OverlayHelpTitle, Layout: core.OverlayLayoutDoc})
+	}
+
+	key(terminal.KeyF1, 0)
+	if !ctx.IsOverlayMode() || !asked() {
+		t.Fatal("F1 in NORMAL did not ask for help")
+	}
+	shown()
+	key(terminal.KeyF1, 0)
+	if !ctx.IsNormalMode() || ctx.IsOverlayActive() {
+		t.Fatal("F1 did not close the help shown")
+	}
+	key(terminal.KeyRune, 'i')
+	key(terminal.KeyF1, 0)
+	if !ctx.IsOverlayMode() || !asked() {
+		t.Fatal("F1 in INSERT did not ask for help")
+	}
+	shown()
+	key(terminal.KeyF10, 0)
+	if configMenu(ctx) == nil {
+		t.Fatal("F10 did not open the menu over help")
+	}
+	ctx.SetOverlaySelection("multiplayer")
+	key(terminal.KeyEnter, 0)
+	ctx.SetOverlaySelection("host")
+	key(terminal.KeyEnter, 0)
+	if r.configForm == nil {
+		t.Fatal("Enter did not open the host form")
+	}
+	key(terminal.KeyF1, 0)
+	if r.configForm != nil || configMenu(ctx) != nil || !ctx.IsOverlayMode() || !asked() {
+		t.Fatal("F1 did not take the place of the menu and its form")
 	}
 }
 

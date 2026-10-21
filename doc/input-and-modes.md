@@ -93,7 +93,7 @@ stateDiagram-v2
     Normal --> Visual: v
     Normal --> Search: slash
     Normal --> Command: colon
-    Normal --> Overlay: Ctrl-G
+    Normal --> Overlay: Ctrl-G, F10, F1
     Insert --> Normal: Escape
     Visual --> Normal: Escape or v
     Search --> Normal: confirm or Escape
@@ -155,7 +155,8 @@ cell shows the keys of a pending sequence, else the last one completed.
 |---|---|
 | `Ctrl-Q`, `Ctrl-C` | Quit, from any mode; `[overlay_keys]` binds them too. |
 | `Ctrl-S` | Cycle audio mute state, from any mode. |
-| `Ctrl-G` | Open or close the [configuration menu](config-menu.md), from any mode; a left press held on the status bar opens it too (§7). |
+| `Ctrl-G`, `F10` | Open or close the [configuration menu](config-menu.md), from any mode; a left press held on the status bar opens it too (§7). |
+| `F1` | Open or close help, from any mode; over another overlay it takes that one's place. |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
 | `Esc` | Cancel pending input, flash the ping grid in Normal, or return to Normal (§2). |
 | Arrow keys, `Home`, `End` | Move in the applicable mode. |
@@ -224,8 +225,8 @@ entries. These are session interaction structures, not persisted editor files.
 
 Macros record semantic intents after parsing, so they replay the same actions
 even when they contain multi-key motions. Command and Overlay mode stay out of a
-recording, the `:` or Ctrl-G that enters them included: playback waits in both,
-so a macro replays Normal, Insert, Visual and Search actions only.
+recording, the `:`, menu or help key that enters them included: playback waits in
+both, so a macro replays Normal, Insert, Visual and Search actions only.
 
 | Sequence | Behavior |
 |---|---|
@@ -414,8 +415,9 @@ no focus or navigation mode of its own.
 Viewer keys are not entries in this command table or the keymap. A replay, and a
 watched script or bot, reserve `SPACE . , + - h j k l 0 q` for viewer pause, step,
 step back, speed, pan/reset, and quit (in a live session only pan and quit); those
-keys never become simulation intents. `:` and `Ctrl-G` open the command line and
-the menu over it. [Runtime and concurrency](runtime.md) describes playback.
+keys never become simulation intents. `:`, the menu keys and the help key open the
+command line, the menu and help over it. [Runtime and concurrency](runtime.md)
+describes playback.
 
 System control uses `System.Name()`, which the manifest keys match. `:system`
 refuses a disable that a system declares required, naming the dependents.
@@ -435,13 +437,19 @@ user files. The action name `append` is an alias of `toggle_auto_fire`.
 See [External filesystem layout](filesystem-layout.md) for the shared root policy.
 
 An override is sparse: it is merged over the embedded table, so unspecified
-bindings retain defaults. The help overlay reads its key column from the merged
-table, so it shows a player's own bindings. The accepted TOML sections are:
+bindings retain defaults. Each key names one action, and an action can have any
+number of keys: the embedded table gives `quit` both `ctrl_q` and `ctrl_c`, and
+`config_menu` both `ctrl_g` and `f10`. TOML refuses a key named twice in a section,
+so no two actions contend for one key. Naming a key adds it to an action; moving an
+action also sets its old key to `"none"`. Help reads its key column from the merged
+table, so it shows a player's own bindings: every key of an action where an entry
+documents that action alone, the first key of each where it documents several
+(`h/j/k/l`). The accepted TOML sections are:
 
 | Section | Key form | Context |
 |---|---|---|
 | `[normal]` | one rune, `space`, `backslash`, or `zero` | Normal and Visual rune bindings. |
-| `[normal_keys]` | terminal key name | Normal and Visual special keys. |
+| `[normal_keys]` | terminal key name: `ctrl_g`, `f10`, `page_up`... | Normal and Visual special keys. |
 | `[operator]` | as `[normal]` | Motions accepted after `d`. |
 | `[prefix_g]` | as `[normal]` | Second key after `g`. |
 | `[overlay]` | as `[normal]` | Overlay rune bindings. |
@@ -461,6 +469,8 @@ v = "none"
 
 [normal_keys]
 backspace = "undo"
+f1 = "none"
+f2 = "help"
 
 [prefix_g]
 m = "motion_origin"
