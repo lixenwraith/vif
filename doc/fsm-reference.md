@@ -628,8 +628,14 @@ transitions = [
 ]
 ```
 
-A button lights and sounds on every press of its key by itself, so a machine judges
-a press and never plays its tone. `EventButtonLightRequest { button, duration_ms }`
+Each press is followed by one `EventInputReleased` with its `slot` and `key`: the
+key's own release where the slot's keyboard reports one, at once with `lost = true`
+where it taps. `releases = true` on the capture asks a console keyboard for releases
+too, and `EventInputReport { slot, releases }` says which a slot does while keys are
+captured.
+
+A button lights and sounds on every press of its key by itself, held lit until the
+release, so a machine judges a press and never plays its tone. `EventButtonLightRequest { button, duration_ms }`
 lights the button at that place in the row, counted from 1, with its sound; a
 spawn on a key that already has a button is refused. A button shows its key in the
 splash font once it is about ten cells square, so a scenario sets a `[map]` floor

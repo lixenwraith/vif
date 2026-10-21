@@ -500,6 +500,7 @@ func (a *App) initInput() error {
 	a.router = mode.NewRouter(a.ctx, a.inputMachine)
 	if a.cfg.Mode.OwnsInput() {
 		a.router.SetMouseModeApplier(a.applyMouseMode)
+		a.router.SetKeyReportApplier(a.keyReportApplier())
 	}
 	return nil
 }

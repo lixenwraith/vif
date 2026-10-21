@@ -78,6 +78,7 @@ const (
 	IntentConfigMenu   // Ctrl+G
 	IntentKeyPress     // A key the scenario captured from Normal, Visual and Insert
 	IntentOverlayPoint // Left press while an overlay or its form has the keys: X, Y
+	IntentKeyRelease   // A captured key let go of, or a hold the terminal ended: Lost
 )
 
 // MotionOp identifies motion algorithm
@@ -181,6 +182,7 @@ type Intent struct {
 	X, Y          int  // Pointer cell of a mouse intent, in terminal coordinates
 	MapCell       bool // X, Y name a map cell instead, as a bot's pointer does
 	MacroPlayback bool // True if intent originated from macro playback
+	Lost          bool // IntentKeyRelease made for a hold whose own release can't arrive
 }
 
 // AppendCommand appends one ex command's intents: the switch to command mode, which

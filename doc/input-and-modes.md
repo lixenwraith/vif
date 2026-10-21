@@ -32,11 +32,13 @@ the parser testable without constructing an ECS world.
 
 A scenario can take printable ASCII keys away from the play grammar, for a game
 whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
-(empty `keys` releases them; `entity` scopes the capture to one cursor's instance)
-and `MetaSystem` stores the set in `GameContext.KeyCapture`, which the parser reads
-without the world lock. In Normal, Visual and Insert a captured key cancels any
-pending count or operator and becomes `IntentKeyPress`. Search and Command text,
-Escape and other special keys are untouched, and a reset releases the capture.
+(empty `keys` releases them; `entity` scopes the capture to one cursor's instance;
+`releases = true` asks a console keyboard for releases too) and `MetaSystem` stores
+the set in `GameContext.KeyCapture`, which the parser reads without the world lock.
+In Normal, Visual and Insert a captured key cancels any pending count or operator
+and becomes `IntentKeyPress`, its release `IntentKeyRelease` in any mode, and its
+repeat nothing while it is held. Search and Command text, Escape and other special
+keys are untouched, and a reset releases the capture.
 
 A captured key is the scenario's one input hook, whatever produces it:
 
@@ -46,16 +48,26 @@ A captured key is the scenario's one input hook, whatever produces it:
   shared FSM sees it on every instance: `slot` is the presser's roster slot,
   `source` 0 for a key and 1 for a pointer, and `tick` the `engine.ticks` it was
   made at, which the barrier holds within the lead and late commit of its apply tick.
-- **Release.** A terminal reports no key release, so only a pointer press has one:
-  the router remembers the button a left press holds and crosses
-  `EventInputReleased` when the pointer lets go, when reporting stops, or before
-  the next press.
+- **Release.** Every press crosses one `EventInputReleased` from its slot. A key's
+  own comes where the keyboard reports releases: a terminal with the key event
+  protocol, asked for at startup and kept for the run (Alacritty 0.13 and later,
+  local or over ssh, and any terminal answering alike), and a Linux or FreeBSD
+  console while a capture with `releases` holds, its Alt+F*n*, dead keys and
+  compose then the game's to forgo. Elsewhere a key press is a tap, released at
+  once, and a held key repeats taps; a pointer press lets go with the pointer. The
+  router ends a hold as `lost` when its key leaves the capture, play leaves Normal,
+  Visual and Insert or is suspended, focus or the report's source goes, or its key
+  presses again; a tap's release is `lost` too.
+- **Report.** `EventInputReport { slot, releases }` crosses as keys come to be
+  captured and with each answer about releases while they are, so a scenario can
+  play a slot that taps differently; that player sees a notice when the capture
+  asked for releases.
 - **Gate.** The router presses only a captured key, only in Normal, Visual and
   Insert, never while input is suspended, and never from macro playback: a
   recorded round of a memory game is the wrong answer to the next one.
 - **Echo.** `World.PushInputPress` sends each crossing with a local echo
   (`EventInputPressEcho`, `EventInputReleaseEcho`), which lights and sounds the
-  button on the pressing instance at once. The crossing applies a playout lead
+  button on the pressing instance at once and holds it lit until the release. The crossing applies a playout lead
   later; it lights the shared button for everyone else and sounds only presses
   from peers, so a session can be played with eyes closed (D-18).
 
@@ -260,7 +272,7 @@ reaches no further than a mouse on the same screen would.
 short toggle for free mouse motion, on by default. The parser passes pointer input
 on only in Normal, Visual and Insert, and the router drops it while the mouse is
 disabled or input is suspended (paused, Command or Overlay); a release still ends
-the hold of a press made before.
+the held fire of a press made before, and a held button ends as play stops (§1).
 
 Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
 cycles both weapons → off → main only → both weapons. `:auto on`, `:auto off`,

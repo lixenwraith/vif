@@ -34,6 +34,12 @@ type awayPresentation interface{ Away() <-chan bool }
 // the status bar's left end again above the keyboard, and the bar draws only that
 type coveredPresentation interface{ Covered() bool }
 
+// keyReportPresentation is one that can report key releases when asked, answering
+// each ask with an EventKeyReport on Events; any other reports presses alone
+type keyReportPresentation interface {
+	SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error
+}
+
 // Host is what a platform supplies to a run. A nil field is the build's own: the
 // terminal, and speakers reached by a backend's name.
 type Host struct {
@@ -53,6 +59,10 @@ func (t terminalHost) CellAspect() vmath.Aspect { return vmath.RefAspect }
 
 // Fini restores the tty, which the crash handler calls before it prints
 func (t terminalHost) Fini() { t.Terminal().Fini() }
+
+func (t terminalHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
+	return t.Terminal().SetKeyReport(report, allow)
+}
 
 func (t terminalHost) SetPointerMode(enabled, motion bool) {
 	if !enabled {

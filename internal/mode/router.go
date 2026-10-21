@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"slices"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -29,6 +30,24 @@ type mouseModeState struct {
 	applied bool
 	enabled bool
 	motion  bool
+}
+
+// KeyReportApplier asks the presentation for key releases from its protocol, and
+// from a console keyboard too when console is set; the answer comes to KeyReported
+type KeyReportApplier func(console bool)
+
+// keyAskState is the last ask for releases and whether keys were captured since
+type keyAskState struct {
+	applied  bool
+	console  bool
+	captured bool
+}
+
+// heldInput is a press whose release has not crossed yet, and the slot it pressed from
+type heldInput struct {
+	key    rune
+	source event.InputSource
+	slot   uint8
 }
 
 // Router interprets Intents and executes game logic
@@ -71,9 +90,9 @@ type Router struct {
 	menuHoldAt [2]int
 	menuSince  time.Time // [wall]
 
-	// heldButton is the key whose button a left press holds: the release goes to the
-	// button pressed, wherever the pointer lets go
-	heldButton rune
+	// holds are the captured keys and buttons this instance's presses hold down; a
+	// button's release goes to the button pressed, wherever the pointer lets go
+	holds []heldInput
 
 	// Fire anchors, shared by auto-fire and held-button preventing stacked requests
 	lastFireMain time.Time
@@ -82,6 +101,11 @@ type Router struct {
 	// Terminal mouse reporting, reconciled on the input tick
 	applyMouseMode MouseModeApplier
 	mouseMode      mouseModeState
+
+	// Key releases, asked for on the input tick: releases is the latest answer
+	applyKeyReport KeyReportApplier
+	keyAsk         keyAskState
+	releases       bool
 
 	// Look-up tables: OpCode → Function
 	motionLUT map[input.MotionOp]MotionFunc
@@ -180,7 +204,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
 			r.mouseLeftHeld, r.menuHold = false, false
-			r.releaseButton()
+			r.releasePointer(intent.Type == input.IntentMouseLeftDown)
 		case input.IntentMouseRightDown, input.IntentMouseRightUp:
 			r.mouseRightHeld = false
 		}
@@ -256,6 +280,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleFireSpecial()
 	case input.IntentKeyPress:
 		return r.handleKeyPress(intent)
+	case input.IntentKeyRelease:
+		return r.handleKeyRelease(intent)
 
 	// Mode switching
 	case input.IntentModeSwitch:
@@ -593,29 +619,67 @@ func (r *Router) handleKeyPress(intent *input.Intent) bool {
 	return true
 }
 
+// handleKeyRelease crosses the release of a captured key this instance holds; a
+// macro's is none, as its presses are none
+func (r *Router) handleKeyRelease(intent *input.Intent) bool {
+	if !intent.MacroPlayback {
+		r.release(intent.Char, event.InputKey, intent.Lost)
+	}
+	return true
+}
+
 // pressInput crosses a press of a captured key, typed or clicked on its button, from
-// this instance's roster slot. The capture and the modes the parser captures in gate
-// every source, bots and scripts included. A macro replays none: a recorded round is
-// the wrong answer to the next.
+// this instance's roster slot, and holds it until its release. The capture and the
+// modes the parser captures in gate every source, bots and scripts included. A
+// macro replays none: a recorded round is the wrong answer to the next.
 func (r *Router) pressInput(intent *input.Intent, key rune, source event.InputSource) {
 	playing := r.ctx.IsNormalMode() || r.ctx.IsVisualMode() || r.ctx.IsInsertMode()
 	seated := int(r.ctx.World.Resources.Player.LocalSlot()) < parameter.MaxPlayers
 	if intent.MacroPlayback || !playing || !seated || r.inputSuspended() || !r.ctx.KeyCapture.Has(key) {
 		return
 	}
-	r.ctx.World.PushInputPress(r.input(key, source))
-	if source == event.InputPointer {
-		r.heldButton = key
+	r.release(key, source, true) // a hold whose release never came ends as the key presses again
+	in := r.input(key, source)
+	r.ctx.World.PushInputPress(in)
+	r.holds = append(r.holds, heldInput{key: key, source: source, slot: in.Slot})
+	// A keyboard reporting presses alone taps: each press lets go as it is made
+	if source == event.InputKey && !r.releases {
+		r.release(key, source, true)
 	}
 }
 
-// releaseButton crosses the release of the button a left press holds
-func (r *Router) releaseButton() {
-	if r.heldButton == 0 {
+// releasePointer crosses the release of the button a left press holds, lost when the
+// pointer never let go of it
+func (r *Router) releasePointer(lost bool) {
+	if i := slices.IndexFunc(r.holds, func(h heldInput) bool { return h.source == event.InputPointer }); i >= 0 {
+		r.release(r.holds[i].key, event.InputPointer, lost)
+	}
+}
+
+// release crosses the release of the hold of key from source, from the slot that
+// pressed it; lost when no player let go of it
+func (r *Router) release(key rune, source event.InputSource, lost bool) {
+	i := slices.IndexFunc(r.holds, func(h heldInput) bool { return h.key == key && h.source == source })
+	if i < 0 {
 		return
 	}
-	r.ctx.World.PushInputRelease(r.input(r.heldButton, event.InputPointer))
-	r.heldButton = 0
+	h := r.holds[i]
+	r.holds = slices.Delete(r.holds, i, i+1)
+	in := r.input(key, source)
+	in.Slot, in.Lost = h.slot, lost
+	r.ctx.World.PushInputRelease(in)
+}
+
+// endHolds ends, as lost, each hold play no longer allows: one whose key the capture
+// gave back, and every one once play stops for a mode that captures nothing or input
+// is suspended
+func (r *Router) endHolds() {
+	playing := (r.ctx.IsNormalMode() || r.ctx.IsVisualMode() || r.ctx.IsInsertMode()) && !r.inputSuspended()
+	for i := len(r.holds) - 1; i >= 0; i-- {
+		if h := r.holds[i]; !playing || !r.ctx.KeyCapture.Has(h.key) {
+			r.release(h.key, h.source, true)
+		}
+	}
 }
 
 // input is an input of key made now from this instance's roster slot
@@ -1027,7 +1091,7 @@ func (r *Router) closeOverlay() bool {
 // --- Mouse ---
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
-	r.releaseButton()
+	r.releasePointer(true)
 	// The status bar is no map cell: a press there starts the hold that summons the
 	// menu, and neither moves the cursor nor fires
 	if r.onStatusBar(intent) {
@@ -1066,7 +1130,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 
 func (r *Router) handleMouseLeftUp() bool {
 	r.mouseLeftHeld, r.menuHold = false, false
-	r.releaseButton()
+	r.releasePointer(false)
 	return true
 }
 
@@ -1130,6 +1194,51 @@ func (r *Router) SetMouseModeApplier(fn MouseModeApplier) {
 	r.applyMouseMode = fn
 }
 
+// SetKeyReportApplier installs the presentation's sink for key release asks. Without
+// one, keys report presses alone.
+func (r *Router) SetKeyReportApplier(fn KeyReportApplier) {
+	r.applyKeyReport = fn
+}
+
+// syncKeyReport asks for releases from the first input tick on, a console keyboard's
+// only while the capture asks for them, since a raw console costs its own keys.
+// Keys coming to be captured cross this slot's report; an ask crosses its answer.
+func (r *Router) syncKeyReport() {
+	captured, console := r.ctx.KeyCapture.Any(), r.ctx.KeyCapture.Releases()
+	started := captured && !r.keyAsk.captured
+	r.keyAsk.captured = captured
+	if r.keyAsk.applied && r.keyAsk.console == console {
+		if started {
+			r.crossReport()
+		}
+		return
+	}
+	r.keyAsk.applied, r.keyAsk.console = true, console
+	if r.applyKeyReport == nil {
+		r.KeyReported(false)
+		return
+	}
+	r.applyKeyReport(console)
+}
+
+// KeyReported takes the presentation's answer to an ask: whether keys release now.
+// While keys are captured, it crosses for this instance's slot.
+func (r *Router) KeyReported(releases bool) {
+	r.releases = releases
+	if r.keyAsk.captured {
+		r.crossReport()
+	}
+}
+
+// crossReport tells every instance whether this slot's keys release or tap
+func (r *Router) crossReport() {
+	slot := r.ctx.World.Resources.Player.LocalSlot()
+	if int(slot) >= parameter.MaxPlayers {
+		return
+	}
+	r.ctx.World.PushCrossing(event.EventInputReport, &event.InputReportPayload{Slot: slot, Releases: r.releases})
+}
+
 // syncMouseMode pushes reporting state to the host when it diverges from the last applied value
 // First call always applies — post context availability lazy init
 // Runs regardless of pause: reporting tracks the flags even while the simulation is frozen
@@ -1147,16 +1256,19 @@ func (r *Router) syncMouseMode() {
 	// Reporting off, no release can follow a press held now
 	if !enabled {
 		r.mouseLeftHeld, r.mouseRightHeld = false, false
-		r.releaseButton()
+		r.releasePointer(true)
 	}
 	r.mouseMode = mouseModeState{applied: true, enabled: enabled, motion: motion}
 	r.applyMouseMode(enabled, motion)
 }
 
-// ProcessInputTick checks mouse reports, summons the menu a hold on the status bar
-// has earned, and emits repeat fire requests for auto-fire and held buttons
+// ProcessInputTick checks mouse reports and key release asks, ends the holds play no
+// longer allows, summons the menu a hold on the status bar has earned, and emits
+// repeat fire requests for auto-fire and held buttons
 func (r *Router) ProcessInputTick() bool {
 	r.syncMouseMode()
+	r.syncKeyReport()
+	r.endHolds()
 	r.openBreak()
 
 	if r.menuHold && time.Since(r.menuSince) >= parameter.MenuHoldDuration { // [wall]

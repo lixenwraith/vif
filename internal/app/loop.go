@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/render"
@@ -258,6 +259,9 @@ func (a *App) Loop() (*restartRequest, error) {
 			if ev.Type == terminal.EventResize {
 				a.handleResize(ev.Width, ev.Height)
 			}
+			if ev.Type == terminal.EventKeyReport {
+				a.keyReported(ev.Report == terminal.KeyReportReleases)
+			}
 
 		case away := <-awayChan:
 			a.setAway(away)
@@ -399,6 +403,33 @@ func (a *App) terminalTaking() bool {
 
 // applyMouseMode is the Router's terminal sink for mouse reporting state
 func (a *App) applyMouseMode(enabled, motion bool) { a.pres.SetPointerMode(enabled, motion) }
+
+// keyReportApplier is the Router's sink for asking for key releases: from a terminal's
+// protocol or a host's own key events, and a console keyboard's when the router says.
+// Nil for a presentation that reports presses alone.
+func (a *App) keyReportApplier() mode.KeyReportApplier {
+	p, ok := a.pres.(keyReportPresentation)
+	if !ok {
+		return nil
+	}
+	return func(console bool) {
+		allow := terminal.KeySourceProtocol | terminal.KeySourceHost
+		if console {
+			allow |= terminal.KeySourceConsole
+		}
+		p.SetKeyReport(terminal.KeyReportReleases, allow)
+	}
+}
+
+// keyReported hands the presentation's answer to the router, which crosses it while
+// keys are captured
+func (a *App) keyReported(releases bool) {
+	before := a.pushed()
+	a.world.RunSafe(func() { a.router.KeyReported(releases) })
+	if a.pushed() != before {
+		a.scheduler.DispatchEventsImmediately()
+	}
+}
 
 // inputTick advances input-driven work: mouse reporting reconciliation,
 // auto-fire and button repeat, macro playback. Each macro intent settles

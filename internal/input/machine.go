@@ -7,8 +7,12 @@ import (
 )
 
 // KeyCapture is the set of printable ASCII keys a scenario takes from Normal, Visual
-// and Insert parsing. Written under the world lock, read by the parser outside it.
-type KeyCapture struct{ bits [2]atomic.Uint64 }
+// and Insert parsing, and whether it asks a console keyboard for their releases.
+// Written under the world lock, read by the parser outside it.
+type KeyCapture struct {
+	bits     [2]atomic.Uint64
+	releases atomic.Bool
+}
 
 // Capturable reports whether a scenario can take r: printable ASCII, which every
 // terminal sends as itself
@@ -16,7 +20,7 @@ func Capturable(r rune) bool { return r >= ' ' && r <= '~' }
 
 // Set replaces the captured keys; an empty string releases them all. It reports
 // the runes it refused, which lie outside printable ASCII.
-func (c *KeyCapture) Set(keys string) (refused string) {
+func (c *KeyCapture) Set(keys string, releases bool) (refused string) {
 	var bits [2]uint64
 	for _, r := range keys {
 		if !Capturable(r) {
@@ -27,6 +31,7 @@ func (c *KeyCapture) Set(keys string) (refused string) {
 	}
 	c.bits[0].Store(bits[0])
 	c.bits[1].Store(bits[1])
+	c.releases.Store(releases && bits != [2]uint64{})
 	return refused
 }
 
@@ -34,6 +39,14 @@ func (c *KeyCapture) Set(keys string) (refused string) {
 func (c *KeyCapture) Has(r rune) bool {
 	return c != nil && r >= 0 && r < 128 && c.bits[r>>6].Load()&(1<<(r&63)) != 0
 }
+
+// Any reports whether any key is captured
+func (c *KeyCapture) Any() bool {
+	return c != nil && c.bits[0].Load()|c.bits[1].Load() != 0
+}
+
+// Releases reports whether the capture asks a console keyboard for releases
+func (c *KeyCapture) Releases() bool { return c != nil && c.releases.Load() }
 
 // Machine is the input state machine
 // Parses terminal.Event into semantic Intent
@@ -116,10 +129,21 @@ func (m *Machine) Process(ev terminal.Event) *Intent {
 }
 
 func (m *Machine) processKey(ev terminal.Event) *Intent {
+	// A captured key's release ends the hold the router keeps for it, in any mode,
+	// since the router ends holds as play stops; any other key's release is nothing
+	if ev.Action == terminal.KeyRelease {
+		if ev.Key == terminal.KeyRune && m.capture.Has(ev.Rune) {
+			return &Intent{Type: IntentKeyRelease, Char: ev.Rune, Count: 1, Lost: ev.Lost}
+		}
+		return nil
+	}
 	switch m.mode {
 	case ModeNormal, ModeVisual, ModeInsert:
 		// A captured key outranks any pending grammar, so a count or operator never eats it
 		if ev.Key == terminal.KeyRune && m.capture.Has(ev.Rune) {
+			if ev.Action == terminal.KeyRepeat {
+				return nil // its hold is down already
+			}
 			m.Reset()
 			m.last = string(ev.Rune)
 			return &Intent{Type: IntentKeyPress, Char: ev.Rune, Count: 1, Command: m.last}
@@ -211,7 +235,8 @@ func (m *Machine) SetKeyTable(kt *KeyTable) {
 	m.keyTable = kt
 }
 
-// SetCapture installs the key set this parser yields as IntentKeyPress
+// SetCapture installs the key set this parser yields as IntentKeyPress and
+// IntentKeyRelease
 func (m *Machine) SetCapture(c *KeyCapture) {
 	m.capture = c
 }

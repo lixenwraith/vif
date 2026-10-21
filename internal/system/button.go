@@ -12,10 +12,10 @@ import (
 )
 
 // ButtonSystem keeps the row of buttons a scenario lays out: it adds them, lights
-// them on request and on a press of their input, and plays each one's sound as it
-// lights. Whether a press was right is the scenario's call, never the button's.
-// An own press is presented by its echo at production, so its applied crossing
-// lights the shared button silently; a peer's press sounds as it applies.
+// them on request and on a press of their input until its release, and plays each
+// one's sound as it lights. Whether a press was right is the scenario's call, never
+// the button's. An own press is presented by its echo at production, so its applied
+// crossing lights the shared button silently; a peer's press sounds as it applies.
 type ButtonSystem struct {
 	world *engine.World
 	toggle
@@ -47,6 +47,7 @@ func (s *ButtonSystem) EventTypes() []event.EventType {
 		event.EventInputReleased,
 		event.EventInputPressEcho,
 		event.EventInputReleaseEcho,
+		event.EventParticipantDeparted,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -68,11 +69,19 @@ func (s *ButtonSystem) HandleEvent(ev event.GameEvent) {
 		s.spawn(p)
 	case *event.ButtonLightRequestPayload:
 		if e := s.bySlot(p.Button); e != 0 {
-			s.light(e, parameter.NoPlayerSlot, false, time.Duration(p.DurationMs)*time.Millisecond, true)
+			s.light(e, parameter.NoPlayerSlot, time.Duration(p.DurationMs)*time.Millisecond, true)
 		}
 	case *event.InputPayload:
 		key, _ := utf8.DecodeRuneInString(p.Key)
 		s.input(ev, p, key)
+	case *event.ParticipantDepartedPayload:
+		// A slot that leaves takes its holds along; no release of theirs will come
+		s.world.Components.Button.Each(func(_ core.Entity, b *component.ButtonComponent) bool {
+			if b.PressedBy == p.Slot {
+				b.Held = false
+			}
+			return true
+		})
 	}
 }
 
@@ -86,13 +95,13 @@ func (s *ButtonSystem) input(ev event.GameEvent, p *event.InputPayload, key rune
 	echo := &s.world.Resources.View.ButtonEcho
 	switch ev.Type {
 	case event.EventInputPressed:
-		s.light(e, p.Slot, p.Source == event.InputPointer, parameter.ButtonPressLight, ev.Origin == event.OriginNetwork)
+		s.light(e, p.Slot, parameter.ButtonPressLight, ev.Origin == event.OriginNetwork)
 	case event.EventInputReleased:
 		if b, _ := s.world.Components.Button.GetPtr(e); b.PressedBy == p.Slot {
 			b.Held = false
 		}
 	case event.EventInputPressEcho:
-		*echo = engine.ButtonEchoState{Key: key, Remaining: parameter.ButtonPressLight, Held: p.Source == event.InputPointer}
+		*echo = engine.ButtonEchoState{Key: key, Remaining: parameter.ButtonPressLight, Held: true}
 		s.sound(e)
 	case event.EventInputReleaseEcho:
 		if echo.Key == key {
@@ -125,14 +134,14 @@ func (s *ButtonSystem) spawn(p *event.ButtonSpawnRequestPayload) {
 	})
 }
 
-// light lights a button for d, pressed by a roster slot or by the scenario when by is
-// parameter.NoPlayerSlot
-func (s *ButtonSystem) light(e core.Entity, by uint8, held bool, d time.Duration, audible bool) {
+// light lights a button for d, or held until its release when a roster slot pressed
+// it rather than the scenario, whose by is parameter.NoPlayerSlot
+func (s *ButtonSystem) light(e core.Entity, by uint8, d time.Duration, audible bool) {
 	b, ok := s.world.Components.Button.GetPtr(e)
 	if !ok || d <= 0 {
 		return
 	}
-	b.PressedBy, b.Held = by, held
+	b.PressedBy, b.Held = by, by != parameter.NoPlayerSlot
 	armTimer(s.world, e, component.TimerDeadline, d)
 	if audible {
 		s.sound(e)
