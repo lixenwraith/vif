@@ -12,10 +12,11 @@
     const AUDIO_PATH = files.audio || 'audio-worklet.js';
 
     /* A touch-first screen (phone, tablet), decided once at load, keeps the system
-       keyboard down on taps and gets the key strip to raise it. A cell is CELL CSS
-       pixels tall and half as wide, the aspect the game is authored at; a phone
-       starts at 6, which holds the map's width in its screen, and a pinch, or
-       Ctrl and the wheel, takes the cell between CELL_LEAST and CELL_MOST. */
+       keyboard down on taps; the key strip's button or two fingers tapped together
+       twice raise it, as on Android. A cell is CELL CSS pixels tall and half as
+       wide, the aspect the game is authored at; a phone starts at 6, which holds the
+       map's width in its screen, and a pinch, or Ctrl and the wheel, takes the cell
+       between CELL_LEAST and CELL_MOST. */
     const touch = matchMedia('(pointer: coarse)').matches;
     const CELL = touch && Math.min(screen.width, screen.height) < 600 ? 6 : 16;
     const CELL_LEAST = 4, CELL_MOST = 40;
@@ -58,10 +59,11 @@ uniform sampler2D u_fg;
 uniform sampler2D u_bg;
 uniform sampler2D u_mask;
 uniform vec2 u_grid;
+uniform vec4 u_src;
 uniform vec2 u_slots;
 varying vec2 v_uv;
 void main() {
-    vec2 pos = v_uv * u_grid;
+    vec2 pos = u_src.xy + v_uv * u_src.zw;
     vec2 cuv = (floor(pos) + 0.5) / u_grid;
     vec4 fg = texture2D(u_fg, cuv);
     vec4 bg = texture2D(u_bg, cuv);
@@ -143,6 +145,27 @@ void main() {
     function frameOf(d) { return [d.cols * d.cw, d.rows * d.ch]; }
     function originOf(d) { return [Math.max(0, Math.floor((canvas.width - d.cols * d.cw) / 2)), 0]; }
 
+    /* While a keyboard covers the canvas's bottom `covered` device pixels, the last
+       row, the status bar's mode and input, is drawn again just above it at twice its
+       size, as Android draws it: its left half fills the frame's width, and the run,
+       told of the keyboard, keeps its input to that half. Null with no keyboard. */
+    let covered = 0;
+    function stripOf(d) {
+        if (!covered || !d.cols) return null;
+        const half = Math.floor(d.cols / 2), [ox] = originOf(d), bottom = canvas.height - covered;
+        return { cols: half, row: d.rows - 1, x: ox, y: bottom - 2 * d.ch, w: 2 * half * d.cw, h: 2 * d.ch };
+    }
+
+    // setCovered keeps the device pixels a keyboard covers, tells Go when one comes or
+    // goes, and draws the strip where it now belongs
+    function setCovered(px) {
+        px = Math.max(0, px);
+        if (px === covered) return;
+        if ((covered > 0) !== (px > 0)) send({ type: 'covered', covered: px > 0 });
+        covered = px;
+        drawer.draw();
+    }
+
     function Drawer(canvas) {
         const gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false });
         if (!gl) throw new Error('WebGL is unavailable');
@@ -188,7 +211,7 @@ void main() {
         gl.enableVertexAttribArray(pos);
         gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
         this.u = {};
-        for (const name of ['u_quad', 'u_grid', 'u_slots', 'u_fg', 'u_bg', 'u_mask']) {
+        for (const name of ['u_quad', 'u_grid', 'u_src', 'u_slots', 'u_fg', 'u_bg', 'u_mask']) {
             this.u[name] = gl.getUniformLocation(program, name);
         }
         this.tex = {};
@@ -251,7 +274,14 @@ void main() {
         }
         const [fw, fh] = this.frame(), [ox, oy] = this.origin();
         gl.uniform4f(this.u.u_quad, -1 + 2 * ox / W, 1 - 2 * oy / H, 2 * fw / W, -2 * fh / H);
+        gl.uniform4f(this.u.u_src, 0, 0, this.cols, this.rows);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        const s = stripOf(this);
+        if (s) {
+            gl.uniform4f(this.u.u_quad, -1 + 2 * s.x / W, 1 - 2 * s.y / H, 2 * s.w / W, -2 * s.h / H);
+            gl.uniform4f(this.u.u_src, 0, s.row, s.cols, 1);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
     };
 
     /* Painter is the screen without WebGL: each changed cell's background and then
@@ -329,17 +359,19 @@ void main() {
         if (!this.cols || !this.mask) return;
         const [ox, oy] = this.origin();
         ctx.drawImage(this.picture, ox, oy);
+        const s = stripOf(this);
+        if (s) {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(this.picture, 0, s.row * this.ch, s.cols * this.cw, this.ch, s.x, s.y, s.w, s.h);
+        }
     };
 
     // === Fitting ===
-    let cellCSS = CELL;   // a cell's height in CSS pixels as drawn now; smaller under a keyboard
-    let scale = 1;        // the screen's CSS scale, below 1 only under a keyboard
-
-    // cell sizes the drawer's cell to the device pixels cellCSS covers, whole ones at
+    // cell sizes the drawer's cell to the device pixels cellBase covers, whole ones at
     // exactly the game's aspect, rasterizing the glyphs again when that changed
     function cell() {
         const dpr = window.devicePixelRatio || 1;
-        const cw = Math.max(1, Math.round(cellCSS * dpr / 2)), ch = 2 * cw;
+        const cw = Math.max(1, Math.round(cellBase * dpr / 2)), ch = 2 * cw;
         if (cw !== drawer.cw || ch !== drawer.ch) {
             drawer.cw = cw;
             drawer.ch = ch;
@@ -347,8 +379,7 @@ void main() {
         }
     }
 
-    // size backs the canvas with the container's device pixels: its layout size,
-    // which the scale a keyboard puts on it (layoutKeyboard) leaves alone
+    // size backs the canvas with the container's device pixels
     function size() {
         const dpr = window.devicePixelRatio || 1;
         const W = Math.max(1, Math.round(container.clientWidth * dpr)), H = Math.max(1, Math.round(container.clientHeight * dpr));
@@ -359,9 +390,8 @@ void main() {
     }
 
     // fit sizes the grid to the cells the container holds at cellBase and reports it
-    // to Go when it changed; the grid is never fitted at a keyboard's smaller cell
+    // to Go when it changed; a keyboard covering the page leaves the grid as it is
     function fit() {
-        cellCSS = cellBase;
         size();
         cell();
         const c = Math.max(1, Math.floor(canvas.width / drawer.cw));
@@ -377,10 +407,10 @@ void main() {
     }
 
     // cellAt is the cell drawn under a pointer event, the nearest edge cell past the
-    // frame; the rect is the scaled one, so the scale comes off first
+    // frame
     function cellAt(e) {
         const rect = canvas.getBoundingClientRect();
-        const dpr = (window.devicePixelRatio || 1) / scale;
+        const dpr = window.devicePixelRatio || 1;
         const [ox, oy] = drawer.origin();
         const fc = drawer.cols || cols, fr = drawer.rows || rows;
         const x = Math.floor(((e.clientX - rect.left) * dpr - ox) / drawer.cw);
@@ -673,9 +703,11 @@ void main() {
     /* The pointer is reported at its cell in the terminal's numbering: buttons left
        1, middle 2, right 3, wheel up 4 and down 5, back 6, forward 7; actions press 1,
        release 2, move 3, drag 4. A touch is the left button, as on Android, marked as
-       a finger's; motion once per cell, and only while Go asked for it. */
+       a finger's, and goes with the pointer off too, as Go keeps the status bar's hold
+       then; motion once per cell, and only while Go asked for it. */
     let pointer = { enabled: false, motion: false };
     let lastCell = null;
+    let fingerDown = false;   // a finger's press was sent and not let go
     const BUTTONS = [1, 2, 3, 6, 7];   // PointerEvent.button to the terminal's
 
     function held(e) {
@@ -693,40 +725,29 @@ void main() {
     function onPointerDown(e) {
         focus();   // keys follow the pointer
         e.preventDefault();
-        if (e.pointerType === 'touch') {
-            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-            if (pointers.size === 2) {
-                if (pointer.enabled && lastCell) mouse(e, 1, 2);
-                pinch = { dist: pinchDistance(), cell: cellBase };
-                return;
-            }
-            if (pointers.size > 2) return;
-        }
-        if (!pointer.enabled) return;
+        if (e.pointerType === 'touch' ? touchDown(e) : !pointer.enabled) return;
         const button = e.pointerType === 'touch' ? 1 : BUTTONS[e.button];
         if (!button) return;
         canvas.setPointerCapture(e.pointerId);
         mouse(e, button, 1);
+        fingerDown = e.pointerType === 'touch';
     }
 
     function onPointerUp(e) {
         if (e.pointerType === 'touch') {
-            pointers.delete(e.pointerId);
-            if (pinch) {
-                if (pointers.size === 0) pinch = null;
-                return;
+            if (!touchUp(e) && fingerDown) {
+                fingerDown = false;
+                mouse(e, 1, 2);
             }
+            return;
         }
         if (!pointer.enabled) return;
-        const button = e.pointerType === 'touch' ? 1 : BUTTONS[e.button];
+        const button = BUTTONS[e.button];
         if (button) mouse(e, button, 2);
     }
 
     function onPointerMove(e) {
-        if (pinch) {
-            onPinchMove(e);
-            return;
-        }
+        if (e.pointerType === 'touch' && touchMove(e)) return;
         if (!pointer.enabled) return;
         const button = held(e);
         if (!button && !pointer.motion) return;
@@ -748,10 +769,7 @@ void main() {
     /* A zoom moves the cell the grid is fitted at, in half pixels between the
        bounds, and refits: the grid changes, and Go sees a resize as it does for a
        window, so a solo map follows it and a shared one shows more or less of
-       itself. A pinch is two pointers on the canvas; the first is released to the
-       game when the second lands, so no press is left held under the gesture. */
-    const pointers = new Map();   // active pointers on the canvas, by id
-    let pinch = null;             // { dist, cell }: the pinch's start
+       itself. */
     let zoomFrame = 0;
 
     function zoomTo(cell) {
@@ -761,14 +779,88 @@ void main() {
         if (!zoomFrame) zoomFrame = requestAnimationFrame(function() { zoomFrame = 0; fit(); });
     }
 
+    // === Fingers ===
+    /* Two fingers on the canvas are a gesture, never play: the first's press is let go
+       when the second lands. Moved apart or together they pinch the zoom; tapped
+       together twice they raise or drop the keyboard, timed as on Android (GameView).
+       A finger landing on the status strip reads it and plays nothing. */
+    const PAIR_TOGETHER_MS = 150, PAIR_TAP_MS = 300, PAIR_DOUBLE_MS = 500, PAIR_SLOP = 8;
+    const pointers = new Map();   // fingers on the canvas, by id: where each is, and was as the pair formed
+    const reading = new Set();    // fingers on the status strip
+    let pinch = null;             // { dist, cell }: the pinch's start
+    const pair = { first: 0, at: 0, down: false, tap: false, tapAt: 0 };
+    let toggleKeyboard = function() {};
+
     function pinchDistance() {
         const [a, b] = [...pointers.values()];
         return Math.hypot(a.x - b.x, a.y - b.y);
     }
 
-    function onPinchMove(e) {
-        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (pointers.size === 2 && pinch) zoomTo(pinch.cell * pinchDistance() / pinch.dist);
+    // onStrip is a finger on the status strip
+    function onStrip(e) {
+        const s = stripOf(drawer);
+        return !!s && (e.clientY - canvas.getBoundingClientRect().top) * (window.devicePixelRatio || 1) >= s.y;
+    }
+
+    // touchDown takes a finger the game does not get: one on the strip, or a second
+    function touchDown(e) {
+        if (onStrip(e)) {
+            reading.add(e.pointerId);
+            return true;
+        }
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
+        if (pointers.size === 1) {
+            pair.first = e.timeStamp;
+            pair.down = pair.tap = false;
+            return false;
+        }
+        if (fingerDown) {
+            fingerDown = false;
+            mouse(e, 1, 2);
+        }
+        pair.down = pointers.size === 2 && e.timeStamp - pair.first <= PAIR_TOGETHER_MS;
+        pair.at = e.timeStamp;
+        for (const p of pointers.values()) { p.x0 = p.x; p.y0 = p.y; }
+        if (pointers.size === 2) pinch = { dist: pinchDistance(), cell: cellBase };
+        return true;
+    }
+
+    // touchMove: a pair's finger moved past the slop is a pinch from then on
+    function touchMove(e) {
+        if (reading.has(e.pointerId)) return true;
+        const p = pointers.get(e.pointerId);
+        if (!p) return false;
+        p.x = e.clientX;
+        p.y = e.clientY;
+        if (!pinch) return false;
+        if (Math.abs(p.x - p.x0) > PAIR_SLOP || Math.abs(p.y - p.y0) > PAIR_SLOP) pair.down = false;
+        if (!pair.down && pointers.size === 2) zoomTo(pinch.cell * pinchDistance() / pinch.dist);
+        return true;
+    }
+
+    // touchUp ends a gesture's finger: the last of a pair tapped twice in time
+    // toggles the keyboard
+    function touchUp(e) {
+        if (reading.delete(e.pointerId)) return true;
+        pointers.delete(e.pointerId);
+        if (!pinch) return false;
+        if (e.type === 'pointercancel') pair.down = pair.tap = false;
+        if (pointers.size === 1) {
+            pair.tap = pair.down && e.timeStamp - pair.at <= PAIR_TAP_MS;
+            pair.down = false;
+        } else if (pointers.size === 0) {
+            pinch = null;
+            if (pair.tap && e.timeStamp - pair.at <= PAIR_TAP_MS) {
+                if (pair.tapAt && e.timeStamp - pair.tapAt <= PAIR_DOUBLE_MS) {
+                    pair.tapAt = 0;
+                    toggleKeyboard();
+                } else {
+                    pair.tapAt = e.timeStamp;
+                }
+            }
+            pair.tap = false;
+        }
+        return true;
     }
 
     // === Event Wiring ===
@@ -870,58 +962,26 @@ void main() {
             layoutKeyboard();
         }
 
+        toggleKeyboard = function() { setKeyboard(!keyboard, true); };
+
         /* While a keyboard covers the page the grid keeps its size, which is the solo
-           map's, and is drawn to fit between the strip and the keyboard: at the
-           smallest half-pixel cell whose grid still covers that height, then scaled
-           down to it exactly, so the whole grid shows, heat bar to status line, and
-           nothing is left over. A zoom under a keyboard refits once it is down. */
-        function drawAt(h) {
-            if (cellCSS !== h) {
-                cellCSS = h;
-                cell();
-                drawer.draw();
-            }
-            return drawer.frame()[1] / (window.devicePixelRatio || 1);   // the grid's CSS height
-        }
-
-        function scaleTo(k) {
-            scale = k;
-            container.style.transform = k < 1 ? 'scale(' + k + ')' : '';
-        }
-
-        let fullHeight = 0;   // the grid's height at cellBase
-        let lastFit = null;   // the cell found for a height, kept while the keyboard holds still
+           map's, and the status strip shows the last row above the keyboard, as on
+           Android; the run is told, and keeps its input to the strip's half. */
         layoutKeyboard = function() {
             if (pageChanged()) return;   // measured against the old page; the refit lays out again
             const up = !!vv && fitH - vv.height * vv.scale > KEYBOARD_MIN;
             if (keyboard && up) keyboardSeen = true;
             else if (keyboard && keyboardSeen) return setKeyboard(false, false);   // dismissed by the system
             keyboardUp = up && (keyboard || keyboardUp);
-
-            if (cellCSS === cellBase) {
-                fullHeight = drawAt(cellBase);
-                lastFit = null;
-            }
-            let k = 1;
-            if (up) {
-                const avail = Math.max(1, vv.height - strip.offsetHeight);
-                let h = lastFit && lastFit.avail === avail ? lastFit.cell
-                    : Math.min(cellBase, Math.max(0.5, Math.ceil(2 * cellBase * avail / fullHeight) / 2));
-                let drawn = drawAt(h);
-                while (drawn < avail && h < cellBase) drawn = drawAt(h += 0.5);
-                lastFit = { avail: avail, cell: h };
-                k = Math.min(1, avail / drawn);
-            } else {
-                drawAt(cellBase);
-                // Only once the page is whole again does a put-off refit see its real size.
-                if (!keyboard && refitPending) {
-                    refitPending = false;
-                    fit();
-                }
+            // Only once the page is whole again does a put-off refit see its real size.
+            if (!up && !keyboard && refitPending) {
+                refitPending = false;
+                fit();
             }
             // The page follows the visible area if the browser pans it to the keyboard.
             document.body.style.transform = up && vv.offsetTop ? 'translateY(' + vv.offsetTop + 'px)' : '';
-            scaleTo(k);
+            const visible = Math.round((vv ? vv.height - strip.offsetHeight : 0) * (window.devicePixelRatio || 1));
+            setCovered(up ? canvas.height - visible : 0);
         };
 
         if (vv) {

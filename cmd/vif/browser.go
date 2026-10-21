@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/browser"
@@ -65,7 +66,7 @@ func (h *browserHost) Init() error {
 		return err
 	}
 	h.aspect = atlas.Aspect()
-	h.host, err = browser.Open(atlas)
+	h.host, err = browser.Open(atlas, parameter.StatusRows)
 	return err
 }
 
@@ -75,6 +76,7 @@ func (h *browserHost) Blocked() time.Duration              { return h.host.Block
 func (h *browserHost) CellAspect() vmath.Aspect            { return h.aspect }
 func (h *browserHost) Events() <-chan terminal.Event       { return h.host.Events() }
 func (h *browserHost) SetPointerMode(enabled, motion bool) { h.host.SetPointerMode(enabled, motion) }
+func (h *browserHost) Covered() bool                       { return h.host.Covered() }
 
 func (h *browserHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
 	return h.host.SetKeyReport(report, allow)

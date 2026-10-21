@@ -615,9 +615,11 @@ have) the page paints on a 2D canvas instead and says so in a notice at the star
 each changed cell is a fill and a glyph tinted through a scratch cell, the same
 picture, slower on a large grid.
 On a touch-first screen (phone, tablet) a tap raises no system
-keyboard; a strip along the top toggles it, sends Tab (and Esc while it is up) and
-goes fullscreen where the browser can. Neither the strip nor the keyboard refits
-the grid; the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch,
+keyboard; two fingers tapped together twice toggle it, as on Android, and so does a
+strip along the top, which also sends Tab (and Esc while it is up) and goes
+fullscreen where the browser can. Neither the strip nor the keyboard refits the
+grid: the keyboard covers it, and the status bar's bottom row is drawn again above
+it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)); the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch,
 or Ctrl and the wheel) do, and a solo map follows. Before launch it maps
 `window.VIF_ARGS` and repeated `arg` query parameters into the program's argv; a
 site that renames the files says so with `data-wasm`, `data-worker` and

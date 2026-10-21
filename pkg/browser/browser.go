@@ -43,19 +43,24 @@ const (
 // goroutine; the page's messages arrive on the Worker's event loop.
 type Host struct {
 	*glyph.Frames
-	tex    *glyph.Texture
-	events chan terminal.Event
-	grid   atomic.Uint64 // cols<<32 | rows
-	event  js.Func
-	keys   hostkey.Report
+	tex     *glyph.Texture
+	events  chan terminal.Event
+	grid    atomic.Uint64 // cols<<32 | rows
+	event   js.Func
+	keys    hostkey.Report
+	barRows int         // the bottom rows a finger still presses with the pointer off
+	pointer atomic.Bool // the run takes pointer events
+	covered atomic.Bool // a keyboard covers the page's bottom rows
+	finger  bool        // a finger's press was taken; the event loop's alone
 
 	mu       sync.Mutex
 	inflight bool // a frame the page has not reported drawn
 }
 
 // Open presents on the page: the texture goes over first, then frames as the page
-// takes them. The host lives as long as the Worker, so nothing closes it.
-func Open(a *glyph.Atlas) (*Host, error) {
+// takes them. barRows is the status bar, whose hold a finger starts even with the
+// pointer off. The host lives as long as the Worker, so nothing closes it.
+func Open(a *glyph.Atlas, barRows int) (*Host, error) {
 	if a == nil {
 		return nil, errors.New("browser: an atlas is required")
 	}
@@ -65,7 +70,7 @@ func Open(a *glyph.Atlas) (*Host, error) {
 			return nil, errors.New("browser: the worker defines no " + name)
 		}
 	}
-	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue)}
+	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue), barRows: barRows}
 	h.keys.Post = h.post
 	h.Frames = glyph.NewFrames(h.tex, false)
 	cols, rows := 80, 24
@@ -108,7 +113,30 @@ func (h *Host) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource)
 // SetPointerMode tells the page which pointer events to report: none, buttons and
 // drags, or every motion as well
 func (h *Host) SetPointerMode(enabled, motion bool) {
+	h.pointer.Store(enabled)
 	js.Global().Call(jsPointer, enabled, motion)
+}
+
+// Covered reports a keyboard over the page's bottom rows, where the page draws the
+// last row's left half again above it
+func (h *Host) Covered() bool { return h.covered.Load() }
+
+// admit is the pointer mode applied to what the page reports, as Android's view
+// applies it: with the pointer off, a finger still presses on the status bar, the
+// hold that opens the menu where the mouse is enabled again, and lifts from a press
+// that was taken
+func (h *Host) admit(ev terminal.Event) bool {
+	switch {
+	case ev.MouseAction == terminal.MouseActionPress && ev.MouseBtn == terminal.MouseBtnLeft:
+		_, rows := h.Size()
+		h.finger = h.pointer.Load() || ev.Touch && ev.MouseY >= rows-h.barRows
+		return h.finger
+	case ev.MouseAction == terminal.MouseActionRelease && ev.MouseBtn == terminal.MouseBtnLeft:
+		taken := h.finger || h.pointer.Load()
+		h.finger = false
+		return taken
+	}
+	return h.pointer.Load()
 }
 
 // present hands the page the newest frame once the one it was handed is drawn
@@ -127,7 +155,8 @@ func (h *Host) present() {
 }
 
 // handle takes what the page sent: a frame drawn, a key going down or up, its keys
-// going elsewhere, text, the pointer, a new size or a request for a whole frame
+// going elsewhere, text, the pointer, a keyboard over it, a new size or a request
+// for a whole frame
 func (h *Host) handle(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -157,9 +186,11 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 		}
 	case "mouse":
 		if ev, ok := mouseEvent(msg.Get("x").Int(), msg.Get("y").Int(), msg.Get("button").Int(),
-			msg.Get("action").Int(), uint8(msg.Get("mods").Int()), msg.Get("touch").Truthy()); ok {
+			msg.Get("action").Int(), uint8(msg.Get("mods").Int()), msg.Get("touch").Truthy()); ok && h.admit(ev) {
 			h.post(ev)
 		}
+	case "covered":
+		h.covered.Store(msg.Get("covered").Truthy())
 	case "resize":
 		cols, rows := max(msg.Get("cols").Int(), 1), max(msg.Get("rows").Int(), 1)
 		if c, r := h.Size(); c != cols || r != rows {

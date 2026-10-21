@@ -123,8 +123,8 @@ func TestKeysArriveAsATerminalReportsThem(t *testing.T) {
 }
 
 // TestTheStatusBarTakesATapWithThePointerOff: with the run taking no pointer a
-// press on the last row, the status bar, is reported with its release, and one
-// anywhere else is not; a release with no press taken is nothing.
+// press on the status bar's rows is reported with its release, and one anywhere
+// else is not; a release with no press taken is nothing.
 func TestTheStatusBarTakesATapWithThePointerOff(t *testing.T) {
 	v := testView(t, false, 1)
 	v.setGrid(10*12, 4*24)
