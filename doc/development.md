@@ -598,7 +598,7 @@ terminal/audio smoke tests.
 | `js/wasm` | Supported constrained build | `pkg/browser` host, a WebGL canvas drawn from cell frames and an AudioWorklet fed the mixer's PCM; embedded scenario/content/keymap, `vlog` stub, no host discovery or raw socket transport. |
 | Windows amd64 | Experimental | `CGO_ENABLED=0`, `novlog`, `vif_noaudio`; published as a zip that plays in a terminal, with the known issues in [Build profiles §4](multi-platform.md#4-platform-matrix). |
 | Android | Native target, a debug-signed APK | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` cell drawer and `AudioTrack`; the wad as its system root ([android/README.md](../android/README.md)). |
-| Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification; no 32-bit target compiles. |
+| Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification; 32-bit targets are not supported ([Build profiles §4](multi-platform.md#4-platform-matrix)). |
 
 ### WASM host
 

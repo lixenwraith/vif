@@ -49,7 +49,7 @@ const (
 
 // God Mode
 const (
-	GodEnergyAmount = 100_000_000_000
+	GodEnergyAmount = 1_000_000_000 // within int32, so a 32-bit fork needs no change here
 )
 
 // Character Spawn Logic
