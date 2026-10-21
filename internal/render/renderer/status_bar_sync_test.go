@@ -248,6 +248,27 @@ func TestStatusItemsSpanTheirRowByPriority(t *testing.T) {
 	}
 }
 
+// TestALongMessageRisesOverTheItems: a message longer than its room on the bottom
+// row starts on the items' row, broken after a slash, and ends on the bottom row,
+// whole; under a keyboard, which hides the items' row, it stays on the bottom row.
+func TestALongMessageRisesOverTheItems(t *testing.T) {
+	r, _ := newStatusBar(t)
+	msg := "Logging to /data/user/0/com.lixen.vif/files/state/vif/log/vif-log-261021-221500.jsonl"
+	r.gameCtx.SetStatusMessage(msg, parameter.StatusNotice)
+	rc := statusContext(63)
+	items, _ := statusRow(r, rc, 22)
+	line, _ := statusRow(r, rc, 23)
+	head := strings.TrimRight(items, " ")
+	if !strings.HasSuffix(head, "/") || !strings.HasPrefix(msg, head) ||
+		!strings.HasSuffix(strings.TrimRight(line, " "), " "+msg[len(head):]) {
+		t.Fatalf("the message reads %q over %q", items, line)
+	}
+	rc.StatusCovered = true
+	if items, _ := statusRow(r, rc, 22); strings.Contains(items, "Logging") {
+		t.Fatalf("under a keyboard the items' row reads %q", items)
+	}
+}
+
 // TestConsoleStatusItemsReadOnTheirBackgrounds is the field that vanished: on a text console
 // every item's text reads on its background, and only text-only items share the bar's black.
 func TestConsoleStatusItemsReadOnTheirBackgrounds(t *testing.T) {

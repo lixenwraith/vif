@@ -408,8 +408,11 @@ shown change, not when a value grows a digit. The bottom row holds the audio
 letter, the mode label, a fixed key cell (`StatusKeyWidth`) with a pending key
 sequence or the last one completed, then typed input or the message shown; no
 item narrows it, and the keys never share their cells or their time with a
-message. While a keyboard covers a touch host (`StatusCovered`), the row keeps
-its input to the left half the host repeats above the keyboard. A
+message. A message longer than its room rises onto the items' row while it shows,
+as vim's rises over the window, broken after a space or a slash where the rest
+then fits the bottom row, so a log path reads whole on a portrait phone. While a
+keyboard covers a touch host (`StatusCovered`), the row keeps its input and
+messages to the left half the host repeats above the keyboard. A
 message is a notice or an alert (`parameter.StatusKinds`): the newest replaces the
 one shown, except that a notice does not displace an alert younger than its
 minimum, and each leaves after its kind's wall time. Its

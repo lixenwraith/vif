@@ -457,8 +457,37 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		text := ":" + r.gameCtx.GetCommandText()
 		r.renderInput(buf, lineY, leftEndX, textWidth, text, visual.RgbCommandInputText, r.gameCtx.GetCommandCursorPos()+1)
 	default:
-		r.renderStatusMessage(buf, lineY, leftEndX, textWidth, r.gameCtx.ShownStatusMessage(realNow.UnixNano()))
+		msg := r.runesOf(r.gameCtx.ShownStatusMessage(realNow.UnixNano()))
+		// One longer than its room rises onto the items' row while it shows, as vim's
+		// long message rises over the window, and ends here; a keyboard hides that row
+		if len(msg) > textWidth && !ctx.StatusCovered {
+			head := spill(msg, ctx.ScreenWidth, textWidth)
+			for x := range ctx.ScreenWidth {
+				ch := ' '
+				if x < len(head) {
+					ch = head[x]
+				}
+				buf.SetWithBg(x, itemsY, ch, visual.RgbStatusMessageText, visual.RgbBackground)
+			}
+			msg = msg[len(head):]
+		}
+		r.renderStatusMessage(buf, lineY, leftEndX, textWidth, msg)
 	}
+}
+
+// spill is the head of a message for a row width wide, the rest going where room
+// is left: all of it when it fits, else up to the last space or slash whose rest
+// still fits the room, so a path breaks between directories, else the row full
+func spill(msg []rune, width, room int) []rune {
+	if len(msg) <= width {
+		return msg
+	}
+	for i := width; i > 0 && len(msg)-i <= room; i-- {
+		if msg[i-1] == ' ' || msg[i-1] == '/' {
+			return msg[:i]
+		}
+	}
+	return msg[:width]
 }
 
 // renderInput is typed input and, unless an overlay holds the keys, its blinking cursor
@@ -769,12 +798,11 @@ func (r *StatusBarRenderer) runesOf(text string) []rune {
 }
 
 // renderStatusMessage renders status message with right-truncation (shows start of text)
-func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, startX, maxWidth int, text string) {
+func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, startX, maxWidth int, runes []rune) {
 	if maxWidth <= 0 {
 		return
 	}
 
-	runes := r.runesOf(text)
 	textLen := len(runes)
 
 	if textLen <= maxWidth {
