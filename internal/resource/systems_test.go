@@ -125,6 +125,29 @@ initial = "Root"
 	}
 }
 
+// TestCheckSystemsHoldsRegionOnlySystemsClosed asserts a region's only_systems is
+// judged alone, as the root's is, and attributed to its region
+func TestCheckSystemsHoldsRegionOnlySystemsClosed(t *testing.T) {
+	open := loadSystemsConfig(t, `
+[regions.main]
+initial = "Root"
+[regions.puzzle]
+only_systems = ["typing"]
+`)
+	if err := checkSystems(open); err == nil || !strings.Contains(err.Error(), "region puzzle: typing requires cursor") {
+		t.Fatalf("a region's only_systems missing a requirement: %v", err)
+	}
+	closed := loadSystemsConfig(t, `
+[regions.main]
+initial = "Root"
+[regions.puzzle]
+only_systems = ["cursor", "typing"]
+`)
+	if err := checkSystems(closed); err != nil {
+		t.Fatalf("checkSystems rejected a closed region only_systems list: %v", err)
+	}
+}
+
 // TestCheckSystemsRejectsUnknownName asserts name validation still runs first,
 // and that the message names the entry it rejected
 func TestCheckSystemsRejectsUnknownName(t *testing.T) {

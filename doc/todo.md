@@ -212,11 +212,6 @@ order only, so what an order-only game never needed is open:
 - Bots press by key; a `button` `PointAt` target matters only if a bot should
   click.
 
-`only_systems` is root-only, so a puzzle that is one phase of a larger scenario
-cannot narrow the set for that phase alone. A region-level form needs an answer for
-the regions active beside it, and a system a region enables outside the baseline
-does not yet hold its required dependencies on against a later disable.
-
 ### Build the map and scenario editor
 
 - Priority: P2

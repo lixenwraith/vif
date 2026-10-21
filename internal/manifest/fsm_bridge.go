@@ -1,8 +1,6 @@
 package manifest
 
 import (
-	"slices"
-
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -31,7 +29,7 @@ func worldHost() std.Host[*engine.World] {
 			w.PushEvent(t, payload)
 		},
 
-		// A declared required dependency outranks the config: refusing here is
+		// A declared required dependency outranks the action: refusing here is
 		// the runtime half of the load-time check in resource.checkSystems
 		SetSystem: func(w *engine.World, name string, enabled bool) {
 			if !enabled && !w.AllowSystemDisable(name) {
@@ -42,18 +40,7 @@ func worldHost() std.Host[*engine.World] {
 				Enabled:    enabled,
 			})
 		},
-
-		// A system toggles only if it handles the command, which cursor, camera, meta
-		// and network do not, so an only_systems list cannot strand them
-		Systems: func(w *engine.World) []string {
-			var names []string
-			for _, sys := range w.Systems() {
-				if h, ok := sys.(event.Handler); ok && slices.Contains(h.EventTypes(), event.EventMetaSystemCommandRequest) {
-					names = append(names, sys.Name())
-				}
-			}
-			return names
-		},
+		ApplySystems: (*engine.World).ApplySystems,
 
 		StatusInt: func(w *engine.World, key string) (int64, bool) {
 			if !w.Resources.Status.Ints.Has(key) {

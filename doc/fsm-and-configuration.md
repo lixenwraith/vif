@@ -117,21 +117,26 @@ disabled_systems = ["particle"]
 
 [regions.boss]
 file = "boss.toml" # no initial: dynamic region
+
+[regions.puzzle]
+file = "puzzle.toml"
+only_systems = ["typing", "button"] # or disabled_systems, not both
 ```
 
 | Field | Meaning |
 |---|---|
 | `description` | Optional short scenario summary, carried with the scenario during transfers. |
 | `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
-| `systems.disabled_systems` | Systems disabled after FSM initialization. Names are validated against runtime `System.Name()` values. |
-| `systems.only_systems` | Every toggled system not named starts disabled; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
+| `systems.disabled_systems` | Systems the baseline leaves off. Names are validated against runtime `System.Name()` values. |
+| `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
 | `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
 | `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's level setups are what hold it. A scenario whose regions size the map differently leaves it out. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
 | `background` | Keeps the region out of the foreground summary the status bar shows; it still updates, handles events and publishes its own `fsm.<region>.*` metrics. |
-| `enabled_systems` | Systems enabled when the region starts or resumes. |
-| `disabled_systems` | Systems disabled when the region starts or resumes. |
+| `enabled_systems` | Systems on while the region runs. |
+| `disabled_systems` | Systems off while the region runs, unless a running system requires one. |
+| `only_systems` | While the region runs, every toggled system that neither this list nor another running region names is off; the region's narrowed phase, exclusive with its `disabled_systems`. |
 
 Initial regions are sorted by name before startup. That sorted insertion order
 becomes their deterministic update/event order. Dynamically spawned regions are
@@ -278,7 +283,7 @@ when its delay elapses.
 |---|---|
 | Variables | `SetVar`, `IncrementVar`, `DecrementVar`, `MultiplyVar`, `DivideVar`, `ModuloVar`, `ClampVar`, `CopyVar`, `RandomVar` |
 | Regions | `SpawnRegion`, `TerminateRegion`, `PauseRegion`, `ResumeRegion` |
-| Systems | `EnableSystem`, `DisableSystem`, `ApplyGlobalSystemConfig`, `ApplyRegionSystemConfigs` |
+| Systems | `EnableSystem`, `DisableSystem`, `ReconcileSystems` |
 | Game bridge | `EmitEvent` |
 | Status/config | `StatusToVar`, `ConfigToVar` |
 
@@ -365,25 +370,33 @@ active path's `on_exit` leaf to root, then removes the runtime region and its
 delayed actions. Pause/resume preserves active state and time.
 
 The root `[systems]` table sets the baseline: every system but `disabled_systems`,
-or only `only_systems`. After initialization, a reset and a capture import, the
-scheduler runs `ApplyGlobalSystemConfig` and then `ApplyRegionSystemConfigs`, which
-applies every active region's enabled/disabled lists on top, so a region
-declaration wins over the root list. Spawning or resuming a region applies that
-region's lists, and every `:region` operation re-applies all active regions'.
-Toggles travel as `EventMetaSystemCommandRequest` events. This keeps mechanics
-constructed but dormant until needed.
+or only `only_systems`. The running regions, those neither paused nor ending,
+adjust it: when any has `only_systems`, the union of those lists replaces the
+baseline, so regions beside a narrowed phase keep what they name; every running
+region's `enabled_systems` add to that and its `disabled_systems` take away. A
+region with `only_systems` decides every toggled system, any other the systems its
+lists name. `ReconcileSystems` sets the systems to that wanted set after
+initialization, a reset and a capture import, and the four region actions and every
+`:region` operation run it whenever the running set changes, so a phase's toggles
+end with the phase. A system a running region decides, or whose wanted state
+changed, goes to it; any other keeps what an action or the `:system` command left
+it at. Toggles travel as `EventMetaSystemCommandRequest` events. This keeps
+mechanics constructed but dormant until needed.
 
 System lists use runtime names, which equal their manifest keys. A system toggles
 only if it subscribes to and honors `EventMetaSystemCommandRequest`; `cursor`,
 `camera`, `meta` and `network` do not, so no list can strand the roster, the view,
 pause and reset, or a session's peers.
 
-A disable is checked against the declared dependency graph, as the baseline leaves
-it. `-check` rejects a config that leaves an enabled system without a required
-dependency, naming the region, or `[systems]` when the root list itself does, and
-`World.AllowSystemDisable` refuses the same disable at run time, whether
-a region list, a `DisableSystem` action or the `:system` command asks for it. A
-dependent the baseline leaves off holds nothing on, so disabling both ends stays
+A disable is checked against the declared dependency graph. `-check` rejects a
+config that leaves an enabled system without a required dependency, naming the
+region, or `[systems]` when the root list itself does; it judges each region alone,
+on its `only_systems` or the baseline, since a union of closed sets stays closed.
+At run time every system left running keeps what it requires on, whoever turned it
+on: `ReconcileSystems` keeps a dependency on against `disabled_systems` and turns one
+back on for a system it starts, and `World.AllowSystemDisable` refuses a
+`DisableSystem` action or the `:system` command while a running system requires the
+target. A dependent that is off holds nothing on, so disabling both ends stays
 legal; an optional dependency is reported once, not per resume.
 
 ### Installing a captured machine
@@ -394,7 +407,7 @@ with the build. Import has a staging form (`Machine.Import`) and a live one
 (`ImportReconciled`). Both resolve the whole capture before mutating the machine,
 so a name or action ID this build lacks refuses it; the staging form then places
 the state without side effects. Regions the capture omits stop.
-`Scheduler.ImportFSM` then re-applies system toggles, since an installed position
+`Scheduler.ImportFSM` then reconciles system toggles, since an installed position
 runs no entry actions, and republishes region telemetry.
 
 The live form also reconciles persistent local lifecycle. Ordinary entry and exit
@@ -538,8 +551,9 @@ Reading and loading a scenario validates at least:
 - external-file cycles, illegal top-level content, and duplicate states;
 - macro definitions, argument names and types, recursion and expansion bounds;
 - state hierarchy/path validity;
-- `only_systems` beside `disabled_systems`, and, in `resource.ValidateScenario`,
-  unknown system names and required dependencies left disabled.
+- `only_systems` beside `disabled_systems`, at the root or in one region, and, in
+  `resource.ValidateScenario`, unknown system names and required dependencies left
+  disabled.
 
 Keys the loader does not read are ignored, not refused, except in `[map]`, in macro
 definitions and invocations, and at the top level of a region or macro file: a
