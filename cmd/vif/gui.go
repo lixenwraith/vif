@@ -56,3 +56,7 @@ func (h *windowHost) Blocked() time.Duration              { return h.win.Blocked
 func (h *windowHost) CellAspect() vmath.Aspect            { return h.aspect }
 func (h *windowHost) Events() <-chan terminal.Event       { return h.win.Events() }
 func (h *windowHost) SetPointerMode(enabled, motion bool) { h.win.SetPointerMode(enabled, motion) }
+
+func (h *windowHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
+	return h.win.SetKeyReport(report, allow)
+}

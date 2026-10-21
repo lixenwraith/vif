@@ -2,7 +2,6 @@ package component
 
 import (
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -15,9 +14,9 @@ type ButtonComponent struct {
 	Color color.RGB
 	Sound string // sound bank name it plays as it lights
 
-	// PressedBy is the cursor whose press lit it, zero when the scenario lit it; Held
-	// keeps a pointer press lit until that cursor releases it
-	PressedBy core.Entity
+	// PressedBy is the roster slot whose press lit it, parameter.NoPlayerSlot when the
+	// scenario lit it; Held keeps a held press lit until that slot releases it
+	PressedBy uint8
 	Held      bool
 }
 

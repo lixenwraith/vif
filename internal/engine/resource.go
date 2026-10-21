@@ -141,6 +141,10 @@ type ConfigResource struct {
 	MapMinWidth  int `toml:"-"`
 	MapMinHeight int `toml:"-"`
 
+	// CursorsOffMap is the scenario's [map] cursors = false: a rostered cursor is its
+	// slot, owner and control alone, with no cell or anything a cell carries
+	CursorsOffMap bool `toml:"-"`
+
 	// ColorMode for rendering pipeline (256-color vs TrueColor)
 	// Set after terminal initialization
 	ColorMode terminal.ColorMode `toml:"color_mode"`

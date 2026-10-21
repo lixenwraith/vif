@@ -37,7 +37,7 @@ func TestATapPressesAndReleasesTheCellUnderIt(t *testing.T) {
 		{175, 159, 9, 3, false}, {-4, 400, 0, 3, false},
 	} {
 		want := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
-			MouseAction: terminal.MouseActionRelease, MouseX: c.cx, MouseY: c.cy}
+			MouseAction: terminal.MouseActionRelease, MouseX: c.cx, MouseY: c.cy, Touch: true}
 		if c.down {
 			want.MouseAction = terminal.MouseActionPress
 		}
@@ -57,7 +57,7 @@ func TestAFingerDragsOncePerCell(t *testing.T) {
 	v.SetPointerMode(true, false)
 	drag := func(x, y int) terminal.Event {
 		return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
-			MouseAction: terminal.MouseActionDrag, MouseX: x, MouseY: y}
+			MouseAction: terminal.MouseActionDrag, MouseX: x, MouseY: y, Touch: true}
 	}
 	if ev, ok := v.drag(w*2, h); ok {
 		t.Fatalf("a finger never pressed dragged: %+v", ev)

@@ -34,11 +34,12 @@ The world starts with an empty, 16-slot cursor roster. Every shipped scenario's
 boot state requests a cursor (the campaign, `blank` and `td` at the map centre,
 `kraken` at 2,2, `simon` below its buttons); `CursorSystem` places it on the
 nearest free cell and attaches cursor, view, protection, ping, energy, heat,
-shield, boost, weapon (holding the innate gun) and combat components. Each cursor
-owns an independent copy of that state. A roster slot records whether this
-instance or a remote peer drives the cursor and, for a bot, which participant
-holds it. One selected local slot receives this instance's input and anchors the
-camera/UI.
+shield, boost, weapon (holding the innate gun) and combat components, or under a
+`[map]` with `cursors = false` the cursor and protection components alone: an
+off-map cursor that only holds its player's slot. Each cursor owns an independent
+copy of that state. A roster slot records whether this instance or a remote peer
+drives the cursor and, for a bot, which participant holds it. One selected local
+slot receives this instance's input and anchors the camera/UI.
 
 Ordinary startup spawns one human-controlled local cursor. With `-host` and
 `-join`, the startup gate assigns up to `parameter.MaxPlayers` slots and every

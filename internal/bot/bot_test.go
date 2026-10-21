@@ -1,7 +1,9 @@
 package bot
 
 import (
+	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,6 +53,20 @@ on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [9, 2
 on_enter = [{ action = "Intent", payload = { name = ["motion_left", 3] } }]`, "not an action name"},
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "Not", guard_args = {} }]`, "Not: 'guard' is not a table"},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = "motion_left", hold = 2 } }]`, "hold applies only to press"},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = "press", char = "a", hold = 0 } }]`, "hold must be a number of ticks or true"},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = "press", char = "a", hold = false } }]`, "hold must be a number of ticks or true"},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = "release" } }]`, `intent "release" requires one printable ASCII char`},
+		{region + `[states.A]
+on_update = [{ action = "PointAt", payload = { target = "glyph", key = "1" } }]`, "key applies only to the button target"},
+		{region + `[states.A]
+on_update = [{ action = "PointAt", payload = { target = "button", away = true } }]`, `unknown target "button"`},
+		{region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "OnTarget", guard_args = { target = "button", key = "12" } }]`, "key must be one character"},
 	} {
 		_, err := ParseGraph("broken", []byte(tt.doc))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -99,15 +115,19 @@ func botFor(t *testing.T, ctx *engine.GameContext, doc string, n int) (*Driver, 
 	return d, rec
 }
 
-// recorder is an instance that keeps what reaches it and dispatches the next of
-// dispatch on each tick
+// recorder is an instance that keeps what reaches it and the tick it came at, and
+// dispatches the next of dispatch on each tick
 type recorder struct {
 	got      []input.Intent
+	at       []int
+	ticks    int
+	releases bool
 	tap      func(event.GameEvent)
 	dispatch []event.GameEvent
 }
 
 func (r *recorder) Tick(int) {
+	r.ticks++
 	if len(r.dispatch) > 0 {
 		r.tap(r.dispatch[0])
 		r.dispatch = r.dispatch[1:]
@@ -115,9 +135,11 @@ func (r *recorder) Tick(int) {
 }
 func (r *recorder) SetDispatchTap(fn func(event.GameEvent)) { r.tap = fn }
 func (r *recorder) InputTick() bool                         { return true }
+func (r *recorder) ReportReleases()                         { r.releases = true }
 func (r *recorder) Inject(intents ...*input.Intent) bool {
 	for _, intent := range intents {
 		r.got = append(r.got, *intent)
+		r.at = append(r.at, r.ticks)
 	}
 	return true
 }
@@ -379,5 +401,162 @@ func TestABotIsWeighedOnlyOnItsOwnEvents(t *testing.T) {
 	want := weight(event.EventBoostReward) + weight(event.EventSpeciesKillConfirmed) + weight(event.EventCursorDefeatState)
 	if got := d.Stats().Fitness; got != want {
 		t.Fatalf("fitness %d, want %d", got, want)
+	}
+}
+
+// TestABotLetsGoOfEveryKeyItPresses: the instance takes the bot's keys as releasing,
+// and the bot lets go of each press itself: a tap at once, a hold when its ticks are
+// up, an open hold at its release, and a held key before pressing it again. A
+// release of a key not held sends nothing, and a press with its release is one action.
+func TestABotLetsGoOfEveryKeyItPresses(t *testing.T) {
+	sent := func(rec *recorder) []string {
+		var out []string
+		for i, intent := range rec.got {
+			out = append(out, fmt.Sprintf("%d %s %c", rec.at[i], intent.Type, intent.Char))
+		}
+		return out
+	}
+	_, ctx := soloWorld(0, 0)
+	_, rec := botFor(t, ctx, `
+[bot]
+actions_per_second = 1000
+
+[regions.play]
+initial = "A"
+
+[states.A]
+on_enter = [
+    { action = "Intent", payload = { name = "press", char = "a", hold = 3 } },
+    { action = "Intent", payload = { name = "press", char = "b" } },
+    { action = "Intent", payload = { name = "press", char = "c", hold = true } },
+    { action = "Intent", payload = { name = "press", char = "d", hold = 20 } },
+]
+transitions = [{ trigger = "Tick", target = "B", guard = "StateTimeExceeds", guard_args = { ms = 200 } }]
+
+[states.B]
+on_enter = [
+    { action = "Intent", payload = { name = "release", char = "c" } },
+    { action = "Intent", payload = { name = "release", char = "e" } },
+    { action = "Intent", payload = { name = "press", char = "d", hold = 2 } },
+]
+`, 12)
+	if !rec.releases {
+		t.Fatal("the bot's instance was not asked to take its keys as releasing")
+	}
+	if got, want := sent(rec), []string{
+		"0 IntentKeyPress a", "0 IntentKeyPress b", "0 IntentKeyRelease b", "0 IntentKeyPress c", "0 IntentKeyPress d",
+		"3 IntentKeyRelease a",
+		"4 IntentKeyRelease c", "4 IntentKeyRelease d", "4 IntentKeyPress d",
+		"6 IntentKeyRelease d",
+	}; !slices.Equal(got, want) {
+		t.Fatalf("sent %q, want %q", got, want)
+	}
+
+	_, rec = botFor(t, ctx, `
+[bot]
+actions_per_second = 20
+
+[regions.play]
+initial = "A"
+
+[states.A]
+on_enter = [
+    { action = "Intent", payload = { name = "press", char = "a" } },
+    { action = "Intent", payload = { name = "press", char = "b" } },
+]
+`, 3)
+	if got, want := sent(rec), []string{"0 IntentKeyPress a", "0 IntentKeyRelease a", "1 IntentKeyPress b", "1 IntentKeyRelease b"}; !slices.Equal(got, want) {
+		t.Fatalf("at one action a tick sent %q, want %q", got, want)
+	}
+}
+
+// TestABotSightsAndClicksButtons: a button is sighted by its cell nearest the cursor,
+// a key picking one; a click presses a shown cell of it wherever the cursor is, and
+// is no click while the view shows none, which a move heads for. On a map with no
+// cursor a click takes the leftmost button's middle, a move goes nowhere, and no
+// button is within reach or under the cursor.
+func TestABotSightsAndClicksButtons(t *testing.T) {
+	down := func(x, y int) input.Intent {
+		return input.Intent{Type: input.IntentMouseLeftDown, X: x, Y: y, MapCell: true}
+	}
+	up := input.Intent{Type: input.IntentMouseLeftUp}
+	move := func(x, y int) input.Intent {
+		return input.Intent{Type: input.IntentMouseMove, X: x, Y: y, MapCell: true}
+	}
+	// On 79x21, three buttons span x 13-28, 31-46 and 49-64, y 5-14; on 200 columns
+	// the first starts at x 74 and the third at 110, past the view's edge at 78
+	world := func(cursor bool, mapW int) *engine.GameContext {
+		w, ctx := soloWorld(10, 2)
+		if !cursor {
+			w.Positions.RemoveEntity(w.Resources.Player.Entity)
+		}
+		cfg := w.Resources.Config
+		cfg.MapWidth = mapW
+		w.Positions.ResizeGrid(cfg.MapWidth, cfg.MapHeight)
+		for slot := 1; slot <= 3; slot++ {
+			e := w.CreateEntity(core.DomainShared)
+			w.Components.Button.SetComponent(e, component.ButtonComponent{Slot: slot, Key: rune('0' + slot)})
+		}
+		return ctx
+	}
+	point := func(payload string) string {
+		return "[bot]\nactions_per_second = 1000\n[regions.play]\ninitial = \"A\"\n[states.A]\n" +
+			"on_update = [{ action = \"PointAt\", payload = " + payload + " }]\n"
+	}
+	for _, c := range []struct {
+		name    string
+		cursor  bool
+		mapW    int
+		payload string
+		want    []input.Intent
+	}{
+		{"a click on a key's button", true, 79, `{ target = "button", key = "2", fire = true }`, []input.Intent{down(31, 5), up}},
+		{"a click on the nearest", true, 79, `{ target = "button", fire = true }`, []input.Intent{down(13, 5), up}},
+		{"a move onto it", true, 79, `{ target = "button", key = "3" }`, []input.Intent{move(49, 5)}},
+		{"a click on its shown part", true, 200, `{ target = "button", key = "1", fire = true }`, []input.Intent{down(74, 5), up}},
+		{"no click on one unshown", true, 200, `{ target = "button", key = "3", fire = true }`, nil},
+		{"a move toward one unshown", true, 200, `{ target = "button", key = "3" }`, []input.Intent{move(78, 5)}},
+		{"a click with no cursor", false, 79, `{ target = "button", fire = true }`, []input.Intent{down(20, 9), up}},
+		{"no move with no cursor", false, 79, `{ target = "button" }`, nil},
+	} {
+		_, rec := botFor(t, world(c.cursor, c.mapW), point(c.payload), 2)
+		if !slices.Equal(rec.got, c.want) {
+			t.Errorf("%s: sent %+v, want %+v", c.name, rec.got, c.want)
+		}
+	}
+
+	passes := func(ctx *engine.GameContext, guard, args string) bool {
+		_, rec := botFor(t, ctx, `
+[regions.play]
+initial = "A"
+
+[states.A]
+transitions = [{ trigger = "Tick", target = "B", guard = "`+guard+`", guard_args = `+args+` }]
+
+[states.B]
+on_enter = [{ action = "Intent", payload = { name = "motion_left" } }]
+`, 3)
+		return len(rec.got) > 0
+	}
+	on := world(true, 79)
+	on.World.Positions.SetPosition(on.World.Resources.Player.Entity, component.PositionComponent{X: 35, Y: 7})
+	for _, c := range []struct {
+		ctx         *engine.GameContext
+		guard, args string
+		want        bool
+	}{
+		{on, "OnTarget", `{ target = "button", key = "2" }`, true},
+		{on, "OnTarget", `{ target = "button", key = "1" }`, false},
+		{on, "HasTarget", `{ target = "button", key = "1", within = 3 }`, false},
+		{on, "HasTarget", `{ target = "button", key = "1", within = 8 }`, true},
+		{on, "HasTarget", `{ target = "button", key = "9" }`, false},
+		{world(false, 79), "HasTarget", `{ target = "button" }`, true},
+		{world(false, 79), "HasTarget", `{ target = "button", within = 100 }`, false},
+		{world(false, 79), "OnTarget", `{ target = "button" }`, false},
+	} {
+		if got := passes(c.ctx, c.guard, c.args); got != c.want {
+			t.Errorf("%s %s with the cursor %s: passes %v, want %v", c.guard, c.args,
+				map[bool]string{true: "at 35,7", false: "off the map"}[c.ctx == on], got, c.want)
+		}
 	}
 }

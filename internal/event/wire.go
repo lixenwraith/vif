@@ -47,6 +47,21 @@ func StampCrossing(payload any, source uint32, seq uint64) {
 	}
 }
 
+// Timed is implemented by a payload that names the tick its producer made it at,
+// which no receiver can check. See BoundTick.
+type Timed interface {
+	BoundTick(applyTick uint64)
+}
+
+// BoundTick holds a crossing's own tick to what the tick it applies at allows, so a
+// peer can't claim an input older than its crossing could be. Every instance applies
+// a crossing at one agreed tick, so every instance bounds it alike.
+func BoundTick(payload any, applyTick uint64) {
+	if t, ok := payload.(Timed); ok {
+		t.BoundTick(applyTick)
+	}
+}
+
 // OnWire reports whether a dispatched event must reach the other participants.
 // An event a peer produced is never echoed: it already reached everyone.
 // By value: Push must stay allocation-free, and a pointer here escapes it.

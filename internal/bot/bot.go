@@ -1,12 +1,13 @@
 // Package bot drives one participant from an internal/fsm graph instead of a
 // terminal. The graph reads its own instance's world and queues intents, which a
-// Driver releases through that instance's mode router at the graph's rate, so a
-// bot is bound by everything that binds a person. See doc/bots.md.
+// Driver sends through that instance's mode router at the graph's rate, so a bot
+// is bound by everything that binds a person. See doc/bots.md.
 package bot
 
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -127,12 +128,14 @@ func unknownKey(table map[string]any, allowed ...string) string {
 }
 
 // Instance is the surface of the participant a driver plays: the same calls an
-// authored script and the fuzz driver make, and the tap its dispatch reports through.
+// authored script and the fuzz driver make, the tap its dispatch reports through,
+// and the switch that has each key it presses hold until the driver lets go of it.
 type Instance interface {
 	Tick(int)
 	Inject(...*input.Intent) bool
 	InputTick() bool
 	SetDispatchTap(func(event.GameEvent))
+	ReportReleases()
 }
 
 // Stats reports one bot's progress.
@@ -170,8 +173,9 @@ type Driver struct {
 	regions []string
 	mind    mind
 	queue   intentQueue
-	rate    int64 // intents per second
-	credit  int64 // intents owed, in thousandths
+	held    []keyHold // the keys the bot holds down, in the order it pressed them
+	rate    int64     // intents per second
+	credit  int64     // intents owed, in thousandths
 	started bool
 	stats   Stats
 
@@ -196,6 +200,7 @@ func NewDriver(inst Instance, ctx *engine.GameContext, g *Graph, seed uint64, pa
 	d.mind = mind{ctx: ctx, queue: &d.queue,
 		rng: vmath.NewSeededRand(seed, "bot."+strconv.FormatUint(uint64(participant), 10))}
 	inst.SetDispatchTap(d.observe)
+	inst.ReportReleases()
 	return d, nil
 }
 
@@ -226,9 +231,10 @@ func payloadTrue(payload any, field string) bool {
 }
 
 // Step updates the graph at the completed tick, after the events the last step
-// dispatched, then releases what the rate allows, advances input-driven work and
-// ticks once. False means an intent quit the game. Credit left idle is capped at
-// one second's worth, so a quiet bot bursts no further.
+// dispatched, then lets go of the keys whose holds are up, sends what the rate
+// allows, advances input-driven work and ticks once. False means an intent quit the
+// game. Credit left idle is capped at one second's worth, so a quiet bot bursts no
+// further.
 func (d *Driver) Step() (bool, error) {
 	d.credit = min(d.credit+d.rate*parameter.GameUpdateInterval.Milliseconds(), d.rate*1000)
 	var err error
@@ -252,7 +258,7 @@ func (d *Driver) Step() (bool, error) {
 	}
 	d.observing.Store(true)
 	defer d.observing.Store(false)
-	if !d.release() || !d.inst.InputTick() {
+	if !d.expire() || !d.inject() || !d.inst.InputTick() {
 		return false, nil
 	}
 	d.inst.Tick(1)
@@ -260,20 +266,82 @@ func (d *Driver) Step() (bool, error) {
 	return true, nil
 }
 
-// release injects queued intents in order, as many as the rate has earned.
-func (d *Driver) release() bool {
+// inject sends queued intents in order, as many as the rate has earned.
+func (d *Driver) inject() bool {
 	for d.credit >= 1000 {
-		intent, ok := d.queue.pop()
+		q, ok := d.queue.pop()
 		if !ok {
 			break
 		}
 		d.credit -= 1000
-		if !d.inst.Inject(&intent) {
+		if !d.send(q) {
 			return false
 		}
 		d.stats.Injected++
 	}
 	return true
+}
+
+// send injects one queued intent. The bot lets go of every key it presses: a tap at
+// once, a hold when its ticks are up or at its key's release, and a key it holds
+// before pressing it again, as a keyboard cannot press a key that is down. Those
+// releases cost no rate; a release the graph queues does.
+func (d *Driver) send(q queued) bool {
+	switch q.intent.Type {
+	case input.IntentKeyRelease:
+		return d.letGo(q.intent.Char)
+	case input.IntentKeyPress:
+		key := q.intent.Char
+		if !d.letGo(key) || !d.inst.Inject(&q.intent) {
+			return false
+		}
+		due := uint64(math.MaxUint64)
+		if q.hold != holdOpen {
+			due = d.stats.Ticks + uint64(q.hold)
+		}
+		d.held = append(d.held, keyHold{key: key, due: due})
+		if q.hold == 0 {
+			return d.letGo(key)
+		}
+		return true
+	}
+	return d.inst.Inject(&q.intent)
+}
+
+// keyHold is a key the bot holds down and the step it lets go at
+type keyHold struct {
+	key rune
+	due uint64
+}
+
+// expire lets go of each key whose hold is up, in the order the bot pressed them.
+func (d *Driver) expire() bool {
+	for i := 0; i < len(d.held); {
+		if d.held[i].due > d.stats.Ticks {
+			i++
+			continue
+		}
+		if !d.unhold(i) {
+			return false
+		}
+	}
+	return true
+}
+
+// letGo lets go of key if the bot holds it.
+func (d *Driver) letGo(key rune) bool {
+	if i := slices.IndexFunc(d.held, func(h keyHold) bool { return h.key == key }); i >= 0 {
+		return d.unhold(i)
+	}
+	return true
+}
+
+// unhold injects the release of the i-th held key. A hold the router has already
+// ended, as play stopped, finds nothing to release there.
+func (d *Driver) unhold(i int) bool {
+	key := d.held[i].key
+	d.held = slices.Delete(d.held, i, i+1)
+	return d.inst.Inject(&input.Intent{Type: input.IntentKeyRelease, Char: key, Count: 1})
 }
 
 // Stats returns the bot's progress and the state each region is in.
@@ -293,28 +361,38 @@ func (d *Driver) Stats() Stats {
 	return st
 }
 
+// queued is an intent waiting on the rate, and for a press, how long its key stays
+// down: ticks, holdOpen until the graph releases it, or zero for a tap
+type queued struct {
+	intent input.Intent
+	hold   int
+}
+
+// holdOpen holds a pressed key until the graph releases it
+const holdOpen = -1
+
 // intentQueue is a bounded FIFO of intents waiting on the rate.
 type intentQueue struct {
-	buf     [queueMax]input.Intent
+	buf     [queueMax]queued
 	head, n int
 	dropped uint64
 }
 
-func (q *intentQueue) push(intent input.Intent) {
+func (q *intentQueue) push(item queued) {
 	if q.n == queueMax {
 		q.dropped++
 		return
 	}
-	q.buf[(q.head+q.n)%queueMax] = intent
+	q.buf[(q.head+q.n)%queueMax] = item
 	q.n++
 }
 
-func (q *intentQueue) pop() (input.Intent, bool) {
+func (q *intentQueue) pop() (queued, bool) {
 	if q.n == 0 {
-		return input.Intent{}, false
+		return queued{}, false
 	}
-	intent := q.buf[q.head]
+	item := q.buf[q.head]
 	q.head = (q.head + 1) % queueMax
 	q.n--
-	return intent, true
+	return item, true
 }

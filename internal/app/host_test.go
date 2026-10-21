@@ -653,6 +653,30 @@ func TestAHostThatCannotBindLeavesTheRunSolo(t *testing.T) {
 	}
 }
 
+// TestAnInputsHorizonOpensWithTheSession: solo a press reaches the machine at the
+// tick it was made at, and once the run is hosted it may arrive as late as the
+// barrier allows, which the status a scenario judges misses by says from the next tick.
+func TestAnInputsHorizonOpensWithTheSession(t *testing.T) {
+	// Not parallel: this binds a real socket.
+	a := mustHeadless(t, 0x301B, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	horizon := func() (v int64) {
+		a.World().RunSafe(func() { v = a.World().Resources.Status.Ints.Get("engine.input_horizon").Load() })
+		return v
+	}
+	if got := horizon(); got != 0 {
+		t.Fatalf("a solo run's horizon is %d ticks, want none", got)
+	}
+	if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	a.Tick(1)
+	if got := horizon(); got != parameter.NetworkApplyHorizonTicks {
+		t.Fatalf("a hosted run's horizon is %d ticks, want %d", got, parameter.NetworkApplyHorizonTicks)
+	}
+}
+
 // TestHostCarriesItsAuthorityPolicy: the word :host is given is the policy every
 // offer it makes names, and a word that is neither is refused before binding.
 func TestHostCarriesItsAuthorityPolicy(t *testing.T) {

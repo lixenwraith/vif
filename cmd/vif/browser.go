@@ -47,3 +47,7 @@ func (h *browserHost) Blocked() time.Duration              { return h.host.Block
 func (h *browserHost) CellAspect() vmath.Aspect            { return h.aspect }
 func (h *browserHost) Events() <-chan terminal.Event       { return h.host.Events() }
 func (h *browserHost) SetPointerMode(enabled, motion bool) { h.host.SetPointerMode(enabled, motion) }
+
+func (h *browserHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
+	return h.host.SetKeyReport(report, allow)
+}

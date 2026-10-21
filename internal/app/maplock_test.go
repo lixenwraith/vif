@@ -3,12 +3,16 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 )
@@ -263,4 +267,160 @@ func TestAMapNeverCropsBelowItsScenarioFloor(t *testing.T) {
 	a.SetupLevel(1500, 30, false, true)
 	a.Tick(1)
 	expect("past the cell cap", parameter.MaxMapCells/100, 100)
+}
+
+// writeOffMapScenario lays down a scenario whose map places no cursor and that takes
+// keys 1 and 2 for its whole run, reconciled so a joiner takes them too.
+func writeOffMapScenario(t *testing.T, root string) {
+	t.Helper()
+	dir := filepath.Join(root, "scenario", "keys")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "description = \"Keys without cursors.\"\n[map]\ncursors = false\n" +
+		"[regions.player]\ninitial = \"PlayerBoot\"\nbackground = true\n" +
+		"[regions.keys]\ninitial = \"Keys\"\n" +
+		"[states.PlayerBoot]\nparent = \"Root\"\non_enter = [{ action = \"EmitEvent\", " +
+		"event = \"EventCursorSpawnRequest\", payload = { center = true, heat = 10, energy = 100 } }]\n" +
+		"[states.Keys]\nparent = \"Root\"\non_enter = [{ action = \"EmitEvent\", " +
+		"event = \"EventKeyCaptureRequest\", payload = { keys = \"12\" }, reconcile = true }]\n"
+	if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// assertOffMap fails unless slot holds a cursor with nothing on the map: no cell and
+// none of what a cell carries.
+func assertOffMap(t *testing.T, a *App, slot uint8) {
+	t.Helper()
+	w := a.World()
+	var e core.Entity
+	var parts []string
+	w.RunSafe(func() {
+		e = w.Resources.Player.Slot(slot)
+		if _, ok := w.Positions.GetPosition(e); ok {
+			parts = append(parts, "position")
+		}
+		for name, held := range map[string]bool{"energy": w.Components.Energy.HasEntity(e),
+			"heat": w.Components.Heat.HasEntity(e), "combat": w.Components.Combat.HasEntity(e),
+			"view": w.Components.CursorView.HasEntity(e), "ping": w.Components.Ping.HasEntity(e)} {
+			if held {
+				parts = append(parts, name)
+			}
+		}
+	})
+	if e == 0 {
+		t.Fatalf("slot %d holds no cursor", slot)
+	}
+	if len(parts) > 0 {
+		t.Fatalf("slot %d's cursor holds %v on a map that places no cursor", slot, parts)
+	}
+}
+
+// TestAMapWithoutCursorsRostersItsPlayerOffIt: [map] cursors = false rosters the boot
+// spawn's slot with nothing on the map, through a reset and a level setup that
+// clears the map; a motion moves nothing, and a captured key still presses from
+// that slot.
+func TestAMapWithoutCursorsRostersItsPlayerOffIt(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeOffMapScenario(t, root)
+	a, err := NewHeadless(Config{Seed: 0xF101, Width: 80, Height: 24, Resources: resource.Options{Dir: root, Scenario: "keys"}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+	assertOffMap(t, a, 0)
+
+	var moves int
+	var presses []event.InputPayload
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		switch p := ev.Payload.(type) {
+		case *event.CursorMoveRequestPayload:
+			moves++
+		case *event.InputPayload:
+			if ev.Type == event.EventInputPressed {
+				presses = append(presses, *p)
+			}
+		}
+	})
+	key := func(k rune) *input.Intent {
+		return a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: k})
+	}
+	a.Inject(key('l'), &input.Intent{Type: input.IntentMouseLeftDown, X: 3, Y: 3}, &input.Intent{Type: input.IntentMouseLeftUp})
+	a.Tick(2)
+	if moves != 0 {
+		t.Fatalf("%d cursor moves on a map that places no cursor", moves)
+	}
+	a.Inject(key('1'))
+	a.Tick(1)
+	if len(presses) != 1 || presses[0].Key != "1" || presses[0].Slot != 0 {
+		t.Fatalf("pressing 1 crossed %+v, want one press of 1 from slot 0", presses)
+	}
+
+	a.Reset(false)
+	a.Tick(2)
+	assertOffMap(t, a, 0)
+	a.SetupLevel(60, 20, true, false)
+	a.Tick(1)
+	assertOffMap(t, a, 0)
+	var count int
+	a.World().RunSafe(func() { count = a.World().Resources.Player.Count() })
+	if count != 1 {
+		t.Fatalf("the roster holds %d cursors, want the one player", count)
+	}
+}
+
+// TestAJoinerTakesASlotOnAMapWithoutCursors: on a map that places no cursor a joiner
+// is rostered off it on both instances alike and follows its own slot, and its press
+// reaches the host from that slot.
+func TestAJoinerTakesASlotOnAMapWithoutCursors(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
+	const seed = 0xF102
+	root := t.TempDir()
+	writeOffMapScenario(t, root)
+	host, err := NewHeadless(Config{Seed: seed, Width: 120, Height: 40, Resources: resource.Options{Dir: root, Scenario: "keys"}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer host.Close()
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	stop := tickInBackground(host)
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40, func(c *Config) { c.Resources.Dir = root })
+	stop()
+
+	settleCorrections(t, host, guest)
+	alignTicks(t, host, guest)
+	waitForRosterPair(t, host, guest)
+	alignTicks(t, host, guest)
+	assertControl(t, host, 1, component.ControlRemote)
+	assertControl(t, guest, 1, component.ControlLocal)
+	if got := guest.localSlot(); got != 1 {
+		t.Fatalf("guest follows slot %d, want its own slot 1", got)
+	}
+	for _, a := range []*App{host, guest} {
+		assertOffMap(t, a, 0)
+		assertOffMap(t, a, 1)
+	}
+	assertSharedParity(t, host, guest, 0)
+
+	var from []uint8
+	host.SetDispatchTap(func(ev event.GameEvent) {
+		if p, ok := ev.Payload.(*event.InputPayload); ok && ev.Type == event.EventInputPressed {
+			from = append(from, p.Slot)
+		}
+	})
+	guest.Inject(guest.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: '2'}))
+	for deadline := time.Now().Add(socketWait); len(from) == 0 && time.Now().Before(deadline); { // [wall] a link bound
+		guest.Tick(1)
+		host.Tick(1)
+		time.Sleep(joinTestTickInterval / 5)
+	}
+	if !slices.Equal(from, []uint8{1}) {
+		t.Fatalf("the guest's press reached the host from slots %v, want its slot 1", from)
+	}
 }

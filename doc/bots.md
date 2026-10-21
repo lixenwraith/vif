@@ -1,9 +1,9 @@
 # Bots
 
 A bot is a participant driven by a graph instead of a terminal. It holds a roster
-slot and a cursor, and its intents (keys and mouse alike) pass through the same mode
-router as a person's, under the same session rules. Bots are cooperative: they
-play beside people against the environment.
+slot and a cursor, unless the map places none, and its intents (keys and mouse
+alike) pass through the same mode router as a person's, under the same session
+rules. Bots are cooperative: they play beside people against the environment.
 
 ## Quick start
 
@@ -125,7 +125,7 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 
 | Table | Holds |
 |---|---|
-| `[bot]` | `actions_per_second`: intents released per second of game time, default 12. |
+| `[bot]` | `actions_per_second`: intents sent per second of game time, default 12. |
 | `[regions.<name>]` | `initial` only. |
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
@@ -139,30 +139,40 @@ is dropped and counted. Allowance left idle builds up to one second's worth.
 
 | Action | Payload | Queues |
 |---|---|---|
-| `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from, or `press`; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action, or the key `press` presses | one key press |
+| `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from, or `press` or `release`; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action, or the key `press` presses and `release` lets go; `hold` for `press`: ticks, or `true` until its `release` | one key press or release |
 | `Text` | `text` | one character per rune |
 | `Command` | `text`: an ex-command, the leading `:` optional, not empty | the command-line round trip |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
-| `PointAt` | `target`; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
+| `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
 `prefix_g`, `prefix_macro_play`, `marker_glyph_*`); `quit` ends the run. `press`
 presses a key a scenario captured, as a typed key or a click on its button would,
-and does nothing while the key is not captured. `PointAt` aims at the nearest
-target of its class, clamped to the cells the view shows, and for `glyph` at the
-left edge of that text run. If the cursor may not enter the cell, it lands on
-the nearest shown cell it may enter, and does nothing when none is shown. `away`
+and does nothing while the key is not captured. The bot lets go of every key it
+presses, at once, after `hold` ticks, or with `hold = true` at a `release` of the
+key, so each press crosses its own release and the bot's slot reports releases
+([Input and modes](input-and-modes.md) §1). A press of a key it holds lets go
+first, a `release` of one it does not hold sends nothing, and play stopping ends
+its hold as it ends a person's. A press and its release are one action; a
+`release` is one of its own.
+
+`PointAt` aims at the nearest target of its class, clamped to the cells the view
+shows, and for `glyph` at the left edge of that text run. If the cursor may not
+enter the cell, it lands on the nearest shown cell it may enter, and does nothing
+when none is shown. A `button` is aimed at its shown cell nearest the cursor, and
+a click presses its key wherever the cursor stands; one the view does not show
+draws a move toward it and no click, which would fire where it landed. `away`
 aims at the target's mirror through the cursor, or, when the view's edge pins the
 cursor in line with it, at the shown open cell farthest from it; it refuses
-`fire` and `random`, and does nothing while the target is on the cursor or no
-cell gains ground.
+`fire`, `button` and `random`, and does nothing while the target is on the cursor
+or no cell gains ground.
 
 ### Guards
 
 | Guard | Args | Passes when |
 |---|---|---|
-| `HasTarget` | `target`, `within` | a target of the class exists, within `within` cells when non-zero |
-| `OnTarget` | `target` | the cursor's cell holds one |
+| `HasTarget` | `target`, `key`, `within` | a target of the class exists, within `within` cells when non-zero |
+| `OnTarget` | `target`, `key` | the cursor's cell holds one |
 | `InMode` | `mode`: `normal`, `visual`, `insert`, `search`, `command`, `overlay` | the router is in that mode |
 | `Chance` | `percent`, 1..100 | a draw from the bot's own stream |
 | `Idle` | none | the intent queue is empty |
@@ -180,10 +190,14 @@ A guard refuses an argument it does not read.
 | `species` | a combat entity other than a cursor or a tower |
 | `threat` | a species, a hostile bullet or a hostile missile, all weighted alike |
 | `cursor` | another participant's cursor |
+| `button` | a scenario's button, or with `key` the one on that key, at its cell nearest the cursor |
 | `random` | a cell the view shows; `PointAt` only |
 
 Distance counts rows twice, as the terminal draws them. `HasTarget` and `OnTarget`
-see the whole local world; `PointAt` reaches only what the view shows.
+see the whole local world; `PointAt` reaches only what the view shows. On a map
+without cursors only buttons are sighted: `PointAt` clicks the leftmost, or the
+one on `key`, at its middle and moves nowhere, `HasTarget` passes only without
+`within`, and `OnTarget` never does.
 
 ### Events
 
@@ -214,7 +228,7 @@ guards over its own view. Actions that write the world are refused at load:
 
 - A graph updates once a tick, every 50 ms of game time.
 - `PointAt` and `TypeGlyph` read the world, so each acts only when all it queues
-  is released before the next tick. `Intent`, `Text` and `Command` queue
+  is sent before the next tick. `Intent`, `Text` and `Command` queue
   regardless; wait for them with `Idle`.
 - Draws come from the bot's own stream, seeded from the session seed and its
   participant. A payload with no choice draws nothing, so a fixed sequence leaves

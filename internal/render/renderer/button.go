@@ -102,7 +102,7 @@ func (r *ButtonRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 func (r *ButtonRenderer) lit(e core.Entity, b *component.ButtonComponent) float64 {
 	world := r.gameCtx.World
 	lit := 0.0
-	if b.PressedBy == 0 || !world.Resources.Player.IsLocal(b.PressedBy) {
+	if b.PressedBy == parameter.NoPlayerSlot || b.PressedBy != world.Resources.Player.LocalSlot() {
 		if b.Held {
 			lit = 1
 		} else if t, ok := world.Components.Timer.GetPtr(e); ok && t.Running(component.TimerDeadline) {

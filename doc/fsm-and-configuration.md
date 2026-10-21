@@ -349,6 +349,7 @@ Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; any other
 | `ConfigIntCompare` | `field`, `op`, `value` | Supported integer config field comparison. |
 | `ConfigBoolCompare` | `field`, `value` | Supported boolean config field comparison. |
 | `PayloadIntCompare` | `field`, `op`, `value` | Event payload numeric field comparison. |
+| `PayloadIntCompareVar` | `field`, `op`, `var` | Event payload numeric field against an FSM variable. |
 | `PayloadBoolEquals` | `field`, `value` | Event payload boolean field comparison. |
 | `PayloadStringEquals` | `field`, `value` | Event payload string field comparison. |
 | `PayloadExists` | none | Event payload is non-nil. |

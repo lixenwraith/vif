@@ -717,6 +717,16 @@ registered flush callback, so the flight-recorder window reaches disk ahead of
 the panic record. The terminal poll goroutine has an additional emergency reset
 because its blocking loop is especially capable of stranding raw mode.
 
+On a Linux or FreeBSD text console, a capture with `releases` switches the
+keyboard raw, and before the first switch the terminal module runs the vif binary
+again as `console-guard`. The guard puts the keyboard and the tty back if vif dies
+where no handler of its own runs: `kill -9`, the OOM killer, a Go fatal error.
+It runs the `init` of every package initialized before the terminal module's, so
+a package `init` only computes and registers: no files, goroutines, signals or
+network. On FreeBSD the guard goes by vif's name, so `pkill -9 vif` ends it too;
+kill vif by its PID. With both gone, `sudo kbd_mode -u -C /dev/ttyN` restores a
+Linux console; the terminal module's README gives FreeBSD's.
+
 Go runtime diagnostics such as race reports write directly to file descriptor
 2 and would corrupt/disappear behind an alternate screen. `-dev` redirects
 stderr to `vif-stderr-<timestamp>.log` in the log directory before terminal

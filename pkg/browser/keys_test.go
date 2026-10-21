@@ -63,25 +63,30 @@ func TestAKeyPressReportsWhatATerminalReports(t *testing.T) {
 }
 
 // TestThePointerIsReportedInTheTerminalsNumbering: button and action as the page
-// numbers them are the terminal's, with the modifiers, and a move is the one action
-// without a button; a number outside either is refused.
+// numbers them are the terminal's, with the modifiers and whether a finger made them,
+// and a move is the one action without a button; a number outside either is refused.
 func TestThePointerIsReportedInTheTerminalsNumbering(t *testing.T) {
 	want := terminal.Event{Type: terminal.EventMouse, MouseX: 3, MouseY: 7,
 		MouseBtn: terminal.MouseBtnRight, MouseAction: terminal.MouseActionPress, Modifiers: terminal.ModCtrl}
-	if got, ok := mouseEvent(3, 7, 3, 1, modCtrl); !ok || got != want {
+	if got, ok := mouseEvent(3, 7, 3, 1, modCtrl, false); !ok || got != want {
 		t.Errorf("right press: %+v %v, want %+v", got, ok, want)
 	}
 	want = terminal.Event{Type: terminal.EventMouse, MouseX: 0, MouseY: 0,
 		MouseBtn: terminal.MouseBtnWheelDown, MouseAction: terminal.MouseActionPress}
-	if got, ok := mouseEvent(-1, -2, 5, 1, 0); !ok || got != want {
+	if got, ok := mouseEvent(-1, -2, 5, 1, 0, false); !ok || got != want {
 		t.Errorf("wheel: %+v %v, want %+v", got, ok, want)
 	}
+	want = terminal.Event{Type: terminal.EventMouse, MouseX: 2, MouseY: 5,
+		MouseBtn: terminal.MouseBtnLeft, MouseAction: terminal.MouseActionDrag, Touch: true}
+	if got, ok := mouseEvent(2, 5, 1, 4, 0, true); !ok || got != want {
+		t.Errorf("finger: %+v %v, want %+v", got, ok, want)
+	}
 	want = terminal.Event{Type: terminal.EventMouse, MouseX: 4, MouseY: 1, MouseAction: terminal.MouseActionMove}
-	if got, ok := mouseEvent(4, 1, 0, 3, 0); !ok || got != want {
+	if got, ok := mouseEvent(4, 1, 0, 3, 0, false); !ok || got != want {
 		t.Errorf("move: %+v %v, want %+v", got, ok, want)
 	}
 	for _, c := range [][2]int{{0, 1}, {0, 4}, {1, 3}, {8, 1}, {1, 0}, {1, 5}} {
-		if ev, ok := mouseEvent(0, 0, c[0], c[1], 0); ok {
+		if ev, ok := mouseEvent(0, 0, c[0], c[1], 0, false); ok {
 			t.Errorf("button %d action %d was taken as %+v", c[0], c[1], ev)
 		}
 	}

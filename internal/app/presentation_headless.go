@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -37,6 +38,8 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 func (a *App) initPresentation() {}
 
 func (a *App) applyMouseMode(bool, bool) {}
+
+func (a *App) keyReportApplier() mode.KeyReportApplier { return nil }
 
 type lobbyEvent struct{}
 

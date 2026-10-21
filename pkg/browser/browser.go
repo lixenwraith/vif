@@ -16,6 +16,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/glyph"
+	"github.com/lixenwraith/vif/pkg/hostkey"
 )
 
 // eventQueue matches the terminal's; a post never waits, since the poster is the
@@ -43,6 +44,7 @@ type Host struct {
 	events chan terminal.Event
 	grid   atomic.Uint64 // cols<<32 | rows
 	event  js.Func
+	keys   hostkey.Report
 
 	mu       sync.Mutex
 	inflight bool // a frame the page has not reported drawn
@@ -61,6 +63,7 @@ func Open(a *glyph.Atlas) (*Host, error) {
 		}
 	}
 	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue)}
+	h.keys.Post = h.post
 	h.Frames = glyph.NewFrames(h.tex, false)
 	cols, rows := 80, 24
 	if grid := g.Get(jsGrid); grid.Type() == js.TypeObject {
@@ -91,6 +94,14 @@ func (h *Host) Flush(cells []terminal.Cell, width, height int) {
 	h.present()
 }
 
+// SetKeyReport asks for each key's release, which the page's keyups give; a key
+// the page has no keyup for, typed on a soft keyboard or the key strip, lets go as
+// it presses
+func (h *Host) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
+	h.keys.Ask(report, allow, true)
+	return nil
+}
+
 // SetPointerMode tells the page which pointer events to report: none, buttons and
 // drags, or every motion as well
 func (h *Host) SetPointerMode(enabled, motion bool) {
@@ -112,8 +123,8 @@ func (h *Host) present() {
 	js.Global().Call(jsFrame, bytes(frame))
 }
 
-// handle takes what the page sent: a frame drawn, a key, text, the pointer, a new
-// size or a request for a whole frame
+// handle takes what the page sent: a frame drawn, a key going down or up, its keys
+// going elsewhere, text, the pointer, a new size or a request for a whole frame
 func (h *Host) handle(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -127,15 +138,23 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 		h.present()
 	case "key":
 		if ev, ok := keyEvent(msg.Get("key").String(), uint8(msg.Get("mods").Int())); ok {
-			h.post(ev)
+			if code := msg.Get("code"); code.Type() == js.TypeString && code.String() != "" {
+				h.keys.Down(keyCode(code.String()), ev, msg.Get("repeat").Truthy())
+			} else {
+				h.keys.Tap(ev)
+			}
 		}
+	case "keyup":
+		h.keys.Up(keyCode(msg.Get("code").String()))
+	case "blur":
+		h.keys.Lost()
 	case "text":
 		for _, r := range msg.Get("text").String() {
-			h.post(textEvent(r))
+			h.keys.Tap(textEvent(r))
 		}
 	case "mouse":
 		if ev, ok := mouseEvent(msg.Get("x").Int(), msg.Get("y").Int(), msg.Get("button").Int(),
-			msg.Get("action").Int(), uint8(msg.Get("mods").Int())); ok {
+			msg.Get("action").Int(), uint8(msg.Get("mods").Int()), msg.Get("touch").Truthy()); ok {
 			h.post(ev)
 		}
 	case "resize":

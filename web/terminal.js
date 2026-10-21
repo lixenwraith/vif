@@ -533,6 +533,7 @@ void main() {
             bytes: bytes.buffer, argv: argv, cols: cols, rows: rows }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });
+            if (document.hidden) send({ type: 'blur' });
         });
         wireHandlers();
     }
@@ -590,10 +591,11 @@ void main() {
     }
 
     // === Keys ===
-    /* Keys arrive on the hidden field: a hardware key as keydown, a soft keyboard's
-       or a paste's text as input events once the browser has composed it. A key the
-       game takes never reaches the field; one left to the browser (a Meta chord, a
-       Ctrl chord a terminal has no byte for, paste) keeps its meaning there. */
+    /* Keys arrive on the hidden field: a hardware key as keydown and keyup by its
+       code, a soft keyboard's or a paste's text as input events once the browser has
+       composed it. A key the game takes never reaches the field; one left to the
+       browser (a Meta chord, a Ctrl chord a terminal has no byte for, paste) keeps
+       its meaning there. */
     const NAMED = /^(Escape|Enter|Tab|Backspace|Delete|Arrow(Up|Down|Left|Right)|Home|End|Page(Up|Down)|Insert|F([1-9]|1[0-2]))$/;
     const CTRL = /^[a-zA-Z @[\\\]^_?]$/;   // the characters whose Ctrl chord a terminal sends
 
@@ -607,8 +609,12 @@ void main() {
         if (e.shiftKey && ((e.ctrlKey && e.key === 'V') || e.key === 'Insert')) return;
         const char = [...e.key].length === 1;
         if (!(char ? !e.ctrlKey || CTRL.test(e.key) : NAMED.test(e.key))) return;
-        send({ type: 'key', key: e.key, mods: mods(e) });
+        send({ type: 'key', key: e.key, mods: mods(e), code: e.code, repeat: e.repeat });
         e.preventDefault();
+    }
+
+    function onKeyUp(e) {
+        if (e.code) send({ type: 'keyup', code: e.code });
     }
 
     function onInput(e) {
@@ -642,8 +648,8 @@ void main() {
     // === Pointer ===
     /* The pointer is reported at its cell in the terminal's numbering: buttons left
        1, middle 2, right 3, wheel up 4 and down 5, back 6, forward 7; actions press 1,
-       release 2, move 3, drag 4. A touch is the left button, as on Android; motion
-       once per cell, and only while Go asked for it. */
+       release 2, move 3, drag 4. A touch is the left button, as on Android, marked as
+       a finger's; motion once per cell, and only while Go asked for it. */
     let pointer = { enabled: false, motion: false };
     let lastCell = null;
     const BUTTONS = [1, 2, 3, 6, 7];   // PointerEvent.button to the terminal's
@@ -655,7 +661,8 @@ void main() {
 
     function mouse(e, button, action) {
         const [x, y] = cellAt(e);
-        send({ type: 'mouse', x: x, y: y, button: button, action: action, mods: mods(e) });
+        send({ type: 'mouse', x: x, y: y, button: button, action: action, mods: mods(e),
+               touch: e.pointerType === 'touch' });
         lastCell = [x, y];
     }
 
@@ -743,6 +750,8 @@ void main() {
     // === Event Wiring ===
     function wireHandlers() {
         input.addEventListener('keydown', onKey);
+        input.addEventListener('keyup', onKeyUp);
+        input.addEventListener('blur', function() { send({ type: 'blur' }); });
         input.addEventListener('input', onInput);
         input.addEventListener('compositionend', onCompositionEnd);
         input.addEventListener('paste', onPaste);

@@ -67,6 +67,7 @@ only_systems = ["system_name", ...]     # Or (not both): every other toggled sys
 min_width = 50                      # Floor under the map's size (optional)
 min_height = 20
 fixed = "500x250"                   # Size the map holds throughout, for front-ends (optional)
+cursors = false                     # Players hold slots, no cursor on the map (optional)
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
@@ -441,6 +442,12 @@ names `all`, an `entity` or a `slot`. `EventCursorSpawned` carries `entity`, `sl
 `x`, `y`; `EventCursorSpawnFailed` signals a full roster, a taken slot or a blocked
 map. A cursor-less configuration is legal.
 
+With `[map] cursors = false` a spawn, a joiner's arrival included, rosters its slot
+with no cursor on the map: only its slot, owner and control, so nothing draws,
+moves, targets or drains it, and `EventCursorSpawned` carries `x = -1`, `y = -1`.
+Its player plays through the keys the scenario captures and their buttons, each
+press from that slot, and counts in `player.count`.
+
 Capture the entity to address that cursor in later actions:
 
 ```toml
@@ -466,7 +473,7 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 |----------------------------------|----------------------------|
 | `player.<n>.entity`              | Entity id, 0 when empty    |
 | `player.<n>.control`             | 0=this instance drives it (a person or a bot), 2=remote, -1=empty |
-| `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty    |
+| `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty or off the map |
 | `player.<n>.energy.current`      | Energy                     |
 | `player.<n>.heat.current`        | Heat                       |
 | `player.<n>.heat.overheat`       | Overheat accumulator       |
@@ -598,6 +605,22 @@ struct tag first, then Go field name — identical to `capture_vars` and
 { trigger = "EventSpeciesKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 } }
 ```
 
+### PayloadIntCompareVar
+
+```toml
+{ trigger = "EventInputPressed", target = "Hit", guard = "PayloadIntCompareVar", guard_args = { field = "tick", op = "lte", var = "close" } }
+```
+
+Compares a payload field with an FSM variable, as a press's `tick`, the
+`engine.ticks` it was made at, with a window's marks, so a press counts however late
+it arrives. A window takes `engine.ticks` into `open` with `StatusToVar` and sets
+`close` to `open` plus its length; a press with `open < tick <= close` hits (two of
+these in an `And`). A press made at the close can arrive up to
+`engine.input_horizon` ticks later (none solo, 40 in a session), so the miss waits:
+take that key into `deadline`, `IncrementVar` it with `source_var = "close"`, and
+miss on `StatusIntCompare` of `engine.ticks` with `since = "deadline"`,
+`op = "gte"`, `value = 0`.
+
 ### PayloadBoolEquals
 
 ```toml
@@ -628,12 +651,20 @@ transitions = [
 ]
 ```
 
-A button lights and sounds on every press of its key by itself, so a machine judges
-a press and never plays its tone. `EventButtonLightRequest { button, duration_ms }`
-lights the button at that place in the row, counted from 1, with its sound; a
-spawn on a key that already has a button is refused. A button shows its key in the
-splash font once it is about ten cells square, so a scenario sets a `[map]` floor
-that leaves room for its row. `wad/scenario/simon` is the worked example.
+A press and its release carry `slot`, `key`, `source` and `tick`, a release also
+`lost`. Each press is followed by one `EventInputReleased`: the key's own release
+where the slot's keyboard reports one, as a bot's does, at once with `lost = true`
+where it taps. `releases = true` on the capture asks a console keyboard for
+releases too, and `EventInputReport { slot, releases }` says which a slot does
+while keys are captured.
+
+A button lights and sounds on every press of its key by itself, held lit until the
+release, so a machine judges a press and never plays its tone.
+`EventButtonLightRequest { button, duration_ms }` lights the button at that place
+in the row, counted from 1, with its sound; a spawn on a key that already has a
+button is refused. A button shows its key in the splash font once it is about ten
+cells square, so a scenario sets a `[map]` floor that leaves room for its row.
+`wad/scenario/simon` is the worked example.
 
 ### PayloadExists
 

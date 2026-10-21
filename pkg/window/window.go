@@ -17,6 +17,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/glyph"
+	"github.com/lixenwraith/vif/pkg/hostkey"
 	"golang.org/x/sys/unix"
 )
 
@@ -46,6 +47,8 @@ type Window struct {
 
 	grid    atomic.Uint64 // cols<<32 | rows
 	pointer atomic.Uint32 // pointerOff, pointerButtons or pointerMotion
+	asks    chan keyAsk   // the latest SetKeyReport the thread has not taken
+	keys    hostkey.Report
 
 	mu             sync.Mutex
 	frame          []terminal.Cell
@@ -61,6 +64,12 @@ type Window struct {
 	cells      []terminal.Cell
 	winW, winH int
 	lastCell   [2]int
+	detectable bool // the server repeats a held key as presses alone
+}
+
+type keyAsk struct {
+	report terminal.KeyReport
+	allow  terminal.KeySource
 }
 
 const (
@@ -79,15 +88,19 @@ const (
 // X event types and the input mask that selects them
 const (
 	xKeyPress        = 2
+	xKeyRelease      = 3
 	xButtonPress     = 4
 	xButtonRelease   = 5
 	xMotionNotify    = 6
+	xFocusOut        = 10
 	xExpose          = 12
 	xConfigureNotify = 22
 	xClientMessage   = 33
-	xEventMask       = 1<<0 | 1<<2 | 1<<3 | 1<<6 | 1<<15 | 1<<17
+	xEventMask       = 1<<0 | 1<<1 | 1<<2 | 1<<3 | 1<<6 | 1<<15 | 1<<17 | 1<<21
 	xaAtom           = 4 // the ATOM property type
 	propModeReplace  = 0
+	notifyInferior   = 2 // focus event details
+	notifyPointer    = 5
 )
 
 // xEvent is Xlib's XEvent union, 24 longs; fields are read at their LP64 offsets
@@ -138,8 +151,10 @@ func newWindow(cfg Config) *Window {
 		ready:  make(chan struct{}, 1),
 		stop:   make(chan struct{}),
 		done:   make(chan struct{}),
+		asks:   make(chan keyAsk, 1),
 		raster: glyph.NewRaster(cfg.Atlas),
 	}
+	w.keys.Post = func(ev terminal.Event) { w.post(ev) }
 	w.setGrid(cfg.Cols, cfg.Rows)
 	return w
 }
@@ -209,6 +224,23 @@ func (w *Window) SetPointerMode(enabled, motion bool) {
 	w.pointer.Store(mode)
 }
 
+// SetKeyReport asks for each key's release, which the window's thread answers with
+// an EventKeyReport: presses alone on a server that repeats a held key as releases
+// and presses, since those can't be told from the player's own
+func (w *Window) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
+	for a := (keyAsk{report, allow}); ; {
+		select {
+		case w.asks <- a:
+			return nil
+		default:
+		}
+		select { // an ask the thread has not taken gives way to this one
+		case <-w.asks:
+		default:
+		}
+	}
+}
+
 func (w *Window) setGrid(cols, rows int) { w.grid.Store(uint64(cols)<<32 | uint64(uint32(rows))) }
 
 // cell is an atlas cell's size in window pixels
@@ -237,6 +269,8 @@ func (w *Window) run(cfg Config, opened chan<- error) {
 		case <-wake:
 		case <-w.ready:
 			w.present()
+		case a := <-w.asks:
+			w.keys.Ask(a.report, a.allow, w.detectable)
 		}
 	}
 }
@@ -251,6 +285,10 @@ func (w *Window) open(cfg Config) error {
 	black := xBlackPixel(w.dpy, screen)
 	w.win = xCreateSimpleWindow(w.dpy, xRootWindow(w.dpy, screen), 0, 0, uint32(w.winW), uint32(w.winH), 0, black, black)
 	xSelectInput(w.dpy, w.win, xEventMask)
+	if xkbSetDetectableAutoRepeat != nil {
+		var supported int32
+		w.detectable = xkbSetDetectableAutoRepeat(w.dpy, 1, &supported) != 0 && supported != 0
+	}
 	xStoreName(w.dpy, w.win, cfg.Title)
 	w.deleteAtom = xInternAtom(w.dpy, "WM_DELETE_WINDOW", 0)
 	xSetWMProtocols(w.dpy, w.win, &w.deleteAtom, 1)
@@ -347,7 +385,16 @@ func (w *Window) handle(ev *xEvent) bool {
 		var buf [32]byte
 		xLookupString(ev, &buf[0], int32(len(buf)), &keysym, 0)
 		if k, ok := keyEvent(keysym, uint32(ev.int32At(80))); ok {
-			return w.post(k)
+			code := uint32(ev.int32At(84))
+			w.keys.Down(code, k, w.keys.Held(code))
+		}
+	case xKeyRelease:
+		w.keys.Up(uint32(ev.int32At(84)))
+	case xFocusOut:
+		// Focus gone to a child, or the pointer's part in a change to the pointer
+		// root, leaves the keys here; any other change takes their releases away
+		if detail := ev.int32At(44); detail != notifyInferior && detail != notifyPointer {
+			w.keys.Lost()
 		}
 	case xButtonPress, xButtonRelease, xMotionNotify:
 		if m, ok := w.mouseEvent(ev); ok {

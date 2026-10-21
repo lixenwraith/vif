@@ -107,6 +107,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventDebugGraphToggle,
 		event.EventMetaStatusMessageRequest,
 		event.EventKeyCaptureRequest,
+		event.EventInputReport,
 		event.EventModeChanged,
 		event.EventLevelSetup,
 		event.EventScreenResize,
@@ -144,9 +145,16 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventKeyCaptureRequest:
 		if p, ok := ev.Payload.(*event.KeyCapturePayload); ok && (p.Entity == 0 || p.Entity == s.world.Resources.Player.Entity) {
-			if refused := s.ctx.KeyCapture.Set(p.Keys); refused != "" {
+			if refused := s.ctx.KeyCapture.Set(p.Keys, p.Releases); refused != "" {
 				s.world.Log().Warn("input", "msg", "capture refused keys", "keys", refused)
 			}
+		}
+
+	case event.EventInputReport:
+		// The player whose keys can't hold where the scenario asked for holds hears why
+		p, ok := ev.Payload.(*event.InputReportPayload)
+		if ok && !p.Releases && p.Slot == s.world.Resources.Player.LocalSlot() && s.ctx.KeyCapture.Releases() {
+			s.ctx.SetStatusMessage("This terminal reports no key releases: a held key plays as taps", parameter.StatusNotice)
 		}
 
 	case event.EventModeChanged:
@@ -428,7 +436,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 
 	// 6. Reset mode, captured keys and status; the FSM reset below spawns the cursor
 	s.ctx.SetMode(core.ModeNormal)
-	s.ctx.KeyCapture.Set("")
+	s.ctx.KeyCapture.Set("", false)
 	s.ctx.SetCommandText("")
 	s.ctx.SetSearchText("")
 	s.ctx.ClearStatusMessage()

@@ -191,27 +191,6 @@ The offline conductor render that produced those comparisons (an APM timeline
 through the sequencer, no device) is a test-only harness in the review branch's
 scratch repository, and would be a `soundlab` or `vif-log` verb.
 
-### Widen the input hook past order-only play
-
-- Priority: P2
-- Affected files: `internal/event/payload.go`, `internal/mode/router.go`,
-  `internal/input/machine.go`, `internal/bot`, `internal/system/button.go`
-
-Presses of captured keys and clicks on buttons cross as `EventInputPressed` and
-`EventInputReleased` ([Input and modes](input-and-modes.md) §1). Simon judges
-order only, so what an order-only game never needed is open:
-
-- Timing: a press applies a playout lead after it was pressed (D-3). A rhythm or
-  reaction game judges by the press's production tick: carry the tick in
-  `InputPayload`, or widen each window by the lead?
-- Sources: right button, wheel, touch, and key release (kitty keyboard protocol)
-  have room in `InputSource`. Does a held key mean anything before terminals
-  report releases?
-- Cursorless play: a press names its cursor. Should a scenario without one still
-  take presses, and whose would they be?
-- Bots press by key; a `button` `PointAt` target matters only if a bot should
-  click.
-
 ### Build the map and scenario editor
 
 - Priority: P2
