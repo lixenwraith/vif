@@ -112,8 +112,8 @@ type JournalCapture struct {
 	Authority   uint32
 
 	// Barrier is the crossing barrier the write left on: a host's write engages it
-	// in the same hold, before anything still queued dispatches, and a replay does
-	// the same rather than at its next tick.
+	// in the same hold, before anything still queued dispatches, and a replay of any
+	// write does the same rather than at its next tick.
 	Barrier bool
 
 	Body []byte // snapshot.WrittenDelta: the world written, against the one before it

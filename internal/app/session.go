@@ -385,13 +385,11 @@ func (d *joinDial) abandon(cause error) {
 func (d *joinDial) open() (*App, error) {
 	cfg, pending, offer := d.cfg, d.pending, d.offer
 
-	// Bound before the reply that declares it, and only for a session whose
-	// authorship can move: where it cannot, a guest's port is for nothing. What is
-	// declared is what was actually bound, which is why this cannot wait until the
-	// transport exists — the reply goes out first. See internal/converge/reach.go.
-	// A browser is never dialled, and js/wasm's net would bind a port nobody reaches.
-	// A participant that joined through a relay could not reach the host, so it is a
-	// leaf unless -listen names an address the session can reach it at.
+	// Bound before the reply that declares it (internal/converge/reach.go), and only
+	// where authorship can move: elsewhere a guest's port is for nothing. A browser is
+	// never dialled, and js/wasm's net would bind a port nobody reaches. A guest that
+	// joined through a relay could not reach the host, so it is a leaf unless -listen
+	// names an address the session can reach it at.
 	var listener net.Listener
 	var declared string
 	gate := &converge.PeerLinkGate{}

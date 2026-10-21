@@ -249,7 +249,8 @@ func (d *ReplayDriver) install() (bool, error) {
 	d.landed = true
 	d.nextCap++
 	d.stats.Installed++
-	if d.held && !d.continues(captureKey(c)) {
+	// The group goes on at the settle group the run's write left, as the install did
+	if d.held && !d.continues(d.cur) {
 		d.held = false
 		d.target.Settle()
 	}

@@ -367,6 +367,10 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	roster := slices.Clone(a.sessionRoster)
 	a.sessionMu.Unlock()
 
+	// The session's world is written between two ticks, so the run takes up settle
+	// group 0 as every install leaves it, and as its replay's install of it does.
+	a.world.Resources.Event.Queue.RebaseStamp(place.Run, place.Tick)
+
 	// A lobby binds this through the roster it closes on; a session opened mid-run
 	// has no lobby, and an unattributed cursor is one no successor can see leave.
 	a.bindCursorOwnersLocked(roster, engine.CoordinatorParticipant)
