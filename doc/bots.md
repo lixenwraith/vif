@@ -291,7 +291,7 @@ Fitness is in the `-headless` summary, the `bot stopped` log record and a seat's
 `bot left` record. From a checkout with `bin/vif` built,
 `./script/test.sh botfitness [graph-file] [seeds] [secs]` plays `default` headless
 and flat out at 120x40 for `secs` (60) over seeds 1..`seeds` (4) on the embedded
-scenario, `td` and `kraken`, and prints each scenario's sum. Given a graph file, it
+scenario and `td`, and prints each scenario's sum. Given a graph file, it
 fails unless that graph beats `default` on every scenario; with none, the sums
 are the baseline to beat. It appends a `stop` region (states `StopWait` and
 `StopQuit`), so a graph cannot use those names.
@@ -344,10 +344,8 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 ## Not built yet
 
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
-- [Beat the default graph](todo.md#beat-the-default-graph)
 - [Let a bot graph use operators and marks](todo.md#let-a-bot-graph-use-operators-and-marks)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Judge a relayed bot's lateness](todo.md#judge-a-relayed-bots-lateness)
 - [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
 - [Name participants beyond their slot](todo.md#name-participants-beyond-their-slot)

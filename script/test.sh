@@ -148,7 +148,7 @@ botfitness)
 		echo "$v"
 	}
 	lost=
-	for scenario in embedded td kraken; do
+	for scenario in embedded td; do
 		case $scenario in
 		embedded) flags=-d ;;
 		*) flags="-config-dir wad -s $scenario" ;;

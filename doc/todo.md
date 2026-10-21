@@ -36,30 +36,6 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 - Digest mismatches watched as networked bot load grows; that run counted 0–5 per
   host.
 
-### Beat the default graph
-
-- Priority: P2
-- Affected files: `internal/bot`, `internal/asset/bot/default.toml`,
-  `internal/system/nugget.go`, `script/test.sh`
-- Guide: [Bots](bots.md#fitness-and-comparing-graphs)
-
-Exit: a graph beats `default` under `./script/test.sh botfitness` over seeds 1–8
-on the embedded scenario, td and kraken. Baseline, `default` over 4 seeds of 60 s:
-embedded 3493, td 1479, kraken −4800 (kraken has no text, gold or nuggets, so
-`default` is weighed only on its defeats there). Candidates:
-- a `Best` utility guard, added once a graph uses it: a weight per target class,
-  utility `weight*1024/(1+isqrt(dist²))` in integers, ties to the lower class;
-- threat evasion in `default` (`HasTarget threat`, `PointAt away`);
-- kill engagement on kraken;
-- a motor layer: a goal the view does not show reached by clicks along a
-  `pkg/navigation` route rather than the clamp.
-
-Decide whether an improved graph replaces `default`, keeping a pinned copy as the
-baseline, or ships beside it. A collected nugget weighs nothing: nothing pushes
-`EventNuggetCollected`; push it in `NuggetSystem.collectNugget` and drop the
-duplicate `statCollected` increment there. Threats are unweighted; weighting them
-by `profile.Contact` needs a `CombatEntityType`-to-`SpeciesType` table.
-
 ### Let a bot graph use operators and marks
 
 - Priority: P3
@@ -83,17 +59,6 @@ special fire stays `Intent fire_special` where the cursor stands.
 such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and the
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
-
-### Judge a relayed bot's lateness
-
-- Priority: P3
-- Affected files: `internal/converge/authority.go`, `internal/app/converge.go`
-
-A guest's bot is never evicted as slow on its own: it has no link to the
-authority, so `LinkMetric` reads zero throughput for it, and `DropParticipant` is
-a disconnect, which would take its holder. Options: charge its lateness to the
-holder's link; evict the bot alone through a dismissal crossing; or keep this
-and document it.
 
 ### Seat a host's bots without a listener
 
@@ -129,8 +94,8 @@ reach late joiners, and a trust decision, since each peer would choose its own.
 ### Train bot graphs offline
 
 - Priority: P3
-- Affected files: `internal/bot`, `pkg/genetic`
-- Prerequisite: [Beat the default graph](#beat-the-default-graph)'s harness
+- Affected files: `internal/bot`, `pkg/genetic`, `internal/system/nugget.go`
+- Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
 First decide how a graph declares bounded tunable numbers: a `[bot.params]` table,
 or bounded macro parameters shared with the editor's macro metadata. A genome is
@@ -138,7 +103,9 @@ those numbers as a bounded vector; `pkg/genetic`'s `Engine` evaluates whole
 headless runs over a matrix of scenarios and seeds, and `pkg/genetic/fitness`
 scalarises the result. A solo run depends only on its seed, so evaluation needs no
 mesh. Decide where trained values ship. Bot genomes never enter the in-game
-genetic registry, which captures carry.
+genetic registry, which captures carry. Fitness weighs no nugget, since nothing
+pushes `EventNuggetCollected`: push it in `NuggetSystem.collectNugget` and drop
+that function's own `statCollected` increment, which the event's handler repeats.
 
 ### Adapt bots to the session's players
 
