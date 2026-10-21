@@ -40,12 +40,14 @@ func BotSpecs(spec string) ([]string, error) {
 	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
 }
 
-// seatLoopback is where a run in no session opens one for its bots.
-const seatLoopback = "127.0.0.1:0"
+// seatJoin is every seat's join address, which makes its run a joining one. It is
+// never dialled: the seat's stream is one its holder opens in-process (seatLink).
+const seatJoin = "holder:0"
 
 // seat is one bot this run holds: a headless instance of its own that joins the
-// run's session over an ordinary link, as any participant does, and plays a graph.
-// The session carries holder identity; graph and lifecycle stay with this process.
+// run's session as any participant does, over an in-process stream, and plays a
+// graph. The session carries holder identity; graph and lifecycle stay with this
+// process.
 type seat struct {
 	number uint64
 	spec   string
@@ -83,14 +85,13 @@ func (a *App) seatHalted(id uint32) bool {
 	return i >= 0
 }
 
-// seatBots seats cfg.Bots in the session this run is in, or in one it hosts on
-// loopback for them.
+// seatBots seats cfg.Bots in the session this run is in, or in one it opens for them.
 func (a *App) seatBots() error {
 	if len(a.cfg.Bots) == 0 {
 		return nil
 	}
 	if a.sessionTransport() == nil {
-		a.Settle() // Bind the boot cursor before opening the implicit host.
+		a.Settle() // Bind the boot cursor before opening the bots' session.
 	}
 	var err error
 	a.world.RunSafe(func() {
@@ -132,48 +133,47 @@ func (a *App) addSeatLocked(spec string) error {
 	return nil
 }
 
-// seatConfigLocked is how a new seat reaches this run's session: a still-guest
-// relays it on its own link, a run in no session first hosts one on loopback, and
-// an authority is dialled on loopback, a successor on an admission listener of its
-// own because its peer listener accepts only already-rostered identities.
-// Caller holds updateMutex.
+// seatConfigLocked is a new seat's run, which joins this run's session in-process; a
+// run in none first opens one with no listener. It sends the session's name, which
+// the handshake its holder serves checks. Caller holds updateMutex.
 func (a *App) seatConfigLocked() (Config, error) {
-	width, height := a.seatScreenLocked()
-	cfg := Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: width, Height: height,
-		NoAdvertise: true, StatTicks: -1, RecTicks: -1}
-	if a.cfg.JoinAddress != "" && !a.world.IsSessionCoordinator() {
-		// The name too: the relay acceptor is this run's own and waits for it.
-		local := network.PeerID(a.world.LocalParticipant())
-		cfg.JoinAddress, cfg.SessionName, cfg.holder = a.cfg.JoinAddress, a.cfg.SessionName, local
-		cfg.relay = func() (net.Conn, error) { return a.relayLink(local) }
-		return cfg, nil
-	}
 	if a.sessionTransportLocked() == nil {
-		if err := a.beginHostingLocked(seatLoopback, ""); err != nil {
-			return cfg, err
+		if err := a.openSessionLocked("", nil); err != nil {
+			return Config{}, err
 		}
 	}
-	cfg.holder = network.PeerID(a.world.LocalParticipant())
-	bound := a.ownListener()
-	if bound == "" {
-		bound = a.seatAddress
-		if bound == "" {
-			port, err := a.socketPort()
-			if err != nil {
-				return cfg, err
-			}
-			bound, err = port.ServeSession(seatLoopback, a.hostNetworkConfig().AcceptSession, a.admitLateJoiner)
-			if err != nil {
-				return cfg, err
-			}
-			a.seatAddress = bound
+	width, height := a.seatScreenLocked()
+	return Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: width, Height: height,
+		NoAdvertise: true, StatTicks: -1, RecTicks: -1, JoinAddress: seatJoin, SessionName: a.cfg.SessionName,
+		holder: network.PeerID(a.world.LocalParticipant()), relay: a.seatLink}, nil
+}
+
+// seatLink opens a stream to this run for one of its bots and serves the join
+// handshake on the near end: the coordinator's, or a still-guest's, which asks the
+// authority on its own link for each answer.
+func (a *App) seatLink() (net.Conn, error) {
+	var (
+		port     *network.SocketPort
+		accept   func(net.Conn) (network.PeerID, error)
+		admitted func(network.PeerID)
+	)
+	a.world.RunSafe(func() {
+		port, _ = a.sessionTransportLocked().(*network.SocketPort)
+		if a.world.IsSessionCoordinator() {
+			accept, admitted = a.sessionAcceptor(), a.admitLateJoiner
+		} else {
+			accept, admitted = a.relayAcceptor(network.PeerID(a.world.LocalParticipant())), a.releaseRelayedJoiner
 		}
+	})
+	if port == nil {
+		return nil, errors.New("the holder is in no session")
 	}
-	target := loopbackOf(bound)
-	if a.cfg.SessionName != "" {
-		target += "/" + a.cfg.SessionName
+	near, far := network.Pipe()
+	if err := port.ServeConn(near, accept, admitted); err != nil {
+		_ = far.Close()
+		return nil, err
 	}
-	return cfg.joining(target)
+	return far, nil
 }
 
 // seatScreenLocked is the screen a new seat plays in: its holder's, so a person's bots
@@ -184,37 +184,6 @@ func (a *App) seatScreenLocked() (int, int) {
 		return BotWidth, BotHeight
 	}
 	return a.ctx.Width, a.ctx.Height
-}
-
-// ownListener is the address this run's session listener bound, "" when it has none.
-func (a *App) ownListener() string {
-	if addr := a.HostAddr(); addr != "" {
-		return addr
-	}
-	if port, err := a.socketPort(); err == nil && a.cfg.HostAddress != "" && port.Addr() != nil {
-		return port.Addr().String()
-	}
-	return ""
-}
-
-// loopbackOf names a bound listener as a dial from this machine: an unspecified host
-// becomes the loopback of its family, which the admission budget does not count.
-func loopbackOf(bound string) string {
-	scheme, hostport := "", bound
-	if s, rest, ok := strings.Cut(bound, "://"); ok {
-		scheme, hostport = s+"://", rest
-	}
-	host, port, err := net.SplitHostPort(hostport)
-	if err != nil {
-		return bound
-	}
-	if ip := net.ParseIP(host); host == "" || ip.IsUnspecified() {
-		host = "127.0.0.1"
-		if ip != nil && ip.To4() == nil {
-			host = "::1"
-		}
-	}
-	return scheme + net.JoinHostPort(host, port)
 }
 
 // playSeat runs one seat until its holder halts it, its graph quits, or the session
@@ -246,7 +215,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				s.id.Store(uint32(entry.ID))
 				s.app.Store(b)
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
-					"peer", s.id.Load(), "slot", s.slot.Load(), "joined", cfg.JoinAddress)
+					"peer", s.id.Load(), "slot", s.slot.Load())
 				return &seatSource{botSource: botSource{d}, holder: forkCell(a), screen: &a.seatScreen,
 					run: b, shown: screen{cfg.Width, cfg.Height}}, nil
 			})

@@ -172,7 +172,7 @@ var topics = []topicDef{
 			{Keys: ":host <addr>", Desc: "Open this running game to participants, e.g. :host :7777; they join at the current tick"},
 			{Keys: ":join <target>", Desc: "Leave this solo game for the session at target, in any form -join takes; a failed join plays on solo"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},
-			{Keys: ":bot [add [N[:graph]|graph]|drop <slot>]", Desc: "List this run's bots, seat bots playing graph (default: default) or drop one; a solo game hosts them on loopback and still pauses. 10, A and 0xA name one slot"},
+			{Keys: ":bot [add [N[:graph]|graph]|drop <slot>]", Desc: "List this run's bots, seat bots playing graph (default: default) or drop one; a solo game opens a session only they can join and still pauses. 10, A and 0xA name one slot"},
 			{Keys: ":player [drop <slot>]", Desc: "List players and bots by slot; the host drops a player with its bots, or one bot"},
 		},
 	},

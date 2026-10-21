@@ -48,7 +48,7 @@ type SessionController interface {
 	// Scenarios names what ChangeScenario starts by name, and the one running.
 	Scenarios() (names []string, current string)
 	SessionSummary() string
-	// A solo run opens a loopback session for its bots.
+	// A solo run opens a session with no listener for its bots.
 	AddBot(graph string) error
 	DropBot(slot int) error
 	RemoveBot(id uint64) error

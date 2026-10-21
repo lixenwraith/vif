@@ -207,7 +207,7 @@ type Config struct {
 	Participants int
 
 	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats
-	// join the session the run is in, and a run in none hosts one on loopback.
+	// join the session the run is in, and a run in none opens one with no listener.
 	Bots []string
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
@@ -359,7 +359,8 @@ func (c Config) Validate() error {
 		return err
 	}
 	// A browser joins over the session's WebSocket route and nothing else: it has
-	// no socket to dial a host:port with, and no listener to host or serve from.
+	// no socket to dial a host:port with, and no listener to host or serve from. Its
+	// bots dial nothing, joining it in-process.
 	var join network.Endpoint
 	if c.JoinAddress != "" {
 		var err error
@@ -394,7 +395,7 @@ func (c Config) Validate() error {
 			return errors.New("a browser build can join a session but not host one")
 		case c.RelayAddress != "":
 			return errors.New("a browser relays only its own bots")
-		case c.JoinAddress != "" && join.Scheme != network.SchemeWebSocket:
+		case c.JoinAddress != "" && c.relay == nil && join.Scheme != network.SchemeWebSocket:
 			return errors.New("a browser cannot dial host:port; join with the session's wss:// link")
 		}
 	}

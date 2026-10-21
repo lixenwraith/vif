@@ -46,16 +46,18 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 
 ## Ownership and leaving
 
-A bot belongs to the run that started it, its holder.
+A bot belongs to the run that started it, its holder, and joins on an in-process
+stream the holder serves, which spends no join budget. A run in no session first
+opens one with no listener, which only its bots can join, so a browser seats bots
+solo too; host first to let others in.
 
-| Bot of | Joins | Leaves when |
+| Bot of | Admitted | Leaves when |
 |---|---|---|
-| the host | its holder's listener over loopback; a run in no session opens one on loopback first | the host ends, it is dropped, or a `-serve` host begins its drain |
-| a guest | through the guest's own link, on an in-process stream the guest serves | the guest leaves or loses its session, or it is dropped |
+| the host | by the host, as any joiner | the host ends, it is dropped, or a `-serve` host begins its drain |
+| a guest | through the guest's own link, the authority deciding | the guest leaves or loses its session, or it is dropped |
 
-- After a hand-off, a holder that inherited authority admits new bots on a
-  loopback listener of its own; a guest keeps seating bots through whoever holds
-  authority.
+- After a hand-off, a holder that inherited authority admits new bots itself; a
+  guest keeps seating bots through whoever holds authority.
 - A person who joins at a guest's `-relay` address plays through the guest the
   same way but is not its bot: it holds no holder, is dropped on its own, and
   keeps its slot when the guest leaves.
@@ -75,7 +77,7 @@ A bot belongs to the run that started it, its holder.
 | Command | Effect |
 |---|---|
 | `:bot` | List this run's bots: slot, graph, joining or leaving. |
-| `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a loopback session. A count of 0 is refused. |
+| `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a session only they can join. A count of 0 is refused. |
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
 | `:player` | List the slots: `3 player` or `4 bot of 3`. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
@@ -109,8 +111,6 @@ only, and a departed slot may be reused.
 - The fleet allocator takes a `bots` count, closed by default (`bots_max` 0); see
   [The session fleet](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
   request form asks for bots yet.
-- A browser build seats bots only as a guest of a session it joined; it cannot
-  host, so it cannot add bots to a solo run.
 
 ## Writing a graph
 
@@ -345,7 +345,7 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
+- [Host a session opened for bots](todo.md#host-a-session-opened-for-bots)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
 - [Name participants beyond their slot](todo.md#name-participants-beyond-their-slot)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)

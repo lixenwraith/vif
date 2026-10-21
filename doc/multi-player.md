@@ -478,7 +478,7 @@ admitted once within a bounded window; a peer link carries succession records an
 departure notices, which still flood. Corrections retain the authority's term,
 tick, hashes, and chunks across relays.
 
-A relayed join — a guest's own bot on an in-process stream (`relayLink`), or a
+A relayed join — a guest's own bot on an in-process stream (`seatLink`), or a
 person at the guest's `-relay` address — is served by the guest as a coordinator
 would: it asks the authority on its own link to allocate the identity and, once
 the joiner installed the world the guest last proved, to cross its arrival with
@@ -502,7 +502,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator always: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host` or, to seat bots, on loopback. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots binds none. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
@@ -755,7 +755,7 @@ The useful runtime signals are:
   refusal;
 - `snapshot.cadence_*` and `network.link_*`: the selected operating point and the
   measurements behind it; a holder's `snapshot.relay_*`, `shard_bytes_sent` and
-  `manifest_bytes_sent` include the loopback links of its own seats;
+  `manifest_bytes_sent` include the in-process links of its own seats;
 - `network.term_stale`, `network.term_refused`, `network.fork`, and
   `network.migrations`: authority continuity.
 

@@ -235,7 +235,7 @@ type Coordinator struct {
 	Report func(PeerID, JoinerReport) error
 
 	// Admit spends the dial budget before expensive world capture and construction.
-	// A nil hook admits the dial; loopback seats use the same handshake.
+	// A nil hook admits the dial.
 	Admit func(net.Addr) error
 
 	// Name is what this session answers to, so one address can serve several. A
@@ -834,7 +834,7 @@ func (l *AdmissionLimiter) sweepLocked(now time.Time) {
 // admissionKey is the host half of a network address. The port is what a dialer
 // changes for free, so counting it would count nothing.
 func admissionKey(addr net.Addr) string {
-	if addr == nil {
+	if _, piped := addr.(inProcess); addr == nil || piped {
 		return ""
 	}
 	s := addr.String()

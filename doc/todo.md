@@ -47,16 +47,15 @@ such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and th
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
 
-### Seat a host's bots without a listener
+### Host a session opened for bots
 
 - Priority: P3
-- Affected files: `internal/app/seat.go`, `internal/app/relay.go`, `internal/network`
+- Affected files: `internal/app/host.go`, `internal/network/transport.go`
 
-A host's bots dial a loopback listener, which a run in no session opens first.
-Serving them on the in-process stream a guest's bots use would remove that
-listener and the loopback exemption from the join budget (which also exempts local
-people), let `:host` add a listener to a session opened only for bots instead of
-refusing, and let a browser seat bots solo.
+A run in no session opens one with no listener for its bots, and `:host` then
+refuses it as already in a session, so a player who wants others in hosts first.
+Binding a listener onto that session's port instead would let bots come first; the
+authority policy stays the one the session opened with.
 
 ### Let a watched holder pause with only its own bots
 

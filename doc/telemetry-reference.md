@@ -301,7 +301,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `snapshot.hash_us` (int) | What indexing and comparing a capture cost outside the world lock. Read it beside `capture_us` |
 | `snapshot.selective_bytes` (int) | The measured wire cost of a non-keyframe correction, which the cadence controller and admission are priced from |
 | `snapshot.shards_{requested,sent,received,refused,applied}` (int) | Pages a receiver asked about, pages returned because they differed, pages arrived, pages in a repair that was not applied, and pages spliced into a capture whose root then verified |
-| `snapshot.shard_bytes_sent`, `snapshot.shard_bytes_received`, `snapshot.request_bytes` (int) | Repair cost per peer from each end, and what this instance's own answers to indexes cost; a holder's sent figures include the loopback links of its own seats |
+| `snapshot.shard_bytes_sent`, `snapshot.shard_bytes_received`, `snapshot.request_bytes` (int) | Repair cost per peer from each end, and what this instance's own answers to indexes cost; a holder's sent figures include the in-process links of its own seats |
 | `snapshot.{pages,entities,cells}_repaired` (int) | Pages a verified repair replaced, the distinct entities behind them, and the indexed cells carried |
 | `snapshot.proof_failures` (int) | Repairs whose rows or result did not reproduce their declared hash. Nothing was written |
 | `snapshot.baseline_refusals` (int) | Indexes or repairs describing a run, session or baseline this instance does not hold |
