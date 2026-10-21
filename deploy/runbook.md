@@ -107,7 +107,7 @@ and bounded by `-players-max`, `-log-level-min`, the installed scenarios and
 | `the served stream bounds are not {...}` | The restarted LogWisp is not serving the queue, connection and timeout bounds in `deploy/logwisp/aggregator.toml`, so the install did not take. The previous build is already back. | Compare the message against `curl -fsS http://127.0.0.1:8081/status \| jq .server`. A LogWisp revision that lacks a setting is the usual cause. |
 | `cannot read the sink bounds from ...aggregator.toml` | The HTTP sink block lost one of `client_buffer_size`, `max_connections` or `write_timeout_ms`, which the verification reads from it. | Restore the setting; the updater will not install a configuration it cannot check. |
 | `… must be disabled before the temporary build`, `containerd.service must be inactive …` | Docker is stopped, but a unit the build's cleanup would disable is enabled, or the distribution containerd runs without it. The node baseline keeps all three disabled. | `sudo systemctl disable --now docker.service docker.socket containerd.service` |
-| `Docker has no buildx plugin, which LogWisp's build needs` | LogWisp's Dockerfile needs BuildKit; without the plugin, `docker build` falls back to the legacy builder, which rejects it. Checked before Docker starts. | `sudo pacman -S --needed docker-buildx` |
+| `Docker has no buildx plugin, which this build needs` | The session image and LogWisp builds need BuildKit (cache mounts, a build secret); without the plugin, `docker build` falls back to the legacy builder, which rejects them. Checked before Docker starts. | `sudo pacman -S --needed docker-buildx` |
 
 ## Watch the stream
 

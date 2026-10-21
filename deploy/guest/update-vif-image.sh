@@ -1,15 +1,9 @@
 #!/bin/sh
-# Build the dedicated-session image once, import it into K3s containerd, point
-# vif-allocator at it, and remove older vif tags. `./deploy/update.sh image`
-# runs it, with the commit tag, whenever the session image is out of date.
+# Build the session image, import it into K3s pinned, point vif-allocator at it and
+# remove older vif tags; allocation pauses meanwhile and the fleet must be empty.
+# `./deploy/update.sh image` runs it. Run as a docker-group user, with an optional tag:
 #
-# Run as the ordinary repository user (a member of the docker group):
-#
-#   ./deploy/guest/update-vif-image.sh             # tag from current commit
-#   ./deploy/guest/update-vif-image.sh v1.2.3      # explicit release tag
-#
-# The script intentionally requires an idle fleet. It stops the allocator before
-# checking so no session can appear between the check and old-image removal.
+#   ./deploy/guest/update-vif-image.sh [TAG]       # default: the commit's short hash
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -18,7 +12,7 @@ cd "$repo_root"
 
 case ${1:-} in
 	-h|--help)
-		sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 esac
@@ -36,12 +30,20 @@ case "$tag" in
 	''|*[!A-Za-z0-9_.-]*) echo "$0: invalid image tag: $tag" >&2; exit 2 ;;
 esac
 
+# The Dockerfile's cache mounts need BuildKit, which buildx reaches with no fallback
+# to the legacy builder; checked before allocation pauses.
+docker buildx version >/dev/null || {
+	echo "$0: Docker has no buildx plugin, which this build needs; install docker-buildx" >&2
+	exit 1
+}
+
 image_name=${VIF_IMAGE_NAME:-vif}
 runtime_repository=${VIF_RUNTIME_REPOSITORY:-docker.io/library/vif}
 local_image=$image_name:$tag
 runtime_image=$runtime_repository:$tag
 allocator_env=${VIF_ALLOCATOR_ENV:-/etc/vif-allocator/allocator.env}
 allocator_group=${VIF_ALLOCATOR_GROUP:-vif-allocator}
+build_cache_limit=${VIF_BUILD_CACHE_LIMIT:-3gb}
 
 archive=$(mktemp "${TMPDIR:-/tmp}/vif-image.XXXXXX.tar")
 env_copy=$(mktemp "${TMPDIR:-/tmp}/vif-allocator-env.XXXXXX")
@@ -55,6 +57,7 @@ docker_running=false
 if systemctl is-active --quiet docker.service docker.socket 2>/dev/null; then
 	docker_running=true
 fi
+docker_started=false
 image_built=false
 
 restore_forward_policy() {
@@ -71,14 +74,21 @@ cleanup() {
 	trap - EXIT HUP INT TERM
 	rm -f "$archive" "$env_copy" "$env_copy.next" || cleanup_status=$?
 
+	if [ "$image_built" = true ]; then
+		docker image rm "$local_image" >/dev/null || cleanup_status=$?
+	fi
+	# The store keeps the base and the Go caches for the next build, shedding the
+	# least recently used past the cap; a Docker serving other work keeps its own.
+	if [ "$docker_started" = true ]; then
+		docker buildx prune --force --max-used-space "$build_cache_limit" \
+			>/dev/null || cleanup_status=$?
+	fi
 	# Docker and the distribution containerd are build tools on this node, not
 	# workload runtimes. Restore the established disabled baseline.
 	if [ "$docker_running" = false ]; then
 		sudo systemctl disable --now docker.service docker.socket containerd.service \
 			>/dev/null 2>&1 || cleanup_status=$?
 		restore_forward_policy || cleanup_status=$?
-	elif [ "$image_built" = true ]; then
-		docker image rm "$local_image" >/dev/null || cleanup_status=$?
 	fi
 
 	if [ "$allocator_was_active" = true ]; then
@@ -106,10 +116,11 @@ if [ "$docker_running" = true ]; then
 else
 	echo "starting Docker for one image build"
 	sudo systemctl start docker.service
+	docker_started=true
 	restore_forward_policy
 fi
 
-docker build --network host \
+docker buildx build --load --network host \
 	-f deploy/docker/Dockerfile \
 	--build-arg VERSION="$tag" \
 	--build-arg REVISION="$revision" \
@@ -157,11 +168,5 @@ for old_image in $old_runtime_images; do
 	echo "removing old K3s image $old_image"
 	sudo k3s crictl rmi "$old_image"
 done
-
-# Docker only builds here: once K3s holds the image, nothing Docker kept — this
-# image, pulled bases, build cache — is used again, and all of it is disk.
-if [ "$docker_running" = false ]; then
-	docker system prune --all --force >/dev/null
-fi
 
 echo "ready: VIF_ALLOCATOR_IMAGE=$runtime_image revision=$revision"
