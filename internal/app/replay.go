@@ -16,13 +16,10 @@ import (
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
-// ConfigFromAnchor rebuilds the configuration a journal was recorded under, as a
-// headless config; NewReplay retargets it for presentation. Speed is dropped: a
-// replay runs the manual clock, which a headless config rejects a rate for. The
-// scenario is asked for by name, so a journal recorded against one outside the
+// ConfigFromAnchor rebuilds the headless config a journal was recorded under, mid-run
+// openings included; NewReplay retargets it for presentation. Speed is dropped: the
+// manual clock takes no rate. The scenario is asked for by name, so one outside the
 // config roots needs -config-dir; VerifyAnchor proves what resolved is what ran.
-// A journal opened mid-run boots the same way: its first capture writes the world
-// it opened on over that boot.
 func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	if a.Schema != event.JournalSchema {
 		return Config{}, fmt.Errorf("journal schema %d, this build reads %d", a.Schema, event.JournalSchema)
@@ -191,8 +188,17 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		if _, err = a.writeSharedLocked(cap, &before, true, c.Opens); err == nil && c.Opens {
+		_, err = a.writeSharedLocked(cap, &before, true, c.Opens)
+		if err == nil && c.Opens {
 			err = a.openedLocked(c, own)
+		}
+		// The barrier stands as the run's write left it before anything still queued
+		// dispatches: a crossing raised before the next tick is the run's, by record.
+		if err == nil && c.Barrier && !a.barrierLocked() {
+			a.activateNetworkSessionLocked()
+			if !a.barrierLocked() {
+				err = errors.New("the run's write engaged its crossing barrier, which this replay cannot")
+			}
 		}
 	})
 	return err
@@ -200,9 +206,8 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 
 // openedLocked settles what writing a journal's opening world queued, with input
 // bound to the slot the run followed, writes the run's own side over what that
-// derived, then takes up the operator state the run stood in. The crossing barrier
-// engages at once, as the run's was: a crossing raised before the next tick is the
-// run's to apply, by record. Caller MUST hold updateMutex.
+// derived, then takes up the operator state the run stood in.
+// Caller MUST hold updateMutex.
 func (a *App) openedLocked(c event.JournalCapture, own ownState) error {
 	a.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
 	a.scheduler.SettleLocked()
@@ -217,7 +222,6 @@ func (a *App) openedLocked(c event.JournalCapture, own ownState) error {
 			t.SetEnabled(!slices.Contains(c.Off, sys.Name()))
 		}
 	}
-	a.activateNetworkSessionLocked()
 	return nil
 }
 

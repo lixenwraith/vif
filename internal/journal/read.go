@@ -59,6 +59,7 @@ type captureFields struct {
 	Boundary    uint64 `json:"boundary"`
 	Participant uint32 `json:"participant"`
 	Authority   uint32 `json:"authority"`
+	Barrier     bool   `json:"barrier"`
 	Body        []byte `json:"body"` // base64, which encoding/json decodes into []byte
 	Opens       bool   `json:"opens"`
 	Mode        uint64 `json:"mode"`
@@ -245,7 +246,7 @@ func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
 	}
 	c := event.JournalCapture{
 		JSeq: f.JSeq, CSeq: f.CSeq, Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
-		Participant: f.Participant, Authority: f.Authority, Body: f.Body,
+		Participant: f.Participant, Authority: f.Authority, Barrier: f.Barrier, Body: f.Body,
 		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Slot: uint8(f.Slot), Own: f.Own,
 	}
 	if f.Off != "" {

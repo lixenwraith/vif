@@ -93,6 +93,7 @@ func (s vlogSink) Capture(c JournalCapture) {
 		"boundary", c.Boundary,
 		"participant", uint64(c.Participant),
 		"authority", uint64(c.Authority),
+		"barrier", c.Barrier,
 		"body", base64.StdEncoding.EncodeToString(c.Body),
 	}
 	if c.Opens {

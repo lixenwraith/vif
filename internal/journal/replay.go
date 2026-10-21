@@ -120,6 +120,7 @@ type ReplayDriver struct {
 	nextCap int
 	cur     groupKey
 	landed  bool // an install moved the clock past records stamped before it
+	held    bool // a group a world is written among, pushed and not yet settled
 	stats   ReplayStats
 	nextDig int
 	matched *event.Stamp
@@ -135,7 +136,7 @@ func NewReplayDriver(target ReplayTarget, s *Stream) *ReplayDriver {
 type Cursor struct {
 	next, nextCap, nextDig int
 	cur                    groupKey
-	landed                 bool
+	landed, held           bool
 	stats                  ReplayStats
 	matched                *event.Stamp
 }
@@ -143,13 +144,13 @@ type Cursor struct {
 // Cursor reads where the driver stands.
 func (d *ReplayDriver) Cursor() Cursor {
 	return Cursor{next: d.next, nextCap: d.nextCap, nextDig: d.nextDig, cur: d.cur,
-		landed: d.landed, stats: d.stats, matched: d.matched}
+		landed: d.landed, held: d.held, stats: d.stats, matched: d.matched}
 }
 
 // Resume places the driver where c was read; its target must stand where c's did.
 func (d *ReplayDriver) Resume(c Cursor) {
 	d.next, d.nextCap, d.nextDig, d.cur = c.next, c.nextCap, c.nextDig, c.cur
-	d.landed, d.stats, d.matched = c.landed, c.stats, c.matched
+	d.landed, d.held, d.stats, d.matched = c.landed, c.held, c.stats, c.matched
 }
 
 // Done reports whether every record has been injected and every world installed.
@@ -237,7 +238,9 @@ func (d *ReplayDriver) install() (bool, error) {
 		d.tick()
 		return true, nil
 	}
-	d.settleTo(c.Boundary)
+	if !d.held {
+		d.settleTo(c.Boundary)
+	}
 	if err := d.target.Install(c); err != nil {
 		return false, fmt.Errorf("replay: capture after jseq %d: %w", c.JSeq, err)
 	}
@@ -246,6 +249,11 @@ func (d *ReplayDriver) install() (bool, error) {
 	d.landed = true
 	d.nextCap++
 	d.stats.Installed++
+	// The group goes on at the settle group the run's write left, as the install did
+	if d.held && !d.continues(d.cur) {
+		d.held = false
+		d.target.Settle()
+	}
 	return true, nil
 }
 
@@ -371,7 +379,7 @@ func (d *ReplayDriver) settleTo(boundary uint64) {
 }
 
 func (d *ReplayDriver) injectGroup(k groupKey) error {
-	if p := d.target.Position(); p.Run == k.run && p.Tick == k.tick {
+	if p := d.target.Position(); p.Run == k.run && p.Tick == k.tick && !d.held {
 		d.settleTo(k.boundary)
 	}
 	j := segmentEnd(d.s.records, d.next, d.s.captures, d.nextCap)
@@ -390,8 +398,11 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 		queued = d.target.PushRecord(*rec, payload) || queued
 	}
 	// The recorded run settles only what it pushed; a settle here would dispatch
-	// events it held until its next tick.
-	if queued {
+	// events it held until its next tick. A world written among a group was written
+	// over the part before it still queued: the group settles once, after the write.
+	d.held = d.held || queued
+	if d.held && !d.writtenAmong(k, j) {
+		d.held = false
 		d.target.Settle()
 	}
 
@@ -402,6 +413,29 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 		d.cur = k
 	}
 	return nil
+}
+
+func captureKey(c event.JournalCapture) groupKey {
+	return groupKey{run: c.Run, tick: c.Tick, boundary: c.Boundary}
+}
+
+// writtenAmong reports whether the next written world lands in group k right after
+// its part ending at j.
+func (d *ReplayDriver) writtenAmong(k groupKey, j int) bool {
+	if d.nextCap >= len(d.s.captures) {
+		return false
+	}
+	c := d.s.captures[d.nextCap]
+	return !c.Opens && captureKey(c) == k && (j >= len(d.s.records) || c.JSeq < d.s.records[j].JSeq)
+}
+
+// continues reports whether group k holds more of the stream: a record, or another
+// world written among it.
+func (d *ReplayDriver) continues(k groupKey) bool {
+	if d.dueCapture() {
+		return !d.s.captures[d.nextCap].Opens && captureKey(d.s.captures[d.nextCap]) == k
+	}
+	return d.next < len(d.s.records) && keyOf(d.s.records[d.next]) == k
 }
 
 func checkRecord(rec *event.JournalRecord) error {

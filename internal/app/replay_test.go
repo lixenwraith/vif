@@ -716,6 +716,119 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 	replayMatches(t, guestRec, guestWant, guestSurface)
 }
 
+// TestAReplayStandsWhereTheRunsWriteLeftIt: a write leaves its replay on the run's
+// barrier and settle group. A host opens its session over a keystroke pushed and not
+// yet settled, as a seat added from another goroutine does, and pushes another before
+// the settle: both stay queued across the install. A journal it opens then does too.
+func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
+	// Not parallel: hosting binds a real socket.
+	rec := journal.NewCapture()
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}, Journal: true, JournalSink: rec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+	// The glyph under the cursor: typing it moves the cursor, a crossing in a session
+	typed := func() *input.Intent {
+		var r rune
+		a.World().RunSafe(func() {
+			if pos, ok := a.World().LocalCursor(); ok {
+				if e, ok := a.World().Positions.TopGlyphAt(pos.X, pos.Y); ok {
+					g, _ := a.World().Components.Glyph.GetComponent(e)
+					r = g.Rune
+				}
+			}
+		})
+		return intentTextChar(r)
+	}
+	for i := 0; typed().Char == 0; i++ {
+		if i == 40 {
+			t.Fatal("no glyph reached")
+		}
+		inject(t, a, intentMotion(input.MotionWordForward, 1))
+		a.Tick(4)
+	}
+	inject(t, a, intentModeSwitch(input.ModeTargetInsert))
+	unsettled := func() {
+		t.Helper()
+		if before := a.pushed(); !a.handleIntent(typed()) || a.pushed() == before {
+			t.Fatal("the keystroke pushed nothing")
+		}
+	}
+	type left struct {
+		at      event.Stamp
+		barrier bool
+	}
+	var hosted, opened left
+	unsettled()
+	a.World().RunSafe(func() {
+		if err = a.beginHostingLocked("127.0.0.1:0", ""); err == nil {
+			hosted = left{a.Position(), a.barrierLocked()}
+		}
+	})
+	if err != nil || !hosted.barrier {
+		t.Fatalf("host: %v; left %+v", err, hosted)
+	}
+	unsettled()
+	a.Settle()
+	typeOn := func(ticks int) {
+		for range ticks {
+			inject(t, a, typed())
+			a.Tick(1)
+		}
+		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+	}
+	typeOn(150)
+
+	mid := journal.NewCapture()
+	a.cfg.JournalSink = mid
+	if _, err := a.openJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	a.World().RunSafe(func() { opened = left{a.Position(), a.barrierLocked()} })
+	typeOn(45)
+
+	for _, c := range []struct {
+		rec     *journal.Capture
+		left    left
+		digests int
+	}{{rec, hosted, 7}, {mid, opened, 2}} {
+		cfg, err := ConfigFromAnchor(c.rec.Anchors()[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		rep, err := NewHeadless(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rep.Close()
+		end := c.rec.End()
+		d, err := newReplayDriver(rep, journal.Set{Records: c.rec.Records(), Captures: c.rec.Captures(),
+			Digests: c.rec.Digests(), End: &end}.Stream())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for d.Stats().Installed == 0 {
+			if more, err := d.Step(); err != nil || !more {
+				t.Fatalf("replay before the write: %v", err)
+			}
+		}
+		got := left{at: rep.Position()}
+		rep.World().RunSafe(func() { got.barrier = rep.barrierLocked() })
+		if got != c.left {
+			t.Fatalf("the install left the replay at %+v; the run's write left it at %+v", got, c.left)
+		}
+		if err = d.RunAll(); err != nil {
+			t.Fatal(err)
+		}
+		if st := d.Stats(); st.Diverged != nil || st.Installed != 1 || st.Digests < c.digests {
+			t.Fatalf("replay diverged %v; %+v", st.Diverged, st)
+		}
+	}
+}
+
 // TestAnOpeningKeepsTheRunsOwnCursor: a journal opened mid-session leaves each
 // participant on its own slot, driving its own cursor with the energy and heat it
 // held, and each journal replays on that slot.
