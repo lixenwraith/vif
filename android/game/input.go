@@ -92,10 +92,10 @@ func textEvent(r rune) terminal.Event {
 	return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
 }
 
-// touch is the left button pressed or released on the cell drawn under pixel x, y,
-// the nearest edge cell for one past the view's edge. With the pointer off the
-// status bar, the last row, still takes a press: the hold that opens the menu,
-// where the mouse is enabled again; a release follows a press that was taken.
+// touch is the left button pressed or released by a finger on the cell drawn under
+// pixel x, y, the nearest edge cell for one past the view's edge. With the pointer
+// off the status bar, the last row, still takes a press: the hold that opens the
+// menu, where the mouse is enabled again; a release follows a press that was taken.
 func (v *view) touch(x, y int, down bool) (terminal.Event, bool) {
 	cx, cy := v.cellAt(x, y)
 	v.mu.Lock()
@@ -110,7 +110,7 @@ func (v *view) touch(x, y int, down bool) (terminal.Event, bool) {
 		action = terminal.MouseActionPress
 	}
 	return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: action,
-		MouseX: cx, MouseY: cy}, true
+		MouseX: cx, MouseY: cy, Touch: true}, true
 }
 
 // drag is a pressed finger moving: the left button dragged to the cell drawn under
@@ -125,7 +125,7 @@ func (v *view) drag(x, y int) (terminal.Event, bool) {
 	}
 	v.finger.x, v.finger.y = cx, cy
 	return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
-		MouseAction: terminal.MouseActionDrag, MouseX: cx, MouseY: cy}, true
+		MouseAction: terminal.MouseActionDrag, MouseX: cx, MouseY: cy, Touch: true}, true
 }
 
 // cellAt is the cell drawn under pixel x, y, the grid stretched over the view; the

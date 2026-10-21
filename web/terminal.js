@@ -642,8 +642,8 @@ void main() {
     // === Pointer ===
     /* The pointer is reported at its cell in the terminal's numbering: buttons left
        1, middle 2, right 3, wheel up 4 and down 5, back 6, forward 7; actions press 1,
-       release 2, move 3, drag 4. A touch is the left button, as on Android; motion
-       once per cell, and only while Go asked for it. */
+       release 2, move 3, drag 4. A touch is the left button, as on Android, marked as
+       a finger's; motion once per cell, and only while Go asked for it. */
     let pointer = { enabled: false, motion: false };
     let lastCell = null;
     const BUTTONS = [1, 2, 3, 6, 7];   // PointerEvent.button to the terminal's
@@ -655,7 +655,8 @@ void main() {
 
     function mouse(e, button, action) {
         const [x, y] = cellAt(e);
-        send({ type: 'mouse', x: x, y: y, button: button, action: action, mods: mods(e) });
+        send({ type: 'mouse', x: x, y: y, button: button, action: action, mods: mods(e),
+               touch: e.pointerType === 'touch' });
         lastCell = [x, y];
     }
 

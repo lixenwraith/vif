@@ -42,12 +42,14 @@ keys are untouched, and a reset releases the capture.
 
 A captured key is the scenario's one input hook, whatever produces it:
 
-- **Sources.** A typed key, a left press on the button of that key (§7), and a bot
-  or script naming the `press` action with the key as its `char` all reach the
-  router, which crosses `EventInputPressed { slot, key, source, tick }` so the
-  shared FSM sees it on every instance: `slot` is the presser's roster slot,
-  `source` 0 for a key and 1 for a pointer, and `tick` the `engine.ticks` it was
-  made at, which the barrier holds within the lead and late commit of its apply tick.
+- **Sources.** A typed key, a press of the left or right button, a finger or a
+  wheel notch on the button of that key (§7), and a bot or script naming the
+  `press` action with the key as its `char` all reach the router, which crosses
+  `EventInputPressed { slot, key, source, tick }` so the shared FSM sees it on every
+  instance: `slot` is the presser's roster slot, `source` 0 a key, 1 the left
+  button, 2 the right, 3 and 4 the wheel up and down, 5 a finger, and `tick` the
+  `engine.ticks` it was made at, which the barrier holds within the lead and late
+  commit of its apply tick.
 - **Release.** Every press crosses one `EventInputReleased` from its slot. A key's
   own comes where the keyboard reports releases: a terminal with the key event
   protocol, asked for at startup and kept for the run (Alacritty 0.13 and later,
@@ -244,15 +246,16 @@ When terminal mouse reporting is enabled:
 | Input | Behavior |
 |---|---|
 | Left press | Move the cursor to the translated map cell and fire main. |
-| Left press on a button | Press the button's key (§1); never moves or fires. |
+| Left or right press, or a finger, on a button | Press the button's key (§1), held until that button or finger lets go; never moves or fires. |
+| Wheel over a button | Press the button's key for one notch, released at once (§1); never moves. |
 | Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on a phone, in the browser through its launcher. The hold, and the menu's rows, take the pointer with mouse input disabled too, so a phone can enable it again. |
 | Left release | End held fire; release a held button. Passed on from every mode. |
 | Left press in the configuration menu | Select and act on its rows, focus a form field, or go back from outside its window ([Config menu](config-menu.md#navigation)). |
 | Left drag | Continue moving the cursor. A finger moving while down is this drag on a phone, one per cell. |
 | Held left | Repeat main fire at the shared repeat interval. |
-| Right press/hold | Fire/repeat special without moving first. |
+| Right press/hold | Fire/repeat special without moving first, off a button. |
 | Left press twice within `MouseDoubleClickWindow`, `MouseDoubleClickSlackPercent` of the screen apart at most | The second fires special as well, for a finger with no right button; both fire main, and a third press starts over. |
-| Wheel | Move the cursor using the event coordinates. |
+| Wheel | Move the cursor using the event coordinates, off a button. |
 | Bare motion | Move only when free-mouse mode is enabled. |
 
 Translation runs terminal to viewport by the game-area offsets, then viewport to

@@ -179,9 +179,10 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 			switch ev.MouseAction {
 			case terminal.MouseActionPress:
 				return &Intent{
-					Type: IntentMouseLeftDown,
-					X:    ev.MouseX,
-					Y:    ev.MouseY,
+					Type:  IntentMouseLeftDown,
+					X:     ev.MouseX,
+					Y:     ev.MouseY,
+					Touch: ev.Touch,
 				}
 			case terminal.MouseActionDrag:
 				return &Intent{
@@ -193,16 +194,21 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 
 		case terminal.MouseBtnRight:
 			if ev.MouseAction == terminal.MouseActionPress {
-				return &Intent{Type: IntentMouseRightDown}
+				return &Intent{Type: IntentMouseRightDown, X: ev.MouseX, Y: ev.MouseY}
 			}
 			// Right drag intentionally ignored
 
 		case terminal.MouseBtnWheelUp, terminal.MouseBtnWheelDown:
 			if ev.MouseAction == terminal.MouseActionPress {
+				dir := ScrollUp
+				if ev.MouseBtn == terminal.MouseBtnWheelDown {
+					dir = ScrollDown
+				}
 				return &Intent{
-					Type: IntentMouseWheelMove,
-					X:    ev.MouseX,
-					Y:    ev.MouseY,
+					Type:      IntentMouseWheelMove,
+					X:         ev.MouseX,
+					Y:         ev.MouseY,
+					ScrollDir: dir,
 				}
 			}
 

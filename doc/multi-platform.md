@@ -420,7 +420,7 @@ size, so glyphs are crisp at any zoom; the mask is drawn again only when that si
 changes. Without WebGL (a Chromium build on a blocklisted GPU) it paints each
 changed cell on a 2D canvas from the same mask, slower on a large grid, and says
 so once. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
-(a touch is the left button, as on Android) and its size as the terminal events the
+(a touch is the left button marked as a finger's, as on Android) and its size as the terminal events the
 host posts. A hidden tab draws nothing and is handed the whole screen on return; the
 run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
 (`browser.Speaker`): the Worker posts each mixer buffer that sounds, and the page
@@ -446,7 +446,7 @@ proportion. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. A tap is a left press and release on its cell and a
-finger moving while down a left drag, posted once per cell as a terminal reports
+finger moving while down a left drag, both marked as a finger's (`Event.Touch`), posted once per cell as a terminal reports
 motion, so the cursor follows it and a held one repeats fire; keys and the system
 keyboard's text are terminal key events, Back is Escape. Two fingers tapped
 together twice raise or drop the system keyboard, read from the window's insets

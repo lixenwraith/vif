@@ -135,7 +135,7 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 		}
 	case "mouse":
 		if ev, ok := mouseEvent(msg.Get("x").Int(), msg.Get("y").Int(), msg.Get("button").Int(),
-			msg.Get("action").Int(), uint8(msg.Get("mods").Int())); ok {
+			msg.Get("action").Int(), uint8(msg.Get("mods").Int()), msg.Get("touch").Truthy()); ok {
 			h.post(ev)
 		}
 	case "resize":

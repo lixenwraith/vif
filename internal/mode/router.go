@@ -204,9 +204,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
 			r.mouseLeftHeld, r.menuHold = false, false
-			r.releasePointer(intent.Type == input.IntentMouseLeftDown)
+			r.releasePointer(false, intent.Type == input.IntentMouseLeftDown)
 		case input.IntentMouseRightDown, input.IntentMouseRightUp:
 			r.mouseRightHeld = false
+			r.releasePointer(true, intent.Type == input.IntentMouseRightDown)
 		}
 		return true
 	}
@@ -343,7 +344,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	case input.IntentMouseLeftUp:
 		return r.handleMouseLeftUp()
 	case input.IntentMouseRightDown:
-		return r.handleMouseRightDown()
+		return r.handleMouseRightDown(intent)
 	case input.IntentMouseRightUp:
 		return r.handleMouseRightUp()
 	case input.IntentMouseDrag:
@@ -648,12 +649,26 @@ func (r *Router) pressInput(intent *input.Intent, key rune, source event.InputSo
 	}
 }
 
-// releasePointer crosses the release of the button a left press holds, lost when the
-// pointer never let go of it
-func (r *Router) releasePointer(lost bool) {
-	if i := slices.IndexFunc(r.holds, func(h heldInput) bool { return h.source == event.InputPointer }); i >= 0 {
-		r.release(r.holds[i].key, event.InputPointer, lost)
+// releasePointer crosses the release of the button a left or right pointer press
+// holds, lost when that pointer button never let go of it
+func (r *Router) releasePointer(right, lost bool) {
+	i := slices.IndexFunc(r.holds, func(h heldInput) bool {
+		if right {
+			return h.source == event.InputPointerRight
+		}
+		return h.source == event.InputPointer || h.source == event.InputTouch
+	})
+	if i >= 0 {
+		r.release(r.holds[i].key, r.holds[i].source, lost)
 	}
+}
+
+// buttonUnder is the key of the button under a pointer intent's cell, zero for none
+func (r *Router) buttonUnder(intent *input.Intent) rune {
+	if x, y, ok := r.pointerCell(intent); ok {
+		return buttonAt(r.ctx, x, y)
+	}
+	return 0
 }
 
 // release crosses the release of the hold of key from source, from the slot that
@@ -1091,7 +1106,7 @@ func (r *Router) closeOverlay() bool {
 // --- Mouse ---
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
-	r.releasePointer(true)
+	r.releasePointer(false, true)
 	// The status bar is no map cell: a press there starts the hold that summons the
 	// menu, and neither moves the cursor nor fires
 	if r.onStatusBar(intent) {
@@ -1100,11 +1115,13 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	}
 	// A press on a button is its key's input whether or not that key is taken now, so
 	// it never moves the cursor onto the button or fires
-	if x, y, ok := r.pointerCell(intent); ok {
-		if key := buttonAt(r.ctx, x, y); key != 0 {
-			r.pressInput(intent, key, event.InputPointer)
-			return true
+	if key := r.buttonUnder(intent); key != 0 {
+		source := event.InputPointer
+		if intent.Touch {
+			source = event.InputTouch
 		}
+		r.pressInput(intent, key, source)
+		return true
 	}
 	r.moveMouseCursor(intent)
 	r.ctx.PushLocal(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
@@ -1120,7 +1137,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 		max(cell[1]-r.leftPressCell[1], r.leftPressCell[1]-cell[1]) <= slack
 	if near && now.Sub(r.leftPressAt) <= parameter.MouseDoubleClickWindow {
 		r.leftPressAt = time.Time{}
-		r.handleMouseRightDown()
+		r.fireSpecialHeld()
 		r.mouseRightHeld = false
 	} else {
 		r.leftPressAt, r.leftPressCell = now, cell
@@ -1130,12 +1147,23 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 
 func (r *Router) handleMouseLeftUp() bool {
 	r.mouseLeftHeld, r.menuHold = false, false
-	r.releasePointer(false)
+	r.releasePointer(false, false)
 	return true
 }
 
-func (r *Router) handleMouseRightDown() bool {
-	// Fire special at current cursor position, no movement
+// handleMouseRightDown presses a button's key as the right button, as the left does,
+// and anywhere else fires special
+func (r *Router) handleMouseRightDown(intent *input.Intent) bool {
+	r.releasePointer(true, true)
+	if key := r.buttonUnder(intent); key != 0 {
+		r.pressInput(intent, key, event.InputPointerRight)
+		return true
+	}
+	return r.fireSpecialHeld()
+}
+
+// fireSpecialHeld fires special at the cursor without moving it and holds it to repeat
+func (r *Router) fireSpecialHeld() bool {
 	r.ctx.PushLocal(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
@@ -1146,6 +1174,7 @@ func (r *Router) handleMouseRightDown() bool {
 
 func (r *Router) handleMouseRightUp() bool {
 	r.mouseRightHeld = false
+	r.releasePointer(true, false)
 	return true
 }
 
@@ -1171,7 +1200,18 @@ func (r *Router) menuPointer(intent *input.Intent) bool {
 	return intent.Type == input.IntentMouseLeftUp || intent.Type == input.IntentMouseLeftDown && r.onStatusBar(intent)
 }
 
+// handleMouseWheelMove moves the cursor, or over a button presses its key for one
+// notch, released as it presses since a wheel has no release
 func (r *Router) handleMouseWheelMove(intent *input.Intent) bool {
+	if key := r.buttonUnder(intent); key != 0 {
+		source := event.InputWheelUp
+		if intent.ScrollDir == input.ScrollDown {
+			source = event.InputWheelDown
+		}
+		r.pressInput(intent, key, source)
+		r.release(key, source, true)
+		return true
+	}
 	r.moveMouseCursor(intent)
 	return true
 }
@@ -1256,7 +1296,8 @@ func (r *Router) syncMouseMode() {
 	// Reporting off, no release can follow a press held now
 	if !enabled {
 		r.mouseLeftHeld, r.mouseRightHeld = false, false
-		r.releasePointer(true)
+		r.releasePointer(false, true)
+		r.releasePointer(true, true)
 	}
 	r.mouseMode = mouseModeState{applied: true, enabled: enabled, motion: motion}
 	r.applyMouseMode(enabled, motion)

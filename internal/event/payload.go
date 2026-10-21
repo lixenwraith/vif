@@ -483,8 +483,12 @@ type KeyCapturePayload struct {
 type InputSource uint8
 
 const (
-	InputKey InputSource = iota
-	InputPointer
+	InputKey          InputSource = iota
+	InputPointer                  // the left button
+	InputPointerRight             // the right button
+	InputWheelUp                  // a wheel notch, released as it presses
+	InputWheelDown                // a wheel notch, released as it presses
+	InputTouch                    // a finger, on a host that reports one
 )
 
 // InputPayload names the roster slot that pressed or released a captured key, the key,

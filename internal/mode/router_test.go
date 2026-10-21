@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -177,5 +178,58 @@ func TestAHeldKeyCrossesOneReleaseHoweverItEnds(t *testing.T) {
 	r.ProcessInputTick()
 	if !slices.Equal(asks, []bool{true, false}) {
 		t.Fatalf("asked for the console keyboard %v, want it while the capture asked and not after", asks)
+	}
+}
+
+// TestEveryPointerPressesAButton: the right button and a finger press a button's key
+// and hold it as the left button does, and a wheel notch presses it released at
+// once; away from a button the wheel moves and the right button fires as before.
+func TestEveryPointerPressesAButton(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	r := NewRouter(ctx, input.NewMachine())
+	w.Components.Button.SetComponent(w.CreateEntity(core.DomainShared), component.ButtonComponent{Slot: 1, Key: '1'})
+	ctx.KeyCapture.Set("1", false)
+	config := w.Resources.Config
+	bx, by, bw, bh := component.ButtonRect(1, 1, config.MapWidth, config.MapHeight)
+	on := func(kind input.IntentType) *input.Intent {
+		return &input.Intent{Type: kind, X: bx + bw/2, Y: by + bh/2, MapCell: true}
+	}
+	crossed := func() (out []string) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.InputPayload:
+				if ev.Type == event.EventInputPressed {
+					out = append(out, fmt.Sprintf("press source=%d", p.Source))
+				} else if ev.Type == event.EventInputReleased {
+					out = append(out, fmt.Sprintf("release source=%d lost=%v", p.Source, p.Lost))
+				}
+			case *event.FireSpecialRequestPayload:
+				out = append(out, "special")
+			}
+		}
+		return out
+	}
+
+	r.Handle(on(input.IntentMouseRightDown))
+	r.Handle(&input.Intent{Type: input.IntentMouseRightUp})
+	touch := on(input.IntentMouseLeftDown)
+	touch.Touch = true
+	r.Handle(touch)
+	r.Handle(&input.Intent{Type: input.IntentMouseLeftUp})
+	wheel := on(input.IntentMouseWheelMove)
+	wheel.ScrollDir = input.ScrollDown
+	r.Handle(wheel)
+	r.Handle(&input.Intent{Type: input.IntentMouseWheelMove, X: 1, Y: 1, MapCell: true})
+	r.Handle(&input.Intent{Type: input.IntentMouseRightDown, X: 1, Y: 1, MapCell: true})
+
+	want := []string{
+		"press source=2", "release source=2 lost=false",
+		"press source=5", "release source=5 lost=false",
+		"press source=4", "release source=4 lost=true",
+		"special",
+	}
+	if got := crossed(); !slices.Equal(got, want) {
+		t.Fatalf("crossed %q, want %q", got, want)
 	}
 }

@@ -80,8 +80,8 @@ func textEvent(r rune) terminal.Event {
 
 // mouseEvent is the terminal event for the pointer at cell x, y: button and action in
 // the terminal's own numbering, which the page uses, a move being the one action
-// without a button; ok is false outside it
-func mouseEvent(x, y, button, action int, mods uint8) (terminal.Event, bool) {
+// without a button, and touch for a finger's; ok is false outside it
+func mouseEvent(x, y, button, action int, mods uint8, touch bool) (terminal.Event, bool) {
 	if button < int(terminal.MouseBtnNone) || button > int(terminal.MouseBtnForward) ||
 		action < int(terminal.MouseActionPress) || action > int(terminal.MouseActionDrag) ||
 		(button == int(terminal.MouseBtnNone)) != (action == int(terminal.MouseActionMove)) {
@@ -89,7 +89,7 @@ func mouseEvent(x, y, button, action int, mods uint8) (terminal.Event, bool) {
 	}
 	return terminal.Event{Type: terminal.EventMouse, MouseX: max(x, 0), MouseY: max(y, 0),
 		MouseBtn: terminal.MouseButton(button), MouseAction: terminal.MouseAction(action),
-		Modifiers: modifiers(mods)}, true
+		Modifiers: modifiers(mods), Touch: touch}, true
 }
 
 func modifiers(mods uint8) terminal.Modifier {
