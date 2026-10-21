@@ -545,6 +545,7 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 		drive(400, want)
 		var err error
 		a.World().RunSafe(func() { err = a.stopJournalLocked(-1) })
+		a.serveJournal()
 		if err != nil {
 			t.Fatalf("round %d: stop: %v", round, err)
 		}
@@ -711,6 +712,7 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 	play(400, true)
 	for _, a := range []*App{host, guest} {
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
 	}
 	replayMatches(t, hostRec, hostWant, guestSurface)
 	replayMatches(t, guestRec, guestWant, guestSurface)
@@ -779,6 +781,7 @@ func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
 			a.Tick(1)
 		}
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
 	}
 	typeOn(150)
 
@@ -825,6 +828,64 @@ func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
 		}
 		if st := d.Stats(); st.Diverged != nil || st.Installed != 1 || st.Digests < c.digests {
 			t.Fatalf("replay diverged %v; %+v", st.Diverged, st)
+		}
+	}
+}
+
+// TestAReplayShowsNoInputTheRunPausedFor: a command typed or a menu read while the run
+// paused took none of its time, so no presented step shows the run paused, on its
+// command line or on a menu: not one a host's write landed among, nor the stop asked
+// from the menu, which closes the journal once the menu has.
+func TestAReplayShowsNoInputTheRunPausedFor(t *testing.T) {
+	// Not parallel: hosting binds a real socket.
+	rec := journal.NewCapture()
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}, Journal: true, JournalSink: rec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+	a.Tick(30)
+	injectExCommand(t, a, "bot add")
+	a.Tick(60)
+	inject(t, a, &input.Intent{Type: input.IntentConfigMenu, Count: 1})
+	a.ctx.SetOverlaySelection("diagnostics")
+	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})
+	a.ctx.SetOverlaySelection("journal")
+	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})
+	a.serveJournal()
+	if a.recorder.Load() == nil || a.ctx.SessionCtl.Journaling() {
+		t.Fatalf("with the menu up after its stop, journal open %v, reported %v", a.recorder.Load() != nil, a.ctx.SessionCtl.Journaling())
+	}
+	// Back to the menu's pages, then out of it
+	inject(t, a, &input.Intent{Type: input.IntentOverlayClose, Count: 1}, &input.Intent{Type: input.IntentOverlayClose, Count: 1})
+	a.serveJournal()
+	if a.recorder.Load() != nil || len(rec.Captures()) != 1 {
+		t.Fatalf("journal open %v once the menu closed, %d worlds written", a.recorder.Load() != nil, len(rec.Captures()))
+	}
+
+	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rep.Close()
+	end := rec.End()
+	d, err := newReplayDriver(rep, journal.Set{Records: rec.Records(), Captures: rec.Captures(),
+		Digests: rec.Digests(), End: &end}.Stream())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for more, src := true, (journalSource{d: d, log: rep.log}); more; {
+		if more, err = src.Step(); err != nil {
+			t.Fatal(err)
+		}
+		if m, p := rep.ctx.GetMode(), rep.ctx.TimeCtl.IsPaused(); m == core.ModeCommand || m == core.ModeOverlay || p {
+			t.Fatalf("the step presented at %+v shows the run in mode %d, paused %v", rep.Position(), m, p)
 		}
 	}
 }
@@ -895,6 +956,7 @@ func TestAnOpeningKeepsTheRunsOwnCursor(t *testing.T) {
 	play(400, true)
 	for _, a := range apps {
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
 		replayMatches(t, recs[a], want[a], guestSurface)
 	}
 }
@@ -928,8 +990,9 @@ func TestNoJournalOpensWhileANewGameStarts(t *testing.T) {
 	}
 }
 
-// TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal at the
-// run's position; the run then records nothing and reports no journal.
+// TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal where the
+// run stands as its loop serves the stop; the run then records nothing and reports no
+// journal.
 func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	t.Parallel()
 	rec := journal.NewCapture()
@@ -944,6 +1007,7 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 
 	var stopErr error
 	a.World().RunSafe(func() { stopErr = a.stopJournalLocked(-1) })
+	a.serveJournal()
 	if stopErr != nil {
 		t.Fatalf("stop: %v", stopErr)
 	}
@@ -956,7 +1020,7 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	if n := len(rec.Records()) - before; n != 0 {
 		t.Fatalf("%d records after the stop", n)
 	}
-	if emitted, _ := a.JournalStats(); emitted != 0 || a.ctx.SessionCtl.JournalPath() != "" {
+	if emitted, _ := a.JournalStats(); emitted != 0 || a.ctx.SessionCtl.Journaling() {
 		t.Fatal("a stopped journal is still reported")
 	}
 	a.World().RunSafe(func() { stopErr = a.stopJournalLocked(-1) })
@@ -965,21 +1029,38 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	}
 }
 
-// TestAStopCancelsAStartNotYetServed: a stop asked before the run's loop serves a
-// start wins, so no journal opens.
-func TestAStopCancelsAStartNotYetServed(t *testing.T) {
+// TestJournalAsksApplyInTheOrderAsked: asks the run's loop has not served yet apply
+// in order, so a stop cancels a start before it and a start after a stop opens
+// another journal once the stop has closed; the status line tells what was served.
+func TestJournalAsksApplyInTheOrderAsked(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 7, 80, 24)
 	defer a.Close()
 	a.cfg.JournalSink = journal.NewCapture()
 	a.Tick(5)
-	var startErr, stopErr error
-	a.World().RunSafe(func() { startErr, stopErr = a.startJournalLocked(-1), a.stopJournalLocked(-1) })
-	if startErr != nil || stopErr != nil {
-		t.Fatalf("start: %v, stop: %v", startErr, stopErr)
+	start, stop := a.startJournalLocked, a.stopJournalLocked
+	ask := func(asks ...func(int) error) *journal.Recorder {
+		t.Helper()
+		var err error
+		a.World().RunSafe(func() {
+			for _, f := range asks {
+				err = errors.Join(err, f(-1))
+			}
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.serveJournal()
+		return a.recorder.Load()
 	}
-	a.serveJournal()
-	if a.recorder.Load() != nil {
+	first := ask(start)
+	if r := ask(stop, start); r == nil || r == first {
+		t.Fatal("a start after a stop opened no other journal")
+	}
+	if ask(stop, start, stop) != nil || !strings.HasPrefix(a.ctx.GetStatusMessage(), "Journal closed") {
+		t.Fatalf("a stop after a start that followed a stop: journal open %v, status %q", a.recorder.Load() != nil, a.ctx.GetStatusMessage())
+	}
+	if ask(start, stop) != nil {
 		t.Fatal("a start the stop overtook opened a journal")
 	}
 }

@@ -322,8 +322,8 @@ func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 
 // TestARunAndItsBotsJournalMidSession: a run that seated a bot after it started
 // opens a journal where it stands, and so does the bot seat it holds, by slot, which
-// goes on driving its own cursor; each closes and opens again, and every journal
-// replays from the world it opened on.
+// goes on driving its own cursor; each closes and opens again in one command's time,
+// and every journal replays from the world it opened on.
 func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines, and the journal
 	// directory is the process's.
@@ -369,15 +369,25 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		return ok
 	}
 	var paths []string
-	for range 2 {
+	for round := range 2 {
 		b := s.app.Load()
 		until("the bot to drive its own cursor", func() bool { return bound(b) })
 		holderCursor, seatCursor := drives(holder), drives(b)
-		holder.World().RunSafe(func() { err = errors.Join(ctl.StartJournal(-1), ctl.StartJournal(slot)) })
+		// The second opening is asked with the first journals' stop, before either loop serves it
+		holder.World().RunSafe(func() {
+			err = nil
+			if round > 0 {
+				err = errors.Join(ctl.StopJournal(-1), ctl.StopJournal(slot))
+			}
+			err = errors.Join(err, ctl.StartJournal(-1), ctl.StartJournal(slot))
+		})
 		if err != nil {
-			t.Fatalf("start: %v", err)
+			t.Fatalf("round %d: %v", round, err)
 		}
-		until("both journals to open", func() bool { return holder.recorder.Load() != nil && b.recorder.Load() != nil })
+		until("both journals to open", func() bool {
+			h, r := holder.recorder.Load(), b.recorder.Load()
+			return h != nil && r != nil && !slices.Contains(paths, h.Path()) && !slices.Contains(paths, r.Path())
+		})
 		if drives(holder) != holderCursor || drives(b) != seatCursor || int(b.localSlot()) != slot {
 			t.Fatalf("the holder drives %d and its seat %d on slot %d after the openings, %d and %d on slot %d before",
 				drives(holder), drives(b), b.localSlot(), holderCursor, seatCursor, slot)
@@ -385,12 +395,13 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		paths = append(paths, holder.recorder.Load().Path(), b.recorder.Load().Path())
 		from := b.Position().Tick
 		until("the bot to play on", func() bool { return b.Position().Tick > from+3*parameter.DigestIntervalTicks })
-		holder.World().RunSafe(func() { err = errors.Join(ctl.StopJournal(-1), ctl.StopJournal(slot)) })
-		if err != nil {
-			t.Fatalf("stop: %v", err)
-		}
-		until("the bot's journal to close", func() bool { return b.recorder.Load() == nil })
 	}
+	holder.World().RunSafe(func() { err = errors.Join(ctl.StopJournal(-1), ctl.StopJournal(slot)) })
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	b := s.app.Load()
+	until("both journals to close", func() bool { return holder.recorder.Load() == nil && b.recorder.Load() == nil })
 	stop()
 	for _, p := range paths {
 		if st, err := VerifyJournal(Config{}, p); err != nil || st.Digests == 0 {

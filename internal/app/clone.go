@@ -182,13 +182,13 @@ type journalSource struct {
 	log *vlog.Log
 }
 
-// Step advances one recorded tick. A world written between two ticks, or a group
-// landing on one, took none of the recorded run's time, so it shares the next tick's
-// rather than holding the view a tick of its own.
+// Step advances one recorded tick and everything up to the next, a world written then
+// and the groups landing on it included: a frame shows the run between two ticks,
+// never inside one, where a command typed while paused took none of its time.
 func (s journalSource) Step() (bool, error) {
 	from := s.d.Stats()
 	more, err := s.d.Step()
-	for at := s.d.Stats().End; more && err == nil && at.Run == from.End.Run && at.Tick == from.End.Tick; at = s.d.Stats().End {
+	for at := s.d.Stats().End; more && err == nil && (s.d.MidTick() || at.Run == from.End.Run && at.Tick == from.End.Tick); at = s.d.Stats().End {
 		more, err = s.d.Step()
 	}
 	return more, err
