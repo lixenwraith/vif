@@ -23,7 +23,8 @@ type Entry struct {
 }
 
 // entryDef documents one binding. Actions resolve their keys from the live key
-// table; an empty Actions list means Keys is a literal the table cannot supply.
+// table: one action shows every key bound to it, several (h j k l) the first of
+// each. An empty Actions list means Keys is a literal the table cannot supply.
 type entryDef struct {
 	Actions      []string
 	Scope        input.KeySection // SectionNormal by default
@@ -31,7 +32,6 @@ type entryDef struct {
 	Suffix       string           // Appended to every resolved key, e.g. "{c}"
 	Keys         string           // Literal display
 	Desc         string
-	All          bool // Show every binding of each action, not just the primary
 }
 
 // topicDef is a section template
@@ -79,7 +79,7 @@ func (e *entryDef) resolve(kt *input.KeyTable) (string, bool) {
 		if len(bound) == 0 {
 			continue
 		}
-		if !e.All {
+		if len(e.Actions) > 1 {
 			bound = bound[:1]
 		}
 		for _, k := range bound {

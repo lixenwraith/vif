@@ -1,11 +1,15 @@
 # vif's complete built-in keymap. The runtime embeds this file, while
 # `make install-config` installs the same document as a user-editable override.
+# Each key names one action; several keys may name the same one, as ctrl_g and
+# f10 both name config_menu.
 
 [normal_keys]
 ctrl_q = "quit"
 ctrl_c = "quit"
 ctrl_s = "toggle_audio_cycle"
 ctrl_g = "config_menu"
+f10 = "config_menu"
+f1 = "help"
 escape = "escape"
 up = "motion_up"
 down = "motion_down"
@@ -125,6 +129,8 @@ ctrl_q = "quit"
 ctrl_c = "quit"
 ctrl_s = "toggle_audio_cycle"
 ctrl_g = "config_menu"
+f10 = "config_menu"
+f1 = "help"
 up = "motion_up"
 down = "motion_down"
 left = "motion_left"
@@ -138,6 +144,8 @@ page_down = "overlay_page_down"
 
 [text_keys]
 ctrl_g = "config_menu"
+f10 = "config_menu"
+f1 = "help"
 up = "motion_up"
 down = "motion_down"
 left = "motion_left"

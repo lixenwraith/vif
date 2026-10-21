@@ -249,6 +249,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleToggleAudioCycle()
 	case input.IntentConfigMenu:
 		return r.handleConfigMenu()
+	case input.IntentHelp:
+		return r.handleHelp()
 
 	// Normal mode navigation
 	case input.IntentMotion:
@@ -1103,6 +1105,28 @@ func (r *Router) closeOverlay() bool {
 	return true
 }
 
+// handleHelp opens help over any mode or overlay, and closes it where it is shown
+func (r *Router) handleHelp() bool {
+	if r.ctx.GetOverlayTitle() == core.OverlayHelpTitle {
+		return r.closeOverlay()
+	}
+	r.enterOverlay()
+	handleHelpCommand(r.ctx)
+	return true
+}
+
+// enterOverlay leaves the mode a key opens an overlay over: pointer holds, the
+// command and search lines and a menu form are dropped, and keys parse as the overlay's
+func (r *Router) enterOverlay() {
+	r.configForm = nil
+	r.mouseLeftHeld, r.mouseRightHeld = false, false
+	r.ctx.SetCommandText("")
+	r.ctx.SetSearchText("")
+	r.ctx.SetCommandCursorPos(0)
+	r.resetCommandHistoryBrowse()
+	r.machine.SetMode(input.ModeOverlay)
+}
+
 // --- Mouse ---
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
@@ -1479,7 +1503,7 @@ func (r *Router) suspendsPlayback(intent *input.Intent) bool {
 	if r.ctx.IsCommandMode() || r.ctx.IsOverlayMode() {
 		return true
 	}
-	return intent.Type == input.IntentConfigMenu ||
+	return intent.Type == input.IntentConfigMenu || intent.Type == input.IntentHelp ||
 		intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand
 }
 

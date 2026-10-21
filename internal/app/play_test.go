@@ -109,7 +109,7 @@ func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 	if p.cmd == nil || !a.ctx.Viewer.Load() || a.ctx.GetOverlayContent().Menu == nil {
 		t.Fatal("Ctrl-G did not open the viewer's menu")
 	}
-	press(terminal.Event{Key: terminal.KeyCtrlG})
+	press(terminal.Event{Key: terminal.KeyF10})
 	if p.cmd != nil || a.ctx.Viewer.Load() || a.ctx.GetMode() != core.ModeInsert || a.ctx.TimeCtl.IsPaused() {
 		t.Fatal("closing the menu failed to return the recorded mode and pause")
 	}
@@ -118,6 +118,15 @@ func TestReplayViewerCommandLineReturnsTheRecordedState(t *testing.T) {
 	if i, _, _, ok := snapshot.FirstDiff(twin.SnapshotSimulation(), a.SnapshotSimulation()); ok {
 		t.Fatalf("the viewer's command line and menu changed the recorded run, at line %d:\n%s", i,
 			strings.Join(snapshot.Diff(twin.SnapshotSimulation(), a.SnapshotSimulation(), 8), "\n"))
+	}
+	// Help is the viewer's too; its ask is a local dispatch the twin never counts
+	press(terminal.Event{Key: terminal.KeyF1})
+	if p.cmd == nil || !a.ctx.Viewer.Load() || a.ctx.GetOverlayTitle() != core.OverlayHelpTitle {
+		t.Fatal("F1 did not open the viewer's help")
+	}
+	press(terminal.Event{Key: terminal.KeyF1})
+	if p.cmd != nil || a.ctx.Viewer.Load() || a.ctx.GetMode() != core.ModeInsert || a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("closing help failed to return the recorded mode and pause")
 	}
 }
 

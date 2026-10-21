@@ -1,10 +1,11 @@
 # Configuration menu
 
-Press **Ctrl-G**, hold a left press (a finger) on the status bar, or enter **`:g`**
-(`:config`) during play. Settings take effect in the current run. The Audio and
-Controls rows and the HUD are also `vif.toml`'s `[play]`: a run that read a settings
-file writes them back as they change, and the next run starts as this one was
-left; the rest changes this run alone, and the keymap is never rewritten.
+Press **Ctrl-G** or **F10**, hold a left press (a finger) on the status bar, or
+enter **`:g`** (`:config`) during play. Settings take effect in the current run.
+The Audio and Controls rows and the HUD are also `vif.toml`'s `[play]`: a run that
+read a settings file writes them back as they change, and the next run starts as
+this one was left; the rest changes this run alone, and the keymap is never
+rewritten.
 
 ## Navigation
 
@@ -20,7 +21,7 @@ left; the rest changes this run alone, and the keymap is never rewritten.
 | Form | Enter | Submit all fields. Invalid input keeps the form and its values. |
 | Form | A press on a field | Focus it. |
 | Anywhere | Escape | Cancel a form, return to categories, then close. `q` also goes back in menus. A press outside the window does the same. |
-| Anywhere | Ctrl-G | Close the menu and discard an unsubmitted form. |
+| Anywhere | Ctrl-G or F10 | Close the menu and discard an unsubmitted form. |
 
 Submitting a session action closes the menu and resumes play. Joining, allocator
 requests and bot admission complete asynchronously; the status bar reports
@@ -111,10 +112,10 @@ session's own bots; the Bots page adds bots held by your run after joining.
 
 ## Key binding and persistence
 
-The `config_menu` action is bound to `ctrl_g` in `normal_keys`, `text_keys` and
-`overlay_keys` in `input/keymap.toml`. Override those sections (or use `-k`) to
-change its shortcut; `:g` remains available. Forms use the text-key bindings,
-while menu navigation uses overlay bindings.
+The `config_menu` action is bound to `ctrl_g` and `f10` in `normal_keys`,
+`text_keys` and `overlay_keys` in `input/keymap.toml`. Override those sections (or
+use `-k`) to add or change its keys; `:g` remains available. Forms use the
+text-key bindings, while menu navigation uses overlay bindings.
 
 Action rows (`Enter`) run the command they name and close the menu: `:n`,
 `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`

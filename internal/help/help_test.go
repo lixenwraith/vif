@@ -63,6 +63,28 @@ func TestEntriesResolve(t *testing.T) {
 	}
 }
 
+// TestAnEntryShowsEveryKeyOfOneActionAndTheFirstOfSeveral: a player's own keys
+// join the key column of an entry documenting their action alone; an entry
+// documenting several (h j k l) keeps to the first key of each
+func TestAnEntryShowsEveryKeyOfOneActionAndTheFirstOfSeveral(t *testing.T) {
+	override, err := input.LoadKeyConfig([]byte("[normal]\ny = \"motion_left\"\n[normal_keys]\nf2 = \"config_menu\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kt := input.MergeKeyTable(input.DefaultKeyTable(), override)
+	for _, tt := range []struct {
+		entry entryDef
+		want  string
+	}{
+		{entryDef{Actions: []string{"config_menu"}}, "Ctrl+G/F10/F2"},
+		{entryDef{Actions: []string{"motion_left", "motion_down"}}, "h/j"},
+	} {
+		if got, _ := tt.entry.resolve(kt); got != tt.want {
+			t.Errorf("%v shows %q, want %q", tt.entry.Actions, got, tt.want)
+		}
+	}
+}
+
 // TestTopicsNonEmpty asserts the default keymap resolves every section
 func TestTopicsNonEmpty(t *testing.T) {
 	got := Topics(input.DefaultKeyTable())
