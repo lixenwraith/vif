@@ -3,6 +3,7 @@ package fsm
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"time"
 
@@ -215,8 +216,8 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 	}
 }
 
-// ExecuteAction runs a registered action by name
-// Used for initialization hooks like ApplyGlobalSystemConfig
+// ExecuteAction runs a registered action by name, for embedder hooks such as
+// ReconcileSystems
 func (m *Machine[T]) ExecuteAction(ctx T, actionName string, args any) bool {
 	fn, ok := m.actionReg[actionName]
 	if !ok {
@@ -592,6 +593,51 @@ func (m *Machine[T]) GetSystemsConfig() *SystemsConfig {
 // GetRegionConfig returns the configuration for a region
 func (m *Machine[T]) GetRegionConfig(regionName string) *RegionConfig {
 	return m.regionConfigs[regionName]
+}
+
+// runningConfigs yields the configs of the regions that run: neither paused nor
+// ending themselves from their own on_exit
+func (m *Machine[T]) runningConfigs(yield func(*RegionConfig) bool) {
+	for _, name := range m.regionOrder {
+		r := m.regions[name]
+		if cfg := m.regionConfigs[name]; cfg != nil && !r.Paused && !r.terminated && !yield(cfg) {
+			return
+		}
+	}
+}
+
+// SystemWanted reports whether the running regions want name on: the union of
+// their only_systems lists, or the [systems] baseline when none has one, plus
+// their enabled_systems, less their disabled_systems
+func (m *Machine[T]) SystemWanted(name string) bool {
+	narrowed, on := false, false
+	for cfg := range m.runningConfigs {
+		if cfg.OnlySystems != nil {
+			narrowed = true
+			on = on || slices.Contains(cfg.OnlySystems, name)
+		}
+	}
+	if !narrowed {
+		on = m.systemsConfig.Enabled(name)
+	}
+	for cfg := range m.runningConfigs {
+		if slices.Contains(cfg.DisabledSystems, name) {
+			return false
+		}
+		on = on || slices.Contains(cfg.EnabledSystems, name)
+	}
+	return on
+}
+
+// SystemDecided reports whether a running region decides name: one with
+// only_systems decides every system, any other those its lists name
+func (m *Machine[T]) SystemDecided(name string) bool {
+	for cfg := range m.runningConfigs {
+		if cfg.OnlySystems != nil || slices.Contains(cfg.EnabledSystems, name) || slices.Contains(cfg.DisabledSystems, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // === Region Lifecycle Methods ===

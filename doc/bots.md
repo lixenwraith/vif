@@ -131,9 +131,9 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 | `[macros]` | Inline macros, expanded at load. |
 
 Anything else is refused at load: `description`, `[systems]`, `macro_files`, and a
-region's `file`, `enabled_systems`, `disabled_systems` or `background`. Queued
-intents wait in a queue of 256; an intent that finds it full is dropped and
-counted. Allowance left idle builds up to one second's worth.
+region's `file`, `enabled_systems`, `disabled_systems`, `only_systems` or
+`background`. Queued intents wait in a queue of 256; an intent that finds it full
+is dropped and counted. Allowance left idle builds up to one second's worth.
 
 ### Actions
 
@@ -208,8 +208,7 @@ variables, `StateTimeExceeds`, `And`, `Or`, `Not`, payload guards, region contro
 over the bot's own machine, status guards over the bot's own registry (bare keys
 such as `heat.current` are its own slot, `player.<n>.*` any slot), and config
 guards over its own view. Actions that write the world are refused at load:
-`EmitEvent`, `EnableSystem`, `DisableSystem`, `ApplyGlobalSystemConfig`,
-`ApplyRegionSystemConfigs`.
+`EmitEvent`, `EnableSystem`, `DisableSystem`, `ReconcileSystems`.
 
 ### Timing and randomness
 

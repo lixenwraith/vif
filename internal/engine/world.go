@@ -33,10 +33,6 @@ type World struct {
 	systems []systemEntry
 	sealed  atomic.Bool
 
-	// systemOn is the scenario's [systems] baseline, set once at load; nil leaves
-	// every system on. A dependent it leaves off holds no dependency on.
-	systemOn func(name string) bool
-
 	// === Update-mutex guarded ===
 	// Entity ids, component stores, positions and masks.
 	// The tick, event, input and render paths all acquire it.
@@ -48,6 +44,11 @@ type World struct {
 	componentMask map[core.Entity]uint64
 	updateMutex   UpdateMutex
 	audit         auditScope // the system a domain violation is attributed to
+
+	// systemsOff holds the toggled systems the last ApplySystems wanted off, a
+	// function of the FSM position it ran at; every system starts on, at
+	// construction and after InitSystems
+	systemsOff map[string]bool
 
 	// === Self-synchronized ===
 	// Readable from any goroutine, including the post-tick telemetry tail
@@ -98,6 +99,7 @@ func NewWorld() *World {
 		componentMask: make(map[core.Entity]uint64, 16384), // reasonable small screen size that doesn't require increase
 		Resources:     &Resource{Rand: NewRandResource(0)}, // app overwrites with the run seed
 		systems:       make([]systemEntry, 0),
+		systemsOff:    make(map[string]bool),
 	}
 	for d := range w.nextEntityID {
 		w.nextEntityID[d] = 1
@@ -297,6 +299,7 @@ func (w *World) InitSystems() error {
 	for _, name := range order {
 		byName[name].Init()
 	}
+	clear(w.systemsOff)
 	return nil
 }
 
@@ -314,15 +317,12 @@ func (w *World) systemGraph() map[string][]string {
 	return deps
 }
 
-// SetSystemBaseline installs the scenario's [systems] baseline before the first tick
-func (w *World) SetSystemBaseline(on func(name string) bool) { w.systemOn = on }
-
-// SystemsRequiring returns the systems the baseline leaves on that declare name at
-// the given strength, sorted. Callers use it to refuse or report a disable request.
+// SystemsRequiring returns the running systems that declare name at the given
+// strength, sorted. Callers use it to refuse or report a disable request.
 func (w *World) SystemsRequiring(name string, strength DependencyStrength) []string {
 	var dependents []string
 	for i := range w.systems {
-		if w.systemOn != nil && !w.systemOn(w.systems[i].sys.Name()) {
+		if t, ok := w.systems[i].sys.(Toggled); ok && !t.Enabled() {
 			continue
 		}
 		for _, d := range w.systems[i].profile.Requires {
@@ -334,6 +334,89 @@ func (w *World) SystemsRequiring(name string, strength DependencyStrength) []str
 	}
 	slices.Sort(dependents)
 	return dependents
+}
+
+// ApplySystems sets the systems that toggle: one the running regions decide, or
+// whose wanted state changed since the last call, goes to what want reports, and
+// any other keeps the state commands left it in. Every system left running keeps
+// the systems it requires on. Enables go first, required systems before their
+// dependents, and disables the other way, so none strands a dependency.
+func (w *World) ApplySystems(want, decided func(name string) bool) {
+	order, err := core.TopoSort(w.systemGraph())
+	if err != nil {
+		return // CheckSystemDependencies refuses such a graph at startup
+	}
+	toggles := make(map[string]bool, len(w.systems))
+	running := make(map[string]bool, len(w.systems))
+	requires := make(map[string][]string, len(w.systems))
+	for i := range w.systems {
+		sys := w.systems[i].sys
+		name := sys.Name()
+		if h, ok := sys.(event.Handler); ok && slices.Contains(h.EventTypes(), event.EventMetaSystemCommandRequest) {
+			toggles[name] = true
+		}
+		t, ok := sys.(Toggled)
+		running[name] = !ok || t.Enabled()
+		for _, d := range w.systems[i].profile.Requires {
+			if d.Strength == DepRequired {
+				requires[name] = append(requires[name], d.Name)
+			}
+		}
+	}
+
+	// Backward, a system's dependents settle before it does. The wanted set is
+	// closed over what it requires, so a region's list cannot strand a dependency.
+	wanted := make(map[string]bool, len(order))
+	for _, name := range slices.Backward(order) {
+		if wanted[name] = wanted[name] || !toggles[name] || want(name); wanted[name] {
+			for _, dep := range requires[name] {
+				wanted[dep] = true
+			}
+		}
+	}
+	// A touched system goes to its wanted state and any other stays as it runs; what
+	// ends up on, either way, holds what it requires on
+	touched := func(name string) bool { return decided(name) || wanted[name] == w.systemsOff[name] }
+	on := make(map[string]bool, len(order))
+	for _, name := range slices.Backward(order) {
+		switch {
+		case !toggles[name]:
+			on[name] = true
+		case touched(name):
+			on[name] = on[name] || wanted[name]
+		default:
+			on[name] = on[name] || running[name]
+		}
+		if on[name] {
+			for _, dep := range requires[name] {
+				on[dep] = true
+			}
+		}
+	}
+
+	push := func(name string, enabled bool) {
+		w.PushEvent(event.EventMetaSystemCommandRequest, &event.MetaSystemCommandPayload{
+			SystemName: name,
+			Enabled:    enabled,
+		})
+	}
+	for _, name := range order {
+		if toggles[name] && on[name] && (touched(name) || !running[name]) {
+			push(name, true)
+		}
+	}
+	for _, name := range slices.Backward(order) {
+		if toggles[name] && !on[name] && touched(name) {
+			push(name, false)
+		}
+	}
+	for _, name := range order {
+		if !toggles[name] || wanted[name] {
+			delete(w.systemsOff, name)
+		} else {
+			w.systemsOff[name] = true
+		}
+	}
 }
 
 // Systems returns a copy of all registered systems
@@ -378,10 +461,10 @@ func (w *World) Seal() {
 	}
 }
 
-// AllowSystemDisable reports whether name may be disabled. A system the baseline
-// leaves on declaring it required refuses the request; an optional one is reported once.
-// Region configs are checked at load time; this covers the runtime commands and
-// FSM actions that validation cannot see.
+// AllowSystemDisable reports whether name may be disabled. A running system
+// declaring it required refuses the request; an optional one is reported once.
+// It judges the DisableSystem action and the :system command; ApplySystems
+// needs no judging.
 func (w *World) AllowSystemDisable(name string) bool {
 	if required := w.SystemsRequiring(name, DepRequired); len(required) > 0 {
 		w.Log().Warn("system", "msg", "disable refused", "system", name,

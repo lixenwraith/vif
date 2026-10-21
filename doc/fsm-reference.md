@@ -72,8 +72,10 @@ fixed = "500x250"                   # Size the map holds throughout, for front-e
 initial = "StateName"               # Initial state (omit for dynamic regions)
 file = "file.toml"                  # External state definitions
 background = true                   # Left out of the status bar's fsm.state summary
-enabled_systems = ["system_name"]   # Enable on region spawn/resume
-disabled_systems = ["system_name"]  # Disable on region spawn/resume
+enabled_systems = ["system_name"]   # On while the region runs
+disabled_systems = ["system_name"]  # Off while it runs, unless a running system requires it
+only_systems = ["system_name"]      # Or (not both with disabled_systems): every toggled
+                                    # system no running region names is off while it runs
 ```
 
 ---
@@ -278,9 +280,11 @@ A string takes the value's decimal form in place of each `{}`, so
 ```
 
 `region` must be declared under `[regions]` and `initial_state` must name a state,
-or the load fails. Spawning an active region does nothing; a spawn or resume
-reapplies the region's `enabled_systems`/`disabled_systems`. A paused region keeps
-its state, time and pending delays, runs nothing and drops its events.
+or the load fails. Spawning an active region does nothing. Each of the four
+reconciles the systems with the regions that now run, so a region's
+`enabled_systems`, `disabled_systems` and `only_systems` hold while it runs and
+hand back when it pauses or ends ([System Control](#system-control)). A paused
+region keeps its state, time and pending delays, runs nothing and drops its events.
 
 ### Variables
 
@@ -389,12 +393,14 @@ elements. A key without dots names a top-level field.
 { action = "DisableSystem", payload = { system_name = "name" } }
 ```
 
-A disable is dropped while a system the `[systems]` baseline leaves on requires
-it. `ApplyGlobalSystemConfig` disables what that baseline leaves off and
-`ApplyRegionSystemConfigs` reapplies every active region's toggles; the runtime runs
-both after init, reset and an installed capture, and the region pass after each
-`:region` command, so a scenario has no need to. Pausing or terminating a region
-reverts none of its toggles.
+A disable is dropped while a running system requires it. `ReconcileSystems` sets
+the systems to what the running regions want: the union of their `only_systems`
+lists, or the `[systems]` baseline when none has one, plus their `enabled_systems`,
+less their `disabled_systems`, with every system left running keeping what it
+requires on. A system the running regions decide, or whose wanted state changed,
+goes to it; any other keeps what `EnableSystem`, `DisableSystem` or `:system` left
+it at. The runtime runs it after init, reset, an installed capture and each
+`:region` command, and the region actions run it, so a scenario has no need to.
 
 ### Status Registry Actions
 
@@ -710,9 +716,10 @@ between instances; the first read of one in a shared session logs a D-14 warning
 ## Execution Order
 
 1. **FSM Init** — enter each region with an `initial` state (in name order), then
-   apply the `[systems]` baseline, then each active region's toggles; a reset first
-   runs every region's `on_exit` (leaf → root)
-2. **Region Spawn** — enter the region, then apply its `enabled_systems`/`disabled_systems`
+   reconcile the systems with the running regions; a reset first runs every region's
+   `on_exit` (leaf → root)
+2. **Region Spawn** — enter the region, then reconcile the systems; a pause, resume
+   or terminate reconciles too
 3. **Tick** — process delayed actions, execute `on_update` (root → leaf), evaluate transitions (leaf → root, first match wins)
 4. **Event** — each queued event, including one an action emitted, reaches the FSM
    before any system handler; each unpaused region takes at most one matching
