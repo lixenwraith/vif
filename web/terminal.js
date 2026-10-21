@@ -533,6 +533,7 @@ void main() {
             bytes: bytes.buffer, argv: argv, cols: cols, rows: rows }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });
+            if (document.hidden) send({ type: 'blur' });
         });
         wireHandlers();
     }
@@ -590,10 +591,11 @@ void main() {
     }
 
     // === Keys ===
-    /* Keys arrive on the hidden field: a hardware key as keydown, a soft keyboard's
-       or a paste's text as input events once the browser has composed it. A key the
-       game takes never reaches the field; one left to the browser (a Meta chord, a
-       Ctrl chord a terminal has no byte for, paste) keeps its meaning there. */
+    /* Keys arrive on the hidden field: a hardware key as keydown and keyup by its
+       code, a soft keyboard's or a paste's text as input events once the browser has
+       composed it. A key the game takes never reaches the field; one left to the
+       browser (a Meta chord, a Ctrl chord a terminal has no byte for, paste) keeps
+       its meaning there. */
     const NAMED = /^(Escape|Enter|Tab|Backspace|Delete|Arrow(Up|Down|Left|Right)|Home|End|Page(Up|Down)|Insert|F([1-9]|1[0-2]))$/;
     const CTRL = /^[a-zA-Z @[\\\]^_?]$/;   // the characters whose Ctrl chord a terminal sends
 
@@ -607,8 +609,12 @@ void main() {
         if (e.shiftKey && ((e.ctrlKey && e.key === 'V') || e.key === 'Insert')) return;
         const char = [...e.key].length === 1;
         if (!(char ? !e.ctrlKey || CTRL.test(e.key) : NAMED.test(e.key))) return;
-        send({ type: 'key', key: e.key, mods: mods(e) });
+        send({ type: 'key', key: e.key, mods: mods(e), code: e.code, repeat: e.repeat });
         e.preventDefault();
+    }
+
+    function onKeyUp(e) {
+        if (e.code) send({ type: 'keyup', code: e.code });
     }
 
     function onInput(e) {
@@ -744,6 +750,8 @@ void main() {
     // === Event Wiring ===
     function wireHandlers() {
         input.addEventListener('keydown', onKey);
+        input.addEventListener('keyup', onKeyUp);
+        input.addEventListener('blur', function() { send({ type: 'blur' }); });
         input.addEventListener('input', onInput);
         input.addEventListener('compositionend', onCompositionEnd);
         input.addEventListener('paste', onPaste);

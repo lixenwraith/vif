@@ -3,8 +3,7 @@
 Not today. Yes, as a program of its own drawn through vif's hosts, for about one
 and a half thousand more lines to first play, most of them outside this
 repository; Doom as a vif scenario inside a session is out of scope. A design for
-future implementation: of its plan only the terminal module's key releases (§3.1)
-are built.
+future implementation: of its plan only key releases (§3.1) are built.
 
 ## 1. Three readings
 
@@ -39,7 +38,6 @@ alternative and is tens of thousands of lines: out of scope.
 
 | Blocker | Where it is today | What closes it | Size |
 |---|---|---|---|
-| No key release on the graphical hosts | The terminal module reports releases where the terminal or console does (§3.1); `pkg/window` handles only `KeyPress`, and the page and Android post presses alone | Each host posts its release (§3.1) | ~100 lines |
 | Cells, not pixels | `render.Surface` and every host draw a cell grid ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)) | A half-block frame converter in `pkg/ascimage` (§3.2); a pixel path for graphical hosts later | ~150; pixel path ~400 |
 | Effects | The mixer is synthesized and 44.1 kHz stereo | Resample each 8-bit lump to float once, at `CacheSound`, and play it through `AudioEngine.PlayBuffer`; centered and unstoppable, since that call has no pan and no voice handle | ~100 |
 | Music | Doom's is MUS played on OPL2 FM from the `GENMIDI` bank | An OPL2 emulator in Go, or MUS channels mapped onto the sequencer's voices; deferred, as gore defers it | ~1,000–1,500 |
@@ -59,11 +57,11 @@ only where the terminal answers its query, never by name: Alacritty 0.13 and lat
 is the reference, locally or over ssh. The other is the Linux or FreeBSD text
 console's raw keyboard, held only while asked, with a guard process that restores
 the console if the program dies. tmux, VTE and xterm report no releases, and a key
-taps there. A lost focus or source releases every held key, marked `Lost`. Where
-no release arrives, `vif-doom` holds a key until no repeat follows within the
-repeat interval, which stutters for the first repeat's delay (250–600 ms): a
-fallback, not play. The window posts X11 `KeyRelease`, the page `keyup` and
-Android the key's `ACTION_UP`, a few lines each.
+taps there. The window, the page and Android post their hardware keys' releases
+the same way (`pkg/hostkey`). A lost focus or source releases every held key,
+marked `Lost`. Where no release arrives, `vif-doom` holds a key until no repeat
+follows within the repeat interval, which stutters for the first repeat's delay
+(250–600 ms): a fallback, not play.
 
 vif's input hook holds a captured key on the same releases
 ([Input and modes](input-and-modes.md) §1), so step 1 of §5 serves vif as well.
@@ -107,7 +105,7 @@ storage.
 | Host | First cut | Missing for good play |
 |---|---|---|
 | Terminal | Plays wherever vif's does | Held keys only where releases arrive: protocol terminals and the text consoles |
-| Desktop window | Plays as cells; Linux and FreeBSD | `KeyRelease`; the pixel path for resolution |
+| Desktop window | Plays as cells; Linux and FreeBSD | The pixel path for resolution |
 | Browser | gore in the Worker under `js/wasm`, with its own copy of `web/` and the IWAD picker | A measurement: Go wasm speed for Doom's renderer is unmeasured |
 | Android | A `gomobile` module of its own, as `android/` is | Touch controls: the strip sends keys, not a stick |
 | Windows | Terminal only, without sound, as vif's zip | What vif's zip lacks |
@@ -119,7 +117,7 @@ useful without Doom.
 
 1. Terminal module: key actions from the key event protocol and the text consoles,
    restored on exit and suspend. Built (terminal v0.5.0, the consoles in v0.5.1).
-2. Hosts: window `KeyRelease`, page `keyup`, Android key up. ~100 lines.
+2. Hosts: window `KeyRelease`, page `keyup`, Android key up. Built.
 3. `pkg/ascimage`: a half-block converter into a caller's cells. ~150 lines.
 4. `vif-doom` (GPL-2.0): a gore frontend per host (frame to cells to `Flush`, host
    events to Doom keys, effects to `PlayBuffer`), IWAD resolution, the hold

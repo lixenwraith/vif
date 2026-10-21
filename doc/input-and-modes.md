@@ -56,15 +56,16 @@ A captured key is the scenario's one input hook, whatever produces it:
   later, none solo and `NetworkApplyHorizonTicks` (2 s) in a session, so a miss
   waits that long ([FSM reference](fsm-reference.md#payloadintcomparevar)).
 - **Release.** Every press crosses one `EventInputReleased` from its slot. A key's
-  own comes where the keyboard reports releases: a terminal with the key event
-  protocol, asked for at startup and kept for the run (Alacritty 0.13 and later,
-  local or over ssh, and any terminal answering alike), and a Linux or FreeBSD
-  console while a capture with `releases` holds, its Alt+F*n*, dead keys and
-  compose then the game's to forgo. Elsewhere a key press is a tap, released at
-  once, and a held key repeats taps; a pointer press lets go with the pointer. The
-  router ends a hold as `lost` when its key leaves the capture, play leaves Normal,
-  Visual and Insert or is suspended, focus or the report's source goes, or its key
-  presses again; a tap's release is `lost` too.
+  own comes where the keyboard reports releases, asked for at startup and kept for
+  the run: a terminal with the key event protocol (Alacritty 0.13 and later, local
+  or over ssh, and any terminal answering alike), and the hardware keys of the
+  desktop window, the page and Android; and a Linux or FreeBSD console while a
+  capture with `releases` holds, its Alt+F*n*, dead keys and compose then the
+  game's to forgo. Elsewhere a key press is a tap, released at once, and a held key
+  repeats taps, as is a soft keyboard's text everywhere; a pointer press lets go
+  with the pointer. The router ends a hold as `lost` when its key leaves the
+  capture, play leaves Normal, Visual and Insert or is suspended, focus or the
+  report's source goes, or its key presses again; a tap's release is `lost` too.
 - **Report.** `EventInputReport { slot, releases }` crosses as keys come to be
   captured and with each answer about releases while they are, so a scenario can
   play a slot that taps differently; that player sees a notice when the capture

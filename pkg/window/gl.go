@@ -42,6 +42,8 @@ var (
 	xLookupString       func(ev *xEvent, buf *byte, size int32, keysym *uint64, status uintptr) int32
 	xFlush              func(dpy uintptr) int32
 
+	xkbSetDetectableAutoRepeat func(dpy uintptr, detectable int32, supported *int32) int32
+
 	eglGetDisplay          func(native uintptr) uintptr
 	eglGetPlatformDisplay  func(platform uint32, native uintptr, attribs uintptr) uintptr
 	eglInitialize          func(dpy uintptr, major, minor *int32) uint32
@@ -138,7 +140,7 @@ func load() error {
 			{"XMapWindow", &xMapWindow}, {"XConnectionNumber", &xConnectionNumber},
 			{"XPending", &xPending}, {"XNextEvent", &xNextEvent},
 			{"XLookupString", &xLookupString}, {"XFlush", &xFlush},
-		}, nil},
+		}, []symbol{{"XkbSetDetectableAutoRepeat", &xkbSetDetectableAutoRepeat}}},
 		{libEGL, []symbol{
 			{"eglGetDisplay", &eglGetDisplay}, {"eglInitialize", &eglInitialize},
 			{"eglBindAPI", &eglBindAPI}, {"eglChooseConfig", &eglChooseConfig},

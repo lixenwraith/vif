@@ -151,13 +151,33 @@ func Drag(x, y int32) {
 	}
 }
 
-// Key is a key the view received: Android's key code, the character it types
-// without Ctrl or Alt (0 for none) and its meta state. It reports whether the game
-// takes the key; one it does not, a volume key, is left to the system.
+// KeyDown is a key the view received going down, or repeating while held:
+// Android's key code, the character it types without Ctrl or Alt (0 for none) and
+// its meta state. It reports whether the game takes the key; one it does not, a
+// volume key, is left to the system.
+func KeyDown(code, typed, meta int32, repeat bool) bool {
+	ev, ok := keyEvent(code, rune(typed), meta)
+	if v := current(); v != nil && ok {
+		v.keys.Down(uint32(code), ev, repeat)
+	}
+	return ok
+}
+
+// KeyUp is a key the view received coming up, taken as its KeyDown was
+func KeyUp(code, typed, meta int32) bool {
+	_, ok := keyEvent(code, rune(typed), meta)
+	if v := current(); v != nil && ok {
+		v.keys.Up(uint32(code))
+	}
+	return ok
+}
+
+// Key is a key pressed and let go at once, with no up of its own to come: Back, or
+// the system keyboard's delete
 func Key(code, typed, meta int32) bool {
 	ev, ok := keyEvent(code, rune(typed), meta)
 	if v := current(); v != nil && ok {
-		v.post(ev)
+		v.keys.Tap(ev)
 	}
 	return ok
 }
@@ -166,8 +186,15 @@ func Key(code, typed, meta int32) bool {
 func Text(s string) {
 	if v := current(); v != nil {
 		for _, r := range s {
-			v.post(textEvent(r))
+			v.keys.Tap(textEvent(r))
 		}
+	}
+}
+
+// FocusLost ends every key held: the window's keys go elsewhere, their ups too
+func FocusLost() {
+	if v := current(); v != nil {
+		v.keys.Lost()
 	}
 }
 

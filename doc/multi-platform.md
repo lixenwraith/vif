@@ -399,7 +399,10 @@ asks for it, as a `vif_gui` build or `vif.toml`'s `[presentation] window` does b
 default and `-cli` refuses; it opens maximized or full screen on `-maximized` or
 `-fullscreen` (`_NET_WM_STATE` set before the map); the window draws each frame with
 `glyph.Raster` and uploads it as one GLES 2 texture, and posts keys and the
-pointer as the events a terminal reports; `-scale n` draws the texture `n` times
+pointer as the events a terminal reports, each key's release too once a run asks
+(`hostkey.Report`, which the page and Android share): XKB's detectable autorepeat
+tells a held key's repeats from releases, a server without it reports presses
+alone, and focus leaving ends every hold; `-scale n` draws the texture `n` times
 its size with nearest filtering, for a HiDPI screen. Its libraries
 (`libX11.so.6`, `libEGL.so.1`, `libGLESv2.so.2`) are opened with purego, so
 the binary builds with `CGO_ENABLED=0`; on FreeBSD purego needs its `fakecgo` built
@@ -421,7 +424,9 @@ changes. Without WebGL (a Chromium build on a blocklisted GPU) it paints each
 changed cell on a 2D canvas from the same mask, slower on a large grid, and says
 so once. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
 (a touch is the left button marked as a finger's, as on Android) and its size as the terminal events the
-host posts. A hidden tab draws nothing and is handed the whole screen on return; the
+host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
+hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
+hidden tab ends every hold. A hidden tab draws nothing and is handed the whole screen on return; the
 run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
 (`browser.Speaker`): the Worker posts each mixer buffer that sounds, and the page
 opens an `AudioContext` at the first and plays them through an AudioWorklet
@@ -448,7 +453,10 @@ through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. A tap is a left press and release on its cell and a
 finger moving while down a left drag, both marked as a finger's (`Event.Touch`), posted once per cell as a terminal reports
 motion, so the cursor follows it and a held one repeats fire; keys and the system
-keyboard's text are terminal key events, Back is Escape. Two fingers tapped
+keyboard's text are terminal key events, Back is Escape. A hardware key's
+`onKeyUp` ends the hold its `onKeyDown` began and `getRepeatCount` marks its
+repeats; the system keyboard's text, its delete and Back tap; the window losing
+focus ends every hold. Two fingers tapped
 together twice raise or drop the system keyboard, read from the window's insets
 rather than a flag of the app's; the keyboard covers the view instead of resizing
 it, so a `crop_on_resize` map keeps its cells; the run hears of the keyboard

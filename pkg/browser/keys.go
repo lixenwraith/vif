@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"hash/fnv"
 	"unicode"
 	"unicode/utf8"
 
@@ -67,6 +68,14 @@ func keyEvent(key string, mods uint8) (terminal.Event, bool) {
 		ev.Modifiers = terminal.ModAlt
 	}
 	return ev, true
+}
+
+// keyCode names the physical key a KeyboardEvent.code names, which pairs a keyup
+// with its keydown however the layout or the modifiers changed the key between them
+func keyCode(code string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(code))
+	return h.Sum32()
 }
 
 // textEvent is one character the page's text field committed, a soft keyboard's
