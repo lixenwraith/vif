@@ -1053,11 +1053,7 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 	case "start", "on":
 		err = ctx.SessionCtl.StartJournal(slot)
 	case "stop", "off":
-		path := ctx.SessionCtl.JournalPath()
-		// No path: the stop cancelled a start, which said so itself
-		if err = ctx.SessionCtl.StopJournal(slot); err == nil && slot < 0 && path != "" {
-			ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
-		}
+		err = ctx.SessionCtl.StopJournal(slot)
 	default:
 		setCommandError(ctx, usage)
 		return CommandResult{Continue: true}

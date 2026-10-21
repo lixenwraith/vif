@@ -931,9 +931,10 @@ world, binds its slot, writes the own side over what that settle derived, takes 
 the operator state and engages its crossing barrier at once, as the run's was;
 `app.loadJournal` refuses a mid-run journal whose files lack the opening.
 
-`:journal stop` closes the journal where the run stands, writing its `end` record
-and releasing the file; a later `:journal start` opens another, and a stop before
-a start is served cancels it. With a slot, `:journal start|stop <slot>` does the
+`:journal stop` closes the journal once its command has settled, as a start opens,
+so it ends where the run went back to play rather than on the command line, writing
+its `end` record and releasing the file; a later `:journal start` opens another, and
+a stop before a start is served cancels it. With a slot, `:journal start|stop <slot>` does the
 same for a bot seat this process runs: the seat's loop opens its journal in its
 own run and the holder's status line reports the path. The journal closes, its
 `end` written, when the seat leaves, whether dropped, quitting or left with no

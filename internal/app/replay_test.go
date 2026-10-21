@@ -545,6 +545,7 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 		drive(400, want)
 		var err error
 		a.World().RunSafe(func() { err = a.stopJournalLocked(-1) })
+		a.serveJournal()
 		if err != nil {
 			t.Fatalf("round %d: stop: %v", round, err)
 		}
@@ -711,6 +712,7 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 	play(400, true)
 	for _, a := range []*App{host, guest} {
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
 	}
 	replayMatches(t, hostRec, hostWant, guestSurface)
 	replayMatches(t, guestRec, guestWant, guestSurface)
@@ -779,6 +781,7 @@ func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
 			a.Tick(1)
 		}
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
 	}
 	typeOn(150)
 
@@ -825,6 +828,53 @@ func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
 		}
 		if st := d.Stats(); st.Diverged != nil || st.Installed != 1 || st.Digests < c.digests {
 			t.Fatalf("replay diverged %v; %+v", st.Diverged, st)
+		}
+	}
+}
+
+// TestAReplayShowsNoCommandTheRunTyped: a command typed while the run paused took none
+// of its time, so no presented step shows the run paused or on its command line: not
+// one a host's write landed among, nor the stop that closed the journal.
+func TestAReplayShowsNoCommandTheRunTyped(t *testing.T) {
+	// Not parallel: hosting binds a real socket.
+	rec := journal.NewCapture()
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}, Journal: true, JournalSink: rec})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+	a.Tick(30)
+	injectExCommand(t, a, "bot add")
+	a.Tick(60)
+	injectExCommand(t, a, "journal stop")
+	a.serveJournal()
+	if a.recorder.Load() != nil || len(rec.Captures()) != 1 {
+		t.Fatalf("journal open %v after the stop, %d worlds written", a.recorder.Load() != nil, len(rec.Captures()))
+	}
+
+	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rep.Close()
+	end := rec.End()
+	d, err := newReplayDriver(rep, journal.Set{Records: rec.Records(), Captures: rec.Captures(),
+		Digests: rec.Digests(), End: &end}.Stream())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for more, src := true, (journalSource{d: d, log: rep.log}); more; {
+		if more, err = src.Step(); err != nil {
+			t.Fatal(err)
+		}
+		if m, p := rep.ctx.GetMode(), rep.ctx.TimeCtl.IsPaused(); m == core.ModeCommand || p {
+			t.Fatalf("the step presented at %+v shows the run in mode %d, paused %v", rep.Position(), m, p)
 		}
 	}
 }
@@ -895,6 +945,7 @@ func TestAnOpeningKeepsTheRunsOwnCursor(t *testing.T) {
 	play(400, true)
 	for _, a := range apps {
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
 		replayMatches(t, recs[a], want[a], guestSurface)
 	}
 }
@@ -928,8 +979,9 @@ func TestNoJournalOpensWhileANewGameStarts(t *testing.T) {
 	}
 }
 
-// TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal at the
-// run's position; the run then records nothing and reports no journal.
+// TestAStoppedJournalEndsWhereTheRunStands: :journal stop ends the journal where the
+// run stands as its loop serves the stop; the run then records nothing and reports no
+// journal.
 func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	t.Parallel()
 	rec := journal.NewCapture()
@@ -944,6 +996,7 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 
 	var stopErr error
 	a.World().RunSafe(func() { stopErr = a.stopJournalLocked(-1) })
+	a.serveJournal()
 	if stopErr != nil {
 		t.Fatalf("stop: %v", stopErr)
 	}

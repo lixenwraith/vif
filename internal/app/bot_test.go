@@ -389,7 +389,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		if err != nil {
 			t.Fatalf("stop: %v", err)
 		}
-		until("the bot's journal to close", func() bool { return b.recorder.Load() == nil })
+		until("both journals to close", func() bool { return holder.recorder.Load() == nil && b.recorder.Load() == nil })
 	}
 	stop()
 	for _, p := range paths {

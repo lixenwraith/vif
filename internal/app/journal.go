@@ -146,9 +146,10 @@ func (a *App) startJournalLocked(slot int) error {
 	return nil
 }
 
-// stopJournalLocked closes this instance's journal where the run stands, or asks
-// the bot seat on slot to close its own; a later start opens another file.
-// Caller MUST hold updateMutex.
+// stopJournalLocked asks for this instance's journal to close, or the bot seat's on
+// slot; a later start opens another file. The loop owning the run closes it once the
+// command has settled, so the journal ends where the run went back to play rather
+// than inside the command line. Caller MUST hold updateMutex.
 func (a *App) stopJournalLocked(slot int) error {
 	if slot >= 0 {
 		return a.askSeatJournal(slot, false)
@@ -159,8 +160,10 @@ func (a *App) stopJournalLocked(slot int) error {
 		}
 		return errors.New("no journal is open")
 	}
-	_, err := a.closeJournal()
-	return err
+	if !a.journalAsk.CompareAndSwap(nil, &journalAsk{report: a.reportJournalClosed}) {
+		return errors.New("the journal is already closing")
+	}
+	return nil
 }
 
 // cancelJournalStart lets a stop win over a start not yet served, reporting it
@@ -219,6 +222,15 @@ func (a *App) serveJournal() {
 		})
 	}
 	ask.report(path, err)
+}
+
+// reportJournalClosed tells this run's player how its own journal stop went.
+func (a *App) reportJournalClosed(path string, err error) {
+	if err != nil {
+		a.ctx.SetStatusMessage("Journal: "+err.Error(), parameter.StatusAlert)
+		return
+	}
+	a.ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
 }
 
 // reportJournal tells this run's player how its own journal start went.

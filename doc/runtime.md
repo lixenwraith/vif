@@ -499,9 +499,10 @@ refuses. A game reset starts a run whose ticks count from zero, so `tick` and
 `time` address the run shown; the status bar reports run, tick and its 1x time.
 
 Pacing converts the recorded tick interval and speed to wall time, then applies
-the viewer's rate. A presented step is one recorded tick: a guest's written world
-and the groups that landed on it take none of the run's time, so they share the
-tick after them rather than holding the view a tick of their own. The presented
+the viewer's rate. A presented step is one recorded tick and everything up to the
+next: its settle groups, and any world written then with the groups that landed on
+it. A frame shows the run between two ticks, never inside one, where a command
+typed while the run paused took none of its time. The presented
 copy steps on its own goroutine in batches of at most three quarters of a frame
 that alternate with frames: the loop reads no key and draws nothing while one runs,
 so an install or a checkpoint delays a frame instead of stalling the loop, and owed
