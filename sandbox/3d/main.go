@@ -224,7 +224,7 @@ const tribarL = 10.0
 var (
 	diagonalView = lookBasis(vec3{1, 1, 1}, vec3{0, 0, 1})
 	// tribarOff centers the figure in projection and in depth along the viewing diagonal
-	tribarOff = vec3{-7 * tribarL / 6, -5 * tribarL / 6, -tribarL / 2}
+	tribarOff = vec3{-5 * tribarL / 6, -tribarL / 2, -tribarL / 6}
 	hemp      = material{a: color.RGB{R: 206, G: 166, B: 106}, b: color.RGB{R: 150, G: 112, B: 92}, spec: 0.3}
 )
 
@@ -623,8 +623,10 @@ func (g *gbuf) shade(rk *renderKnobs, radius, refDepth float64) {
 }
 
 // edges darkens the near side of a depth step or crease as a line, and the far side,
-// background included, as a halo that falls off over the window.
-func (g *gbuf) edges(rk *renderKnobs, eps float64) {
+// background included, as a halo that falls off over the window. A neighbour counts as
+// a step only where it leaves the plane through this pixel, so a tilted face is not its
+// own occluder, and each ramps in over a second eps so motion never flips it in a frame.
+func (g *gbuf) edges(rk *renderKnobs, eps, sx, sy float64) {
 	w, h := g.w, g.h
 	k := int(rk.haloSize + 0.5)
 	kx := (k + 1) / 2
@@ -632,6 +634,12 @@ func (g *gbuf) edges(rk *renderKnobs, eps float64) {
 		for x := range w {
 			i := y*w + x
 			d := g.depth[i]
+			gx, gy := 0.0, 0.0
+			if d != inf {
+				n := g.nrm[i]
+				nz := math.Max(n.z, 0.15)
+				gx, gy = n.x/(nz*sx), -n.y/(nz*sy)
+			}
 			f := 1.0
 			if d != inf && rk.edgeLine > 0 {
 				line := 0.0
@@ -641,10 +649,11 @@ func (g *gbuf) edges(rk *renderKnobs, eps float64) {
 						continue
 					}
 					j := ny*w + nx
-					switch dj := g.depth[j]; {
-					case dj > d+eps:
-						line = 1
-					case math.Abs(dj-d) <= eps && g.nrm[i].dot(g.nrm[j]) < 0.6:
+					step := g.depth[j] - (d + gx*float64(o[0]) + gy*float64(o[1]))
+					switch {
+					case step > eps:
+						line = math.Max(line, math.Min(1, step/eps-1))
+					case math.Abs(step) <= eps && g.nrm[i].dot(g.nrm[j]) < 0.3:
 						line = math.Max(line, 0.6)
 					}
 				}
@@ -659,11 +668,19 @@ func (g *gbuf) edges(rk *renderKnobs, eps float64) {
 					}
 					for dx := -kx; dx <= kx; dx++ {
 						nx := x + dx
-						if nx < 0 || nx >= w || g.depth[ny*w+nx] >= d-eps {
+						if nx < 0 || nx >= w {
+							continue
+						}
+						dj := g.depth[ny*w+nx]
+						if dj == inf {
+							continue
+						}
+						step := d + gx*float64(dx) + gy*float64(dy) - dj
+						if step <= eps {
 							continue
 						}
 						dist := math.Max(math.Abs(float64(dx))*2, math.Abs(float64(dy)))
-						occ = math.Max(occ, 1-dist/float64(k+1))
+						occ = math.Max(occ, (1-dist/float64(k+1))*math.Min(1, step/eps-1))
 					}
 				}
 				f *= 1 - rk.halo*occ
@@ -702,7 +719,7 @@ func render(g *gbuf, sc *scene, rk *renderKnobs, now float64) {
 		g.splatBox(&cam, &boxes[i], &sc.mats[boxes[i].mat], rk.hueDrift)
 	}
 	g.shade(rk, sc.radius, cam.refDepth())
-	g.edges(rk, 0.5*sc.thick)
+	g.edges(rk, 0.5*sc.thick, cam.sx, cam.sy)
 }
 
 // --- Controls and HUD ---
