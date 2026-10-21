@@ -1242,8 +1242,9 @@ func (r *Router) SetKeyReportApplier(fn KeyReportApplier) {
 }
 
 // syncKeyReport asks for releases from the first input tick on, a console keyboard's
-// only while the capture asks for them, since a raw console costs its own keys.
-// Keys coming to be captured cross this slot's report; an ask crosses its answer.
+// only while the capture asks for them, since a raw console costs some of its own
+// keys and its mouse. Keys coming to be captured cross this slot's report; an ask
+// crosses its answer.
 func (r *Router) syncKeyReport() {
 	captured, console := r.ctx.KeyCapture.Any(), r.ctx.KeyCapture.Releases()
 	started := captured && !r.keyAsk.captured

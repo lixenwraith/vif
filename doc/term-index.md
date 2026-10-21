@@ -271,6 +271,8 @@ code does not have yet, described only by a design such as
 
 **console palette** (also: ConsolePalette) — The text console's sixteen colors (Linux's live palette, FreeBSD vt's default or VGA) that every cell settles on in 256-color mode. [Rendering §6](rendering.md#6-finalization-and-color-modes) · `internal/engine` `ConsolePalette`
 
+**console-guard** (also: console guard) — The watchdog the terminal module runs, a second copy of the vif binary, before a Linux or FreeBSD console's keyboard first goes raw for a capture with `releases`: it restores the keyboard and the tty if vif dies where no handler of its own runs (`kill -9`, the OOM killer, a Go fatal error). It runs the `init` of every package initialized before the terminal module's, so none may have side effects. See also **key report**, **core.Go**. [Development §10](development.md#10-crash-and-runtime-capture) · [Input §1](input-and-modes.md#1-input-pipeline) · `github.com/lixenwraith/terminal` `KeySourceConsole`
+
 **contact damage** (also: profile.Contact) — What a species touching a cursor costs it, applied through `strikeCursor` only on a cursor this instance simulates. See also **cursor damage**. [Combat §5](combat.md#5-resolution-statuses-and-what-crosses) · `internal/profile` `Contact`
 
 **control kind** (also: ControlKind, ControlLocal, ControlRemote) — Whether this instance drives a cursor through its own mode router (`ControlLocal`) or mirrors one driven elsewhere (`ControlRemote`); a bot is local on its own instance and remote everywhere else. [Gameplay §2](gameplay.md#2-cursor-and-player-state) · [D-2](domain-design.md#d-2--one-instance-simulates-each-player) · `internal/component` `ControlKind`
