@@ -328,16 +328,6 @@ than the system's, to tell a console-host gap from a backend one; try a build
 without `vif_noaudio` with ffplay on `PATH`; and try the flicker with the frame
 wrapped in synchronized output.
 
-### Build for 32-bit targets
-
-- Priority: P3
-- Affected files: `internal/parameter/gameplay.go`, `internal/mode/commands.go`
-
-`parameter.GodEnergyAmount` (10^11) overflows a 32-bit `int` in `:god`, so no
-32-bit target compiles, 32-bit Termux included. Keep it within 2^31 or carry the
-energy as `int64`, then add a 32-bit cross-build to `make verify` if it should stay
-that way.
-
 ### Cache a received scenario to the user root
 
 - Priority: P3
