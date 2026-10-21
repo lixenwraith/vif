@@ -33,7 +33,7 @@ type configForm struct {
 
 var configForms = map[string]configFormSpec{
 	"add": {
-		label: "Add bots", description: "Seat local bots in this session. A solo run opens a loopback host; host publicly first to invite remote players.", command: "bot",
+		label: "Add bots", description: "Seat local bots in this session. A solo run opens a session only they can join; host first to invite remote players.", command: "bot",
 		fields: []configFormField{
 			{"Count", "1", "Number of bots to add. Each bot occupies a player slot."},
 			{"Policy", "default", "Policy graph name or path; blank uses default. Bots belong to this run and leave with it."},

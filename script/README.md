@@ -33,7 +33,7 @@ These print what they measured and are not part of `all`.
 
 | Check | What it measures |
 |---|---|
-| `botfitness [graph] [seeds] [secs]` | default's fitness summed per scenario (embedded, td, kraken) over seeds 1..N, flat out; given a graph file, it fails unless that graph beats default on every scenario |
+| `botfitness [graph] [seeds] [secs]` | default's fitness summed per scenario (embedded, td) over seeds 1..N, flat out; given a graph file, it fails unless that graph beats default on every scenario |
 | `load [sessions] [bots] [secs]` | Linux only, since it reads `/proc`: per session a `-serve` host seating its own bots at 120x40 under the pod's `GOMEMLIMIT`, and a headless bot joining it (`GUEST_BOTS` of its own; `SCENARIO` serves a wad scenario); prints each host's memory, CPU, tick, guests, peers, evictions and digest mismatches, and fails on a slipping clock, an eviction, a short roster or a peak past `LIMIT_MB` (default the pod's limit for its bots) |
 
 ## The sparring pair

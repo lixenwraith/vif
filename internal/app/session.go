@@ -95,14 +95,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = a.sessionCapacity()
 	netCfg.OnError = logSessionError
-	netCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign:   a.assignParticipant,
-		Release:  a.releaseParticipant,
-		Admit:    a.admitDial,
-		Report:   a.noteJoinerReport,
-		Name:     a.cfg.SessionName,
-		Scenario: a.scenarioBody,
-	}, netCfg.ConnectTimeout)
+	netCfg.AcceptSession = a.sessionAcceptor()
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// closed: a dropped participant comes back into the slot its departure released,
 	// through the one gate a reconnect has ever had. The hook answers nothing until
@@ -111,18 +104,17 @@ func (a *App) hostNetworkConfig() *network.Config {
 	return netCfg
 }
 
-// admitDial spends the per-address join budget on every dial but one from this
-// machine: a holder's bot seats dial its listener over loopback, and only a process
-// on this host can. The fleet's front door keeps its own budget on the player.
-func (a *App) admitDial(addr net.Addr) error {
-	if addr != nil {
-		if host, _, err := net.SplitHostPort(addr.String()); err == nil {
-			if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-				return nil
-			}
-		}
-	}
-	return a.admissions.Admit(addr)
+// sessionAcceptor is the join handshake this run serves as its session's coordinator,
+// on its listener and on its bots' in-process streams, which spend no join budget.
+func (a *App) sessionAcceptor() func(net.Conn) (network.PeerID, error) {
+	return network.HostAcceptor(network.Coordinator{
+		Assign:   a.assignParticipant,
+		Release:  a.releaseParticipant,
+		Admit:    a.admissions.Admit,
+		Report:   a.noteJoinerReport,
+		Name:     a.cfg.SessionName,
+		Scenario: a.scenarioBody,
+	}, network.DefaultConfig().ConnectTimeout)
 }
 
 // Serve only the immutable scenario this run holds; another scenario needs a new App.

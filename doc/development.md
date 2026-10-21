@@ -404,8 +404,8 @@ runs. Only a driven host (`-script`, or a `-headless`/`-watch` bot) that names
 (`lobbyQuorum`, `internal/app/session.go`). A dialling host is admitted at most
 `parameter.NetworkAdmitBurst` times per `NetworkAdmitWindow`, because the admission
 that follows a handshake reads and sends a whole world and a peer cycling through it
-would otherwise spend one connect per capture. A loopback dial is not counted: only
-this machine makes one, a run's own bots among them.
+would otherwise spend one connect per capture. A run's own bots join in-process and
+spend none.
 
 ### A scripted participant
 
@@ -461,7 +461,7 @@ reproduce.
 ### Bots beside a run
 
 `-bot` and `-bots` seat bots as participants, each a headless instance in the same
-process; a host's bots join over loopback, a guest's through its own link.
+process that joins its holder in-process.
 Commands, compositions and examples are in [Bots](bots.md).
 
 ### End-to-end checks

@@ -46,16 +46,18 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 
 ## Ownership and leaving
 
-A bot belongs to the run that started it, its holder.
+A bot belongs to the run that started it, its holder, and joins on an in-process
+stream the holder serves, which spends no join budget. A run in no session first
+opens one with no listener, which only its bots can join, so a browser seats bots
+solo too; host first to let others in.
 
-| Bot of | Joins | Leaves when |
+| Bot of | Admitted | Leaves when |
 |---|---|---|
-| the host | its holder's listener over loopback; a run in no session opens one on loopback first | the host ends, it is dropped, or a `-serve` host begins its drain |
-| a guest | through the guest's own link, on an in-process stream the guest serves | the guest leaves or loses its session, or it is dropped |
+| the host | by the host, as any joiner | the host ends, it is dropped, or a `-serve` host begins its drain |
+| a guest | through the guest's own link, the authority deciding | the guest leaves or loses its session, or it is dropped |
 
-- After a hand-off, a holder that inherited authority admits new bots on a
-  loopback listener of its own; a guest keeps seating bots through whoever holds
-  authority.
+- After a hand-off, a holder that inherited authority admits new bots itself; a
+  guest keeps seating bots through whoever holds authority.
 - A person who joins at a guest's `-relay` address plays through the guest the
   same way but is not its bot: it holds no holder, is dropped on its own, and
   keeps its slot when the guest leaves.
@@ -75,7 +77,7 @@ A bot belongs to the run that started it, its holder.
 | Command | Effect |
 |---|---|
 | `:bot` | List this run's bots: slot, graph, joining or leaving. |
-| `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a loopback session. A count of 0 is refused. |
+| `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a session only they can join. A count of 0 is refused. |
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
 | `:player` | List the slots: `3 player` or `4 bot of 3`. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
@@ -109,8 +111,6 @@ only, and a departed slot may be reused.
 - The fleet allocator takes a `bots` count, closed by default (`bots_max` 0); see
   [The session fleet](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
   request form asks for bots yet.
-- A browser build seats bots only as a guest of a session it joined; it cannot
-  host, so it cannot add bots to a solo run.
 
 ## Writing a graph
 
@@ -142,12 +142,12 @@ is dropped and counted. Allowance left idle builds up to one second's worth.
 |---|---|---|
 | `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from, or `press` or `release`; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action, or the key `press` presses and `release` lets go; `hold` for `press`: ticks, or `true` until its `release` | one key press or release |
 | `Text` | `text` | one character per rune |
-| `Command` | `text`: an ex-command, the leading `:` optional, not empty | the command-line round trip |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |
 
 `Intent` refuses an action that only opens a key sequence (`operator_delete`,
-`prefix_g`, `prefix_macro_play`, `marker_glyph_*`); `quit` ends the run. `press`
+`prefix_g`, `prefix_macro_play`, `marker_glyph_*`) or that opens the command line
+or the menu (`mode_command`, `config_menu`); `quit` ends the run. `press`
 presses a key a scenario captured, as a typed key or a click on its button would,
 and does nothing while the key is not captured. The bot lets go of every key it
 presses, at once, after `hold` ticks, or with `hold = true` at a `release` of the
@@ -229,8 +229,8 @@ guards over its own view. Actions that write the world are refused at load:
 
 - A graph updates once a tick, every 50 ms of game time.
 - `PointAt` and `TypeGlyph` read the world, so each acts only when all it queues
-  is sent before the next tick. `Intent`, `Text` and `Command` queue
-  regardless; wait for them with `Idle`.
+  is sent before the next tick. `Intent` and `Text` queue regardless; wait for
+  them with `Idle`.
 - Draws come from the bot's own stream, seeded from the session seed and its
   participant. A payload with no choice draws nothing, so a fixed sequence leaves
   the stream alone.
@@ -291,7 +291,7 @@ Fitness is in the `-headless` summary, the `bot stopped` log record and a seat's
 `bot left` record. From a checkout with `bin/vif` built,
 `./script/test.sh botfitness [graph-file] [seeds] [secs]` plays `default` headless
 and flat out at 120x40 for `secs` (60) over seeds 1..`seeds` (4) on the embedded
-scenario, `td` and `kraken`, and prints each scenario's sum. Given a graph file, it
+scenario and `td`, and prints each scenario's sum. Given a graph file, it
 fails unless that graph beats `default` on every scenario; with none, the sums
 are the baseline to beat. It appends a `stop` region (states `StopWait` and
 `StopQuit`), so a graph cannot use those names.
@@ -313,7 +313,7 @@ unattended.
   never the event queue, crossings the session still holds, RNG positions,
   pending delayed actions, the prediction ledger or network state. A keystroke can
   miss, as a person's can.
-- Nothing limits which commands a graph may issue, `:q` and `:bot add` included.
+- It issues no commands.
 - It reaches only what its view shows. A seat's view is its holder's screen, so a
   person's bots see what that person sees and play differently across terminals.
 - It plays cooperatively: cursor weapons do not strike cursors.
@@ -344,12 +344,8 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 ## Not built yet
 
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
-- [Beat the default graph](todo.md#beat-the-default-graph)
-- [Let a bot graph use operators and marks](todo.md#let-a-bot-graph-use-operators-and-marks)
-- [Limit the commands a bot graph may issue](todo.md#limit-the-commands-a-bot-graph-may-issue)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Judge a relayed bot's lateness](todo.md#judge-a-relayed-bots-lateness)
-- [Seat a host's bots without a listener](todo.md#seat-a-hosts-bots-without-a-listener)
+- [Host a session opened for bots](todo.md#host-a-session-opened-for-bots)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
 - [Name participants beyond their slot](todo.md#name-participants-beyond-their-slot)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)

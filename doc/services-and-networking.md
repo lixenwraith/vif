@@ -354,12 +354,11 @@ world, so a peer that joins and leaves in a loop costs one capture per connect.
 `network.AdmissionLimiter` gives each dialling host
 `parameter.NetworkAdmitBurst` admissions per `NetworkAdmitWindow`, keyed by address
 rather than by identity — an identity is what the attack consumes and is released
-the moment the connection drops. A dial from loopback is exempt: only a process on
-this host can make one, and a holder's bot seats dial its listener that way. A
-refusal is written back as a `MsgJoinReply`
-carrying its reason, for the same reason a mid-succession refusal is: a dialer that
-can read why it was turned away backs off, where one that only sees the stream end
-retries immediately.
+the moment the connection drops. A holder's bot seats join on in-process streams
+(`network.Pipe`), which have no dialler and spend nothing. A refusal is written back
+as a `MsgJoinReply` carrying its reason, for the same reason a mid-succession
+refusal is: a dialer that can read why it was turned away backs off, where one that
+only sees the stream end retries immediately.
 
 The limiter's own table is bounded by `NetworkAdmitTracked` and swept when an
 unseen host arrives. Past that ceiling it fails closed: a completed TCP handshake

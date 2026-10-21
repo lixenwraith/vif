@@ -124,7 +124,7 @@ spec:
             - "${MAP_SIZE}"
             - "-players"
             - "${PLAYERS}"
-            # Seated over loopback before the lobby opens; each takes a roster seat.
+            # Seated in-process before the lobby opens; each takes a roster seat.
             - "-bots"
             - "${BOTS}"
             # The allocated lifetime. The first is the window the player who

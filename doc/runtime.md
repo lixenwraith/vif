@@ -625,14 +625,15 @@ flowchart LR
 
 A seat (`internal/app/seat.go`) is that driver on another headless instance in the
 holder's process, on its own goroutine and paced against the authority like any
-guest. `seatConfigLocked` routes its join: a still-guest relays it on its own link,
-a run in no session first hosts on loopback, an authority is dialled on loopback,
-and a successor opens an admission listener of its own. A seat plays in its
-holder's screen: a person's terminal, which `App.handleResize` publishes as it
-changes and the seat takes between two steps, or the holder's `-size`, else a
-bot's 120x40. A play-mode holder's seats stand still while it is paused; a driven
-holder's step on. A headless bot or seat ends once its instance forks, and a seat
-also once its holder does.
+guest. It joins on an in-process stream (`seatLink`) its holder serves with the
+handshake it holds when the seat dials: a still-guest's relays the join on its own
+link, an authority's admits it as any joiner. A run in no session first opens one
+with no listener (`openSessionLocked`). A seat plays in its holder's screen: a
+person's terminal, which `App.handleResize` publishes as it changes and the seat
+takes between two steps, or the holder's `-size`, else a bot's 120x40. A play-mode
+holder's seats stand still while it is paused; a driven holder's step on. A
+headless bot or seat ends once its instance forks, and a seat also once its holder
+does.
 
 ## 5. Simulation tick steps
 

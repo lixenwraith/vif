@@ -70,11 +70,11 @@ slot matches its cursor label. **Cancel joining** stops a pending bot; it stays
 marked as leaving until its admission unwinds. Bots held by another player are
 outside this list.
 
-Adding bots to a solo run opens a loopback session. To invite remote players,
-**host at the intended listening address before adding bots**. An existing
-session cannot be rebound through the menu. A browser build cannot host, so it
-adds bots only as a guest of a session it joined. The same operations are
-`:bot add [N[:graph]|graph]` and `:bot drop <slot>`; see [Bots](bots.md).
+Adding bots to a solo run opens a session only they can join, in a browser too. To
+invite remote players, **host at the intended listening address before adding
+bots**. An existing session cannot be rebound through the menu. The same
+operations are `:bot add [N[:graph]|graph]` and `:bot drop <slot>`; see
+[Bots](bots.md).
 
 ### Multiplayer
 

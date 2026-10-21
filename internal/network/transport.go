@@ -104,8 +104,12 @@ func (t *Transport) serveAsPeer() error {
 	return t.listen(t.config.ListenAddress, t.config.AcceptPeer, false)
 }
 
-// startServer accepts joiners.
+// startServer accepts joiners, on no listener when it was given neither one nor an
+// address: a session opened only for this process's own streams (ServeConn).
 func (t *Transport) startServer() error {
+	if t.config.PreboundListener == nil && t.config.Address == "" {
+		return nil
+	}
 	if err := t.listen(t.config.Address, nil, true); err != nil {
 		t.running.Store(false)
 		return err

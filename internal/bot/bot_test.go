@@ -44,7 +44,9 @@ on_update = [{ action = "PointAt", payload = { target = "threat", away = true, f
 		{region + `[states.A]
 transitions = [{ trigger = "Tick", target = "A", guard = "InMode", guard_args = { mode = "replace" } }]`, `unknown mode "replace"`},
 		{region + `[states.A]
-on_enter = [{ action = "Command", payload = { text = " : " } }]`, "command must not be empty"},
+on_enter = [{ action = "Intent", payload = { name = "mode_command" } }]`, "a bot issues no commands"},
+		{region + `[states.A]
+on_enter = [{ action = "Intent", payload = { name = ["motion_left", "config_menu"] } }]`, "a bot issues no commands"},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [] } }]`, "count range must be [min, max]"},
 		{region + `[states.A]

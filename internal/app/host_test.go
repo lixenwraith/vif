@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -585,6 +586,33 @@ func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
 	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
 	if err != nil || !changed || a.restart.Load().Scenario != "other" {
 		t.Fatalf("another name: changed %v, %v; want a restart on it", changed, err)
+	}
+}
+
+// TestARunWithOnlyItsBotsChangesScenario: a session its own bots are all of has no
+// address to send them back to and needs none, since the next run seats them again.
+func TestARunWithOnlyItsBotsChangesScenario(t *testing.T) {
+	// Not parallel: paced runs against wall-clock deadlines.
+	root := t.TempDir()
+	writeScenario(t, root, "other", "A scenario this root holds.")
+	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	a.cfg.Mode, a.cfg.Resources.Dir = ModePlay, root
+	tickUntilCursor(t, a)
+	stop := tickInBackground(a)
+	t.Cleanup(func() { stop(); a.Close() })
+	var err error
+	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForCursors(t, a, 2)
+	seated := func() bool { b := a.botSeats(); return len(b) == 1 && !b[0].Joining }
+	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	var changed bool
+	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
+	if req := a.restart.Load(); err != nil || !changed || req.Host != "" || !slices.Equal(req.Bots, []string{"roam"}) {
+		t.Fatalf("changed %v, %v, restart %+v; want one with no address that seats roam again", changed, err, req)
 	}
 }
 

@@ -420,14 +420,6 @@ func register(m *fsm.Machine[*mind]) {
 		}
 		return out, err
 	})
-	m.RegisterAction("Command", queueAll)
-	m.RegisterActionArgs("Command", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
-		text, err := textPayload(cfg.Payload)
-		if text = input.CommandLine(text); err == nil && text == "" {
-			err = errors.New("command must not be empty")
-		}
-		return input.AppendCommand(nil, text), err
-	})
 	m.RegisterAction("TypeGlyph", func(m *mind, _ any) {
 		char, ok := m.glyphUnder()
 		insert := m.ctx.IsInsertMode()
@@ -640,10 +632,17 @@ func compileIntent(payload any) (intentChoice, error) {
 // presses tap.
 const releaseAction = "release"
 
-// intentFor is input.IntentFor with the release of a key the bot holds
+// intentFor is input.IntentFor with the release of a key the bot holds. It refuses the
+// command line and the menu, which offers the same operations: a bot plays and issues
+// no commands.
 func intentFor(name string, count int, char string) (input.Intent, error) {
 	if name != releaseAction {
-		return input.IntentFor(name, count, char)
+		intent, err := input.IntentFor(name, count, char)
+		if err == nil && (intent.Type == input.IntentConfigMenu ||
+			intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand) {
+			err = fmt.Errorf("intent %q opens the command line or the menu; a bot issues no commands", name)
+		}
+		return intent, err
 	}
 	key, size := utf8.DecodeRuneInString(char)
 	if size == 0 || size != len(char) || !input.Capturable(key) {
@@ -677,7 +676,7 @@ func decodePayload(payload any, into any, allowed ...string) error {
 	return toml.Decode(table, into)
 }
 
-// textPayload reads the one non-empty text field Text and Command take
+// textPayload reads Text's one non-empty text field
 func textPayload(payload any) (string, error) {
 	var p struct {
 		Text string `toml:"text"`

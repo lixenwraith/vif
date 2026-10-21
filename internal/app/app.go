@@ -111,10 +111,10 @@ type App struct {
 	// entry per accepted connection and closes into the offer the start gate sends.
 	sessionRoster []network.RosterEntry
 
-	// midRunPort is the socket a solo run opened for itself with :host. A run
-	// started with -host takes its endpoint from NetworkService instead, which the
-	// hub owns and closes; this one is owned here because nothing else knows it
-	// exists.
+	// midRunPort is the socket a solo run opened for itself, with :host or with no
+	// listener for its bots. A run started with -host takes its endpoint from
+	// NetworkService instead, which the hub owns and closes; this one is owned here
+	// because nothing else knows it exists.
 	midRunPort *network.SocketPort
 
 	// lateJoins arms the mid-run gate on a host whose startup lobby has closed. It
@@ -196,11 +196,10 @@ type App struct {
 
 	// seats are the bots this run holds. seatsMu is taken under the world lock and
 	// never takes it.
-	seatsMu     sync.Mutex
-	seats       []*seat
-	dropped     []uint32 // seats told to leave, until their links close
-	seatSerial  uint64
-	seatAddress string // extra loopback join listener after succession; world lock
+	seatsMu    sync.Mutex
+	seats      []*seat
+	dropped    []uint32 // seats told to leave, until their links close
+	seatSerial uint64
 	// seatScreen is this run's terminal as its seats follow it, published on each
 	// resize by a run whose terminal is its geometry; nil until the first.
 	seatScreen atomic.Pointer[screen]

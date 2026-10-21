@@ -214,14 +214,14 @@ func waitForCursors(t *testing.T, a *App, n int) {
 		a.seatsSummary()+fmt.Sprint((instance{a}).WorldRoster()), a.ctx.GetStatusMessage())
 }
 
-// TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session hosts one
-// on loopback, its bots join it as participants, one dropped departs as the drop
-// it was asked for rather than a link loss, and the rest leave with the run.
+// TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session opens one
+// with no listener, its bots join it in-process as participants, one dropped departs
+// as the drop it was asked for rather than a link loss, and the rest leave with the run.
 func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
-	// Not parallel: real sockets against wall-clock deadlines.
+	// Not parallel: paced runs against wall-clock deadlines.
 	holder, stop := driveBot(t, Config{Bots: []string{"roam", "patrol"}}, "patrol", nil)
-	if addr := holder.HostAddr(); !strings.HasPrefix(addr, "127.0.0.1:") {
-		t.Fatalf("a run with bots hosts on %q, not on loopback", addr)
+	if addr := holder.HostAddr(); addr != "" {
+		t.Fatalf("a run with bots listens on %s", addr)
 	}
 	waitForCursors(t, holder, 3)
 	// A seat learns its slot from its own gate, which can finish after the holder
@@ -274,16 +274,13 @@ func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
 // ends the pause and a session with a stranger in it refuses one.
 func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	addr := freeAddress(t)
+	holder, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, holder, 2)
-	// A bot is rostered before its seat learns its participant, and until then its
-	// link is a stranger's to the pause gate
-	seated := func() bool {
-		holder.seatsMu.Lock()
-		defer holder.seatsMu.Unlock()
-		return len(holder.seats) == 1 && holder.seats[0].id.Load() != 0
-	}
-	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	// A bot is rostered before its seat learns its participant, and until a tick
+	// latches that, its link is a stranger's to the pause gate. A host's bots join
+	// its lobby, so the roster holds them before the holder has ticked at all.
+	for deadline := time.Now().Add(socketWait); !holder.world.Session().SeatsOnly && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	pauses := func() bool {
 		holder.Context().SetPaused(true)
@@ -299,7 +296,7 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 	if !pauses() {
 		t.Fatal("an authority whose only peer is its own bot refused to pause")
 	}
-	mustSocketJoiner(t, holder.HostAddr(), fixtureSeed, 120, 40)
+	mustSocketJoiner(t, addr, fixtureSeed, 120, 40)
 	if holder.Context().TimeCtl.IsPaused() {
 		t.Fatal("an arrival left the session paused, which its gate cannot serve")
 	}
@@ -312,9 +309,10 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 // while the host's own bots stay.
 func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	_, leave := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{"roam"}}, "patrol", nil)
+	_, leave := driveBot(t, Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	leave()
 	waitForCursors(t, host, 2)
@@ -325,7 +323,7 @@ func TestAGuestsBotsLeaveWithIt(t *testing.T) {
 // goes on driving its own cursor; each closes and opens again in one command's time,
 // and every journal replays from the world it opened on.
 func TestARunAndItsBotsJournalMidSession(t *testing.T) {
-	// Not parallel: real sockets against wall-clock deadlines, and the journal
+	// Not parallel: paced runs against wall-clock deadlines, and the journal
 	// directory is the process's.
 	dir, level := t.TempDir(), vlog.LevelName()
 	vlog.Configure(vlog.Config{JournalDir: dir, Level: level})
@@ -413,7 +411,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 // TestASeatsOpeningLeavesItsRunAsItWas: a bot seat's journal opening, on a slot
 // other than its holder's, leaves the seat's run as it stood, so the bot plays on.
 func TestASeatsOpeningLeavesItsRunAsItWas(t *testing.T) {
-	// Not parallel: real sockets against wall-clock deadlines, and the journal
+	// Not parallel: paced runs against wall-clock deadlines, and the journal
 	// directory is the process's.
 	dir, level := t.TempDir(), vlog.LevelName()
 	vlog.Configure(vlog.Config{JournalDir: dir, Level: level})
@@ -463,7 +461,7 @@ func TestASeatsOpeningLeavesItsRunAsItWas(t *testing.T) {
 // TestASeatsJournalClosesWithItsBot: a bot dropped while its seat journals takes the
 // journal with it, closed and replayable, and its holder says so.
 func TestASeatsJournalClosesWithItsBot(t *testing.T) {
-	// Not parallel: real sockets against wall-clock deadlines, and the journal
+	// Not parallel: paced runs against wall-clock deadlines, and the journal
 	// directory is the process's.
 	dir, level := t.TempDir(), vlog.LevelName()
 	vlog.Configure(vlog.Config{JournalDir: dir, Level: level})
@@ -517,9 +515,10 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 // left with no session, and stops rather than playing its fork for nobody.
 func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	host, leave := driveBot(t, Config{FixedAuthority: true, Bots: []string{"roam"}}, "patrol", nil)
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, FixedAuthority: true, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	cfg := Config{JoinAddress: host.HostAddr(), Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
+	cfg := Config{JoinAddress: addr, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}}
 	g, err := loadBotGraph(cfg.Resources, "patrol")
 	if err != nil {
@@ -552,9 +551,10 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines. The session is
 	// named: the guest's relay acceptor checks the name, so its seat must send it.
-	host, _ := driveBot(t, Config{Bots: []string{"roam"}, SessionName: "named"}, "patrol", nil)
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}, SessionName: "named"}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), SessionName: "named", Bots: []string{"roam"}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{JoinAddress: addr, SessionName: "named", Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
 	if h, g := host.sessionTransport().PeerCount(), guest.sessionTransport().PeerCount(); h != 2 || g != 2 {
@@ -580,10 +580,11 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 // whoever holds authority, so the departed host's address is never dialled.
 func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	host, leave := driveBot(t, Config{Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 2)
-	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, DefaultBotGraph, nil)
-	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, DefaultBotGraph, nil)
+	successor, _ := driveBot(t, Config{JoinAddress: addr}, DefaultBotGraph, nil)
+	guest, _ := driveBot(t, Config{JoinAddress: addr}, DefaultBotGraph, nil)
 	for _, a := range []*App{host, successor, guest} {
 		waitForCursors(t, a, 4)
 	}
@@ -652,38 +653,6 @@ func TestASeatStandsStillWhileItsHoldersClockIsStopped(t *testing.T) {
 	}
 }
 
-// TestAHoldersBotsDialItFromThisMachine: a bot reaches its holder's listener over
-// the loopback of the family it bound, and a loopback dial spends no join budget,
-// so a host seats more bots than one address may join in a window.
-func TestAHoldersBotsDialItFromThisMachine(t *testing.T) {
-	t.Parallel()
-	for bound, want := range map[string]string{
-		"127.0.0.1:7777":     "127.0.0.1:7777",
-		"0.0.0.0:7777":       "127.0.0.1:7777",
-		"[::]:7777":          "[::1]:7777",
-		"ws://[::]:7777":     "ws://[::1]:7777",
-		"192.0.2.10:7777":    "192.0.2.10:7777",
-		"ws://127.0.0.1:777": "ws://127.0.0.1:777",
-	} {
-		if got := loopbackOf(bound); got != want {
-			t.Errorf("a listener bound on %s is dialled at %s, want %s", bound, got, want)
-		}
-	}
-	a := &App{admissions: network.NewAdmissionLimiter()}
-	for i := range parameter.MaxPlayers {
-		if err := a.admitDial(&net.TCPAddr{IP: net.IPv6loopback, Port: 40000 + i}); err != nil {
-			t.Fatalf("loopback dial %d was refused: %v", i+1, err)
-		}
-	}
-	var err error
-	for range parameter.NetworkAdmitBurst + 1 {
-		err = a.admitDial(&net.TCPAddr{IP: net.ParseIP("192.0.2.7"), Port: 1})
-	}
-	if err == nil {
-		t.Fatal("a remote address was not budgeted")
-	}
-}
-
 // TestDefaultTypesWhatItReaches: the bot reads the glyph under its cursor before it types.
 // A miss is a glyph the tick's own fire destroyed after the read, which is rare.
 func TestDefaultTypesWhatItReaches(t *testing.T) {
@@ -700,7 +669,7 @@ func TestDefaultTypesWhatItReaches(t *testing.T) {
 func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
-	if err := host.BeginHosting(seatLoopback); err != nil {
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatal(err)
 	}
 	stopTicks := tickInBackground(host)
@@ -743,9 +712,6 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 		t.Fatal("the holder's existing bot was replaced during migration")
 	default:
 	}
-	if holder.seatAddress == "" {
-		t.Fatal("the successor did not open local admission")
-	}
 }
 
 func TestBotReplayEndsAtTheRecordedSimulationBoundary(t *testing.T) {
@@ -786,9 +752,10 @@ func TestBotReplayEndsAtTheRecordedSimulationBoundary(t *testing.T) {
 }
 
 func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
-	host, _ := driveBot(t, Config{Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 2)
-	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{DefaultBotGraph, DefaultBotGraph}}, DefaultBotGraph, nil)
+	guest, _ := driveBot(t, Config{JoinAddress: addr, Bots: []string{DefaultBotGraph, DefaultBotGraph}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 5)
 	waitForCursors(t, guest, 5)
 	holder := guest.localParticipant()
@@ -859,10 +826,11 @@ func TestBotInputPreservesOperatorFeedback(t *testing.T) {
 }
 
 func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
-	host, leave := driveBot(t, Config{Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 2)
-	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
-	other, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, DefaultBotGraph, nil)
+	successor, _ := driveBot(t, Config{JoinAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	other, _ := driveBot(t, Config{JoinAddress: addr}, DefaultBotGraph, nil)
 	for _, a := range []*App{host, successor, other} {
 		waitForCursors(t, a, 5)
 	}
@@ -929,10 +897,11 @@ func waitForMotion(t *testing.T, a *App, e core.Entity, what string) {
 // reach it back.
 func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), RelayAddress: relayAddr}, "patrol", nil)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
 	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
@@ -957,12 +926,13 @@ func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 // then on; the session goes on with its relay gone.
 func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	host, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, leave := driveBot(t, Config{JoinAddress: host.HostAddr(), RelayAddress: relayAddr}, "patrol", nil)
+	relay, leave := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
 	waitForCursors(t, host, 3)
-	other, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
+	other, _ := driveBot(t, Config{JoinAddress: addr}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitListening(t, relayAddr)
 	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)

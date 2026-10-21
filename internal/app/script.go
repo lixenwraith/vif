@@ -169,10 +169,10 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 	if a.cfg.Mode == ModeScript {
 		return true, runPresented(a, src, kind, name, interval, paced, signals)
 	}
-	// A solo run that opens a session with :host gains a peer to keep step with, so
-	// pacing engages at that moment. The clock is re-anchored there rather than
-	// carried forward, or the ticks it ran flat out would be a debt the pacing
-	// immediately spends. An explicit -speed max is honoured either way.
+	// A solo run that opens a session, with :host or for its bots, gains a peer to
+	// keep step with, so pacing engages at that moment. The clock is re-anchored there
+	// rather than carried forward, or the ticks it ran flat out would be a debt the
+	// pacing immediately spends. An explicit -speed max is honoured either way.
 	autoPace := cfg.TimeScaleSpec == ""
 	nextTick := time.Now() // [wall] pacing only
 	for {
@@ -203,7 +203,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		if !more {
 			return true, nil
 		}
-		if !paced && autoPace && a.HostAddr() != "" {
+		if !paced && autoPace && a.sessionTransport() != nil {
 			paced, nextTick = true, time.Now() // [wall]
 			a.log.Info("app", "msg", kind+" pacing engaged",
 				"address", a.HostAddr(), "tick", a.Position().Tick)

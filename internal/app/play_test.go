@@ -164,8 +164,8 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 		t.Fatalf("new game failed: %s, position %+v", a.ctx.GetStatusMessage(), a.Position())
 	}
 	command("bot add 1:patrol")
-	if a.HostAddr() == "" {
-		t.Fatalf("bot add did not host: %s", a.ctx.GetStatusMessage())
+	if a.sessionTransport() == nil {
+		t.Fatalf("bot add opened no session: %s", a.ctx.GetStatusMessage())
 	}
 	press(terminal.KeyRune, ':')
 	if p.cmd == nil || a.ctx.Viewer.Load() {
