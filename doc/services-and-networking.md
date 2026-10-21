@@ -940,8 +940,8 @@ and under `-authority host` it says that it is continuing locally, shows
 `Host lost` and keeps ticking — `:session` then names the term it still holds and
 that it is a local fork. Restarting the host and rejoining is a *new* session, not
 a merge: an old fork left running would refuse its artifacts and say so.
-`-players <n>` caps the roster a host admits, `-host` or a later `:host` alike;
-unset, it is `MaxPlayers`. Bind the host to `:7777` for a LAN. Internet routing
+`-players <n>` caps the roster a host admits, `-host` or a later `:host` alike, and
+so does the scenario's `max_players`; unset, both are `MaxPlayers`. Bind the host to `:7777` for a LAN. Internet routing
 uses the same TCP path but is not safe for untrusted peers until authentication
 and TLS configuration are exposed.
 
