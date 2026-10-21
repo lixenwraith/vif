@@ -1,8 +1,10 @@
 package mode
 
 import (
+	"cmp"
 	"fmt"
 	"math"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
@@ -120,15 +123,15 @@ var configPages = []configPage{
 		{key: "prof", label: "Runtime profiler", description: "Collect module timings, logged each second while file logging is on. Enabling also pins profiler cards to the telemetry HUD.",
 			command: "debug prof", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.World.Resources.Prof.Profiling()) }},
-		commandAction("cpu", "CPU profile", captureDescription("a CPU profile"), "debug cpu"),
-		commandAction("heap", "Heap profile", "Write a heap profile; the status bar names the file.", "debug heap"),
-		commandAction("mutex", "Mutex profile", captureDescription("a mutex profile"), "debug mutex"),
-		commandAction("trace", "Execution trace", captureDescription("an execution trace"), "debug trace"),
-		commandAction("snap", "Telemetry snapshot", "Write every metric with the view and session state to a snapshot file in the log directory.", "t save"),
+		withDisabled(commandAction("cpu", "CPU profile", captureDescription("a CPU profile"), "debug cpu"), lacking(paths.ExternalFiles(), "CPU profile")),
+		withDisabled(commandAction("heap", "Heap profile", "Write a heap profile; the status bar names the file.", "debug heap"), lacking(paths.ExternalFiles(), "Heap profile")),
+		withDisabled(commandAction("mutex", "Mutex profile", captureDescription("a mutex profile"), "debug mutex"), lacking(paths.ExternalFiles(), "Mutex profile")),
+		withDisabled(commandAction("trace", "Execution trace", captureDescription("an execution trace"), "debug trace"), lacking(paths.ExternalFiles(), "Execution trace")),
+		withDisabled(commandAction("snap", "Telemetry snapshot", "Write every metric with the view and session state to a snapshot file in the log directory.", "t save"), lacking(vlog.Linked, "Telemetry snapshot")),
 		{key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The run plays on as it was. :journal start <slot> records a bot of yours.",
 			command: "journal", choices: []string{"off", "on"}, read: journalValue, disabled: journalUnavailable},
 	}},
-	{key: "startup", label: "Startup settings", description: "Settings that require restarting, and where to configure them.", options: []configOption{
+	{key: "startup", label: "Startup settings", description: cmp.Or(startupNotes[runtime.GOOS], "Settings that require restarting, and where to configure them."), options: []configOption{
 		{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. The Game page starts another scenario now.", read: startupValue},
 		{key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at startup.", read: startupValue},
 		{key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at startup.", read: startupValue},
@@ -138,6 +141,13 @@ var configPages = []configPage{
 }
 
 func startupValue(*engine.GameContext) string { return "info" }
+
+// startupNotes is how a platform without a command line sets what the Startup
+// rows name, by GOOS; a terminal or desktop run takes the flags and vif.toml as named
+var startupNotes = map[string]string{
+	"js":      "Settings fixed when the page loaded. A browser reads no files: launch arguments (?arg=) carry the flags these rows name, and the embedded scenario, keymap and content stand.",
+	"android": "Settings fixed when the app started. Android has no command line: vif.toml in the app's files directory sets what these rows name.",
+}
 
 // commandAction is a row Enter runs command from, leaving the menu as an action does.
 func commandAction(key, label, description, command string) configOption {
@@ -197,31 +207,47 @@ func journalValue(ctx *engine.GameContext) string {
 
 // A journal recording can always be closed; starting one has the run's conditions.
 func journalUnavailable(ctx *engine.GameContext) string {
-	if ctx.SessionCtl == nil {
-		return "This runtime cannot start a journal"
-	}
-	if ctx.SessionCtl.Journaling() {
+	switch {
+	case ctx.SessionCtl == nil:
+		return sessionsUnavailable
+	case ctx.SessionCtl.Journaling():
 		return ""
+	case !vlog.Linked:
+		return unavailable("Journal")
 	}
 	if err := ctx.SessionCtl.JournalError(); err != nil {
-		return "Unavailable: " + err.Error()
+		return sentence(err)
 	}
 	return ""
 }
 
+// Audio is left out of a build, or silent in a run whose device did not open
 func audioUnavailable(ctx *engine.GameContext) string {
 	reg := ctx.World.Resources.Status
-	if reg.Ints.Get("audio.mask").Load() < 0 || reg.Bools.Get("audio.silent").Load() {
+	switch {
+	case reg.Ints.Get("audio.mask").Load() < 0:
+		return unavailable("Audio")
+	case reg.Bools.Get("audio.silent").Load():
 		return "Audio unavailable in this run"
 	}
 	return ""
 }
 
 func loggingUnavailable(*engine.GameContext) string {
-	if vlog.LevelName() == "OFF" {
-		return "Logging unavailable in this build"
+	if !vlog.Linked {
+		return unavailable("Logging")
 	}
 	return ""
+}
+
+// lacking disables a row whose command this platform cannot serve, with its reason
+func lacking(have bool, what string) func(*engine.GameContext) string {
+	return func(*engine.GameContext) string {
+		if have {
+			return ""
+		}
+		return unavailable(what)
+	}
 }
 
 func audioChannelValue(mask uint8) func(*engine.GameContext) string {

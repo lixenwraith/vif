@@ -1,11 +1,14 @@
 package paths
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lixenwraith/vif/internal/asset"
 )
 
 func TestConfigRootsPutOverrideAndUserBeforeSystem(t *testing.T) {
@@ -104,48 +107,165 @@ func TestSettingsRefuseAnUnknownKey(t *testing.T) {
 	}
 }
 
-// TestSaveSettingsWritesThePlayTableAlone: a file not there yet starts as the
-// embedded one; a file holding [play] has that table replaced, comments under it
-// included, and every other line kept; one without it has it appended. What was
-// written reads back.
-func TestSaveSettingsWritesThePlayTableAlone(t *testing.T) {
+// TestSavePlayWritesTheChangedKeysAlone: a file not there yet starts as the
+// embedded one; in a file holding [play] the line of each key that changed is
+// replaced and a key it lacks goes after its last, every other line kept, comments
+// included; a file without the table has it appended. What was written reads back.
+func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(SystemRootsEnv, "")
 	dir := t.TempDir()
 	file := filepath.Join(dir, SettingsFile)
-	play := Play{Effects: true, Volume: 0.35, AutoFire: "main", Mouse: true, HUD: true}
-	if err := SaveSettings(file, play); err != nil {
+	store := FileStore{Path: file}
+	was := DefaultPlay()
+	now := was
+	now.Effects, now.Volume, now.AutoFire, now.HUD = false, 0.35, "main", true
+	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
 	s, path, err := LoadSettings(dir)
-	if err != nil || path != file || s.Play != play || s.Audio.BufferMs != 50 {
+	if err != nil || path != file || s.Play != now || s.Audio.BufferMs != 50 {
 		t.Fatalf("saved anew: %+v from %q, %v", s.Play, path, err)
 	}
+	if got, _ := os.ReadFile(file); !strings.HasPrefix(string(got), "# vif.toml") {
+		t.Fatalf("a new file did not start as the embedded one:\n%s", got)
+	}
 
-	text := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# old\neffects = false\n\n[audio]\nbuffer_ms = 20\n"
+	text := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\neffects = false\nhud = false # old\n\n# about audio\n[audio]\nbuffer_ms = 20"
 	if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	play.Music = true
-	if err := SaveSettings(file, play); err != nil {
+	was = now
+	now.HUD, now.Mouse, now.Volume = false, false, 0.25
+	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(file)
-	if !strings.HasPrefix(string(got), "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n") ||
-		!strings.HasSuffix(string(got), "\n\n[audio]\nbuffer_ms = 20\n") || strings.Contains(string(got), "# old") {
-		t.Fatalf("replaced table:\n%s", got)
+	want := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\neffects = false\nhud = false\n" +
+		"mouse = false\nvolume = 0.25\n\n# about audio\n[audio]\nbuffer_ms = 20\n"
+	if got, _ := os.ReadFile(file); string(got) != want {
+		t.Fatalf("written keys:\n%s\nwant:\n%s", got, want)
 	}
-	if s, _, err = LoadSettings(dir); err != nil || s.Play != play || s.Audio.BufferMs != 20 || filepath.Base(s.Paths.Log) != "logs" {
-		t.Fatalf("after the replace: %+v %+v, %v", s.Play, s.Paths, err)
+	if s, _, err = LoadSettings(dir); err != nil || s.Play.Mouse || s.Play.Volume != 0.25 || s.Audio.BufferMs != 20 || filepath.Base(s.Paths.Log) != "logs" {
+		t.Fatalf("after the write: %+v %+v, %v", s.Play, s.Paths, err)
+	}
+	if err := SavePlay(store, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(file); string(got) != want {
+		t.Fatalf("nothing changed, yet the file did:\n%s", got)
 	}
 
 	if err := os.WriteFile(file, []byte("[audio]\nbuffer_ms = 30\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := SaveSettings(file, play); err != nil {
+	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
-	if s, _, err = LoadSettings(dir); err != nil || s.Play != play || s.Audio.BufferMs != 30 {
-		t.Fatalf("after the append: %+v, %v", s, err)
+	if got, _ := os.ReadFile(file); string(got) != "[audio]\nbuffer_ms = 30\n\n[play]\nhud = false\nmouse = false\nvolume = 0.25\n" {
+		t.Fatalf("appended table:\n%s", got)
 	}
+}
+
+// TestSettingsForWritesThePlayersOwnFile: the file read is written when it is in
+// the override or the user root; one read further down, or none, makes the user
+// root's, which starts as the file read with its relative paths made absolute and
+// shadows it from then on. Without a user root nothing is written.
+func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
+	if !isUnixLike() || runtime.GOOS == "android" {
+		t.Skip("system roots are Unix-specific")
+	}
+	base, home := t.TempDir(), t.TempDir()
+	user, system, override := filepath.Join(base, "user"), filepath.Join(base, "system"), filepath.Join(base, "override")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", user)
+	t.Setenv(SystemRootsEnv, system)
+	mine := filepath.Join(user, AppDirName, SettingsFile)
+	site := filepath.Join(system, SettingsFile)
+	for _, c := range []struct {
+		name, override, read string
+		want                 FileStore
+	}{
+		{"user root", "", mine, FileStore{Path: mine}},
+		{"override", override, filepath.Join(override, SettingsFile), FileStore{Path: filepath.Join(override, SettingsFile)}},
+		{"system root", override, site, FileStore{Path: mine, Seed: site}},
+		{"embedded", override, "", FileStore{Path: mine}},
+	} {
+		if got := SettingsFor(c.override, c.read); got != SettingsStore(c.want) {
+			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
+		}
+	}
+
+	if err := os.MkdirAll(system, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	text := "[paths]\ncontent = \"words\" # site\nscenario = \"td\"\nkeymap = \"~/k.toml\"\n\n[audio]\nbuffer_ms = 100\n"
+	if err := os.WriteFile(site, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, read, err := LoadSettings("")
+	if err != nil || read != site {
+		t.Fatalf("read %q, %v", read, err)
+	}
+	now := s.Play
+	now.HUD = true
+	if err := SavePlay(SettingsFor("", read), s.Play, now); err != nil {
+		t.Fatal(err)
+	}
+	s, read, err = LoadSettings("")
+	if err != nil || read != mine || !s.Play.HUD || s.Audio.BufferMs != 100 ||
+		s.Paths.Content != filepath.Join(system, "words") || s.Paths.Scenario != "td" || s.Paths.Keymap != filepath.Join(home, "k.toml") {
+		t.Fatalf("the user root's copy: %+v from %q, %v", s, read, err)
+	}
+	if got, _ := os.ReadFile(site); string(got) != text {
+		t.Fatalf("the system root's file was written:\n%s", got)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
+	if got := SettingsFor("", site); got != nil {
+		t.Fatalf("no user root, yet a store: %+v", got)
+	}
+}
+
+// memStore is a settings document held in memory, as a page holds one
+type memStore struct{ doc []byte }
+
+func (m *memStore) Load() ([]byte, error) { return m.doc, nil }
+func (m *memStore) Store(doc []byte) error {
+	m.doc = doc
+	return nil
+}
+
+// FuzzSavePlayKeepsTheDocument: whatever valid settings document a store holds, a
+// write either leaves it valid, reading back the values written and every other
+// setting as it was, or is refused and leaves it alone.
+func FuzzSavePlayKeepsTheDocument(f *testing.F) {
+	f.Add(string(asset.DefaultSettings), true, 0.25)
+	f.Add("", false, 1.0)
+	f.Add("[play]\nhud = true\n", false, 0.0)
+	f.Add("[audio]\nbuffer_ms = 20\n[ \"play\" ] # mine\n'effects'=true", true, 0.5)
+	f.Add("play.hud = true\n", false, 0.5)
+	f.Fuzz(func(t *testing.T, doc string, hud bool, volume float64) {
+		before, err := ParseSettings([]byte(doc))
+		if err != nil || math.IsNaN(volume) || volume < 0 || volume > 1 {
+			t.Skip()
+		}
+		now := before.Play
+		now.HUD, now.Volume = hud, volume
+		store := &memStore{doc: []byte(doc)}
+		if err := SavePlay(store, before.Play, now); err != nil {
+			if string(store.doc) != doc {
+				t.Fatalf("a refused write changed the document: %v", err)
+			}
+			return
+		}
+		after, err := ParseSettings(store.doc)
+		if err != nil {
+			t.Fatalf("the written document does not read: %v\n%s", err, store.doc)
+		}
+		before.Play = now
+		if after != before {
+			t.Fatalf("read back %+v, want %+v\n%s", after, before, store.doc)
+		}
+	})
 }

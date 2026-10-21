@@ -117,11 +117,11 @@ func configFormOption(key string) configOption {
 		read: func(*engine.GameContext) string { return "Enter" },
 		disabled: func(ctx *engine.GameContext) string {
 			if ctx.SessionCtl == nil {
-				return "Session controls unavailable in this run"
+				return sessionsUnavailable
 			}
 			if spec.unavailable != nil {
 				if err := spec.unavailable(ctx.SessionCtl); err != nil {
-					return err.Error()
+					return sentence(err)
 				}
 			}
 			return ""

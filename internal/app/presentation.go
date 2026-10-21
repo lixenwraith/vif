@@ -31,8 +31,13 @@ type Presentation interface {
 type awayPresentation interface{ Away() <-chan bool }
 
 // coveredPresentation is one a keyboard can cover: while it does, the host shows
-// the status bar's left end again above the keyboard, and the bar draws only that
+// the left half of the status bar's bottom row again above the keyboard, and the
+// bar keeps its input to that half
 type coveredPresentation interface{ Covered() bool }
+
+// zoomPresentation is one the player zooms: Cell is a cell's height in dp as they
+// left it, 0 for the screen's own, which the run writes back to vif.toml
+type zoomPresentation interface{ Cell() float64 }
 
 // keyReportPresentation is one that can report key releases when asked, answering
 // each ask with an EventKeyReport on Events; any other reports presses alone

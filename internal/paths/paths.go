@@ -66,14 +66,25 @@ func ConfigRoots(override string) []string {
 	}
 
 	add(override)
-	if base, err := os.UserConfigDir(); err == nil {
-		add(filepath.Join(base, AppDirName))
-	}
+	add(UserRoot())
 	add(checkoutRoot())
 	for _, root := range systemRoots() {
 		add(root)
 	}
 	return roots
+}
+
+// UserRoot is the player's own configuration root: os.UserConfigDir plus vif, ""
+// where the platform names none or a build has no host filesystem.
+func UserRoot() string {
+	if !ExternalFiles() {
+		return ""
+	}
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(base, AppDirName)
 }
 
 // checkoutRoot is the wad/ beside the bin/ holding this binary, so a build plays

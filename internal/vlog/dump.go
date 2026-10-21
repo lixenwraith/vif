@@ -21,7 +21,7 @@ func Dump(run, tick uint64, fill func(emit func(sub string, args ...any))) (stri
 	mu.Unlock()
 
 	if dir == "" {
-		return "", fmt.Errorf("vlog: no directory configured")
+		return "", errNoLogDir
 	}
 
 	name := snapPrefix + time.Now().Format(fileTimeFormat)
@@ -78,7 +78,7 @@ func (l *Log) EmitSet(sub string, run, tick uint64, fill func(emit func(args ...
 	dir, spawn := cfg.Dir, cfg.Spawn
 	mu.Unlock()
 	if dir == "" {
-		return "", fmt.Errorf("vlog: no directory configured")
+		return "", errNoLogDir
 	}
 
 	name := recPrefix + time.Now().Format(recTimeFormat)

@@ -715,6 +715,33 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 ## Rendering
 
+### Open a console of the command and message history on backtick
+
+- Priority: P1
+- Affected files: `internal/asset/input/keymap.toml`, `internal/mode/router.go`,
+  `internal/mode/commands.go`, `internal/engine/game_context.go`,
+  `internal/render/renderer/status_bar.go`, a console renderer and its row in
+  `internal/manifest/definition.go`, `android/app/src/main/java/com/lixen/vif/GameView.java`,
+  `web/terminal.js`, `doc/input-and-modes.md`, `doc/rendering.md`
+
+Backtick, unbound in normal mode today, drops a panel from the top of the screen
+as Quake's console does: several rows of the messages the run posted and the
+commands typed, newest at the foot, scrolled back with the keys an overlay
+already takes, over the command line; backtick again or Escape raises it. The
+status bar keeps showing the newest message, rising onto the items' row when it
+needs two lines, and cuts a longer one: Android's 85-character log path at 18 dp
+in portrait, and anything past about 15 characters in the one-row strip above its
+keyboard at the default zoom. The console is where such a message reads whole, on
+every host alike. `GameContext` keeps only the message shown (`statusMessage`),
+so it needs a bounded history of them (kind, wall time, text); the router's
+256-command ring (`cmdHistory`) already holds the commands. Open for its own
+session: whether the console's line is command mode's or a second one; how a
+touch host opens it, as no soft keyboard shows backtick on its first page (a key
+strip button, a gesture, a tap on the bar's message); what a backtick is in
+insert mode, where it types; whether a solo run pauses while it is down, as the
+menu does; its height and what a resize does; and whether the history outlives
+the run in the state directory, as a shell's does.
+
 ### Give the configuration menu a touch target on Android
 
 - Priority: P1

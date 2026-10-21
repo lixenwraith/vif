@@ -70,12 +70,9 @@ func spawnWall(w *engine.World, x, y int) {
 	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 }
 
-// wallWithGap builds a full-height barrier at column x with one opening.
-func wallWithGap(w *engine.World, x, gapY, height int) {
-	for y := range height {
-		if y == gapY {
-			continue
-		}
+// wallWithGap builds a barrier down column x of the map, open on its last row only.
+func wallWithGap(w *engine.World, x int) {
+	for y := range w.Resources.Config.MapHeight - 1 {
 		spawnWall(w, x, y)
 	}
 }
@@ -171,7 +168,7 @@ func flyLoot(t *testing.T, w *engine.World, lootEntity, owner core.Entity, maxTi
 // so the barrier is one it goes around.
 func TestLootRoutesToItsOwnCursorNotTheNearestOne(t *testing.T) {
 	w, owner, other := testCursorWorld(t) // (5,5) and (15,5)
-	wallWithGap(w, 10, 20, 24)
+	wallWithGap(w, 10)
 
 	loot := NewLootSystem(w).(*LootSystem)
 	// Behind the barrier from its owner, and two cells from the other cursor.
@@ -202,12 +199,12 @@ func TestLootRoutesToItsOwnCursorNotTheNearestOne(t *testing.T) {
 // nothing about where it goes.
 func TestLootWithoutLineOfSightKeepsItsOwnRoute(t *testing.T) {
 	solo, soloOwner := soloCursorWorld(t)
-	wallWithGap(solo, 10, 20, 24)
+	wallWithGap(solo, 10)
 	soloLoot := NewLootSystem(solo).(*LootSystem)
 	alone := flyLoot(t, solo, dropLoot(solo, soloLoot, 13, 5, soloOwner), soloOwner, 300)
 
 	shared, sharedOwner, _ := testCursorWorld(t)
-	wallWithGap(shared, 10, 20, 24)
+	wallWithGap(shared, 10)
 	sharedLoot := NewLootSystem(shared).(*LootSystem)
 	beside := flyLoot(t, shared, dropLoot(shared, sharedLoot, 13, 5, sharedOwner), sharedOwner, 300)
 

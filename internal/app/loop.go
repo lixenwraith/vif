@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
@@ -404,6 +405,21 @@ func (a *App) terminalTaking() bool {
 // applyMouseMode is the Router's terminal sink for mouse reporting state
 func (a *App) applyMouseMode(enabled, motion bool) { a.pres.SetPointerMode(enabled, motion) }
 
+// persistCell writes back the zoom the player left the presentation at, as
+// persistPlay writes [play]
+func (a *App) persistCell() {
+	z, ok := a.pres.(zoomPresentation)
+	if !ok || a.cfg.Settings == nil {
+		return
+	}
+	if cell := z.Cell(); cell != a.cell {
+		a.cell = cell
+		if err := paths.SaveCell(a.cfg.Settings, cell); err != nil {
+			a.settingsUnsaved(err)
+		}
+	}
+}
+
 // keyReportApplier is the Router's sink for asking for key releases: from a terminal's
 // protocol or a host's own key events, and a console keyboard's when the router says.
 // Nil for a presentation that reports presses alone.
@@ -437,6 +453,7 @@ func (a *App) keyReported(releases bool) {
 // Returns false when the player quit.
 func (a *App) inputTick() bool {
 	a.persistPlay()
+	a.persistCell()
 	before := a.pushed()
 	if a.processInputTick() || a.pushed() != before {
 		a.scheduler.DispatchEventsImmediately()

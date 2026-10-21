@@ -399,12 +399,20 @@ so normal dimming does not make control information unreadable. A heat level
 lights `width*level/100` cells over a black track, and the ten segments and
 their notches derive from the same division, so a level of 10k ends exactly on
 the k-th notch at any width. The status bar
-draws a fixed priority of items: session badge, time control, FSM phase, energy,
-damage multiplier, boost, grid state, and lower-priority metrics that are dropped
-first when space is tight. After the mode label a fixed key cell
-(`StatusKeyWidth`) shows a pending key sequence or the last one completed; it never
-shares its cells or its time with a message. Typed input takes the space it needs
-from the right-side items; a status message takes it from the metrics only. A
+is two rows (`StatusRows`) on every host. The upper one holds the status items in
+a fixed priority: session badge, time control, FSM phase, energy, damage
+multiplier, boost, grid state, and the metrics, dropped first when space is tight.
+Those that fit span the row edge to edge, each in a slot at least its width and
+the slots as equal as those widths allow, so an item's edges move when the items
+shown change, not when a value grows a digit. The bottom row holds the audio
+letter, the mode label, a fixed key cell (`StatusKeyWidth`) with a pending key
+sequence or the last one completed, then typed input or the message shown; no
+item narrows it, and the keys never share their cells or their time with a
+message. A message longer than its room rises onto the items' row while it shows,
+as vim's rises over the window, broken after a space or a slash where the rest
+then fits the bottom row, so a log path reads whole on a portrait phone. While a
+keyboard covers a touch host (`StatusCovered`), the row keeps its input and
+messages to the left half the host repeats above the keyboard. A
 message is a notice or an alert (`parameter.StatusKinds`): the newest replaces the
 one shown, except that a notice does not displace an alert younger than its
 minimum, and each leaves after its kind's wall time. Its

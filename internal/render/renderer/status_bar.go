@@ -132,7 +132,9 @@ func statusPalette256(c *render.Console) *statusPalette {
 	}
 }
 
-// StatusBarRenderer draws the status bar at the bottom
+// StatusBarRenderer draws the status bar, the two rows at the bottom on every host:
+// the status items across the whole width, then the mode, the key cell and the line
+// a player types on and reads messages from, which no item ever narrows
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
 	pal     *statusPalette
@@ -188,6 +190,7 @@ type StatusBarRenderer struct {
 	// Scratch the bar reuses frame to frame, and each item's text as last formatted
 	items  []statusItem
 	widths []int
+	slots  []int
 	runes  []rune
 
 	phaseText, energyText, damageText, boostText, gridText statusText
@@ -241,16 +244,15 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 // Render implements SystemRenderer
 func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskUI)
-	statusY := ctx.GameYOffset + ctx.ViewportHeight + 1
-
-	// Bounds check: skip if status row outside screen
-	if statusY >= ctx.ScreenHeight {
+	itemsY := ctx.GameYOffset + ctx.ViewportHeight + 1
+	lineY := itemsY + parameter.StatusRows - 1
+	if lineY >= ctx.ScreenHeight {
 		return
 	}
-
-	// Clear status bar
-	for x := range ctx.ScreenWidth {
-		buf.SetWithBg(x, statusY, ' ', visual.RgbBackground, visual.RgbBackground)
+	for y := itemsY; y <= lineY; y++ {
+		for x := range ctx.ScreenWidth {
+			buf.SetWithBg(x, y, ' ', visual.RgbBackground, visual.RgbBackground)
+		}
 	}
 
 	// Cursor blink runs on wall time: it must continue while the world is paused
@@ -260,17 +262,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		r.lastBlinkToggle = realNow
 	}
 
-	// === BUILD RIGHT-SIDE ITEMS ===
+	// === BUILD ITEMS, BY PRIORITY ===
 
-	rightItems := r.items[:0]
+	items := r.items[:0]
 
 	// Priority 0: one cell for the whole session. See networkItem.
 	if item, ok := r.networkItem(); ok {
-		rightItems = append(rightItems, item)
+		items = append(items, item)
 	}
 	// Time control is absent at real time with nothing pending.
 	if item, ok := r.timeItem(); ok {
-		rightItems = append(rightItems, item)
+		items = append(items, item)
 	}
 
 	// Priority 1: FSM Phase
@@ -292,7 +294,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		text := r.phaseText.hold(tenths(timerVal), phaseName, "", func() string {
 			return fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal)
 		})
-		rightItems = append(rightItems, r.pal.phase(phaseIdx, phaseTotal).with(text))
+		items = append(items, r.pal.phase(phaseIdx, phaseTotal).with(text))
 	}
 
 	// Priority 2: Energy
@@ -321,14 +323,14 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			energy = r.pal.blink[len(r.pal.blink)-1]
 		}
 	}
-	rightItems = append(rightItems, energy.with(r.energyText.hold(energyVal, "", "", func() string {
+	items = append(items, energy.with(r.energyText.hold(energyVal, "", "", func() string {
 		return fmt.Sprintf(" Energy: %s ", status.FormatCount(energyVal))
 	})))
 
 	// Priority 3: Damage Multiplier (cycle scaling)
 	dmgMult := r.statDamageMultiplier.Load()
 	if dmgMult > 1 {
-		rightItems = append(rightItems, r.pal.alarm.with(r.damageText.hold(dmgMult, "", "", func() string {
+		items = append(items, r.pal.alarm.with(r.damageText.hold(dmgMult, "", "", func() string {
 			return fmt.Sprintf(" x%s ", status.FormatCount(dmgMult))
 		})))
 	}
@@ -340,7 +342,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if remaining < 0 {
 			remaining = 0
 		}
-		rightItems = append(rightItems, r.pal.boost.with(r.boostText.hold(tenths(remaining), "", "", func() string {
+		items = append(items, r.pal.boost.with(r.boostText.hold(tenths(remaining), "", "", func() string {
 			return fmt.Sprintf(" Boost: %.1fs ", remaining)
 		})))
 	}
@@ -351,29 +353,30 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if gridRemaining < 0 {
 			gridRemaining = 0
 		}
-		rightItems = append(rightItems, statusItem{
+		items = append(items, statusItem{
 			text: r.gridText.hold(tenths(gridRemaining), "", "", func() string { return fmt.Sprintf(" Grid: %.1fs ", gridRemaining) }),
 			fg:   visual.RgbGridTimerFg,
 			bg:   visual.RgbBackground,
 		})
 	}
 
-	// Priority 6-9: Metrics (lowest priority, dropped first, and all a message may take)
-	metricsAt := len(rightItems)
+	// Priority 6-9: Metrics (lowest priority, dropped first)
 	apm, ticks, fps := r.statAPM.Load(), r.statTicks.Load(), r.statFPS.Load()
-	rightItems = append(rightItems,
+	items = append(items,
 		r.pal.apm.with(r.apmText.hold(apm, "", "", func() string { return fmt.Sprintf(" APM: %d ", apm) })),
 		r.pal.gt.with(r.gtText.hold(ticks, "", "", func() string { return fmt.Sprintf(" GT: %d ", ticks) })),
 		r.pal.fps.with(r.fpsText.hold(fps, "", "", func() string { return fmt.Sprintf(" FPS: %d ", fps) })),
 		r.pal.label,
 	)
-	r.items = rightItems
+	r.items = items
+	r.renderItems(buf, itemsY, ctx.ScreenWidth, items)
 
+	// === THE LINE: AUDIO, MODE, KEYS, THEN INPUT OR A MESSAGE ===
+	// A keyboard covering it leaves the left half the host repeats above it
+	width := ctx.ScreenWidth
 	if ctx.StatusCovered {
-		rightItems = rightItems[:0]
+		width /= 2
 	}
-
-	// === RENDER LEFT-SIDE FIXED ELEMENTS ===
 	x := 0
 
 	// Audio state indicator; -1 = no audio resource
@@ -381,10 +384,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		mask := uint8(mv) & parameter.AudioChanAll
 		audio := r.pal.audio[mask]
 		for _, ch := range parameter.AudioText[mask] {
-			if x >= ctx.ScreenWidth {
+			if x >= width {
 				return
 			}
-			buf.SetWithBg(x, statusY, ch, audio.fg, audio.bg)
+			buf.SetWithBg(x, lineY, ch, audio.fg, audio.bg)
 			x++
 		}
 	}
@@ -404,10 +407,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		modeText, mode = parameter.ModeTextNormal, r.pal.mode[0]
 	}
 	for _, ch := range modeText {
-		if x >= ctx.ScreenWidth {
+		if x >= width {
 			return
 		}
-		buf.SetWithBg(x, statusY, ch, mode.fg, mode.bg)
+		buf.SetWithBg(x, lineY, ch, mode.fg, mode.bg)
 		x++
 	}
 
@@ -419,8 +422,8 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		})
 		recX := x - len(modeText)
 		for i, ch := range recText {
-			if recX+i < ctx.ScreenWidth {
-				buf.SetWithBg(recX+i, statusY, ch, r.pal.alarm.fg, r.pal.alarm.bg)
+			if recX+i < width {
+				buf.SetWithBg(recX+i, lineY, ch, r.pal.alarm.fg, r.pal.alarm.bg)
 			}
 		}
 	}
@@ -436,113 +439,123 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 		i := 0
 		for _, ch := range keys {
-			if leftEndX+i < ctx.ScreenWidth {
-				buf.SetWithBg(leftEndX+i, statusY, ch, visual.RgbLastCommandText, visual.RgbBackground)
+			if leftEndX+i < width {
+				buf.SetWithBg(leftEndX+i, lineY, ch, visual.RgbLastCommandText, visual.RgbBackground)
 			}
 			i++
 		}
 		leftEndX += parameter.StatusKeyWidth + 1
 	}
 
-	// === DETERMINE TEXT CONTENT AND NEEDED WIDTH ===
-	var textContent string
-	var textFg color.RGB
-	var isInputMode bool // search or command mode (needs cursor)
-
-	if r.gameCtx.IsSearchMode() {
-		textContent = "/" + r.gameCtx.GetSearchText()
-		textFg = visual.RgbSearchInputText
-		isInputMode = true
-	} else if r.gameCtx.IsCommandMode() {
-		textContent = ":" + r.gameCtx.GetCommandText()
-		textFg = visual.RgbCommandInputText
-		isInputMode = true
-	} else {
-		textContent = r.gameCtx.ShownStatusMessage(realNow.UnixNano())
-		textFg = visual.RgbStatusMessageText
-		isInputMode = false
+	// === INPUT WITH ITS CURSOR, OR THE MESSAGE SHOWN ===
+	textWidth := max(width-leftEndX, 0)
+	switch {
+	case r.gameCtx.IsSearchMode():
+		text := "/" + r.gameCtx.GetSearchText()
+		r.renderInput(buf, lineY, leftEndX, textWidth, text, visual.RgbSearchInputText, utf8.RuneCountInString(text))
+	case r.gameCtx.IsCommandMode():
+		text := ":" + r.gameCtx.GetCommandText()
+		r.renderInput(buf, lineY, leftEndX, textWidth, text, visual.RgbCommandInputText, r.gameCtx.GetCommandCursorPos()+1)
+	default:
+		msg := r.runesOf(r.gameCtx.ShownStatusMessage(realNow.UnixNano()))
+		// One longer than its room rises onto the items' row while it shows, as vim's
+		// long message rises over the window, and ends here; a keyboard hides that row
+		if len(msg) > textWidth && !ctx.StatusCovered {
+			head := spill(msg, ctx.ScreenWidth, textWidth)
+			for x := range ctx.ScreenWidth {
+				ch := ' '
+				if x < len(head) {
+					ch = head[x]
+				}
+				buf.SetWithBg(x, itemsY, ch, visual.RgbStatusMessageText, visual.RgbBackground)
+			}
+			msg = msg[len(head):]
+		}
+		r.renderStatusMessage(buf, lineY, leftEndX, textWidth, msg)
 	}
+}
 
-	textNeeded := utf8.RuneCountInString(textContent)
-	if isInputMode && !r.gameCtx.IsOverlayActive() {
-		textNeeded++ // Reserve space for cursor
+// spill is the head of a message for a row width wide, the rest going where room
+// is left: all of it when it fits, else up to the last space or slash whose rest
+// still fits the room, so a path breaks between directories, else the row full
+func spill(msg []rune, width, room int) []rune {
+	if len(msg) <= width {
+		return msg
 	}
-
-	// === DYNAMIC RIGHT-SIDE ALLOCATION ===
-	// Calculate widths for all right items
-	itemWidths := r.widths[:0]
-	for _, item := range rightItems {
-		itemWidths = append(itemWidths, utf8.RuneCountInString(item.text))
+	for i := width; i > 0 && len(msg)-i <= room; i-- {
+		if msg[i-1] == ' ' || msg[i-1] == '/' {
+			return msg[:i]
+		}
 	}
-	r.widths = itemWidths
+	return msg[:width]
+}
 
-	availableTotal := ctx.ScreenWidth - leftEndX
+// renderInput is typed input and, unless an overlay holds the keys, its blinking cursor
+func (r *StatusBarRenderer) renderInput(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg color.RGB, cursorPos int) {
+	cursorX := r.renderInputText(buf, y, startX, maxWidth, text, fg, cursorPos)
+	if !r.gameCtx.IsOverlayActive() && r.cursorBlinkOn && cursorX < startX+maxWidth {
+		buf.SetWithBg(cursorX, y, parameter.StatusCursorChar, visual.RgbStatusCursor, visual.RgbStatusCursorBg)
+	}
+}
 
-	// Start with max items that could fit (ignoring text needs)
-	fitCount := 0
-	rightFitWidth := 0
-	for i, w := range itemWidths {
-		if rightFitWidth+w <= availableTotal {
-			rightFitWidth += w
-			fitCount = i + 1
-		} else {
+// renderItems lays the items out across the row edge to edge: as many as fit, in
+// priority order, each in a slot at least its width. The slots are as equal as
+// those widths allow, so an item's edges move when the items shown change, not
+// when a value grows by a digit; its text is centred on its own colours.
+func (r *StatusBarRenderer) renderItems(buf *render.RenderBuffer, y, width int, items []statusItem) {
+	widths, used := r.widths[:0], 0
+	for _, item := range items {
+		w := utf8.RuneCountInString(item.text)
+		if used+w > width {
 			break
 		}
+		widths, used = append(widths, w), used+w
 	}
-
-	// Typed input takes the space it needs from the right-side items, lowest priority
-	// first; a message takes it from the metrics only, so the bar reflows when a
-	// message arrives or leaves, never on a key.
-	floor := metricsAt
-	if isInputMode {
-		floor = 0
+	r.widths = widths
+	if len(widths) == 0 {
+		return
 	}
-	for fitCount > floor && textNeeded > 0 {
-		textAvailable := availableTotal - rightFitWidth
-		if textAvailable >= textNeeded {
-			break
-		}
-		// Drop last item
-		fitCount--
-		rightFitWidth = 0
-		for i := range fitCount {
-			rightFitWidth += itemWidths[i]
-		}
-	}
-
-	textAvailableWidth := max(availableTotal-rightFitWidth, 0)
-
-	// === RENDER TEXT CONTENT ===
-	var textEndX int
-	if isInputMode {
-		cursorPos := utf8.RuneCountInString(textContent) // search: cursor at end
-		if r.gameCtx.IsCommandMode() {
-			cursorPos = r.gameCtx.GetCommandCursorPos() + 1 // +1 for ':' prefix
-		}
-		textEndX = r.renderInputText(buf, statusY, leftEndX, textAvailableWidth, textContent, textFg, cursorPos)
-	} else if textContent != "" {
-		r.renderStatusMessage(buf, statusY, leftEndX, textAvailableWidth, textContent)
-		textEndX = leftEndX + min(utf8.RuneCountInString(textContent), textAvailableWidth)
-	}
-
-	// === RENDER CURSOR (search/command modes only, not during overlay) ===
-	if isInputMode && !r.gameCtx.IsOverlayActive() && r.cursorBlinkOn {
-		cursorX := textEndX
-		if cursorX < ctx.ScreenWidth-rightFitWidth {
-			buf.SetWithBg(cursorX, statusY, parameter.StatusCursorChar, visual.RgbStatusCursor, visual.RgbStatusCursorBg)
-		}
-	}
-
-	// === RENDER RIGHT-SIDE ITEMS ===
-	if fitCount > 0 {
-		startX := ctx.ScreenWidth - rightFitWidth
-		for i := range fitCount {
-			item := rightItems[i]
-			for _, ch := range item.text {
-				buf.SetWithBg(startX, statusY, ch, item.fg, item.bg)
-				startX++
+	// Water-filling: an item wider than an equal share keeps its width, and the
+	// rest share what is left, until every share holds the item given it
+	slots := append(r.slots[:0], widths...)
+	r.slots = slots
+	fixed, left, open := 0, width, len(slots)
+	for open > 0 {
+		share, grew := left/open, false
+		for i, w := range widths {
+			if fixed&(1<<i) == 0 && w > share {
+				fixed, left, open, grew = fixed|1<<i, left-w, open-1, true
 			}
 		}
+		if !grew {
+			break
+		}
+	}
+	extra := 0
+	if open > 0 {
+		extra = left % open
+	}
+	for i := range slots {
+		if fixed&(1<<i) == 0 {
+			slots[i] = left / open
+			if extra > 0 {
+				slots[i]++
+				extra--
+			}
+		}
+	}
+	x := 0
+	for i, slot := range slots {
+		item := items[i]
+		for j := range slot {
+			buf.SetWithBg(x+j, y, ' ', item.fg, item.bg)
+		}
+		at := x + (slot-widths[i])/2
+		for _, ch := range item.text {
+			buf.SetWithBg(at, y, ch, item.fg, item.bg)
+			at++
+		}
+		x += slot
 	}
 }
 
@@ -785,12 +798,11 @@ func (r *StatusBarRenderer) runesOf(text string) []rune {
 }
 
 // renderStatusMessage renders status message with right-truncation (shows start of text)
-func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, startX, maxWidth int, text string) {
+func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, startX, maxWidth int, runes []rune) {
 	if maxWidth <= 0 {
 		return
 	}
 
-	runes := r.runesOf(text)
 	textLen := len(runes)
 
 	if textLen <= maxWidth {

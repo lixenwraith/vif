@@ -458,8 +458,8 @@ in pitch from 1 to 4, and each key drawn large in black that turns white as its
 button lights. The buttons run up once before the first game, and any press cuts
 that short. A level plays the sequence, one note longer than the last; after a
 short pause the player repeats it by key or by clicking the buttons. Every note
-shown or pressed sounds, so the game can be played with eyes closed once sound is
-on (sound starts muted; `Ctrl-S` cycles it). A correct press blooms over its button
+shown or pressed sounds, so the game can be played with eyes closed (`Ctrl-S`
+cycles the sound channels). A correct press blooms over its button
 and a cleared level flashes green. From the first turn an ember burns the heat
 down as the turn's clock; each shown note and each cleared level refill it, and
 special fire spends it too. A wrong note or a burnt-out ember loses the game: the

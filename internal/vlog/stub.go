@@ -8,8 +8,12 @@ package vlog
 
 import (
 	"errors"
+	"runtime"
 	"time"
 )
+
+// Linked reports that this build carries the logger
+const Linked = false
 
 // Level constants mirrored from log for call-site brevity
 const (
@@ -20,8 +24,14 @@ const (
 	LevelError int64 = 8
 )
 
-// ErrDisabled reports that this build carries no logger
-var ErrDisabled = errors.New("vlog: built without logging support")
+// ErrDisabled reports that this build carries no logger, as a player reads it: a
+// browser has no files to write, and a novlog build leaves the logger out
+var ErrDisabled = func() error {
+	if runtime.GOOS == "js" {
+		return errors.New("logging unavailable in a browser")
+	}
+	return errors.New("logging unavailable in this build")
+}()
 
 // Config mirrors the real build's setup struct
 type Config struct {

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
@@ -175,6 +177,10 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 // handleLogCommand controls the session logger
 // Usage: :log | :log on|off | :log <level> | :log scope [spec] | :log stat [ticks]
 func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if !vlog.Linked {
+		setCommandError(ctx, unavailable("Logging"))
+		return CommandResult{Continue: true}
+	}
 	if len(args) == 0 {
 		reportLogState(ctx)
 		return CommandResult{Continue: true}
@@ -326,6 +332,27 @@ func setCommandError(ctx *engine.GameContext, message string) {
 	ctx.SetStatusMessage(message, parameter.StatusNotice)
 }
 
+// sessionsUnavailable refuses a session, scenario or journal command in a run
+// built without the controller, as a test harness is
+const sessionsUnavailable = "Session controls unavailable in this run"
+
+// unavailable is why a feature this platform or build lacks is refused, the one
+// phrase its menu row and its command both show: a browser has no files to write,
+// and a build may leave a part out
+func unavailable(what string) string {
+	if !paths.ExternalFiles() {
+		return what + " unavailable in a browser"
+	}
+	return what + " unavailable in this build"
+}
+
+// sentence is an error as the status bar shows it, its first letter raised
+func sentence(err error) string {
+	s := err.Error()
+	r, n := utf8.DecodeRuneInString(s)
+	return string(unicode.ToUpper(r)) + s[n:]
+}
+
 // handleQuitCommand exits the game
 func handleQuitCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: false}
@@ -371,12 +398,12 @@ func resetGame(ctx *engine.GameContext, purge bool) bool {
 // reported here with the game still running.
 func changeScenario(ctx *engine.GameContext, name string) CommandResult {
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, "This runtime cannot change scenario")
+		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
 	changed, err := ctx.SessionCtl.ChangeScenario(name)
 	if err != nil {
-		setCommandError(ctx, "Scenario: "+err.Error())
+		setCommandError(ctx, sentence(err))
 		return CommandResult{Continue: true}
 	}
 	if !changed {
@@ -650,6 +677,10 @@ type snapRecord struct {
 // lock, one coherent tick, and writes the file off it so a live tick never waits
 // on disk. The status bar reports the path once the write drains.
 func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
+	if !vlog.Linked {
+		setCommandError(ctx, unavailable("Telemetry snapshot"))
+		return CommandResult{Continue: true}
+	}
 	var records []snapRecord
 	capture := func(sub string, args ...any) { records = append(records, snapRecord{sub, args}) }
 	ctx.SnapshotContext(capture)
@@ -693,6 +724,10 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 	case "b", "break":
 		handleBreakCommand(ctx, args[1:])
 	case "heap":
+		if !paths.ExternalFiles() {
+			setCommandError(ctx, unavailable("Heap profile"))
+			break
+		}
 		dir := diagnosticsDir()
 		core.Go(func() {
 			path, err := prof.WriteHeap(dir)
@@ -928,7 +963,7 @@ var timedCaptures = map[string]struct {
 	label string
 }{
 	"cpu":   {prof.StartCPU, "CPU profile"},
-	"trace": {prof.StartTrace, "Trace"},
+	"trace": {prof.StartTrace, "Execution trace"},
 	"mutex": {prof.StartMutex, "Mutex profile"},
 }
 
@@ -946,6 +981,10 @@ func handleCaptureCommand(ctx *engine.GameContext, kind string, args []string) {
 
 	capture := timedCaptures[kind]
 	label := capture.label
+	if !paths.ExternalFiles() {
+		setCommandError(ctx, unavailable(label))
+		return
+	}
 	path, err := capture.start(diagnosticsDir(), d, func(path string, err error) { reportCapture(ctx, label, path, err) })
 	if err != nil {
 		setCommandError(ctx, label+" failed: "+err.Error())
@@ -985,7 +1024,7 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 // Opening a session uses its own admission check, before the live-session guard applies.
 func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, "This runtime has no session transport")
+		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
 	if len(args) != 1 && len(args) != 2 {
@@ -997,7 +1036,7 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		authority = args[1]
 	}
 	if err := ctx.SessionCtl.BeginHosting(args[0], authority); err != nil {
-		setCommandError(ctx, err.Error())
+		setCommandError(ctx, sentence(err))
 		return CommandResult{Continue: true}
 	}
 	return CommandResult{Continue: true}
@@ -1007,7 +1046,7 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 // Usage: :join <target>   the same forms -join takes
 func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, "This runtime has no session transport")
+		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
 	if len(args) != 1 {
@@ -1029,7 +1068,7 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult {
 	const usage = "Usage: :journal [start|stop] [slot]"
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, "This runtime cannot start a journal")
+		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
 	if len(args) == 0 {
@@ -1044,7 +1083,7 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 	case len(args) == 2:
 		n, err := parsePlayerSlot(args[1])
 		if err != nil {
-			setCommandError(ctx, "Journal: "+err.Error())
+			setCommandError(ctx, sentence(err))
 			return CommandResult{Continue: true}
 		}
 		slot = n
@@ -1052,6 +1091,10 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 	var err error
 	switch args[0] {
 	case "start", "on":
+		if !vlog.Linked {
+			setCommandError(ctx, unavailable("Journal"))
+			return CommandResult{Continue: true}
+		}
 		err = ctx.SessionCtl.StartJournal(slot)
 	case "stop", "off":
 		err = ctx.SessionCtl.StopJournal(slot)
@@ -1060,7 +1103,7 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 		return CommandResult{Continue: true}
 	}
 	if err != nil {
-		setCommandError(ctx, "Journal: "+err.Error())
+		setCommandError(ctx, sentence(err))
 	}
 	return CommandResult{Continue: true}
 }
@@ -1068,7 +1111,7 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 // handleSessionCommand reports what this run is part of.
 func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, "This runtime has no session transport")
+		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
 	ctx.SetStatusMessage(ctx.SessionCtl.SessionSummary(), parameter.StatusNotice)
@@ -1080,7 +1123,7 @@ func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 // Usage: :bot | :bot add [N[:graph]|graph] | :bot drop <slot>
 func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, "This runtime has no session transport")
+		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
 	var err error
@@ -1109,7 +1152,7 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true}
 	}
 	if err != nil {
-		setCommandError(ctx, "Bot: "+err.Error())
+		setCommandError(ctx, sentence(err))
 	}
 	return CommandResult{Continue: true}
 }
@@ -1131,7 +1174,7 @@ func parsePlayerSlot(value string) (int, error) {
 func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 	result := CommandResult{Continue: true}
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, "This runtime has no session transport")
+		setCommandError(ctx, sessionsUnavailable)
 		return result
 	}
 	if len(args) == 0 {
@@ -1165,7 +1208,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 		err = ctx.SessionCtl.DropPlayer(slot)
 	}
 	if err != nil {
-		setCommandError(ctx, err.Error())
+		setCommandError(ctx, sentence(err))
 	} else {
 		ctx.SetStatusMessage(fmt.Sprintf("Slot %X and its bots leaving", slot), parameter.StatusNotice)
 	}

@@ -87,10 +87,11 @@ Uninstalled, `./bin/vif` plays the checkout's `wad/`. The
 ## Playing
 
 `F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the
-[configuration menu](doc/config-menu.md), and `:q` quits. Sound starts muted:
-`Ctrl-S` cycles through the channels, and `-mute=false` starts with sound. The
-menu's sound, controls and HUD settings are written back to the `vif.toml` the
-run read; the rest last the run.
+[configuration menu](doc/config-menu.md), and `:q` quits. Sound is on: `Ctrl-S`
+cycles through the channels, and `-mute` starts muted. The menu's sound, controls
+and HUD settings are written back for the next run, to your own `vif.toml` (the
+user root's, created at the first change when the run read none of yours); the
+rest last the run.
 
 `vif -h` prints every flag, to stdout; `man vif` is the same list after an
 install. The ones most runs want:

@@ -280,7 +280,7 @@ func (a *App) BeginHosting(addr string) error {
 
 func (a *App) hostErrorLocked() error {
 	if !buildHasSocketNetwork {
-		return errors.New("host: a browser build can join a session but not host one")
+		return errors.New("host: a browser can join a session but not host one")
 	}
 	if a.dialling.Load() {
 		return errors.New("host: a join is already being dialled")

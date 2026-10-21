@@ -53,6 +53,22 @@ It is the contract, not a suggestion.
   the log, captures or settings. Bump the version the artifact carries and move on;
   never hold or narrow a fix for backward compatibility.
 
+## Platforms
+
+- One game on every host: terminal, desktop window, Android and the browser.
+  A command, key, gesture, layout or setting works the same on each wherever the
+  host allows; a difference the host forces is documented in
+  `doc/multi-platform.md`, and a touch gesture one touch host has the other gets.
+- What a player reads (status bar, menu, errors, manual) uses one vocabulary on
+  every host. Name the platform as the player knows it ("a browser", "Android",
+  "this build", "this run"), never a package, build tag, GOOS or system call.
+- A feature a host lacks reads `<Thing> unavailable in a browser`, `in this build`
+  or `in this run` (`internal/mode` `unavailable`); a menu row's reason and its
+  command's refusal are the same sentence. An error shown starts with a capital.
+- A setting the player changes is saved by one rule on every host
+  (`paths.SettingsFor`, `paths.SettingsStore`).
+- Fix an inconsistent message, comment or doc you come across.
+
 ## Tests
 
 - One test per rule, named for the rule. No test that restates another.
