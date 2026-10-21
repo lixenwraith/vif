@@ -77,7 +77,7 @@ func Start(files, wad string, width, height int32, density float32, raster bool,
 	p := settings.Paths
 	vlog.Configure(vlog.Config{Dir: cmp.Or(p.Log, paths.DefaultLogDir()),
 		JournalDir: cmp.Or(p.Journal, paths.DefaultJournalDir()), Spawn: core.Go})
-	v := newView(tex, raster, density)
+	v := newView(tex, raster, density, settings.Presentation.Cell)
 	v.setGrid(int(width), int(height))
 	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
@@ -206,15 +206,15 @@ func Resume() {
 	}
 }
 
-// Zoom scales the cell as a pinch asked, between half and three times cellDP; a
-// grid that changes is reported as a resize, which a crop_on_resize map follows
+// Zoom scales the cell by a pinch's scale, within the range the browser's zoom
+// keeps too; a grid that changes is reported as a resize, which a crop_on_resize
+// map follows, and the run keeps the cell in vif.toml for the next
 func Zoom(scale float32) {
 	v := current()
 	if v == nil {
 		return
 	}
-	v.zoom = min(max(scale, zoomMin), zoomMax)
-	v.setCell()
+	v.zoom(float64(scale))
 	v.mu.Lock()
 	w, h := v.w, v.h
 	v.mu.Unlock()

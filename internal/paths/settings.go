@@ -14,6 +14,7 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // SettingsFile is the settings document at the top of a configuration root.
@@ -36,11 +37,13 @@ type Settings struct {
 		BufferMs int `toml:"buffer_ms"`
 	} `toml:"audio"`
 	// Presentation.Window opens the desktop window by default, as -g does, and
-	// Maximized or Fullscreen the state it opens in, as the flags of those names do
+	// Maximized or Fullscreen the state it opens in, as the flags of those names do;
+	// Cell is the zoom a run writes back, 0 for the screen's own
 	Presentation struct {
-		Window     bool `toml:"window"`
-		Maximized  bool `toml:"maximized"`
-		Fullscreen bool `toml:"fullscreen"`
+		Window     bool    `toml:"window"`
+		Maximized  bool    `toml:"maximized"`
+		Fullscreen bool    `toml:"fullscreen"`
+		Cell       float64 `toml:"cell"`
 	} `toml:"presentation"`
 	Play Play `toml:"play"`
 }
@@ -164,6 +167,9 @@ func decodeSettings(data []byte, s *Settings) error {
 	if err := toml.Decode(raw, s); err != nil {
 		return err
 	}
+	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
+		return fmt.Errorf("presentation.cell %g is not 0 or between %g and %g", c, parameter.CellLeast, parameter.CellMost)
+	}
 	return s.Play.check()
 }
 
@@ -244,6 +250,12 @@ func SavePlay(s SettingsStore, was, now Play) error {
 		return nil
 	}
 	return saveTable(s, "play", changed)
+}
+
+// SaveCell writes the zoom a host was left at into [presentation] as SavePlay
+// writes a [play] value
+func SaveCell(s SettingsStore, cell float64) error {
+	return saveTable(s, "presentation", map[string]float64{"cell": cell})
 }
 
 func saveTable(s SettingsStore, table string, v any) error {

@@ -205,3 +205,37 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 		t.Fatal("a purge did not return to the values the run started with")
 	}
 }
+
+// zoomed is a presentation the player zooms, and nothing else
+type zoomed struct {
+	Presentation
+	cell float64
+}
+
+func (z *zoomed) Cell() float64 { return z.cell }
+
+// TestAZoomIsWrittenBackAsLeft: the cell a presentation opened at is never written;
+// one the player zoomed to is, into [presentation], and the next run reads it.
+func TestAZoomIsWrittenBackAsLeft(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	dir := t.TempDir()
+	file := filepath.Join(dir, paths.SettingsFile)
+	a, err := NewHeadless(Config{Seed: 1, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
+		Play: paths.DefaultPlay(), Settings: paths.FileStore{Path: file}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	z := &zoomed{cell: 12}
+	a.pres, a.cell = z, z.cell
+	a.persistCell()
+	if _, err := os.Stat(file); err == nil {
+		t.Fatal("the zoom did not move, yet the settings file was written")
+	}
+	z.cell = 9.5
+	a.persistCell()
+	if s, _, err := paths.LoadSettings(dir); err != nil || s.Presentation.Cell != 9.5 || s.Play != paths.DefaultPlay() {
+		t.Fatalf("written back: cell %g, play %+v, %v", s.Presentation.Cell, s.Play, err)
+	}
+}

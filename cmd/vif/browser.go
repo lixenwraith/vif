@@ -66,7 +66,8 @@ func (h *browserHost) Init() error {
 		return err
 	}
 	h.aspect = atlas.Aspect()
-	h.host, err = browser.Open(atlas, parameter.StatusRows)
+	h.host, err = browser.Open(atlas, browser.Config{BarRows: parameter.StatusRows, Cell: settings.Presentation.Cell,
+		CellLeast: parameter.CellLeast, CellMost: parameter.CellMost, CellStep: parameter.CellStep})
 	return err
 }
 
@@ -77,6 +78,7 @@ func (h *browserHost) CellAspect() vmath.Aspect            { return h.aspect }
 func (h *browserHost) Events() <-chan terminal.Event       { return h.host.Events() }
 func (h *browserHost) SetPointerMode(enabled, motion bool) { h.host.SetPointerMode(enabled, motion) }
 func (h *browserHost) Covered() bool                       { return h.host.Covered() }
+func (h *browserHost) Cell() float64                       { return h.host.Cell() }
 
 func (h *browserHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
 	return h.host.SetKeyReport(report, allow)

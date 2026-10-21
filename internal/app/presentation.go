@@ -35,6 +35,10 @@ type awayPresentation interface{ Away() <-chan bool }
 // bar keeps its input to that half
 type coveredPresentation interface{ Covered() bool }
 
+// zoomPresentation is one the player zooms: Cell is a cell's height in dp as they
+// left it, 0 for the screen's own, which the run writes back to vif.toml
+type zoomPresentation interface{ Cell() float64 }
+
 // keyReportPresentation is one that can report key releases when asked, answering
 // each ask with an EventKeyReport on Events; any other reports presses alone
 type keyReportPresentation interface {

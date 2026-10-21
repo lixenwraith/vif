@@ -619,11 +619,13 @@ keyboard; two fingers tapped together twice toggle it, as on Android, and so doe
 strip along the top, which also sends Tab (and Esc while it is up) and goes
 fullscreen where the browser can. Neither the strip nor the keyboard refits the
 grid: the keyboard covers it, and the status bar's bottom row is drawn again above
-it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)); the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch,
-or Ctrl and the wheel) do, and a solo map follows. Before launch it maps
-`window.VIF_ARGS` and repeated `arg` query parameters into the program's argv; a
-site that renames the files says so with `data-wasm`, `data-worker` and
-`data-exec` on the script element
+it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host));
+the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch, or Ctrl
+and the wheel, within the range Go names, Android's too) do, and a solo map
+follows; the run keeps the cell a zoom leaves with the page's settings. Before
+launch it maps `window.VIF_ARGS` and repeated `arg` query parameters into the
+program's argv; a site that renames the files says so with `data-wasm`,
+`data-worker` and `data-exec` on the script element
 ([Build profiles](multi-platform.md#6-browser-launch-arguments)). `make serve`
 builds `web/vif.wasm` and serves this directory.
 

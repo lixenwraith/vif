@@ -26,6 +26,15 @@ const (
 	WindowTitle = "vif"
 )
 
+// CellLeast and CellMost bound the cell a zoom reaches, its height in dp (a CSS
+// pixel in a browser), in steps of CellStep: the range of Android's pinch and the
+// page's alike, and of vif.toml's [presentation] cell
+const (
+	CellLeast = 4.0
+	CellMost  = 40.0
+	CellStep  = 0.5
+)
+
 // AudioText is the audio indicator by channel mask (muted, effects, music, both): a letter
 // every terminal font has, which says the state without its color
 var AudioText = [4]string{" X ", " S ", " M ", " O "}

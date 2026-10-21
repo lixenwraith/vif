@@ -15,12 +15,11 @@
        keyboard down on taps; the key strip's button or two fingers tapped together
        twice raise it, as on Android. A cell is CELL CSS pixels tall and half as
        wide, the aspect the game is authored at; a phone starts at 6, which holds the
-       map's width in its screen, and a pinch, or Ctrl and the wheel, takes the cell
-       between CELL_LEAST and CELL_MOST. */
+       map's width in its screen, and a pinch, or Ctrl and the wheel, zooms it within
+       the range Go names, Android's too; Go keeps the cell a zoom leaves. */
     const touch = matchMedia('(pointer: coarse)').matches;
     const CELL = touch && Math.min(screen.width, screen.height) < 600 ? 6 : 16;
-    const CELL_LEAST = 4, CELL_MOST = 40;
-    let cellBase = CELL;    // the cell the grid is fitted at: CELL until a zoom moves it
+    let cellBase = CELL;    // the cell the grid is fitted at: CELL until Go or a zoom moves it
     const FONT = '"JetBrains Mono", "Fira Code", "SF Mono", Menlo, "DejaVu Sans Mono", Consolas, monospace';
 
     const container = document.getElementById('terminal');
@@ -566,6 +565,9 @@ void main() {
                 pointer = { enabled: msg.enabled, motion: msg.motion };
                 lastCell = null;
                 break;
+            case 'zoom':
+                zoomFrom(msg);
+                break;
             case 'audio':
                 onAudio(msg.data);
                 break;
@@ -766,17 +768,31 @@ void main() {
     }
 
     // === Zoom ===
-    /* A zoom moves the cell the grid is fitted at, in half pixels between the
+    /* A zoom moves the cell the grid is fitted at, in Go's steps between its
        bounds, and refits: the grid changes, and Go sees a resize as it does for a
        window, so a solo map follows it and a shared one shows more or less of
-       itself. */
-    let zoomFrame = 0;
+       itself. Go is told the cell once it holds still, and keeps it. */
+    const ZOOM_SETTLE_MS = 500;
+    let zoom = null;   // { least, most, step }: Go's range; nothing zooms before it arrives
+    let zoomFrame = 0, zoomSettle = 0;
 
     function zoomTo(cell) {
-        cell = Math.min(CELL_MOST, Math.max(CELL_LEAST, Math.round(cell * 2) / 2));
+        if (!zoom) return;
+        cell = Math.min(zoom.most, Math.max(zoom.least, Math.round(cell / zoom.step) * zoom.step));
         if (cell === cellBase) return;
         cellBase = cell;
         if (!zoomFrame) zoomFrame = requestAnimationFrame(function() { zoomFrame = 0; fit(); });
+        clearTimeout(zoomSettle);
+        zoomSettle = setTimeout(function() { send({ type: 'zoom', cell: cellBase }); }, ZOOM_SETTLE_MS);
+    }
+
+    // zoomFrom takes Go's range and the cell kept from an earlier visit, 0 for none
+    function zoomFrom(msg) {
+        zoom = { least: msg.least, most: msg.most, step: msg.step };
+        if (msg.cell && msg.cell !== cellBase) {
+            cellBase = msg.cell;
+            fit();
+        }
     }
 
     // === Fingers ===

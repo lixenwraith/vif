@@ -46,7 +46,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private final Stats stats = new Stats();
     private final int slop;
     private final ScaleGestureDetector scaler; // a pinch zooms the cells
-    private float zoom = 1;
+    private float pinch; // the scale of the pinch in progress, which the game zooms by at its end
     private boolean scaling; // a pinch is in progress: its fingers are no taps
 
     private boolean started;
@@ -80,6 +80,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
             @Override
             public boolean onScaleBegin(ScaleGestureDetector d) {
                 scaling = true;
+                pinch = 1;
                 pairDown = pairTap = false;
                 Game.tap((int) d.getFocusX(), (int) d.getFocusY(), false);
                 return true;
@@ -87,13 +88,13 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
 
             @Override
             public boolean onScale(ScaleGestureDetector d) {
-                zoom = Math.max(0.5f, Math.min(3f, zoom * d.getScaleFactor()));
+                pinch *= d.getScaleFactor();
                 return true;
             }
 
             @Override
             public void onScaleEnd(ScaleGestureDetector d) {
-                Game.zoom(zoom);
+                Game.zoom(pinch);
             }
         });
         scaler.setQuickScaleEnabled(false); // a double tap is special fire, not a zoom handle

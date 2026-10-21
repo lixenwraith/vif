@@ -10,6 +10,7 @@ package browser
 import (
 	"errors"
 	"io"
+	"math"
 	"sync"
 	"sync/atomic"
 	"syscall/js"
@@ -25,19 +26,28 @@ const eventQueue = 256
 
 // The Worker's side of the bridge, web/worker.js: vifGrid is the grid the page
 // measured before the program started and vifSettings the settings document it
-// kept; vifAtlas, vifFrame, vifPointer, vifAudio and vifKeepSettings post the
-// texture, a frame, the pointer mode, a PCM buffer and the settings to keep to the
-// page; goEvent is what the page sends back, one object a message
+// kept; vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio and vifKeepSettings post
+// the texture, the zoom, a frame, the pointer mode, a PCM buffer and the settings
+// to keep to the page; goEvent is what the page sends back, one object a message
 const (
 	jsGrid     = "vifGrid"
 	jsSettings = "vifSettings"
 	jsAtlas    = "vifAtlas"
+	jsZoom     = "vifZoom"
 	jsFrame    = "vifFrame"
 	jsPointer  = "vifPointer"
 	jsAudio    = "vifAudio"
 	jsKeep     = "vifKeepSettings"
 	jsEvent    = "goEvent"
 )
+
+// Config is what the run tells the page: the status bar's rows, whose hold a
+// finger starts even with the pointer off, and the zoom, a cell's height in CSS
+// pixels the page opens at (0 for its own) and the range and step a zoom keeps to
+type Config struct {
+	BarRows                             int
+	Cell, CellLeast, CellMost, CellStep float64
+}
 
 // Host is a Surface over the page. Frames and Sync may be called from any
 // goroutine; the page's messages arrive on the Worker's event loop.
@@ -48,29 +58,30 @@ type Host struct {
 	grid    atomic.Uint64 // cols<<32 | rows
 	event   js.Func
 	keys    hostkey.Report
-	barRows int         // the bottom rows a finger still presses with the pointer off
-	pointer atomic.Bool // the run takes pointer events
-	covered atomic.Bool // a keyboard covers the page's bottom rows
-	finger  bool        // a finger's press was taken; the event loop's alone
+	barRows int           // the bottom rows a finger still presses with the pointer off
+	pointer atomic.Bool   // the run takes pointer events
+	covered atomic.Bool   // a keyboard covers the page's bottom rows
+	cell    atomic.Uint64 // the zoom, float64 bits
+	finger  bool          // a finger's press was taken; the event loop's alone
 
 	mu       sync.Mutex
 	inflight bool // a frame the page has not reported drawn
 }
 
-// Open presents on the page: the texture goes over first, then frames as the page
-// takes them. barRows is the status bar, whose hold a finger starts even with the
-// pointer off. The host lives as long as the Worker, so nothing closes it.
-func Open(a *glyph.Atlas, barRows int) (*Host, error) {
+// Open presents on the page: the texture and the zoom go over first, then frames
+// as the page takes them. The host lives as long as the Worker, so nothing closes it.
+func Open(a *glyph.Atlas, c Config) (*Host, error) {
 	if a == nil {
 		return nil, errors.New("browser: an atlas is required")
 	}
 	g := js.Global()
-	for _, name := range []string{jsAtlas, jsFrame, jsPointer} {
+	for _, name := range []string{jsAtlas, jsZoom, jsFrame, jsPointer} {
 		if g.Get(name).Type() != js.TypeFunction {
 			return nil, errors.New("browser: the worker defines no " + name)
 		}
 	}
-	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue), barRows: barRows}
+	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue), barRows: c.BarRows}
+	h.cell.Store(math.Float64bits(c.Cell))
 	h.keys.Post = h.post
 	h.Frames = glyph.NewFrames(h.tex, false)
 	cols, rows := 80, 24
@@ -81,6 +92,7 @@ func Open(a *glyph.Atlas, barRows int) (*Host, error) {
 	h.event = js.FuncOf(h.handle)
 	g.Set(jsEvent, h.event)
 	g.Call(jsAtlas, bytes(h.tex.Bytes()))
+	g.Call(jsZoom, c.Cell, c.CellLeast, c.CellMost, c.CellStep)
 	return h, nil
 }
 
@@ -121,6 +133,9 @@ func (h *Host) SetPointerMode(enabled, motion bool) {
 // last row's left half again above it
 func (h *Host) Covered() bool { return h.covered.Load() }
 
+// Cell is the zoom the page was left at, a cell's height in CSS pixels, 0 for its own
+func (h *Host) Cell() float64 { return math.Float64frombits(h.cell.Load()) }
+
 // admit is the pointer mode applied to what the page reports, as Android's view
 // applies it: with the pointer off, a finger still presses on the status bar, the
 // hold that opens the menu where the mouse is enabled again, and lifts from a press
@@ -155,8 +170,8 @@ func (h *Host) present() {
 }
 
 // handle takes what the page sent: a frame drawn, a key going down or up, its keys
-// going elsewhere, text, the pointer, a keyboard over it, a new size or a request
-// for a whole frame
+// going elsewhere, text, the pointer, a keyboard over it, a zoom, a new size or a
+// request for a whole frame
 func (h *Host) handle(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -191,6 +206,8 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 		}
 	case "covered":
 		h.covered.Store(msg.Get("covered").Truthy())
+	case "zoom":
+		h.cell.Store(math.Float64bits(msg.Get("cell").Float()))
 	case "resize":
 		cols, rows := max(msg.Get("cols").Int(), 1), max(msg.Get("rows").Int(), 1)
 		if c, r := h.Size(); c != cols || r != rows {

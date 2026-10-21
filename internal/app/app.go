@@ -465,10 +465,15 @@ func (a *App) persistPlay() {
 	}
 	a.cfg.Play = p
 	if err := paths.SavePlay(a.cfg.Settings, was, p); err != nil {
-		a.log.Warn("app", "msg", "settings not saved", "error", err.Error())
-		a.ctx.SetStatusMessage("Settings not saved: "+err.Error(), parameter.StatusAlert)
-		a.cfg.Settings = nil
+		a.settingsUnsaved(err)
 	}
+}
+
+// settingsUnsaved reports a write back that failed, once: the run writes no more
+func (a *App) settingsUnsaved(err error) {
+	a.log.Warn("app", "msg", "settings not saved", "error", err.Error())
+	a.ctx.SetStatusMessage("Settings not saved: "+err.Error(), parameter.StatusAlert)
+	a.cfg.Settings = nil
 }
 
 // applyMapLatch installs this run's D-14 position before any system is built and

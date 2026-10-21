@@ -32,6 +32,10 @@ buffer_ms = 50
 window = false
 maximized = false
 fullscreen = false
+# A cell's height in dp, a CSS pixel in a browser, as a pinch on Android or a zoom
+# in a browser left it, from 4 to 40, written back like [play]; 0 is the screen's
+# own size. The terminal and the desktop window ignore it.
+cell = 0
 
 # What the configuration menu changes in a run, written back so the next starts
 # as this one was left: the two sound channels, the effects volume (0 to 1),

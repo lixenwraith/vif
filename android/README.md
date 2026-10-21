@@ -65,10 +65,11 @@ browser once that browser may install apps.
 adb shell am start -n com.lixen.vif/.MainActivity
 ```
 
-A cell is 12 dp tall (`cellDP`), and the grid the view holds is stretched over the
-view edge to edge. Add `--ez raster true` to paint with Go's software raster instead
-of the Canvas drawer. `adb logcat -s vif` prints the render thread's frame time every five
-seconds: frames painted per second, mean, p95 and max of take, paint and post.
+A cell is 12 dp tall (`cellDP`) until a pinch zooms it, and the grid the view
+holds is stretched over the view edge to edge. Add `--ez raster true` to paint with
+Go's software raster instead of the Canvas drawer. `adb logcat -s vif` prints the
+render thread's frame time every five seconds: frames painted per second, mean, p95
+and max of take, paint and post.
 
 Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
@@ -76,11 +77,12 @@ configuration menu, whose rows a tap selects and a second tap acts on; keys, a
 hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
 two fingers tapped together, twice within half a second, raise or drop the system
 keyboard (a finger joining one held or dragging is play, not the gesture, and so is
-a single pair tap); a pinch zooms the cells between half and three times their
-12 dp, the grid refitting as it does on a rotation (a `crop_on_resize` map crops to
-it); two taps near each other within `MouseDoubleClickWindow` fire special; with
-mouse input disabled a press on the status bar still opens the menu; Back is
-Escape; `:q` quits. The keyboard
+a single pair tap); a pinch zooms the cell from 4 to 40 dp, the browser's range
+too, never under the atlas's 12x24 pixels, the grid refitting as it does on a
+rotation (a `crop_on_resize` map crops to it) and the cell kept in `vif.toml`'s
+`[presentation] cell` for the next run; two taps near each other within
+`MouseDoubleClickWindow` fire special; with mouse input disabled a press on the
+status bar still opens the menu; Back is Escape; `:q` quits. The keyboard
 covers the picture rather than resizing it, which on a `crop_on_resize` map would
 delete what it covered; while it is up the left half of the status bar's bottom
 row, its mode and input, is drawn again just above the keyboard at twice its size,

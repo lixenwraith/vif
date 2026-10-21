@@ -424,11 +424,13 @@ queue and shows as `Blocked`. The page (`web/terminal.js`) draws the grid with o
 WebGL quad whose fragment shader finds its cell in two data textures and mixes the
 cell's colors by a glyph mask, rasterized from a monospace font at the cell's device
 size, so glyphs are crisp at any zoom; the mask is drawn again only when that size
-changes. Without WebGL (a Chromium build on a blocklisted GPU) it paints each
-changed cell on a 2D canvas from the same mask, slower on a large grid, and says
-so once. It reports keys, a soft keyboard's text and pastes, the pointer at its cell
-(a touch is the left button marked as a finger's, as on Android) and its size as the terminal events the
-host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
+changes; a pinch, or Ctrl and the wheel, zooms the cell live within the range
+`browser.Open` hands the page, Android's, and the page reports the cell once it
+holds still, for the run to keep as Android's. Without WebGL (a Chromium build on a
+blocklisted GPU) it paints each changed cell on a 2D canvas from the same mask,
+slower on a large grid, and says so once. It reports keys, a soft keyboard's text
+and pastes, the pointer at its cell (a touch is the left button marked as a
+finger's, as on Android) and its size as the terminal events the host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
 hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
 hidden tab ends every hold. A hidden tab draws nothing and is handed the whole screen on return; the
 run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
@@ -444,7 +446,11 @@ Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
 `app.Run`. The view's grid is the cells its pixels hold at a cell 12 dp tall
-(16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5). A
+(16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
+which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
+`CellMost` (4 to 40 dp, the page's range too) in `CellStep` steps, never under the
+atlas, and the run keeps it in `vif.toml`'s `[presentation] cell` as it keeps
+`[play]` (`paths.SaveCell`), so the next run opens at it. A
 Java render thread takes the newest frame at each vsync as the cells changed
 since the one it holds (`glyph.Frames`, the hand-off every host drawing in another
 runtime shares), which `CellDrawer.OnCanvas` paints from the atlas as one texture

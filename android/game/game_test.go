@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func testView(t *testing.T, raster bool, density float32) *view {
@@ -12,7 +13,7 @@ func testView(t *testing.T, raster bool, density float32) *view {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newView(tex, raster, density)
+	return newView(tex, raster, density, 0)
 }
 
 // TestATapPressesAndReleasesTheCellUnderIt: a 420 dpi phone's cell is 16x32
@@ -142,21 +143,23 @@ func TestTheStatusBarTakesATapWithThePointerOff(t *testing.T) {
 	}
 }
 
-// TestAPinchResizesTheCellsWithinBounds: the zoom scales the cell between half and
-// three times, and the grid the same pixels hold follows.
-func TestAPinchResizesTheCellsWithinBounds(t *testing.T) {
+// TestAPinchZoomsTheCellWithinBounds: a pinch scales the cell in CellStep steps,
+// and the grid the same pixels hold follows; it stops at CellMost, and short of
+// CellLeast at the atlas, which a 420 dpi phone reaches at 9.5 dp.
+func TestAPinchZoomsTheCellWithinBounds(t *testing.T) {
 	v := testView(t, false, 2.625)
 	v.setGrid(1008, 2244)
 	cols, rows := v.Size()
-	v.zoom = 2
-	v.setCell()
+	v.zoom(2)
 	v.setGrid(1008, 2244)
-	if c, r := v.Size(); c*2 != cols && c*2 != cols-1 || r >= rows {
-		t.Fatalf("at twice the cell the grid is %dx%d, was %dx%d", c, r, cols, rows)
+	if c, r := v.Size(); v.Cell() != 2*cellDP || c*2 != cols && c*2 != cols-1 || r >= rows {
+		t.Fatalf("at %g dp the grid is %dx%d, was %dx%d at %d", v.Cell(), c, r, cols, rows, cellDP)
 	}
-	v.zoom = 0.1
-	v.setCell()
-	if a := v.tex.Atlas(); v.cellW < a.Width || v.cellH < a.Height {
-		t.Fatalf("a cell %dx%d fell under the atlas's %dx%d", v.cellW, v.cellH, a.Width, a.Height)
+	if v.zoom(10); v.Cell() != parameter.CellMost {
+		t.Fatalf("zoomed in past the bound to %g dp", v.Cell())
+	}
+	v.zoom(0.01)
+	if a := v.tex.Atlas(); v.Cell() != 9.5 || v.cellW != a.Width || v.cellH != a.Height {
+		t.Fatalf("zoomed out to %g dp, a %dx%d cell, where the atlas is %dx%d", v.Cell(), v.cellW, v.cellH, a.Width, a.Height)
 	}
 }

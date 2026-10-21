@@ -22,6 +22,8 @@ type presentationState struct {
 	termBlocked time.Time
 	// awayPaused is a pause made because the player left the screen, undone on return
 	awayPaused bool
+	// cell is the zoom the presentation opened at or the run last wrote back
+	cell float64
 }
 
 func validateBuildConfig(Config) error { return nil }
@@ -76,6 +78,9 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 }
 
 func (a *App) initPresentation() {
+	if z, ok := a.pres.(zoomPresentation); ok {
+		a.cell = z.Cell()
+	}
 	w, h := a.pres.Size()
 	a.orchestrator = render.NewRenderOrchestrator(a.pres.Surface(), w, h)
 	// 256 colors is for a text console, whose palette renderers choose their colors from
