@@ -31,7 +31,8 @@ participants are its own bots; a guest or a session with other players keeps
 running. A new arrival resumes a paused host. Replay viewers retain their
 inspection-only command restrictions. A bracketed value marks a row that is
 unavailable or read only; for an unavailable row the description below the list
-starts with the reason.
+starts with the reason, the sentence its command gives (`Logging unavailable in a
+browser`, `Audio unavailable in this run`).
 
 ## Pages
 
@@ -89,7 +90,8 @@ departure.
 `ws://:4242`. Authority may be blank to keep the startup policy, `host` to end
 the session when its authority leaves, or `migrate` to allow a successor. The
 status bar reports the bound address. Share an address reachable by your guests;
-the menu does not change network reachability. Browser builds cannot host.
+the menu does not change network reachability. A browser can join a session but
+not host one.
 
 **Join a session** accepts `host:port[/name]`, `vif://` and `tcp://` links or
 `ws(s)://` URLs. An `http(s)://` site requests a new session with server defaults.

@@ -76,11 +76,12 @@ func ValidateScenario(o Options) (Scenario, error) {
 	}
 	m := fsm.NewMachine[*engine.World]()
 	manifest.RegisterFSMComponents(m)
-	if err := fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry()); err != nil {
-		return Scenario{}, err
+	err = fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry())
+	if err == nil {
+		err = checkSystems(m)
 	}
-	if err := checkSystems(m); err != nil {
-		return Scenario{}, err
+	if err != nil {
+		return Scenario{}, fmt.Errorf("scenario %s: %w", sc.Name, err)
 	}
 	return sc, nil
 }

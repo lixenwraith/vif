@@ -286,7 +286,7 @@ func setupDiagnostics() {
 		if err != nil {
 			// Fatal rather than degraded: logging was asked for, and a run that
 			// cannot write it has no way to say so afterwards.
-			fmt.Fprintf(os.Stderr, "logging unavailable: %v\n", err)
+			fmt.Fprintf(os.Stderr, "-l: %v\n", err)
 			os.Exit(exitLogSetup)
 		}
 		fmt.Printf("logging enabled: %s (level %s, scope %s)\n",

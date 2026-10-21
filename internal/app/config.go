@@ -392,7 +392,7 @@ func (c Config) Validate() error {
 	if !buildHasSocketNetwork {
 		switch {
 		case c.HostAddress != "":
-			return errors.New("a browser build can join a session but not host one")
+			return errors.New("a browser can join a session but not host one")
 		case c.RelayAddress != "":
 			return errors.New("a browser relays only its own bots")
 		case c.JoinAddress != "" && c.relay == nil && join.Scheme != network.SchemeWebSocket:

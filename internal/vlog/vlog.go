@@ -20,6 +20,9 @@ import (
 	"github.com/lixenwraith/log"
 )
 
+// Linked reports that this build carries the logger
+const Linked = true
+
 // Level constants mirrored from log for call-site brevity
 const (
 	LevelDebug = log.LevelDebug
@@ -244,13 +247,13 @@ func Start() (string, error) {
 	defer mu.Unlock()
 
 	if sink.Load() != nil {
-		return currentPath(), fmt.Errorf("vlog: already running")
+		return currentPath(), errors.New("already logging")
 	}
 	if closing.Load() {
-		return "", fmt.Errorf("vlog: previous session still draining")
+		return "", errors.New("the previous log is still being written; try again")
 	}
 	if cfg.Dir == "" && !cfg.Console {
-		return "", fmt.Errorf("vlog: no directory configured")
+		return "", errNoLogDir
 	}
 
 	name := filePrefix + time.Now().Format(fileTimeFormat)
@@ -512,7 +515,10 @@ func JournalUnavailable() error {
 	return nil
 }
 
-var errNoJournalDir = errors.New("vlog: no journal directory configured")
+var (
+	errNoLogDir     = errors.New("no log directory configured")
+	errNoJournalDir = errors.New("no journal directory configured")
+)
 
 // OpenJournal opens a dedicated journal file and begins processing.
 // Performs disk I/O; startup or operator command only.
