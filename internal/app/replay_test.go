@@ -826,6 +826,8 @@ func TestAJournalReplaysAcrossALeave(t *testing.T) {
 			replayMatches(t, rec, want, guestSurface)
 		})
 	}
+}
+
 // TestAHeldSessionReplaysOnEitherSide: a session's hold and its end replay on host
 // and guest alike, from a journal opened before the hold and one opened on it. Only
 // the host's :pause asked for either; the guest's end came with the host's next tick,
