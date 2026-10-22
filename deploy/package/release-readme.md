@@ -83,8 +83,9 @@ cd vif-@LABEL@-web
 python3 -m http.server 8080
 ```
 
-Then open http://localhost:8080/. The game plays with the scenario and typing
-corpus it carries.
+Then open http://localhost:8080/. The page opens on a start screen, where a click
+or a key starts the game and `?` lists the mouse and keyboard controls; the game
+plays with the scenario and typing corpus it carries.
 
 <!-- end -->
 <!-- if client windows -->
@@ -111,7 +112,7 @@ plays through the first of `pacat`, `pw-cat`, `aplay`, SoX's `play` or `ffplay` 
 
 <!-- end -->
 <!-- if web -->
-Sound is on once the page is first touched or typed in, as a browser asks:
+Sound is on from the click, tap or key that starts the game, as a browser asks:
 `Ctrl-S` cycles through the channels, and `?arg=-mute` starts muted. The settings
 menu's choices are kept in the browser's storage for the next visit. A browser
 plays sound only on a secure page, which localhost is; served to other machines,

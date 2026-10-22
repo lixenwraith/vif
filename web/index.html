@@ -31,27 +31,43 @@
         <polygon points="200,200 300,300 200,300" fill="gray"/>
         <path d="M100,100 L300,100 L300,300 L100,300 Z M200,100 L200,300 M100,200 L300,200 M100,100 L300,300 M300,100 L100,300" fill="none" stroke="#000" stroke-width="20"/>
     </svg>
-    <button type="button" id="controls" aria-label="Touch controls">?</button>
+    <button type="button" id="controls" aria-label="Controls">?</button>
 </div>
 <div id="loading">Loading vif...</div>
 <div id="notice" role="status" hidden></div>
 <dialog id="help" aria-labelledby="help-title">
     <div id="help-head">
-        <h2 id="help-title">Touch controls</h2>
+        <h2 id="help-title">Controls</h2>
         <button type="button" id="help-close" aria-label="Close">×</button>
     </div>
-    <!-- The touch controls as Android's StartScreen.java words them; the strip is the page's alone -->
     <div id="help-body" tabindex="-1" autofocus>
-        <dl>
-            <dt>Tap</dt><dd>Move the cursor there and fire the main weapon; hold to repeat</dd>
-            <dt>Drag</dt><dd>Drag the cursor with your finger</dd>
-            <dt>Double tap</dt><dd>Fire the special weapon as well</dd>
-            <dt>Hold the status bar</dt><dd>Open the configuration menu: audio, bots, multiplayer and more</dd>
-            <dt>Two fingers, tap twice</dt><dd>Show or hide the keyboard, to type commands such as :help</dd>
-            <dt>Pinch</dt><dd>Zoom in or out; the zoom is kept for next time</dd>
-            <dt>The strip at the top</dt><dd>Keyboard, Tab, Esc while typing, sound and full screen</dd>
-        </dl>
-        <p>With a keyboard, F1 or :help lists every key and command, and :q quits.</p>
+        <!-- A touch screen's: as Android's StartScreen.java words them; the strip is the page's alone -->
+        <div id="help-touch" hidden>
+            <dl>
+                <dt>Tap</dt><dd>Move the cursor there and fire the main weapon; hold to repeat</dd>
+                <dt>Drag</dt><dd>Drag the cursor with your finger</dd>
+                <dt>Double tap</dt><dd>Fire the special weapon as well</dd>
+                <dt>Hold the status bar</dt><dd>Open the configuration menu: audio, bots, multiplayer and more</dd>
+                <dt>Two fingers, tap twice</dt><dd>Show or hide the keyboard, to type commands such as :help</dd>
+                <dt>Pinch</dt><dd>Zoom in or out; the zoom is kept for next time</dd>
+                <dt>The strip at the top</dt><dd>Keyboard, Tab, Esc while typing, sound and full screen</dd>
+            </dl>
+            <p>With a keyboard, F1 or :help lists every key and command, and :q quits.</p>
+        </div>
+        <!-- A mouse's and keyboard's: as the game's own help (internal/help) words them -->
+        <div id="help-mouse" hidden>
+            <dl>
+                <dt>Move the mouse</dt><dd>The cursor follows it; :free turns that off or on</dd>
+                <dt>Click</dt><dd>Move the cursor there and fire the main weapon; hold to repeat</dd>
+                <dt>Right click</dt><dd>Fire the special weapon where the cursor already is; hold to repeat</dd>
+                <dt>Hold the status bar</dt><dd>Open the configuration menu: audio, bots, multiplayer and more; Ctrl-G or F10 too</dd>
+                <dt>Ctrl and the wheel</dt><dd>Zoom in or out, as a trackpad's pinch does; the zoom is kept for next time</dd>
+                <dt>h j k l, the arrows</dt><dd>Move one cell left, down, up, right</dd>
+                <dt>Enter, Space</dt><dd>Fire the main weapon, the special one</dd>
+                <dt>Ctrl-S</dt><dd>Cycle audio: music and effects, music only, effects only, silent</dd>
+            </dl>
+            <p>F1 or :help lists every key and command, and :q quits.</p>
+        </div>
     </div>
 </dialog>
 <noscript><div id="nojs">vif requires JavaScript and WebAssembly.<br><a href="/vif/">Back to the project page</a></div></noscript>

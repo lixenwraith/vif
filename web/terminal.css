@@ -67,9 +67,9 @@ html, body {
 #loading.hidden { display: none; }
 #loading.error  { color: #f44; }
 
-/* A touch screen shows Android's start screen while the program loads: the logo two
-   fifths of the shorter side at the centre, the loading line under it, ? in the
-   corner. The line and the notice stay above it. */
+/* Every page opens on Android's start screen: the logo two fifths of the shorter side
+   at the centre, the loading line under it, ? in the corner. The line and the notice
+   stay above it. */
 :root { --logo: 40vmin; }
 
 #start {
@@ -93,7 +93,12 @@ html, body {
 #start:not([hidden]) ~ #loading {
     top: calc(50% + var(--logo) / 2 + 24px);
     transform: translateX(-50%);
+    color: #bbb;              /* Android's "Tap to start" */
+    font-size: 18px;
+    pointer-events: none;     /* a tap on the words is the screen's */
 }
+
+#start:not([hidden]) ~ #loading.error { color: #f44; }
 
 #controls {
     position: absolute;
@@ -108,8 +113,8 @@ html, body {
     font: 24px/1 monospace;
 }
 
-/* The touch controls: a window inset 16px from the page's edges, its list scrolling
-   under the title and the close button. */
+/* The controls: a window inset 16px from the page's edges, its list scrolling under
+   the title and the close button. */
 #help {
     position: fixed;
     inset: 16px;
@@ -127,6 +132,18 @@ html, body {
 #help[open] {
     display: flex;
     flex-direction: column;
+}
+
+/* A mouse's and keyboard's window: centred, as tall as its list, at most the touch
+   window's size. */
+@media not all and (pointer: coarse) {
+    #help {
+        inset: 0;
+        width: min(42em, 100% - 32px);
+        height: fit-content;
+        max-height: calc(100% - 32px);
+        margin: auto;
+    }
 }
 
 #help::backdrop { background: rgba(0, 0, 0, 0.6); }
