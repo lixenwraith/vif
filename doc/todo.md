@@ -581,10 +581,11 @@ session from `https://lixen.com`, its default). Put a second choice beside the t
 host a game at the site, as that request does, and/or join one of the running games
 the site lists (`GET /vif/api/sessions`), so `game.Start` takes a join target. The
 page needs nothing: the site's lobby (`/vif/lobby/`) is its choice, and its Play
-link opens the page with `-join`, which starts without a tap. A run that ends in an
-error, such as a refused join, shows it on the start screen; today Android finishes
-the activity and leaves the reason in logcat. Open: host, list or both; a second
-screen or rows on this one; what a session that ends returns to.
+link opens the page with `-join`, which joins at its start screen's tap. A run that
+ends in an error, such as a refused join, shows it on the start screen, as the page
+does; today Android finishes the activity and leaves the reason in logcat. Open:
+host, list or both; a second screen or rows on this one; what a session that ends
+returns to.
 
 ## Session membership
 

@@ -438,31 +438,85 @@ void main() {
             document.getElementById('strip').hidden = false;   // before the first fit
             // Focus raises no keyboard while so marked; hardware keys still type through.
             input.setAttribute('inputmode', 'none');
-            wireStart();
         }
+        wireStart();
         fit();
         if (touch) wireTouch();
         return true;
     }
 
     // === Start screen ===
-    /* A touch screen shows Android's start screen while the program loads: the
-       logo, the loading line under it and ? for the touch controls. The game takes
-       the screen at its first frame, without a tap; Android's is the one a player
-       waits on. */
+    /* Every page opens on Android's start screen: the logo, the loading line, which
+       asks for the start once the program is compiled, and ? for the controls. The
+       Worker holds that program until one tap, click or key press, made at any point
+       of the download or compile; the press opens the sound too, as a context made
+       inside one plays from the first buffer. */
     const start = document.getElementById('start');
+    const help = document.getElementById('help');
+    const PROMPT = touch ? 'Tap to start' : 'Click or press a key to start';
+    // The named keys that start the game: Escape, Tab and the F keys stay the
+    // browser's and the screen's, as do chords
+    const START_KEYS = /^(Enter|Backspace|Delete|Arrow(Up|Down|Left|Right)|Home|End|Page(Up|Down)|Insert)$/;
+    let ready = false;      // the program is compiled and held for the start
+    let tapped = false;     // the tap, click or key press came
+    let startCode = null;   // the start key held down, which starts the game as it comes up
 
     function wireStart() {
-        const help = document.getElementById('help');
         const controls = document.getElementById('controls');
+        const title = touch ? 'Touch controls' : 'Mouse and keyboard';
+        document.getElementById('help-title').textContent = title;
+        document.getElementById(touch ? 'help-touch' : 'help-mouse').hidden = false;
+        controls.setAttribute('aria-label', title);
         start.hidden = false;
-        // A tap here leaves focus on the field, where hardware keys type once the game runs.
+        // A tap here leaves focus where it is: on the field, once the program loaded.
         start.addEventListener('pointerdown', function(e) { e.preventDefault(); });
+        start.addEventListener('click', function(e) { if (e.target !== controls) begin(); });
+        document.addEventListener('keydown', startKey, true);
+        document.addEventListener('keyup', startKey, true);
         // The ? sits nearer the edge than the window, and would show past its corner.
         controls.addEventListener('click', function() { controls.hidden = true; help.showModal(); });
         help.addEventListener('close', function() { controls.hidden = false; });
         document.getElementById('help-close').addEventListener('click', function() { help.close(); });
         help.addEventListener('click', function(e) { if (e.target === help) help.close(); });   // the backdrop
+    }
+
+    /* A key starts the game as a click does, on its release, and the game sees
+       none of it: neither its press nor its repeats while held. Keys are the
+       window's while it is open and the ?'s while it has focus. */
+    function startKey(e) {
+        if (tapped || help.open || e.target.closest('button')) return;
+        if (e.type === 'keyup') {
+            if (e.code !== startCode) return;
+        } else if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey
+            || ([...e.key].length !== 1 && !START_KEYS.test(e.key))) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === 'keyup') {
+            begin();
+        } else {
+            startCode = e.code;
+            if (!audio) openAudio();   // in the press: a release lets no sound start on some browsers
+        }
+    }
+
+    // begin is the start screen's tap, click or key: the program runs from it, now
+    // or once compiled
+    function begin() {
+        if (tapped) return;
+        tapped = true;
+        document.removeEventListener('keydown', startKey, true);
+        document.removeEventListener('keyup', startKey, true);
+        focus();   // keys follow, in a frame that had no focus too
+        if (!audio) openAudio();
+        if (ready) run();
+    }
+
+    function run() {
+        if (!program) return;
+        program.postMessage({ type: 'run' });
+        document.getElementById('loading').textContent = 'Starting…';
     }
 
     /* Launch arguments, from the page and from the query string. This is how a
@@ -575,6 +629,11 @@ void main() {
             switch (msg.type) {
             case 'atlas':
                 drawer.setAtlas(msg.data);
+                break;
+            case 'ready':   // compiled and held for the start screen's tap
+                ready = true;
+                if (tapped) run();
+                else loading.textContent = PROMPT;
                 break;
             case 'frame':
                 loading.classList.add('hidden');   // compiled and drawing

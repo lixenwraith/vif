@@ -72,8 +72,8 @@ screen's size, which its ×, Back or a tap outside closes. The run starts behind
 it, paused at its first tick and silent, and a tap anywhere else lifts the screen
 off the game; a screen turned first starts that game over at its new size. Back
 there is the system's, and no key reaches the game until the tap.
-A browser on a touch screen shows the same screen in the same words while it loads,
-and starts without a tap.
+A browser shows the same screen in the same words and waits for its tap too; a
+desktop's asks for a click or a key instead.
 
 A cell is 12 dp tall (`cellDP`) until a pinch zooms it, and the grid the view
 holds is stretched over the view edge to edge. Add `--ez raster true` to paint with

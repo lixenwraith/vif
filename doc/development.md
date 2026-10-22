@@ -625,8 +625,10 @@ grid: the keyboard covers it, and the status bar's bottom row is drawn again abo
 it ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host));
 the page resizing (a rotation, a window, fullscreen) and a zoom (a pinch, or Ctrl
 and the wheel, within the range Go names, Android's too) do, and a solo map
-follows; the run keeps the cell a zoom leaves with the page's settings. Before
-launch it maps `window.VIF_ARGS` and repeated `arg` query parameters into the
+follows; the run keeps the cell a zoom leaves with the page's settings. Every page
+opens on the start screen, and the Worker holds the compiled program until its tap,
+click or key press ([Build profiles §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+Before launch it maps `window.VIF_ARGS` and repeated `arg` query parameters into the
 program's argv; a site that renames the files says so with `data-wasm`,
 `data-worker` and `data-exec` on the script element
 ([Build profiles](multi-platform.md#6-browser-launch-arguments)). `make serve`

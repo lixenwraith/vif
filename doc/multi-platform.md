@@ -487,10 +487,13 @@ every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse inpu
 off a press on the bar's rows still reaches the run, and the open menu takes the
 pointer. The page does each of these on a touch screen, timed alike: the double
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
-bottom row drawn again above it, and the hold. It shows the same start screen in
-the same words while the program loads, the key strip listed where Android lists
-Back, and the game takes the screen at its first frame, without a tap: Android's
-tap is the one wait, so a lobby's link joins at once.
+bottom row drawn again above it, and the hold. Every page opens on the same start
+screen in the same words, the key strip listed where Android lists Back; a
+desktop's asks for a click or a key, and its `?` lists the mouse and the first keys.
+The Worker holds the compiled program until that press, made at any point of the
+download or compile, which opens the sound too; a key starts it as it comes up,
+unseen by the game, and Escape, Tab, the F keys and chords start nothing. A lobby's
+`-join` link waits for it too.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its
