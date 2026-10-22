@@ -919,16 +919,3 @@ a phone its battery. While a solo run is away, the event loop could wait on a pu
 instead of its ticker, the app loop drop its input and frame tickers until a report
 or event comes, and the render thread stop its vsync callback once it has painted
 the last frame flushed.
-
-## Tests
-
-### Fuzz the join handshake
-
-- Priority: P1
-- Affected files: `internal/network` (join and peer-link handshakes, admission)
-- Guide: [Session fleet](kubernetes-fleet.md#4-security-posture) §4
-
-The game port is unauthenticated by decision and reachable from the Internet, and
-§4 lists what bounds a stranger on it. What it lacks is a fuzz target in
-`internal/network` for malformed, oversized, replayed and half-open handshakes,
-beside the frame and upgrade targets `pkg/websocket` already has.

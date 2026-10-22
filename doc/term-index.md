@@ -729,7 +729,7 @@ code does not have yet, described only by a design such as
 
 **fuzzer** — two senses.
 - *Soak*: `journal.FuzzDriver`, a seeded action sequence (intents, ticks, commands, resets, region operations, resizes, level setups) drawn from its own stream, so two drivers from one seed step in lockstep; the soak tests in `internal/app` run it over seed sweeps tiered by `VIF_SOAK`. [Development §5](development.md#5-validation-and-tests) · `internal/journal` `FuzzDriver`, `RunFuzz`
-- *Go fuzzing*: native `Fuzz*` test targets that check code against a reference or an invariant, such as the flow field against a heap search. [Navigation §2](navigation-design.md#2-flow-fields) · `pkg/navigation` `FuzzComputeMatchesReference`
+- *Go fuzzing*: native `Fuzz*` test targets that check code against a reference or an invariant, such as the flow field against a heap search, or the join and peer-link handshakes against whatever a stranger sends. [Navigation §2](navigation-design.md#2-flow-fields) · [Session fleet §4](kubernetes-fleet.md#4-security-posture) · `pkg/navigation` `FuzzComputeMatchesReference` · `internal/network` `FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits`, `FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant`
 
 ## G
 

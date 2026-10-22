@@ -98,6 +98,10 @@ What bounds a stranger:
   the coordinator;
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
+- fuzz targets on the two handshakes a stranger's bytes reach, the join and the peer
+  link (`internal/network`): whatever a dialler sends, malformed, oversized, replayed
+  or cut short, is answered with an offer or a reason, and holds an identity or a
+  link only once admitted;
 - the start gate, which waits on whoever is still on the link for one world install.
   A participant that goes silent is dropped at that bound and one that drops is
   excused rather than fatal, so neither holding a fresh session open nor ending
@@ -130,12 +134,10 @@ What bounds a stranger:
   the addresses inside the session; a fleet session is its address, so it has no
   reason to want the other shape.
 
-What remains unbounded is fuzz coverage for a malformed, oversized, replayed or
-half-open handshake ([Fuzz the join handshake](todo.md#fuzz-the-join-handshake)). The firewall requirements in
-[Deployment §2](kube-docker-deploy.md#2-the-public-edge) are what
-stand in front of the rest: the forwarded surface is the ten-port NodePort range and
-the front door's 7777, and the probe, log-stream and cluster API ports never leave
-the node.
+The firewall requirements in [Deployment §2](kube-docker-deploy.md#2-the-public-edge)
+are what stand in front of the rest: the forwarded surface is the ten-port NodePort
+range and the front door's 7777, and the probe, log-stream and cluster API ports
+never leave the node.
 
 ## 5. Late-crossing ordering
 
