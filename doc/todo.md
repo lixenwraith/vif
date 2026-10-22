@@ -633,6 +633,18 @@ diverge from there. Late joiners already install a mid-run world; what is missin
 the redirect and an authority, for a pod an allocator request, that starts from a
 transferred world instead of a scenario.
 
+### Run a scenario with no players
+
+- Priority: P3
+- Affected files: `internal/app/session.go`, `internal/app/serve.go`, `wad/scenario/td`
+- Guide: [FSM and configuration](fsm-and-configuration.md#3-root-schema) §3
+
+`min_players = 0` is accepted and, like 1, waits for one player. A game that runs
+with nobody in it, such as td's two sides attacking each other's towers, needs a
+lobby quorum of 0 so a server starts without a guest, `holdVacant` parking only
+below the scenario's minimum, the ownerless boot cursor dropped without a park, and
+spawns that do not anchor on a cursor: the gold cycle fails and retries with none.
+
 ## Combat
 
 ### Let mounted weapons strike more than cursors

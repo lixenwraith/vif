@@ -39,6 +39,9 @@ const (
 type Scenario struct {
 	Name        string
 	Description string
+	// MinPlayers and MaxPlayers are min_players and max_players, how many players,
+	// bots counted, the scenario runs with: one to a full roster when undeclared
+	MinPlayers, MaxPlayers int
 	// MapMinWidth and MapMinHeight are the [map] floor under the map's size, zero
 	// when the scenario sets none
 	MapMinWidth, MapMinHeight int
@@ -260,8 +263,38 @@ func (s *Scenario) validate() error {
 			return errors.New("description must be a string")
 		}
 	}
+	if err := s.readPlayers(doc); err != nil {
+		return err
+	}
 	if table, exists := doc["map"]; exists {
 		return s.readMap(table)
+	}
+	return nil
+}
+
+// readPlayers reads min_players and max_players. A min of 0 declares a game that
+// runs with nobody in it; a max of 0 would be one nobody could join.
+func (s *Scenario) readPlayers(doc map[string]any) error {
+	s.MinPlayers, s.MaxPlayers = 1, parameter.MaxPlayers
+	for _, f := range []struct {
+		key string
+		to  *int
+	}{{"min_players", &s.MinPlayers}, {"max_players", &s.MaxPlayers}} {
+		value, exists := doc[f.key]
+		if !exists {
+			continue
+		}
+		n, ok := value.(int64)
+		if !ok || n < 0 || n > parameter.MaxPlayers {
+			return fmt.Errorf("%s must be an integer from 0 to %d", f.key, parameter.MaxPlayers)
+		}
+		*f.to = int(n)
+	}
+	switch {
+	case s.MaxPlayers < 1:
+		return errors.New("max_players must be at least 1")
+	case s.MaxPlayers < s.MinPlayers:
+		return fmt.Errorf("max_players %d is below min_players %d", s.MaxPlayers, s.MinPlayers)
 	}
 	return nil
 }

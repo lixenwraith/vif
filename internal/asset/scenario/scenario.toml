@@ -1,4 +1,6 @@
 description = "Survive escalating storms, lure Krakens through mazes, and defend the tower."
+min_players = 1
+max_players = 16
 
 # Root configuration with region definitions
 

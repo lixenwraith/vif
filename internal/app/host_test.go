@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -589,18 +590,26 @@ func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
 	}
 }
 
-// TestARunWithOnlyItsBotsChangesScenario: a session its own bots are all of has no
-// address to send them back to and needs none, since the next run seats them again.
-func TestARunWithOnlyItsBotsChangesScenario(t *testing.T) {
+// TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem: a session its own bots are
+// all of has no address to send them back to and needs none, since the next run
+// seats them again; a scenario whose max_players is below its players is refused.
+func TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem(t *testing.T) {
 	// Not parallel: paced runs against wall-clock deadlines.
 	root := t.TempDir()
 	writeScenario(t, root, "other", "A scenario this root holds.")
+	solo := filepath.Join(writeScenario(t, root, "solo", "One player."), "scenario.toml")
+	body, err := os.ReadFile(solo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(solo, append([]byte("max_players = 1\n"), body...), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	a.cfg.Mode, a.cfg.Resources.Dir = ModePlay, root
 	tickUntilCursor(t, a)
 	stop := tickInBackground(a)
 	t.Cleanup(func() { stop(); a.Close() })
-	var err error
 	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
 	if err != nil {
 		t.Fatal(err)
@@ -610,6 +619,10 @@ func TestARunWithOnlyItsBotsChangesScenario(t *testing.T) {
 	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	var changed bool
+	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("solo") })
+	if err == nil || !strings.Contains(err.Error(), "at most 1") || changed || a.restart.Load() != nil {
+		t.Fatalf("a one-player scenario over a run and its bot: changed %v, %v; want it refused", changed, err)
+	}
 	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
 	if req := a.restart.Load(); err != nil || !changed || req.Host != "" || !slices.Equal(req.Bots, []string{"roam"}) {
 		t.Fatalf("changed %v, %v, restart %+v; want one with no address that seats roam again", changed, err, req)

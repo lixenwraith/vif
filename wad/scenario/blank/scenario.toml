@@ -1,4 +1,6 @@
 description = "An empty arena for experimenting with commands and building scenarios."
+min_players = 1
+max_players = 16
 
 # The authoring scaffold: an empty map with a player on it and nothing to fight.
 

@@ -352,20 +352,21 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 	}
 }
 
-// TestPlayersIsACeilingAndOnlySometimesAParty pins all three meanings of one flag.
-// It is always the cursor ceiling; sessionCapacity is its guest half, which on a
-// dedicated host is the whole of it because that host drives none. What an explicit
-// value adds on a scripted or bot-driven host is the lobby — a party that says it is
-// four starts together — and the zero value drops exactly that.
-func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
+// TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty: -players and max_players
+// are cursor ceilings, the lower holding, of which sessionCapacity is the guest half.
+// An explicit -players on a scripted or bot-driven host is also the lobby's party,
+// min_players raises any lobby's, and a -players under min_players is refused.
+func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name         string
 		serves       bool
 		participants int
+		low, high    int // the scenario's range: zero keeps its default, a negative low is 0
 		capacity     int
 		players      int
 		quorum       int
+		refused      bool
 	}{
 		{name: "host/unset", capacity: parameter.MaxPlayers - 1,
 			players: parameter.MaxPlayers, quorum: 1},
@@ -380,6 +381,14 @@ func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 			players: 3, quorum: 1},
 		{name: "serve/one", serves: true, participants: 1, capacity: 1,
 			players: 1, quorum: 1},
+		{name: "host/scenario max", participants: 4, high: 2, capacity: 1, players: 2, quorum: 1},
+		{name: "host/scenario min", low: 3, capacity: parameter.MaxPlayers - 1,
+			players: parameter.MaxPlayers, quorum: 2},
+		{name: "host/under min", participants: 2, low: 3, capacity: 1, players: 2, quorum: 1, refused: true},
+		{name: "serve/scenario range", serves: true, participants: 4, low: 2, high: 3,
+			capacity: 3, players: 3, quorum: 2},
+		{name: "serve/no players", serves: true, low: -1, capacity: parameter.MaxPlayers,
+			players: parameter.MaxPlayers, quorum: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -388,6 +397,15 @@ func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 			a.cfg.Participants = tt.participants
 			if tt.serves {
 				a.cfg.Mode = ModeServer
+			}
+			if tt.low != 0 {
+				a.scenario.MinPlayers = max(tt.low, 0)
+			}
+			if tt.high != 0 {
+				a.scenario.MaxPlayers = tt.high
+			}
+			if err := a.playersFit(a.scenario); (err != nil) != tt.refused {
+				t.Fatalf("fit = %v, want refused %t", err, tt.refused)
 			}
 			if got := a.sessionCapacity(); got != tt.capacity {
 				t.Fatalf("guest capacity = %d, want %d", got, tt.capacity)

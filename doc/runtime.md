@@ -130,13 +130,16 @@ is, and the roster hands it to the first guest, which is what keeps shared creat
 order identical to an ordinary host's.
 
 A server's `-players` ceiling counts *guests*, because the server is not one of
-them; any other host's counts one fewer, because it holds a cursor itself. A lobby
-exists only where no person plays at the process, and the process seats its own
-bots before it, so they count as guests: a server starts on its first guest; a
-scripted or bot-driven `-host` on its first guest or, with `-players`, on the whole
-party it names; an interactive host has none and plays from its own first tick.
-Every later guest arrives through the mid-run gate. An interactive `-host` is
-`:host` given at startup.
+them; any other host's counts one fewer, because it holds a cursor itself. The
+scenario's `max_players` caps the same count, bots included, and the lower ceiling
+holds. A lobby exists only where no person plays at the process, and the process
+seats its own bots before it, so they count as guests: a server starts on its first
+guest, or on the scenario's `min_players`; a scripted or bot-driven `-host` on the
+guests that minimum needs beside its own cursor, at least one, or, with `-players`,
+on the whole party it names; an interactive host has none and plays from its own
+first tick. A `-players` under `min_players` is refused, and an allocated lobby
+short of it ends at `-first-join` like an empty one. Every later guest arrives
+through the mid-run gate. An interactive `-host` is `:host` given at startup.
 
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.

@@ -232,9 +232,6 @@ func New(cfg Config) (*App, error) {
 		admissions: network.NewAdmissionLimiter(),
 		life:       lifecycle.New(cfg.Lifetime),
 	}
-	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
-		a.cfg.networkConfig = a.hostNetworkConfig()
-	}
 	if a.cfg.JoinAddress != "" && a.cfg.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
 	}
@@ -270,6 +267,10 @@ func (a *App) init() error {
 	// journal anchor, which names what this run turned out to be reading.
 	if err := a.readScenario(); err != nil {
 		return err
+	}
+	// After the scenario, whose max_players bounds what the transport admits.
+	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
+		a.cfg.networkConfig = a.hostNetworkConfig()
 	}
 	if err := a.initServices(); err != nil {
 		return err
@@ -635,6 +636,9 @@ func (a *App) readScenario() error {
 	sc, err := resource.LoadScenario(a.cfg.Resources)
 	if err != nil {
 		return fmt.Errorf("scenario: %w", err)
+	}
+	if err := a.playersFit(sc); err != nil {
+		return err
 	}
 	a.scenario = sc
 	a.log.Info("app", "msg", "scenario loaded", "name", sc.Name, "digest", sc.Short(), "files", sc.Files())

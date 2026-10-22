@@ -87,7 +87,7 @@ func ValidateScenario(o Options) (Scenario, error) {
 }
 
 // checkScenario reports what a peer would compare: the name, the digest, and
-// where it came from.
+// where it came from, and the players it runs with.
 func checkScenario(o Options, w io.Writer) error {
 	sc, err := ValidateScenario(o)
 	if err != nil {
@@ -100,8 +100,8 @@ func checkScenario(o Options, w io.Writer) error {
 	if source == "" {
 		source = "embedded default"
 	}
-	fmt.Fprintf(w, "scenario ok: %s (%s, %d files, sha256:%s)\n",
-		source, sc.Name, sc.Files(), sc.Short())
+	fmt.Fprintf(w, "scenario ok: %s (%s, %d files, sha256:%s, players %d..%d)\n",
+		source, sc.Name, sc.Files(), sc.Short(), sc.MinPlayers, sc.MaxPlayers)
 	fmt.Fprintln(w, "systems ok")
 	return nil
 }
