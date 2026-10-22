@@ -111,8 +111,9 @@ func (r *Reach) DeclaredAddr() string {
 	return r.declared
 }
 
-// NoteDeclared puts one joiner in the chain and publishes the whole chain. Only
-// the coordinator runs it: it is the far end of the stream the address arrived on.
+// NoteDeclared puts one joiner in the chain, which the correction loop publishes
+// whole. Only the coordinator runs it: it is the far end of the stream the address
+// arrived on.
 func (r *Reach) NoteDeclared(id network.PeerID, report network.JoinerReport) {
 	if r == nil || report.Listen == "" || id == 0 {
 		return

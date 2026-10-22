@@ -48,8 +48,10 @@ type Authority struct {
 
 	// chain is the succession candidate list: every participant that declared a
 	// port, in join order, adopted whole from an offer, a handoff or MsgPeerList.
-	// See internal/network/reach.go.
-	chain network.SuccessionChain
+	// See internal/network/reach.go. chainDue marks a participant appended since
+	// the chain last went out, which drive publishes.
+	chain    network.SuccessionChain
+	chainDue bool
 
 	// record is the handoff this instance is authoring under, kept so a survivor
 	// that links up after the record was flooded can be told who took the term.
@@ -453,8 +455,13 @@ func (u *Authority) drive() {
 	u.mu.Lock()
 	contested, since := u.contested, u.since
 	badge, reconcile := u.badgeUntil, u.reconcileAt
+	due := u.chainDue
+	u.chainDue = false
 	u.mu.Unlock()
 
+	if due {
+		u.PublishChain()
+	}
 	tick := u.inst.Position().Tick
 	if badge != 0 && tick >= badge {
 		u.mu.Lock()
@@ -720,19 +727,16 @@ func (u *Authority) successionOrder() []network.PeerID {
 	return append(out, rest...)
 }
 
-// appendChain adds one participant that declared a port and publishes the whole
-// chain, which only the coordinator does. Reports whether anything changed.
-func (u *Authority) appendChain(id network.PeerID, addr string) bool {
+// appendChain adds one participant that declared a port, which only the
+// coordinator does, and leaves the chain to drive to publish. A joiner is noted
+// under the session lock, or the world lock when it came through a relay, and a
+// flood reads the transport under the world lock.
+func (u *Authority) appendChain(id network.PeerID, addr string) {
 	u.mu.Lock()
-	next := u.chain.Append(id, addr)
-	if slices.Equal(u.chain, next) {
-		u.mu.Unlock()
-		return false
+	defer u.mu.Unlock()
+	if next := u.chain.Append(id, addr); !slices.Equal(u.chain, next) {
+		u.chain, u.chainDue = next, true
 	}
-	u.chain = next
-	u.mu.Unlock()
-	u.PublishChain()
-	return true
 }
 
 // PublishChain floods the chain whole. The coordinator also runs it as the session
