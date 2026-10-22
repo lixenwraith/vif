@@ -259,9 +259,10 @@ func (u *Authority) driveIngress(now time.Time) {
 }
 
 // Open records the term and membership this instance enters a session under. It
-// is the same call from all three doors — a tick-zero lobby, a mid-run join, and
-// a `:host` that opens a solo run — because the three differ in how the offer was
-// obtained and not in what it says.
+// is the same call from every door — a tick-zero lobby, a mid-run join, a `:host`
+// that opens a solo run, and a run reopening its world after `:leave` — because
+// they differ in how the offer was obtained and not in what it says. Whatever a
+// session left here, its succession included, ends with it.
 func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
 	u.mu.Lock()
 	u.term = max(o.Term, network.FirstTerm)
@@ -272,7 +273,13 @@ func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
 	u.chain = slices.Clone(o.Chain)
 	u.fixed = o.FixedAuthority
 	u.fork = false
+	u.record = network.HandoffRecord{}
+	clear(u.accepted)
+	u.contested, u.lost, u.since, u.reports, u.published = 0, 0, 0, nil, false
+	u.reconcileAt, u.badgeUntil = 0, 0
 	u.mu.Unlock()
+	u.statMigrating.Store(false)
+	u.statHostLost.Store(false)
 	u.publish()
 }
 

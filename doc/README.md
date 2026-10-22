@@ -106,9 +106,9 @@ This documentation distinguishes three states:
 - **Experimental/incomplete** means code exists but the normal application does
   not expose a complete end-to-end feature. Authenticated multiplayer is an
   example: the message kinds are reserved and nothing populates them. Startup
-  networking, mid-run hosting and joining (`:host`, `:join`), reconnect, host
-  authority with link-paced correction, and authority migration are optional and
-  active.
+  networking, mid-run hosting, joining and leaving (`:host`, `:join`, `:leave`),
+  reconnect, host authority with link-paced correction, and authority migration
+  are optional and active.
 
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not

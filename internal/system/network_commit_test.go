@@ -513,6 +513,41 @@ func TestADepartedIdentityLeavesNoFence(t *testing.T) {
 	}
 }
 
+// TestALeftSessionAppliesNothingButTheRunsOwn: once this instance has left its
+// session, nothing another participant sent applies, barrier-bound or not, nor any
+// roster change still scheduled; no source keeps a fence, a sync or a digest for
+// the identity's next holder to trip on. Its own crossings still apply.
+func TestALeftSessionAppliesNothingButTheRunsOwn(t *testing.T) {
+	t.Parallel()
+	s := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
+	s.scheduleCrossings(1, boundsBatch(t, 1, 99, 101, 1, 0))
+	s.scheduleCrossings(1, boundsBatch(t, 1, 100, 108, 1, 0))
+	s.applyDue(101)
+	if s.AppliedCrossingFences().Seq(1) == 0 {
+		t.Fatal("the authority's first crossing raised no fence; the case below proves nothing")
+	}
+	own := barrierArtifact{frame: event.WireFrame{Event: "EventGoldJumpRequest", Domain: "shared", Seq: 1}, applyTick: 108, source: 2}
+	arrival := own
+	arrival.frame.Event, arrival.frame.Seq, arrival.authored = "EventParticipantJoined", 2, true
+	s.mu.Lock()
+	s.scheduled = append(s.scheduled, own, arrival)
+	s.relay = 1
+	s.mu.Unlock()
+	s.states = append(s.states, pendingState{applyTick: 108, source: 1, payload: syncFor(0, 1, 1, 40)})
+	s.pendingDigest[1] = stateDigest{Tick: 108, Hash: 7, Valid: true}
+
+	s.LeaveSession()
+	if got := s.AppliedCrossingFences().Seq(1); got != 0 {
+		t.Errorf("participant 1 keeps fence %d after this instance left its session", got)
+	}
+	if len(s.scheduled) != 1 || s.scheduled[0].source != 2 || s.scheduled[0].frame.Seq != 1 {
+		t.Errorf("scheduled %+v after leaving; want this instance's own crossing alone", s.scheduled)
+	}
+	if len(s.states) != 0 || s.pendingDigest[1].Valid || s.relay != 0 {
+		t.Errorf("the left session keeps %d syncs, digest %+v and relay %d", len(s.states), s.pendingDigest[1], s.relay)
+	}
+}
+
 // inRun re-stamps one encoded batch with the run it was produced in.
 func inRun(t *testing.T, body []byte, run uint64) []byte {
 	t.Helper()

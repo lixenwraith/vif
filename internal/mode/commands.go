@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "session", "bot", "player", "g", "config", "journal",
+	"host", "join", "leave", "session", "bot", "player", "g", "config", "journal",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -136,6 +136,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleHostCommand(ctx, args)
 	case "join":
 		return handleJoinCommand(ctx, args)
+	case "leave":
+		return handleLeaveCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
 	case "journal":
@@ -1096,6 +1098,23 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true}
 	}
 	ctx.MacroClearFlag.Store(true)
+	return CommandResult{Continue: true}
+}
+
+// handleLeaveCommand takes this run out of its session into one of its own, the
+// world as it stands. The run's loop serves it; the status line says how it went.
+func handleLeaveCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, sessionsUnavailable)
+		return CommandResult{Continue: true}
+	}
+	if len(args) != 0 {
+		setCommandError(ctx, "Usage: :leave")
+		return CommandResult{Continue: true}
+	}
+	if err := ctx.SessionCtl.Leave(); err != nil {
+		setCommandError(ctx, "Leave: "+err.Error())
+	}
 	return CommandResult{Continue: true}
 }
 

@@ -48,8 +48,10 @@ var configPages = []configPage{
 	}, extra: scenarioConfigOptions},
 	{key: "bots", label: "Bots", description: "Add bots or remove your bots. Hosts can also remove other players and bots on Multiplayer.",
 		options: []configOption{configFormOption("add")}, extra: botConfigOptions},
-	{key: "multiplayer", label: "Multiplayer", description: "Host this run, join a session or request one from an allocator.", options: []configOption{
+	{key: "multiplayer", label: "Multiplayer", description: "Host this run, join a session or request one from an allocator, or leave the one you are in.", options: []configOption{
 		configFormOption("host"), configFormOption("join"), configFormOption("request"),
+		withDisabled(commandAction("leave", "Leave the session", "Play on in a session of your own from where this one stands; your bots come along, and the others play on without you.", "leave"),
+			sessionRefusal(engine.SessionController.LeaveError)),
 	}, extra: sessionConfigOptions},
 	{key: "audio", label: "Audio", description: "Music, sound effects and effects volume.", options: []configOption{
 		{key: "effects", label: "Sound effects", description: "Game sound effects; independent of music.",

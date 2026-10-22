@@ -212,6 +212,10 @@ func (a *App) Loop() (*restartRequest, error) {
 		if req := a.restart.Load(); req != nil {
 			return req, nil
 		}
+		if a.leaving.Load() {
+			a.leaveSession()
+			continue // a replacement latched while it ran is taken first
+		}
 		a.serveJournal()
 		select {
 		case sig := <-sigChan:

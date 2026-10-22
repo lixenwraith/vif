@@ -174,6 +174,46 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	}
 }
 
+// TestALeavingInstanceAuthorsOnlyTheSessionItReopens: whatever the session it left
+// still had going here — a fork, a lost host, a queued correction or succession
+// message — ends with that session, and the instance authors the one it goes on in.
+func TestALeavingInstanceAuthorsOnlyTheSessionItReopens(t *testing.T) {
+	t.Parallel()
+	guest := newRun(t, 2, nil, roster(2))
+	guest.u.Open(network.SessionOffer{
+		Host: 1, Assigned: 2, Term: network.FirstTerm, Roster: roster(2), FixedAuthority: true,
+	}, 2)
+	guest.u.peerLost(1)
+	if !guest.u.State().Fork {
+		t.Fatal("a pinned guest did not fork on losing its host; the case below proves nothing")
+	}
+	guest.c.Receive([]byte("a correction the left session sent"))
+	guest.c.ReceiveAuthorityFrame(uint8(network.MsgAuthorityReport), 1, []byte("a report it sent"))
+
+	err := guest.c.Leave(func() error {
+		guest.u.Open(network.SessionOffer{
+			Host: 2, Assigned: 2, Term: guest.u.Term() + 1, Roster: roster(2)[1:],
+		}, 2)
+		return nil
+	})
+	got := guest.u.State()
+	if err != nil || got.Fork || got.Authority != 2 || got.Term != network.FirstTerm+1 || !guest.u.isAuthority() {
+		t.Fatalf("after leaving (%v) the instance holds %+v; want it authoring the next term", err, got)
+	}
+	if guest.reg.Bools.Get("network.host_lost").Load() || guest.reg.Bools.Get("network.fork").Load() {
+		t.Fatal("the session it reopened still reports the host it lost")
+	}
+	guest.c.inboxMu.Lock()
+	inbox := len(guest.c.inbox)
+	guest.c.inboxMu.Unlock()
+	guest.c.authorityMu.Lock()
+	frames := len(guest.c.authorityIn)
+	guest.c.authorityMu.Unlock()
+	if inbox != 0 || frames != 0 {
+		t.Fatalf("the left session still has %d corrections and %d succession messages queued", inbox, frames)
+	}
+}
+
 // TestTheSuccessionOrderIsTheOrderTheRuleElects pins what a survivor with no link
 // retries down. It walks the same order the election runs in — the chain, then any
 // other survivor — so a reconnect and a handoff cannot disagree about who is being

@@ -56,6 +56,7 @@ type menuSession struct {
 
 func (s *menuSession) HostError() error                          { return nil }
 func (s *menuSession) JoinError() error                          { return nil }
+func (s *menuSession) LeaveError() error                         { return nil }
 func (s *menuSession) SessionSummary() string                    { return "Test session" }
 func (s *menuSession) Bots() []engine.BotSeat                    { return s.bots }
 func (s *menuSession) Participants() []engine.SessionParticipant { return nil }

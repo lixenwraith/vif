@@ -760,6 +760,72 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 	replayMatches(t, guestRec, guestWant, guestSurface)
 }
 
+// TestAJournalReplaysAcrossALeave: leaving writes the world as opening a session does
+// and removes those left behind in the settle after it, so the journal of a guest, or
+// of a host whose bot leaves and is seated again, open across its leave replays to
+// the world it played on in.
+func TestAJournalReplaysAcrossALeave(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, side := range []string{"guest", "host with its bot"} {
+		t.Run(side, func(t *testing.T) {
+			host := mustHeadless(t, fixtureSeed, 120, 40)
+			defer host.Close()
+			tickUntilCursor(t, host)
+			stop := tickInBackground(host)
+			if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+				t.Fatalf("host: %v", err)
+			}
+			leaver, bots := host, 0
+			if side != "guest" {
+				var err error
+				host.World().RunSafe(func() { err = (sessionControl{host}).AddBot("roam") })
+				if err != nil {
+					t.Fatalf("bot: %v", err)
+				}
+				bots = 1
+			}
+			waitForSeats(t, host, bots)
+			guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
+			guest.cfg.JoinAddress = host.HostAddr()
+			stop()
+			waitForRosterPair(t, host, guest)
+			if side == "guest" {
+				leaver = guest
+			}
+
+			rng := vmath.NewFastRand(11)
+			motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+			want := map[event.Stamp][]string{}
+			play := func(ticks int) {
+				for range ticks {
+					for _, a := range []*App{host, guest} {
+						if rng.Intn(3) == 0 {
+							inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+						}
+					}
+					host.Tick(1)
+					guest.Tick(1)
+					guest.ApplyPendingCorrections()
+					p := leaver.Position()
+					want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(leaver)
+				}
+			}
+			rec := journal.NewCapture()
+			leaver.cfg.JournalSink = rec
+			if _, err := leaver.openJournal(); err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			play(120)
+			leaveAs(t, leaver)
+			stop = tickInBackground(leaver)
+			waitForSeats(t, leaver, bots)
+			stop()
+			play(120)
+			leaver.World().RunSafe(func() { _ = leaver.stopJournalLocked(-1) })
+			leaver.serveJournal()
+			replayMatches(t, rec, want, guestSurface)
+		})
+	}
 // TestAHeldSessionReplaysOnEitherSide: a session's hold and its end replay on host
 // and guest alike, from a journal opened before the hold and one opened on it. Only
 // the host's :pause asked for either; the guest's end came with the host's next tick,

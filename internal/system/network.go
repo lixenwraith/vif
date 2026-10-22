@@ -708,28 +708,52 @@ func (s *NetworkSystem) forgetParticipant(participant uint32) {
 	if participant == 0 || int(participant) >= len(s.appliedPeerSeq) {
 		return
 	}
-	ordinary := func(a barrierArtifact) bool {
-		et, ok := event.GetEventType(a.frame.Event)
-		return a.source == participant && (!ok || !barrierBound(et))
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.appliedPeerSeq[participant] = 0
-	s.downAt[participant] = 0
-	s.seqs[participant] = window{}
+	s.forgetLocked(func(source uint32) bool { return source == participant }, func(a barrierArtifact) bool {
+		et, ok := event.GetEventType(a.frame.Event)
+		return a.source == participant && (!ok || !barrierBound(et))
+	})
+}
+
+// LeaveSession forgets the session this instance has left, as every other
+// participant's departure would and further: none of what they sent applies here
+// any more, barrier-bound or not, and no roster change still scheduled is this
+// session's. Its own crossings still apply. Caller holds the world lock.
+func (s *NetworkSystem) LeaveSession() {
+	s.states = s.states[:0] // owner syncs are other participants'; an own one is only forwarded
+	s.pendingDigest = [participantSlots]stateDigest{}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	local := s.localSource
+	s.forgetLocked(func(source uint32) bool { return source != local }, func(a barrierArtifact) bool {
+		et, _ := event.GetEventType(a.frame.Event)
+		return a.source != local || et == event.EventParticipantJoined || et == event.EventParticipantDeparted
+	})
+	s.relay = 0
+}
+
+// forgetLocked clears the sources gone names and drops the artifacts drop names,
+// scheduled or retained. Caller holds s.mu.
+func (s *NetworkSystem) forgetLocked(gone func(uint32) bool, drop func(barrierArtifact) bool) {
+	for id := uint32(1); id < participantSlots; id++ {
+		if gone(id) {
+			s.appliedPeerSeq[id], s.downAt[id], s.seqs[id] = 0, 0, window{}
+		}
+	}
 	kept := make(network.CrossingFences, 0, len(s.snapshotFences)) // shared with the capture header
 	for _, f := range s.snapshotFences {
-		if f.Source != network.PeerID(participant) {
+		if !gone(uint32(f.Source)) {
 			kept = append(kept, f)
 		}
 	}
 	s.snapshotFences = kept
-	s.scheduled = slices.DeleteFunc(s.scheduled, ordinary)
+	s.scheduled = slices.DeleteFunc(s.scheduled, drop)
 	s.scheduledBytes = 0
 	for _, a := range s.scheduled {
 		s.scheduledBytes += frameBytes(a.frame)
 	}
-	s.applied = slices.DeleteFunc(s.applied, ordinary)
+	s.applied = slices.DeleteFunc(s.applied, drop)
 }
 
 // Cross encodes and schedules a crossing when a peer is live, taking the event: the
