@@ -345,9 +345,11 @@ divergence.
 The values a peer is measured against are the coordinator's own, derived from the
 anchor it offered rather than read again at reply time, so a reset between the offer
 and the acceptance cannot turn a valid join into a mismatch or the reverse. A
-mismatch names one field and both values, and carries `IdentityRefusalTag` so the
-joiner can recognise it across the wire — unlike a handoff refusal it is not worth
-retrying, because nothing about the peer will be different a second later.
+mismatch names both builds by release and commit (`Build`, never compared), then one
+field and both values, each side reading its own build as the one here, and carries
+`IdentityRefusalTag` so the joiner can recognise it across the wire — unlike a
+handoff refusal it is not worth retrying, because nothing about the peer will be
+different a second later, and `cmd/vif` exits 76 on it.
 
 A dialer configured with no build identity (`Config.Identity`) skips its check,
 which is what leaves a harness free to dial a hand-built fixture.
@@ -410,7 +412,8 @@ Ack is observational—there is no retransmission policy.
 
 The handshake travels plain. From the join reply on, each direction of a link is
 one deflate stream (`NetworkStreamLevel`), so a frame compresses against every frame
-before it. The writer takes the frames queued within `NetworkWriteLinger` of a
+before it; a coordinator that refuses the reply writes its refusal on that stream,
+where the joiner reads it. The writer takes the frames queued within `NetworkWriteLinger` of a
 burst's first and sync-flushes once. Go's levels 1-6 drop their history on a flushed
 block under 128 bytes, which is most bursts; 7 keeps it.
 

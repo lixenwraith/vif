@@ -331,9 +331,12 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			err = errors.New(reply.Error)
 			return 0, err
 		}
+		// The joiner reads everything after its reply off the compressed stream.
+		refuse := func(cause error) { RefuseJoin(openFlateStream(conn, 0, 0), cause, timeout) }
 		// Verify before Report so an incompatible joiner cannot affect session state.
+		// It is told in its own terms: to it, its build is the one here.
 		if err = o.Identity.Verify(reply.Identity); err != nil {
-			RefuseJoin(conn, err, timeout)
+			refuse(reply.Identity.Verify(o.Identity))
 			return 0, err
 		}
 		if c.Report != nil {
@@ -341,7 +344,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 				Width: reply.Width, Height: reply.Height, Listen: reply.Listen,
 				Remote: conn.RemoteAddr().String(), Holder: reply.Holder,
 			}); err != nil {
-				RefuseJoin(conn, err, timeout)
+				refuse(err)
 				return 0, err
 			}
 		}
@@ -420,8 +423,9 @@ func ReadSessionRoute(r io.Reader) (string, error) {
 	return string(msg.Payload), nil
 }
 
-// RefuseJoin writes one pre-offer rejection, which the dialer reads as its reason.
-// A failure to write it is not worth reporting: the connection is being closed
+// RefuseJoin writes one rejection, which the dialer reads as its reason; a
+// compressed stream is flushed, since the dialer reads nothing it still holds. A
+// failure to write it is not worth reporting: the connection is being closed
 // either way, and the joiner falls back to reading the stream's end.
 func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 	body, err := json.Marshal(sessionReply{Error: cause.Error()})
@@ -432,7 +436,11 @@ func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 		_ = conn.SetWriteDeadline(time.Now().Add(timeout))
 		defer conn.SetWriteDeadline(time.Time{})
 	}
-	_ = NewMessage(MsgJoinReply, body).Encode(conn)
+	if err = NewMessage(MsgJoinReply, body).Encode(conn); err == nil {
+		if stream, ok := conn.(*flateStream); ok {
+			_ = stream.Flush()
+		}
+	}
 }
 
 // PendingJoin owns a dialled stream until the startup gate transfers it to a port.
@@ -710,6 +718,9 @@ func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 		if !p.hold(msg) {
 			break
 		}
+	}
+	if msg.Type == MsgJoinReply {
+		return SessionOffer{}, refusalFrom(msg)
 	}
 	if msg.Type != MsgStart {
 		return SessionOffer{}, fmt.Errorf("join handshake: got message %#x, want start", msg.Type)

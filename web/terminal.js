@@ -480,13 +480,17 @@ void main() {
         }
     }
 
+    /* 76 (EX_PROTOCOL) is a session that runs another build or session: the same
+       page would be refused again, so its reason is shown without a retry. */
+    const EXIT_IDENTITY = 76;
+
     function showExit(code, reason) {
         if (code === 0) {
             showMessage('vif has exited. Reload to start again.', false);
             return;
         }
         reason = (reason || 'exit code ' + code).replace(/\.$/, '');
-        showMessage('vif stopped: ' + reason + '. Reload to retry.', true);
+        showMessage('vif stopped: ' + reason + (code === EXIT_IDENTITY ? '.' : '. Reload to retry.'), true);
     }
 
     // === WASM Loading ===
