@@ -325,9 +325,9 @@ The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typin
 `:join <that link>` in a running solo game does the same without a reload. A
 `ws://` or `wss://` target is dialled whole, and its last path segment is the name
 sent first, as a `vif://` link's is. An `http(s)://` site creates a session, and the
-page joins the WebSocket route the site answers with; a host:port, `tcp://` or
-`vif://` target is refused here (see the address grammar in
-[Services](services-and-networking.md)).
+page joins the WebSocket route the site answers with; a session's `vif://` link
+joins by the route its site lists, and a bare host:port is refused here (see the
+address grammar in [Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash

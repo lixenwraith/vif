@@ -87,12 +87,13 @@ adapter. Native networking is role-selected separately:
 play constructs the no-op-capable socket adapter, while every other mode
 constructs it only for a host or join address, which only a script or bot run and
 `-serve` may be given. A browser registers the same adapter
-for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, and is
-refused `-host`, `-serve` and a `host:port` target, none of which it could bind or
-dial. The allocator terminates the route and splices it to the session's game
-port; a native client may dial it too, and otherwise keeps raw TCP. Replay
-input controls playback rather than the mode router, and its terminal resize
-affects presentation rather than recorded geometry.
+for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, or a
+session's `vif://` link, which it joins by the route its site lists, and is refused
+`-host`, `-serve` and a bare `host:port`, none of which it could bind or dial. The
+allocator terminates the route and splices it to the session's game port; a native
+client may dial it too, and otherwise keeps raw TCP. Replay input controls playback
+rather than the mode router, and its terminal resize affects presentation rather
+than recorded geometry.
 
 Content and audio details are covered in
 [Content, assets, and tools](content-assets-and-tools.md) and
@@ -162,11 +163,15 @@ Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
 an address, or a `ws(s)://` route a browser joins by, whose last path segment is
 the name. An `http(s)://` URL names a site instead: `network.RequestSession` posts
 to its `/vif/api/sessions` and the returned link is what `-join` or `:join` dials,
-so a restart or rejoin follows that session rather than creating another. The
-scheme picks the transport and tcp is the default. A host's bound address
-(`-host`, `-serve`, `:host`) is tcp or plain `ws://host:port`, one protocol per
-listener; `-listen` is tcp, which participants link to each other over; any other
-scheme is refused (§7.3).
+so a restart or rejoin follows that session rather than creating another. A link
+naming a session whose route does not answer, a `vif://` link in a browser or one
+typed onto another route's port, is looked up by its name in `GET /vif/api/sessions`
+of the site that issued it (the link's own origin, then its host's `https`), and the
+routes listed for this build are dialled. A route's own refusal stands, and a site
+that answers but does not list the session says so. The scheme picks the transport
+and tcp is the default. A host's bound address (`-host`, `-serve`, `:host`) is tcp
+or plain `ws://host:port`, one protocol per listener; `-listen` is tcp, which
+participants link to each other over; any other scheme is refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from

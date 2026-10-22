@@ -465,7 +465,7 @@ func (a *App) SessionSummary() string {
 func (a *App) sessionSummaryLocked() string {
 	if a.sessionTransportLocked() == nil {
 		if !buildHasSocketNetwork {
-			return "Solo run; :join <wss:// link> joins a session"
+			return "Solo run; :join <link> joins a session"
 		}
 		return "Solo run; :host <addr> opens it to participants, :join <target> joins one"
 	}

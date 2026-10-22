@@ -43,9 +43,12 @@ type wsConn struct {
 	releaseOnce sync.Once
 }
 
-// sessionLink is the session's WebSocket route, empty where the site publishes none:
-// a page has no socket to dial the front door with.
-func sessionLink(_, wsURL string) string { return wsURL }
+// buildDialsTCP is whether this build has a socket to dial a host:port with; a page
+// has none.
+const buildDialsTCP = false
+
+// routeAnswered is false: a page is not shown whether, or why, a route refused it.
+func routeAnswered(error) bool { return false }
 
 // listenWebSocket is refused: a page has no port to listen on.
 func listenWebSocket(string, time.Duration) (net.Listener, error) {

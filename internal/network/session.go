@@ -570,6 +570,9 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	}
 	base.Role, base.Address = RolePeer, addr
 	conn, err := dial(addr, base)
+	if err != nil && base.Dial == nil && base.SessionName != "" && !routeAnswered(err) {
+		conn, err = dialListed(base, err)
+	}
 	if err != nil {
 		return nil, SessionOffer{}, err
 	}
@@ -619,6 +622,29 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 		}
 	}
 	return &PendingJoin{conn: &flateStream{Conn: conn}, base: *base, offer: offer}, offer, nil
+}
+
+// dialListed dials base's session by another link its site lists, once nothing
+// answered at its own address: a player may hold the link another kind of client
+// joins by. With no site answering, the failure of the address it was given stands.
+func dialListed(base *Config, failed error) (net.Conn, error) {
+	links, err := listedLinks(base.Address, base.SessionName, base.ConnectTimeout)
+	if err != nil {
+		return nil, err
+	}
+	for _, link := range links {
+		e, err := ParseEndpoint(link)
+		if err != nil || e.Addr == base.Address {
+			continue
+		}
+		conn, err := dial(e.Addr, base)
+		if err == nil {
+			base.Address = e.Addr
+			return conn, nil
+		}
+		failed = fmt.Errorf("%s: %w", link, err)
+	}
+	return nil, failed
 }
 
 // TransportConfig returns a client config that adopts the negotiated identity.

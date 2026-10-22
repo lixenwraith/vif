@@ -308,6 +308,12 @@ on all of them, so no route can seat a player in a match their link did not name
 | Direct | `vif://<site>:<nodeport>/<id>` | host forward, the session's NodePort, the pod's 7777 | the pod itself, on the name, its roster and its per-address budget |
 | Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the allocator, the pod's 7777 | the allocator, before the upgrade (below) |
 
+Any of these links joins from either client. A browser cannot dial a `vif://` link,
+and a link can be typed onto another route's port, so a client that no route answers
+looks the name up in the site's `GET /vif/api/sessions` and dials the routes listed
+for it; a route's own refusal stands
+([Services §6](services-and-networking.md#6-operator-session-surface)).
+
 **The front door.** `vif-allocator` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly
 one `MsgSessionRoute` frame, under a five-second deadline and the 64-byte name
