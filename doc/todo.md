@@ -562,6 +562,25 @@ Combat's counters mix Shared results with per-instance ones, so two instances'
 Shared combat outcomes do not compare directly. Splitting them is a telemetry
 redesign rather than a domain-boundary fix.
 
+### Offer lixen.com games on the start screen
+
+- Priority: P1
+- Affected files: `android/app/src/main/java/com/lixen/vif/StartScreen.java`,
+  `android/app/src/main/java/com/lixen/vif/MainActivity.java`, `android/game/game.go`,
+  `web/index.html`, `web/terminal.js`
+
+Build it once the join refactor lands and its join matrix passes. Android opens on
+a start screen with one choice, "Tap to start", a solo run; the site is reached only
+from inside the run, through the menu's Multiplayer page (join a link, or request a
+session from `https://lixen.com`, its default). Put a second choice beside the tap:
+host a game at the site, as that request does, and/or join one of the running games
+the site lists (`GET /vif/api/sessions`), so `game.Start` takes a join target. A
+touch page the site serves needs only a link to its lobby (`/vif/lobby/`) on the
+same screen, since the lobby's Play link already opens the page with `-join`. A run
+that ends in an error, such as a refused join, shows it on the start screen; today
+Android finishes the activity and leaves the reason in logcat. Open: host, list or
+both; a second screen or rows on this one; what a session that ends returns to.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

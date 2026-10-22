@@ -445,7 +445,10 @@ keyboard would, to cycle the channels.
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
-`app.Run`. The view's grid is the cells its pixels hold at a cell 12 dp tall
+`app.Run`. The app opens on a start screen (`StartScreen`): the logo, "Tap to
+start" under it and a `?` that opens the touch controls; the tap creates the view,
+whose surface starts the run, so nothing plays behind the screen. The view's grid
+is the cells its pixels hold at a cell 12 dp tall
 (16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
 which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
 `CellMost` (4 to 40 dp, the page's range too) in `CellStep` steps, never under the
@@ -478,7 +481,10 @@ every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse inpu
 off a press on the bar's rows still reaches the run, and the open menu takes the
 pointer. The page does each of these on a touch screen, timed alike: the double
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
-bottom row drawn again above it, and the hold.
+bottom row drawn again above it, and the hold. It opens on the same start screen in
+the same words, the key strip listed where Android lists Back: the Worker compiles
+the program behind it and holds it (`hold`) until the tap runs it, and the tap
+opens the `AudioContext` inside its gesture, so the first sound plays.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its
