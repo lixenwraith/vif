@@ -435,9 +435,10 @@ timed on it, since echoes a stalled path releases together arrive microseconds a
 ### 4.1 The playout buffer
 
 The paths deliver worlds of different ages: a whole body is one one-way delay old,
-a selective repair three. Adopting each capture's tick would step the clock by up
-to four one-way delays and every shared actor with it, so a capture behind the
-clock is projected (§3.3) and moves nothing; the buffer is for the other direction.
+a selective repair five — the root, then a round trip each for the index and the
+page hashes. Adopting each capture's tick would step the clock by up to four
+one-way delays and every shared actor with it, so a capture behind the clock is
+projected (§3.3) and moves nothing; the buffer is for the other direction.
 
 A correction describing a tick this instance has not reached, within
 `NetworkHoldTicks`, is held until it has. A manifest ahead of the clock is held the
@@ -801,7 +802,8 @@ where they can be compared against each other.
 ## 8. Remaining gaps
 
 Each entry says what is actually absent rather than what is imperfect, and how to see
-it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
+it. Planned multiplayer work is in [the todo list](todo.md#multiplayer), and what
+could make the netcode cheaper in [Netcode optimization](netcode-optimization.md).
 
 ### Deferred by decision
 
