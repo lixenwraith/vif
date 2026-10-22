@@ -461,3 +461,80 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 		t.Fatalf("the seat plays on %dx%d after its holder's terminal became 170x50", w, h)
 	}
 }
+
+// awayScreen is a framePresentation its player can leave, as Android's view is
+type awayScreen struct {
+	framePresentation
+	away chan bool
+}
+
+func (s *awayScreen) Away() <-chan bool { return s.away }
+
+// TestAnUnseenGameStartsOverAtTheScreensNewSize: a player away before the clock
+// starts, as behind Android's start screen, holds the game at its first tick, drawn
+// undimmed. A screen that changes size before they come starts that game over as
+// one opened at the new size would be, still waiting; once they have come, a resize
+// crops the game in play instead.
+func TestAnUnseenGameStartsOverAtTheScreensNewSize(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	const pw, ph, lw, lh = 60, 100, 100, 60 // a phone held upright, then turned
+	open := func(p Presentation) *App {
+		t.Helper()
+		a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5743,
+			Host: Host{Presentation: p}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(a.Close)
+		a.scheduler.Prepare()
+		return a
+	}
+	cursor := func(a *App) (at [2]int) {
+		a.World().RunSafe(func() {
+			if pos, ok := a.World().LocalCursor(); ok {
+				at = [2]int{pos.X, pos.Y}
+			}
+		})
+		return at
+	}
+
+	screen := &awayScreen{framePresentation{w: pw, h: ph}, make(chan bool, 1)}
+	a := open(screen)
+	screen.away <- true
+	a.takeAway(screen.away)
+	if !a.ctx.TimeCtl.IsPaused() || !a.unseen || a.Position().Tick != 0 {
+		t.Fatalf("paused %v, unseen %v at tick %d; want an unseen game held at its first tick",
+			a.ctx.TimeCtl.IsPaused(), a.unseen, a.Position().Tick)
+	}
+	if a.renderContext().IsPaused {
+		t.Fatal("the waiting game is drawn dimmed, as a pause the player made")
+	}
+
+	a.handleResize(lw, lh)
+	a.scheduler.RunTicks(0) // the reset's half the clock runs between ticks
+	a.keepAway()
+	turned := open(&framePresentation{w: lw, h: lh})
+	turned.Settle()
+	if !a.ctx.TimeCtl.IsPaused() || a.Position().Run != 1 || a.Position().Tick != 0 {
+		t.Fatalf("after the turn: paused %v at %+v; want a new game held at its first tick",
+			a.ctx.TimeCtl.IsPaused(), a.Position())
+	}
+	w, h := mapSize(a)
+	if tw, th := mapSize(turned); w != tw || h != th || cursor(a) != cursor(turned) {
+		t.Fatalf("the turned game is %dx%d with its cursor at %v, want one opened turned: %dx%d at %v",
+			w, h, cursor(a), tw, th, cursor(turned))
+	}
+
+	a.setAway(false)
+	if a.ctx.TimeCtl.IsPaused() || a.unseen {
+		t.Fatalf("paused %v, unseen %v once the player came", a.ctx.TimeCtl.IsPaused(), a.unseen)
+	}
+	a.handleResize(pw, ph)
+	a.scheduler.RunTicks(0)
+	if pos := a.Position(); pos.Run != 1 {
+		t.Fatalf("a game in play started over on a resize: %+v", pos)
+	}
+	if w2, h2 := mapSize(a); h2 <= h || w2 >= w {
+		t.Fatalf("the map is %dx%d after turning back, want it cropped upright from %dx%d", w2, h2, w, h)
+	}
+}

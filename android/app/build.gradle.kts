@@ -71,12 +71,17 @@ val bindGo = tasks.register<Exec>("bindGo") {
     inputs.files(fileTree(repoRoot) { include("go.mod", "go.sum", "internal/**", "pkg/**") })
     inputs.files(fileTree(goModule) { include("go.mod", "go.sum", "game/**") })
     outputs.file(boundAar)
+    // Locals, not the script's values: the configuration cache cannot keep an action
+    // that holds the script itself
     val bin = goBin.get().asFile.path
+    val sdkDir = sdk.sdkDirectory
+    val ndkDir = sdk.ndkDirectory
+    val aar = boundAar.get().asFile
     doFirst {
         environment("PATH", bin + File.pathSeparator + System.getenv("PATH"))
-        environment("ANDROID_HOME", sdk.sdkDirectory.get().asFile.path)
-        environment("ANDROID_NDK_HOME", sdk.ndkDirectory.get().asFile.path)
-        boundAar.get().asFile.parentFile.mkdirs()
+        environment("ANDROID_HOME", sdkDir.get().asFile.path)
+        environment("ANDROID_NDK_HOME", ndkDir.get().asFile.path)
+        aar.parentFile.mkdirs()
     }
     commandLine("$bin/gomobile", "bind", "-target=android/arm64,android/amd64", "-androidapi", "30",
         "-javapkg=com.lixen.vif", "-ldflags=-s -w", "-o", boundAar.get().asFile.path, "./game")

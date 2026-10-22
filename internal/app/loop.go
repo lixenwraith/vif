@@ -185,6 +185,15 @@ func (a *App) Loop() (*restartRequest, error) {
 		a.ctx.TimeCtl.SetPaused(false)
 	}
 
+	// A player already away, behind Android's start screen, holds the game at its
+	// first tick: the run waits for them as it began
+	var awayChan <-chan bool
+	if p, ok := a.pres.(awayPresentation); ok {
+		awayChan = p.Away()
+		a.scheduler.Prepare() // the pause settles before the clock starts
+		a.takeAway(awayChan)
+	}
+
 	// Prime the first tick, then start the game clock
 	a.frameReady <- struct{}{}
 	a.scheduler.Start()
@@ -217,10 +226,6 @@ func (a *App) Loop() (*restartRequest, error) {
 	defer inputTicker.Stop()
 
 	eventChan := a.pres.Events()
-	var awayChan <-chan bool
-	if p, ok := a.pres.(awayPresentation); ok {
-		awayChan = p.Away()
-	}
 
 	for {
 		// Before the wait, not inside it: a latched restart is serviced on the
@@ -273,6 +278,7 @@ func (a *App) Loop() (*restartRequest, error) {
 			}
 
 		case <-frameTicker.C:
+			a.keepAway()
 			if !a.frame() {
 				return nil, nil
 			}
@@ -284,11 +290,15 @@ func (a *App) Loop() (*restartRequest, error) {
 // orchestrator (main-loop state) resizes against dimensions the handler wrote. The
 // push takes the lock like any input: a journaled record landing mid-tick would
 // settle inside that tick, where a reproduction cannot put it. A run whose terminal
-// is its geometry publishes it for its seats to follow.
+// is its geometry publishes it for its seats to follow. An unseen game starts over
+// at the new size, as one opened at it, rather than cropped as a game in play is.
 func (a *App) handleResize(width, height int) {
 	a.world.RunSafe(func() {
 		a.ctx.PushLocalOrigin(event.EventScreenResize,
 			&event.ScreenResizePayload{Width: width, Height: height}, event.OriginInput)
+		if a.unseen {
+			a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginInput)
+		}
 	})
 	a.scheduler.DispatchEventsImmediately()
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
@@ -302,7 +312,7 @@ func (a *App) handleResize(width, height int) {
 func (a *App) setAway(away bool) {
 	a.world.RunSafe(func() {
 		switch {
-		case away && !a.ctx.TimeCtl.IsPaused():
+		case away && !a.ctx.TimeCtl.IsPaused() && a.world.Session().Pausable():
 			a.ctx.PauseForInput()
 			a.awayPaused = true
 		case !away && a.awayPaused:
@@ -310,7 +320,34 @@ func (a *App) setAway(away bool) {
 			a.awayPaused = false
 		}
 	})
+	if !away {
+		a.unseen = false
+	}
 	a.scheduler.DispatchEventsImmediately()
+}
+
+// takeAway applies the away reports made before the clock starts. A run whose
+// player is away then is unseen until they come: nobody has seen its game.
+func (a *App) takeAway(reports <-chan bool) {
+	for {
+		select {
+		case away := <-reports:
+			a.setAway(away)
+		default:
+			a.unseen = a.awayPaused
+			return
+		}
+	}
+}
+
+// keepAway holds a run paused for its away player. A reset resumes the game it
+// starts, as the one an unseen game's resize asks for does, so the pause is made
+// again before that game's first tick.
+func (a *App) keepAway() {
+	if a.awayPaused && !a.ctx.TimeCtl.IsPaused() {
+		a.world.RunSafe(a.ctx.PauseForInput)
+		a.scheduler.DispatchEventsImmediately()
+	}
 }
 
 // renderContext reads everything a frame draws from, in one critical section: Config
@@ -337,6 +374,9 @@ func (a *App) renderContext() render.RenderContext {
 	if p, ok := a.pres.(coveredPresentation); ok {
 		out.StatusCovered = p.Covered()
 	}
+	// A pause made for an away player is not theirs: the game they come back to is
+	// drawn as it is, the picture Android's start screen lifts off at its tap
+	out.IsPaused = out.IsPaused && !a.awayPaused
 	return out
 }
 

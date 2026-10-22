@@ -7,7 +7,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | Path | What |
 |---|---|
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
-| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds the launcher icon, `../lixen-logo.svg` as an adaptive icon on black, with its lines alone as the themed one. |
+| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows and the launcher icon insets on black, with its lines alone as the themed icon. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
 | `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sound, volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
@@ -20,7 +20,8 @@ holding platform `android-36.1` and NDK `29.0.14206865`, its licence accepted.
 The SDK is `sdk.dir=<path>` in `android/local.properties` (ignored by git), else
 `ANDROID_HOME`, else Android Studio's default, `~/Android/Sdk`
 (`~/Library/Android/sdk` on macOS). The first build downloads Gradle, the JDK 21
-it builds on and the SDK build tools.
+it builds on and the SDK build tools; later builds reuse them, and Gradle's build and
+configuration caches (`gradle.properties`) rerun only what changed.
 
 ```bash
 make android             # names every missing piece and its fix, else bin/vif-debug.apk
@@ -64,6 +65,15 @@ browser once that browser may install apps.
 ```bash
 adb shell am start -n com.lixen.vif/.MainActivity
 ```
+
+The app opens on its start screen: the logo at the centre, "Tap to start" under
+it, and a `?` in the corner that opens the touch controls in a window nearly the
+screen's size, which its ×, Back or a tap outside closes. The run starts behind
+it, paused at its first tick and silent, and a tap anywhere else lifts the screen
+off the game; a screen turned first starts that game over at its new size. Back
+there is the system's, and no key reaches the game until the tap.
+A browser on a touch screen shows the same screen in the same words while it loads,
+and starts without a tap.
 
 A cell is 12 dp tall (`cellDP`) until a pinch zooms it, and the grid the view
 holds is stretched over the view edge to edge. Add `--ez raster true` to paint with

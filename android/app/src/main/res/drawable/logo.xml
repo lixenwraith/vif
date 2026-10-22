@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- lixen-logo.svg's square, strokes included: eight wedges under a black square
+     with its cross and diagonals. The start screen shows it; the launcher insets it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="220dp"
+    android:height="220dp"
+    android:viewportWidth="220"
+    android:viewportHeight="220">
+    <group
+        android:translateX="-90"
+        android:translateY="-90">
+        <path android:fillColor="#FF0000" android:pathData="M200,200 L200,300 L100,300 Z" />
+        <path android:fillColor="#FFA500" android:pathData="M200,200 L100,300 L100,200 Z" />
+        <path android:fillColor="#FFFF00" android:pathData="M200,200 L100,200 L100,100 Z" />
+        <path android:fillColor="#008000" android:pathData="M200,200 L100,100 L200,100 Z" />
+        <path android:fillColor="#0000FF" android:pathData="M200,200 L200,100 L300,100 Z" />
+        <path android:fillColor="#4B0082" android:pathData="M200,200 L300,100 L300,200 Z" />
+        <path android:fillColor="#EE82EE" android:pathData="M200,200 L300,200 L300,300 Z" />
+        <path android:fillColor="#808080" android:pathData="M200,200 L300,300 L200,300 Z" />
+        <path
+            android:strokeColor="#000000"
+            android:strokeWidth="20"
+            android:pathData="M100,100 L300,100 L300,300 L100,300 Z M200,100 L200,300 M100,200 L300,200 M100,100 L300,300 M300,100 L100,300" />
+    </group>
+</vector>
