@@ -59,6 +59,7 @@ html, body {
     text-align: center;
     overflow-wrap: anywhere;              /* an exit reason can carry a whole URL */
     font-variant-numeric: tabular-nums;   /* the byte counter must not reflow */
+    z-index: 3;                           /* over the start screen */
 }
 
 #nojs a { color: #8ea2ff; }
@@ -66,12 +67,117 @@ html, body {
 #loading.hidden { display: none; }
 #loading.error  { color: #f44; }
 
+/* A touch screen opens on the start screen, as Android does: the logo two fifths of
+   the shorter side at the centre, the loading line under it, ? in the corner. The
+   line and the notice stay above it. */
+:root { --logo: 40vmin; }
+
+#start {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    background: #000;
+}
+
+#start[hidden] { display: none; }
+
+#logo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--logo);
+    height: var(--logo);
+    transform: translate(-50%, -50%);
+}
+
+#start:not([hidden]) ~ #loading {
+    top: calc(50% + var(--logo) / 2 + 24px);
+    transform: translateX(-50%);
+    color: #bbb;
+    font-size: 18px;
+}
+
+#controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 48px;
+    height: 48px;
+    border: 2px solid #bbb;
+    border-radius: 50%;
+    background: none;
+    color: #fff;
+    font: 24px/1 monospace;
+}
+
+/* The touch controls: a window inset 16px from the page's edges, its list scrolling
+   under the title and the close button. */
+#help {
+    position: fixed;
+    inset: 16px;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 1px solid #555;
+    background: #000;
+    color: #bbb;
+    font: 15px/1.4 monospace;
+}
+
+#help[open] {
+    display: flex;
+    flex-direction: column;
+}
+
+#help::backdrop { background: rgba(0, 0, 0, 0.6); }
+
+#help-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    padding-left: 16px;
+}
+
+#help-head h2 {
+    color: #fff;
+    font: bold 18px monospace;
+}
+
+#help-close {
+    width: 48px;
+    height: 48px;
+    border: 0;
+    background: none;
+    color: #fff;
+    font: 28px/1 monospace;
+}
+
+#help-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 16px 16px;
+}
+
+#help-body:focus { outline: none; }   /* focused as it opens, for the keys that scroll it */
+
+#help dt {
+    color: #fff;
+    font-weight: bold;
+}
+
+#help dd { padding: 2px 0 14px 16px; }
+#help p  { padding-top: 8px; }
+
 /* A line over the game, gone after a while: the fallback drawer in use. */
 #notice {
     position: fixed;
     top: 4px;
     right: 8px;
-    z-index: 2;
+    z-index: 3;
     max-width: 90vw;
     padding: 2px 6px;
     background: rgba(0, 0, 0, 0.7);
@@ -128,7 +234,8 @@ html, body {
     }
 
     #terminal,
-    #strip {
+    #strip,
+    #start {
         touch-action: none;
         -webkit-user-select: none;
         user-select: none;
