@@ -670,9 +670,10 @@ join installs a current keyframe and catches up the bounded transfer gap. Reconn
 uses the same path.
 
 `network.SocketPort` uses a fixed 12-byte frame header and complete short-read and
-short-write handling. Heartbeats and deadlines close silent streams. Bounded input
-and output queue refusal is counted; application events are not retransmitted.
-Newer corrections and keyframes recover state.
+short-write handling. Read deadlines close silent streams, and link probes keep
+live ones out of them. Bounded input and output queue refusal is counted;
+application events are not retransmitted. Newer corrections and keyframes recover
+state.
 
 At 20 ticks/s the event stream is small relative to authoritative state: an empty
 epoch is 44 bytes, four cursor moves are about 567 bytes, and one owner-state sync

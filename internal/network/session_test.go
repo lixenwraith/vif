@@ -27,8 +27,7 @@ func testOffer() SessionOffer {
 
 func TestSilentPeerBecomesDisconnectNotification(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.DisconnectTimeout = 20 * time.Millisecond
-	cfg.HeartbeatInterval = 0
+	cfg.ReadTimeout = 20 * time.Millisecond
 	pm := NewPeerManager(cfg)
 	disconnected := make(chan PeerID, 1)
 	pm.SetHandlers(nil, func(id PeerID) { disconnected <- id }, nil)
@@ -45,6 +44,58 @@ func TestSilentPeerBecomesDisconnectNotification(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("silent peer did not time out")
+	}
+}
+
+// TestProbesKeepAQuietLinkAlive: a lobby and then a session carry nothing but
+// probes for longer than the read timeout, and neither end calls the other lost.
+func TestProbesKeepAQuietLinkAlive(t *testing.T) {
+	quiet := 5 * parameter.NetworkProbeInterval
+	offer := testOffer()
+	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.ReadTimeout = quiet
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	joinCfg := DebugConfig(RolePeer, "")
+	joinCfg.ReadTimeout = quiet
+	pending, _, err := DialSession(host.Addr().String(), joinCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pending.Close()
+	guestCfg := pending.TransportConfig()
+	if err := pending.Complete(nil, JoinerReport{}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return host.PeerCount() == 1 }, host.Changes(), "host peer")
+
+	start, err := json.Marshal(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.AfterFunc(2*quiet, func() { host.Send(2, uint8(MsgStart), start) })
+	if _, err := pending.WaitStart(); err != nil {
+		t.Fatalf("a lobby longer than the read timeout ended: %v", err)
+	}
+	if err := pending.Ready(); err != nil {
+		t.Fatal(err)
+	}
+	guest := NewSocketPort(guestCfg)
+	defer guest.Close()
+	if err := guest.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return guest.PeerCount() == 1 }, guest.Changes(), "guest peer")
+
+	time.Sleep(2 * quiet)
+	if !host.Connected(2) || !guest.Connected(1) {
+		t.Fatalf("a quiet session dropped its link: the host holds the guest %t, the guest holds the host %t",
+			host.Connected(2), guest.Connected(1))
 	}
 }
 

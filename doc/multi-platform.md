@@ -207,7 +207,7 @@ replay.
 
 A browser that freezes the tab instead, as Chrome may under its energy or memory
 saving and mobile browsers readily do, stops the Worker, so nothing reads the
-socket. The session drops the participant after `DisconnectTimeout` (30 s) of
+socket. The session drops the participant after `NetworkLinkDeadAfter` (5 s) of
 silence, as it drops any silent peer, and on return the page shows "Host connection
 lost; continuing locally from the last authoritative state"; reloading the same
 link rejoins while the session lives.

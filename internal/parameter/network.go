@@ -262,6 +262,13 @@ const (
 	// probes count as lost. A stream loses nothing, so this is a link that stopped.
 	NetworkProbeLostAfter = time.Second
 
+	// NetworkLinkDeadAfter is how long a session stream may go without a frame
+	// before it is closed as lost. The far end answers each probe on receipt, off its
+	// tick, so a live link is never this quiet, a paused or stalled run's included:
+	// only a dropped network, an expired NAT mapping, a sleeping machine or a frozen
+	// tab is.
+	NetworkLinkDeadAfter = 5 * time.Second
+
 	// SnapshotFloorGraceTicks is how far past the floor a receiver waits before
 	// calling its own condition unrecoverable: the floor bounds publication, and a
 	// receiver also pays the transfer and the install. One nominal keyframe period is
