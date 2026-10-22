@@ -801,7 +801,8 @@ where they can be compared against each other.
 ## 8. Remaining gaps
 
 Each entry says what is actually absent rather than what is imperfect, and how to see
-it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
+it. Planned multiplayer work is in [the todo list](todo.md#multiplayer), and what
+could make the netcode cheaper in [Netcode optimization](netcode-optimization.md).
 
 ### Deferred by decision
 
