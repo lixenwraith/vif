@@ -1,6 +1,7 @@
 package network
 
 import (
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -53,8 +54,8 @@ func TestVerifyNamesTheFirstDifference(t *testing.T) {
 		if !strings.Contains(err.Error(), field) {
 			t.Fatalf("%s: refusal %q does not name the field", field, err)
 		}
-		if !IsIdentityRefusal(err) {
-			t.Fatalf("%s: refusal %q is not recognisable across the wire", field, err)
+		if !errors.Is(err, &Refusal{Code: RefusalIdentity}) {
+			t.Fatalf("%s: refusal %q is not an identity refusal", field, err)
 		}
 		const builds = "vif 1154b8a6 here and vif 9b6df60e on the other side"
 		if local.VerifyBuild(remote) != nil && !strings.Contains(err.Error(), builds) {
@@ -79,7 +80,7 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 	const readsTheirs = "vif 9b6df60e here and vif 1154b8a6 on the other side"
 	check := func(side string, err error, want string) {
 		t.Helper()
-		if !IsIdentityRefusal(err) || !strings.Contains(err.Error(), want) {
+		if !errors.Is(err, &Refusal{Code: RefusalIdentity}) || !strings.Contains(err.Error(), want) {
 			t.Errorf("the %s read %v, want a refusal naming %q", side, err, want)
 		}
 	}

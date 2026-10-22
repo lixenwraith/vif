@@ -43,7 +43,7 @@ Name this host answers to, so one address can serve several sessions
 .B \-players <n>
 Roster ceiling including self, 2..16 (with \-serve, guests only, 1..16); unset holds the whole roster; with a \-join site, the one requested
 .TP
-.B \-bot, \-bots [N[:graph]|graph]
+.B \-bot [N[:graph]|graph]
 Add bots alongside you (default 1:default); \-host/\-join keep your player
 .TP
 .B \-authority host|migrate
@@ -263,7 +263,7 @@ desktop window opens and how, the zoom Android and a browser keep, and the [play
 settings the menu writes back.
 .TP
 .I bot/<name>.toml
-Bot graphs that \-bot, \-bots and :bot add name; a path also works. The default
+Bot graphs that \-bot and :bot add name; a path also works. The default
 graph is compiled in and resolves last.
 .TP
 .IR /usr/local/etc/vif ", " /etc/vif

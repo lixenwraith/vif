@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -591,6 +592,54 @@ func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
 	}
 }
 
+// TestTheFirstRestartAskedForStands: a run already being replaced refuses a scenario
+// change rather than overwriting the restart it latched, a dialled join's above all.
+func TestTheFirstRestartAskedForStands(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeScenario(t, root, "other", "A scenario this root holds.")
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 80, Height: 24, Resources: resource.Options{Dir: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	a.cfg.Mode = ModePlay
+	first := &restartRequest{Join: "127.0.0.1:7777"}
+	if !a.replaceWith(first) {
+		t.Fatal("the first restart was refused")
+	}
+	var changed bool
+	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
+	if !errors.Is(err, errRunReplaced) || changed || a.restart.Load() != first {
+		t.Fatalf("a later change: changed %v, %v; want it refused and the first restart kept", changed, err)
+	}
+}
+
+// TestABotToldToLeaveIsNotSeatedAgain: a restart asked for while a removed bot is
+// still leaving does not bring it back in the next run.
+func TestABotToldToLeaveIsNotSeatedAgain(t *testing.T) {
+	// Not parallel: paced runs against wall-clock deadlines.
+	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, a)
+	stop := tickInBackground(a)
+	t.Cleanup(func() { stop(); a.Close() })
+	var err error
+	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForSeats(t, a, 1)
+	req := &restartRequest{}
+	a.World().RunSafe(func() {
+		if err = a.dropSeat(int(a.botSeats()[0].Slot)); err == nil {
+			a.replaceWith(req)
+		}
+	})
+	if err != nil || len(req.Bots) != 0 {
+		t.Fatalf("dropped %v, then the restart seats %v; want none", err, req.Bots)
+	}
+}
+
 // TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem: a session its own bots are
 // all of has no address to send them back to and needs none, since the next run
 // seats them again; a scenario whose max_players is below its players is refused.
@@ -701,10 +750,7 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 	// What Run does next: the replaced run goes, and the request builds the next
 	// one, driven here rather than presented.
 	replaced()
-	next, err := Config{Bots: req.Bots, dialled: req.dialled}.joining(req.Join)
-	if err != nil {
-		t.Fatal(err)
-	}
+	next, _ := Config{}.restarted(req)
 	driveBot(t, next, "patrol", nil)
 	waitForCursors(t, host, 3)
 }
@@ -1300,9 +1346,10 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 }
 
 // TestASessionCommandIsGatedByTheRoleARunHolds is the join matrix's role and
-// command table: what :join and :host answer in each role a run can hold, and how
-// :session names it. A run whose session is its own bots' takes both; a guest that
-// inherited the term reads as the host it now is.
+// command table: the role each kind of run holds, what :join and :host answer in
+// it, and how :session names it. A run whose session is its own bots' takes both,
+// one its session left may join another, and a guest that inherited the term reads
+// as the host it now is.
 func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	ticking := func(a *App) *App {
@@ -1329,34 +1376,54 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	host := hosting(ticking(mustHeadless(t, fixtureSeed, BotWidth, BotHeight)))
 	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
 	guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+	gone := mustHeadless(t, 0x3104, BotWidth, BotHeight)
+	tickUntilCursor(t, gone)
+	stopGone := tickInBackground(gone)
+	leave := sync.OnceFunc(func() { stopGone(); gone.Close() })
+	t.Cleanup(leave)
+	hosting(gone)
+	left, leftPort := mustSocketJoiner(t, gone.HostAddr(), 0x3104, BotWidth, BotHeight)
+	left.cfg.JoinAddress = gone.HostAddr()
 
 	for _, row := range []struct {
-		role       string
+		kind       string
 		run        func() *App
+		role       sessionRole
 		join, host string // the refusal each names; empty takes the command
 		line       string // how :session opens
 	}{
 		{"solo", func() *App { return ticking(mustHeadless(t, 0x3101, BotWidth, BotHeight)) },
-			"", "", "Solo run"},
+			roleSolo, "", "", "Solo run"},
 		{"solo with its bots", func() *App { return withBot(ticking(mustHeadless(t, 0x3102, BotWidth, BotHeight))) },
-			"", "", "Session hosting, "},
+			roleSeats, "", "", "Session hosting, "},
 		{"hosting", func() *App { return host },
-			"already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+			roleHost, "already in a session", "already hosting", "Session hosting 127.0.0.1:"},
 		{"hosting with its bots", func() *App { return withBot(hosting(ticking(mustHeadless(t, 0x3103, BotWidth, BotHeight)))) },
-			"already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+			roleHost, "already in a session", "already hosting", "Session hosting 127.0.0.1:"},
 		{"joined", func() *App { return guest },
-			"already in a session", "already in a session", "Session joined " + host.HostAddr() + ", "},
+			roleGuest, "already in a session", "already in a session", "Session joined " + host.HostAddr() + ", "},
 		{"inherited the term", func() *App {
 			guest.World().RunSafe(func() {
 				guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
 			})
 			return guest
-		}, "already in a session", "already in a session", "Session hosting, "},
+		}, roleGuest, "already in a session", "already in a session", "Session hosting, "},
+		{"its session left", func() *App {
+			leave()
+			for deadline := time.Now().Add(socketWait); leftPort.PeerCount() > 0; time.Sleep(time.Millisecond) {
+				if time.Now().After(deadline) {
+					t.Fatal("the guest never lost its host")
+				}
+			}
+			return left
+		}, roleLeft, "", "already in a session", "Session joined " + gone.HostAddr() + ", "},
 	} {
 		a := row.run()
+		var role sessionRole
 		var join, hostErr error
 		var line string
 		a.World().RunSafe(func() {
+			role = a.sessionRoleLocked()
 			mode := a.cfg.Mode
 			a.cfg.Mode = ModePlay // :join serves Run's loop, which a headless run lacks
 			join = a.joinErrorLocked()
@@ -1364,17 +1431,20 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 			hostErr = a.hostErrorLocked()
 			line = a.sessionSummaryLocked()
 		})
+		if role != row.role {
+			t.Errorf("a run %s holds role %d; want %d", row.kind, role, row.role)
+		}
 		for _, c := range []struct {
 			command string
 			err     error
 			want    string
 		}{{":join", join, row.join}, {":host", hostErr, row.host}} {
 			if c.want == "" && c.err != nil || c.want != "" && (c.err == nil || !strings.Contains(c.err.Error(), c.want)) {
-				t.Errorf("%s in a run %s: %v; want %q", c.command, row.role, c.err, cmp.Or(c.want, "taken"))
+				t.Errorf("%s in a run %s: %v; want %q", c.command, row.kind, c.err, cmp.Or(c.want, "taken"))
 			}
 		}
 		if !strings.HasPrefix(line, row.line) {
-			t.Errorf(":session in a run %s reads %q; want it to open %q", row.role, line, row.line)
+			t.Errorf(":session in a run %s reads %q; want it to open %q", row.kind, line, row.line)
 		}
 	}
 }

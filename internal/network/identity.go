@@ -2,23 +2,12 @@ package network
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lixenwraith/vif/internal/event"
 )
 
 // ProtocolVersion changes when peers cannot share the session wire contract.
-const ProtocolVersion uint32 = 7
-
-// IdentityRefusalTag distinguishes incompatible simulation identity from a
-// retryable admission failure without matching user-facing prose.
-const IdentityRefusalTag = "identity-mismatch"
-
-// IsIdentityRefusal reports whether a join was refused for a build or session
-// identity the coordinator would not accept.
-func IsIdentityRefusal(err error) bool {
-	return err != nil && strings.Contains(err.Error(), IdentityRefusalTag)
-}
+const ProtocolVersion uint32 = 8
 
 // PeerIdentity is the simulation contract verified by both sides before admission.
 // Build identity is checked before construction; session identity after construction.
@@ -90,8 +79,8 @@ func (local PeerIdentity) sessionFields(remote PeerIdentity) []identityField {
 // what they turned out to be.
 func (local PeerIdentity) VerifyBuild(remote PeerIdentity) error {
 	if diff := firstDifference(local.buildFields(remote)); diff != "" {
-		return fmt.Errorf("another build, %s here and %s on the other side: %s (%s)",
-			local.named(), remote.named(), diff, IdentityRefusalTag)
+		return &Refusal{Code: RefusalIdentity, Reason: fmt.Sprintf("another build, %s here and %s on the other side: %s",
+			local.named(), remote.named(), diff)}
 	}
 	return nil
 }
@@ -103,7 +92,7 @@ func (local PeerIdentity) Verify(remote PeerIdentity) error {
 		return err
 	}
 	if diff := firstDifference(local.sessionFields(remote)); diff != "" {
-		return fmt.Errorf("another session: %s (%s)", diff, IdentityRefusalTag)
+		return &Refusal{Code: RefusalIdentity, Reason: "another session: " + diff}
 	}
 	return nil
 }

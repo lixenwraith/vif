@@ -24,7 +24,6 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 | Flag | Effect |
 |---|---|
 | `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; omitted operands mean `1:default`. |
-| `-bots [N[:graph]\|graph]` | The same grammar; requests from both flags add together. |
 | `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`. Not with `-watch` or `-serve`. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
@@ -335,7 +334,7 @@ unattended.
 | A `roam` or `patrol` bot plays an old policy | An installed file of that name shadows `default`: use `-bot default` or update the file. |
 | `dropped` above 0 in `bot stopped` or `bot left` | The graph queues faster than its rate; guard its actions with `Idle` or raise `actions_per_second`. |
 | `-speed max cannot pace a session` | Run one bot alone, without `-host`, `-join` or further bots. |
-| `-headless requires -bot, -bots or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
+| `-headless requires -bot or -replay …` | Give it a bot; `-watch` and `-serve` do not combine with it. |
 | `Bot <graph>: …` on the status bar | The seat failed to join; the log has `bot not seated` with the error. |
 
 The holder logs `bot seated`, `bot left` and `bot not seated` for each seat, whose

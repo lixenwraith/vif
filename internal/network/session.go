@@ -73,7 +73,7 @@ type SessionOffer struct {
 func (o SessionOffer) CarriesSnapshot() bool { return o.SnapshotBytes > 0 }
 
 type sessionReply struct {
-	Error string `json:"error,omitempty"`
+	refusalField
 
 	// The joiner's own terminal-equivalent geometry, sent with its acceptance. It
 	// is advisory and arrives after the joiner has built its world, so it can only
@@ -143,7 +143,7 @@ type RelayJoin struct {
 type RelayAdmit struct {
 	Nonce uint32       `json:"nonce"`
 	Offer SessionOffer `json:"offer,omitzero"`
-	Error string       `json:"error,omitempty"`
+	refusalField
 }
 
 // Validate rejects transport-level ambiguity before App.Join checks identity.
@@ -274,9 +274,9 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 				// Answered for the same reason a refused Assign is: a dialer that
 				// can read why it was turned away can back off, where one that only
 				// sees the stream end retries immediately and makes the condition
-				// the refusal exists to stop.
+				// the refusal exists to stop. The host's own report names the address.
 				RefuseJoin(conn, err, timeout)
-				return 0, err
+				return 0, fmt.Errorf("%s: %w", conn.RemoteAddr(), err)
 			}
 		}
 		o, err := c.Assign()
@@ -327,8 +327,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		if err = json.Unmarshal(msg.Payload, &reply); err != nil {
 			return 0, fmt.Errorf("join handshake reply: %w", err)
 		}
-		if reply.Error != "" {
-			err = errors.New(reply.Error)
+		if err = reply.Refused(); err != nil {
 			return 0, err
 		}
 		// The joiner reads everything after its reply off the compressed stream.
@@ -359,7 +358,7 @@ func refusalFrom(msg *Message) error {
 	if err := json.Unmarshal(msg.Payload, &reply); err != nil || reply.Error == "" {
 		return errors.New("refused by the host with no reason given")
 	}
-	return errors.New("refused by the host: " + reply.Error)
+	return fmt.Errorf("refused by the host: %w", reply.Refused())
 }
 
 // serveScenario answers one scenario request with the chunked body. The deadline is
@@ -404,7 +403,7 @@ func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
 		return err
 	}
 	if got != name {
-		return errors.New("this address is not serving the session that was dialled")
+		return &Refusal{Code: RefusalUnknown, Reason: "this address is not serving the session that was dialled"}
 	}
 	return nil
 }
@@ -423,12 +422,112 @@ func ReadSessionRoute(r io.Reader) (string, error) {
 	return string(msg.Payload), nil
 }
 
+// RefusalCode is the kind of a join refusal, which a dialer acts on rather than on
+// its wording. Zero is a refusal that names no kind this build knows.
+type RefusalCode uint8
+
+const (
+	RefusalFull     RefusalCode = iota + 1 // no room for another participant
+	RefusalStarting                        // the lobby is closing on its roster
+	RefusalHandoff                         // the session is electing an authority
+	RefusalEnding                          // the session is draining or has expired
+	RefusalIdentity                        // another build, or another session
+	RefusalBudget                          // this address has joined too often
+	RefusalBehind                          // the join could not catch up with the session
+	RefusalUnknown                         // no such session at this address
+)
+
+// Retry is what a refused dialer can do about it.
+type Retry uint8
+
+const (
+	RetryLater Retry = iota // a person may retry, and a rejoin does; a seat does not
+	RetrySoon               // it passes in moments, so seats and rejoins retry
+	RetryNever              // the same dial is refused again
+)
+
+// refusals is what each kind means to its dialer, indexed by RefusalCode: whether
+// trying again can help, and the advice its player reads after the reason.
+var refusals = [...]struct {
+	retry  Retry
+	advice string
+}{
+	RefusalFull:     {RetryLater, "retry when a player leaves"},
+	RefusalStarting: {RetrySoon, "retry in a moment"},
+	RefusalHandoff:  {RetrySoon, "retry in a moment"},
+	RefusalEnding:   {RetryNever, ""},
+	RefusalIdentity: {RetryNever, ""},
+	RefusalBudget:   {RetryLater, "retry in a minute"},
+	RefusalBehind:   {RetrySoon, "retry in a moment"},
+	RefusalUnknown:  {RetryNever, ""},
+}
+
+// Refusal is a join turned away. Code is the kind and Reason what the player
+// reads, to which Error adds the advice for its kind; detail belongs in Reason,
+// since the advice ends the sentence. One refusal matches another of its kind.
+type Refusal struct {
+	Code   RefusalCode
+	Reason string
+}
+
+func (r *Refusal) Error() string {
+	if advice := refusals[r.Code].advice; advice != "" {
+		return r.Reason + "; " + advice
+	}
+	return r.Reason
+}
+
+func (r *Refusal) Is(target error) bool {
+	t, ok := target.(*Refusal)
+	return ok && t.Code == r.Code
+}
+
+// RetryOf is what a dialer refused with err can do: its kind's entry, or
+// RetryLater for a failure that names no kind.
+func RetryOf(err error) Retry {
+	var r *Refusal
+	if errors.As(err, &r) {
+		return refusals[r.Code].retry
+	}
+	return RetryLater
+}
+
+// refusalField is a refusal as a frame carries it: the code, and the reason
+// without the advice, which the reader's own build adds.
+type refusalField struct {
+	Code  RefusalCode `json:"code,omitempty"`
+	Error string      `json:"error,omitempty"`
+}
+
+// Refuse makes err the refusal this frame carries.
+func (f *refusalField) Refuse(err error) {
+	f.Code, f.Error = 0, err.Error()
+	var r *Refusal
+	if errors.As(err, &r) {
+		f.Code, f.Error = r.Code, r.Reason
+	}
+}
+
+// Refused is the refusal this frame carries, nil when it carries none, and a
+// Refusal when its kind is one this build knows.
+func (f refusalField) Refused() error {
+	switch {
+	case f.Error == "":
+		return nil
+	case f.Code == 0 || int(f.Code) >= len(refusals):
+		return errors.New(f.Error)
+	}
+	return &Refusal{Code: f.Code, Reason: f.Error}
+}
+
 // RefuseJoin writes one rejection, which the dialer reads as its reason; a
 // compressed stream is flushed, since the dialer reads nothing it still holds. A
 // failure to write it is not worth reporting: the connection is being closed
 // either way, and the joiner falls back to reading the stream's end.
 func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
-	body, err := json.Marshal(sessionReply{Error: cause.Error()})
+	var reply sessionReply
+	reply.Refuse(cause)
+	body, err := json.Marshal(reply)
 	if err != nil {
 		return
 	}
@@ -603,8 +702,7 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	}
 	if msg.Type == MsgJoinReply {
 		// Refused before an identity was allocated. The coordinator says why, and
-		// the one reason worth acting on rather than reporting is a succession:
-		// IsHandoffRefusal is what a caller retries on.
+		// the kind it names is what a caller decides a retry on (RetryOf).
 		_ = conn.Close()
 		return nil, SessionOffer{}, refusalFrom(msg)
 	}
@@ -676,7 +774,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	p.replied = true
 	reply := sessionReply{}
 	if joinErr != nil {
-		reply.Error = joinErr.Error()
+		reply.Refuse(joinErr)
 	} else {
 		reply.Width, reply.Height = report.Width, report.Height
 		reply.Identity = report.Identity
@@ -843,15 +941,14 @@ func (l *AdmissionLimiter) Admit(addr net.Addr) error {
 			// a table this wide is many real hosts dialling at once rather than one
 			// forging them, and a roster of sixteen has no reading of that in which
 			// the next dial is the one it was waiting for.
-			return fmt.Errorf("admission: %d dialling hosts already tracked", len(l.seen))
+			return &Refusal{Code: RefusalBudget, Reason: fmt.Sprintf("%d other hosts are joining at once", len(l.seen))}
 		}
 		entry = &admissionCount{opened: now}
 		l.seen[key] = entry
 	}
 
 	if entry.count >= l.burst {
-		return fmt.Errorf("admission: %s has joined %d times within %s",
-			key, entry.count, l.window)
+		return &Refusal{Code: RefusalBudget, Reason: "this address has joined too often"}
 	}
 	entry.count++
 	return nil

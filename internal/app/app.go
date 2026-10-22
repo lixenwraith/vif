@@ -32,9 +32,10 @@ import (
 // fallbackColorMode is published when no terminal exists to detect against
 const fallbackColorMode = terminal.ColorMode256
 
-// restartRequest is what one run asks the next one to be. Loop returns it and Run
-// applies it to the command line it was given, so the operator's own flags still
-// decide everything a restart does not name — a pinned -seed most of all.
+// restartRequest is what one run asks the next one to be. Loop returns it and
+// Config.restarted builds the next run from it on the command line Run was given,
+// so the operator's own flags still decide everything a restart does not name — a
+// pinned -seed most of all.
 type restartRequest struct {
 	Notice string
 	// Scenario replaces -s. Empty keeps the command line's, which is what a guest
@@ -65,6 +66,15 @@ type restartRequest struct {
 	// Journal opens a journal in the next run from its start: this run was
 	// journaling, or asked to start, when it was replaced.
 	Journal bool
+}
+
+// replaceWith latches req as the run to build next, and is the only thing that
+// does. Its seats are read now rather than at the switch: what asks for a restart
+// may be the session closing, which ends them before this run is replaced. The
+// first request stands; a later one is refused.
+func (a *App) replaceWith(req *restartRequest) bool {
+	req.Bots = a.seatGraphs()
+	return a.restart.CompareAndSwap(nil, req)
 }
 
 // App owns the wired runtime: services, world, input, scheduler, and the selected

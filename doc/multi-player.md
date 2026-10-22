@@ -27,6 +27,11 @@ Use these terms consistently:
   them, retains authoritative captures so it can answer their selective repair
   requests, and reports their proofs upstream. It authors nothing. A guest is the
   relay of its own bots, and with `-relay <addr>` of the people who join there.
+- A run's **session role** is what it is to its session, read from what the
+  session wrote: solo, seats (a session it opened for its own bots, with no door),
+  host, server, guest, or left (a guest whose session has nobody left but its own
+  bots). `:join`, `:host` and `:session` answer by it from one table. It is not
+  authorship: a guest that inherited the term is a guest that authors.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
   and never moves backwards on an instance.

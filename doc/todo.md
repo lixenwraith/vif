@@ -43,7 +43,7 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
   `tool/vif-allocator`
 
 `actions_per_second` is the only knob, and nothing caps it. Options: a rate suffix
-such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and the
+such as `-bot 2:default@6` that `BotSpecs` parses, so `-bot`, `:bot add` and the
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
 

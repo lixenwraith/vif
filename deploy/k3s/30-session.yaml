@@ -125,7 +125,7 @@ spec:
             - "-players"
             - "${PLAYERS}"
             # Seated in-process before the lobby opens; each takes a roster seat.
-            - "-bots"
+            - "-bot"
             - "${BOTS}"
             # The allocated lifetime. The first is the window the player who
             # triggered this container has to arrive; the second is how long the

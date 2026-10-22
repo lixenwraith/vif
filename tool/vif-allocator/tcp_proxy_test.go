@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -114,8 +113,8 @@ func join(addr, id string) error {
 
 // TestEitherRouteRefusesBeforeDialling covers each answer short of a pod over the
 // front door and the browser route alike: none of them may cost that pod a
-// connection, and a dialer that named a session is told why in the stream, which a
-// page reads where it is never shown a status.
+// connection, and a dialer that named a session is told why in the stream, and
+// whether a retry can help, which a page reads where it is never shown a status.
 func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
 	pod := startPod(t)
 	closed, err := net.Listen("tcp", "127.0.0.1:0")
@@ -128,12 +127,14 @@ func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
 		name, id, want string
 		routeErr       error
 		pod            *testPod
+		retry          network.Retry
 	}{
-		{"an identifier no session could have", "not-a-session", "no such session", nil, pod},
-		{"an unknown session", routedID, "no such session", errSessionUnknown, pod},
-		{"a full session", routedID, "not accepting players", fmt.Errorf("%w: occupied", errSessionRefusing), pod},
-		{"a session with no reachable pod", routedID, "no reachable pod", errSessionUnroutable, pod},
-		{"a pod that refuses the dial", routedID, "no reachable pod", nil, refusing},
+		{"an identifier no session could have", "not-a-session", "no such session", nil, pod, network.RetryNever},
+		{"an unknown session", routedID, "no such session", errSessionUnknown, pod, network.RetryNever},
+		{"a full session", routedID, "not accepting players", sessionRefusing("occupied"), pod, network.RetryLater},
+		{"a draining session", routedID, "not accepting players", sessionRefusing("draining"), pod, network.RetryNever},
+		{"a session with no reachable pod", routedID, "no reachable pod", errSessionUnroutable, pod, network.RetryLater},
+		{"a pod that refuses the dial", routedID, "no reachable pod", nil, refusing, network.RetryLater},
 	} {
 		sessions := &fakeSessionAllocator{podIP: "127.0.0.1", routeErr: tc.routeErr}
 		for route, addr := range map[string]string{
@@ -144,8 +145,14 @@ func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
 			if err == nil || !strings.Contains(strings.ToLower(err.Error()), tc.want) {
 				t.Errorf("%s over the %s: joined with %v, want a refusal naming %q", tc.name, route, err, tc.want)
 			}
-			if status := new(websocket.HandshakeError); tc.id == routedID && errors.As(err, &status) {
+			if route == "browser route" && tc.id != routedID {
+				continue // a malformed path is answered before the upgrade
+			}
+			if status := new(websocket.HandshakeError); errors.As(err, &status) {
 				t.Errorf("%s over the %s: refused with %d before the upgrade", tc.name, route, status.Status)
+			}
+			if got := network.RetryOf(err); got != tc.retry {
+				t.Errorf("%s over the %s: %v reads as retry %d, want %d", tc.name, route, err, got, tc.retry)
 			}
 		}
 	}

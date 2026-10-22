@@ -80,6 +80,31 @@ func TestSessionRejectionReturnsTheJoinErrorUnchanged(t *testing.T) {
 	}
 }
 
+// TestARefusalCrossesTheWireAsItsKind: the reader acts on the kind it reads and
+// adds that kind's advice once; a kind a later build added reads as its reason.
+func TestARefusalCrossesTheWireAsItsKind(t *testing.T) {
+	read := func(body []byte) error {
+		var reply sessionReply
+		if err := json.Unmarshal(body, &reply); err != nil {
+			t.Fatal(err)
+		}
+		return reply.Refused()
+	}
+	starting := &Refusal{Code: RefusalStarting, Reason: "session is starting"}
+	var sent sessionReply
+	sent.Refuse(fmt.Errorf("refused locally: %w", starting))
+	body, err := json.Marshal(sent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := read(body); !errors.Is(got, starting) || got.Error() != starting.Error() || RetryOf(got) != RetrySoon {
+		t.Fatalf("refusal read back as %q (retry %d), want %q", got, RetryOf(got), starting)
+	}
+	if got := read([]byte(`{"code":200,"error":"a kind from a later build"}`)); got.Error() != "a kind from a later build" || RetryOf(got) != RetryLater {
+		t.Fatalf("unknown kind read back as %q (retry %d)", got, RetryOf(got))
+	}
+}
+
 // TestAFailedBindOrDialSaysWhatThePlayerCanDo: the common failures read as the
 // player's next step rather than the system's words, and keep their cause.
 func TestAFailedBindOrDialSaysWhatThePlayerCanDo(t *testing.T) {

@@ -194,8 +194,8 @@ func (a *App) askAuthority(req network.RelayJoin) (network.RelayAdmit, error) {
 			return ans, errors.New("the session's authority did not answer a relayed join in time")
 		}
 	}
-	if ans.Error != "" {
-		return ans, errors.New(ans.Error)
+	if err := ans.Refused(); err != nil {
+		return ans, err
 	}
 	return ans, nil
 }
@@ -272,7 +272,7 @@ func (a *App) decideRelayJoinLocked(relay network.PeerID, body []byte) {
 		err = fmt.Errorf("relayed join step %d is not one this build takes", req.Step)
 	}
 	if err != nil {
-		ans.Error = err.Error()
+		ans.Refuse(err)
 	}
 	out, _ := json.Marshal(ans) // plain data cannot fail to encode
 	if r := a.world.Resources.Network; r != nil && r.Port != nil {

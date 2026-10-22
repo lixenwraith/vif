@@ -96,8 +96,8 @@ type peerHello struct {
 }
 
 type peerWelcome struct {
-	From     PeerID       `json:"from"`
-	Error    string       `json:"error,omitempty"`
+	From PeerID `json:"from"`
+	refusalField
 	Identity PeerIdentity `json:"identity"`
 }
 
@@ -135,12 +135,12 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, err
 		if g.Identity.Protocol != 0 {
 			if refused = g.Identity.VerifyBuild(hello.Identity); refused != nil {
 				// Told in the dialler's terms: to it, its build is the one here.
-				reply.Error = hello.Identity.VerifyBuild(g.Identity).Error()
+				reply.Refuse(hello.Identity.VerifyBuild(g.Identity))
 			}
 		}
 		if refused == nil && g.Admit != nil {
 			if refused = g.Admit(hello.From); refused != nil {
-				reply.Error = refused.Error()
+				reply.Refuse(refused)
 			}
 		}
 		body, err := json.Marshal(reply)
@@ -193,8 +193,8 @@ func DialPeerLink(addr string, cfg *Config, local PeerID) (net.Conn, PeerID, err
 	if err := json.Unmarshal(msg.Payload, &welcome); err != nil {
 		return fail(fmt.Errorf("peer link ack: %w", err))
 	}
-	if welcome.Error != "" {
-		return fail(errors.New(welcome.Error))
+	if err := welcome.Refused(); err != nil {
+		return fail(err)
 	}
 	if welcome.From == 0 {
 		return fail(errors.New("peer link: the far end named no participant"))
