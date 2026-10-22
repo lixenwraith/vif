@@ -19,8 +19,41 @@
     <canvas id="screen"></canvas>
     <textarea id="input" aria-label="Game input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
 </div>
+<div id="start" hidden>
+    <svg id="logo" viewBox="90 90 220 220" role="img" aria-label="lixen">
+        <polygon points="200,200 200,300 100,300" fill="red"/>
+        <polygon points="200,200 100,300 100,200" fill="orange"/>
+        <polygon points="200,200 100,200 100,100" fill="yellow"/>
+        <polygon points="200,200 100,100 200,100" fill="green"/>
+        <polygon points="200,200 200,100 300,100" fill="blue"/>
+        <polygon points="200,200 300,100 300,200" fill="indigo"/>
+        <polygon points="200,200 300,200 300,300" fill="violet"/>
+        <polygon points="200,200 300,300 200,300" fill="gray"/>
+        <path d="M100,100 L300,100 L300,300 L100,300 Z M200,100 L200,300 M100,200 L300,200 M100,100 L300,300 M300,100 L100,300" fill="none" stroke="#000" stroke-width="20"/>
+    </svg>
+    <button type="button" id="controls" aria-label="Touch controls">?</button>
+</div>
 <div id="loading">Loading vif...</div>
 <div id="notice" role="status" hidden></div>
+<dialog id="help" aria-labelledby="help-title">
+    <div id="help-head">
+        <h2 id="help-title">Touch controls</h2>
+        <button type="button" id="help-close" aria-label="Close">×</button>
+    </div>
+    <!-- The touch controls as Android's StartScreen.java words them; the strip is the page's alone -->
+    <div id="help-body" tabindex="-1" autofocus>
+        <dl>
+            <dt>Tap</dt><dd>Move the cursor there and fire the main weapon; hold to repeat</dd>
+            <dt>Drag</dt><dd>Drag the cursor with your finger</dd>
+            <dt>Double tap</dt><dd>Fire the special weapon as well</dd>
+            <dt>Hold the status bar</dt><dd>Open the configuration menu: audio, bots, multiplayer and more</dd>
+            <dt>Two fingers, tap twice</dt><dd>Show or hide the keyboard, to type commands such as :help</dd>
+            <dt>Pinch</dt><dd>Zoom in or out; the zoom is kept for next time</dd>
+            <dt>The strip at the top</dt><dd>Keyboard, Tab, Esc while typing, sound and full screen</dd>
+        </dl>
+        <p>With a keyboard, F1 or :help lists every key and command, and :q quits.</p>
+    </div>
+</dialog>
 <noscript><div id="nojs">vif requires JavaScript and WebAssembly.<br><a href="/vif/">Back to the project page</a></div></noscript>
 <script src="terminal.js"></script>
 </body>

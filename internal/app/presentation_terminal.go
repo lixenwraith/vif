@@ -22,6 +22,9 @@ type presentationState struct {
 	termBlocked time.Time
 	// awayPaused is a pause made because the player left the screen, undone on return
 	awayPaused bool
+	// unseen is a run whose player was away when its clock started, behind Android's
+	// start screen, until they come
+	unseen bool
 	// cell is the zoom the presentation opened at or the run last wrote back
 	cell float64
 }

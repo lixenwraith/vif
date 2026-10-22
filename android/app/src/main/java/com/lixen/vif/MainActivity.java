@@ -21,9 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
- * Hosts the game's view, copies the APK's wad to the files directory where the game
- * reads it as its system root, and passes the activity's lifecycle to the run.
- * Start with the extra "raster" set to paint with Go's software raster instead.
+ * Opens on the start screen over the game's view, whose run starts behind it and
+ * waits there, away, until the tap lifts it; copies the APK's wad to the files
+ * directory where the game reads it as its system root, and passes the activity's
+ * lifecycle to the run. Start with the extra "raster" set to paint with Go's
+ * software raster instead.
  */
 public final class MainActivity extends Activity {
     static final String TAG = "vif";
@@ -32,6 +34,8 @@ public final class MainActivity extends Activity {
     private static final long BACK_TWICE_MS = 1500;
 
     private Speaker speaker;
+    private GameView view;
+    private StartScreen start; // over the view until its tap, null after
     private long backAt;
 
     @Override
@@ -40,13 +44,16 @@ public final class MainActivity extends Activity {
         getWindow().setDecorFitsSystemWindows(false);
         try {
             speaker = new Speaker();
+            speaker.pause(); // silent until the start screen's tap
         } catch (UnsupportedOperationException e) {
             Log.w(TAG, "no speakers; the game runs silent", e);
         }
-        GameView view = new GameView(this, getFilesDir().getPath(), copyWad().getPath(),
+        view = new GameView(this, getFilesDir().getPath(), copyWad().getPath(),
                 getIntent().getBooleanExtra("raster", false), speaker);
+        start = new StartScreen(this, this::play);
         FrameLayout root = new FrameLayout(this);
         root.addView(view);
+        root.addView(start);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
@@ -56,7 +63,21 @@ public final class MainActivity extends Activity {
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
-        // Back is the game's Escape, which leaves a mode; the run is quit with :q
+    }
+
+    /** The start screen is up: a run started now begins away, waiting behind it for the tap. */
+    boolean waiting() {
+        return start != null;
+    }
+
+    /** The start screen's tap: it leaves the game it covered, which goes on at once. */
+    private void play() {
+        ((FrameLayout) start.getParent()).removeView(start);
+        start = null;
+        view.takeKeys();
+        goOn();
+        // Back is the game's Escape, which leaves a mode; the run is quit with :q. On
+        // the start screen Back is the system's
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::back);
@@ -78,6 +99,13 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (start == null) {
+            goOn();
+        }
+    }
+
+    /** The player is at the game: the speakers play and the run goes on. */
+    private void goOn() {
         if (speaker != null) {
             speaker.resume();
         }

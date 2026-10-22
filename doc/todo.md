@@ -568,6 +568,24 @@ Combat's counters mix Shared results with per-instance ones, so two instances'
 Shared combat outcomes do not compare directly. Splitting them is a telemetry
 redesign rather than a domain-boundary fix.
 
+### Offer lixen.com games on the start screen
+
+- Priority: P1
+- Affected files: `android/app/src/main/java/com/lixen/vif/StartScreen.java`,
+  `android/app/src/main/java/com/lixen/vif/MainActivity.java`, `android/game/game.go`
+
+Build it once the join refactor lands and its join matrix passes. Android opens on
+a start screen with one choice, "Tap to start", a solo run; the site is reached only
+from inside the run, through the menu's Multiplayer page (join a link, or request a
+session from `https://lixen.com`, its default). Put a second choice beside the tap:
+host a game at the site, as that request does, and/or join one of the running games
+the site lists (`GET /vif/api/sessions`), so `game.Start` takes a join target. The
+page needs nothing: the site's lobby (`/vif/lobby/`) is its choice, and its Play
+link opens the page with `-join`, which starts without a tap. A run that ends in an
+error, such as a refused join, shows it on the start screen; today Android finishes
+the activity and leaves the reason in logcat. Open: host, list or both; a second
+screen or rows on this one; what a session that ends returns to.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -884,6 +902,22 @@ and expect them usable.
 down composites at run time, but no system or scenario uses them. A species or
 scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
+
+### Let a paused run sleep
+
+- Priority: P2
+- Affected files: `internal/engine/scheduler.go` (`eventLoop`), `internal/app/loop.go`
+  (`Loop`'s tickers), `android/app/src/main/java/com/lixen/vif/GameView.java` (`doFrame`)
+
+A paused run keeps every clock of a running one: the event loop wakes each 4 ms
+with or without a queued event, the input tick each 16 ms, the frame tick at 60 Hz,
+and on Android the render thread asks for a frame at each vsync. On the Pixel 7
+emulator that is 19 to 23% of a core on the start screen and 9% with the app in
+the background, where nothing is drawn (2026-10-22); the background is what costs
+a phone its battery. While a solo run is away, the event loop could wait on a push
+instead of its ticker, the app loop drop its input and frame tickers until a report
+or event comes, and the render thread stop its vsync callback once it has painted
+the last frame flushed.
 
 ## Tests
 
