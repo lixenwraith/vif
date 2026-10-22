@@ -38,7 +38,11 @@ type configPage struct {
 }
 
 var configPages = []configPage{
-	{key: "game", label: "Game", description: "Start a new game, or another scenario from its row or by name.", options: []configOption{
+	{key: "game", label: "Game", description: "Pause, start a new game, or another scenario from its row or by name.", options: []configOption{
+		{key: "pause", label: "Pause", description: "Stop the game until this is turned off. In a session only the host can, and every participant stops at the same tick.",
+			command: "pause", choices: []string{"off", "on"},
+			read:     func(ctx *engine.GameContext) string { return toggleWord(ctx.TimeCtl.Held()) },
+			disabled: func(ctx *engine.GameContext) string { return holdRefused(ctx, !ctx.TimeCtl.Held()) }},
 		withDisabled(commandAction("new", "New game", "Restart this scenario from its first tick. In a session only the host can, and every participant restarts with it.", "new"), hostOnly),
 		configFormOption("scenario"),
 	}, extra: scenarioConfigOptions},

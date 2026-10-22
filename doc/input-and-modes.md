@@ -115,9 +115,11 @@ Escape in Normal cancels a pending key sequence, or with none pending flashes th
 ping grid; from any other mode it returns to Normal, and in the configuration menu
 it goes back one level. The router unpauses before it runs a command: an overlay
 command (`:help`, `:t`, `:g`) requests the pause again, and a reset pauses until the
-scheduler has rebuilt the run. `MetaSystem` refuses a pause in a live session
-unless every other participant is one of this run's bots (§9), which leaves Command
-and Overlay as non-blocking inspection there.
+scheduler has rebuilt the run. `MetaSystem` refuses a pause in a live session unless
+every other participant is one of this run's bots (§9), which leaves Command and
+Overlay as non-blocking inspection there. `:pause` is a hold, which no mode change
+ends: under it Normal takes no play, only `:`, the menu, help, quit, the audio
+toggle and a key's release.
 
 ## 3. Normal-mode grammar
 
@@ -327,6 +329,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | Command | Purpose |
 |---|---|
 | `:quit`, `:q` | Exit. |
+| `:pause [on\|off]`, `:p` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. `:step` ends a solo hold, `:new` any. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and every participant resets. |
 | `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
@@ -367,18 +370,19 @@ The event registry validates `:emit` names and uses generated payload type
 metadata to decode optional inline TOML. Rows from `:system` down are mainly
 developer and authoring controls.
 
-In a live session, pause, speed, step, breakpoints, system mutation, raw `:emit`
-and FSM region operations are refused because applying them to only one scheduler
-would desynchronise shared state. Pause alone is allowed to the authority while
-every other participant is its own bot, which stands still with it; an arrival
-ends the pause. Help, telemetry and about overlays stay local and do not pause,
-logging and view controls are local inspection, and resizes retain D-14's locked
-map bounds. Player grants and effect commands remain available because they author
-the invoking cursor or use the ordinary player-to-shared crossing path. The host's
-reset crosses at an agreed tick, so every participant resets; a guest reset is
-refused. `:host` and `:bot` are outside the guard: `:host` creates the session
-the guard protects and refuses a run already in one, and a bot joins through the
-session's own gate as any participant does.
+In a live session, pause, speed, step, breakpoints, system mutation, raw `:emit` and
+FSM region operations are refused because applying them to only one scheduler would
+desynchronise shared state. Pause alone is allowed to the authority while every
+other participant is its own bot, which stands still with it; an arrival ends the
+pause. The host's `:pause` crosses instead, so it stops everyone. Help, telemetry
+and about overlays stay local and do not pause, logging and view controls are local
+inspection, and resizes retain D-14's locked map bounds. Player grants and effect
+commands remain available because they author the invoking cursor or use the
+ordinary player-to-shared crossing path. The host's reset crosses at an agreed tick,
+so every participant resets; a guest reset is refused. `:host` and `:bot` are
+outside the guard: `:host` creates the session the guard protects and refuses a run
+already in one, and a bot joins through the session's own gate as any participant
+does.
 
 A watched bot is live play: `:n` and `:bot` use the normal command path. While
 its operator types a command, graph input waits and a live session keeps ticking.

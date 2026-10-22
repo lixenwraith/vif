@@ -111,6 +111,68 @@ func TestTheMenuKeepsThePointerWithTheMouseDisabled(t *testing.T) {
 	}
 }
 
+// TestAHoldTakesNoPlayButOpensTheMenu: under a hold a key that plays and a press on
+// the map do nothing, while the command line opens and the status bar's press opens
+// the menu, whose Pause row reads on and ends the hold.
+func TestAHoldTakesNoPlayButOpensTheMenu(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &menuSession{}
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	ctx.AutoFire.Store(engine.AutoFireOff) // the tick's own fire requests would count as play
+	ctx.TimeCtl.SetHeld(true)
+	key := func(k terminal.Key, ch rune) {
+		if in := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); in != nil {
+			r.Handle(in)
+		}
+	}
+	mouse := func(action terminal.MouseAction, x, y int) {
+		ev := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: action, MouseX: x, MouseY: y}
+		if in := machine.Process(ev); in != nil {
+			r.Handle(in)
+		}
+	}
+	key(terminal.KeyRune, 'l')
+	key(terminal.KeyRune, 'i')
+	mouse(terminal.MouseActionPress, 10, 10)
+	mouse(terminal.MouseActionRelease, 10, 10)
+	if evs := w.Resources.Event.Queue.Consume(); len(evs) != 0 || ctx.GetMode() != core.ModeNormal {
+		t.Fatalf("play under a hold left mode %v and events %v", ctx.GetMode(), evs)
+	}
+	key(terminal.KeyRune, ':')
+	if !ctx.IsCommandMode() {
+		t.Fatal("the command line did not open under a hold")
+	}
+	key(terminal.KeyEscape, 0)
+
+	mouse(terminal.MouseActionPress, 10, ctx.GameYOffset+ctx.World.Resources.Config.ViewportHeight)
+	r.menuSince = r.menuSince.Add(-parameter.MenuHoldDuration)
+	r.ProcessInputTick()
+	if configMenu(ctx) == nil {
+		t.Fatal("the status bar's press opened no menu under a hold")
+	}
+	ctx.SetOverlaySelection("game")
+	key(terminal.KeyEnter, 0)
+	m := configMenu(ctx)
+	i := slices.IndexFunc(m.Rows, func(row core.OverlayMenuRow) bool { return row.Key == "pause" })
+	if i < 0 || m.Rows[i].Value != "on" || m.Rows[i].Disabled != "" {
+		t.Fatalf("the Game page under a hold shows %+v", m.Rows)
+	}
+	w.Resources.Event.Queue.Consume()
+	ctx.SetOverlaySelection("pause")
+	key(terminal.KeyEnter, 0)
+	var asked []bool
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.GamePausePayload); ok && ev.Type == event.EventGameHoldRequest {
+			asked = append(asked, p.Paused)
+		}
+	}
+	if !slices.Equal(asked, []bool{false}) {
+		t.Fatalf("the Pause row asked for holds %v, want its end alone", asked)
+	}
+}
+
 // TestAHeldKeyCrossesOneReleaseHoweverItEnds: a captured key held where keys release
 // crosses its own release; play stopping, or the capture giving the key back, ends a
 // hold as lost, and a keyboard reporting presses alone taps. Keys coming to be

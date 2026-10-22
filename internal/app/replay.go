@@ -217,6 +217,7 @@ func (a *App) openedLocked(c event.JournalCapture, own ownState) error {
 	a.ctx.SetMode(c.Mode)
 	a.world.UpdateBoundsRadius()
 	a.ctx.TimeCtl.SetPaused(c.Paused)
+	a.ctx.TimeCtl.SetHeld(c.Held)
 	for _, sys := range a.world.Systems() {
 		if t, ok := sys.(engine.Toggled); ok {
 			t.SetEnabled(!slices.Contains(c.Off, sys.Name()))

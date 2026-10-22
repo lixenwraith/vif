@@ -431,8 +431,8 @@ scripted side exactly, so what changes between runs is only what the person did.
 
 `-watch` presents a scripted run on its own terminal over the same manual clock
 and the same script geometry, so the presented and headless forms simulate
-identically. A presented run that is in a session offers pan and quit only: pause,
-step and rate are instance-local and half a session cannot be paused.
+identically. A presented run that is in a session offers pan and quit only: step
+and rate are instance-local, and a session stops only by its host's hold.
 
 The two halves also play each other headless: start the host half as above and
 run `./bin/vif -script script/sparring-guest.toml -join 127.0.0.1:7777` beside it.

@@ -736,8 +736,13 @@ func (s *Scheduler) schedulerLoop() {
 
 // stepTick advances frozen game time by one interval and runs the tick past the
 // pause gate. Render backpressure is skipped: the render loop grants no frame
-// while paused, and a step is an inspection request, not a paced one.
+// while paused, and a step is an inspection request, not a paced one. A hold stops
+// a driven run too, since its session's other participants stand at that tick, but
+// not a reproduction: the run it follows took no tick while held.
 func (s *Scheduler) stepTick() {
+	if s.ctl.Held() && !s.world.Reproduces() {
+		return
+	}
 	s.ctl.Step(s.tickInterval)
 	s.stepping = true
 	s.processTick()

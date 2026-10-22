@@ -119,6 +119,10 @@ const (
 	EventGameSpeedChanged
 	// EventGameStepRequest (GameStepPayload) [local] asks MetaSystem to step ticks or arm a run-until breakpoint
 	EventGameStepRequest
+	// EventGameHoldRequest (GamePausePayload) [local] asks MetaSystem to start or end a hold, the pause only :pause ends
+	EventGameHoldRequest
+	// EventGameHold [bus] starts a hold; a live session's host crosses it, so every participant stops after one tick
+	EventGameHold
 
 	// --- FSM ---
 

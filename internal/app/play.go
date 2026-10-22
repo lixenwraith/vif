@@ -272,7 +272,8 @@ func (p *player) advance(elapsed time.Duration) {
 		}
 	}
 	commandHeld := p.cmd != nil && !(p.interactive && p.live)
-	if p.done || commandHeld || p.paused {
+	held := p.driven && p.a.ctx.TimeCtl.Held()
+	if p.done || commandHeld || p.paused || held {
 		p.a.world.Resources.Prof.Hold() // a profiler window spans played time only
 	}
 	if commandHeld {
@@ -283,6 +284,13 @@ func (p *player) advance(elapsed time.Duration) {
 		return
 	}
 	if p.done {
+		return
+	}
+	// A held run takes no step, as a headless one does not, and owes no time for
+	// the hold; it still drains its link, since the host's resume is an epoch
+	if held {
+		p.a.ApplyPendingCorrections()
+		p.budget = 0
 		return
 	}
 	if p.paused {

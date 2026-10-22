@@ -136,7 +136,7 @@ func runDriven(cfg Config, kind, name string, build func(*App) (pacedSource, err
 // drive builds the App in the session cfg names, lets build put a driver on it, and
 // steps that driver headless under the run's wall pace, or presented. finished is
 // false when stop or a cancelled session ended the run first. While hold reports
-// true the run stands still, as a paused clock does, and re-anchors its pace after.
+// true, or a hold stands, the run stands still and re-anchors its pace after.
 func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() bool,
 	build func(*App) (pacedSource, error)) (finished bool, err error) {
 	if cfg.Mode != ModeScript {
@@ -188,7 +188,12 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		}
 		// Between two steps, as a presenting run's loop serves it between two waits
 		a.serveJournal()
-		if hold != nil && hold() {
+		// A held run stands still as its holder's pause does, but still drains its
+		// link: the host's resume is the next epoch it sends.
+		if held := a.ctx.TimeCtl.Held(); held || hold != nil && hold() {
+			if held {
+				a.ApplyPendingCorrections()
+			}
 			if !waitScriptTick(signals, parameter.PausedPollInterval) {
 				return false, nil
 			}

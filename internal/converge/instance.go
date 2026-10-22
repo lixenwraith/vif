@@ -14,9 +14,12 @@ import (
 // tick.
 type Instance interface {
 	// Position is the run and tick every schedule and every containment rule is
-	// measured against; Driven marks a run whose caller paces its own cadence.
+	// measured against; Driven marks a run whose caller paces its own cadence; Held
+	// is a hold, under which Position stands still, so a window counted in its ticks
+	// runs on the wall clock instead.
 	Position() event.Stamp
 	Driven() bool
+	Held() bool
 
 	// LocalParticipant is this instance's session identity, zero outside a session.
 	LocalParticipant() uint32
@@ -61,9 +64,11 @@ type Instance interface {
 
 	// AuthorityChanged moves the membership a handoff carries into the places the
 	// run reads it from; DropAbandonedCursors removes the participants an instance
-	// left with no link will never hear from again.
+	// left with no link will never hear from again; Forked says no handoff came, and
+	// the run goes on alone from the last authoritative state.
 	AuthorityChanged(rec network.HandoffRecord, mine bool)
 	DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID)
+	Forked()
 
 	// SetStatusMessage is the operator surface a refusal or a recovery is said on.
 	SetStatusMessage(msg string, kind parameter.StatusKind)

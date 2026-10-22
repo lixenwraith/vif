@@ -250,6 +250,57 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	}
 }
 
+// TestAJoinerLandsInAHeldSessionHeld: a held session's gate can wait for no lead, so
+// a joiner is given the world at the held tick and holds there with the host, and
+// the host's resume starts both and crosses its arrival.
+func TestAJoinerLandsInAHeldSessionHeld(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
+	const seed = 0x3021
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(60)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	mode.ExecuteCommand(host.Context(), "pause")
+	host.Settle()
+	for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+		// A move made as the hold lands applies after it, so the world at the held
+		// tick lacks it: the joiner hears it as what was still scheduled.
+		inject(t, host, intentMotion(input.MotionRight, 1))
+		host.Tick(1)
+	}
+	at := host.Position().Tick
+	if !host.Context().TimeCtl.Held() {
+		t.Fatal("the host did not hold")
+	}
+
+	// A held host drains its link only between ticks it does not take, as its
+	// driver does while it waits.
+	stopTicking := tickInBackground(host)
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40)
+	stopTicking()
+	if !guest.Context().TimeCtl.Held() || guest.Position().Tick != at || host.Position().Tick != at {
+		t.Fatalf("the guest holds %v at tick %d and the host stands at %d, want both held at %d",
+			guest.Context().TimeCtl.Held(), guest.Position().Tick, host.Position().Tick, at)
+	}
+	if got := guest.Context().GetStatusMessage(); got != "Paused by the host" {
+		t.Fatalf("the joiner was told %q", got)
+	}
+	assertSharedParity(t, host, guest, 0)
+
+	mode.ExecuteCommand(host.Context(), "pause off")
+	host.Settle()
+	waitForRosterPair(t, host, guest)
+	if guest.Context().TimeCtl.Held() || guest.Position().Tick <= at {
+		t.Fatalf("after the host resumed the guest holds %v at tick %d", guest.Context().TimeCtl.Held(), guest.Position().Tick)
+	}
+	settleCorrections(t, host, guest)
+	alignTicks(t, host, guest)
+	assertSharedParity(t, host, guest, 1)
+}
+
 // TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism: a dropped
 // participant leaves a departure crossing and its identity returns to the pool, and
 // what comes back is an ordinary dial. The join runs twice against one lobby host —
@@ -1087,6 +1138,180 @@ func TestLiveSessionRefusesAnInstanceLocalPause(t *testing.T) {
 	for range parameter.NetworkBarrierDelayTicks + 2 {
 		tickAll(apps)
 	}
+	assertMeshParity(t, apps, 0)
+}
+
+// holdSession has the host :pause and ticks until every participant holds, failing
+// unless all stand at one tick, which it returns.
+func holdSession(t *testing.T, apps []*App) uint64 {
+	t.Helper()
+	mode.ExecuteCommand(apps[0].Context(), "pause")
+	apps[0].Settle()
+	for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+		tickAll(apps)
+	}
+	at := apps[0].Position().Tick
+	for i, a := range apps {
+		if !a.Context().TimeCtl.Held() || a.Position().Tick != at {
+			t.Fatalf("participant %d: held %v at tick %d, want held at the host's %d",
+				i+1, a.Context().TimeCtl.Held(), a.Position().Tick, at)
+		}
+	}
+	return at
+}
+
+// TestAHoldStopsEveryParticipantAtOneTick: the host's :pause crosses, so host and
+// guest stop after one agreed tick and stand there however often they are ticked.
+func TestAHoldStopsEveryParticipantAtOneTick(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A2, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	at := holdSession(t, apps)
+	for range 4 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if got := a.Position().Tick; got != at {
+			t.Fatalf("participant %d ran to tick %d under a hold at %d", i+1, got, at)
+		}
+	}
+	if got := apps[1].Context().GetStatusMessage(); got != "Paused by the host" {
+		t.Fatalf("the guest was told %q", got)
+	}
+	assertMeshParity(t, apps, 0)
+}
+
+// TestOnlyTheHostHoldsALiveSession: what a hold stops is everyone, so starting one is
+// the host's alone, as ending one is. A guest asking is told so and nothing crosses.
+func TestOnlyTheHostHoldsALiveSession(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A3, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	guest := apps[1]
+	mode.ExecuteCommand(guest.Context(), "pause")
+	guest.Settle()
+	if got := guest.Context().GetStatusMessage(); got != "Only the host can pause a live session" {
+		t.Fatalf("a guest's :pause was told %q", got)
+	}
+	for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if a.Context().TimeCtl.Held() {
+			t.Fatalf("participant %d holds on a guest's ask", i+1)
+		}
+	}
+	holdSession(t, apps)
+	mode.ExecuteCommand(guest.Context(), "pause off")
+	guest.Settle()
+	if got := guest.Context().GetStatusMessage(); got != "Only the host can resume a live session" {
+		t.Fatalf("a guest's :pause off was told %q", got)
+	}
+	tickAll(apps)
+	if !guest.Context().TimeCtl.Held() {
+		t.Fatal("a guest ended the host's hold")
+	}
+}
+
+// TestTheHostsNextTickResumesItsGuests: a held host sends nothing, so its first epoch
+// after :pause off is the resume, and the guest runs on from the tick both stood at.
+func TestTheHostsNextTickResumesItsGuests(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A4, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	at := holdSession(t, apps)
+	mode.ExecuteCommand(apps[0].Context(), "pause off")
+	apps[0].Settle()
+	if apps[0].Context().TimeCtl.Held() || !apps[1].Context().TimeCtl.Held() {
+		t.Fatalf("after :pause off the host holds %v and the guest %v, want the host alone running",
+			apps[0].Context().TimeCtl.Held(), apps[1].Context().TimeCtl.Held())
+	}
+	tickAll(apps)
+	for i, a := range apps {
+		if a.Context().TimeCtl.Held() || a.Position().Tick != at+1 {
+			t.Fatalf("participant %d: held %v at tick %d, want running at %d",
+				i+1, a.Context().TimeCtl.Held(), a.Position().Tick, at+1)
+		}
+	}
+	if got := apps[1].Context().GetStatusMessage(); got != "Resumed by the host" {
+		t.Fatalf("the guest was told %q", got)
+	}
+	for range 4 {
+		tickAll(apps)
+	}
+	assertMeshParity(t, apps, 0)
+}
+
+// TestANewGameEndsAHold: the reset crossed for :new applies at a tick a held session
+// would never reach, so the host ends its hold first, and every participant starts
+// the new game running.
+func TestANewGameEndsAHold(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A5, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	holdSession(t, apps)
+	run := apps[0].Position().Run
+	mode.ExecuteCommand(apps[0].Context(), "n")
+	apps[0].Settle()
+	for range parameter.NetworkBarrierMaxDelayTicks + 4 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if a.Context().TimeCtl.Held() || a.Position().Run != run+1 {
+			t.Fatalf("participant %d: held %v in run %d, want running the new game, run %d",
+				i+1, a.Context().TimeCtl.Held(), a.Position().Run, run+1)
+		}
+	}
+	assertMeshParity(t, apps, 0)
+}
+
+// TestAHeldSessionsSuccessorResumesIt: a hold is ended by the host that set it, so a
+// host lost while holding takes that with it. The successor runs on as it takes the
+// term, and its first tick resumes the rest.
+func TestAHeldSessionsSuccessorResumesIt(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+	at := holdSession(t, apps)
+	closeParticipant(apps[0])
+	survivors := apps[1:]
+	if !settleAuthority(t, survivors, func() bool {
+		return authorityOf(survivors[0]).Term > network.FirstTerm && authorityOf(survivors[1]).Term > network.FirstTerm
+	}) {
+		t.Fatalf("no succession: participant 2 holds %+v, participant 3 holds %+v",
+			authorityOf(survivors[0]), authorityOf(survivors[1]))
+	}
+	if survivors[0].Context().TimeCtl.Held() {
+		t.Fatal("the successor still holds the lost host's hold")
+	}
+	for range 2 {
+		tickAll(survivors)
+	}
+	for i, a := range survivors {
+		if a.Context().TimeCtl.Held() || a.Position().Tick <= at {
+			t.Fatalf("participant %d: held %v at tick %d, want running past %d",
+				i+2, a.Context().TimeCtl.Held(), a.Position().Tick, at)
+		}
+	}
+}
+
+// TestAProjectionRunsPastAHold: a correction read before a hold, installed after the
+// session resumed, is projected across the hold's tick. Nothing in a projection may
+// stop its clock, or the world it hands over would stand short of its label.
+func TestAProjectionRunsPastAHold(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A6, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	tickAll(apps)
+	before := mustCaptureShared(t, apps[0])
+	holdSession(t, apps)
+	mode.ExecuteCommand(apps[0].Context(), "pause off")
+	apps[0].Settle()
+	for range 4 {
+		tickAll(apps)
+	}
+	installCorrection(t, apps[1], before)
 	assertMeshParity(t, apps, 0)
 }
 
