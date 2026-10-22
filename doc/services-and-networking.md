@@ -990,7 +990,7 @@ inside a process nothing can reach.
 
 | Path | Code | Body |
 |---|---|---|
-| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | plain text: `live`, `ready` and a `reason` when either is false on one line, then a `key=value` line each, in key order, for `address`, `bots` (how many of the guests are bots), `capacity`, `clock`, `expires_in` when a countdown is running, `guests`, `map` (`WxH`, from the first tick on), `phase` and `tick` |
+| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | plain text: `live`, `ready` and a `reason` when either is false on one line, then a `key=value` line each, in key order, for `address`, `bots` (how many of the guests are bots), `build` (this binary, as a refusal of another build names it), `capacity`, `clock`, `expires_in` when a countdown is running, `guests`, `map` (`WxH`, from the first tick on), `phase` and `tick` |
 | `/metrics` | always 200 | the status registry in the Prometheus text format |
 
 There is one health path rather than a liveness one and a readiness one. An
