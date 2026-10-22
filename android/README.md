@@ -69,7 +69,8 @@ The app opens on its start screen: the logo at the centre, "Tap to start" under
 it, and a `?` in the corner that opens the touch controls in a window nearly the
 screen's size, which its ×, Back or a tap outside closes. A tap anywhere else
 starts the run, so nothing plays behind the screen; Back there is the system's.
-A browser on a touch screen opens on the same screen in the same words.
+A browser on a touch screen shows the same screen in the same words while it loads,
+and starts without a tap.
 
 A cell is 12 dp tall (`cellDP`) until a pinch zooms it, and the grid the view
 holds is stretched over the view edge to edge. Add `--ez raster true` to paint with

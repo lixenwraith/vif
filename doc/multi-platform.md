@@ -481,10 +481,10 @@ every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse inpu
 off a press on the bar's rows still reaches the run, and the open menu takes the
 pointer. The page does each of these on a touch screen, timed alike: the double
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
-bottom row drawn again above it, and the hold. It opens on the same start screen in
-the same words, the key strip listed where Android lists Back: the Worker compiles
-the program behind it and holds it (`hold`) until the tap runs it, and the tap
-opens the `AudioContext` inside its gesture, so the first sound plays.
+bottom row drawn again above it, and the hold. It shows the same start screen in
+the same words while the program loads, the key strip listed where Android lists
+Back, and the game takes the screen at its first frame, without a tap: Android's
+tap is the one wait, so a lobby's link joins at once.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its

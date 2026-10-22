@@ -446,36 +446,20 @@ void main() {
     }
 
     // === Start screen ===
-    /* A touch screen opens on the start screen, as Android does: the logo, the
-       loading line under it, which asks for a tap once the program is compiled, and
-       ? for the touch controls. The program runs from the tap, which opens the sound
-       too: a context made inside a gesture plays from the first buffer. */
+    /* A touch screen shows Android's start screen while the program loads: the
+       logo, the loading line under it and ? for the touch controls. The game takes
+       the screen at its first frame, without a tap; Android's is the one a player
+       waits on. */
     const start = document.getElementById('start');
-    let ready = false;    // the program is compiled and held for the tap
-    let tapped = false;   // the start screen was tapped
 
     function wireStart() {
         const help = document.getElementById('help');
         start.hidden = false;
         // A tap here leaves focus on the field, where hardware keys type once the game runs.
         start.addEventListener('pointerdown', function(e) { e.preventDefault(); });
-        start.addEventListener('click', function(e) {
-            if (e.target.closest('#controls')) {
-                help.showModal();
-            } else if (!tapped) {
-                tapped = true;
-                openAudio();
-                if (ready) run();
-            }
-        });
+        document.getElementById('controls').addEventListener('click', function() { help.showModal(); });
         document.getElementById('help-close').addEventListener('click', function() { help.close(); });
         help.addEventListener('click', function(e) { if (e.target === help) help.close(); });   // the backdrop
-    }
-
-    function run() {
-        if (!program) return;
-        program.postMessage({ type: 'run' });
-        document.getElementById('loading').textContent = 'Starting…';
     }
 
     /* Launch arguments, from the page and from the query string. This is how a
@@ -585,11 +569,6 @@ void main() {
             case 'atlas':
                 drawer.setAtlas(msg.data);
                 break;
-            case 'ready':   // compiled and held for the start screen's tap
-                ready = true;
-                if (tapped) run();
-                else loading.textContent = 'Tap to start';
-                break;
             case 'frame':
                 loading.classList.add('hidden');   // compiled and drawing
                 if (!start.hidden) start.hidden = true;
@@ -625,7 +604,7 @@ void main() {
             }
         };
         // Resolved here: the worker would resolve a relative name against its own URL.
-        program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href, hold: touch,
+        program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href,
             bytes: bytes.buffer, argv: argv, cols: cols, rows: rows, settings: keptSettings() }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });

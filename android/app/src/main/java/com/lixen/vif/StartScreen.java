@@ -18,8 +18,8 @@ import android.widget.TextView;
 /**
  * The screen the app opens on: the logo at the centre, "Tap to start" under it and a
  * ? in the corner that opens the touch controls. A tap anywhere else starts the
- * game, which runs from then on only. A browser on a touch screen opens on the same
- * screen (web/index.html), in the same words.
+ * game, which runs from then on only. A browser on a touch screen shows the same
+ * screen (web/index.html) in the same words while it loads, and needs no tap.
  */
 final class StartScreen extends FrameLayout {
     // The touch controls as web/index.html words them; Back is Android's alone

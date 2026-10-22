@@ -51,9 +51,6 @@ globalThis.vifKeepSettings = function(text) {
     postMessage({ type: 'settings', text: text });
 };
 
-// The program compiled and held for the page's start screen, until its tap posts run
-let held = null;
-
 async function start(msg) {
     try {
         loadRuntime(msg.exec || 'wasm_exec.js');
@@ -70,11 +67,6 @@ async function start(msg) {
     };
     try {
         const result = await WebAssembly.instantiate(msg.bytes, go.importObject);
-        if (msg.hold) {
-            held = function() { go.run(result.instance); };
-            postMessage({ type: 'ready' });
-            return;
-        }
         go.run(result.instance);
     } catch (err) {
         postMessage({ type: 'failed', reason: err.message });
@@ -86,13 +78,6 @@ onmessage = function(e) {
     switch (msg.type) {
     case 'start':
         start(msg);
-        break;
-    case 'run':
-        if (held) {
-            const run = held;
-            held = null;
-            run();
-        }
         break;
     case 'event':
         // A size measured before the program started is what it opens at.

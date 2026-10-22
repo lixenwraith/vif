@@ -67,9 +67,9 @@ html, body {
 #loading.hidden { display: none; }
 #loading.error  { color: #f44; }
 
-/* A touch screen opens on the start screen, as Android does: the logo two fifths of
-   the shorter side at the centre, the loading line under it, ? in the corner. The
-   line and the notice stay above it. */
+/* A touch screen shows Android's start screen while the program loads: the logo two
+   fifths of the shorter side at the centre, the loading line under it, ? in the
+   corner. The line and the notice stay above it. */
 :root { --logo: 40vmin; }
 
 #start {
@@ -93,8 +93,6 @@ html, body {
 #start:not([hidden]) ~ #loading {
     top: calc(50% + var(--logo) / 2 + 24px);
     transform: translateX(-50%);
-    color: #bbb;
-    font-size: 18px;
 }
 
 #controls {
