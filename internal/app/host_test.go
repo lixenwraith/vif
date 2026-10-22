@@ -615,9 +615,7 @@ func TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForCursors(t, a, 2)
-	seated := func() bool { b := a.botSeats(); return len(b) == 1 && !b[0].Joining }
-	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-	}
+	waitForSeats(t, a, 1)
 	var changed bool
 	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("solo") })
 	if err == nil || !strings.Contains(err.Error(), "at most 1") || changed || a.restart.Load() != nil {
@@ -626,6 +624,101 @@ func TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem(t *testing.T) {
 	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
 	if req := a.restart.Load(); err != nil || !changed || req.Host != "" || !slices.Equal(req.Bots, []string{"roam"}) {
 		t.Fatalf("changed %v, %v, restart %+v; want one with no address that seats roam again", changed, err, req)
+	}
+}
+
+// TestARunWithOnlyItsBotsOpensTheirSessionToOthers: :host on a run whose session is
+// its own bots' opens that session's door under the policy it names, rather than
+// refusing it as a second session, and a person who dials in joins beside the bot.
+func TestARunWithOnlyItsBotsOpensTheirSessionToOthers(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, a)
+	stop := tickInBackground(a)
+	t.Cleanup(func() { stop(); a.Close() })
+	var err error
+	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForSeats(t, a, 1)
+	a.World().RunSafe(func() { err = a.beginHostingLocked("127.0.0.1:0", AuthorityHost) })
+	if err != nil {
+		t.Fatalf(":host beside its own bot: %v", err)
+	}
+	a.World().RunSafe(func() { err = a.beginHostingLocked("127.0.0.1:0", "") })
+	if err == nil || !strings.Contains(err.Error(), "already hosting") {
+		t.Fatalf("a second :host = %v; want it refused as hosting", err)
+	}
+	pending, offer := dialSession(t, a.HostAddr())
+	_ = pending.Close()
+	if !offer.FixedAuthority {
+		t.Fatal("the door opened under the bots' policy, not the one :host named")
+	}
+	mustSocketJoiner(t, a.HostAddr(), fixtureSeed, BotWidth, BotHeight)
+	waitForCursors(t, a, 3)
+}
+
+// TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem: :join on a run whose session is
+// its own bots' dials rather than refusing, and the run it becomes is the one the
+// restart loop builds from its live seats, not the configuration it dialled with, so
+// the bot comes along through its holder.
+func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, 0x3023, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	stopHost := tickInBackground(host)
+	t.Cleanup(func() { stopHost(); host.Close() })
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	a.cfg.Mode = ModePlay // joinLocked serves Run's loop
+	tickUntilCursor(t, a)
+	stop := tickInBackground(a)
+	replaced := sync.OnceFunc(func() { stop(); a.Close() })
+	t.Cleanup(replaced)
+	var err error
+	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForSeats(t, a, 1)
+	a.World().RunSafe(func() { err = a.joinLocked(host.HostAddr()) })
+	if err != nil {
+		t.Fatalf(":join beside its own bot: %v", err)
+	}
+	for deadline := time.Now().Add(socketWait); a.dialling.Load(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the dial never finished")
+		}
+	}
+	req := a.restart.Load()
+	if req == nil || req.dialled == nil || !slices.Equal(req.Bots, []string{"roam"}) {
+		t.Fatalf("restart %+v; want a dialled join that seats roam again (status %q)", req, a.Context().GetStatusMessage())
+	}
+	// What Run does next: the replaced run goes, and the request builds the next
+	// one, driven here rather than presented.
+	replaced()
+	next, err := Config{Bots: req.Bots, dialled: req.dialled}.joining(req.Join)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driveBot(t, next, "patrol", nil)
+	waitForCursors(t, host, 3)
+}
+
+// waitForSeats waits for a run's n bot seats to be admitted.
+func waitForSeats(t *testing.T, a *App, n int) {
+	t.Helper()
+	seated := func() bool {
+		b := a.botSeats()
+		return len(b) == n && !slices.ContainsFunc(b, func(s engine.BotSeat) bool { return s.Joining })
+	}
+	for deadline := time.Now().Add(socketWait); !seated(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("seats %+v; want %d admitted", a.botSeats(), n)
+		}
 	}
 }
 

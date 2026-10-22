@@ -47,16 +47,6 @@ such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and th
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
 
-### Host a session opened for bots
-
-- Priority: P3
-- Affected files: `internal/app/host.go`, `internal/network/transport.go`
-
-A run in no session opens one with no listener for its bots, and `:host` then
-refuses it as already in a session, so a player who wants others in hosts first.
-Binding a listener onto that session's port instead would let bots come first; the
-authority policy stays the one the session opened with.
-
 ### Let a watched holder pause with only its own bots
 
 - Priority: P3

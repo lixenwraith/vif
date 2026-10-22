@@ -262,9 +262,10 @@ port once the clock runs; `:host <addr> [host|migrate]` does the same on a run t
 is **already playing**, at whatever tick it has reached — same acceptor, same
 identity allocation, same capture. The joiner dials before constructing its `App`,
 so the anchor seed is installed before RNG/content initialization. `:join <target>`
-is the other half: a solo run, or one its session left alone, dials target while it
-plays on and rebuilds itself joined once admitted. `:session` reports what a run is
-part of.
+is the other half: a solo run, its bots included, or one its session left alone,
+dials target while it plays on and rebuilds itself joined once admitted, from the
+live seats, play settings and journal rather than its startup flags. `:session`
+reports what a run is part of.
 
 ### Two-terminal verification
 
