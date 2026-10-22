@@ -21,9 +21,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
- * Hosts the game's view, copies the APK's wad to the files directory where the game
- * reads it as its system root, and passes the activity's lifecycle to the run.
- * Start with the extra "raster" set to paint with Go's software raster instead.
+ * Opens on the start screen, whose tap hands the screen to the game's view; copies
+ * the APK's wad to the files directory where the game reads it as its system root,
+ * and passes the activity's lifecycle to the run. Start with the extra "raster" set
+ * to paint with Go's software raster instead.
  */
 public final class MainActivity extends Activity {
     static final String TAG = "vif";
@@ -32,6 +33,8 @@ public final class MainActivity extends Activity {
     private static final long BACK_TWICE_MS = 1500;
 
     private Speaker speaker;
+    private FrameLayout root;
+    private GameView view; // the game's, once the start screen is tapped
     private long backAt;
 
     @Override
@@ -43,20 +46,29 @@ public final class MainActivity extends Activity {
         } catch (UnsupportedOperationException e) {
             Log.w(TAG, "no speakers; the game runs silent", e);
         }
-        GameView view = new GameView(this, getFilesDir().getPath(), copyWad().getPath(),
-                getIntent().getBooleanExtra("raster", false), speaker);
-        FrameLayout root = new FrameLayout(this);
-        root.addView(view);
+        root = new FrameLayout(this);
+        root.addView(new StartScreen(this, this::play));
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             // The keyboard covers the view rather than shrinking it: a resize crops a
             // crop_on_resize map, and what it cropped is gone when the keyboard is
-            view.keyboardCovers(Math.max(0, insets.getInsets(WindowInsets.Type.ime()).bottom - bars.bottom));
+            if (view != null) {
+                view.keyboardCovers(Math.max(0, insets.getInsets(WindowInsets.Type.ime()).bottom - bars.bottom));
+            }
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
-        // Back is the game's Escape, which leaves a mode; the run is quit with :q
+    }
+
+    /** The start screen's tap: the game's view takes the screen, and its run starts. */
+    private void play() {
+        view = new GameView(this, getFilesDir().getPath(), copyWad().getPath(),
+                getIntent().getBooleanExtra("raster", false), speaker);
+        root.removeAllViews();
+        root.addView(view);
+        // Back is the game's Escape, which leaves a mode; the run is quit with :q. On
+        // the start screen Back is the system's
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                     OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::back);
