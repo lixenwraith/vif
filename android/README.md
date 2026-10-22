@@ -20,7 +20,8 @@ holding platform `android-36.1` and NDK `29.0.14206865`, its licence accepted.
 The SDK is `sdk.dir=<path>` in `android/local.properties` (ignored by git), else
 `ANDROID_HOME`, else Android Studio's default, `~/Android/Sdk`
 (`~/Library/Android/sdk` on macOS). The first build downloads Gradle, the JDK 21
-it builds on and the SDK build tools.
+it builds on and the SDK build tools; later builds reuse them, and Gradle's build and
+configuration caches (`gradle.properties`) rerun only what changed.
 
 ```bash
 make android             # names every missing piece and its fix, else bin/vif-debug.apk
