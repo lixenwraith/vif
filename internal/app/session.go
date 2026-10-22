@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -777,41 +776,23 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	if err != nil {
 		return err
 	}
-	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
-	chunks, err := network.EncodeSnapshotChunks(0, tick, body)
-	if err != nil {
-		return err
-	}
-
-	// Each joiner receives the closed roster addressed to itself, then the world it
-	// names. Sending the same participant list and the same capture to everyone is
-	// what makes shared creation order identical.
+	// Every guest receives the same roster and the same capture, which is what makes
+	// shared creation order identical.
+	guests := make([]network.PeerID, 0, admitted)
 	for _, participant := range offer.Roster {
-		if participant.ID == offer.Host {
-			continue
+		if participant.ID != offer.Host {
+			guests = append(guests, participant.ID)
 		}
-		addressed := offer
-		addressed.Assigned = participant.ID
-		start, err := json.Marshal(addressed)
-		if err != nil {
-			return err
-		}
-		if !port.Send(uint32(participant.ID), uint8(network.MsgStart), start) {
-			return fmt.Errorf("host could not release participant %d", participant.ID)
-		}
-		for i, chunk := range chunks {
-			if !port.Send(uint32(participant.ID), uint8(network.MsgStateSnapshot), chunk) {
-				return fmt.Errorf("host could not send capture chunk %d/%d to participant %d",
-					i+1, len(chunks), participant.ID)
-			}
-		}
+	}
+	if _, err := sendGate(port, offer, tick, body, guests...); err != nil {
+		return err
 	}
 	// Bound the install separately from first arrival; closed links count as abandoned.
 	abandoned := make(map[network.PeerID]bool, admitted)
 	confirmedGuests := func() int {
 		n := 0
-		for _, participant := range offer.Roster {
-			if participant.ID != offer.Host && port.Confirmed(uint32(participant.ID)) {
+		for _, id := range guests {
+			if port.Confirmed(uint32(id)) {
 				n++
 			}
 		}
@@ -824,9 +805,8 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	if err := a.waitForStartup(port, signals,
 		time.Now().Add(parameter.NetworkJoinReadyTimeout),
 		func(now time.Time) error {
-			for _, participant := range offer.Roster {
-				id := participant.ID
-				if id == offer.Host || port.Confirmed(uint32(id)) {
+			for _, id := range guests {
+				if port.Confirmed(uint32(id)) {
 					continue
 				}
 				abandoned[id] = true
@@ -837,9 +817,8 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 			return nil
 		},
 		func() bool {
-			for _, participant := range offer.Roster {
-				id := participant.ID
-				if id == offer.Host || abandoned[id] {
+			for _, id := range guests {
+				if abandoned[id] {
 					continue
 				}
 				if port.Connected(uint32(id)) && !port.Confirmed(uint32(id)) {
@@ -855,9 +834,8 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	// decided per link. A participant that cannot carry a whole world per floor
 	// window is dropped like one that never confirmed: it leaves through the ordinary
 	// departure the loop is about to drain, and the others keep their match.
-	for _, participant := range offer.Roster {
-		id := participant.ID
-		if id == offer.Host || !port.Connected(uint32(id)) {
+	for _, id := range guests {
+		if !port.Connected(uint32(id)) {
 			continue
 		}
 		if err := a.corrections.AdmitMeasuredLink(port, id); err != nil {
