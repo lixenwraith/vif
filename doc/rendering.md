@@ -337,6 +337,15 @@ crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
 instead of accumulating color, and the visible ring-buffer prefix contracts as
 a blocked tracer drains to its stop point.
 
+The kraken renderer shades a pose once. A tick moves the Kraken and the frames
+until the next show the same pose, so it keeps the shaded cells while the pose,
+position and visible bounds match, and draws them again as they are. It takes the
+tentacle samples the Kraken system built that tick from `KrakenShape` and samples
+the shape itself only when something moved the Kraken after its system ran. Each
+disc stamps its box with squared distances, and only a cell within
+`vmath.RoundingMargin` of a disc or rim edge takes the square root the definition
+compares, so the cells are exactly those of the per-cell distance test.
+
 A cell can hold several glyphs while drift carries layers past one another. The
 glyph renderer draws only the cell's top glyph, the one typing acts on, so a
 nearer parallax layer covers a farther one; `Position.TopGlyphIs` settles a cell

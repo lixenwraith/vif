@@ -32,7 +32,7 @@ author may replace that progression entirely with external TOML configuration.
 
 The world starts with an empty, 16-slot cursor roster. Every shipped scenario's
 boot state requests a cursor (the campaign, `blank` and `td` at the map centre,
-`kraken` at 2,2, `simon` below its buttons); `CursorSystem` places it on the
+`simon` below its buttons); `CursorSystem` places it on the
 nearest free cell and attaches cursor, view, protection, ping, energy, heat,
 shield, boost, weapon (holding the innate gun) and combat components, or under a
 `[map]` with `cursors = false` the cursor and protection components alone: an
@@ -450,8 +450,8 @@ it spawns and arms the cursor before opening `main`.
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `kraken` is a repeating combat arena, and `simon` is a memory game. Each
-entry has a short `description` for scenario listings.
+scaffold, and `simon` is a memory game. Each entry has a short `description` for
+scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its
