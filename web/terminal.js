@@ -501,9 +501,9 @@ void main() {
         }
     }
 
-    /* 76 (EX_PROTOCOL) is a session that runs another build or session: the same
-       page would be refused again, so its reason is shown without a retry. */
-    const EXIT_IDENTITY = 76;
+    /* 76 (EX_PROTOCOL) is a refused join, whose reason already says whether a
+       retry helps, so it is shown as it is. */
+    const EXIT_REFUSED = 76;
 
     function showExit(code, reason) {
         if (code === 0) {
@@ -511,7 +511,7 @@ void main() {
             return;
         }
         reason = (reason || 'exit code ' + code).replace(/\.$/, '');
-        showMessage('vif stopped: ' + reason + (code === EXIT_IDENTITY ? '.' : '. Reload to retry.'), true);
+        showMessage('vif stopped: ' + reason + (code === EXIT_REFUSED ? '.' : '. Reload to retry.'), true);
     }
 
     // === WASM Loading ===

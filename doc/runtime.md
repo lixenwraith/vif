@@ -983,8 +983,8 @@ is released. The hub stops every initialized service in reverse dependency order
 
 `cmd/vif` configures diagnostics before any terminal enters its alternate screen,
 so startup failures and runtime reports remain recoverable. It exits 1 on any
-returned error, 76 (`EX_PROTOCOL`) on a refusal for another build or session, which
-a retry would meet again, and 73 (`EX_CANTCREAT`) when logging was requested and
+returned error, 76 (`EX_PROTOCOL`) on a refused join, whose reason says whether a
+retry helps, and 73 (`EX_CANTCREAT`) when logging was requested and
 cannot start: a run that cannot write the log it was asked for ends before it plays
 rather than playing unlogged.
 

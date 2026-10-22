@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -40,7 +41,7 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 
 	select {
 	case err := <-host.midRunPort.Errors():
-		if !network.IsIdentityRefusal(err) {
+		if !errors.Is(err, &network.Refusal{Code: network.RefusalIdentity}) {
 			t.Fatalf("the host refused for %v, want an identity refusal", err)
 		}
 		if !strings.Contains(err.Error(), "simulation") {
@@ -117,8 +118,8 @@ func TestADifferentCorpusStillJoins(t *testing.T) {
 	if !strings.Contains(err.Error(), "scenario_digest") {
 		t.Fatalf("refusal %q does not name the scenario", err)
 	}
-	if !network.IsIdentityRefusal(err) {
-		t.Fatalf("refusal %q is not recognisable across the wire", err)
+	if !errors.Is(err, &network.Refusal{Code: network.RefusalIdentity}) {
+		t.Fatalf("refusal %q is not an identity refusal", err)
 	}
 }
 

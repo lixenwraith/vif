@@ -22,6 +22,8 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/lifecycle"
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 )
@@ -30,8 +32,7 @@ var (
 	errFleetFull         = errors.New("all session ports are allocated")
 	errSessionNotReady   = errors.New("session did not become ready")
 	errRequestRefused    = errors.New("session request refused")
-	errSessionUnknown    = errors.New("no such session")
-	errSessionRefusing   = errors.New("session is not accepting players")
+	errSessionUnknown    = &network.Refusal{Code: network.RefusalUnknown, Reason: "no such session"}
 	errSessionUnroutable = errors.New("session has no reachable pod")
 )
 
@@ -631,7 +632,7 @@ func (a *allocator) routeSession(ctx context.Context, id string) (string, error)
 		// draining refuses the dial itself; refusing here costs it nothing and
 		// tells the caller which of the two it is.
 		if !state.Ready {
-			return "", fmt.Errorf("%w: %s", errSessionRefusing, state.Phase)
+			return "", sessionRefusing(state.Phase)
 		}
 		return item.Status.PodIP, nil
 	}
@@ -639,6 +640,16 @@ func (a *allocator) routeSession(ctx context.Context, id string) (string, error)
 		return "", errSessionUnknown
 	}
 	return "", errSessionUnroutable
+}
+
+// sessionRefusing is a live pod's refusal, of the kind its phase names: a session
+// draining or expired is ending, and any other one is full.
+func sessionRefusing(phase string) error {
+	code := network.RefusalFull
+	if phase == lifecycle.PhaseDraining.String() || phase == lifecycle.PhaseExpired.String() {
+		code = network.RefusalEnding
+	}
+	return &network.Refusal{Code: code, Reason: "session is not accepting players: " + phase}
 }
 
 func (a *allocator) reconcile(ctx context.Context) (reconcileResult, error) {

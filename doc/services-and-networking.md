@@ -346,10 +346,9 @@ The values a peer is measured against are the coordinator's own, derived from th
 anchor it offered rather than read again at reply time, so a reset between the offer
 and the acceptance cannot turn a valid join into a mismatch or the reverse. A
 mismatch names both builds by release and commit (`Build`, never compared), then one
-field and both values, each side reading its own build as the one here, and carries
-`IdentityRefusalTag` so the joiner can recognise it across the wire — unlike a
-handoff refusal it is not worth retrying, because nothing about the peer will be
-different a second later, and `cmd/vif` exits 76 on it.
+field and both values, each side reading its own build as the one here. It is a
+refusal of kind `RefusalIdentity`, which no retry helps: nothing about the peer will
+be different a second later.
 
 A dialer configured with no build identity (`Config.Identity`) skips its check,
 which is what leaves a harness free to dial a hand-built fixture.
@@ -427,9 +426,12 @@ host started without `-name` expects no such frame.
 A join refused before an identity is allocated — a name that is not this
 session's, a dialling host past its admission budget, a session electing a new
 authority, closing its lobby, ending or full — is answered with a `MsgJoinReply`
-carrying the reason rather than by closing the stream, so the dialer can tell
-"retry against the new authority" (`network.IsHandoffRefusal`) from another
-refusal and from a connection that ended for no stated reason. Gameplay uses `MsgEvent` for a closed crossing
+carrying its kind and reason (`network.Refusal`) rather than by closing the stream.
+The dialer acts on the kind, never the wording: one table gives each kind's retry
+(`RetryOf`: a seat retries only a `RetrySoon` kind, a rejoin anything but
+`RetryNever`) and the advice its player reads after the reason, and `cmd/vif` exits
+76 (`EX_PROTOCOL`) on any refusal. A relayed join's answer (`RelayAdmit`) and a peer
+link's `MsgAck` carry the same two fields. Gameplay uses `MsgEvent` for a closed crossing
 epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
 `MsgStateDigest` for the periodic shared-world parity probe. Authority travels as
 `MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the

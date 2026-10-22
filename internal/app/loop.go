@@ -122,8 +122,8 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 
 // openRun builds the App, retrying while the coordinator this participant follows
 // rebuilds itself. Only a rejoin retries: a first -join reports a host that is not
-// there at once, which is what an operator dialling by hand wants, and an identity
-// the coordinator refuses will not be a different identity a second later.
+// there at once, which is what an operator dialling by hand wants, and a refusal
+// that no retry helps meets the same answer a second later.
 func openRun(cfg Config, rejoin bool) (*App, error) {
 	if !rejoin {
 		return newSessionApp(cfg)
@@ -134,7 +134,7 @@ func openRun(cfg Config, rejoin bool) (*App, error) {
 		switch {
 		case err == nil:
 			return a, nil
-		case network.IsIdentityRefusal(err) || !time.Now().Before(deadline):
+		case network.RetryOf(err) == network.RetryNever || !time.Now().Before(deadline):
 			return nil, err
 		}
 		time.Sleep(parameter.SessionRejoinInterval)

@@ -28,22 +28,21 @@ var errSessionCanceled = errors.New("network session canceled")
 var errSessionSignalled = fmt.Errorf("%w by a signal", errSessionCanceled)
 
 // ErrSessionHandoff refuses a join that arrived while the session was electing a
-// new authority. It is distinguishable on purpose: a joiner may retry against the
-// authority that emerges, and half-admitting it into a term that is about to end
-// is the one outcome that would leave a participant in a session nobody owns.
-var ErrSessionHandoff = errors.New(
-	"session authority is changing (" + network.HandoffRefusalTag + "); retry")
+// new authority. A joiner retries against the authority that emerges: half-admitting
+// it into a term that is about to end is the one outcome that would leave a
+// participant in a session nobody owns.
+var ErrSessionHandoff = &network.Refusal{Code: network.RefusalHandoff, Reason: "session authority is changing"}
 
 // ErrSessionStarting refuses a dial that lands in the window between the startup
-// lobby closing and the mid-run gate opening. It is distinguishable for the same
-// reason ErrSessionHandoff is: the dialer's answer is to retry, not to give up.
-var ErrSessionStarting = errors.New("session is starting; retry")
+// lobby closing and the mid-run gate opening, which a dialer retries for the same
+// reason it retries ErrSessionHandoff.
+var ErrSessionStarting = &network.Refusal{Code: network.RefusalStarting, Reason: "session is starting"}
 
-// ErrSessionEnding refuses a dial to a session that is draining or has expired. It
-// is the opposite of ErrSessionStarting and must not be confused with it: this run
-// is leaving, so retrying against it is exactly the wrong answer. An allocator
-// reading it should place the participant somewhere else.
-var ErrSessionEnding = errors.New("session is ending")
+// ErrSessionEnding is the kind of refusal a draining or expired session gives a
+// dial. It is the opposite of ErrSessionStarting: this run is leaving, so retrying
+// against it is exactly the wrong answer, and an allocator reading it should place
+// the participant somewhere else.
+var ErrSessionEnding = &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending"}
 
 // errSessionExpired ends a lobby whose allocated window closed before a guest
 // reached it. It is a clean end rather than a failure — the session did what it was
@@ -526,7 +525,7 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network
 	// spent on a participant this process is about to stop authoring for, and the
 	// refusal is what makes a drain a drain rather than a slower shutdown.
 	if st := a.life.State(time.Now()); !st.Admit {
-		return network.SessionOffer{}, fmt.Errorf("%w: %s", ErrSessionEnding, st.Reason)
+		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: " + st.Reason}
 	}
 
 	limit := a.sessionCapacity() + 1
@@ -534,8 +533,8 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network
 		a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: a.hostSlot()}}
 	}
 	if len(a.sessionRoster) >= limit {
-		return network.SessionOffer{}, fmt.Errorf("session is full at %d participant(s)",
-			a.playerCapacity())
+		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalFull,
+			Reason: fmt.Sprintf("session is full at %d participant(s)", a.playerCapacity())}
 	}
 	if holder != 0 {
 		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == holder })

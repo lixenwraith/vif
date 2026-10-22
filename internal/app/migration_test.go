@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -432,7 +433,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("a dial that landed mid-succession was admitted")
 	}
-	if !network.IsHandoffRefusal(err) {
+	if !errors.Is(err, ErrSessionHandoff) {
 		t.Fatalf("the refusal is not distinguishable: %v", err)
 	}
 }

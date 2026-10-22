@@ -28,10 +28,8 @@ const (
 	spliceStall = 10 * time.Second
 )
 
-var (
-	errRouteBusy      = errors.New("this session is carrying as many connections as it accepts")
-	errRouteAdmission = errors.New("this address has joined too often; try again in a minute")
-)
+var errRouteBusy = &network.Refusal{Code: network.RefusalFull,
+	Reason: "this session is carrying as many connections as it accepts"}
 
 // tcpRouter is the native front door: one port for every session, which places a
 // connection by the name its dialer sends before reading. It reads that one frame
@@ -102,15 +100,15 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 	// Keyed on the dialler, whose address the host forwards unchanged or the edge
 	// names, and charged before the lookup: that costs the API server a list and the
 	// pod a probe.
-	if r.admit.Admit(from) != nil {
-		return refuse(errRouteAdmission)
+	if err := r.admit.Admit(from); err != nil {
+		return refuse(err)
 	}
 	lookup, cancel := context.WithTimeout(context.Background(), routeTimeout)
 	podIP, err := r.sessions.routeSession(lookup, id)
 	cancel()
 	if err != nil {
-		if !errors.Is(err, errSessionUnknown) && !errors.Is(err, errSessionRefusing) &&
-			!errors.Is(err, errSessionUnroutable) {
+		var refused *network.Refusal
+		if !errors.As(err, &refused) && !errors.Is(err, errSessionUnroutable) {
 			r.log.Error("route session", "session", id, "error", err)
 			err = errors.New("could not resolve the session")
 		}

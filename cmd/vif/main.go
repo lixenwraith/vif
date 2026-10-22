@@ -29,7 +29,7 @@ import (
 const (
 	exitFailure  = 1
 	exitLogSetup = 73 // EX_CANTCREAT: logging requested but unavailable
-	exitIdentity = 76 // EX_PROTOCOL: a session of another build or session
+	exitRefused  = 76 // EX_PROTOCOL: a session refused the join, saying whether a retry helps
 )
 
 const logShutdownTimeout = 2 * time.Second
@@ -208,11 +208,12 @@ func main() {
 	}
 }
 
-// exitCode is a returned error's code. A refusal for another build or session has
-// its own, so a launcher does not offer the retry that would be refused again.
+// exitCode is a returned error's code. A refused join has its own: its reason
+// already says whether a retry helps, so a launcher shows it without offering one.
 func exitCode(err error) int {
-	if network.IsIdentityRefusal(err) {
-		return exitIdentity
+	var refused *network.Refusal
+	if errors.As(err, &refused) {
+		return exitRefused
 	}
 	return exitFailure
 }

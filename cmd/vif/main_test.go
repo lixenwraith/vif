@@ -282,14 +282,14 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 	}
 }
 
-// TestAnotherBuildsRefusalHasItsOwnExitCode: the page reads the code, not the
-// prose, to leave out a retry that would be refused again.
-func TestAnotherBuildsRefusalHasItsOwnExitCode(t *testing.T) {
+// TestARefusedJoinHasItsOwnExitCode: the page reads the code, not the prose, and
+// shows a refusal's reason as it is, since the reason says whether a retry helps.
+func TestARefusedJoinHasItsOwnExitCode(t *testing.T) {
 	ours := network.PeerIdentity{Protocol: network.ProtocolVersion}
 	refused := fmt.Errorf("join vif://host.example:7777/7f3c1a: %w",
 		ours.VerifyBuild(network.PeerIdentity{Protocol: network.ProtocolVersion + 1}))
-	if got := exitCode(refused); got != exitIdentity {
-		t.Errorf("a refusal for another build exits %d, want %d", got, exitIdentity)
+	if got := exitCode(refused); got != exitRefused {
+		t.Errorf("a refusal for another build exits %d, want %d", got, exitRefused)
 	}
 	if got := exitCode(errors.New("nothing is listening at host.example:7777")); got != exitFailure {
 		t.Errorf("a join nothing answered exits %d, want %d", got, exitFailure)
