@@ -162,7 +162,7 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if err := a.playersFit(sc); err != nil {
 		return false, err
 	}
-	req := &restartRequest{Scenario: name, Bots: a.seatGraphs()}
+	req := &restartRequest{Scenario: name}
 	if port != nil {
 		// Where this run's participants come back to. The address it already
 		// listens on when it opened the session; the one it advertised when it
@@ -176,12 +176,16 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 		if req.Host == "" && !a.seatsOnly() {
 			return false, errors.New("this participant has no address its session can return to")
 		}
+	}
+	if !a.replaceWith(req) {
+		return false, errRunReplaced
+	}
+	if port != nil {
 		// Said before this run's transport goes, because afterwards there is nobody
 		// to say it to. All it carries is where to come back: the offer a
 		// participant is given when it redials names what is being played.
 		port.Broadcast(uint8(network.MsgSessionRestart), []byte(req.Host))
 	}
-	a.restart.Store(req)
 	a.log.Info("app", "msg", "scenario change requested",
 		"scenario", sc.Name, "digest", sc.Short(), "host", req.Host)
 	return true, nil
@@ -193,7 +197,7 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
-	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr, Bots: a.seatGraphs()}) {
+	if a.replaceWith(&restartRequest{Rejoin: true, Join: addr}) {
 		a.log.Info("session", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }
@@ -258,7 +262,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		case err != nil:
 			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
-		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d, Bots: a.seatGraphs()}):
+		case !a.replaceWith(&restartRequest{Join: link, dialled: d}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})

@@ -331,6 +331,41 @@ func (c Config) joining(target string) (Config, error) {
 	return c, nil
 }
 
+// restarted is the run next asks for, built on this one's command line, and the
+// solo run a :join that fails after its dial plays on as. Hosting resumes after the
+// clock rather than before it: the next run is not waiting for a lobby, it is
+// reopening a door its guests are already at.
+func (c Config) restarted(next *restartRequest) (Config, *Config) {
+	c.notice, c.dialled, c.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
+	c.Journal, c.journalCarried = next.Journal, next.Journal
+	if next.Scenario != "" {
+		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false
+	}
+	c.HostAddress, c.resumeHost = "", next.Host
+	switch {
+	case next.Rejoin:
+		if next.Join != "" {
+			c.JoinAddress = next.Join
+		}
+	case next.Join != "":
+		solo := c
+		solo.JoinAddress, solo.SessionName = "", ""
+		joined, err := c.joining(next.Join)
+		if err != nil { // parsed when latched, so a solo run is what is left
+			next.dialled.abandon(err)
+			solo.notice = "Join failed: " + err.Error()
+			return solo, nil
+		}
+		joined.dialled = next.dialled
+		return joined, &solo
+	default:
+		// Not following anyone: a run that led its session, and one that
+		// inherited it and has nobody left, both start over on their own.
+		c.JoinAddress = ""
+	}
+	return c, nil
+}
+
 // Normalize fills unset fields that carry a defined default
 func (c *Config) Normalize() {
 	if c.Play.AutoFire == "" {

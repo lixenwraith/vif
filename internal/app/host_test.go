@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -591,6 +592,54 @@ func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
 	}
 }
 
+// TestTheFirstRestartAskedForStands: a run already being replaced refuses a scenario
+// change rather than overwriting the restart it latched, a dialled join's above all.
+func TestTheFirstRestartAskedForStands(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeScenario(t, root, "other", "A scenario this root holds.")
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 80, Height: 24, Resources: resource.Options{Dir: root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	a.cfg.Mode = ModePlay
+	first := &restartRequest{Join: "127.0.0.1:7777"}
+	if !a.replaceWith(first) {
+		t.Fatal("the first restart was refused")
+	}
+	var changed bool
+	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
+	if !errors.Is(err, errRunReplaced) || changed || a.restart.Load() != first {
+		t.Fatalf("a later change: changed %v, %v; want it refused and the first restart kept", changed, err)
+	}
+}
+
+// TestABotToldToLeaveIsNotSeatedAgain: a restart asked for while a removed bot is
+// still leaving does not bring it back in the next run.
+func TestABotToldToLeaveIsNotSeatedAgain(t *testing.T) {
+	// Not parallel: paced runs against wall-clock deadlines.
+	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, a)
+	stop := tickInBackground(a)
+	t.Cleanup(func() { stop(); a.Close() })
+	var err error
+	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForSeats(t, a, 1)
+	req := &restartRequest{}
+	a.World().RunSafe(func() {
+		if err = a.dropSeat(int(a.botSeats()[0].Slot)); err == nil {
+			a.replaceWith(req)
+		}
+	})
+	if err != nil || len(req.Bots) != 0 {
+		t.Fatalf("dropped %v, then the restart seats %v; want none", err, req.Bots)
+	}
+}
+
 // TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem: a session its own bots are
 // all of has no address to send them back to and needs none, since the next run
 // seats them again; a scenario whose max_players is below its players is refused.
@@ -701,10 +750,7 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 	// What Run does next: the replaced run goes, and the request builds the next
 	// one, driven here rather than presented.
 	replaced()
-	next, err := Config{Bots: req.Bots, dialled: req.dialled}.joining(req.Join)
-	if err != nil {
-		t.Fatal(err)
-	}
+	next, _ := Config{}.restarted(req)
 	driveBot(t, next, "patrol", nil)
 	waitForCursors(t, host, 3)
 }

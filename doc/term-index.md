@@ -1546,7 +1546,7 @@ code does not have yet, described only by a design such as
 
 **run** — two senses. See also **reset**, **position lattice**.
 - *Game run*: The world between game resets: the run counter advances once per reset and rebases the tick to zero, so every record is stamped (run, tick, boundary) and an artifact naming another run is refused. [Logging: Position lattice](logging-and-diagnostics.md#position-lattice) · [Multi-player §4](multi-player.md#4-correction-pipeline) · `internal/event` `Stamp.Run`, `EventQueue.NextRun`; `internal/converge` `Corrections.followRun`
-- *Process run*: One App the `app.Run` loop builds; another scenario (`:n <scenario>`), `:join`, a session restart or a removal by the host replaces it with a fresh one. [Runtime §10](runtime.md#10-reset-and-operator-state) · [Runtime §1](runtime.md#1-process-modes) · `internal/app` `Run`
+- *Process run*: One App the `app.Run` loop builds; another scenario (`:n <scenario>`), `:join`, a session restart or a removal by the host replaces it with a fresh one, which `Config.restarted` builds from the command line and what the restart names. The first restart asked for is the one served. [Runtime §10](runtime.md#10-reset-and-operator-state) · [Runtime §1](runtime.md#1-process-modes) · `internal/app` `Run`, `Config.restarted`
 
 **run-until** (also: `:step … fsm|ev`) — A time-control request that runs, at an optional rate, until the next matching FSM region transition or a named event dispatches, then pauses there or restores the previous rate; it trips once and expires after 20,000 ticks. See also **time control**. [Runtime §9](runtime.md#9-time-control) · `internal/engine` `TimeControl`, `BreakState`
 

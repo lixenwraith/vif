@@ -418,13 +418,16 @@ func (a *App) seatJournalNotices() []string {
 	return out
 }
 
-// seatGraphs are the graphs of the seats this run holds, in the order they came.
+// seatGraphs are the graphs of the seats this run holds, in the order they came; a
+// seat told to leave is not held, even while it is still leaving.
 func (a *App) seatGraphs() []string {
 	a.seatsMu.Lock()
 	defer a.seatsMu.Unlock()
 	specs := make([]string, 0, len(a.seats))
 	for _, s := range a.seats {
-		specs = append(specs, s.spec)
+		if !s.halted() {
+			specs = append(specs, s.spec)
+		}
 	}
 	return specs
 }

@@ -63,33 +63,8 @@ func Run(cfg Config) error {
 		if next == nil {
 			return nil
 		}
-		solo, cfg.notice, cfg.dialled, cfg.Bots, cfg.Play = nil, next.Notice, nil, next.Bots, next.Play
-		cfg.Journal, cfg.journalCarried = next.Journal, next.Journal
-		if next.Scenario != "" {
-			cfg.Resources.Scenario, cfg.Resources.Embedded = next.Scenario, false
-		}
-		// Hosting resumes after the clock rather than before it: this run is not
-		// waiting for a lobby, it is reopening a door its guests are already at.
-		cfg.HostAddress, cfg.resumeHost = "", next.Host
-		switch {
-		case next.Rejoin:
-			if next.Join != "" {
-				cfg.JoinAddress = next.Join
-			}
-		case next.Join != "":
-			prev := cfg
-			prev.JoinAddress, prev.SessionName = "", ""
-			solo = &prev
-			if cfg, err = cfg.joining(next.Join); err != nil {
-				cfg, solo = prev, nil // validated when latched; a solo run is what is left
-				cfg.notice = "Join failed: " + err.Error()
-			}
-		default:
-			// Not following anyone: a run that led its session, and one that
-			// inherited it and has nobody left, both start over on their own.
-			cfg.JoinAddress = ""
-		}
-		rejoin, cfg.dialled = next.Rejoin, next.dialled
+		cfg, solo = cfg.restarted(next)
+		rejoin = next.Rejoin
 		vlog.Info("app", "msg", "run restarting", "scenario", cfg.Resources.Scenario,
 			"host", next.Host, "join", cfg.JoinAddress, "rejoin", rejoin)
 	}
