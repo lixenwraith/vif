@@ -117,6 +117,23 @@ func TestTimeControlHoldOutlastsAPause(t *testing.T) {
 	}
 }
 
+// TestTimeControlAFreezeIsNoHostsHold: a freeze stops the clock as a hold does, but
+// it never takes over a hold standing when it came, and a hold set after it ends is
+// a host's again.
+func TestTimeControlAFreezeIsNoHostsHold(t *testing.T) {
+	tc := newTestControl()
+	if !tc.Freeze() || !tc.Held() || !tc.Frozen() {
+		t.Fatal("a freeze did not stop the clock as one")
+	}
+	tc.SetHeld(false)
+	if !tc.SetHeld(true) || tc.Frozen() {
+		t.Fatal("a hold set after a freeze read as the freeze")
+	}
+	if tc.Freeze() || tc.Frozen() {
+		t.Fatal("a freeze took over the hold standing when it came")
+	}
+}
+
 // TestTimeControlManualPassthrough pins headless time semantics
 func TestTimeControlManualPassthrough(t *testing.T) {
 	tc := NewTimeControl(NewManualClock(), status.NewRegistry())

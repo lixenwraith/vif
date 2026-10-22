@@ -19,7 +19,6 @@ type instance struct{ a *App }
 
 func (i instance) Position() event.Stamp { return i.a.Position() }
 func (i instance) Driven() bool          { return i.a.cfg.Mode.Driven() }
-func (i instance) Held() bool            { return i.a.ctx.TimeCtl.Held() }
 
 func (i instance) LocalParticipant() uint32 { return i.a.localParticipant() }
 
@@ -159,13 +158,16 @@ func (i instance) DropAbandonedCursors(roster []network.RosterEntry, local netwo
 	i.a.dropAbandonedCursors(roster, local)
 }
 
-// Forked ends a hold the lost host set, and gives up the claim the run was in its
-// session under whatever links it still holds: what a fork plays is not what its
-// player brings back.
+// Forked ends the hold standing, a freeze or one the lost host set, and gives up the
+// claim the run was in its session under whatever links it still holds: what a fork
+// plays is not what its player brings back.
 func (i instance) Forked() {
 	i.a.endHostlessHold()
 	i.a.leaveClaim()
 }
+
+func (i instance) Freeze() { i.a.freeze() }
+func (i instance) Thaw()   { i.a.thaw() }
 
 func (i instance) SetStatusMessage(msg string, kind parameter.StatusKind) {
 	i.a.ctx.SetStatusMessage(msg, kind)
@@ -321,7 +323,6 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 		}
 	})
 	if mine {
-		a.endHostlessHold()
 		a.corrections.BecomeAuthority(rec)
 		// Live scripts and bots advance their clock, but need the same publication
 		// pump as their original host; only harnesses publish corrections by hand.
@@ -334,8 +335,8 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	a.corrections.FollowAuthority(rec)
 }
 
-// endHostlessHold ends a hold the lost host set, which nobody else could: this run
-// took the term or goes on alone, and either way its game runs again.
+// endHostlessHold ends whatever hold stands as this run goes on alone: no host is
+// left to end it.
 func (a *App) endHostlessHold() {
 	a.world.RunSafe(func() { a.releaseHold("Resumed") })
 }
@@ -356,6 +357,28 @@ func (a *App) awayOrderLocked(roster []network.RosterEntry) []network.PeerID {
 	}
 	slices.SortStableFunc(out, func(x, y network.PeerID) int { return since[x].Compare(since[y]) })
 	return out
+}
+
+// freeze stops this run while its session's host changes. A replay needs no record
+// of it: no tick passes while it stands, and its end is journaled as any hold's.
+func (a *App) freeze() {
+	a.world.RunSafe(func() {
+		a.ctx.Freeze()
+		a.ctx.SetStatusMessage("Host lost; waiting for the next host", parameter.StatusAlert)
+	})
+}
+
+// thaw resumes the session this run took over. A hold the lost host set stays for
+// this run's own :pause, unless a script or bot drives the run and nobody here can.
+func (a *App) thaw() {
+	a.world.RunSafe(func() {
+		switch {
+		case a.ctx.TimeCtl.Frozen() || a.cfg.scriptedSession:
+			a.releaseHold("Resumed")
+		case a.ctx.TimeCtl.Held():
+			a.ctx.SetStatusMessage("Paused; this run hosts the session now", parameter.StatusNotice)
+		}
+	})
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

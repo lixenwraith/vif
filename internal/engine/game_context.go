@@ -967,6 +967,13 @@ func (ctx *GameContext) Hold(held bool) bool {
 	return true
 }
 
+// Freeze is Hold for a session whose host is changing; see TimeControl.Freeze.
+func (ctx *GameContext) Freeze() {
+	if ctx.TimeCtl.Freeze() {
+		ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: true})
+	}
+}
+
 // PauseForInput pauses a solo run while the operator types a command or reads an
 // overlay. A live session keeps ticking for every participant, so there the request
 // is not made: it would only earn the refusal an explicit pause does.

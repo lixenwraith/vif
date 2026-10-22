@@ -154,6 +154,7 @@ type TimeControl struct {
 	stopMu sync.Mutex
 	paused atomic.Bool                // this instance's pause: input, away, a breakpoint
 	held   atomic.Bool                // a hold, which only :pause or the host's resume ends
+	frozen atomic.Bool                // the hold standing is a freeze; see Freeze
 	brk    atomic.Pointer[BreakState] // armed run-until request, nil when disarmed
 	budget atomic.Int64               // remaining stepped ticks while paused
 	breaks atomic.Pointer[BreakSet]   // standing breakpoints, nil when none
@@ -166,7 +167,7 @@ type TimeControl struct {
 	statPaused *atomic.Bool
 }
 
-// NewTimeControl binds a clock to the status registry; call before Freeze
+// NewTimeControl binds a clock to the status registry; call before Registry.Freeze
 func NewTimeControl(clock Clock, reg *status.Registry) *TimeControl {
 	tc := &TimeControl{
 		clock:      clock,
@@ -201,14 +202,38 @@ func (tc *TimeControl) SetPaused(paused bool) bool { return tc.stop(&tc.paused, 
 
 // SetHeld starts or ends a hold and reports whether that changed. A hold stops the
 // clock as a pause does, but ending a pause leaves it standing, and no step passes
-// it: in a session every participant stands at the tick it applied in.
-func (tc *TimeControl) SetHeld(held bool) bool { return tc.stop(&tc.held, held) }
+// it: in a session every participant stands at the tick it applied in. Either way,
+// the hold is no longer a freeze.
+func (tc *TimeControl) SetHeld(held bool) bool {
+	tc.stopMu.Lock()
+	defer tc.stopMu.Unlock()
+	tc.frozen.Store(false)
+	return tc.stopLocked(&tc.held, held)
+}
+
+// Freeze holds the clock while the session's host changes and reports whether that
+// stopped it; a hold already standing stays the hold it was. No host set a freeze,
+// so the one taking the session over ends it, where a host's hold waits for :pause.
+func (tc *TimeControl) Freeze() bool {
+	tc.stopMu.Lock()
+	defer tc.stopMu.Unlock()
+	if !tc.stopLocked(&tc.held, true) {
+		return false
+	}
+	tc.frozen.Store(true)
+	return true
+}
 
 // stop sets one reason the clock stands still and moves the clock when the pair's
 // answer changes.
 func (tc *TimeControl) stop(reason *atomic.Bool, on bool) bool {
 	tc.stopMu.Lock()
 	defer tc.stopMu.Unlock()
+	return tc.stopLocked(reason, on)
+}
+
+// stopLocked is stop for a caller holding stopMu.
+func (tc *TimeControl) stopLocked(reason *atomic.Bool, on bool) bool {
 	was := tc.IsPaused()
 	if !reason.CompareAndSwap(!on, on) {
 		return false
@@ -233,6 +258,9 @@ func (tc *TimeControl) IsPaused() bool { return tc.paused.Load() || tc.held.Load
 
 // Held reports whether a hold stands
 func (tc *TimeControl) Held() bool { return tc.held.Load() }
+
+// Frozen reports whether the hold standing is a freeze rather than a host's
+func (tc *TimeControl) Frozen() bool { return tc.frozen.Load() }
 
 // OwnPause reports this instance's own pause, a hold aside
 func (tc *TimeControl) OwnPause() bool { return tc.paused.Load() }
