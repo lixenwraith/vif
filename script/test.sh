@@ -196,8 +196,6 @@ load)
 	hz=$(getconf CLK_TCK)
 	config=-d
 	[ -z "${SCENARIO:-}" ] || config="-config-dir wad -s $SCENARIO"
-	relayed=
-	[ "$guest_bots" = 0 ] || relayed="-bots $guest_bots"
 	D=$(mktemp -d)
 	note "$sessions session(s) of $bots host bot(s) and a joiner with $guest_bots for ${secs}s; logs in $D"
 	n=0
@@ -208,7 +206,7 @@ load)
 		fi
 		# shellcheck disable=SC2086
 		GOMEMLIMIT=$gomem "$BIN" -serve "$HOST:$((PORT + 2 * n))" -probe "$HOST:$probe" $config -size 120x40 \
-			-players "$want" -bots "$bots" -log-stdout -lv info >"$D/host$n.log" 2>&1 &
+			-players "$want" -bot "$bots" -log-stdout -lv info >"$D/host$n.log" 2>&1 &
 		eval "host$n=\$!"
 		LOAD_PIDS="${LOAD_PIDS:-} $!"
 		n=$((n + 1))
@@ -225,8 +223,7 @@ load)
 	while [ "$n" -lt "$sessions" ]; do
 		probe=$((PROBE_PORT + 2 * n))
 		wait_for 20 "admits $probe" || fail "host $n never admitted a dial: $D/host$n.log"
-		# shellcheck disable=SC2086
-		"$BIN" -headless -bot default -join "$HOST:$((PORT + 2 * n))" $relayed \
+		"$BIN" -headless -bot "$((guest_bots + 1))" -join "$HOST:$((PORT + 2 * n))" \
 			-log-stdout -lv info >"$D/join$n.log" 2>&1 &
 		LOAD_PIDS="$LOAD_PIDS $!"
 		wait_for 60 "probe_get /health $probe | grep -qx guests=$want" \
@@ -403,7 +400,7 @@ fleet)
 		printf '%s' "$rendered" | grep -q -- "$want" \
 			|| fail "the rendered template is missing $want"
 	done
-	printf '%s\n' "$rendered" | grep -A1 -- '"-bots"' | grep -q '"3"' \
+	printf '%s\n' "$rendered" | grep -A1 -- '"-bot"' | grep -q '"3"' \
 		|| fail "the rendered template does not seat the bots it was given"
 	go test ./tool/vif-allocator/ >/dev/null || fail "allocator tests"
 	pass "the session template and the allocator agree on the fleet's workload"

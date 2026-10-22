@@ -220,17 +220,17 @@ func TestSessionFlags(t *testing.T) {
 		t.Fatal("a joining guest accepted a host lobby cap")
 	}
 	if bots, err := app.BotSpecs("2"); err != nil || !slices.Equal(bots, []string{app.DefaultBotGraph, app.DefaultBotGraph}) {
-		t.Fatalf("-bots 2 seats %v, %v", bots, err)
+		t.Fatalf("-bot 2 seats %v, %v", bots, err)
 	}
 	if bots, err := app.BotSpecs("1:patrol"); err != nil || !slices.Equal(bots, []string{"patrol"}) {
-		t.Fatalf("-bots 1:patrol seats %v, %v", bots, err)
+		t.Fatalf("-bot 1:patrol seats %v, %v", bots, err)
 	}
 	if bots, err := app.BotSpecs("0"); err != nil || len(bots) != 0 {
-		t.Fatalf("-bots 0 seats %v, %v", bots, err)
+		t.Fatalf("-bot 0 seats %v, %v", bots, err)
 	}
 	for _, spec := range []string{"17", "-1", ":roam"} {
-		if err := (sessionFlags{bots: spec}).validateInvocation(false, false, ""); err == nil {
-			t.Fatalf("-bots %s was accepted", spec)
+		if err := (sessionFlags{bot: spec}).validateInvocation(false, false, ""); err == nil {
+			t.Fatalf("-bot %s was accepted", spec)
 		}
 	}
 }
@@ -282,29 +282,34 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 
 func TestScriptInvocation(t *testing.T) {
 	hosted := sessionFlags{host: ":7777", players: 2}
-	if err := validateInvocation(false, false, "", "scenario.toml", "", false, hosted); err != nil {
+	if err := validateInvocation(false, false, "", "scenario.toml", false, hosted); err != nil {
 		t.Fatalf("hosted script rejected: %v", err)
 	}
-	if err := validateInvocation(false, false, "", "scenario.toml", "", true, hosted); err != nil {
+	if err := validateInvocation(false, false, "", "scenario.toml", true, hosted); err != nil {
 		t.Fatalf("watched hosted script rejected: %v", err)
 	}
-	if err := validateInvocation(false, false, "", "", "roam", true, hosted); err != nil {
+	hostedBot := hosted
+	hostedBot.bot = "roam"
+	if err := validateInvocation(false, false, "", "", true, hostedBot); err != nil {
 		t.Fatalf("watched hosting bot rejected: %v", err)
 	}
-	if err := validateInvocation(false, false, "run.jrn", "scenario.toml", "", false, sessionFlags{}); err == nil {
+	if err := validateInvocation(false, false, "run.jrn", "scenario.toml", false, sessionFlags{}); err == nil {
 		t.Fatal("-replay and -script were accepted together")
 	}
-	if err := validateInvocation(true, false, "", "scenario.toml", "", false, sessionFlags{}); err == nil {
+	if err := validateInvocation(true, false, "", "scenario.toml", false, sessionFlags{}); err == nil {
 		t.Fatal("-schema and -script were accepted together")
 	}
-	if err := validateInvocation(false, false, "", "scenario.toml", "roam", false, sessionFlags{}); err == nil {
-		t.Fatal("-script and -bot were accepted together, and both drive the one seat")
+	if err := validateInvocation(false, false, "", "scenario.toml", false, sessionFlags{bot: "roam"}); err != nil {
+		t.Fatalf("-script refused the bots seated beside it: %v", err)
 	}
-	if err := validateInvocation(false, false, "", "", "roam", false, sessionFlags{serve: ":7777"}); err != nil {
+	if err := validateInvocation(false, false, "run.jrn", "", false, sessionFlags{bot: "roam"}); err == nil {
+		t.Fatal("-replay accepted bots, which a journal's playback cannot seat")
+	}
+	if err := validateInvocation(false, false, "", "", false, sessionFlags{serve: ":7777", bot: "roam"}); err != nil {
 		t.Fatalf("-serve cannot seat bots: %v", err)
 	}
-	for _, none := range []sessionFlags{{}, {bots: "0"}} {
-		if err := validateInvocation(false, false, "", "", "", true, none); err == nil {
+	for _, none := range []sessionFlags{{}, {bot: "0"}} {
+		if err := validateInvocation(false, false, "", "", true, none); err == nil {
 			t.Fatalf("-watch was accepted without a script or bot to present: %+v", none)
 		}
 	}
@@ -445,12 +450,10 @@ func TestBotOperandsKeepTheFollowingFlags(t *testing.T) {
 		{[]string{"-bot", "-watch"}, "1", true},
 		{[]string{"-bot", "2:default", "-watch"}, "2:default", true},
 		{[]string{"--bot=default", "-watch"}, "default", true},
-		{[]string{"-bots", "-watch"}, "1", true},
 	} {
 		fs := flag.NewFlagSet("bot", flag.ContinueOnError)
 		var spec string
 		fs.StringVar(&spec, "bot", "", "")
-		fs.StringVar(&spec, "bots", "", "")
 		watch := fs.Bool("watch", false, "")
 		if err := fs.Parse(botArgs(fs, tt.args)); err != nil {
 			t.Fatal(err)

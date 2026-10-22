@@ -38,9 +38,9 @@ a full development binary or the smaller deployment artifact. See
 from the journal anchor, and `-script <file>` constructs a caller-driven
 `ModeHeadless` run from an authored tick schedule, or `ModeScript` with `-watch`.
 `-bot [N[:graph]|graph]` adds bots beside the human, including with `-host`
-and `-join`; `-bots` accepts the same grammar. `-watch` uses the first bot's view
-with no human, and `-headless` runs it without a terminal. Each additional bot is
-its own instance in the same process (§4, Bot seats). See [Bots](bots.md).
+and `-join`. `-watch` uses the first bot's view with no human, and `-headless`
+runs it without a terminal. Each additional bot is its own instance in the same
+process (§4, Bot seats). See [Bots](bots.md).
 
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|

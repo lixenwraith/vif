@@ -134,7 +134,7 @@ code does not have yet, described only by a design such as
 
 **boost** (also: BoostComponent) — A per-cursor timed reward started or extended by a correct character or a species kill credited to that cursor (a predicted kill only once confirmed); while active it doubles heat gain per character and blocks ordinary energy penalties, and a typing error ends it. It is owner-authored state (D-13). [Gameplay: Boost](gameplay.md#boost) · `internal/component` `BoostComponent`; `internal/system` `BoostSystem`
 
-**bot** (also: -bot, -bots, :bot) — A participant driven by a graph instead of a terminal: it holds a roster slot and a cursor, unless the map places none, and its intents pass through the same mode router under the same session rules. See also **seat**, **graph**. [Bots](bots.md#bots) · [Bots: Flags](bots.md#flags) · `internal/bot` `Driver`, `Graph`
+**bot** (also: -bot, :bot) — A participant driven by a graph instead of a terminal: it holds a roster slot and a cursor, unless the map places none, and its intents pass through the same mode router under the same session rules. See also **seat**, **graph**. [Bots](bots.md#bots) · [Bots: Flags](bots.md#flags) · `internal/bot` `Driver`, `Graph`
 
 **boundary** — five senses. See also **position lattice**, **crossing fence**, **compared surface**.
 - *Journal*: the third counter of the position lattice `(run, tick, boundary)`; it advances when a non-empty settle group completes and resets each tick, run and **written world**. [Logging: Position lattice](logging-and-diagnostics.md#position-lattice) · `internal/event` `Stamp`, `EventQueue.NextBoundary`

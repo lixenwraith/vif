@@ -57,7 +57,6 @@ var (
 	flagScale    = flag.Int("scale", 1, "Desktop window pixels per font pixel; with -g")
 	flagReplay   = flag.String("replay", "", "Replay a recorded journal instead of playing")
 	flagScript   = flag.String("script", "", "Run an authored deterministic TOML tick script")
-	flagBot      = flag.String("bot", "", "Add bots: [N[:graph]|graph], default 1:default")
 	flagHeadless = flag.Bool("headless", false, "Run -bot without a human player or terminal, or verify a -replay")
 	flagWatch    = flag.Bool("watch", false, "Watch the first bot or a script; no human player")
 	flagHelp     = flag.Bool("h", false, "Print the flag help and exit")
@@ -155,10 +154,10 @@ func main() {
 
 	setupDiagnostics()
 
-	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagBot, *flagWatch, flagSession)
-	bots := botCount(*flagBot, flagSession.bots)
+	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagWatch, flagSession)
+	bots := flagSession.botCount()
 	if sessionErr == nil && *flagHeadless && (*flagWatch || bots == 0 && *flagReplay == "" || flagSession.serve != "") {
-		sessionErr = errors.New("-headless requires -bot, -bots or -replay and cannot combine with -watch or -serve")
+		sessionErr = errors.New("-headless requires -bot or -replay and cannot combine with -watch or -serve")
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
@@ -399,9 +398,7 @@ func buildConfig() app.Config {
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
-	cfg.Bots, _ = app.BotSpecs(*flagBot)
-	extra, _ := app.BotSpecs(flagSession.bots)
-	cfg.Bots = append(cfg.Bots, extra...)
+	cfg.Bots, _ = app.BotSpecs(flagSession.bot)
 
 	cfg.Play, cfg.Settings = settings.Play, settingsStore
 	// -mute either way names both channels for this run; unset, [play] stands
@@ -510,7 +507,7 @@ type sessionFlags struct {
 	probe       string
 	size        string
 	players     int
-	bots        string
+	bot         string
 	authority   string
 	listen      string
 	noAdvertise bool
@@ -555,9 +552,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
 		"Ceiling on the roster, itself included (2..%d; with -serve, guests only, 1..%d; default the whole roster); with a -join site, the one requested",
 		parameter.MaxPlayers, parameter.MaxPlayers))
-	fs.StringVar(&f.bots, "bots", "", fmt.Sprintf(
-		"Add bots using [N[:graph]|graph] (default 1:%s); combines with -bot",
-		app.DefaultBotGraph))
+	fs.StringVar(&f.bot, "bot", "", fmt.Sprintf(
+		"Add bots using [N[:graph]|graph] (default 1:%s)", app.DefaultBotGraph))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
 		"With -join in a %q session, the address this participant is dialled back on. "+
 			"Default the host's own port, falling back to an OS-assigned one when that "+
@@ -594,12 +590,12 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.authority != "" && f.host == "" && f.serve == "" {
 		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
 	}
-	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bots != "" ||
+	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bot != "" ||
 		f.authority != "" || f.listen != "" || f.noAdvertise || f.relay != "" || f.name != "" || f.lifetime().Bounded()) &&
 		(schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bots, -authority, -listen, -no-advertise, -relay, -name and the session lifetime bounds are available only in interactive play")
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -no-advertise, -relay, -name and the session lifetime bounds are available only in interactive play")
 	}
-	if _, err := app.BotSpecs(f.bots); err != nil {
+	if _, err := app.BotSpecs(f.bot); err != nil {
 		return err
 	}
 	if e, err := network.ParseEndpoint(f.join); f.players != 0 && f.join != "" && err == nil && e.Scheme != network.SchemeSite {
@@ -692,23 +688,20 @@ func parseSize(spec string) (width, height int, err error) {
 	return width, height, nil
 }
 
-func validateInvocation(schema, check bool, replay, script, bot string, watch bool, session sessionFlags) error {
+func validateInvocation(schema, check bool, replay, script string, watch bool, session sessionFlags) error {
 	modes := 0
-	for _, selected := range []bool{schema, check, replay != "", script != "", bot != ""} {
+	for _, selected := range []bool{schema, check, replay != "", script != ""} {
 		if selected {
 			modes++
 		}
 	}
 	if modes > 1 {
-		return fmt.Errorf("-schema, -check, -replay, -script and -bot are mutually exclusive")
-	}
-	if _, err := app.BotSpecs(bot); err != nil {
-		return err
+		return fmt.Errorf("-schema, -check, -replay and -script are mutually exclusive")
 	}
 	if err := session.validateInvocation(schema, check, replay); err != nil {
 		return err
 	}
-	if watch && script == "" && botCount(bot, session.bots) == 0 {
+	if watch && script == "" && session.botCount() == 0 {
 		return fmt.Errorf("-watch presents a -script or -bot run and has no other subject")
 	}
 	if watch && session.serve != "" {
@@ -717,11 +710,10 @@ func validateInvocation(schema, check bool, replay, script, bot string, watch bo
 	return nil
 }
 
-// botCount is how many bots -bot and -bots ask for together, once both are valid.
-func botCount(bot, bots string) int {
-	a, _ := app.BotSpecs(bot)
-	b, _ := app.BotSpecs(bots)
-	return len(a) + len(b)
+// botCount is how many bots -bot asks for, once it is valid.
+func (f sessionFlags) botCount() int {
+	bots, _ := app.BotSpecs(f.bot)
+	return len(bots)
 }
 
 // Go's flag parser has no optional string operand; preserve the next option.
@@ -737,7 +729,7 @@ func botArgs(fs *flag.FlagSet, args []string) []string {
 			out = append(out, arg)
 			continue
 		}
-		if name == "bot" || name == "bots" {
+		if name == "bot" {
 			spec := "1"
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				i++

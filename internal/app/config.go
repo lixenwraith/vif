@@ -440,7 +440,7 @@ func (c Config) Validate() error {
 		return errors.New("-players configures a host, not a joining guest")
 	}
 	if len(c.Bots) > parameter.MaxPlayers {
-		return fmt.Errorf("-bots %d is more than the %d a session holds", len(c.Bots), parameter.MaxPlayers)
+		return fmt.Errorf("-bot %d is more than the %d a session holds", len(c.Bots), parameter.MaxPlayers)
 	}
 	if c.LogScope != "" {
 		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {

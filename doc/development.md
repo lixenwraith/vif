@@ -149,7 +149,7 @@ line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
 | `-join <addr>` | Join `[tcp://\|vif://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies the seed and the scenario, and the joiner keeps its own typing corpus. Grammar in [Services and networking](services-and-networking.md) §6. |
 | `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
 | `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`, beside the scenario's `max_players`, the lower holding; with a `-join` site, the size requested. Unset holds the whole roster; under the scenario's `min_players` it is refused. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
-| `-bot`, `-bots [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; requests from both flags add together, operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
+| `-bot [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
 | `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` hands it to the first surviving member of the succession chain, else the lowest surviving identity, never a bot's. Default `host` with `-serve`, `migrate` otherwise. |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second over the window, on a link carrying at least this many bytes per second. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
 | `-listen <addr>`, `-no-advertise` | With `-join`, the address the other participants reach this one at in a migrate session, or none at all, which keeps it a leaf, elected only when no chain member survives ([Multiplayer](multi-player.md) §5.3). |
@@ -245,9 +245,9 @@ screen is taken. A bare `-l`, `-j` or `-mw` remains boolean, so a directory
 requires `-l=DIR`, `-j=DIR` or `-mw=DIR`, not a space; a leftover argument is
 reported and ignored.
 
-`-schema`, `-check`, `-replay`, `-script` and `-bot` are mutually exclusive.
-`-watch` needs a script or a bot, and `-headless` a bot or a replay; neither
-combines with `-serve`, nor `-headless` with `-watch`.
+`-schema`, `-check`, `-replay` and `-script` are mutually exclusive; a script seats
+`-bot`'s bots beside its own run. `-watch` needs a script or a bot, and `-headless`
+a bot or a replay; neither combines with `-serve`, nor `-headless` with `-watch`.
 
 `-first-join`, `-empty` and `-drain` are refused without `-serve`, for the reason
 `-probe` is: an interactive run is ended by the person who started it, and a flag
@@ -255,7 +255,7 @@ that ends a process must not silently do nothing.
 
 `-serve` is a host of its own and does not combine with `-host` or `-join`. `-host`
 and `-join` are mutually exclusive and available on interactive play and on driven
-`-script` and bot runs. They, `-serve`, `-probe`, `-players`, `-bots`, `-authority`,
+`-script` and bot runs. They, `-serve`, `-probe`, `-players`, `-bot`, `-authority`,
 `-listen`, `-no-advertise`, `-name` and the lifetime bounds are an error beside
 `-check`, `-schema` or `-replay`. An interactive `-host` plays at once and opens its
 port once the clock runs; `:host <addr> [host|migrate]` does the same on a run that
@@ -461,7 +461,7 @@ reproduce.
 
 ### Bots beside a run
 
-`-bot` and `-bots` seat bots as participants, each a headless instance in the same
+`-bot` seats bots as participants, each a headless instance in the same
 process that joins its holder in-process.
 Commands, compositions and examples are in [Bots](bots.md).
 
