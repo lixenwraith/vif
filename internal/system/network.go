@@ -1493,10 +1493,13 @@ func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
 // noticeDeparture despawns nothing: only a direct neighbour sees a lost link, at a
 // moment its transport chose, so acting here would remove a shared cursor at a
 // different tick on every instance. The coordinator crosses the one departure and
-// any other neighbour floods a notice; releasing the identity stays local.
+// any other neighbour floods a notice. The identity returns to the pool when that
+// crossing applies, or here for a participant with no cursor, which has none.
 func (s *NetworkSystem) noticeDeparture(peerID uint32) {
-	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
-		r.OnDeparture(peerID)
+	if _, crossed := s.participantSlot(peerID); !crossed {
+		if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
+			r.OnDeparture(peerID)
+		}
 	}
 	s.announceDeparture(peerID, 0)
 }

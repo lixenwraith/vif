@@ -46,13 +46,21 @@ func dialWebSocket(target string, timeout time.Duration) (net.Conn, error) {
 		Error struct{ Message string } `json:"error"`
 	}
 	if errors.As(err, &refused) && json.Unmarshal(refused.Body, &body) == nil && body.Error.Message != "" {
-		return nil, errors.New(body.Error.Message)
+		return nil, plainError{body.Error.Message, err}
 	}
 	return nil, err
 }
 
-// sessionLink is the front door's link: a native client is TCP end to end.
-func sessionLink(joinTarget, _ string) string { return joinTarget }
+// routeAnswered reports whether a failed dial reached a route that refused it, with
+// a status and usually a reason: that answer stands rather than sending the link to
+// its site.
+func routeAnswered(err error) bool {
+	var refused *websocket.HandshakeError
+	return errors.As(err, &refused)
+}
+
+// buildDialsTCP is whether this build has a socket to dial a host:port with.
+const buildDialsTCP = true
 
 // wsListener answers ws:// upgrades on a TCP port and yields each as a stream, so
 // the accept loop's handshake budget and per-address admission see a WebSocket

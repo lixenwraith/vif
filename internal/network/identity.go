@@ -32,6 +32,11 @@ type PeerIdentity struct {
 	Seed           uint64 `json:"seed"`
 	Session        uint64 `json:"session"`
 	ScenarioDigest string `json:"scenario_digest"`
+
+	// Build names the binary to a person reading a refusal, and is never compared:
+	// the fields above decide whether two builds share a session, this one only
+	// says which builds they were.
+	Build string `json:"build,omitempty"`
 }
 
 // SessionFrom fills the session half from an anchor, leaving the build half to the
@@ -84,7 +89,11 @@ func (local PeerIdentity) sessionFields(remote PeerIdentity) []identityField {
 // corpus do not exist yet; the coordinator checks those when the joiner reports
 // what they turned out to be.
 func (local PeerIdentity) VerifyBuild(remote PeerIdentity) error {
-	return firstDifference(local.buildFields(remote))
+	if diff := firstDifference(local.buildFields(remote)); diff != "" {
+		return fmt.Errorf("another build, %s here and %s on the other side: %s (%s)",
+			local.named(), remote.named(), diff, IdentityRefusalTag)
+	}
+	return nil
 }
 
 // Verify compares the whole identity: the build a peer is running and the session
@@ -93,18 +102,28 @@ func (local PeerIdentity) Verify(remote PeerIdentity) error {
 	if err := local.VerifyBuild(remote); err != nil {
 		return err
 	}
-	return firstDifference(local.sessionFields(remote))
+	if diff := firstDifference(local.sessionFields(remote)); diff != "" {
+		return fmt.Errorf("another session: %s (%s)", diff, IdentityRefusalTag)
+	}
+	return nil
+}
+
+// named is how a refusal names a build; one with no name predates naming itself.
+func (id PeerIdentity) named() string {
+	if id.Build == "" {
+		return "an older vif"
+	}
+	return "vif " + id.Build
 }
 
 // firstDifference names one field rather than all of them: they are usually one
 // cause, the message goes to a person deciding what to reinstall, and a peer that
 // differs in nine fields is a different build rather than nine problems.
-func firstDifference(fields []identityField) error {
+func firstDifference(fields []identityField) string {
 	for _, f := range fields {
 		if f.want != f.got {
-			return fmt.Errorf("%s: %s is %v here and %v on the other side",
-				IdentityRefusalTag, f.name, f.want, f.got)
+			return fmt.Sprintf("%s is %v here and %v there", f.name, f.want, f.got)
 		}
 	}
-	return nil
+	return ""
 }

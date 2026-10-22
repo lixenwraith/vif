@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -178,19 +179,90 @@ func RequestSession(site string, players int, scenario string) (string, error) {
 	}
 	defer resp.Body.Close()
 	var reply struct {
-		JoinTarget string `json:"join_target"`
-		WSURL      string `json:"ws_url"`
-		Error      struct{ Message string }
+		siteSession
+		Error struct{ Message string }
 	}
-	decoded := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&reply) == nil
+	decoded := json.NewDecoder(io.LimitReader(resp.Body, siteReplyBytes)).Decode(&reply) == nil
 	switch {
 	case resp.StatusCode != http.StatusCreated && decoded && reply.Error.Message != "":
 		return "", errors.New(reply.Error.Message)
 	case resp.StatusCode != http.StatusCreated:
 		return "", fmt.Errorf("%s answered %s", site, resp.Status)
 	}
-	if link := sessionLink(reply.JoinTarget, reply.WSURL); link != "" {
-		return link, nil
+	if links := sessionLinks(reply.JoinTarget, reply.WSURL); len(links) > 0 {
+		return links[0], nil
 	}
 	return "", fmt.Errorf("%s created a session this build has no route to", site)
+}
+
+// sessionLinks are the routes to a site's session this build can take, best first:
+// natively the front door, then the WebSocket route for a network that blocks it.
+func sessionLinks(joinTarget, wsURL string) []string {
+	links := []string{wsURL}
+	if buildDialsTCP {
+		links = []string{joinTarget, wsURL}
+	}
+	return slices.DeleteFunc(links, func(link string) bool { return link == "" })
+}
+
+// siteSession is a session as its site describes it: the links each client takes.
+type siteSession struct {
+	ID         string `json:"id"`
+	JoinTarget string `json:"join_target"`
+	WSURL      string `json:"ws_url"`
+}
+
+// siteReplyBytes bounds how much of a site's answer is read.
+const siteReplyBytes = 64 << 10
+
+// listedLinks asks the site that issued addr, a link to the session named name, for
+// the links this build can take to that session. The first site that lists its
+// sessions answers for them; with none answering, there are no links and no error.
+func listedLinks(addr, name string, timeout time.Duration) ([]string, error) {
+	client := &http.Client{Timeout: timeout}
+	for _, site := range linkSites(addr) {
+		resp, err := client.Get(site + "/vif/api/sessions")
+		if err != nil {
+			continue
+		}
+		var reply struct{ Sessions []siteSession }
+		listed := resp.StatusCode == http.StatusOK &&
+			json.NewDecoder(io.LimitReader(resp.Body, siteReplyBytes)).Decode(&reply) == nil
+		_ = resp.Body.Close()
+		if !listed {
+			continue
+		}
+		for _, s := range reply.Sessions {
+			if s.ID != name {
+				continue
+			}
+			if links := sessionLinks(s.JoinTarget, s.WSURL); len(links) > 0 {
+				return links, nil
+			}
+			return nil, fmt.Errorf("%s lists session %s with no route this build has", site, name)
+		}
+		return nil, fmt.Errorf("%s lists no session %s", site, name)
+	}
+	return nil, nil
+}
+
+// linkSites are the origins that may have issued a link: a WebSocket route's own,
+// then its host's over https, which is also where a front door's site answers.
+func linkSites(addr string) []string {
+	var sites []string
+	host, _, err := net.SplitHostPort(addr)
+	if u, uerr := url.Parse(addr); uerr == nil && (u.Scheme == "ws" || u.Scheme == "wss") {
+		sites = append(sites, strings.Replace(u.Scheme, "ws", "http", 1)+"://"+u.Host)
+		host, err = u.Hostname(), nil
+	}
+	if err != nil || host == "" {
+		return sites
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if site := "https://" + host; !slices.Contains(sites, site) {
+		sites = append(sites, site)
+	}
+	return sites
 }

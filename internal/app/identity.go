@@ -1,6 +1,9 @@
 package app
 
 import (
+	"strings"
+
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
@@ -9,8 +12,9 @@ import (
 )
 
 // buildIdentity is what this binary is, with no world required: five compile-time
-// constants. It is what a dialer compares against an offer before it constructs
-// anything, and it is the half of the identity no configuration changes.
+// constants and the name a refusal gives them. It is what a dialer compares against
+// an offer before it constructs anything, and it is the half of the identity no
+// configuration changes.
 func buildIdentity() network.PeerIdentity {
 	return network.PeerIdentity{
 		Protocol:       network.ProtocolVersion,
@@ -18,7 +22,22 @@ func buildIdentity() network.PeerIdentity {
 		CaptureSchema:  snapshot.Schema,
 		JournalSchema:  event.JournalSchema,
 		TickIntervalNS: int64(parameter.GameUpdateInterval),
+		Build:          buildName(),
 	}
+}
+
+// buildName is how a refusal names this build: the commit it was built from, after
+// its release when it is one. A pseudo-version only repeats the commit.
+func buildName() string {
+	version, revision := asset.Version()
+	if revision == "" {
+		return version
+	}
+	short := revision[:min(len(revision), 8)]
+	if version == "(devel)" || strings.Contains(version, revision[:min(len(revision), 12)]) {
+		return short
+	}
+	return version + " (" + short + ")"
 }
 
 // sessionIdentity is the whole of it: this build, and the session this instance has

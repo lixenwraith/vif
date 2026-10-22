@@ -1,8 +1,10 @@
 package network
 
 import (
+	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/event"
 )
@@ -12,18 +14,23 @@ func sampleIdentity() PeerIdentity {
 		Protocol: ProtocolVersion, Simulation: "abc123", CaptureSchema: 4,
 		JournalSchema: 11, TickIntervalNS: 50_000_000,
 		Seed: 0x5EED, Session: 1, ScenarioDigest: "sha256:2604b13fd259",
+		Build: "1154b8a6",
 	}
 }
 
 // TestVerifyNamesTheFirstDifference covers the message a person acts on. One field,
-// named, with both values: a peer that differs in nine fields is a different build
-// rather than nine problems, and the message says which one to look at first.
+// named, with both values, and another build named on both sides: a peer that
+// differs in nine fields is a different build rather than nine problems, and the
+// message says which builds they are and which field to look at first. A name
+// alone is no difference.
 func TestVerifyNamesTheFirstDifference(t *testing.T) {
 	t.Parallel()
 	local := sampleIdentity()
 
-	if err := local.Verify(sampleIdentity()); err != nil {
-		t.Fatalf("two identical peers were refused: %v", err)
+	renamed := sampleIdentity()
+	renamed.Build = "9b6df60e"
+	if err := local.Verify(renamed); err != nil {
+		t.Fatalf("two peers differing in their names alone were refused: %v", err)
 	}
 
 	cases := map[string]func(*PeerIdentity){
@@ -37,7 +44,7 @@ func TestVerifyNamesTheFirstDifference(t *testing.T) {
 		"scenario_digest": func(p *PeerIdentity) { p.ScenarioDigest = "sha256:deadbeef0000" },
 	}
 	for field, break_ := range cases {
-		remote := sampleIdentity()
+		remote := renamed
 		break_(&remote)
 		err := local.Verify(remote)
 		if err == nil {
@@ -49,7 +56,82 @@ func TestVerifyNamesTheFirstDifference(t *testing.T) {
 		if !IsIdentityRefusal(err) {
 			t.Fatalf("%s: refusal %q is not recognisable across the wire", field, err)
 		}
+		const builds = "vif 1154b8a6 here and vif 9b6df60e on the other side"
+		if local.VerifyBuild(remote) != nil && !strings.Contains(err.Error(), builds) {
+			t.Fatalf("%s: refusal %q does not name both builds", field, err)
+		}
 	}
+
+	older := sampleIdentity()
+	older.Build, older.Protocol = "", ProtocolVersion-1
+	if err := local.VerifyBuild(older); err == nil || !strings.Contains(err.Error(), "an older vif on the other side") {
+		t.Fatalf("a build that predates naming itself was refused with %v", err)
+	}
+}
+
+// TestARefusalIsToldInItsReadersTerms: each side reads its own build as the one
+// here, on a join its host refuses after the joiner's reply, which the joiner reads
+// off the compressed stream it opened, and on a peer link.
+func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
+	ours, theirs := sampleIdentity(), sampleIdentity()
+	theirs.Build, theirs.Simulation = "9b6df60e", "deadbeef"
+	const readsOurs = "vif 1154b8a6 here and vif 9b6df60e on the other side"
+	const readsTheirs = "vif 9b6df60e here and vif 1154b8a6 on the other side"
+	check := func(side string, err error, want string) {
+		t.Helper()
+		if !IsIdentityRefusal(err) || !strings.Contains(err.Error(), want) {
+			t.Errorf("the %s read %v, want a refusal naming %q", side, err, want)
+		}
+	}
+
+	// The joiner skipped its own check, as one configured with no identity does.
+	offer := testOffer()
+	offer.Identity = ours
+	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pending, _, err := DialSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pending.Close()
+	if err := pending.Complete(nil, JoinerReport{Identity: theirs}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = pending.WaitStart()
+	check("joiner", err, readsTheirs)
+	select {
+	case err := <-host.Errors():
+		check("host", err, readsOurs)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the host never refused the joiner")
+	}
+
+	accept := PeerAcceptor(PeerGate{Local: 2, Identity: ours}, time.Second)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	accepted := make(chan error, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err == nil {
+			_, err = accept(conn)
+			_ = conn.Close()
+		}
+		accepted <- err
+	}()
+	cfg := DebugConfig(RolePeer, "")
+	cfg.ConnectTimeout, cfg.Identity = time.Second, theirs
+	_, _, err = DialPeerLink(ln.Addr().String(), cfg, 3)
+	check("dialler", err, readsTheirs)
+	check("acceptor", <-accepted, readsOurs)
 }
 
 // TestVerifyBuildIgnoresWhatAPeerCannotKnowYet is the whole reason the check has

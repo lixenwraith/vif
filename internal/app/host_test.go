@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -615,9 +616,7 @@ func TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForCursors(t, a, 2)
-	seated := func() bool { b := a.botSeats(); return len(b) == 1 && !b[0].Joining }
-	for deadline := time.Now().Add(socketWait); !seated() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-	}
+	waitForSeats(t, a, 1)
 	var changed bool
 	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("solo") })
 	if err == nil || !strings.Contains(err.Error(), "at most 1") || changed || a.restart.Load() != nil {
@@ -626,6 +625,101 @@ func TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem(t *testing.T) {
 	a.World().RunSafe(func() { changed, err = a.changeScenarioLocked("other") })
 	if req := a.restart.Load(); err != nil || !changed || req.Host != "" || !slices.Equal(req.Bots, []string{"roam"}) {
 		t.Fatalf("changed %v, %v, restart %+v; want one with no address that seats roam again", changed, err, req)
+	}
+}
+
+// TestARunWithOnlyItsBotsOpensTheirSessionToOthers: :host on a run whose session is
+// its own bots' opens that session's door under the policy it names, rather than
+// refusing it as a second session, and a person who dials in joins beside the bot.
+func TestARunWithOnlyItsBotsOpensTheirSessionToOthers(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, a)
+	stop := tickInBackground(a)
+	t.Cleanup(func() { stop(); a.Close() })
+	var err error
+	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForSeats(t, a, 1)
+	a.World().RunSafe(func() { err = a.beginHostingLocked("127.0.0.1:0", AuthorityHost) })
+	if err != nil {
+		t.Fatalf(":host beside its own bot: %v", err)
+	}
+	a.World().RunSafe(func() { err = a.beginHostingLocked("127.0.0.1:0", "") })
+	if err == nil || !strings.Contains(err.Error(), "already hosting") {
+		t.Fatalf("a second :host = %v; want it refused as hosting", err)
+	}
+	pending, offer := dialSession(t, a.HostAddr())
+	_ = pending.Close()
+	if !offer.FixedAuthority {
+		t.Fatal("the door opened under the bots' policy, not the one :host named")
+	}
+	mustSocketJoiner(t, a.HostAddr(), fixtureSeed, BotWidth, BotHeight)
+	waitForCursors(t, a, 3)
+}
+
+// TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem: :join on a run whose session is
+// its own bots' dials rather than refusing, and the run it becomes is the one the
+// restart loop builds from its live seats, not the configuration it dialled with, so
+// the bot comes along through its holder.
+func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, 0x3023, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	stopHost := tickInBackground(host)
+	t.Cleanup(func() { stopHost(); host.Close() })
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	a.cfg.Mode = ModePlay // joinLocked serves Run's loop
+	tickUntilCursor(t, a)
+	stop := tickInBackground(a)
+	replaced := sync.OnceFunc(func() { stop(); a.Close() })
+	t.Cleanup(replaced)
+	var err error
+	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForSeats(t, a, 1)
+	a.World().RunSafe(func() { err = a.joinLocked(host.HostAddr()) })
+	if err != nil {
+		t.Fatalf(":join beside its own bot: %v", err)
+	}
+	for deadline := time.Now().Add(socketWait); a.dialling.Load(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the dial never finished")
+		}
+	}
+	req := a.restart.Load()
+	if req == nil || req.dialled == nil || !slices.Equal(req.Bots, []string{"roam"}) {
+		t.Fatalf("restart %+v; want a dialled join that seats roam again (status %q)", req, a.Context().GetStatusMessage())
+	}
+	// What Run does next: the replaced run goes, and the request builds the next
+	// one, driven here rather than presented.
+	replaced()
+	next, err := Config{Bots: req.Bots, dialled: req.dialled}.joining(req.Join)
+	if err != nil {
+		t.Fatal(err)
+	}
+	driveBot(t, next, "patrol", nil)
+	waitForCursors(t, host, 3)
+}
+
+// waitForSeats waits for a run's n bot seats to be admitted.
+func waitForSeats(t *testing.T, a *App, n int) {
+	t.Helper()
+	seated := func() bool {
+		b := a.botSeats()
+		return len(b) == n && !slices.ContainsFunc(b, func(s engine.BotSeat) bool { return s.Joining })
+	}
+	for deadline := time.Now().Add(socketWait); !seated(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("seats %+v; want %d admitted", a.botSeats(), n)
+		}
 	}
 }
 
@@ -1171,6 +1265,117 @@ func TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime(t *testin
 	}
 	if _, _, _, differs := snapshot.FirstDiff(a.SnapshotShared(), b.SnapshotShared()); !differs {
 		t.Fatal("a forged elapsed game time did not move the shared snapshot")
+	}
+}
+
+// TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies: a lost link is crossed
+// as a departure that applies a lead later, so its identity is free only then; a
+// dial assigned it in between, as a guest redialling at once was, is the
+// participant that departure disconnects.
+func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, 120, 40)
+	defer host.Close()
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stop := tickInBackground(host)
+	defer stop()
+	guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
+	waitForCursors(t, host, 2)
+	stop()
+	lost := network.PeerID(guest.World().LocalParticipant())
+	_ = port.Close()
+	for deadline := time.Now().Add(socketWait); host.sessionTransport().PeerCount() > 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the host never lost the guest's link")
+		}
+	}
+	host.Tick(1)
+
+	pending, offer := dialSession(t, host.HostAddr())
+	defer pending.Close()
+	if offer.Assigned == lost {
+		t.Fatalf("identity %d was reassigned while its departure was still to apply", lost)
+	}
+}
+
+// TestASessionCommandIsGatedByTheRoleARunHolds is the join matrix's role and
+// command table: what :join and :host answer in each role a run can hold, and how
+// :session names it. A run whose session is its own bots' takes both; a guest that
+// inherited the term reads as the host it now is.
+func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	ticking := func(a *App) *App {
+		tickUntilCursor(t, a)
+		stop := tickInBackground(a)
+		t.Cleanup(func() { stop(); a.Close() })
+		return a
+	}
+	withBot := func(a *App) *App {
+		var err error
+		a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForSeats(t, a, 1)
+		return a
+	}
+	hosting := func(a *App) *App {
+		if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	host := hosting(ticking(mustHeadless(t, fixtureSeed, BotWidth, BotHeight)))
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
+	guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+
+	for _, row := range []struct {
+		role       string
+		run        func() *App
+		join, host string // the refusal each names; empty takes the command
+		line       string // how :session opens
+	}{
+		{"solo", func() *App { return ticking(mustHeadless(t, 0x3101, BotWidth, BotHeight)) },
+			"", "", "Solo run"},
+		{"solo with its bots", func() *App { return withBot(ticking(mustHeadless(t, 0x3102, BotWidth, BotHeight))) },
+			"", "", "Session hosting, "},
+		{"hosting", func() *App { return host },
+			"already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+		{"hosting with its bots", func() *App { return withBot(hosting(ticking(mustHeadless(t, 0x3103, BotWidth, BotHeight)))) },
+			"already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+		{"joined", func() *App { return guest },
+			"already in a session", "already in a session", "Session joined " + host.HostAddr() + ", "},
+		{"inherited the term", func() *App {
+			guest.World().RunSafe(func() {
+				guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
+			})
+			return guest
+		}, "already in a session", "already in a session", "Session hosting, "},
+	} {
+		a := row.run()
+		var join, hostErr error
+		var line string
+		a.World().RunSafe(func() {
+			mode := a.cfg.Mode
+			a.cfg.Mode = ModePlay // :join serves Run's loop, which a headless run lacks
+			join = a.joinErrorLocked()
+			a.cfg.Mode = mode
+			hostErr = a.hostErrorLocked()
+			line = a.sessionSummaryLocked()
+		})
+		for _, c := range []struct {
+			command string
+			err     error
+			want    string
+		}{{":join", join, row.join}, {":host", hostErr, row.host}} {
+			if c.want == "" && c.err != nil || c.want != "" && (c.err == nil || !strings.Contains(c.err.Error(), c.want)) {
+				t.Errorf("%s in a run %s: %v; want %q", c.command, row.role, c.err, cmp.Or(c.want, "taken"))
+			}
+		}
+		if !strings.HasPrefix(line, row.line) {
+			t.Errorf(":session in a run %s reads %q; want it to open %q", row.role, line, row.line)
+		}
 	}
 }
 

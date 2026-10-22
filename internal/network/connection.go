@@ -502,6 +502,8 @@ func dial(target string, cfg *Config) (net.Conn, error) {
 	switch {
 	case e.Scheme == SchemeWebSocket:
 		conn, err = dialWebSocket(e.Addr, cfg.ConnectTimeout)
+	case !buildDialsTCP:
+		err = errors.New("TCP unavailable in a browser")
 	case cfg.TLS != nil:
 		conn, err = tls.DialWithDialer(dialer, "tcp", e.Addr, cfg.TLS)
 	default:

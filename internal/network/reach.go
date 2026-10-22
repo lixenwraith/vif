@@ -131,14 +131,16 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, err
 			return 0, fmt.Errorf("peer link hello: %w", err)
 		}
 		reply := peerWelcome{From: g.Local, Identity: g.Identity}
+		var refused error
 		if g.Identity.Protocol != 0 {
-			if err := g.Identity.VerifyBuild(hello.Identity); err != nil {
-				reply.Error = err.Error()
+			if refused = g.Identity.VerifyBuild(hello.Identity); refused != nil {
+				// Told in the dialler's terms: to it, its build is the one here.
+				reply.Error = hello.Identity.VerifyBuild(g.Identity).Error()
 			}
 		}
-		if reply.Error == "" && g.Admit != nil {
-			if err := g.Admit(hello.From); err != nil {
-				reply.Error = err.Error()
+		if refused == nil && g.Admit != nil {
+			if refused = g.Admit(hello.From); refused != nil {
+				reply.Error = refused.Error()
 			}
 		}
 		body, err := json.Marshal(reply)
@@ -148,8 +150,8 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, err
 		if err := NewMessage(MsgAck, body).Encode(conn); err != nil {
 			return 0, err
 		}
-		if reply.Error != "" {
-			return 0, errors.New(reply.Error)
+		if refused != nil {
+			return 0, refused
 		}
 		return hello.From, nil
 	}

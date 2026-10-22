@@ -353,15 +353,16 @@ func newJoiningApp(cfg Config) (*App, error) {
 			return nil, err
 		}
 	}
-	return d.open()
+	return d.open(cfg)
 }
 
 // joinDial is a session the host has admitted this instance to and whose scenario
 // it holds: everything a host can refuse, settled before anything is built on it.
+// It holds the handshake alone, so the run it opens is the one its caller built.
 type joinDial struct {
-	cfg     Config
-	pending *network.PendingJoin
-	offer   network.SessionOffer
+	pending   *network.PendingJoin
+	offer     network.SessionOffer
+	resources resource.Options // the session's scenario, as this instance resolved it
 }
 
 // dialJoin dials cfg's session and adopts its offer and scenario. A peer running a
@@ -380,7 +381,6 @@ func dialJoin(cfg Config) (*joinDial, error) {
 		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)
 	}
 	d := &joinDial{pending: pending, offer: offer}
-	cfg.networkConfig = pending.TransportConfig()
 	if cfg, err = ConfigForJoin(cfg, offer); err == nil {
 		err = resolveJoinScenario(&cfg, pending, offer)
 	}
@@ -388,7 +388,7 @@ func dialJoin(cfg Config) (*joinDial, error) {
 		d.abandon(err)
 		return nil, err
 	}
-	d.cfg = cfg
+	d.resources = cfg.Resources
 	return d, nil
 }
 
@@ -398,9 +398,15 @@ func (d *joinDial) abandon(cause error) {
 	_ = d.pending.Close()
 }
 
-// open constructs the joining App and replies to the host.
-func (d *joinDial) open() (*App, error) {
-	cfg, pending, offer := d.cfg, d.pending, d.offer
+// open constructs the joining App cfg describes and replies to the host.
+func (d *joinDial) open(cfg Config) (*App, error) {
+	pending, offer := d.pending, d.offer
+	cfg.Resources, cfg.networkConfig = d.resources, pending.TransportConfig()
+	cfg, err := ConfigForJoin(cfg, offer)
+	if err != nil {
+		d.abandon(err)
+		return nil, err
+	}
 
 	// Bound before the reply that declares it (internal/converge/reach.go), and only
 	// where authorship can move: elsewhere a guest's port is for nothing. A browser is

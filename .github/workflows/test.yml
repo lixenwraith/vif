@@ -51,6 +51,14 @@ jobs:
     - name: Test the desktop window package
       run: CGO_ENABLED=0 go test ./pkg/window
 
+    # js/wasm caps a program's argv and environment together at 8 KiB, which a
+    # runner's environment passes, so these run under Node with almost none of it.
+    - name: Test the browser build
+      run: |
+        wasm_exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"
+        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" ./pkg/browser
+        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" -run Browser ./internal/network
+
     - name: Vet and test the Android host module
       working-directory: android
       run: go vet ./... && go test ./...

@@ -138,7 +138,7 @@ func (a *App) addSeatLocked(spec string) error {
 // the handshake its holder serves checks. Caller holds updateMutex.
 func (a *App) seatConfigLocked() (Config, error) {
 	if a.sessionTransportLocked() == nil {
-		if err := a.openSessionLocked("", nil); err != nil {
+		if err := a.openSessionLocked(); err != nil {
 			return Config{}, err
 		}
 	}

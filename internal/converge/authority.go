@@ -273,6 +273,14 @@ func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
 	u.publish()
 }
 
+// Pin sets whether authorship stays with the participant that opened the session.
+// A session opened for its holder's own bots takes the policy it opens to others on.
+func (u *Authority) Pin(fixed bool) {
+	u.mu.Lock()
+	u.fixed = fixed
+	u.mu.Unlock()
+}
+
 // Term, Holder and Local are the three identities the rest of the session reads.
 func (u *Authority) Term() network.AuthorityTerm {
 	u.mu.Lock()

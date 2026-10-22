@@ -80,6 +80,9 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 		t.Fatalf("the offer names capture schema %d, this build reads %d",
 			offer.Identity.CaptureSchema, snapshot.Schema)
 	}
+	if offer.Identity.Build == "" || offer.Identity.Build != buildName() {
+		t.Fatalf("the offer names build %q, this one is %q", offer.Identity.Build, buildName())
+	}
 	// The offer's identity and this instance's own describe the same session,
 	// because one is derived from the anchor the other was read from.
 	if err := offer.Identity.Verify(a.sessionIdentity()); err != nil {

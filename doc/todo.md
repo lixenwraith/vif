@@ -47,16 +47,6 @@ such as `-bot 2:default@6` that `BotSpecs` parses, so `-bots`, `:bot add` and th
 menu share it; graph variants per level; or a ceiling the driver clamps every
 graph to. The fleet request carries it once the site exposes one.
 
-### Host a session opened for bots
-
-- Priority: P3
-- Affected files: `internal/app/host.go`, `internal/network/transport.go`
-
-A run in no session opens one with no listener for its bots, and `:host` then
-refuses it as already in a session, so a player who wants others in hosts first.
-Binding a listener onto that session's port instead would let bots come first; the
-authority policy stays the one the session opened with.
-
 ### Let a watched holder pause with only its own bots
 
 - Priority: P3
@@ -181,6 +171,20 @@ library copies.
 
 ## Browser sessions
 
+### Serve wss from a terminal that hosts or serves
+
+- Priority: P0
+- Affected files: `internal/network/endpoint.go`, `internal/network/websocket_other.go`,
+  `internal/app/host.go`, `cmd/vif`
+
+A terminal already joins by a `wss://` link: `vif -join wss://lixen.com/vif/ws/<id>`
+sends the link's own origin, which the fleet's browser route admits. It cannot be
+joined that way. `-host`, `-serve` and `:host` bind TCP or plain `ws://`, which a
+page served over `https` cannot open, so a terminal that hosts or serves answers
+`wss` as well. That takes a certificate and key around the listener's TCP port
+(`tls.NewListener`); decide where the key lives, and whether one port tells TCP,
+`ws` and `wss` apart by their first bytes or `wss` binds a port of its own.
+
 ### Bound navigation's worst tick on busy maps
 
 - Priority: P2
@@ -196,15 +200,6 @@ registry deriving the grids to keep from the live navigators, so a data-driven
 species' footprint costs one row. A 2×2 coarse field is not planned: it changes
 the answer, and the shared grid already took the cost it would have saved.
 
-### Serve wss from vif's own listener
-
-- Priority: P3
-- Affected files: `cmd/vif`, `internal/network/websocket_other.go`
-
-`-host`/`-serve ws://` is plain: a page served over `https` cannot open it. Taking a
-certificate and key would wrap the listener's TCP port in `tls.NewListener` and let
-`wss://host:port` bind; decide where the key lives before adding the flags.
-
 ### Tighten the per-address budgets
 
 - Priority: P2
@@ -215,6 +210,19 @@ routes and 4 creations per `-first-join` window, loose while one address carries
 several test clients; the target is one of each. One NAT is one address, so loosen
 joins before creations if households report refusals, and key IPv6 on its /64
 first.
+
+### Budget a fleet pod's joins per player
+
+- Priority: P3
+- Affected files: `internal/network/session.go` (`AdmissionLimiter`),
+  `tool/vif-allocator`
+
+A pod sees every player the allocator splices at the node's address, so its own
+budget of 6 joins a minute is one per session rather than one per player: a
+seventh join into one session within a minute is refused, whoever makes it,
+though the allocator has already budgeted each player. Close it when a session
+that busy appears, by exempting the node's address at the pod or by having the
+allocator name the player to it.
 
 ### Add browser admission authentication
 
@@ -514,8 +522,6 @@ projection and the write. WASM gains scheduling time, not parallel CPU.
 A bind or dial names the player's next step; these gaps remain:
 - A playing host never learns why a joiner was refused: accept and handshake
   failures only reach the log, and `port.Errors()` is drained only by a lobby.
-- A refusal written after the joiner's reply goes out raw while the joiner reads
-  deflate, so it reads a stream error instead of the reason (from reading; unrun).
 - A site request can run 2 minutes, past the 5 s its "Joining" notice lasts.
 - A rejoin shows nothing for up to `SessionRejoinWindow`.
 - Windows' WSAE codes miss `plainNetError` and keep the system's words.

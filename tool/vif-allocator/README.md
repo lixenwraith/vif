@@ -157,17 +157,17 @@ one of them is handed a `ws_url` whose origin this allocator refuses, and a page
 that checks the URL it was given against its own location will hide the link rather
 than offer a broken one.
 
-The browser route validates before it upgrades — method, identifier syntax, that
-the request is an upgrade, `Origin` against `-web-origin` (`403`), the player's join
-budget (`429`, the front door's, below), the session's liveness and readiness in
-reconciled Kubernetes state (`404` unknown, `409` full or ending, `503`
-unreachable), and `-route-max` connections for that session, counted with the front
-door's (`503`). Then it checks the handshake itself (`426` for another version, `400`
-for a bad key), dials the pod's game port (`502` when that fails), answers the
-`101` with `pkg/websocket` and splices the socket's payload to the pod as the front
-door does; the pod reads the browser's own route frame. It never accepts an
-upstream a caller named: the identifier is a routing key looked up in Kubernetes,
-not an address supplied. The decision record is in
+The browser route validates what HTTP must before it upgrades — method, identifier
+syntax, that the request is an upgrade, `Origin` against `-web-origin` (`403`) and
+the handshake itself (`426` for another version, `400` for a bad key) — then answers
+the `101` with `pkg/websocket` and places the stream as the front door places a
+dial, 32 at once: the route frame, the player's join budget (the front door's,
+below), the session's liveness and readiness in reconciled Kubernetes state,
+`-route-max` connections for that session counted with the front door's, and the
+pod's game port. Each of those is refused as the join reply a page reads, since a
+browser is never shown a status, and the stream is then spliced to the pod. It never
+accepts an upstream a caller named: the identifier is a routing key looked up in
+Kubernetes, not an address supplied. The decision record is in
 [`doc/multi-platform.md`](../../doc/multi-platform.md#5-browser-networking).
 
 The allocator deliberately exposes no public delete endpoint: this API is

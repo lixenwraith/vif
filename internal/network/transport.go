@@ -128,9 +128,21 @@ func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error), s
 			return err
 		}
 	}
+	return t.serve(ln, accept, served)
+}
+
+// serve makes ln this transport's own listener: at Start, or later on a host started
+// with none, which from then on takes joiners on it as one started on it does.
+func (t *Transport) serve(ln net.Listener, accept func(net.Conn) (PeerID, error), served bool) error {
 	t.listenMu.Lock()
+	defer t.listenMu.Unlock()
+	switch {
+	case !t.running.Load():
+		return errors.New("transport is stopped")
+	case t.listener != nil:
+		return errors.New("transport already listens")
+	}
 	t.listener = ln
-	t.listenMu.Unlock()
 	t.wg.Add(1)
 	go t.acceptLoop(ln, accept, t.config.OnAdmit, served)
 	return nil

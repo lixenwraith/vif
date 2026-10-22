@@ -3,7 +3,11 @@ package network
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -249,6 +253,67 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	defer pending.Close()
 	if got.Assigned != offer.Assigned {
 		t.Fatalf("offer assigned %d, want %d", got.Assigned, offer.Assigned)
+	}
+}
+
+// TestALinkAClientCannotTakeJoinsByTheRouteItsSiteLists: a link whose route never
+// answers is looked up by its session's name on the site that issued it, whose list
+// is the word on whether that session exists.
+func TestALinkAClientCannotTakeJoinsByTheRouteItsSiteLists(t *testing.T) {
+	offer := testOffer()
+	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{
+		Assign: func() (SessionOffer, error) { return offer, nil },
+		Name:   "7f3c1a",
+	}, time.Second)
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/vif/api/sessions" {
+			_, _ = fmt.Fprintf(w, `{"sessions":[{"id":"7f3c1a","join_target":"vif://%s/7f3c1a"}]}`, host.Addr())
+			return
+		}
+		if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer site.Close()
+	join := func(name string) (*PendingJoin, SessionOffer, error) {
+		cfg := DebugConfig(RolePeer, "")
+		cfg.SessionName = name
+		return DialSession("ws"+strings.TrimPrefix(site.URL, "http")+"/vif/ws/"+name, cfg)
+	}
+
+	pending, got, err := join("7f3c1a")
+	if err != nil {
+		t.Fatalf("a route that never answered did not join by the one its site lists: %v", err)
+	}
+	defer pending.Close()
+	if got.Assigned != offer.Assigned {
+		t.Fatalf("offer assigned %d, want %d", got.Assigned, offer.Assigned)
+	}
+	if _, _, err := join("1a3c7f"); err == nil || !strings.Contains(err.Error(), "lists no session 1a3c7f") {
+		t.Fatalf("joining a session the site does not list: %v", err)
+	}
+}
+
+// TestALinkIsLookedUpWhereItsSiteAnswers: a front door's site is its host's https
+// origin, and a WebSocket route's is its own, then that host's.
+func TestALinkIsLookedUpWhereItsSiteAnswers(t *testing.T) {
+	for addr, want := range map[string][]string{
+		"lixen.com:7777":            {"https://lixen.com"},
+		"[::1]:7777":                {"https://[::1]"},
+		"wss://lixen.com/vif/ws/a1": {"https://lixen.com"},
+		"wss://lixen.com:7777/a1":   {"https://lixen.com:7777", "https://lixen.com"},
+		"ws://127.0.0.1:8080/a1":    {"http://127.0.0.1:8080", "https://127.0.0.1"},
+	} {
+		if got := linkSites(addr); !slices.Equal(got, want) {
+			t.Errorf("linkSites(%q) = %q, want %q", addr, got, want)
+		}
 	}
 }
 
