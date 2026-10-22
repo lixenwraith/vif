@@ -16,10 +16,11 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * The screen the app opens on: the logo at the centre, "Tap to start" under it and a
- * ? in the corner that opens the touch controls. A tap anywhere else starts the
- * game, which runs from then on only. A browser on a touch screen shows the same
- * screen (web/index.html) in the same words while it loads, and needs no tap.
+ * The screen the app opens on, over the game: the logo at the centre, "Tap to start"
+ * under it and a ? in the corner that opens the touch controls. The run starts behind
+ * it and waits, paused; a tap anywhere else lifts the screen and the game goes on at
+ * once. A browser on a touch screen shows the same screen (web/index.html) in the
+ * same words while it loads, and needs no tap.
  */
 final class StartScreen extends FrameLayout {
     // The touch controls as web/index.html words them; Back is Android's alone
@@ -37,6 +38,7 @@ final class StartScreen extends FrameLayout {
 
     private final ImageView logo;
     private final TextView prompt;
+    private final TextView help;
 
     StartScreen(Context context, Runnable start) {
         super(context);
@@ -49,7 +51,7 @@ final class StartScreen extends FrameLayout {
         prompt = text("Tap to start", 18, GREY);
         addView(prompt, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.CENTER_HORIZONTAL));
-        TextView help = text("?", 24, Color.WHITE);
+        help = text("?", 24, Color.WHITE);
         help.setGravity(Gravity.CENTER);
         help.setContentDescription("Touch controls");
         GradientDrawable ring = new GradientDrawable();
@@ -124,6 +126,9 @@ final class StartScreen extends FrameLayout {
         dialog.setContentView(outside);
         dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        // The ? sits nearer the edge than the window, and would show past its corner
+        help.setVisibility(INVISIBLE);
+        dialog.setOnDismissListener(d -> help.setVisibility(VISIBLE));
         dialog.show();
     }
 

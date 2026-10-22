@@ -122,7 +122,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
                 return;
             }
             started = true;
-            requestFocus();
+            activity.started();
         } else {
             Game.resize(width, height);
         }

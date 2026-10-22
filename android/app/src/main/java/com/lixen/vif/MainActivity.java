@@ -21,10 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
- * Opens on the start screen, whose tap hands the screen to the game's view; copies
- * the APK's wad to the files directory where the game reads it as its system root,
- * and passes the activity's lifecycle to the run. Start with the extra "raster" set
- * to paint with Go's software raster instead.
+ * Opens on the start screen over the game's view, whose run starts behind it and
+ * waits there, away, until the tap lifts it; copies the APK's wad to the files
+ * directory where the game reads it as its system root, and passes the activity's
+ * lifecycle to the run. Start with the extra "raster" set to paint with Go's
+ * software raster instead.
  */
 public final class MainActivity extends Activity {
     static final String TAG = "vif";
@@ -33,8 +34,8 @@ public final class MainActivity extends Activity {
     private static final long BACK_TWICE_MS = 1500;
 
     private Speaker speaker;
-    private FrameLayout root;
-    private GameView view; // the game's, once the start screen is tapped
+    private GameView view;
+    private StartScreen start; // over the view until its tap, null after
     private long backAt;
 
     @Override
@@ -43,30 +44,42 @@ public final class MainActivity extends Activity {
         getWindow().setDecorFitsSystemWindows(false);
         try {
             speaker = new Speaker();
+            speaker.pause(); // silent until the start screen's tap
         } catch (UnsupportedOperationException e) {
             Log.w(TAG, "no speakers; the game runs silent", e);
         }
-        root = new FrameLayout(this);
-        root.addView(new StartScreen(this, this::play));
+        view = new GameView(this, getFilesDir().getPath(), copyWad().getPath(),
+                getIntent().getBooleanExtra("raster", false), speaker);
+        start = new StartScreen(this, this::play);
+        FrameLayout root = new FrameLayout(this);
+        root.addView(view);
+        root.addView(start);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             // The keyboard covers the view rather than shrinking it: a resize crops a
             // crop_on_resize map, and what it cropped is gone when the keyboard is
-            if (view != null) {
-                view.keyboardCovers(Math.max(0, insets.getInsets(WindowInsets.Type.ime()).bottom - bars.bottom));
-            }
+            view.keyboardCovers(Math.max(0, insets.getInsets(WindowInsets.Type.ime()).bottom - bars.bottom));
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
     }
 
-    /** The start screen's tap: the game's view takes the screen, and its run starts. */
+    /** The run has started; behind the start screen it waits, away, for the tap. */
+    void started() {
+        if (start != null) {
+            Game.pause();
+        } else {
+            view.requestFocus();
+        }
+    }
+
+    /** The start screen's tap: it leaves the game it covered, which goes on at once. */
     private void play() {
-        view = new GameView(this, getFilesDir().getPath(), copyWad().getPath(),
-                getIntent().getBooleanExtra("raster", false), speaker);
-        root.removeAllViews();
-        root.addView(view);
+        ((FrameLayout) start.getParent()).removeView(start);
+        start = null;
+        view.requestFocus();
+        goOn();
         // Back is the game's Escape, which leaves a mode; the run is quit with :q. On
         // the start screen Back is the system's
         if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -90,6 +103,13 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (start == null) {
+            goOn();
+        }
+    }
+
+    /** The player is at the game: the speakers play and the run goes on. */
+    private void goOn() {
         if (speaker != null) {
             speaker.resume();
         }

@@ -454,10 +454,13 @@ void main() {
 
     function wireStart() {
         const help = document.getElementById('help');
+        const controls = document.getElementById('controls');
         start.hidden = false;
         // A tap here leaves focus on the field, where hardware keys type once the game runs.
         start.addEventListener('pointerdown', function(e) { e.preventDefault(); });
-        document.getElementById('controls').addEventListener('click', function() { help.showModal(); });
+        // The ? sits nearer the edge than the window, and would show past its corner.
+        controls.addEventListener('click', function() { controls.hidden = true; help.showModal(); });
+        help.addEventListener('close', function() { controls.hidden = false; });
         document.getElementById('help-close').addEventListener('click', function() { help.close(); });
         help.addEventListener('click', function(e) { if (e.target === help) help.close(); });   // the backdrop
     }
