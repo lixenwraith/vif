@@ -1298,6 +1298,29 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 	}
 }
 
+// TestTheSessionLineNamesTheRoleARunHoldsNow: a guest reads as joined until the
+// term it inherits makes it the session's host.
+func TestTheSessionLineNamesTheRoleARunHoldsNow(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, 120, 40)
+	defer host.Close()
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stop := tickInBackground(host)
+	defer stop()
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
+	guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+	if got := guest.SessionSummary(); !strings.HasPrefix(got, "Session joined "+host.HostAddr()+",") {
+		t.Fatalf("a guest reads %q", got)
+	}
+	guest.World().RunSafe(func() {
+		guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
+	})
+	if got := guest.SessionSummary(); !strings.HasPrefix(got, "Session hosting,") {
+		t.Fatalf("a guest that inherited the term reads %q", got)
+	}
+}
+
 // An abandoned relayed join leaves by a departure crossing that applies a lead
 // later, so its identity is free only then: a dial assigned it in between, as a
 // person joining right after a dropped probe of the relay's address was, is the

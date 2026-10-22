@@ -471,11 +471,15 @@ func (a *App) sessionSummaryLocked() string {
 	}
 	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
 	participant := a.world.LocalParticipant()
-	// The dial direction, which is not authorship: a guest holds the term after a
-	// handoff, and the authority clause below is what names who authors. A harness
-	// binds no address, so the word stands alone rather than trailing a blank.
+	// The role this run holds now: a guest that inherited the term hosts the session
+	// at the address it declared, which its peers redial, not the one it dialled. A
+	// harness binds no address, so the word stands alone rather than trailing a blank.
 	where, addr := "hosting", a.cfg.HostAddress
-	if a.cfg.JoinAddress != "" {
+	switch {
+	case a.cfg.JoinAddress == "":
+	case a.world.IsSessionCoordinator():
+		addr = a.reach.DeclaredAddr()
+	default:
 		where, addr = "joined", a.cfg.JoinAddress
 	}
 	if addr != "" {
