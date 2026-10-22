@@ -154,8 +154,8 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `-host <bind-address>` | Bind before the terminal starts, so a port the run cannot have ends it with the reason on stderr, as a `-join` that cannot dial does; then play at once and serve the listener when the clock starts, exactly as `:host` does. A rebuilt run that cannot reopen its door plays on solo. |
 | `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
-| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. |
-| `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. |
+| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. A run that hosts already, or is in a session it joined, refuses it by its [session role](multi-player.md#1-vocabulary-and-boundaries). |
+| `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. A run that hosts, or is in a joined session that still has others in it, refuses it by its session role. |
 | `:session` | One line: hosting or joined, by the role held now, and the address (a guest that inherited the term hosts at the one it declared), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
@@ -346,10 +346,9 @@ The values a peer is measured against are the coordinator's own, derived from th
 anchor it offered rather than read again at reply time, so a reset between the offer
 and the acceptance cannot turn a valid join into a mismatch or the reverse. A
 mismatch names both builds by release and commit (`Build`, never compared), then one
-field and both values, each side reading its own build as the one here, and carries
-`IdentityRefusalTag` so the joiner can recognise it across the wire — unlike a
-handoff refusal it is not worth retrying, because nothing about the peer will be
-different a second later, and `cmd/vif` exits 76 on it.
+field and both values, each side reading its own build as the one here. It is a
+refusal of kind `RefusalIdentity`, which no retry helps: nothing about the peer will
+be different a second later.
 
 A dialer configured with no build identity (`Config.Identity`) skips its check,
 which is what leaves a harness free to dial a hand-built fixture.
@@ -427,9 +426,12 @@ host started without `-name` expects no such frame.
 A join refused before an identity is allocated — a name that is not this
 session's, a dialling host past its admission budget, a session electing a new
 authority, closing its lobby, ending or full — is answered with a `MsgJoinReply`
-carrying the reason rather than by closing the stream, so the dialer can tell
-"retry against the new authority" (`network.IsHandoffRefusal`) from another
-refusal and from a connection that ended for no stated reason. Gameplay uses `MsgEvent` for a closed crossing
+carrying its kind and reason (`network.Refusal`) rather than by closing the stream.
+The dialer acts on the kind, never the wording: one table gives each kind's retry
+(`RetryOf`: a seat retries only a `RetrySoon` kind, a rejoin anything but
+`RetryNever`) and the advice its player reads after the reason, and `cmd/vif` exits
+76 (`EX_PROTOCOL`) on any refusal. A relayed join's answer (`RelayAdmit`) and a peer
+link's `MsgAck` carry the same two fields. Gameplay uses `MsgEvent` for a closed crossing
 epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
 `MsgStateDigest` for the periodic shared-world parity probe. Authority travels as
 `MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the

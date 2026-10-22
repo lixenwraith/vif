@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -120,6 +121,37 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+// TestARestartKeepsTheCommandLineAndTakesWhatItNames: the next run is the command
+// line Run was given with what the restart named, so a pinned seed survives, and a
+// :join falls back to that run on its own; a run following nobody starts solo.
+func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
+	t.Parallel()
+	line := Config{Seed: 7, HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
+		Resources: resource.Options{Scenario: "main", Embedded: true}}
+	dialled := &joinDial{}
+	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
+		Join: "10.0.0.2:7777/abc", dialled: dialled, Bots: []string{"roam"}, Journal: true})
+	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.notice != "n" ||
+		!slices.Equal(next.Bots, []string{"roam"}) || !next.Journal || !next.journalCarried {
+		t.Fatalf("next run %+v; want the command line with what the restart named", next)
+	}
+	if next.HostAddress != "" || next.resumeHost != "127.0.0.1:7001" {
+		t.Fatalf("hosting opens %q before the clock and %q after it; want only after", next.HostAddress, next.resumeHost)
+	}
+	if next.JoinAddress != "10.0.0.2:7777" || next.SessionName != "abc" || next.dialled != dialled {
+		t.Fatalf("a :join builds %q/%q on %p; want the target on its own dial", next.JoinAddress, next.SessionName, next.dialled)
+	}
+	if solo == nil || solo.Seed != 7 || solo.JoinAddress != "" || solo.SessionName != "" || solo.dialled != nil {
+		t.Fatalf("a :join falls back to %+v; want the same run on its own", solo)
+	}
+	if moved, _ := line.restarted(&restartRequest{Rejoin: true, Join: "10.0.0.3:7777"}); moved.JoinAddress != "10.0.0.3:7777" || moved.SessionName != "old" {
+		t.Fatalf("a rejoin dials %q/%q; want the session's moved door", moved.JoinAddress, moved.SessionName)
+	}
+	if alone, solo := line.restarted(&restartRequest{}); alone.JoinAddress != "" || solo != nil {
+		t.Fatalf("a run following nobody dials %q", alone.JoinAddress)
 	}
 }
 

@@ -409,7 +409,7 @@ func TestARequestedRosterLevelAndScenarioReachTheJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"-players","2","-bots","1"`, `"-lv","debug"`,
+	for _, want := range []string{`"-players","2","-bot","1"`, `"-lv","debug"`,
 		`"-config-dir","/wad","-s","td"`, `"-check","-config-dir","/wad","-s","td"`, `"-size","160x48"`} {
 		if !strings.Contains(string(encoded), want) {
 			t.Fatalf("the Job does not carry %s: %s", want, encoded)

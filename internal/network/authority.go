@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/lixenwraith/vif/internal/event"
 )
@@ -51,18 +50,6 @@ type HandoffRecord struct {
 	// it is about to adopt was last proved authoritative, which is the number that
 	// says whether the handoff cost it anything.
 	EvidenceTick uint64 `json:"evidence_tick"`
-}
-
-// HandoffRefusalTag marks a join refused because the session was electing a new
-// authority. It travels inside the refusal text because that is what the join
-// handshake carries back, and it is a tag rather than a sentence so a joiner can
-// recognise it without matching prose.
-const HandoffRefusalTag = "authority-handoff"
-
-// IsHandoffRefusal reports whether a join failed because a succession was running,
-// which is the one refusal a joiner should retry rather than report.
-func IsHandoffRefusal(err error) bool {
-	return err != nil && strings.Contains(err.Error(), HandoffRefusalTag)
 }
 
 // Validate refuses a handoff record the succession rule could not have produced.

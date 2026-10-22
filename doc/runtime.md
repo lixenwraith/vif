@@ -38,9 +38,9 @@ a full development binary or the smaller deployment artifact. See
 from the journal anchor, and `-script <file>` constructs a caller-driven
 `ModeHeadless` run from an authored tick schedule, or `ModeScript` with `-watch`.
 `-bot [N[:graph]|graph]` adds bots beside the human, including with `-host`
-and `-join`; `-bots` accepts the same grammar. `-watch` uses the first bot's view
-with no human, and `-headless` runs it without a terminal. Each additional bot is
-its own instance in the same process (§4, Bot seats). See [Bots](bots.md).
+and `-join`. `-watch` uses the first bot's view with no human, and `-headless`
+runs it without a terminal. Each additional bot is its own instance in the same
+process (§4, Bot seats). See [Bots](bots.md).
 
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|
@@ -881,8 +881,13 @@ the FSM metric set, and `Scheduler.Prepare` freezes that set for the life of a
 run, so another scenario needs another run: `Run` owns a loop that builds one App
 per run, and the command validates the name and latches which one comes next;
 naming the scenario already loaded resets in place instead. The same loop replaces
-the run for a `:join`, a session restart and a removal by the host; the scenario
-change and the restart seat the run's bots again.
+the run for a `:join`, a session restart and a removal by the host, and the first
+of these asked for is the one served: a run already being replaced refuses another.
+One builder, `Config.restarted`, makes each next run from the command line `Run` was
+given and what the restart names. A scenario change, a restart and a `:join` seat
+the run's bots again, read when the restart is asked for, since a session closing
+ends them before the switch; a bot told to leave is not among them, and a removal
+by the host seats none.
 Everything operator-owned restarts with it. The terminal does not: `Run` opens one
 for the process and every run presents on it, so a replacement redraws the screen
 rather than leaving and re-entering it. See
@@ -983,8 +988,8 @@ is released. The hub stops every initialized service in reverse dependency order
 
 `cmd/vif` configures diagnostics before any terminal enters its alternate screen,
 so startup failures and runtime reports remain recoverable. It exits 1 on any
-returned error, 76 (`EX_PROTOCOL`) on a refusal for another build or session, which
-a retry would meet again, and 73 (`EX_CANTCREAT`) when logging was requested and
+returned error, 76 (`EX_PROTOCOL`) on a refused join, whose reason says whether a
+retry helps, and 73 (`EX_CANTCREAT`) when logging was requested and
 cannot start: a run that cannot write the log it was asked for ends before it plays
 rather than playing unlogged.
 

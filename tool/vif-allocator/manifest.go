@@ -62,7 +62,7 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 		"-config-dir", "/wad",
 		"-s", cfg.Scenario,
 		"-players", strconv.Itoa(cfg.Players),
-		"-bots", strconv.Itoa(cfg.Bots),
+		"-bot", strconv.Itoa(cfg.Bots),
 		"-first-join", cfg.FirstJoin,
 		"-empty", cfg.Empty,
 		"-drain", cfg.Drain,

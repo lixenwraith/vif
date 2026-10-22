@@ -226,7 +226,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 		if run != nil {
 			a.seatJournalLeft(int(s.slot.Load()), run)
 		}
-		if driver == nil && err != nil && retryableJoin(err) && time.Now().Before(deadline) &&
+		if driver == nil && err != nil && network.RetryOf(err) == network.RetrySoon && time.Now().Before(deadline) &&
 			waitScriptTick(s.stop, parameter.SessionRejoinInterval) {
 			continue
 		}
@@ -242,13 +242,6 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 		}
 		return
 	}
-}
-
-// retryableJoin reports a refusal that asks the dialer to retry: the host is between
-// its lobby and its mid-run gate or electing an authority, or the seat fell behind it.
-func retryableJoin(err error) bool {
-	return network.IsHandoffRefusal(err) || strings.Contains(err.Error(), ErrSessionStarting.Error()) ||
-		errors.Is(err, errJoinBehind)
 }
 
 // forkCell is an instance's own "no session left" flag: it lost its authority and
@@ -425,13 +418,16 @@ func (a *App) seatJournalNotices() []string {
 	return out
 }
 
-// seatGraphs are the graphs of the seats this run holds, in the order they came.
+// seatGraphs are the graphs of the seats this run holds, in the order they came; a
+// seat told to leave is not held, even while it is still leaving.
 func (a *App) seatGraphs() []string {
 	a.seatsMu.Lock()
 	defer a.seatsMu.Unlock()
 	specs := make([]string, 0, len(a.seats))
 	for _, s := range a.seats {
-		specs = append(specs, s.spec)
+		if !s.halted() {
+			specs = append(specs, s.spec)
+		}
 	}
 	return specs
 }

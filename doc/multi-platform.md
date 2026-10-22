@@ -332,9 +332,9 @@ address grammar in [Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash
-that ended it) in place of the terminal. A refused or failed join reads there, with
-a hint to reload except after exit 76, a refusal for another build or session that
-a reload would meet again. The page then terminates the Worker and posts it nothing
+that ended it) in place of the terminal. A failed join reads there with a hint to
+reload; a refused one exits 76 and reads as it is, since its reason already says
+whether a retry helps. The page then terminates the Worker and posts it nothing
 more, so a later resize or visibility change cannot replace that reason.
 
 ## 7. External maps and assets

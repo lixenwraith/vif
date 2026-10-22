@@ -162,7 +162,7 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if err := a.playersFit(sc); err != nil {
 		return false, err
 	}
-	req := &restartRequest{Scenario: name, Bots: a.seatGraphs()}
+	req := &restartRequest{Scenario: name}
 	if port != nil {
 		// Where this run's participants come back to. The address it already
 		// listens on when it opened the session; the one it advertised when it
@@ -176,12 +176,16 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 		if req.Host == "" && !a.seatsOnly() {
 			return false, errors.New("this participant has no address its session can return to")
 		}
+	}
+	if !a.replaceWith(req) {
+		return false, errRunReplaced
+	}
+	if port != nil {
 		// Said before this run's transport goes, because afterwards there is nobody
 		// to say it to. All it carries is where to come back: the offer a
 		// participant is given when it redials names what is being played.
 		port.Broadcast(uint8(network.MsgSessionRestart), []byte(req.Host))
 	}
-	a.restart.Store(req)
 	a.log.Info("app", "msg", "scenario change requested",
 		"scenario", sc.Name, "digest", sc.Short(), "host", req.Host)
 	return true, nil
@@ -190,10 +194,10 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 // A restart follows the authority's current address, which may have migrated.
 // Called under the world lock; the restart loop consumes the atomic request.
 func (a *App) receiveSessionRestart(from uint32, addr string) {
-	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
+	if a.cfg.Mode != ModePlay || !a.sessionRoleLocked().joined() {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
-	if a.restart.CompareAndSwap(nil, &restartRequest{Rejoin: true, Join: addr, Bots: a.seatGraphs()}) {
+	if a.replaceWith(&restartRequest{Rejoin: true, Join: addr}) {
 		a.log.Info("session", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }
@@ -206,12 +210,60 @@ func (a *App) joinLocked(target string) error {
 	return a.joinSessionLocked(target, 0, "")
 }
 
+// sessionRole is what a run is to its session, read from what the session wrote
+// rather than kept beside it. Who authors is not part of it but the authority's,
+// so a guest that inherited the term is a guest that authors.
+type sessionRole uint8
+
+const (
+	roleSolo   sessionRole = iota // in no session
+	roleSeats                     // in one it opened for its own bots, with no door
+	roleHost                      // coordinating one others can join
+	roleServer                    // coordinating one it plays no part in
+	roleGuest                     // in one it joined
+	roleLeft                      // in one it joined, which has nobody left but its own bots
+)
+
+const inSession = "this run is already in a session"
+
+// sessionRoles is why each role refuses :join and :host, empty where it takes them.
+var sessionRoles = [...]struct{ join, host string }{
+	roleSolo:   {"", ""},
+	roleSeats:  {"", ""},
+	roleHost:   {inSession, "this run is already hosting"},
+	roleServer: {inSession, "this run is already hosting"},
+	roleGuest:  {inSession, inSession},
+	roleLeft:   {"", inSession},
+}
+
+func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
+
+// sessionRoleLocked is the role this run holds now. Caller MUST hold updateMutex.
+func (a *App) sessionRoleLocked() sessionRole {
+	a.sessionMu.Lock()
+	opened := a.midRunPort != nil
+	a.sessionMu.Unlock()
+	switch {
+	case a.cfg.Mode.Serves():
+		return roleServer
+	case a.sessionTransportLocked() == nil:
+		return roleSolo
+	case a.cfg.JoinAddress != "" && a.seatsOnly():
+		return roleLeft
+	case a.cfg.JoinAddress != "":
+		return roleGuest
+	case opened && a.cfg.HostAddress == "":
+		return roleSeats
+	}
+	return roleHost
+}
+
 func (a *App) joinErrorLocked() error {
 	if a.cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
 	}
-	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && !a.seatsOnly()) {
-		return errors.New("this run is already in a session")
+	if why := sessionRoles[a.sessionRoleLocked()].join; why != "" {
+		return errors.New(why)
 	}
 	if a.dialling.Load() {
 		return errors.New("a join is already being dialled")
@@ -258,7 +310,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		case err != nil:
 			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
-		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d, Bots: a.seatGraphs()}):
+		case !a.replaceWith(&restartRequest{Join: link, dialled: d}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})
@@ -290,14 +342,8 @@ func (a *App) hostErrorLocked() error {
 	}
 	// A session this run opened without a door holds only its bots: :host opens
 	// that one to others rather than a second.
-	a.sessionMu.Lock()
-	opened := a.midRunPort != nil
-	a.sessionMu.Unlock()
-	switch {
-	case opened && a.cfg.HostAddress != "":
-		return errors.New("host: this run is already hosting")
-	case !opened && a.sessionTransportLocked() != nil:
-		return errors.New("host: this run is already in a session")
+	if why := sessionRoles[a.sessionRoleLocked()].host; why != "" {
+		return errors.New("host: " + why)
 	}
 	return nil
 }
@@ -476,7 +522,7 @@ func (a *App) sessionSummaryLocked() string {
 	// harness binds no address, so the word stands alone rather than trailing a blank.
 	where, addr := "hosting", a.cfg.HostAddress
 	switch {
-	case a.cfg.JoinAddress == "":
+	case !a.sessionRoleLocked().joined():
 	case a.world.IsSessionCoordinator():
 		addr = a.reach.DeclaredAddr()
 	default:
@@ -756,8 +802,7 @@ func (a *App) resumeJoinedSession() error {
 		}
 		step := target - local
 		if caught+step > parameter.NetworkJoinCatchUpTicks {
-			return fmt.Errorf("%w: it is more than %d ticks ahead of the world it sent",
-				errJoinBehind, parameter.NetworkJoinCatchUpTicks)
+			return joinBehind("it is more than %d ticks ahead of the world it sent", parameter.NetworkJoinCatchUpTicks)
 		}
 		a.scheduler.RunTicks(int(step))
 		caught += step
@@ -798,15 +843,16 @@ func (a *App) finishCatchUp(held []*network.Message, caught uint64) error {
 		"caught_up_ticks", caught, "tick", a.Position().Tick, "lag_ticks", remaining)
 	a.telemetry.CatchUp.Store(int64(caught))
 	if remaining > parameter.NetworkJoinLagTicks {
-		return fmt.Errorf("%w: still %d ticks after catching up, lead is %d",
-			errJoinBehind, remaining, parameter.NetworkJoinLagTicks)
+		return joinBehind("still %d ticks after catching up, lead is %d", remaining, parameter.NetworkJoinLagTicks)
 	}
 	return nil
 }
 
-// errJoinBehind refuses a join that could not close the gap to the session while it
+// joinBehind refuses a join that could not close the gap to the session while it
 // installed, a matter of load rather than of the session; a seat retries it.
-var errJoinBehind = errors.New("join: behind the session")
+func joinBehind(format string, args ...any) error {
+	return &network.Refusal{Code: network.RefusalBehind, Reason: "join: behind the session: " + fmt.Sprintf(format, args...)}
+}
 
 // joinCatchUpRounds is how many times a joining participant re-reads the session's
 // tick while closing the gap. Each round drains what the previous one revealed;
