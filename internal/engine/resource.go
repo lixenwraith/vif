@@ -53,6 +53,9 @@ type Resource struct {
 	// Transient visual effects
 	Transient *TransientResource
 
+	// Tentacle samples the Kraken system built this tick, for its renderer
+	KrakenShape *KrakenShapeResource
+
 	// Player-domain view effects
 	View *ViewResource
 
