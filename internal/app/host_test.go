@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -1298,26 +1299,83 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 	}
 }
 
-// TestTheSessionLineNamesTheRoleARunHoldsNow: a guest reads as joined until the
-// term it inherits makes it the session's host.
-func TestTheSessionLineNamesTheRoleARunHoldsNow(t *testing.T) {
-	host := mustHeadless(t, fixtureSeed, 120, 40)
-	defer host.Close()
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatal(err)
+// TestASessionCommandIsGatedByTheRoleARunHolds is the join matrix's role and
+// command table: what :join and :host answer in each role a run can hold, and how
+// :session names it. A run whose session is its own bots' takes both; a guest that
+// inherited the term reads as the host it now is.
+func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	ticking := func(a *App) *App {
+		tickUntilCursor(t, a)
+		stop := tickInBackground(a)
+		t.Cleanup(func() { stop(); a.Close() })
+		return a
 	}
-	stop := tickInBackground(host)
-	defer stop()
-	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
+	withBot := func(a *App) *App {
+		var err error
+		a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForSeats(t, a, 1)
+		return a
+	}
+	hosting := func(a *App) *App {
+		if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	host := hosting(ticking(mustHeadless(t, fixtureSeed, BotWidth, BotHeight)))
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
 	guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
-	if got := guest.SessionSummary(); !strings.HasPrefix(got, "Session joined "+host.HostAddr()+",") {
-		t.Fatalf("a guest reads %q", got)
-	}
-	guest.World().RunSafe(func() {
-		guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
-	})
-	if got := guest.SessionSummary(); !strings.HasPrefix(got, "Session hosting,") {
-		t.Fatalf("a guest that inherited the term reads %q", got)
+
+	for _, row := range []struct {
+		role       string
+		run        func() *App
+		join, host string // the refusal each names; empty takes the command
+		line       string // how :session opens
+	}{
+		{"solo", func() *App { return ticking(mustHeadless(t, 0x3101, BotWidth, BotHeight)) },
+			"", "", "Solo run"},
+		{"solo with its bots", func() *App { return withBot(ticking(mustHeadless(t, 0x3102, BotWidth, BotHeight))) },
+			"", "", "Session hosting, "},
+		{"hosting", func() *App { return host },
+			"already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+		{"hosting with its bots", func() *App { return withBot(hosting(ticking(mustHeadless(t, 0x3103, BotWidth, BotHeight)))) },
+			"already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+		{"joined", func() *App { return guest },
+			"already in a session", "already in a session", "Session joined " + host.HostAddr() + ", "},
+		{"inherited the term", func() *App {
+			guest.World().RunSafe(func() {
+				guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
+			})
+			return guest
+		}, "already in a session", "already in a session", "Session hosting, "},
+	} {
+		a := row.run()
+		var join, hostErr error
+		var line string
+		a.World().RunSafe(func() {
+			mode := a.cfg.Mode
+			a.cfg.Mode = ModePlay // :join serves Run's loop, which a headless run lacks
+			join = a.joinErrorLocked()
+			a.cfg.Mode = mode
+			hostErr = a.hostErrorLocked()
+			line = a.sessionSummaryLocked()
+		})
+		for _, c := range []struct {
+			command string
+			err     error
+			want    string
+		}{{":join", join, row.join}, {":host", hostErr, row.host}} {
+			if c.want == "" && c.err != nil || c.want != "" && (c.err == nil || !strings.Contains(c.err.Error(), c.want)) {
+				t.Errorf("%s in a run %s: %v; want %q", c.command, row.role, c.err, cmp.Or(c.want, "taken"))
+			}
+		}
+		if !strings.HasPrefix(line, row.line) {
+			t.Errorf(":session in a run %s reads %q; want it to open %q", row.role, line, row.line)
+		}
 	}
 }
 
