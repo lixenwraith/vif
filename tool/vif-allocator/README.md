@@ -105,17 +105,16 @@ be granted, and can name the defaults, rather than discovering either by refusal
   "log_levels": ["debug", "info", "warn", "error"],
   "log_level_default": "info",
   "size_default": "first",
-  "scenarios": ["main", "blank", "kraken", "simon", "td"],
+  "scenarios": ["main", "blank", "simon", "td"],
   "scenario_descriptions": {
     "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
     "blank": "An empty arena for experimenting with commands and building scenarios.",
-    "kraken": "Practice fighting a Kraken in an open arena with repeating encounters.",
     "simon": "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
   },
   "scenario_fixed_maps": {"td": "500x250"},
-  "scenario_min_players": {"main": 1, "blank": 1, "kraken": 1, "simon": 1, "td": 1},
-  "scenario_max_players": {"main": 16, "blank": 16, "kraken": 16, "simon": 16, "td": 16}
+  "scenario_min_players": {"main": 1, "blank": 1, "simon": 1, "td": 1},
+  "scenario_max_players": {"main": 16, "blank": 16, "simon": 16, "td": 16}
 }
 ```
 

@@ -208,6 +208,7 @@ transport the app attaches.
 | `Genetics` | Population registry spawners sample genotypes from. |
 | `Transient` | Player-domain explosion and pulse presentation. |
 | `View` | Player-domain screen effects: grayout, strobe and this instance's button echo. |
+| `KrakenShape` | The tentacle samples the Kraken system built this tick, each with the pose it came from, which the kraken renderer reuses for the same pose; derived, so a snapshot never carries it. |
 | `NavigationDebug` | Per-runtime operator view of navigation internals. |
 | `Status`, `Prof` | Registered atomic metrics, closed by `Freeze` before the first tick, and the profiler. |
 | `Files` | Categorized external file capability. |

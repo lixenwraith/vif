@@ -2,6 +2,7 @@ package system
 
 import (
 	"math"
+	"slices"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -116,6 +117,7 @@ func (s *KrakenSystem) Update() {
 	}
 	dt := s.world.Resources.Time.DeltaTime
 	seconds := min(dt.Seconds(), parameter.MaxSimulationDeltaSeconds)
+	s.world.Resources.KrakenShape.Reset()
 	for _, e := range s.world.Components.Kraken.Entities() {
 		combat, ok := s.world.Components.Combat.GetPtr(e)
 		if !ok {
@@ -309,7 +311,9 @@ func (s *KrakenSystem) moveBody(motion *component.KineticComponent, x, y float64
 func (s *KrakenSystem) syncMembers(e core.Entity, k *component.KrakenComponent, x, y float64) {
 	s.resetFootprint()
 	s.addDisc(x, y, parameter.KrakenBodyRadius*2)
-	k.TentacleSamples(x, y, func(cx, cy, radius, _ float64, _ bool) { s.addDisc(cx, cy, radius) })
+	for _, p := range s.world.Resources.KrakenShape.Build(e, k, x, y) {
+		s.addDisc(p.X, p.Y, p.Radius)
+	}
 	header, ok := s.world.Components.Header.GetPtr(e)
 	if !ok {
 		return
@@ -402,19 +406,41 @@ func (s *KrakenSystem) covers(x, y int) bool {
 func (s *KrakenSystem) addDisc(x, y, radius float64) {
 	w, h := s.gridW, s.gridH
 	// Off-map samples remain animation geometry, without hitboxes or cell sweeps.
-	if x+radius < 0.5 || x-radius > float64(w)-0.5 || y+radius/2 < 0.5 || y-radius/2 > float64(h)-0.5 {
+	if x+radius < vmath.CellCenter || x-radius > float64(w)-vmath.CellCenter ||
+		y+radius/parameter.KrakenRowSquash < vmath.CellCenter || y-radius/parameter.KrakenRowSquash > float64(h)-vmath.CellCenter {
 		return
 	}
-	for cy := max(0, int(math.Ceil(y-radius/2-0.5))); cy <= min(h-1, int(math.Floor(y+radius/2-0.5))); cy++ {
-		row := s.grid[cy*w : (cy+1)*w]
-		for cx := max(0, int(math.Ceil(x-radius-0.5))); cx <= min(w-1, int(math.Floor(x+radius-0.5))); cx++ {
-			dx, dy := float64(cx)+0.5-x, (float64(cy)+0.5-y)*2
-			if dx*dx+dy*dy <= radius*radius && row[cx] == footNone {
-				row[cx] = footCovered
-				s.cells = append(s.cells, vmath.Point{X: cx, Y: cy})
+	x0, x1 := max(0, int(math.Ceil(x-radius-vmath.CellCenter))), min(w-1, int(math.Floor(x+radius-vmath.CellCenter)))
+	y0, y1 := max(0, int(math.Ceil(y-radius/parameter.KrakenRowSquash-vmath.CellCenter))), min(h-1, int(math.Floor(y+radius/parameter.KrakenRowSquash-vmath.CellCenter)))
+	if x0 > x1 || y0 > y1 {
+		return
+	}
+	// Every box cell is written past the list and kept only when the disc covers it
+	// first, so the loop takes no branch per cell
+	cells := slices.Grow(s.cells, (x1-x0+1)*(y1-y0+1))
+	n := len(cells)
+	cells = cells[:cap(cells)]
+	for cy := y0; cy <= y1; cy++ {
+		row := s.grid[cy*w+x0 : cy*w+x1+1]
+		dy := (float64(cy) + vmath.CellCenter - y) * parameter.KrakenRowSquash
+		column := float64(x0) + vmath.CellCenter
+		for i := range row {
+			dx := column - x
+			column++
+			covered := footNone
+			if dx*dx+dy*dy <= radius*radius {
+				covered = footCovered
 			}
+			first := covered
+			if row[i] != footNone {
+				first = footNone
+			}
+			row[i] = max(row[i], covered)
+			cells[n] = vmath.Point{X: x0 + i, Y: cy}
+			n += int(first)
 		}
 	}
+	s.cells = cells[:n]
 }
 
 // interact clears what the footprint covers and strikes the cursors it touches

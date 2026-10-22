@@ -35,7 +35,6 @@ bounds and held in memory. Installed layout:
 ├── scenario/
 │   ├── main/              # optional override: a copy of internal/asset/scenario/
 │   ├── blank/scenario.toml
-│   ├── kraken/scenario.toml
 │   ├── simon/scenario.toml
 │   └── td/
 │       ├── scenario.toml
