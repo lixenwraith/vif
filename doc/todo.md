@@ -211,6 +211,19 @@ several test clients; the target is one of each. One NAT is one address, so loos
 joins before creations if households report refusals, and key IPv6 on its /64
 first.
 
+### Budget a fleet pod's joins per player
+
+- Priority: P3
+- Affected files: `internal/network/session.go` (`AdmissionLimiter`),
+  `tool/vif-allocator`
+
+A pod sees every player the allocator splices at the node's address, so its own
+budget of 6 joins a minute is one per session rather than one per player: a
+seventh join into one session within a minute is refused, whoever makes it,
+though the allocator has already budgeted each player. Close it when a session
+that busy appears, by exempting the node's address at the pod or by having the
+allocator name the player to it.
+
 ### Add browser admission authentication
 
 - Priority: P2
@@ -509,8 +522,6 @@ projection and the write. WASM gains scheduling time, not parallel CPU.
 A bind or dial names the player's next step; these gaps remain:
 - A playing host never learns why a joiner was refused: accept and handshake
   failures only reach the log, and `port.Errors()` is drained only by a lobby.
-- A refusal written after the joiner's reply goes out raw while the joiner reads
-  deflate, so it reads a stream error instead of the reason (from reading; unrun).
 - A site request can run 2 minutes, past the 5 s its "Joining" notice lasts.
 - A rejoin shows nothing for up to `SessionRejoinWindow`.
 - Windows' WSAE codes miss `plainNetError` and keep the system's words.
