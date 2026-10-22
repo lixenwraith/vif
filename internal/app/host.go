@@ -194,7 +194,7 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 // A restart follows the authority's current address, which may have migrated.
 // Called under the world lock; the restart loop consumes the atomic request.
 func (a *App) receiveSessionRestart(from uint32, addr string) {
-	if a.cfg.Mode != ModePlay || a.cfg.JoinAddress == "" {
+	if a.cfg.Mode != ModePlay || !a.sessionRoleLocked().joined() {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
 	if a.replaceWith(&restartRequest{Rejoin: true, Join: addr}) {
@@ -210,12 +210,60 @@ func (a *App) joinLocked(target string) error {
 	return a.joinSessionLocked(target, 0, "")
 }
 
+// sessionRole is what a run is to its session, read from what the session wrote
+// rather than kept beside it. Who authors is not part of it but the authority's,
+// so a guest that inherited the term is a guest that authors.
+type sessionRole uint8
+
+const (
+	roleSolo   sessionRole = iota // in no session
+	roleSeats                     // in one it opened for its own bots, with no door
+	roleHost                      // coordinating one others can join
+	roleServer                    // coordinating one it plays no part in
+	roleGuest                     // in one it joined
+	roleLeft                      // in one it joined, which has nobody left but its own bots
+)
+
+const inSession = "this run is already in a session"
+
+// sessionRoles is why each role refuses :join and :host, empty where it takes them.
+var sessionRoles = [...]struct{ join, host string }{
+	roleSolo:   {"", ""},
+	roleSeats:  {"", ""},
+	roleHost:   {inSession, "this run is already hosting"},
+	roleServer: {inSession, "this run is already hosting"},
+	roleGuest:  {inSession, inSession},
+	roleLeft:   {"", inSession},
+}
+
+func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
+
+// sessionRoleLocked is the role this run holds now. Caller MUST hold updateMutex.
+func (a *App) sessionRoleLocked() sessionRole {
+	a.sessionMu.Lock()
+	opened := a.midRunPort != nil
+	a.sessionMu.Unlock()
+	switch {
+	case a.cfg.Mode.Serves():
+		return roleServer
+	case a.sessionTransportLocked() == nil:
+		return roleSolo
+	case a.cfg.JoinAddress != "" && a.seatsOnly():
+		return roleLeft
+	case a.cfg.JoinAddress != "":
+		return roleGuest
+	case opened && a.cfg.HostAddress == "":
+		return roleSeats
+	}
+	return roleHost
+}
+
 func (a *App) joinErrorLocked() error {
 	if a.cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
 	}
-	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && !a.seatsOnly()) {
-		return errors.New("this run is already in a session")
+	if why := sessionRoles[a.sessionRoleLocked()].join; why != "" {
+		return errors.New(why)
 	}
 	if a.dialling.Load() {
 		return errors.New("a join is already being dialled")
@@ -294,14 +342,8 @@ func (a *App) hostErrorLocked() error {
 	}
 	// A session this run opened without a door holds only its bots: :host opens
 	// that one to others rather than a second.
-	a.sessionMu.Lock()
-	opened := a.midRunPort != nil
-	a.sessionMu.Unlock()
-	switch {
-	case opened && a.cfg.HostAddress != "":
-		return errors.New("host: this run is already hosting")
-	case !opened && a.sessionTransportLocked() != nil:
-		return errors.New("host: this run is already in a session")
+	if why := sessionRoles[a.sessionRoleLocked()].host; why != "" {
+		return errors.New("host: " + why)
 	}
 	return nil
 }
@@ -480,7 +522,7 @@ func (a *App) sessionSummaryLocked() string {
 	// harness binds no address, so the word stands alone rather than trailing a blank.
 	where, addr := "hosting", a.cfg.HostAddress
 	switch {
-	case a.cfg.JoinAddress == "":
+	case !a.sessionRoleLocked().joined():
 	case a.world.IsSessionCoordinator():
 		addr = a.reach.DeclaredAddr()
 	default:
