@@ -641,65 +641,78 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 
 // sendMidRunGate sends one joiner the closed roster and the world it names, then
 // crosses its arrival. The world is the cadence's keyframe rather than a read taken
-// for this join, so two joins arriving together share one read. "Fresh enough" is a
-// playout lead past the admission, not the current tick: an epoch flushed just
-// before the admission reaches nobody and is in no capture taken at that tick.
+// for this join, so two joins arriving together share one read.
 func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error {
 	offer, err := a.midRunOffer(id)
 	if err != nil {
 		return err
 	}
-
-	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
-	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
-	body, tick, err := a.corrections.KeyframeAt(minTick, deadline)
+	tick, bytes, took, err := a.gateJoiner(port, offer, a.corrections.KeyframeAt)
 	if err != nil {
-		return err
-	}
-	transferStart, err := sendGate(port, offer, tick, body)
-	if err != nil {
-		return err
-	}
-	if err := a.awaitJoinerReady(port, id); err != nil {
 		return err
 	}
 	// Refused *after* the install rather than before it, because the install is
 	// what completes the measurement. A participant refused here is dropped by the
 	// caller and its identity returned to the pool, which is the same unwind a
 	// join that could not finish its gate takes.
-	if err := a.corrections.AdmitLink(port, id, len(body), time.Since(transferStart)); err != nil {
+	if err := a.corrections.AdmitLink(port, id, bytes, took); err != nil {
 		return err
 	}
 
 	assignment, _ := offer.Entry(id)
 	a.crossParticipantArrival(id, assignment.Slot)
 	a.log.Info("session", "msg", "mid-run participant admitted",
-		"peer", id, "slot", assignment.Slot, "snapshot_tick", tick, "bytes", len(body))
+		"peer", id, "slot", assignment.Slot, "snapshot_tick", tick, "bytes", bytes)
 	return nil
 }
 
-// sendGate releases the participant an offer is addressed to into the world body
-// encodes at tick, and returns when its transfer started. The transfer is the
-// measurement, so it is timed from the first chunk to the joiner's confirmation:
-// nothing else on a fresh link has pushed enough bytes to say what it carries.
-func sendGate(port *network.SocketPort, offer network.SessionOffer, tick uint64, body []byte) (time.Time, error) {
-	id := uint32(offer.Assigned)
+// gateJoiner releases the participant offer is addressed to into the world at a
+// playout lead past the admission, waits for its install, and says which world and
+// how long its transfer took. Fresh enough is that lead, not the current tick: an
+// epoch flushed just before the admission reaches nobody and is in no capture taken
+// at that tick.
+func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer,
+	world func(minTick uint64, deadline time.Time) ([]byte, uint64, error),
+) (tick uint64, bytes int, took time.Duration, err error) {
+	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
+	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
+	body, tick, err := world(minTick, deadline)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	began, err := sendGate(port, offer, tick, body, offer.Assigned)
+	if err == nil {
+		err = a.awaitJoinerReady(port, offer.Assigned)
+	}
+	return tick, len(body), time.Since(began), err
+}
+
+// sendGate releases each participant named into the world body encodes at tick: the
+// roster addressed to it, then the world, one encoding shared by all. It returns when
+// the last transfer started; a transfer is the measurement, timed from its first
+// chunk to the joiner's confirmation, since nothing else on a fresh link has pushed
+// enough bytes to say what it carries.
+func sendGate(port *network.SocketPort, offer network.SessionOffer, tick uint64, body []byte, to ...network.PeerID) (time.Time, error) {
 	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
 	chunks, err := network.EncodeSnapshotChunks(0, tick, body)
 	if err != nil {
 		return time.Time{}, err
 	}
-	start, err := json.Marshal(offer)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if !port.Send(id, uint8(network.MsgStart), start) {
-		return time.Time{}, fmt.Errorf("could not release participant %d", id)
-	}
-	began := time.Now() // [wall] a link measurement, not a game clock
-	for i, chunk := range chunks {
-		if !port.Send(id, uint8(network.MsgStateSnapshot), chunk) {
-			return time.Time{}, fmt.Errorf("could not send capture chunk %d/%d", i+1, len(chunks))
+	var began time.Time
+	for _, id := range to {
+		offer.Assigned = id
+		start, err := json.Marshal(offer)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if !port.Send(uint32(id), uint8(network.MsgStart), start) {
+			return time.Time{}, fmt.Errorf("could not release participant %d", id)
+		}
+		began = time.Now() // [wall] a link measurement, not a game clock
+		for i, chunk := range chunks {
+			if !port.Send(uint32(id), uint8(network.MsgStateSnapshot), chunk) {
+				return time.Time{}, fmt.Errorf("could not send capture chunk %d/%d to participant %d", i+1, len(chunks), id)
+			}
 		}
 	}
 	return began, nil

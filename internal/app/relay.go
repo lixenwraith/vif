@@ -128,36 +128,19 @@ func (a *App) releaseRelayedJoiner(id network.PeerID) {
 	}
 }
 
-// sendRelayedGate sends a joiner the world this run has proved the authority's at a
-// playout lead past the admission, resealed because the cursor cells outside the
-// root are this run's own mirror, and has the authority cross its arrival once it
-// has installed it.
+// sendRelayedGate sends a joiner the world this run has proved the authority's, and
+// has the authority cross its arrival once it has installed it.
 func (a *App) sendRelayedGate(port *network.SocketPort, offer network.SessionOffer, report network.JoinerReport) error {
 	id := offer.Assigned
-	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
-	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
-	cap, err := a.corrections.ProvedWorld(minTick, deadline)
+	tick, bytes, _, err := a.gateJoiner(port, offer, a.corrections.ProvedWorld)
 	if err != nil {
-		return err
-	}
-	if err := a.encoder.Seal(&cap); err != nil {
-		return err
-	}
-	body, err := a.encoder.EncodeCapture(cap)
-	if err != nil {
-		return err
-	}
-	if _, err := sendGate(port, offer, cap.Header.Tick, body); err != nil {
-		return err
-	}
-	if err := a.awaitJoinerReady(port, id); err != nil {
 		return err
 	}
 	if _, err := a.askAuthority(network.RelayJoin{Step: network.RelayReady, Leaf: id, Report: report}); err != nil {
 		return err
 	}
 	a.log.Info("session", "msg", "relayed participant admitted",
-		"peer", id, "snapshot_tick", cap.Header.Tick, "bytes", len(body))
+		"peer", id, "snapshot_tick", tick, "bytes", bytes)
 	return nil
 }
 

@@ -1318,12 +1318,12 @@ type provedWait struct {
 	ch   chan snapshot.SharedCapture
 }
 
-// ProvedWorld returns the first world this instance proves the authority's at or
-// past minTick — installed whole, repaired, or matched by an index's root — which
-// is what a relay serves a participant joining through it. The header is the
-// authority's; the integrity hash is not, since owner-authored cursor cells sit
-// outside the root and this instance holds its own mirror of each.
-func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) (snapshot.SharedCapture, error) {
+// ProvedWorld encodes the first world this instance proves the authority's at or
+// past minTick — installed whole, repaired, or matched by an index's root — and
+// names its tick, as KeyframeAt does: it is what a relay serves a participant
+// joining through it. The header is the authority's and the seal this instance's
+// own, since owner-authored cursor cells sit outside the root and it mirrors each.
+func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	w := provedWait{tick: minTick, ch: make(chan snapshot.SharedCapture, 1)}
 	c.installedMu.Lock()
 	c.proving = append(c.proving, w)
@@ -1332,7 +1332,7 @@ func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) (snapshot.
 	defer timer.Stop()
 	select {
 	case cap := <-w.ch:
-		return cap, nil
+		return c.encodeProved(cap)
 	case <-timer.C:
 	case <-c.stop:
 	}
@@ -1341,10 +1341,19 @@ func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) (snapshot.
 	c.installedMu.Unlock()
 	select {
 	case cap := <-w.ch: // proved as the wait ran out
-		return cap, nil
+		return c.encodeProved(cap)
 	default:
 	}
-	return snapshot.SharedCapture{}, fmt.Errorf("no world proved the authority's past tick %d in time", minTick)
+	return nil, 0, fmt.Errorf("no world proved the authority's past tick %d in time", minTick)
+}
+
+// encodeProved reseals a proved world over this instance's cursor cells and encodes it.
+func (c *Corrections) encodeProved(cap snapshot.SharedCapture) ([]byte, uint64, error) {
+	if err := c.inst.Encoder().Seal(&cap); err != nil {
+		return nil, 0, err
+	}
+	body, err := c.inst.Encoder().EncodeCapture(cap)
+	return body, cap.Header.Tick, err
 }
 
 // offerProved hands a world whose root matched the authority's to the joins
