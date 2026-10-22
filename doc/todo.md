@@ -171,6 +171,20 @@ library copies.
 
 ## Browser sessions
 
+### Serve wss from a terminal that hosts or serves
+
+- Priority: P0
+- Affected files: `internal/network/endpoint.go`, `internal/network/websocket_other.go`,
+  `internal/app/host.go`, `cmd/vif`
+
+A terminal already joins by a `wss://` link: `vif -join wss://lixen.com/vif/ws/<id>`
+sends the link's own origin, which the fleet's browser route admits. It cannot be
+joined that way. `-host`, `-serve` and `:host` bind TCP or plain `ws://`, which a
+page served over `https` cannot open, so a terminal that hosts or serves answers
+`wss` as well. That takes a certificate and key around the listener's TCP port
+(`tls.NewListener`); decide where the key lives, and whether one port tells TCP,
+`ws` and `wss` apart by their first bytes or `wss` binds a port of its own.
+
 ### Bound navigation's worst tick on busy maps
 
 - Priority: P2
@@ -185,15 +199,6 @@ in canonical group order, if a browser frame still stalls, and a footprint tier
 registry deriving the grids to keep from the live navigators, so a data-driven
 species' footprint costs one row. A 2×2 coarse field is not planned: it changes
 the answer, and the shared grid already took the cost it would have saved.
-
-### Serve wss from vif's own listener
-
-- Priority: P3
-- Affected files: `cmd/vif`, `internal/network/websocket_other.go`
-
-`-host`/`-serve ws://` is plain: a page served over `https` cannot open it. Taking a
-certificate and key would wrap the listener's TCP port in `tls.NewListener` and let
-`wss://host:port` bind; decide where the key lives before adding the flags.
 
 ### Tighten the per-address budgets
 
