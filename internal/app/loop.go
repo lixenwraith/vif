@@ -342,12 +342,13 @@ func (a *App) renderContext() render.RenderContext {
 
 // frame advances one render frame; false means the player quit. A hidden page draws
 // nothing, so no frames queue behind it, and is handed the whole screen on its
-// return. Neither does a terminal that stopped taking output. The tick
+// return. Neither does a terminal that stopped taking output, nor a run whose player
+// is away (Android's start screen, or the app in the background). The tick
 // handshake below runs either way: the frame loop never waits on the terminal, so a
 // terminal nobody reads cannot slow the world.
 func (a *App) frame() bool {
 	a.ctx.IncrementFrameNumber()
-	draw := !pageHidden() && a.terminalTaking()
+	draw := !a.awayPaused && !pageHidden() && a.terminalTaking()
 	var renderCtx render.RenderContext
 	if draw {
 		renderCtx = a.renderContext()

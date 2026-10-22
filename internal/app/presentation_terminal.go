@@ -20,7 +20,8 @@ type presentationState struct {
 
 	// termBlocked is when the terminal stopped taking output, zero while it takes it
 	termBlocked time.Time
-	// awayPaused is a pause made because the player left the screen, undone on return
+	// awayPaused is set while the player is away from the screen, which pauses a solo
+	// run and draws no frame, undone on return
 	awayPaused bool
 	// cell is the zoom the presentation opened at or the run last wrote back
 	cell float64

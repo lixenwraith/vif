@@ -462,8 +462,9 @@ against `glyph.Raster` pixel for pixel, and posts it on a hardware canvas stretc
 over the whole view, filtered, so no margin is left; a tap maps to its cell in
 proportion. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
-through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
-the drawer the whole grid. A tap is a left press and release on its cell and a
+through the XDG variables. `onPause` reaches the run as `Away`, which pauses a
+solo run and draws no frame while the player is gone, and `onResume` hands the
+drawer the whole grid. A tap is a left press and release on its cell and a
 finger moving while down a left drag, both marked as a finger's (`Event.Touch`), posted once per cell as a terminal reports
 motion, so the cursor follows it and a held one repeats fire; keys and the system
 keyboard's text are terminal key events, Back is Escape. A hardware key's
