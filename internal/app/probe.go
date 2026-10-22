@@ -82,6 +82,9 @@ func (a *App) probeSnapshot() probe.Snapshot {
 		"capacity": strconv.Itoa(capacity),
 		"address":  a.cfg.HostAddress,
 		"phase":    life.Phase.String(),
+		// As a refusal names it, so a session list can say which page it admits
+		// before that page dials and is refused.
+		"build": buildName(),
 	}
 	if !life.Deadline.IsZero() {
 		// What an allocator needs and a roster count cannot say: how long this

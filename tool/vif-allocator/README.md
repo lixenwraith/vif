@@ -76,6 +76,7 @@ One session row has this shape:
     "guests": 0,
     "bots": 0,
     "map": "500x250",
+    "build": "v0.1.0 (1154b8a6)",
     "phase": "waiting",
     "tick": 0
   }
@@ -90,7 +91,8 @@ holds a seat; `bots` is how many of them are bots. A pod that is not ready, or
 whose probe fails, reports `live=false` with its pod phase or `starting`, and
 `routable` is false until its address is a ready endpoint. `scenario` and `size` are
 what the session was created with, kept as annotations on its Job; `map` is the map
-it has, from the first tick on.
+it has, from the first tick on. `build` is the binary the session runs, named as a
+refusal of another build names it, so a page can be told before it dials one.
 
 `limits` names what this deployment will accept — `players_max`, `bots_max`, the
 allowed `log_levels`, most verbose first, and the installed `scenarios`, default

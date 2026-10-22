@@ -273,6 +273,16 @@ leaves: one hidden or suspended for five minutes must cost the other players
 nothing and resume or rejoin on return, and a session whose last guest was a
 browser must end on its own grace.
 
+### Warn in the site's lobby when a session runs another build
+
+- Priority: P2
+- Affected files: the Hugo site's `vif-lobby.js`, `.github/workflows/release.yml`
+
+Each row of the allocator's session list names the build its session runs
+(`state.build`), as the refusal a page of another build reads does. The site's
+lobby can show it, and warn before a Play that would be refused once it knows the
+page's own build, which the release's web bundle does not name yet.
+
 ## Packaging
 
 Distribution-specific detail lives in [Packaging](packaging.md).
