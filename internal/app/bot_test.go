@@ -954,6 +954,36 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	}
 }
 
+// TestARelayedPersonsOwnAddressReachesTheSession: a person that joins through a
+// relay and names its own -listen address is admitted, and the chain that carries
+// that address reaches the relay. The host notes the address under the world lock,
+// as it takes every relayed step, so the chain goes out between two ticks.
+func TestARelayedPersonsOwnAddressReachesTheSession(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr, ListenAddress: freeAddress(t)}, "roam", nil)
+	id, want := network.PeerID(person.localParticipant()), person.reach.DeclaredAddr()
+	if want == "" {
+		t.Fatal("the relayed person declared no address")
+	}
+	got := ""
+	for deadline := time.Now().Add(socketWait); got != want && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		got, _ = relay.authority.Chain().Lookup(id)
+	}
+	if got != want {
+		t.Fatalf("the relay's chain names the relayed person at %q, want %q", got, want)
+	}
+	for _, a := range []*App{host, relay, person} {
+		waitForCursors(t, a, 4)
+	}
+}
+
 // TestABotsPressHoldsUntilItLetsGo: a bot's instance takes its keys as releasing,
 // so a press of a captured key holds for the ticks its graph asked and a tap lets go
 // at once, each let go rather than lost, and its slot crosses as releasing.
