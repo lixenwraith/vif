@@ -53,9 +53,9 @@ graph to. The fleet request carries it once the site exposes one.
 - Affected files: `internal/app/play.go`, `internal/app/seat.go`
 
 A watched bot with seats is in a session, so the viewer forces it unpaused and
-ignores pause keys, and a driven holder's seats get no hold. A person's run pauses
-with only its own bots; let the viewer pause while `SessionState.SeatsOnly` holds,
-and give a driven holder's seats the same hold.
+ignores pause keys. A person's run pauses with only its own bots; the viewer's pause
+key could start the session hold `:pause` starts when the holder is its session's
+host, which already stops its seats at one tick.
 
 ### Name participants beyond their slot
 
@@ -523,6 +523,26 @@ A bind or dial names the player's next step; these gaps remain:
 - A site request can run 2 minutes, past the 5 s its "Joining" notice lasts.
 - A rejoin shows nothing for up to `SessionRejoinWindow`.
 - Windows' WSAE codes miss `plainNetError` and keep the system's words.
+
+### Close the edges of a session hold
+
+- Priority: P2
+- Affected files: `internal/app/host.go`, `internal/app/relay.go`,
+  `internal/app/join.go`, `internal/system/meta.go`, `internal/app/script.go`
+
+The host's hold ([Multi-player](multi-player.md#36-holding-a-session) §3.6) leaves
+these gaps:
+- A join that meets a hold mid-gate fails and is retried until the host resumes: a
+  relay's gate, and a host's whose playout-lead wait the hold cuts short, wait for
+  a capture past the held tick. Both could gate as a held host does.
+- A joiner's landing hold is not journaled, so a guest journal recorded across a
+  join into a held session replays the install running and the host's resume
+  there announces nothing. The world a join installs could carry it, as an
+  opening carries a hold.
+- `:pause off` before the host's own hold has landed does nothing, and the hold
+  then needs another `:pause`. The end could apply at the landing instead.
+- A script that `:pause`s itself never resumes: its driven loop takes no step
+  while held, so its timeline never reaches the next action. Refuse it there.
 
 ### Pace repairs as bodies are paced
 

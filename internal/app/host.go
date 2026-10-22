@@ -647,7 +647,7 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 	if err != nil {
 		return err
 	}
-	tick, bytes, took, err := a.gateJoiner(port, offer, a.corrections.KeyframeAt)
+	tick, bytes, took, err := a.gateJoiner(port, offer, a.ctx.TimeCtl.Held(), a.corrections.KeyframeAt)
 	if err != nil {
 		return err
 	}
@@ -667,24 +667,73 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 }
 
 // gateJoiner releases the participant offer is addressed to into the world at a
-// playout lead past the admission, waits for its install, and says which world and
-// how long its transfer took. Fresh enough is that lead, not the current tick: an
-// epoch flushed just before the admission reaches nobody and is in no capture taken
-// at that tick.
-func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer,
+// playout lead past the admission — an epoch flushed just before it reaches nobody
+// and is in no capture at that tick — waits for its install, and says which world
+// and how long its transfer took. A held session reaches no lead: the world is the
+// held tick's, what is scheduled past it follows, and the joiner holds there too.
+func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer, held bool,
 	world func(minTick uint64, deadline time.Time) ([]byte, uint64, error),
 ) (tick uint64, bytes int, took time.Duration, err error) {
-	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
+	at := a.Position()
+	minTick := at.Tick + parameter.NetworkBarrierDelayTicks
+	if held {
+		minTick = at.Tick
+	}
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
 	body, tick, err := world(minTick, deadline)
 	if err != nil {
 		return 0, 0, 0, err
 	}
+	var pending [][]byte
+	if held {
+		if pending, err = a.pendingAt(at.Run, tick); err != nil {
+			return 0, 0, 0, err
+		}
+	}
+	offer.Held = held
 	began, err := sendGate(port, offer, tick, body, offer.Assigned)
+	for i := 0; err == nil && i < len(pending); i++ {
+		if !port.Send(uint32(offer.Assigned), uint8(network.MsgEvent), pending[i]) {
+			err = fmt.Errorf("could not send scheduled crossings to participant %d", offer.Assigned)
+		}
+	}
 	if err == nil {
 		err = a.awaitJoinerReady(port, offer.Assigned)
 	}
 	return tick, len(body), time.Since(began), err
+}
+
+// pendingAt encodes what a held session has scheduled past tick, as the epochs it
+// went out in, which a joiner installed at that tick never heard. It is read only
+// while the session still stands there: what a tick applies is in neither.
+func (a *App) pendingAt(run, tick uint64) ([][]byte, error) {
+	var batches []event.WireBatch
+	stood := false
+	a.world.RunSafe(func() {
+		at := a.Position()
+		if stood = at.Run == run && at.Tick == tick && a.ctx.TimeCtl.Held(); !stood {
+			return
+		}
+		for _, sys := range a.world.Systems() {
+			if p, ok := sys.(interface {
+				PendingAfter(uint64) []event.WireBatch
+			}); ok {
+				batches = p.PendingAfter(tick)
+			}
+		}
+	})
+	if !stood {
+		return nil, errors.New("the session resumed while its world was read")
+	}
+	bodies := make([][]byte, 0, len(batches))
+	for _, b := range batches {
+		body, err := event.EncodeWireBatch(b)
+		if err != nil {
+			return nil, err
+		}
+		bodies = append(bodies, body)
+	}
+	return bodies, nil
 }
 
 // sendGate releases each participant named into the world body encodes at tick: the
@@ -801,6 +850,16 @@ func (a *App) resumeJoinedSession() error {
 		a.reportJoinLag(0)
 		return nil
 	}
+	// A held session's joiner holds at the world it installed. Only the host's next
+	// epoch ends that, and it may be among what the rounds below drain: then the
+	// gap is closed as any other.
+	if a.sessionOffer.Held {
+		a.world.RunSafe(func() {
+			if a.ctx.Hold(true) {
+				a.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
+			}
+		})
+	}
 
 	// The gap is only partly readable from what the gate held: epochs closed during
 	// the install sat in the socket until the port started, and the barrier learns of
@@ -810,7 +869,7 @@ func (a *App) resumeJoinedSession() error {
 	for range joinCatchUpRounds {
 		local := a.Position().Tick
 		target := max(newestHeldEpoch(held), a.awaitSessionTick(local))
-		if target <= local {
+		if target <= local || a.ctx.TimeCtl.Held() {
 			break
 		}
 		step := target - local

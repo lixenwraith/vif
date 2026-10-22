@@ -73,6 +73,62 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 	}
 }
 
+// TestASoloPauseStandsUntilTheNextPause: the Game page's Pause row holds a solo run
+// at once, and a tick asked of it takes none. Closing the menu or the command line
+// ends only the pause each made; :pause runs the game on, and so does a step.
+func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
+	t.Parallel()
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	key := func(k terminal.Key, ch rune) {
+		t.Helper()
+		intent := a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch})
+		if intent == nil || !a.Inject(intent) {
+			t.Fatalf("key %v %q was not routed", k, ch)
+		}
+	}
+	command := func(text string) {
+		t.Helper()
+		key(terminal.KeyRune, ':')
+		for _, ch := range text {
+			key(terminal.KeyRune, ch)
+		}
+		key(terminal.KeyEnter, 0)
+	}
+	ctx := a.Context()
+	a.Tick(1)
+	key(terminal.KeyCtrlG, 0)
+	ctx.SetOverlaySelection("game")
+	key(terminal.KeyEnter, 0)
+	ctx.SetOverlaySelection("pause")
+	key(terminal.KeyEnter, 0)
+	key(terminal.KeyCtrlG, 0)
+	at := a.Position().Tick
+	a.Tick(3)
+	if !ctx.TimeCtl.Held() || ctx.GetMode() != core.ModeNormal || a.Position().Tick != at {
+		t.Fatalf("after the Pause row and the menu closing: held %v, mode %v, tick %d from %d",
+			ctx.TimeCtl.Held(), ctx.GetMode(), a.Position().Tick, at)
+	}
+	key(terminal.KeyRune, ':')
+	key(terminal.KeyEscape, 0)
+	if !ctx.TimeCtl.Held() {
+		t.Fatal("closing the command line ended the hold")
+	}
+	command("pause")
+	a.Tick(1)
+	if ctx.TimeCtl.IsPaused() || a.Position().Tick != at+1 {
+		t.Fatalf(":pause again left paused %v at tick %d, want running at %d", ctx.TimeCtl.IsPaused(), a.Position().Tick, at+1)
+	}
+	command("pause")
+	command("step")
+	if ctx.TimeCtl.Held() {
+		t.Fatal("a step left the hold standing")
+	}
+}
+
 func TestNetworkSessionConfigValidation(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

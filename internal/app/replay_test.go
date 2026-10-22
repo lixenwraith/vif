@@ -301,6 +301,7 @@ func TestReplayReproducesRecordedRuns(t *testing.T) {
 		"split-settle": runSplitSettleScript,
 		"reset":        runResetScript,
 		"defeat":       runDefeatScript,
+		"hold":         runHoldScript,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -553,6 +554,47 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 	}
 }
 
+// TestAJournalOpenedOnAHoldReplaysItsEnd: an opening records a hold standing as it
+// does the pause, so its replay stands held too and the :pause that ends the run's
+// hold ends the replay's, telling its systems as the run's were told.
+func TestAJournalOpenedOnAHoldReplaysItsEnd(t *testing.T) {
+	t.Parallel()
+	rng := vmath.NewFastRand(6)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	a := mustHeadless(t, 0x7E6, 120, 40)
+	defer a.Close()
+	pause := func() {
+		inject(t, a, intentModeSwitch(input.ModeTargetCommand))
+		inject(t, a, intentCommandBody("pause")...)
+	}
+	a.Tick(60)
+	pause()
+	if !a.Context().TimeCtl.Held() {
+		t.Fatal(":pause did not hold")
+	}
+	rec, want := journal.NewCapture(), map[event.Stamp][]string{}
+	a.cfg.JournalSink = rec
+	if _, err := a.openJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	pause()
+	for range 200 {
+		if rng.Intn(3) == 0 {
+			inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+		}
+		a.Tick(1)
+		p := a.Position()
+		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = a.SnapshotSimulation()
+	}
+	var err error
+	a.World().RunSafe(func() { err = a.stopJournalLocked(-1) })
+	a.serveJournal()
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	replayMatches(t, rec, want, func(rep *App) []string { return rep.SnapshotSimulation() })
+}
+
 // TestAJournalOpenedMidRunDoesNotPerturb drives one input sequence twice, opening a
 // journal mid-run on one of them, and requires the two to stand alike at the opening
 // and on every tick after: the opening carries the run's own side, so nothing a
@@ -710,6 +752,84 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 		}
 	}
 	play(400, true)
+	for _, a := range []*App{host, guest} {
+		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
+	}
+	replayMatches(t, hostRec, hostWant, guestSurface)
+	replayMatches(t, guestRec, guestWant, guestSurface)
+}
+
+// TestAHeldSessionReplaysOnEitherSide: a session's hold and its end replay on host
+// and guest alike, from a journal opened before the hold and one opened on it. Only
+// the host's :pause asked for either; the guest's end came with the host's next tick,
+// which its replay has no link to hear.
+func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	const seed = 0x3022
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(240)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	stop := tickInBackground(host)
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40)
+	stop()
+	waitForRosterPair(t, host, guest)
+
+	hostRec, guestRec := journal.NewCapture(), journal.NewCapture()
+	host.cfg.JournalSink, guest.cfg.JournalSink = hostRec, guestRec
+	open := func(a *App) {
+		if _, err := a.openJournal(); err != nil {
+			t.Fatalf("open: %v", err)
+		}
+	}
+	rng := vmath.NewFastRand(11)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	hostWant, guestWant := map[event.Stamp][]string{}, map[event.Stamp][]string{}
+	play := func(ticks int) {
+		for range ticks {
+			for _, a := range []*App{host, guest} {
+				if rng.Intn(3) == 0 {
+					inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+				}
+			}
+			host.Tick(1)
+			guest.Tick(1)
+			guest.ApplyPendingCorrections()
+			for a, want := range map[*App]map[event.Stamp][]string{host: hostWant, guest: guestWant} {
+				p := a.Position()
+				want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(a)
+			}
+		}
+	}
+	held := func(want bool) {
+		t.Helper()
+		for deadline := time.Now().Add(socketWait); host.Context().TimeCtl.Held() != want ||
+			guest.Context().TimeCtl.Held() != want; time.Sleep(joinTestTickInterval / 5) {
+			if time.Now().After(deadline) {
+				t.Fatalf("host held %v and guest held %v, want both %v", host.Context().TimeCtl.Held(),
+					guest.Context().TimeCtl.Held(), want)
+			}
+			play(1)
+		}
+	}
+	// Typed, as a player asks: the journal holds what the player's input pushed
+	pause := func(body string) {
+		inject(t, host, intentModeSwitch(input.ModeTargetCommand))
+		inject(t, host, intentCommandBody(body)...)
+	}
+	open(host)
+	play(100)
+	pause("pause")
+	held(true)
+	open(guest)
+	play(20)
+	pause("pause off")
+	held(false)
+	play(300)
 	for _, a := range []*App{host, guest} {
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
 		a.serveJournal()
@@ -1502,6 +1622,23 @@ func runDefeatScript(t *testing.T, a *App) int {
 	if got := a.World().Resources.Event.Queue.Stamp().Run; got != 1 {
 		t.Fatalf("run %d after a defeat, want 1", got)
 	}
+	r.step(2, intentMotion(input.MotionDown, 2))
+	return r.done()
+}
+
+// runHoldScript holds the run between two motions: the run takes no tick while it
+// stands, and its replay, which a hold stops nowhere, has to reach the same world.
+func runHoldScript(t *testing.T, a *App) int {
+	t.Helper()
+	r := newScriptRunner(t, a)
+	r.step(1, intentMotion(input.MotionRight, 4))
+	r.step(1, intentModeSwitch(input.ModeTargetCommand))
+	r.step(3, intentCommandBody("pause")...)
+	if !a.Context().TimeCtl.Held() {
+		t.Fatal(":pause did not hold: the script no longer covers a held run's replay")
+	}
+	r.step(1, intentModeSwitch(input.ModeTargetCommand))
+	r.step(1, intentCommandBody("pause")...)
 	r.step(2, intentMotion(input.MotionDown, 2))
 	return r.done()
 }

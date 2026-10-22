@@ -28,17 +28,18 @@ progress or failure. Cancelling a form before submission starts no action.
 
 Solo play pauses while the menu is open. A host may pause when its only other
 participants are its own bots; a guest or a session with other players keeps
-running. A new arrival resumes a paused host. Replay viewers retain their
-inspection-only command restrictions. A bracketed value marks a row that is
-unavailable or read only; for an unavailable row the description below the list
-starts with the reason, the sentence its command gives (`Logging unavailable in a
-browser`, `Audio unavailable in this run`).
+running. A new arrival resumes a paused host. Game → Pause is another kind of pause,
+which stands until it is turned off. Replay viewers retain their inspection-only
+command restrictions. A bracketed value marks a row that is unavailable or read
+only; for an unavailable row the description below the list starts with the reason,
+the sentence its command gives (`Logging unavailable in a browser`, `Audio
+unavailable in this run`).
 
 ## Pages
 
 | Page | Controls |
 |---|---|
-| Game | A new game; a row per scenario the configuration roots hold, which starts it; another scenario by name or path. |
+| Game | Pause; a new game; a row per scenario the configuration roots hold, which starts it; another scenario by name or path. |
 | Bots | Add bots by count and policy; remove a bot held by this run or cancel its admission. |
 | Multiplayer | Host this run, join an existing session, request an allocated session, inspect status, drop a player with its bots or an individual bot (host only). |
 | Audio | Music, sound effects, effects volume in 5% steps. |
@@ -50,12 +51,15 @@ browser`, `Audio unavailable in this run`).
 
 ### Game
 
-**New game** restarts the running scenario from its first tick, as `:n` does. Below
-it, one row per scenario names what `:n <name>` would start: `main` and every
-`scenario/<name>/scenario.toml` the configuration roots hold, the running one marked
-`current`; a tap or Enter starts it, so a phone needs no name to type. **Scenario by
-name** takes what `-s` takes, a name or a path, for one the rows do not list. In a
-session only the host can start either, and its participants rejoin.
+**Pause** stops the game until it is turned off, as `:pause` does; closing the menu
+leaves it stopped. In a session only the host can, every participant stops at the
+same tick, anyone joining lands paused, and the host turning it off resumes
+everyone. **New game** restarts the running scenario from its first tick, as `:n`
+does. Below it, one row per scenario names what `:n <name>` would start: `main` and
+every `scenario/<name>/scenario.toml` the configuration roots hold, the running one
+marked `current`; a tap or Enter starts it, so a phone needs no name to type.
+**Scenario by name** takes what `-s` takes, a name or a path, for one the rows do
+not list. In a session only the host can start either, and its participants rejoin.
 
 ### Bots
 

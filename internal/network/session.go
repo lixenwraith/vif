@@ -62,6 +62,10 @@ type SessionOffer struct {
 	SnapshotTick  uint64 `json:"snapshot_tick,omitempty"`
 	SnapshotBytes int    `json:"snapshot_bytes,omitempty"`
 
+	// Held says the session stands held at SnapshotTick, so the joiner holds there
+	// too. The crossings still scheduled past that tick follow the capture.
+	Held bool `json:"held,omitempty"`
+
 	// Identity is what the coordinator is. The joiner reads it before it builds a
 	// world, so a peer that cannot be in this session finds out before paying for
 	// the attempt — and the anchor comparison it already performs is left in place,

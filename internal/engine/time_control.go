@@ -3,6 +3,7 @@ package engine
 import (
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -147,7 +148,12 @@ type TimeControl struct {
 	clock Clock
 	wake  chan struct{}
 
-	paused atomic.Bool                // pause authority; the clock mirrors it
+	// The two reasons the clock stands still; it runs only while neither holds.
+	// stopMu orders their changes, so the clock follows the pair rather than
+	// whichever writer came last.
+	stopMu sync.Mutex
+	paused atomic.Bool                // this instance's pause: input, away, a breakpoint
+	held   atomic.Bool                // a hold, which only :pause or the host's resume ends
 	brk    atomic.Pointer[BreakState] // armed run-until request, nil when disarmed
 	budget atomic.Int64               // remaining stepped ticks while paused
 	breaks atomic.Pointer[BreakSet]   // standing breakpoints, nil when none
@@ -188,27 +194,48 @@ func (tc *TimeControl) ToReal(d time.Duration) time.Duration { return tc.clock.T
 // Step advances frozen game time; the paused step path
 func (tc *TimeControl) Step(d time.Duration) { tc.clock.Step(d) }
 
-// SetPaused freezes or restarts game time and reports whether the state changed.
-// Sole pause authority: input, render and the scheduler all read IsPaused.
-func (tc *TimeControl) SetPaused(paused bool) bool {
-	if !tc.paused.CompareAndSwap(!paused, paused) {
+// SetPaused freezes or restarts game time for this instance's own reasons and
+// reports whether that changed. Sole pause authority: input, render and the
+// scheduler all read IsPaused.
+func (tc *TimeControl) SetPaused(paused bool) bool { return tc.stop(&tc.paused, paused) }
+
+// SetHeld starts or ends a hold and reports whether that changed. A hold stops the
+// clock as a pause does, but ending a pause leaves it standing, and no step passes
+// it: in a session every participant stands at the tick it applied in.
+func (tc *TimeControl) SetHeld(held bool) bool { return tc.stop(&tc.held, held) }
+
+// stop sets one reason the clock stands still and moves the clock when the pair's
+// answer changes.
+func (tc *TimeControl) stop(reason *atomic.Bool, on bool) bool {
+	tc.stopMu.Lock()
+	defer tc.stopMu.Unlock()
+	was := tc.IsPaused()
+	if !reason.CompareAndSwap(!on, on) {
 		return false
 	}
-	if paused {
-		tc.clock.Pause()
-	} else {
-		tc.clock.Resume()
+	if now := tc.IsPaused(); now != was {
+		if now {
+			tc.clock.Pause()
+		} else {
+			tc.clock.Resume()
+		}
+		tc.statPaused.Store(now)
+		tc.signal() // a sleep armed at the old rate must be recomputed
 	}
-	tc.statPaused.Store(paused)
-	tc.signal() // a sleep armed at the old rate must be recomputed
 	return true
 }
 
 // Clock returns the clock time control drives.
 func (tc *TimeControl) Clock() Clock { return tc.clock }
 
-// IsPaused reports whether game time is frozen
-func (tc *TimeControl) IsPaused() bool { return tc.paused.Load() }
+// IsPaused reports whether game time is frozen, by a pause or by a hold
+func (tc *TimeControl) IsPaused() bool { return tc.paused.Load() || tc.held.Load() }
+
+// Held reports whether a hold stands
+func (tc *TimeControl) Held() bool { return tc.held.Load() }
+
+// OwnPause reports this instance's own pause, a hold aside
+func (tc *TimeControl) OwnPause() bool { return tc.paused.Load() }
 
 // Wake fires when the rate changes and an armed sleep must be recomputed
 func (tc *TimeControl) Wake() <-chan struct{} { return tc.wake }

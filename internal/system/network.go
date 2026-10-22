@@ -369,10 +369,12 @@ func (w *window) newest() uint64 { return w.high }
 // digests and departure of the identity at the top of the range.
 const participantSlots = parameter.MaxPlayers + 2
 
-// barrierArtifact is one encoded local or peer crossing waiting for its apply tick.
+// barrierArtifact is one encoded local or peer crossing waiting for its apply tick,
+// and the epoch its source produced it in.
 type barrierArtifact struct {
 	frame     event.WireFrame
 	applyTick uint64
+	produced  uint64
 	source    uint32
 	origin    event.Origin
 	// void marks a crossing the authority refused as too late: it applies nothing
@@ -767,7 +769,7 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	// this artifact is this instance's own and has already been broadcast, so
 	// refusing it here would be a divergence rather than a defence.
 	s.scheduled = append(s.scheduled, barrierArtifact{
-		frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
+		frame: frame, applyTick: applyTick, produced: s.productionEpoch, source: s.localSource, origin: ev.Origin,
 	})
 	s.scheduledBytes += frameBytes(frame)
 	if barrierBound(ev.Type) {
@@ -888,14 +890,14 @@ func (s *NetworkSystem) AppliedCrossingFences() network.CrossingFences {
 
 // barrierBound names the artifacts that apply at one agreed tick on every instance,
 // the producer included: the ones deciding what the world *is* — roster, run, shared
-// identity, the progression a region gates spawns on, and the defeat that rebuilds
-// the level — not what happens in a world both already hold, whose gap a correction
-// repairs. Nobody's input waits on them. See multi-player.md §3.1.
+// identity, a region's spawn progression, the defeat that rebuilds the level, the
+// hold every clock stops at — not what happens in a world both already hold, whose
+// gap a correction repairs. Nobody's input waits on them. See multi-player.md §3.1.
 func barrierBound(et event.EventType) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
 		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventDrainDefeated,
-		event.EventCursorDefeatState:
+		event.EventCursorDefeatState, event.EventGameHold:
 		return true
 	default:
 		return false
@@ -981,6 +983,31 @@ func (s *NetworkSystem) RetainedAfter(tick uint64, fences network.CrossingFences
 		origins = append(origins, a.origin)
 	}
 	return frames, sources, origins
+}
+
+// PendingAfter is what this instance holds scheduled past tick, as the committed
+// epochs it went out in: a joiner given the world at that tick heard none of them.
+// An own crossing not yet sent goes out in its own epoch, and a void one applies
+// nothing. Caller MUST hold updateMutex.
+func (s *NetworkSystem) PendingAfter(tick uint64) []event.WireBatch {
+	run := s.localRun()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []event.WireBatch
+	for _, a := range s.scheduled {
+		if a.applyTick <= tick || a.void || a.source == s.localSource && a.produced >= s.productionEpoch {
+			continue
+		}
+		i := slices.IndexFunc(out, func(b event.WireBatch) bool {
+			return b.Source == a.source && b.ProducedTick == a.produced
+		})
+		if i < 0 {
+			i = len(out)
+			out = append(out, event.WireBatch{Run: run, ProducedTick: a.produced, Source: a.source, Committed: true})
+		}
+		out[i].Frames = append(out[i].Frames, event.ScheduledWireFrame{Frame: a.frame, ApplyTick: a.applyTick})
+	}
+	return out
 }
 
 // retainedContainedLocked is snapshotContainsLocked against a capture being
@@ -2042,8 +2069,8 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 				continue
 			}
 			a := barrierArtifact{
-				frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
-				authored: batch.Source == s.authorityParticipant(),
+				frame: f.Frame, applyTick: f.ApplyTick, produced: batch.ProducedTick, source: batch.Source,
+				origin: event.OriginNetwork, authored: batch.Source == s.authorityParticipant(),
 			}
 			if committing {
 				if a.applyTick < next {
@@ -2080,6 +2107,9 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	s.mu.Unlock()
 	if admitted && batch.Source == authority {
 		s.observeAuthorityEpoch(batch.ProducedTick)
+		if r := s.world.Resources.Network; r != nil && r.OnAuthorityAhead != nil && batch.ProducedTick > s.localTick() {
+			r.OnAuthorityAhead()
+		}
 	}
 	if late > 0 {
 		s.statCommitLate.Add(int64(late))
@@ -2529,12 +2559,13 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 }
 
 // Only the authority may author roster changes, which create or destroy shared
-// identities: the one that sent the frame, or the one it applies under — a dropped
-// guest sees the link close before its dismissal's tick and takes the term itself.
-// Other source authentication requires authenticated peers.
+// identities, and a hold, which stops everyone: the one that sent the frame, or the
+// one it applies under — a dropped guest sees the link close before its dismissal's
+// tick and takes the term itself. Other source authentication requires
+// authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32, authored bool) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted:
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold:
 		return authored || source == s.authorityParticipant()
 	default:
 		return true

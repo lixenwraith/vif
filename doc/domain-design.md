@@ -648,15 +648,15 @@ identity returns to the pool and a crossing sequence starts at one, so a fence
 kept from the previous holder would claim a capture already contains crossings the
 next holder has yet to produce.
 
-Speed, step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`)
-are instance-local operator actions and are refused while peers are live; so is
+Speed, step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`) are
+instance-local operator actions and are refused while peers are live; so is an own
 pause, unless every linked participant is a bot seat this instance holds
-(`SeatsOnly`). Only the coordinator may reset a live session, and the reset
-crosses. The programmatic surface takes the same rule through one guard:
-`App.SetupLevel`, `App.Region` and `App.Reset` read the event's declared class, so
-the coordinator crosses a `Bus` request, a guest's is refused, and any other class
-is refused outright. Inspection modes and the telemetry save remain available
-without stopping simulation.
+(`SeatsOnly`). Only the coordinator may hold or reset a live session, and both
+cross: a hold stops every participant after the same tick. The programmatic surface
+takes the same rule through one guard: `App.SetupLevel`, `App.Region` and
+`App.Reset` read the event's declared class, so the coordinator crosses a `Bus`
+request, a guest's is refused, and any other class is refused outright. Inspection
+modes and the telemetry save remain available without stopping simulation.
 
 ### 4.5 Join and stream framing
 
