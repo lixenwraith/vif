@@ -171,6 +171,7 @@ var topics = []topicDef{
 			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
 			{Keys: ":host <addr>", Desc: "Open this running game to participants, e.g. :host :7777; they join at the current tick"},
 			{Keys: ":join <target>", Desc: "Leave this solo game for the session at target, in any form -join takes; a failed join plays on solo"},
+			{Keys: ":leave", Desc: "Leave the session and play on in one of your own from where it stands; your bots come along, and :host or :join opens or finds another"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},
 			{Keys: ":bot [add [N[:graph]|graph]|drop <slot>]", Desc: "List this run's bots, seat bots playing graph (default: default) or drop one; a solo game opens a session only they can join and still pauses. 10, A and 0xA name one slot"},
 			{Keys: ":player [drop <slot>]", Desc: "List players and bots by slot; the host drops a player with its bots, or one bot"},

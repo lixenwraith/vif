@@ -26,22 +26,28 @@ func (i instance) LocalParticipant() uint32 { return i.a.localParticipant() }
 // same list on every instance.
 func (i instance) WorldRoster() []network.RosterEntry {
 	var out []network.RosterEntry
-	i.a.world.RunSafe(func() {
-		w := i.a.world
-		for slot := range parameter.MaxPlayers {
-			e := w.Resources.Player.Slot(uint8(slot))
-			if e == 0 {
-				continue
-			}
-			c, ok := w.Components.Cursor.GetComponent(e)
-			if !ok || c.PeerID == 0 {
-				continue
-			}
-			out = append(out, network.RosterEntry{
-				ID: network.PeerID(c.PeerID), Slot: uint8(slot), Holder: network.PeerID(c.Holder),
-			})
+	i.a.world.RunSafe(func() { out = i.a.worldRosterLocked() })
+	return out
+}
+
+// worldRosterLocked is WorldRoster for a caller that holds the world lock.
+// Caller MUST hold updateMutex.
+func (a *App) worldRosterLocked() []network.RosterEntry {
+	var out []network.RosterEntry
+	w := a.world
+	for slot := range parameter.MaxPlayers {
+		e := w.Resources.Player.Slot(uint8(slot))
+		if e == 0 {
+			continue
 		}
-	})
+		c, ok := w.Components.Cursor.GetComponent(e)
+		if !ok || c.PeerID == 0 {
+			continue
+		}
+		out = append(out, network.RosterEntry{
+			ID: network.PeerID(c.PeerID), Slot: uint8(slot), Holder: network.PeerID(c.Holder),
+		})
+	}
 	slices.SortFunc(out, func(a, b network.RosterEntry) int { return int(a.ID) - int(b.ID) })
 	return out
 }

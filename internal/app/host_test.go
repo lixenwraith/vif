@@ -1346,10 +1346,10 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 }
 
 // TestASessionCommandIsGatedByTheRoleARunHolds is the join matrix's role and
-// command table: the role each kind of run holds, what :join and :host answer in
-// it, and how :session names it. A run whose session is its own bots' takes both,
-// one its session left may join another, and a guest that inherited the term reads
-// as the host it now is.
+// command table: the role each kind of run holds, what :join, :host and :leave
+// answer in it, and how :session names it. A run whose session is its own bots'
+// takes :join and :host and has nothing to leave, one its session left may join
+// another or leave, and a guest that inherited the term reads as the host it now is.
 func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	ticking := func(a *App) *App {
@@ -1386,28 +1386,28 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	left.cfg.JoinAddress = gone.HostAddr()
 
 	for _, row := range []struct {
-		kind       string
-		run        func() *App
-		role       sessionRole
-		join, host string // the refusal each names; empty takes the command
-		line       string // how :session opens
+		kind              string
+		run               func() *App
+		role              sessionRole
+		join, host, leave string // the refusal each names; empty takes the command
+		line              string // how :session opens
 	}{
 		{"solo", func() *App { return ticking(mustHeadless(t, 0x3101, BotWidth, BotHeight)) },
-			roleSolo, "", "", "Solo run"},
+			roleSolo, "", "", "in no session", "Solo run"},
 		{"solo with its bots", func() *App { return withBot(ticking(mustHeadless(t, 0x3102, BotWidth, BotHeight))) },
-			roleSeats, "", "", "Session hosting, "},
+			roleSeats, "", "", "only its own bots", "Session hosting, "},
 		{"hosting", func() *App { return host },
-			roleHost, "already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+			roleHost, "already in a session", "already hosting", "", "Session hosting 127.0.0.1:"},
 		{"hosting with its bots", func() *App { return withBot(hosting(ticking(mustHeadless(t, 0x3103, BotWidth, BotHeight)))) },
-			roleHost, "already in a session", "already hosting", "Session hosting 127.0.0.1:"},
+			roleHost, "already in a session", "already hosting", "", "Session hosting 127.0.0.1:"},
 		{"joined", func() *App { return guest },
-			roleGuest, "already in a session", "already in a session", "Session joined " + host.HostAddr() + ", "},
+			roleGuest, "already in a session", "already in a session", "", "Session joined " + host.HostAddr() + ", "},
 		{"inherited the term", func() *App {
 			guest.World().RunSafe(func() {
 				guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
 			})
 			return guest
-		}, roleGuest, "already in a session", "already in a session", "Session hosting, "},
+		}, roleGuest, "already in a session", "already in a session", "", "Session hosting, "},
 		{"its session left", func() *App {
 			leave()
 			for deadline := time.Now().Add(socketWait); leftPort.PeerCount() > 0; time.Sleep(time.Millisecond) {
@@ -1416,17 +1416,17 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 				}
 			}
 			return left
-		}, roleLeft, "", "already in a session", "Session joined " + gone.HostAddr() + ", "},
+		}, roleLeft, "", "already in a session", "", "Session joined " + gone.HostAddr() + ", "},
 	} {
 		a := row.run()
 		var role sessionRole
-		var join, hostErr error
+		var join, hostErr, leaveErr error
 		var line string
 		a.World().RunSafe(func() {
 			role = a.sessionRoleLocked()
 			mode := a.cfg.Mode
-			a.cfg.Mode = ModePlay // :join serves Run's loop, which a headless run lacks
-			join = a.joinErrorLocked()
+			a.cfg.Mode = ModePlay // :join and :leave serve Run's loop, which a headless run lacks
+			join, leaveErr = a.joinErrorLocked(), a.leaveErrorLocked()
 			a.cfg.Mode = mode
 			hostErr = a.hostErrorLocked()
 			line = a.sessionSummaryLocked()
@@ -1438,7 +1438,7 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 			command string
 			err     error
 			want    string
-		}{{":join", join, row.join}, {":host", hostErr, row.host}} {
+		}{{":join", join, row.join}, {":host", hostErr, row.host}, {":leave", leaveErr, row.leave}} {
 			if c.want == "" && c.err != nil || c.want != "" && (c.err == nil || !strings.Contains(c.err.Error(), c.want)) {
 				t.Errorf("%s in a run %s: %v; want %q", c.command, row.kind, c.err, cmp.Or(c.want, "taken"))
 			}
@@ -1446,6 +1446,129 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 		if !strings.HasPrefix(line, row.line) {
 			t.Errorf(":session in a run %s reads %q; want it to open %q", row.kind, line, row.line)
 		}
+	}
+}
+
+// leaveAs serves :leave as Run's loop does, for a harness that stands in for it. A
+// harness has no loop, the one refusal its role does not decide, and may be ticking:
+// the mode the refusal reads is left as it is.
+func leaveAs(t *testing.T, a *App) {
+	t.Helper()
+	var why string
+	a.World().RunSafe(func() { why = sessionRoles[a.sessionRoleLocked()].leave })
+	if why != "" || !a.leaving.CompareAndSwap(false, true) {
+		t.Fatalf(":leave refused: %q", why)
+	}
+	a.leaveSession()
+}
+
+// TestALeavingGuestPlaysOnInASessionOfItsOwn: a guest that leaves goes on with the
+// world as it stands, authoring a session of its own under the identity it had and
+// the term after the one it held. Nobody it left is in that world any more, its
+// host sees it go, and nothing names the session it left, so :host and :join are
+// open to it.
+func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	t.Cleanup(host.Close)
+	tickUntilCursor(t, host)
+	stopTicking := tickInBackground(host)
+	t.Cleanup(stopTicking)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
+	guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+	stopTicking()
+	waitForRosterPair(t, host, guest)
+	id, term := guest.localParticipant(), guest.authorityTerm()
+	var own core.Entity
+	guest.World().RunSafe(func() { own = guest.world.Resources.Player.Slot(1) })
+
+	leaveAs(t, guest)
+	var role sessionRole
+	var authoring bool
+	var left, kept core.Entity
+	var hostErr, joinErr, leaveErr error
+	guest.World().RunSafe(func() {
+		role, authoring = guest.sessionRoleLocked(), guest.world.IsSessionCoordinator()
+		left, kept = guest.world.Resources.Player.Slot(0), guest.world.Resources.Player.Slot(1)
+		mode := guest.cfg.Mode
+		guest.cfg.Mode = ModePlay
+		joinErr, leaveErr = guest.joinErrorLocked(), guest.leaveErrorLocked()
+		guest.cfg.Mode = mode
+		hostErr = guest.hostErrorLocked()
+	})
+	if role != roleSeats || !authoring || guest.localParticipant() != id || guest.authorityTerm() != term+1 {
+		t.Fatalf("after leaving, participant %d holds role %d, authoring %t, term %d; want role %d authoring as %d at term %d",
+			guest.localParticipant(), role, authoring, guest.authorityTerm(), roleSeats, id, term+1)
+	}
+	if left != 0 || kept != own {
+		t.Fatalf("after leaving, slot 0 holds %d and slot 1 %d; want the host gone and the guest's own %d kept", left, kept, own)
+	}
+	if hostErr != nil || joinErr != nil || leaveErr == nil {
+		t.Fatalf("after leaving, :host %v, :join %v, :leave %v; want the first two taken and nothing left to leave", hostErr, joinErr, leaveErr)
+	}
+	waitForHostRoster(t, host, 1)
+}
+
+// TestALeavingHostTakesItsBotsAndShutsItsDoor: a host that leaves takes its bots
+// along, seated again in the session it goes on in, and shuts the door its guests
+// came in by: they lose their host, and nothing answers a dial at its address.
+func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	t.Cleanup(host.Close)
+	tickUntilCursor(t, host)
+	stopTicking := tickInBackground(host)
+	t.Cleanup(stopTicking)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	addr := host.HostAddr()
+	var err error
+	host.World().RunSafe(func() { err = (sessionControl{host}).AddBot("roam") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForSeats(t, host, 1)
+	seated := host.botSeats()[0]
+	_, port := mustSocketJoiner(t, addr, fixtureSeed, BotWidth, BotHeight)
+	waitForCursors(t, host, 3)
+
+	leaveAs(t, host)
+	waitForSeats(t, host, 1)
+	if again := host.botSeats()[0]; again.ID == seated.ID {
+		t.Fatalf("the bot kept seat %d through the leave; want it seated again", again.ID)
+	}
+	waitForCursors(t, host, 2) // its own and its bot's: the guest is not in its world
+	if got := host.HostAddr(); got != "" {
+		t.Fatalf("the host still answers at %q after leaving", got)
+	}
+	for deadline := time.Now().Add(socketWait); port.PeerCount() > 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the guest never lost its host")
+		}
+	}
+	if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
+		_ = c.Close()
+		t.Fatalf("a dial to %s after the host left connected", addr)
+	}
+}
+
+// TestADialWhileItsHostLeavesIsRefusedAsTheSessionEnding: the term it would be
+// offered ends with the leave and the door it came in by shuts, so the dial is told
+// the session is ending, which a joiner does not retry against.
+func TestADialWhileItsHostLeavesIsRefusedAsTheSessionEnding(t *testing.T) {
+	t.Parallel()
+	host := mustHeadless(t, fixtureSeed, 120, 40)
+	defer host.Close()
+	host.AttachTransport(network.NewMesh().Node(1))
+	host.leaving.Store(true)
+	_, err := host.assignFor(host.JoinAnchor(), 0)
+	var refusal *network.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != network.RefusalEnding {
+		t.Fatalf("a dial while its host leaves was answered %v; want the session ending", err)
 	}
 }
 

@@ -111,21 +111,26 @@ var configForms = map[string]configFormSpec{
 	},
 }
 
+// sessionRefusal is why a session row is disabled: a run without session controls,
+// or what check says the run refuses now, as its command would.
+func sessionRefusal(check func(engine.SessionController) error) func(*engine.GameContext) string {
+	return func(ctx *engine.GameContext) string {
+		if ctx.SessionCtl == nil {
+			return sessionsUnavailable
+		}
+		if check != nil {
+			if err := check(ctx.SessionCtl); err != nil {
+				return sentence(err)
+			}
+		}
+		return ""
+	}
+}
+
 func configFormOption(key string) configOption {
 	spec := configForms[key]
 	o := configOption{key: key, label: spec.label, description: spec.description, command: spec.command,
-		read: func(*engine.GameContext) string { return "Enter" },
-		disabled: func(ctx *engine.GameContext) string {
-			if ctx.SessionCtl == nil {
-				return sessionsUnavailable
-			}
-			if spec.unavailable != nil {
-				if err := spec.unavailable(ctx.SessionCtl); err != nil {
-					return sentence(err)
-				}
-			}
-			return ""
-		}}
+		read: func(*engine.GameContext) string { return "Enter" }, disabled: sessionRefusal(spec.unavailable)}
 	o.activate = func(r *Router) {
 		state := tui.NewFormState()
 		for _, f := range spec.fields {

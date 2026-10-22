@@ -28,10 +28,11 @@ Use these terms consistently:
   requests, and reports their proofs upstream. It authors nothing. A guest is the
   relay of its own bots, and with `-relay <addr>` of the people who join there.
 - A run's **session role** is what it is to its session, read from what the
-  session wrote: solo, seats (a session it opened for its own bots, with no door),
-  host, server, guest, or left (a guest whose session has nobody left but its own
-  bots). `:join`, `:host` and `:session` answer by it from one table. It is not
-  authorship: a guest that inherited the term is a guest that authors.
+  session wrote: solo, seats (a session of its own with no door: one it opened for
+  its bots, or the one `:leave` goes on in), host, server, guest, or left (a guest
+  whose session has nobody left but its own bots). `:join`, `:host`, `:leave` and
+  `:session` answer by it from one table. It is not authorship: a guest that
+  inherited the term is a guest that authors.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
   and never moves backwards on an instance.
@@ -507,7 +508,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots binds none until `:host` opens it. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave`, binds none until `:host` opens it. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
@@ -665,6 +666,54 @@ handoff.
 | Declining advertisement | `-no-advertise` plays as a leaf. Refusing such a participant would turn a privacy preference into a lockout. |
 | Default listen port | The coordinator's own port, falling back to ephemeral, declaring what was bound. A port that is harmless on the machine that chose it is not necessarily harmless on somebody else's. |
 | Rejoin after a handoff | Every participant holds the whole chain, so a survivor with no link walks it — every candidate once, the list again a second later — with the attempt count on the status bar. |
+
+### 5.4 Leaving a session
+
+`:leave` takes a run out of its session into one of its own, the world as it
+stands: the session a solo run opens for its bots (§5.0), so `:host` opens it to
+others, `:join` replaces it and `:bot add` seats more. A host and a guest leave
+alike. A solo run and a run whose session holds only its own bots have nothing to
+leave, and a server stays in the session it serves, so each refuses it by its
+session role. Those left behind see an ordinary loss: the host removes a guest that
+left as it removes one whose link closed, the people a guest relayed keep their
+slots as when any relay leaves (§5), and the guests of a host that left run §5.1,
+which under `-authority host` is the fork.
+
+The run keeps its identity and authors the term after the one it held. Its cursor,
+its crossings still scheduled and its journal all name that identity, and nobody it
+leaves behind holds it, so the departures it produces for them cannot remove its
+own cursor, as they would if it took the coordinator's usual first identity. The
+new term puts anything still carrying the old one behind the term it holds, where
+every authoritative artifact is ignored.
+
+Its bots leave first, as they do when it quits, and are seated again with fresh
+cursors once the old door is shut; a bot's journal closes with the cursor it drove.
+In between, the run's loop serves the leave, so no other command interleaves:
+
+1. **Open the new session**, under the correction pipeline's apply lock, so nothing
+   of the left session is applied across the swap and what it still had queued is
+   dropped. Opening is the step that can fail — a journal records the write as it
+   records a join's, which captures the world first — so it runs before anything is
+   dropped, and a failure leaves the run in the session it could not leave, with its
+   bots seated back there.
+2. **Drop what the left session sent.** `NetworkSystem.LeaveSession` drops every
+   artifact another participant sent, scheduled or applied, with its fences, owner
+   syncs and digests, and every roster change still waiting, the run's own included,
+   since the session it opens writes its roster afresh; its own ordinary crossings
+   carry on. The relay it joined through is forgotten and its peer-link listener
+   closes, so nothing the left session was told still answers.
+3. **Remove those left behind**, locally as a fork does (§5.2), and settle the
+   departures before any identity is handed out again: one of theirs given to a bot
+   would be the participant a departure still pending removes.
+4. **Close the old port** outside the world lock, because closing it waits for
+   handshakes that take that lock. A dial reaching the old door meanwhile is refused
+   as the session ending (`RefusalEnding`), so nobody is admitted into a term that
+   ends with it.
+
+Nothing names the left session afterwards: the join and host addresses and the
+session name are cleared, so a restart neither dials back into it nor listens on its
+address, and `:session` reads `Session hosting` with no address. A run already being
+replaced is not left: what replaces it decides where it goes.
 
 ## 6. Current operating point
 
@@ -941,7 +990,7 @@ cadences. A corrected cursor must not subsequently visit an older cell because o
 a delayed copy. Also verify typing, gold destruction, combat, reset, disconnect,
 and reconnect while watching the diagnostics in §7.
 
-Two membership checks are worth running by hand on every host shape, because they
+Three membership checks are worth running by hand on every host shape, because they
 exercise the paths a two-terminal session reaches and nothing else does:
 
 - The guest leaves with `:q` and dials again. It should install a current capture
@@ -953,8 +1002,13 @@ exercise the paths a two-terminal session reaches and nothing else does:
   the host's cursor must be gone from its map rather than standing where it was
   left. A guest that could not reach the successor shows `Host lost` and keeps
   playing instead, which is the fork.
+- Either leaves with `:leave` instead and plays on. Its world goes on from where it
+  stood, `:session` reads `Session hosting` with no address under the same
+  participant, and its bots come back on fresh cursors. The others see the loss
+  above: a guest that left is gone from its host's map, and a host that left is lost
+  to its guests. `:host` then opens the run's own session to others.
 
-Reachability is worth a third, on a session of three or more, because it is the one
+Reachability is worth a fourth, on a session of three or more, because it is the one
 path a two-terminal session never exercises:
 
 ```sh

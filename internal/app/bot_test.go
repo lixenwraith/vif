@@ -576,6 +576,39 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 	}
 }
 
+// TestAGuestsBotsComeAlongWhenItLeaves: the bots a guest seated through its link are
+// seated again in the session it goes on in, through it as the coordinator it now
+// is, and its host sees them go with it. The name the left session answered to is
+// not the one they join under.
+func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}, SessionName: "named"}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	guest, _ := driveBot(t, Config{JoinAddress: addr, SessionName: "named", Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	waitForCursors(t, guest, 4)
+	waitForSeats(t, guest, 1)
+	seated := guest.botSeats()[0]
+
+	leaveAs(t, guest)
+	waitForSeats(t, guest, 1)
+	again := guest.botSeats()[0]
+	if again.ID == seated.ID {
+		t.Fatalf("the bot kept seat %d through the leave; want it seated again", again.ID)
+	}
+	waitForCursors(t, guest, 2)
+	waitForCursors(t, host, 2)
+	var e core.Entity
+	guest.world.RunSafe(func() { e = guest.world.Resources.Player.Slot(again.Slot) })
+	first := cursorPosition(guest, e)
+	for deadline := time.Now().Add(socketWait); cursorPosition(guest, e) == first; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the guest's bot never moved in the session it went on in")
+		}
+	}
+}
+
 // TestAStillGuestSeatsBotsAfterItsHostLeaves: a guest's bots join through it
 // whoever holds authority, so the departed host's address is never dialled.
 func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {

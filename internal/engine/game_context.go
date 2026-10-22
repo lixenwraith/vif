@@ -43,6 +43,10 @@ type SessionController interface {
 	RequestSession(site string, players int, scenario string) error
 	HostError() error
 	JoinError() error
+	// Leave takes the run out of its session into one of its own, the world as it
+	// stands; the run's loop serves it and the status line says how it went.
+	Leave() error
+	LeaveError() error
 	// False means the current scenario can reset without replacing the run.
 	ChangeScenario(name string) (bool, error)
 	// Scenarios names what ChangeScenario starts by name, and the one running.

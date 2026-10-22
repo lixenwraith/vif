@@ -519,6 +519,11 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network
 	if a.lobbyClosing.Load() {
 		return network.SessionOffer{}, ErrSessionStarting
 	}
+	// A dial while this run leaves its session would be offered a term that ends with
+	// it, on a door about to shut; its bots go back in once the run has left.
+	if a.leaving.Load() {
+		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: its host is leaving it"}
+	}
 	// A draining or expired session refuses before it allocates anything. The
 	// roster slot, the identity and the capture that would follow are all work
 	// spent on a participant this process is about to stop authoring for, and the
@@ -617,14 +622,20 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 // — a departure is produced once at one agreed tick because two instances must
 // destroy a shared entity together, and here there is no second instance.
 func (a *App) dropAbandonedCursors(roster []network.RosterEntry, local network.PeerID) {
-	if p := a.sessionTransport(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
+	a.world.RunSafe(func() { a.dropAbandonedLocked(roster, local) })
+}
+
+// dropAbandonedLocked is dropAbandonedCursors under the world lock, which a run
+// leaving its session holds. Caller MUST hold updateMutex.
+func (a *App) dropAbandonedLocked(roster []network.RosterEntry, local network.PeerID) {
+	if p := a.sessionTransportLocked(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
 		return
 	}
 	for _, p := range roster {
 		if p.ID == local || p.Slot == parameter.NoPlayerSlot {
 			continue
 		}
-		a.pushDeparture(p.ID, p.Slot, core.DomainShared)
+		a.pushDepartureLocked(p.ID, p.Slot, core.DomainShared)
 	}
 }
 
