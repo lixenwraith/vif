@@ -906,6 +906,43 @@ func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
 	replayMatches(t, guestRec, guestWant, guestSurface)
 }
 
+// TestARunTakesItsSessionWriteAsAnInstall: a run journaled across its :host takes
+// the world it writes as the replay's install of it does, so what an install
+// derives (the spatial gauges, what carriers publish as they load) stands alike on
+// both, and the journal replays to the surface the run played on.
+func TestARunTakesItsSessionWriteAsAnInstall(t *testing.T) {
+	// Not parallel: hosting binds a real socket.
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	rec := journal.NewCapture()
+	a.cfg.JournalSink = rec
+	if _, err := a.openJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	rng := vmath.NewFastRand(13)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	want := map[event.Stamp][]string{}
+	play := func(ticks int) {
+		for range ticks {
+			if rng.Intn(3) == 0 {
+				inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			}
+			a.Tick(1)
+			p := a.Position()
+			want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(a)
+		}
+	}
+	play(60)
+	if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	play(60)
+	a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+	a.serveJournal()
+	replayMatches(t, rec, want, guestSurface)
+}
+
 // TestAReplayStandsWhereTheRunsWriteLeftIt: a write leaves its replay on the run's
 // barrier and settle group. A host opens its session over a keystroke pushed and not
 // yet settled, as a seat added from another goroutine does, and pushes another before

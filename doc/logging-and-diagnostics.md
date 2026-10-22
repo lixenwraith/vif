@@ -255,6 +255,7 @@ greps for rather than enumerating every refusal.
 | `authoring under a new term` / `following a new authority` / `continuing locally` | WARN / INFO / WARN | `term`, `seeded_from_tick`, `have_baseline` / `term`, `authority` / `held_term`, `contested_term`, `lost`, `reason` | the successor; every other survivor; a survivor left playing alone, with no reachable successor or under a pinned authority |
 | `uncommitted crossings resent at handoff` | INFO | `crossings`, `dropped` | a guest resending to the new authority the crossings no authority committed (`NetworkSystem.ResendUncommitted`); `dropped` are those past one frame, which the next correction takes back |
 | `join installed the session world` | INFO | `tick`, `run`, `stage_us`, `commit_us` | `App.JoinSessionAt` |
+| `opened session not taken as written` | ERROR | `error` | a run taking the world its session's opening wrote as an install takes it, which refused it: a defect |
 | `mid-run participant admitted` / `join caught up` | INFO | `peer`, `slot`, `snapshot_tick`, `bytes` / `held_frames`, `caught_up_ticks`, `tick`, `lag_ticks` | the authority's mid-run gate; the joiner once its catch-up closes |
 | `session parked` / `session ended` | INFO | `tick`, plus `expires_in` or `restart_in` / `phase`, `reason`, `guests`, `address` | the `-serve` loop |
 | `parked session resumed` / `parked session restarted` | INFO | `tick`, plus `vacant` on the restart | the `-serve` loop: a guest arrived, or an unbounded host reset the abandoned world |
@@ -967,7 +968,10 @@ rebuilds it from its own world at that place, refuses a rebuild whose hash diffe
 journal replays from its join. The install leaves the replay where the write left
 the run: on the barrier it left, which a host's write engages in the same hold (else
 crossings dispatched after it apply at once and again where the journal records
-them), and at settle group 0, a host's write included. A write can land between
+them), and at settle group 0, a host's write included. A host takes its own write
+as an install takes it, journaled or not, so what an install derives from the world
+it writes (the spatial gauges, what carriers publish as they load) stands on the run
+as on its replay. A write can land between
 ticks while records of its settle group are still queued, as a seat added from
 another goroutine does between a keystroke's push and its settle. They dispatch with
 what is pushed at group 0 before the next settle, so replay pushes them on both
