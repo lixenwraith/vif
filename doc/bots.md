@@ -48,7 +48,8 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 A bot belongs to the run that started it, its holder, and joins on an in-process
 stream the holder serves, which spends no join budget. A run in no session first
 opens one with no listener, which only its bots can join, so a browser seats bots
-solo too; host first to let others in.
+solo too. `:host` opens that session to others, and `:join` takes the bots along
+into the session it joins.
 
 | Bot of | Admitted | Leaves when |
 |---|---|---|
@@ -344,7 +345,6 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
-- [Host a session opened for bots](todo.md#host-a-session-opened-for-bots)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
 - [Name participants beyond their slot](todo.md#name-participants-beyond-their-slot)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)

@@ -29,6 +29,7 @@ import (
 const (
 	exitFailure  = 1
 	exitLogSetup = 73 // EX_CANTCREAT: logging requested but unavailable
+	exitIdentity = 76 // EX_PROTOCOL: a session of another build or session
 )
 
 const logShutdownTimeout = 2 * time.Second
@@ -203,8 +204,17 @@ func main() {
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(exitFailure)
+		os.Exit(exitCode(err))
 	}
+}
+
+// exitCode is a returned error's code. A refusal for another build or session has
+// its own, so a launcher does not offer the retry that would be refused again.
+func exitCode(err error) int {
+	if network.IsIdentityRefusal(err) {
+		return exitIdentity
+	}
+	return exitFailure
 }
 
 // verifyJournal reports what a headless replay reproduced; leaving the run is the error.

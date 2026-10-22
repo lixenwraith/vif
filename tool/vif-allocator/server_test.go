@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -221,9 +219,9 @@ func TestLogEndpointIsExplicitlyDeferred(t *testing.T) {
 	}
 }
 
-// TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin: each refusal is a
-// status answered before any 101, the allocator's own handshake checks and pod dial
-// included.
+// TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin: what HTTP must
+// refuse is a status answered before any 101, the allocator's own handshake checks
+// included; the session's own refusals follow it as the front door's do.
 func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T) {
 	const live = "/vif/ws/" + routedID
 	upgrade := func(method, path string, edits ...string) *http.Request {
@@ -238,18 +236,9 @@ func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T)
 		}
 		return r
 	}
-	closed, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, refusingPort, _ := net.SplitHostPort(closed.Addr().String())
-	_ = closed.Close()
-
 	for name, tc := range map[string]struct {
-		request  *http.Request
-		routeErr error
-		held     int
-		want     int
+		request *http.Request
+		want    int
 	}{
 		"a path that is not a session identifier": {
 			request: upgrade(http.MethodGet, "/vif/ws/0123456789ABCDEF/extra"), want: http.StatusNotFound},
@@ -258,25 +247,12 @@ func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T)
 			request: upgrade(http.MethodGet, live, "Origin", "https://elsewhere.example"), want: http.StatusForbidden},
 		"a method the route does not answer": {
 			request: upgrade(http.MethodPost, live), want: http.StatusMethodNotAllowed},
-		"an unknown session": {
-			request: upgrade(http.MethodGet, live), routeErr: errSessionUnknown, want: http.StatusNotFound},
-		"a session not accepting players": {request: upgrade(http.MethodGet, live),
-			routeErr: fmt.Errorf("%w: occupied", errSessionRefusing), want: http.StatusConflict},
-		"a session with no reachable pod": {request: upgrade(http.MethodGet, live),
-			routeErr: errSessionUnroutable, want: http.StatusServiceUnavailable},
-		"a session at -route-max": {request: upgrade(http.MethodGet, live), held: 2,
-			want: http.StatusServiceUnavailable},
 		"another WebSocket version": {
 			request: upgrade(http.MethodGet, live, "Sec-WebSocket-Version", "8"), want: http.StatusUpgradeRequired},
 		"a key that is not 16 bytes": {
 			request: upgrade(http.MethodGet, live, "Sec-WebSocket-Key", "AAAA"), want: http.StatusBadRequest},
-		"a pod that refuses the dial": {request: upgrade(http.MethodGet, live), want: http.StatusBadGateway},
 	} {
-		server := testWebServer(&fakeSessionAllocator{podIP: "127.0.0.1", routeErr: tc.routeErr})
-		server.ws.game = refusingPort
-		for range tc.held {
-			server.ws.holds.hold(routedID)
-		}
+		server := testWebServer(&fakeSessionAllocator{podIP: "127.0.0.1"})
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, tc.request)
 		if response.Code != tc.want {

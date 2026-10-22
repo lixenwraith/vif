@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
-	"errors"
-	"net"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
@@ -22,17 +18,11 @@ const wsRoutePrefix = "/vif/ws/"
 var sessionIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 // wsRouter carries one browser connection to the session it names: it terminates
-// the WebSocket and splices its payload to the pod's game port, as the front door
-// does with a native dial.
+// the WebSocket and places its payload with the front door's own placement, so the
+// two routes share a budget, a ceiling and their refusals.
 type wsRouter struct {
 	origin string
-	holds  *holds
-	joins  *network.AdmissionLimiter
-	game   string // the pod port dialled; a test points it at a stand-in
-}
-
-func newWSRouter(origin string, held *holds, joins *network.AdmissionLimiter) *wsRouter {
-	return &wsRouter{origin: origin, holds: held, joins: joins, game: gamePort}
+	route  *tcpRouter
 }
 
 // holds bounds the connections one session carries through this allocator, over
@@ -65,9 +55,10 @@ func (h *holds) hold(id string) (func(), bool) {
 	}, true
 }
 
-// handleSessionSocket refuses everything it can before the upgrade, because after it
-// there is no status code left to send, then splices the socket to the pod. The pod
-// reads the browser's own route frame and refuses a name not its own.
+// handleSessionSocket answers before the upgrade only what HTTP must: the route,
+// the upgrade and its origin. After the 101 the stream is placed as the front door
+// places one, so a refusal is the join reply either client reads rather than a
+// status a page is never shown.
 func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) {
 	if s.ws == nil {
 		writeAPIError(w, http.StatusNotImplemented, "web_route_not_configured",
@@ -95,68 +86,21 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 			"This session route answers one origin")
 		return
 	}
-
-	// The front door's budget, charged where it charges it: before the lookup.
-	if s.ws.joins.Admit(s.clientAddr(r)) != nil {
-		w.Header().Set("Retry-After", "60")
-		writeAPIError(w, http.StatusTooManyRequests, "join_budget", capitalize(errRouteAdmission.Error()))
-		return
-	}
-
-	lookup, cancel := context.WithTimeout(r.Context(), routeTimeout)
-	podIP, err := s.allocator.routeSession(lookup, id)
-	cancel()
-	if err != nil {
-		s.writeRouteError(w, id, err)
-		return
-	}
-
-	release, ok := s.ws.holds.hold(id)
-	if !ok {
-		w.Header().Set("Retry-After", "5")
-		writeAPIError(w, http.StatusServiceUnavailable, "session_busy",
-			"This session is carrying as many connections as it accepts")
-		return
-	}
-	defer release()
-
 	handshake, err := websocket.Check(w, r)
 	if err != nil {
 		refused := err.(*websocket.RequestError)
 		writeAPIError(w, refused.Status, "bad_handshake", capitalize(refused.Reason))
 		return
 	}
-	// Dialled before the 101, so an unreachable pod is still a status.
-	upstream, err := net.DialTimeout("tcp", net.JoinHostPort(podIP, s.ws.game), routeTimeout)
-	if err != nil {
-		s.log.Warn("session socket dial failed", "session", id, "error", err)
-		writeAPIError(w, http.StatusBadGateway, "session_unreachable",
-			"The session did not accept the connection")
-		return
-	}
 	client, err := handshake.Upgrade(w)
 	if err != nil {
-		_ = upstream.Close()
 		s.log.Warn("session socket upgrade failed", "session", id, "error", err)
 		return
 	}
-	s.log.Info("session socket opened", "session", id)
-	splice(client, upstream)
-}
-
-func (s *apiServer) writeRouteError(w http.ResponseWriter, id string, err error) {
-	switch {
-	case errors.Is(err, errSessionUnknown):
-		writeAPIError(w, http.StatusNotFound, "unknown_session", "No such session")
-	case errors.Is(err, errSessionRefusing):
-		writeAPIError(w, http.StatusConflict, "session_not_accepting",
-			"The session is full or ending and is not accepting players")
-	case errors.Is(err, errSessionUnroutable):
-		w.Header().Set("Retry-After", "5")
-		writeAPIError(w, http.StatusServiceUnavailable, "session_unreachable",
-			"The session has no reachable pod")
-	default:
-		s.log.Error("route session", "session", id, "error", err)
-		writeAPIError(w, http.StatusBadGateway, "kubernetes_error", "Could not resolve the session")
+	upstream, release := s.ws.route.place(client, s.clientAddr(r))
+	if upstream == nil {
+		return
 	}
+	defer release()
+	splice(client, upstream)
 }

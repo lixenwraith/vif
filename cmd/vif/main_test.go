@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -277,6 +279,20 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 	}
 	if err := (sessionFlags{join: "host.example:7777", name: "7f3c1a"}).validateInvocation(false, false, ""); err == nil {
 		t.Fatal("a joiner accepted a name beside the target that carries one")
+	}
+}
+
+// TestAnotherBuildsRefusalHasItsOwnExitCode: the page reads the code, not the
+// prose, to leave out a retry that would be refused again.
+func TestAnotherBuildsRefusalHasItsOwnExitCode(t *testing.T) {
+	ours := network.PeerIdentity{Protocol: network.ProtocolVersion}
+	refused := fmt.Errorf("join vif://host.example:7777/7f3c1a: %w",
+		ours.VerifyBuild(network.PeerIdentity{Protocol: network.ProtocolVersion + 1}))
+	if got := exitCode(refused); got != exitIdentity {
+		t.Errorf("a refusal for another build exits %d, want %d", got, exitIdentity)
+	}
+	if got := exitCode(errors.New("nothing is listening at host.example:7777")); got != exitFailure {
+		t.Errorf("a join nothing answered exits %d, want %d", got, exitFailure)
 	}
 }
 

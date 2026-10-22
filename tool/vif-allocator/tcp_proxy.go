@@ -35,7 +35,8 @@ var (
 
 // tcpRouter is the native front door: one port for every session, which places a
 // connection by the name its dialer sends before reading. It reads that one frame
-// and nothing after it; see doc/kubernetes-fleet.md §9.
+// and nothing after it, and the browser route places its streams with it too; see
+// doc/kubernetes-fleet.md §9.
 type tcpRouter struct {
 	sessions sessionAllocator
 	holds    *holds
@@ -63,16 +64,8 @@ func (r *tcpRouter) serve(listener net.Listener) {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		select {
-		case r.placing <- struct{}{}:
-		default:
-			_ = conn.Close()
-			continue
-		}
 		go func() {
-			upstream, release := r.place(conn)
-			<-r.placing
-			if upstream != nil {
+			if upstream, release := r.place(conn, conn.RemoteAddr()); upstream != nil {
 				defer release()
 				splice(conn, upstream)
 			}
@@ -82,7 +75,15 @@ func (r *tcpRouter) serve(listener net.Listener) {
 
 // place answers the route frame with the session's pod, the frame replayed to it,
 // or with a refusal the dialer reads as its reason. Every refusal precedes a dial.
-func (r *tcpRouter) place(client net.Conn) (net.Conn, func()) {
+// from is the dialler's address, which the join budget is charged to.
+func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
+	select {
+	case r.placing <- struct{}{}:
+		defer func() { <-r.placing }()
+	default:
+		_ = client.Close()
+		return nil, nil
+	}
 	_ = client.SetDeadline(time.Now().Add(routeTimeout))
 	id, err := network.ReadSessionRoute(client)
 	if err != nil {
@@ -98,10 +99,10 @@ func (r *tcpRouter) place(client net.Conn) (net.Conn, func()) {
 	if !sessionIDPattern.MatchString(id) {
 		return refuse(errSessionUnknown)
 	}
-	// Keyed on the dialler, whose address the host forwards unchanged, and charged
-	// before the lookup: that costs the API server a list and the pod a probe. The
-	// browser route charges the same budget.
-	if r.admit.Admit(client.RemoteAddr()) != nil {
+	// Keyed on the dialler, whose address the host forwards unchanged or the edge
+	// names, and charged before the lookup: that costs the API server a list and the
+	// pod a probe.
+	if r.admit.Admit(from) != nil {
 		return refuse(errRouteAdmission)
 	}
 	lookup, cancel := context.WithTimeout(context.Background(), routeTimeout)
