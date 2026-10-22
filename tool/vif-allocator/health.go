@@ -27,6 +27,7 @@ type sessionHealth struct {
 	Phase     string `json:"phase,omitempty"`
 	Tick      uint64 `json:"tick"`
 	Map       string `json:"map,omitempty"`
+	Build     string `json:"build,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 }
 
@@ -101,6 +102,7 @@ func parseHealth(data []byte) (sessionHealth, error) {
 	var result sessionHealth
 	seenLive := false
 	seenReady := false
+	freeText := map[string]*string{"reason": &result.Reason, "build": &result.Build}
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -109,15 +111,16 @@ func parseHealth(data []byte) (sessionHealth, error) {
 		}
 		// The probe writes `live=<b> ready=<b>[ reason=<free text>]` on the first
 		// line and one key=value per line after it, so a line holds any number of
-		// fields and reason runs to the end of its line.
+		// fields, and free text — a reason, or a build such as "v0.1.0 (1154b8a6)" —
+		// runs to the end of its line.
 		for rest := line; rest != ""; {
 			field, remainder, _ := strings.Cut(rest, " ")
 			key, value, ok := strings.Cut(field, "=")
 			if !ok || key == "" {
 				return sessionHealth{}, fmt.Errorf("invalid health line %q", line)
 			}
-			if key == "reason" {
-				result.Reason = strings.TrimPrefix(rest, "reason=")
+			if dst, free := freeText[key]; free {
+				*dst = strings.TrimPrefix(rest, key+"=")
 				break
 			}
 			rest = strings.TrimLeft(remainder, " ")
