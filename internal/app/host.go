@@ -43,6 +43,8 @@ func (c sessionControl) BotSummary() string          { return c.a.seatsSummary()
 func (c sessionControl) Bots() []engine.BotSeat      { return c.a.botSeats() }
 func (c sessionControl) HostError() error            { return c.a.hostErrorLocked() }
 func (c sessionControl) JoinError() error            { return c.a.joinErrorLocked() }
+func (c sessionControl) Leave() error                { return c.a.leaveLocked() }
+func (c sessionControl) LeaveError() error           { return c.a.leaveErrorLocked() }
 func (c sessionControl) StartJournal(slot int) error { return c.a.startJournalLocked(slot) }
 func (c sessionControl) StopJournal(slot int) error  { return c.a.stopJournalLocked(slot) }
 func (c sessionControl) JournalError() error         { return c.a.journalErrorLocked() }
@@ -80,7 +82,7 @@ func (a *App) dropPlayerLocked(entity core.Entity) error {
 		return errors.New("that player has already left")
 	}
 	if a.world.SimulatesLocally(entity) {
-		return errors.New("use :q to leave your own session")
+		return errors.New("use :leave to leave the session")
 	}
 	a.world.PushEventFull(event.EventParticipantDeparted,
 		&event.ParticipantDepartedPayload{Participant: p.PeerID, Slot: p.Slot, Dismissed: true},
@@ -226,14 +228,15 @@ const (
 
 const inSession = "this run is already in a session"
 
-// sessionRoles is why each role refuses :join and :host, empty where it takes them.
-var sessionRoles = [...]struct{ join, host string }{
-	roleSolo:   {"", ""},
-	roleSeats:  {"", ""},
-	roleHost:   {inSession, "this run is already hosting"},
-	roleServer: {inSession, "this run is already hosting"},
-	roleGuest:  {inSession, inSession},
-	roleLeft:   {"", inSession},
+// sessionRoles is why each role refuses :join, :host and :leave, empty where it
+// takes them.
+var sessionRoles = [...]struct{ join, host, leave string }{
+	roleSolo:   {"", "", "this run is in no session"},
+	roleSeats:  {"", "", "this run's session holds only its own bots"},
+	roleHost:   {inSession, "this run is already hosting", ""},
+	roleServer: {inSession, "this run is already hosting", "a server stays in the session it serves"},
+	roleGuest:  {inSession, inSession, ""},
+	roleLeft:   {"", inSession, ""},
 }
 
 func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
@@ -410,7 +413,8 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 }
 
 // openSessionLocked opens a session this run coordinates, with no door: its bots'
-// streams it opens itself, and :host opens the door. Caller MUST hold updateMutex.
+// streams it opens itself, and :host opens the door. A run that leaves its session
+// opens its next one here too. Caller MUST hold updateMutex.
 func (a *App) openSessionLocked() error {
 	// Opening a session writes the world — owners, the latch, the lead — so a
 	// journal records the write as it records a join's, and a replay makes it.
@@ -424,10 +428,19 @@ func (a *App) openSessionLocked() error {
 		}
 	}
 
+	// A run goes on under the identity it already has: what the session it left
+	// still holds here names it, and a run in none takes the session's first.
+	self := network.RosterEntry{
+		ID:   cmp.Or(network.PeerID(a.world.LocalParticipant()), engine.CoordinatorParticipant),
+		Slot: a.world.Resources.Player.LocalSlot(),
+	}
+
 	// The roster ceiling is the port's from here: an unset -players already means
 	// the whole roster, and a run that opens a session mid-game has no lobby for the
 	// flag's other meaning.
-	port := network.NewSocketPort(a.hostNetworkConfig())
+	netCfg := a.hostNetworkConfig()
+	netCfg.ParticipantID = self.ID
+	port := network.NewSocketPort(netCfg)
 
 	// Armed before any stream arrives: a run that opens a session mid-game has no
 	// startup lobby, so every dial it ever sees is a mid-run join.
@@ -435,7 +448,8 @@ func (a *App) openSessionLocked() error {
 
 	a.sessionMu.Lock()
 	a.midRunPort = port
-	a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: 0}}
+	a.sessionRoster = []network.RosterEntry{self}
+	a.sessionOffer = network.SessionOffer{}
 	roster := slices.Clone(a.sessionRoster)
 	a.sessionMu.Unlock()
 
@@ -445,15 +459,16 @@ func (a *App) openSessionLocked() error {
 
 	// A lobby binds this through the roster it closes on; a session opened mid-run
 	// has no lobby, and an unattributed cursor is one no successor can see leave.
-	a.bindCursorOwnersLocked(roster, engine.CoordinatorParticipant)
+	a.bindCursorOwnersLocked(roster, self.ID)
 
-	// The run that opens a session authors its first term. Everything downstream
-	// reads authorship from here rather than from the identity the handshake
-	// assigns, which is what lets a later handoff move it.
+	// The run that opens a session authors its first term, after any it held: a
+	// handoff or report from the session it left then names a stale one. Everything
+	// downstream reads authorship from here rather than from the identity the
+	// handshake assigns, which is what lets a later handoff move it.
 	a.openAuthorityLocked(network.SessionOffer{
-		Anchor: a.joinAnchorLocked(), Host: engine.CoordinatorParticipant, Assigned: engine.CoordinatorParticipant,
-		Term: network.FirstTerm, Roster: roster, FixedAuthority: a.cfg.FixedAuthority,
-	}, engine.CoordinatorParticipant)
+		Anchor: a.joinAnchorLocked(), Host: self.ID, Assigned: self.ID,
+		Term: a.authorityTerm() + 1, Roster: roster, FixedAuthority: a.cfg.FixedAuthority,
+	}, self.ID)
 
 	// Attaching latches the world as shared (D-14) and installs the departure and
 	// digest hooks; activating closes the pre-session crossing window so this
@@ -479,6 +494,113 @@ func (a *App) openSessionLocked() error {
 
 	a.log.Info("session", "msg", "session opened", "tick", a.Position().Tick)
 	return nil
+}
+
+// leaveErrorLocked says why this run cannot leave its session now. Caller MUST hold
+// updateMutex.
+func (a *App) leaveErrorLocked() error {
+	if a.cfg.Mode != ModePlay {
+		return fmt.Errorf("%s mode has no loop to leave from", a.cfg.Mode)
+	}
+	if why := sessionRoles[a.sessionRoleLocked()].leave; why != "" {
+		return errors.New(why)
+	}
+	switch {
+	case a.dialling.Load():
+		return errors.New("a join is already being dialled")
+	case a.leaving.Load():
+		return errors.New("this run is already leaving its session")
+	case a.dismissed.Load() || a.restart.Load() != nil:
+		return errRunReplaced
+	}
+	return nil
+}
+
+// leaveLocked asks Loop to take this run out of its session, which it does off the
+// world lock: closing a port waits for its handshakes, and they take that lock.
+// Caller MUST hold updateMutex.
+func (a *App) leaveLocked() error {
+	if err := a.leaveErrorLocked(); err != nil {
+		return err
+	}
+	a.leaving.Store(true)
+	a.ctx.SetStatusMessage("Leaving the session...", parameter.StatusNotice)
+	a.log.Info("session", "msg", "leave requested", "tick", a.Position().Tick)
+	return nil
+}
+
+// leaveSession takes this run out of its session and goes on with the world as it
+// stands, in a session of its own. Its bots leave first, as they do when it quits,
+// and are seated again only once the door it had is shut. Runs on Loop, which holds
+// no lock: the port it closes waits for handshakes that take the world lock.
+func (a *App) leaveSession() {
+	bots := a.seatGraphs()
+	a.closeSeats()
+	var old engine.NetworkPort
+	err := a.corrections.Leave(func() error {
+		var err error
+		a.world.RunSafe(func() { old, err = a.leaveSessionLocked() })
+		return err
+	})
+	if port, ok := old.(interface{ Close() error }); ok {
+		_ = port.Close()
+	}
+	a.leaving.Store(false)
+	a.world.RunSafe(func() {
+		switch {
+		case err != nil:
+			a.log.Warn("session", "msg", "session not left", "error", err.Error())
+			a.ctx.SetStatusMessage("Leave: "+err.Error(), parameter.StatusAlert)
+		case len(bots) > 0:
+			a.log.Info("session", "msg", "session left", "tick", a.Position().Tick, "bots", len(bots))
+			a.ctx.SetStatusMessage("Left the session; playing on with your bots", parameter.StatusNotice)
+		default:
+			a.log.Info("session", "msg", "session left", "tick", a.Position().Tick)
+			a.ctx.SetStatusMessage("Left the session; playing on alone", parameter.StatusNotice)
+		}
+		// Into whichever session the run is in now: the one it could not leave, else its own.
+		for _, spec := range bots {
+			if err := a.addSeatLocked(spec); err != nil {
+				a.log.Warn("app", "msg", "bot not seated", "graph", spec, "error", err.Error())
+				a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
+			}
+		}
+	})
+}
+
+// leaveSessionLocked reopens the world in a session of this run's own and forgets
+// the one it was in, whose transport it returns for the caller to close off the
+// lock. Caller MUST hold updateMutex.
+func (a *App) leaveSessionLocked() (engine.NetworkPort, error) {
+	// A run being replaced is not left: what replaces it decides where it goes.
+	if a.dismissed.Load() || a.restart.Load() != nil {
+		return nil, errRunReplaced
+	}
+	old, roster := a.sessionTransportLocked(), a.worldRosterLocked()
+	local := network.PeerID(a.world.LocalParticipant())
+	// Nothing names the session left: not the address a restart would go back to,
+	// nor the name the next one would answer to.
+	cfg := a.cfg
+	a.cfg.JoinAddress, a.cfg.HostAddress, a.cfg.SessionName = "", "", ""
+	if err := a.openSessionLocked(); err != nil {
+		a.cfg = cfg
+		return nil, err
+	}
+	for _, sys := range a.world.Systems() {
+		if s, ok := sys.(interface{ LeaveSession() }); ok {
+			s.LeaveSession()
+		}
+	}
+	a.reach.Close()
+	// Every link the drops were for closes unread with the port.
+	a.seatsMu.Lock()
+	a.dropped = nil
+	a.seatsMu.Unlock()
+	// Gone from this world before an identity is handed out again: one of theirs
+	// given to a bot would be the participant a departure still pending removes.
+	a.dropAbandonedLocked(roster, local)
+	a.scheduler.SettleLocked()
+	return old, nil
 }
 
 // sessionTransport returns the attached endpoint, nil when this run has none. The

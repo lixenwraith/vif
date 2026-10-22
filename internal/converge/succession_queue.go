@@ -66,6 +66,26 @@ func (c *Corrections) driveAuthority() {
 	u.drive()
 }
 
+// Leave ends this instance's part in its session: reopen writes the session it goes
+// on in, under the apply lock so nothing resolved under the old term installs past
+// it, and from then on this instance authors. What the old session still has queued
+// here goes with it.
+func (c *Corrections) Leave(reopen func() error) error {
+	c.applyMu.Lock()
+	defer c.applyMu.Unlock()
+	if err := reopen(); err != nil {
+		return err
+	}
+	c.inboxMu.Lock()
+	c.inbox = nil
+	c.inboxMu.Unlock()
+	c.authorityMu.Lock()
+	c.authorityIn, c.peersLost = nil, nil
+	c.authorityMu.Unlock()
+	c.BecomeAuthority(network.HandoffRecord{Term: c.authority.Term(), Authority: c.authority.Local()})
+	return nil
+}
+
 // BecomeAuthority turns a receiver into the publisher for a new term, seeded from
 // the last whole capture it installed in this run. That capture is the one every
 // other survivor installed too, so it is already the baseline a delta may name —

@@ -48,8 +48,8 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 A bot belongs to the run that started it, its holder, and joins on an in-process
 stream the holder serves, which spends no join budget. A run in no session first
 opens one with no listener, which only its bots can join, so a browser seats bots
-solo too. `:host` opens that session to others, and `:join` takes the bots along
-into the session it joins.
+solo too. `:host` opens that session to others, `:join` takes the bots along
+into the session it joins, and `:leave` takes them out of one with the run.
 
 | Bot of | Admitted | Leaves when |
 |---|---|---|
@@ -66,6 +66,8 @@ into the session it joins.
   follows `-no-advertise` like any other.
 - `:bot drop <slot>` drops one of your bots; the host may drop any bot.
   `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
+- `:leave` takes your bots out of the session with you: they leave it first and
+  are seated again, on fresh cursors, in the session your run goes on in.
 - A dropped person starts a new local game without its bots; a dropped watched or
   headless run stops. Dropping ends membership; it is not a ban.
 - A headless bot ends once its host leaves and no participant, itself included,

@@ -151,15 +151,18 @@ func (r *Reach) Forget(id network.PeerID) {
 	r.mu.Unlock()
 }
 
-// Close releases the listening port, which is the run's rather than the transport's.
+// Close releases the listening port, which is the run's rather than the transport's,
+// and the address declared on it: a run that left its session is reachable at
+// nothing that session was told.
 func (r *Reach) Close() {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	ln := r.listener
-	r.listener = nil
+	r.listener, r.declared = nil, ""
 	r.mu.Unlock()
+	r.statListening.Store(false)
 	if ln != nil {
 		_ = ln.Close()
 	}
@@ -207,7 +210,7 @@ func (r *Reach) dialSuccessor() {
 		return
 	}
 	if addr, found := u.Chain().Lookup(successor); found {
-		r.dial(successor, addr)
+		r.dial(dialer, successor, addr)
 	}
 }
 
@@ -234,18 +237,20 @@ func (r *Reach) retrySuccession() {
 			return // reachable already; the record arrives on that link
 		}
 		if addr, found := chain.Lookup(id); found {
-			r.dial(id, addr)
+			r.dial(dialer, id, addr)
 		}
 	}
 	r.statAttempts.Add(1)
 }
 
 // dial opens one peer link, at most one attempt per participant at a time and off
-// this loop: a connect to an address nothing answers takes the whole timeout.
+// this loop: a connect to an address nothing answers takes the whole timeout. It
+// opens on the transport it was decided on, which a :leave may have replaced since
+// with one whose session the far end is not in.
 //
 // A link opened during a succession is announced: the record that named the new
 // authority was flooded before this link existed, so the far end has to be asked.
-func (r *Reach) dial(id network.PeerID, addr string) {
+func (r *Reach) dial(dialer engine.PeerDialingPort, id network.PeerID, addr string) {
 	r.mu.Lock()
 	if r.dialing[id] {
 		r.mu.Unlock()
@@ -260,10 +265,6 @@ func (r *Reach) dial(id network.PeerID, addr string) {
 			delete(r.dialing, id)
 			r.mu.Unlock()
 		}()
-		dialer, ok := r.inst.Transport().(engine.PeerDialingPort)
-		if !ok {
-			return
-		}
 		if err := dialer.DialPeer(addr); err != nil {
 			r.log.Debug("net", "msg", "peer dial failed",
 				"peer", uint64(id), "address", addr, "error", err.Error())

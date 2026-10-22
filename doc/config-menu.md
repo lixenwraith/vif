@@ -41,7 +41,7 @@ unavailable in this run`).
 |---|---|
 | Game | Pause; a new game; a row per scenario the configuration roots hold, which starts it; another scenario by name or path. |
 | Bots | Add bots by count and policy; remove a bot held by this run or cancel its admission. |
-| Multiplayer | Host this run, join an existing session, request an allocated session, inspect status, drop a player with its bots or an individual bot (host only). |
+| Multiplayer | Host this run, join an existing session, request an allocated session, leave the session, inspect status, drop a player with its bots or an individual bot (host only). |
 | Audio | Music, sound effects, effects volume in 5% steps. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
@@ -115,6 +115,12 @@ server controls capacity, scenarios, quotas and availability; refusals appear
 in the status bar and preserve the current run. The form cannot ask for the
 session's own bots; the Bots page adds bots held by your run after joining.
 
+**Leave the session** runs `:leave`: the run plays on in a session of its own from
+where this one stands, its bots seated again beside it, and the others play on
+without it. A solo run, a session holding only your own bots, a pending join, or
+a driven run without the play loop disables it. See
+[Multiplayer §5.4](multi-player.md#54-leaving-a-session).
+
 ## Key binding and persistence
 
 The `config_menu` action is bound to `ctrl_g` and `f10` in `normal_keys`,
@@ -122,7 +128,7 @@ The `config_menu` action is bound to `ctrl_g` and `f10` in `normal_keys`,
 use `-k`) to add or change its keys; `:g` remains available. Forms use the
 text-key bindings, while menu navigation uses overlay bindings.
 
-Action rows (`Enter`) run the command they name and close the menu: `:n`,
+Action rows (`Enter`) run the command they name and close the menu: `:n`, `:leave`,
 `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`
 and `:replay restart`; a scenario row and the Scenario by name form submit
 `:n <scenario>` the same way. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the

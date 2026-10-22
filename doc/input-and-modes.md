@@ -339,8 +339,9 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:free [on\|off]`, `:f` | Toggle or set free mouse. |
 | `:auto [on\|off\|main]`, `:a` | Cycle or set automatic fire. |
 | `:mouse enable\|disable\|free`, `:m` | Control terminal mouse input. |
-| `:host <addr> [host\|migrate]` | Open this running game to participants (`:host :7777`), under the authority policy named: `host` ends the session with this participant, `migrate` hands it to a survivor. On a run whose session holds only its bots, opens that session; refused while hosting or in any other session. |
-| `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser looks a `vif://` link up on its site. Refused while in a session other than one holding only this run's bots, which come along. The game plays on while the dial runs and is replaced only once the host admits it; a refusal leaves it as it was, and a join that fails after that starts a solo game. |
+| `:host <addr> [host\|migrate]` | Open this running game to participants (`:host :7777`), under the authority policy named: `host` ends the session with this participant, `migrate` hands it to a survivor. On a run whose session holds only its bots, opens that session; refused while hosting or in any other session, which `:leave` leaves first. |
+| `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser looks a `vif://` link up on its site. Refused while in a session other than one holding only this run's bots, which come along, so `:leave` any other first. The game plays on while the dial runs and is replaced only once the host admits it; a refusal leaves it as it was, and a join that fails after that starts a solo game. |
+| `:leave` | Leave the session and play on in one of your own from where the world stands, as the same participant: your bots leave with you and are seated again with fresh cursors, and the run is then in a session like the one `:bot add` opens on a solo run, which `:host` opens to others and `:join` replaces. Those left behind see you go as a lost link. Refused on a solo run, on one whose session holds only its own bots, and on a server. |
 | `:session` | Report the session role, address, participant, cursor slot, peer links, tick and map latch, then the authority, reachability, slowest link and snapshot cadence. |
 | `:bot [add [N[:graph]\|graph]\|drop <slot>]` | List your bots; add one or N using `default` when omitted; drop your bot by slot, or any bot when hosting. Decimal `10`, hex `A` and `0xA` name the same slot. |
 | `:player [drop <slot>]` | List all players and bots. Host-only removal drops the player and its bots, or one bot alone; uses the same slot grammar. |
@@ -370,6 +371,18 @@ The event registry validates `:emit` names and uses generated payload type
 metadata to decode optional inline TOML. Rows from `:system` down are mainly
 developer and authoring controls.
 
+In a live session, pause, speed, step, breakpoints, system mutation, raw `:emit`
+and FSM region operations are refused because applying them to only one scheduler
+would desynchronise shared state. Pause alone is allowed to the authority while
+every other participant is its own bot, which stands still with it; an arrival
+ends the pause. Help, telemetry and about overlays stay local and do not pause,
+logging and view controls are local inspection, and resizes retain D-14's locked
+map bounds. Player grants and effect commands remain available because they author
+the invoking cursor or use the ordinary player-to-shared crossing path. The host's
+reset crosses at an agreed tick, so every participant resets; a guest reset is
+refused. `:host`, `:leave` and `:bot` are outside the guard: `:host` creates the
+session the guard protects and refuses a run already in one, `:leave` takes the
+run out of it, and a bot joins through the session's own gate as any participant
 In a live session, pause, speed, step, breakpoints, system mutation, raw `:emit` and
 FSM region operations are refused because applying them to only one scheduler would
 desynchronise shared state. Pause alone is allowed to the authority while every
@@ -393,7 +406,9 @@ These permissions do not apply to a recorded replay.
 lock and `mode/` must never acquire it itself. Such a command reaches
 `engine.SessionController`, whose methods are therefore the lock-held forms; an
 implementation that took the lock again wedges the instance at the tick the command
-lands on, with neither a tick nor a signal able to recover it.
+lands on, with neither a tick nor a signal able to recover it. `:leave` only asks:
+the run's loop serves it outside the lock, because closing the port it leaves waits
+for handshakes that take the world lock.
 
 Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, pinned
 overlay cards and breakpoints are operator-owned and survive plain `:new`. Both

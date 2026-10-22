@@ -280,12 +280,16 @@ func (a *App) forgetSeat(s *seat) {
 	a.seatsMu.Unlock()
 }
 
-// haltSeats halts every seat without waiting and returns them.
+// haltSeats halts every seat without waiting and returns them. Each link closing is
+// then the drop that was asked for, as it is for a seat dropped alone.
 func (a *App) haltSeats() []*seat {
 	a.seatsMu.Lock()
+	defer a.seatsMu.Unlock()
 	seats := slices.Clone(a.seats)
-	a.seatsMu.Unlock()
 	for _, s := range seats {
+		if id := s.id.Load(); id != 0 && !s.halted() {
+			a.dropped = append(a.dropped, id)
+		}
 		s.halt()
 	}
 	return seats

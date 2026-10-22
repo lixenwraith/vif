@@ -625,19 +625,6 @@ and solo play is a session of one. Commands then move participants between sessi
 session's authority; `:join`/`:leave` for a participant; `:drop` for an authority
 removing one; `:merge`/`:split` for whole sessions.
 
-### Leave a session and play on alone
-
-- Priority: P2
-- Affected files: `internal/mode/commands.go`, `internal/app/loop.go`,
-  `internal/help/topics.go`
-
-`:leave` ends this instance's part in a session on purpose and keeps its world: it
-closes its link, so the authority crosses the departure now rather than on a
-timeout, and continues as its own authority. A guest takes the local-fork path it
-takes on losing its host ([Multi-player](multi-player.md) §5.1) without the
-`Host lost` badge; an authority closes its listener first, and its guests succeed
-or fork as its `-authority` policy says.
-
 ### Let an authority drop a participant
 
 - Priority: P2
