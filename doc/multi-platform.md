@@ -257,9 +257,10 @@ flowchart LR
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
 secret. The site's nginx terminates TLS and forwards `Upgrade` without interpreting
 a frame. The allocator checks the method, the identifier's syntax, that the request
-is an upgrade, the `Origin`, the address's join budget, the session's liveness and
-readiness in reconciled Kubernetes state, and its own per-session ceiling; only then
-does it answer the upgrade, and it never accepts an upstream a caller named.
+is an upgrade and the `Origin` before it answers the upgrade. The address's join
+budget, the session's liveness and readiness in reconciled Kubernetes state and its
+own per-session ceiling follow in the stream, as the front door's do, so a page reads
+why it was refused; it never accepts an upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The route is same-origin with the page, so a
