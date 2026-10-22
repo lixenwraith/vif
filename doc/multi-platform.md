@@ -385,7 +385,7 @@ runs, the `render.Surface` frames are flushed to, its size, how long it has held
 a frame, the events it reports in the terminal's vocabulary (`terminal.Event`,
 which a host posts for the keys and pointer cells it maps), and the pointer mode.
 One the player can leave without quitting also reports that on `Away`, and a solo
-run pauses until they return. The terminal is one (`terminalHost`); it is the
+run pauses until they return, drawn undimmed: the pause is not theirs. The terminal is one (`terminalHost`); it is the
 default when `Config.Host` names none. A host also supplies its speakers as
 `Host.Audio`, a writer the mixer streams PCM to in place of a backend found by
 name. Adding a graphical host is therefore composition, not a simulation fork:
@@ -447,7 +447,14 @@ keyboard would, to cycle the channels.
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
-`app.Run`. The view's grid is the cells its pixels hold at a cell 12 dp tall
+`app.Run`. The app opens on a start screen (`StartScreen`) over the view: the logo,
+"Tap to start" under it and a `?` that opens the touch controls. The run starts
+behind it with its player away (`game.Start`'s `away`): its game waits at its first
+tick, drawn undimmed and silent, so the tap lifts the screen off a game already
+built and painted; its keys reach it only from then. A screen turned before the
+tap starts that game over at the new size, as one opened at it would be, since
+nobody has seen it; once played, a resize crops it as on a terminal.
+The view's grid is the cells its pixels hold at a cell 12 dp tall
 (16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
 which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
 `CellMost` (4 to 40 dp, the page's range too) in `CellStep` steps, never under the
@@ -480,7 +487,10 @@ every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse inpu
 off a press on the bar's rows still reaches the run, and the open menu takes the
 pointer. The page does each of these on a touch screen, timed alike: the double
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
-bottom row drawn again above it, and the hold.
+bottom row drawn again above it, and the hold. It shows the same start screen in
+the same words while the program loads, the key strip listed where Android lists
+Back, and the game takes the screen at its first frame, without a tap: Android's
+tap is the one wait, so a lobby's link joins at once.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its

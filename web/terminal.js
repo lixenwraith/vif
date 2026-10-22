@@ -438,10 +438,31 @@ void main() {
             document.getElementById('strip').hidden = false;   // before the first fit
             // Focus raises no keyboard while so marked; hardware keys still type through.
             input.setAttribute('inputmode', 'none');
+            wireStart();
         }
         fit();
         if (touch) wireTouch();
         return true;
+    }
+
+    // === Start screen ===
+    /* A touch screen shows Android's start screen while the program loads: the
+       logo, the loading line under it and ? for the touch controls. The game takes
+       the screen at its first frame, without a tap; Android's is the one a player
+       waits on. */
+    const start = document.getElementById('start');
+
+    function wireStart() {
+        const help = document.getElementById('help');
+        const controls = document.getElementById('controls');
+        start.hidden = false;
+        // A tap here leaves focus on the field, where hardware keys type once the game runs.
+        start.addEventListener('pointerdown', function(e) { e.preventDefault(); });
+        // The ? sits nearer the edge than the window, and would show past its corner.
+        controls.addEventListener('click', function() { controls.hidden = true; help.showModal(); });
+        help.addEventListener('close', function() { controls.hidden = false; });
+        document.getElementById('help-close').addEventListener('click', function() { help.close(); });
+        help.addEventListener('click', function(e) { if (e.target === help) help.close(); });   // the backdrop
     }
 
     /* Launch arguments, from the page and from the query string. This is how a
@@ -557,6 +578,7 @@ void main() {
                 break;
             case 'frame':
                 loading.classList.add('hidden');   // compiled and drawing
+                if (!start.hidden) start.hidden = true;
                 // Every frame is reported drawn, or Go holds the next until it is.
                 try {
                     drawer.apply(msg.data);

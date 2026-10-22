@@ -49,8 +49,10 @@ var (
 // screen's density. files is the app's own directory, holding the user root, logs
 // and journals; wad is where the APK's assets were copied, read as the system root.
 // vif.toml is read and written back as a terminal run does. raster paints frames
-// with the software raster and hands the drawer pixels.
-func Start(files, wad string, width, height int32, density float32, raster bool, speaker Speaker, listener Listener) error {
+// with the software raster and hands the drawer pixels. away starts the run with
+// its player away, behind the start screen: its game waits at its first tick for
+// Resume, and starts over at the view's new grid if that changes before then.
+func Start(files, wad string, width, height int32, density float32, raster, away bool, speaker Speaker, listener Listener) error {
 	tex, err := loadTexture()
 	if err != nil {
 		return err
@@ -79,6 +81,9 @@ func Start(files, wad string, width, height int32, density float32, raster bool,
 		JournalDir: cmp.Or(p.Journal, paths.DefaultJournalDir()), Spawn: core.Go})
 	v := newView(tex, raster, density, settings.Presentation.Cell)
 	v.setGrid(int(width), int(height))
+	if away {
+		v.setAway(true) // before the run reads its reports, so it never starts going
+	}
 	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
