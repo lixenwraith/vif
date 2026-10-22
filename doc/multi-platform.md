@@ -257,9 +257,10 @@ flowchart LR
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
 secret. The site's nginx terminates TLS and forwards `Upgrade` without interpreting
 a frame. The allocator checks the method, the identifier's syntax, that the request
-is an upgrade, the `Origin`, the address's join budget, the session's liveness and
-readiness in reconciled Kubernetes state, and its own per-session ceiling; only then
-does it answer the upgrade, and it never accepts an upstream a caller named.
+is an upgrade and the `Origin` before it answers the upgrade. The address's join
+budget, the session's liveness and readiness in reconciled Kubernetes state and its
+own per-session ceiling follow in the stream, as the front door's do, so a page reads
+why it was refused; it never accepts an upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The route is same-origin with the page, so a
@@ -325,15 +326,16 @@ The page passes `-join=wss://<site>/vif/ws/<session>` through this bridge; typin
 `:join <that link>` in a running solo game does the same without a reload. A
 `ws://` or `wss://` target is dialled whole, and its last path segment is the name
 sent first, as a `vif://` link's is. An `http(s)://` site creates a session, and the
-page joins the WebSocket route the site answers with; a host:port, `tcp://` or
-`vif://` target is refused here (see the address grammar in
-[Services](services-and-networking.md)).
+page joins the WebSocket route the site answers with; a session's `vif://` link
+joins by the route its site lists, and a bare host:port is refused here (see the
+address grammar in [Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash
-that ended it) in place of the terminal. A refused or failed join reads there. The
-page then terminates the Worker and posts it nothing more, so a later resize or
-visibility change cannot replace that reason.
+that ended it) in place of the terminal. A refused or failed join reads there, with
+a hint to reload except after exit 76, a refusal for another build or session that
+a reload would meet again. The page then terminates the Worker and posts it nothing
+more, so a later resize or visibility change cannot replace that reason.
 
 ## 7. External maps and assets
 

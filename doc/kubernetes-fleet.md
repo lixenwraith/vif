@@ -306,7 +306,13 @@ on all of them, so no route can seat a player in a match their link did not name
 |---|---|---|---|
 | Front door | `vif://<site>:7777/<id>` | host forward, the allocator on the node, the pod's 7777 | the allocator, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max` |
 | Direct | `vif://<site>:<nodeport>/<id>` | host forward, the session's NodePort, the pod's 7777 | the pod itself, on the name, its roster and its per-address budget |
-| Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the allocator, the pod's 7777 | the allocator, before the upgrade (below) |
+| Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the allocator, the pod's 7777 | the allocator: another origin before the upgrade, the rest as the front door does (below) |
+
+Any of these links joins from either client. A browser cannot dial a `vif://` link,
+and a link can be typed onto another route's port, so a client that no route answers
+looks the name up in the site's `GET /vif/api/sessions` and dials the routes listed
+for it; a route's own refusal stands
+([Services §6](services-and-networking.md#6-operator-session-surface)).
 
 **The front door.** `vif-allocator` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly
@@ -323,16 +329,17 @@ allocator's (§4).
 
 **Where the browser route's layers stop.** Nginx terminates TLS and forwards the
 `Upgrade`; it never looks at a frame. `vif-allocator` checks method, identifier
-syntax, that the request is an upgrade, `Origin` (403), the player's join budget
-(429), the session's liveness and readiness and the shared ceiling, then the
-handshake (426 for another version, 400 for a bad key), then dials `podIP:7777`
-(502 if that fails); each is a status before any 101. It answers the 101 and splices
-the socket's payload to the pod with the front door's `splice`, `TCP_NODELAY` on
-every socket, and never dials an upstream a caller named. The page wraps its own
-`WebSocket` as a `net.Conn`, and `vif -join wss://…` dials with `pkg/websocket` and
-sends the URL's origin; both send the route's last path segment as the name inside
-the stream, so the pod checks it and the protocol, bounds and handshake are a
-native client's.
+syntax, that the request is an upgrade, `Origin` (403) and the handshake (426 for
+another version, 400 for a bad key), each a status before any 101. It then answers
+the 101 and places the stream with the front door's own placement, 32 at once: the
+route frame, the player's join budget, the session's liveness and readiness and the
+shared ceiling, then `podIP:7777`, each refused as the join reply both clients read,
+since a page is never shown a status. It splices with the front door's `splice`,
+`TCP_NODELAY` on every socket, and never dials an upstream a caller named. The page
+wraps its own `WebSocket` as a `net.Conn`, and `vif -join wss://…` dials with
+`pkg/websocket` and sends the URL's origin; both send the route's last path segment
+as the name inside the stream, which the allocator places and the pod checks, so
+the protocol, bounds and handshake are a native client's.
 
 **What it costs.** The pod sees browsers at the node's address, as it sees
 front-door players, so its budget is one per session for every proxied player and
@@ -350,10 +357,10 @@ The deployment is complete when all of these hold, and the open work of §3 is w
 stands between here and there:
 
 - ten concurrent files have distinct names and matching self-tags;
-- the browser route refuses another origin, an unknown session, a session that is
-  not ready and the connection past `-route-max`, each before the upgrade, and the
-  front door refuses the same before any dial; both refuse a player past its join
-  budget, and the API one past its creation budget;
+- the browser route refuses another origin before the upgrade, and both routes
+  refuse an unknown session, a session that is not ready and the connection past
+  `-route-max` before any dial, with a reason the player reads; both refuse a player
+  past its join budget, and the API one past its creation budget;
 - session pods remain Restricted, tokenless, and free of direct `hostPath`;
 - allocator RBAC cannot read `pods/log`;
 - tmpfs is hard-capped, K3s fails closed without it, and reboot clears it;

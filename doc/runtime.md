@@ -631,7 +631,8 @@ holder's process, on its own goroutine and paced against the authority like any
 guest. It joins on an in-process stream (`seatLink`) its holder serves with the
 handshake it holds when the seat dials: a still-guest's relays the join on its own
 link, an authority's admits it as any joiner. A run in no session first opens one
-with no listener (`openSessionLocked`). A seat plays in its holder's screen: a
+with no listener (`openSessionLocked`), which `:host` later serves a listener on
+(`SocketPort.Serve`). A seat plays in its holder's screen: a
 person's terminal, which `App.handleResize` publishes as it changes and the seat
 takes between two steps, or the holder's `-size`, else a bot's 120x40. A play-mode
 holder's seats stand still while it is paused; a driven holder's step on. A
@@ -982,8 +983,9 @@ is released. The hub stops every initialized service in reverse dependency order
 
 `cmd/vif` configures diagnostics before any terminal enters its alternate screen,
 so startup failures and runtime reports remain recoverable. It exits 1 on any
-returned error, and 73 (`EX_CANTCREAT`) when logging was requested and cannot
-start: a run that cannot write the log it was asked for ends before it plays
+returned error, 76 (`EX_PROTOCOL`) on a refusal for another build or session, which
+a retry would meet again, and 73 (`EX_CANTCREAT`) when logging was requested and
+cannot start: a run that cannot write the log it was asked for ends before it plays
 rather than playing unlogged.
 
 Crash handling is designed around terminal restoration:

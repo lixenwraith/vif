@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -77,7 +78,7 @@ func startBrowserRoute(t *testing.T, sessions sessionAllocator, held *holds, pod
 	server := httptest.NewUnstartedServer(nil)
 	api := newAPIServer(sessions, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
 		allocatorConfig{WebOrigin: "http://" + server.Listener.Addr().String()}, held, nil)
-	_, api.ws.game, _ = net.SplitHostPort(pod.addr)
+	_, api.ws.route.game, _ = net.SplitHostPort(pod.addr)
 	server.Config.Handler = api
 	server.Start()
 	t.Cleanup(server.Close)
@@ -111,23 +112,41 @@ func join(addr, id string) error {
 	return err
 }
 
-// TestTheFrontDoorRefusesBeforeDialling covers each answer a lookup can give short of
-// a pod: none of them may cost that pod a connection, and a dialer that named a
-// session is told why rather than left reading a closed stream.
-func TestTheFrontDoorRefusesBeforeDialling(t *testing.T) {
+// TestEitherRouteRefusesBeforeDialling covers each answer short of a pod over the
+// front door and the browser route alike: none of them may cost that pod a
+// connection, and a dialer that named a session is told why in the stream, which a
+// page reads where it is never shown a status.
+func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
 	pod := startPod(t)
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refusing := &testPod{addr: closed.Addr().String()}
+	_ = closed.Close()
 	for _, tc := range []struct {
 		name, id, want string
 		routeErr       error
+		pod            *testPod
 	}{
-		{"an identifier no session could have", "not-a-session", "no such session", nil},
-		{"an unknown session", routedID, "no such session", errSessionUnknown},
-		{"a full session", routedID, "not accepting players", fmt.Errorf("%w: occupied", errSessionRefusing)},
+		{"an identifier no session could have", "not-a-session", "no such session", nil, pod},
+		{"an unknown session", routedID, "no such session", errSessionUnknown, pod},
+		{"a full session", routedID, "not accepting players", fmt.Errorf("%w: occupied", errSessionRefusing), pod},
+		{"a session with no reachable pod", routedID, "no reachable pod", errSessionUnroutable, pod},
+		{"a pod that refuses the dial", routedID, "no reachable pod", nil, refusing},
 	} {
-		addr := startFrontDoor(t, &fakeSessionAllocator{podIP: "127.0.0.1", routeErr: tc.routeErr},
-			newHolds(1), network.NewAdmissionLimiter(), pod)
-		if err := join(addr, tc.id); err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("%s: joined with %v, want a refusal naming %q", tc.name, err, tc.want)
+		sessions := &fakeSessionAllocator{podIP: "127.0.0.1", routeErr: tc.routeErr}
+		for route, addr := range map[string]string{
+			"front door":    startFrontDoor(t, sessions, newHolds(1), network.NewAdmissionLimiter(), tc.pod),
+			"browser route": startBrowserRoute(t, sessions, newHolds(1), tc.pod) + tc.id,
+		} {
+			err := join(addr, tc.id)
+			if err == nil || !strings.Contains(strings.ToLower(err.Error()), tc.want) {
+				t.Errorf("%s over the %s: joined with %v, want a refusal naming %q", tc.name, route, err, tc.want)
+			}
+			if status := new(websocket.HandshakeError); tc.id == routedID && errors.As(err, &status) {
+				t.Errorf("%s over the %s: refused with %d before the upgrade", tc.name, route, status.Status)
+			}
 		}
 	}
 
@@ -148,6 +167,29 @@ func TestTheFrontDoorRefusesBeforeDialling(t *testing.T) {
 	}
 	if n := pod.accepted.Load(); n != 0 {
 		t.Fatalf("refused dials reached the pod %d time(s)", n)
+	}
+}
+
+// TestAStreamPastThePlacementBoundIsClosedAtOnce: both routes place with place, so
+// neither queues a stream behind silent ones it is still reading.
+func TestAStreamPastThePlacementBoundIsClosedAtOnce(t *testing.T) {
+	router := newTCPRouter(&fakeSessionAllocator{}, newHolds(1), nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	router.placing = make(chan struct{}, 1)
+	silent, placing := net.Pipe()
+	defer silent.Close()
+	go router.place(placing, nil)
+	for deadline := time.Now().Add(time.Second); len(router.placing) == 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a silent stream was never counted as being placed")
+		}
+	}
+	past, dialler := net.Pipe()
+	if upstream, _ := router.place(past, nil); upstream != nil {
+		t.Fatal("a stream past the bound was placed")
+	}
+	_ = dialler.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := dialler.Read(make([]byte, 1)); err != io.EOF {
+		t.Fatalf("a stream past the bound read %v, want it closed", err)
 	}
 }
 
@@ -181,8 +223,8 @@ func TestTheFrontDoorReplaysTheNameAndSplicesBothWays(t *testing.T) {
 }
 
 // TestTheBrowserRouteSplicesTheSocketToThePod: the pod reads the name the browser
-// sent inside the socket rather than one the allocator wrote, bytes pass both ways,
-// and the allocator answers the browser's close.
+// sent inside the socket, bytes pass both ways, and the allocator answers the
+// browser's close.
 func TestTheBrowserRouteSplicesTheSocketToThePod(t *testing.T) {
 	pod := startPod(t)
 	route := startBrowserRoute(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), pod)
@@ -190,7 +232,7 @@ func TestTheBrowserRouteSplicesTheSocketToThePod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := network.NewMessage(network.MsgSessionRoute, []byte("named-inside")).Encode(conn); err != nil {
+	if err := network.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Write([]byte("ping")); err != nil {
@@ -201,21 +243,12 @@ func TestTheBrowserRouteSplicesTheSocketToThePod(t *testing.T) {
 	if _, err := io.ReadFull(conn, echoed); err != nil || string(echoed) != "ping" {
 		t.Fatalf("read back %q, %v", echoed, err)
 	}
-	if got := <-pod.names; got != "named-inside" {
-		t.Fatalf("the pod was sent %q, want the browser's own frame", got)
+	if got := <-pod.names; got != routedID {
+		t.Fatalf("the pod was sent %q, want the name the browser sent", got)
 	}
 	start := time.Now()
 	if err := conn.Close(); err != nil || time.Since(start) > time.Second {
 		t.Fatalf("Close = %v after %s; the allocator did not answer the close", err, time.Since(start))
-	}
-}
-
-// TestANativeDialReadsTheBrowserRoutesRefusal: a refusal before the upgrade reaches
-// vif -join as the allocator's message, as the front door's join reply does.
-func TestANativeDialReadsTheBrowserRoutesRefusal(t *testing.T) {
-	route := startBrowserRoute(t, &fakeSessionAllocator{routeErr: errSessionUnknown}, newHolds(1), startPod(t))
-	if err := join(route+routedID, routedID); err == nil || err.Error() != "No such session" {
-		t.Fatalf("a refused dial returned %v", err)
 	}
 }
 
@@ -272,18 +305,22 @@ func TestAnAddressHasOneJoinBudgetOverBothRoutes(t *testing.T) {
 		t.Fatalf("a dial past the budget returned %v", err)
 	}
 
+	var player atomic.Value
+	server := httptest.NewUnstartedServer(nil)
 	api := newAPIServer(sessions, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
-		allocatorConfig{WebOrigin: "https://site.example", ClientAddressHeader: "X-Real-IP"}, newHolds(1), joins)
-	for player, want := range map[string]int{"127.0.0.1": http.StatusTooManyRequests, "192.0.2.1": http.StatusNotFound} {
-		request := httptest.NewRequest(http.MethodGet, wsRoutePrefix+routedID, nil)
-		request.Header.Set("Connection", "Upgrade")
-		request.Header.Set("Upgrade", "websocket")
-		request.Header.Set("Origin", "https://site.example")
-		request.Header.Set("X-Real-IP", player)
-		response := httptest.NewRecorder()
-		api.ServeHTTP(response, request)
-		if response.Code != want {
-			t.Errorf("a browser at %s was answered %d, want %d", player, response.Code, want)
+		allocatorConfig{WebOrigin: "http://" + server.Listener.Addr().String(), ClientAddressHeader: "X-Real-IP"},
+		newHolds(1), joins)
+	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("X-Real-IP", player.Load().(string))
+		api.ServeHTTP(w, r)
+	})
+	server.Start()
+	defer server.Close()
+	route := "ws://" + server.Listener.Addr().String() + wsRoutePrefix + routedID
+	for _, tc := range []struct{ player, want string }{{"127.0.0.1", "too often"}, {"192.0.2.1", "no such session"}} {
+		player.Store(tc.player)
+		if err := join(route, routedID); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("a browser at %s was answered %v, want a refusal naming %q", tc.player, err, tc.want)
 		}
 	}
 }

@@ -37,15 +37,25 @@ type wsConn struct {
 	err          error
 	readDeadline time.Time
 
-	handlers    []js.Func
+	handlers    []wsHandler
 	closed      chan struct{}
 	closeOnce   sync.Once
 	releaseOnce sync.Once
 }
 
-// sessionLink is the session's WebSocket route, empty where the site publishes none:
-// a page has no socket to dial the front door with.
-func sessionLink(_, wsURL string) string { return wsURL }
+// wsHandler is one listener a link registered, kept so Close can take it off the
+// socket before releasing it.
+type wsHandler struct {
+	event string
+	fn    js.Func
+}
+
+// buildDialsTCP is whether this build has a socket to dial a host:port with; a page
+// has none.
+const buildDialsTCP = false
+
+// routeAnswered is false: a page is not shown whether, or why, a route refused it.
+func routeAnswered(error) bool { return false }
 
 // listenWebSocket is refused: a page has no port to listen on.
 func listenWebSocket(string, time.Duration) (net.Listener, error) {
@@ -101,9 +111,9 @@ func dialWebSocket(target string, timeout time.Duration) (conn net.Conn, err err
 	}
 }
 
-// on registers one retained listener; every one of them is released by Close,
-// because a js.Func the browser still holds keeps this instance alive after the
-// game has finished with it.
+// on registers one retained listener; Close removes and releases every one of
+// them, because a js.Func the browser still holds keeps this instance alive after
+// the game has finished with it.
 func (c *wsConn) on(event string, handle func(js.Value)) {
 	fn := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) > 0 {
@@ -111,7 +121,7 @@ func (c *wsConn) on(event string, handle func(js.Value)) {
 		}
 		return nil
 	})
-	c.handlers = append(c.handlers, fn)
+	c.handlers = append(c.handlers, wsHandler{event, fn})
 	c.ws.Call("addEventListener", event, fn)
 }
 
@@ -223,8 +233,11 @@ func (c *wsConn) Close() error {
 			defer func() { _ = recover() }() // a socket the browser already closed
 			c.ws.Call("close")
 		}()
-		for _, fn := range c.handlers {
-			fn.Release()
+		// Off the socket before released: the browser fires close after close()
+		// returns, and a released func it calls is an error in the page.
+		for _, h := range c.handlers {
+			c.ws.Call("removeEventListener", h.event, h.fn)
+			h.fn.Release()
 		}
 		c.handlers = nil
 	})
