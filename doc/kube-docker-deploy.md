@@ -71,7 +71,7 @@ Site configuration, kept outside this repository. What it must provide:
 |---|---|
 | Forward TCP 7777 and 31700–31709, and only those, to the node | The whole player-facing native surface: the front door and each session's direct port. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
 | Do not rewrite the source address | Services use `externalTrafficPolicy: Local`, and the front door and the session key their admission budgets on the dialling address. |
-| Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and heartbeats every ten seconds. |
+| Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and probes it every 200 ms each way. |
 | Admit the site host to the node's 9080 | The allocator's API and browser route, reached only through the site's nginx (§12). |
 
 Test the public ports from a machine off the host: host-originated traffic can
@@ -353,7 +353,7 @@ the edge in front of 9080:
 | Limit open sockets and handshakes per player on `/vif/ws/<session>` | The allocator's join budget counts dials a minute and `VIF_ALLOCATOR_ROUTE_MAX` connections a session; neither bounds the sockets one player holds open. |
 | Pass `/vif/api/logs` unbuffered, with an hour-long read timeout | It is one long-lived SSE response; a buffer or a short timeout stalls or truncates it. |
 | Overwrite the header `VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER` names with the player's address | It keys the per-player join and creation budgets; with no header named, the API and browser routes charge none. |
-| Keep any idle-connection bound on the TLS path well above ten seconds | A browser session holds one connection for the whole match, and the game's heartbeat crosses it at least every ten seconds each way. |
+| Keep any idle-connection bound on the TLS path above a second | A browser session holds one connection for the whole match; the link probe crosses it every 200 ms each way, and the game drops a link silent for five seconds. |
 
 The page that opens the socket must permit it; `connect-src 'self'` does.
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is a
@@ -651,7 +651,6 @@ Each row below is a dead end until its meaning is known:
 | A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
 | A create answers `504 session_not_ready` and the pod never leaves `Init`. | The config check could not start. `kubectl -n vif describe pod` names the image it could not pull, usually an unpinned one the kubelet deleted at 85% disk: `./deploy/update.sh` imports it again, pinned. |
 | The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers; the browser route needs `Upgrade` and `Connection` forwarded (§12). |
-| A browser session ends after about thirty seconds of a full lobby. | An idle-connection bound on the site's TLS path below the game's ten-second heartbeat (§12). |
 | A NodePort that answered before does not now. | `FORWARD` policy is `DROP`. Docker sets it and a stop does not restore it (§4). |
 | A LogWisp or hand-run Docker build cannot resolve DNS. | A node filter older than its `docker0` rule (`./deploy/update.sh --diff filter`). The session image builds with `--network host` and never crosses `docker0`. |
 | `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log`, as the RBAC check above does. |
