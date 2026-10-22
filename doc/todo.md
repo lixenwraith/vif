@@ -482,6 +482,7 @@ convergence and the authority's per-link fan-out.
 
 - Priority: P2
 - Affected files: `internal/system/network.go`, `internal/converge/correction.go`
+- Guide: [Netcode optimization](netcode-optimization.md#3-approaches) N1, N3, N5, N7, N14
 
 A star's authority sends every participant's epochs and owner syncs down to every
 other, the producer's own copy included: at 16 players 4,444 epochs and 736 syncs a
@@ -492,18 +493,15 @@ command stream was nine tenths of about 64 kB/s both ways before deflate: owner
 syncs, a 595-byte TOML of 27 fields of which 17 were zero, every six ticks per cursor
 and twice over, a fifth; the explosion batch crossings a quarter; the producer's own
 committed echo, which a guest with nothing behind it reads only the marker of, a
-quarter of the downlink. Candidates, each a message-set or cadence change that cuts
-constants where relays (`-relay`) move the quadratic term off the host: one bundle
-per link per tick carrying every source's committed frames with their epoch markers,
-which pacing and fences read, as `MsgBundle` already does upstream; owner syncs as
-deltas, or first `omitempty` on `CursorStatePayload` as other payloads carry; a
-frames-less committed copy to a producer with nothing behind it; shard sets without
-the section summary the receiver already holds; and rounds aligned across peers.
+quarter of the downlink. The candidates are message-set and cadence changes that
+cut constants where relays (`-relay`) move the quadratic term off the host; the
+guide weighs each.
 
 ### Project a correction outside the live lock
 
 - Priority: P2
 - Affected files: `internal/app/snapshot_stage.go`
+- Guide: [Netcode optimization](netcode-optimization.md#n11-less-work-under-the-live-lock) N11
 
 At td an install that projects nothing already holds the live lock 40–70 ms for the
 capture pair, comparison and write, and each projected tick adds up to a simulation
@@ -531,6 +529,7 @@ A bind or dial names the player's next step; these gaps remain:
 - Priority: P3
 - Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`,
   `internal/snapshot/shard.go`
+- Guide: [Netcode optimization](netcode-optimization.md#n6-repairs-as-wide-as-the-keyframe-they-replace) N6
 
 A repair set waits for a busy link in the per-peer queue a body uses, but leaves as
 one frame of up to `SnapshotShardBytesMax` (48 kB), so on a link at the tower's floor
