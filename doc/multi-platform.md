@@ -383,7 +383,7 @@ runs, the `render.Surface` frames are flushed to, its size, how long it has held
 a frame, the events it reports in the terminal's vocabulary (`terminal.Event`,
 which a host posts for the keys and pointer cells it maps), and the pointer mode.
 One the player can leave without quitting also reports that on `Away`, and a solo
-run pauses until they return. The terminal is one (`terminalHost`); it is the
+run pauses until they return, drawn undimmed: the pause is not theirs. The terminal is one (`terminalHost`); it is the
 default when `Config.Host` names none. A host also supplies its speakers as
 `Host.Audio`, a writer the mixer streams PCM to in place of a backend found by
 name. Adding a graphical host is therefore composition, not a simulation fork:
@@ -447,7 +447,11 @@ module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
 `app.Run`. The app opens on a start screen (`StartScreen`) over the view: the logo,
 "Tap to start" under it and a `?` that opens the touch controls. The run starts
-behind it, away and silent, so the tap lifts the screen off a game already built.
+behind it with its player away (`game.Start`'s `away`): its game waits at its first
+tick, drawn undimmed and silent, so the tap lifts the screen off a game already
+built and painted. A screen turned before the tap starts that game over at the new
+size, as one opened at it would be, since nobody has seen it; once played, a resize
+crops it as on a terminal.
 The view's grid is the cells its pixels hold at a cell 12 dp tall
 (16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
 which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
@@ -462,9 +466,8 @@ against `glyph.Raster` pixel for pixel, and posts it on a hardware canvas stretc
 over the whole view, filtered, so no margin is left; a tap maps to its cell in
 proportion. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
-through the XDG variables. `onPause` reaches the run as `Away`, which pauses a
-solo run and draws no frame while the player is gone, and `onResume` hands the
-drawer the whole grid. A tap is a left press and release on its cell and a
+through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
+the drawer the whole grid. A tap is a left press and release on its cell and a
 finger moving while down a left drag, both marked as a finger's (`Event.Touch`), posted once per cell as a terminal reports
 motion, so the cursor follows it and a held one repeats fire; keys and the system
 keyboard's text are terminal key events, Back is Escape. A hardware key's

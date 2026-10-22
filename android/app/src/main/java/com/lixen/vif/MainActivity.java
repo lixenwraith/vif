@@ -65,13 +65,9 @@ public final class MainActivity extends Activity {
         setContentView(root);
     }
 
-    /** The run has started; behind the start screen it waits, away, for the tap. */
-    void started() {
-        if (start != null) {
-            Game.pause();
-        } else {
-            view.requestFocus();
-        }
+    /** The start screen is up: a run started now begins away, waiting behind it for the tap. */
+    boolean waiting() {
+        return start != null;
     }
 
     /** The start screen's tap: it leaves the game it covered, which goes on at once. */
