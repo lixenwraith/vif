@@ -161,6 +161,7 @@ var topics = []topicDef{
 			{Keys: ":h  :?", Desc: "This help"},
 			{Keys: ":g  :config", Desc: "Configuration: bots, multiplayer, audio, controls, display, solo speed and diagnostics; startup settings explain files and flags"},
 			{Keys: ":about", Desc: "Version, engine and licence"},
+			{Keys: ":pause [on|off]  :p", Desc: "Pause or resume the game until the next :pause; in a live session only the host can, every participant stops at the same tick, and a joiner lands paused"},
 			{Keys: ":new  :n", Desc: "New game; in a live session the host resets everyone and a guest is refused"},
 			{Keys: ":new! :n!", Desc: "Restart, clear this operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and the rate to their startup values; logging is untouched"},
 			{Keys: ":n <scenario>", Desc: "Rebuild the run on another scenario, by installed name or path; everything operator-owned restarts with it"},
@@ -190,7 +191,7 @@ var topics = []topicDef{
 			{Keys: "Multiplayer", Desc: "Host, join a link, or request a vif-allocator session with player count and scenario; progress appears in the status bar"},
 			{Actions: []string{"motion_up", "motion_down"}, Scope: input.SectionText, Desc: "Forms: move between fields; Left/Right and Home/End edit the cursor position"},
 			{Actions: []string{"text_confirm"}, Scope: input.SectionText, Desc: "Forms: submit all fields; Escape cancels without submitting"},
-			{Keys: "This run", Desc: "No settings are written to disk. Solo play pauses; live sessions follow the existing pause policy. Replays keep only viewer controls"},
+			{Keys: "This run", Desc: "No settings are written to disk. Solo play pauses while the menu is open and a live session runs on; Game > Pause stops either. Replays keep only viewer controls"},
 		},
 	},
 	{

@@ -353,7 +353,11 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// A live run owns the terminal; the staging world only needs a viewport large
 	// enough to hold the latched map, which is what the live instance already runs.
 	cfg.Width, cfg.Height = a.ctx.Width, a.ctx.Height
-	return NewHeadless(cfg)
+	staging, err := NewHeadless(cfg)
+	if err == nil {
+		staging.world.Project()
+	}
+	return staging, err
 }
 
 // installSharedResolved is InstallShared without the identity check: StageShared has

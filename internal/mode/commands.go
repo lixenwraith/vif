@@ -33,7 +33,7 @@ type CommandResult struct {
 // the switch so the two move together; TestCommandsDocumented cross-checks it
 // against internal/help.
 var commandNames = []string{
-	"flow", "graph", "l", "log", "q", "quit", "n", "new", "new!", "n!",
+	"flow", "graph", "l", "log", "q", "quit", "p", "pause", "n", "new", "new!", "n!",
 	"f", "free", "a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
 	"t", "telemetry", "hud", "d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
 	"boost", "god", "demon", "blossom", "decay", "dust",
@@ -80,6 +80,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleLogCommand(ctx, args)
 	case "q", "quit":
 		return handleQuitCommand(ctx)
+	case "p", "pause":
+		return handlePauseCommand(ctx, args)
 	case "new", "n":
 		return handleNewCommand(ctx, args, false)
 	case "new!", "n!":
@@ -382,17 +384,53 @@ func handleNewCommand(ctx *engine.GameContext, args []string, purge bool) Comman
 // session so every participant resets from one artifact. False means the request
 // was refused and the caller has already been told why.
 func resetGame(ctx *engine.GameContext, purge bool) bool {
+	if ctx.World.LiveSession() && !ctx.World.IsSessionCoordinator() {
+		setCommandError(ctx, "Only the host can reset a live session")
+		return false
+	}
+	// The new game starts running: a reset crossed in a held session would wait
+	// for a tick nobody reaches
+	if ctx.TimeCtl.Held() {
+		ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false})
+	}
 	if ctx.World.LiveSession() {
-		if !ctx.World.IsSessionCoordinator() {
-			setCommandError(ctx, "Only the host can reset a live session")
-			return false
-		}
 		ctx.PushCrossing(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
 	} else {
 		ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
 	}
 	ctx.MacroClearFlag.Store(true) // Signal macro reset
 	return true
+}
+
+// handlePauseCommand starts, ends or toggles a hold: the pause only another :pause
+// ends. A live session's hold is its host's, and stops every participant at once.
+func handlePauseCommand(ctx *engine.GameContext, args []string) CommandResult {
+	held, explicit, ok := parseToggleArg(args)
+	if !ok {
+		setCommandError(ctx, "Usage: :pause [on|off]")
+		return CommandResult{Continue: true}
+	}
+	if !explicit {
+		held = !ctx.TimeCtl.Held()
+	}
+	if why := holdRefused(ctx, held); why != "" {
+		setCommandError(ctx, why)
+		return CommandResult{Continue: true}
+	}
+	ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: held})
+	return CommandResult{Continue: true}
+}
+
+// holdRefused is why this instance may not start, or end, a hold: in a live session
+// that is the host's alone, since what it starts stops everyone.
+func holdRefused(ctx *engine.GameContext, held bool) string {
+	switch {
+	case !ctx.World.LiveSession() || ctx.World.IsSessionCoordinator():
+		return ""
+	case held:
+		return "Only the host can pause a live session"
+	}
+	return "Only the host can resume a live session"
 }
 
 // changeScenario asks the runtime to rebuild this run on another scenario. The

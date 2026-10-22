@@ -92,6 +92,17 @@ func TestAnUnboundedLobbyKeepsWaiting(t *testing.T) {
 	}
 }
 
+// TestTheProbeNamesItsBuildAsARefusalWould: the session list read from the probe
+// says which build each session runs in the words a refusal of another build uses,
+// so a page can be told before it dials.
+func TestTheProbeNamesItsBuildAsARefusalWould(t *testing.T) {
+	t.Parallel()
+	a := supervisedServer(t, 2, lifecycle.Policy{})
+	if got, want := a.probeSnapshot().Detail["build"], buildIdentity().Build; got == "" || got != want {
+		t.Fatalf("the probe names build %q; a refusal names %q", got, want)
+	}
+}
+
 // TestWhatTheProbeReportsAboutAdmission pins the one field that is not the status
 // code. Readiness is "would a dial be admitted", which is neither liveness nor "the
 // session has started". The refusals stay distinguishable: a full session and a

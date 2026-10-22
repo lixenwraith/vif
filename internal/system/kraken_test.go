@@ -2,6 +2,8 @@ package system
 
 import (
 	"math"
+	"math/rand/v2"
+	"slices"
 	"testing"
 	"time"
 
@@ -163,17 +165,17 @@ func TestKrakenWindupKeepsSpinningUntilItsLockedCharge(t *testing.T) {
 		t.Fatal("wind-up did not visibly rotate at least a full turn")
 	}
 	maxBend, leg := 0.0, -1
-	k.TentacleSamples(x, y, func(lx, ly, _, step float64, _ bool) {
-		if step == 0 {
+	for _, p := range k.AppendTentacleSamples(nil, x, y) {
+		if p.Step == 0 {
 			leg++
 		}
-		if step < 0.95 {
-			return
+		if p.Step < 0.95 {
+			continue
 		}
 		base := k.Angle + float64(leg)*math.Pi/4
-		bend := math.Abs(math.Remainder(math.Atan2((ly-y)*2, lx-x)-base, 2*math.Pi))
+		bend := math.Abs(math.Remainder(math.Atan2((p.Y-y)*2, p.X-x)-base, 2*math.Pi))
 		maxBend = max(maxBend, bend)
-	})
+	}
 	if maxBend > math.Pi/4 {
 		t.Fatal("spinning tentacles curved behind the adjacent leg")
 	}
@@ -228,11 +230,12 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	walls, death := NewWallSystem(w).(*WallSystem), NewDeathSystem(w).(*DeathSystem)
 	var leg vmath.Point
 	shape := component.KrakenComponent{}
-	shape.TentacleSamples(90.5, 45.5, func(x, y, _, step float64, _ bool) {
-		if leg == (vmath.Point{}) && step >= 0.5 {
-			leg = vmath.PointAt(x, y)
+	for _, p := range shape.AppendTentacleSamples(nil, 90.5, 45.5) {
+		if p.Step >= 0.5 {
+			leg = vmath.PointAt(p.X, p.Y)
+			break
 		}
-	})
+	}
 	for _, cell := range []vmath.Point{{X: 90, Y: 45}, leg, {X: 150, Y: 80}} {
 		spawnWall(w, cell.X, cell.Y)
 	}
@@ -474,9 +477,9 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	k.State, k.AttackT = component.KrakenAttack, 1
 	s.syncMembers(e, k, motion.PreciseX, motion.PreciseY)
 	outside := false
-	k.TentacleSamples(motion.PreciseX, motion.PreciseY, func(x, y, _, _ float64, _ bool) {
-		outside = outside || x < 0 || y < 0
-	})
+	for _, p := range k.AppendTentacleSamples(nil, motion.PreciseX, motion.PreciseY) {
+		outside = outside || p.X < 0 || p.Y < 0
+	}
 	if !outside {
 		t.Fatal("expected unclamped tentacles beyond the map")
 	}
@@ -632,6 +635,66 @@ func TestKrakenDeathRetiresWholeMemberPool(t *testing.T) {
 		_, positioned := w.Positions.GetPosition(member.Entity)
 		if w.Components.Member.HasEntity(member.Entity) || positioned {
 			t.Fatal("Kraken death left a live hitbox")
+		}
+	}
+}
+
+func TestKrakenSharesItsSamplesWithTheRenderer(t *testing.T) {
+	w, s, e, _ := krakenFixture(t)
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	s.Update()
+	k, _ := w.Components.Kraken.GetPtr(e)
+	motion, _ := w.Components.Kinetic.GetPtr(e)
+	got, ok := w.Resources.KrakenShape.Samples(e, k, motion.PreciseX, motion.PreciseY)
+	if !ok || !slices.Equal(got, k.AppendTentacleSamples(nil, motion.PreciseX, motion.PreciseY)) {
+		t.Fatalf("the tick's pose has no samples of its own: ok=%v, %d samples", ok, len(got))
+	}
+	moved := *k
+	moved.Angle += 0.01
+	if _, ok := w.Resources.KrakenShape.Samples(e, &moved, motion.PreciseX, motion.PreciseY); ok {
+		t.Fatal("a pose the system never sampled took its samples")
+	}
+}
+
+// The footprint lists each cell under the first disc covering it, discs in their
+// order and each disc's cells row by row, which is the order members take them in.
+func TestKrakenFootprintListsCellsByFirstCoveringDisc(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 11))
+	for round := range 2000 {
+		w, h := 1+rng.IntN(90), 1+rng.IntN(50)
+		s := &KrakenSystem{gridW: w, gridH: h, grid: make([]uint8, w*h)}
+		covered := make([]bool, w*h)
+		var want []vmath.Point
+		for range 1 + rng.IntN(60) {
+			var x, y, radius float64
+			switch rng.IntN(3) {
+			case 0: // cell centers and corners with whole radii put cells on the rim
+				x = float64(rng.IntN(w+10)-5) + vmath.CellCenter*float64(rng.IntN(2))
+				y = float64(rng.IntN(h+6)-3) + vmath.CellCenter*float64(rng.IntN(2))
+				radius = float64(rng.IntN(5))
+			case 1:
+				x, y, radius = rng.Float64()*float64(w+20)-10, rng.Float64()*float64(h+10)-5, rng.Float64()*18
+			default:
+				x, y, radius = rng.Float64()*float64(w), rng.Float64()*float64(h), rng.Float64()*parameter.KrakenLegThickness
+			}
+			s.addDisc(x, y, radius)
+			for cy := max(0, int(y-radius)-2); cy < min(h, int(y+radius)+3); cy++ {
+				for cx := max(0, int(x-radius)-2); cx < min(w, int(x+radius)+3); cx++ {
+					dx, dy := float64(cx)+vmath.CellCenter-x, (float64(cy)+vmath.CellCenter-y)*parameter.KrakenRowSquash
+					if dx*dx+dy*dy <= radius*radius && !covered[cy*w+cx] {
+						covered[cy*w+cx] = true
+						want = append(want, vmath.Point{X: cx, Y: cy})
+					}
+				}
+			}
+		}
+		if !slices.Equal(s.cells, want) {
+			t.Fatalf("round %d: footprint %v, want %v", round, s.cells, want)
+		}
+		for i, c := range covered {
+			if c != (s.grid[i] == footCovered) {
+				t.Fatalf("round %d: grid cell %d covered=%v, grid %d", round, i, c, s.grid[i])
+			}
 		}
 	}
 }

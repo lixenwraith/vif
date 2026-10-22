@@ -18,6 +18,7 @@ type instance struct{ a *App }
 
 func (i instance) Position() event.Stamp { return i.a.Position() }
 func (i instance) Driven() bool          { return i.a.cfg.Mode.Driven() }
+func (i instance) Held() bool            { return i.a.ctx.TimeCtl.Held() }
 
 func (i instance) LocalParticipant() uint32 { return i.a.localParticipant() }
 
@@ -150,6 +151,8 @@ func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool) {
 func (i instance) DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID) {
 	i.a.dropAbandonedCursors(roster, local)
 }
+
+func (i instance) Forked() { i.a.endHostlessHold() }
 
 func (i instance) SetStatusMessage(msg string, kind parameter.StatusKind) {
 	i.a.ctx.SetStatusMessage(msg, kind)
@@ -301,6 +304,7 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 		}
 	})
 	if mine {
+		a.endHostlessHold()
 		a.corrections.BecomeAuthority(rec)
 		// Live scripts and bots advance their clock, but need the same publication
 		// pump as their original host; only harnesses publish corrections by hand.
@@ -311,6 +315,12 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 		return
 	}
 	a.corrections.FollowAuthority(rec)
+}
+
+// endHostlessHold ends a hold the lost host set, which nobody else could: this run
+// took the term or goes on alone, and either way its game runs again.
+func (a *App) endHostlessHold() {
+	a.world.RunSafe(func() { a.releaseHold("Resumed") })
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

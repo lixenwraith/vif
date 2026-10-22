@@ -431,8 +431,8 @@ scripted side exactly, so what changes between runs is only what the person did.
 
 `-watch` presents a scripted run on its own terminal over the same manual clock
 and the same script geometry, so the presented and headless forms simulate
-identically. A presented run that is in a session offers pan and quit only: pause,
-step and rate are instance-local and half a session cannot be paused.
+identically. A presented run that is in a session offers pan and quit only: step
+and rate are instance-local, and a session stops only by its host's hold.
 
 The two halves also play each other headless: start the host half as above and
 run `./bin/vif -script script/sparring-guest.toml -join 127.0.0.1:7777` beside it.
@@ -520,7 +520,10 @@ are experiments, not tests.
 scenario and on `td`; run it with `-benchtime=1500x -benchmem` so every run
 simulates the same ticks of one seed and the allocation counts compare exactly, and
 compare `SnapshotSimulation` before and after a change that must not move the
-simulation.
+simulation. `BenchmarkKrakenRegion` beside it measures the Kraken in the
+campaign's kraken region, one `tick` and the `frames` the kraken renderer draws of
+it; its comment shows the browser build's run under Node, where the Kraken's cost
+showed first.
 
 The soak profiles are tiered, because the widest one costs too much for an edit
 cycle; no workflow sets `VIF_SOAK`, so it runs only when asked for.

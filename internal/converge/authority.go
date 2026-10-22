@@ -80,6 +80,7 @@ type Authority struct {
 	contested network.AuthorityTerm
 	lost      network.PeerID
 	since     uint64
+	sinceWall time.Time // [wall] the window a held run counts, with no tick to count
 	reports   map[network.PeerID]bool
 	published bool
 
@@ -387,7 +388,7 @@ func (u *Authority) beginSuccession(lost network.PeerID) {
 	}
 	u.contested = u.term + 1
 	u.lost = lost
-	u.since = tick
+	u.since, u.sinceWall = tick, time.Now() // [wall]
 	u.reports = make(map[network.PeerID]bool, len(u.roster))
 	u.published = false
 	term, local := u.contested, u.local
@@ -460,7 +461,7 @@ func (u *Authority) recordReport(rep network.AuthorityReport) bool {
 // rather than on a schedule.
 func (u *Authority) drive() {
 	u.mu.Lock()
-	contested, since := u.contested, u.since
+	contested, since, sinceWall := u.contested, u.since, u.sinceWall
 	badge, reconcile := u.badgeUntil, u.reconcileAt
 	due := u.chainDue
 	u.chainDue = false
@@ -506,7 +507,8 @@ func (u *Authority) drive() {
 	u.mu.Lock()
 	stillOpen := u.contested == contested
 	u.mu.Unlock()
-	if stillOpen && (fixed || tick > since+parameter.NetworkSuccessionTicks) {
+	heldOut := u.inst.Held() && time.Since(sinceWall) > parameter.NetworkSuccessionWait // [wall]
+	if stillOpen && (fixed || tick > since+parameter.NetworkSuccessionTicks || heldOut) {
 		u.giveUp()
 	}
 }
@@ -518,7 +520,7 @@ func (u *Authority) restartRun(tick uint64) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.contested != 0 {
-		u.since = tick
+		u.since, u.sinceWall = tick, time.Now() // [wall]
 	}
 	if u.badgeUntil != 0 {
 		u.badgeUntil = tick + parameter.NetworkMigrationBadgeTicks
@@ -619,6 +621,7 @@ func (u *Authority) giveUp() {
 		"contested_term", uint64(term), "lost", uint64(lost), "reason", why)
 	u.inst.SetStatusMessage(
 		"Host connection lost; continuing locally from the last authoritative state", parameter.StatusAlert)
+	u.inst.Forked()
 }
 
 // adopt installs a handoff record: the term, the authority, and the membership

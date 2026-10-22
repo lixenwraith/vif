@@ -54,7 +54,7 @@ flowchart LR
 | Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Every fleet pod answers to its session ID, on every route (§9). |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
 | Shutdown | `SIGTERM` drains: readiness false, dials refused with `ErrSessionEnding`, exit when the roster empties or `-drain` elapses. |
-| Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster, map and tick. |
+| Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster, map, tick and build. |
 | Storage | Match state is never persisted. A 256 MiB node tmpfs backs one Retain local PV/PVC for ephemeral public game logs, and an 8 MiB node directory backs a second, read-only one for scenarios. A session Job mounts those two claims and nothing else. Replacing the scenario tree is an atomic rename: a running match keeps the inode its pod mounted, and the next pod gets the new one. |
 
 Kubernetes restart and replication do not create game-level high availability.
@@ -90,8 +90,9 @@ What bounds a stranger:
   on both proxied routes as one budget per address (`-client-joins`), the front
   door's from the dialler and the browser route's from `-client-address-header`. At
   the pod, proxied players share the node's address and so a budget per session;
-- at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine with a
-  `ConnectTimeout` (5 s) and a `ReadTimeout` (30 s);
+- at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine within
+  `ConnectTimeout` (5 s), and every admitted stream closed after
+  `NetworkLinkDeadAfter` (5 s) without a frame;
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
   peer can make the host reserve memory by asking;
 - `admissibleFromSource`, which refuses roster-creating crossings from anyone but

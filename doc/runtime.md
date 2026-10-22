@@ -111,8 +111,8 @@ changes while a peer is linked. A script sharing a session with either must matc
 simulation is unchanged — the same manual clock, the same script geometry, the
 same driver — so a presented run and a headless one of the same script produce
 the same world. Only pan and quit are offered while a presented script is in a
-session; pause, step and rate are instance-local and half a session cannot be
-paused.
+session: step and rate are instance-local, and a session stops only by its host's
+hold (§8).
 
 ### 1.2 The dedicated host
 
@@ -395,7 +395,7 @@ that have arrived, then for each of `n` ticks services a pending reset, steps th
 manual clock by exactly the fixed interval and executes one tick body on the
 caller's goroutine; `App.Settle` drains an injected event group without advancing
 time. `Tick` deliberately executes even when operator pause state is true,
-because the caller is the clock authority.
+because the caller is the clock authority; a hold alone stops it (§8).
 
 For a solo driven App, the resulting run is a pure function of seed, resolved
 config, and injected event groups. A networked script or bot additionally
@@ -635,7 +635,8 @@ with no listener (`openSessionLocked`), which `:host` later serves a listener on
 (`SocketPort.Serve`). A seat plays in its holder's screen: a
 person's terminal, which `App.handleResize` publishes as it changes and the seat
 takes between two steps, or the holder's `-size`, else a bot's 120x40. A play-mode
-holder's seats stand still while it is paused; a driven holder's step on. A
+holder's seats stand still while it is paused; a driven holder's step on. A hold
+stops seats at its tick, as it stops every participant. A
 headless bot or seat ends once its instance forks, and a seat also once its holder
 does.
 
@@ -764,7 +765,7 @@ state loss and is logged when observed.
 | Event queue writes | Lock-free MPSC producer protocol | Any producer; payload lifetime rules still apply. |
 | Event queue consume | World lock as single-consumer token | Scheduler tick, event loop, immediate dispatch, or reset only. |
 | System list | Single-threaded construction, then `World.Seal` | Read-only after `Scheduler.Prepare` seals it. |
-| Pause, rate, step budget, run-until request, standing breakpoints | `TimeControl` atomics; breakpoints as a `BreakSet` replaced whole | `MetaSystem` and commands set them, and the session paths pause and release a lobby or a parked run; the scheduler takes steps and trips requests and breakpoints; input and render read them without the world lock. |
+| Pause, hold, rate, step budget, run-until request, standing breakpoints | `TimeControl` atomics, pause and hold changed under `stopMu`; breakpoints as a `BreakSet` replaced whole | `MetaSystem` and commands set them, and the session paths pause and release a lobby or a parked run and end a hold no command ends; the scheduler takes steps and trips requests and breakpoints; input and render read them without the world lock. |
 | Render buffer | Render orchestrator | Main/render path only; cleared and reused per frame. |
 | Context flags/counters | Atomics | Cross-goroutine reads for macros, mouse, auto-fire, frame/status strings. |
 | APM history | `GameState.mu` plus atomic published totals | Scheduler admits gestures at dispatch and rolls history. |
@@ -805,8 +806,13 @@ logging call sites pass primitive values or copies.
 
 ## 8. Pause semantics
 
-Pause freezes simulation ticks through `PausableClock` and the scheduler's
-pause gate. It does not freeze the whole process:
+The clock stands still for either of two reasons (`TimeControl.IsPaused`): this
+instance's own pause (`SetPaused`, `OwnPause`) — the command line or an overlay in
+a solo run, its player away, a breakpoint hit, `:step` — and a hold (`SetHeld`,
+`Held`), which
+`:pause` or Game → Pause starts and only another ends, so closing a menu leaves it
+standing. Pause freezes simulation ticks through `PausableClock` and the
+scheduler's pause gate. It does not freeze the whole process:
 
 - terminal input and signals still arrive;
 - the event loop still dispatches queued events;
@@ -816,8 +822,8 @@ pause gate. It does not freeze the whole process:
   suspended;
 - `AudioSystem` propagates pause to the mixer, which fades the audio path.
 
-`MetaSystem` is the single owner that keeps pause flag, clock, and pause-change
-events aligned. It refuses a request to enter pause while a transport has a live
+`MetaSystem` is the single owner that keeps both flags, clock, and pause-change
+events aligned. It refuses an own pause while a transport has a live
 peer: stopping one participant would also stop its barrier production and apply
 loop while every peer continued. Command and overlay modes still open, and ask
 for no pause where the run cannot take one (`SessionState.Pausable`). The
@@ -825,8 +831,20 @@ exception is an authority whose every linked participant is a seat it holds
 (`SessionState.SeatsOnly`): its seats stand still with it, and a late joiner's
 admission unpauses it.
 
+A hold is how a session stops: only the host starts or ends one, and it crosses,
+so every participant stops after one agreed tick and a joiner lands held
+([Multi-player §3.6](multi-player.md#36-holding-a-session)). Under a hold the router
+takes no play; the command line, the menus, help, quit, the audio toggle and the
+status bar's menu press still answer. `:step` ends a solo hold, and `:new` any.
+
 In a driven App, pause remains observable/operator state but never revokes the
-caller's authority: `App.Tick` uses the stepped tick path and still advances.
+caller's authority: `App.Tick` uses the stepped tick path and still advances. A
+hold does stop it, since its session's other participants stand at that tick; a
+driven loop then drains its link without stepping, as the host's resume is an
+epoch. A reproduction — a replay, or a correction's projection — applies a hold
+as state and steps through it, since the run it follows took no tick while held;
+an end no command made here is journaled as the request one makes, and a journal's
+opening records a hold standing, so a replay ends its hold where the run did.
 
 ## 9. Time control
 
@@ -872,7 +890,7 @@ These controls are operator pacing under `ModePlay`. Replay records and
 reinjects their events, but its manual clock advances only under
 `ReplayDriver`; viewer `+`/`-` controls presentation pacing instead.
 Speed changes, tick stepping and run-until controls are refused in a live network
-session for the same per-instance-clock reason as pause.
+session for the same per-instance-clock reason as an own pause.
 
 ## 10. Reset and operator state
 

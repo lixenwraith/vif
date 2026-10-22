@@ -915,8 +915,8 @@ interval, the content source, pin and fingerprint, and geometry.
 stands, solo, hosting or joined, and the run plays on as it was. Its replay boots
 afresh from the anchor (non-zero `start_run` or `start_tick`), so the journal's
 first `capture`, flagged `opens`, carries everything that boot would otherwise
-decide: the live shared world, the operator state (`mode`, `paused`, the toggled
-systems that are `off`, the `slot` input follows) and the run's own side (`own`).
+decide: the live shared world, the operator state (`mode`, `paused`, `held`, the
+toggled systems that are `off`, the `slot` input follows) and the run's own side (`own`).
 That is its player domain under the same entity IDs, the camera, APM and gesture
 tracking, timed effects, the player domain's streams, the cells its input has in
 flight, each system's own state (`engine.LocalStateSaver`), the corpus position,

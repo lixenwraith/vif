@@ -76,6 +76,7 @@ One session row has this shape:
     "guests": 0,
     "bots": 0,
     "map": "500x250",
+    "build": "v0.1.0 (1154b8a6)",
     "phase": "waiting",
     "tick": 0
   }
@@ -90,7 +91,8 @@ holds a seat; `bots` is how many of them are bots. A pod that is not ready, or
 whose probe fails, reports `live=false` with its pod phase or `starting`, and
 `routable` is false until its address is a ready endpoint. `scenario` and `size` are
 what the session was created with, kept as annotations on its Job; `map` is the map
-it has, from the first tick on.
+it has, from the first tick on. `build` is the binary the session runs, named as a
+refusal of another build names it, so a page can be told before it dials one.
 
 `limits` names what this deployment will accept — `players_max`, `bots_max`, the
 allowed `log_levels`, most verbose first, and the installed `scenarios`, default
@@ -105,17 +107,16 @@ be granted, and can name the defaults, rather than discovering either by refusal
   "log_levels": ["debug", "info", "warn", "error"],
   "log_level_default": "info",
   "size_default": "first",
-  "scenarios": ["main", "blank", "kraken", "simon", "td"],
+  "scenarios": ["main", "blank", "simon", "td"],
   "scenario_descriptions": {
     "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
     "blank": "An empty arena for experimenting with commands and building scenarios.",
-    "kraken": "Practice fighting a Kraken in an open arena with repeating encounters.",
     "simon": "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
   },
   "scenario_fixed_maps": {"td": "500x250"},
-  "scenario_min_players": {"main": 1, "blank": 1, "kraken": 1, "simon": 1, "td": 1},
-  "scenario_max_players": {"main": 16, "blank": 16, "kraken": 16, "simon": 16, "td": 16}
+  "scenario_min_players": {"main": 1, "blank": 1, "simon": 1, "td": 1},
+  "scenario_max_players": {"main": 16, "blank": 16, "simon": 16, "td": 16}
 }
 ```
 

@@ -60,6 +60,7 @@ func (s *menuSession) LeaveError() error                         { return nil }
 func (s *menuSession) SessionSummary() string                    { return "Test session" }
 func (s *menuSession) Bots() []engine.BotSeat                    { return s.bots }
 func (s *menuSession) Participants() []engine.SessionParticipant { return nil }
+func (s *menuSession) Scenarios() ([]string, string)             { return nil, "" }
 func (s *menuSession) BeginHosting(addr, authority string) error {
 	if s.err != nil {
 		return s.err

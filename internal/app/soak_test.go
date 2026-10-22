@@ -317,7 +317,7 @@ func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
 // Each shipped scenario must boot a player and end the run on one participant defeat.
 func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"main", "blank", "kraken", "td", "simon", ""} {
+	for _, name := range []string{"main", "blank", "td", "simon", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel

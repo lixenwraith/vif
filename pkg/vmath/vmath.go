@@ -10,6 +10,11 @@ import "math"
 // CellCenter is the offset from a cell origin to its center.
 const CellCenter = 0.5
 
+// RoundingMargin is an absolute distance from a threshold past which a value up to
+// about 1e4 compares the same however a few float64 operations rounded it, so a
+// cheaper form of a test can decide outside it and the exact expression within it.
+const RoundingMargin = 1e-9
+
 // DiagonalNum over DiagonalDen scales a radius to its diagonal step in integer
 // cells: 7/10 for 1/√2. A float would round a cell apart past radius 16, and the
 // simulation reproduces the integer form.

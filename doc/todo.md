@@ -53,9 +53,9 @@ graph to. The fleet request carries it once the site exposes one.
 - Affected files: `internal/app/play.go`, `internal/app/seat.go`
 
 A watched bot with seats is in a session, so the viewer forces it unpaused and
-ignores pause keys, and a driven holder's seats get no hold. A person's run pauses
-with only its own bots; let the viewer pause while `SessionState.SeatsOnly` holds,
-and give a driven holder's seats the same hold.
+ignores pause keys. A person's run pauses with only its own bots; the viewer's pause
+key could start the session hold `:pause` starts when the holder is its session's
+host, which already stops its seats at one tick.
 
 ### Name participants beyond their slot
 
@@ -273,6 +273,16 @@ leaves: one hidden or suspended for five minutes must cost the other players
 nothing and resume or rejoin on return, and a session whose last guest was a
 browser must end on its own grace.
 
+### Warn in the site's lobby when a session runs another build
+
+- Priority: P2
+- Affected files: the Hugo site's `vif-lobby.js`, `.github/workflows/release.yml`
+
+Each row of the allocator's session list names the build its session runs
+(`state.build`), as the refusal a page of another build reads does. The site's
+lobby can show it, and warn before a Play that would be refused once it knows the
+page's own build, which the release's web bundle does not name yet.
+
 ## Packaging
 
 Distribution-specific detail lives in [Packaging](packaging.md).
@@ -482,6 +492,7 @@ convergence and the authority's per-link fan-out.
 
 - Priority: P2
 - Affected files: `internal/system/network.go`, `internal/converge/correction.go`
+- Guide: [Netcode optimization](netcode-optimization.md#3-approaches) N1, N3, N5, N7, N14
 
 A star's authority sends every participant's epochs and owner syncs down to every
 other, the producer's own copy included: at 16 players 4,444 epochs and 736 syncs a
@@ -492,18 +503,15 @@ command stream was nine tenths of about 64 kB/s both ways before deflate: owner
 syncs, a 595-byte TOML of 27 fields of which 17 were zero, every six ticks per cursor
 and twice over, a fifth; the explosion batch crossings a quarter; the producer's own
 committed echo, which a guest with nothing behind it reads only the marker of, a
-quarter of the downlink. Candidates, each a message-set or cadence change that cuts
-constants where relays (`-relay`) move the quadratic term off the host: one bundle
-per link per tick carrying every source's committed frames with their epoch markers,
-which pacing and fences read, as `MsgBundle` already does upstream; owner syncs as
-deltas, or first `omitempty` on `CursorStatePayload` as other payloads carry; a
-frames-less committed copy to a producer with nothing behind it; shard sets without
-the section summary the receiver already holds; and rounds aligned across peers.
+quarter of the downlink. The candidates are message-set and cadence changes that
+cut constants where relays (`-relay`) move the quadratic term off the host; the
+guide weighs each.
 
 ### Project a correction outside the live lock
 
 - Priority: P2
 - Affected files: `internal/app/snapshot_stage.go`
+- Guide: [Netcode optimization](netcode-optimization.md#n11-less-work-under-the-live-lock) N11
 
 At td an install that projects nothing already holds the live lock 40–70 ms for the
 capture pair, comparison and write, and each projected tick adds up to a simulation
@@ -526,11 +534,32 @@ A bind or dial names the player's next step; these gaps remain:
 - A rejoin shows nothing for up to `SessionRejoinWindow`.
 - Windows' WSAE codes miss `plainNetError` and keep the system's words.
 
+### Close the edges of a session hold
+
+- Priority: P2
+- Affected files: `internal/app/host.go`, `internal/app/relay.go`,
+  `internal/app/join.go`, `internal/system/meta.go`, `internal/app/script.go`
+
+The host's hold ([Multi-player](multi-player.md#36-holding-a-session) §3.6) leaves
+these gaps:
+- A join that meets a hold mid-gate fails and is retried until the host resumes: a
+  relay's gate, and a host's whose playout-lead wait the hold cuts short, wait for
+  a capture past the held tick. Both could gate as a held host does.
+- A joiner's landing hold is not journaled, so a guest journal recorded across a
+  join into a held session replays the install running and the host's resume
+  there announces nothing. The world a join installs could carry it, as an
+  opening carries a hold.
+- `:pause off` before the host's own hold has landed does nothing, and the hold
+  then needs another `:pause`. The end could apply at the landing instead.
+- A script that `:pause`s itself never resumes: its driven loop takes no step
+  while held, so its timeline never reaches the next action. Refuse it there.
+
 ### Pace repairs as bodies are paced
 
 - Priority: P3
 - Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`,
   `internal/snapshot/shard.go`
+- Guide: [Netcode optimization](netcode-optimization.md#n6-repairs-as-wide-as-the-keyframe-they-replace) N6
 
 A repair set waits for a busy link in the per-peer queue a body uses, but leaves as
 one frame of up to `SnapshotShardBytesMax` (48 kB), so on a link at the tower's floor
@@ -839,6 +868,20 @@ left needs a compromise: a coarser table for the ring Gaussian keyed by the
 squared plane distance, fewer jagged buckets, or ring evaluation only inside the
 band the pulse can light. None is visible in principle, none is bit-identical.
 Revisit only if `:d prof` ranks `draw ember` high again.
+
+### Sample the kraken's tentacles more coarsely
+
+- Priority: P3
+- Affected files: `internal/parameter/kraken.go`, `internal/component/kraken.go`
+
+What the kraken still costs scales with its tentacle samples, about 780 discs a
+tick at `KrakenSampleStep` 0.35, which the footprint and the shading each stamp.
+A step of 0.7 in the browser build took the first frame after a tick from about
+0.35 to 0.24 ms and the kraken region's tick from about 0.9 to 0.8 ms, at a
+visible cost over the same poses: 0.6% of drawn cells appear or vanish at the
+edges, 1.8% take another rim glyph and 0.5% another color, and the footprint's
+edges move by a cell in places, so contact and wall clearing shift with them.
+Revisit only if `:d prof` ranks `sys kraken` or `draw kraken` high again.
 
 ## Genetic library
 

@@ -62,6 +62,10 @@ type SessionOffer struct {
 	SnapshotTick  uint64 `json:"snapshot_tick,omitempty"`
 	SnapshotBytes int    `json:"snapshot_bytes,omitempty"`
 
+	// Held says the session stands held at SnapshotTick, so the joiner holds there
+	// too. The crossings still scheduled past that tick follow the capture.
+	Held bool `json:"held,omitempty"`
+
 	// Identity is what the coordinator is. The joiner reads it before it builds a
 	// world, so a peer that cannot be in this session finds out before paying for
 	// the attempt — and the anchor comparison it already performs is left in place,
@@ -582,7 +586,7 @@ func (p *PendingJoin) RequestScenario(digest string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, body, err := readChunked(p, MsgScenarioBody, p.base.ReadTimeout)
+	_, body, err := readChunked(p, MsgScenarioBody)
 	if err != nil {
 		return nil, err
 	}
@@ -605,8 +609,6 @@ func (p *PendingJoin) Peer() PeerID { return cmp.Or(p.offer.Relay, p.offer.Host)
 func (p *PendingJoin) hold(msg *Message) bool {
 	p.gateBytes += uint64(HeaderSize + len(msg.Payload))
 	switch msg.Type {
-	case MsgHeartbeat:
-		return true
 	case MsgLinkProbe:
 		// Answer probes during admission so snapshot transfer is not measured as loss.
 		// An empty pre-world report allows the host to rebase its counters.
@@ -639,6 +641,19 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		return true
 	}
 	return false
+}
+
+// next reads the stream's next frame within ReadTimeout. Past the offer the host
+// streams or probes it, so a stream silent that long has lost its host.
+func (p *PendingJoin) next() (*Message, error) {
+	if p.base.ReadTimeout > 0 {
+		_ = p.conn.SetReadDeadline(time.Now().Add(p.base.ReadTimeout))
+	}
+	msg, err := Decode(p.conn)
+	if ne := net.Error(nil); errors.As(err, &ne) && ne.Timeout() {
+		return nil, plainError{"the host stopped answering", err}
+	}
+	return msg, err
 }
 
 // answerProbe replies to one link probe read off the handshake stream. A failed
@@ -799,7 +814,8 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 }
 
 // WaitStart returns the closed roster before any cursor is built, preserving shared
-// entity creation order. Human lobby time has no deadline; transport closure ends it.
+// entity creation order. Human lobby time has no deadline, but the host probes the
+// stream throughout, so a lost host ends it as a closed stream does.
 func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 	if !p.replied {
 		return SessionOffer{}, errors.New("join handshake has no reply")
@@ -807,10 +823,11 @@ func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 	if p.started {
 		return SessionOffer{}, errors.New("join start gate already received")
 	}
+	defer p.conn.SetReadDeadline(time.Time{})
 	var msg *Message
 	for {
 		var err error
-		if msg, err = Decode(p.conn); err != nil {
+		if msg, err = p.next(); err != nil {
 			return SessionOffer{}, err
 		}
 		if !p.hold(msg) {
@@ -848,7 +865,7 @@ func (p *PendingJoin) ReceiveSnapshot() (uint64, []byte, error) {
 	if !p.offer.CarriesSnapshot() {
 		return 0, nil, errors.New("join start gate carries no capture")
 	}
-	tick, body, err := readSnapshot(p, p.base.ReadTimeout)
+	tick, body, err := readSnapshot(p)
 	if err != nil {
 		return 0, nil, fmt.Errorf("join snapshot: %w", err)
 	}

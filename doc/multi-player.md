@@ -77,6 +77,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is elected only when the chain names no survivor (§5.1, §5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
+| Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
@@ -128,6 +129,7 @@ A correction must not be repairing entity allocation or run numbering.
 |---|---|
 | `EventParticipantJoined` / `EventParticipantDeparted` | creates or destroys a shared cursor |
 | `EventGameResetRequest` | replaces the run |
+| `EventGameHold` | stops every participant's clock after the same tick (§3.6) |
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
 | `EventCursorDefeatState` | folds into `session.any_defeated`, which `MonitorGlobalReset` answers with a new game |
@@ -359,6 +361,29 @@ lost authority costs a player only what the commit bound voids. Every receiver
 takes each source's crossing sequence once (`NetworkSequenceWindow`), whatever
 epoch carries it.
 
+### 3.6 Holding a session
+
+A session stops only as a whole, and only its host stops it. The host's `:pause`
+(Game → Pause) crosses `EventGameHold`, admissible from the authority alone, so
+every participant applies it at one agreed tick, completes that tick and takes no
+other (`TimeControl.SetHeld`). A guest's `:pause` is refused, and a second one
+before the first lands asks nothing more. A held participant still drains its
+links and answers the link probe off the tick, so a hold times nobody out.
+
+The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
+no epoch, so the first one its next tick produces, admitted past a guest's own
+tick (`NetworkResource.OnAuthorityAhead`), resumes that guest. `:new` ends a hold
+before its reset crosses, which would otherwise wait for a tick nobody reaches.
+Taking the term and forking end a hold the lost host left (§5.1). An end no
+command made is journaled as the request a command makes, since a replay has no
+link to hear it.
+
+A joiner admitted to a held session lands held. Its gate captures the held tick
+itself, since a held session never reaches the playout lead past it, and sends
+after the world the crossings still scheduled past that tick
+(`NetworkSystem.PendingAfter`), which a capture there does not contain; the
+offer's `Held` holds the joiner at the world it installed.
+
 ## 4. Correction pipeline
 
 The host publishes one authoritative capture on the session timeline, then serves
@@ -436,9 +461,10 @@ timed on it, since echoes a stalled path releases together arrive microseconds a
 ### 4.1 The playout buffer
 
 The paths deliver worlds of different ages: a whole body is one one-way delay old,
-a selective repair three. Adopting each capture's tick would step the clock by up
-to four one-way delays and every shared actor with it, so a capture behind the
-clock is projected (§3.3) and moves nothing; the buffer is for the other direction.
+a selective repair five — the root, then a round trip each for the index and the
+page hashes. Adopting each capture's tick would step the clock by up to four
+one-way delays and every shared actor with it, so a capture behind the clock is
+projected (§3.3) and moves nothing; the buffer is for the other direction.
 
 A correction describing a tick this instance has not reached, within
 `NetworkHoldTicks`, is held until it has. A manifest ahead of the clock is held the
@@ -571,7 +597,9 @@ The procedure on each survivor is:
    record instead of letting the survivor time out.
 4. **After `parameter.NetworkSuccessionTicks`, give up.** No record arrived, so
    this instance cannot reach the successor and continues as an explicit local
-   fork. Under `-authority host` it gives up at once.
+   fork. Under `-authority host` it gives up at once. A held session takes no
+   tick, so its window runs on the wall (`NetworkSuccessionWait`); taking the term
+   or forking ends the hold, which nobody else could.
 
 Retention *ordering* is deliberately not an eligibility test. With one designated
 candidate there is no alternative to prefer, and a successor a cadence behind a
@@ -827,15 +855,15 @@ growing correction, persistent lag, repeated suffix unavailability, transport
 loss on a healthy local link, or shared actors changing backward after a
 correction.
 
-Pause, speed, step, breakpoints and raw shared mutation (`:system`, `:emit`,
+An own pause, speed, step, breakpoints and raw shared mutation (`:system`, `:emit`,
 `:region`) are refused in a live session. They are instance-local operations and
 cannot stop or mutate only one copy of it; a host whose only links are its own bot
-seats may still pause (`SessionState.SeatsOnly`). The programmatic surface refuses
-by the event's declared class (`App.shareOperator`): `App.SetupLevel` and
-`App.Region` carry `ClassShared` payloads, which `event.OnWire` never transports, so
-no participant may originate one in a live session — the authority included.
-`App.Reset` is `ClassBus`, so it crosses on the authority and is refused on a guest,
-as `:new` is.
+seats may still pause (`SessionState.SeatsOnly`), and the host's hold stops every
+participant (§3.6). The programmatic surface refuses by the event's declared class
+(`App.shareOperator`): `App.SetupLevel` and `App.Region` carry `ClassShared`
+payloads, which `event.OnWire` never transports, so no participant may originate one
+in a live session — the authority included. `App.Reset` is `ClassBus`, so it crosses
+on the authority and is refused on a guest, as `:new` is.
 
 The status bar renders the whole of this as **one badge**, chosen by severity, so a
 worse fact hides a lesser one rather than sitting beside it: `Migrating [n]`,
@@ -850,7 +878,8 @@ where they can be compared against each other.
 ## 8. Remaining gaps
 
 Each entry says what is actually absent rather than what is imperfect, and how to see
-it. Planned multiplayer work is in [the todo list](todo.md#multiplayer).
+it. Planned multiplayer work is in [the todo list](todo.md#multiplayer), and what
+could make the netcode cheaper in [Netcode optimization](netcode-optimization.md).
 
 ### Deferred by decision
 

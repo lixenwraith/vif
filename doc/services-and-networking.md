@@ -417,10 +417,9 @@ where the joiner reads it. The writer takes the frames queued within `NetworkWri
 burst's first and sync-flushes once. Go's levels 1-6 drop their history on a flushed
 block under 128 bytes, which is most bursts; 7 keeps it.
 
-Control messages carry heartbeat, join offer/reply, start/ready gates and
-disconnect notices. `MsgSessionRoute` (0x05) is the exception to the coordinator
-speaking first: a dialer that was given a session name sends it as one frame before
-it reads, so a front door can place the connection on an address serving several
+Control messages carry join offer/reply, start/ready gates and disconnect notices.
+`MsgSessionRoute` (0x05) is the exception to the coordinator speaking first: a
+dialer that was given a session name sends it as one frame before it reads, so a front door can place the connection on an address serving several
 sessions and the session it reaches can refuse a name that is not its own; the
 fleet's allocator is one ([fleet §9](kubernetes-fleet.md#9-the-session-routes)). A
 host started without `-name` expects no such frame.
@@ -457,7 +456,8 @@ resolved D-3 artifact, never the keystroke that produced it.
 protocol times. Everything else says only what this instance sent and how far
 behind the newest tick it has *heard about* it stands, so they are what lets the
 correction cadence follow the link rather than a constant. A probe goes to every
-link each `NetworkProbeInterval`. They are unusual in one way that matters:
+link each `NetworkProbeInterval`, which also keeps a live link inside its read
+deadline (§10). They are unusual in one way that matters:
 **neither ever reaches the game**. `SocketPort` answers a probe from the read
 goroutine and swallows an echo there, `MeshPort` does the same inside `Drain`, so
 what the measurement describes is the wire rather than how often an instance runs
@@ -811,12 +811,15 @@ once as well as counted.
 
 ## 10. Timeouts, limits and security
 
-`network.Config` applies connection/read/write deadlines, heartbeat and silent
-disconnect intervals, read/write buffer sizes, bounded send/receive queues, peer
-cap, handshake budget and optional TLS. Heartbeats are framed control messages and a
-silent connection closes through the normal disconnect path. The defaults send a
-heartbeat every 10 seconds and declare the peer silent after 30 seconds; clean EOF
-is observed immediately.
+`network.Config` applies connection, read and write deadlines, read/write buffer
+sizes, bounded send/receive queues, peer cap, handshake budget and optional TLS.
+Every frame a stream carries after the offer, in a lobby, a join transfer or a
+session, is read within `parameter.NetworkLinkDeadAfter` (5 s). The far end answers
+each `NetworkProbeInterval` (200 ms) probe on receipt, off its tick, so a live link,
+paused or stalled, never comes near it; a stream that silent (a dropped network, an
+expired NAT mapping, a sleeping machine, a frozen tab) closes through the normal
+disconnect path, which starts its departure or a succession. Clean EOF is observed
+immediately.
 
 What the operator surface does not cover:
 
@@ -988,7 +991,7 @@ inside a process nothing can reach.
 
 | Path | Code | Body |
 |---|---|---|
-| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | plain text: `live`, `ready` and a `reason` when either is false on one line, then a `key=value` line each, in key order, for `address`, `bots` (how many of the guests are bots), `capacity`, `clock`, `expires_in` when a countdown is running, `guests`, `map` (`WxH`, from the first tick on), `phase` and `tick` |
+| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | plain text: `live`, `ready` and a `reason` when either is false on one line, then a `key=value` line each, in key order, for `address`, `bots` (how many of the guests are bots), `build` (this binary, as a refusal of another build names it), `capacity`, `clock`, `expires_in` when a countdown is running, `guests`, `map` (`WxH`, from the first tick on), `phase` and `tick` |
 | `/metrics` | always 200 | the status registry in the Prometheus text format |
 
 There is one health path rather than a liveness one and a readiness one. An

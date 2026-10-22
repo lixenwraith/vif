@@ -262,6 +262,13 @@ const (
 	// probes count as lost. A stream loses nothing, so this is a link that stopped.
 	NetworkProbeLostAfter = time.Second
 
+	// NetworkLinkDeadAfter is how long a session stream may go without a frame
+	// before it is closed as lost. The far end answers each probe on receipt, off its
+	// tick, so a live link is never this quiet, a paused or stalled run's included:
+	// only a dropped network, an expired NAT mapping, a sleeping machine or a frozen
+	// tab is.
+	NetworkLinkDeadAfter = 5 * time.Second
+
 	// SnapshotFloorGraceTicks is how far past the floor a receiver waits before
 	// calling its own condition unrecoverable: the floor bounds publication, and a
 	// receiver also pays the transfer and the install. One nominal keyframe period is
@@ -337,6 +344,10 @@ const (
 	// says so. A deadline, never a timer to choose by: the successor is a function of
 	// the roster and chain, and a racing timer could let two instances take one term.
 	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
+
+	// NetworkSuccessionWait is that bound on the wall clock, for a succession that
+	// opens while a hold stands: no tick comes to count it in.
+	NetworkSuccessionWait = NetworkSuccessionTicks * GameUpdateInterval
 
 	// NetworkRejoinPassInterval paces a survivor's walk down the succession list. A
 	// pass tries every candidate once; this is the pause before the list is walked

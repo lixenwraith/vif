@@ -287,6 +287,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	// 8. Transient Resource
 	world.Resources.Transient = NewTransientResource()
 	world.Resources.View = NewViewResource()
+	world.Resources.KrakenShape = NewKrakenShapeResource()
 
 	// 9. Cursor roster; the FSM spawns cursors, so the world starts with none
 	world.Resources.Player = &PlayerResource{status: world.Resources.Status}
@@ -953,6 +954,16 @@ func (ctx *GameContext) SetPaused(paused bool) {
 		return
 	}
 	ctx.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
+}
+
+// Hold starts or ends this instance's hold and, when that changed, tells its systems
+// what the clock now does; what the player is told is the caller's.
+func (ctx *GameContext) Hold(held bool) bool {
+	if !ctx.TimeCtl.SetHeld(held) {
+		return false
+	}
+	ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: ctx.TimeCtl.IsPaused()})
+	return true
 }
 
 // PauseForInput pauses a solo run while the operator types a command or reads an
