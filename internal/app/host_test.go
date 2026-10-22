@@ -1267,6 +1267,37 @@ func TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime(t *testin
 	}
 }
 
+// TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies: a lost link is crossed
+// as a departure that applies a lead later, so its identity is free only then; a
+// dial assigned it in between, as a guest redialling at once was, is the
+// participant that departure disconnects.
+func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, 120, 40)
+	defer host.Close()
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stop := tickInBackground(host)
+	defer stop()
+	guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
+	waitForCursors(t, host, 2)
+	stop()
+	lost := network.PeerID(guest.World().LocalParticipant())
+	_ = port.Close()
+	for deadline := time.Now().Add(socketWait); host.sessionTransport().PeerCount() > 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the host never lost the guest's link")
+		}
+	}
+	host.Tick(1)
+
+	pending, offer := dialSession(t, host.HostAddr())
+	defer pending.Close()
+	if offer.Assigned == lost {
+		t.Fatalf("identity %d was reassigned while its departure was still to apply", lost)
+	}
+}
+
 // An abandoned relayed join leaves by a departure crossing that applies a lead
 // later, so its identity is free only then: a dial assigned it in between, as a
 // person joining right after a dropped probe of the relay's address was, is the

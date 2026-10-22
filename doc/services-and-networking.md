@@ -698,7 +698,8 @@ barrier and the map latch
 in place: the barrier and the bounds are properties of the run, so a stretch with
 no peer attached still stamps its crossings by the lead it last adopted and still
 keeps the bounds every participant adopted. A departure is itself a crossing and lands at that lead
-rather than where the lost link was observed.
+rather than where the lost link was observed, and only then is its identity free: a
+dial in between is assigned another, not one the departure would disconnect.
 
 At the same six-tick cadence, direct neighbours exchange a run/tick/hash sample
 over the exact `SnapshotShared` comparison surface, plus category hashes. A
