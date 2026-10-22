@@ -74,7 +74,7 @@ public final class MainActivity extends Activity {
     private void play() {
         ((FrameLayout) start.getParent()).removeView(start);
         start = null;
-        view.requestFocus();
+        view.takeKeys();
         goOn();
         // Back is the game's Escape, which leaves a mode; the run is quit with :q. On
         // the start screen Back is the system's

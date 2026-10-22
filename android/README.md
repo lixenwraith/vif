@@ -71,7 +71,7 @@ it, and a `?` in the corner that opens the touch controls in a window nearly the
 screen's size, which its ×, Back or a tap outside closes. The run starts behind
 it, paused at its first tick and silent, and a tap anywhere else lifts the screen
 off the game; a screen turned first starts that game over at its new size. Back
-there is the system's.
+there is the system's, and no key reaches the game until the tap.
 A browser on a touch screen shows the same screen in the same words while it loads,
 and starts without a tap.
 

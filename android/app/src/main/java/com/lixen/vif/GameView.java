@@ -98,9 +98,13 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
             }
         });
         scaler.setQuickScaleEnabled(false); // a double tap is special fire, not a zoom handle
-        setFocusable(true);
-        setFocusableInTouchMode(true);
         getHolder().addCallback(this);
+    }
+
+    /** Keys reach the game once the start screen is gone: under it, one would play in a game nobody sees. */
+    void takeKeys() {
+        setFocusableInTouchMode(true);
+        requestFocus();
     }
 
     @Override

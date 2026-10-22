@@ -451,9 +451,9 @@ module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 "Tap to start" under it and a `?` that opens the touch controls. The run starts
 behind it with its player away (`game.Start`'s `away`): its game waits at its first
 tick, drawn undimmed and silent, so the tap lifts the screen off a game already
-built and painted. A screen turned before the tap starts that game over at the new
-size, as one opened at it would be, since nobody has seen it; once played, a resize
-crops it as on a terminal.
+built and painted; its keys reach it only from then. A screen turned before the
+tap starts that game over at the new size, as one opened at it would be, since
+nobody has seen it; once played, a resize crops it as on a terminal.
 The view's grid is the cells its pixels hold at a cell 12 dp tall
 (16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
 which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
