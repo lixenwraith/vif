@@ -99,6 +99,8 @@ config fields.
 
 ```toml
 description = "A short description for scenario selection."
+min_players = 1
+max_players = 4
 macro_files = ["macros.toml"]
 
 [systems]
@@ -126,6 +128,7 @@ only_systems = ["typing", "button"] # or disabled_systems, not both
 | Field | Meaning |
 |---|---|
 | `description` | Optional short scenario summary, carried with the scenario during transfers. |
+| `min_players`, `max_players` | How many players, bots counted, the scenario runs with: `0..parameter.MaxPlayers`, max at least 1 and min. Undeclared, 1 and a full roster. `max_players` is a ceiling beside `-players`, the lower one holding, and a startup lobby waits for `min_players` ([Runtime §1.2](runtime.md#12-the-dedicated-host)); a min of 0 waits for one until a game with nobody in it can run. |
 | `macro_files`, `macros` | Macro libraries and definitions every scenario file may invoke ([TOML macros](toml-macros.md)). |
 | `systems.disabled_systems` | Systems the baseline leaves off. Names are validated against runtime `System.Name()` values. |
 | `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |

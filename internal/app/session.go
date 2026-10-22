@@ -171,16 +171,17 @@ func (a *App) openMidRunJoins() {
 }
 
 // sessionCapacity is how many guests this host will ever hold, excluding itself.
-// `-players` is a ceiling and only a ceiling; unset means the whole roster. What the
-// lobby waits for is lobbyQuorum, the flag's other half. The subtraction is the only
-// difference between the shapes: an interactive host holds one of the cursors
-// itself, a dedicated one holds a roster entry and no slot on the map.
+// `-players` and the scenario's max_players are ceilings and only ceilings, the
+// lower one holding; unset, `-players` means the whole roster. What the lobby waits
+// for is lobbyQuorum. The subtraction is the only difference between the shapes: an
+// interactive host holds one of the cursors itself, a dedicated one holds a roster
+// entry and no slot on the map.
 func (a *App) sessionCapacity() int {
 	n := a.cfg.Participants
 	if n <= 0 {
 		n = parameter.MaxPlayers
 	}
-	n = min(n, parameter.MaxPlayers)
+	n = min(n, a.scenario.MaxPlayers)
 	if a.cfg.Mode.Serves() {
 		return n
 	}
@@ -220,15 +221,39 @@ func (a *App) rosterGuests() (guests, bots int) {
 }
 
 // lobbyQuorum is how many guests the start gate waits for before it closes the lobby
-// and releases tick zero. One, unless `-players` named a party: every guest after
-// the first arrives through the mid-run gate, the same path a reconnect uses. A
-// dedicated host is always this shape, because waiting on a number would make a
-// pod's readiness a function of how many people wanted to play.
+// and releases tick zero: one, or as many as the scenario's min_players needs beside
+// this host's own cursor, unless `-players` named a party on a host that is not
+// dedicated. Every later guest arrives through the mid-run gate, as a reconnect does.
+// A min_players of 0 waits for one: a session with nobody in it parks.
 func (a *App) lobbyQuorum() int {
-	if a.cfg.Mode.Serves() || a.cfg.Participants <= 0 {
-		return 1
+	switch {
+	case a.cfg.Mode.Serves():
+		return max(1, a.scenario.MinPlayers)
+	case a.cfg.Participants <= 0:
+		return max(1, a.scenario.MinPlayers-1)
 	}
 	return a.sessionCapacity()
+}
+
+// rosterPlayers is how many players, bots counted, this run's session holds: its
+// guests, and its own cursor unless it is a dedicated host.
+func (a *App) rosterPlayers() int {
+	if a.cfg.Mode.Serves() {
+		return a.guestCount()
+	}
+	return a.guestCount() + 1
+}
+
+// playersFit refuses a scenario this run cannot play: a `-players` ceiling under
+// its min_players, or a session already holding more than its max_players.
+func (a *App) playersFit(sc resource.Scenario) error {
+	if n := a.cfg.Participants; n > 0 && n < sc.MinPlayers {
+		return fmt.Errorf("-players %d is below scenario %s's min_players %d", n, sc.Name, sc.MinPlayers)
+	}
+	if n := a.rosterPlayers(); n > sc.MaxPlayers {
+		return fmt.Errorf("scenario %s holds at most %d players; this session has %d", sc.Name, sc.MaxPlayers, n)
+	}
+	return nil
 }
 
 // Admission records ownership before a bot can enter the lobby or running roster.

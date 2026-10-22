@@ -48,7 +48,7 @@ flowchart LR
 |---|---|
 | Session unit | One process owns one match timeline. The world is in memory; no replacement pod inherits it. |
 | Authority | The dedicated host's Shared world is canonical; guests predict and accept corrections. |
-| Capacity | `-players` is a ceiling on guests. At capacity the health body reports `ready=false`; the process stays healthy. |
+| Capacity | `-players` is a ceiling on guests, and so is the scenario's `max_players`. At capacity the health body reports `ready=false`; the process stays healthy. |
 | Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. The session's own bots count as occupancy, so a session only they occupy runs until a drain, which sends them away at once, or the Job's one-hour `activeDeadlineSeconds`. |
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed, RNG session or scenario digest differs from the offer it made. The corpus is not among them: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
 | Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Every fleet pod answers to its session ID, on every route (§9). |
@@ -290,7 +290,7 @@ What a cluster has not yet been put through is
 - **`SIGHUP` terminates like any other signal.** No reload contract is planned.
 - **A session ends on emptiness.** There is no gameplay terminal state; if one ever
   exists it attaches to `lifecycle.Controller.Expire` and nothing else changes.
-- **Dedicated lobby:** quorum is one, `-players` is capacity.
+- **Dedicated lobby:** quorum is one, or the scenario's `min_players`; `-players` is capacity.
 - **Map bounds:** a scenario that sets up its own map (td) keeps it; otherwise an
   explicit `-size` wins, and without one the first person sets the shared map, or
   the session's own bots at 120x40 when it seats any.

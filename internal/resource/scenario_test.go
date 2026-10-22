@@ -3,6 +3,7 @@ package resource
 import (
 	"bytes"
 	"compress/flate"
+	"fmt"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"io/fs"
 	"os"
@@ -205,6 +206,37 @@ func TestAMapPlacesCursorsUnlessItSaysNot(t *testing.T) {
 		}
 		if s.CursorsOffMap != c.offMap {
 			t.Errorf("%q: cursors off the map %t, want %t", c.table, s.CursorsOffMap, c.offMap)
+		}
+	}
+}
+
+// TestAScenarioDeclaresItsPlayerRange: min_players and max_players default to one
+// and a full roster, min may be 0, and a range nobody could join or that is upside
+// down or past the roster is refused.
+func TestAScenarioDeclaresItsPlayerRange(t *testing.T) {
+	for _, c := range []struct {
+		preamble string
+		min, max int
+		refused  bool
+	}{
+		{"", 1, parameter.MaxPlayers, false},
+		{"min_players = 0\nmax_players = 2\n", 0, 2, false},
+		{"min_players = 3\n", 3, parameter.MaxPlayers, false},
+		{"max_players = 0\n", 0, 0, true},
+		{"min_players = 3\nmax_players = 2\n", 0, 0, true},
+		{fmt.Sprintf("max_players = %d\n", parameter.MaxPlayers+1), 0, 0, true},
+		{"min_players = \"1\"\n", 0, 0, true},
+	} {
+		entry := c.preamble + "[regions.main]\nfile = \"main.toml\"\n"
+		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
+		s, err := ReadScenario("players", fsys, "scenario.toml")
+		switch {
+		case c.refused && err == nil:
+			t.Errorf("%q was taken", c.preamble)
+		case !c.refused && err != nil:
+			t.Errorf("%q: %v", c.preamble, err)
+		case !c.refused && (s.MinPlayers != c.min || s.MaxPlayers != c.max):
+			t.Errorf("%q: players %d..%d, want %d..%d", c.preamble, s.MinPlayers, s.MaxPlayers, c.min, c.max)
 		}
 	}
 }

@@ -160,6 +160,9 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if sc.Digest() == a.scenario.Digest() {
 		return false, nil // already running these bytes; the caller resets instead
 	}
+	if err := a.playersFit(sc); err != nil {
+		return false, err
+	}
 	req := &restartRequest{Scenario: name, Bots: a.seatGraphs()}
 	if port != nil {
 		// Where this run's participants come back to. The address it already
