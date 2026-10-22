@@ -572,9 +572,10 @@ manual smoke test because unit tests do not reproduce every emulator.
 `.github/workflows/test.yml` runs on pushes to `main`, `master`, `develop` and
 `claude/*`, and on pull requests to `main`, `master` or `develop`. Its single job,
 on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profiles
-and targets, the window and Android module tests, and `go test -race -v ./...`
-with `GORACE` halting on the first race and writing `race.*`, which is uploaded for
-seven days on failure.
+and targets, the window and Android module tests, the browser build's tests under
+Node (`pkg/browser` and the `Browser` tests of `internal/network`, through
+`go_js_wasm_exec`), and `go test -race -v ./...` with `GORACE` halting on the first
+race and writing `race.*`, which is uploaded for seven days on failure.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
 regenerates the registries and, on a tag, fails if that changed the tree, vets
