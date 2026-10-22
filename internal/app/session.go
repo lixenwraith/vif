@@ -149,9 +149,10 @@ func (a *App) admitLateJoiner(id network.PeerID) {
 	// Before the gate, not after it: the gate waits for a capture a playout lead
 	// ahead of the current tick, so a session parked for having nobody in it would
 	// time out every dial that came to end that. A pause its own bots allowed ends
-	// the same way, since the arrival is somebody the pause does not hold.
+	// the same way, since the arrival is somebody the pause does not hold; a hold
+	// does hold it, and its gate needs no lead.
 	a.resumeVacant()
-	if a.ctx.TimeCtl.IsPaused() {
+	if a.ctx.TimeCtl.OwnPause() {
 		a.ctx.SetPaused(false)
 		a.scheduler.DispatchEventsImmediately()
 	}

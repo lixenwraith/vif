@@ -646,3 +646,77 @@ func TestAParticipantWithNoPathAdoptsTheLinkThatReturnsItsEpochs(t *testing.T) {
 		t.Fatalf("after its epoch came back through participant 2 it sent %v, want one bundle to 2", got)
 	}
 }
+
+// TestAJoinerAtAHeldTickHearsWhatIsScheduledPastIt: a held session stands at one tick
+// with crossings still due after it, which a joiner given that world never heard.
+// They go to it as the committed epochs they went out in; an own crossing not yet
+// sent goes out in its own epoch, and a void one applies nothing.
+func TestAJoinerAtAHeldTickHearsWhatIsScheduledPastIt(t *testing.T) {
+	t.Parallel()
+	event.EnsureRegistry()
+	host := sessionSystem(t, 1, 99, &linkedPort{peers: []uint32{2}})
+	host.Flush(99)
+	host.world.Resources.Event.Queue.RebaseStamp(0, 100)
+	stale := 100 - uint64(parameter.NetworkCommitLateTicks) - 1
+	host.scheduleCrossings(2, rawBatch(t, 2, 98, 101, 103, stale))
+	cross := func() {
+		t.Helper()
+		if !host.Cross(event.GameEvent{Type: event.EventGoldJumpRequest, Domain: core.DomainPlayer}) {
+			t.Fatal("the barrier did not take an own crossing")
+		}
+	}
+	cross()
+	host.Flush(100)
+	cross()
+
+	type epoch struct {
+		source   uint32
+		produced uint64
+		applies  []uint64
+	}
+	var got []epoch
+	for _, b := range host.PendingAfter(100) {
+		if !b.Committed {
+			t.Fatalf("participant %d's epoch %d goes out raw", b.Source, b.ProducedTick)
+		}
+		e := epoch{source: b.Source, produced: b.ProducedTick}
+		for _, f := range b.Frames {
+			e.applies = append(e.applies, f.ApplyTick)
+		}
+		got = append(got, e)
+	}
+	lead := uint64(parameter.NetworkBarrierDelayTicks)
+	want := []epoch{{2, 98, []uint64{101, 103}}, {1, 100, []uint64{100 + lead}}}
+	if !slices.EqualFunc(got, want, func(a, b epoch) bool {
+		return a.source == b.source && a.produced == b.produced && slices.Equal(a.applies, b.applies)
+	}) {
+		t.Fatalf("a joiner at tick 100 is sent %+v, want %+v", got, want)
+	}
+}
+
+// TestOnlyTheAuthorityRunningPastAGuestResumesIt: a held authority sends no epoch, so
+// one it produced past a guest's tick is its resume. One at the guest's own tick, or
+// another participant's past it, is not.
+func TestOnlyTheAuthorityRunningPastAGuestResumesIt(t *testing.T) {
+	t.Parallel()
+	guest := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1, 3}})
+	resumed := 0
+	guest.world.Resources.Network.OnAuthorityAhead = func() { resumed++ }
+	epoch := func(source uint32, produced uint64) []byte {
+		t.Helper()
+		body, err := event.EncodeWireBatch(event.WireBatch{Source: source, ProducedTick: produced, Committed: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+	guest.scheduleCrossings(1, epoch(1, 100))
+	guest.scheduleCrossings(3, epoch(3, 101))
+	if resumed != 0 {
+		t.Fatalf("epochs at the guest's tick and from another participant resumed it %d times", resumed)
+	}
+	guest.scheduleCrossings(1, epoch(1, 101))
+	if resumed != 1 {
+		t.Fatalf("the authority's epoch past the guest resumed it %d times, want 1", resumed)
+	}
+}

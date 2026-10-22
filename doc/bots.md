@@ -99,9 +99,11 @@ only, and a departed slot may be reused.
 
 ## Pause, speed and session lifetime
 
-- A host may pause only while every other participant is its own bot; its bots
-  stand still with it, and anyone joining ends the pause. A guest, a host with
-  other people in, or a watched bot in a session cannot pause.
+- A host's `:pause` stops every participant at the same tick, bots included, until
+  its next `:pause`; a bot in a held session waits with it. A menu or the command
+  line pauses a host only while every other participant is its own bot; its bots
+  stand still with it, and anyone joining ends that pause. A guest or a watched
+  bot in a session cannot pause.
 - Speed changes are refused in a live session, one only your bots share included.
   `-speed max` is for one solo watched or headless bot.
 - Bots count as occupancy. A `-serve` session only its own bots occupy plays on

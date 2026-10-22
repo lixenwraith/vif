@@ -198,9 +198,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	}
 
 	// Pointer admission gate. Dropped input is not an action. The status bar keeps
-	// its hold with the mouse disabled: a phone has no key for the menu, and the
-	// menu is where the mouse is enabled again
-	if isMouseIntent(intent.Type) && (r.inputSuspended() || r.ctx.MouseDisabled.Load() && !r.menuPointer(intent)) {
+	// its hold with the mouse disabled and through a hold: a phone has no key for
+	// the menu, which is where the mouse is enabled again and a hold ends
+	menu := r.menuPointer(intent)
+	if isMouseIntent(intent.Type) && (r.inputSuspended() && !(menu && r.heldInPlay()) || r.ctx.MouseDisabled.Load() && !menu) {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
 			r.mouseLeftHeld, r.menuHold = false, false
@@ -209,6 +210,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 			r.mouseRightHeld = false
 			r.releasePointer(true, intent.Type == input.IntentMouseRightDown)
 		}
+		return true
+	}
+
+	if r.ctx.TimeCtl.Held() && !r.heldAdmits(intent) {
 		return true
 	}
 
@@ -1251,6 +1256,28 @@ func (r *Router) handleMouseMove(intent *input.Intent) bool {
 // inputSuspended reports whether machine-driven and pointer input must be withheld
 func (r *Router) inputSuspended() bool {
 	return r.ctx.TimeCtl.IsPaused() || r.ctx.IsCommandMode() || r.ctx.IsOverlayMode()
+}
+
+// heldInPlay reports a hold over play rather than over the command line or a menu
+func (r *Router) heldInPlay() bool {
+	return r.ctx.TimeCtl.Held() && !r.ctx.IsCommandMode() && !r.ctx.IsOverlayMode()
+}
+
+// heldAdmits reports whether an intent acts during a hold, which takes no play: the
+// command line and the overlays take everything, and play only what opens them,
+// quits, mutes, lets go of a key, or the status bar press the pointer gate kept.
+func (r *Router) heldAdmits(intent *input.Intent) bool {
+	if !r.heldInPlay() || isMouseIntent(intent.Type) {
+		return true
+	}
+	switch intent.Type {
+	case input.IntentQuit, input.IntentEscape, input.IntentToggleAudioCycle, input.IntentConfigMenu,
+		input.IntentHelp, input.IntentKeyRelease:
+		return true
+	case input.IntentModeSwitch:
+		return intent.ModeTarget == input.ModeTargetCommand
+	}
+	return false
 }
 
 // SetMouseModeApplier installs the terminal reporting sink. Optional: a nil

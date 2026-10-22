@@ -47,6 +47,10 @@ type MetaSystem struct {
 	// Cycle difficulty scaling: a world property the shared FSM raises, applied
 	// by EnergySystem to penalties
 	damageMultiplier int64
+
+	// holdUntil is the tick a hold this instance asked for is due by, zero when
+	// none is on its way: a second ask before then asks nothing more.
+	holdUntil uint64
 }
 
 // NewMetaSystem creates a new meta system
@@ -88,6 +92,7 @@ func (s *MetaSystem) Init() {
 	s.statAnyDefeated.Store(false)
 	s.setDamageMultiplier(1)
 	s.resetKills()
+	s.holdUntil = 0
 }
 
 // Name returns system's name
@@ -118,6 +123,8 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventGamePauseRequest,
 		event.EventGameSpeedRequest,
 		event.EventGameStepRequest,
+		event.EventGameHoldRequest,
+		event.EventGameHold,
 		event.EventSpeciesKilled,
 		event.EventDrainDefeated,
 		event.EventCursorDefeatState,
@@ -221,6 +228,14 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventGameStepRequest:
 		p, _ := ev.Payload.(*event.GameStepPayload)
 		s.handleStepRequest(p)
+
+	case event.EventGameHoldRequest:
+		if p, ok := ev.Payload.(*event.GamePausePayload); ok {
+			s.handleHoldRequest(p.Paused)
+		}
+
+	case event.EventGameHold:
+		s.handleHold(ev.Origin == event.OriginNetwork)
 
 	case event.EventSpeciesKilled:
 		if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
@@ -670,7 +685,40 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 	if !s.ctx.TimeCtl.SetPaused(paused) {
 		return
 	}
-	s.ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
+	s.ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: s.ctx.TimeCtl.IsPaused()})
+}
+
+// handleHoldRequest starts or ends a hold. The start crosses, so a live session's
+// participants all stop after one agreed tick, and a solo run, where nothing
+// crosses, holds at once. The end is this instance's own: a guest's comes with the
+// host's next tick.
+func (s *MetaSystem) handleHoldRequest(held bool) {
+	if !held {
+		if s.ctx.Hold(false) {
+			s.ctx.SetStatusMessage("Resumed", parameter.StatusNotice)
+		}
+		return
+	}
+	tick := s.world.Resources.Game.State.GetGameTicks()
+	if s.ctx.TimeCtl.Held() || tick < s.holdUntil {
+		return
+	}
+	s.holdUntil = tick + parameter.NetworkApplyHorizonTicks
+	s.ctx.PushCrossing(event.EventGameHold, nil)
+}
+
+// handleHold applies a hold at the tick it crossed for; byHost is a hold another
+// participant crossed, which only a live session's host may.
+func (s *MetaSystem) handleHold(byHost bool) {
+	s.holdUntil = 0
+	if !s.ctx.Hold(true) {
+		return
+	}
+	if byHost {
+		s.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
+		return
+	}
+	s.ctx.SetStatusMessage("Paused", parameter.StatusNotice)
 }
 
 // handleSpeedRequest applies the time scale through its single owner, then
@@ -704,6 +752,8 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 		s.handleSpeedRequest(nil) // restores 1x and disarms
 		return
 	}
+	// A step moves a held run on, from the pause or at the rate it asks for
+	s.ctx.Hold(false)
 
 	if p.Ticks > 0 {
 		n := min(p.Ticks, int64(parameter.StepBurstMax))

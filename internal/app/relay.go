@@ -132,7 +132,7 @@ func (a *App) releaseRelayedJoiner(id network.PeerID) {
 // has the authority cross its arrival once it has installed it.
 func (a *App) sendRelayedGate(port *network.SocketPort, offer network.SessionOffer, report network.JoinerReport) error {
 	id := offer.Assigned
-	tick, bytes, _, err := a.gateJoiner(port, offer, a.corrections.ProvedWorld)
+	tick, bytes, _, err := a.gateJoiner(port, offer, false, a.corrections.ProvedWorld)
 	if err != nil {
 		return err
 	}

@@ -88,6 +88,7 @@ type World struct {
 	overdue                 []event.SpeciesKilledPayload // evicted past the bound, paid at tick close
 	session                 atomic.Pointer[SessionState] // latched; see LatchSession
 	followJournal           atomic.Bool                  // a replay: session state and settlements are records
+	projects                atomic.Bool                  // a projection: it re-runs ticks another world reached
 	statPredictionPending   *atomic.Int64
 	statPredictionConfirmed *atomic.Int64
 	statPredictionDropped   *atomic.Int64
@@ -571,6 +572,14 @@ func (w *World) SessionBarrier() bool { return w.sessionShared.Load() }
 // bound and when a run is constructed to reproduce one; never cleared, because the
 // bounds a participant has already adopted outlive the link that delivered them.
 func (w *World) MarkSessionShared() { w.sessionShared.Store(true) }
+
+// Project marks this world a projection's: it re-runs ticks another world has
+// already reached, so nothing in it may stop its clock short of them.
+func (w *World) Project() { w.projects.Store(true) }
+
+// Reproduces reports whether another world decides this one's ticks, as a replay's
+// journal or a projection's live world does. A hold stops neither.
+func (w *World) Reproduces() bool { return w.followJournal.Load() || w.projects.Load() }
 
 // LiveSession reports whether this world is currently sharing ticks with peers.
 // A local multi-cursor setup has no transport and remains operator-controlled.

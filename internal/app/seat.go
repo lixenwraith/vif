@@ -117,10 +117,11 @@ func (a *App) addSeatLocked(spec string) error {
 		return err
 	}
 	// A holder whose clock stops when paused stops its seats with it; a driven one
-	// steps through a pause, and so do they.
+	// steps through a pause, and so do they. A hold reaches them as the crossing it
+	// is, at the tick every participant stops at.
 	var hold func() bool
 	if !a.cfg.Mode.Driven() {
-		hold = a.ctx.TimeCtl.IsPaused
+		hold = a.ctx.TimeCtl.OwnPause
 	}
 	s := &seat{spec: spec, graph: graph, stop: make(chan os.Signal), done: make(chan struct{})}
 	a.seatsMu.Lock()

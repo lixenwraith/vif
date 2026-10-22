@@ -338,4 +338,20 @@ func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnSessionRestart = a.receiveSessionRestart
 	r.OnRelayJoin = a.onRelayJoin
 	r.SeatsOnly = a.seatsOnly
+	r.OnAuthorityAhead = a.authorityAhead
+}
+
+// authorityAhead ends a hold the host has run past: a held host sends no epoch, so
+// one past this instance's tick is the resume. Caller MUST hold updateMutex.
+func (a *App) authorityAhead() { a.releaseHold("Resumed by the host") }
+
+// releaseHold ends a hold no command here ends, and records the end as the request
+// a command makes: a replay of this run ends its hold there too, having no link or
+// succession to end it. Caller MUST hold updateMutex.
+func (a *App) releaseHold(said string) {
+	if !a.ctx.Hold(false) {
+		return
+	}
+	a.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false}, event.OriginSession)
+	a.ctx.SetStatusMessage(said, parameter.StatusNotice)
 }

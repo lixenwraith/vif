@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -303,6 +304,48 @@ func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) 
 	if pauses() {
 		t.Fatal("an authority paused a session holding a participant it does not hold")
 	}
+}
+
+// TestASeatHoldsWithItsWorld: a hold reaches a bot as the crossing it is, so the bot
+// stands at the tick its holder stops at, and the holder's resume starts it again.
+func TestASeatHoldsWithItsWorld(t *testing.T) {
+	// Not parallel: paced runs against wall-clock deadlines.
+	until := func(what string, done func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(socketWait); !done(); time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+		}
+	}
+	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, holder, 2)
+	var b *App
+	until("the bot to be seated", func() bool {
+		holder.seatsMu.Lock()
+		defer holder.seatsMu.Unlock()
+		if len(holder.seats) == 1 {
+			b = holder.seats[0].app.Load()
+		}
+		return b != nil
+	})
+	// As the input path does: the command, then a settle, since a held run's
+	// driver takes no tick to settle it in.
+	pause := func(arg string) {
+		holder.World().RunSafe(func() { mode.ExecuteCommand(holder.Context(), "pause "+arg) })
+		holder.Settle()
+	}
+	held := func(a *App) bool { return a.Context().TimeCtl.Held() }
+
+	pause("on")
+	until("both to hold", func() bool { return held(holder) && held(b) })
+	at := holder.Position().Tick
+	time.Sleep(4 * parameter.GameUpdateInterval) // [wall] ticks a hold must not take
+	if holder.Position().Tick != at || b.Position().Tick != at {
+		t.Fatalf("held at tick %d, the holder stands at %d and its bot at %d", at, holder.Position().Tick, b.Position().Tick)
+	}
+	pause("off")
+	until("the bot to run on", func() bool { return !held(b) && b.Position().Tick > at })
 }
 
 // TestAGuestsBotsLeaveWithIt: a guest's bots join through it and go when it does,

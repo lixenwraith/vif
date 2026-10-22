@@ -1183,6 +1183,11 @@ type NetworkResource struct {
 	// session layer can read a world at exactly the tick a held manifest names. It
 	// must not block.
 	OnTickClosed func(completedTick uint64)
+
+	// OnAuthorityAhead reports an epoch the authority produced past this instance's
+	// own tick: what ends a guest's hold, since a host that resumed sends one. Called
+	// under the world lock; it must not block.
+	OnAuthorityAhead func()
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.

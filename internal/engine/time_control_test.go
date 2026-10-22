@@ -84,6 +84,39 @@ func TestTimeControlPause(t *testing.T) {
 	}
 }
 
+// TestTimeControlHoldOutlastsAPause: a hold stops the clock as a pause does, but
+// ending the pause leaves it standing and OwnPause reads the pause alone. A sleeper
+// is woken only when the pair's answer changes.
+func TestTimeControlHoldOutlastsAPause(t *testing.T) {
+	tc := newTestControl()
+	drainWake(tc)
+
+	if !tc.SetHeld(true) || !tc.Held() || !tc.IsPaused() || tc.OwnPause() {
+		t.Fatal("a hold did not stop the clock by itself")
+	}
+	if n := drainWake(tc); n != 1 {
+		t.Fatalf("the hold signalled %d times, want 1", n)
+	}
+	if !tc.SetPaused(true) || !tc.OwnPause() {
+		t.Fatal("a pause under a hold was not taken")
+	}
+	if !tc.SetPaused(false) || !tc.IsPaused() {
+		t.Fatal("ending the pause ended the hold")
+	}
+	if n := drainWake(tc); n != 0 {
+		t.Fatalf("a pause under a hold signalled %d times", n)
+	}
+	if tc.SetHeld(true) {
+		t.Fatal("a second hold reported a change")
+	}
+	if !tc.SetHeld(false) || tc.IsPaused() {
+		t.Fatal("ending the hold left the clock stopped")
+	}
+	if n := drainWake(tc); n != 1 {
+		t.Fatalf("the resume signalled %d times, want 1", n)
+	}
+}
+
 // TestTimeControlManualPassthrough pins headless time semantics
 func TestTimeControlManualPassthrough(t *testing.T) {
 	tc := NewTimeControl(NewManualClock(), status.NewRegistry())

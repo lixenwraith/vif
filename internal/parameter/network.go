@@ -345,6 +345,10 @@ const (
 	// the roster and chain, and a racing timer could let two instances take one term.
 	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
 
+	// NetworkSuccessionWait is that bound on the wall clock, for a succession that
+	// opens while a hold stands: no tick comes to count it in.
+	NetworkSuccessionWait = NetworkSuccessionTicks * GameUpdateInterval
+
 	// NetworkRejoinPassInterval paces a survivor's walk down the succession list. A
 	// pass tries every candidate once; this is the pause before the list is walked
 	// again, so a successor that is merely slow is retried without the list

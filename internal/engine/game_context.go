@@ -952,6 +952,16 @@ func (ctx *GameContext) SetPaused(paused bool) {
 	ctx.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }
 
+// Hold starts or ends this instance's hold and, when that changed, tells its systems
+// what the clock now does; what the player is told is the caller's.
+func (ctx *GameContext) Hold(held bool) bool {
+	if !ctx.TimeCtl.SetHeld(held) {
+		return false
+	}
+	ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: ctx.TimeCtl.IsPaused()})
+	return true
+}
+
 // PauseForInput pauses a solo run while the operator types a command or reads an
 // overlay. A live session keeps ticking for every participant, so there the request
 // is not made: it would only earn the refusal an explicit pause does.

@@ -285,7 +285,7 @@ func (a *App) serveJournal() {
 // pausedForInput reports whether the run stands paused on an overlay or the command line
 func (a *App) pausedForInput() bool {
 	m := a.ctx.GetMode()
-	return a.ctx.TimeCtl.IsPaused() && (m == core.ModeOverlay || m == core.ModeCommand)
+	return a.ctx.TimeCtl.OwnPause() && (m == core.ModeOverlay || m == core.ModeCommand)
 }
 
 // reportJournalClosed tells this run's player how its own journal stop went.
@@ -453,7 +453,7 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 		Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
 		Participant: a.world.LocalParticipant(), Authority: cap.Header.Authority,
 		Barrier: a.barrierLocked(), Body: body,
-		Opens: true, Mode: a.ctx.GetMode(), Paused: a.ctx.TimeCtl.IsPaused(), Off: off,
+		Opens: true, Mode: a.ctx.GetMode(), Paused: a.ctx.TimeCtl.OwnPause(), Held: a.ctx.TimeCtl.Held(), Off: off,
 		Slot: a.world.Resources.Player.LocalSlot(), Own: ownBody,
 	}, nil
 }

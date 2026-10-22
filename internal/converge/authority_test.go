@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // chainOf renders identities as chain entries; an in-process session needs no
@@ -106,6 +107,37 @@ func TestTheTermGateRefusesWhatNobodyHandedThisInstance(t *testing.T) {
 	}
 	if err := fork.u.adopt(record(fork.u, network.FirstTerm+2, 2, 1), 1); err == nil {
 		t.Fatal("a fork adopted a handoff that skipped the term it missed")
+	}
+}
+
+// TestAHeldSuccessionRunsOutOnTheWall: a held run stands on one tick, so the window
+// a succession is given runs on the wall clock instead, and the fork it ends in is
+// told to the run, whose hold no host is left to end. A run not held counts ticks.
+func TestAHeldSuccessionRunsOutOnTheWall(t *testing.T) {
+	t.Parallel()
+	run := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
+	hold := func(held bool) {
+		run.world.mu.Lock()
+		run.world.held = held
+		run.world.mu.Unlock()
+	}
+	hold(true)
+	run.u.beginSuccession(1)
+	if run.u.State().Fork {
+		t.Fatal("a held run gave up as its succession opened")
+	}
+	hold(false)
+	run.u.mu.Lock()
+	run.u.sinceWall = run.u.sinceWall.Add(-parameter.NetworkSuccessionWait - time.Millisecond)
+	run.u.mu.Unlock()
+	run.u.drive()
+	if run.u.State().Fork {
+		t.Fatal("a running instance gave up on the wall clock")
+	}
+	hold(true)
+	run.u.drive()
+	if !run.u.State().Fork || run.world.forked != 1 {
+		t.Fatalf("a held run past the window: fork %v, told %d times", run.u.State().Fork, run.world.forked)
 	}
 }
 
