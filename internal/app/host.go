@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"slices"
 	"time"
 
@@ -160,6 +159,9 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if sc.Digest() == a.scenario.Digest() {
 		return false, nil // already running these bytes; the caller resets instead
 	}
+	if err := a.playersFit(sc); err != nil {
+		return false, err
+	}
 	req := &restartRequest{Scenario: name, Bots: a.seatGraphs()}
 	if port != nil {
 		// Where this run's participants come back to. The address it already
@@ -198,7 +200,8 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 
 // joinLocked dials target while this run plays on, and replaces the run only once
 // the host has admitted it: a refusal leaves the game as it was. A run left alone
-// by its session may join another. Caller MUST hold updateMutex.
+// by its session may join another, and so may one whose session is its own bots',
+// which the next run seats in the new one. Caller MUST hold updateMutex.
 func (a *App) joinLocked(target string) error {
 	return a.joinSessionLocked(target, 0, "")
 }
@@ -207,7 +210,7 @@ func (a *App) joinErrorLocked() error {
 	if a.cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
 	}
-	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && port.PeerCount() > 0) {
+	if port := a.sessionTransportLocked(); a.cfg.HostAddress != "" || (port != nil && !a.seatsOnly()) {
 		return errors.New("this run is already in a session")
 	}
 	if a.dialling.Load() {
@@ -255,7 +258,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		case err != nil:
 			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
-		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d}):
+		case !a.restart.CompareAndSwap(nil, &restartRequest{Join: link, dialled: d, Bots: a.seatGraphs()}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})
@@ -285,15 +288,17 @@ func (a *App) hostErrorLocked() error {
 	if a.dialling.Load() {
 		return errors.New("host: a join is already being dialled")
 	}
-	if a.sessionTransportLocked() != nil {
+	// A session this run opened without a door holds only its bots: :host opens
+	// that one to others rather than a second.
+	a.sessionMu.Lock()
+	opened := a.midRunPort != nil
+	a.sessionMu.Unlock()
+	switch {
+	case opened && a.cfg.HostAddress != "":
+		return errors.New("host: this run is already hosting")
+	case !opened && a.sessionTransportLocked() != nil:
 		return errors.New("host: this run is already in a session")
 	}
-	a.sessionMu.Lock()
-	if a.midRunPort != nil {
-		a.sessionMu.Unlock()
-		return errors.New("host: this run is already hosting")
-	}
-	a.sessionMu.Unlock()
 	return nil
 }
 
@@ -332,17 +337,35 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
 	}
-	if err := a.openSessionLocked(addr, ln); err != nil {
+	if a.sessionTransportLocked() == nil {
+		if err := a.openSessionLocked(); err != nil {
+			_ = ln.Close()
+			a.cfg.FixedAuthority = fixed
+			return err
+		}
+	}
+	a.sessionMu.Lock()
+	port := a.midRunPort
+	a.sessionMu.Unlock()
+
+	if err := port.Serve(ln); err != nil {
 		_ = ln.Close()
 		a.cfg.FixedAuthority = fixed
-		return err
+		return fmt.Errorf("host: %w", err)
 	}
+	// A dial already in reads these only once it has the world lock this call holds.
+	// The policy is the session's from here: only this run's bots were offered one.
+	a.cfg.HostAddress = addr
+	a.authority.Pin(a.cfg.FixedAuthority)
+	a.log.Info("session", "msg", "hosting opened mid-run",
+		"address", ln.Addr().String(), "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
+	a.ctx.SetStatusMessage("Hosting on "+ln.Addr().String(), parameter.StatusNotice)
 	return nil
 }
 
-// openSessionLocked opens a session this run coordinates on ln, or on no listener at
-// all for its bots alone, whose streams it opens itself. Caller MUST hold updateMutex.
-func (a *App) openSessionLocked(addr string, ln net.Listener) error {
+// openSessionLocked opens a session this run coordinates, with no door: its bots'
+// streams it opens itself, and :host opens the door. Caller MUST hold updateMutex.
+func (a *App) openSessionLocked() error {
 	// Opening a session writes the world — owners, the latch, the lead — so a
 	// journal records the write as it records a join's, and a replay makes it.
 	journal := a.world.Resources.Event.Queue.Journal()
@@ -355,24 +378,15 @@ func (a *App) openSessionLocked(addr string, ln net.Listener) error {
 		}
 	}
 
-	// The address is recorded before the port serves, so every later reader — the
-	// accept goroutine's anchor, the status line — sees it already set, and nothing
-	// writes it again once a peer can arrive. The roster ceiling needs no such
-	// handling: an unset -players already means the whole roster, and a run that
-	// opens a session mid-game has no lobby for the flag's other meaning.
-	a.cfg.HostAddress = addr
-	netCfg := a.hostNetworkConfig()
-	netCfg.PreboundListener = ln
-	port := network.NewSocketPort(netCfg)
+	// The roster ceiling is the port's from here: an unset -players already means
+	// the whole roster, and a run that opens a session mid-game has no lobby for the
+	// flag's other meaning.
+	port := network.NewSocketPort(a.hostNetworkConfig())
 
-	// Armed before the listener exists: a run that opens a session mid-game has no
+	// Armed before any stream arrives: a run that opens a session mid-game has no
 	// startup lobby, so every dial it ever sees is a mid-run join.
 	a.lateJoins.Store(true)
 
-	// Everything the accept goroutine reads is published before the listener that
-	// wakes it exists: Start returns with the loop already running, and a dial in
-	// that instant reaches OnAdmit. Its capture read then blocks on the world lock
-	// this call holds, which is what makes the attach below happen first.
 	a.sessionMu.Lock()
 	a.midRunPort = port
 	a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: 0}}
@@ -401,7 +415,7 @@ func (a *App) openSessionLocked(addr string, ln net.Listener) error {
 	a.attachTransportLocked(port)
 	a.activateNetworkSessionLocked()
 
-	_ = port.Start() // bound above, so starting only serves it
+	_ = port.Start() // no listener, so starting only runs it
 
 	// The authority's cadence starts with the session. Nothing is published while
 	// no peer is connected — publish returns on an empty roster — so a host waiting
@@ -417,13 +431,7 @@ func (a *App) openSessionLocked(addr string, ln net.Listener) error {
 		}
 	}
 
-	if ln == nil {
-		a.log.Info("session", "msg", "session opened for bots", "tick", a.Position().Tick)
-		return nil
-	}
-	a.log.Info("session", "msg", "hosting opened mid-run",
-		"address", ln.Addr().String(), "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
-	a.ctx.SetStatusMessage("Hosting on "+ln.Addr().String(), parameter.StatusNotice)
+	a.log.Info("session", "msg", "session opened", "tick", a.Position().Tick)
 	return nil
 }
 
@@ -457,17 +465,21 @@ func (a *App) SessionSummary() string {
 func (a *App) sessionSummaryLocked() string {
 	if a.sessionTransportLocked() == nil {
 		if !buildHasSocketNetwork {
-			return "Solo run; :join <wss:// link> joins a session"
+			return "Solo run; :join <link> joins a session"
 		}
 		return "Solo run; :host <addr> opens it to participants, :join <target> joins one"
 	}
 	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
 	participant := a.world.LocalParticipant()
-	// The dial direction, which is not authorship: a guest holds the term after a
-	// handoff, and the authority clause below is what names who authors. A harness
-	// binds no address, so the word stands alone rather than trailing a blank.
+	// The role this run holds now: a guest that inherited the term hosts the session
+	// at the address it declared, which its peers redial, not the one it dialled. A
+	// harness binds no address, so the word stands alone rather than trailing a blank.
 	where, addr := "hosting", a.cfg.HostAddress
-	if a.cfg.JoinAddress != "" {
+	switch {
+	case a.cfg.JoinAddress == "":
+	case a.world.IsSessionCoordinator():
+		addr = a.reach.DeclaredAddr()
+	default:
 		where, addr = "joined", a.cfg.JoinAddress
 	}
 	if addr != "" {

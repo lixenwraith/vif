@@ -148,7 +148,7 @@ line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
 | `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. Takes `ws://` like `-host`. |
 | `-join <addr>` | Join `[tcp://\|vif://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies the seed and the scenario, and the joiner keeps its own typing corpus. Grammar in [Services and networking](services-and-networking.md) §6. |
 | `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
-| `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`; with a `-join` site, the size requested. Unset holds the whole roster. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
+| `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`, beside the scenario's `max_players`, the lower holding; with a `-join` site, the size requested. Unset holds the whole roster; under the scenario's `min_players` it is refused. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
 | `-bot`, `-bots [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; requests from both flags add together, operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
 | `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` hands it to the first surviving member of the succession chain, else the lowest surviving identity, never a bot's. Default `host` with `-serve`, `migrate` otherwise. |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second over the window, on a link carrying at least this many bytes per second. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
@@ -262,9 +262,10 @@ port once the clock runs; `:host <addr> [host|migrate]` does the same on a run t
 is **already playing**, at whatever tick it has reached — same acceptor, same
 identity allocation, same capture. The joiner dials before constructing its `App`,
 so the anchor seed is installed before RNG/content initialization. `:join <target>`
-is the other half: a solo run, or one its session left alone, dials target while it
-plays on and rebuilds itself joined once admitted. `:session` reports what a run is
-part of.
+is the other half: a solo run, its bots included, or one its session left alone,
+dials target while it plays on and rebuilds itself joined once admitted, from the
+live seats, play settings and journal rather than its startup flags. `:session`
+reports what a run is part of.
 
 ### Two-terminal verification
 
@@ -395,8 +396,9 @@ outside `-serve`; the policy is `internal/lifecycle` and the phases are document
 in [Runtime](runtime.md) §1.2. This is what `deploy/` runs; see
 [Deploying the session fleet](kube-docker-deploy.md).
 
-`-players` is a ceiling on every host shape and unset means the whole roster. A
-server starts on its first guest and takes the rest through the mid-run gate, so the
+`-players` is a ceiling on every host shape and unset means the whole roster, as is
+the scenario's `max_players`. A server starts on its first guest, or on the
+scenario's `min_players`, and takes the rest through the mid-run gate, so the
 example above holds at most four guests but plays as soon as one arrives. An
 interactive `-host` plays from its first tick and opens its port once the clock
 runs. Only a driven host (`-script`, or a `-headless`/`-watch` bot) that names
@@ -570,9 +572,10 @@ manual smoke test because unit tests do not reproduce every emulator.
 `.github/workflows/test.yml` runs on pushes to `main`, `master`, `develop` and
 `claude/*`, and on pull requests to `main`, `master` or `develop`. Its single job,
 on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profiles
-and targets, the window and Android module tests, and `go test -race -v ./...`
-with `GORACE` halting on the first race and writing `race.*`, which is uploaded for
-seven days on failure.
+and targets, the window and Android module tests, the browser build's tests under
+Node (`pkg/browser` and the `Browser` tests of `internal/network`, through
+`go_js_wasm_exec`), and `go test -race -v ./...` with `GORACE` halting on the first
+race and writing `race.*`, which is uploaded for seven days on failure.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
 regenerates the registries and, on a tag, fails if that changed the tree, vets

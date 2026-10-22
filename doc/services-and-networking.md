@@ -87,12 +87,13 @@ adapter. Native networking is role-selected separately:
 play constructs the no-op-capable socket adapter, while every other mode
 constructs it only for a host or join address, which only a script or bot run and
 `-serve` may be given. A browser registers the same adapter
-for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, and is
-refused `-host`, `-serve` and a `host:port` target, none of which it could bind or
-dial. The allocator terminates the route and splices it to the session's game
-port; a native client may dial it too, and otherwise keeps raw TCP. Replay
-input controls playback rather than the mode router, and its terminal resize
-affects presentation rather than recorded geometry.
+for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, or a
+session's `vif://` link, which it joins by the route its site lists, and is refused
+`-host`, `-serve` and a bare `host:port`, none of which it could bind or dial. The
+allocator terminates the route and splices it to the session's game port; a native
+client may dial it too, and otherwise keeps raw TCP. Replay input controls playback
+rather than the mode router, and its terminal resize affects presentation rather
+than recorded geometry.
 
 Content and audio details are covered in
 [Content, assets, and tools](content-assets-and-tools.md) and
@@ -153,20 +154,24 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `-host <bind-address>` | Bind before the terminal starts, so a port the run cannot have ends it with the reason on stderr, as a `-join` that cannot dial does; then play at once and serve the listener when the clock starts, exactly as `:host` does. A rebuilt run that cannot reopen its door plays on solo. |
 | `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
-| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the port is created, attached and started; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
-| `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. |
-| `:session` | One line: hosting or joined and the address, participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
+| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. |
+| `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. |
+| `:session` | One line: hosting or joined, by the role held now, and the address (a guest that inherited the term hosts at the one it declared), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
 `[tcp://|vif://]host:port[/name]`, the name routing to one of several sessions on
 an address, or a `ws(s)://` route a browser joins by, whose last path segment is
 the name. An `http(s)://` URL names a site instead: `network.RequestSession` posts
 to its `/vif/api/sessions` and the returned link is what `-join` or `:join` dials,
-so a restart or rejoin follows that session rather than creating another. The
-scheme picks the transport and tcp is the default. A host's bound address
-(`-host`, `-serve`, `:host`) is tcp or plain `ws://host:port`, one protocol per
-listener; `-listen` is tcp, which participants link to each other over; any other
-scheme is refused (§7.3).
+so a restart or rejoin follows that session rather than creating another. A link
+naming a session whose route does not answer, a `vif://` link in a browser or one
+typed onto another route's port, is looked up by its name in `GET /vif/api/sessions`
+of the site that issued it (the link's own origin, then its host's `https`), and the
+routes listed for this build are dialled. A route's own refusal stands, and a site
+that answers but does not list the session says so. The scheme picks the transport
+and tcp is the default. A host's bound address (`-host`, `-serve`, `:host`) is tcp
+or plain `ws://host:port`, one protocol per listener; `-listen` is tcp, which
+participants link to each other over; any other scheme is refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
@@ -340,9 +345,11 @@ divergence.
 The values a peer is measured against are the coordinator's own, derived from the
 anchor it offered rather than read again at reply time, so a reset between the offer
 and the acceptance cannot turn a valid join into a mismatch or the reverse. A
-mismatch names one field and both values, and carries `IdentityRefusalTag` so the
-joiner can recognise it across the wire — unlike a handoff refusal it is not worth
-retrying, because nothing about the peer will be different a second later.
+mismatch names both builds by release and commit (`Build`, never compared), then one
+field and both values, each side reading its own build as the one here, and carries
+`IdentityRefusalTag` so the joiner can recognise it across the wire — unlike a
+handoff refusal it is not worth retrying, because nothing about the peer will be
+different a second later, and `cmd/vif` exits 76 on it.
 
 A dialer configured with no build identity (`Config.Identity`) skips its check,
 which is what leaves a harness free to dial a hand-built fixture.
@@ -405,7 +412,8 @@ Ack is observational—there is no retransmission policy.
 
 The handshake travels plain. From the join reply on, each direction of a link is
 one deflate stream (`NetworkStreamLevel`), so a frame compresses against every frame
-before it. The writer takes the frames queued within `NetworkWriteLinger` of a
+before it; a coordinator that refuses the reply writes its refusal on that stream,
+where the joiner reads it. The writer takes the frames queued within `NetworkWriteLinger` of a
 burst's first and sync-flushes once. Go's levels 1-6 drop their history on a flushed
 block under 128 bytes, which is most bursts; 7 keeps it.
 
@@ -693,7 +701,8 @@ barrier and the map latch
 in place: the barrier and the bounds are properties of the run, so a stretch with
 no peer attached still stamps its crossings by the lead it last adopted and still
 keeps the bounds every participant adopted. A departure is itself a crossing and lands at that lead
-rather than where the lost link was observed.
+rather than where the lost link was observed, and only then is its identity free: a
+dial in between is assigned another, not one the departure would disconnect.
 
 At the same six-tick cadence, direct neighbours exchange a run/tick/hash sample
 over the exact `SnapshotShared` comparison surface, plus category hashes. A
@@ -940,8 +949,8 @@ and under `-authority host` it says that it is continuing locally, shows
 `Host lost` and keeps ticking — `:session` then names the term it still holds and
 that it is a local fork. Restarting the host and rejoining is a *new* session, not
 a merge: an old fork left running would refuse its artifacts and say so.
-`-players <n>` caps the roster a host admits, `-host` or a later `:host` alike;
-unset, it is `MaxPlayers`. Bind the host to `:7777` for a LAN. Internet routing
+`-players <n>` caps the roster a host admits, `-host` or a later `:host` alike, and
+so does the scenario's `max_players`; unset, both are `MaxPlayers`. Bind the host to `:7777` for a LAN. Internet routing
 uses the same TCP path but is not safe for untrusted peers until authentication
 and TLS configuration are exposed.
 

@@ -331,9 +331,12 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			err = errors.New(reply.Error)
 			return 0, err
 		}
+		// The joiner reads everything after its reply off the compressed stream.
+		refuse := func(cause error) { RefuseJoin(openFlateStream(conn, 0, 0), cause, timeout) }
 		// Verify before Report so an incompatible joiner cannot affect session state.
+		// It is told in its own terms: to it, its build is the one here.
 		if err = o.Identity.Verify(reply.Identity); err != nil {
-			RefuseJoin(conn, err, timeout)
+			refuse(reply.Identity.Verify(o.Identity))
 			return 0, err
 		}
 		if c.Report != nil {
@@ -341,7 +344,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 				Width: reply.Width, Height: reply.Height, Listen: reply.Listen,
 				Remote: conn.RemoteAddr().String(), Holder: reply.Holder,
 			}); err != nil {
-				RefuseJoin(conn, err, timeout)
+				refuse(err)
 				return 0, err
 			}
 		}
@@ -420,8 +423,9 @@ func ReadSessionRoute(r io.Reader) (string, error) {
 	return string(msg.Payload), nil
 }
 
-// RefuseJoin writes one pre-offer rejection, which the dialer reads as its reason.
-// A failure to write it is not worth reporting: the connection is being closed
+// RefuseJoin writes one rejection, which the dialer reads as its reason; a
+// compressed stream is flushed, since the dialer reads nothing it still holds. A
+// failure to write it is not worth reporting: the connection is being closed
 // either way, and the joiner falls back to reading the stream's end.
 func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 	body, err := json.Marshal(sessionReply{Error: cause.Error()})
@@ -432,7 +436,11 @@ func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 		_ = conn.SetWriteDeadline(time.Now().Add(timeout))
 		defer conn.SetWriteDeadline(time.Time{})
 	}
-	_ = NewMessage(MsgJoinReply, body).Encode(conn)
+	if err = NewMessage(MsgJoinReply, body).Encode(conn); err == nil {
+		if stream, ok := conn.(*flateStream); ok {
+			_ = stream.Flush()
+		}
+	}
 }
 
 // PendingJoin owns a dialled stream until the startup gate transfers it to a port.
@@ -570,6 +578,9 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	}
 	base.Role, base.Address = RolePeer, addr
 	conn, err := dial(addr, base)
+	if err != nil && base.Dial == nil && base.SessionName != "" && !routeAnswered(err) {
+		conn, err = dialListed(base, err)
+	}
 	if err != nil {
 		return nil, SessionOffer{}, err
 	}
@@ -619,6 +630,29 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 		}
 	}
 	return &PendingJoin{conn: &flateStream{Conn: conn}, base: *base, offer: offer}, offer, nil
+}
+
+// dialListed dials base's session by another link its site lists, once nothing
+// answered at its own address: a player may hold the link another kind of client
+// joins by. With no site answering, the failure of the address it was given stands.
+func dialListed(base *Config, failed error) (net.Conn, error) {
+	links, err := listedLinks(base.Address, base.SessionName, base.ConnectTimeout)
+	if err != nil {
+		return nil, err
+	}
+	for _, link := range links {
+		e, err := ParseEndpoint(link)
+		if err != nil || e.Addr == base.Address {
+			continue
+		}
+		conn, err := dial(e.Addr, base)
+		if err == nil {
+			base.Address = e.Addr
+			return conn, nil
+		}
+		failed = fmt.Errorf("%s: %w", link, err)
+	}
+	return nil, failed
 }
 
 // TransportConfig returns a client config that adopts the negotiated identity.
@@ -684,6 +718,9 @@ func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 		if !p.hold(msg) {
 			break
 		}
+	}
+	if msg.Type == MsgJoinReply {
+		return SessionOffer{}, refusalFrom(msg)
 	}
 	if msg.Type != MsgStart {
 		return SessionOffer{}, fmt.Errorf("join handshake: got message %#x, want start", msg.Type)

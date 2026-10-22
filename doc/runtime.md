@@ -130,13 +130,16 @@ is, and the roster hands it to the first guest, which is what keeps shared creat
 order identical to an ordinary host's.
 
 A server's `-players` ceiling counts *guests*, because the server is not one of
-them; any other host's counts one fewer, because it holds a cursor itself. A lobby
-exists only where no person plays at the process, and the process seats its own
-bots before it, so they count as guests: a server starts on its first guest; a
-scripted or bot-driven `-host` on its first guest or, with `-players`, on the whole
-party it names; an interactive host has none and plays from its own first tick.
-Every later guest arrives through the mid-run gate. An interactive `-host` is
-`:host` given at startup.
+them; any other host's counts one fewer, because it holds a cursor itself. The
+scenario's `max_players` caps the same count, bots included, and the lower ceiling
+holds. A lobby exists only where no person plays at the process, and the process
+seats its own bots before it, so they count as guests: a server starts on its first
+guest, or on the scenario's `min_players`; a scripted or bot-driven `-host` on the
+guests that minimum needs beside its own cursor, at least one, or, with `-players`,
+on the whole party it names; an interactive host has none and plays from its own
+first tick. A `-players` under `min_players` is refused, and an allocated lobby
+short of it ends at `-first-join` like an empty one. Every later guest arrives
+through the mid-run gate. An interactive `-host` is `:host` given at startup.
 
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
@@ -628,7 +631,8 @@ holder's process, on its own goroutine and paced against the authority like any
 guest. It joins on an in-process stream (`seatLink`) its holder serves with the
 handshake it holds when the seat dials: a still-guest's relays the join on its own
 link, an authority's admits it as any joiner. A run in no session first opens one
-with no listener (`openSessionLocked`). A seat plays in its holder's screen: a
+with no listener (`openSessionLocked`), which `:host` later serves a listener on
+(`SocketPort.Serve`). A seat plays in its holder's screen: a
 person's terminal, which `App.handleResize` publishes as it changes and the seat
 takes between two steps, or the holder's `-size`, else a bot's 120x40. A play-mode
 holder's seats stand still while it is paused; a driven holder's step on. A
@@ -979,8 +983,9 @@ is released. The hub stops every initialized service in reverse dependency order
 
 `cmd/vif` configures diagnostics before any terminal enters its alternate screen,
 so startup failures and runtime reports remain recoverable. It exits 1 on any
-returned error, and 73 (`EX_CANTCREAT`) when logging was requested and cannot
-start: a run that cannot write the log it was asked for ends before it plays
+returned error, 76 (`EX_PROTOCOL`) on a refusal for another build or session, which
+a retry would meet again, and 73 (`EX_CANTCREAT`) when logging was requested and
+cannot start: a run that cannot write the log it was asked for ends before it plays
 rather than playing unlogged.
 
 Crash handling is designed around terminal restoration:

@@ -22,6 +22,7 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 )
 
@@ -76,10 +77,10 @@ type sessionRequest struct {
 
 // fleetLimits is what the deployment will accept and what an omitted choice gets,
 // so a caller can offer only the choices this allocator would allow, and name its
-// defaults, rather than discovering either by refusal. Descriptions and FixedMaps
-// hold what each scenario's entry states, keyed by name; one that states nothing is
-// absent. They sit beside Scenarios so a caller that reads the names alone is
-// unaffected.
+// defaults, rather than discovering either by refusal. Descriptions, FixedMaps,
+// MinPlayers and MaxPlayers hold what each scenario's entry states, keyed by name;
+// one that states nothing is absent. They sit beside Scenarios so a caller that
+// reads the names alone is unaffected.
 type fleetLimits struct {
 	PlayersMax      int               `json:"players_max"`
 	PlayersDefault  int               `json:"players_default"`
@@ -90,6 +91,8 @@ type fleetLimits struct {
 	Scenarios       []string          `json:"scenarios"`
 	Descriptions    map[string]string `json:"scenario_descriptions,omitempty"`
 	FixedMaps       map[string]string `json:"scenario_fixed_maps,omitempty"`
+	MinPlayers      map[string]int    `json:"scenario_min_players,omitempty"`
+	MaxPlayers      map[string]int    `json:"scenario_max_players,omitempty"`
 }
 
 type session struct {
@@ -137,12 +140,12 @@ func newAllocator(kube kubeAPI, health healthProbe, cfg allocatorConfig) *alloca
 }
 
 func (a *allocator) limits() fleetLimits {
-	names := a.scenarios()
-	descriptions, fixed := a.describe(names)
 	w := a.cfg.Workload
-	return fleetLimits{PlayersMax: a.cfg.PlayersMax, PlayersDefault: w.Players, BotsMax: a.cfg.BotsMax,
+	out := fleetLimits{PlayersMax: a.cfg.PlayersMax, PlayersDefault: w.Players, BotsMax: a.cfg.BotsMax,
 		LogLevels: a.cfg.LogLevels, LogLevelDefault: w.LogLevel, SizeDefault: w.Size,
-		Scenarios: names, Descriptions: descriptions, FixedMaps: fixed}
+		Scenarios: a.scenarios()}
+	a.describe(&out)
+	return out
 }
 
 // scenarios is what the node's volume holds, read per request rather than kept
@@ -170,19 +173,22 @@ func (a *allocator) scenarios() []string {
 	return out
 }
 
-// describeScan bounds what is read of an entry file for its description and its
-// [map] fixed. The description is top-level, which TOML places ahead of the first
-// table; either one past this leaves the scenario offered but undescribed.
+// describeScan bounds what is read of an entry file for its description, player
+// range and [map] fixed. The first two are top-level, which TOML places ahead of the
+// first table; any one past this leaves the scenario offered but undescribed by it.
 const describeScan = 4 << 10
 
-// describe reads each scenario's description and [map] fixed from its entry file,
-// per request for the reason the names are. A main the volume does not hold is the
-// game's embedded fallback, so it is described by that one. An unreadable or
-// malformed entry is left undescribed: describing is not this service's check to fail.
-func (a *allocator) describe(names []string) (descriptions, fixed map[string]string) {
+// describe fills each of limits' scenarios' description, player range and [map]
+// fixed from its entry file, per request for the reason the names are. A main the
+// volume does not hold is the game's embedded fallback, so it is described by that
+// one. An unreadable or malformed entry is left undescribed: describing is not this
+// service's check to fail.
+func (a *allocator) describe(limits *fleetLimits) {
 	root := filepath.Join(a.cfg.WadDir, paths.ScenarioDirName)
-	descriptions, fixed = make(map[string]string, len(names)), make(map[string]string)
-	for _, name := range names {
+	limits.Descriptions, limits.FixedMaps = map[string]string{}, map[string]string{}
+	limits.MinPlayers, limits.MaxPlayers = map[string]int{}, map[string]int{}
+	players := map[string]map[string]int{"min_players": limits.MinPlayers, "max_players": limits.MaxPlayers}
+	for _, name := range limits.Scenarios {
 		head, err := readHead(filepath.Join(root, name, paths.ScenarioFile), describeScan)
 		if errors.Is(err, fs.ErrNotExist) && name == paths.MainScenarioName {
 			head, err = fs.ReadFile(asset.DefaultScenario, asset.DefaultScenarioEntry)
@@ -190,20 +196,30 @@ func (a *allocator) describe(names []string) (descriptions, fixed map[string]str
 		if err != nil {
 			continue
 		}
-		if text := preambleDescription(head); text != "" {
-			descriptions[name] = text
+		doc := preamble(head)
+		text, _ := doc["description"].(string)
+		if text = strings.TrimSpace(text); text != "" {
+			limits.Descriptions[name] = text
+		}
+		for key, into := range players {
+			if n, ok := doc[key].(int64); ok && n >= 0 && n <= parameter.MaxPlayers {
+				into[name] = int(n)
+			}
 		}
 		if size := fixedMap(head); size != "" {
-			fixed[name] = size
+			limits.FixedMaps[name] = size
 		}
 	}
-	if len(descriptions) == 0 {
-		descriptions = nil
+	limits.Descriptions, limits.FixedMaps = orNil(limits.Descriptions), orNil(limits.FixedMaps)
+	limits.MinPlayers, limits.MaxPlayers = orNil(limits.MinPlayers), orNil(limits.MaxPlayers)
+}
+
+// orNil is an empty map as none, so its key is omitted.
+func orNil[V any](m map[string]V) map[string]V {
+	if len(m) == 0 {
+		return nil
 	}
-	if len(fixed) == 0 {
-		fixed = nil
-	}
-	return descriptions, fixed
+	return m
 }
 
 // readHead returns at most limit bytes of a file, cut back to its last whole line
@@ -224,9 +240,9 @@ func readHead(name string, limit int) ([]byte, error) {
 	return head, nil
 }
 
-// preambleDescription parses only what precedes the first table header, the one
-// place a top-level key can be, so a cut read never hands the parser half a table.
-func preambleDescription(data []byte) string {
+// preamble parses only what precedes the first table header, the one place a
+// top-level key can be, so a cut read never hands the parser half a table.
+func preamble(data []byte) map[string]any {
 	end := len(data)
 	for offset := 0; offset < len(data); {
 		line := data[offset:]
@@ -241,10 +257,9 @@ func preambleDescription(data []byte) string {
 	}
 	doc, err := toml.NewParser(data[:end]).Parse()
 	if err != nil {
-		return ""
+		return nil
 	}
-	text, _ := doc["description"].(string)
-	return strings.TrimSpace(text)
+	return doc
 }
 
 // fixedMap reads [map] fixed, the size a scenario says its map holds throughout,
@@ -278,16 +293,37 @@ func fixedMap(data []byte) string {
 }
 
 // resolve folds a caller's choices into this deployment's workload. An omitted
-// choice keeps the default; one outside what the operator opened is refused rather
-// than clamped, because a session quietly given a different roster than the one it
-// asked for is worse than a request the caller can correct.
+// choice keeps the default, moved into the scenario's player range; one outside what
+// the operator opened or the scenario plays is refused rather than clamped, because
+// a session quietly given a different roster than the one it asked for is worse than
+// a request the caller can correct.
 func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 	workload := a.cfg.Workload
-	if req.Players != 0 {
-		if req.Players < 1 || req.Players > a.cfg.PlayersMax {
-			return workloadConfig{}, fmt.Errorf("%w: players must be between 1 and %d",
-				errRequestRefused, a.cfg.PlayersMax)
+	limits := a.limits()
+	if req.Scenario != "" {
+		if !slices.Contains(limits.Scenarios, req.Scenario) {
+			return workloadConfig{}, fmt.Errorf("%w: scenario must be one of %s",
+				errRequestRefused, strings.Join(limits.Scenarios, ", "))
 		}
+		workload.Scenario = req.Scenario
+	}
+	low, high := 1, a.cfg.PlayersMax
+	if n, ok := limits.MinPlayers[workload.Scenario]; ok {
+		low = max(low, n)
+	}
+	if n, ok := limits.MaxPlayers[workload.Scenario]; ok {
+		high = min(high, n)
+	}
+	switch {
+	case low > high:
+		return workloadConfig{}, fmt.Errorf("%w: scenario %s needs %d players and this fleet opens %d",
+			errRequestRefused, workload.Scenario, low, high)
+	case req.Players == 0:
+		workload.Players = min(max(workload.Players, low), high)
+	case req.Players < low || req.Players > high:
+		return workloadConfig{}, fmt.Errorf("%w: players must be between %d and %d for %s",
+			errRequestRefused, low, high, workload.Scenario)
+	default:
 		workload.Players = req.Players
 	}
 	// Bots are roster guests and a session is ready only while a seat is free, so
@@ -303,14 +339,6 @@ func (a *allocator) resolve(req sessionRequest) (workloadConfig, error) {
 				errRequestRefused, strings.Join(a.cfg.LogLevels, ", "))
 		}
 		workload.LogLevel = req.LogLevel
-	}
-	if req.Scenario != "" {
-		installed := a.scenarios()
-		if !slices.Contains(installed, req.Scenario) {
-			return workloadConfig{}, fmt.Errorf("%w: scenario must be one of %s",
-				errRequestRefused, strings.Join(installed, ", "))
-		}
-		workload.Scenario = req.Scenario
 	}
 	if req.Size != "" {
 		if err := checkSize(req.Size); err != nil {

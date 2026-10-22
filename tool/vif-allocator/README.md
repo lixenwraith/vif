@@ -113,17 +113,22 @@ be granted, and can name the defaults, rather than discovering either by refusal
     "simon": "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
   },
-  "scenario_fixed_maps": {"td": "500x250"}
+  "scenario_fixed_maps": {"td": "500x250"},
+  "scenario_min_players": {"main": 1, "blank": 1, "kraken": 1, "simon": 1, "td": 1},
+  "scenario_max_players": {"main": 16, "blank": 16, "kraken": 16, "simon": 16, "td": 16}
 }
 ```
 
-`scenario_descriptions` is each scenario's top-level `description`, and
-`scenario_fixed_maps` its `[map] fixed`, the size it says its map holds throughout,
-so the screen a request names does not size it. Both are read from its
-`scenario.toml` on every request as the names are; `main` off the volume is the
-game's embedded fallback, described by that. A scenario that states either one
-past the file's first 4 KiB, the description after any table, is absent from that
-object and still offered; with none at all the key is omitted. `-players-max`
+`scenario_descriptions` is each scenario's top-level `description`,
+`scenario_min_players` and `scenario_max_players` its `min_players` and
+`max_players`, and `scenario_fixed_maps` its `[map] fixed`, the size it says its map
+holds throughout, so the screen a request names does not size it. All are read from
+its `scenario.toml` on every request as the names are; `main` off the volume is the
+game's embedded fallback, described by that. A scenario that states one past the
+file's first 4 KiB, or a top-level one after any table, is absent from that object
+and still offered; with none at all the key is omitted. `players` must also fall in
+the scenario's range, which an omitted one is moved into from the default, and a
+scenario needing more than `-players-max` is refused. `-players-max`
 defaults to `-players`, `-bots-max` to `0` and `-log-level-min` to `debug`:
 publishing the API must not hand an anonymous caller a sixteen-player world, the
 fleet's CPU or its shared log rate, so each opens only as far as an operator sets
@@ -152,17 +157,17 @@ one of them is handed a `ws_url` whose origin this allocator refuses, and a page
 that checks the URL it was given against its own location will hide the link rather
 than offer a broken one.
 
-The browser route validates before it upgrades — method, identifier syntax, that
-the request is an upgrade, `Origin` against `-web-origin` (`403`), the player's join
-budget (`429`, the front door's, below), the session's liveness and readiness in
-reconciled Kubernetes state (`404` unknown, `409` full or ending, `503`
-unreachable), and `-route-max` connections for that session, counted with the front
-door's (`503`). Then it checks the handshake itself (`426` for another version, `400`
-for a bad key), dials the pod's game port (`502` when that fails), answers the
-`101` with `pkg/websocket` and splices the socket's payload to the pod as the front
-door does; the pod reads the browser's own route frame. It never accepts an
-upstream a caller named: the identifier is a routing key looked up in Kubernetes,
-not an address supplied. The decision record is in
+The browser route validates what HTTP must before it upgrades — method, identifier
+syntax, that the request is an upgrade, `Origin` against `-web-origin` (`403`) and
+the handshake itself (`426` for another version, `400` for a bad key) — then answers
+the `101` with `pkg/websocket` and places the stream as the front door places a
+dial, 32 at once: the route frame, the player's join budget (the front door's,
+below), the session's liveness and readiness in reconciled Kubernetes state,
+`-route-max` connections for that session counted with the front door's, and the
+pod's game port. Each of those is refused as the join reply a page reads, since a
+browser is never shown a status, and the stream is then spliced to the pod. It never
+accepts an upstream a caller named: the identifier is a routing key looked up in
+Kubernetes, not an address supplied. The decision record is in
 [`doc/multi-platform.md`](../../doc/multi-platform.md#5-browser-networking).
 
 The allocator deliberately exposes no public delete endpoint: this API is
