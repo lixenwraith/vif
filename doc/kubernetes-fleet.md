@@ -90,8 +90,9 @@ What bounds a stranger:
   on both proxied routes as one budget per address (`-client-joins`), the front
   door's from the dialler and the browser route's from `-client-address-header`. At
   the pod, proxied players share the node's address and so a budget per session;
-- at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine with a
-  `ConnectTimeout` (5 s) and a `ReadTimeout` (30 s);
+- at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine within
+  `ConnectTimeout` (5 s), and every admitted stream closed after
+  `NetworkLinkDeadAfter` (5 s) without a frame;
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
   peer can make the host reserve memory by asking;
 - `admissibleFromSource`, which refuses roster-creating crossings from anyone but

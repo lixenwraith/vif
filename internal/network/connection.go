@@ -67,9 +67,8 @@ type Peer struct {
 	// Send queue
 	sendCh chan *Message
 
-	readTimeout       time.Duration
-	writeTimeout      time.Duration
-	heartbeatInterval time.Duration
+	readTimeout  time.Duration
+	writeTimeout time.Duration
 
 	// Lifecycle
 	closeCh   chan struct{}
@@ -82,19 +81,15 @@ type Peer struct {
 // newPeer creates a peer from an established connection
 func newPeer(id PeerID, conn net.Conn, cfg *Config) *Peer {
 	p := &Peer{
-		ID:                id,
-		Addr:              conn.RemoteAddr().String(),
-		conn:              conn,
-		stream:            openFlateStream(conn, cfg.ReadBufferSize, cfg.WriteBufferSize),
-		sendCh:            make(chan *Message, cfg.SendQueueSize),
-		closeCh:           make(chan struct{}),
-		done:              make(chan struct{}),
-		readTimeout:       cfg.DisconnectTimeout,
-		writeTimeout:      cfg.WriteTimeout,
-		heartbeatInterval: cfg.HeartbeatInterval,
-	}
-	if p.readTimeout <= 0 {
-		p.readTimeout = cfg.ReadTimeout
+		ID:           id,
+		Addr:         conn.RemoteAddr().String(),
+		conn:         conn,
+		stream:       openFlateStream(conn, cfg.ReadBufferSize, cfg.WriteBufferSize),
+		sendCh:       make(chan *Message, cfg.SendQueueSize),
+		closeCh:      make(chan struct{}),
+		done:         make(chan struct{}),
+		readTimeout:  cfg.ReadTimeout,
+		writeTimeout: cfg.WriteTimeout,
 	}
 	p.State.Store(uint32(StateConnected))
 	p.LastSeen.Store(time.Now().UnixNano())
@@ -131,7 +126,8 @@ func (p *Peer) Close() {
 	})
 }
 
-// readLoop reads messages from the connection
+// readLoop reads messages until the stream ends or its next frame is later than the
+// read timeout: the far end answers this end's probes, so that link has stopped.
 func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 	defer p.Close()
 
@@ -168,13 +164,6 @@ func (p *Peer) writeLoop() {
 	defer close(p.done)
 	defer p.conn.Close()
 	defer p.Close()
-	var heartbeat <-chan time.Time
-	var ticker *time.Ticker
-	if p.heartbeatInterval > 0 {
-		ticker = time.NewTicker(p.heartbeatInterval)
-		heartbeat = ticker.C
-		defer ticker.Stop()
-	}
 
 	linger := time.NewTimer(0)
 	<-linger.C
@@ -186,8 +175,6 @@ func (p *Peer) writeLoop() {
 			p.flushQueued(false)
 			return
 		case msg = <-p.sendCh:
-		case <-heartbeat:
-			msg = NewMessage(MsgHeartbeat, nil)
 		}
 		if p.writeTimeout > 0 {
 			_ = p.conn.SetWriteDeadline(time.Now().Add(p.writeTimeout))

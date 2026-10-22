@@ -165,12 +165,12 @@ func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := network.NewMessage(network.MsgHeartbeat, nil).Encode(conn); err != nil {
+	if err := network.NewMessage(network.MsgEvent, nil).Encode(conn); err != nil {
 		t.Fatal(err)
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	if reply, err := io.ReadAll(conn); err != nil || len(reply) != 0 {
-		t.Errorf("a heartbeat opening was answered with %q, %v", reply, err)
+		t.Errorf("an epoch opening was answered with %q, %v", reply, err)
 	}
 	if n := pod.accepted.Load(); n != 0 {
 		t.Fatalf("refused dials reached the pod %d time(s)", n)

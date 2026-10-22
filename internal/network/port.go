@@ -383,8 +383,6 @@ func (p *SocketPort) onMessage(id PeerID, msg *Message) {
 		return
 	}
 	switch msg.Type {
-	case MsgHeartbeat:
-		return
 	case MsgReady:
 		// The joiner's port counts delivered bytes from zero from here on, and the
 		// capture its gate read is in this end's sent count: a new origin.

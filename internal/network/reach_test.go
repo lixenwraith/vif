@@ -197,7 +197,7 @@ func TestAPeerDialBecomesALink(t *testing.T) {
 	}
 	waitForPeer(t, func() bool { return listener.Connected(3) },
 		"the listener never admitted the participant that dialled it")
-	if !dialer.Send(2, uint8(MsgHeartbeat), nil) {
+	if !dialer.Send(2, uint8(MsgEvent), nil) {
 		t.Fatal("the new link refused a frame")
 	}
 }

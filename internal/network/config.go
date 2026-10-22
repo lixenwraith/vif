@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"net"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Role defines the network topology role
@@ -66,12 +68,11 @@ type Config struct {
 	// A zero Protocol disables the check, so a harness can dial a hand-built fixture.
 	Identity PeerIdentity
 
-	// Timing
-	ConnectTimeout    time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	HeartbeatInterval time.Duration
-	DisconnectTimeout time.Duration
+	// Timing. ReadTimeout bounds the wait for each frame a stream carries after the
+	// offer: the far end streams or probes it, so a stream that quiet has stopped.
+	ConnectTimeout time.Duration
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
 
 	// Buffer sizes
 	ReadBufferSize  int
@@ -117,20 +118,18 @@ type Config struct {
 // DefaultConfig returns production-safe defaults
 func DefaultConfig() *Config {
 	return &Config{
-		Role:              RoleNone,
-		Address:           ":7777",
-		TLS:               nil, // Must be explicitly configured for production
-		MaxPeers:          16,
-		MaxHandshakes:     8,
-		ConnectTimeout:    5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      5 * time.Second,
-		HeartbeatInterval: 10 * time.Second,
-		DisconnectTimeout: 30 * time.Second,
-		ReadBufferSize:    64 * 1024,
-		WriteBufferSize:   64 * 1024,
-		SendQueueSize:     256,
-		RecvQueueSize:     256,
+		Role:            RoleNone,
+		Address:         ":7777",
+		TLS:             nil, // Must be explicitly configured for production
+		MaxPeers:        16,
+		MaxHandshakes:   8,
+		ConnectTimeout:  5 * time.Second,
+		ReadTimeout:     parameter.NetworkLinkDeadAfter,
+		WriteTimeout:    5 * time.Second,
+		ReadBufferSize:  64 * 1024,
+		WriteBufferSize: 64 * 1024,
+		SendQueueSize:   256,
+		RecvQueueSize:   256,
 	}
 }
 

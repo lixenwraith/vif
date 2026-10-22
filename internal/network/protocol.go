@@ -15,9 +15,6 @@ type MessageType uint8
 // yet; nothing sends or accepts them, and NetworkSystem counts an unrecognised type
 // as a drop rather than translating it.
 const (
-	// Control
-	MsgHeartbeat MessageType = 0x01 // Live: keeps a silent stream inside its read deadline
-
 	// MsgSessionRoute is the one frame a dialer sends before it reads: the session
 	// name it was given, so one address can carry several. A front door reads it to
 	// place the connection, and the session refuses a name not its own, so a stale
