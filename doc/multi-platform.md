@@ -226,7 +226,7 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 |---|---|
 | **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carries every proxied player's bytes; for a browser it also unmasks and frames them, which costs microseconds (fleet §9). |
 | A bridge process in the session pod. | An image, a container and a hop per session, and a socket whose latency this repository does not control: one without `TCP_NODELAY` holds each frame toward the player until the last is acknowledged, tens of milliseconds a frame. |
-| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps the allocator's hop and moves the `Origin` check into every pod. The listener exists for one binary on a LAN or in a test (below); the fleet does not use it. |
+| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps the allocator's hop and moves the `Origin` check into every pod. The listener exists for one binary on a LAN, a terminal that hosts for pages, or a test (below); the fleet does not use it. |
 | A third-party package. | `net/http` has no WebSocket handler, `golang.org/x/net/websocket` is deprecated, and a maintained package is a network-facing dependency on the path every player takes. |
 | The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |
 | An ingress controller. | None translates WebSocket to a raw TCP backend. |
@@ -235,9 +235,16 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 
 `vif -host ws://:7777` or `-serve ws://:7777` serves a session over WebSocket from
 one binary, one protocol per listener. The upgrade feeds the TCP accept loop, so
-the handshake budget and per-address admission apply unchanged. It is plain `ws`
-on any path, and checks no `Origin`: it grants nothing ambient a foreign page could
-borrow. `-join ws://host:7777/<name>` joins it from a terminal or a page.
+the handshake budget and per-address admission apply unchanged. It answers on any
+path and checks no `Origin`: it grants nothing ambient a foreign page could borrow.
+`-join ws://host:7777/<name>` joins it from a terminal or a page served over plain
+http. A page served over https opens only `wss://`, so a terminal that hosts for
+one binds `wss://:7777` and serves the certificate `-cert` and `-key` name, as does
+`:host wss://:7777` in a run started with them; the dialling browser must trust
+that certificate (one a public authority issued for the host's name, or a private
+one the player's browser was told to trust), and its page's `connect-src` must
+allow the host's origin. A terminal joins it with `-join wss://host:7777/<name>`
+under the system's trust roots.
 
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
 address, as it sees front-door players, so per-player admission is the
@@ -264,8 +271,9 @@ why it was refused; it never accepts an upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The route is same-origin with the page, so a
-`connect-src 'self'` policy permits it. Ordinary CORS headers are not a substitute
-for the `Origin` check. Browser admission credentials, short-lived and
+`connect-src 'self'` policy permits it; a terminal's own `wss://` door is another
+origin, which that policy must name (`connect-src 'self' wss:`) before the page can
+join it. Ordinary CORS headers are not a substitute for the `Origin` check. Browser admission credentials, short-lived and
 session-scoped, are [open work](todo.md#add-browser-admission-authentication).
 
 Native clients use raw TCP, through the allocator's front door or the session's

@@ -35,7 +35,7 @@ func Run(cfg Config) error {
 	// A port the player asked for that this run cannot have ends it before the
 	// terminal starts, as a -join that cannot dial does.
 	if cfg.resumeHost != "" && buildHasSocketNetwork {
-		ln, err := network.Listen(cfg.resumeHost, network.DebugConfig(network.RoleHost, cfg.resumeHost))
+		ln, err := network.Listen(cfg.resumeHost, cfg.hostNetwork(cfg.resumeHost))
 		if err != nil {
 			return fmt.Errorf("host %s: %w", cfg.resumeHost, err)
 		}

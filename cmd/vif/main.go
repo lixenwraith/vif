@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -161,6 +162,9 @@ func main() {
 	bots := flagSession.botCount()
 	if sessionErr == nil && *flagHeadless && (*flagWatch || bots == 0 && *flagReplay == "" || flagSession.serve != "") {
 		sessionErr = errors.New("-headless requires -bot or -replay and cannot combine with -watch or -serve")
+	}
+	if sessionErr == nil && flagSession.cert != "" {
+		sessionTLS, sessionErr = network.LoadTLS(flagSession.cert, flagSession.key)
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
@@ -366,6 +370,7 @@ var (
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) paths.SettingsStore
 	pageClaims                        app.ClaimStore
+	sessionTLS                        *tls.Config // -cert and -key, read once validated
 )
 
 // buildConfig translates parsed flags into the runtime configuration
@@ -392,7 +397,7 @@ func buildConfig() app.Config {
 		cfg.JoinAddress, cfg.SessionName = join.Addr, cmp.Or(join.Name, cfg.SessionName)
 	}
 	cfg.HostAddress, cfg.ListenAddress = endpoint(flagSession.host).Addr, endpoint(flagSession.listen).Addr
-	cfg.RelayAddress = endpoint(flagSession.relay).Addr
+	cfg.RelayAddress, cfg.TLS = endpoint(flagSession.relay).Addr, sessionTLS
 
 	if flagSession.serve != "" {
 		cfg.HostAddress = endpoint(flagSession.serve).Addr
@@ -529,6 +534,7 @@ type sessionFlags struct {
 	listen      string
 	noAdvertise bool
 	relay       string
+	cert, key   string
 
 	// slow is the eviction policy a host applies to a participant that cannot keep
 	// up; see converge.SlowPolicy.
@@ -554,10 +560,12 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 }
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.host, "host", "", "Host a session on a bind address, :7777 for tcp or ws://:7777 for WebSocket")
+	fs.StringVar(&f.host, "host", "", "Host a session on a bind address, :7777 for tcp, ws://:7777 or wss://:7777 for WebSocket")
 	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given")
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
-	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777 or ws://:7777")
+	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777, ws://:7777 or wss://:7777")
+	fs.StringVar(&f.cert, "cert", "", "Certificate chain a wss:// host serves, a PEM file; for -host, -serve or :host")
+	fs.StringVar(&f.key, "key", "", "The certificate's private key, a PEM file; default the -cert file")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,
@@ -608,9 +616,12 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
 	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bot != "" ||
-		f.authority != "" || f.listen != "" || f.noAdvertise || f.relay != "" || f.name != "" || f.lifetime().Bounded()) &&
-		(schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -no-advertise, -relay, -name and the session lifetime bounds are available only in interactive play")
+		f.authority != "" || f.listen != "" || f.noAdvertise || f.relay != "" || f.name != "" || f.cert != "" || f.key != "" ||
+		f.lifetime().Bounded()) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -no-advertise, -relay, -name, -cert, -key and the session lifetime bounds are available only in interactive play")
+	}
+	if f.key != "" && f.cert == "" {
+		return fmt.Errorf("-key is the key of a -cert certificate")
 	}
 	if _, err := app.BotSpecs(f.bot); err != nil {
 		return err
@@ -639,6 +650,9 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 			err = e.Listenable()
 		case e.Name != "":
 			err = validSessionName(e.Name)
+		}
+		if err == nil && a.binds && e.Secure() && f.cert == "" {
+			err = errors.New("a wss:// host serves a certificate; give one with -cert")
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", a.flag, err)

@@ -281,7 +281,7 @@ func echoServer(t *testing.T) (string, chan error) {
 // a pong between its halves, and Close completes the handshake well inside its bound.
 func TestRoundTripAcrossFragmentsPingsAndClose(t *testing.T) {
 	url, ended := echoServer(t)
-	c, err := Dial(t.Context(), url+"/any/path?q=1")
+	c, err := Dial(t.Context(), url+"/any/path?q=1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +359,7 @@ func TestHandshakeLeavesBytesReadPastItToTheStream(t *testing.T) {
 			"Connection: Upgrade\r\nSec-WebSocket-Accept: "+acceptKey(r.Header.Get("Sec-WebSocket-Key"))+"\r\n\r\n"),
 			appendFrame(nil, opBinary, []byte("first"), nil)...))
 	}()
-	d, err := Dial(t.Context(), "ws://"+listener.Addr().String())
+	d, err := Dial(t.Context(), "ws://"+listener.Addr().String(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

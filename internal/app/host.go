@@ -396,7 +396,7 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	ln := a.cfg.hostListener
 	a.cfg.hostListener = nil
 	if ln == nil {
-		if ln, err = network.Listen(addr, network.DebugConfig(network.RoleHost, addr)); err != nil {
+		if ln, err = network.Listen(addr, a.cfg.hostNetwork(addr)); err != nil {
 			a.cfg.FixedAuthority = fixed
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
@@ -438,7 +438,7 @@ func (a *App) hostTakenSessionLocked(addr string) error {
 	}
 	bound := port.ListenAddr()
 	if !port.ListensOn(addr) {
-		ln, err := network.Listen(addr, network.DebugConfig(network.RoleHost, addr))
+		ln, err := network.Listen(addr, a.cfg.hostNetwork(addr))
 		if err != nil {
 			return fmt.Errorf("host %s: %w", addr, err)
 		}

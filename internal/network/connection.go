@@ -3,7 +3,6 @@ package network
 import (
 	"bufio"
 	"compress/flate"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -474,8 +473,8 @@ func (pm *PeerManager) Close() {
 	}
 }
 
-// dial connects to a target by the transport it names, TLS over TCP when configured,
-// or through the configuration's own Dial.
+// dial connects to a target by the transport it names, or through the
+// configuration's own Dial.
 func dial(target string, cfg *Config) (net.Conn, error) {
 	if cfg.Dial != nil {
 		return cfg.Dial()
@@ -485,16 +484,13 @@ func dial(target string, cfg *Config) (net.Conn, error) {
 		return nil, err
 	}
 	var conn net.Conn
-	dialer := &net.Dialer{Timeout: cfg.ConnectTimeout}
 	switch {
 	case e.Scheme == SchemeWebSocket:
-		conn, err = dialWebSocket(e.Addr, cfg.ConnectTimeout)
+		conn, err = dialWebSocket(e.Addr, cfg.ConnectTimeout, cfg.TLS)
 	case !buildDialsTCP:
 		err = errors.New("TCP unavailable in a browser")
-	case cfg.TLS != nil:
-		conn, err = tls.DialWithDialer(dialer, "tcp", e.Addr, cfg.TLS)
 	default:
-		conn, err = dialer.Dial("tcp", e.Addr)
+		conn, err = (&net.Dialer{Timeout: cfg.ConnectTimeout}).Dial("tcp", e.Addr)
 	}
 	return conn, plainNetError(err)
 }

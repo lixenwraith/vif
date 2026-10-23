@@ -28,6 +28,9 @@ limit_req_zone  $proxy_protocol_addr zone=vif_ws_req:10m rate=12r/m;
 # its own <meta> policy intersects with the header, so both want the value:
 #
 #   connect-src 'self' wss://<site-host>;
+#
+# A page that is to join a game a terminal hosts at its own wss:// door needs that
+# origin too, which only a bare scheme covers: connect-src 'self' wss:;
 
 # --- server context, inside the site's TLS server block ---
 

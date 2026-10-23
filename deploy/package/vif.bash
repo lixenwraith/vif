@@ -5,6 +5,8 @@ _vif() {
 	case ${COMP_WORDS[COMP_CWORD-1]} in
 	-host) ;;
 	-serve) ;;
+	-cert) ;;
+	-key) ;;
 	-join) ;;
 	-name) ;;
 	-players) ;;
@@ -37,7 +39,7 @@ _vif() {
 	-lt|-log-stat) ;;
 	-lr|-log-recorder) ;;
 	-log-session-id) ;;
-	*) mapfile -t COMPREPLY < <(compgen -W '-host -serve -join -name -players -bot -authority -slow-window -slow-late -slow-bytes -listen -no-advertise -relay -size -probe -first-join -empty -drain -d -config-embedded -config-dir -s -config-scenario -f -config-content -k -config-keymap -config-music -config-sounds -color -g -gui -cli -maximized -fullscreen -scale -mute -ab -audio-backend -nw -no-wait -seed -speed -script -headless -watch -r -replay -check -schema -l -log -lv -log-level -ls -log-scope -lt -log-stat -lr -log-recorder -log-session-id -log-stdout -j -journal -mw -music-wav -dev -h -help -version' -- "$cur") ;;
+	*) mapfile -t COMPREPLY < <(compgen -W '-host -serve -cert -key -join -name -players -bot -authority -slow-window -slow-late -slow-bytes -listen -no-advertise -relay -size -probe -first-join -empty -drain -d -config-embedded -config-dir -s -config-scenario -f -config-content -k -config-keymap -config-music -config-sounds -color -g -gui -cli -maximized -fullscreen -scale -mute -ab -audio-backend -nw -no-wait -seed -speed -script -headless -watch -r -replay -check -schema -l -log -lv -log-level -ls -log-scope -lt -log-stat -lr -log-recorder -log-session-id -log-stdout -j -journal -mw -music-wav -dev -h -help -version' -- "$cur") ;;
 	esac
 }
 complete -F _vif vif

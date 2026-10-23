@@ -2,12 +2,21 @@ package network
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -548,4 +557,92 @@ func TestAParticipantIsACursorNotARosterEntry(t *testing.T) {
 	if got := hosted.ParticipantCount(); got != 2 {
 		t.Fatalf("an interactive host and one guest counted %d participants, want 2", got)
 	}
+}
+
+// TestAWssHostIsJoinedByADialerThatTrustsItsCertificate serves a session over wss
+// from one binary: the door speaks TLS with the certificate it was given, a dialer
+// that trusts none of the host's is turned away before the offer, and one that does
+// is admitted as a ws dialer is. A wss door opens only with a certificate.
+func TestAWssHostIsJoinedByADialerThatTrustsItsCertificate(t *testing.T) {
+	certFile := filepath.Join(t.TempDir(), "host.pem")
+	pool := writeSelfSigned(t, certFile)
+	serverTLS, err := LoadTLS(certFile, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Listen("wss://127.0.0.1:0", DebugConfig(RoleHost, "")); err == nil {
+		t.Fatal("a wss door opened with no certificate to serve")
+	}
+
+	offer := testOffer()
+	hostCfg := DebugConfig(RoleHost, "wss://127.0.0.1:0")
+	hostCfg.TLS = serverTLS
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{
+		Assign: func([]string) (SessionOffer, error) { return offer, nil },
+	}, time.Second)
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	route := host.Addr().String() + "/"
+	if !strings.HasPrefix(route, "wss://") {
+		t.Fatalf("the door is %s, want a wss:// address", route)
+	}
+
+	if _, _, err := DialSession(route, DebugConfig(RolePeer, "")); err == nil {
+		t.Fatal("a dial trusting none of the host's certificate was admitted")
+	} else if err.Error() != "the host's certificate is not one this machine trusts" {
+		t.Fatalf("an untrusted certificate read %q", err)
+	}
+	trusting := DebugConfig(RolePeer, "")
+	trusting.TLS = &tls.Config{RootCAs: pool}
+	pending, got, err := DialSession(route, trusting)
+	if err != nil {
+		t.Fatalf("a dial trusting the host's certificate was refused: %v", err)
+	}
+	defer pending.Close()
+	if got.Assigned != offer.Assigned {
+		t.Fatalf("offer assigned %d, want %d", got.Assigned, offer.Assigned)
+	}
+}
+
+// writeSelfSigned writes a certificate for 127.0.0.1 and its key to one PEM file,
+// as -cert alone reads them, and returns the pool that trusts it.
+func writeSelfSigned(t *testing.T, file string) *x509.CertPool {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pemFile bytes.Buffer
+	_ = pem.Encode(&pemFile, &pem.Block{Type: "CERTIFICATE", Bytes: der})
+	_ = pem.Encode(&pemFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	if err := os.WriteFile(file, pemFile.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
+	return pool
 }

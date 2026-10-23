@@ -47,7 +47,7 @@ func newReach(inst Instance, reg *status.Registry) *Reach {
 // BindAdvertised binds the port this participant is dialled on and returns the
 // address to declare. want is -listen, empty for the coordinator's own port. An
 // address with no host is completed by the coordinator from the connection.
-func BindAdvertised(want, hostAddr string, cfg *network.Config) (net.Listener, string) {
+func BindAdvertised(want, hostAddr string) (net.Listener, string) {
 	if want == "" {
 		_, port, err := net.SplitHostPort(hostAddr)
 		if err != nil || port == "" {
@@ -59,7 +59,7 @@ func BindAdvertised(want, hostAddr string, cfg *network.Config) (net.Listener, s
 	if host, _, err := net.SplitHostPort(want); err == nil && unspecifiedHost(host) {
 		explicit = false
 	}
-	ln, err := network.BindPeer(want, cfg)
+	ln, err := network.BindPeer(want)
 	if err != nil {
 		// A port a participant could not take makes it a leaf, never an error.
 		vlog.Warn("net", "msg", "no listening port; this participant is a leaf",

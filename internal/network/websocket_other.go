@@ -5,6 +5,7 @@ package network
 import (
 	"cmp"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -26,7 +27,7 @@ const writeLinger = parameter.NetworkWriteLinger
 // port. A refusal before the upgrade carries the allocator's JSON error, and its
 // message is reported as a join reply's reason is. A URL with no host is this
 // machine, as a host-less host:port is to TCP.
-func dialWebSocket(target string, timeout time.Duration) (net.Conn, error) {
+func dialWebSocket(target string, timeout time.Duration, tlsCfg *tls.Config) (net.Conn, error) {
 	if u, err := url.Parse(target); err == nil && u.Hostname() == "" {
 		u.Host = net.JoinHostPort("localhost", u.Port())
 		target = u.String()
@@ -37,7 +38,7 @@ func dialWebSocket(target string, timeout time.Duration) (net.Conn, error) {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	conn, err := websocket.Dial(ctx, target)
+	conn, err := websocket.Dial(ctx, target, tlsCfg)
 	if err == nil {
 		return conn, nil
 	}
@@ -62,20 +63,23 @@ func routeAnswered(err error) bool {
 // buildDialsTCP is whether this build has a socket to dial a host:port with.
 const buildDialsTCP = true
 
-// wsListener answers ws:// upgrades on a TCP port and yields each as a stream, so
-// the accept loop's handshake budget and per-address admission see a WebSocket
-// joiner as they see a TCP one. The HTTP request before it is bounded in time and
-// size; Origin is not checked, since a session's join handshake is its admission.
+// wsListener answers ws:// upgrades on a TCP port, under TLS for wss://, and yields
+// each as a stream, so the accept loop's handshake budget and per-address admission
+// see a WebSocket joiner as they see a TCP one. The HTTP request before it is
+// bounded in time and size, the TLS handshake with it; Origin is not checked, since
+// a session's join handshake is its admission.
 type wsListener struct {
 	tcp    net.Listener
+	scheme string
 	srv    *http.Server
 	conns  chan net.Conn
 	closed chan struct{}
 	once   sync.Once
 }
 
-// listenWebSocket binds target, a ws:// URL that Listenable accepted.
-func listenWebSocket(target string, timeout time.Duration) (net.Listener, error) {
+// listenWebSocket binds target, a ws:// or wss:// URL that Listenable accepted; the
+// latter serves tlsCfg.
+func listenWebSocket(target string, timeout time.Duration, tlsCfg *tls.Config) (net.Listener, error) {
 	u, err := url.Parse(target)
 	if err != nil {
 		return nil, err
@@ -84,7 +88,7 @@ func listenWebSocket(target string, timeout time.Duration) (net.Listener, error)
 	if err != nil {
 		return nil, err
 	}
-	l := &wsListener{tcp: tcp, conns: make(chan net.Conn), closed: make(chan struct{})}
+	l := &wsListener{tcp: tcp, scheme: u.Scheme, conns: make(chan net.Conn), closed: make(chan struct{})}
 	l.srv = &http.Server{
 		Handler:           http.HandlerFunc(l.upgrade),
 		ReadHeaderTimeout: cmp.Or(timeout, DefaultConfig().ConnectTimeout),
@@ -92,7 +96,11 @@ func listenWebSocket(target string, timeout time.Duration) (net.Listener, error)
 		ErrorLog:          log.New(io.Discard, "", 0),
 	}
 	l.srv.SetKeepAlivesEnabled(false)
-	go func() { _ = l.srv.Serve(tcp) }()
+	serving := tcp
+	if u.Scheme == "wss" {
+		serving = tls.NewListener(tcp, tlsCfg)
+	}
+	go func() { _ = l.srv.Serve(serving) }()
 	return l, nil
 }
 
@@ -133,4 +141,4 @@ func (l *wsListener) Close() error {
 	return err
 }
 
-func (l *wsListener) Addr() net.Addr { return wsAddr("ws://" + l.tcp.Addr().String()) }
+func (l *wsListener) Addr() net.Addr { return wsAddr(l.scheme + "://" + l.tcp.Addr().String()) }
