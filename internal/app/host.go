@@ -212,8 +212,8 @@ func (a *App) joinLocked(target string) error {
 }
 
 // sessionRole is what a run is to its session, read from what the session wrote
-// rather than kept beside it. Who authors is not part of it but the authority's,
-// so a guest that inherited the term is a guest that authors.
+// rather than kept beside it. A guest that took the term over hosts: its port takes
+// joins as the first host's did.
 type sessionRole uint8
 
 const (
@@ -250,6 +250,8 @@ func (a *App) sessionRoleLocked() sessionRole {
 		return roleServer
 	case a.sessionTransportLocked() == nil:
 		return roleSolo
+	case a.cfg.JoinAddress != "" && a.world.IsSessionCoordinator():
+		return roleHost
 	case a.cfg.JoinAddress != "" && a.seatsOnly():
 		return roleLeft
 	case a.cfg.JoinAddress != "":
@@ -623,9 +625,9 @@ func (a *App) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 		kept = append(kept, p)
 	}
 	// Nothing names the session left: not the address a restart would go back to,
-	// nor the name the next one would answer to.
+	// nor the name the next one would answer to, nor the ceiling it was opened with.
 	cfg := a.cfg
-	a.cfg.JoinAddress, a.cfg.HostAddress, a.cfg.SessionName = "", "", ""
+	a.cfg.JoinAddress, a.cfg.HostAddress, a.cfg.SessionName, a.cfg.sessionPlayers = "", "", "", 0
 	// The claim the run left under keeps its record as it stands, for a return to
 	// that session; the one it opens issues its own.
 	prior := a.claim.Swap(nil)
@@ -694,15 +696,11 @@ func (a *App) sessionSummaryLocked() string {
 	}
 	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
 	participant := a.world.LocalParticipant()
-	// The role this run holds now: a guest that inherited the term hosts the session
-	// at the address it declared, which its peers redial, not the one it dialled. A
-	// harness binds no address, so the word stands alone rather than trailing a blank.
-	where, addr := "hosting", a.cfg.HostAddress
-	switch {
-	case !a.sessionRoleLocked().joined():
-	case a.world.IsSessionCoordinator():
-		addr = a.reach.DeclaredAddr()
-	default:
+	// A guest that took the term over hosts at the address it declared, which its
+	// session dials, not the one it dialled. A harness binds no address, so the word
+	// stands alone rather than trailing a blank.
+	where, addr := "hosting", cmp.Or(a.cfg.HostAddress, a.reach.DeclaredAddr())
+	if a.sessionRoleLocked().joined() {
 		where, addr = "joined", a.cfg.JoinAddress
 	}
 	if addr != "" {

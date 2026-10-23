@@ -453,21 +453,25 @@ func (a *App) forked(roster []network.RosterEntry, local network.PeerID) {
 // errRedialEnded turns down an admission the redialling run no longer takes.
 var errRedialEnded = errors.New("the run went on without this host")
 
-// redial takes this run back to the host it lost, at the door it came in by: a link
-// that dropped on this side alone leaves a place that host's Wraith gives back,
-// under the claim the run joined with. Only a person's run that dialled the
-// session's first host has that door. The claim is let go for the dial to name, its
-// record as the drop left it.
+// redial takes this run back to the host it lost, which it had a link of its own
+// to: a link that dropped on this side alone leaves a place that host's Wraith gives
+// back, under the claim the run joined with. The chain names where each host but the
+// first is dialled; the first is at the door this run came in by. Only a person's run
+// redials. The claim is let go for the dial to name, its record as the drop left it.
 func (a *App) redial(lost network.PeerID) bool {
 	var cfg Config
 	door := false
 	a.world.RunSafe(func() {
 		cfg = a.cfg
-		door = cfg.Mode == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" && a.joinedThrough == 0 &&
-			lost == engine.CoordinatorParticipant && !a.leaving.Load() && a.restart.Load() == nil
+		door = cfg.Mode == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" &&
+			!a.leaving.Load() && a.restart.Load() == nil
 	})
 	if !door {
 		return false
+	}
+	addr, ok := a.authority.Chain().Lookup(lost)
+	if !ok {
+		addr = cfg.JoinAddress
 	}
 	c := a.claim.Swap(nil)
 	if c == nil {
@@ -475,18 +479,20 @@ func (a *App) redial(lost network.PeerID) bool {
 	}
 	a.claims.release(c)
 	a.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost),
-		"dial", network.Shown(cfg.JoinAddress))
-	core.Go(func() { a.redialDoor(cfg, lost, c) })
+		"dial", network.Shown(addr))
+	core.Go(func() { a.redialDoor(cfg, addr, lost, c) })
 	return true
 }
 
-// redialDoor dials the lost host while this run waits on it. Admitted back into its
-// own place, the run is replaced by the one admitted; a refusal no retry helps, a
-// door nothing answers at, or a place that is not this run's begins the walk. A run
-// that stays in its session holds its claim again.
-func (a *App) redialDoor(cfg Config, lost network.PeerID, c *claim) {
+// redialDoor dials the lost host at addr while this run waits on it. Admitted back
+// into its own place, the run is replaced by the one admitted; a refusal no retry
+// helps, a door nothing answers at, or a place that is not this run's begins the
+// walk. A run that stays in its session holds its claim again.
+func (a *App) redialDoor(cfg Config, addr string, lost network.PeerID, c *claim) {
+	dial := cfg
+	dial.JoinAddress = addr
 	for a.authority.Redialing(lost) {
-		d, err := dialJoin(cfg)
+		d, err := dialJoin(dial)
 		if err != nil {
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
 				a.log.Info("session", "msg", "lost host refused the redial", "error", err.Error())

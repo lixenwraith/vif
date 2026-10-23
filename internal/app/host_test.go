@@ -1703,7 +1703,7 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 				guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
 			})
 			return guest
-		}, roleGuest, "already in a session", "already in a session", "", "Session hosting, "},
+		}, roleHost, "already in a session", "already hosting", "", "Session hosting, "},
 		{"its session left", func() *App {
 			leave()
 			for deadline := time.Now().Add(socketWait); leftPort.PeerCount() > 0; time.Sleep(time.Millisecond) {
@@ -1761,8 +1761,8 @@ func leaveAs(t *testing.T, a *App) {
 // TestALeavingGuestPlaysOnInASessionOfItsOwn: a guest that leaves goes on with the
 // world as it stands, authoring a session of its own under the identity it had and
 // the term after the one it held. Nobody it left is in that world any more, its
-// host keeps its cursor as a Wraith, and nothing names the session it left, so
-// :host and :join are open to it.
+// host keeps its cursor as a Wraith, and nothing names the session it left, its
+// -players included, so :host and :join are open to it.
 func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
@@ -1770,6 +1770,7 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	tickUntilCursor(t, host)
 	stopTicking := tickInBackground(host)
 	t.Cleanup(stopTicking)
+	host.cfg.Participants = 3
 	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatal(err)
 	}
@@ -1804,6 +1805,9 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	}
 	if hostErr != nil || joinErr != nil || leaveErr == nil {
 		t.Fatalf("after leaving, :host %v, :join %v, :leave %v; want the first two taken and nothing left to leave", hostErr, joinErr, leaveErr)
+	}
+	if got := guest.playerCapacity(); got != min(parameter.MaxPlayers, guest.scenario.MaxPlayers) {
+		t.Fatalf("after leaving, the guest holds its own session to %d players; want no ceiling but the scenario's", got)
 	}
 	resume := tickInBackground(host)
 	t.Cleanup(resume)

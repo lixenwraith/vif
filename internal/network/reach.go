@@ -110,9 +110,9 @@ type PeerGate struct {
 }
 
 // PeerAcceptor returns the accept handshake for links from participants rather
-// than joiners; a guest binds with this and never with HostAcceptor. Only the
-// build half of the identity is verified, as on the join path: the session half is
-// settled by the roster the gate admits against.
+// than joiners, which a guest's port runs beside HostAcceptor's. Only the build half
+// of the identity is verified, as on the join path: the session half is settled by
+// the roster the gate admits against.
 func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, error) {
 	return func(conn net.Conn) (PeerID, error) {
 		if timeout > 0 {

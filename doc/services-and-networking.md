@@ -227,12 +227,12 @@ state, peer count and connected state.
 |---|---|
 | `RoleNone` | Disabled/no-op. |
 | `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer's claims, then allocates a participant identity and slot, or the place a claim takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
-| `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
+| `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it, and runs `AcceptSession` there for a join, which the opening frame tells from a peer link and the app admits once this participant hosts; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
 ```mermaid
 flowchart TD
-    Transport["Transport"] --> Listener["accept loop: HostAcceptor or AcceptPeer"]
+    Transport["Transport"] --> Listener["accept loop: HostAcceptor, AcceptPeer or both"]
     Transport --> Dial["coordinator dial, preconnected stream or DialPeer"]
     Listener --> Manager["PeerManager"]
     Dial --> Manager
@@ -418,11 +418,13 @@ burst's first and sync-flushes once. Go's levels 1-6 drop their history on a flu
 block under 128 bytes, which is most bursts; 7 keeps it.
 
 Control messages carry join offer/reply, start/ready gates and disconnect notices.
-`MsgSessionRoute` (0x05) is the exception to the coordinator speaking first: a
-dialer that was given a session name sends it as one frame before it reads, so a front door can place the connection on an address serving several
-sessions and the session it reaches can refuse a name that is not its own; the
-fleet's allocator is one ([fleet §9](kubernetes-fleet.md#9-the-session-routes)). A
-host started without `-name` expects no such frame. Once the dialer is admitted, the
+`MsgSessionRoute` (0x05) is the exception to the coordinator speaking first: every
+join sends it as one frame before it reads, with the session name it was given or
+none. A front door places the connection on it where one address serves several
+sessions, the fleet's allocator among them ([fleet
+§9](kubernetes-fleet.md#9-the-session-routes)); the session it reaches refuses a name
+that is not its own; and a port that takes peer links too tells a join from one by
+it, a peer link opening with `MsgConnect`. Once the dialer is admitted, the
 coordinator asks which places it can come back to (`MsgJoinClaims`, 0x06) and the
 dialer answers with the tokens of the claims it keeps, at most `ClaimsKept`, before
 anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths)). It is asked

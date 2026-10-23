@@ -538,16 +538,17 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and, once it takes the session over, joins (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
-| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
+| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
 A successor is usually on another machine and cannot bind its predecessor's
 address, so a successor that authors must already be reachable at an address of its
 own (§5.3). Nothing is rebound: the predecessor's address is not reused, so there is
 no `TIME_WAIT` race to back off from and no window in which an address is
 half-released. What moves is which address the survivors dial, not which address
-answers.
+answers, and new players dial the same one: the successor's port takes joins as the
+first host's did.
 
 `-authority host` is the default for `-serve`. There the address *is* the session:
 an orchestrator replacing the pod at the same address is the reconnect its guests
@@ -584,14 +585,15 @@ The procedure on each survivor is:
    would have carried that news is produced by the participant that is gone, so a
    survivor two links away opens the same walk from the notice, which names the lost
    term.
-2. **Redial the host at this run's own door.** A person's run that joined the
-   session's first host directly redials it under the claim its place waits under
-   (§5.4): a link that dropped on its side alone leaves a place the host's Wraith
-   gives back, and the run admitted back replaces this one, as `:join` does. It
-   waits up to a window, however many other survivors lost the host too, so a host
-   that went silent costs that window; a host that is gone ends it at once — nothing
-   listening, a refusal no retry helps, or no place for this run. A successor's door
-   admits nobody yet, so any other survivor walks at once.
+2. **Redial the host.** A person's run with a link of its own to its host redials
+   it under the claim its place waits under (§5.4), the first host at the door the
+   run came in by and a host that took the session over where the chain says: a link
+   that dropped on its side alone leaves a place the host's Wraith gives back, and
+   the run admitted back replaces this one, as `:join` does. It waits up to a
+   window, however many other survivors lost the host too, so a host that went
+   silent costs that window; a host that is gone ends it at once — nothing
+   listening, a refusal no retry helps, or no place for this run. A survivor that
+   reached its host through another participant walks at once.
 3. **Walk the list.** A survivor dials each candidate whose turn has begun, once a
    second, and announces itself on each link it opens, so a host that took the term
    before that link existed answers with its record. A candidate whose turn comes
@@ -689,6 +691,13 @@ instance binds it, and authorship never leaves the machine that started the worl
    captures nothing. Admission is roster membership, read from the world rather than
    from the coordinator's own list, and deliberately *not* the term: a survivor
    still electing is exactly who needs to open one.
+5. The same port takes joins, which open with the session's name
+   (`MsgSessionRoute`, empty for none) where a peer link opens with `MsgConnect`, so
+   its first byte says which handshake runs. A join is turned away until this
+   participant holds the term, as `RefusalUnknown`, or `RefusalHandoff` while a term
+   moves; from then on it is admitted as at the first host's door, under the
+   `-players` the session was opened with, which every offer carries
+   (`SessionOffer.Players`).
 
 #### Why the chain is beside the roster and not in it
 
@@ -725,6 +734,7 @@ handoff.
 | Rejoin after a handoff | Every participant holds the whole chain, so every survivor walks it from the top, each candidate a window's turn, a guest whose own link dropped redialling its host first. |
 | Redial wait | A guest redials its own host for a whole window before it walks, however many others lost the host too: a host that went silent costs that window, and one that quit or crashed refuses at once. |
 | Relaying | Opt-in and off by default (`:relay`, the Multiplayer page). A run carries only those that joined through it unless its player offers more, so nobody's traffic lands on a run that did not offer to carry it. |
+| Joins after a handoff | The successor's own port takes them, the one its survivors already dial, rather than a second door; a join and a peer link each open with a frame of their own. The `-players` ceiling travels in the offer, so it holds whoever hosts. |
 
 ### 5.4 Wraiths
 
@@ -851,10 +861,11 @@ serves the leave, so no other command interleaves:
    as the session ending (`RefusalEnding`), so nobody is admitted into a term that
    ends with it.
 
-Nothing names the left session afterwards: the join and host addresses and the
-session name are cleared, so a restart neither dials back into it nor listens on its
-address, and `:session` reads `Session hosting` with no address. A run already being
-replaced is not left: what replaces it decides where it goes.
+Nothing names the left session afterwards: the join and host addresses, the session
+name and the `-players` a joined session carried are cleared, so a restart neither
+dials back into it nor listens on its address, and `:session` reads `Session
+hosting` with no address. A run already being replaced is not left: what replaces
+it decides where it goes.
 
 ## 6. Current operating point
 
@@ -1175,8 +1186,10 @@ since on one machine the host already holds the default port — and the host lo
 `succession chain published` as each is added. On each guest `:session` names how
 many candidates the chain holds and whether this one is listening. Kill the host:
 each guest's redial is refused, the survivors walk to the list's first candidate and
-continue in one session, rather than each continuing alone. Repeat with
-`-no-advertise` on the first guest and the second hosts instead.
+continue in one session, rather than each continuing alone. The one hosting now
+reads `Session hosting` and its port in `:session`, and a third terminal's `-join`
+at that port is admitted into the session. Repeat with `-no-advertise` on the first
+guest and the second hosts instead.
 
 ## 10. Where this came from
 

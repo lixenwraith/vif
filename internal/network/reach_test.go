@@ -163,46 +163,45 @@ func TestBindPeerFallsBackWhenThePortIsTaken(t *testing.T) {
 	}
 }
 
-// TestAPeerDialBecomesALink proves a participant that bound a port of its own is
-// dialled by another and the stream becomes an ordinary peer.
-func TestAPeerDialBecomesALink(t *testing.T) {
-	ln, err := BindPeer("127.0.0.1:0", nil)
-	if err != nil {
-		t.Fatalf("bind: %v", err)
+// TestAParticipantsPortTakesPeerLinksAndJoins: a participant that bound a port of
+// its own is dialled by another and the stream becomes an ordinary peer, and a join
+// at that port runs the session's handshake, each told by the frame it opens with.
+// Only the join is served and reaches the join gate, and one that named another
+// session is refused as such.
+func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
+	offer := testOffer()
+	offer.Host, offer.Assigned = 2, 4
+	offer.Roster = []RosterEntry{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}, {ID: 4, Slot: 2}}
+	admitted := make(chan PeerID, 4)
+	port := func(local PeerID, gate func(PeerID) error) *SocketPort {
+		ln, err := BindPeer("127.0.0.1:0", nil)
+		if err != nil {
+			t.Fatalf("bind: %v", err)
+		}
+		cfg := DebugConfig(RolePeer, "")
+		cfg.ParticipantID = local
+		cfg.PreboundListener = ln
+		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: local, Admit: gate}, time.Second)
+		cfg.AcceptSession = HostAcceptor(Coordinator{
+			Assign: func([]string) (SessionOffer, error) { return offer, nil },
+		}, time.Second)
+		cfg.OnAdmit = func(id PeerID) { admitted <- id }
+		p := NewSocketPort(cfg)
+		if err := p.Start(); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		t.Cleanup(func() { _ = p.Close() })
+		return p
 	}
-	listenCfg := DebugConfig(RolePeer, "")
-	listenCfg.ParticipantID = 2
-	listenCfg.PreboundListener = ln
-	listenCfg.AcceptPeer = PeerAcceptor(PeerGate{
-		Local: 2,
-		Admit: func(from PeerID) error {
-			if from != 3 {
-				return errors.New("not in this session")
-			}
-			return nil
-		},
-	}, time.Second)
-	listener := NewSocketPort(listenCfg)
-	if err := listener.Start(); err != nil {
-		t.Fatalf("listener start: %v", err)
-	}
-	defer listener.Close()
+	listener := port(2, func(from PeerID) error {
+		if from != 3 {
+			return errors.New("not in this session")
+		}
+		return nil
+	})
+	dialer := port(3, nil)
 
-	dialLn, err := BindPeer("127.0.0.1:0", nil)
-	if err != nil {
-		t.Fatalf("bind: %v", err)
-	}
-	dialCfg := DebugConfig(RolePeer, "")
-	dialCfg.ParticipantID = 3
-	dialCfg.PreboundListener = dialLn
-	dialCfg.AcceptPeer = PeerAcceptor(PeerGate{Local: 3}, time.Second)
-	dialer := NewSocketPort(dialCfg)
-	if err := dialer.Start(); err != nil {
-		t.Fatalf("dialer start: %v", err)
-	}
-	defer dialer.Close()
-
-	if err := dialer.DialPeer(ln.Addr().String()); err != nil {
+	if err := dialer.DialPeer(listener.ListenAddr()); err != nil {
 		t.Fatalf("peer dial: %v", err)
 	}
 	if !dialer.Connected(2) {
@@ -212,6 +211,47 @@ func TestAPeerDialBecomesALink(t *testing.T) {
 		"the listener never admitted the participant that dialled it")
 	if !dialer.Send(2, uint8(MsgEvent), nil) {
 		t.Fatal("the new link refused a frame")
+	}
+
+	pending, got, err := DialSession(listener.ListenAddr(), DebugConfig(RolePeer, ""))
+	if err != nil || got.Assigned != 4 {
+		t.Fatalf("a join at the port = (%+v, %v), want the offer to participant 4", got, err)
+	}
+	defer pending.Close()
+	if err := pending.Complete(nil, JoinerReport{}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case id := <-admitted:
+		if id != 4 {
+			t.Fatalf("the join gate ran for participant %d, want the joiner", id)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the join never reached the join gate")
+	}
+	in := make([]Inbound, 8)
+	served := map[PeerID]bool{}
+	for _, e := range in[:listener.Drain(in)] {
+		if e.Kind == InboundConnect {
+			served[e.Peer] = e.Served
+		}
+	}
+	if s, ok := served[3]; !ok || s {
+		t.Fatalf("the peer link connected as %v (present %v), want unserved", s, ok)
+	}
+	if !served[4] {
+		t.Fatal("the join did not connect as served")
+	}
+
+	named := DebugConfig(RolePeer, "")
+	named.SessionName = "7f3c1a"
+	if _, _, err := DialSession(listener.ListenAddr(), named); !errors.Is(err, &Refusal{Code: RefusalUnknown}) {
+		t.Fatalf("a join naming a session this port does not serve: %v", err)
+	}
+	select {
+	case id := <-admitted:
+		t.Fatalf("the join gate ran for participant %d past the one join", id)
+	default:
 	}
 }
 

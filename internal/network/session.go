@@ -58,6 +58,11 @@ type SessionOffer struct {
 	// policy keeps guests from interpreting one host loss in different ways.
 	FixedAuthority bool `json:"fixed_authority,omitempty"`
 
+	// Players is the ceiling on the session's cursors the host that opened it set
+	// with -players, zero for none: a host that takes the session over admits no
+	// more than it would have.
+	Players int `json:"players,omitempty"`
+
 	// Relay is the participant on the far end of the joiner's stream when that is not
 	// the host: the holder a bot joined through. Zero on a dial to the coordinator.
 	Relay PeerID `json:"relay,omitempty"`
@@ -263,9 +268,9 @@ type Coordinator struct {
 	Admit func(net.Addr) error
 
 	// Name is what this session answers to, so one address can serve several. A
-	// dialer sends it before the handshake and one that named another session is
-	// refused. Empty expects no such frame, which is an address with one session
-	// on it — a two-terminal lobby, a harness, a host somebody started by hand.
+	// dialer sends one before the handshake and one that named another session is
+	// refused. Empty answers a dial that named none, which is an address with one
+	// session on it — a two-terminal lobby, a harness, a host somebody started by hand.
 	Name string
 
 	// Scenario answers a joiner that asked for the session's scenario by digest,
@@ -285,13 +290,11 @@ const MaxSessionName = 64
 // rather than being fixed at two.
 func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, error) {
 	return func(conn net.Conn) (id PeerID, err error) {
-		if c.Name != "" {
-			// Before Admit, because a link that named another session costs the
-			// budget Admit holds for the players of this one.
-			if err = readSessionName(conn, c.Name, timeout); err != nil {
-				RefuseJoin(conn, err, timeout)
-				return 0, err
-			}
+		// Before Admit, because a link that named another session costs the budget
+		// Admit holds for the players of this one.
+		if err = readSessionName(conn, c.Name, timeout); err != nil {
+			RefuseJoin(conn, err, timeout)
+			return 0, err
 		}
 		if c.Admit != nil {
 			if err = c.Admit(conn.RemoteAddr()); err != nil {
@@ -790,12 +793,11 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 		_ = conn.SetDeadline(time.Now().Add(base.ConnectTimeout))
 	}
 	// Before the offer is read, because the coordinator reads this before it writes
-	// one and a front door has to place the connection before either happens.
-	if base.SessionName != "" {
-		if err = NewMessage(MsgSessionRoute, []byte(base.SessionName)).Encode(conn); err != nil {
-			_ = conn.Close()
-			return nil, SessionOffer{}, err
-		}
+	// one and a front door has to place the connection before either happens; sent
+	// unnamed too, so a port that also takes peer links tells this is a join.
+	if err = NewMessage(MsgSessionRoute, []byte(base.SessionName)).Encode(conn); err != nil {
+		_ = conn.Close()
+		return nil, SessionOffer{}, err
 	}
 	msg, err := Decode(conn)
 	if err == nil && msg.Type == MsgJoinClaims {

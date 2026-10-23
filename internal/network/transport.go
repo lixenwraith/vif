@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -101,7 +102,7 @@ func (t *Transport) serveAsPeer() error {
 	if t.config.PreboundListener == nil && t.config.ListenAddress == "" {
 		return nil
 	}
-	return t.listen(t.config.ListenAddress, t.config.AcceptPeer, false)
+	return t.listen(t.config.ListenAddress, t.config.AcceptPeer)
 }
 
 // startServer accepts joiners, on no listener when it was given neither one nor an
@@ -110,17 +111,15 @@ func (t *Transport) startServer() error {
 	if t.config.PreboundListener == nil && t.config.Address == "" {
 		return nil
 	}
-	if err := t.listen(t.config.Address, nil, true); err != nil {
+	if err := t.listen(t.config.Address, nil); err != nil {
 		t.running.Store(false)
 		return err
 	}
 	return nil
 }
 
-// listen serves the port the caller bound, else binds addr. accept is the
-// per-connection handshake, nil the coordinator's session handshake; served says
-// the handshake admits joiners rather than peers.
-func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error), served bool) error {
+// listen serves the port the caller bound, else binds addr.
+func (t *Transport) listen(addr string, peer func(net.Conn) (PeerID, error)) error {
 	ln := t.config.PreboundListener
 	if ln == nil {
 		var err error
@@ -128,12 +127,14 @@ func (t *Transport) listen(addr string, accept func(net.Conn) (PeerID, error), s
 			return err
 		}
 	}
-	return t.serve(ln, accept, served)
+	return t.serve(ln, peer)
 }
 
 // serve makes ln this transport's own listener: at Start, or later on a host started
-// with none, which from then on takes joiners on it as one started on it does.
-func (t *Transport) serve(ln net.Listener, accept func(net.Conn) (PeerID, error), served bool) error {
+// with none, which from then on takes joiners on it as one started on it does. It
+// takes joins with the session's handshake and, given peer, links from the
+// session's participants beside them.
+func (t *Transport) serve(ln net.Listener, peer func(net.Conn) (PeerID, error)) error {
 	t.listenMu.Lock()
 	defer t.listenMu.Unlock()
 	switch {
@@ -144,8 +145,59 @@ func (t *Transport) serve(ln net.Listener, accept func(net.Conn) (PeerID, error)
 	}
 	t.listener = ln
 	t.wg.Add(1)
-	go t.acceptLoop(ln, accept, t.config.OnAdmit, served)
+	go t.acceptLoop(ln, door{peer: peer, join: t.config.AcceptSession, admitted: t.config.OnAdmit})
 	return nil
+}
+
+// door is what a listener serves: links from participants already in the session
+// (peer), joins (join), or both, and what runs once a join is a peer. Every dialer
+// speaks first, a peer link with MsgConnect and a join with its session's name, so
+// a door taking both reads which this is off the first byte.
+type door struct {
+	peer, join func(net.Conn) (PeerID, error)
+	admitted   func(PeerID)
+}
+
+// open picks the handshake conn runs, and the stream that handshake reads: one the
+// first byte was read from gives it back. served is a join's.
+func (d door) open(conn net.Conn, timeout time.Duration) (accept func(net.Conn) (PeerID, error), served bool, link net.Conn, err error) {
+	switch {
+	case d.join == nil:
+		return d.peer, false, conn, nil
+	case d.peer == nil:
+		return d.join, true, conn, nil
+	}
+	if timeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(timeout))
+		defer conn.SetReadDeadline(time.Time{})
+	}
+	first := &firstByte{Conn: conn}
+	if _, err := io.ReadFull(conn, first.b[:]); err != nil {
+		return nil, false, nil, err
+	}
+	switch MessageType(first.b[0]) {
+	case MsgConnect:
+		return d.peer, false, first, nil
+	case MsgSessionRoute:
+		return d.join, true, first, nil
+	}
+	return nil, false, nil, fmt.Errorf("transport: %s opened with message %#x, neither a peer link nor a join",
+		conn.RemoteAddr(), first.b[0])
+}
+
+// firstByte is a stream whose first byte door.open read, read again first.
+type firstByte struct {
+	net.Conn
+	b    [1]byte
+	read bool
+}
+
+func (c *firstByte) Read(p []byte) (int, error) {
+	if c.read || len(p) == 0 {
+		return c.Conn.Read(p)
+	}
+	c.read, p[0] = true, c.b[0]
+	return 1, nil
 }
 
 // Listen binds addr as a host serves it, so a caller learns it cannot have the port
@@ -182,13 +234,8 @@ func (t *Transport) DialPeer(addr string, local PeerID) error {
 	if err != nil {
 		return err
 	}
-	if _, err := t.peers.AddConnectionAs(conn, id, false); err != nil {
-		return err
-	}
-	if t.config.OnAdmit != nil {
-		t.config.OnAdmit(id)
-	}
-	return nil
+	_, err = t.peers.AddConnectionAs(conn, id, false)
+	return err
 }
 
 // serveSession adds an admission listener without replacing surviving peer links.
@@ -204,7 +251,7 @@ func (t *Transport) serveSession(addr string, accept func(net.Conn) (PeerID, err
 	}
 	t.extraListeners = append(t.extraListeners, ln)
 	t.wg.Add(1)
-	go t.acceptLoop(ln, accept, admitted, true)
+	go t.acceptLoop(ln, door{join: accept, admitted: admitted})
 	return ln.Addr().String(), nil
 }
 
@@ -226,12 +273,12 @@ func (t *Transport) serveConn(conn net.Conn, accept func(net.Conn) (PeerID, erro
 		return errors.New("transport is stopped")
 	}
 	t.wg.Add(1)
-	go t.handshake(conn, accept, admitted, true)
+	go t.handshake(conn, door{join: accept, admitted: admitted})
 	return nil
 }
 
 // acceptLoop handles incoming connections
-func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, error), admitted func(PeerID), served bool) {
+func (t *Transport) acceptLoop(ln net.Listener, d door) {
 	defer t.wg.Done()
 
 	for {
@@ -266,11 +313,7 @@ func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, e
 		// Accept order is not an identity: the barrier's per-source epoch window and
 		// every roster lookup are keyed by canonical participant ID, so admitting a
 		// stream under a connection-local number would corrupt both silently.
-		handshake := accept
-		if handshake == nil {
-			handshake = t.config.AcceptSession
-		}
-		if handshake == nil {
+		if d.peer == nil && d.join == nil {
 			_ = conn.Close()
 			t.report(errors.New("transport: host accepted a connection with no session handshake"))
 			continue
@@ -290,16 +333,20 @@ func (t *Transport) acceptLoop(ln net.Listener, accept func(net.Conn) (PeerID, e
 			continue
 		}
 		t.wg.Add(1)
-		go t.handshake(conn, handshake, admitted, served)
+		go t.handshake(conn, d)
 	}
 }
 
 // Release the unauthenticated budget before running the bounded participant gate.
-func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, error), admitted func(PeerID), served bool) {
+func (t *Transport) handshake(conn net.Conn, d door) {
 	defer t.wg.Done()
 	t.holdPending(conn)
 
-	id, err := accept(conn)
+	accept, served, link, err := d.open(conn, t.config.ConnectTimeout)
+	var id PeerID
+	if err == nil {
+		id, err = accept(link)
+	}
 	t.releasePending(conn)
 	<-t.handshakes
 	if err != nil {
@@ -308,12 +355,12 @@ func (t *Transport) handshake(conn net.Conn, accept func(net.Conn) (PeerID, erro
 		return
 	}
 	// AddConnectionAs closes the connection on every failure of its own.
-	if _, err := t.peers.AddConnectionAs(conn, id, served); err != nil {
+	if _, err := t.peers.AddConnectionAs(link, id, served); err != nil {
 		t.report(err)
 		return
 	}
-	if admitted != nil {
-		admitted(id)
+	if served && d.admitted != nil {
+		d.admitted(id)
 	}
 }
 

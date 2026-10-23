@@ -259,6 +259,10 @@ type Config struct {
 	// transport detail private leaves Config's public session surface role-neutral.
 	networkConfig *network.Config
 
+	// sessionPlayers is the -players of the session this run joined, which it holds
+	// to should it take that session over; Participants is a host's own.
+	sessionPlayers int
+
 	// dialled is a :join the host already admitted, dialled while the run it
 	// replaces played on; notice is what that run's failure tells the next one.
 	dialled *joinDial
@@ -321,6 +325,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.CropOnResize = fromAnchor.CropOnResize
 	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
+	local.sessionPlayers = o.Players
 	if !local.Mode.Driven() {
 		local.TimeScaleSpec = o.Anchor.Anchor.Speed
 	}
@@ -328,13 +333,14 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 }
 
 // joining is this configuration pointed at the session a :join names, as -join
-// would have built it. -players goes: it caps a roster this run no longer hosts.
+// would have built it. -players and -authority go: they set a session this run no
+// longer hosts, and the one it joins has its own, which its offer carries.
 func (c Config) joining(target string) (Config, error) {
 	e, err := network.ParseEndpoint(target)
 	if err != nil {
 		return c, err
 	}
-	c.HostAddress, c.Participants = "", 0
+	c.HostAddress, c.Participants, c.FixedAuthority = "", 0, false
 	c.JoinAddress, c.SessionName = e.Addr, e.Name
 	return c, nil
 }
@@ -357,12 +363,12 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 		}
 	case next.Join == "" && next.dialled != nil:
 		solo := c
-		solo.JoinAddress, solo.SessionName = "", ""
+		solo.JoinAddress, solo.SessionName, solo.sessionPlayers = "", "", 0
 		c.dialled = next.dialled
 		return c, &solo
 	case next.Join != "":
 		solo := c
-		solo.JoinAddress, solo.SessionName = "", ""
+		solo.JoinAddress, solo.SessionName, solo.sessionPlayers = "", "", 0
 		joined, err := c.joining(next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
 			next.dialled.abandon(err)

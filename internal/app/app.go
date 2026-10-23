@@ -300,6 +300,11 @@ func (a *App) init() error {
 	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
 		a.cfg.networkConfig = a.hostNetworkConfig()
 	}
+	// A guest's own port takes joins beside its peer links, which it admits once
+	// it authors the session: a successor takes players where its session reaches it.
+	if c := a.cfg.networkConfig; c != nil && c.AcceptPeer != nil {
+		c.AcceptSession, c.OnAdmit = a.sessionAcceptor(a.admitHosted), a.admitLateJoiner
+	}
 	if err := a.initServices(); err != nil {
 		return err
 	}

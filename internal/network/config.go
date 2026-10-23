@@ -58,8 +58,8 @@ type Config struct {
 	// Session identity is agreed by the join handshake.
 	ParticipantID PeerID
 
-	// SessionName is what a dialer was told it is joining, sent as one frame before
-	// the handshake so a front door can place the connection on an address that
+	// SessionName is what a dialer was told it is joining, sent as the first frame
+	// of every join so a front door can place the connection on an address that
 	// serves several sessions. Empty dials an address that serves one.
 	SessionName string
 
@@ -93,8 +93,9 @@ type Config struct {
 
 	// ListenAddress and AcceptPeer let a participant that is not the coordinator
 	// bind a port of its own, so the session can reach it after a handoff (reach.go).
-	// A guest never runs AcceptSession, having no roster to assign from, and a
-	// coordinator never runs AcceptPeer. Empty leaves a participant a leaf.
+	// Its port runs AcceptSession too, for a join, which the opening frame tells
+	// from a peer link: a successor takes players where the session reaches it.
+	// Empty leaves a participant a leaf.
 	ListenAddress string
 	AcceptPeer    func(net.Conn) (PeerID, error)
 
@@ -102,10 +103,10 @@ type Config struct {
 	// a host's Address: the bound address is declared before the transport exists.
 	PreboundListener net.Listener
 
-	// OnAdmit runs once an accepted stream is a peer, on the accept goroutine, and
-	// sends a mid-run join its start gate and capture. It is apart from AcceptSession
-	// because the peer must receive crossings before its world is read, or the epochs
-	// between the two are lost to it.
+	// OnAdmit runs once a join this transport accepted is a peer, on the accept
+	// goroutine, and sends a mid-run join its start gate and capture. It is apart
+	// from AcceptSession because the peer must receive crossings before its world is
+	// read, or the epochs between the two are lost to it.
 	OnAdmit func(PeerID)
 
 	OnError func(error)

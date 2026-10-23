@@ -33,6 +33,10 @@ var errSessionSignalled = fmt.Errorf("%w by a signal", errSessionCanceled)
 // participant in a session nobody owns.
 var ErrSessionHandoff = &network.Refusal{Code: network.RefusalHandoff, Reason: "session authority is changing"}
 
+// errNotHosting refuses a join at the port of a guest that does not author its
+// session: only the participant holding the term admits anybody.
+var errNotHosting = &network.Refusal{Code: network.RefusalUnknown, Reason: "this participant does not host its session"}
+
 // ErrSessionStarting refuses a dial that lands in the window between the startup
 // lobby closing and the mid-run gate opening, which a dialer retries for the same
 // reason it retries ErrSessionHandoff.
@@ -94,7 +98,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = a.sessionCapacity()
 	netCfg.OnError = logSessionError
-	netCfg.AcceptSession = a.sessionAcceptor()
+	netCfg.AcceptSession = a.sessionAcceptor(a.admissions.Admit)
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// closed: a dropped participant comes back through the one gate a reconnect has
 	// ever had. The hook answers nothing until the run arms it, because until then
@@ -105,15 +109,29 @@ func (a *App) hostNetworkConfig() *network.Config {
 
 // sessionAcceptor is the join handshake this run serves as its session's coordinator,
 // on its listener and on its bots' in-process streams, which spend no join budget.
-func (a *App) sessionAcceptor() func(net.Conn) (network.PeerID, error) {
+// admit takes or refuses a dial before anything is allocated for it.
+func (a *App) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) (network.PeerID, error) {
 	return network.HostAcceptor(network.Coordinator{
 		Assign:   a.assignParticipant,
 		Release:  a.releaseParticipant,
-		Admit:    a.admissions.Admit,
+		Admit:    admit,
 		Report:   a.noteJoinerReport,
 		Name:     a.cfg.SessionName,
 		Scenario: a.scenarioBody,
 	}, network.DefaultConfig().ConnectTimeout)
+}
+
+// admitHosted is a guest's port admitting a dial: it does once this run holds the
+// term, spending the budget a host's door does, and while the term moves it refuses
+// as that door would.
+func (a *App) admitHosted(addr net.Addr) error {
+	switch st := a.authority.State(); {
+	case st.Migrating:
+		return ErrSessionHandoff
+	case !st.Authoring():
+		return errNotHosting
+	}
+	return a.admissions.Admit(addr)
 }
 
 // Serve only the immutable scenario this run holds; another scenario needs a new App.
@@ -177,7 +195,7 @@ func (a *App) openMidRunJoins() {
 // interactive host holds one of the cursors itself, a dedicated one holds a roster
 // entry and no slot on the map.
 func (a *App) sessionCapacity() int {
-	n := a.cfg.Participants
+	n := a.playersSet()
 	if n <= 0 {
 		n = parameter.MaxPlayers
 	}
@@ -187,6 +205,10 @@ func (a *App) sessionCapacity() int {
 	}
 	return n - 1
 }
+
+// playersSet is the `-players` this run's session was opened with, zero for none:
+// its own as that session's host, else the one the offer it joined on carried.
+func (a *App) playersSet() int { return cmp.Or(a.cfg.Participants, a.cfg.sessionPlayers) }
 
 // playerCapacity is the cursor ceiling `-players` names. sessionCapacity is its
 // guest half; an interactive host drives the one that is left, a dedicated one
@@ -247,7 +269,7 @@ func (a *App) rosterPlayers() int {
 // playersFit refuses a scenario this run cannot play: a `-players` ceiling under
 // its min_players, or a session already holding more than its max_players.
 func (a *App) playersFit(sc resource.Scenario) error {
-	if n := a.cfg.Participants; n > 0 && n < sc.MinPlayers {
+	if n := a.playersSet(); n > 0 && n < sc.MinPlayers {
 		return fmt.Errorf("-players %d is below scenario %s's min_players %d", n, sc.Name, sc.MinPlayers)
 	}
 	if n := a.rosterPlayers(); n > sc.MaxPlayers {
@@ -886,6 +908,7 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 		// A joiner adopts the chain whole: candidate list and address book in one.
 		Chain:          a.sessionChain(),
 		FixedAuthority: a.cfg.FixedAuthority,
+		Players:        a.playersSet(),
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
 		// what it offered — a reset between the two cannot turn a valid join into a
