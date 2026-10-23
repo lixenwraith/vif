@@ -1,9 +1,12 @@
 package app
 
 import (
+	"errors"
 	"slices"
+	"syscall"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
@@ -73,6 +76,42 @@ func (i instance) Downstream() (out []uint32) {
 	})
 	return out
 }
+
+// relayLinks is the network system as the succession asks it about paths: whether
+// this run reaches its authority, and whose artifacts it carries there.
+type relayLinks interface {
+	Reaches() bool
+	Carries(id uint32) bool
+	Carry(id uint32)
+}
+
+// links runs fn on the network system under the world lock; a run without one
+// has nothing to ask.
+func (i instance) links(fn func(relayLinks)) {
+	i.a.world.RunSafe(func() {
+		for _, sys := range i.a.world.Systems() {
+			if l, ok := sys.(relayLinks); ok {
+				fn(l)
+				return
+			}
+		}
+	})
+}
+
+// Reaches reports a path to the authority; a run with no network system has
+// nothing that could lose one.
+func (i instance) Reaches() bool {
+	reaches := true
+	i.links(func(l relayLinks) { reaches = l.Reaches() })
+	return reaches
+}
+
+func (i instance) Carries(id uint32) (carries bool) {
+	i.links(func(l relayLinks) { carries = l.Carries(id) })
+	return carries
+}
+
+func (i instance) Carry(id uint32) { i.links(func(l relayLinks) { l.Carry(id) }) }
 
 // DrainOffTick translates whatever the endpoint holds without advancing a tick, so
 // a manifest, a request or a repair is acted on the moment it lands, and a resume
@@ -150,13 +189,19 @@ func (i instance) Ingress(id uint32) (n uint64) {
 	return n
 }
 
-func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool) {
-	i.a.applyAuthorityChange(rec, mine)
+func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool, via network.PeerID) {
+	i.a.applyAuthorityChange(rec, mine, via)
 }
 
-func (i instance) DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID) {
-	i.a.dropAbandonedCursors(roster, local)
+// CrossDepartures keeps the places of the participants a new host's group does not
+// hold: each departs as a Wraith, as any departure does.
+func (i instance) CrossDepartures(away []network.RosterEntry) {
+	for _, p := range away {
+		i.a.crossDeparture(p.ID, p.Slot)
+	}
 }
+
+func (i instance) Redial(lost network.PeerID) bool { return i.a.redial(lost) }
 
 func (i instance) Forked(roster []network.RosterEntry, local network.PeerID) {
 	i.a.forked(roster, local)
@@ -288,12 +333,12 @@ func (a *App) openAuthorityLocked(o network.SessionOffer, local network.PeerID) 
 	a.publishAuthorityResourceLocked()
 }
 
-// applyAuthorityChange moves the membership a handoff carries into the places the
-// session reads it from, and switches this instance's role. Nothing is re-derived:
-// roster, slots and anchor are adopted exactly as carried, which is what makes
-// them identical on every survivor. Who is away is ordered by their Wraiths' waits,
-// and a place a dial was taking back is the predecessor's to have finished.
-func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
+// applyAuthorityChange adopts the membership a handoff carries exactly, which keeps
+// roster, slots and anchor identical on every survivor, and switches this
+// instance's role. Who is away is ordered by their Wraiths' waits, and a place a
+// dial was taking back is the predecessor's to have finished. via is the link this
+// run follows the new host through, zero for a link of its own.
+func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool, via network.PeerID) {
 	var away []network.PeerID
 	a.world.RunSafe(func() { away = a.awayOrderLocked(rec.Roster) })
 	a.sessionMu.Lock()
@@ -310,10 +355,14 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 		return
 	}
 	// What the lost authority never returned committed goes to its successor,
-	// this instance's own when it is the successor.
+	// this instance's own when it is the successor, by the path the record came.
 	a.world.RunSafe(func() {
 		for _, sys := range a.world.Systems() {
-			if r, ok := sys.(interface{ ResendUncommitted() }); ok {
+			if r, ok := sys.(interface {
+				FollowThrough(id uint32)
+				ResendUncommitted()
+			}); ok {
+				r.FollowThrough(uint32(via))
 				r.ResendUncommitted()
 			}
 		}
@@ -389,13 +438,85 @@ func (a *App) thawLocked() (held bool) {
 // session of its own (leaveSession), keeping every other player's place for
 // whoever hosts next; a run with no loop drops them and plays on as the fork.
 func (a *App) forked(roster []network.RosterEntry, local network.PeerID) {
-	a.leaveClaim()
 	if a.cfg.Mode == ModePlay {
+		// Leaving before the claim goes, as a redial holds its claim again before it
+		// reads leaving: whichever of the two runs second lets the claim go.
 		a.leaving.Store(true)
+		a.leaveClaim()
 		return
 	}
+	a.leaveClaim()
 	a.dropAbandonedCursors(roster, local)
 	a.world.RunSafe(func() { a.thawLocked() })
+}
+
+// errRedialEnded turns down an admission the redialling run no longer takes.
+var errRedialEnded = errors.New("the run went on without this host")
+
+// redial takes this run back to the host it lost, at the door it came in by: a link
+// that dropped on this side alone leaves a place that host's Wraith gives back,
+// under the claim the run joined with. Only a person's run that dialled the
+// session's first host has that door. The claim is let go for the dial to name, its
+// record as the drop left it.
+func (a *App) redial(lost network.PeerID) bool {
+	var cfg Config
+	door := false
+	a.world.RunSafe(func() {
+		cfg = a.cfg
+		door = cfg.Mode == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" && a.joinedThrough == 0 &&
+			lost == engine.CoordinatorParticipant && !a.leaving.Load() && a.restart.Load() == nil
+	})
+	if !door {
+		return false
+	}
+	c := a.claim.Swap(nil)
+	if c == nil {
+		return false
+	}
+	a.claims.release(c)
+	a.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost),
+		"dial", network.Shown(cfg.JoinAddress))
+	core.Go(func() { a.redialDoor(cfg, lost, c) })
+	return true
+}
+
+// redialDoor dials the lost host while this run waits on it. Admitted back into its
+// own place, the run is replaced by the one admitted; a refusal no retry helps, a
+// door nothing answers at, or a place that is not this run's begins the walk. A run
+// that stays in its session holds its claim again.
+func (a *App) redialDoor(cfg Config, lost network.PeerID, c *claim) {
+	for a.authority.Redialing(lost) {
+		d, err := dialJoin(cfg)
+		if err != nil {
+			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
+				a.log.Info("session", "msg", "lost host refused the redial", "error", err.Error())
+				a.authority.RedialRefused(lost)
+			} else {
+				time.Sleep(parameter.NetworkRejoinPassInterval) // [wall] a link wait, not a game one
+			}
+			continue
+		}
+		back := &restartRequest{Notice: "Host connection restored", dialled: d}
+		if d.claim == c && a.authority.RedialAdmitted(lost) && a.replaceWith(back) {
+			a.log.Info("session", "msg", "lost host admitted this run back", "authority", uint64(lost))
+			return
+		}
+		d.abandon(errRedialEnded)
+		if d.claim != c {
+			a.log.Info("session", "msg", "lost host holds no place for this run")
+			a.authority.RedialRefused(lost)
+		}
+	}
+	a.world.RunSafe(func() {
+		if a.cfg.JoinAddress != cfg.JoinAddress || !a.claims.hold(c) {
+			return
+		}
+		// Held before leaving is read, the other way round from forked.
+		if !a.claim.CompareAndSwap(nil, c) ||
+			(a.leaving.Load() || a.restart.Load() != nil) && a.claim.CompareAndSwap(c, nil) {
+			a.claims.release(c)
+		}
+	})
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

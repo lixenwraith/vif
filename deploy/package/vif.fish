@@ -11,7 +11,7 @@ complete -c vif -o slow-window -x -d 'Window a participant\'s lateness is judged
 complete -c vif -o slow-late -x -d 'Evict at this many late epochs per second over the window; 0 ignores lateness (default 5)'
 complete -c vif -o slow-bytes -x -d '...and at least this many bytes per second on its link; 0 ignores throughput (default 8192)'
 complete -c vif -o listen -x -d 'Address this participant is dialled back on; -join only, default the host\'s port then an ephemeral one'
-complete -c vif -o no-advertise -d 'Keep this participant\'s address out of the session; -join only, elected only when no advertised participant survives'
+complete -c vif -o no-advertise -d 'Keep this participant\'s address out of the session; -join only, never a succession candidate'
 complete -c vif -o relay -x -d 'Admit participants that cannot reach the host here and carry their traffic; -join only'
 complete -c vif -o size -x -d 'Terminal-equivalent size for a run that has no terminal'
 complete -c vif -o probe -x -d 'Health and metrics endpoint; -serve only'

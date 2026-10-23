@@ -581,8 +581,7 @@ included, so the producer knows what was committed; each relay passes a copy it
 admitted down to the links behind it. A per-source 64-epoch window admits
 out-of-order paths once, a 512-sequence window takes each crossing once whatever
 epoch carries it, and the hop limit bounds forwarding. Owner-state syncs take the
-same paths; a peer link to the successor carries only succession records and
-departure notices.
+same paths; a peer link carries only succession records and departure notices.
 
 Owner-state sync uses a per-slot sequence. Correction chunks carry the authority
 term and capture tick unchanged. A relay serves selective pages only from retained
@@ -631,18 +630,20 @@ One departure crossing turns the holder and its bots Wraith, and one dismissal
 removes them ([Multi-player §5.4](multi-player.md#54-wraiths)). A host may remove
 one bot without removing its holder; a guest may remove its own bots.
 
-When the authority goes, the successor is the first surviving independent
-participant in the succession chain, falling back to the lowest independent
-roster identity. Bot leaves cannot inherit authority. Every survivor computes
-the same choice; a receiver refuses a record naming anyone else. A survivor that
-cannot reach the successor continues as an explicit local fork.
+When the authority goes, every survivor walks the same succession list: the
+chain's independent participants still playing, in join order, a bot never among
+them. Candidate *k* takes term *T + k* only in its turn, a succession window after
+the one above it, and a receiver refuses a record whose authority its own list does
+not put at that term. A guest whose own link dropped redials its host first. A
+survivor follows the first host it reaches, which keeps the places its group lost as
+Wraiths; one that reaches none continues as an explicit local fork.
 
-The one instance that removes a participant without a crossing is an instance with
-no link left: a fork, or the successor of a star. Nothing there can produce or
-receive one, so it drops every cursor it does not simulate as local roster state.
-Agreeing on a tick needs a second instance, and there is none; an instance that
-still holds links leaves its roster alone, which is part of the unimplemented
-partition case below.
+The one instance that departs a participant without a crossing is a fork with no
+link left. Nothing there can produce or receive one, so it departs every cursor it
+does not simulate as local roster state: a person's fork keeps each as a Wraith in
+the session it goes on in, a script's or a bot's drops them. Agreeing on a tick
+needs a second instance, and there is none; a fork that still holds links leaves its
+roster alone, which is part of the unimplemented partition case below.
 
 A departure also clears what the instance had applied from that participant. The
 identity returns to the pool once its participant is dismissed, and a crossing
@@ -723,8 +724,9 @@ The boundaries are enforced mechanically:
 - correction ordering criteria cover local replay, queued authority frames, late
   authority frames, and captures racing undispatched input;
 - link criteria cover cadence bounds, saturation, recovery, and floor refusal;
-- succession criteria cover the designated successor, retention eligibility, term gates,
-  roster continuity, and explicit fork fallback.
+- succession criteria cover the list and its per-candidate terms, the redial and the
+  walk, retention eligibility, term gates, roster continuity, and explicit fork
+  fallback.
 
 The criteria live where what they assert lives. `internal/app` drives real
 instances over a mesh or a socket, so it owns anything whose subject is a world:
@@ -751,8 +753,8 @@ departing cursor Wraith, and reconnect must take a current world.
 | Trust | Transport, participant claims and handoff records are unauthenticated and plaintext. Structural checks prevent races, not hostility. |
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | Each participant stamps the lead its own link to the authority asks for, capped at `NetworkBarrierMaxDelayTicks` (multi-player.md §3.5). A crossing that misses it still lands later on the authority than on its producer, and one past `NetworkCommitLateTicks` is void everywhere but its producer until a correction repairs it. |
-| Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the current successor from the published succession chain, so the shape is a star with a successor chain over it. |
-| Partition | The **first survivor in the succession chain**, else the lowest independent roster identity, succeeds without a vote; losing that successor once it holds the term runs the next succession, but losing it together with the authority elects nobody, because the roster still names it, and the survivors fork. A survivor with no link walks the succession list, and one that hears no record within the succession window forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
+| Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the first candidate on the published succession chain, so the shape is a star with a successor chain over it. |
+| Partition | Survivors walk the **succession list** without a vote: each candidate takes a term of its own in its turn, so losing the first candidate with the authority passes the session to the next, and survivors that reach different candidates play on as different games, each host keeping the others' places as Wraiths. A survivor that reaches no candidate forks. Merging an explicit local fork or a divided game does not work. A fork with no link left departs the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Progression | `kills.drain` is a session total, so quasar progression is session-wide rather than per cursor. |
 | Presentation | A presentation smaller than the map is a viewport the camera scrolls; remote cursor presentation has no interpolation beyond receive scheduling. |

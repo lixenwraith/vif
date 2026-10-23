@@ -75,8 +75,8 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Playout lead | Per participant (§3.5): the worst recent age at which the authority committed its epochs, read off the committed copies, plus a relay tick; a participant behind a relay reads it off the same copies. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
 | Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
-| Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the current successor. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is elected only when the chain names no survivor (§5.1, §5.3). |
-| Host loss | `-authority migrate` (default off `-serve`): **the first survivor in the succession chain** takes the next term, with no vote, because every survivor computes it from state it already holds identically. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. |
+| Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the first candidate. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never a candidate (§5.1, §5.3). |
+| Host loss | `-authority migrate` (default off `-serve`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. `-authority host` (default on `-serve`): nobody takes it, and every survivor continues alone once its redial ends. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
@@ -504,7 +504,7 @@ either, since a fresh attempt brings a fresher world.
 
 The session is a tree rooted at the authority: the shipped CLI builds a star, a
 guest seating bots or relaying people (`-relay`) adds a level, and in a migrate
-session every participant also holds a peer link to the successor (§5.3). Every
+session every participant also holds a peer link to the first candidate (§5.3). Every
 link is up, down or beside. A participant's **up** link is the authority if it
 holds one, else the relay it joined through (`NetworkResource.Relay`) or adopted;
 its **down** links are those that send it raw artifacts or were served a join
@@ -522,9 +522,9 @@ what the joiner reported (`MsgRelayJoin`). A bot declares its holder and dials n
 peer links, since it shares its holder's fate; its holder's departure takes its
 bot group at the same crossing, to wait with it or to go with it. A person declares no holder: it keeps its slot when
 its relay leaves, and, having no link then, walks the chain like a survivor does
-and plays on through whichever participant answers (`Reach.cutOff`,
-`NetworkSystem.sendUp`). It is a leaf unless `-listen` names an address, since it
-could not reach the host itself. The holder identity is retained in the roster and
+and plays on through whichever participant relays for others (§5.1), forking when
+none does (`Reach.cutOff`, `NetworkSystem.sendUp`). It is a leaf unless `-listen`
+names an address, since it could not reach the host itself. The holder identity is retained in the roster and
 Shared cursor across captures, resets and succession. Hosts may remove any remote
 slot with `:player drop`; removing a bot alone leaves its holder and siblings.
 `:bot drop` also lets a guest remove its own bot. Both accept decimal or hex slots.
@@ -556,68 +556,77 @@ for a deployment where the world may only ever live on the machine that started 
 
 ### 5.1 Succession
 
-If the authority disappears, the successor is **the first survivor in the
-succession chain**, falling back to the roster's lowest surviving independent
-identity when the chain names nobody still present. Bot leaves are not candidates.
-It is a pure function of the chain, the roster and the participant that went, all
-three of which every survivor already holds, so every survivor names the same
-successor without exchanging anything. The chain is
-append-only, so a survivor holding a prefix of it elects the same participant as one
-holding the whole — which is why it needs no agreement step.
+If the authority disappears, the survivors walk the **succession list**: the
+chain's participants in join order (§5.3), less the one that went, one away and a
+bot, whose seat has a holder. It is a function of the chain, the roster and who
+went, all of which every survivor holds, so every survivor reads the same list
+without exchanging anything; a local dial result is never an input. A session whose
+chain names nobody still present has no list, and every survivor forks.
 
-A *local* dial result is never an input, and that is the rule that matters most:
-if each instance filtered candidates by what it could reach, two survivors would
-compute two successors, which is the single outcome this design rules out. A
-survivor that cannot reach the elected successor falls back to the timeout and
-forks.
-
-That determinism *is* the split-brain rule. At most one instance can conclude that
-it is the successor, so at most one can ever claim the term — which is what a
-quorum would buy, and what a quorum cannot buy here: a rule requiring a strict
-majority of the closed roster elects nobody in the smallest session, where one
-survivor of a roster of two is not a majority of two, and it is the whole session.
+Candidate *k* takes the term *T + k*, *T* being the lost authority's, and only when
+its turn comes: *k − 1* windows (`parameter.NetworkSuccessionWindow`, 5 s on the wall
+clock, since the session stands frozen) after the walk began. A receiver refuses a
+record whose authority is not the candidate its own list puts at that term, so no
+two hosts ever share one. That is the split-brain rule, and it needs no quorum, which
+could not serve the smallest session anyway: one survivor of a roster of two is not a
+majority of two. A survivor follows the first record that reaches it for the host it
+followed, and only that host from then on, so survivors that reach different
+candidates play on as different games, each keeping the others' places (§5.2).
 
 The procedure on each survivor is:
 
-1. **Stop, and flood a loss notice.** Nobody plays on in a world the successor is
+1. **Stop, and flood a loss notice.** Nobody plays on in a world the next host is
    about to replace, so a survivor freezes its clock when it sees its authority go,
    by its own link, a notice or a record reaching it first (`TimeControl.Freeze`).
    The freeze is the hold the session itself asks for, settled at once as the end
-   of one is (§3.6), so a replay stands still in the pass the run did. The notice
-   decides nothing, but only a direct neighbour of the authority sees the link drop,
-   and the departure crossing that would have carried that news is produced by the
-   participant that is gone. A survivor two links away opens the same succession
-   from the notice.
-2. **If the session allows the term to move and the succession names this
-   instance, take it.** Immediately — there is nothing to collect and nobody to ask,
-   and the session is stalled until somebody authors. The one self-check is
-   retention: a successor with no retained authoritative record has no baseline
-   for a delta to name and would answer the first manifest with a whole world for
-   every survivor at once. A join capture counts as retention, so a guest admitted
-   seconds before the loss is eligible. Holding the term, it starts its correction
-   pump, a live script's or bot's included; only a harness publishes by hand. It
-   resumes once every survivor's notice has reached it, each one a path to it, or
-   when the window (step 4) runs out on whoever is missing; the lost authority's
-   bots went with it, and nothing reports for a Wraith. A survivor that adopts the
-   record first sends its notice then, and one already adopted still forwards a
-   late one. Each survivor resumes on the successor's first epoch past its own
-   tick, as from a hold (§3.6).
-3. **Otherwise wait for the record, dialling while it waits.** A handoff carries
-   the roster with its slots and holders, the session anchor, the chain and the
-   successor's evidence tick, so adopting it is one decision rather than a term
-   change followed by a roster negotiation. A survivor with no link to whoever is
-   taking over walks the succession list — every candidate once, the list again a
-   second later, the attempt count on the status bar — and announces itself on each
-   link it opens, so an authority elected before that link existed answers with its
-   record instead of letting the survivor time out.
-4. **After `parameter.NetworkSuccessionWindow`, give up.** No record arrived, so
-   this instance cannot reach the successor and continues as an explicit local
-   fork. The window is 5 s on the wall clock from the loss, since no tick passes to
-   count it. Under `-authority host` nothing freezes and it gives up at once.
+   of one is (§3.6), so a replay stands still in the pass the run did. Only a direct
+   neighbour of the authority sees the link drop, and the departure crossing that
+   would have carried that news is produced by the participant that is gone, so a
+   survivor two links away opens the same walk from the notice, which names the lost
+   term.
+2. **Redial the host at this run's own door.** A person's run that joined the
+   session's first host directly redials it under the claim its place waits under
+   (§5.4): a link that dropped on its side alone leaves a place the host's Wraith
+   gives back, and the run admitted back replaces this one, as `:join` does. It
+   waits up to a window, however many other survivors lost the host too, so a host
+   that went silent costs that window; a host that is gone ends it at once — nothing
+   listening, a refusal no retry helps, or no place for this run. A successor's door
+   admits nobody yet, so any other survivor walks at once.
+3. **Walk the list.** A survivor dials each candidate whose turn has begun, once a
+   second, and announces itself on each link it opens, so a host that took the term
+   before that link existed answers with its record. A candidate whose turn comes
+   takes the term if the session lets it move, with one self-check, retention: a
+   host with no retained authoritative record has no baseline for a delta to name
+   and would answer the first manifest with a whole world for every survivor at
+   once. A join capture counts, so a guest admitted seconds before the loss is
+   eligible. A record carries the roster with its slots and holders, the anchor, the
+   chain and the evidence tick, so adopting it is one decision. The host starts its
+   correction pump, a live script's or bot's included; only a harness publishes by
+   hand.
+4. **The host resumes its group.** Every survivor that adopts a record reports the
+   term it joined, and the host resumes once every survivor's report is in, or a
+   window after it took the term for whoever is missing; the lost authority's bots
+   went with it, and nothing reports for a Wraith. Each survivor resumes on the
+   host's first epoch past its own tick, as from a hold (§3.6).
+5. **Past the last candidate's turn, give up.** No record arrived, so this instance
+   continues as an explicit local fork. Under `-authority host` nothing walks: a
+   survivor forks once its redial ends, at once without one, and only a redial
+   freezes it.
 
-Retention *ordering* is deliberately not an eligibility test. With one designated
-candidate there is no alternative to prefer, and a successor a cadence behind a
-peer costs that peer one correction.
+Retention *ordering* is deliberately not an eligibility test: the list decides who
+is next, and a host a cadence behind a peer costs that peer one correction.
+
+**Relaying is opt-in.** A run carries another participant's raw artifacts toward the
+authority only for one that joined through it — its bots, a person at its `-relay`
+address — unless its player turned on **Relay for others** (`:relay on`, the
+Multiplayer page, `[play] relay`), which a browser cannot. Anything else is dropped
+and counted (`network.relay_refused`), so nobody's traffic lands on a run that did
+not offer to carry it; a link already carried stays carried when relaying is turned
+off. A candidate that is not hosting answers a survivor's notice with the record it
+follows only when it carries that survivor, which then follows the host through it.
+A participant with no path to its authority, a person whose relay left, walks every
+candidate for one that carries it and forks after a walk down the whole list
+(`Reach.cutOff`).
 
 A person's run that forks goes on in a session of its own, as `:leave` takes it
 (§5.5): the same identity, the next term, every other player's place kept as a
@@ -629,23 +638,21 @@ higher term met later, because partition merging is not implemented.
 
 ### 5.2 The roster after a loss
 
-An instance left with **no link at all** — a successor no survivor reached, and a
-fork with no loop to take it into a session of its own (§5.1) — drops every cursor
-it does not simulate: the authority that went, and behind it the guests that were
-only ever reachable through it. A person's fork drops nobody: every place waits as
-a Wraith in the session it goes on in (§5.5). Having no link is what makes the drop
-exact rather than convenient: a departure is produced once at one agreed tick
-because two instances must destroy the same shared entity together, and here there
-is no second instance. On a fork the removal is therefore local; the successor
-produces the predecessor's as the ordinary crossing, because it may. A handoff
-preserves the surviving roster exactly; only the lost predecessor and its bots may
-differ when their departures straddle the handoff.
+A handoff preserves the surviving roster exactly; only the lost predecessor and its
+bots may differ when their departures straddle the handoff. The host produces the
+predecessor's departure as the ordinary crossing, because it may, and the place
+waits as a Wraith (§5.4). A convergence floor (`NetworkSuccessionTicks`) after its
+group resumes, every independent participant that reported no membership at its
+term departs the same way, its bots with it: a survivor that followed another host,
+or forked. The floor comes after play resumes rather than at once, so a survivor
+still arriving through a relay hop is not sent away.
 
-A successor applies that rule a convergence floor (`NetworkSuccessionTicks`) after
-its group resumes rather than at once, so a survivor still arriving through a relay
-hop is not dropped. An instance
-that still holds a link keeps its roster: it has peers to agree an apply tick with,
-and on a fork no authority to name one (§8).
+A fork with no loop to take it into a session of its own (§5.1), left with **no link
+at all**, drops every cursor it does not simulate. Having no link is what makes the
+drop exact rather than convenient: a departure is produced once at one agreed tick
+because two instances must destroy the same shared entity together, and here there is
+no second instance. A person's fork drops nobody: every place waits as a Wraith in
+the session it goes on in (§5.5). A fork still linked keeps its roster (§8).
 
 A departure, however it is produced, also clears what the instance had applied from
 that participant. An identity returns to the pool once its participant is dismissed
@@ -664,14 +671,14 @@ instance binds it, and authorship never leaves the machine that started the worl
    opens is one somebody already chose to open. A machine already using it — two
    guests on one machine — takes an OS-assigned port instead. `-no-advertise`, a
    failed bind, or `-authority host` leaves a participant a **leaf**: it plays
-   normally, declares nothing and is elected only when the chain names no survivor.
+   normally, declares nothing and is never a candidate.
 2. The coordinator puts every declared address in the chain and publishes the whole
    chain on `MsgPeerList` between two ticks, never under the lock it took the address
    under, and again as the session opens so a participant admitted early is not left
    holding a prefix. It completes a declared `:7777` from the join
    connection's remote address, because a participant knows which port it bound and
    not which address the world reaches it at.
-3. Every participant dials the current successor and keeps that link warm, so the
+3. Every participant dials the first candidate and keeps that link warm, so the
    instance that will have to author already has one when it does. A **successor
    chain** rather than a full mesh: N links instead of N², and the chain is the same
    either way, so the shape is one dial policy and can be widened later without
@@ -692,11 +699,12 @@ predecessor and its bots — is not identical to the receiver's. An `Addr` field
 that struct would make a guest that rebound its port look like a different roster
 and fail every handoff.
 
-**Append-only is what makes it a legal succession input.** `DesignatedSuccessor`
-must be a pure function of state every survivor holds identically, and a broadcast
-is identical only eventually. Appending never reorders, so any two participants hold
-a chain and one of its prefixes — and a prefix and its extension name the same first
-survivor. That is the whole of the agreement, and it needs no barrier crossing.
+**Append-only is what makes it a legal succession input.** The list
+(`SuccessionCandidates`) must be a function of state every survivor holds
+identically, and a broadcast is identical only eventually. Appending never reorders,
+so any two participants hold a chain and one of its prefixes — and a prefix and its
+extension list the same candidates in the same order as far as the prefix goes. That
+is the whole of the agreement, and it needs no barrier crossing.
 
 **A stale chain must not resurrect a departed peer.** `MsgPeerList` carries the
 authority's term and is refused below the term the receiver holds, like every other
@@ -714,7 +722,9 @@ handoff.
 | Mesh shape | Successor chain. Full mesh is N² links for redundancy nothing yet asks for; the chain is the same either way, so widening it later is one dial policy. Moving authorship down the list for latency or loss is deliberately *not* here. |
 | Declining advertisement | `-no-advertise` plays as a leaf. Refusing such a participant would turn a privacy preference into a lockout. |
 | Default listen port | The coordinator's own port, falling back to ephemeral, declaring what was bound. A port that is harmless on the machine that chose it is not necessarily harmless on somebody else's. |
-| Rejoin after a handoff | Every participant holds the whole chain, so a survivor with no link walks it — every candidate once, the list again a second later — with the attempt count on the status bar. |
+| Rejoin after a handoff | Every participant holds the whole chain, so every survivor walks it from the top, each candidate a window's turn, a guest whose own link dropped redialling its host first. |
+| Redial wait | A guest redials its own host for a whole window before it walks, however many others lost the host too: a host that went silent costs that window, and one that quit or crashed refuses at once. |
+| Relaying | Opt-in and off by default (`:relay`, the Multiplayer page). A run carries only those that joined through it unless its player offers more, so nobody's traffic lands on a run that did not offer to carry it. |
 
 ### 5.4 Wraiths
 
@@ -724,7 +734,7 @@ everything the world reaches a cursor through, keeping `Cursor`, `Protection` an
 `Wraith` component that holds the cell it stood on and the game time it turned.
 Nothing hits, aims at, collides with or drains it, it touches nothing, and the peer
 renderer draws its slot label alone at that cell. Its roster entry reads `Away`,
-which succession (`DesignatedSuccessor`, `successionOrder`) and the corrections owed
+which succession (`SuccessionCandidates`) and the corrections owed
 (`owedLocked`) pass over: nothing reaches a participant that is not there. A
 holder's bots wait with it, and its identity and slot stay taken.
 
@@ -765,7 +775,8 @@ A player brings back what its cursor held when it left (`event.CursorRecord`: en
 heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`).
 The record stops once the run is out of the session: it closed, or plays on after a
 fork (`converge.Instance.Forked`), its own bots still linked or not, while a
-successor carrying the session keeps its own; a dismissal forgets the claim. The
+successor carrying the session keeps its own; a run redialling the host it lost
+stops it at the drop and keeps it again if it stays; a dismissal forgets the claim. The
 arrival crossing carries it, and `CursorSystem.reclaim` writes it over the template
 at the free cell nearest the one the Wraith held, on every instance. A Wraith is
 driven by nobody, its own participant included, until that arrival.
@@ -1040,13 +1051,20 @@ could make the netcode cheaper in [Netcode optimization](netcode-optimization.md
    finishing one target inside that lateness can each be credited on their own
    instance.
 
-5. **An instance that keeps a link after a loss keeps the whole roster.**
-   `DropAbandonedCursors` acts only on an instance left with no link (§5.2). A
-   successor that some survivors could not reach, or a fork with no loop still
-   linked to its own bots, keeps every roster entry, and a participant it has no
-   path to stays a cursor nothing moves.
+5. **A fork that keeps a link keeps the whole roster.** `dropAbandonedCursors`
+   acts only on an instance left with no link (§5.2), so a script's or a bot's fork
+   still linked to its own bots keeps every roster entry, and a participant it has
+   no path to stays a cursor nothing moves. A host has no such gap: those its group
+   lost wait as Wraiths.
 
-6. **A browser guest once kept the previous region's glyphs.** Entering the tower
+6. **A survivor that reaches its host after the floor waits as a Wraith.** The
+   floor (§5.2) sends away every independent participant that reported no
+   membership at the host's term, so a survivor whose report arrives later finds its
+   own cursor a Wraith, which only a return under its claim gives back. *To see the
+   remainder:* a survivor whose dial to the first candidate outlasts the window and
+   a floor.
+
+7. **A browser guest once kept the previous region's glyphs.** Entering the tower
    region, it kept the region before's glyphs, or kept the glyph system running
    although the tower disables it. It was seen once, on 2026-09-24, and has not
    recurred. *To see the remainder:* a second sighting should record whether that
@@ -1134,7 +1152,7 @@ exercise the paths a two-terminal session reaches and nothing else does:
 - The host leaves instead. The guest takes the term — `:session` names it as the
   authority, `network.migrations` reads 1, and the `Host lost` badge clears — and
   the host's cursor must wait where it was left as a Wraith rather than play on. A
-  guest that could not reach the successor says its host connection was lost and
+  guest that could reach no candidate says its host connection was lost and
   plays on in a session of its own, which is the fork: `:session` reads `Session
   hosting` under the same participant, and the host and every other player wait on
   its map as Wraiths.
@@ -1156,9 +1174,9 @@ Each guest logs `peer listener bound` with the port it got — an ephemeral one,
 since on one machine the host already holds the default port — and the host logs
 `succession chain published` as each is added. On each guest `:session` names how
 many candidates the chain holds and whether this one is listening. Kill the host:
-the survivors elect the chain's first survivor and continue in one session, rather
-than each continuing alone. Repeat with `-no-advertise` on the first guest and the
-second is elected instead.
+each guest's redial is refused, the survivors walk to the list's first candidate and
+continue in one session, rather than each continuing alone. Repeat with
+`-no-advertise` on the first guest and the second hosts instead.
 
 ## 10. Where this came from
 

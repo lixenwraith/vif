@@ -320,7 +320,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 }
 
 // The authority policies a host names: what losing the authoring participant
-// does. Host ends the session there; migrate hands it to the next survivor.
+// does. Host ends the session there; migrate hands it down the succession list.
 const (
 	AuthorityHost    = "host"
 	AuthorityMigrate = "migrate"
@@ -539,11 +539,10 @@ func (a *App) leaveLocked() error {
 }
 
 // leaveSession takes this run out of its session, on :leave or once the session gave
-// it up (forked), and goes on with the world as it stands, in a session of its own.
-// Its bots leave first, as they do when it quits, keeping their places there as
-// Wraiths beside its own, and are seated again only once the door it had is shut,
-// each taking back the place it had. Runs on Loop, which holds no lock: the port it
-// closes waits for handshakes that take the world lock.
+// it up (forked), into one of its own with the world as it stands. Its bots leave
+// first, as when it quits, waiting as Wraiths, and each takes its place back once the
+// door it had is shut. Runs on Loop, which holds no lock: the port it closes waits
+// for handshakes that take the world lock.
 func (a *App) leaveSession() {
 	lost := forkCell(a).Load() // read before the reopen clears it
 	bots := a.seatGraphs()

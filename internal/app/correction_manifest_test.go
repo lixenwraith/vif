@@ -711,7 +711,7 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 		roster = append(roster, network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
 	}
 	reportBody, err := network.EncodeAuthorityReport(network.AuthorityReport{
-		Term: network.FirstTerm + 1, From: 2, Lost: 1,
+		Term: network.FirstTerm, From: 2, Lost: 1,
 	})
 	if err != nil {
 		t.Fatalf("report encode: %v", err)

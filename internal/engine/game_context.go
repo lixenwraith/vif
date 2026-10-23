@@ -132,6 +132,10 @@ type GameContext struct {
 
 	AutoFire atomic.Uint32 // AutoFireOff, AutoFireMain, or AutoFireBoth
 
+	// Relaying carries any participant's artifacts toward the authority, not only
+	// those that joined through this run; off unless its player turns it on
+	Relaying atomic.Bool
+
 	KeyCapture input.KeyCapture // Keys the scenario takes from play-mode parsing
 
 	// Viewer marks the command line as a replay viewer's: the recording authors the

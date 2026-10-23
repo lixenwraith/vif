@@ -437,12 +437,13 @@ correction demand, while a fixed whole-world convergence floor prevents adaptati
 from weakening recovery.
 
 Losing the authority is answered by the session's `-authority` policy. With
-`migrate` the first survivor in the succession chain — the participants that
-advertised an address, in join order — takes the next term, or the lowest
-surviving identity when the chain names nobody still present; a bot is never a
-candidate. Every survivor computes it from the roster and chain it holds, so no
-vote is needed and no two instances can claim it. With `host`, which is the
-default for `-serve`, the term never moves and every survivor continues alone. In
+`migrate` the survivors walk the succession list — the participants that advertised
+an address, in join order; a bot is never a candidate — and candidate *k* takes the
+lost term plus *k* in its turn, a window after the one above it. Every survivor
+reads the list from the roster and chain it holds, so no vote is needed and no two
+instances can claim one term; a survivor that reaches no candidate continues alone.
+With `host`, which is the default for `-serve`, the term never moves and every
+survivor continues alone once its redial of the host ends. In
 a migrate session each guest but a bot or a browser binds a port of its own unless
 `-no-advertise` keeps it a leaf, and the chain carries the addresses, so migration
 moves the session and not only its authorship; see
