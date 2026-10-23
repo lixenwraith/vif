@@ -231,7 +231,7 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventGameHoldRequest:
 		if p, ok := ev.Payload.(*event.GamePausePayload); ok {
-			s.handleHoldRequest(p.Paused)
+			s.handleHoldRequest(p.Paused, ev.Origin == event.OriginSession)
 		}
 
 	case event.EventGameHold:
@@ -695,13 +695,18 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 
 // handleHoldRequest starts or ends a hold. The start crosses, so a live session's
 // participants all stop after one agreed tick, and a solo run, where nothing
-// crosses, holds at once. The end is this instance's own: a guest's comes with the
-// host's next tick.
-func (s *MetaSystem) handleHoldRequest(held bool) {
+// crosses, holds at once; one the session asks for is the freeze its host's loss
+// takes, held here at once. The end is this instance's own: a guest's comes with
+// the host's next tick.
+func (s *MetaSystem) handleHoldRequest(held, session bool) {
 	if !held {
 		if s.ctx.Hold(false) {
 			s.ctx.SetStatusMessage("Resumed", parameter.StatusNotice)
 		}
+		return
+	}
+	if session {
+		s.ctx.Freeze()
 		return
 	}
 	tick := s.world.Resources.Game.State.GetGameTicks()

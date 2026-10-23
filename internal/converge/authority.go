@@ -75,14 +75,20 @@ type Authority struct {
 
 	// The succession in progress, if any. contested is the term being taken over,
 	// which is always the held term plus one: a successor that skipped a term would
-	// be adopting authorship over state nobody agreed it had. reports is the set of
-	// survivors whose loss notice has been seen, which is what terminates the flood.
+	// be adopting authorship over state nobody agreed it had. opened is when this
+	// instance saw its authority go, which its window runs from.
 	contested network.AuthorityTerm
 	lost      network.PeerID
-	since     uint64
-	sinceWall time.Time // [wall] the window a held run counts, with no tick to count
-	reports   map[network.PeerID]bool
+	opened    time.Time // [wall] the session stands frozen, so no tick counts it
 	published bool
+
+	// reports is the set of survivors whose loss notice for term reportsFor has been
+	// seen: what terminates the flood, and what tells the successor everyone is in.
+	// It outlives the handoff, so a late notice still travels; resumeBy is when that
+	// successor resumes its group whoever is missing, zero once it has.
+	reports    map[network.PeerID]bool
+	reportsFor network.AuthorityTerm
+	resumeBy   time.Time // [wall]
 
 	// reconcileAt is the tick at which a successor that took the term reconciles
 	// its roster with what it can actually reach. Zero when nothing is pending.
@@ -275,7 +281,8 @@ func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
 	u.fork = false
 	u.record = network.HandoffRecord{}
 	clear(u.accepted)
-	u.contested, u.lost, u.since, u.reports, u.published = 0, 0, 0, nil, false
+	u.contested, u.lost, u.opened, u.published = 0, 0, time.Time{}, false
+	u.reports, u.reportsFor, u.resumeBy = nil, 0, time.Time{}
 	u.reconcileAt, u.badgeUntil = 0, 0
 	u.mu.Unlock()
 	u.statMigrating.Store(false)
@@ -380,7 +387,6 @@ func (u *Authority) peerLost(id uint32) {
 // beginSuccession opens the election for the next term and floods this survivor's
 // input to it.
 func (u *Authority) beginSuccession(lost network.PeerID) {
-	tick := u.inst.Position().Tick
 	u.mu.Lock()
 	if u.contested != 0 || u.term == 0 {
 		u.mu.Unlock()
@@ -388,12 +394,17 @@ func (u *Authority) beginSuccession(lost network.PeerID) {
 	}
 	u.contested = u.term + 1
 	u.lost = lost
-	u.since, u.sinceWall = tick, time.Now() // [wall]
-	u.reports = make(map[network.PeerID]bool, len(u.roster))
+	u.opened = time.Now() // [wall]
+	u.reports, u.reportsFor = make(map[network.PeerID]bool, len(u.roster)), u.contested
 	u.published = false
-	term, local := u.contested, u.local
+	term, local, fixed := u.contested, u.local, u.fixed
 	u.mu.Unlock()
 
+	// Nobody plays on in a world the successor is about to replace, so the session
+	// stands still until it resumes; a pinned one forks at once instead.
+	if !fixed {
+		u.inst.Freeze()
+	}
 	u.statMigrating.Store(true)
 	u.log.Warn("session", "msg", "authority lost; succession opened",
 		"peer", uint64(lost), "term", uint64(term), "local", uint64(local))
@@ -407,8 +418,14 @@ func (u *Authority) beginSuccession(lost network.PeerID) {
 // that is gone, so the notice travels instead.
 func (u *Authority) sendReport() {
 	u.mu.Lock()
-	term, local, lost := u.contested, u.local, u.lost
+	term, lost := u.contested, u.lost
 	u.mu.Unlock()
+	u.report(term, lost)
+}
+
+// report floods this instance's notice that lost went, for the succession to term.
+func (u *Authority) report(term network.AuthorityTerm, lost network.PeerID) {
+	local := u.Local()
 	if term == 0 || local == 0 {
 		return
 	}
@@ -448,7 +465,7 @@ func (u *Authority) seat() bool {
 func (u *Authority) recordReport(rep network.AuthorityReport) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if rep.Term != u.contested || rep.From == 0 || u.reports[rep.From] {
+	if rep.Term != u.reportsFor || u.reports == nil || rep.From == 0 || u.reports[rep.From] {
 		return false
 	}
 	u.reports[rep.From] = true
@@ -461,7 +478,7 @@ func (u *Authority) recordReport(rep network.AuthorityReport) bool {
 // rather than on a schedule.
 func (u *Authority) drive() {
 	u.mu.Lock()
-	contested, since, sinceWall := u.contested, u.since, u.sinceWall
+	contested, opened := u.contested, u.opened
 	badge, reconcile := u.badgeUntil, u.reconcileAt
 	due := u.chainDue
 	u.chainDue = false
@@ -490,38 +507,58 @@ func (u *Authority) drive() {
 	u.reach.drive(contested != 0)
 	u.driveEviction(time.Now()) // [wall] a policy over the link, not the game
 	u.driveIngress(time.Now())  // [wall] likewise
-	if contested == 0 {
+	if contested != 0 {
+		u.mu.Lock()
+		fixed := u.fixed
+		u.mu.Unlock()
+		// A session that pinned its authorship has nothing to elect and nothing to
+		// wait for. The succession still *opens*, because opening it is what floods
+		// the loss to survivors a relay away, and it ends in the same place a
+		// fruitless one does — one window earlier, because no record is coming.
+		if !fixed {
+			u.trySucceed()
+		}
+		u.mu.Lock()
+		stillOpen := u.contested == contested
+		u.mu.Unlock()
+		if stillOpen && (fixed || time.Since(opened) > parameter.NetworkSuccessionWindow) { // [wall]
+			u.giveUp()
+		}
+	}
+	u.driveResume()
+}
+
+// driveResume ends the successor's window: its group resumes once every survivor's
+// notice is in, each a path to this instance, or once the window runs out for
+// whoever is missing. The lost authority's own bots went with it, and nothing
+// reports for a Wraith.
+func (u *Authority) driveResume() {
+	u.mu.Lock()
+	by, lost := u.resumeBy, u.record.Predecessor
+	u.mu.Unlock()
+	if by.IsZero() {
 		return
 	}
+	roster := u.currentRoster()
 	u.mu.Lock()
-	fixed := u.fixed
-	u.mu.Unlock()
-	// A session that pinned its authorship has nothing to elect and nothing to wait
-	// for. The succession still *opens*, because opening it is what floods the loss
-	// to survivors a relay away, and it ends in the same place a fruitless one does
-	// — one window earlier, because no record is coming.
-	if !fixed {
-		u.trySucceed()
+	missing := slices.ContainsFunc(roster, func(p network.RosterEntry) bool {
+		return p.ID != lost && p.Holder != lost && !p.Away && !u.reports[p.ID]
+	})
+	if u.resumeBy.IsZero() || missing && time.Now().Before(by) { // [wall]
+		u.mu.Unlock()
+		return
 	}
-
-	u.mu.Lock()
-	stillOpen := u.contested == contested
+	u.resumeBy = time.Time{}
 	u.mu.Unlock()
-	heldOut := u.inst.Held() && time.Since(sinceWall) > parameter.NetworkSuccessionWait // [wall]
-	if stillOpen && (fixed || tick > since+parameter.NetworkSuccessionTicks || heldOut) {
-		u.giveUp()
-	}
+	u.inst.Thaw()
 }
 
 // restartRun moves the pending deadlines onto a run that restarted the tick count
-// at tick: each window starts again there, which can only lengthen it, where a
-// deadline from the run before would not fall due until the new run passed it.
+// at tick: each starts again there, which can only lengthen it, where a deadline
+// from the run before would not fall due until the new run passed it.
 func (u *Authority) restartRun(tick uint64) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.contested != 0 {
-		u.since, u.sinceWall = tick, time.Now() // [wall]
-	}
 	if u.badgeUntil != 0 {
 		u.badgeUntil = tick + parameter.NetworkMigrationBadgeTicks
 	}
@@ -578,11 +615,12 @@ func (u *Authority) trySucceed() {
 		return
 	}
 	// The roster the successor took over names participants it may have no path to
-	// — in a star, every guest but itself. Reconciled after the succession window
+	// — in a star, every guest but itself. Reconciled a floor after play resumes
 	// rather than now, because a survivor that is merely a relay hop away is still
 	// arriving and dropping it here would destroy a cursor it still simulates.
 	u.mu.Lock()
 	u.reconcileAt = u.inst.Position().Tick + parameter.NetworkSuccessionTicks
+	u.resumeBy = u.opened.Add(parameter.NetworkSuccessionWindow)
 	u.mu.Unlock()
 
 	if body, err := network.EncodeHandoff(rec); err == nil {
@@ -605,7 +643,8 @@ func (u *Authority) giveUp() {
 		return
 	}
 	term, lost, local, fixed := u.contested, u.lost, u.local, u.fixed
-	u.contested, u.reports, u.published = 0, nil, false
+	u.contested, u.published = 0, false
+	u.reports, u.reportsFor = nil, 0
 	u.fork = true
 	u.mu.Unlock()
 
@@ -663,12 +702,21 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	u.chain = slices.Clone(rec.Chain)
 	u.record = rec
 	u.accepted[rec.Term] = rec
-	u.contested, u.reports, u.published = 0, nil, false
+	// An instance the record reaches before any notice sees its authority go only now.
+	learned := u.contested == 0
+	if u.reportsFor != rec.Term {
+		u.reports, u.reportsFor = make(map[network.PeerID]bool, len(rec.Roster)), rec.Term
+	}
+	unreported := !u.reports[u.local]
+	u.contested, u.published = 0, false
 	u.fork = false
 	u.badgeUntil = u.inst.Position().Tick + parameter.NetworkMigrationBadgeTicks
 	mine := u.local == rec.Authority
 	u.mu.Unlock()
 
+	if learned && !mine {
+		u.inst.Freeze()
+	}
 	u.statMigrations.Add(1)
 	u.statMigrating.Store(true)
 	u.statHostLost.Store(false)
@@ -684,6 +732,10 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 
 	if body, err := network.EncodeHandoff(rec); err == nil {
 		u.flood(network.MsgAuthorityHandoff, from, body)
+	}
+	// The successor counts notices to know its group is in.
+	if unreported {
+		u.report(rec.Term, rec.Predecessor)
 	}
 	return nil
 }
@@ -837,9 +889,12 @@ func (u *Authority) onReport(from uint32, body []byte) {
 	held, contested, holder, local := u.term, u.contested, u.holder, u.local
 	u.mu.Unlock()
 	if rep.Term <= held {
-		// A succession this instance has already resolved. The record that named
-		// the authority was flooded before this link existed, so the survivor still
-		// electing is told on it rather than left to time the election out.
+		// A succession this instance has already resolved. The notice still travels,
+		// since the successor resumes once every survivor's is in, and the survivor
+		// still electing is told the record rather than left to time out.
+		if u.recordReport(rep) {
+			u.flood(network.MsgAuthorityReport, from, body)
+		}
 		u.answerElection(from)
 		return
 	}

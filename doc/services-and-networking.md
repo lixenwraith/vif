@@ -602,7 +602,10 @@ input, because the election has none — it carries the *news*, which is load-be
 on its own: the departure crossing that would have said the authority is gone has
 exactly one producer and that producer is what went, so a participant two links away
 learns of the loss here or not at all. The successor's first act under the new term
-is to cross that departure itself.
+is to cross that departure itself. The report is also how the successor knows its
+group is in: it resumes once every survivor's has reached it
+([Multiplayer](multi-player.md#51-succession) §5.1), so a survivor that adopts the
+record first sends one then, and one already adopted still forwards a late one.
 
 There is no vote. `network.DesignatedSuccessor` names the first surviving
 participant in the succession chain that holds its own seat (a bot's seat has a
@@ -615,8 +618,9 @@ one self-check is retention, because an instance with nothing retained has no
 baseline for a delta to name; a receiver's check is that the record names the
 successor its own roster designates.
 
-A survivor that hears no record within `parameter.NetworkSuccessionTicks` cannot
-reach the successor, continues locally, and says so. A session opened under
+Every survivor freezes its clock when it sees the loss, so the wait runs on the wall:
+a survivor that hears no record within `parameter.NetworkSuccessionWindow` (5 s)
+cannot reach the successor, continues locally, and says so. A session opened under
 `-authority host` (the default for `-serve`) or `:host <addr> host` pins its
 authority: the loss is still flooded, but every survivor continues locally at once
 rather than waiting for a record that is not coming.

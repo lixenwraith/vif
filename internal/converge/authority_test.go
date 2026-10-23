@@ -110,34 +110,74 @@ func TestTheTermGateRefusesWhatNobodyHandedThisInstance(t *testing.T) {
 	}
 }
 
-// TestAHeldSuccessionRunsOutOnTheWall: a held run stands on one tick, so the window
-// a succession is given runs on the wall clock instead, and the fork it ends in is
-// told to the run, whose hold no host is left to end. A run not held counts ticks.
-func TestAHeldSuccessionRunsOutOnTheWall(t *testing.T) {
+// TestASurvivorStandsFrozenThroughTheWindow: a survivor stops its run when its
+// authority goes, and with no record the window runs out on the wall clock, since no
+// tick passes to count it; the fork it ends in is told to the run.
+func TestASurvivorStandsFrozenThroughTheWindow(t *testing.T) {
 	t.Parallel()
 	run := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
-	hold := func(held bool) {
-		run.world.mu.Lock()
-		run.world.held = held
-		run.world.mu.Unlock()
-	}
-	hold(true)
 	run.u.beginSuccession(1)
-	if run.u.State().Fork {
-		t.Fatal("a held run gave up as its succession opened")
+	run.u.drive()
+	if !run.world.frozen || run.u.State().Fork {
+		t.Fatalf("inside the window: frozen %v, fork %v", run.world.frozen, run.u.State().Fork)
 	}
-	hold(false)
 	run.u.mu.Lock()
-	run.u.sinceWall = run.u.sinceWall.Add(-parameter.NetworkSuccessionWait - time.Millisecond)
+	run.u.opened = run.u.opened.Add(-parameter.NetworkSuccessionWindow - time.Millisecond)
 	run.u.mu.Unlock()
 	run.u.drive()
-	if run.u.State().Fork {
-		t.Fatal("a running instance gave up on the wall clock")
+	if !run.u.State().Fork || run.world.forked != 1 || run.world.frozen {
+		t.Fatalf("past the window: fork %v, told %d times, frozen %v",
+			run.u.State().Fork, run.world.forked, run.world.frozen)
 	}
-	hold(true)
-	run.u.drive()
-	if !run.u.State().Fork || run.world.forked != 1 {
-		t.Fatalf("a held run past the window: fork %v, told %d times", run.u.State().Fork, run.world.forked)
+}
+
+// TestARecordAheadOfTheNoticeFreezesItsReader: a survivor the handoff reaches before
+// it saw its authority go stands still with the rest, since its new authority does.
+func TestARecordAheadOfTheNoticeFreezesItsReader(t *testing.T) {
+	t.Parallel()
+	guest := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
+	if err := guest.u.adopt(record(guest.u, network.FirstTerm+1, 2, 1), 0); err != nil {
+		t.Fatalf("the successor's record: %v", err)
+	}
+	if !guest.world.frozen {
+		t.Fatal("the record moved this run's authority and left it playing on")
+	}
+}
+
+// TestTheSuccessorResumesOnceEverySurvivorIsIn: the successor holds its group still
+// until every survivor's notice has reached it, the lost authority's own bots and
+// the Wraiths aside, or until the window runs out on whoever is missing.
+func TestTheSuccessorResumesOnceEverySurvivorIsIn(t *testing.T) {
+	t.Parallel()
+	took := func(resumeBy time.Time) *run {
+		r := newRun(t, 2, nil, append(roster(3),
+			network.RosterEntry{ID: 4, Slot: 3, Holder: 1}, network.RosterEntry{ID: 5, Slot: 4, Away: true}))
+		r.open(1, nil, false)
+		r.u.beginSuccession(1)
+		if err := r.u.adopt(record(r.u, network.FirstTerm+1, 2, 1), 0); err != nil {
+			t.Fatalf("the successor's own record: %v", err)
+		}
+		r.u.mu.Lock()
+		r.u.resumeBy = resumeBy
+		r.u.mu.Unlock()
+		r.u.driveResume()
+		return r
+	}
+	waiting := took(time.Now().Add(time.Hour))
+	if waiting.world.thawed != 0 {
+		t.Fatal("the successor resumed before participant 3's notice reached it")
+	}
+	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting.u.Receive(uint8(network.MsgAuthorityReport), 3, body)
+	waiting.u.driveResume()
+	if waiting.world.thawed != 1 {
+		t.Fatalf("with every notice in the successor resumed %d times, want once", waiting.world.thawed)
+	}
+	if late := took(time.Now().Add(-time.Millisecond)); late.world.thawed != 1 {
+		t.Fatalf("past the window the successor resumed %d times, want once", late.world.thawed)
 	}
 }
 

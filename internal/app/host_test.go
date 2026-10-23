@@ -1274,34 +1274,50 @@ func TestANewGameEndsAHold(t *testing.T) {
 	assertMeshParity(t, apps, 0)
 }
 
-// TestAHeldSessionsSuccessorResumesIt: a hold is ended by the host that set it, so a
-// host lost while holding takes that with it. The successor runs on as it takes the
-// term, and its first tick resumes the rest.
-func TestAHeldSessionsSuccessorResumesIt(t *testing.T) {
+// TestASuccessorKeepsTheHoldTheLostHostSet: a session held when its host goes stays
+// held under its successor, whose own :pause resumes everyone. A successor a script
+// or bot drives has nobody to give one, so it resumes as its window closes.
+func TestASuccessorKeepsTheHoldTheLostHostSet(t *testing.T) {
 	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
-	localCursors(t, apps)
-	primeRetention(t, apps)
-	at := holdSession(t, apps)
-	closeParticipant(apps[0])
-	survivors := apps[1:]
-	if !settleAuthority(t, survivors, func() bool {
-		return authorityOf(survivors[0]).Term > network.FirstTerm && authorityOf(survivors[1]).Term > network.FirstTerm
-	}) {
-		t.Fatalf("no succession: participant 2 holds %+v, participant 3 holds %+v",
-			authorityOf(survivors[0]), authorityOf(survivors[1]))
-	}
-	if survivors[0].Context().TimeCtl.Held() {
-		t.Fatal("the successor still holds the lost host's hold")
-	}
-	for range 2 {
-		tickAll(survivors)
-	}
-	for i, a := range survivors {
-		if a.Context().TimeCtl.Held() || a.Position().Tick <= at {
-			t.Fatalf("participant %d: held %v at tick %d, want running past %d",
-				i+2, a.Context().TimeCtl.Held(), a.Position().Tick, at)
-		}
+	for _, scripted := range []bool{false, true} {
+		t.Run(map[bool]string{false: "player", true: "script"}[scripted], func(t *testing.T) {
+			t.Parallel()
+			apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
+			localCursors(t, apps)
+			primeRetention(t, apps)
+			at := holdSession(t, apps)
+			apps[1].cfg.scriptedSession = scripted
+			closeParticipant(apps[0])
+			survivors := apps[1:]
+			if !settleAuthority(t, survivors, func() bool {
+				return authorityOf(survivors[0]).Term > network.FirstTerm && authorityOf(survivors[1]).Term > network.FirstTerm
+			}) {
+				t.Fatalf("no succession: participant 2 holds %+v, participant 3 holds %+v",
+					authorityOf(survivors[0]), authorityOf(survivors[1]))
+			}
+			for range 4 {
+				tickAll(survivors)
+			}
+			if !scripted {
+				for i, a := range survivors {
+					if !a.Context().TimeCtl.Held() || a.Position().Tick != at {
+						t.Fatalf("participant %d: held %v at tick %d, want still held at %d",
+							i+2, a.Context().TimeCtl.Held(), a.Position().Tick, at)
+					}
+				}
+				mode.ExecuteCommand(survivors[0].Context(), "pause off")
+				survivors[0].Settle()
+			}
+			for range 4 {
+				tickAll(survivors)
+			}
+			for i, a := range survivors {
+				if a.Context().TimeCtl.Held() || a.Position().Tick <= at {
+					t.Fatalf("participant %d: held %v at tick %d, want running past %d",
+						i+2, a.Context().TimeCtl.Held(), a.Position().Tick, at)
+				}
+			}
+		})
 	}
 }
 

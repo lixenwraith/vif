@@ -359,15 +359,16 @@ const (
 	// problem the ledger cannot fix.
 	PredictionLedgerMax = 1024
 
-	// NetworkSuccessionTicks bounds a succession: a survivor that has neither adopted
-	// a handoff nor taken the term within one convergence floor continues locally and
-	// says so. A deadline, never a timer to choose by: the successor is a function of
-	// the roster and chain, and a racing timer could let two instances take one term.
-	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
+	// NetworkSuccessionWindow bounds a succession on the wall clock, since the session
+	// stands frozen through it: a survivor no handoff reaches by then continues
+	// locally and says so, and the successor resumes without whoever has not linked.
+	// A deadline, never a timer to choose by: the successor is a function of the
+	// roster and chain, and a racing timer could let two instances take one term.
+	NetworkSuccessionWindow = 5 * time.Second
 
-	// NetworkSuccessionWait is that bound on the wall clock, for a succession that
-	// opens while a hold stands: no tick comes to count it in.
-	NetworkSuccessionWait = NetworkSuccessionTicks * GameUpdateInterval
+	// NetworkSuccessionTicks is how long a successor plays on before it drops the
+	// participants it took over and cannot reach: one convergence floor.
+	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
 
 	// NetworkRejoinPassInterval paces a survivor's walk down the succession list. A
 	// pass tries every candidate once; this is the pause before the list is walked

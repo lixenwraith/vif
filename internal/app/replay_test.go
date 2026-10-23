@@ -917,6 +917,60 @@ func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
 	replayMatches(t, guestRec, guestWant, guestSurface)
 }
 
+// TestAFrozenSurvivorReplaysAsItRan: a survivor journaled across its host's loss
+// replays to the run it was. The replay stands still where the run froze, so the
+// input the run took while its session stood counts alike on both.
+func TestAFrozenSurvivorReplaysAsItRan(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x3024, 4, [][2]int{{1, 2}, {1, 3}, {1, 4}, {2, 3}, {2, 4}, {3, 4}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+	quick, slow := apps[1:3], apps[3]
+	recs := map[*App]*journal.Capture{}
+	want := map[*App]map[event.Stamp][]string{}
+	for i, a := range quick {
+		recs[a], want[a] = journal.NewCapture(), map[event.Stamp][]string{}
+		a.cfg.JournalSink = recs[a]
+		if _, err := a.openJournal(); err != nil {
+			t.Fatalf("participant %d: open: %v", i+2, err)
+		}
+	}
+	rng := vmath.NewFastRand(13)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	play := func(ticks int, in []*App) {
+		for range ticks {
+			for _, a := range quick {
+				if rng.Intn(3) == 0 {
+					inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+				}
+			}
+			tickAll(in)
+			for _, a := range quick {
+				p := a.Position()
+				want[a][event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(a)
+			}
+		}
+	}
+	play(100, apps)
+	closeParticipant(apps[0])
+	if !settleAuthority(t, quick, func() bool { return authorityOf(quick[1]).Authority == 2 }) {
+		t.Fatalf("participant 3 never followed participant 2: %+v", authorityOf(quick[1]))
+	}
+	// Frozen until participant 4's notice arrives, and the command line still answers
+	for _, a := range quick {
+		inject(t, a, intentModeSwitch(input.ModeTargetCommand))
+		inject(t, a, intentEscape())
+	}
+	play(4, quick)
+	slow.ApplyPendingCorrections()
+	play(300, apps[1:])
+	for _, a := range quick {
+		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
+		a.serveJournal()
+		replayMatches(t, recs[a], want[a], guestSurface)
+	}
+}
+
 // TestARunTakesItsSessionWriteAsAnInstall: a run journaled across its :host takes
 // the world it writes as the replay's install of it does, so what an install
 // derives (the spatial gauges, what carriers publish as they load) stands alike on

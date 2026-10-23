@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/converge"
@@ -13,14 +14,15 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// settleAuthority runs the succession to a conclusion without advancing anyone's
-// clock further than it has to. The election is driven from the correction loop, so
-// a round of ApplyPendingCorrections plus one tick is one round of report and
-// handoff. The bound is the succession deadline: past it the instances have fallen
-// back to local continuation, which is a conclusion several of these tests are about.
+// settleAuthority runs the succession to a conclusion. The election is driven from
+// the correction loop, so a round of ApplyPendingCorrections plus one tick is one
+// round of report and handoff. The session stands frozen meanwhile, so the bound is
+// the window on the wall clock: past it the instances have fallen back to local
+// continuation, which is a conclusion several of these tests are about.
 func settleAuthority(t *testing.T, apps []*App, done func() bool) bool {
 	t.Helper()
-	for range parameter.NetworkSuccessionTicks + 4 {
+	window := parameter.NetworkSuccessionWindow + time.Second
+	for deadline := time.Now().Add(window); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		for _, a := range apps {
 			a.ApplyPendingCorrections()
 		}
@@ -123,6 +125,40 @@ func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 	}
 	if survivors[1].authority.State().Authoring() {
 		t.Fatal("a participant that was not elected considers itself the authority")
+	}
+}
+
+// TestASessionStandsStillWhileItsHostChanges: every survivor stops when it sees its
+// host go and takes no tick until the successor resumes, which waits for the notice
+// of a survivor slow to see the loss; the successor's first tick then runs the rest.
+func TestASessionStandsStillWhileItsHostChanges(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 4, [][2]int{{1, 2}, {1, 3}, {1, 4}, {2, 3}, {2, 4}, {3, 4}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+	at := apps[1].Position().Tick
+	closeParticipant(apps[0])
+	quick, slow := apps[1:3], apps[3]
+	if !settleAuthority(t, quick, func() bool { return authorityOf(quick[1]).Authority == 2 }) {
+		t.Fatalf("participant 3 never followed participant 2: %+v", authorityOf(quick[1]))
+	}
+	for range 4 {
+		tickAll(quick)
+	}
+	for i, a := range quick {
+		if got := a.Position().Tick; got != at {
+			t.Fatalf("participant %d ran to tick %d while participant 4 had not seen the loss", i+2, got)
+		}
+	}
+	slow.ApplyPendingCorrections()
+	for range 4 {
+		tickAll(apps[1:])
+	}
+	for i, a := range apps[1:] {
+		if a.Context().TimeCtl.Held() || a.Position().Tick <= at {
+			t.Fatalf("participant %d: held %v at tick %d, want running past %d",
+				i+2, a.Context().TimeCtl.Held(), a.Position().Tick, at)
+		}
 	}
 }
 
@@ -273,7 +309,8 @@ func TestAnUnreachableSuccessorLeavesTheRestForking(t *testing.T) {
 	successor, cutOff := apps[0], apps[2]
 	survivors := []*App{successor, cutOff}
 	settleAuthority(t, survivors, func() bool {
-		return authorityOf(successor).Authority == 1 && authorityOf(cutOff).Fork
+		return authorityOf(successor).Authority == 1 && authorityOf(cutOff).Fork &&
+			!successor.Context().TimeCtl.Held()
 	})
 
 	if got := authorityOf(successor); got.Authority != 1 || got.Fork {
