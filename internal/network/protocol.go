@@ -28,6 +28,17 @@ const (
 	// the route has read all a dialer sent and its refusal arrives whole.
 	MsgJoinClaims MessageType = 0x06 // Live: the claims a dialer comes back with
 
+	// Preparing, which holds nothing in the session. A preview is the offer an
+	// assignment would make, with no identity in it: the dialer checks its build,
+	// fetches the scenario and builds its world on it. Prepared says it did and waits
+	// for its player's press, which opens the coordinator's ready period; seat is the
+	// press, or a dialer that needs none, and the coordinator assigns its place only
+	// then, answering with the offer. A ready period that runs out with no seat ends
+	// the handshake, and nothing was held to give back.
+	MsgJoinPreview  MessageType = 0x07 // Live: the session a dialer prepares for
+	MsgJoinPrepared MessageType = 0x08 // Live: the dialer is ready and waits for its press
+	MsgJoinSeat     MessageType = 0x09 // Live: the dialer asks for its place now
+
 	// Game. 0x10 is reserved and stays so: raw participant input is not a message
 	// kind — a peer sends the resolved D-3 artifact, never the keystroke.
 	MsgStateSync   MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
@@ -43,10 +54,10 @@ const (
 	MsgLinkEcho  MessageType = 0x15 // Live: one probe answered, with the peer's report
 
 	// MsgScenarioRequest and MsgScenarioBody carry the session's scenario to a joiner
-	// whose roots lack it: the request names the offer's digest, and the answer is the
-	// deflated canonical form, chunked like a capture. They sit between the offer and
-	// the reply, before the joiner reports an identity the coordinator would refuse
-	// it on, and one request fits there: what follows the answer has to be the reply.
+	// whose roots lack it: the request names the preview's digest, and the answer is
+	// the deflated canonical form, chunked like a capture. They sit before the joiner
+	// reports an identity the coordinator would refuse it on, while it prepares or,
+	// seated at once, before its reply, and one request fits a handshake.
 	MsgScenarioRequest MessageType = 0x16 // Live: a joiner asking for the session's scenario
 	MsgScenarioBody    MessageType = 0x17 // Live: one chunk of the deflated scenario
 

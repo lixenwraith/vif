@@ -57,6 +57,12 @@ type restartRequest struct {
 	Join    string
 	dialled *joinDial
 
+	// press says the next run's player started its join, so its seat waits for
+	// their press. provided is the scenario a join already holds, which a run
+	// joining the same session again has no need to fetch twice.
+	press    bool
+	provided *resource.Scenario
+
 	// Bots are the graphs of the seats this run held, which the next one seats again.
 	Bots []string
 
@@ -376,6 +382,11 @@ func (a *App) initWorld() {
 	// Service resources bridged into the ECS
 	a.hub.BindResources(a.world.Resources)
 	if r := a.world.Resources.Network; r != nil {
+		// A joiner is nobody until its seat names it (bindSeat), not the coordinator
+		// a port with no identity otherwise stands for.
+		if a.cfg.JoinAddress != "" && a.cfg.networkConfig != nil && a.cfg.networkConfig.ParticipantID == 0 {
+			r.ParticipantID = 0
+		}
 		a.bindSessionHooks(r)
 		// A session endpoint exists, so this run is shared for its whole life whether
 		// or not a peer is attached at a given tick. Latching here rather than

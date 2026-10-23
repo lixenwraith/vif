@@ -96,7 +96,7 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 	// which is what a live session does: verifying more than the build refused
 	// every peer link there was.
 	accept := PeerAcceptor(PeerGate{
-		Local:    2,
+		Local:    func() PeerID { return 2 },
 		Identity: PeerIdentity{Protocol: ProtocolVersion, Seed: 42, Session: 7},
 		Admit: func(from PeerID) error {
 			if from != 3 {
@@ -181,7 +181,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 		cfg := DebugConfig(RolePeer, "")
 		cfg.ParticipantID = local
 		cfg.PreboundListener = ln
-		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: local, Admit: gate}, time.Second)
+		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: func() PeerID { return local }, Admit: gate}, time.Second)
 		cfg.AcceptSession = HostAcceptor(Coordinator{
 			Assign: func([]string) (SessionOffer, error) { return offer, nil },
 		}, time.Second)

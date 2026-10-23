@@ -76,8 +76,11 @@ type SessionOffer struct {
 	SnapshotBytes int    `json:"snapshot_bytes,omitempty"`
 
 	// Held says the session stands held at SnapshotTick, so the joiner holds there
-	// too. The crossings still scheduled past that tick follow the capture.
-	Held bool `json:"held,omitempty"`
+	// too. The crossings still scheduled past that tick follow the capture. Start
+	// says the hold is a new game waiting for its host's press, which the joiner
+	// waits for as that rather than as a pause.
+	Held  bool `json:"held,omitempty"`
+	Start bool `json:"start,omitempty"`
 
 	// Identity is what the coordinator is. The joiner reads it before it builds a
 	// world, so a peer that cannot be in this session finds out before paying for
@@ -227,6 +230,20 @@ func (o SessionOffer) Validate() error {
 	return nil
 }
 
+// ValidatePreview rejects a preview no dialer can prepare on: one naming no host or
+// term, one that already assigns a place, or one relayed by the host itself.
+func (o SessionOffer) ValidatePreview() error {
+	switch {
+	case o.Host == 0 || o.Assigned != 0:
+		return errors.New("join preview names no host, or assigns a place before the seat")
+	case o.Term < FirstTerm:
+		return errors.New("join preview carries no authority term")
+	case o.Relay == o.Host:
+		return errors.New("join preview names the host as its own relay")
+	}
+	return nil
+}
+
 // Entry returns the coordinator assignment for id.
 func (o SessionOffer) Entry(id PeerID) (RosterEntry, bool) {
 	i := slices.IndexFunc(o.Roster, func(p RosterEntry) bool { return p.ID == id })
@@ -253,10 +270,21 @@ func (o SessionOffer) ParticipantCount() int {
 // participant identity and returns the offer carrying it, or the place one of the
 // dialer's claim tokens comes back to; Release returns that identity to the pool, or
 // that place to its Wraith, when the handshake does not complete, so a rejected or
-// abandoned connection does not consume a roster slot.
+// abandoned connection does not consume a roster slot. Assign runs at the dialer's
+// seat, never before: a dialer prepares on a preview, which holds nothing.
 type Coordinator struct {
 	Assign  func(claims []string) (SessionOffer, error)
 	Release func(PeerID)
+
+	// Preview is the session as a dialer naming claims would be offered it, with no
+	// identity assigned: the offer Assign would make, or the refusal it would give,
+	// with nothing allocated or asked for. Nil previews nothing, which only a dialer
+	// that seats at once (DialSession) can join on.
+	Preview func(claims []string) (SessionOffer, error)
+
+	// PressWindow is the ready period a prepared dialer has to seat in; zero is
+	// parameter.NetworkJoinPressWindow.
+	PressWindow time.Duration
 
 	// Report carries what a joiner said about itself once its acceptance arrives.
 	// It runs after Assign and only for a handshake that completed, so what it
@@ -287,7 +315,9 @@ const MaxSessionName = 64
 
 // HostAcceptor returns a pre-world handshake for Transport's accept loop. Each
 // accepted connection gets its own identity, so the roster grows with the lobby
-// rather than being fixed at two.
+// rather than being fixed at two, and gets it only at its seat: a dialer that
+// prepares, and whose player does not press within the ready period, leaves having
+// held nothing.
 func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, error) {
 	return func(conn net.Conn) (id PeerID, err error) {
 		// Before Admit, because a link that named another session costs the budget
@@ -308,6 +338,10 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		}
 		claims, err := askClaims(conn, timeout)
 		if err != nil {
+			return 0, err
+		}
+		h := hostHandshake{c: c, conn: conn, timeout: timeout}
+		if err = h.awaitSeat(claims); err != nil {
 			return 0, err
 		}
 		o, err := c.Assign(claims)
@@ -339,11 +373,11 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		if err != nil {
 			return 0, err
 		}
-		// A joiner whose roots do not hold this session's scenario asks for it here,
-		// before it builds a world and therefore before it reports an identity this
-		// coordinator would refuse it on. One request fits: what follows the answer
-		// has to be the reply.
-		if msg.Type == MsgScenarioRequest {
+		// A dialer that seated at once asks for the scenario here, as it would have
+		// while preparing: before it builds a world and so before it reports an
+		// identity this coordinator would refuse it on.
+		if msg.Type == MsgScenarioRequest && !h.asked {
+			h.asked = true
 			if err = serveScenario(conn, c, string(msg.Payload), timeout); err != nil {
 				return 0, err
 			}
@@ -380,6 +414,79 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			}
 		}
 		return o.Assigned, nil
+	}
+}
+
+// hostHandshake is one dialer's handshake as the coordinator runs it.
+type hostHandshake struct {
+	c       Coordinator
+	conn    net.Conn
+	timeout time.Duration
+	asked   bool // the one scenario request this handshake has is spent
+}
+
+// awaitSeat previews the session to the dialer and waits, holding nothing for it,
+// for its seat: at once, or after it prepared and its player pressed within the
+// ready period. Preparing is a world build, bounded as the frames around it are; the
+// ready period is a person's, and running out of it drops the candidate.
+func (h *hostHandshake) awaitSeat(claims []string) error {
+	var preview SessionOffer
+	if h.c.Preview != nil {
+		var err error
+		if preview, err = h.c.Preview(claims); err != nil {
+			RefuseJoin(h.conn, err, h.timeout)
+			return err
+		}
+	}
+	body, err := json.Marshal(preview)
+	if err != nil {
+		return err
+	}
+	defer h.conn.SetDeadline(time.Time{})
+	if h.timeout > 0 {
+		_ = h.conn.SetDeadline(time.Now().Add(h.timeout))
+	}
+	if err := NewMessage(MsgJoinPreview, body).Encode(h.conn); err != nil {
+		return err
+	}
+	window, prepared := h.timeout, false
+	for {
+		if window > 0 {
+			_ = h.conn.SetDeadline(time.Now().Add(window))
+		}
+		msg, err := Decode(h.conn)
+		if ne := net.Error(nil); prepared && errors.As(err, &ne) && ne.Timeout() {
+			err = &Refusal{Code: RefusalUnpressed, Reason: fmt.Sprintf("no press came within %s", window)}
+			RefuseJoin(h.conn, err, h.timeout)
+			return err
+		}
+		if err != nil {
+			return err
+		}
+		switch {
+		case msg.Type == MsgJoinSeat:
+			return nil
+		case msg.Type == MsgScenarioRequest && !h.asked && !prepared:
+			h.asked = true
+			if err := serveScenario(h.conn, h.c, string(msg.Payload), h.timeout); err != nil {
+				return err
+			}
+		case msg.Type == MsgJoinPrepared && !prepared:
+			prepared = true
+			window = cmp.Or(h.c.PressWindow, parameter.NetworkJoinPressWindow)
+		case msg.Type == MsgJoinReply:
+			// The dialer gave up before its seat, and says why.
+			var reply sessionReply
+			if err := json.Unmarshal(msg.Payload, &reply); err != nil {
+				return fmt.Errorf("join handshake reply: %w", err)
+			}
+			if err := reply.Refused(); err != nil {
+				return err
+			}
+			return errors.New("join handshake: accepted before any seat")
+		default:
+			return fmt.Errorf("join handshake: got message %#x, want a seat", msg.Type)
+		}
 	}
 }
 
@@ -528,6 +635,7 @@ const (
 	RefusalUnknown                          // no such session at this address
 	RefusalYielding                         // full, and a Wraith is giving up its place
 	RefusalReturning                        // the claimed place is still linked or already coming back
+	RefusalUnpressed                        // the dialer's player did not press within the ready period
 )
 
 // Retry is what a refused dialer can do about it.
@@ -555,6 +663,7 @@ var refusals = [...]struct {
 	RefusalUnknown:   {RetryNever, ""},
 	RefusalYielding:  {RetrySoon, "retry in a moment"},
 	RefusalReturning: {RetrySoon, "retry in a moment"},
+	RefusalUnpressed: {RetrySoon, "press again to join"},
 }
 
 // Refusal is a join turned away. Code is the kind and Reason what the player
@@ -656,17 +765,24 @@ type PendingJoin struct {
 
 	// asked records that this stream has already spent its one scenario request.
 	asked bool
+
+	// prepared is when this dialer said it was ready for its press, which opened the
+	// coordinator's ready period; zero before, and for a dialer that seats at once.
+	prepared time.Time
 }
 
-// RequestScenario asks the coordinator for the scenario the offer named and returns
-// the deflated body. One request per handshake: the coordinator reads what follows
-// the answer as the reply, so a second would be a protocol error on both sides.
+// RequestScenario asks the coordinator for the scenario the preview named and
+// returns the deflated body. One request per handshake, made while preparing or,
+// seated at once, before the reply: the coordinator reads what follows the answer as
+// the next step, so a second would be a protocol error on both sides.
 func (p *PendingJoin) RequestScenario(digest string) ([]byte, error) {
 	switch {
 	case p.replied:
 		return nil, errors.New("join handshake already completed")
 	case p.asked:
 		return nil, errors.New("join handshake already asked for a scenario")
+	case !p.prepared.IsZero():
+		return nil, errors.New("join handshake already prepared on its scenario")
 	}
 	p.asked = true
 	if p.base.WriteTimeout > 0 {
@@ -774,8 +890,48 @@ func (p *PendingJoin) send(msg *Message) error {
 // maxDeferredJoinFrames bounds what one join may buffer off its stream.
 const maxDeferredJoinFrames = 512
 
-// DialSession connects and receives the host's anchor before an App is built.
+// PreviewSession dials addr and reads the session it would join, which holds
+// nothing for this dial yet: its identity, slot and claim are assigned at Seat. The
+// build half of the identity is checked here, before a world is built on the
+// preview; the session half once one is.
+func PreviewSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
+	p, err := openJoinStream(addr, cfg)
+	if err != nil {
+		return nil, SessionOffer{}, err
+	}
+	if err := p.offer.ValidatePreview(); err != nil {
+		_ = p.conn.Close()
+		return nil, SessionOffer{}, err
+	}
+	if p.base.Identity.Protocol != 0 {
+		if err := p.base.Identity.VerifyBuild(p.offer.Identity); err != nil {
+			_ = p.conn.Close()
+			return nil, SessionOffer{}, err
+		}
+	}
+	return p, p.offer, nil
+}
+
+// DialSession connects and takes its place at once, preparing on no preview: a
+// harness, or a coordinator that previews nothing. The scenario, if asked for, comes
+// after the offer.
 func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
+	p, err := openJoinStream(addr, cfg)
+	if err != nil {
+		return nil, SessionOffer{}, err
+	}
+	offer, err := p.Seat()
+	if err != nil {
+		_ = p.conn.Close()
+		return nil, SessionOffer{}, err
+	}
+	return p, offer, nil
+}
+
+// openJoinStream dials addr, names the session and the claims the dial keeps, and
+// reads the preview the coordinator answers with, unchecked: a coordinator that
+// previews nothing is still one a dial can seat at once with.
+func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 	base := DefaultConfig()
 	if cfg != nil {
 		copy := *cfg
@@ -787,17 +943,17 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 		conn, err = dialListed(base, err)
 	}
 	if err != nil {
-		return nil, SessionOffer{}, err
+		return nil, err
 	}
 	if base.ConnectTimeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(base.ConnectTimeout))
 	}
-	// Before the offer is read, because the coordinator reads this before it writes
+	// Before the preview is read, because the coordinator reads this before it writes
 	// one and a front door has to place the connection before either happens; sent
 	// unnamed too, so a port that also takes peer links tells this is a join.
 	if err = NewMessage(MsgSessionRoute, []byte(base.SessionName)).Encode(conn); err != nil {
 		_ = conn.Close()
-		return nil, SessionOffer{}, err
+		return nil, err
 	}
 	msg, err := Decode(conn)
 	if err == nil && msg.Type == MsgJoinClaims {
@@ -806,36 +962,96 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	_ = conn.SetDeadline(time.Time{})
 	if err != nil {
 		_ = conn.Close()
-		return nil, SessionOffer{}, plainError{"connected, but no vif session answered there", err}
+		return nil, plainError{"connected, but no vif session answered there", err}
 	}
 	if msg.Type == MsgJoinReply {
-		// Refused before an identity was allocated. The coordinator says why, and
-		// the kind it names is what a caller decides a retry on (RetryOf).
+		// Refused before anything was held for it. The coordinator says why, and the
+		// kind it names is what a caller decides a retry on (RetryOf).
 		_ = conn.Close()
-		return nil, SessionOffer{}, refusalFrom(msg)
+		return nil, refusalFrom(msg)
 	}
-	if msg.Type != MsgJoinOffer {
+	if msg.Type != MsgJoinPreview {
 		_ = conn.Close()
-		return nil, SessionOffer{}, fmt.Errorf("join handshake: got message %#x, want offer", msg.Type)
+		return nil, fmt.Errorf("join handshake: got message %#x, want a preview", msg.Type)
+	}
+	var preview SessionOffer
+	if err := json.Unmarshal(msg.Payload, &preview); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("join handshake preview: %w", err)
+	}
+	return &PendingJoin{conn: &flateStream{Conn: conn}, base: *base, offer: preview}, nil
+}
+
+// Prepared tells the coordinator this dialer has built its world on the preview and
+// waits for its player's press, which opens the ready period: Seat within it.
+func (p *PendingJoin) Prepared() error {
+	switch {
+	case p.replied || p.offer.Assigned != 0:
+		return errors.New("join handshake already seated")
+	case !p.prepared.IsZero():
+		return errors.New("join handshake already prepared")
+	}
+	if p.base.WriteTimeout > 0 {
+		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
+		defer p.conn.SetWriteDeadline(time.Time{})
+	}
+	if err := NewMessage(MsgJoinPrepared, nil).Encode(p.conn); err != nil {
+		return err
+	}
+	p.prepared = time.Now() // [wall] a person's wait, measured as the coordinator measures it
+	return nil
+}
+
+// ErrPressLapsed is a seat asked for after the ready period, which the coordinator
+// has ended by now: the stream is not tried, and a dial is what seats.
+var ErrPressLapsed = &Refusal{Code: RefusalUnpressed, Reason: "the press came after the host's ready period"}
+
+// Seat asks for this dialer's place, which the coordinator assigns now, and returns
+// the offer carrying it. A dialer that prepared seats within the ready period or not
+// at all on this stream. The offer is the preview's session as it stands at the seat,
+// which the caller compares with the world it prepared.
+func (p *PendingJoin) Seat() (SessionOffer, error) {
+	switch {
+	case p.replied || p.offer.Assigned != 0:
+		return SessionOffer{}, errors.New("join handshake already seated")
+	case !p.prepared.IsZero() && time.Since(p.prepared) >= parameter.NetworkJoinPressWindow:
+		return SessionOffer{}, ErrPressLapsed
+	}
+	if p.base.ConnectTimeout > 0 {
+		_ = p.conn.SetDeadline(time.Now().Add(p.base.ConnectTimeout))
+		defer p.conn.SetDeadline(time.Time{})
+	}
+	if err := NewMessage(MsgJoinSeat, nil).Encode(p.conn); err != nil {
+		return SessionOffer{}, plainError{"the host dropped the join before its seat", err}
+	}
+	msg, err := Decode(p.conn)
+	switch {
+	case err != nil:
+		return SessionOffer{}, plainError{"the host dropped the join before its seat", err}
+	case msg.Type == MsgJoinReply:
+		return SessionOffer{}, refusalFrom(msg)
+	case msg.Type != MsgJoinOffer:
+		return SessionOffer{}, fmt.Errorf("join handshake: got message %#x, want offer", msg.Type)
 	}
 	var offer SessionOffer
 	if err := json.Unmarshal(msg.Payload, &offer); err != nil {
-		_ = conn.Close()
-		return nil, SessionOffer{}, fmt.Errorf("join handshake offer: %w", err)
+		return SessionOffer{}, fmt.Errorf("join handshake offer: %w", err)
 	}
 	if err := offer.Validate(); err != nil {
-		_ = conn.Close()
-		return nil, SessionOffer{}, err
+		return SessionOffer{}, err
 	}
-	// Check build identity before constructing the offered world; session identity
-	// is verified after construction.
-	if base.Identity.Protocol != 0 {
-		if err := base.Identity.VerifyBuild(offer.Identity); err != nil {
-			_ = conn.Close()
-			return nil, SessionOffer{}, err
+	// Checked again, since a dial that seats at once checks it here alone.
+	if p.base.Identity.Protocol != 0 {
+		if err := p.base.Identity.VerifyBuild(offer.Identity); err != nil {
+			return SessionOffer{}, err
 		}
 	}
-	return &PendingJoin{conn: &flateStream{Conn: conn}, base: *base, offer: offer}, offer, nil
+	if p.offer.Host != 0 && (offer.Host != p.offer.Host || offer.Relay != p.offer.Relay) {
+		return SessionOffer{}, fmt.Errorf("join handshake: seated by participant %d through %d, previewed by %d through %d",
+			offer.Host, offer.Relay, p.offer.Host, p.offer.Relay)
+	}
+	p.offer = offer
+	return offer, nil
 }
 
 // answerClaims names the tokens this dial comes back with and reads the frame the
@@ -874,23 +1090,30 @@ func dialListed(base *Config, failed error) (net.Conn, error) {
 	return nil, failed
 }
 
-// TransportConfig returns a client config that adopts the negotiated identity.
+// TransportConfig returns a client config that adopts the negotiated identity and
+// the join's stream. Before the seat there is no identity, and the stream stays this
+// join's until the port takes it (SocketPort.TakeJoin).
 func (p *PendingJoin) TransportConfig() *Config {
 	cfg := p.base
 	cfg.Role = RolePeer
-	cfg.ParticipantID = p.offer.Assigned
-	cfg.preconnected = p.conn
-	cfg.preconnectedPeer = p.Peer()
 	cfg.Dial = nil // the join's own stream; a later peer link dials its address
+	if p.offer.Assigned != 0 {
+		cfg.ParticipantID = p.offer.Assigned
+		cfg.preconnected, cfg.preconnectedPeer = p.conn, p.Peer()
+	}
 	return &cfg
 }
 
 // Complete returns a rejection unchanged or admits the stream for the start gate.
 // The report travels with the acceptance and is ignored on a rejection, which
-// carries no participant to describe.
+// carries no participant to describe. A rejection before the seat gives up a
+// handshake that held nothing; an acceptance needs the seat.
 func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
-	if p.replied {
+	switch {
+	case p.replied:
 		return errors.New("join handshake already completed")
+	case joinErr == nil && p.offer.Assigned == 0:
+		return errors.New("join handshake has no seat to accept")
 	}
 	p.replied = true
 	reply := sessionReply{}
