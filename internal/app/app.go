@@ -121,6 +121,21 @@ type App struct {
 	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
 	// entry per accepted connection and closes into the offer the start gate sends.
 	sessionRoster []network.RosterEntry
+	// awayOrder is who of the roster is away, in the order they left: a full session
+	// gives a newcomer the place of the first. yielding is that one while its dismissal
+	// is on its way, and dismissWraith hands it to the authority's next tick.
+	awayOrder     []network.PeerID
+	yielding      network.PeerID
+	dismissWraith atomic.Uint32
+	// returning is each place a dial took back with its claim until its arrival
+	// crosses, the entry as it waited, for a join that fails to give back, and the
+	// record its player brought; no wait runs out on its Wraith meanwhile.
+	returning map[network.PeerID]returnPlace
+
+	// claims is what this process comes back to its sessions with, and claim the one
+	// this run is in its session under: nil before it is in one, and once it has left.
+	claims *claimKeeper
+	claim  atomic.Pointer[claim]
 
 	// midRunPort is the socket a solo run opened for itself, with :host or with no
 	// listener for its bots. A run started with -host takes its endpoint from
@@ -243,6 +258,7 @@ func New(cfg Config) (*App, error) {
 		hub:        service.NewHub(log),
 		admissions: network.NewAdmissionLimiter(),
 		life:       lifecycle.New(cfg.Lifetime),
+		claims:     cfg.claims,
 	}
 	if a.cfg.JoinAddress != "" && a.cfg.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
@@ -597,6 +613,7 @@ func (a *App) Close() {
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
+	a.leaveClaim()
 	if a.pendingJoin != nil {
 		_ = a.pendingJoin.Close()
 	}

@@ -292,11 +292,11 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 			// The window in between: the lobby's offers are already out and the
 			// mid-run gate waits on a capture a stopped clock never reaches.
 			a.lobbyClosing.Store(true)
-			if _, err := a.assignParticipant(); !errors.Is(err, ErrSessionStarting) {
+			if _, err := a.assignParticipant(nil); !errors.Is(err, ErrSessionStarting) {
 				t.Fatalf("a dial during the closing window returned %v, want ErrSessionStarting", err)
 			}
 			a.openMidRunJoins()
-			if _, err := a.assignParticipant(); err != nil {
+			if _, err := a.assignParticipant(nil); err != nil {
 				t.Fatalf("a dial after the gate opened was refused: %v", err)
 			}
 

@@ -156,7 +156,7 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
 | `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. A run that hosts already, or is in a session it joined, refuses it by its [session role](multi-player.md#1-vocabulary-and-boundaries). |
 | `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. A run that hosts, or is in a joined session that still has others in it, refuses it by its session role. |
-| `:leave` | Takes a host or a guest out of its session into one of its own, as the same participant under the next term, the world as it stands ([Multiplayer §5.4](multi-player.md#54-leaving-a-session)). The command only asks: the run's loop serves it outside the world lock, since closing the port it leaves waits for handshakes that take that lock, and refuses a dial at the old door meanwhile. Its bots leave first and are seated again once that door is shut. A solo run, one whose session holds only its own bots, and a server refuse it by its session role. |
+| `:leave` | Takes a host or a guest out of its session into one of its own, as the same participant under the next term, the world as it stands ([Multiplayer §5.5](multi-player.md#55-leaving-a-session)). The command only asks: the run's loop serves it outside the world lock, since closing the port it leaves waits for handshakes that take that lock, and refuses a dial at the old door meanwhile. Its bots leave first and are seated again once that door is shut. A solo run, one whose session holds only its own bots, and a server refuse it by its session role. |
 | `:session` | One line: hosting or joined, by the role held now, and the address (a guest that inherited the term hosts at the one it declared), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
@@ -226,7 +226,7 @@ state, peer count and connected state.
 | Role | Behavior |
 |---|---|
 | `RoleNone` | Disabled/no-op. |
-| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, then allocates a participant identity and slot and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
+| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer's claims, then allocates a participant identity and slot, or the place a claim takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
 | `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
@@ -422,13 +422,20 @@ Control messages carry join offer/reply, start/ready gates and disconnect notice
 dialer that was given a session name sends it as one frame before it reads, so a front door can place the connection on an address serving several
 sessions and the session it reaches can refuse a name that is not its own; the
 fleet's allocator is one ([fleet §9](kubernetes-fleet.md#9-the-session-routes)). A
-host started without `-name` expects no such frame.
+host started without `-name` expects no such frame. Once the dialer is admitted, the
+coordinator asks which places it can come back to (`MsgJoinClaims`, 0x06) and the
+dialer answers with the tokens of the claims it keeps, at most `ClaimsKept`, before
+anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths)). It is asked
+rather than sent with the route, so a front door that refuses the route has read
+all the dialer sent and its refusal arrives whole.
 A join refused before an identity is allocated — a name that is not this
 session's, a dialling host past its admission budget, a session electing a new
-authority, closing its lobby, ending or full — is answered with a `MsgJoinReply`
-carrying its kind and reason (`network.Refusal`) rather than by closing the stream.
-The dialer acts on the kind, never the wording: one table gives each kind's retry
-(`RetryOf`: a seat retries only a `RetrySoon` kind, a rejoin anything but
+authority, closing its lobby, ending, full, full while a Wraith gives up its place
+for this dial, or a claimed place still linked or already coming back — is answered
+with a `MsgJoinReply` carrying its kind and reason (`network.Refusal`) rather than
+by closing the stream. The dialer acts on
+the kind, never the wording: one table gives each kind's retry (`RetryOf`: a seat
+and a first join retry only a `RetrySoon` kind, a rejoin anything but
 `RetryNever`) and the advice its player reads after the reason, and `cmd/vif` exits
 76 (`EX_PROTOCOL`) on any refusal. A relayed join's answer (`RelayAdmit`) and a peer
 link's `MsgAck` carry the same two fields. Gameplay uses `MsgEvent` for a closed crossing

@@ -84,6 +84,43 @@ func TestPeerCursorsAreDrawnAndTheLocalOneIsNot(t *testing.T) {
 	}
 }
 
+// TestAWraithIsDrawnAsItsLabelAlone: a Wraith keeps its label at the cell it holds,
+// in its slot's colour over whatever lies beneath, so it reads as a place kept for
+// a player rather than a player in play, in either colour mode.
+func TestAWraithIsDrawnAsItsLabelAlone(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []terminal.ColorMode{terminal.ColorModeTrueColor, terminal.ColorMode256} {
+		gameCtx, cursors := peerWorld(t, 3)
+		w := gameCtx.World
+		w.Resources.Config.ColorMode = mode
+		w.Positions.RemoveEntity(cursors[2])
+		w.Components.Wraith.SetComponent(cursors[2], component.WraithComponent{X: 30, Y: 10})
+		rc := peerContext(gameCtx)
+		x, y, visible := rc.MapToScreen(30, 10)
+		if !visible {
+			t.Fatal("the Wraith's cell is outside a viewport this test placed it inside")
+		}
+		buf := render.NewRenderBuffer(mode, 80, 24)
+		under := buf.CellAt(x, y)
+		r := NewPeerCursorRenderer(gameCtx)
+		r.Render(rc, buf)
+
+		got := buf.CellAt(x, y)
+		fg, attrs := peerCursorColor(2), terminal.AttrNone
+		if mode == terminal.ColorMode256 {
+			fg, attrs = color.RGB{R: r.slots256[2%len(r.slots256)]}, terminal.AttrFg256
+		}
+		if got.Rune != '2' || got.Fg != fg || got.Attrs != attrs || got.Bg != under.Bg {
+			t.Fatalf("mode %v drew the Wraith as %+v, want label 2 in %v (attrs %v) over background %v",
+				mode, got, fg, attrs, under.Bg)
+		}
+		px, py, _ := rc.MapToScreen(6, 3)
+		if cell := buf.CellAt(px, py); cell.Rune != '1' || cell.Attrs&terminal.AttrBg256 == 0 && cell.Bg == under.Bg {
+			t.Fatalf("mode %v drew the playing peer as %+v beside a Wraith", mode, cell)
+		}
+	}
+}
+
 // TestASoloRunDrawsNoPeers keeps the renderer free on the path most runs take.
 func TestASoloRunDrawsNoPeers(t *testing.T) {
 	t.Parallel()

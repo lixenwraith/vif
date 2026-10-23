@@ -233,6 +233,27 @@ func TestTheSuccessionOrderIsTheOrderTheRuleElects(t *testing.T) {
 	}
 }
 
+// TestASurvivorDoesNotWaitForAnAwayParticipant: a participant whose cursor waits as
+// a Wraith has no link to serve a term from, so the order a survivor retries down
+// passes it over, as the election does.
+func TestASurvivorDoesNotWaitForAnAwayParticipant(t *testing.T) {
+	t.Parallel()
+	members := roster(4)
+	members[2].Away = true
+	r := newRun(t, 4, nil, members)
+	r.u.Open(network.SessionOffer{
+		Host: 1, Assigned: 4, Term: network.FirstTerm,
+		Roster: members, Chain: chainOf(3, 4),
+	}, 4)
+
+	if got, want := r.u.successionOrder(), []network.PeerID{2}; !slices.Equal(got, want) {
+		t.Fatalf("succession order = %v, want %v with the away participant passed over", got, want)
+	}
+	if got, ok := r.u.successor(); !ok || got != 4 {
+		t.Fatalf("successor = %d (ok=%t), want this run, next on the chain after the away participant", got, ok)
+	}
+}
+
 // TestAGuestAdmitsAPeerLink is the failure a live session hit: admission read the
 // coordinator's roster, which a guest never fills, so a survivor's link to the
 // successor was refused and both forked. Admission is roster membership, and

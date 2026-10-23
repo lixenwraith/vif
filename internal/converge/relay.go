@@ -112,11 +112,12 @@ func (c *Corrections) provedLocked(ids []uint32) map[uint32]uint64 {
 }
 
 // owedLocked is everyone corrections are owed to: the direct links, and every
-// participant the world's roster holds but this one. Caller MUST hold publishMu.
+// participant the world's roster holds but this one and any away, which nothing
+// reaches until it returns. Caller MUST hold publishMu.
 func (c *Corrections) owedLocked(ids []uint32) []uint32 {
 	out, local := slices.Clone(ids), c.inst.LocalParticipant()
 	for _, e := range c.inst.WorldRoster() {
-		if id := uint32(e.ID); id != local && !slices.Contains(out, id) {
+		if id := uint32(e.ID); id != local && !e.Away && !slices.Contains(out, id) {
 			out = append(out, id)
 		}
 	}

@@ -131,6 +131,21 @@ const (
 	// Wall time on purpose: the clock it is measured beside is stopped.
 	SessionVacantReset = time.Minute
 
+	// WraithTimeout is how long a departed participant's cursor waits as a Wraith
+	// before the authority drops it and its bots. Game time: a paused or held
+	// session ages nobody's wait, and two minutes covers a reload or a reconnect.
+	WraithTimeout = 2 * time.Minute
+
+	// ClaimsKept is how many claims a process keeps to come back to its sessions
+	// with: a player and every bot it can hold, twice, so one joined since still
+	// leaves the last session's places to return to.
+	ClaimsKept = 2 * MaxPlayers
+
+	// ClaimStoreInterval is how often at most a page writes its claims to the tab's
+	// storage as its cursors sync, so a reload brings back a record that old at
+	// worst; issuing or giving one up writes at once. Wall time: a reload is.
+	ClaimStoreInterval = time.Second
+
 	// SessionRejoinWindow and SessionRejoinInterval bound a participant redialling
 	// the coordinator that told it the session is rebuilding on another scenario. The
 	// window covers a world build, so it is generous; the interval is what a refused

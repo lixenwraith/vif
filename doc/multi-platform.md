@@ -345,7 +345,9 @@ keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
 build resolves. What a native run writes back to `vif.toml`'s `[play]` the page
 keeps in the site's storage (`localStorage`, handed to the Worker at the start,
 since a Worker has none), so each visit starts as the last was left; a private
-window, or a site whose storage is blocked, keeps them to the run.
+window, or a site whose storage is blocked, keeps them to the run. The claims a run
+comes back to its session with live in the tab's own storage (`sessionStorage`), so
+a reload takes back the place it left ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 
 A guest already receives custom maps. When the scenario it resolves does not have
 the session's digest, the coordinator serves it during the join, between the offer

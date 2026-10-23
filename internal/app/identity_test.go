@@ -66,7 +66,7 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 	defer a.Close()
 	tickUntilCursor(t, a)
 
-	offer, err := a.assignParticipant()
+	offer, err := a.assignParticipant(nil)
 	if err != nil {
 		t.Fatalf("assign: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestADifferentCorpusStillJoins(t *testing.T) {
 	defer a.Close()
 	tickUntilCursor(t, a)
 
-	offer, err := a.assignParticipant()
+	offer, err := a.assignParticipant(nil)
 	if err != nil {
 		t.Fatalf("assign: %v", err)
 	}

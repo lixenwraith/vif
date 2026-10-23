@@ -196,6 +196,9 @@ func participantConfigOptions(ctx *engine.GameContext) []configOption {
 		if p.Holder != 0 {
 			kind, description = "bot", "Enter removes this bot only; its holder and other bots stay."
 		}
+		if p.Away {
+			kind += ", away"
+		}
 		out = append(out, configOption{key: fmt.Sprintf("player/%d", p.Entity),
 			label: fmt.Sprintf("Drop %X: %s", p.Slot, kind), description: description,
 			command: "player", read: func(*engine.GameContext) string { return "Enter" },

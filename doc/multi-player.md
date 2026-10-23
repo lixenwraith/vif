@@ -492,7 +492,8 @@ tick and reaches a paced guest before that guest runs the tick.
 
 Roster changes are shared artifacts produced by the coordinator. A direct
 neighbour reports a disconnect; the authority turns it into one departure at one
-apply tick. A mid-run join is admitted to transport before its capture is read, so
+apply tick, which leaves the participant's cursor waiting as a **Wraith** (§5.4).
+A mid-run join is admitted to transport before its capture is read, so
 traffic produced during transfer is buffered rather than lost. The join waits for
 a capture far enough past admission to include pre-admission epochs and refuses a
 catch-up gap past `NetworkJoinCatchUpTicks`, or one still wider than
@@ -516,8 +517,8 @@ person at the guest's `-relay` address — is served by the guest as a coordinat
 would: it asks the authority on its own link to allocate the identity and, once
 the joiner installed the world the guest last proved, to cross its arrival with
 what the joiner reported (`MsgRelayJoin`). A bot declares its holder and dials no
-peer links, since it shares its holder's fate; a holder departure retires its bot
-group at the same crossing. A person declares no holder: it keeps its slot when
+peer links, since it shares its holder's fate; its holder's departure takes its
+bot group at the same crossing, to wait with it or to go with it. A person declares no holder: it keeps its slot when
 its relay leaves, and, having no link then, walks the chain like a survivor does
 and plays on through whichever participant answers (`Reach.cutOff`,
 `NetworkSystem.sendUp`). It is a leaf unless `-listen` names an address, since it
@@ -628,10 +629,10 @@ that still holds a link keeps its roster: it has peers to agree an apply tick wi
 and on a fork no authority to name one (§8).
 
 A departure, however it is produced, also clears what the instance had applied from
-that participant. Identities return to the pool and a crossing sequence starts at
-one, so a fence kept from the previous holder would claim a capture already contains
-crossings the next holder of that identity has not produced — and §3.2's install
-rule would then discard exactly those.
+that participant. An identity returns to the pool once its participant is dismissed
+(§5.4), and a crossing sequence starts at one, so a fence kept from the previous
+holder would claim a capture already contains crossings the next holder of that
+identity has not produced — and §3.2's install rule would then discard exactly those.
 
 ### 5.3 Reachability under `-authority migrate`
 
@@ -696,24 +697,90 @@ handoff.
 | Default listen port | The coordinator's own port, falling back to ephemeral, declaring what was bound. A port that is harmless on the machine that chose it is not necessarily harmless on somebody else's. |
 | Rejoin after a handoff | Every participant holds the whole chain, so a survivor with no link walks it — every candidate once, the list again a second later — with the attempt count on the status bar. |
 
-### 5.4 Leaving a session
+### 5.4 Wraiths
+
+A departure leaves the participant's cursor a **Wraith** rather than removing it.
+It keeps its entity, slot, owner and holder, and `CursorSystem.wraith` strips
+everything the world reaches a cursor through, keeping `Cursor`, `Protection` and a
+`Wraith` component that holds the cell it stood on and the game time it turned.
+Nothing hits, aims at, collides with or drains it, it touches nothing, and the peer
+renderer draws its slot label alone at that cell. Its roster entry reads `Away`,
+which succession (`DesignatedSuccessor`, `successionOrder`) and the corrections owed
+(`owedLocked`) pass over: nothing reaches a participant that is not there. A
+holder's bots wait with it, and its identity and slot stay taken.
+
+A **dismissal** (`ParticipantDepartedPayload.Dismissed`) removes the cursor and its
+bots for good and returns the identity and slot to the pool: the host's `:player
+drop`, a holder dropping its seat, an abandoned relayed join, an instance with no
+link (§5.2), and the authority's own two, which it crosses once
+(`NetworkSystem.expireWraiths`):
+
+- **Timeout.** A Wraith is dismissed `WraithTimeout` (2 min) of game time after it
+  turned; a bot whose holder waits too goes in its holder's dismissal. A reset
+  rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
+  of resets keeps one.
+- **Yield.** A dial a full session cannot otherwise admit has the participant away
+  longest dismissed for it (`App.yieldLocked`) and is refused `RefusalYielding`,
+  which seats and first joins retry in a moment; the retry takes the freed place.
+  A successor orders who is away by their Wraiths' waits.
+
+A notice dismisses only a seat, which its holder dropped; a player whose link
+closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
+occupied and its clock runs while one waits, which is what lets its wait run out.
+A defeat is the players left: a Wraith neither loses nor holds one up.
+
+**Coming back.** Each place is joined under a **claim**: a random token the
+participant's process keeps (`claimKeeper`; a page in its tab's `sessionStorage`,
+so a reload keeps it and another tab is another player; a terminal for the
+process's life) and whose digest the roster entry and the cursor carry, so a
+successor's roster carries it too. The host's own entry carries one. When the
+coordinator asks (`MsgJoinClaims`), before it assigns a place, a dial names the
+tokens it keeps of its kind, a seat its bots' and a player its own. A token whose
+digest an away entry carries takes that place back, a full session's too: the same
+identity, slot and cursor, held for that dial until its arrival crosses, so no
+newcomer is given it and no wait runs out on it (`NetworkResource.WraithKept`). A
+join that does not complete gives it back to the Wraith. A holder's bots come back
+the same way once it seats them again.
+
+A player brings back what its cursor held when it left (`event.CursorRecord`: energy,
+heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`).
+The record stops once the run is out of the session: it closed, or plays on after a
+fork (`converge.Instance.Forked`), its own bots still linked or not, while a
+successor carrying the session keeps its own; a dismissal forgets the claim. The
+arrival crossing carries it, and `CursorSystem.reclaim` writes it over the template
+at the free cell nearest the one the Wraith held, on every instance. A Wraith is
+driven by nobody, its own participant included, until that arrival.
+
+A claim whose place is still linked, which the host has not yet seen go, closes that
+link (`App.closeStaleLink`): its departure crosses as any lost link's does, and the
+dial is refused `RefusalReturning`, which it retries in a moment into the place. A
+place held through a relay waits for the relay to see its link go, and one another
+dial is taking back is refused the same way. The roster carries digests alone and a
+dial names its tokens only on its way to the coordinator, through the `-relay` it
+joins by if any, which carries all its traffic anyway, so no other peer can take its
+place; the port is unauthenticated by decision, so a claim is no credential against
+the wire.
+
+### 5.5 Leaving a session
 
 `:leave` takes a run out of its session into one of its own, the world as it
 stands: the session a solo run opens for its bots (§5.0), so `:host` opens it to
 others, `:join` replaces it and `:bot add` seats more. A host and a guest leave
 alike. A solo run and a run whose session holds only its own bots have nothing to
 leave, and a server stays in the session it serves, so each refuses it by its
-session role. Those left behind see an ordinary loss: the host removes a guest that
-left as it removes one whose link closed, the people a guest relayed keep their
-slots as when any relay leaves (§5), and the guests of a host that left run §5.1,
-which under `-authority host` is the fork.
+session role. Those left behind see an ordinary loss: the host keeps a guest that
+left as a Wraith, as it keeps one whose link closed (§5.4), the people a guest
+relayed keep their slots as when any relay leaves (§5), and the guests of a host
+that left run §5.1, which under `-authority host` is the fork.
 
 The run keeps its identity and authors the term after the one it held. Its cursor,
 its crossings still scheduled and its journal all name that identity, and nobody it
 leaves behind holds it, so the departures it produces for them cannot remove its
 own cursor, as they would if it took the coordinator's usual first identity. The
 new term puts anything still carrying the old one behind the term it holds, where
-every authoritative artifact is ignored.
+every authoritative artifact is ignored. The claim it was in the left session under
+is given up with its record as it stood, so it can still take its Wraith back
+there (§5.4), and the session it opens issues its own.
 
 Its bots leave first, as they do when it quits, and are seated again with fresh
 cursors once the old door is shut; a bot's journal closes with the cursor it drove.
@@ -1023,14 +1090,16 @@ and reconnect while watching the diagnostics in §7.
 Three membership checks are worth running by hand on every host shape, because they
 exercise the paths a two-terminal session reaches and nothing else does:
 
-- The guest leaves with `:q` and dials again. It should install a current capture
-  and take back the slot its departure released. While it waits at the start gate
-  it is not yet in a session and has no world, but the wait is still leavable:
+- The guest leaves with `:q` and dials again. It should install a current capture.
+  Its old cursor waits as a Wraith, its slot label alone where it stood, until it
+  is dismissed two minutes later, or at once when a full session needs its place;
+  a browser guest that reloads instead comes back to that place, the cursor its
+  Wraith kept, with the energy and health it left with. While it waits at the start
+  gate it is not yet in a session and has no world, but the wait is still leavable:
   Ctrl-Q, Ctrl-C and a terminal resize are answered there.
 - The host leaves instead. The guest takes the term — `:session` names it as the
   authority, `network.migrations` reads 1, and the `Host lost` badge clears — and
-  the host's cursor must be gone from its map rather than standing where it was
-  left. A guest that could not reach the successor shows `Host lost` and keeps
+  the host's cursor must wait where it was left as a Wraith rather than play on. A guest that could not reach the successor shows `Host lost` and keeps
   playing instead, which is the fork.
 - Either leaves with `:leave` instead and plays on. Its world goes on from where it
   stood, `:session` reads `Session hosting` with no address under the same

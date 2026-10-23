@@ -1,5 +1,7 @@
 package component
 
+import "time"
+
 // ControlKind is which producer on this instance drives a cursor. A bot is its
 // own instance whose policy feeds the router, so it is ControlLocal there and
 // ControlRemote everywhere else. Values are journaled in cursor spawn payloads.
@@ -21,4 +23,16 @@ type CursorComponent struct {
 	// PeerID names the remote owner when Control is ControlRemote
 	PeerID uint32
 	Holder uint32 // Participant whose process holds this bot; zero for independent players.
+
+	// Claim is the digest of the token its participant comes back with, which the
+	// roster a successor takes over reads from here.
+	Claim string
+}
+
+// WraithComponent marks a cursor whose participant is away. It keeps its slot and is
+// drawn at its cell, and it holds no other component, so nothing in the world reaches
+// it and it reaches nothing until its participant takes it back.
+type WraithComponent struct {
+	Since time.Time // game time it turned at; the authority drops it WraithTimeout later
+	X, Y  int       // the cell it holds, -1 for a cursor off the map
 }

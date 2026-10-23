@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net"
@@ -95,9 +96,9 @@ func (a *App) hostNetworkConfig() *network.Config {
 	netCfg.OnError = logSessionError
 	netCfg.AcceptSession = a.sessionAcceptor()
 	// Every host outlives its guests, so every host admits a dial after its lobby
-	// closed: a dropped participant comes back into the slot its departure released,
-	// through the one gate a reconnect has ever had. The hook answers nothing until
-	// the run arms it, because until then the gate is the startup lobby's own.
+	// closed: a dropped participant comes back through the one gate a reconnect has
+	// ever had. The hook answers nothing until the run arms it, because until then
+	// the gate is the startup lobby's own.
 	netCfg.OnAdmit = a.admitLateJoiner
 	return netCfg
 }
@@ -255,7 +256,8 @@ func (a *App) playersFit(sc resource.Scenario) error {
 	return nil
 }
 
-// Admission records ownership before a bot can enter the lobby or running roster.
+// Admission records ownership before a bot can enter the lobby or running roster,
+// and the claim its participant comes back under.
 func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) error {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
@@ -268,6 +270,19 @@ func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) e
 	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
 	if i < 0 {
 		return errors.New("participant left during admission")
+	}
+	// A participant taking its place back keeps the claim it came back under, and
+	// comes back as what it left as.
+	if r, back := a.returning[id]; back {
+		if report.Holder != r.entry.Holder {
+			return errors.New("a participant comes back with the holder it left with")
+		}
+		r.record = report.Record
+		a.returning[id] = r
+	} else if report.Claim != "" && !network.ValidClaim(report.Claim) {
+		return errors.New("the joiner's claim is of another form")
+	} else {
+		a.sessionRoster[i].Claim = report.Claim
 	}
 	a.sessionRoster[i].Holder = report.Holder
 	if report.Holder == 0 {
@@ -362,17 +377,26 @@ type joinDial struct {
 	pending   *network.PendingJoin
 	offer     network.SessionOffer
 	resources resource.Options // the session's scenario, as this instance resolved it
+
+	// claim is the one the offer gives a place back under, nil for a new place, held
+	// from claims until the run built on this dial takes it.
+	claims *claimKeeper
+	claim  *claim
 }
 
 // dialJoin dials cfg's session and adopts its offer and scenario. A peer running a
-// different protocol or simulation is refused here, before it has built a world.
+// different protocol or simulation is refused here, before it has built a world. It
+// names every claim of its kind it keeps, so a place one of them waits under is the
+// one offered.
 func dialJoin(cfg Config) (*joinDial, error) {
+	seat := cfg.holder != 0
 	netCfg := network.DebugConfig(network.RolePeer, cfg.JoinAddress)
 	netCfg.OnError = logSessionError
 	netCfg.Identity = buildIdentity()
 	netCfg.SessionName = cfg.SessionName
 	netCfg.Dial = cfg.relay
 	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
+	netCfg.Claims = cfg.claims.tokens(seat)
 	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
 	if err != nil {
 		if cfg.relay != nil {
@@ -380,7 +404,7 @@ func dialJoin(cfg Config) (*joinDial, error) {
 		}
 		return nil, fmt.Errorf("join %s: %w", network.Shown(cfg.JoinAddress), err)
 	}
-	d := &joinDial{pending: pending, offer: offer}
+	d := &joinDial{pending: pending, offer: offer, claims: cfg.claims, claim: cfg.claims.take(offer, seat)}
 	if cfg, err = ConfigForJoin(cfg, offer); err == nil {
 		err = resolveJoinScenario(&cfg, pending, offer)
 	}
@@ -392,10 +416,14 @@ func dialJoin(cfg Config) (*joinDial, error) {
 	return d, nil
 }
 
-// abandon refuses the offer, which releases the identity the host assigned.
+// abandon refuses the offer, which releases the identity the host assigned, or
+// gives the place back to its Wraith and the claim back to the keeper.
 func (d *joinDial) abandon(cause error) {
 	_ = d.pending.Complete(cause, network.JoinerReport{})
 	_ = d.pending.Close()
+	if d.claim != nil {
+		d.claims.release(d.claim)
+	}
 }
 
 // open constructs the joining App cfg describes and replies to the host.
@@ -438,6 +466,12 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 		d.abandon(err)
 		return nil, err
 	}
+	// The run holds the claim from here, and gives it up as it closes.
+	c := d.claim
+	if c == nil {
+		c = d.claims.issue(cfg.holder != 0)
+	}
+	a.claim.Store(c)
 	gate.Bind(a.reach)
 	a.reach.AdoptListener(listener, declared)
 	a.pendingJoin = pending
@@ -492,17 +526,47 @@ func resolveJoinScenario(cfg *Config, pending *network.PendingJoin, o network.Se
 	return nil
 }
 
-// assignParticipant allocates the next identity and returns the offer carrying it.
-// One call per accepted connection: the roster is the lobby so far, and the roster a
-// participant actually builds from arrives later, at the start gate.
-func (a *App) assignParticipant() (network.SessionOffer, error) {
-	return a.assignFor(a.JoinAnchor(), 0)
+// assignParticipant allocates the next identity, or the place a claim the dialer
+// named waits under, and returns the offer carrying it. One call per accepted
+// connection: the roster is the lobby so far, and the roster a participant actually
+// builds from arrives later, at the start gate.
+func (a *App) assignParticipant(claims []string) (network.SessionOffer, error) {
+	o, err := a.assignFor(a.JoinAnchor(), 0, claims)
+	a.closeStaleLink(err, a.sessionTransport())
+	return o, err
+}
+
+// returnPlace is a place a dial took back with its claim, until its arrival
+// crosses: the entry as it waited, and what its player brings back.
+type returnPlace struct {
+	entry  network.RosterEntry
+	record *event.CursorRecord
+}
+
+// staleLink refuses a dial whose claim names a place still linked: whoever names the
+// token is its player, and the link one it left that the host has not yet seen go.
+type staleLink struct {
+	id network.PeerID
+	*network.Refusal
+}
+
+func (s *staleLink) Unwrap() error { return s.Refusal }
+
+// closeStaleLink closes the link a refusal found a returning player's place held
+// on. Its departure crosses as any lost link's does, and the dial's retry takes the
+// place back; a place held through a relay waits for that relay to see its link go.
+func (a *App) closeStaleLink(err error, port engine.NetworkPort) {
+	var s *staleLink
+	if p, ok := port.(engine.PeerDroppingPort); ok && errors.As(err, &s) && p.Disconnect(uint32(s.id)) {
+		a.log.Info("session", "msg", "stale link closed for a returning player", "peer", uint64(s.id))
+	}
 }
 
 // assignFor is the allocation itself. holder is the participant a bot joins through,
-// recorded now because the bot never reports to this instance. Caller must not hold
-// sessionMu.
-func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network.SessionOffer, error) {
+// recorded now because the bot never reports to this instance. A claim among the
+// tokens named takes back the place its Wraith keeps, a full session's too. Caller
+// must not hold sessionMu.
+func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID, claims []string) (network.SessionOffer, error) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 
@@ -535,18 +599,27 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network
 	}
 
 	limit := a.sessionCapacity() + 1
-	if len(a.sessionRoster) == 0 {
-		a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: a.hostSlot()}}
-	}
-	if len(a.sessionRoster) >= limit {
-		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalFull,
-			Reason: fmt.Sprintf("session is full at %d participant(s)", a.playerCapacity())}
-	}
+	a.openRosterLocked()
 	if holder != 0 {
 		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == holder })
 		if i < 0 || a.sessionRoster[i].Holder != 0 {
 			return network.SessionOffer{}, errors.New("a bot's holder must be a participant that is not itself a bot")
 		}
+	}
+	if entry, err := a.claimedLocked(claims, holder); err != nil || entry.ID != 0 {
+		if err != nil {
+			return network.SessionOffer{}, err
+		}
+		a.sessionOffer = a.offerLocked(anchor, entry.ID)
+		return a.sessionOffer, a.sessionOffer.Validate()
+	}
+	if len(a.sessionRoster) >= limit {
+		if a.yieldLocked() {
+			return network.SessionOffer{}, &network.Refusal{Code: network.RefusalYielding,
+				Reason: "session is full, and a player who left is giving up a place"}
+		}
+		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalFull,
+			Reason: fmt.Sprintf("session is full at %d participant(s)", a.playerCapacity())}
 	}
 	assigned := a.nextParticipantLocked()
 	assigned.Holder = holder
@@ -554,6 +627,81 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID) (network
 
 	a.sessionOffer = a.offerLocked(anchor, assigned.ID)
 	return a.sessionOffer, a.sessionOffer.Validate()
+}
+
+// claimedLocked is the place one of the tokens a dial named takes back: an away
+// entry its Wraith keeps, held for the dial until its arrival crosses. A bot comes
+// back through its own holder. A claimed place still linked, or coming back on
+// another dial, refuses this one for a retry. Caller holds sessionMu.
+func (a *App) claimedLocked(tokens []string, holder network.PeerID) (network.RosterEntry, error) {
+	var refused error
+	for _, t := range tokens {
+		digest := network.ClaimDigest(t)
+		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.Claim == digest })
+		if i < 0 {
+			continue
+		}
+		p := a.sessionRoster[i]
+		_, back := a.returning[p.ID]
+		switch {
+		case p.ID == a.authorityID() || p.ID == a.yielding || p.Holder != 0 && p.Holder != cmp.Or(holder, a.authorityID()):
+			continue
+		case back:
+			refused = &network.Refusal{Code: network.RefusalReturning, Reason: "this player's place is being taken back by another join"}
+		case !p.Away:
+			refused = &staleLink{id: p.ID, Refusal: &network.Refusal{Code: network.RefusalReturning,
+				Reason: "this player's place is still linked to the run it left"}}
+		default:
+			if a.returning == nil {
+				a.returning = make(map[network.PeerID]returnPlace)
+			}
+			a.returning[p.ID] = returnPlace{entry: p}
+			if holder != 0 {
+				a.sessionRoster[i].Holder = holder
+			}
+			return a.sessionRoster[i], nil
+		}
+	}
+	return network.RosterEntry{}, refused
+}
+
+// giveBack returns a place a dial took back to its Wraith, for a join that did not
+// complete, and reports whether id was one.
+func (a *App) giveBack(id network.PeerID) bool {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	r, ok := a.returning[id]
+	if !ok {
+		return false
+	}
+	delete(a.returning, id)
+	if i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id }); i >= 0 {
+		a.sessionRoster[i] = r.entry
+	}
+	return true
+}
+
+// openRosterLocked starts the roster with this run's own entry, which carries the
+// claim it comes back under should a successor take its session. Caller holds
+// sessionMu.
+func (a *App) openRosterLocked() {
+	if len(a.sessionRoster) == 0 {
+		a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: a.hostSlot(), Claim: a.ownClaim()}}
+	}
+}
+
+// ownClaim is the digest of the claim this run is in its session under, issued when
+// a session it opens first names it; a dedicated host has no place to come back to.
+func (a *App) ownClaim() string {
+	if a.cfg.Mode.Serves() {
+		return ""
+	}
+	c := a.claim.Load()
+	if c == nil {
+		c = a.claims.issue(a.cfg.holder != 0)
+		a.claim.Store(c)
+	}
+	return network.ClaimDigest(c.Token)
 }
 
 // nextParticipantLocked takes the lowest free identity and the lowest free slot, so
@@ -580,13 +728,22 @@ func (a *App) nextParticipantLocked() network.RosterEntry {
 	return out
 }
 
-// releaseParticipant32 is the departure hook the network resource calls when a
-// participant leaves, returning its identity so a later connection can take it.
-func (a *App) releaseParticipant32(id uint32) { a.releaseParticipant(network.PeerID(id)) }
+// participantDeparted is the departure hook the network resource calls when a
+// participant leaves.
+func (a *App) participantDeparted(id uint32, final bool) { a.leaveRoster(network.PeerID(id), final) }
 
 // releaseParticipant returns an identity whose handshake did not complete, or whose
-// participant has left.
+// participant has left for good; a place taken back goes back to its Wraith.
 func (a *App) releaseParticipant(id network.PeerID) {
+	if !a.giveBack(id) {
+		a.leaveRoster(id, true)
+	}
+}
+
+// leaveRoster forgets the links a departed participant held. A final departure
+// returns its identity and slot to the pool, with its bots'; any other keeps both
+// for the Wraith that waits in the slot, and marks the entry away.
+func (a *App) leaveRoster(id network.PeerID, final bool) {
 	if id == 0 || id == a.authorityID() {
 		return
 	}
@@ -596,8 +753,56 @@ func (a *App) releaseParticipant(id network.PeerID) {
 	}
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
-	a.sessionRoster = slices.DeleteFunc(a.sessionRoster,
-		func(p network.RosterEntry) bool { return p.ID == id || p.Holder == id })
+	if final {
+		gone := func(p network.RosterEntry) bool { return p.ID == id || p.Holder == id }
+		for _, p := range a.sessionRoster {
+			if gone(p) {
+				a.awayOrder = slices.DeleteFunc(a.awayOrder, func(away network.PeerID) bool { return away == p.ID })
+				delete(a.returning, p.ID)
+				if a.yielding == p.ID {
+					a.yielding = 0
+				}
+			}
+		}
+		a.sessionRoster = slices.DeleteFunc(a.sessionRoster, gone)
+		return
+	}
+	for i := range a.sessionRoster {
+		if a.sessionRoster[i].ID == id {
+			a.sessionRoster[i].Away = true
+		}
+	}
+	if !slices.Contains(a.awayOrder, id) {
+		a.awayOrder = append(a.awayOrder, id)
+	}
+}
+
+// yieldLocked asks the authority to dismiss the participant away longest, for a dial
+// a full session cannot otherwise admit, and reports whether a place is on its way.
+// It asks once until that dismissal applies; a bot whose holder is away waits for
+// its holder's, and a place coming back is not away. Caller holds sessionMu.
+func (a *App) yieldLocked() bool {
+	away := func(id network.PeerID) (network.RosterEntry, bool) {
+		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
+		if _, back := a.returning[id]; i < 0 || !a.sessionRoster[i].Away || back {
+			return network.RosterEntry{}, false
+		}
+		return a.sessionRoster[i], true
+	}
+	if _, ok := away(a.yielding); ok {
+		return true
+	}
+	a.yielding = 0
+	for _, id := range a.awayOrder {
+		p, ok := away(id)
+		if _, holderAway := away(p.Holder); !ok || p.Holder != 0 && holderAway {
+			continue
+		}
+		a.yielding = id
+		a.dismissWraith.Store(uint32(id))
+		return true
+	}
+	return false
 }
 
 // crossPredecessorDeparture removes the authority that was lost from the roster. A
@@ -637,30 +842,29 @@ func (a *App) dropAbandonedLocked(roster []network.RosterEntry, local network.Pe
 		if p.ID == local || p.Slot == parameter.NoPlayerSlot {
 			continue
 		}
-		a.pushDepartureLocked(p.ID, p.Slot, core.DomainShared)
+		a.pushDepartureLocked(event.ParticipantDepartedPayload{Participant: uint32(p.ID), Slot: p.Slot, Dismissed: true},
+			core.DomainShared)
 	}
 }
 
 // crossDeparture produces one participant's departure as the D-11 crossing it is.
 func (a *App) crossDeparture(id network.PeerID, slot uint8) {
-	a.pushDeparture(id, slot, core.DomainPlayer)
+	a.pushDeparture(event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot}, core.DomainPlayer)
 }
 
-// pushDeparture emits one participant's removal: player puts the artifact on the
+// pushDeparture emits one participant's departure: player puts the artifact on the
 // wire for every instance to apply at one agreed tick, shared keeps it here, and
-// both are recorded. The identity returns to the pool when the departure applies
+// both are recorded. The identity returns to the pool when a dismissal applies
 // (OnDeparture), never here: a dial assigned it in between would be the
 // participant the crossing removes.
-func (a *App) pushDeparture(id network.PeerID, slot uint8, domain core.Domain) {
-	a.world.RunSafe(func() { a.pushDepartureLocked(id, slot, domain) })
+func (a *App) pushDeparture(p event.ParticipantDepartedPayload, domain core.Domain) {
+	a.world.RunSafe(func() { a.pushDepartureLocked(p, domain) })
 }
 
 // pushDepartureLocked is pushDeparture under the world lock. Caller MUST hold
 // updateMutex.
-func (a *App) pushDepartureLocked(id network.PeerID, slot uint8, domain core.Domain) {
-	a.world.PushEventFull(event.EventParticipantDeparted,
-		&event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot},
-		event.OriginSession, domain)
+func (a *App) pushDepartureLocked(p event.ParticipantDepartedPayload, domain core.Domain) {
+	a.world.PushEventFull(event.EventParticipantDeparted, &p, event.OriginSession, domain)
 }
 
 // offerLocked builds the offer addressed to one participant. Caller holds sessionMu,
@@ -701,7 +905,7 @@ func (a *App) hostOffer() (network.SessionOffer, error) {
 		// No joiner ever arrived; describe the two-participant lobby this host opened.
 		// Through the allocator rather than beside it: a dedicated host holds no slot,
 		// so its guest takes slot zero and a second rule here would disagree.
-		a.sessionRoster = []network.RosterEntry{{ID: engine.CoordinatorParticipant, Slot: a.hostSlot()}}
+		a.openRosterLocked()
 		a.sessionRoster = append(a.sessionRoster, a.nextParticipantLocked())
 	}
 	assigned := a.authorityID()

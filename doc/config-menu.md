@@ -87,8 +87,9 @@ participant has a **Drop &lt;slot&gt;: player|bot** row that only the host can
 activate. Dropping a player removes its bots; dropping a bot leaves its holder
 and siblings. Commands are `:player` and `:player drop <slot>`;
 `:bot drop <slot>` also lets the host remove any bot. Decimal `10`, hexadecimal
-`A` and `0xA` all refer to the cursor marked `A`. Slots may be reused after
-departure.
+`A` and `0xA` all refer to the cursor marked `A`. A player who left reads
+`player, away` while its Wraith waits; dropping it ends the wait. Slots may be
+reused once a departed player is dropped.
 
 **Host this run** takes a listening address such as `:4242`, `127.0.0.1:4242` or
 `ws://:4242`. Authority may be blank to keep the startup policy, `host` to end
@@ -119,7 +120,7 @@ session's own bots; the Bots page adds bots held by your run after joining.
 where this one stands, its bots seated again beside it, and the others play on
 without it. A solo run, a session holding only your own bots, a pending join, or
 a driven run without the play loop disables it. See
-[Multiplayer §5.4](multi-player.md#54-leaving-a-session).
+[Multiplayer §5.5](multi-player.md#55-leaving-a-session).
 
 ## Key binding and persistence
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
@@ -54,7 +55,7 @@ func (a *App) serveRelay() {
 // people it relays, as a coordinator's with the authority asked for each answer.
 func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID, error) {
 	return network.HostAcceptor(network.Coordinator{
-		Assign:   func() (network.SessionOffer, error) { return a.relayAssign(local) },
+		Assign:   func(claims []string) (network.SessionOffer, error) { return a.relayAssign(local, claims) },
 		Release:  a.relayRelease,
 		Admit:    a.admissions.Admit,
 		Report:   func(id network.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
@@ -63,10 +64,10 @@ func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID
 	}, network.DefaultConfig().ConnectTimeout)
 }
 
-// relayAssign asks the authority for an identity this run holds and names this run
-// as the far end of the joiner's stream.
-func (a *App) relayAssign(local network.PeerID) (network.SessionOffer, error) {
-	ans, err := a.askAuthority(network.RelayJoin{Step: network.RelayAssign})
+// relayAssign asks the authority for an identity this run holds, or the place one of
+// the joiner's claims takes back, and names this run as the far end of its stream.
+func (a *App) relayAssign(local network.PeerID, claims []string) (network.SessionOffer, error) {
+	ans, err := a.askAuthority(network.RelayJoin{Step: network.RelayAssign, Claims: claims})
 	if err != nil {
 		return network.SessionOffer{}, err
 	}
@@ -248,7 +249,8 @@ func (a *App) decideRelayJoinLocked(relay network.PeerID, body []byte) {
 	case req.Step == network.RelayAssign && !a.lateJoins.Load():
 		err = ErrSessionStarting
 	case req.Step == network.RelayAssign:
-		ans.Offer, err = a.assignFor(a.joinAnchorLocked(), relay)
+		ans.Offer, err = a.assignFor(a.joinAnchorLocked(), relay, req.Claims)
+		a.closeStaleLink(err, a.sessionTransportLocked())
 	case req.Step == network.RelayReady:
 		err = a.admitRelayedLocked(relay, req.Leaf, req.Report)
 	default:
@@ -292,10 +294,12 @@ func (a *App) admitRelayedLocked(relay, leaf network.PeerID, report network.Join
 }
 
 // abandonRelayedLocked retires a relayed join that failed. Whether its arrival
-// crossed is the holder's guess, so it leaves as any participant does: a departure
-// for a cursor never made removes nothing. Caller MUST hold updateMutex.
+// crossed is the holder's guess, so it is dismissed as any participant can be: a
+// departure for a cursor never made removes nothing. A place taken back whose
+// arrival has not crossed goes back to its Wraith. Caller MUST hold updateMutex.
 func (a *App) abandonRelayedLocked(relay, leaf network.PeerID) {
-	if slot, ok := a.relayedSlot(relay, leaf); ok {
-		a.pushDepartureLocked(leaf, slot, core.DomainPlayer)
+	if slot, ok := a.relayedSlot(relay, leaf); ok && !a.giveBack(leaf) {
+		a.pushDepartureLocked(event.ParticipantDepartedPayload{Participant: uint32(leaf), Slot: slot, Dismissed: true},
+			core.DomainPlayer)
 	}
 }

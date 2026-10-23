@@ -468,14 +468,16 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	// A departure is a crossing like any other, so it lands at the playout lead the
 	// session runs on rather than where the lost link was observed. The barrier owns
 	// it even though there is no peer left to send it to: the tick it applies at is
-	// what a reproduction of this run has to reach.
+	// what a reproduction of this run has to reach. The guest's cursor waits in its
+	// slot as a Wraith.
 	a.Tick(parameter.NetworkBarrierDelayTicks + 1)
 	var roster int
 	var state string
 	var peers int64
-	var latched bool
+	var latched, away bool
 	a.World().RunSafe(func() {
 		roster = a.World().Resources.Player.Count()
+		away = a.World().Components.Wraith.HasEntity(a.World().Resources.Player.Slot(1))
 		reg := a.World().Resources.Status
 		state = reg.Strings.Get("network.state").Load()
 		peers = reg.Ints.Get("network.peers").Load()
@@ -483,9 +485,9 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	})
 	// The latch survives the disconnect: a run that opened a session keeps the bounds
 	// its participants adopted, so a returning one replays onto the same map (D-14).
-	if roster != 1 || !host.IsRunning() || state != "down" || peers != 0 || !latched {
-		t.Fatalf("host after disconnect = roster %d running %t state %q peers %d latch %t",
-			roster, host.IsRunning(), state, peers, latched)
+	if roster != 2 || !away || !host.IsRunning() || state != "down" || peers != 0 || !latched {
+		t.Fatalf("host after disconnect = roster %d guest away %t running %t state %q peers %d latch %t",
+			roster, away, host.IsRunning(), state, peers, latched)
 	}
 
 }

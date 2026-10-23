@@ -719,7 +719,7 @@ func (u *Authority) successionOrder() []network.PeerID {
 	u.mu.Unlock()
 	alive := func(id network.PeerID) bool {
 		return id != 0 && id != holder && id != local &&
-			slices.ContainsFunc(roster, func(p network.RosterEntry) bool { return p.ID == id })
+			slices.ContainsFunc(roster, func(p network.RosterEntry) bool { return p.ID == id && !p.Away })
 	}
 	var out []network.PeerID
 	for _, e := range chain {

@@ -555,6 +555,27 @@ void main() {
         }
     }
 
+    /* The claims a run comes back to its session with, kept for this tab alone: a
+       reload takes back the place a player left, and another tab is another player.
+       Storage refused, they last the run. */
+    const CLAIMS_KEY = 'vif.claims';
+
+    function keptClaims() {
+        try {
+            return sessionStorage.getItem(CLAIMS_KEY) || '';
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function keepClaims(text) {
+        try {
+            sessionStorage.setItem(CLAIMS_KEY, text);
+        } catch (err) {
+            /* nothing to tell: the run keeps them */
+        }
+    }
+
     function showExit(code, reason) {
         if (code === 0) {
             showMessage('vif has exited.', false);
@@ -655,6 +676,9 @@ void main() {
             case 'settings':
                 keepSettings(msg.text);
                 break;
+            case 'claims':
+                keepClaims(msg.text);
+                break;
             case 'exit':
                 showExit(msg.code, msg.reason);
                 stop();
@@ -667,7 +691,8 @@ void main() {
         };
         // Resolved here: the worker would resolve a relative name against its own URL.
         program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href,
-            bytes: bytes.buffer, argv: argv, cols: cols, rows: rows, settings: keptSettings() }, [bytes.buffer]);
+            bytes: bytes.buffer, argv: argv, cols: cols, rows: rows, settings: keptSettings(),
+            claims: keptClaims() }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });
             if (document.hidden) {

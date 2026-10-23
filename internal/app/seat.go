@@ -146,7 +146,7 @@ func (a *App) seatConfigLocked() (Config, error) {
 	width, height := a.seatScreenLocked()
 	return Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: width, Height: height,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1, JoinAddress: seatJoin, SessionName: a.cfg.SessionName,
-		holder: network.PeerID(a.world.LocalParticipant()), relay: a.seatLink}, nil
+		holder: network.PeerID(a.world.LocalParticipant()), relay: a.seatLink, claims: a.claims}, nil
 }
 
 // seatLink opens a stream to this run for one of its bots and serves the join

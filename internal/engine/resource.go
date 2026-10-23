@@ -310,10 +310,13 @@ type pendingPointer struct {
 // cursor. Every participant stores the same slots and peer IDs, but marks only
 // its own assignment non-remote.
 type CursorRosterEntry struct {
+	Claim   string // digest of the token its participant comes back with
 	Holder  uint32
 	Slot    uint8
 	Control component.ControlKind
 	PeerID  uint32
+	Wraith  bool          // its participant is away, so the reset rebuilds it as a Wraith
+	Waited  time.Duration // how long it has been away, which the new game's wait goes on from
 }
 
 // PingAbsoluteBounds holds absolute coordinates derived from cursor position and radius
@@ -1107,10 +1110,11 @@ type NetworkResource struct {
 	// is worth it only once something disagrees.
 	SharedDigest func(detail bool) SharedStateDigest
 
-	// OnDeparture is called under the world lock when a participant leaves, so the
-	// session layer can return its identity to the pool. It must not take a lock
-	// that a world-lock acquisition waits behind.
-	OnDeparture func(participant uint32)
+	// OnDeparture is called under the world lock when a participant leaves. A final
+	// departure returns its identity to the pool; any other leaves the identity and
+	// slot to the Wraith that waits for it. It must not take a lock that a world-lock
+	// acquisition waits behind.
+	OnDeparture func(participant uint32, final bool)
 	OnDismissed func()
 
 	// OnCorrection hands one reassembled authoritative correction to the session
@@ -1148,6 +1152,19 @@ type NetworkResource struct {
 	// SeatsOnly reports whether every participant linked to this instance is a bot
 	// seat it holds, which stands still with its clock. Called under the world lock.
 	SeatsOnly func() bool
+
+	// DismissWraith takes the participant whose Wraith the session layer wants gone
+	// at once, to give a full session's place to a newcomer; zero for none. The
+	// authority reads it as it closes each tick, under the world lock.
+	DismissWraith func() uint32
+
+	// WraithKept reports a participant the session layer is giving its Wraith back
+	// to, which no wait may run out on while its arrival is on its way.
+	WraithKept func(participant uint32) bool
+
+	// OnOwnState takes each sync this instance sends of the cursor it plays, which
+	// its player brings back to its Wraith should it leave. Under the world lock.
+	OnOwnState func(*event.CursorStatePayload)
 
 	// OnPeerLost reports a direct neighbour's departure to the session layer,
 	// beside the identity release OnDeparture does. It is a different question:

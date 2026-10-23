@@ -322,8 +322,10 @@ const (
 	EventCursorArmRequest
 	// EventCursorDespawnRequest (CursorDespawnRequestPayload) [shared] asks CursorSystem to destroy cursors
 	EventCursorDespawnRequest
-	// EventCursorDespawned (CursorDespawnedPayload) [shared] announces a destroyed cursor
+	// EventCursorDespawned (CursorDespawnedPayload) [shared] announces a cursor leaving play: destroyed, or turned Wraith
 	EventCursorDespawned
+	// EventCursorWraithRequest (CursorWraithRequestPayload) [shared] asks CursorSystem to turn a departed participant's cursor Wraith
+	EventCursorWraithRequest
 	// EventCursorMoveRequest (CursorMoveRequestPayload) [bus] asks CursorSystem to place a cursor
 	EventCursorMoveRequest
 	// EventCursorMoved (CursorMovedPayload) [shared] announces an applied cursor position

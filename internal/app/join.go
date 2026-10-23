@@ -234,8 +234,13 @@ func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) e
 		a.world.RunSafe(a.ctx.PublishMapLock)
 		return nil
 	}
+	// A Wraith in the slot is this participant's own place, which it drives once its
+	// arrival crosses and takes it back.
 	var owned bool
-	a.world.RunSafe(func() { owned = a.world.Resources.Player.Slot(localAssignment.Slot) != 0 })
+	a.world.RunSafe(func() {
+		e := a.world.Resources.Player.Slot(localAssignment.Slot)
+		owned = e != 0 && !a.world.Components.Wraith.HasEntity(e)
+	})
 	if owned && localAssignment.Slot != a.localSlot() {
 		a.ctx.PushEventOrigin(event.EventCursorSetLocalRequest,
 			&event.CursorSetLocalPayload{Slot: localAssignment.Slot}, event.OriginDebug)
@@ -247,19 +252,21 @@ func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) e
 
 // bindCursorOwnersLocked writes each slot's owning participant onto its cursor, and
 // which of them this instance drives. The owner travels in every capture, and a
-// slot no roster can attribute is a participant a succession cannot see leave.
-// Caller MUST hold updateMutex.
+// slot no roster can attribute is a participant a succession cannot see leave. A
+// Wraith keeps the owner it left with, and nobody drives it. Caller MUST hold
+// updateMutex.
 func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local network.PeerID) {
 	roster := a.world.Resources.Player
 	for _, p := range participants {
 		if p.Slot == parameter.NoPlayerSlot {
 			continue
 		}
-		c, ok := a.world.Components.Cursor.GetPtr(roster.Slot(p.Slot))
-		if !ok {
+		e := roster.Slot(p.Slot)
+		c, ok := a.world.Components.Cursor.GetPtr(e)
+		if !ok || a.world.Components.Wraith.HasEntity(e) {
 			continue
 		}
-		c.PeerID, c.Holder = uint32(p.ID), uint32(p.Holder)
+		c.PeerID, c.Holder, c.Claim = uint32(p.ID), uint32(p.Holder), p.Claim
 		c.Control = component.ControlRemote
 		if p.ID == local {
 			c.Control = component.ControlLocal
@@ -321,10 +328,17 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 // service's endpoint and an attached one alike.
 func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.Relay = uint32(a.joinedThrough)
-	r.OnDeparture = a.releaseParticipant32
+	r.OnDeparture = a.participantDeparted
 	// Replays and staging worlds apply roster changes without ending their viewer.
 	if _, live := r.Port.(engine.PeerDroppingPort); live {
-		r.OnDismissed = func() { a.dismissed.Store(true); a.haltSeats() }
+		r.OnDismissed = func() {
+			a.dismissed.Store(true)
+			a.haltSeats()
+			// The place is gone, and the claim with it.
+			if c := a.claim.Swap(nil); c != nil {
+				a.claims.forget(c)
+			}
+		}
 	}
 	r.SharedDigest = a.sharedDigestLocked
 	// The correction queue takes bytes and nothing else: this runs inside a tick,
@@ -339,6 +353,9 @@ func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnRelayJoin = a.onRelayJoin
 	r.SeatsOnly = a.seatsOnly
 	r.OnAuthorityAhead = a.authorityAhead
+	r.DismissWraith = func() uint32 { return a.dismissWraith.Swap(0) }
+	r.WraithKept = a.wraithKept
+	r.OnOwnState = a.keepRecord
 }
 
 // authorityAhead marks a hold the host has run past: a held host sends no epoch, so
@@ -362,4 +379,33 @@ func (a *App) releaseHold(said string) {
 	a.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false}, event.OriginSession)
 	a.scheduler.SettleLocked()
 	a.ctx.SetStatusMessage(said, parameter.StatusNotice)
+}
+
+// wraithKept reports whether a participant's Wraith is on its way back: a dial took
+// its place back, or its arrival crossed and has yet to apply.
+func (a *App) wraithKept(participant uint32) bool {
+	id := network.PeerID(participant)
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	if _, back := a.returning[id]; back {
+		return true
+	}
+	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
+	return i >= 0 && !a.sessionRoster[i].Away
+}
+
+// keepRecord keeps what this run's own cursor holds as its sync sends it, which is
+// what its player brings back should the run leave the session.
+func (a *App) keepRecord(p *event.CursorStatePayload) {
+	if c := a.claim.Load(); c != nil {
+		a.claims.keep(c, p.Record())
+	}
+}
+
+// leaveClaim gives up the claim this run is in its session under, which keeps the
+// record its last sync left.
+func (a *App) leaveClaim() {
+	if c := a.claim.Swap(nil); c != nil {
+		a.claims.release(c)
+	}
 }

@@ -65,7 +65,7 @@ func (c sessionControl) Participants() []engine.SessionParticipant {
 		e := c.a.world.Resources.Player.Slot(uint8(slot))
 		if p, ok := c.a.world.Components.Cursor.GetComponent(e); ok {
 			out = append(out, engine.SessionParticipant{Entity: e, Slot: p.Slot, Holder: p.Holder,
-				Local: c.a.world.SimulatesLocally(e)})
+				Local: c.a.world.SimulatesLocally(e), Away: c.a.world.Components.Wraith.HasEntity(e)})
 		}
 	}
 	return out
@@ -444,8 +444,13 @@ func (a *App) openSessionLocked() error {
 
 	a.sessionMu.Lock()
 	a.midRunPort = port
+	self.Claim = a.ownClaim()
 	a.sessionRoster = []network.RosterEntry{self}
 	a.sessionOffer = network.SessionOffer{}
+	// Who was away from the session this run left, or on the way back to it, stays
+	// with that session: an identity it hands out again is somebody new.
+	a.awayOrder, a.yielding, a.returning = nil, 0, nil
+	a.dismissWraith.Store(0)
 	roster := slices.Clone(a.sessionRoster)
 	a.sessionMu.Unlock()
 
@@ -584,9 +589,16 @@ func (a *App) leaveSessionLocked() (engine.NetworkPort, error) {
 	// nor the name the next one would answer to.
 	cfg := a.cfg
 	a.cfg.JoinAddress, a.cfg.HostAddress, a.cfg.SessionName = "", "", ""
+	// The claim the run left under keeps its record as it stands, for a return to
+	// that session; the one it opens issues its own.
+	prior := a.claim.Swap(nil)
 	if err := a.openSessionLocked(); err != nil {
+		a.claim.Store(prior)
 		a.cfg = cfg
 		return nil, err
+	}
+	if prior != nil {
+		a.claims.release(prior)
 	}
 	for _, sys := range a.world.Systems() {
 		if s, ok := sys.(interface{ LeaveSession() }); ok {
@@ -932,8 +944,9 @@ func (a *App) crossParticipantArrival(id network.PeerID, slot uint8) {
 	a.world.RunSafe(func() { a.crossArrivalLocked(id, slot) })
 }
 
-// crossArrivalLocked is crossParticipantArrival under the world lock. Caller MUST
-// hold updateMutex.
+// crossArrivalLocked is crossParticipantArrival under the world lock. A participant
+// back in a place its claim took back is no longer away from here, and brings the
+// record it left with. Caller MUST hold updateMutex.
 func (a *App) crossArrivalLocked(id network.PeerID, slot uint8) {
 	a.sessionMu.Lock()
 	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
@@ -941,11 +954,13 @@ func (a *App) crossArrivalLocked(id network.PeerID, slot uint8) {
 		a.sessionMu.Unlock()
 		return
 	}
-	holder := a.sessionRoster[i].Holder
+	p := &event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot,
+		Holder: uint32(a.sessionRoster[i].Holder), Claim: a.sessionRoster[i].Claim, Record: a.returning[id].record}
+	delete(a.returning, id)
+	a.sessionRoster[i].Away = false
+	a.awayOrder = slices.DeleteFunc(a.awayOrder, func(away network.PeerID) bool { return away == id })
 	a.sessionMu.Unlock()
-	a.world.PushEventFull(event.EventParticipantJoined,
-		&event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot, Holder: uint32(holder)},
-		event.OriginSession, core.DomainPlayer)
+	a.world.PushEventFull(event.EventParticipantJoined, p, event.OriginSession, core.DomainPlayer)
 }
 
 // resumeJoinedSession hands the traffic the gate held to the port and closes the gap
