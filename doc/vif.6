@@ -29,10 +29,16 @@ the [play] settings; a flag given on the command line wins.
 .SS Session
 .TP
 .B \-host <addr>
-Play at once and open the game to participants, e.g. :7777 or ws://:7777
+Play at once and open the game to participants, e.g. :7777, ws://:7777 or wss://:7777
 .TP
 .B \-serve <addr>
-Bind a headless session with no local cursor, e.g. :7777 or ws://:7777
+Bind a headless session with no local cursor, e.g. :7777, ws://:7777 or wss://:7777
+.TP
+.B \-cert <file>
+Certificate chain a wss:// host serves, PEM; for \-host, \-serve or :host
+.TP
+.B \-key <file>
+The certificate's private key, PEM; default the \-cert file
 .TP
 .B \-join <addr>
 Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given

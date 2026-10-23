@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -168,6 +169,10 @@ type Config struct {
 	// dedicated host holds tick zero in a lobby until lobbyQuorum guests pass the
 	// start gate.
 	HostAddress string
+
+	// TLS is the certificate a wss:// door serves, -cert and -key; nil opens none.
+	// It is the run's, so a door :host opens later serves it too.
+	TLS *tls.Config
 
 	// JoinAddress is the session this run joins, at startup or through :join, at
 	// whatever tick the host has reached. The host's offer supplies simulation
@@ -389,6 +394,13 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 		c.JoinAddress = ""
 	}
 	return c, nil
+}
+
+// hostNetwork is the transport a door this run opens at addr is served with.
+func (c Config) hostNetwork(addr string) *network.Config {
+	cfg := network.DebugConfig(network.RoleHost, addr)
+	cfg.TLS = c.TLS
+	return cfg
 }
 
 // Normalize fills unset fields that carry a defined default

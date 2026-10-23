@@ -170,9 +170,10 @@ typed onto another route's port, is looked up by its name in `GET /vif/api/sessi
 of the site that issued it (the link's own origin, then its host's `https`), and the
 routes listed for this build are dialled. A route's own refusal stands, and a site
 that answers but does not list the session says so. The scheme picks the transport
-and tcp is the default. A host's bound address (`-host`, `-serve`, `:host`) is tcp
-or plain `ws://host:port`, one protocol per listener; `-listen` is tcp, which
-participants link to each other over; any other scheme is refused (§7.3).
+and tcp is the default. A host's bound address (`-host`, `-serve`, `:host`) is tcp,
+plain `ws://host:port` or `wss://host:port`, one protocol per listener, the last
+serving the certificate `-cert` and `-key` name; `-listen` is tcp, which participants
+link to each other over; any other scheme is refused (§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
@@ -239,20 +240,24 @@ flowchart TD
     Manager --> Peer["read, write and close goroutines"]
 ```
 
-`network.Listen` binds a `ws://` address as a WebSocket listener, a TCP one with
-`tls.Listen` when a TLS config is supplied programmatically, and otherwise with
-`net.Listen`. It is exported so a run learns it cannot have the port before
-anything depends on it; the run then hands the bound listener to the port as
+`network.Listen` binds a `ws://` or `wss://` address as a WebSocket listener and a
+TCP one with `net.Listen`. It is exported so a run learns it cannot have the port
+before anything depends on it; the run then hands the bound listener to the port as
 `Config.PreboundListener`. The WebSocket listener answers upgrades on a TCP port
 with `pkg/websocket` and yields each as a stream, so the handshake budget and
 per-address admission see a WebSocket joiner as they see a TCP one; its HTTP
 request is bounded in time and size, and Origin is not checked, since the join
-handshake is the admission. A bind or dial that fails is reported as what the
-player can do (`plainNetError`): a port below 1024, a port in use, an address not
-of this machine, a name not found, nothing listening, an unreachable network, no
-answer; a dial that connects to something that offers no session says so, and a
-host's refusal is prefixed as one. Anything else keeps the system's words. The CLI
-deliberately supplies no TLS configuration in this trusted-peer proof.
+handshake is the admission. A `wss://` listener wraps that port in TLS with
+`Config.TLS`, the certificate `-cert` and `-key` name (`network.LoadTLS`: PEM, the
+key in the certificate's file when `-key` is not given, TLS 1.2 or later, HTTP/1.1
+alone), and is refused without one; the same field is what a native `wss://` dial
+trusts in place of the system's roots, which a browser's dial never consults. TCP
+and `ws` stay plaintext whatever it holds. A bind or dial that fails is reported as
+what the player can do (`plainNetError`): a port below 1024, a port in use, an
+address not of this machine, a name not found, nothing listening, an unreachable
+network, no answer, a certificate this machine does not trust; a dial that connects
+to something that offers no session says so, and a host's refusal is prefixed as
+one. Anything else keeps the system's words.
 
 `dial` is where a WebSocket route diverges and stops diverging: a `ws://` or
 `wss://` target is opened as the page's own WebSocket in a browser, or with
@@ -873,7 +878,8 @@ What the operator surface does not cover:
   back into the running session; a coordinator whose only links are its own bot
   seats may still pause;
 - no lag compensation;
-- trusted plaintext peers; no authentication or CLI TLS identity;
+- trusted plaintext peers over tcp and `ws`; no authentication, and a `wss://`
+  door's certificate names the host to a browser, not the player to the host;
 - host loss hands the term down the succession list (§8), and every survivor
   that reaches no candidate, or every survivor when the session pinned its
   authority, goes on apart: a person's run in a session of its own that keeps every

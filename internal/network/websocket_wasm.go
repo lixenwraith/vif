@@ -3,6 +3,7 @@
 package network
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -58,14 +59,15 @@ const buildDialsTCP = false
 func routeAnswered(error) bool { return false }
 
 // listenWebSocket is refused: a page has no port to listen on.
-func listenWebSocket(string, time.Duration) (net.Listener, error) {
+func listenWebSocket(string, time.Duration, *tls.Config) (net.Listener, error) {
 	return nil, errors.New("websocket: a browser cannot listen")
 }
 
 // dialWebSocket opens the session route and returns it once the browser reports
 // the connection open, so a caller holds a stream it can write to rather than one
-// that may still fail its handshake.
-func dialWebSocket(target string, timeout time.Duration) (conn net.Conn, err error) {
+// that may still fail its handshake. The browser decides what a wss route's
+// certificate is worth; the configuration's TLS has no say.
+func dialWebSocket(target string, timeout time.Duration, _ *tls.Config) (conn net.Conn, err error) {
 	ctor := js.Global().Get("WebSocket")
 	if !ctor.Truthy() {
 		return nil, errors.New("websocket: this browser exposes no WebSocket")

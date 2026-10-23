@@ -1,7 +1,6 @@
 package network
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,14 +68,8 @@ func DecodePeerList(b []byte) (PeerListRecord, error) {
 
 // BindPeer binds the port this participant is dialled on, falling back to an
 // OS-assigned one when the requested port is taken.
-func BindPeer(addr string, cfg *Config) (net.Listener, error) {
-	listen := func(a string) (net.Listener, error) {
-		if cfg != nil && cfg.TLS != nil {
-			return tls.Listen("tcp", a, cfg.TLS)
-		}
-		return net.Listen("tcp", a)
-	}
-	ln, err := listen(addr)
+func BindPeer(addr string) (net.Listener, error) {
+	ln, err := net.Listen("tcp", addr)
 	if err == nil {
 		return ln, nil
 	}
@@ -84,7 +77,7 @@ func BindPeer(addr string, cfg *Config) (net.Listener, error) {
 	if splitErr != nil {
 		return nil, err
 	}
-	return listen(net.JoinHostPort(host, "0"))
+	return net.Listen("tcp", net.JoinHostPort(host, "0"))
 }
 
 // peerHello is the MsgConnect body. Two participants already hold identities the

@@ -171,19 +171,21 @@ library copies.
 
 ## Browser sessions
 
-### Serve wss from a terminal that hosts or serves
+### Answer tcp, ws and wss on one host port
 
-- Priority: P0
-- Affected files: `internal/network/endpoint.go`, `internal/network/websocket_other.go`,
-  `internal/app/host.go`, `cmd/vif`
+- Priority: P3
+- Affected files: `internal/network/transport.go`, `internal/network/websocket_other.go`,
+  `cmd/vif/main.go`
 
-A terminal already joins by a `wss://` link: `vif -join wss://lixen.com/vif/ws/<id>`
-sends the link's own origin, which the fleet's browser route admits. It cannot be
-joined that way. `-host`, `-serve` and `:host` bind TCP or plain `ws://`, which a
-page served over `https` cannot open, so a terminal that hosts or serves answers
-`wss` as well. That takes a certificate and key around the listener's TCP port
-(`tls.NewListener`); decide where the key lives, and whether one port tells TCP,
-`ws` and `wss` apart by their first bytes or `wss` binds a port of its own.
+A host binds one protocol per listener: `-host :7777` for terminals, `ws://:7777`
+for pages served over http, `wss://:7777` with `-cert` for pages served over https.
+A person hosting at home for both terminals and pages has no second door short of
+a successor's `:host`, and a terminal joining a `wss://` door trusts only the
+system's roots, so a private certificate keeps terminals out of it. What would
+close it: the host's accept loop telling a TLS record (0x16) and an HTTP request
+(`G`) from vif's own opening frames (`door.open` already reads the first byte) and
+handing each to the upgrade, so one port answers all three; and a `-ca` a joiner
+names a private certificate's issuer by.
 
 ### Bound navigation's worst tick on busy maps
 
@@ -250,20 +252,6 @@ who would rather fetch a scenario than unpack one. What it needs before it is
 written is whose signature makes bytes trustworthy, which origins may serve them,
 and how long a fetched container is kept.
 
-### Let a browser tab leave and come back
-
-- Priority: P2
-- Affected files: `web/terminal.js`, `web/worker.js`, `internal/app/loop.go`,
-  `internal/lifecycle`
-- Guide: [Build profiles](multi-platform.md#a-hidden-tab)
-
-A hidden tab draws nothing and repaints once on return, and a reload inside the
-Wraith wait takes its place back with the tab's claim
-([Multi-player](multi-player.md#54-wraiths) §5.4). What remains is a tab that
-leaves: one hidden or suspended for five minutes must cost the other players
-nothing and resume or rejoin on return, and a session whose last guest was a
-browser must end on its own grace.
-
 ### Launch the page and Android without their start screen
 
 - Priority: P3
@@ -307,7 +295,7 @@ Distribution-specific detail lives in [Packaging](packaging.md).
 
 ### Promote a nightly build to the first stable release
 
-- Priority: P0
+- Priority: P1
 - Affected files: `doc/packaging.md`, `README.md`
 - Prerequisite: choose a nightly commit after the complete verification gate
   passes

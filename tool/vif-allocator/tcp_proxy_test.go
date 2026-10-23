@@ -235,7 +235,7 @@ func TestTheFrontDoorReplaysTheNameAndSplicesBothWays(t *testing.T) {
 func TestTheBrowserRouteSplicesTheSocketToThePod(t *testing.T) {
 	pod := startPod(t)
 	route := startBrowserRoute(t, &fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), pod)
-	conn, err := websocket.Dial(t.Context(), route+routedID)
+	conn, err := websocket.Dial(t.Context(), route+routedID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 	held := newHolds(1)
 	sessions := &fakeSessionAllocator{podIP: "127.0.0.1"}
 	addr := startFrontDoor(t, sessions, held, network.NewAdmissionLimiter(), pod)
-	browser, err := websocket.Dial(t.Context(), startBrowserRoute(t, sessions, held, pod)+routedID)
+	browser, err := websocket.Dial(t.Context(), startBrowserRoute(t, sessions, held, pod)+routedID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

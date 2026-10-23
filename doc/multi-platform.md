@@ -132,7 +132,7 @@ It should produce no output. The container is one static binary in
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental; plays in Alacritty, with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer and `AudioTrack` (§8); the wad as the system root |
-| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets, each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a hidden tab leaves after five minutes and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets, each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `pkg/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
@@ -205,12 +205,19 @@ whole screen once. Drawing on would hold frames behind the page's throttled time
 the host hands the page one at a time, so even then one waits, never a backlog to
 replay.
 
-A browser that freezes the tab instead, as Chrome may under its energy or memory
-saving and mobile browsers readily do, stops the Worker, so nothing reads the
-socket. The session drops the participant after `NetworkLinkDeadAfter` (5 s) of
-silence, as it drops any silent peer, and on return the page shows "Host connection
-lost; continuing locally from the last authoritative state"; reloading the same
-link rejoins while the session lives.
+A joined page hidden for five minutes (`LEAVE_HIDDEN_MS` in `web/terminal.js`)
+leaves: the page ends its Worker, the session sees the link close and the cursor
+waits as a Wraith ([Multiplayer §5.4](multi-player.md#54-wraiths)), dismissed after
+`WraithTimeout`, so a session nobody else plays empties and ends on its grace. Shown
+again after that long hidden, the page reloads, which rejoins with the tab's claim
+while the place waits and as a new player after; a shorter absence costs the others
+nothing and resumes where it was. A browser that freezes the tab instead, as Chrome
+may under its energy or memory saving and mobile browsers readily do, stops the
+Worker, so nothing reads the socket: the session drops the participant after
+`NetworkLinkDeadAfter` (5 s) of silence, as it drops any silent peer, and on return
+the Worker redials its host under its claim ([Multiplayer §5.1](multi-player.md#51-succession))
+and takes its place back while the Wraith waits; a tab frozen past the five minutes
+reloads as a hidden one does.
 
 ### Where WebSocket is spoken
 
@@ -226,7 +233,7 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 |---|---|
 | **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carries every proxied player's bytes; for a browser it also unmasks and frames them, which costs microseconds (fleet §9). |
 | A bridge process in the session pod. | An image, a container and a hop per session, and a socket whose latency this repository does not control: one without `TCP_NODELAY` holds each frame toward the player until the last is acknowledged, tens of milliseconds a frame. |
-| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps the allocator's hop and moves the `Origin` check into every pod. The listener exists for one binary on a LAN or in a test (below); the fleet does not use it. |
+| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps the allocator's hop and moves the `Origin` check into every pod. The listener exists for one binary on a LAN, a terminal that hosts for pages, or a test (below); the fleet does not use it. |
 | A third-party package. | `net/http` has no WebSocket handler, `golang.org/x/net/websocket` is deprecated, and a maintained package is a network-facing dependency on the path every player takes. |
 | The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |
 | An ingress controller. | None translates WebSocket to a raw TCP backend. |
@@ -235,9 +242,16 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 
 `vif -host ws://:7777` or `-serve ws://:7777` serves a session over WebSocket from
 one binary, one protocol per listener. The upgrade feeds the TCP accept loop, so
-the handshake budget and per-address admission apply unchanged. It is plain `ws`
-on any path, and checks no `Origin`: it grants nothing ambient a foreign page could
-borrow. `-join ws://host:7777/<name>` joins it from a terminal or a page.
+the handshake budget and per-address admission apply unchanged. It answers on any
+path and checks no `Origin`: it grants nothing ambient a foreign page could borrow.
+`-join ws://host:7777/<name>` joins it from a terminal or a page served over plain
+http. A page served over https opens only `wss://`, so a terminal that hosts for
+one binds `wss://:7777` and serves the certificate `-cert` and `-key` name, as does
+`:host wss://:7777` in a run started with them; the dialling browser must trust
+that certificate (one a public authority issued for the host's name, or a private
+one the player's browser was told to trust), and its page's `connect-src` must
+allow the host's origin. A terminal joins it with `-join wss://host:7777/<name>`
+under the system's trust roots.
 
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
 address, as it sees front-door players, so per-player admission is the
@@ -264,8 +278,9 @@ why it was refused; it never accepts an upstream a caller named.
 
 For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The route is same-origin with the page, so a
-`connect-src 'self'` policy permits it. Ordinary CORS headers are not a substitute
-for the `Origin` check. Browser admission credentials, short-lived and
+`connect-src 'self'` policy permits it; a terminal's own `wss://` door is another
+origin, which that policy must name (`connect-src 'self' wss:`) before the page can
+join it. Ordinary CORS headers are not a substitute for the `Origin` check. Browser admission credentials, short-lived and
 session-scoped, are [open work](todo.md#add-browser-admission-authentication).
 
 Native clients use raw TCP, through the allocator's front door or the session's
@@ -567,11 +582,10 @@ go vet ./...
 node --check web/terminal.js web/worker.js web/audio-worklet.js
 ```
 
-Compilation is not runtime certification. What the browser route still has to
-show is a tab that leaves, hidden or suspended, and a session whose last guest was
-a browser ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)). Linux and FreeBSD release
-checks should include a real terminal; audio-capable artifacts also need at least
-one real or `null`/WAV backend smoke test. Windows is played by hand, not
+Compilation is not runtime certification. A hidden tab's leave and return (§5) is
+checked by hand in a browser, since no test harness hides a tab. Linux and FreeBSD
+release checks should include a real terminal; audio-capable artifacts also need at
+least one real or `null`/WAV backend smoke test. Windows is played by hand, not
 certified on the release path; its known issues are in §4.
 
 Two policy decisions stay separate from transport, and both are open in todo:

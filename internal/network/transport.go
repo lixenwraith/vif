@@ -1,7 +1,6 @@
 package network
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -203,6 +202,7 @@ func (c *firstByte) Read(p []byte) (int, error) {
 
 // Listen binds addr as a host serves it, so a caller learns it cannot have the port
 // before anything depends on it; Config.PreboundListener then hands it to the port.
+// A wss:// address serves cfg.TLS, and is refused without one.
 func Listen(addr string, cfg *Config) (net.Listener, error) {
 	e, err := ParseEndpoint(addr)
 	if err == nil {
@@ -213,10 +213,10 @@ func Listen(addr string, cfg *Config) (net.Listener, error) {
 	}
 	var ln net.Listener
 	switch {
+	case e.Secure() && cfg.TLS == nil:
+		return nil, errors.New("wss needs a certificate; start with -cert and -key")
 	case e.Scheme == SchemeWebSocket:
-		ln, err = listenWebSocket(e.Addr, cfg.ConnectTimeout)
-	case cfg.TLS != nil:
-		ln, err = tls.Listen("tcp", e.Addr, cfg.TLS)
+		ln, err = listenWebSocket(e.Addr, cfg.ConnectTimeout, cfg.TLS)
 	default:
 		ln, err = net.Listen("tcp", e.Addr)
 	}
