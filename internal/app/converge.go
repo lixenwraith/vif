@@ -359,11 +359,15 @@ func (a *App) awayOrderLocked(roster []network.RosterEntry) []network.PeerID {
 	return out
 }
 
-// freeze stops this run while its session's host changes. A replay needs no record
-// of it: no tick passes while it stands, and its end is journaled as any hold's.
+// freeze stops this run while its session's host changes, through the request the
+// session makes, settled at once as releaseHold settles its end, so a replay stands
+// still in the pass the run did. A hold standing already stays the host's.
 func (a *App) freeze() {
 	a.world.RunSafe(func() {
-		a.ctx.Freeze()
+		if !a.ctx.TimeCtl.Held() {
+			a.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: true}, event.OriginSession)
+			a.scheduler.SettleLocked()
+		}
 		a.ctx.SetStatusMessage("Host lost; waiting for the next host", parameter.StatusAlert)
 	})
 }

@@ -581,7 +581,8 @@ The procedure on each survivor is:
 1. **Stop, and flood a loss notice.** Nobody plays on in a world the successor is
    about to replace, so a survivor freezes its clock when it sees its authority go,
    by its own link, a notice or a record reaching it first (`TimeControl.Freeze`).
-   No tick passes in a freeze, so a replay needs no record of its start. The notice
+   The freeze is the hold the session itself asks for, settled at once as the end
+   of one is (§3.6), so a replay stands still in the pass the run did. The notice
    decides nothing, but only a direct neighbour of the authority sees the link drop,
    and the departure crossing that would have carried that news is produced by the
    participant that is gone. A survivor two links away opens the same succession
