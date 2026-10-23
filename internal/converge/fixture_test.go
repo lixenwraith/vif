@@ -37,6 +37,7 @@ type stub struct {
 	handoffs  []adopted
 	abandoned [][]network.RosterEntry
 	forked    int
+	forkedAs  []network.RosterEntry
 	thawed    int
 	said      []string
 
@@ -147,10 +148,11 @@ func (s *stub) DropAbandonedCursors(roster []network.RosterEntry, _ network.Peer
 	s.abandoned = append(s.abandoned, roster)
 }
 
-func (s *stub) Forked() {
+func (s *stub) Forked(roster []network.RosterEntry, _ network.PeerID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forked++
+	s.forkedAs = roster
 	s.frozen = false
 }
 

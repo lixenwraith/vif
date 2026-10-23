@@ -61,11 +61,11 @@ type Instance interface {
 
 	// AuthorityChanged moves the membership a handoff carries into the places the
 	// run reads it from; DropAbandonedCursors removes the participants an instance
-	// left with no link will never hear from again; Forked says no handoff came, and
-	// the run goes on alone from the last authoritative state.
+	// left with no link will never hear from again; Forked says no handoff came, so
+	// the run goes on alone from the last authoritative state, with the roster it held.
 	AuthorityChanged(rec network.HandoffRecord, mine bool)
 	DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID)
-	Forked()
+	Forked(roster []network.RosterEntry, local network.PeerID)
 
 	// Freeze stops the run while its authority moves; Thaw is the successor's end of
 	// that window, which leaves standing a hold the lost host set.

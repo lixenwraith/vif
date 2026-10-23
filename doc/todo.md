@@ -679,9 +679,9 @@ the joiner's report, and drop the record from the keeper and the report.
 - Affected files: `internal/app/session.go`, `internal/converge/authority.go`
 
 `dropAbandonedCursors` acts only on an instance left with no link, so a successor
-some survivors could not reach, or a fork still linked to its own bots, keeps every
-roster entry, and a participant it has no path to stays a cursor nothing moves
-([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). Decide who
+some survivors could not reach, or a fork with no loop still linked to its own bots,
+keeps every roster entry, and a participant it has no path to stays a cursor nothing
+moves ([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). Decide who
 produces those departures, and at which tick, on an instance that still has peers
 to agree one with.
 

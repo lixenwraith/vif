@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1809,6 +1810,106 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	waitForWraiths(t, host, 1)
 }
 
+// TestAForkGoesOnInASessionOfItsOwn: a run its session gives up, here a guest whose
+// pinned host left, is taken on as :leave takes it: a session of its own under the
+// identity it had and the next term, :host and :join open to it, and the loss said
+// as one. The host's place stays, its cursor a Wraith the fork gives back to the
+// claim it waits under.
+func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	t.Cleanup(host.Close)
+	tickUntilCursor(t, host)
+	stopTicking := tickInBackground(host)
+	t.Cleanup(stopTicking)
+	var err error
+	host.World().RunSafe(func() { err = host.beginHostingLocked("127.0.0.1:0", AuthorityHost) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
+	guest.World().RunSafe(func() {
+		guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+		guest.cfg.Mode = ModePlay               // the mode whose loop takes a fork on
+	})
+	stopTicking()
+	waitForRosterPair(t, host, guest)
+	id, term, token := guest.localParticipant(), guest.authorityTerm(), host.claim.Load().Token
+	held := places(guest, everyone)
+
+	leaveAs(t, host)
+	stopGuest := tickInBackground(guest)
+	for deadline := time.Now().Add(socketWait); !guest.leaving.Load() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	stopGuest()
+	if !guest.leaving.Load() {
+		t.Fatal("the guest lost its pinned host, and nothing asked its loop to take it on")
+	}
+	guest.leaveSession() // as Run's loop does
+
+	var role sessionRole
+	var authoring bool
+	var hostErr, joinErr, leaveErr error
+	guest.World().RunSafe(func() {
+		role, authoring = guest.sessionRoleLocked(), guest.world.IsSessionCoordinator()
+		joinErr, leaveErr = guest.joinErrorLocked(), guest.leaveErrorLocked()
+		hostErr = guest.hostErrorLocked()
+	})
+	if role != roleSeats || !authoring || guest.localParticipant() != id || guest.authorityTerm() != term+1 {
+		t.Fatalf("after its fork, participant %d holds role %d, authoring %t, term %d; want role %d authoring as %d at term %d",
+			guest.localParticipant(), role, authoring, guest.authorityTerm(), roleSeats, id, term+1)
+	}
+	if got := places(guest, everyone); len(held) != 2 || !maps.Equal(got, held) || !wraithIn(guest, 0) {
+		t.Fatalf("after its fork the guest holds %v (entity, participant by slot), the host's a Wraith %t; want %v, the host's a Wraith",
+			got, wraithIn(guest, 0), held)
+	}
+	if hostErr != nil || joinErr != nil || leaveErr == nil {
+		t.Fatalf("after its fork, :host %v, :join %v, :leave %v; want the first two taken and nothing left to leave", hostErr, joinErr, leaveErr)
+	}
+	if msg := guest.Context().GetStatusMessage(); msg != "Host connection lost; playing on in a session of your own" {
+		t.Fatalf("after its fork the guest says %q; want the loss said", msg)
+	}
+	back, err := guest.assignFor(guest.JoinAnchor(), 0, []string{token})
+	if err != nil || uint64(back.Assigned) != held[0][1] || assignedSlot(back) != 0 {
+		t.Fatalf("the host's claim was given %d on slot %d, %v; want its own place, %d on slot 0", back.Assigned, assignedSlot(back), err, held[0][1])
+	}
+}
+
+// TestAForkKeepsTheHoldItsLostHostSet: a run its session gave up goes on in a session
+// of its own paused, as its host left it, and says so, for its own :pause to end; a
+// freeze, which no host set, ends there.
+func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name   string
+		stop   func(*engine.GameContext)
+		held   bool
+		notice string
+	}{
+		{"the host's hold", func(ctx *engine.GameContext) { ctx.Hold(true) }, true, "Host connection lost; paused in a session of your own"},
+		{"a freeze", (*engine.GameContext).Freeze, false, "Host connection lost; playing on in a session of your own"},
+	} {
+		a := mustHeadless(t, fixtureSeed, 120, 40)
+		t.Cleanup(a.Close)
+		tickUntilCursor(t, a)
+		var err error
+		a.World().RunSafe(func() {
+			if err = a.openSessionLocked(nil); err == nil {
+				tt.stop(a.ctx)
+			}
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		forkCell(a).Store(true) // as giveUp leaves it
+		a.leaving.Store(true)
+		a.leaveSession()
+		if held, msg := a.ctx.TimeCtl.Held(), a.ctx.GetStatusMessage(); held != tt.held || msg != tt.notice {
+			t.Errorf("a fork under %s goes on held %t, saying %q; want held %t, saying %q", tt.name, held, msg, tt.held, tt.notice)
+		}
+	}
+}
+
 // TestASessionARunOpensHasNobodyAwayFromIt: who was away from the session a run
 // left, or on the way back to it, stays with that session, so the next one hands an
 // identity out as somebody new: nobody there is yielded, dismissed or brought back.
@@ -1823,7 +1924,7 @@ func TestASessionARunOpensHasNobodyAwayFromIt(t *testing.T) {
 	a.sessionMu.Unlock()
 	a.dismissWraith.Store(2)
 	var err error
-	a.World().RunSafe(func() { err = a.openSessionLocked() })
+	a.World().RunSafe(func() { err = a.openSessionLocked(nil) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1837,8 +1938,9 @@ func TestASessionARunOpensHasNobodyAwayFromIt(t *testing.T) {
 }
 
 // TestALeavingHostTakesItsBotsAndShutsItsDoor: a host that leaves takes its bots
-// along, seated again in the session it goes on in, and shuts the door its guests
-// came in by: they lose their host, and nothing answers a dial at its address.
+// along, seated again in the session it goes on in on the places they had, and shuts
+// the door its guests came in by: they lose their host, and nothing answers a dial
+// at its address.
 func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
@@ -1859,6 +1961,8 @@ func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 	seated := host.botSeats()[0]
 	_, port := mustSocketJoiner(t, addr, fixtureSeed, BotWidth, BotHeight)
 	waitForCursors(t, host, 3)
+	itsBots := heldBy(host.localParticipant())
+	left := places(host, itsBots)
 
 	leaveAs(t, host)
 	waitForSeats(t, host, 1)
@@ -1866,6 +1970,10 @@ func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 		t.Fatalf("the bot kept seat %d through the leave; want it seated again", again.ID)
 	}
 	waitForCursors(t, host, 2) // its own and its bot's: the guest is not in its world
+	waitForWraiths(t, host, 0)
+	if got := places(host, itsBots); len(left) != 1 || !maps.Equal(got, left) {
+		t.Fatalf("after the leave the host's bot holds %v (entity, participant by slot); want the place it had, %v", got, left)
+	}
 	if got := host.HostAddr(); got != "" {
 		t.Fatalf("the host still answers at %q after leaving", got)
 	}
@@ -2053,6 +2161,31 @@ func TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace(t *testing.T) {
 	if wraithIn(host, assignedSlot(back)) || energy != record.Energy || health != record.HitPoints {
 		t.Fatalf("after the arrival the place is a Wraith %t, with energy %d and health %d; want it taken back with %+v",
 			wraithIn(host, assignedSlot(back)), energy, health, *record)
+	}
+}
+
+// TestAWraithWaitsUnderTheClaimItsRosterNames: a Wraith keeps the participant and
+// holder it left with and takes the claim the roster names it under, as a session a
+// run opens names its bots' afresh; an entry naming somebody else leaves it as it was.
+func TestAWraithWaitsUnderTheClaimItsRosterNames(t *testing.T) {
+	host, guest, token := awayGuest(t)
+	slot := assignedSlot(guest)
+	cursor := func() (c component.CursorComponent) {
+		host.world.RunSafe(func() { c, _ = host.world.Components.Cursor.GetComponent(host.world.Resources.Player.Slot(slot)) })
+		return c
+	}
+	bind := func(p network.RosterEntry) {
+		host.world.RunSafe(func() { host.bindCursorOwnersLocked([]network.RosterEntry{p}, engine.CoordinatorParticipant) })
+	}
+	bind(network.RosterEntry{ID: guest.Assigned + 1, Slot: slot, Claim: network.ClaimDigest(network.NewClaimToken())})
+	if c := cursor(); c.Claim != network.ClaimDigest(token) || c.PeerID != uint32(guest.Assigned) {
+		t.Fatalf("an entry naming somebody else left the Wraith as participant %d under %q; want %d under its own claim", c.PeerID, c.Claim, guest.Assigned)
+	}
+	carried := network.ClaimDigest(network.NewClaimToken())
+	bind(network.RosterEntry{ID: guest.Assigned, Slot: slot, Holder: 9, Claim: carried})
+	if c := cursor(); c.Claim != carried || c.PeerID != uint32(guest.Assigned) || c.Holder != 0 || !wraithIn(host, slot) {
+		t.Fatalf("the Wraith is participant %d held by %d under %q, a Wraith %t; want %d held by nobody under %q, still waiting",
+			c.PeerID, c.Holder, c.Claim, wraithIn(host, slot), guest.Assigned, carried)
 	}
 }
 

@@ -29,10 +29,10 @@ Use these terms consistently:
   relay of its own bots, and with `-relay <addr>` of the people who join there.
 - A run's **session role** is what it is to its session, read from what the
   session wrote: solo, seats (a session of its own with no door: one it opened for
-  its bots, or the one `:leave` goes on in), host, server, guest, or left (a guest
-  whose session has nobody left but its own bots). `:join`, `:host`, `:leave` and
-  `:session` answer by it from one table. It is not authorship: a guest that
-  inherited the term is a guest that authors.
+  its bots, or the one `:leave` or a fork goes on in), host, server, guest, or left
+  (a guest whose session has nobody left but its own bots). `:join`, `:host`,
+  `:leave` and `:session` answer by it from one table. It is not authorship: a
+  guest that inherited the term is a guest that authors.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
   and never moves backwards on an instance.
@@ -375,10 +375,11 @@ no epoch, so the first one its next tick produces, admitted past a guest's own
 tick (`NetworkResource.OnAuthorityAhead`), resumes that guest once the drain that
 carried it is done. `:new` ends a hold before its reset crosses, which would
 otherwise wait for a tick nobody reaches. A hold outlives a lost host: its
-successor keeps it for its own `:pause`, unless a script or bot drives that run
-and nobody there can give one, and a fork ends it (§5.1). An end no command made
-goes through the request a command makes, settled at once: the hold ends in the
-pass that dispatches it, on the run as on its replay, which has no link to hear it.
+successor keeps it for its own `:pause`, as a person's fork does in the session it
+goes on in (§5.5), unless a script or bot drives that run and nobody there can give
+one. An end no command made goes through the request a command makes, settled at
+once: the hold ends in the pass that dispatches it, on the run as on its replay,
+which has no link to hear it.
 
 A joiner admitted to a held session lands held. Its gate captures the held tick
 itself, since a held session never reaches the playout lead past it, and sends
@@ -537,7 +538,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave`, binds none until `:host` opens it. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too — `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
@@ -618,21 +619,27 @@ Retention *ordering* is deliberately not an eligibility test. With one designate
 candidate there is no alternative to prefer, and a successor a cadence behind a
 peer costs that peer one correction.
 
-A survivor that forks continues locally with `network.fork` and a persistent
-`Host lost` badge; encountering a higher term later is refused because partition
-merging is not implemented.
+A person's run that forks goes on in a session of its own, as `:leave` takes it
+(§5.5): the same identity, the next term, every other player's place kept as a
+Wraith, and `:host` or `:join` at once. Under `-authority host` every guest
+does so the moment its host goes, so whichever hosts next takes the others back
+with their progress. A run with no loop to serve that, a script's or a bot's, stays
+the fork, with `network.fork` and a persistent `Host lost` badge; it refuses a
+higher term met later, because partition merging is not implemented.
 
 ### 5.2 The roster after a loss
 
-An instance left with **no link at all** — a successor no survivor reached, and
-every survivor that could not reach it — drops every cursor it does not simulate:
-the authority that went, and behind it the guests that were only ever reachable through
-it. Having no link is what makes that exact rather than convenient: a departure is
-produced once at one agreed tick because two instances must destroy the same shared
-entity together, and here there is no second instance. On a fork the removal is
-therefore local; the successor produces the predecessor's as the ordinary crossing,
-because it may. A handoff preserves the surviving roster exactly; only the lost
-predecessor and its bots may differ when their departures straddle the handoff.
+An instance left with **no link at all** — a successor no survivor reached, and a
+fork with no loop to take it into a session of its own (§5.1) — drops every cursor
+it does not simulate: the authority that went, and behind it the guests that were
+only ever reachable through it. A person's fork drops nobody: every place waits as
+a Wraith in the session it goes on in (§5.5). Having no link is what makes the drop
+exact rather than convenient: a departure is produced once at one agreed tick
+because two instances must destroy the same shared entity together, and here there
+is no second instance. On a fork the removal is therefore local; the successor
+produces the predecessor's as the ordinary crossing, because it may. A handoff
+preserves the surviving roster exactly; only the lost predecessor and its bots may
+differ when their departures straddle the handoff.
 
 A successor applies that rule a convergence floor (`NetworkSuccessionTicks`) after
 its group resumes rather than at once, so a survivor still arriving through a relay
@@ -785,6 +792,16 @@ left and its bots as Wraiths, as it keeps one whose link closed (§5.4), the peo
 a guest relayed keep their slots as when any relay leaves (§5), and the guests of a
 host that left run §5.1, which under `-authority host` is the fork.
 
+A person's fork leaves the same way. `converge.Instance.Forked` hands the run the
+roster it held, and its loop serves the fork as it serves `:leave` (`App.forked`,
+`App.leaveSession`), except that it keeps every place rather than its bots' alone:
+each other player's cursor waits as a Wraith in the session it opens, for its player
+to take back once `:host` opens the door (§5.4). A hold the lost host set stands
+there for this run's own `:pause`, and a freeze ends; the status bar says which. A
+seat under such a run ends only when the run halts it (`App.seatEnds`), never on its
+own fork or the run's, so the leave finds every bot to seat again. A run with no
+loop to serve the fork stays the fork (§5.1).
+
 The run keeps its identity and authors the term after the one it held. Its cursor,
 its crossings still scheduled and its journal all name that identity, and nobody it
 leaves behind holds it, so the departures it produces for them cannot remove its
@@ -795,10 +812,12 @@ is given up with its record as it stood, so it can still take its Wraith back
 there (§5.4), and the session it opens issues its own.
 
 Its bots leave first, as they do when it quits, though as lost links rather than
-dropped seats, so the session left keeps their places too, and are seated again
-with fresh cursors once the old door is shut; a bot's journal closes with the cursor
-it drove.
-In between, the run's loop serves the leave, so no other command interleaves:
+dropped seats, so the session left keeps their places too. The session it opens
+keeps them as well, each under a claim of its own (`claimKeeper.carry`: a new token
+over a copy of the record the bot left with, which stays the left session's for a
+return there), and once the old door is shut each bot is seated again and takes
+its place back; a bot's journal closes with its seat. In between, the run's loop
+serves the leave, so no other command interleaves:
 
 1. **Open the new session**, under the correction pipeline's apply lock, so nothing
    of the left session is applied across the swap and what it still had queued is
@@ -812,9 +831,10 @@ In between, the run's loop serves the leave, so no other command interleaves:
    since the session it opens writes its roster afresh; its own ordinary crossings
    carry on. The relay it joined through is forgotten and its peer-link listener
    closes, so nothing the left session was told still answers.
-3. **Remove those left behind**, locally as a fork does (§5.2), and settle the
-   departures before any identity is handed out again: one of theirs given to a bot
-   would be the participant a departure still pending removes.
+3. **Turn the places kept into Wraiths and remove the rest**, locally as a fork
+   with no loop removes them (§5.2), and settle the departures before any identity
+   is handed out again: one of theirs given to a bot would be the participant a
+   departure still pending removes. A place already a Wraith waits on as one.
 4. **Close the old port** outside the world lock, because closing it waits for
    handshakes that take that lock. A dial reaching the old door meanwhile is refused
    as the session ending (`RefusalEnding`), so nobody is admitted into a term that
@@ -1022,9 +1042,9 @@ could make the netcode cheaper in [Netcode optimization](netcode-optimization.md
 
 5. **An instance that keeps a link after a loss keeps the whole roster.**
    `DropAbandonedCursors` acts only on an instance left with no link (§5.2). A
-   successor that some survivors could not reach, or a fork still linked to its
-   own bots, keeps every roster entry, and a participant it has no path to stays a
-   cursor nothing moves.
+   successor that some survivors could not reach, or a fork with no loop still
+   linked to its own bots, keeps every roster entry, and a participant it has no
+   path to stays a cursor nothing moves.
 
 6. **A browser guest once kept the previous region's glyphs.** Entering the tower
    region, it kept the region before's glyphs, or kept the glyph system running
@@ -1113,13 +1133,16 @@ exercise the paths a two-terminal session reaches and nothing else does:
   Ctrl-Q, Ctrl-C and a terminal resize are answered there.
 - The host leaves instead. The guest takes the term — `:session` names it as the
   authority, `network.migrations` reads 1, and the `Host lost` badge clears — and
-  the host's cursor must wait where it was left as a Wraith rather than play on. A guest that could not reach the successor shows `Host lost` and keeps
-  playing instead, which is the fork.
+  the host's cursor must wait where it was left as a Wraith rather than play on. A
+  guest that could not reach the successor says its host connection was lost and
+  plays on in a session of its own, which is the fork: `:session` reads `Session
+  hosting` under the same participant, and the host and every other player wait on
+  its map as Wraiths.
 - Either leaves with `:leave` instead and plays on. Its world goes on from where it
   stood, `:session` reads `Session hosting` with no address under the same
-  participant, and its bots come back on fresh cursors. The others see the loss
-  above: a guest that left is gone from its host's map, and a host that left is lost
-  to its guests. `:host` then opens the run's own session to others.
+  participant, and its bots come back to the places they had. The others see the
+  loss above: a guest that left waits on its host's map as a Wraith, and a host that
+  left is lost to its guests. `:host` then opens the run's own session to others.
 
 Reachability is worth a fourth, on a session of three or more, because it is the one
 path a two-terminal session never exercises:

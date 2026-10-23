@@ -84,11 +84,39 @@ func (k *claimKeeper) take(o network.SessionOffer, bot bool) *claim {
 	return nil
 }
 
-// issue holds a new claim, for a new place. The oldest no run holds give way.
+// issue holds a new claim, for a new place.
 func (k *claimKeeper) issue(bot bool) *claim {
 	c := &claim{Token: network.NewClaimToken(), Bot: bot, held: true}
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	k.addLocked(c)
+	return c
+}
+
+// carry is the claim a place goes on under in the session its run opens next: a new
+// token over the record the place left with, so the claim it left under keeps that
+// record for a return to the session it left. Nil when no claim a run gave up has
+// that digest.
+func (k *claimKeeper) carry(digest string) *claim {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	i := slices.IndexFunc(k.claims, func(c *claim) bool { return !c.held && network.ClaimDigest(c.Token) == digest })
+	if i < 0 {
+		return nil
+	}
+	c := &claim{Token: network.NewClaimToken(), Bot: k.claims[i].Bot}
+	if r := k.claims[i].Record; r != nil {
+		record := *r
+		record.Charges = slices.Clone(r.Charges)
+		c.Record = &record
+	}
+	k.addLocked(c)
+	return c
+}
+
+// addLocked keeps one more claim, and the oldest no run holds give way to it.
+// Caller holds mu.
+func (k *claimKeeper) addLocked(c *claim) {
 	k.claims = append(k.claims, c)
 	for i := 0; len(k.claims) > parameter.ClaimsKept && i < len(k.claims); i++ {
 		if !k.claims[i].held {
@@ -97,7 +125,6 @@ func (k *claimKeeper) issue(bot bool) *claim {
 		}
 	}
 	k.storeLocked()
-	return c
 }
 
 // keep records the cursor a held claim's run plays as its last sync sent it, which

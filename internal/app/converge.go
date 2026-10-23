@@ -158,12 +158,8 @@ func (i instance) DropAbandonedCursors(roster []network.RosterEntry, local netwo
 	i.a.dropAbandonedCursors(roster, local)
 }
 
-// Forked ends the hold standing, a freeze or one the lost host set, and gives up the
-// claim the run was in its session under whatever links it still holds: what a fork
-// plays is not what its player brings back.
-func (i instance) Forked() {
-	i.a.endHostlessHold()
-	i.a.leaveClaim()
+func (i instance) Forked(roster []network.RosterEntry, local network.PeerID) {
+	i.a.forked(roster, local)
 }
 
 func (i instance) Freeze() { i.a.freeze() }
@@ -335,12 +331,6 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	a.corrections.FollowAuthority(rec)
 }
 
-// endHostlessHold ends whatever hold stands as this run goes on alone: no host is
-// left to end it.
-func (a *App) endHostlessHold() {
-	a.world.RunSafe(func() { a.releaseHold("Resumed") })
-}
-
 // awayOrderLocked is who of roster is away, longest first, as their Wraiths wait.
 // Caller MUST hold updateMutex.
 func (a *App) awayOrderLocked(roster []network.RosterEntry) []network.PeerID {
@@ -372,17 +362,40 @@ func (a *App) freeze() {
 	})
 }
 
-// thaw resumes the session this run took over. A hold the lost host set stays for
-// this run's own :pause, unless a script or bot drives the run and nobody here can.
+// thaw resumes the session this run took over.
 func (a *App) thaw() {
 	a.world.RunSafe(func() {
-		switch {
-		case a.ctx.TimeCtl.Frozen() || a.cfg.scriptedSession:
-			a.releaseHold("Resumed")
-		case a.ctx.TimeCtl.Held():
+		if a.thawLocked() {
 			a.ctx.SetStatusMessage("Paused; this run hosts the session now", parameter.StatusNotice)
 		}
 	})
+}
+
+// thawLocked ends a freeze, and reports whether a hold the lost host set still
+// stands: it stays for this run's own :pause, unless a script or bot drives the run
+// or it hosts no session, and nobody here can end it. Caller MUST hold updateMutex,
+// between two ticks.
+func (a *App) thawLocked() (held bool) {
+	if a.ctx.TimeCtl.Frozen() || a.cfg.scriptedSession || !a.world.IsSessionCoordinator() {
+		a.releaseHold("Resumed")
+		return false
+	}
+	return a.ctx.TimeCtl.Held()
+}
+
+// forked goes on with a run its session gave up. The claim it was in that session
+// under keeps its record as it stood, whatever links it still holds: what a fork
+// plays is not what its player brings back. A play run's loop takes it into a
+// session of its own (leaveSession), keeping every other player's place for
+// whoever hosts next; a run with no loop drops them and plays on as the fork.
+func (a *App) forked(roster []network.RosterEntry, local network.PeerID) {
+	a.leaveClaim()
+	if a.cfg.Mode == ModePlay {
+		a.leaving.Store(true)
+		return
+	}
+	a.dropAbandonedCursors(roster, local)
+	a.world.RunSafe(func() { a.thawLocked() })
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

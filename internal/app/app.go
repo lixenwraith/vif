@@ -97,7 +97,7 @@ type App struct {
 	// by Loop between two waits. Nil means this run ends when the player quits.
 	restart      atomic.Pointer[restartRequest]
 	dialling     atomic.Bool // a :join is being dialled while this run plays on
-	leaving      atomic.Bool // a :leave is waiting for Loop, or being served by it
+	leaving      atomic.Bool // a :leave or a fork is waiting for Loop, or being served by it
 	inputMachine *input.Machine
 	router       *mode.Router
 
