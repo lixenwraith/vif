@@ -167,14 +167,14 @@ func TestBindPeerFallsBackWhenThePortIsTaken(t *testing.T) {
 // its own is dialled by another and the stream becomes an ordinary peer, and a join
 // at that port runs the session's handshake, each told by the frame it opens with.
 // Only the join is served and reaches the join gate, and one that named another
-// session is refused as such.
+// session is refused as such. The port names the addresses it answers at.
 func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 	offer := testOffer()
 	offer.Host, offer.Assigned = 2, 4
 	offer.Roster = []RosterEntry{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}, {ID: 4, Slot: 2}}
 	admitted := make(chan PeerID, 4)
-	port := func(local PeerID, gate func(PeerID) error) *SocketPort {
-		ln, err := BindPeer("127.0.0.1:0", nil)
+	port := func(bind string, local PeerID, gate func(PeerID) error) *SocketPort {
+		ln, err := BindPeer(bind, nil)
 		if err != nil {
 			t.Fatalf("bind: %v", err)
 		}
@@ -193,13 +193,13 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 		t.Cleanup(func() { _ = p.Close() })
 		return p
 	}
-	listener := port(2, func(from PeerID) error {
+	listener := port("127.0.0.1:0", 2, func(from PeerID) error {
 		if from != 3 {
 			return errors.New("not in this session")
 		}
 		return nil
 	})
-	dialer := port(3, nil)
+	dialer := port("127.0.0.1:0", 3, nil)
 
 	if err := dialer.DialPeer(listener.ListenAddr()); err != nil {
 		t.Fatalf("peer dial: %v", err)
@@ -252,6 +252,27 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 	case id := <-admitted:
 		t.Fatalf("the join gate ran for participant %d past the one join", id)
 	default:
+	}
+
+	_, own, _ := net.SplitHostPort(listener.ListenAddr())
+	wild := port(":0", 5, nil)
+	_, every, _ := net.SplitHostPort(wild.ListenAddr())
+	for _, c := range []struct {
+		port *SocketPort
+		addr string
+		want bool
+	}{
+		{listener, ":" + own, true},
+		{listener, "tcp://127.0.0.1:" + own, true},
+		{listener, "0.0.0.0:" + own, true},
+		{listener, "127.0.0.2:" + own, false},
+		{listener, "ws://127.0.0.1:" + own, false},
+		{listener, "127.0.0.1:" + every, false},
+		{wild, "127.0.0.2:" + every, true},
+	} {
+		if got := c.port.ListensOn(c.addr); got != c.want {
+			t.Errorf("a port bound at %s answers at %s: %v; want %v", c.port.ListenAddr(), c.addr, got, c.want)
+		}
 	}
 }
 

@@ -297,14 +297,15 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 
 // TestASuccessorTakesPlayersAsTheFirstHostDid: a guest's own port turns a join away
 // while another participant hosts, and takes one once the guest took the session
-// over, into the term it holds and under the -players its first host set. A
-// survivor whose link to it drops redials it where the chain says, the first
-// host's door long shut, and is admitted back into its own place.
+// over, into the term it holds and under the -players its first host set. :host
+// then opens the door it names, keeping the policy the session's players hold, and
+// the run is its host. A survivor whose link to it drops redials it where the chain
+// says, the first host's door long shut, and is admitted back into its own place.
 func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
-	host.cfg.Participants = 4
+	host.cfg.Participants = 5
 	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatal(err)
 	}
@@ -352,8 +353,8 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	// reads the frozen world fails if the thaw lands mid-read.
 	for deadline := time.Now().Add(socketWait); successor.Context().TimeCtl.Held() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
-	if got := successor.playerCapacity(); got != 4 {
-		t.Fatalf("the successor holds the session to %d players; want its first host's -players, 4", got)
+	if got := successor.playerCapacity(); got != 5 {
+		t.Fatalf("the successor holds the session to %d players; want its first host's -players, 5", got)
 	}
 	if line, want := successor.SessionSummary(), "Session hosting "+successor.reach.DeclaredAddr()+","; !strings.HasPrefix(line, want) {
 		t.Fatalf(":session on the successor reads %q; want it to open %q", line, want)
@@ -363,6 +364,26 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 		t.Fatalf("a player that joined the successor holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
 	}
 	waitForCursors(t, successor, 4) // the first host's Wraith among them
+
+	at := freeAddress(t)
+	var fixed, opened, again error
+	var role sessionRole
+	successor.World().RunSafe(func() {
+		fixed, opened = successor.beginHostingLocked(at, AuthorityHost), successor.beginHostingLocked(at, "")
+		again, role = successor.hostErrorLocked(), successor.sessionRoleLocked()
+	})
+	if fixed == nil || opened != nil || role != roleHost || again == nil || !strings.Contains(again.Error(), "already hosting") {
+		t.Fatalf(":host on the successor: %v under the host policy, %v under its own, then role %d and %v; "+
+			"want refused, opened, a host, already hosting", fixed, opened, role, again)
+	}
+	if line, want := successor.SessionSummary(), "Session hosting "+at+","; !strings.HasPrefix(line, want) {
+		t.Fatalf(":session on the successor after :host reads %q; want it to open %q", line, want)
+	}
+	late, _ := driveBot(t, Config{JoinAddress: at}, "patrol", nil)
+	if got := authorityOf(late); got.Authority != id || got.Term != network.FirstTerm+1 {
+		t.Fatalf("a player that joined at the door :host opened holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
+	}
+	waitForCursors(t, successor, 5)
 
 	c, gid := guest.claim.Load(), guest.localParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
@@ -378,6 +399,46 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 		t.Fatalf("the guest was not admitted back into its own place at the successor: %+v", req)
 	}
 	req.dialled.abandon(errors.New("the test is over"))
+}
+
+// TestASuccessorHostsAtItsOwnPort: :host on a successor naming the port its session
+// reaches it at opens nothing more, where a second bind would only collide with it,
+// and the run hosts there.
+func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
+	t.Cleanup(stop)
+	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
+	waitForCursors(t, successor, 2)
+	id := network.PeerID(successor.localParticipant())
+	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	stop()
+	for deadline := time.Now().Add(socketWait); (successor.authority.Holder() != id || successor.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	port, err := successor.socketPort()
+	if err != nil || successor.authority.Holder() != id {
+		t.Fatalf("the guest did not take the session over on a port of its own: %v", err)
+	}
+	own := port.ListenAddr()
+	var opened error
+	var role sessionRole
+	successor.World().RunSafe(func() {
+		opened = successor.beginHostingLocked(own, "")
+		role = successor.sessionRoleLocked()
+	})
+	if opened != nil || role != roleHost {
+		t.Fatalf(":host %s on the successor: %v, then role %d; want it hosting there", own, opened, role)
+	}
+	if line, want := successor.SessionSummary(), "Session hosting "+own+","; !strings.HasPrefix(line, want) {
+		t.Fatalf(":session on the successor reads %q; want it to open %q", line, want)
+	}
 }
 
 // claimHeld reads whether a run of a's process is in its session under c.

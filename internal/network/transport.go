@@ -130,20 +130,21 @@ func (t *Transport) listen(addr string, peer func(net.Conn) (PeerID, error)) err
 	return t.serve(ln, peer)
 }
 
-// serve makes ln this transport's own listener: at Start, or later on a host started
-// with none, which from then on takes joiners on it as one started on it does. It
-// takes joins with the session's handshake and, given peer, links from the
-// session's participants beside them.
+// serve takes joins on ln, which this transport then owns: at Start, later on a host
+// started with none, or beside a participant's own port as a second door, the first
+// listener staying the one Addr names. It takes joins with the session's handshake
+// and, given peer, links from the session's participants beside them.
 func (t *Transport) serve(ln net.Listener, peer func(net.Conn) (PeerID, error)) error {
 	t.listenMu.Lock()
 	defer t.listenMu.Unlock()
-	switch {
-	case !t.running.Load():
+	if !t.running.Load() {
 		return errors.New("transport is stopped")
-	case t.listener != nil:
-		return errors.New("transport already listens")
 	}
-	t.listener = ln
+	if t.listener == nil {
+		t.listener = ln
+	} else {
+		t.extraListeners = append(t.extraListeners, ln)
+	}
 	t.wg.Add(1)
 	go t.acceptLoop(ln, door{peer: peer, join: t.config.AcceptSession, admitted: t.config.OnAdmit})
 	return nil

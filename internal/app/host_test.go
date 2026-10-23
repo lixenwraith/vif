@@ -1645,7 +1645,8 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 // command table: the role each kind of run holds, what :join, :host and :leave
 // answer in it, and how :session names it. A run whose session is its own bots'
 // takes :join and :host and has nothing to leave, one its session left may join
-// another or leave, and a guest that inherited the term reads as the host it now is.
+// another or leave, and a guest that inherited the term is a successor, which may
+// open a door with :host.
 func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	ticking := func(a *App) *App {
@@ -1703,7 +1704,7 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 				guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
 			})
 			return guest
-		}, roleHost, "already in a session", "already hosting", "", "Session hosting, "},
+		}, roleSuccessor, "already in a session", "", "", "Session hosting, "},
 		{"its session left", func() *App {
 			leave()
 			for deadline := time.Now().Add(socketWait); leftPort.PeerCount() > 0; time.Sleep(time.Millisecond) {

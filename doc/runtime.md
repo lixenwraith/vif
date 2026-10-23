@@ -58,7 +58,7 @@ Four ways to be in a session, which differ in less than the flag names suggest:
 |---|---:|---:|---:|---|---|
 | `-host <addr>` | yes | yes | yes | none — plays from its first tick, opens once its clock runs; a script or bot waits in one (§1.2) | `migrate` |
 | `-serve <addr>` | yes | no | no | its first guest: nobody plays until one arrives | `host` |
-| `:host <addr> [host\|migrate]` | yes | yes | yes | none — the session opens at the tick it is running | the word given, else the run's |
+| `:host <addr> [host\|migrate]` | yes | yes | yes | none — the session opens at the tick it is running | the word given, else the run's; a successor's stays `migrate` |
 | `-join <addr>` | in a migrate session, one of its own; with `-relay <addr>`, one that admits people who cannot reach the host | yes | yes | waits for the host's start gate | adopted from the offer |
 
 The guest's port is what makes migration mean anything. The coordinator completes
