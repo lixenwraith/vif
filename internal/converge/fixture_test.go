@@ -25,7 +25,7 @@ import (
 type stub struct {
 	mu     sync.Mutex
 	stamp  event.Stamp
-	held   bool
+	frozen bool
 	local  uint32
 	roster []network.RosterEntry
 	port   engine.NetworkPort
@@ -37,6 +37,7 @@ type stub struct {
 	handoffs  []adopted
 	abandoned [][]network.RosterEntry
 	forked    int
+	thawed    int
 	said      []string
 
 	// What the eviction policy reads, and what it decided.
@@ -61,12 +62,6 @@ func (s *stub) Position() event.Stamp {
 // Driven is always true: a criterion paces its own publications, and a pump beside
 // it would be a second thing deciding when a correction leaves.
 func (s *stub) Driven() bool { return true }
-
-func (s *stub) Held() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.held
-}
 
 func (s *stub) LocalParticipant() uint32 { return s.local }
 
@@ -156,6 +151,20 @@ func (s *stub) Forked() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forked++
+	s.frozen = false
+}
+
+func (s *stub) Freeze() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.frozen = true
+}
+
+func (s *stub) Thaw() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.thawed++
+	s.frozen = false
 }
 
 func (s *stub) SetStatusMessage(msg string, _ parameter.StatusKind) {

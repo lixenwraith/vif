@@ -374,10 +374,11 @@ The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
 no epoch, so the first one its next tick produces, admitted past a guest's own
 tick (`NetworkResource.OnAuthorityAhead`), resumes that guest once the drain that
 carried it is done. `:new` ends a hold before its reset crosses, which would
-otherwise wait for a tick nobody reaches. Taking the term and forking end a hold
-the lost host left (§5.1). An end no command made goes through the request a
-command makes, settled at once: the hold ends in the pass that dispatches it, on
-the run as on its replay, which has no link to hear it.
+otherwise wait for a tick nobody reaches. A hold outlives a lost host: its
+successor keeps it for its own `:pause`, unless a script or bot drives that run
+and nobody there can give one, and a fork ends it (§5.1). An end no command made
+goes through the request a command makes, settled at once: the hold ends in the
+pass that dispatches it, on the run as on its replay, which has no link to hear it.
 
 A joiner admitted to a held session lands held. Its gate captures the held tick
 itself, since a held session never reaches the playout lead past it, and sends
@@ -577,10 +578,15 @@ survivor of a roster of two is not a majority of two, and it is the whole sessio
 
 The procedure on each survivor is:
 
-1. **Flood a loss notice.** It decides nothing, but only a direct neighbour of the
-   authority sees the link drop, and the departure crossing that would have carried
-   that news is produced by the participant that is gone. A survivor two links away
-   opens the same succession from the notice.
+1. **Stop, and flood a loss notice.** Nobody plays on in a world the successor is
+   about to replace, so a survivor freezes its clock when it sees its authority go,
+   by its own link, a notice or a record reaching it first (`TimeControl.Freeze`).
+   The freeze is the hold the session itself asks for, settled at once as the end
+   of one is (§3.6), so a replay stands still in the pass the run did. The notice
+   decides nothing, but only a direct neighbour of the authority sees the link drop,
+   and the departure crossing that would have carried that news is produced by the
+   participant that is gone. A survivor two links away opens the same succession
+   from the notice.
 2. **If the session allows the term to move and the succession names this
    instance, take it.** Immediately — there is nothing to collect and nobody to ask,
    and the session is stalled until somebody authors. The one self-check is
@@ -588,7 +594,13 @@ The procedure on each survivor is:
    for a delta to name and would answer the first manifest with a whole world for
    every survivor at once. A join capture counts as retention, so a guest admitted
    seconds before the loss is eligible. Holding the term, it starts its correction
-   pump, a live script's or bot's included; only a harness publishes by hand.
+   pump, a live script's or bot's included; only a harness publishes by hand. It
+   resumes once every survivor's notice has reached it, each one a path to it, or
+   when the window (step 4) runs out on whoever is missing; the lost authority's
+   bots went with it, and nothing reports for a Wraith. A survivor that adopts the
+   record first sends its notice then, and one already adopted still forwards a
+   late one. Each survivor resumes on the successor's first epoch past its own
+   tick, as from a hold (§3.6).
 3. **Otherwise wait for the record, dialling while it waits.** A handoff carries
    the roster with its slots and holders, the session anchor, the chain and the
    successor's evidence tick, so adopting it is one decision rather than a term
@@ -597,11 +609,10 @@ The procedure on each survivor is:
    second later, the attempt count on the status bar — and announces itself on each
    link it opens, so an authority elected before that link existed answers with its
    record instead of letting the survivor time out.
-4. **After `parameter.NetworkSuccessionTicks`, give up.** No record arrived, so
+4. **After `parameter.NetworkSuccessionWindow`, give up.** No record arrived, so
    this instance cannot reach the successor and continues as an explicit local
-   fork. Under `-authority host` it gives up at once. A held session takes no
-   tick, so its window runs on the wall (`NetworkSuccessionWait`); taking the term
-   or forking ends the hold, which nobody else could.
+   fork. The window is 5 s on the wall clock from the loss, since no tick passes to
+   count it. Under `-authority host` nothing freezes and it gives up at once.
 
 Retention *ordering* is deliberately not an eligibility test. With one designated
 candidate there is no alternative to prefer, and a successor a cadence behind a
@@ -623,8 +634,9 @@ therefore local; the successor produces the predecessor's as the ordinary crossi
 because it may. A handoff preserves the surviving roster exactly; only the lost
 predecessor and its bots may differ when their departures straddle the handoff.
 
-A successor applies that rule once the succession window closes rather than at
-once, so a survivor still arriving through a relay hop is not dropped. An instance
+A successor applies that rule a convergence floor (`NetworkSuccessionTicks`) after
+its group resumes rather than at once, so a survivor still arriving through a relay
+hop is not dropped. An instance
 that still holds a link keeps its roster: it has peers to agree an apply tick with,
 and on a fork no authority to name one (§8).
 

@@ -14,12 +14,9 @@ import (
 // tick.
 type Instance interface {
 	// Position is the run and tick every schedule and every containment rule is
-	// measured against; Driven marks a run whose caller paces its own cadence; Held
-	// is a hold, under which Position stands still, so a window counted in its ticks
-	// runs on the wall clock instead.
+	// measured against; Driven marks a run whose caller paces its own cadence.
 	Position() event.Stamp
 	Driven() bool
-	Held() bool
 
 	// LocalParticipant is this instance's session identity, zero outside a session.
 	LocalParticipant() uint32
@@ -69,6 +66,11 @@ type Instance interface {
 	AuthorityChanged(rec network.HandoffRecord, mine bool)
 	DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID)
 	Forked()
+
+	// Freeze stops the run while its authority moves; Thaw is the successor's end of
+	// that window, which leaves standing a hold the lost host set.
+	Freeze()
+	Thaw()
 
 	// SetStatusMessage is the operator surface a refusal or a recovery is said on.
 	SetStatusMessage(msg string, kind parameter.StatusKind)

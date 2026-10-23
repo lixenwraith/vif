@@ -765,7 +765,7 @@ state loss and is logged when observed.
 | Event queue writes | Lock-free MPSC producer protocol | Any producer; payload lifetime rules still apply. |
 | Event queue consume | World lock as single-consumer token | Scheduler tick, event loop, immediate dispatch, or reset only. |
 | System list | Single-threaded construction, then `World.Seal` | Read-only after `Scheduler.Prepare` seals it. |
-| Pause, hold, rate, step budget, run-until request, standing breakpoints | `TimeControl` atomics, pause and hold changed under `stopMu`; breakpoints as a `BreakSet` replaced whole | `MetaSystem` and commands set them, and the session paths pause and release a lobby or a parked run and end a hold no command ends; the scheduler takes steps and trips requests and breakpoints; input and render read them without the world lock. |
+| Pause, hold, rate, step budget, run-until request, standing breakpoints | `TimeControl` atomics, pause and hold changed under `stopMu`; breakpoints as a `BreakSet` replaced whole | `MetaSystem` and commands set them, and the session paths pause and release a lobby or a parked run, freeze a survivor and end a hold no command ends; the scheduler takes steps and trips requests and breakpoints; input and render read them without the world lock. |
 | Render buffer | Render orchestrator | Main/render path only; cleared and reused per frame. |
 | Context flags/counters | Atomics | Cross-goroutine reads for macros, mouse, auto-fire, frame/status strings. |
 | APM history | `GameState.mu` plus atomic published totals | Scheduler admits gestures at dispatch and rolls history. |
@@ -833,9 +833,11 @@ admission unpauses it.
 
 A hold is how a session stops: only the host starts or ends one, and it crosses,
 so every participant stops after one agreed tick and a joiner lands held
-([Multi-player §3.6](multi-player.md#36-holding-a-session)). Under a hold the router
-takes no play; the command line, the menus, help, quit, the audio toggle and the
-status bar's menu press still answer. `:step` ends a solo hold, and `:new` any.
+([Multi-player §3.6](multi-player.md#36-holding-a-session)); a survivor also stands
+frozen while its host changes ([Multi-player §5.1](multi-player.md#51-succession)).
+Under a hold the router takes no play; the command line, the menus, help, quit, the
+audio toggle and the status bar's menu press still answer. `:step` ends a solo
+hold, and `:new` any.
 
 In a driven App, pause remains observable/operator state but never revokes the
 caller's authority: `App.Tick` uses the stepped tick path and still advances. A
@@ -843,9 +845,9 @@ hold does stop it, since its session's other participants stand at that tick; a
 driven loop then drains its link without stepping, as the host's resume is an
 epoch. A reproduction — a replay, or a correction's projection — applies a hold
 as state and steps through it, since the run it follows took no tick while held;
-an end no command made here goes through the request one makes, settled at once,
-and a journal's opening records a hold standing, so a replay ends its hold in the
-pass the run did.
+an end no command made here, and the start of a freeze, go through the request a
+command makes, settled at once, and a journal's opening records a hold standing,
+so a replay holds and ends its hold in the pass the run did.
 
 ## 9. Time control
 
