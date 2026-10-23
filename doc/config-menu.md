@@ -41,7 +41,7 @@ unavailable in this run`).
 |---|---|
 | Game | Pause; a new game; a row per scenario the configuration roots hold, which starts it; another scenario by name or path. |
 | Bots | Add bots by count and policy; remove a bot held by this run or cancel its admission. |
-| Multiplayer | Host this run, join an existing session, request an allocated session, leave the session, inspect status, drop a player with its bots or an individual bot (host only). |
+| Multiplayer | Host this run, join an existing session, request an allocated session, leave the session, relay for others, inspect status, drop a player with its bots or an individual bot (host only). |
 | Audio | Music, sound effects, effects volume in 5% steps. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
@@ -121,6 +121,12 @@ where this one stands, its bots seated again beside it, and the others play on
 without it. A solo run, a session holding only your own bots, a pending join, or
 a driven run without the play loop disables it. See
 [Multiplayer §5.5](multi-player.md#55-leaving-a-session).
+
+**Relay for others** runs `:relay on|off` and is saved in `[play]`: on, this run
+carries the game for a player who reaches it and not the host, as after a host
+loss; off, the default, it carries only those that joined through it, its bots and
+its `-relay` door. A browser cannot relay, and the row says so. See
+[Multiplayer §5.1](multi-player.md#51-succession).
 
 ## Key binding and persistence
 

@@ -170,12 +170,13 @@ func (r *Reach) Close() {
 
 // drive runs between two ticks, from the same loop the succession does. A bot dials
 // nobody: it shares its holder's fate, so the link it joined on is the one it needs.
-func (r *Reach) drive(contested bool) {
+// walking is a survivor walking the list, or one cut off.
+func (r *Reach) drive(walking bool) {
 	if r == nil || r.authority.seat() {
 		return
 	}
 	r.statChain.Store(int64(len(r.authority.Chain())))
-	if contested || r.cutOff() {
+	if walking {
 		r.retrySuccession()
 		return
 	}
@@ -183,18 +184,19 @@ func (r *Reach) drive(contested bool) {
 	r.dialSuccessor()
 }
 
-// cutOff reports a participant with no link at all that still has a session to
-// reach: the relay it joined through left. It walks the chain as a survivor does,
-// and whichever participant answers carries its artifacts (NetworkSystem.sendUp).
+// cutOff reports a participant with no path to its authority that still has a
+// session to reach: the relay it went through left, or carries it no more. It
+// dials every candidate for one that carries it (NetworkSystem.sendUp), and goes
+// on alone if none does (Authority.driveCutOff).
 func (r *Reach) cutOff() bool {
-	port := r.inst.Transport()
-	if port == nil || !port.IsRunning() || port.PeerCount() > 0 {
+	if r == nil || r.authority.seat() {
 		return false
 	}
 	u := r.authority
 	u.mu.Lock()
-	defer u.mu.Unlock()
-	return u.term > 0 && !u.fork && u.local != u.holder
+	in := u.term > 0 && !u.fork && u.local != u.holder && u.contested == 0
+	u.mu.Unlock()
+	return in && !r.inst.Reaches()
 }
 
 // dialSuccessor keeps the chain's first link open, so the instance that will have
@@ -214,9 +216,10 @@ func (r *Reach) dialSuccessor() {
 	}
 }
 
-// retrySuccession walks the whole candidate list when the authority has gone and
-// this instance has no link to whoever is taking over, repeating once a second.
-// Every participant holds the chain, so losing the successor too is survivable.
+// retrySuccession dials each candidate whose turn has come and is not linked yet,
+// repeating once a second: the record of one that hosts, or a link that carries
+// this instance, arrives on it. Every participant holds the chain, so losing a
+// candidate too is survivable.
 func (r *Reach) retrySuccession() {
 	dialer, ok := r.inst.Transport().(engine.PeerDialingPort)
 	if !ok {
@@ -232,9 +235,9 @@ func (r *Reach) retrySuccession() {
 	r.mu.Unlock()
 
 	chain := r.authority.Chain()
-	for _, id := range r.authority.successionOrder() {
+	for _, id := range r.authority.walkTargets(now) {
 		if dialer.Connected(uint32(id)) {
-			return // reachable already; the record arrives on that link
+			continue
 		}
 		if addr, found := chain.Lookup(id); found {
 			r.dial(dialer, id, addr)
@@ -243,13 +246,11 @@ func (r *Reach) retrySuccession() {
 	r.statAttempts.Add(1)
 }
 
-// dial opens one peer link, at most one attempt per participant at a time and off
-// this loop: a connect to an address nothing answers takes the whole timeout. It
-// opens on the transport it was decided on, which a :leave may have replaced since
-// with one whose session the far end is not in.
-//
-// A link opened during a succession is announced: the record that named the new
-// authority was flooded before this link existed, so the far end has to be asked.
+// dial opens one peer link off this loop, one attempt per participant at a time, as
+// a connect nothing answers takes the whole timeout, and on the transport it was
+// decided on, which a :leave may have replaced since. A link opened during a
+// succession is announced: the record naming the new host was flooded before the
+// link existed, so the far end has to be asked.
 func (r *Reach) dial(dialer engine.PeerDialingPort, id network.PeerID, addr string) {
 	r.mu.Lock()
 	if r.dialing[id] {

@@ -352,13 +352,11 @@ func logRuntimeReport(r core.RuntimeReport) {
 	status.Trigger(status.TrigRace)
 }
 
-// platformHost is the build's platform host; empty, the run presents on the
-// terminal. openWindow makes it the desktop window, nil in a build without one;
-// windowByDefault is a vif_gui build's, which opens the window unless -g=false;
-// windowMaximized and windowFullscreen are the state it opens in. pageSettings,
-// in a browser, reads the settings the page kept over the embedded ones and is
-// where the run writes them back, a browser having no vif.toml; pageClaims is where
-// it keeps the claims its runs come back to their sessions with, across a reload.
+// platformHost is the build's platform host, empty on the terminal. openWindow
+// makes it the desktop window, nil without one; windowByDefault opens it unless
+// -g=false, windowMaximized and windowFullscreen the state it opens in. pageSettings
+// is where a browser, which has no vif.toml, reads and writes its settings, and
+// pageClaims where it keeps the claims its runs return with, across a reload.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
@@ -573,7 +571,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 			"port is taken; whatever is bound is what the session publishes",
 		authorityMigrate))
 	fs.BoolVar(&f.noAdvertise, "no-advertise", false,
-		"With -join, keep this participant's address out of the session. It plays normally and is elected only when no advertised participant survives")
+		"With -join, keep this participant's address out of the session. It plays normally and is never a succession candidate")
 	fs.StringVar(&f.relay, "relay", "",
 		"With -join, admit participants that cannot reach the host at this address and carry their traffic on this participant's link")
 	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow,
@@ -583,8 +581,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.Float64Var(&f.slow.BytesPerSecond, "slow-bytes", parameter.NetworkSlowBytesPerSecond,
 		"With -host or -serve, and whose link carries at least this many bytes per second; 0 ignores throughput")
 	fs.StringVar(&f.authority, "authority", "", fmt.Sprintf(
-		"What losing the authoring participant does: %q hands the session to the "+
-			"roster's next survivor, %q ends it and leaves every survivor playing alone. "+
+		"What losing the authoring participant does: %q hands the session down the "+
+			"succession list, %q ends it and leaves every survivor playing alone. "+
 			"Default %q with -serve and %q otherwise",
 		authorityMigrate, authorityHost, authorityHost, authorityMigrate))
 }

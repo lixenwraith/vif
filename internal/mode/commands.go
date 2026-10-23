@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "session", "bot", "player", "g", "config", "journal",
+	"host", "join", "leave", "relay", "session", "bot", "player", "g", "config", "journal",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -138,6 +138,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleJoinCommand(ctx, args)
 	case "leave":
 		return handleLeaveCommand(ctx, args)
+	case "relay":
+		return handleRelayCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
 	case "journal":
@@ -1081,6 +1083,21 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 	return CommandResult{Continue: true}
 }
+
+// handleRelayCommand turns on or off carrying the game for players who reach this
+// run and not their host, as after a host loss; one that joined through this run
+// is carried either way. Usage: :relay [on|off]
+func handleRelayCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if reason := relayUnavailable(ctx); reason != "" {
+		setCommandError(ctx, reason)
+		return CommandResult{Continue: true}
+	}
+	return applyToggle(ctx, &ctx.Relaying, args, "relay", "Relaying for others")
+}
+
+// relayUnavailable refuses relaying where nobody can reach this run: a browser
+// is never dialled
+var relayUnavailable = lacking(paths.ExternalFiles(), "Relaying")
 
 // handleJoinCommand replaces this solo run with one joined to a session.
 // Usage: :join <target>   the same forms -join takes

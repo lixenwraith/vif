@@ -3,40 +3,53 @@ package network
 import (
 	"errors"
 	"net"
+	"slices"
 	"testing"
 	"time"
 )
 
-// TestSuccessionReadsTheChain covers the rule and the property that makes it safe
-// without agreement: a chain and any prefix of it name the same first survivor.
+// TestSuccessionReadsTheChain covers the list survivors walk and the property that
+// makes it safe without agreement: a chain and any prefix of it name the same first
+// candidates. Nobody away, held or without a port is one: nobody could dial it.
 func TestSuccessionReadsTheChain(t *testing.T) {
+	roster := []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2},
+		{ID: 4, Slot: 3, Away: true}, {ID: 5, Slot: 4, Holder: 3}, {ID: 6, Slot: 5}}
+	chain := SuccessionChain{{ID: 3, Addr: "a"}, {ID: 4, Addr: "d"}, {ID: 5, Addr: "e"}, {ID: 2, Addr: "b"}, {ID: 9, Addr: "x"}}
+
+	for _, c := range []struct {
+		lost  PeerID
+		chain SuccessionChain
+		want  []PeerID
+	}{
+		{1, chain, []PeerID{3, 2}},  // confirmation order, not identity order
+		{1, chain[:1], []PeerID{3}}, // a prefix agrees with its extension
+		{3, chain, []PeerID{2}},     // losing a candidate with the authority leaves the rest
+		{1, nil, nil},               // no port, no candidate
+	} {
+		if got := SuccessionCandidates(roster, c.lost, c.chain); !slices.Equal(got, c.want) {
+			t.Fatalf("candidates after %d's loss with chain %v = %v, want %v", c.lost, c.chain, got, c.want)
+		}
+	}
+}
+
+// TestEachCandidateTakesItsOwnTerm: the k-th candidate's record names the term k
+// past the one its receiver holds, so two hosts' records never tie, and one for a
+// term no candidate takes or naming another candidate is refused.
+func TestEachCandidateTakesItsOwnTerm(t *testing.T) {
 	roster := []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
 	chain := SuccessionChain{{ID: 3, Addr: "a"}, {ID: 2, Addr: "b"}}
-
-	// An empty chain is "nobody was ever confirmed", not "nobody is eligible".
-	if got, ok := DesignatedSuccessor(roster, 1, nil); !ok || got != 2 {
-		t.Fatalf("successor with no chain = %d (ok=%t), want the roster rule's 2", got, ok)
+	rec := func(term AuthorityTerm, authority PeerID) HandoffRecord {
+		return HandoffRecord{Term: term, Authority: authority, Predecessor: 1, Roster: roster}
 	}
-	// Confirmation order, not identity order: 3 was confirmed first.
-	if got, ok := DesignatedSuccessor(roster, 1, chain); !ok || got != 3 {
-		t.Fatalf("successor = %d (ok=%t), want the chain's first survivor 3", got, ok)
+	for _, ok := range []HandoffRecord{rec(FirstTerm+1, 3), rec(FirstTerm+2, 2)} {
+		if err := ok.Validate(roster, chain, FirstTerm); err != nil {
+			t.Fatalf("candidate %d's record for term %d was refused: %v", ok.Authority, ok.Term, err)
+		}
 	}
-	// A prefix agrees with its extension, which is why an appended chain needs no
-	// agreement step.
-	if got, _ := DesignatedSuccessor(roster, 1, chain[:1]); got != 3 {
-		t.Fatalf("prefix elected %d, want the same 3", got)
-	}
-	// Losing the authority and the successor together still elects.
-	if got, ok := DesignatedSuccessor(roster, 3, chain); !ok || got != 2 {
-		t.Fatalf("successor to 3 = %d (ok=%t), want 2", got, ok)
-	}
-	// A chain naming only participants that are gone falls back to the roster.
-	gone := SuccessionChain{{ID: 9, Addr: "x"}}
-	if got, ok := DesignatedSuccessor(roster, 1, gone); !ok || got != 2 {
-		t.Fatalf("stale chain elected %d (ok=%t), want the fallback 2", got, ok)
-	}
-	if _, ok := DesignatedSuccessor([]RosterEntry{{ID: 1}}, 1, nil); ok {
-		t.Fatal("a roster with no survivor designated one")
+	for _, bad := range []HandoffRecord{rec(FirstTerm+1, 2), rec(FirstTerm+3, 2), rec(FirstTerm, 3)} {
+		if bad.Validate(roster, chain, FirstTerm) == nil {
+			t.Fatalf("a record naming %d for term %d was accepted", bad.Authority, bad.Term)
+		}
 	}
 }
 
@@ -50,15 +63,15 @@ func TestAnAddressIsNotRosterIdentity(t *testing.T) {
 		Roster: roster,
 		Chain:  SuccessionChain{{ID: 2, Addr: "10.0.0.2:7777"}},
 	}
-	if err := rec.Validate(roster, rec.Chain); err != nil {
+	if err := rec.Validate(roster, rec.Chain, FirstTerm); err != nil {
 		t.Fatalf("a valid record was refused: %v", err)
 	}
 	rec.Chain = SuccessionChain{{ID: 2, Addr: "10.0.0.2:41235"}}
-	if err := rec.Validate(roster, rec.Chain); err != nil {
+	if err := rec.Validate(roster, rec.Chain, FirstTerm); err != nil {
 		t.Fatalf("a record whose peer rebound its port was refused: %v", err)
 	}
 	rec.Roster = []RosterEntry{{ID: 1, Slot: 1}, {ID: 2, Slot: 0}}
-	if err := rec.Validate(roster, rec.Chain); err == nil {
+	if err := rec.Validate(roster, rec.Chain, FirstTerm); err == nil {
 		t.Fatal("a record carrying different slot assignments was accepted")
 	}
 }

@@ -16,13 +16,16 @@ type AuthorityTerm uint64
 // FirstTerm is the term the instance that opens a session authors under.
 const FirstTerm AuthorityTerm = 1
 
-// AuthorityReport floods loss news beyond the lost authority's direct neighbours.
-// Deduplication uses (From, Term); the succession chain and the roster, not
-// reports, elect the successor.
+// AuthorityReport floods loss news beyond the lost authority's direct neighbours. A
+// notice names the term the lost authority held; a survivor that adopted a record
+// reports that record's term, and Via the neighbour it reaches its host through,
+// zero on a link of its own. Deduplication uses (From, Term); the chain and the
+// roster, not reports, name the candidates.
 type AuthorityReport struct {
 	Term AuthorityTerm `json:"term"`
 	From PeerID        `json:"from"`
 	Lost PeerID        `json:"lost"`
+	Via  PeerID        `json:"via,omitempty"`
 }
 
 // HandoffRecord is the evidence a receiver needs before it will adopt a term it
@@ -52,10 +55,11 @@ type HandoffRecord struct {
 	EvidenceTick uint64 `json:"evidence_tick"`
 }
 
-// Validate refuses a handoff record the succession rule could not have produced.
-// chain is the receiver's own, for the same reason the roster is: the check a
-// receiver makes for itself is the half of the split-brain rule it can make.
-func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain) error {
+// Validate refuses a handoff record the succession rule could not have produced from
+// held, the term the receiver holds. chain is the receiver's own, for the same reason
+// the roster is: the check a receiver makes for itself is the half of the split-brain
+// rule it can make.
+func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain, held AuthorityTerm) error {
 	if h.Term < FirstTerm {
 		return errors.New("handoff carries no authority term")
 	}
@@ -73,16 +77,17 @@ func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain) err
 		return errors.New("handoff carries a different surviving roster")
 	}
 	// The whole of the split-brain check, and the receiver makes it for itself
-	// rather than counting evidence the record brought with it: the successor a
-	// term may name is a function of the roster above, which this instance has
-	// just been shown to agree with, and of its own chain.
-	want, ok := DesignatedSuccessor(roster, h.Predecessor, chain)
-	if !ok {
-		return errors.New("handoff names a successor for a roster with no survivor")
+	// rather than counting evidence the record brought with it: the candidate a
+	// term may name is a function of the roster above, which this instance has just
+	// been shown to agree with, and of its own chain.
+	candidates := SuccessionCandidates(roster, h.Predecessor, chain)
+	if h.Term <= held || uint64(h.Term-held) > uint64(len(candidates)) {
+		return fmt.Errorf("handoff enters term %d from term %d, which none of %d candidates takes",
+			h.Term, held, len(candidates))
 	}
-	if h.Authority != want {
-		return fmt.Errorf("handoff names participant %d as the successor to %d; this roster designates %d",
-			h.Authority, h.Predecessor, want)
+	if want := candidates[h.Term-held-1]; h.Authority != want {
+		return fmt.Errorf("handoff names participant %d for term %d; this roster's candidate for it is %d",
+			h.Authority, h.Term, want)
 	}
 	return nil
 }
@@ -101,26 +106,20 @@ func SameRoster(a, b []RosterEntry) bool {
 	return slices.Equal(x, y)
 }
 
-// DesignatedSuccessor chooses the first surviving independent chain member, falling
-// back to the lowest independent roster identity; one away is no survivor. Local
-// reach is never an input.
-func DesignatedSuccessor(roster []RosterEntry, lost PeerID, chain SuccessionChain) (PeerID, bool) {
-	alive := func(id PeerID) bool {
-		return id != 0 && id != lost &&
-			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == id && p.Holder == 0 && !p.Away })
-	}
+// SuccessionCandidates is the list a lost authority's survivors walk: every
+// surviving independent chain member, in chain order. The k-th takes the term k past
+// the lost one's, so two hosts' records never tie. One away is no survivor, and a
+// participant with no port is no candidate, since nobody could dial it. Local reach
+// is never an input.
+func SuccessionCandidates(roster []RosterEntry, lost PeerID, chain SuccessionChain) []PeerID {
+	var out []PeerID
 	for _, e := range chain {
-		if alive(e.ID) {
-			return e.ID, true
+		if e.ID != 0 && e.ID != lost &&
+			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == e.ID && p.Holder == 0 && !p.Away }) {
+			out = append(out, e.ID)
 		}
 	}
-	best, found := PeerID(0), false
-	for _, p := range roster {
-		if alive(p.ID) && (!found || p.ID < best) {
-			best, found = p.ID, true
-		}
-	}
-	return best, found
+	return out
 }
 
 // EncodeAuthorityReport and its sibling are the wire forms. They are separate

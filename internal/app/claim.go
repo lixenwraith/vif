@@ -151,6 +151,18 @@ func (k *claimKeeper) release(c *claim) {
 	k.storeLocked()
 }
 
+// hold takes a claim back for the run that let it go to redial its host, its record
+// as it was: false once a dial took it or newer claims pushed it out.
+func (k *claimKeeper) hold(c *claim) bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if c.held || !slices.Contains(k.claims, c) {
+		return false
+	}
+	c.held = true
+	return true
+}
+
 // forget drops a claim whose place is gone: its participant was dismissed.
 func (k *claimKeeper) forget(c *claim) {
 	k.mu.Lock()

@@ -35,11 +35,20 @@ type stub struct {
 	installed []snapshot.SharedCapture
 	adopted   []snapshot.CaptureHeader
 	handoffs  []adopted
-	abandoned [][]network.RosterEntry
+	departed  [][]network.RosterEntry
 	forked    int
 	forkedAs  []network.RosterEntry
 	thawed    int
 	said      []string
+
+	// What a walk asks of the run: whether it redials the authority it lost and
+	// which, whether it relays for others and whom it marked behind it, and whether
+	// it has lost every path to its authority.
+	redial   bool
+	redials  []network.PeerID
+	relaying bool
+	carried  []uint32
+	cut      bool
 
 	// What the eviction policy reads, and what it decided.
 	late    map[uint32]uint64
@@ -47,11 +56,13 @@ type stub struct {
 	dropped []uint32
 }
 
-// adopted is one call the succession made on the run: the record it moved to, and
-// whether this instance is the one that now authors.
+// adopted is one call the succession made on the run: the record it moved to,
+// whether this instance is the one that now authors, and the link it follows that
+// one through.
 type adopted struct {
 	rec  network.HandoffRecord
 	mine bool
+	via  network.PeerID
 }
 
 func (s *stub) Position() event.Stamp {
@@ -84,6 +95,34 @@ func (s *stub) Downstream() []uint32 {
 }
 
 func (s *stub) DrainOffTick() {}
+
+// Reaches is true unless a criterion cuts this instance off.
+func (s *stub) Reaches() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.cut
+}
+
+// Carries is a link served here, or any once relaying is on.
+func (s *stub) Carries(id uint32) bool {
+	s.mu.Lock()
+	relaying := s.relaying
+	s.mu.Unlock()
+	return relaying || slices.Contains(s.Downstream(), id)
+}
+
+func (s *stub) Carry(id uint32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.carried = append(s.carried, id)
+}
+
+func (s *stub) Redial(lost network.PeerID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.redials = append(s.redials, lost)
+	return s.redial
+}
 
 func (s *stub) CaptureShared() (snapshot.SharedCapture, error) {
 	s.mu.Lock()
@@ -136,16 +175,16 @@ func (s *stub) DropParticipant(id uint32) bool {
 	return first
 }
 
-func (s *stub) AuthorityChanged(rec network.HandoffRecord, mine bool) {
+func (s *stub) AuthorityChanged(rec network.HandoffRecord, mine bool, via network.PeerID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.handoffs = append(s.handoffs, adopted{rec: rec, mine: mine})
+	s.handoffs = append(s.handoffs, adopted{rec: rec, mine: mine, via: via})
 }
 
-func (s *stub) DropAbandonedCursors(roster []network.RosterEntry, _ network.PeerID) {
+func (s *stub) CrossDepartures(away []network.RosterEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.abandoned = append(s.abandoned, roster)
+	s.departed = append(s.departed, away)
 }
 
 func (s *stub) Forked(roster []network.RosterEntry, _ network.PeerID) {
@@ -306,17 +345,22 @@ func seal(cap snapshot.SharedCapture) snapshot.SharedCapture {
 }
 
 // session links n participants into a mesh and returns their runs, every one
-// already in the first term under coordinator 1.
+// already in the first term under coordinator 1, every guest on the chain in
+// identity order, as guests that each declared a port are.
 func session(t *testing.T, n int, links [][2]int) []*run {
 	t.Helper()
 	mesh := network.NewMesh()
 	for _, l := range links {
 		mesh.Link(network.PeerID(l[0]), network.PeerID(l[1]))
 	}
+	var chain network.SuccessionChain
+	for id := 2; id <= n; id++ {
+		chain = append(chain, network.ChainEntry{ID: network.PeerID(id), Addr: "mesh"})
+	}
 	runs := make([]*run, n)
 	for i := range runs {
 		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(n))
-		runs[i].open(1, nil, false)
+		runs[i].open(1, chain, false)
 	}
 	return runs
 }

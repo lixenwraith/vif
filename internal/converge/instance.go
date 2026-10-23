@@ -34,13 +34,19 @@ type Instance interface {
 	Downstream() []uint32
 	DrainOffTick()
 
-	// InstallCapture projects a capture this protocol has proved — by its integrity
-	// hash or by the authority's root — to this instance's own tick, writes the
-	// projection, and reports how far the live world had drifted from it.
-	// AdoptAuthority takes a header whose world this instance provably holds already.
-	// VerifyCaptureIdentity answers whether a header describes this session.
-	// Encoder is this instance's capture encodings, which every seal, index and
-	// body here shares.
+	// Reaches reports a path to the authority: a link to it, or a relay that carries
+	// this instance. Carries reports a link whose participant this instance carries:
+	// one that joined through it, or any once its player turned relaying on. Carry
+	// marks one behind it, which the authority's artifacts then flow down to.
+	Reaches() bool
+	Carries(id uint32) bool
+	Carry(id uint32)
+
+	// InstallCapture projects a capture proved by its integrity hash or the
+	// authority's root to this instance's tick, writes it, and reports the drift.
+	// AdoptAuthority takes a header whose world this instance provably holds;
+	// VerifyCaptureIdentity answers whether a header describes this session; Encoder
+	// is the capture encodings every seal, index and body here shares.
 	CaptureShared() (snapshot.SharedCapture, error)
 	// CaptureSharedLocked is the read without its seal, for TickClosed, which runs
 	// under the world lock; a comparison needs no integrity hash, only the index.
@@ -60,12 +66,19 @@ type Instance interface {
 	Ingress(id uint32) uint64
 
 	// AuthorityChanged moves the membership a handoff carries into the places the
-	// run reads it from; DropAbandonedCursors removes the participants an instance
-	// left with no link will never hear from again; Forked says no handoff came, so
-	// the run goes on alone from the last authoritative state, with the roster it held.
-	AuthorityChanged(rec network.HandoffRecord, mine bool)
-	DropAbandonedCursors(roster []network.RosterEntry, local network.PeerID)
+	// run reads it from, and via is the link it follows the new host through, zero
+	// for its own; CrossDepartures keeps the places of participants a new host's
+	// group lost as Wraiths; Forked says no handoff came, so the run goes on alone
+	// from the last authoritative state, with the roster it held.
+	AuthorityChanged(rec network.HandoffRecord, mine bool, via network.PeerID)
+	CrossDepartures(away []network.RosterEntry)
 	Forked(roster []network.RosterEntry, local network.PeerID)
+
+	// Redial starts this run's redial of the authority it lost, at the door it came
+	// in by with the claim its place waits under, and reports whether one started.
+	// It dials while Authority.Redialing, replaces the run once RedialAdmitted, and
+	// reports a door that turned it away through RedialRefused.
+	Redial(lost network.PeerID) bool
 
 	// Freeze stops the run while its authority moves; Thaw is the successor's end of
 	// that window, which leaves standing a hold the lost host set.

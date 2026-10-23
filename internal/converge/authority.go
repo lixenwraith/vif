@@ -2,6 +2,7 @@ package converge
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -35,7 +36,7 @@ type Authority struct {
 
 	// corrections is what authorship produces, and reach the links it needs to
 	// move: a successor seeds its cadence from what it installed, and a survivor
-	// with no link to the participant taking over dials down the chain.
+	// dials each candidate on the list whose turn has come.
 	corrections *Corrections
 	reach       *Reach
 
@@ -73,22 +74,32 @@ type Authority struct {
 	// never moves, and every survivor forks the moment the authority goes.
 	fixed bool
 
-	// The succession in progress, if any. contested is the term being taken over,
-	// which is always the held term plus one: a successor that skipped a term would
-	// be adopting authorship over state nobody agreed it had. opened is when this
-	// instance saw its authority go, which its window runs from.
+	// direct marks a link of this instance's own to its authority rather than a path
+	// through a relay: a survivor that had one saw the loss itself, and redials it.
+	direct bool
+
+	// The succession in progress, if any. contested is the term the lost authority
+	// held, zero when no walk is open; lost is that authority, and opened when this
+	// instance saw it go. walkFrom is when the walk down the candidates began, zero
+	// while it waits on this instance's redial of the lost authority (redialing).
 	contested network.AuthorityTerm
 	lost      network.PeerID
 	opened    time.Time // [wall] the session stands frozen, so no tick counts it
+	walkFrom  time.Time // [wall]
+	redialing bool
 	published bool
 
-	// reports is the set of survivors whose loss notice for term reportsFor has been
-	// seen: what terminates the flood, and what tells the successor everyone is in.
-	// It outlives the handoff, so a late notice still travels; resumeBy is when that
-	// successor resumes its group whoever is missing, zero once it has.
-	reports    map[network.PeerID]bool
+	// reports is each notice and membership report seen since the authority of term
+	// reportsFor went, by sender and named term: what ends the flood and tells a host
+	// who joined it. It outlives the handoff; resumeBy is when that host resumes, zero
+	// once it has.
+	reports    map[reportKey]struct{}
 	reportsFor network.AuthorityTerm
 	resumeBy   time.Time // [wall]
+
+	// cutSince is when this instance lost every path to its authority, zero while it
+	// has one; see driveCutOff.
+	cutSince time.Time // [wall]
 
 	// reconcileAt is the tick at which a successor that took the term reconciles
 	// its roster with what it can actually reach. Zero when nothing is pending.
@@ -278,11 +289,13 @@ func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
 	u.anchor = o.Anchor
 	u.chain = slices.Clone(o.Chain)
 	u.fixed = o.FixedAuthority
+	u.direct = o.Relay == 0 && o.Host != local
 	u.fork = false
 	u.record = network.HandoffRecord{}
 	clear(u.accepted)
-	u.contested, u.lost, u.opened, u.published = 0, 0, time.Time{}, false
-	u.reports, u.reportsFor, u.resumeBy = nil, 0, time.Time{}
+	u.contested, u.lost, u.opened, u.walkFrom = 0, 0, time.Time{}, time.Time{}
+	u.redialing, u.published, u.cutSince = false, false, time.Time{}
+	u.reports, u.reportsFor, u.resumeBy = nil, u.term, time.Time{}
 	u.reconcileAt, u.badgeUntil = 0, 0
 	u.mu.Unlock()
 	u.statMigrating.Store(false)
@@ -371,9 +384,15 @@ func (u *Authority) refuse(from uint32, term network.AuthorityTerm, why string) 
 
 // === succession ===
 
+// reportKey is one report: who sent it, and the term it names.
+type reportKey struct {
+	from network.PeerID
+	term network.AuthorityTerm
+}
+
 // peerLost is the transport's report that a direct neighbour has gone. It starts
-// a succession only for the participant that was authoring; every other departure
-// changes this instance's reach, which the next report it sends will carry.
+// a succession only for the participant that was authoring; any other departure
+// is the authority's to cross.
 func (u *Authority) peerLost(id uint32) {
 	u.mu.Lock()
 	start := u.term > 0 && network.PeerID(id) == u.holder && u.local != u.holder && u.contested == 0
@@ -384,52 +403,98 @@ func (u *Authority) peerLost(id uint32) {
 	u.beginSuccession(network.PeerID(id))
 }
 
-// beginSuccession opens the election for the next term and floods this survivor's
-// input to it.
+// beginSuccession opens the walk down the candidates for the authority that went and
+// floods this survivor's notice. One with a link of its own to that authority
+// redials it first, and its walk begins when the redial ends; any other walks at
+// once.
 func (u *Authority) beginSuccession(lost network.PeerID) {
 	u.mu.Lock()
-	if u.contested != 0 || u.term == 0 {
+	if u.contested != 0 || u.term == 0 || u.fork {
 		u.mu.Unlock()
 		return
 	}
-	u.contested = u.term + 1
-	u.lost = lost
-	u.opened = time.Now() // [wall]
-	u.reports, u.reportsFor = make(map[network.PeerID]bool, len(u.roster)), u.contested
-	u.published = false
-	term, local, fixed := u.contested, u.local, u.fixed
+	now := time.Now() // [wall]
+	u.contested, u.lost, u.opened = u.term, lost, now
+	u.walkFrom, u.redialing, u.published = time.Time{}, false, false
+	u.reportsFor = u.term
+	maps.DeleteFunc(u.reports, func(k reportKey, _ struct{}) bool { return k.term < u.term })
+	held, local, fixed, direct := u.contested, u.local, u.fixed, u.direct
 	u.mu.Unlock()
 
-	// Nobody plays on in a world the successor is about to replace, so the session
-	// stands still until it resumes; a pinned one forks at once instead.
-	if !fixed {
+	redial := direct && u.inst.Redial(lost)
+	u.mu.Lock()
+	if u.contested == held {
+		u.redialing = redial
+		if !redial {
+			u.walkFrom = now
+		}
+	}
+	u.mu.Unlock()
+	// Nobody plays on in a world the next host is about to replace, so the session
+	// stands still until it resumes; a pinned one forks once its redial ends.
+	if !fixed || redial {
 		u.inst.Freeze()
 	}
 	u.statMigrating.Store(true)
-	u.log.Warn("session", "msg", "authority lost; succession opened",
-		"peer", uint64(lost), "term", uint64(term), "local", uint64(local))
+	u.log.Warn("session", "msg", "authority lost; walking the succession list",
+		"peer", uint64(lost), "term", uint64(held), "local", uint64(local), "redial", redial)
 	u.sendReport()
 	u.drive()
 }
 
-// sendReport floods the news that the authority is gone. It decides nothing — the
-// successor is a function of the roster — but only a direct neighbour sees the link
-// drop, and the crossing that would carry the news is produced by the participant
-// that is gone, so the notice travels instead.
-func (u *Authority) sendReport() {
+// Redialing reports that this instance still waits on its redial of lost: nothing
+// ended the wait and its window has not run out.
+func (u *Authority) Redialing(lost network.PeerID) bool {
 	u.mu.Lock()
-	term, lost := u.contested, u.lost
-	u.mu.Unlock()
-	u.report(term, lost)
+	defer u.mu.Unlock()
+	return u.redialOpenLocked(lost, time.Now()) // [wall]
 }
 
-// report floods this instance's notice that lost went, for the succession to term.
-func (u *Authority) report(term network.AuthorityTerm, lost network.PeerID) {
-	local := u.Local()
-	if term == 0 || local == 0 {
+// RedialAdmitted reports whether the run may go back to lost through the dial that
+// authority admitted, which it may until the walk begins. On true this instance
+// takes no turn and follows no record: the run it is replaced by is in its place.
+func (u *Authority) RedialAdmitted(lost network.PeerID) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if !u.redialOpenLocked(lost, time.Now()) { // [wall]
+		return false
+	}
+	u.contested, u.redialing, u.fork = 0, false, true
+	return true
+}
+
+// RedialRefused ends the wait on this instance's redial of lost: that authority
+// refused it, nothing answered at its door, or it holds no place for this instance.
+// The walk begins.
+func (u *Authority) RedialRefused(lost network.PeerID) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if now := time.Now(); u.redialOpenLocked(lost, now) { // [wall]
+		u.walkFrom = now
+	}
+}
+
+// redialOpenLocked is Redialing at now. Caller holds mu.
+func (u *Authority) redialOpenLocked(lost network.PeerID, now time.Time) bool {
+	return u.contested != 0 && u.lost == lost && u.redialing && u.walkFrom.IsZero() &&
+		now.Sub(u.opened) < parameter.NetworkSuccessionWindow
+}
+
+// sendReport floods this survivor's notice that its authority went, again on a link
+// opened during the walk: the far end may host, or carry this instance to a host,
+// and the record it took was flooded before the link existed.
+func (u *Authority) sendReport() {
+	u.mu.Lock()
+	rep := network.AuthorityReport{Term: u.contested, From: u.local, Lost: u.lost}
+	u.mu.Unlock()
+	u.report(rep)
+}
+
+// report records and floods one report of this instance's own.
+func (u *Authority) report(rep network.AuthorityReport) {
+	if rep.Term == 0 || rep.From == 0 {
 		return
 	}
-	rep := network.AuthorityReport{Term: term, From: local, Lost: lost}
 	u.recordReport(rep)
 	body, err := network.EncodeAuthorityReport(rep)
 	if err != nil {
@@ -460,25 +525,39 @@ func (u *Authority) seat() bool {
 	return i >= 0 && roster[i].Holder != 0
 }
 
-// recordReport notes one survivor's loss notice, reporting whether it was new.
-// The set is what terminates the flood: a notice says one thing and says it once.
+// recordReport notes one report, reporting whether it was new. The set is what ends
+// the flood: a report says one thing and says it once. One naming a term before the
+// lost authority's is history.
 func (u *Authority) recordReport(rep network.AuthorityReport) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if rep.Term != u.reportsFor || u.reports == nil || rep.From == 0 || u.reports[rep.From] {
+	k := reportKey{from: rep.From, term: rep.Term}
+	if u.term == 0 || rep.From == 0 || rep.Term < u.reportsFor {
 		return false
 	}
-	u.reports[rep.From] = true
+	if _, seen := u.reports[k]; seen {
+		return false
+	}
+	if u.reports == nil {
+		u.reports = make(map[reportKey]struct{}, 2*len(u.roster))
+	}
+	u.reports[k] = struct{}{}
 	return true
+}
+
+// reportedLocked reports a membership id sent at term. Caller holds mu.
+func (u *Authority) reportedLocked(id network.PeerID, term network.AuthorityTerm) bool {
+	_, ok := u.reports[reportKey{from: id, term: term}]
+	return ok
 }
 
 // drive advances the succession. It is called from the correction loop, which runs
 // between two ticks on every instance whichever half of the protocol it is, and
-// from each succession frame that arrives — so the election proceeds on evidence
-// rather than on a schedule.
+// from each succession frame that arrives — so the walk proceeds on evidence as
+// well as on its deadlines.
 func (u *Authority) drive() {
 	u.mu.Lock()
-	contested, opened := u.contested, u.opened
+	contested := u.contested
 	badge, reconcile := u.badgeUntil, u.reconcileAt
 	due := u.chainDue
 	u.chainDue = false
@@ -495,43 +574,75 @@ func (u *Authority) drive() {
 		u.statMigrating.Store(false)
 	}
 	if reconcile != 0 && tick >= reconcile {
-		roster := u.currentRoster()
-		u.mu.Lock()
-		u.reconcileAt = 0
-		local := u.local
-		u.mu.Unlock()
-		u.inst.DropAbandonedCursors(roster, local)
+		u.reconcile()
 	}
+	now := time.Now() // [wall] the walk and the policies below run over links, not the game
+	cut := contested == 0 && u.reach.cutOff()
 	// The reachability work runs on the same loop and for the same reason: it is
 	// between two ticks, on every instance, whichever half of the protocol it is.
-	u.reach.drive(contested != 0)
-	u.driveEviction(time.Now()) // [wall] a policy over the link, not the game
-	u.driveIngress(time.Now())  // [wall] likewise
+	u.reach.drive(contested != 0 || cut)
+	u.driveEviction(now)
+	u.driveIngress(now)
 	if contested != 0 {
-		u.mu.Lock()
-		fixed := u.fixed
-		u.mu.Unlock()
-		// A session that pinned its authorship has nothing to elect and nothing to
-		// wait for. The succession still *opens*, because opening it is what floods
-		// the loss to survivors a relay away, and it ends in the same place a
-		// fruitless one does — one window earlier, because no record is coming.
-		if !fixed {
-			u.trySucceed()
-		}
-		u.mu.Lock()
-		stillOpen := u.contested == contested
-		u.mu.Unlock()
-		if stillOpen && (fixed || time.Since(opened) > parameter.NetworkSuccessionWindow) { // [wall]
-			u.giveUp()
-		}
+		u.driveWalk(now)
 	}
+	u.driveCutOff(cut, now)
 	u.driveResume()
 }
 
-// driveResume ends the successor's window: its group resumes once every survivor's
-// notice is in, each a path to this instance, or once the window runs out for
-// whoever is missing. The lost authority's own bots went with it, and nothing
-// reports for a Wraith.
+// driveWalk takes this instance's turn on the list when it comes, and gives the
+// session up past the last one, or at once in a pinned session, which has nobody
+// to walk to. A redial nothing ended runs one window.
+func (u *Authority) driveWalk(now time.Time) {
+	roster := u.currentRoster()
+	u.mu.Lock()
+	if u.walkFrom.IsZero() && now.Sub(u.opened) >= parameter.NetworkSuccessionWindow {
+		u.walkFrom = u.opened.Add(parameter.NetworkSuccessionWindow)
+	}
+	contested, from, fixed := u.contested, u.walkFrom, u.fixed
+	turns := len(network.SuccessionCandidates(roster, u.lost, u.chain))
+	u.mu.Unlock()
+	if from.IsZero() {
+		return
+	}
+	if !fixed {
+		u.trySucceed(now)
+	}
+	u.mu.Lock()
+	stillOpen := u.contested == contested
+	u.mu.Unlock()
+	switch {
+	case !stillOpen:
+	case fixed:
+		u.giveUp("the session pinned its authority")
+	case now.Sub(from) >= time.Duration(turns)*parameter.NetworkSuccessionWindow:
+		u.giveUp("no candidate's record arrived")
+	}
+}
+
+// driveCutOff gives up a session this instance has had no path to for as long as a
+// walk down the whole list takes: no candidate it reached carries it.
+func (u *Authority) driveCutOff(cut bool, now time.Time) {
+	u.mu.Lock()
+	if !cut {
+		u.cutSince = time.Time{}
+		u.mu.Unlock()
+		return
+	}
+	if u.cutSince.IsZero() {
+		u.cutSince = now
+	}
+	since, holder, chain := u.cutSince, u.holder, slices.Clone(u.chain)
+	u.mu.Unlock()
+	turns := len(network.SuccessionCandidates(u.currentRoster(), holder, chain)) + 1
+	if now.Sub(since) >= time.Duration(turns)*parameter.NetworkSuccessionWindow {
+		u.giveUp("no participant carries this instance to its authority")
+	}
+}
+
+// driveResume ends the host's window: its group resumes once every survivor's
+// membership is in, or once the window runs out for whoever is missing. The lost
+// authority's own bots went with it, and nothing reports for a Wraith.
 func (u *Authority) driveResume() {
 	u.mu.Lock()
 	by, lost := u.resumeBy, u.record.Predecessor
@@ -542,7 +653,7 @@ func (u *Authority) driveResume() {
 	roster := u.currentRoster()
 	u.mu.Lock()
 	missing := slices.ContainsFunc(roster, func(p network.RosterEntry) bool {
-		return p.ID != lost && p.Holder != lost && !p.Away && !u.reports[p.ID]
+		return p.ID != lost && p.Holder != lost && !p.Away && !u.reportedLocked(p.ID, u.term)
 	})
 	if u.resumeBy.IsZero() || missing && time.Now().Before(by) { // [wall]
 		u.mu.Unlock()
@@ -551,6 +662,27 @@ func (u *Authority) driveResume() {
 	u.resumeBy = time.Time{}
 	u.mu.Unlock()
 	u.inst.Thaw()
+}
+
+// reconcile keeps the place of every participant the host's group does not hold as
+// a Wraith, a floor after play resumed: a survivor that followed another host, or
+// none, reported no membership at this term. Its bots wait with it, and one away
+// waits already. The lost authority's departure crossed as the term was taken.
+func (u *Authority) reconcile() {
+	roster := u.currentRoster()
+	u.mu.Lock()
+	u.reconcileAt = 0
+	var away []network.RosterEntry
+	for _, p := range roster {
+		if p.ID != u.local && p.ID != u.record.Predecessor && p.Holder == 0 && !p.Away &&
+			!u.reportedLocked(p.ID, u.term) {
+			away = append(away, p)
+		}
+	}
+	u.mu.Unlock()
+	if len(away) > 0 {
+		u.inst.CrossDepartures(away)
+	}
 }
 
 // restartRun moves the pending deadlines onto a run that restarted the tick count
@@ -567,24 +699,23 @@ func (u *Authority) restartRun(tick uint64) {
 	}
 }
 
-// trySucceed takes the term when the succession names this instance. The successor
-// is a pure function of the roster, the chain and the participant that went, so at
-// most one instance publishes, as soon as it notices. A quorum would add a round
-// trip and elect nobody in a session of two, where one survivor is half the roster.
-// The one self-check is retention: without a baseline it stands down.
-func (u *Authority) trySucceed() {
+// trySucceed takes a term when this instance's turn on the list has come and no
+// record reached it first. Candidate k takes the term k past the lost one's once
+// k-1 turns of a window each passed, so no two hosts' records share a term and an
+// earlier candidate's record wins wherever it arrives in time. The one self-check is
+// retention: without a baseline it lets its turn pass.
+func (u *Authority) trySucceed(now time.Time) {
 	roster := u.currentRoster()
 	u.mu.Lock()
-	if u.contested == 0 || u.published || u.local == 0 {
+	if u.contested == 0 || u.published || u.local == 0 || u.walkFrom.IsZero() {
 		u.mu.Unlock()
 		return
 	}
-	term, lost, local := u.contested, u.lost, u.local
-	chain := slices.Clone(u.chain)
+	held, lost, local, from := u.contested, u.lost, u.local, u.walkFrom
+	k := slices.Index(network.SuccessionCandidates(roster, lost, u.chain), local) + 1
 	u.mu.Unlock()
-
-	if want, ok := network.DesignatedSuccessor(roster, lost, chain); !ok || want != local {
-		return // not this instance's term to take; the record or the window decides
+	if k == 0 || now.Sub(from) < time.Duration(k-1)*parameter.NetworkSuccessionWindow {
+		return
 	}
 	evidenceTick, retained := u.corrections.retentionEvidence()
 	if retained == 0 {
@@ -592,13 +723,13 @@ func (u *Authority) trySucceed() {
 	}
 
 	u.mu.Lock()
-	if u.contested != term || u.published {
+	if u.contested != held || u.published {
 		u.mu.Unlock()
 		return
 	}
 	u.published = true
 	rec := network.HandoffRecord{
-		Term:        term,
+		Term:        held + network.AuthorityTerm(k),
 		Authority:   local,
 		Predecessor: lost,
 		Roster:      roster,
@@ -614,49 +745,39 @@ func (u *Authority) trySucceed() {
 		u.log.Error("session", "msg", "succession could not adopt its own record", "error", err.Error())
 		return
 	}
-	// The roster the successor took over names participants it may have no path to
-	// — in a star, every guest but itself. Reconciled a floor after play resumes
-	// rather than now, because a survivor that is merely a relay hop away is still
-	// arriving and dropping it here would destroy a cursor it still simulates.
+	// The roster taken over names everyone, the group or not. Reconciled a floor
+	// after play resumes rather than now, because a survivor a relay away is still
+	// arriving and keeping it away here would take a cursor it still simulates.
 	u.mu.Lock()
 	u.reconcileAt = u.inst.Position().Tick + parameter.NetworkSuccessionTicks
-	u.resumeBy = u.opened.Add(parameter.NetworkSuccessionWindow)
+	u.resumeBy = now.Add(parameter.NetworkSuccessionWindow)
 	u.mu.Unlock()
-
-	if body, err := network.EncodeHandoff(rec); err == nil {
-		u.flood(network.MsgAuthorityHandoff, 0, body)
-	}
 }
 
-// giveUp ends a succession no record ever answered: this instance is not the
-// designated successor and cannot reach the one that is, it is and had nothing
-// retained to author from, or the session pinned its authority. What is left is the
-// local-continuation fallback, said plainly: this instance continues its own game
-// from the last authoritative state.
-func (u *Authority) giveUp() {
+// giveUp ends a walk no record answered, or a path no participant restored: this
+// instance's turn never came or it had nothing retained to author from, or the
+// session pinned its authority. What is left is the local continuation, said
+// plainly: this instance continues its own game from the last authoritative state.
+func (u *Authority) giveUp(why string) {
 	// Read before the state is cleared: the run goes on with the roster it held when
 	// its authority went.
 	roster := u.currentRoster()
 	u.mu.Lock()
-	if u.contested == 0 {
+	if u.fork || u.term == 0 {
 		u.mu.Unlock()
 		return
 	}
-	term, lost, local, fixed := u.contested, u.lost, u.local, u.fixed
-	u.contested, u.published = 0, false
-	u.reports, u.reportsFor = nil, 0
+	held, holder, local := u.term, u.holder, u.local
+	u.contested, u.published, u.redialing = 0, false, false
+	u.walkFrom, u.cutSince = time.Time{}, time.Time{}
 	u.fork = true
 	u.mu.Unlock()
 
 	u.statMigrating.Store(false)
 	u.statHostLost.Store(true)
 	u.publish()
-	why := "no successor was reachable"
-	if fixed {
-		why = "the session pinned its authority"
-	}
-	u.log.Warn("session", "msg", "continuing locally", "held_term", uint64(u.Term()),
-		"contested_term", uint64(term), "lost", uint64(lost), "reason", why)
+	u.log.Warn("session", "msg", "continuing locally", "held_term", uint64(held),
+		"authority", uint64(holder), "reason", why)
 	u.inst.SetStatusMessage(
 		"Host connection lost; continuing locally from the last authoritative state", parameter.StatusAlert)
 	u.inst.Forked(roster, local)
@@ -668,11 +789,8 @@ func (u *Authority) giveUp() {
 // from is the link the record arrived on, or zero when this instance produced it.
 func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	roster := u.currentRoster()
+	direct := from == 0 || u.linked(rec.Authority)
 	u.mu.Lock()
-	if err := rec.Validate(roster, u.chain); err != nil {
-		u.mu.Unlock()
-		return err
-	}
 	// The conflict check comes first, and the order is the invariant rather than a
 	// preference: a rival record for a term this instance has already adopted is
 	// the split-brain case, and reaching the staleness test before it would
@@ -685,15 +803,17 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 		}
 		return nil // the same record arriving by a second path
 	}
-	if rec.Term <= u.term {
+	// One at or below the term held is history, and one for a loss this instance
+	// followed another host through, or none, is a group it did not join: past its
+	// window a survivor follows only the host it joined.
+	if rec.Term <= u.term || u.fork || rec.Predecessor != u.holder {
 		u.mu.Unlock()
-		return nil // the session has already moved past this record
+		return nil
 	}
-	if rec.Term != u.term+1 {
-		held := u.term
+	held := u.term
+	if err := rec.Validate(roster, u.chain, held); err != nil {
 		u.mu.Unlock()
-		return fmt.Errorf("handoff enters term %d from term %d; a term is never skipped",
-			rec.Term, held)
+		return err
 	}
 	u.term, u.holder = rec.Term, rec.Authority
 	u.roster = slices.Clone(rec.Roster)
@@ -703,16 +823,21 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	u.accepted[rec.Term] = rec
 	// An instance the record reaches before any notice sees its authority go only now.
 	learned := u.contested == 0
-	if u.reportsFor != rec.Term {
-		u.reports, u.reportsFor = make(map[network.PeerID]bool, len(rec.Roster)), rec.Term
+	if learned {
+		u.lost, u.reportsFor = rec.Predecessor, held
+		maps.DeleteFunc(u.reports, func(k reportKey, _ struct{}) bool { return k.term < held })
 	}
-	unreported := !u.reports[u.local]
-	u.contested, u.published = 0, false
-	u.fork = false
+	u.contested, u.published, u.redialing = 0, false, false
+	u.walkFrom, u.direct = time.Time{}, direct
 	u.badgeUntil = u.inst.Position().Tick + parameter.NetworkMigrationBadgeTicks
-	mine := u.local == rec.Authority
+	local, mine := u.local, u.local == rec.Authority
 	u.mu.Unlock()
 
+	// A record from a link other than its host's is followed through that link.
+	var via network.PeerID
+	if !direct {
+		via = network.PeerID(from)
+	}
 	if learned && !mine {
 		u.inst.Freeze()
 	}
@@ -720,22 +845,26 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	u.statMigrating.Store(true)
 	u.statHostLost.Store(false)
 	u.publish()
-	u.inst.AuthorityChanged(rec, mine)
+	u.inst.AuthorityChanged(rec, mine, via)
 
 	u.log.Warn("session", "msg", "authority handed off",
 		"term", uint64(rec.Term), "authority", uint64(rec.Authority),
 		"predecessor", uint64(rec.Predecessor), "roster", len(rec.Roster),
-		"evidence_tick", rec.EvidenceTick, "local", mine)
+		"evidence_tick", rec.EvidenceTick, "local", mine, "via", uint64(via))
 	u.inst.SetStatusMessage(
 		fmt.Sprintf("Authority moved to participant %d (term %d)", rec.Authority, rec.Term), parameter.StatusAlert)
 
+	// The host floods its record; a survivor passes it on only to the links it
+	// carries, since one it does not carry could not follow the host through it.
 	if body, err := network.EncodeHandoff(rec); err == nil {
-		u.flood(network.MsgAuthorityHandoff, from, body)
+		if mine {
+			u.flood(network.MsgAuthorityHandoff, 0, body)
+		} else {
+			u.forward(network.MsgAuthorityHandoff, from, body)
+		}
 	}
-	// The successor counts notices to know its group is in.
-	if unreported {
-		u.report(rec.Term, rec.Predecessor)
-	}
+	// Every member reports the term it joined, which is how its host counts its group.
+	u.report(network.AuthorityReport{Term: rec.Term, From: local, Lost: rec.Predecessor, Via: via})
 	return nil
 }
 
@@ -748,44 +877,35 @@ func (u *Authority) Chain() network.SuccessionChain {
 	return slices.Clone(u.chain)
 }
 
-// successor is the participant this instance would follow if the authority went
-// now. It is the same pure function succession runs, exposed so a survivor can
-// dial the right address before it needs one.
+// successor is the first candidate this instance would walk to if the authority
+// went now, exposed so a survivor holds a link to it before it needs one.
 func (u *Authority) successor() (network.PeerID, bool) {
 	roster := u.currentRoster()
 	u.mu.Lock()
-	holder, chain := u.holder, slices.Clone(u.chain)
-	u.mu.Unlock()
-	return network.DesignatedSuccessor(roster, holder, chain)
+	defer u.mu.Unlock()
+	list := network.SuccessionCandidates(roster, u.holder, u.chain)
+	if len(list) == 0 {
+		return 0, false
+	}
+	return list[0], true
 }
 
-// successionOrder is the succession list: every survivor of the authority's loss,
-// in the order the rule would elect them. It is what a survivor with no link
-// retries down, so a reconnect walks the same order the election does rather than
-// an order of its own.
-func (u *Authority) successionOrder() []network.PeerID {
+// walkTargets is whom this instance dials: during a walk each candidate whose turn
+// has begun, the first while it redials; cut off, every candidate, for one that
+// carries it. Never itself.
+func (u *Authority) walkTargets(now time.Time) []network.PeerID {
 	roster := u.currentRoster()
 	u.mu.Lock()
-	holder, local, chain := u.holder, u.local, slices.Clone(u.chain)
-	u.mu.Unlock()
-	alive := func(id network.PeerID) bool {
-		return id != 0 && id != holder && id != local &&
-			slices.ContainsFunc(roster, func(p network.RosterEntry) bool { return p.ID == id && !p.Away })
-	}
-	var out []network.PeerID
-	for _, e := range chain {
-		if alive(e.ID) {
-			out = append(out, e.ID)
+	defer u.mu.Unlock()
+	list := network.SuccessionCandidates(roster, u.holder, u.chain)
+	if u.contested != 0 {
+		turns := 1
+		if !u.walkFrom.IsZero() {
+			turns += int(now.Sub(u.walkFrom) / parameter.NetworkSuccessionWindow)
 		}
+		list = list[:min(turns, len(list))]
 	}
-	var rest []network.PeerID
-	for _, p := range roster {
-		if alive(p.ID) && !slices.Contains(out, p.ID) {
-			rest = append(rest, p.ID)
-		}
-	}
-	slices.Sort(rest)
-	return append(out, rest...)
+	return slices.DeleteFunc(list, func(id network.PeerID) bool { return id == u.local })
 }
 
 // appendChain adds one participant that declared a port, which only the
@@ -871,37 +991,38 @@ func (u *Authority) Receive(kind uint8, from uint32, body []byte) {
 	}
 }
 
-// onReport notes a survivor's loss notice and joins the succession it announces. A
-// participant that never saw the disconnect itself — one two links from the lost
-// authority — learns of it here, which is why the notices are flooded: the
-// departure crossing that would carry that news is the lost authority's to produce.
+// onReport notes one report and acts on it. A notice says its sender lost the
+// authority of the term it names: a survivor two links from that authority learns
+// of the loss here, and a host, or a survivor that carries the sender, answers with
+// the record it follows. A membership report names the term its sender joined.
 func (u *Authority) onReport(from uint32, body []byte) {
 	rep, err := network.DecodeAuthorityReport(body)
 	if err != nil || rep.From == 0 {
 		return
 	}
-	// A closing or dismissed peer may lose an authority that remains linked here.
-	if p, ok := u.inst.Transport().(interface{ Peers() []uint32 }); ok && slices.Contains(p.Peers(), uint32(rep.Lost)) {
+	// A survivor that follows its host through this instance names it, and the
+	// host's artifacts flow on down to it from here.
+	if rep.Via != 0 && rep.Via == u.Local() && from == uint32(rep.From) {
+		u.inst.Carry(from)
+	}
+	// A sender that lost an authority still linked here was cut off, closed or
+	// dismissed alone, which is no news here.
+	if u.linked(rep.Lost) {
 		return
 	}
 	u.mu.Lock()
-	held, contested, holder, local := u.term, u.contested, u.holder, u.local
+	held, contested, holder, local, base := u.term, u.contested, u.holder, u.local, u.reportsFor
+	resolved := contested == 0 && u.record.Term != 0 && u.record.Predecessor == rep.Lost
 	u.mu.Unlock()
-	if rep.Term <= held {
-		// A succession this instance has already resolved. The notice still travels,
-		// since the successor resumes once every survivor's is in, and the survivor
-		// still electing is told the record rather than left to time out.
-		if u.recordReport(rep) {
-			u.flood(network.MsgAuthorityReport, from, body)
-		}
-		u.answerElection(from)
-		return
-	}
-	if contested == 0 {
-		if rep.Lost != holder || local == holder {
-			return
-		}
+	switch {
+	case rep.Lost == local || rep.Lost != holder && !resolved:
+		return // a loss this instance is no survivor of
+	case contested == 0 && rep.Lost == holder && rep.Term == held:
 		u.beginSuccession(rep.Lost)
+	case resolved && rep.Term == base:
+		// Answered before the duplicate test: a survivor sends its notice again on
+		// each link it opens, and a new one may be how it reaches a host.
+		u.answer(from)
 	}
 	if !u.recordReport(rep) {
 		return
@@ -910,13 +1031,14 @@ func (u *Authority) onReport(from uint32, body []byte) {
 	u.drive()
 }
 
-// answerElection re-sends this instance's record to one survivor, when this
-// instance is the authority that record named.
-func (u *Authority) answerElection(to uint32) {
+// answer re-sends the record this instance follows to a survivor still walking: the
+// host answers every one, any other survivor one it carries, which then follows the
+// host through it.
+func (u *Authority) answer(to uint32) {
 	u.mu.Lock()
-	rec, holder, local := u.record, u.holder, u.local
+	rec, host := u.record, u.holder == u.local
 	u.mu.Unlock()
-	if rec.Term == 0 || holder != local || to == 0 {
+	if rec.Term == 0 || to == 0 || !host && !u.inst.Carries(to) {
 		return
 	}
 	body, err := network.EncodeHandoff(rec)
@@ -928,10 +1050,12 @@ func (u *Authority) answerElection(to uint32) {
 	}
 }
 
-// onHandoff adopts, or refuses, one record.
+// onHandoff adopts, or refuses, one record. One whose predecessor is still linked
+// here is another group's, this one's host being alive; should that link go, this
+// instance's notice is answered with it.
 func (u *Authority) onHandoff(from uint32, body []byte) {
 	rec, err := network.DecodeHandoff(body)
-	if err != nil {
+	if err != nil || u.linked(rec.Predecessor) {
 		return
 	}
 	if err := u.adopt(rec, from); err != nil {
@@ -941,6 +1065,27 @@ func (u *Authority) onHandoff(from uint32, body []byte) {
 			"error", err.Error())
 		u.inst.SetStatusMessage("Refused a conflicting authority handoff: "+err.Error(), parameter.StatusAlert)
 	}
+}
+
+// forward passes one succession frame on to the links this instance carries but the
+// one it arrived on.
+func (u *Authority) forward(kind network.MessageType, exclude uint32, body []byte) {
+	port := u.inst.Transport()
+	p, ok := port.(interface{ Peers() []uint32 })
+	if !ok || !port.IsRunning() {
+		return
+	}
+	for _, id := range p.Peers() {
+		if id != exclude && u.inst.Carries(id) {
+			port.Send(id, uint8(kind), body)
+		}
+	}
+}
+
+// linked reports a direct link to id.
+func (u *Authority) linked(id network.PeerID) bool {
+	p, ok := u.inst.Transport().(interface{ Peers() []uint32 })
+	return ok && id != 0 && slices.Contains(p.Peers(), uint32(id))
 }
 
 // flood forwards one succession frame to every direct neighbour but the link it
@@ -987,7 +1132,7 @@ func (u *Authority) Summary() string {
 		line += fmt.Sprintf(", %d handoff(s)", migrations)
 	}
 	if contested != 0 {
-		line += fmt.Sprintf("; electing term %d", contested)
+		line += "; host lost, walking the succession list"
 	}
 	if fork {
 		line += "; LOCAL FORK — this instance is no longer part of the session"

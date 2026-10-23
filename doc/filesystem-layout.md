@@ -127,7 +127,7 @@ take; `[audio] buffer_ms` sets the mixer period; `[presentation] window = true` 
 the desktop window by default, as `-g` does, and `maximized` or `fullscreen` the
 state it opens in, and `cell` is the zoom Android and a browser open at; `[play]` is
 how a run starts and what the configuration menu changes in it: the sound channels,
-the effects volume, auto-fire, mouse input, pointer following and the telemetry HUD. It is found like any resource,
+the effects volume, auto-fire, mouse input, pointer following, the telemetry HUD and relaying for others. It is found like any resource,
 from `-config-dir` down to the system roots; the first file wins whole, a key it
 omits keeps the embedded default, and the `vif.toml` inside its own `root` is not
 read. Every key is a default: a flag given on the command line wins, and `-d`

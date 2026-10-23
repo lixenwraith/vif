@@ -251,11 +251,10 @@ func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) e
 }
 
 // bindCursorOwnersLocked writes each slot's owning participant onto its cursor, and
-// which of them this instance drives. The owner travels in every capture, and a
-// slot no roster can attribute is a participant a succession cannot see leave. A
-// Wraith keeps the owner it left with, and nobody drives it; it takes the claim the
-// roster names, which a session a run opens names afresh for its bots. Caller MUST
-// hold updateMutex.
+// which of them this instance drives: a slot no roster attributes is a participant
+// a succession cannot see leave. A Wraith keeps the owner it left with, driven by
+// nobody, under the claim the roster names, which a session a run opens names
+// afresh for its bots. Caller MUST hold updateMutex.
 func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local network.PeerID) {
 	roster := a.world.Resources.Player
 	for _, p := range participants {
@@ -361,6 +360,8 @@ func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnAuthorityAhead = a.authorityAhead
 	r.DismissWraith = func() uint32 { return a.dismissWraith.Swap(0) }
 	r.WraithKept = a.wraithKept
+	// Read as each artifact arrives, since the context is built after the world.
+	r.Relaying = func() bool { return a.ctx.Relaying.Load() }
 	r.OnOwnState = a.keepRecord
 }
 

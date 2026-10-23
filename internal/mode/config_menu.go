@@ -52,6 +52,9 @@ var configPages = []configPage{
 		configFormOption("host"), configFormOption("join"), configFormOption("request"),
 		withDisabled(commandAction("leave", "Leave the session", "Play on in a session of your own from where this one stands; your bots come along, and the others play on without you.", "leave"),
 			sessionRefusal(engine.SessionController.LeaveError)),
+		{key: "relay", label: "Relay for others", description: "Carry the game for players who reach this run and not their host, as after a host loss. Off by default; one that joined through this run is carried either way.",
+			command: "relay", choices: []string{"off", "on"},
+			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Relaying.Load()) }, disabled: relayUnavailable},
 	}, extra: sessionConfigOptions},
 	{key: "audio", label: "Audio", description: "Music, sound effects and effects volume.", options: []configOption{
 		{key: "effects", label: "Sound effects", description: "Game sound effects; independent of music.",

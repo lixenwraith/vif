@@ -64,15 +64,15 @@ Four ways to be in a session, which differ in less than the flag names suggest:
 The guest's port is what makes migration mean anything. The coordinator completes
 the declared address from the connection it arrived on and publishes it,
 unconfirmed, in the succession chain; every participant but a seated bot keeps a
-link open to the current successor, so the instance that has to author already has
-one at a handoff. `-listen <addr>` names the port and the default is the host's
+link open to the first candidate on it, so the instance likeliest to author already
+has one at a handoff. `-listen <addr>` names the port and the default is the host's
 own, either falling back to an OS-assigned one when it is taken; `-no-advertise` —
 or a bind that fails, or an `-authority host` session — leaves the participant a
-leaf that plays normally and, in a migrate session, is elected only when the chain
-names no survivor. `-relay <addr>` makes a joined participant a door for people
-who cannot reach the host: they `-join` that address, take independent slots, and
-play through it; a person admitted that way is a leaf unless it passes `-listen`,
-and keeps its slot when its relay leaves. See [Multiplayer](multi-player.md) §5.
+leaf that plays normally and is never a candidate. `-relay <addr>` makes a joined
+participant a door for people who cannot reach the host: they `-join` that address,
+take independent slots, and play through it; a person admitted that way is a leaf
+unless it passes `-listen`, and keeps its slot when its relay leaves. See
+[Multiplayer](multi-player.md) §5.
 
 Everything else about the session is one implementation. `-players` is a ceiling
 on every host and unset means the whole roster; the mid-run gate is
@@ -262,8 +262,8 @@ It also outlives its own authority, and that is why `-serve` defaults to
 allocator handed out and what every guest holds, so if the process goes, the answer
 is an orchestrator putting another one at that address and the guests dialling back
 — not a guest declaring itself the host. This is policy, not a limit:
-a migrate session's guests declare ports and its successor is the first surviving
-member of the published chain ([Multiplayer](multi-player.md) §5.1, §5.3), and
+a migrate session's guests declare ports and its survivors walk the published chain
+for a new host ([Multiplayer](multi-player.md) §5.1, §5.3), and
 `-serve` still pins authorship because the address it was allocated at is the
 session's identity.
 

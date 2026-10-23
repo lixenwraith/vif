@@ -359,21 +359,22 @@ const (
 	// problem the ledger cannot fix.
 	PredictionLedgerMax = 1024
 
-	// NetworkSuccessionWindow bounds a succession on the wall clock, since the session
-	// stands frozen through it: a survivor no handoff reaches by then continues
-	// locally and says so, and the successor resumes without whoever has not linked.
-	// A deadline, never a timer to choose by: the successor is a function of the
-	// roster and chain, and a racing timer could let two instances take one term.
+	// NetworkSuccessionWindow is one turn of a succession on the wall clock, since
+	// the session stands frozen through it: a survivor redials its lost host for one,
+	// each candidate on the list hosts one turn after the one above it, and a host
+	// resumes its group within one. Each candidate takes a term of its own, so turns
+	// that overlap on skewed clocks never put two hosts on one term.
 	NetworkSuccessionWindow = 5 * time.Second
 
-	// NetworkSuccessionTicks is how long a successor plays on before it drops the
-	// participants it took over and cannot reach: one convergence floor.
+	// NetworkSuccessionTicks is how long a host that took the term plays on before
+	// the participants its group does not hold depart as Wraiths: one convergence
+	// floor.
 	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
 
-	// NetworkRejoinPassInterval paces a survivor's walk down the succession list. A
-	// pass tries every candidate once; this is the pause before the list is walked
-	// again, so a successor that is merely slow is retried without the list
-	// becoming a spin.
+	// NetworkRejoinPassInterval paces a survivor's walk down the succession list and
+	// its redial of the host it lost. A pass tries every candidate whose turn began
+	// once; this is the pause before the next, so a successor or a host that is
+	// merely slow is retried without the walk becoming a spin.
 	NetworkRejoinPassInterval = time.Second
 
 	// NetworkMigrationBadgeTicks is how long the status bar shows MIGRATING after

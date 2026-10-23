@@ -69,9 +69,9 @@ Four limits follow, and §3 is sorted against them:
 
 Every approach keeps these; one that needs another is out of scope here.
 
-- **The whole world everywhere.** Any survivor may be elected and must answer the
-  next manifest from retention (multi-player §5.1), so nothing filters crossings or
-  corrections by interest. Relevance schedules a peer's cadence
+- **The whole world everywhere.** Any candidate may take the term and must answer
+  the next manifest from retention (multi-player §5.1), so nothing filters crossings
+  or corrections by interest. Relevance schedules a peer's cadence
   (`SnapshotRelevanceRadius`) and never filters.
 - **Lossless, proved, whole repairs.** A repair reconstructs the authority's root and
   applies whole (D-23): an encoding may change, a value may not be rounded, and pages

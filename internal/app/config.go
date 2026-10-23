@@ -355,6 +355,11 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 		if next.Join != "" {
 			c.JoinAddress = next.Join
 		}
+	case next.Join == "" && next.dialled != nil:
+		solo := c
+		solo.JoinAddress, solo.SessionName = "", ""
+		c.dialled = next.dialled
+		return c, &solo
 	case next.Join != "":
 		solo := c
 		solo.JoinAddress, solo.SessionName = "", ""

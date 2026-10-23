@@ -2,6 +2,7 @@ package system
 
 import (
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -202,6 +203,7 @@ func TestAGuestSendsTheAuthorityOneFrameATick(t *testing.T) {
 	t.Parallel()
 	port := &linkedPort{peers: []uint32{1, 3}}
 	s := sessionSystem(t, 2, 100, port)
+	s.Carry(3)
 	s.scheduleCrossings(3, rawBatch(t, 3, 100, 104))
 	s.Flush(100)
 	if len(port.sent) != 1 || port.sent[0].to != 1 || port.sent[0].kind != network.MsgBundle {
@@ -629,7 +631,8 @@ func TestAGuestForwardsDownOnlyToThoseBehindIt(t *testing.T) {
 	t.Parallel()
 	port := &linkedPort{peers: []uint32{1, 3, 4}}
 	guest := sessionSystem(t, 2, 100, port)
-	guest.scheduleCrossings(3, rawBatch(t, 3, 100, 104)) // participant 3 is behind this guest
+	guest.Carry(3)
+	guest.scheduleCrossings(3, rawBatch(t, 3, 100, 104))
 	port.sent = nil
 	guest.scheduleCrossings(1, boundsBatch(t, 5, 100, 105, 1, 0))
 	chunks, err := network.EncodeSnapshotChunks(0, 100, []byte("world"))
@@ -640,6 +643,45 @@ func TestAGuestForwardsDownOnlyToThoseBehindIt(t *testing.T) {
 	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{3, 3}) {
 		t.Fatalf("the guest sent to %v and flooded %d frames, want the copy and the chunk to participant 3 alone",
 			got, len(port.flooded))
+	}
+}
+
+// TestAGuestCarriesOnlyWhomItRelaysFor: a raw epoch on a link this guest does not
+// carry is dropped and counted, so nobody's traffic lands on a run that did not
+// offer to carry it. One that joined through it is carried whatever its player
+// chose, and any once its player relays for others.
+func TestAGuestCarriesOnlyWhomItRelaysFor(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{1, 3, 4}}
+	s := sessionSystem(t, 2, 100, port)
+	var relaying atomic.Bool
+	s.world.Resources.Network.Relaying = relaying.Load
+	carried := func(from uint32, produced uint64) bool {
+		t.Helper()
+		port.sent = nil
+		s.scheduleCrossings(from, rawBatch(t, from, produced, produced+4))
+		s.Flush(produced)
+		if len(port.sent) != 1 {
+			t.Fatalf("the guest sent %d frames, want its bundle to the authority", len(port.sent))
+		}
+		var sources []uint32
+		_ = network.Unbundle(port.sent[0].body, func(kind network.MessageType, body []byte) {
+			if b, err := event.DecodeWireBatch(body); err == nil && kind == network.MsgEvent {
+				sources = append(sources, b.Source)
+			}
+		})
+		return slices.Contains(sources, from)
+	}
+	if carried(3, 100) || s.statUncarried.Load() != 1 {
+		t.Fatalf("a link this guest does not carry was carried, %d refused", s.statUncarried.Load())
+	}
+	s.served[4] = true
+	if !carried(4, 101) {
+		t.Fatal("a participant that joined through this guest was not carried")
+	}
+	relaying.Store(true)
+	if !carried(3, 102) || s.statUncarried.Load() != 1 {
+		t.Fatal("a guest relaying for others did not carry a participant that reaches it")
 	}
 }
 

@@ -58,6 +58,7 @@ type Play struct {
 	Mouse       bool    `toml:"mouse"`
 	FollowMouse bool    `toml:"follow_mouse"`
 	HUD         bool    `toml:"hud"`
+	Relay       bool    `toml:"relay"`
 }
 
 func (p Play) check() error {

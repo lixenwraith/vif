@@ -140,6 +140,10 @@ type NetworkSystem struct {
 	statCommitVoid  *atomic.Int64
 	statUncommitted *atomic.Int64
 
+	// statUncarried counts raw artifacts from a participant this instance does not
+	// carry toward the authority, its player not relaying for others.
+	statUncarried *atomic.Int64
+
 	// The link measurement: the slowest link's round trip, variation, rate and
 	// peer, and the highest loss any link reports. It is the transport's own
 	// estimate, read and stored, so a network round trip never becomes a value a
@@ -203,6 +207,11 @@ type NetworkSystem struct {
 	// own epochs committed once that was gone.
 	downAt [participantSlots]uint64
 	relay  uint32
+
+	// served marks, per link, a participant that joined through this instance: one
+	// it carries toward the authority whatever its player chose. Any other it
+	// carries only once its player turned relaying on; see carries.
+	served [participantSlots]bool
 
 	// upstream is this tick's raw artifacts for the authority on a guest linked to
 	// it, its own and those it carries; Flush sends them as one frame.
@@ -438,6 +447,7 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statCommitLate = s.intStat(reg, "network.commit_late")
 	s.statCommitVoid = s.intStat(reg, "network.commit_void")
 	s.statUncommitted = s.intStat(reg, "network.commit_refused_raw")
+	s.statUncarried = s.intStat(reg, "network.relay_refused")
 	s.statRTT = s.intStat(reg, "network.link_rtt_ms")
 	s.statJitter = s.intStat(reg, "network.link_jitter_ms")
 	s.statLinkBps = s.intStat(reg, "network.link_bps")
@@ -745,6 +755,7 @@ func (s *NetworkSystem) LeaveSession() {
 		return a.source != local || et == event.EventParticipantJoined || et == event.EventParticipantDeparted
 	})
 	s.relay = 0
+	s.served = [participantSlots]bool{}
 }
 
 // forgetLocked clears the sources gone names and drops the artifacts drop names,
@@ -1537,12 +1548,16 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 		in := &s.buf[i]
 		switch in.Kind {
 		case network.InboundConnect:
-			if in.Served {
+			if in.Served && int(in.Peer) < len(s.served) {
+				s.served[in.Peer] = true
 				s.noteDown(uint32(in.Peer))
 			}
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
 			s.world.LatchSession()
 		case network.InboundDisconnect:
+			if int(in.Peer) < len(s.served) {
+				s.served[in.Peer] = false
+			}
 			s.world.LatchSession()
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
 			dropped := s.reportDisconnect(uint32(in.Peer), p.PeerCount())
@@ -1557,12 +1572,11 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 	}
 }
 
-// reportDisconnect names link loss when it happens. A digest cannot: once the edge
-// is gone nothing on it sends a mismatching one, so the worst transport failure
-// would look like silence. Losing the authority is called out separately on a
-// guest, which continues from the last authoritative state — a fork rather than a
-// session until a succession adopts a term. It reports whether the link was a seat
-// this run dropped.
+// reportDisconnect names link loss when it happens, which a digest cannot: once the
+// edge is gone nothing on it sends a mismatching one. Losing the authority is
+// called out apart on a guest, which plays on from the last authoritative state
+// until a succession settles. It reports whether the link was a seat this run
+// dropped.
 func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) (dropped bool) {
 	authorityLost := peerID == s.authorityParticipant() && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
@@ -1601,12 +1615,11 @@ func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
 	s.pendingDigest[peer] = stateDigest{}
 }
 
-// noticeDeparture changes nothing: only a direct neighbour sees a lost link, at a
-// moment its transport chose, so acting here would change a shared cursor at a
-// different tick on every instance. The coordinator crosses the one departure and
-// any other neighbour floods a notice. The identity returns to the pool when that
-// crossing applies, or here for a participant with no cursor, which has none.
-// dismissed is a seat this run dropped, which leaves for good.
+// noticeDeparture changes no shared cursor: only a direct neighbour sees a lost
+// link, at a moment its transport chose, so the coordinator crosses the departure
+// and any other neighbour floods a notice. The identity returns to the pool when
+// that crossing applies, or here for a participant with no cursor. dismissed is a
+// seat this run dropped, which leaves for good.
 func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
 	if _, crossed := s.participantSlot(peerID); !crossed {
 		if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
@@ -2090,6 +2103,10 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	raw := !batch.Committed && batch.Source != authority
 	committing := raw && local == authority
 	if raw && batch.Source != local {
+		if !committing && !s.carries(from) {
+			s.statUncarried.Add(1)
+			return
+		}
 		s.noteDown(from)
 	}
 	switch {
@@ -2269,6 +2286,39 @@ func (s *NetworkSystem) noteDown(from uint32) {
 func (s *NetworkSystem) behind(id uint32, tick uint64) bool {
 	at := s.downAt[id]
 	return at != 0 && tick <= at+parameter.NetworkEpochWindow
+}
+
+// carries reports whether this instance passes a participant's raw artifacts on
+// toward the authority: one that joined through it or is behind it already, or any
+// once its player turned relaying on, so nobody's traffic lands on a participant
+// that did not offer to carry it.
+func (s *NetworkSystem) carries(from uint32) bool {
+	if from == 0 || int(from) >= len(s.served) {
+		return false
+	}
+	r := s.world.Resources.Network
+	return s.served[from] || s.behind(from, s.localTick()) || r != nil && r.Relaying != nil && r.Relaying()
+}
+
+// Carries is carries for the session layer, which answers a walking survivor with
+// the record it follows only when it would carry that survivor's artifacts.
+// Caller holds the world lock.
+func (s *NetworkSystem) Carries(id uint32) bool { return s.carries(id) }
+
+// Carry marks a participant that follows its host through this instance behind it,
+// so the host's artifacts flow down to it before it has sent any of its own.
+// Caller holds the world lock.
+func (s *NetworkSystem) Carry(id uint32) { s.noteDown(id) }
+
+// Reaches reports a path to the authority. Caller holds the world lock.
+func (s *NetworkSystem) Reaches() bool { return s.up() != 0 }
+
+// FollowThrough takes the link a handoff came through as this instance's path to
+// the host it names, which it has no link of its own to. Caller holds the world lock.
+func (s *NetworkSystem) FollowThrough(id uint32) {
+	if id != 0 {
+		s.relay = id
+	}
 }
 
 // up is the link toward the authority: the authority itself, else the relay this
@@ -2847,6 +2897,10 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 		return
 	}
 	if raw && !own {
+		if !committing && !s.carries(from) {
+			s.statUncarried.Add(1)
+			return
+		}
 		s.noteDown(from)
 	}
 	fresh := batch.Frames[:0]

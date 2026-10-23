@@ -1162,16 +1162,19 @@ type NetworkResource struct {
 	// to, which no wait may run out on while its arrival is on its way.
 	WraithKept func(participant uint32) bool
 
+	// Relaying reports that this run's player lets it carry any participant's
+	// artifacts toward the authority, not only those that joined through it. Called
+	// under the world lock; it must not block.
+	Relaying func() bool
+
 	// OnOwnState takes each sync this instance sends of the cursor it plays, which
 	// its player brings back to its Wraith should it leave. Under the world lock.
 	OnOwnState func(*event.CursorStatePayload)
 
-	// OnPeerLost reports a direct neighbour's departure to the session layer,
-	// beside the identity release OnDeparture does. It is a different question:
-	// which identities the lobby may hand out again is local bookkeeping, and
-	// whether the participant that just left was the one authoring is what starts
-	// a succession. It reports whether the departure was this instance's own doing,
-	// a seat it dropped, which is news to nobody.
+	// OnPeerLost reports a direct neighbour's departure to the session layer, which
+	// starts a succession if it was the one authoring; OnDeparture's identity
+	// release is local bookkeeping. It reports whether the departure was this
+	// instance's own doing, a seat it dropped, which is news to nobody.
 	OnPeerLost func(participant uint32) bool
 
 	// Authority is the participant currently authoring the Shared world, and Term

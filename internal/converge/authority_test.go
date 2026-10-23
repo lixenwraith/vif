@@ -30,43 +30,55 @@ func record(u *Authority, term network.AuthorityTerm, authority, predecessor net
 	}
 }
 
-// TestASecondHandoffForOneTermIsRefused: whatever two candidates believe, a
-// participant adopts one record per term — and a record that skips a term, or
-// carries a roster this session never closed on, is refused for the same reason.
-func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
-	t.Parallel()
-	guest := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
+// rewind moves a run's walk and cut-off back by d, as d of wall time passing would.
+func rewind(r *run, d time.Duration) {
+	r.u.mu.Lock()
+	defer r.u.mu.Unlock()
+	for _, at := range []*time.Time{&r.u.opened, &r.u.walkFrom, &r.u.cutSince} {
+		if !at.IsZero() {
+			*at = at.Add(-d)
+		}
+	}
+}
 
-	base := record(guest.u, network.FirstTerm+1, 2, 1)
+// TestASurvivorFollowsOneRecordPerLoss: a participant adopts one record per term,
+// so a rival for a term adopted, or one carrying a roster this session never closed
+// on, is refused; and having followed one host it ignores the other candidates'
+// records for the same loss, whichever their term, as the group it did not join.
+func TestASurvivorFollowsOneRecordPerLoss(t *testing.T) {
+	t.Parallel()
+	guest := session(t, 4, [][2]int{{1, 2}, {1, 3}, {1, 4}})[3]
+
+	foreign := record(guest.u, network.FirstTerm+2, 3, 1)
+	foreign.Roster = append(slices.Clone(foreign.Roster), network.RosterEntry{ID: 5, Slot: 4})
+	if err := guest.u.adopt(foreign, 0); err == nil {
+		t.Fatal("a record carrying a roster this session never closed on was adopted")
+	}
+	base := record(guest.u, network.FirstTerm+2, 3, 1)
 	if err := guest.u.adopt(base, 0); err != nil {
-		t.Fatalf("the first record for a term must be adopted: %v", err)
+		t.Fatalf("the second candidate's record for its own term must be adopted: %v", err)
 	}
 	rival := base
-	rival.Authority = 3
+	rival.Authority = 2
 	if err := guest.u.adopt(rival, 0); err == nil {
 		t.Fatal("a second, different record for one term was adopted")
 	}
-	if got := guest.u.State(); got.Authority != 2 || got.Term != network.FirstTerm+1 {
-		t.Fatalf("the refused record moved the authority anyway: %+v", got)
+	for _, other := range []network.HandoffRecord{
+		record(guest.u, network.FirstTerm+1, 2, 1), record(guest.u, network.FirstTerm+3, 4, 1),
+	} {
+		if err := guest.u.adopt(other, 0); err != nil {
+			t.Fatalf("another group's record was refused rather than ignored: %v", err)
+		}
 	}
-
-	skipped := base
-	skipped.Term = network.FirstTerm + 3
-	if err := guest.u.adopt(skipped, 0); err == nil {
-		t.Fatal("a record entering a term two generations ahead was adopted")
-	}
-	foreign := base
-	foreign.Term = network.FirstTerm + 2
-	foreign.Roster = append(slices.Clone(base.Roster), network.RosterEntry{ID: 4, Slot: 3})
-	if err := guest.u.adopt(foreign, 0); err == nil {
-		t.Fatal("a record carrying a roster this session never closed on was adopted")
+	if got := guest.u.State(); got.Authority != 3 || got.Term != network.FirstTerm+2 {
+		t.Fatalf("the survivor left the host it followed: %+v", got)
 	}
 }
 
 func TestLossReportsCannotReplaceALinkedAuthority(t *testing.T) {
 	t.Parallel()
 	guest := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
-	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: 2, From: 2, Lost: 1})
+	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm, From: 2, Lost: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,14 +90,14 @@ func TestLossReportsCannotReplaceALinkedAuthority(t *testing.T) {
 
 // TestTheTermGateRefusesWhatNobodyHandedThisInstance is the wire rule a fork runs
 // under: older is ignored, equal acted on, newer refused rather than adopted, and
-// a handoff that skips the term the fork missed is not a way back in.
+// no handoff is a way back in.
 func TestTheTermGateRefusesWhatNobodyHandedThisInstance(t *testing.T) {
 	t.Parallel()
 	fork := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
 
-	// A succession nothing can elect: the window passes with no record.
+	// A walk nothing answers: the last turn passes with no record.
 	fork.u.beginSuccession(1)
-	fork.u.giveUp()
+	fork.u.giveUp("criterion")
 	if got := fork.u.State(); !got.Fork {
 		t.Fatalf("the instance did not become a local fork: %+v", got)
 	}
@@ -105,28 +117,29 @@ func TestTheTermGateRefusesWhatNobodyHandedThisInstance(t *testing.T) {
 	if got := fork.u.State(); got.Term != network.FirstTerm || !got.Fork {
 		t.Fatalf("the refused artifacts moved the fork's authority: %+v", got)
 	}
-	if err := fork.u.adopt(record(fork.u, network.FirstTerm+2, 2, 1), 1); err == nil {
-		t.Fatal("a fork adopted a handoff that skipped the term it missed")
+	if err := fork.u.adopt(record(fork.u, network.FirstTerm+1, 2, 1), 1); err != nil || fork.u.Term() != network.FirstTerm {
+		t.Fatalf("a fork took a handoff (%v)", err)
 	}
 }
 
-// TestASurvivorStandsFrozenThroughTheWindow: a survivor stops its run when its
-// authority goes, and with no record the window runs out on the wall clock, since no
-// tick passes to count it; the fork it ends in is told to the run.
-func TestASurvivorStandsFrozenThroughTheWindow(t *testing.T) {
+// TestASurvivorStandsFrozenThroughTheWalk: a survivor stops its run when its
+// authority goes, and with no record it stands until the last candidate's turn has
+// passed on the wall clock, since no tick passes to count it; the fork it ends in is
+// told to the run.
+func TestASurvivorStandsFrozenThroughTheWalk(t *testing.T) {
 	t.Parallel()
 	run := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
+	turns := time.Duration(len(run.u.Chain())) * parameter.NetworkSuccessionWindow
 	run.u.beginSuccession(1)
+	rewind(run, turns-time.Millisecond)
 	run.u.drive()
 	if !run.world.frozen || run.u.State().Fork {
-		t.Fatalf("inside the window: frozen %v, fork %v", run.world.frozen, run.u.State().Fork)
+		t.Fatalf("inside the walk: frozen %v, fork %v", run.world.frozen, run.u.State().Fork)
 	}
-	run.u.mu.Lock()
-	run.u.opened = run.u.opened.Add(-parameter.NetworkSuccessionWindow - time.Millisecond)
-	run.u.mu.Unlock()
+	rewind(run, 2*time.Millisecond)
 	run.u.drive()
 	if !run.u.State().Fork || run.world.forked != 1 || run.world.frozen {
-		t.Fatalf("past the window: fork %v, told %d times, frozen %v",
+		t.Fatalf("past the last turn: fork %v, told %d times, frozen %v",
 			run.u.State().Fork, run.world.forked, run.world.frozen)
 	}
 }
@@ -144,18 +157,18 @@ func TestARecordAheadOfTheNoticeFreezesItsReader(t *testing.T) {
 	}
 }
 
-// TestTheSuccessorResumesOnceEverySurvivorIsIn: the successor holds its group still
-// until every survivor's notice has reached it, the lost authority's own bots and
-// the Wraiths aside, or until the window runs out on whoever is missing.
-func TestTheSuccessorResumesOnceEverySurvivorIsIn(t *testing.T) {
+// TestTheHostResumesOnceItsGroupIsIn: the new host holds its group still until
+// every survivor's membership has reached it, the lost authority's own bots and the
+// Wraiths aside, or until the window runs out on whoever is missing.
+func TestTheHostResumesOnceItsGroupIsIn(t *testing.T) {
 	t.Parallel()
 	took := func(resumeBy time.Time) *run {
 		r := newRun(t, 2, nil, append(roster(3),
 			network.RosterEntry{ID: 4, Slot: 3, Holder: 1}, network.RosterEntry{ID: 5, Slot: 4, Away: true}))
-		r.open(1, nil, false)
+		r.open(1, chainOf(2, 3), false)
 		r.u.beginSuccession(1)
 		if err := r.u.adopt(record(r.u, network.FirstTerm+1, 2, 1), 0); err != nil {
-			t.Fatalf("the successor's own record: %v", err)
+			t.Fatalf("the host's own record: %v", err)
 		}
 		r.u.mu.Lock()
 		r.u.resumeBy = resumeBy
@@ -165,7 +178,7 @@ func TestTheSuccessorResumesOnceEverySurvivorIsIn(t *testing.T) {
 	}
 	waiting := took(time.Now().Add(time.Hour))
 	if waiting.world.thawed != 0 {
-		t.Fatal("the successor resumed before participant 3's notice reached it")
+		t.Fatal("the host resumed before participant 3's membership reached it")
 	}
 	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1})
 	if err != nil {
@@ -174,10 +187,10 @@ func TestTheSuccessorResumesOnceEverySurvivorIsIn(t *testing.T) {
 	waiting.u.Receive(uint8(network.MsgAuthorityReport), 3, body)
 	waiting.u.driveResume()
 	if waiting.world.thawed != 1 {
-		t.Fatalf("with every notice in the successor resumed %d times, want once", waiting.world.thawed)
+		t.Fatalf("with its group in the host resumed %d times, want once", waiting.world.thawed)
 	}
 	if late := took(time.Now().Add(-time.Millisecond)); late.world.thawed != 1 {
-		t.Fatalf("past the window the successor resumed %d times, want once", late.world.thawed)
+		t.Fatalf("past the window the host resumed %d times, want once", late.world.thawed)
 	}
 }
 
@@ -212,6 +225,22 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	if guest.world.forked != 1 || len(guest.world.forkedAs) != 2 {
 		t.Fatalf("the fork was told %d times with %d roster entries; want once with the 2 it held",
 			guest.world.forked, len(guest.world.forkedAs))
+	}
+
+	// A pinned guest walks to nobody; the one wait it has is its redial of the host.
+	redialing := newRun(t, 2, nil, roster(2))
+	redialing.world.redial = true
+	redialing.u.Open(network.SessionOffer{
+		Host: 1, Assigned: 2, Term: network.FirstTerm, Roster: roster(2), FixedAuthority: true,
+	}, 2)
+	redialing.u.peerLost(1)
+	if redialing.u.State().Fork || !redialing.world.frozen {
+		t.Fatal("a pinned guest forked, or played on, before its redial ended")
+	}
+	redialing.u.RedialRefused(1)
+	redialing.u.drive()
+	if !redialing.u.State().Fork {
+		t.Fatal("a pinned guest whose redial was refused did not fork")
 	}
 }
 
@@ -255,43 +284,196 @@ func TestALeavingInstanceAuthorsOnlyTheSessionItReopens(t *testing.T) {
 	}
 }
 
-// TestTheSuccessionOrderIsTheOrderTheRuleElects pins what a survivor with no link
-// retries down. It walks the same order the election runs in — the chain, then any
-// other survivor — so a reconnect and a handoff cannot disagree about who is being
-// waited for.
-func TestTheSuccessionOrderIsTheOrderTheRuleElects(t *testing.T) {
+// TestTheWalkDialsEachCandidateInTurn: a survivor dials the first candidate while it
+// redials its lost host, and one more each window after, passing over a participant
+// away, which has no link to serve a term from; one cut off dials them all.
+func TestTheWalkDialsEachCandidateInTurn(t *testing.T) {
 	t.Parallel()
-	r := newRun(t, 4, nil, roster(4))
+	members := roster(5)
+	members[2].Away = true
+	r := newRun(t, 5, nil, members)
+	r.world.redial = true
 	r.u.Open(network.SessionOffer{
-		Host: 1, Assigned: 4, Term: network.FirstTerm,
-		Roster: roster(4), Chain: chainOf(3, 4),
-	}, 4)
-
-	got := r.u.successionOrder()
-	want := []network.PeerID{3, 2}
-	if !slices.Equal(got, want) {
-		t.Fatalf("succession order = %v, want the chain first: %v", got, want)
+		Host: 1, Assigned: 5, Term: network.FirstTerm, Roster: members, Chain: chainOf(3, 2, 4, 5),
+	}, 5)
+	now := time.Now()
+	if got, want := r.u.walkTargets(now), []network.PeerID{2, 4}; !slices.Equal(got, want) {
+		t.Fatalf("cut off, dials %v; want every candidate %v", got, want)
+	}
+	if got, ok := r.u.successor(); !ok || got != 2 {
+		t.Fatalf("successor = %d (ok=%t), want 2, first on the chain after the away participant", got, ok)
+	}
+	r.u.beginSuccession(1)
+	if got, want := r.u.walkTargets(now.Add(time.Hour)), []network.PeerID{2}; !slices.Equal(got, want) {
+		t.Fatalf("redialing, dials %v; want the first candidate %v", got, want)
+	}
+	r.u.RedialRefused(1)
+	now = time.Now()
+	for _, c := range []struct {
+		at   time.Duration
+		want []network.PeerID
+	}{
+		{0, []network.PeerID{2}},
+		{parameter.NetworkSuccessionWindow, []network.PeerID{2, 4}},
+		{4 * parameter.NetworkSuccessionWindow, []network.PeerID{2, 4}},
+	} {
+		if got := r.u.walkTargets(now.Add(c.at)); !slices.Equal(got, c.want) {
+			t.Fatalf("%v into the walk, dials %v; want %v", c.at, got, c.want)
+		}
 	}
 }
 
-// TestASurvivorDoesNotWaitForAnAwayParticipant: a participant whose cursor waits as
-// a Wraith has no link to serve a term from, so the order a survivor retries down
-// passes it over, as the election does.
-func TestASurvivorDoesNotWaitForAnAwayParticipant(t *testing.T) {
+// TestTheWalkWaitsOnARedial: a survivor redialing its lost host begins its walk when
+// the redial is refused or a window after the loss, and not when another survivor's
+// notice says the host went for it too.
+func TestTheWalkWaitsOnARedial(t *testing.T) {
 	t.Parallel()
-	members := roster(4)
-	members[2].Away = true
-	r := newRun(t, 4, nil, members)
-	r.u.Open(network.SessionOffer{
-		Host: 1, Assigned: 4, Term: network.FirstTerm,
-		Roster: members, Chain: chainOf(3, 4),
-	}, 4)
-
-	if got, want := r.u.successionOrder(), []network.PeerID{2}; !slices.Equal(got, want) {
-		t.Fatalf("succession order = %v, want %v with the away participant passed over", got, want)
+	walking := func(r *run) bool {
+		r.u.mu.Lock()
+		defer r.u.mu.Unlock()
+		return !r.u.walkFrom.IsZero()
 	}
-	if got, ok := r.u.successor(); !ok || got != 4 {
-		t.Fatalf("successor = %d (ok=%t), want this run, next on the chain after the away participant", got, ok)
+	lose := func() *run {
+		r := session(t, 3, nil)[1]
+		r.world.redial = true
+		r.u.beginSuccession(1)
+		if walking(r) || len(r.world.redials) != 1 {
+			t.Fatalf("redials %v, walking %v; want one redial and the walk waiting on it", r.world.redials, walking(r))
+		}
+		return r
+	}
+	refused := lose()
+	refused.u.RedialRefused(1)
+	told := lose()
+	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm, From: 3, Lost: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	told.u.Receive(uint8(network.MsgAuthorityReport), 3, body)
+	timed := lose()
+	rewind(timed, parameter.NetworkSuccessionWindow)
+	timed.u.drive()
+	if !walking(refused) || walking(told) || !walking(timed) {
+		t.Fatalf("walking: refused %v, told by another survivor %v, timed out %v",
+			walking(refused), walking(told), walking(timed))
+	}
+}
+
+// TestTheWalkGoesDownTheList: when the first candidate went with the host, the
+// second takes the term two past the lost one's once a window has passed, the
+// survivors follow it, and at the floor it keeps the first candidate's place as a
+// Wraith, since nothing reported it into the group.
+func TestTheWalkGoesDownTheList(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Link(1, 4)
+	mesh.Peer(3, 4)
+	runs := make([]*run, 4)
+	for i := range runs {
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(4))
+		runs[i].open(1, chainOf(2, 3), false)
+	}
+	// Every guest holds the host's keyframe, which is what a candidate authors from.
+	if err := runs[0].c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	_ = mesh.Node(1).Close()
+	_ = mesh.Node(2).Close()
+	host, guest := runs[2], runs[3]
+	survivors := runs[2:]
+	for _, r := range survivors {
+		r.c.QueuePeerLost(1)
+	}
+	deliver(survivors, 2)
+	if host.u.Term() != network.FirstTerm || guest.u.Term() != network.FirstTerm {
+		t.Fatal("a term was taken before the first candidate's turn had passed")
+	}
+	for _, r := range survivors {
+		rewind(r, parameter.NetworkSuccessionWindow)
+	}
+	deliver(survivors, 3)
+	for _, r := range survivors {
+		if got := r.u.State(); got.Authority != 3 || got.Term != network.FirstTerm+2 {
+			t.Fatalf("participant %d holds %+v; want the second candidate's term", r.world.local, got)
+		}
+	}
+	host.world.advance(parameter.NetworkSuccessionTicks)
+	deliver(survivors, 1)
+	if len(host.world.departed) != 1 || len(host.world.departed[0]) != 1 || host.world.departed[0][0].ID != 2 {
+		t.Fatalf("at the floor the host kept %v as Wraiths; want the first candidate alone", host.world.departed)
+	}
+}
+
+// TestASurvivorCarriesOnlyWhomItRelaysFor: one that follows the new host answers a
+// walking survivor's notice with the host's record only once it carries that
+// survivor, which then follows the host through it and is counted in.
+func TestASurvivorCarriesOnlyWhomItRelaysFor(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Link(1, 4)
+	mesh.Peer(2, 3)
+	mesh.Peer(3, 4)
+	runs := make([]*run, 4)
+	for i := range runs {
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(4))
+		runs[i].open(1, chainOf(2, 3), false)
+	}
+	if err := runs[0].c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	_ = mesh.Node(1).Close()
+	host, relay, far := runs[1], runs[2], runs[3]
+	survivors := runs[1:]
+	for _, r := range survivors {
+		r.c.QueuePeerLost(1)
+	}
+	deliver(survivors, 4)
+	if got := relay.u.State(); got.Authority != 2 || got.Term != network.FirstTerm+1 {
+		t.Fatalf("the relay holds %+v; want the first candidate's term", got)
+	}
+	if !far.u.Migrating() {
+		t.Fatal("a survivor followed the host through a participant that does not relay")
+	}
+
+	relay.world.relaying = true
+	far.u.sendReport() // as on a link it opens
+	deliver(survivors, 4)
+	got := far.u.State()
+	if got.Authority != 2 || len(far.world.handoffs) != 1 || far.world.handoffs[0].via != 3 {
+		t.Fatalf("the far survivor holds %+v after %v; want the host, followed through participant 3", got, far.world.handoffs)
+	}
+	if !slices.Equal(relay.world.carried, []uint32{4}) {
+		t.Fatalf("the relay marked %v behind it; want participant 4", relay.world.carried)
+	}
+	host.u.mu.Lock()
+	in := host.u.reportedLocked(4, network.FirstTerm+1)
+	host.u.mu.Unlock()
+	if !in {
+		t.Fatal("the host did not count the carried survivor in its group")
+	}
+}
+
+// TestACutOffParticipantGoesOnAlone: one with no path to its authority, through a
+// relay that left or carries it no more, plays on alone once a walk down the whole
+// list has passed with nobody carrying it.
+func TestACutOffParticipantGoesOnAlone(t *testing.T) {
+	t.Parallel()
+	r := session(t, 3, nil)[2]
+	r.world.cut = true
+	r.u.drive()
+	if r.u.State().Fork {
+		t.Fatal("a participant went on alone the moment it lost its path")
+	}
+	rewind(r, time.Duration(len(r.u.Chain())+1)*parameter.NetworkSuccessionWindow)
+	r.u.drive()
+	if !r.u.State().Fork || r.world.forked != 1 {
+		t.Fatalf("past a whole walk: fork %v, told %d times", r.u.State().Fork, r.world.forked)
 	}
 }
 

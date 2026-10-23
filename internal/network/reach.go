@@ -20,7 +20,7 @@ type ChainEntry struct {
 //
 // Append-only in join order, never re-sorted. That is what keeps succession safe
 // without agreement: every held chain is a prefix of the newest, and a prefix and
-// its extension name the same first survivor.
+// its extension list the same candidates in the same order.
 type SuccessionChain []ChainEntry
 
 // Lookup returns the address published for one participant.
