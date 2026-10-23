@@ -29,10 +29,10 @@ Use these terms consistently:
   relay of its own bots, and with `-relay <addr>` of the people who join there.
 - A run's **session role** is what it is to its session, read from what the
   session wrote: solo, seats (a session of its own with no door: one it opened for
-  its bots, or the one `:leave` or a fork goes on in), host, server, guest, or left
-  (a guest whose session has nobody left but its own bots). `:join`, `:host`,
-  `:leave` and `:session` answer by it from one table. It is not authorship: a
-  guest that inherited the term is a guest that authors.
+  its bots, or the one `:leave` or a fork goes on in), host, server, guest, left
+  (a guest whose session has nobody left but its own bots), or successor (a guest
+  that took the term over, hosting at its own port until `:host` opens a door).
+  `:join`, `:host`, `:leave` and `:session` answer by it from one table.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
   and never moves backwards on an instance.
@@ -538,7 +538,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and, once it takes the session over, joins (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and, once it takes the session over, joins (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
@@ -734,7 +734,7 @@ handoff.
 | Rejoin after a handoff | Every participant holds the whole chain, so every survivor walks it from the top, each candidate a window's turn, a guest whose own link dropped redialling its host first. |
 | Redial wait | A guest redials its own host for a whole window before it walks, however many others lost the host too: a host that went silent costs that window, and one that quit or crashed refuses at once. |
 | Relaying | Opt-in and off by default (`:relay`, the Multiplayer page). A run carries only those that joined through it unless its player offers more, so nobody's traffic lands on a run that did not offer to carry it. |
-| Joins after a handoff | The successor's own port takes them, the one its survivors already dial, rather than a second door; a join and a peer link each open with a frame of their own. The `-players` ceiling travels in the offer, so it holds whoever hosts. |
+| Joins after a handoff | The successor's own port takes them, the one its survivors already dial, rather than a second door; a join and a peer link each open with a frame of their own. `:host` opens one at the address it names, or names that port, and the successor hosts as the first host did, under the `migrate` policy its players hold. The `-players` ceiling travels in the offer, so it holds whoever hosts. |
 
 ### 5.4 Wraiths
 
@@ -1188,8 +1188,9 @@ many candidates the chain holds and whether this one is listening. Kill the host
 each guest's redial is refused, the survivors walk to the list's first candidate and
 continue in one session, rather than each continuing alone. The one hosting now
 reads `Session hosting` and its port in `:session`, and a third terminal's `-join`
-at that port is admitted into the session. Repeat with `-no-advertise` on the first
-guest and the second hosts instead.
+at that port is admitted into the session; `:host :7778` there opens another door,
+which `:session` then names. Repeat with `-no-advertise` on the first guest and the
+second hosts instead.
 
 ## 10. Where this came from
 
