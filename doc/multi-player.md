@@ -769,9 +769,9 @@ others, `:join` replaces it and `:bot add` seats more. A host and a guest leave
 alike. A solo run and a run whose session holds only its own bots have nothing to
 leave, and a server stays in the session it serves, so each refuses it by its
 session role. Those left behind see an ordinary loss: the host keeps a guest that
-left as a Wraith, as it keeps one whose link closed (§5.4), the people a guest
-relayed keep their slots as when any relay leaves (§5), and the guests of a host
-that left run §5.1, which under `-authority host` is the fork.
+left and its bots as Wraiths, as it keeps one whose link closed (§5.4), the people
+a guest relayed keep their slots as when any relay leaves (§5), and the guests of a
+host that left run §5.1, which under `-authority host` is the fork.
 
 The run keeps its identity and authors the term after the one it held. Its cursor,
 its crossings still scheduled and its journal all name that identity, and nobody it
@@ -782,8 +782,10 @@ every authoritative artifact is ignored. The claim it was in the left session un
 is given up with its record as it stood, so it can still take its Wraith back
 there (§5.4), and the session it opens issues its own.
 
-Its bots leave first, as they do when it quits, and are seated again with fresh
-cursors once the old door is shut; a bot's journal closes with the cursor it drove.
+Its bots leave first, as they do when it quits, though as lost links rather than
+dropped seats, so the session left keeps their places too, and are seated again
+with fresh cursors once the old door is shut; a bot's journal closes with the cursor
+it drove.
 In between, the run's loop serves the leave, so no other command interleaves:
 
 1. **Open the new session**, under the correction pipeline's apply lock, so nothing

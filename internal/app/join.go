@@ -333,7 +333,7 @@ func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	if _, live := r.Port.(engine.PeerDroppingPort); live {
 		r.OnDismissed = func() {
 			a.dismissed.Store(true)
-			a.haltSeats()
+			a.haltSeats(false)
 			// The place is gone, and the claim with it.
 			if c := a.claim.Swap(nil); c != nil {
 				a.claims.forget(c)

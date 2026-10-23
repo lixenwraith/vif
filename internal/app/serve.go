@@ -101,7 +101,7 @@ func (a *App) Serve() error {
 			// nobody could schedule. A second signal ends it, and so does a drain
 			// that finds an empty roster or runs out its deadline. The host's own
 			// bots are nobody's match, so they leave at once.
-			a.haltSeats()
+			a.haltSeats(false)
 			st := a.interrupt(time.Now(), "signal "+sig.String())
 			a.log.Info("app", "msg", "signal received",
 				"signal", sig.String(), "phase", st.Phase.String(),

@@ -538,11 +538,12 @@ func (a *App) leaveLocked() error {
 
 // leaveSession takes this run out of its session and goes on with the world as it
 // stands, in a session of its own. Its bots leave first, as they do when it quits,
-// and are seated again only once the door it had is shut. Runs on Loop, which holds
-// no lock: the port it closes waits for handshakes that take the world lock.
+// keeping their places there as Wraiths beside its own, and are seated again only
+// once the door it had is shut. Runs on Loop, which holds no lock: the port it
+// closes waits for handshakes that take the world lock.
 func (a *App) leaveSession() {
 	bots := a.seatGraphs()
-	a.closeSeats()
+	a.closeSeats(true)
 	var old engine.NetworkPort
 	err := a.corrections.Leave(func() error {
 		var err error

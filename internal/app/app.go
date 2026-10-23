@@ -609,7 +609,7 @@ func (a *App) initScheduler() error {
 func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown started")
 	begin := time.Now()
-	a.closeSeats()
+	a.closeSeats(false)
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
