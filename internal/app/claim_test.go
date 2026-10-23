@@ -66,6 +66,35 @@ func TestAPlayerBringsBackWhatItLeftWith(t *testing.T) {
 	}
 }
 
+// TestAPlaceCarriedOnKeepsTheRecordItLeftWith: the claim a place goes on under in its
+// run's next session starts from the record it left with, and what it plays there
+// is kept on that claim alone, so the one it left under brings back the record as it
+// stood. Only a claim a run gave up is carried.
+func TestAPlaceCarriedOnKeepsTheRecordItLeftWith(t *testing.T) {
+	k := newClaimKeeper(nil)
+	left := k.issue(true)
+	k.keep(left, event.CursorRecord{Energy: 500, Charges: []int{2, 1}})
+	if k.carry(network.ClaimDigest(left.Token)) != nil {
+		t.Fatal("a claim its run still holds was carried")
+	}
+	k.release(left)
+	carried := k.carry(network.ClaimDigest(left.Token))
+	if carried == nil || carried.Token == left.Token || !carried.Bot || carried.Record == nil || carried.Record.Energy != 500 {
+		t.Fatalf("the place goes on under %+v; want a bot's claim of its own over the record it left with", carried)
+	}
+	carried.Record.Charges[0] = 8
+	if k.take(offerOf(carried), true) != carried {
+		t.Fatal("the place's offer did not hand the run the claim it goes on under")
+	}
+	k.keep(carried, event.CursorRecord{Energy: 7})
+	if left.Record.Energy != 500 || !slices.Equal(left.Record.Charges, []int{2, 1}) {
+		t.Fatalf("the claim the place left under brings back %+v, want the record it left with", *left.Record)
+	}
+	if k.carry(network.ClaimDigest(network.NewClaimToken())) != nil {
+		t.Fatal("a claim this process never held was carried")
+	}
+}
+
 // TestATabKeepsItsClaimsAcrossAReload: a keeper reads back what the tab's storage
 // kept, leaving out a document or a token of another form, and keeps at most
 // ClaimsKept, the oldest no run holds giving way.

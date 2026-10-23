@@ -637,8 +637,9 @@ person's terminal, which `App.handleResize` publishes as it changes and the seat
 takes between two steps, or the holder's `-size`, else a bot's 120x40. A play-mode
 holder's seats stand still while it is paused; a driven holder's step on. A hold
 stops seats at its tick, as it stops every participant. A
-headless bot or seat ends once its instance forks, and a seat also once its holder
-does.
+headless bot ends once its instance forks, and a seat once it or its holder does,
+unless its holder is a person's run: its loop takes the fork into a session of its
+own and seats its bots again there, so only the run ends its seats (`App.seatEnds`).
 
 ## 5. Simulation tick steps
 

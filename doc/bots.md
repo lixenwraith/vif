@@ -70,12 +70,14 @@ into the session it joins, and `:leave` takes them out of one with the run.
 - `:bot drop <slot>` drops one of your bots; the host may drop any bot.
   `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
 - `:leave` takes your bots out of the session with you: they leave it first and
-  are seated again, on fresh cursors, in the session your run goes on in.
+  are seated again in the session your run goes on in, each taking back the place
+  it had. A run that loses its host and finds nobody to take over goes on the same
+  way, keeping every other player's place too.
 - A dropped person starts a new local game without its bots; a dropped watched or
   headless run stops. Dropping ends membership; it is not a ban.
 - A headless bot ends once its host leaves and no participant, itself included,
   takes over; one that takes over plays on with its own bots, as any session only
-  bots occupy does. A watched bot plays on alone, as a person does.
+  bots occupy does. A watched bot plays on alone, as the fork.
 
 ## Commands and the menu
 

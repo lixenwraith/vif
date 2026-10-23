@@ -829,20 +829,22 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 // — a departure is produced once at one agreed tick because two instances must
 // destroy a shared entity together, and here there is no second instance.
 func (a *App) dropAbandonedCursors(roster []network.RosterEntry, local network.PeerID) {
-	a.world.RunSafe(func() { a.dropAbandonedLocked(roster, local) })
+	a.world.RunSafe(func() { a.dropAbandonedLocked(roster, nil, local) })
 }
 
 // dropAbandonedLocked is dropAbandonedCursors under the world lock, which a run
-// leaving its session holds. Caller MUST hold updateMutex.
-func (a *App) dropAbandonedLocked(roster []network.RosterEntry, local network.PeerID) {
+// leaving its session holds. A place it kept is not removed but waits as a Wraith,
+// as it would for any departure. Caller MUST hold updateMutex.
+func (a *App) dropAbandonedLocked(roster, kept []network.RosterEntry, local network.PeerID) {
 	if p := a.sessionTransportLocked(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
 		return
 	}
 	for _, p := range roster {
-		if p.ID == local || p.Slot == parameter.NoPlayerSlot {
+		keep := slices.ContainsFunc(kept, func(k network.RosterEntry) bool { return k.ID == p.ID })
+		if p.ID == local || p.Slot == parameter.NoPlayerSlot || keep && p.Away {
 			continue
 		}
-		a.pushDepartureLocked(event.ParticipantDepartedPayload{Participant: uint32(p.ID), Slot: p.Slot, Dismissed: true},
+		a.pushDepartureLocked(event.ParticipantDepartedPayload{Participant: uint32(p.ID), Slot: p.Slot, Dismissed: !keep},
 			core.DomainShared)
 	}
 }

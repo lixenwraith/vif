@@ -16,6 +16,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
@@ -214,6 +215,37 @@ func waitForCursors(t *testing.T, a *App, n int) {
 	})
 	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s; status %q", held, n, a.Position(), a.SessionSummary(),
 		a.seatsSummary()+fmt.Sprint((instance{a}).WorldRoster()), a.ctx.GetStatusMessage())
+}
+
+// places reads the cursor and the participant on each slot whose cursor match takes.
+func places(a *App, match func(component.CursorComponent) bool) map[uint8][2]uint64 {
+	out := make(map[uint8][2]uint64)
+	a.world.RunSafe(func() {
+		for slot := range uint8(parameter.MaxPlayers) {
+			e := a.world.Resources.Player.Slot(slot)
+			if c, ok := a.world.Components.Cursor.GetComponent(e); ok && match(c) {
+				out[slot] = [2]uint64{uint64(e), uint64(c.PeerID)}
+			}
+		}
+	})
+	return out
+}
+
+// claimOn is the claim the cursor on slot waits or plays under.
+func claimOn(a *App, slot uint8) (claim string) {
+	a.world.RunSafe(func() {
+		c, _ := a.world.Components.Cursor.GetComponent(a.world.Resources.Player.Slot(slot))
+		claim = c.Claim
+	})
+	return claim
+}
+
+// everyone is every cursor, for places.
+func everyone(component.CursorComponent) bool { return true }
+
+// heldBy is the cursors of holder's bots, for places.
+func heldBy(holder uint32) func(component.CursorComponent) bool {
+	return func(c component.CursorComponent) bool { return c.Holder == holder }
 }
 
 // waitForWraiths waits for a running instance's world to hold n Wraiths.
@@ -576,6 +608,50 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	}
 }
 
+// TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn: a seat ends once its
+// session is gone for it, by its own fork or its holder's, except under a play run,
+// whose loop takes its fork into a session of its own and seats its bots again there.
+func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
+	t.Parallel()
+	graph, err := loadBotGraph(resource.Options{Embedded: true}, "roam")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name  string
+		mode  Mode
+		fork  func(holder, seat *App)
+		steps bool
+	}{
+		{"its headless holder's fork", ModeHeadless, func(h, _ *App) { forkCell(h).Store(true) }, false},
+		{"its own fork", ModeHeadless, func(_, s *App) { forkCell(s).Store(true) }, false},
+		{"both forks under a play run", ModePlay, func(h, s *App) {
+			forkCell(h).Store(true)
+			forkCell(s).Store(true)
+		}, true},
+	} {
+		holder := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+		t.Cleanup(holder.Close)
+		holder.cfg.Mode = tt.mode
+		seated := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+		t.Cleanup(seated.Close)
+		d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.localParticipant())
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := &seatSource{botSource: botSource{d}, ends: holder.seatEnds(seated), screen: &holder.seatScreen,
+			run: seated, shown: screen{BotWidth, BotHeight}}
+		tt.fork(holder, seated)
+		more, err := src.Step()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if more != tt.steps {
+			t.Errorf("after %s the seat steps on: %t; want %t", tt.name, more, tt.steps)
+		}
+	}
+}
+
 // TestAHeadlessBotEndsWhenItsSessionDoes: a guest bot whose pinned host leaves is
 // left with no session, and stops rather than playing its fork for nobody.
 func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
@@ -643,8 +719,8 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 
 // TestAGuestsBotsComeAlongWhenItLeaves: the bots a guest seated through its link are
 // seated again in the session it goes on in, through it as the coordinator it now
-// is, and its host keeps them as Wraiths with it. The name the left session answered
-// to is not the one they join under.
+// is, each taking back the place it had there, and its host keeps them as Wraiths
+// with it. The name the left session answered to is not the one they join under.
 func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
@@ -655,6 +731,8 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 	waitForCursors(t, guest, 4)
 	waitForSeats(t, guest, 1)
 	seated := guest.botSeats()[0]
+	itsBots := heldBy(guest.localParticipant())
+	left := places(guest, itsBots)
 
 	leaveAs(t, guest)
 	waitForSeats(t, guest, 1)
@@ -663,7 +741,16 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 		t.Fatalf("the bot kept seat %d through the leave; want it seated again", again.ID)
 	}
 	waitForCursors(t, guest, 2)
+	waitForWraiths(t, guest, 0)
+	if got := places(guest, itsBots); len(left) != 1 || !maps.Equal(got, left) {
+		t.Fatalf("after the leave the guest's bot holds %v (entity, participant by slot); want the place it had, %v", got, left)
+	}
 	waitForWraiths(t, host, 2)
+	// Under a claim of its own in the session it went on in, so the record it left
+	// the host's with stays there
+	if waits, plays := claimOn(host, again.Slot), claimOn(guest, again.Slot); waits == "" || waits == plays {
+		t.Fatalf("the bot waits on the host under %q and plays on under %q; want a claim of its own", waits, plays)
+	}
 	var e core.Entity
 	guest.world.RunSafe(func() { e = guest.world.Resources.Player.Slot(again.Slot) })
 	first := cursorPosition(guest, e)
@@ -775,28 +862,16 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	}
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	places := func() map[uint8][2]uint64 {
-		out := make(map[uint8][2]uint64)
-		host.world.RunSafe(func() {
-			for slot := range uint8(parameter.MaxPlayers) {
-				e := host.world.Resources.Player.Slot(slot)
-				if c, ok := host.world.Components.Cursor.GetComponent(e); ok {
-					out[slot] = [2]uint64{uint64(e), uint64(c.PeerID)}
-				}
-			}
-		})
-		return out
-	}
 	cfg := Config{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}, claims: newClaimKeeper(nil)}
 	_, leave := driveBot(t, cfg, "patrol", nil)
 	waitForCursors(t, host, 3)
-	left := places()
+	left := places(host, everyone)
 	leave()
 	waitForWraiths(t, host, 2)
 
 	driveBot(t, cfg, "patrol", nil)
 	waitForWraiths(t, host, 0)
-	if got := places(); !maps.Equal(got, left) {
+	if got := places(host, everyone); !maps.Equal(got, left) {
 		t.Fatalf("after coming back the session holds %v (entity, participant by slot), want the places it left, %v", got, left)
 	}
 }

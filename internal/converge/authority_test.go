@@ -184,8 +184,8 @@ func TestTheSuccessorResumesOnceEverySurvivorIsIn(t *testing.T) {
 // TestAPinnedAuthorityDoesNotMove is the option a deployment needs and a person
 // hosting a game does not. The policy is the coordinator's and travels in the
 // offer, because a disagreement about it is one instance electing and one refusing.
-// A pinned survivor still stops holding a cursor nobody will move again — that is
-// the roster rule, not the authority one.
+// What a pinned survivor keeps of the others is the run's rule, not the authority's:
+// its fork is handed the roster it held.
 func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	t.Parallel()
 	guest := newRun(t, 2, nil, roster(2))
@@ -209,8 +209,9 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	if !guest.reg.Bools.Get("network.host_lost").Load() {
 		t.Fatal("the survivor did not report the loss")
 	}
-	if len(guest.world.abandoned) == 0 {
-		t.Fatal("a survivor with no link kept the cursors nobody will move again")
+	if guest.world.forked != 1 || len(guest.world.forkedAs) != 2 {
+		t.Fatalf("the fork was told %d times with %d roster entries; want once with the 2 it held",
+			guest.world.forked, len(guest.world.forkedAs))
 	}
 }
 

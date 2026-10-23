@@ -253,8 +253,9 @@ func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) e
 // bindCursorOwnersLocked writes each slot's owning participant onto its cursor, and
 // which of them this instance drives. The owner travels in every capture, and a
 // slot no roster can attribute is a participant a succession cannot see leave. A
-// Wraith keeps the owner it left with, and nobody drives it. Caller MUST hold
-// updateMutex.
+// Wraith keeps the owner it left with, and nobody drives it; it takes the claim the
+// roster names, which a session a run opens names afresh for its bots. Caller MUST
+// hold updateMutex.
 func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local network.PeerID) {
 	roster := a.world.Resources.Player
 	for _, p := range participants {
@@ -263,13 +264,18 @@ func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local n
 		}
 		e := roster.Slot(p.Slot)
 		c, ok := a.world.Components.Cursor.GetPtr(e)
-		if !ok || a.world.Components.Wraith.HasEntity(e) {
-			continue
-		}
-		c.PeerID, c.Holder, c.Claim = uint32(p.ID), uint32(p.Holder), p.Claim
-		c.Control = component.ControlRemote
-		if p.ID == local {
-			c.Control = component.ControlLocal
+		switch {
+		case !ok:
+		case a.world.Components.Wraith.HasEntity(e):
+			if c.PeerID == uint32(p.ID) {
+				c.Claim = p.Claim
+			}
+		default:
+			c.PeerID, c.Holder, c.Claim = uint32(p.ID), uint32(p.Holder), p.Claim
+			c.Control = component.ControlRemote
+			if p.ID == local {
+				c.Control = component.ControlLocal
+			}
 		}
 	}
 }
