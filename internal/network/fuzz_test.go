@@ -8,6 +8,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // scripted is a dialer whose bytes are fixed in advance, and keeps what the
@@ -43,8 +45,8 @@ func frames(msgs ...any) []byte {
 }
 
 // FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits: whatever a dialer sends, it is
-// answered first with an offer or the reason it has none, and the identity Assign
-// gave it is either admitted and reported once, or released once.
+// asked first for its claims or told why it is not, and the identity Assign gave it
+// is either admitted and reported once, or released once.
 func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 	const name, digest = "0123456789abcdef", "sha256:2604b13fd259"
 	ours := sampleIdentity()
@@ -55,23 +57,31 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 	reply := sessionReply{Identity: ours, Width: 120, Height: 40}
 	refusal := sessionReply{}
 	refusal.Refuse(errors.New("join mismatch"))
-	whole := frames(MsgJoinReply, reply)
+	// answered is a dialer naming no claims, then sending msgs.
+	answered := func(msgs ...any) []byte { return frames(append([]any{MsgJoinClaims, []string{}}, msgs...)...) }
+	whole := answered(MsgJoinReply, reply)
 	f.Add(whole, false, true, true, true)
-	f.Add(frames(MsgSessionRoute, []byte(name), MsgJoinReply, reply), true, true, true, true)
-	f.Add(frames(MsgSessionRoute, []byte("another"), MsgJoinReply, reply), true, true, true, true)
+	f.Add(frames(MsgSessionRoute, []byte(name), MsgJoinClaims, []string{}, MsgJoinReply, reply), true, true, true, true)
+	f.Add(frames(MsgSessionRoute, []byte("another"), MsgJoinClaims, []string{}, MsgJoinReply, reply), true, true, true, true)
 	f.Add(frames(MsgSessionRoute, bytes.Repeat([]byte{'n'}, MaxSessionName+1)), true, true, true, true)
-	f.Add(frames(MsgScenarioRequest, []byte(digest), MsgJoinReply, reply), false, true, true, true)
-	f.Add(frames(MsgScenarioRequest, []byte(digest), MsgScenarioRequest, []byte(digest)), false, true, true, true)
-	f.Add(frames(MsgScenarioRequest, []byte("sha256:0"), MsgJoinReply, reply), false, true, true, true)
-	f.Add(frames(MsgJoinReply, sessionReply{Identity: other}), false, true, true, true)
-	f.Add(frames(MsgJoinReply, sessionReply{Identity: elsewhere}), false, true, true, true)
-	f.Add(frames(MsgJoinReply, sessionReply{Identity: ours, Holder: 1, Listen: "192.0.2.2:7777"}), false, true, true, true)
-	f.Add(frames(MsgJoinReply, refusal), false, true, true, true)
-	f.Add(frames(MsgJoinReply, reply, MsgJoinReply, reply), false, true, true, true)
-	f.Add(frames(MsgJoinReply, []byte(`{"code":200,"error":"x"`)), false, true, true, true)
-	f.Add(frames(MsgEvent, []byte("not a reply")), false, true, true, true)
+	f.Add(frames(MsgJoinClaims, []string{NewClaimToken()}, MsgJoinReply, reply), false, true, true, true)
+	f.Add(frames(MsgJoinClaims, slices.Repeat([]string{NewClaimToken()}, parameter.ClaimsKept+1), MsgJoinReply, reply),
+		false, true, true, true)
+	f.Add(frames(MsgJoinClaims, []string{"not a token"}, MsgJoinReply, reply), false, true, true, true)
+	f.Add(frames(MsgJoinClaims, []byte("not a list"), MsgJoinReply, reply), false, true, true, true)
+	f.Add(frames(MsgJoinReply, reply), false, true, true, true)
+	f.Add(answered(MsgScenarioRequest, []byte(digest), MsgJoinReply, reply), false, true, true, true)
+	f.Add(answered(MsgScenarioRequest, []byte(digest), MsgScenarioRequest, []byte(digest)), false, true, true, true)
+	f.Add(answered(MsgScenarioRequest, []byte("sha256:0"), MsgJoinReply, reply), false, true, true, true)
+	f.Add(answered(MsgJoinReply, sessionReply{Identity: other}), false, true, true, true)
+	f.Add(answered(MsgJoinReply, sessionReply{Identity: elsewhere}), false, true, true, true)
+	f.Add(answered(MsgJoinReply, sessionReply{Identity: ours, Holder: 1, Listen: "192.0.2.2:7777"}), false, true, true, true)
+	f.Add(answered(MsgJoinReply, refusal), false, true, true, true)
+	f.Add(answered(MsgJoinReply, reply, MsgJoinReply, reply), false, true, true, true)
+	f.Add(answered(MsgJoinReply, []byte(`{"code":200,"error":"x"`)), false, true, true, true)
+	f.Add(answered(MsgEvent, []byte("not a reply")), false, true, true, true)
 	f.Add(whole[:len(whole)-1], false, true, true, true)
-	f.Add([]byte{byte(MsgJoinReply), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}, false, true, true, true)
+	f.Add(answered()[:3], false, true, true, true)
 	f.Add([]byte{}, false, true, true, true)
 	f.Add(whole, false, false, true, true)
 	f.Add(whole, false, true, false, true)
@@ -81,7 +91,7 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 		offer.Identity = ours
 		var assigned, released, reported []PeerID
 		c := Coordinator{
-			Assign: func() (SessionOffer, error) {
+			Assign: func([]string) (SessionOffer, error) {
 				if !room {
 					return SessionOffer{}, &Refusal{Code: RefusalFull, Reason: "session is full"}
 				}
@@ -121,7 +131,7 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 			t.Fatalf("the dialer was not answered: %v", derr)
 		case first.Type == MsgJoinReply && (json.Unmarshal(first.Payload, &answer) != nil || answer.Refused() == nil):
 			t.Fatalf("the dialer was refused with no reason: %q", first.Payload)
-		case first.Type != MsgJoinReply && first.Type != MsgJoinOffer:
+		case first.Type != MsgJoinReply && first.Type != MsgJoinClaims:
 			t.Fatalf("the dialer was answered with message %#x", first.Type)
 		}
 		switch {

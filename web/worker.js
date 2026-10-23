@@ -46,9 +46,13 @@ globalThis.vifPointer = function(enabled, motion) {
 globalThis.vifZoom = function(cell, least, most, step) {
     postMessage({ type: 'zoom', cell: cell, least: least, most: most, step: step });
 };
-// A Worker has no localStorage: the page reads and keeps the settings document.
+// A Worker has no localStorage: the page reads and keeps the settings document,
+// and the claims its runs come back to their sessions with.
 globalThis.vifKeepSettings = function(text) {
     postMessage({ type: 'settings', text: text });
+};
+globalThis.vifKeepClaims = function(text) {
+    postMessage({ type: 'claims', text: text });
 };
 
 // The program compiled and held for the page's start screen, until its tap posts run
@@ -63,6 +67,7 @@ async function start(msg) {
     }
     globalThis.vifGrid = { cols: msg.cols, rows: msg.rows };
     globalThis.vifSettings = msg.settings || '';
+    globalThis.vifClaims = msg.claims || '';
     const go = new Go();
     go.argv = msg.argv;
     go.exit = function(code) {

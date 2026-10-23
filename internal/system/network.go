@@ -86,6 +86,7 @@ type NetworkSystem struct {
 	stateSeen    [parameter.MaxPlayers]uint64
 	rawStateSeen [parameter.MaxPlayers]uint64
 	departed     [participantSlots]bool // participants already announced or noticed
+	expiring     [participantSlots]bool // Wraiths whose dismissal this authority has crossed
 	ticks        uint64
 	statSent     *atomic.Int64
 	statRecv     *atomic.Int64
@@ -461,7 +462,7 @@ func (s *NetworkSystem) Init() {
 	s.syncSeq = 0
 	s.lastSync = [parameter.MaxPlayers]uint64{}
 	s.states, s.stateSeen, s.rawStateSeen = s.states[:0], [parameter.MaxPlayers]uint64{}, [parameter.MaxPlayers]uint64{}
-	s.departed = [participantSlots]bool{}
+	s.departed, s.expiring = [participantSlots]bool{}, [participantSlots]bool{}
 
 	for _, c := range s.resetInts {
 		c.Store(0)
@@ -579,10 +580,17 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 // addParticipant applies the arrival crossing. Every instance runs it at the same
 // apply tick, so the cursor it creates takes the same shared entity everywhere (D-11)
 // — which is the reason a mid-run arrival cannot be a local reaction to a connect.
-// The instance the payload names is the one that goes on to simulate it.
+// The instance the payload names is the one that goes on to simulate it. An arrival
+// into a slot its participant's own Wraith holds is that participant back.
 func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
-	if int(p.Slot) >= parameter.MaxPlayers || s.world.Resources.Player.Slot(p.Slot) != 0 {
+	if int(p.Slot) >= parameter.MaxPlayers {
 		return
+	}
+	if e := s.world.Resources.Player.Slot(p.Slot); e != 0 {
+		c, _ := s.world.Components.Cursor.GetComponent(e)
+		if c.PeerID != p.Participant || !s.world.Components.Wraith.HasEntity(e) {
+			return
+		}
 	}
 	control := component.ControlRemote
 	if p.Participant == s.participantID() {
@@ -591,14 +599,14 @@ func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 	heat, energy := s.world.Resources.Player.InitialResources()
 	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
 		Slot: p.Slot, Center: true, Control: uint8(control), PeerID: p.Participant, Holder: p.Holder,
-		Heat: heat, Energy: energy,
+		Heat: heat, Energy: energy, Claim: p.Claim, Record: p.Record,
 	})
 	if control == component.ControlLocal {
 		s.world.PushEvent(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: p.Slot})
 	}
 	s.lastSync[p.Slot], s.stateSeen[p.Slot], s.rawStateSeen[p.Slot] = 0, 0, 0
 	if int(p.Participant) < len(s.departed) {
-		s.departed[p.Participant] = false
+		s.departed[p.Participant], s.expiring[p.Participant] = false, false
 	}
 }
 
@@ -653,8 +661,9 @@ func (s *NetworkSystem) barrierDelayTicks() uint64 {
 }
 
 // removeParticipant applies the departure crossing. It arrives at the same apply
-// tick on every instance, so the despawn it derives does too (D-5) — which is the
-// whole reason a disconnect is not acted on where it is observed.
+// tick on every instance, so the change it derives does too (D-5) — which is the
+// whole reason a disconnect is not acted on where it is observed. A dismissal
+// despawns the cursor; any other departure turns it Wraith, keeping its slot.
 func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	if p.Participant == 0 {
 		return
@@ -664,12 +673,13 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 		s.enabled = false
 		r.OnDismissed()
 	}
-	// One crossing retires the whole holder group at the same simulation boundary.
+	// One crossing retires the whole holder group at the same simulation boundary,
+	// in the same way: a holder's bots wait with it, or go with it.
 	var children []event.ParticipantDepartedPayload
 	for _, e := range s.world.Components.Cursor.Entities() {
 		c, ok := s.world.Components.Cursor.GetComponent(e)
 		if ok && c.Holder == p.Participant {
-			children = append(children, event.ParticipantDepartedPayload{Participant: c.PeerID, Slot: c.Slot, Dismissed: true})
+			children = append(children, event.ParticipantDepartedPayload{Participant: c.PeerID, Slot: c.Slot, Dismissed: p.Dismissed})
 		}
 	}
 	for i := range children {
@@ -677,25 +687,29 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	}
 	s.forgetParticipant(p.Participant)
 	if int(p.Participant) < len(s.departed) {
-		s.departed[p.Participant] = true
+		s.departed[p.Participant], s.expiring[p.Participant] = true, false
 	}
-	if r := s.world.Resources.Network; r != nil {
-		if r.OnDeparture != nil {
-			r.OnDeparture(p.Participant)
-		}
+	var cursor core.Entity
+	if int(p.Slot) < parameter.MaxPlayers {
+		cursor = s.world.Resources.Player.Slot(p.Slot)
+	}
+	c, held := s.world.Components.Cursor.GetComponent(cursor)
+	held = held && c.PeerID == p.Participant
+	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
+		// A participant with no cursor has nothing to wait in, so it leaves for good.
+		r.OnDeparture(p.Participant, p.Dismissed || !held)
 	}
 	if port, ok := s.port().(engine.PeerDroppingPort); ok {
 		port.Disconnect(p.Participant)
 	}
-	if int(p.Slot) >= parameter.MaxPlayers {
+	if !held || s.world.SimulatesLocally(cursor) {
 		return
 	}
-	cursor := s.world.Resources.Player.Slot(p.Slot)
-	c, ok := s.world.Components.Cursor.GetComponent(cursor)
-	if !ok || c.PeerID != p.Participant || s.world.SimulatesLocally(cursor) {
-		return
+	if p.Dismissed {
+		s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: p.Slot})
+	} else {
+		s.world.PushEvent(event.EventCursorWraithRequest, &event.CursorWraithRequestPayload{Slot: p.Slot})
 	}
-	s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: p.Slot})
 	s.lastSync[p.Slot], s.stateSeen[p.Slot], s.rawStateSeen[p.Slot] = 0, 0, 0
 }
 
@@ -1382,7 +1396,52 @@ func (s *NetworkSystem) pushSessionRecords(p engine.NetworkPort) {
 	s.world.SettlePredictedDeaths()
 	if s.enabled {
 		s.driveOwnLead(p)
+		if p != nil && p.IsRunning() && s.isCoordinator() {
+			s.expireWraiths()
+		}
 	}
+}
+
+// expireWraiths dismisses each participant away for parameter.WraithTimeout of game
+// time, and the one the session layer gives a newcomer the place of, once each: the
+// authority decides it as it decides every roster change, a bot whose holder waits
+// too goes in its holder's crossing, and one on its way back waits for its arrival.
+func (s *NetworkSystem) expireWraiths() {
+	var yield uint32
+	kept := func(uint32) bool { return false }
+	if r := s.world.Resources.Network; r != nil {
+		if r.DismissWraith != nil {
+			yield = r.DismissWraith()
+		}
+		if r.WraithKept != nil {
+			kept = r.WraithKept
+		}
+	}
+	now := s.world.Resources.Time.GameTime
+	cursors := s.world.Components.Cursor
+	var due []event.ParticipantDepartedPayload
+	s.world.Components.Wraith.Each(func(e core.Entity, w *component.WraithComponent) bool {
+		c, ok := cursors.GetComponent(e)
+		if !ok || c.PeerID == 0 || int(c.PeerID) >= len(s.expiring) || s.expiring[c.PeerID] ||
+			now.Sub(w.Since) < parameter.WraithTimeout && c.PeerID != yield || c.Holder != 0 && s.away(c.Holder) ||
+			kept(c.PeerID) {
+			return true
+		}
+		s.expiring[c.PeerID] = true
+		due = append(due, event.ParticipantDepartedPayload{Participant: c.PeerID, Slot: c.Slot, Dismissed: true})
+		return true
+	})
+	for i := range due {
+		s.world.Log().Info("session", "msg", "wraith dropped", "participant", due[i].Participant,
+			"slot", int(due[i].Slot), "yielded", due[i].Participant == yield)
+		s.crossSession(event.EventParticipantDeparted, &due[i])
+	}
+}
+
+// away reports whether a participant's cursor is a Wraith.
+func (s *NetworkSystem) away(participant uint32) bool {
+	slot, ok := s.participantSlot(participant)
+	return ok && s.world.Components.Wraith.HasEntity(s.world.Resources.Player.Slot(slot))
 }
 
 // publishLinkMeasurement hands the transport this instance's progress report and
@@ -1486,9 +1545,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 		case network.InboundDisconnect:
 			s.world.LatchSession()
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
-			s.reportDisconnect(uint32(in.Peer), p.PeerCount())
+			dropped := s.reportDisconnect(uint32(in.Peer), p.PeerCount())
 			s.forgetDigestPeer(uint32(in.Peer))
-			s.noticeDeparture(uint32(in.Peer))
+			s.noticeDeparture(uint32(in.Peer), dropped)
 		case network.InboundMessage:
 			if r := s.world.Resources.Network; r != nil && in.Msg != nil && int(in.Peer) < len(r.Ingress) {
 				r.Ingress[in.Peer].Add(uint64(network.HeaderSize + len(in.Msg.Payload)))
@@ -1502,8 +1561,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 // is gone nothing on it sends a mismatching one, so the worst transport failure
 // would look like silence. Losing the authority is called out separately on a
 // guest, which continues from the last authoritative state — a fork rather than a
-// session until a succession adopts a term.
-func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
+// session until a succession adopts a term. It reports whether the link was a seat
+// this run dropped.
+func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) (dropped bool) {
 	authorityLost := peerID == s.authorityParticipant() && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
 	if peerID == s.relay && !authorityLost {
@@ -1521,17 +1581,17 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	// Every departure reaches the session layer, not only the authority's: a
 	// survivor's own reach is what the succession rule counts, and it changes
 	// whenever any link does. A seat this run dropped leaves as it was told to.
-	dropped := false
 	if r := s.world.Resources.Network; r != nil && r.OnPeerLost != nil {
 		dropped = r.OnPeerLost(peerID)
 	}
 	if dropped {
 		s.world.Log().Info("net", "msg", "seat link closed", "peer", peerID, "remaining_peers", remaining)
-		return
+		return true
 	}
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Alert: true})
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
+	return false
 }
 
 func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
@@ -1541,23 +1601,24 @@ func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
 	s.pendingDigest[peer] = stateDigest{}
 }
 
-// noticeDeparture despawns nothing: only a direct neighbour sees a lost link, at a
-// moment its transport chose, so acting here would remove a shared cursor at a
+// noticeDeparture changes nothing: only a direct neighbour sees a lost link, at a
+// moment its transport chose, so acting here would change a shared cursor at a
 // different tick on every instance. The coordinator crosses the one departure and
 // any other neighbour floods a notice. The identity returns to the pool when that
 // crossing applies, or here for a participant with no cursor, which has none.
-func (s *NetworkSystem) noticeDeparture(peerID uint32) {
+// dismissed is a seat this run dropped, which leaves for good.
+func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
 	if _, crossed := s.participantSlot(peerID); !crossed {
 		if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
-			r.OnDeparture(peerID)
+			r.OnDeparture(peerID, true)
 		}
 	}
-	s.announceDeparture(peerID, 0)
+	s.announceDeparture(peerID, 0, dismissed)
 }
 
 // announceDeparture crosses or forwards one departure, once. from is the link a
 // notice arrived on, or zero when this instance observed the disconnect itself.
-func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32) bool {
+func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32, dismissed bool) bool {
 	if peerID == 0 || int(peerID) >= len(s.departed) || s.departed[peerID] {
 		return false
 	}
@@ -1569,14 +1630,14 @@ func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32) bool {
 	}
 	if s.isCoordinator() {
 		s.crossSession(event.EventParticipantDeparted,
-			&event.ParticipantDepartedPayload{Participant: peerID, Slot: slot})
+			&event.ParticipantDepartedPayload{Participant: peerID, Slot: slot, Dismissed: dismissed})
 		return true
 	}
 	p := s.port()
 	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return true
 	}
-	body, err := json.Marshal(event.ParticipantDepartedPayload{Participant: peerID, Slot: slot})
+	body, err := json.Marshal(event.ParticipantDepartedPayload{Participant: peerID, Slot: slot, Dismissed: dismissed})
 	if err != nil {
 		s.statDrop.Add(1)
 		return true
@@ -1601,7 +1662,14 @@ func (s *NetworkSystem) receiveDeparture(from uint32, body []byte) {
 	if s.linked(p.Participant) {
 		return
 	}
-	if !s.announceDeparture(p.Participant, from) {
+	// A notice dismisses only a seat, which its holder dropped and any neighbour
+	// passes on; a player leaves for good only by the authority's own word.
+	if p.Dismissed {
+		slot, ok := s.participantSlot(p.Participant)
+		c, _ := s.world.Components.Cursor.GetComponent(s.world.Resources.Player.Slot(slot))
+		p.Dismissed = ok && c.Holder != 0
+	}
+	if !s.announceDeparture(p.Participant, from, p.Dismissed) {
 		s.statDuplicates.Add(1)
 	}
 }
@@ -2678,14 +2746,19 @@ func (s *NetworkSystem) remoteParticipants() int {
 // holding up the others.
 func (s *NetworkSystem) sendCursorState(p engine.NetworkPort) {
 	s.syncSeq++
+	r := s.world.Resources.Network
 	for i := range parameter.MaxPlayers {
 		cursor := s.world.Resources.Player.Slot(uint8(i))
 		if cursor == 0 || !s.world.SimulatesLocally(cursor) {
 			continue
 		}
+		state := s.readCursorState(cursor, uint8(i))
+		if r != nil && r.OnOwnState != nil && uint8(i) == s.world.Resources.Player.LocalSlot() {
+			r.OnOwnState(state)
+		}
 		// The authority's own sync is committed as sent, to its next tick; a guest's
 		// goes raw, for the authority to commit.
-		f := event.ScheduledWireFrame{Frame: stateFrame(s.readCursorState(cursor, uint8(i)))}
+		f := event.ScheduledWireFrame{Frame: stateFrame(state)}
 		if s.isCoordinator() {
 			f.ApplyTick = s.localTick() + 1
 		}
@@ -2858,7 +2931,8 @@ func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 // another's sequence, so it is dropped rather than reconciled.
 func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	cursor := s.world.ResolveCursor(p.Entity)
-	if cursor == 0 || s.world.SimulatesLocally(cursor) || int(p.Slot) >= parameter.MaxPlayers {
+	if cursor == 0 || s.world.SimulatesLocally(cursor) || int(p.Slot) >= parameter.MaxPlayers ||
+		s.world.Components.Wraith.HasEntity(cursor) {
 		s.statDrop.Add(1)
 		return false
 	}
@@ -2940,7 +3014,7 @@ type networkState struct {
 	syncSeq, ticks, lostSeq                    uint64
 	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
 	states                                     []pendingState
-	departed                                   [participantSlots]bool
+	departed, expiring                         [participantSlots]bool
 	digestHistory                              [parameter.NetworkEpochWindow]stateDigest
 	pendingDigest                              [participantSlots]stateDigest
 	suffix                                     []localCrossing
@@ -2967,7 +3041,7 @@ func (s *NetworkSystem) CopyState() any {
 		encodeErr: s.encodeErr, suffixDropped: s.suffixDropped, barrierActive: s.barrierActive.Load(),
 		appliedPeerSeq: s.appliedPeerSeq, downAt: s.downAt, relay: s.relay, snapshotFences: slices.Clone(s.snapshotFences),
 		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
-		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed,
+		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed, expiring: s.expiring,
 		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
 		paceSamples: s.paceSamples, paceCount: s.paceCount, pathAge: s.pathAge,
 		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
@@ -2995,6 +3069,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.appliedPeerSeq, s.downAt, s.relay, s.snapshotFences = c.appliedPeerSeq, c.downAt, c.relay, slices.Clone(c.snapshotFences)
 	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
 	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
+	s.expiring = c.expiring
 	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
 	s.paceSamples, s.paceCount, s.pathAge = c.paceSamples, c.paceCount, c.pathAge
 	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch

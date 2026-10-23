@@ -88,6 +88,38 @@ func TestMetaDefeatGatesFollowRosteredOwnerCrossings(t *testing.T) {
 	}
 }
 
+// TestAWraithNeitherLosesNorHoldsUpADefeat: the players left decide a defeat, so a
+// defeated player alone with a Wraith has lost, and a session of Wraiths has not.
+func TestAWraithNeitherLosesNorHoldsUpADefeat(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	meta := NewMetaSystem(ctx).(*MetaSystem)
+	for slot := range uint8(2) {
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
+			Payload: &event.CursorSpawnRequestPayload{Slot: slot, X: 5 + int(slot)*10, Y: 5,
+				Control: uint8(component.ControlLocal)}})
+	}
+	turn := func(slot uint8) {
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+			Payload: &event.CursorWraithRequestPayload{Slot: slot}})
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			meta.HandleEvent(ev)
+		}
+	}
+	all, anyLost := w.Resources.Status.Bools.Get("session.all_defeated"), w.Resources.Status.Bools.Get("session.any_defeated")
+	turn(1)
+	meta.HandleEvent(event.GameEvent{Type: event.EventCursorDefeatState,
+		Payload: &event.CursorDefeatStatePayload{Entity: w.Resources.Player.Slot(0), Defeated: true}})
+	if !all.Load() || !anyLost.Load() {
+		t.Fatalf("a defeated player alone with a Wraith: all defeated %t, any %t; want both", all.Load(), anyLost.Load())
+	}
+	turn(0)
+	if all.Load() || anyLost.Load() {
+		t.Fatalf("a session of Wraiths: all defeated %t, any %t; want neither", all.Load(), anyLost.Load())
+	}
+}
+
 // A species strikes only the cursors this instance owns: a shield its members reach,
 // with the impact crossing, and a bare cursor on a member's cell unless the species
 // strikes shields alone.

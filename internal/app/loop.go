@@ -25,6 +25,9 @@ func Run(cfg Config) error {
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
+	// One keeper for every run of the process, so a run that replaces another comes
+	// back to the place that one left.
+	cfg.claims = newClaimKeeper(cfg.ClaimStore)
 	// A host with a player plays from its first tick and opens its door once the
 	// clock runs, as :host does; only a run with nobody to play waits in a lobby.
 	cfg.HostAddress, cfg.resumeHost = "", cfg.HostAddress
@@ -96,20 +99,18 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 }
 
 // openRun builds the App, retrying while the coordinator this participant follows
-// rebuilds itself. Only a rejoin retries: a first -join reports a host that is not
-// there at once, which is what an operator dialling by hand wants, and a refusal
-// that no retry helps meets the same answer a second later.
+// rebuilds itself. A first -join retries only a refusal that passes in moments: it
+// reports a host that is not there at once, which is what an operator dialling by
+// hand wants, and a refusal that no retry helps meets the same answer a second later.
 func openRun(cfg Config, rejoin bool) (*App, error) {
-	if !rejoin {
-		return newSessionApp(cfg)
-	}
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
 	for {
 		a, err := newSessionApp(cfg)
+		retry := network.RetryOf(err)
 		switch {
 		case err == nil:
 			return a, nil
-		case network.RetryOf(err) == network.RetryNever || !time.Now().Before(deadline):
+		case retry == network.RetryNever || !rejoin && retry != network.RetrySoon || !time.Now().Before(deadline):
 			return nil, err
 		}
 		time.Sleep(parameter.SessionRejoinInterval)

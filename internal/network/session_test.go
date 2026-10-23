@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,7 +56,7 @@ func TestProbesKeepAQuietLinkAlive(t *testing.T) {
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.ReadTimeout = quiet
-	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
 	host := NewSocketPort(hostCfg)
 	defer host.Close()
 	if err := host.Start(); err != nil {
@@ -99,11 +100,48 @@ func TestProbesKeepAQuietLinkAlive(t *testing.T) {
 	}
 }
 
+// TestTheCoordinatorAssignsWithTheClaimsADialNames: a place is assigned knowing
+// exactly the tokens the dialer keeps, and a dialer naming one of another form is
+// assigned nothing.
+func TestTheCoordinatorAssignsWithTheClaimsADialNames(t *testing.T) {
+	offer := testOffer()
+	assigned := make(chan []string, 1)
+	accept := HostAcceptor(Coordinator{Assign: func(claims []string) (SessionOffer, error) {
+		assigned <- claims
+		return offer, nil
+	}}, time.Second)
+	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = accept
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for _, kept := range [][]string{nil, {NewClaimToken(), NewClaimToken()}} {
+		cfg := DebugConfig(RolePeer, "")
+		cfg.Claims = kept
+		pending, _, err := DialSession(host.Addr().String(), cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = pending.Close()
+		if got := <-assigned; !slices.Equal(got, kept) {
+			t.Fatalf("a dial keeping %q was assigned knowing %q", kept, got)
+		}
+	}
+
+	conn := &scripted{in: bytes.NewReader(frames(MsgJoinClaims, []string{ClaimDigest("x")[:10]}))}
+	if _, err := accept(conn); err == nil || len(assigned) != 0 {
+		t.Fatalf("a dial naming a claim of another form: %v, assigned %d", err, len(assigned))
+	}
+}
+
 func TestSessionRejectionReturnsTheJoinErrorUnchanged(t *testing.T) {
 	offer := testOffer()
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
 	host := NewSocketPort(hostCfg)
 	defer host.Close()
 	if err := host.Start(); err != nil {
@@ -191,7 +229,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	offer := testOffer()
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
 	host := NewSocketPort(hostCfg)
 	defer host.Close()
 	if err := host.Start(); err != nil {
@@ -300,7 +338,7 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	hostCfg := DebugConfig(RoleHost, "ws://127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
-		Assign: func() (SessionOffer, error) { return offer, nil },
+		Assign: func([]string) (SessionOffer, error) { return offer, nil },
 		Name:   "7f3c1a",
 	}, time.Second)
 	host := NewSocketPort(hostCfg)
@@ -340,7 +378,7 @@ func TestALinkAClientCannotTakeJoinsByTheRouteItsSiteLists(t *testing.T) {
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
-		Assign: func() (SessionOffer, error) { return offer, nil },
+		Assign: func([]string) (SessionOffer, error) { return offer, nil },
 		Name:   "7f3c1a",
 	}, time.Second)
 	host := NewSocketPort(hostCfg)

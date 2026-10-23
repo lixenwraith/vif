@@ -2,6 +2,7 @@ package system
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -66,6 +67,7 @@ func (s *CursorSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCursorSpawnRequest,
 		event.EventCursorDespawnRequest,
+		event.EventCursorWraithRequest,
 		event.EventCursorMoveRequest,
 		event.EventCursorSetLocalRequest,
 	}
@@ -81,6 +83,10 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCursorDespawnRequest:
 		if p, ok := ev.Payload.(*event.CursorDespawnRequestPayload); ok {
 			s.despawn(p)
+		}
+	case event.EventCursorWraithRequest:
+		if p, ok := ev.Payload.(*event.CursorWraithRequestPayload); ok {
+			s.wraith(p.Slot, s.world.Resources.Time.GameTime)
 		}
 	case event.EventCursorMoveRequest:
 		if p, ok := ev.Payload.(*event.CursorMoveRequestPayload); ok {
@@ -133,7 +139,9 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 
 	// A full reset rebuilds the session roster through the normal scripted boot
 	// request. The request supplies the configuration template; the pending entries
-	// supply only membership and per-instance control assignments.
+	// supply only membership and per-instance control assignments. A Wraith is
+	// rebuilt like any cursor and turns again, its wait going on from the last game's,
+	// so no run of resets keeps it.
 	if entries, count, local := roster.TakeRestore(); count > 0 {
 		roster.SetLocal(local)
 		for i := range count {
@@ -142,8 +150,11 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 			q.Slot = entry.Slot
 			q.Auto = false
 			q.Control = uint8(entry.Control)
-			q.PeerID, q.Holder = entry.PeerID, entry.Holder
+			q.PeerID, q.Holder, q.Claim = entry.PeerID, entry.Holder, entry.Claim
 			s.spawnOne(&q)
+			if entry.Wraith {
+				s.wraith(entry.Slot, s.world.Resources.Time.GameTime.Add(-entry.Waited))
+			}
 		}
 		return
 	}
@@ -163,7 +174,16 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 		}
 		slot = free
 	}
-	if int(slot) >= parameter.MaxPlayers || roster.Slot(slot) != 0 {
+	if int(slot) >= parameter.MaxPlayers {
+		s.fail("slot unavailable")
+		return
+	}
+	if e := roster.Slot(slot); e != 0 {
+		c, _ := s.world.Components.Cursor.GetComponent(e)
+		if w, away := s.world.Components.Wraith.GetComponent(e); away && c.PeerID == p.PeerID {
+			s.reclaim(e, slot, w, p)
+			return
+		}
 		s.fail("slot unavailable")
 		return
 	}
@@ -185,9 +205,8 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 		return
 	}
 
-	e := s.build(slot, x, y, component.ControlKind(p.Control), p.PeerID, p.Heat, p.Energy)
-	cursor, _ := s.world.Components.Cursor.GetPtr(e)
-	cursor.Holder = p.Holder
+	e := s.build(slot, p)
+	s.equip(e, x, y, p.Heat, p.Energy)
 	roster.Bind(slot, e)
 	s.world.UpdateBoundsRadius()
 	s.publishRoster()
@@ -201,10 +220,7 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 // that places none: nothing draws, moves, targets or drains it, and a player holding
 // it plays through the keys and buttons the scenario takes. It announces no cell.
 func (s *CursorSystem) rosterOffMap(slot uint8, p *event.CursorSpawnRequestPayload) {
-	e := s.world.CreateEntity(core.DomainShared)
-	s.world.Components.Cursor.SetComponent(e, component.CursorComponent{
-		Slot: slot, Control: component.ControlKind(p.Control), PeerID: p.PeerID, Holder: p.Holder})
-	s.world.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll})
+	e := s.build(slot, p)
 	s.world.Resources.Player.Bind(slot, e)
 	s.publishRoster()
 
@@ -244,15 +260,106 @@ func (s *CursorSystem) destroy(slot uint8) {
 	s.world.PushEvent(event.EventCursorDespawned, &event.CursorDespawnedPayload{Entity: e, Slot: slot})
 }
 
-// build creates one cursor entity with its full component set
-func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind, peerID uint32, heat, energy int) core.Entity {
+// wraith turns one rostered cursor Wraith, waiting since the given game time: it
+// keeps its entity, slot and owner, and gives up everything the world reaches it
+// through, the cell it stood on included, which it remembers to be drawn at and to
+// come back to.
+func (s *CursorSystem) wraith(slot uint8, since time.Time) {
+	w := s.world
+	e := w.Resources.Player.Slot(slot)
+	if e == 0 || w.Components.Wraith.HasEntity(e) {
+		return
+	}
+	x, y := -1, -1
+	if pos, ok := w.Positions.GetPosition(e); ok {
+		x, y = pos.X, pos.Y
+	}
+	s.strip(e)
+	w.Components.Wraith.SetComponent(e, component.WraithComponent{Since: since, X: x, Y: y})
+	s.publishRoster()
+
+	w.Log().Info("app", "msg", "cursor turned wraith", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
+	w.PushEvent(event.EventCursorDespawned, &event.CursorDespawnedPayload{Entity: e, Slot: slot})
+}
+
+// reclaim gives a Wraith back to its participant: equipped again at the free cell
+// nearest the one it held, or the map's centre for one it held off the map, with
+// what its player brought back of the game it left over the template.
+func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.WraithComponent, p *event.CursorSpawnRequestPayload) {
+	w := s.world
+	config := w.Resources.Config
+	x, y := -1, -1
+	if !config.CursorsOffMap {
+		x, y = wraith.X, wraith.Y
+		if x < 0 {
+			x, y = config.MapWidth/2, config.MapHeight/2
+		}
+		var placed bool
+		x, y, placed = w.ResolveFreeCell(
+			max(0, min(x, config.MapWidth-1)), max(0, min(y, config.MapHeight-1)),
+			component.WallBlockCursor)
+		if !placed {
+			s.fail("no free cell")
+			return
+		}
+	}
+	w.Components.Wraith.RemoveEntity(e)
+	if c, ok := w.Components.Cursor.GetPtr(e); ok {
+		c.Control = component.ControlKind(p.Control)
+	}
+	if x >= 0 {
+		s.equip(e, x, y, p.Heat, p.Energy)
+		if r := p.Record; r != nil {
+			s.restore(e, r)
+		}
+		w.UpdateBoundsRadius()
+	}
+	s.publishRoster()
+
+	w.Log().Info("app", "msg", "cursor taken back", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
+	w.PushEvent(event.EventCursorSpawned, &event.CursorSpawnedPayload{Entity: e, X: x, Y: y, Slot: slot})
+	if x >= 0 {
+		w.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
+	}
+}
+
+// restore writes what a returning player brought back of the game it left over the
+// template its cursor was equipped with.
+func (s *CursorSystem) restore(e core.Entity, r *event.CursorRecord) {
+	c := s.world.Components
+	if energy, ok := c.Energy.GetPtr(e); ok {
+		energy.Current = r.Energy
+	}
+	if heat, ok := c.Heat.GetPtr(e); ok {
+		heat.Current = r.Heat
+	}
+	if combat, ok := c.Combat.GetPtr(e); ok {
+		combat.HitPoints = r.HitPoints
+	}
+	if weapon, ok := c.Weapon.GetPtr(e); ok {
+		for wt := range min(component.WeaponCount, component.WeaponType(len(r.Charges))) {
+			weapon.Charges[wt] = r.Charges[wt]
+		}
+	}
+}
+
+// build creates the entity a slot holds before anything places it: its slot, its
+// owner and what drives it. An off-map cursor and a Wraith are this alone.
+func (s *CursorSystem) build(slot uint8, p *event.CursorSpawnRequestPayload) core.Entity {
 	w := s.world
 	e := w.CreateEntity(core.DomainShared)
-
-	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
-	w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: slot, Control: control, PeerID: peerID})
-	w.Components.CursorView.SetComponent(e, component.CursorViewComponent{})
+	w.Components.Cursor.SetComponent(e, component.CursorComponent{
+		Slot: slot, Control: component.ControlKind(p.Control), PeerID: p.PeerID, Holder: p.Holder, Claim: p.Claim})
 	w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll})
+	return e
+}
+
+// equip puts a built cursor on the map with its full playing set; strip takes the
+// same set away again, so a component one adds the other removes.
+func (s *CursorSystem) equip(e core.Entity, x, y, heat, energy int) {
+	w := s.world
+	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+	w.Components.CursorView.SetComponent(e, component.CursorViewComponent{})
 	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: true})
 	w.Components.Heat.SetComponent(e, component.HeatComponent{Current: heat})
 	w.Components.Energy.SetComponent(e, component.EnergyComponent{Current: int64(energy)})
@@ -275,7 +382,19 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 		CombatEntityType: component.CombatEntityCursor,
 		HitPoints:        100,
 	})
-	return e
+}
+
+func (s *CursorSystem) strip(e core.Entity) {
+	w := s.world
+	w.Positions.RemoveEntity(e)
+	w.Components.CursorView.RemoveEntity(e)
+	w.Components.Ping.RemoveEntity(e)
+	w.Components.Heat.RemoveEntity(e)
+	w.Components.Energy.RemoveEntity(e)
+	w.Components.Shield.RemoveEntity(e)
+	w.Components.Boost.RemoveEntity(e)
+	w.Components.Weapon.RemoveEntity(e)
+	w.Components.Combat.RemoveEntity(e)
 }
 
 // fail reports a spawn refusal so the FSM can retry

@@ -167,6 +167,94 @@ func TestRemoteCursorJoinsTheRosterWithoutBecomingLocal(t *testing.T) {
 	}
 }
 
+// TestADepartedCursorWaitsAsAWraith: a Wraith keeps its entity, slot, owner and the
+// cell it stood on, and holds nothing the world reaches a cursor through, so no
+// contested mechanic finds it. Turning it is announced as the cursor leaving play,
+// once: its wait starts when it turns.
+func TestADepartedCursorWaitsAsAWraith(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	turn := func() []event.GameEvent {
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+			Payload: &event.CursorWraithRequestPayload{Slot: 2}})
+		return w.Resources.Event.Queue.Consume()
+	}
+
+	since := w.Resources.Time.GameTime
+	events := turn()
+	if got := w.Resources.Player.Slot(2); got != remote {
+		t.Fatalf("slot 2 holds %d after its cursor turned Wraith, want the same entity %d", got, remote)
+	}
+	if c, ok := w.Components.Cursor.GetComponent(remote); !ok || c.PeerID != 7 || c.Control != component.ControlRemote {
+		t.Fatalf("the Wraith's cursor = %+v, want peer 7 driving it remotely", c)
+	}
+	wraith, ok := w.Components.Wraith.GetComponent(remote)
+	if !ok || wraith.X != 25 || wraith.Y != 5 || !wraith.Since.Equal(since) {
+		t.Fatalf("Wraith = %+v (held %t), want cell 25,5 since %v", wraith, ok, since)
+	}
+	if mask, _ := w.GetComponentMask(remote); mask != engine.CursorBit|engine.ProtectionBit|engine.WraithBit {
+		t.Fatalf("the Wraith holds components %b, want its cursor, protection and Wraith alone", mask)
+	}
+	if got, _, _, ok := ClosestCursor(w, 25, 5); ok && got == remote {
+		t.Fatal("a contested mechanic found the Wraith at the cell it holds")
+	}
+	if len(events) != 1 || events[0].Type != event.EventCursorDespawned {
+		t.Fatalf("turning Wraith announced %v, want one cursor leaving play", events)
+	}
+	if p, _ := events[0].Payload.(*event.CursorDespawnedPayload); p == nil || p.Entity != remote || p.Slot != 2 {
+		t.Fatalf("the announcement names %+v, want entity %d in slot 2", events[0].Payload, remote)
+	}
+
+	w.Resources.Time.GameTime = since.Add(time.Minute)
+	if events := turn(); len(events) != 0 {
+		t.Fatalf("a second request announced %v, want nothing", events)
+	}
+	if wraith, _ := w.Components.Wraith.GetComponent(remote); !wraith.Since.Equal(since) {
+		t.Fatalf("a second request restarted the wait at %v, want %v", wraith.Since, since)
+	}
+}
+
+// TestAnArrivalIntoItsOwnWraithTakesItBack: a participant's spawn into the slot its
+// Wraith keeps is that cursor again, at the cell it held and with what its player
+// brought back over the template; another participant's finds the slot taken.
+func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+		Payload: &event.CursorWraithRequestPayload{Slot: 2}})
+	w.Resources.Event.Queue.Consume()
+	record := event.CursorRecord{Charges: []int{0, 3}, Energy: 4321, Heat: 9, HitPoints: 37}
+	arrive := func(peer uint32) {
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
+			Slot: 2, Center: true, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record}})
+		w.Resources.Event.Queue.Consume()
+	}
+
+	arrive(8)
+	if !w.Components.Wraith.HasEntity(remote) || w.Resources.Player.Slot(2) != remote {
+		t.Fatal("another participant's arrival took the Wraith's place")
+	}
+	arrive(7)
+	if w.Resources.Player.Slot(2) != remote || w.Components.Wraith.HasEntity(remote) {
+		t.Fatalf("slot 2 holds %d, a Wraith %t; want entity %d taken back", w.Resources.Player.Slot(2),
+			w.Components.Wraith.HasEntity(remote), remote)
+	}
+	if pos, ok := w.Positions.GetPosition(remote); !ok || pos.X != 25 || pos.Y != 5 {
+		t.Fatalf("the cursor taken back stands at %+v, want the cell its Wraith held, 25,5", pos)
+	}
+	energy, _ := w.Components.Energy.GetComponent(remote)
+	heat, _ := w.Components.Heat.GetComponent(remote)
+	combat, _ := w.Components.Combat.GetComponent(remote)
+	weapon, _ := w.Components.Weapon.GetComponent(remote)
+	if energy.Current != record.Energy || heat.Current != record.Heat || combat.HitPoints != record.HitPoints ||
+		weapon.Charges[1] != record.Charges[1] {
+		t.Fatalf("taken back with energy %d heat %d health %d charges %v; want the record %+v",
+			energy.Current, heat.Current, combat.HitPoints, weapon.Charges, record)
+	}
+}
+
 // TestRemoteCursorRejectsOwnerAuthoredWrites is the D-2 admission check: every
 // owner-authored writer refuses a cursor this instance does not simulate, so a
 // transported value is the single authority for that cell (D-13).

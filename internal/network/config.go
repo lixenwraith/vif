@@ -63,6 +63,10 @@ type Config struct {
 	// serves several sessions. Empty dials an address that serves one.
 	SessionName string
 
+	// Claims are the tokens a dial names when the coordinator asks which places it
+	// can come back to: one a Wraith keeps a place under is offered that place.
+	Claims []string
+
 	// Identity is the build half of what this peer is (wire contract, manifest and
 	// layout schemas), compared against the offer before a world is built from it.
 	// A zero Protocol disables the check, so a harness can dial a hand-built fixture.

@@ -1251,6 +1251,9 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 					name += fmt.Sprintf(" of %X", holder)
 				}
 			}
+			if p.Away {
+				name += " (away)"
+			}
 			names = append(names, name)
 		}
 		ctx.SetStatusMessage("Players: "+strings.Join(names, ", ")+"; :player drop <slot>", parameter.StatusNotice)

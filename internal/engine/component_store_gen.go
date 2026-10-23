@@ -14,6 +14,7 @@ const (
 	SigilBit
 	NuggetBit
 	CursorBit
+	WraithBit
 	ProtectionBit
 	KineticBit
 	WallBit
@@ -73,6 +74,7 @@ type Component struct {
 	Sigil        *Store[component.SigilComponent]
 	Nugget       *Store[component.NuggetComponent]
 	Cursor       *Store[component.CursorComponent]
+	Wraith       *Store[component.WraithComponent]
 	Protection   *Store[component.ProtectionComponent]
 	Kinetic      *Store[component.KineticComponent]
 	Wall         *Store[component.WallComponent]
@@ -131,6 +133,7 @@ func initComponents(w *World) {
 	w.Components.Sigil = NewStore[component.SigilComponent](w, SigilBit)
 	w.Components.Nugget = NewStore[component.NuggetComponent](w, NuggetBit)
 	w.Components.Cursor = NewStore[component.CursorComponent](w, CursorBit)
+	w.Components.Wraith = NewStore[component.WraithComponent](w, WraithBit)
 	w.Components.Protection = NewStore[component.ProtectionComponent](w, ProtectionBit)
 	w.Components.Kinetic = NewStore[component.KineticComponent](w, KineticBit)
 	w.Components.Wall = NewStore[component.WallComponent](w, WallBit)
@@ -211,6 +214,9 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&CursorBit != 0 {
 		w.Components.Cursor.RemoveEntity(e, true)
+	}
+	if mask&WraithBit != 0 {
+		w.Components.Wraith.RemoveEntity(e, true)
 	}
 	if mask&ProtectionBit != 0 {
 		w.Components.Protection.RemoveEntity(e, true)
@@ -393,6 +399,9 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&CursorBit != 0 {
 		w.Components.Cursor.RemoveBatch(entities, true)
 	}
+	if union&WraithBit != 0 {
+		w.Components.Wraith.RemoveBatch(entities, true)
+	}
 	if union&ProtectionBit != 0 {
 		w.Components.Protection.RemoveBatch(entities, true)
 	}
@@ -556,6 +565,7 @@ func (w *World) wipeAll() {
 	w.Components.Sigil.ClearAllComponents()
 	w.Components.Nugget.ClearAllComponents()
 	w.Components.Cursor.ClearAllComponents()
+	w.Components.Wraith.ClearAllComponents()
 	w.Components.Protection.ClearAllComponents()
 	w.Components.Kinetic.ClearAllComponents()
 	w.Components.Wall.ClearAllComponents()
@@ -617,6 +627,7 @@ type componentCopies struct {
 	Sigil        storeCopy[component.SigilComponent]
 	Nugget       storeCopy[component.NuggetComponent]
 	Cursor       storeCopy[component.CursorComponent]
+	Wraith       storeCopy[component.WraithComponent]
 	Protection   storeCopy[component.ProtectionComponent]
 	Kinetic      storeCopy[component.KineticComponent]
 	Wall         storeCopy[component.WallComponent]
@@ -675,6 +686,7 @@ func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 	c.Sigil = w.Components.Sigil.copyOut(reuse.Sigil)
 	c.Nugget = w.Components.Nugget.copyOut(reuse.Nugget)
 	c.Cursor = w.Components.Cursor.copyOut(reuse.Cursor)
+	c.Wraith = w.Components.Wraith.copyOut(reuse.Wraith)
 	c.Protection = w.Components.Protection.copyOut(reuse.Protection)
 	c.Kinetic = w.Components.Kinetic.copyOut(reuse.Kinetic)
 	c.Wall = w.Components.Wall.copyOut(reuse.Wall)
@@ -734,6 +746,7 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Sigil.copyIn(c.Sigil)
 	w.Components.Nugget.copyIn(c.Nugget)
 	w.Components.Cursor.copyIn(c.Cursor)
+	w.Components.Wraith.copyIn(c.Wraith)
 	w.Components.Protection.copyIn(c.Protection)
 	w.Components.Kinetic.copyIn(c.Kinetic)
 	w.Components.Wall.copyIn(c.Wall)

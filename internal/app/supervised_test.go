@@ -129,7 +129,7 @@ func TestWhatTheProbeReportsAboutAdmission(t *testing.T) {
 	if !full.Live {
 		t.Fatal("a full session reported itself dead; capacity is not a fault")
 	}
-	if _, err := a.assignParticipant(); errors.Is(err, ErrSessionEnding) {
+	if _, err := a.assignParticipant(nil); errors.Is(err, ErrSessionEnding) {
 		t.Fatal("a full session refused as if it were ending")
 	}
 
@@ -198,7 +198,7 @@ func TestDrainingRefusesDialsAndReadiness(t *testing.T) {
 
 	// The refusal has to be distinguishable from the starting one: this session is
 	// leaving, so retrying against it is exactly the wrong answer.
-	_, err := a.assignParticipant()
+	_, err := a.assignParticipant(nil)
 	if !errors.Is(err, ErrSessionEnding) {
 		t.Fatalf("a draining session answered a dial with %v, want ErrSessionEnding", err)
 	}

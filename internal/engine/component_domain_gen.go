@@ -15,6 +15,7 @@ type componentRule struct {
 var componentDomains = map[uint64]componentRule{
 	NuggetBit:       {"Nugget", core.DomainPlayer},
 	CursorBit:       {"Cursor", core.DomainShared},
+	WraithBit:       {"Wraith", core.DomainShared},
 	WallBit:         {"Wall", core.DomainShared},
 	LootBit:         {"Loot", core.DomainPlayer},
 	GatewayBit:      {"Gateway", core.DomainShared},

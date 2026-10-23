@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"os"
 	"slices"
@@ -215,6 +216,19 @@ func waitForCursors(t *testing.T, a *App, n int) {
 		a.seatsSummary()+fmt.Sprint((instance{a}).WorldRoster()), a.ctx.GetStatusMessage())
 }
 
+// waitForWraiths waits for a running instance's world to hold n Wraiths.
+func waitForWraiths(t *testing.T, a *App, n int) {
+	t.Helper()
+	var held int
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		a.World().RunSafe(func() { held = a.World().Components.Wraith.CountEntities() })
+		if held == n {
+			return
+		}
+	}
+	t.Fatalf("the world holds %d Wraiths, want %d; roster %+v", held, n, (instance{a}).WorldRoster())
+}
+
 // TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session opens one
 // with no listener, its bots join it in-process as participants, one dropped departs
 // as the drop it was asked for rather than a link loss, and the rest leave with the run.
@@ -348,17 +362,25 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 	until("the bot to run on", func() bool { return !held(b) && b.Position().Tick > at })
 }
 
-// TestAGuestsBotsLeaveWithIt: a guest's bots join through it and go when it does,
-// while the host's own bots stay.
-func TestAGuestsBotsLeaveWithIt(t *testing.T) {
+// TestAGuestsBotsWaitWithIt: a guest's bots join through it, and when it goes they
+// wait in their slots as Wraiths with it, while the host's own bot plays on.
+func TestAGuestsBotsWaitWithIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
 	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	_, leave := driveBot(t, Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	guest, leave := driveBot(t, Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 4)
+	id := network.PeerID(guest.localParticipant())
 	leave()
-	waitForCursors(t, host, 2)
+	waitForWraiths(t, host, 2)
+	roster := (instance{host}).WorldRoster()
+	for _, p := range roster {
+		if gone := p.ID == id || p.Holder == id; p.Away != gone {
+			t.Fatalf("the host holds %+v after participant %d left with its bot; roster %+v", p, id, roster)
+		}
+	}
+	waitForCursors(t, host, 4)
 }
 
 // TestARunAndItsBotsJournalMidSession: a run that seated a bot after it started
@@ -621,8 +643,8 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 
 // TestAGuestsBotsComeAlongWhenItLeaves: the bots a guest seated through its link are
 // seated again in the session it goes on in, through it as the coordinator it now
-// is, and its host sees them go with it. The name the left session answered to is
-// not the one they join under.
+// is, and its host keeps them as Wraiths with it. The name the left session answered
+// to is not the one they join under.
 func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
@@ -641,7 +663,7 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 		t.Fatalf("the bot kept seat %d through the leave; want it seated again", again.ID)
 	}
 	waitForCursors(t, guest, 2)
-	waitForCursors(t, host, 2)
+	waitForWraiths(t, host, 2)
 	var e core.Entity
 	guest.world.RunSafe(func() { e = guest.world.Resources.Player.Slot(again.Slot) })
 	first := cursorPosition(guest, e)
@@ -673,7 +695,7 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 	}
 	leave()
 	for _, a := range []*App{successor, guest} {
-		waitForCursors(t, a, 2)
+		waitForWraiths(t, a, 2)
 		for deadline := time.Now().Add(socketWait); (uint32(a.authority.Holder()) != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		}
 		if uint32(a.authority.Holder()) != id {
@@ -685,7 +707,7 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 		t.Fatalf("adding a bot: %v", err)
 	}
 	for _, a := range []*App{successor, guest} {
-		waitForCursors(t, a, 3)
+		waitForCursors(t, a, 5)
 	}
 	// The bot is rostered before its handshake ends, so its link to the guest can
 	// land after its cursor does
@@ -742,6 +764,43 @@ func TestDefaultTypesWhatItReaches(t *testing.T) {
 	}
 }
 
+// TestAPlayerComingBackTakesBackItsWraithAndItsBots: a guest whose run left joins
+// again from the same process, naming the claims it left under, and it and its bot
+// are given their own places back, the cursors their Wraiths kept.
+func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	t.Cleanup(func() { stopTicks(); host.Close() })
+	places := func() map[uint8][2]uint64 {
+		out := make(map[uint8][2]uint64)
+		host.world.RunSafe(func() {
+			for slot := range uint8(parameter.MaxPlayers) {
+				e := host.world.Resources.Player.Slot(slot)
+				if c, ok := host.world.Components.Cursor.GetComponent(e); ok {
+					out[slot] = [2]uint64{uint64(e), uint64(c.PeerID)}
+				}
+			}
+		})
+		return out
+	}
+	cfg := Config{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}, claims: newClaimKeeper(nil)}
+	_, leave := driveBot(t, cfg, "patrol", nil)
+	waitForCursors(t, host, 3)
+	left := places()
+	leave()
+	waitForWraiths(t, host, 2)
+
+	driveBot(t, cfg, "patrol", nil)
+	waitForWraiths(t, host, 0)
+	if got := places(); !maps.Equal(got, left) {
+		t.Fatalf("after coming back the session holds %v (entity, participant by slot), want the places it left, %v", got, left)
+	}
+}
+
 func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
@@ -775,14 +834,14 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 	if holder.authority.Holder() != holder.authority.Local() {
 		t.Fatal("the guest did not inherit the session")
 	}
-	waitForCursors(t, holder, 2)
+	waitForWraiths(t, holder, 1)
 	// Through the session control `:bot add` calls rather than typed: the holder's own
 	// bot types as well, and a mode it switched to would swallow the command.
 	holder.world.RunSafe(func() { err = holder.ctx.SessionCtl.AddBot("2:patrol") })
 	if err != nil {
 		t.Fatalf("adding bots: %v", err)
 	}
-	waitForCursors(t, holder, 4)
+	waitForCursors(t, holder, 5)
 	select {
 	case <-kept.done:
 		t.Fatal("the holder's existing bot was replaced during migration")
@@ -922,7 +981,7 @@ func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
 	}
 	leave()
 	for _, a := range []*App{successor, other} {
-		waitForCursors(t, a, 3)
+		waitForWraiths(t, a, 2)
 		for deadline := time.Now().Add(socketWait); (uint32(a.authority.Holder()) != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		}
 		if uint32(a.authority.Holder()) != id || forkCell(a).Load() {
@@ -999,7 +1058,7 @@ func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 
 // TestAPersonFindsAnotherPathWhenItsRelayLeaves: left with no link, a relayed
 // participant walks the chain to another guest, which carries its artifacts from
-// then on; the session goes on with its relay gone.
+// then on; the session goes on with its relay's cursor waiting as a Wraith.
 func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
@@ -1022,7 +1081,7 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 
 	leave()
 	for _, a := range []*App{host, other, person} {
-		waitForCursors(t, a, 4)
+		waitForWraiths(t, a, 1)
 	}
 	waitForMotion(t, host, cursorOf(t, host, id), "the relayed person's cursor on the host after its relay left")
 	if o, p := other.sessionTransport().PeerCount(), person.sessionTransport().PeerCount(); o != 2 || p != 1 {

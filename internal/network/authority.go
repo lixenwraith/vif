@@ -102,11 +102,12 @@ func SameRoster(a, b []RosterEntry) bool {
 }
 
 // DesignatedSuccessor chooses the first surviving independent chain member, falling
-// back to the lowest independent roster identity. Local reach is never an input.
+// back to the lowest independent roster identity; one away is no survivor. Local
+// reach is never an input.
 func DesignatedSuccessor(roster []RosterEntry, lost PeerID, chain SuccessionChain) (PeerID, bool) {
 	alive := func(id PeerID) bool {
 		return id != 0 && id != lost &&
-			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == id && p.Holder == 0 })
+			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == id && p.Holder == 0 && !p.Away })
 	}
 	for _, e := range chain {
 		if alive(e.ID) {

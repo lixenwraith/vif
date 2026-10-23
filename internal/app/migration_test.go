@@ -163,6 +163,24 @@ func TestTheSuccessorIsTheRostersLowestSurvivor(t *testing.T) {
 	}
 }
 
+// TestAnAwayParticipantIsNoSuccessor: a Wraith's participant has no link to serve a
+// term from, so the rule passes it over on the chain and on the roster alike, and a
+// session whose only other participant is away has no survivor.
+func TestAnAwayParticipantIsNoSuccessor(t *testing.T) {
+	t.Parallel()
+	roster := []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1, Away: true}, {ID: 3, Slot: 2}}
+	if got, ok := network.DesignatedSuccessor(roster, 1, nil); !ok || got != 3 {
+		t.Fatalf("successor to the host past an away guest = %d (ok=%t), want 3", got, ok)
+	}
+	chain := network.SuccessionChain{{ID: 2, Addr: "mesh"}, {ID: 3, Addr: "mesh"}}
+	if got, ok := network.DesignatedSuccessor(roster, 1, chain); !ok || got != 3 {
+		t.Fatalf("successor down a chain led by an away guest = %d (ok=%t), want 3", got, ok)
+	}
+	if got, ok := network.DesignatedSuccessor(roster[:2], 1, nil); ok {
+		t.Fatalf("a roster whose only guest is away designated %d", got)
+	}
+}
+
 // TestOnlyTheDesignatedSuccessorMayHoldATerm is the receiving end of the same
 // rule, and the whole of what replaced the vote: a receiver refuses a record
 // naming anyone but the successor its own roster designates, so a survivor that
@@ -301,6 +319,46 @@ func TestAnUnreachableSuccessorLeavesTheRestForking(t *testing.T) {
 				i, count)
 		}
 	}
+}
+
+// TestAForkFreezesItsPlayersRecordAndASuccessorDoesNot: a run its session gave up
+// gives up its claim, so what it plays from there is not what its player brings
+// back; the successor carrying the session on keeps its own, though it reaches
+// nobody and drops the cursors it cannot.
+func TestAForkFreezesItsPlayersRecordAndASuccessorDoesNot(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+	handOff(t, apps, 1)
+	claims := make([]*claim, len(apps))
+	for i, a := range apps {
+		claims[i] = a.claims.issue(false)
+		a.claim.Store(claims[i])
+	}
+
+	closeParticipant(apps[1])
+	successor, cutOff := apps[0], apps[2]
+	survivors := []*App{successor, cutOff}
+	settleAuthority(t, survivors, func() bool {
+		return authorityOf(successor).Authority == 1 && authorityOf(cutOff).Fork
+	})
+	for range 2*parameter.NetworkSuccessionTicks + 4 {
+		tickAll(survivors)
+	}
+	if cutOff.claim.Load() != nil || claimHeld(cutOff, claims[2]) {
+		t.Fatal("the fork still holds the claim its player comes back under")
+	}
+	if successor.claim.Load() != claims[0] || !claimHeld(successor, claims[0]) {
+		t.Fatal("the successor gave up the claim it carries its session on under")
+	}
+}
+
+// claimHeld reads whether a run of a's process is in its session under c.
+func claimHeld(a *App, c *claim) bool {
+	a.claims.mu.Lock()
+	defer a.claims.mu.Unlock()
+	return c.held
 }
 
 // handOff moves authorship to apps[to], for a test whose subject is what happens

@@ -22,6 +22,12 @@ const (
 	// not a credential: the port is unauthenticated by decision.
 	MsgSessionRoute MessageType = 0x05 // Live: the session name a dialer is holding
 
+	// MsgJoinClaims is the coordinator asking a dialer, before it assigns a place,
+	// which places it can come back to, and the dialer's answer: the token of each
+	// claim it keeps. Asked rather than sent with the route, so a door that refuses
+	// the route has read all a dialer sent and its refusal arrives whole.
+	MsgJoinClaims MessageType = 0x06 // Live: the claims a dialer comes back with
+
 	// Game. 0x10 is reserved and stays so: raw participant input is not a message
 	// kind — a peer sends the resolved D-3 artifact, never the keystroke.
 	MsgStateSync   MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)

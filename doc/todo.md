@@ -257,7 +257,9 @@ and how long a fetched container is kept.
   `internal/lifecycle`
 - Guide: [Build profiles](multi-platform.md#a-hidden-tab)
 
-A hidden tab draws nothing and repaints once on return. What remains is a tab that
+A hidden tab draws nothing and repaints once on return, and a reload inside the
+Wraith wait takes its place back with the tab's claim
+([Multi-player](multi-player.md#54-wraiths) §5.4). What remains is a tab that
 leaves: one hidden or suspended for five minutes must cost the other players
 nothing and resume or rejoin on return, and a session whose last guest was a
 browser must end on its own grace.
@@ -626,6 +628,35 @@ prints, playing on alone as after `:leave` instead of starting over, and an
 operator route on the allocator, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
+
+### Keep a Wraith's stats in the session
+
+- Priority: P2
+- Affected files: `internal/app/claim.go`, `internal/app/identity.go`,
+  `internal/app/host.go`, `internal/system/cursor.go`, `internal/system/network.go`
+- Guide: [Multi-player](multi-player.md#54-wraiths) §5.4
+
+A player coming back to its Wraith brings its cursor's stats itself
+(`event.CursorRecord`: energy, heat, health and loadout): the last owner-state sync
+its run made in that session, frozen once the run leaves it, so play in a fork since
+never comes back. This is a compromise. The values are owner-authored
+([D-13](domain-design.md#d-13--owner-authored-shared-values-have-one-writer)) and a
+Wraith gives up everything the world reaches it through, so neither the host nor the
+shared world keeps them, and the session takes the returning run's word for them.
+
+The fix shares some data of every cursor, so the session holds what each Wraith
+resumes with and a successor inherits it. That moves those values off the one-writer
+rule (D-2, D-13) for every system that writes them owner-side, and costs bandwidth,
+which is why it waits. A cheaper step, a Wraith keeping the copy the sync committed
+at its departure tick, is outside the hash and the repair (D-13), so nothing holds
+the instances' copies equal.
+
+The record is built to be replaced: one type, made in one place
+(`NetworkResource.OnOwnState` into the claim keeper) and read in one
+(`CursorSystem.restore`), carried by the arrival crossing the coordinator fills
+(`ParticipantJoinedPayload.Record`). What would close it: decide which values the
+session holds, have the coordinator fill the arrival from its own world instead of
+the joiner's report, and drop the record from the keeper and the report.
 
 ### Drop the cursors a linked instance cannot reach
 

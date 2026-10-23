@@ -90,7 +90,7 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 	offer.Identity = ours
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
 	host := NewSocketPort(hostCfg)
 	defer host.Close()
 	if err := host.Start(); err != nil {

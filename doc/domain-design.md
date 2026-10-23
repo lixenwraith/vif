@@ -627,8 +627,9 @@ tick and takes the term itself. Full reset is likewise serialized by the coordin
 it preserves the closed roster and rebuilds cursors in slot order.
 
 A bot's holder identity travels in admission, the roster and the Shared cursor.
-One departure crossing removes the holder and its bots. A host may remove one bot
-without removing its holder; a guest may remove its own bots.
+One departure crossing turns the holder and its bots Wraith, and one dismissal
+removes them ([Multi-player §5.4](multi-player.md#54-wraiths)). A host may remove
+one bot without removing its holder; a guest may remove its own bots.
 
 When the authority goes, the successor is the first surviving independent
 participant in the succession chain, falling back to the lowest independent
@@ -644,9 +645,9 @@ still holds links leaves its roster alone, which is part of the unimplemented
 partition case below.
 
 A departure also clears what the instance had applied from that participant. The
-identity returns to the pool and a crossing sequence starts at one, so a fence
-kept from the previous holder would claim a capture already contains crossings the
-next holder has yet to produce.
+identity returns to the pool once its participant is dismissed, and a crossing
+sequence starts at one, so a fence kept from the previous holder would claim a
+capture already contains crossings the next holder has yet to produce.
 
 Speed, step, breakpoints and raw Shared mutation (`:system`, `:emit`, `:region`) are
 instance-local operator actions and are refused while peers are live; so is an own
@@ -740,8 +741,8 @@ Regenerating the tables and the repository gates are in
 Manual host/guest acceptance should use different terminal sizes and rapid input
 from both participants. After a correction, a remote cursor must not walk backward
 through older absolute positions. Resize must not move the map, host reset must
-preserve the roster, guest reset must be refused, disconnect must remove only the
-departing cursor, and reconnect must take a current world.
+preserve the roster, guest reset must be refused, disconnect must turn only the
+departing cursor Wraith, and reconnect must take a current world.
 
 ## 7. Current limits
 

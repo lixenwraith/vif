@@ -458,10 +458,10 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 }
 
 // TestDepartureReachesTheWholeMesh closes the membership half of the mesh. In the
-// chain 1—2—3, participant 3's departure is observed only by 2, which shares no link
-// with... nothing: 1 never sees the disconnect at all. If the removal happened where
-// it was observed, participant 1 would keep a cursor nobody simulates for the rest of
-// the session, and the two instances would disagree about the roster forever.
+// chain 1—2—3, participant 3's departure is observed only by 2: 1 never sees the
+// disconnect at all. If the cursor turned Wraith only where the loss was observed,
+// participant 1 would keep it playing with nobody simulating it, and the two
+// instances would disagree about the world forever.
 func TestDepartureReachesTheWholeMesh(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
@@ -485,13 +485,15 @@ func TestDepartureReachesTheWholeMesh(t *testing.T) {
 	for i, a := range survivors {
 		var slot core.Entity
 		var count int
+		var away bool
 		a.World().RunSafe(func() {
 			slot = a.World().Resources.Player.Slot(2)
 			count = a.World().Resources.Player.Count()
+			away = a.World().Components.Wraith.HasEntity(slot)
 		})
-		if slot != 0 || count != 2 {
-			t.Fatalf("participant %d roster after departure = slot2 %d, count %d; want 0 and 2",
-				i+1, slot, count)
+		if slot != local[2] || count != 3 || !away {
+			t.Fatalf("participant %d roster after departure = slot2 %d away %t, count %d; want %d away and 3",
+				i+1, slot, away, count, local[2])
 		}
 		// Its own cursor is untouched: a departure removes one participant, not the
 		// instance that noticed it.
