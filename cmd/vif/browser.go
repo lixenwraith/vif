@@ -90,6 +90,7 @@ func (h *browserHost) Events() <-chan terminal.Event       { return h.host.Event
 func (h *browserHost) SetPointerMode(enabled, motion bool) { h.host.SetPointerMode(enabled, motion) }
 func (h *browserHost) Covered() bool                       { return h.host.Covered() }
 func (h *browserHost) Cell() float64                       { return h.host.Cell() }
+func (h *browserHost) Away() <-chan bool                   { return h.host.Away() }
 
 func (h *browserHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
 	return h.host.SetKeyReport(report, allow)
