@@ -417,18 +417,21 @@ func TestAdmissionSpendsABudgetPerDiallingHost(t *testing.T) {
 	}
 }
 
-// TestAdmissionIgnoresThePort pins the key: the port is what a dialer changes for
-// free, so counting it would count nothing.
-func TestAdmissionIgnoresThePort(t *testing.T) {
+// TestAdmissionIgnoresWhatADialerChangesFreely pins the key: the port, and an IPv6
+// address's low half, cost a dialer nothing to change, so counting them would
+// count nothing.
+func TestAdmissionIgnoresWhatADialerChangesFreely(t *testing.T) {
 	t.Parallel()
-	l := NewAdmissionLimiter()
-	for i := range parameter.NetworkAdmitBurst {
-		if err := l.Admit(admitFrom("10.0.0.3", 40000+i)); err != nil {
-			t.Fatalf("admission %d was refused: %v", i+1, err)
+	for _, hosts := range [][2]string{{"10.0.0.3", "10.0.0.3"}, {"2001:db8:1:2::a", "2001:db8:1:2:ffff::b"}} {
+		l := NewAdmissionLimiter()
+		for i := range parameter.NetworkAdmitBurst {
+			if err := l.Admit(admitFrom(hosts[0], 40000+i)); err != nil {
+				t.Fatalf("admission %d from %s was refused: %v", i+1, hosts[0], err)
+			}
 		}
-	}
-	if err := l.Admit(admitFrom("10.0.0.3", 55555)); err == nil {
-		t.Fatal("a new source port bought a fresh budget")
+		if err := l.Admit(admitFrom(hosts[1], 55555)); err == nil {
+			t.Fatalf("%s bought a fresh budget beside %s", hosts[1], hosts[0])
+		}
 	}
 }
 

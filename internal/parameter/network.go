@@ -144,6 +144,11 @@ const (
 	// crossings would arrive after the ticks they name.
 	NetworkJoinReadyTimeout = 5 * time.Second
 
+	// NetworkJoinConnectTimeout bounds a join's connect. A browser opens its socket
+	// through TLS, an HTTP upgrade and the site's proxy, round trips a loaded link
+	// stretches past the ConnectTimeout a session's own redials keep.
+	NetworkJoinConnectTimeout = 15 * time.Second
+
 	// NetworkJoinLagTicks is how far behind the session, in ticks, a freshly
 	// installed participant may land and still be admitted. It is the default playout
 	// lead: N ticks behind, a crossing stamped for Q+lead meets a session at Q+N, late

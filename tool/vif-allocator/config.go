@@ -114,8 +114,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"header the site's edge overwrites with the player's address, e.g. X-Real-IP; empty budgets no address on the API or browser route")
 	set.IntVar(&cfg.Allocator.ClientJoins, "client-joins", parameter.NetworkAdmitBurst,
 		"joins one player address may make per minute, over the front door and the browser route together")
-	set.IntVar(&cfg.Allocator.ClientCreates, "client-creates", 4,
-		"sessions one player address may create per -first-join window")
+	set.IntVar(&cfg.Allocator.ClientCreates, "client-creates", 1,
+		"sessions one player address may create per -first-join window; a refused or full-fleet request spends none")
 	set.IntVar(&cfg.Allocator.PortFirst, "port-first", 31700, "first allocatable NodePort")
 	set.IntVar(&cfg.Allocator.PortLast, "port-last", 31709, "last allocatable NodePort")
 	set.DurationVar(&cfg.Allocator.ReadyTimeout, "ready-timeout", 75*time.Second, "session readiness deadline")
