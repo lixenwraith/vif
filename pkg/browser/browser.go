@@ -70,6 +70,7 @@ type Host struct {
 	finger  bool          // a finger's press was taken; the event loop's alone
 	fitted  chan struct{} // closed once the page has fitted its grid to the zoom
 	fitOnce sync.Once
+	away    chan bool // the player left for the page's start screen, or came back
 
 	mu       sync.Mutex
 	inflight bool // a frame the page has not reported drawn
@@ -92,7 +93,7 @@ func Open(a *glyph.Atlas, c Config) (*Host, error) {
 		}
 	}
 	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue), barRows: c.BarRows,
-		fitted: make(chan struct{})}
+		fitted: make(chan struct{}), away: make(chan bool, eventQueue)}
 	h.cell.Store(math.Float64bits(c.Cell))
 	h.keys.Post = h.post
 	h.Frames = glyph.NewFrames(h.tex, false)
@@ -113,6 +114,10 @@ func Open(a *glyph.Atlas, c Config) (*Host, error) {
 }
 
 func (h *Host) Events() <-chan terminal.Event { return h.events }
+
+// Away reports the player leaving for the page's start screen and returning, as
+// Android reports its app sent to the background: a solo run waits meanwhile
+func (h *Host) Away() <-chan bool { return h.away }
 
 // Size is the grid of whole cells the page holds
 func (h *Host) Size() (cols, rows int) {
@@ -187,7 +192,8 @@ func (h *Host) present() {
 
 // handle takes what the page sent: a frame drawn, a key going down or up, its keys
 // going elsewhere, text, the pointer, a keyboard over it, a zoom, a new size, the
-// grid fitted to the zoom Open sent or a request for a whole frame
+// grid fitted to the zoom Open sent, the player leaving or returning, or a request
+// for a whole frame
 func (h *Host) handle(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -232,6 +238,11 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 		}
 	case "fitted": // after the resize the fit sent, if it changed the grid
 		h.fitOnce.Do(func() { close(h.fitted) })
+	case "away":
+		select {
+		case h.away <- msg.Get("away").Truthy():
+		default:
+		}
 	case "sync":
 		h.Sync()
 	}

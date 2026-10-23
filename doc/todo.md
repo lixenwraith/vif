@@ -262,6 +262,21 @@ leaves: one hidden or suspended for five minutes must cost the other players
 nothing and resume or rejoin on return, and a session whose last guest was a
 browser must end on its own grace.
 
+### Join a pasted game link from the Android app
+
+- Priority: P2
+- Affected files: `android/app/src/main/java/com/lixen/vif/StartScreen.java`,
+  `MainActivity.java`, `android/game/game.go`
+
+The site hands out a game's link in three shapes: the terminal command (`vif -join
+vif://lixen.com:7777/<game>`), the bare `vif://` link, and the browser's
+`https://lixen.com/vif/wasm/?arg=-join=wss://…`. The app takes none of them short
+of typing `:join` and the link on the soft keyboard. A Join button on its start
+screen could read the clipboard (or a field to paste into), strip a leading `vif
+-join` and the browser link's `?arg=-join=` wrapper, keep the `vif://` or `wss://`
+link and join it as `:join` does; a `vif://` intent filter would open links
+tapped elsewhere. Unchecked without an emulator or a phone, so not built yet.
+
 ### Warn in the site's lobby when a session runs another build
 
 - Priority: P2

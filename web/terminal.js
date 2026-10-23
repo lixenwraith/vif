@@ -470,9 +470,16 @@ void main() {
         start.hidden = false;
         // A tap here leaves focus where it is: on the field, once the program loaded.
         start.addEventListener('pointerdown', function(e) { e.preventDefault(); });
-        start.addEventListener('click', function(e) { if (e.target !== controls) begin(); });
+        // Anywhere but a button starts the game, or returns to the one kept behind.
+        start.addEventListener('click', function(e) {
+            if (e.target.closest('button')) return;
+            if (away) resume(); else begin();
+        });
         document.addEventListener('keydown', startKey, true);
         document.addEventListener('keyup', startKey, true);
+        document.getElementById('menu-reload').addEventListener('click', function() { location.reload(); });
+        document.getElementById('menu-solo').addEventListener('click', playSolo);
+        document.getElementById('share').addEventListener('click', share);
         // The ? sits nearer the edge than the window, and would show past its corner.
         controls.addEventListener('click', function() { controls.hidden = true; help.showModal(); });
         help.addEventListener('close', function() { controls.hidden = false; });
@@ -482,9 +489,10 @@ void main() {
 
     /* A key starts the game as a click does, on its release, and the game sees
        none of it: neither its press nor its repeats while held. Keys are the
-       window's while it is open and the ?'s while it has focus. */
+       window's while it is open and the ?'s while it has focus. Back from a game,
+       a key returns to it the same way. */
     function startKey(e) {
-        if (tapped || help.open || e.target.closest('button')) return;
+        if ((tapped && !away) || help.open || e.target.closest('button')) return;
         if (e.type === 'keyup') {
             if (e.code !== startCode) return;
         } else if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey
@@ -494,7 +502,7 @@ void main() {
         e.preventDefault();
         e.stopPropagation();
         if (e.type === 'keyup') {
-            begin();
+            if (away) resume(); else begin();
         } else {
             startCode = e.code;
             if (!audio) openAudio();   // in the press: a release lets no sound start on some browsers
@@ -506,8 +514,6 @@ void main() {
     function begin() {
         if (tapped) return;
         tapped = true;
-        document.removeEventListener('keydown', startKey, true);
-        document.removeEventListener('keyup', startKey, true);
         focus();   // keys follow, in a frame that had no focus too
         if (!audio) openAudio();
         if (ready) run();
@@ -633,7 +639,11 @@ void main() {
                 break;
             case 'frame':
                 loading.classList.add('hidden');   // compiled and drawing
-                if (!start.hidden) start.hidden = true;
+                if (!playing) {
+                    playing = true;
+                    if (navigator.userActivation && navigator.userActivation.isActive) arm();
+                }
+                if (!start.hidden && !away) start.hidden = true;
                 // Every frame is reported drawn, or Go holds the next until it is.
                 try {
                     drawer.apply(msg.data);
@@ -669,7 +679,7 @@ void main() {
         program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href,
             bytes: bytes.buffer, argv: argv, cols: cols, rows: rows, settings: keptSettings() }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
-            if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });
+            if (program) program.postMessage({ type: 'visibility', hidden: document.hidden || away });
             if (document.hidden) {
                 lost();
                 send({ type: 'blur' });
@@ -744,6 +754,7 @@ void main() {
     }
 
     function onKey(e) {
+        arm();
         if (e.isComposing || e.metaKey) return;
         // Ctrl-Shift-V and Shift-Insert paste, as in a terminal; the text arrives below
         if (e.shiftKey && ((e.ctrlKey && e.key === 'V') || e.key === 'Insert')) return;
@@ -831,6 +842,7 @@ void main() {
     }
 
     function onPointerDown(e) {
+        arm();
         focus();   // keys follow the pointer
         e.preventDefault();
         if (e.pointerType === 'touch' ? touchDown(e) : !pointer.enabled) return;
@@ -846,6 +858,7 @@ void main() {
     }
 
     function onPointerUp(e) {
+        arm();   // a touch's gesture is its release
         if (e.pointerType === 'touch') {
             if (!touchUp(e) && fingerDown) {
                 fingerDown = false;
@@ -1154,19 +1167,127 @@ void main() {
         setTimeout(function() { el.hidden = true; }, 5000);
     }
 
-    // Every message here ends the run: it takes the start screen's place, with a reload
+    // Every message here ends the run: it takes the start screen's place, with a
+    // reload, and a solo game in place of a shared one that refused or ended
     function showMessage(msg, isError) {
         const el = document.getElementById('loading');
         el.textContent = msg;
         el.classList.remove('hidden');
         el.classList.toggle('error', isError);
         start.hidden = true;
-        const again = document.createElement('button');
-        again.type = 'button';
-        again.textContent = 'Reload';
-        again.addEventListener('click', function() { location.reload(); });
-        el.append(again);
+        away = false;
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const again = button('Reload', function() { location.reload(); });
+        actions.append(again);
+        if (joined && isError) actions.append(button('Play solo', playSolo));
+        el.append(actions);
         again.focus({ preventScroll: true });
+    }
+
+    function button(label, onClick) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.addEventListener('click', onClick);
+        return b;
+    }
+
+    // === Back ===
+    /* Back is the game's Escape, as on Android, and a second back the start screen
+       again, over the game kept as it was: a solo game waits for its player (away,
+       as Android's app in the background), a shared one goes on. A tap or key there
+       returns to it; Reload, and for a joined game Play solo and its link, are at
+       hand, since some browsers keep this page from being pulled down to reload.
+       From there back leaves the page as it would have. A browser passes over
+       entries a page pushed without a gesture of the player's, so the two back lands
+       on are pushed in one: the start's, a press in the game, the return. */
+    const joined = (function() {
+        try {
+            return launchArguments().slice(1).some(function(arg) { return /^-join(=|$)/.test(arg); });
+        } catch (err) {
+            return false;   // refused as the load starts, which says so
+        }
+    })();
+    let playing = false;   // the first frame came
+    let away = false;      // the start screen is up over the game
+    let traps = 0;         // entries above the page's own for back to land on
+
+    function arm() {
+        if (!playing || away || !program) return;
+        while (traps < 2) history.pushState({ vif: ++traps }, '');
+    }
+
+    window.addEventListener('popstate', function(e) {
+        traps = (e.state && e.state.vif) || 0;
+        if (away) return;
+        if (!program || !playing) {   // nothing to keep: back leaves, as it would have
+            history.back();
+            return;
+        }
+        if (traps) send({ type: 'key', key: 'Escape', mods: 0 });
+        else showAway();
+    });
+
+    function showAway() {
+        away = true;
+        lost();
+        send({ type: 'blur' });
+        send({ type: 'away', away: true });
+        program.postMessage({ type: 'visibility', hidden: true });   // nothing drawn under it
+        input.blur();
+        document.getElementById('menu-line').textContent = touch
+            ? 'Tap to return to the game' : 'Click or press a key to return to the game';
+        document.getElementById('menu-solo').hidden = !joined;
+        document.getElementById('share').hidden = !joined;
+        document.getElementById('menu').hidden = false;
+        start.classList.add('menu');
+        start.hidden = false;
+    }
+
+    function resume() {
+        if (!away || !program) return;
+        away = false;
+        start.hidden = true;
+        start.classList.remove('menu');
+        document.getElementById('menu').hidden = true;
+        document.getElementById('share').hidden = true;
+        send({ type: 'away', away: false });
+        program.postMessage({ type: 'visibility', hidden: document.hidden });
+        focus();
+        arm();
+    }
+
+    // playSolo opens this page without its join, in its place: the same build alone
+    function playSolo() {
+        const url = new URL(location.href);
+        const args = url.searchParams.getAll('arg');
+        url.searchParams.delete('arg');
+        for (let i = 0; i < args.length; i++) {
+            if (args[i] === '-join') i++;   // the address as the next argument
+            else if (!/^-join=/.test(args[i])) url.searchParams.append('arg', args[i]);
+        }
+        url.hash = '';
+        location.replace(url.href);
+    }
+
+    // share copies this page's address, which opens the same game joined
+    let shareTimer = 0;
+    function share() {
+        const done = document.getElementById('share-done');
+        const say = function(text) {
+            done.textContent = text;
+            done.hidden = false;
+            clearTimeout(shareTimer);
+            shareTimer = setTimeout(function() { done.hidden = true; }, 1500);
+        };
+        const url = location.href.split('#')[0];
+        if (!navigator.clipboard) {
+            say('Copy needs a secure page');
+            return;
+        }
+        navigator.clipboard.writeText(url).then(function() { say('Link copied'); },
+            function() { say('Copy refused'); });
     }
 
     // === Entry Point ===

@@ -74,11 +74,10 @@ html, body {
 #loading.hidden { display: none; }
 #loading.error  { color: #f44; }
 
-#loading button {
-    display: block;
+.actions button {
     min-width: 8em;
     min-height: 44px;
-    margin: 0.75em auto 0;
+    padding: 0 1em;
     border: 1px solid #555;
     border-radius: 6px;
     background: #111;
@@ -88,26 +87,53 @@ html, body {
 
 /* Every page opens on Android's start screen: the logo two fifths of the shorter side
    at the centre, the loading line under it, ? in the corner. The line and the notice
-   stay above it. */
+   stay above it. Back from a game the logo moves up for a line and the actions under
+   it, and a shared game's link takes the other corner. */
 :root { --logo: 40vmin; }
 
 #start {
     position: fixed;
     inset: 0;
     z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
     background: #000;
 }
 
 #start[hidden] { display: none; }
 
+#start.menu { --logo: min(40vmin, 30dvh); }
+
 #logo {
-    position: absolute;
-    top: 50%;
-    left: 50%;
+    flex: none;
     width: var(--logo);
     height: var(--logo);
-    transform: translate(-50%, -50%);
 }
+
+#menu {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    max-width: 90vw;
+    color: #bbb;
+    font: 18px monospace;
+    text-align: center;
+}
+
+#menu[hidden] { display: none; }
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+}
+
+#loading .actions { margin-top: 0.75em; }
 
 #start:not([hidden]) ~ #loading {
     top: calc(50% + var(--logo) / 2 + 24px);
@@ -117,7 +143,8 @@ html, body {
     pointer-events: none;     /* a tap on the words is the screen's */
 }
 
-#controls {
+#controls,
+#share {
     position: absolute;
     top: 12px;
     right: 12px;
@@ -129,6 +156,26 @@ html, body {
     color: #fff;
     font: 24px/1 monospace;
 }
+
+#share {
+    right: auto;
+    left: 12px;
+    display: grid;
+    place-items: center;
+}
+
+#share[hidden] { display: none; }
+
+/* "Link copied", beside the link a moment */
+#share-done {
+    position: absolute;
+    top: 24px;
+    left: 72px;
+    color: #bbb;
+    font: 15px monospace;
+}
+
+#share-done[hidden] { display: none; }
 
 /* The controls: a window inset 16px from the page's edges, its list scrolling under
    the title and the close button. */

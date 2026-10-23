@@ -333,7 +333,8 @@ address grammar in [Services](services-and-networking.md)).
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash
 that ended it) in place of the terminal and the start screen, centred in what the
-browser's bars leave, with a Reload button. A refused join's reason says whether a
+browser's bars leave, with a Reload button, and Play solo beside it when the run
+joined a game, which opens the page without its `-join`. A refused join's reason says whether a
 retry helps; a socket that does not open says the game may have ended or the link is
 too slow, after `NetworkJoinConnectTimeout` (15 s) where it never answers. The page then terminates the Worker and posts it nothing
 more, so a later resize or visibility change cannot replace that reason.
@@ -495,12 +496,20 @@ off a press on the bar's rows still reaches the run, and the open menu takes the
 pointer. The page does each of these on a touch screen, timed alike: the double
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
 bottom row drawn again above it, and the hold. Every page opens on the same start
-screen in the same words, the key strip listed where Android lists Back; a
+screen in the same words, the key strip listed beside Back; a
 desktop's asks for a click or a key, and its `?` lists the mouse and the first keys.
 The Worker holds the compiled program until that press, made at any point of the
 download or compile, which opens the sound too; a key starts it as it comes up,
 unseen by the game, and Escape, Tab, the F keys and chords start nothing. A lobby's
-`-join` link waits for it too.
+`-join` link waits for it too. A browser's Back is the game's Escape too, and a
+second Back brings the start screen back over the game rather than leaving it: the
+page reports its player away (`Host.Away`, as Android's background does), so a
+solo run waits and a shared one goes on, and a tap or key returns to it. Under the
+logo there are Reload, which a browser that will not pull the page down to reload
+lacks, and for a joined game Play solo and, in the corner, its link to copy; Back
+from there leaves the page. The page pushes the two history entries Back lands on
+inside a gesture of the player's (the start, a press in the game, the return),
+since a browser passes over entries pushed without one.
 
 Measured on a Pixel 7 emulator (Android 16, x86_64, 1080x2400, a 90x91 grid):
 the game hands over a frame every vsync and about 20 a second change cells, its
