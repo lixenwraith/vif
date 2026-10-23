@@ -843,8 +843,9 @@ hold does stop it, since its session's other participants stand at that tick; a
 driven loop then drains its link without stepping, as the host's resume is an
 epoch. A reproduction — a replay, or a correction's projection — applies a hold
 as state and steps through it, since the run it follows took no tick while held;
-an end no command made here is journaled as the request one makes, and a journal's
-opening records a hold standing, so a replay ends its hold where the run did.
+an end no command made here goes through the request one makes, settled at once,
+and a journal's opening records a hold standing, so a replay ends its hold in the
+pass the run did.
 
 ## 9. Time control
 

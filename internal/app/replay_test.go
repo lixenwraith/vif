@@ -831,7 +831,8 @@ func TestAJournalReplaysAcrossALeave(t *testing.T) {
 // TestAHeldSessionReplaysOnEitherSide: a session's hold and its end replay on host
 // and guest alike, from a journal opened before the hold and one opened on it. Only
 // the host's :pause asked for either; the guest's end came with the host's next tick,
-// which its replay has no link to hear.
+// which its replay has no link to hear, so the guest ends its hold as its replay
+// does: in the pass that dispatches the end, whatever input that pass carries.
 func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	const seed = 0x3022
@@ -895,12 +896,22 @@ func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
 	held(true)
 	open(guest)
 	play(20)
+	// Seen before any handler: the hold still stands when its end dispatches
+	var ends []bool
+	guest.SetDispatchTap(func(ev event.GameEvent) {
+		if ev.Type == event.EventGameHoldRequest {
+			ends = append(ends, guest.Context().TimeCtl.Held())
+		}
+	})
 	pause("pause off")
 	held(false)
 	play(300)
 	for _, a := range []*App{host, guest} {
 		a.World().RunSafe(func() { _ = a.stopJournalLocked(-1) })
 		a.serveJournal()
+	}
+	if !slices.Equal(ends, []bool{true}) {
+		t.Fatalf("the guest's hold stood %v as each end dispatched, want [true]", ends)
 	}
 	replayMatches(t, hostRec, hostWant, guestSurface)
 	replayMatches(t, guestRec, guestWant, guestSurface)

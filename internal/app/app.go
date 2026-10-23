@@ -188,6 +188,7 @@ type App struct {
 	encoder   snapshot.Encoder // capture encodings the seal, the index and the journal share
 
 	sharedStatus statusKeys // the registry keys a capture carries; world lock
+	hostResumed  bool       // a held guest's drain admitted the host's resume; world lock
 
 	// The three halves of the authority protocol, built together because they hold
 	// references to each other: corrections is what this instance publishes and

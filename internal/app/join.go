@@ -341,17 +341,25 @@ func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnAuthorityAhead = a.authorityAhead
 }
 
-// authorityAhead ends a hold the host has run past: a held host sends no epoch, so
-// one past this instance's tick is the resume. Caller MUST hold updateMutex.
-func (a *App) authorityAhead() { a.releaseHold("Resumed by the host") }
+// authorityAhead marks a hold the host has run past: a held host sends no epoch, so
+// one past this instance's tick is the resume. The hold ends after the off-tick
+// drain, since ending it settles, which a system mid-drain must not. Caller MUST
+// hold updateMutex.
+func (a *App) authorityAhead() {
+	if a.ctx.TimeCtl.Held() {
+		a.hostResumed = true
+	}
+}
 
-// releaseHold ends a hold no command here ends, and records the end as the request
-// a command makes: a replay of this run ends its hold there too, having no link or
-// succession to end it. Caller MUST hold updateMutex.
+// releaseHold ends a hold no command here ends through the request a command makes,
+// settled at once: the hold ends in the pass that dispatches the request, as on a
+// replay of this run, which has no link or succession to end it, so input settled
+// beside it counts alike on both. Caller MUST hold updateMutex, between two ticks.
 func (a *App) releaseHold(said string) {
-	if !a.ctx.Hold(false) {
+	if !a.ctx.TimeCtl.Held() {
 		return
 	}
 	a.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false}, event.OriginSession)
+	a.scheduler.SettleLocked()
 	a.ctx.SetStatusMessage(said, parameter.StatusNotice)
 }
