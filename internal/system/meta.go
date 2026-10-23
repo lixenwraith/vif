@@ -142,8 +142,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventGameResetRequest:
 		p, _ := ev.Payload.(*event.GameResetPayload)
 		// Purge is operator-local. A crossed coordinator reset restarts every
-		// participant, but it must not erase each peer's own command history.
-		s.handleGameReset(p != nil && p.Purge && ev.Origin != event.OriginNetwork)
+		// participant, but it must not erase each peer's own command history; the
+		// wait is the new game's, so every participant takes it.
+		s.handleGameReset(p != nil && p.Purge && ev.Origin != event.OriginNetwork, p != nil && p.Wait)
 
 	case event.EventMetaStatusMessageRequest:
 		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
@@ -403,8 +404,9 @@ func (s *MetaSystem) resetKills() {
 }
 
 // Reset rebuilds the world and closed roster before state and FSM scheduling;
-// purge additionally clears operator state.
-func (s *MetaSystem) handleGameReset(purge bool) {
+// purge additionally clears operator state, and wait holds the new game for its
+// player's press.
+func (s *MetaSystem) handleGameReset(purge, wait bool) {
 	// 1. Pause and stop audio
 	s.ctx.PauseForInput()
 
@@ -465,7 +467,13 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	// 7. Cancel pending step requests; the rate survives a plain reset
 	s.ctx.TimeCtl.CancelBreak()
 
-	// 8. Signal FSM reset - Non-blocking
+	// 8. The new game stands at its first tick until the press, which the scheduler's
+	//    unpause leaves alone: it ends a pause, not a hold
+	if wait {
+		s.ctx.HoldAs(engine.HoldStart)
+	}
+
+	// 9. Signal FSM reset - Non-blocking
 
 	// On return from this function main releases the world lock and scheduler acquires it for reset
 	select {
@@ -473,7 +481,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	default:
 	}
 
-	// 9. Purge operator session state; last, so it wins over anything reset restored
+	// 10. Purge operator session state; last, so it wins over anything reset restored
 	if purge {
 		s.ctx.ResetSessionState()
 		s.world.Log().Info("app", "msg", "session purged")
@@ -700,13 +708,14 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 // the host's next tick.
 func (s *MetaSystem) handleHoldRequest(held, session bool) {
 	if !held {
-		if s.ctx.Hold(false) {
+		start := s.ctx.TimeCtl.Holds(engine.HoldStart)
+		if s.ctx.Hold(false) && !start {
 			s.ctx.SetStatusMessage("Resumed", parameter.StatusNotice)
 		}
 		return
 	}
 	if session {
-		s.ctx.Freeze()
+		s.ctx.HoldAs(engine.HoldFreeze)
 		return
 	}
 	tick := s.world.Resources.Game.State.GetGameTicks()

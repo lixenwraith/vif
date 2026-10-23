@@ -47,6 +47,7 @@ const (
 var (
 	flagColor    = flag.String("color", colourAuto, "Colour depth: auto, 256 or true")
 	flagMute     = flag.Bool("mute", true, "Start muted or, =false, with sound; unset, vif.toml's [play] decides")
+	flagNoWait   = flag.Bool("nw", true, "Start each new game at once or, =false, at a key or click; unset, vif.toml's [play] wait decides")
 	flagCheck    = flag.Bool("check", false, "Validate the resolved config, then exit")
 	flagSchema   = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
 	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
@@ -88,6 +89,7 @@ func init() {
 	flag.StringVar(&flagAudioBackend, "audio-backend", "", audioHint)
 	flag.BoolVar(flagHelp, "help", false, "Print the flag help and exit")
 	flag.BoolVar(flagGUI, "gui", false, "Open the game in a desktop window instead of the terminal")
+	flag.BoolVar(flagNoWait, "no-wait", true, "Start each new game at once or, =false, at a key or click; unset, vif.toml's [play] wait decides")
 	flag.StringVar(flagReplay, "r", "", "Replay a recorded journal instead of playing")
 	journalHint := "Record a replay journal; -j=DIR overrides the user-state directory"
 	flag.Var(&flagJournal, "j", journalHint)
@@ -412,10 +414,14 @@ func buildConfig() app.Config {
 	cfg.Bots, _ = app.BotSpecs(flagSession.bot)
 
 	cfg.Play, cfg.Settings, cfg.ClaimStore = settings.Play, settingsStore, pageClaims
-	// -mute either way names both channels for this run; unset, [play] stands
+	// -mute either way names both channels for this run, and -nw the wait; unset,
+	// [play] stands, and a value set here is never written back
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "mute" {
+		switch f.Name {
+		case "mute":
 			cfg.Play.Effects, cfg.Play.Music = !*flagMute, !*flagMute
+		case "nw", "no-wait":
+			cfg.Play.Wait = !*flagNoWait
 		}
 	})
 	cfg.MusicWAV = musicWAVDir()

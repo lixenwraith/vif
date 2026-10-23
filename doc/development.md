@@ -138,7 +138,9 @@ a usage error. Short and long forms of the same option share one line here and
 one line in the program's own help; they are the same flag, not aliases, so
 `-s` and `-config-scenario` write the same field and the last one on the command
 line wins. That help is `helpSections` in `cmd/vif/usage.go`, which also renders
-`doc/vif.6` and the shell completions in `deploy/package/`.
+`doc/vif.6` and the shell completions in `deploy/package/`. A flag sets its value
+for that run alone and is never written back; `vif.toml` holds the defaults
+([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)).
 
 ### Session
 
@@ -184,13 +186,14 @@ and the audio buffer; a flag on the command line wins
 | `-cli` | Play in the terminal whatever `vif.toml` or a `vif-gui` build says; wins over `-g`. |
 | `-maximized[=false]`, `-fullscreen[=false]` | The state the desktop window opens in, asked of the window manager (`_NET_WM_STATE`); `vif.toml`'s `[presentation] maximized` and `fullscreen` set the default, and a terminal run ignores both. |
 | `-scale <n>` | With `-g`: draw the window's font at `n` times its pixels each way, for a HiDPI screen; default 1. |
-| `-mute[=false]` | Start muted; `-mute=false` starts with sound. Unset, `vif.toml`'s `[play]` channels stand, sound on by default and written back as the player changes them; a channel the flag set and the player left alone is never written. |
+| `-mute[=false]` | Start muted; `-mute=false` starts with sound. Unset, `vif.toml`'s `[play]` channels stand, sound on by default. |
 | `-ab`, `-audio-backend <name>` | Force an audio backend: `pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`. |
 
 ### Run
 
 | Flag | Purpose |
 |---|---|
+| `-nw`, `-no-wait[=false]` | Start each new game at once rather than at its player's key, click or tap; `-nw=false` waits. Unset, `vif.toml`'s `[play] wait` stands, waiting by default. |
 | `-seed <n>` | Root RNG seed; zero draws one and logs it. |
 | `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or autonomous bots it is the run's wall pace instead and additionally accepts `max`. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |

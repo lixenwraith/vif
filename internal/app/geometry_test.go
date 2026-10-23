@@ -469,12 +469,12 @@ type awayScreen struct {
 
 func (s *awayScreen) Away() <-chan bool { return s.away }
 
-// TestAnUnseenGameStartsOverAtTheScreensNewSize: a player away before the clock
-// starts, as behind Android's start screen, holds the game at its first tick, drawn
-// undimmed. A screen that changes size before they come starts that game over as
-// one opened at the new size would be, still waiting; once they have come, a resize
-// crops the game in play instead.
-func TestAnUnseenGameStartsOverAtTheScreensNewSize(t *testing.T) {
+// TestAWaitingGameStartsOverAtTheScreensNewSize: a player away before the clock
+// starts, as behind Android's start screen, finds the game waiting at its first
+// tick, drawn undimmed. A screen that changes size before the start starts that game
+// over as one opened at the new size would be, still waiting; their return starts
+// it, and from then a resize crops the game in play instead.
+func TestAWaitingGameStartsOverAtTheScreensNewSize(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	const pw, ph, lw, lh = 60, 100, 100, 60 // a phone held upright, then turned
 	open := func(p Presentation) *App {
@@ -500,10 +500,10 @@ func TestAnUnseenGameStartsOverAtTheScreensNewSize(t *testing.T) {
 	screen := &awayScreen{framePresentation{w: pw, h: ph}, make(chan bool, 1)}
 	a := open(screen)
 	screen.away <- true
-	a.takeAway(screen.away)
-	if !a.ctx.TimeCtl.IsPaused() || !a.unseen || a.Position().Tick != 0 {
-		t.Fatalf("paused %v, unseen %v at tick %d; want an unseen game held at its first tick",
-			a.ctx.TimeCtl.IsPaused(), a.unseen, a.Position().Tick)
+	a.holdFirstGame(screen.away)
+	if !a.ctx.TimeCtl.Holds(engine.HoldStart) || !a.unseen || a.Position().Tick != 0 {
+		t.Fatalf("waiting %v, unseen %v at tick %d; want an unseen game waiting at its first tick",
+			a.ctx.TimeCtl.Holds(engine.HoldStart), a.unseen, a.Position().Tick)
 	}
 	if a.renderContext().IsPaused {
 		t.Fatal("the waiting game is drawn dimmed, as a pause the player made")
@@ -511,12 +511,11 @@ func TestAnUnseenGameStartsOverAtTheScreensNewSize(t *testing.T) {
 
 	a.handleResize(lw, lh)
 	a.scheduler.RunTicks(0) // the reset's half the clock runs between ticks
-	a.keepAway()
 	turned := open(&framePresentation{w: lw, h: lh})
 	turned.Settle()
-	if !a.ctx.TimeCtl.IsPaused() || a.Position().Run != 1 || a.Position().Tick != 0 {
-		t.Fatalf("after the turn: paused %v at %+v; want a new game held at its first tick",
-			a.ctx.TimeCtl.IsPaused(), a.Position())
+	if !a.ctx.TimeCtl.Holds(engine.HoldStart) || a.Position().Run != 1 || a.Position().Tick != 0 {
+		t.Fatalf("after the turn: waiting %v at %+v; want a new game waiting at its first tick",
+			a.ctx.TimeCtl.Holds(engine.HoldStart), a.Position())
 	}
 	w, h := mapSize(a)
 	if tw, th := mapSize(turned); w != tw || h != th || cursor(a) != cursor(turned) {
@@ -535,5 +534,58 @@ func TestAnUnseenGameStartsOverAtTheScreensNewSize(t *testing.T) {
 	}
 	if w2, h2 := mapSize(a); h2 <= h || w2 >= w {
 		t.Fatalf("the map is %dx%d after turning back, want it cropped upright from %dx%d", w2, h2, w, h)
+	}
+}
+
+// TestAFirstGameWaitsForItsPlayersPress: a run a person plays stands at its first
+// tick, drawn undimmed and asking for a key or click, until a press the held game
+// would ignore, a key or a click on the map. Help, Escape and a press on the status
+// bar keep their meaning and leave it waiting, and the press that starts the game
+// does nothing else in it: the cursor stays where the game put it.
+func TestAFirstGameWaitsForItsPlayersPress(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	const w, h = 120, 40
+	click := func(y int, action terminal.MouseAction) terminal.Event {
+		return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: action, MouseX: w / 4, MouseY: y}
+	}
+	kept := []terminal.Event{
+		{Type: terminal.EventKey, Key: terminal.KeyF1},
+		{Type: terminal.EventKey, Key: terminal.KeyEscape},
+		click(h-1, terminal.MouseActionPress),
+		click(h-1, terminal.MouseActionRelease),
+	}
+	for name, start := range map[string]terminal.Event{
+		"key":   {Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'j'},
+		"click": click(h/4, terminal.MouseActionPress),
+	} {
+		a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5744,
+			Host: Host{Presentation: &framePresentation{w: w, h: h}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(a.Close)
+		a.holdFirstGame(nil)
+		cursor := func() (at [2]int) {
+			a.World().RunSafe(func() {
+				if pos, ok := a.World().LocalCursor(); ok {
+					at = [2]int{pos.X, pos.Y}
+				}
+			})
+			return at
+		}
+		at := cursor()
+		if rc := a.renderContext(); !a.ctx.TimeCtl.Holds(engine.HoldStart) || rc.IsPaused || rc.Prompt != "Click or press a key to start" {
+			t.Fatalf("%s: waiting %v, dimmed %v, asking %q at launch", name, a.ctx.TimeCtl.Holds(engine.HoldStart), rc.IsPaused, rc.Prompt)
+		}
+		for i, ev := range kept {
+			if !a.takeEvent(ev) || !a.ctx.TimeCtl.Holds(engine.HoldStart) {
+				t.Fatalf("%s: press %d of the kept keys started the game", name, i)
+			}
+		}
+		a.takeEvent(start)
+		if rc := a.renderContext(); a.ctx.TimeCtl.IsPaused() || rc.Prompt != "" || cursor() != at {
+			t.Fatalf("%s: paused %v, asking %q, cursor at %v from %v after the press; want the game started as it stood",
+				name, a.ctx.TimeCtl.IsPaused(), rc.Prompt, cursor(), at)
+		}
 	}
 }

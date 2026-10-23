@@ -381,6 +381,14 @@ one. An end no command made goes through the request a command makes, settled at
 once: the hold ends in the pass that dispatches it, on the run as on its replay,
 which has no link to hear it.
 
+A new game's start is this hold, marked a start (`engine.HoldStart`). A reset whose
+`GameResetPayload.Wait` is set holds every participant as it applies, which the
+scheduler's unpause of the new game leaves standing, and the host's first press
+ends it as its `:pause` would, each guest resuming on the host's next epoch. A
+guest's press does nothing, and its status line reads "Waiting for the host to
+start". A host nobody plays (`-serve`, a fleet session) never waits, and a
+scenario's own reset carries no `Wait`.
+
 A joiner admitted to a held session lands held. Its gate captures the held tick
 itself, since a held session never reaches the playout lead past it, and sends
 after the world the crossings still scheduled past that tick

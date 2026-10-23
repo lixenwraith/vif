@@ -459,11 +459,13 @@ module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
 `app.Run`. The app opens on a start screen (`StartScreen`) over the view: the logo,
 "Tap to start" under it and a `?` that opens the touch controls. The run starts
-behind it with its player away (`game.Start`'s `away`): its game waits at its first
-tick, drawn undimmed and silent, so the tap lifts the screen off a game already
-built and painted; its keys reach it only from then. A screen turned before the
-tap starts that game over at the new size, as one opened at it would be, since
-nobody has seen it; once played, a resize crops it as on a terminal.
+behind it with its player away (`game.Start`'s `away`): its first game waits in its
+start hold, drawn undimmed and silent, and the tap, the press that starts it, lifts
+the screen off a game already built and painted; its keys reach it only from then.
+A screen turned while a solo game waits starts that game over at the new size, as
+one opened at it would be; once started, a resize crops it as on a terminal. Every
+later new game waits in the game for a tap, as a terminal's does for a key or a
+click, unless `[play] wait` is off; the start screen opens every launch either way.
 The view's grid is the cells its pixels hold at a cell 12 dp tall
 (16x32 pixels on a 420 dpi phone, never under the atlas's 12x24; aspect 0.5),
 which a pinch zooms when its fingers lift: from `parameter.CellLeast` to
@@ -502,7 +504,10 @@ screen in the same words, the key strip listed beside Back; a
 desktop's asks for a click or a key, and its `?` lists the mouse and the first keys.
 The Worker holds the compiled program until that press, made at any point of the
 download or compile, which opens the sound too; a key starts it as it comes up,
-unseen by the game, and Escape, Tab, the F keys and chords start nothing. A lobby's
+unseen by the game, and Escape, Tab, the F keys and chords start nothing. The press
+is the first game's (`Host.Pressed`), so that game does not wait again; a later new
+game waits in the game as a terminal's does, unless `[play] wait` is off, and the
+start screen opens every launch either way. A lobby's
 `-join` link waits for it too. A browser's Back is the game's Escape too, and a
 second Back brings the start screen back over the game rather than leaving it: the
 page reports its player away (`Host.Away`, as Android's background does), so a

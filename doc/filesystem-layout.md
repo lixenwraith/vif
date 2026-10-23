@@ -127,7 +127,8 @@ take; `[audio] buffer_ms` sets the mixer period; `[presentation] window = true` 
 the desktop window by default, as `-g` does, and `maximized` or `fullscreen` the
 state it opens in, and `cell` is the zoom Android and a browser open at; `[play]` is
 how a run starts and what the configuration menu changes in it: the sound channels,
-the effects volume, auto-fire, mouse input, pointer following, the telemetry HUD and relaying for others. It is found like any resource,
+the effects volume, auto-fire, mouse input, pointer following, the telemetry HUD,
+relaying for others, and each new game waiting for its player's press. It is found like any resource,
 from `-config-dir` down to the system roots; the first file wins whole, a key it
 omits keeps the embedded default, and the `vif.toml` inside its own `root` is not
 read. Every key is a default: a flag given on the command line wins, and `-d`
@@ -137,13 +138,19 @@ directory, and an unknown key is refused. `-check` names
 the file it read. Music and sound overrides stay out of it, because a run that
 creates no audio refuses them and a default must not break `-serve`.
 
-A run writes each `[play]` value, and the zoom as `[presentation] cell`, back as
-the player changes it, so the next starts the same: into the `vif.toml` it read
-when that is the player's own, in the user root or the `-config-dir` root, else
-into the user root's, created at the first change as a copy of the one it read
-(relative paths made absolute) that shadows it from then on. A checkout's or a system root's file is never written, and a channel
-`-mute` set for the run stays out unless the player changes it. A browser keeps
-them in the site's storage ([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
+One rule holds on every host: a flag sets its value for its run alone, `vif.toml`
+holds the value every run starts from, and the menu writes back what the player
+changes. A run writes each `[play]` value, and the zoom as `[presentation] cell`,
+back as the player changes it, through a menu row or the command behind it, so the
+next starts the same: into the `vif.toml` it read when that is the player's own, in
+the user root or the `-config-dir` root, else into the user root's, created at the
+first change as a copy of the one it read (relative paths made absolute) that
+shadows it from then on. A checkout's or a system root's file is never written.
+Only a value changed in the run is written, so one a flag set (`-mute`'s channels,
+`-nw`'s wait) stays out unless the player then changes it. No flag saves the
+others: a flag is what an alias, a script or a link repeats, and writing it back
+would let the last command line decide every later run. A browser keeps them in
+the site's storage ([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
 
 ## 4. Installation
 

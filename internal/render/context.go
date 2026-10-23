@@ -50,6 +50,10 @@ type RenderContext struct {
 	// StatusCovered: a keyboard covers the status bar and the host shows the left
 	// half of its bottom row again above it, so the bar keeps its input to that half
 	StatusCovered bool
+
+	// Prompt is the status line shown while no message is: what a game waiting for
+	// its start asks of the player
+	Prompt string
 }
 
 // NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource

@@ -595,6 +595,52 @@ func TestAJournalOpenedOnAHoldReplaysItsEnd(t *testing.T) {
 	replayMatches(t, rec, want, func(rep *App) []string { return rep.SnapshotSimulation() })
 }
 
+// TestANewGameThatWaitsReplaysItsStart: a :n the wait holds is journaled with it, so
+// a replay stands where the run stood, input dropped as the run dropped it, until
+// the press the run recorded starts the replay's game where the run's started.
+func TestANewGameThatWaitsReplaysItsStart(t *testing.T) {
+	t.Parallel()
+	rng := vmath.NewFastRand(13)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	a := mustHeadless(t, 0x7E7, 120, 40)
+	defer a.Close()
+	a.Context().WaitStart.Store(true)
+	rec, want := journal.NewCapture(), map[event.Stamp][]string{}
+	a.cfg.JournalSink = rec
+	if _, err := a.openJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	play := func(ticks int) {
+		for range ticks {
+			if rng.Intn(3) == 0 {
+				inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			}
+			a.Tick(1)
+			p := a.Position()
+			want[event.Stamp{Run: p.Run, Tick: p.Tick}] = a.SnapshotSimulation()
+		}
+	}
+	play(60)
+	inject(t, a, intentModeSwitch(input.ModeTargetCommand))
+	inject(t, a, intentCommandBody("n")...)
+	play(20)
+	if p := a.Position(); !a.Context().TimeCtl.Holds(engine.HoldStart) || p.Tick != 0 {
+		t.Fatalf("waiting %v at %+v after :n, want the new game waiting at its first tick",
+			a.Context().TimeCtl.Holds(engine.HoldStart), p)
+	}
+	if !startPress(a) {
+		t.Fatal("the press did not start the new game")
+	}
+	play(200)
+	var err error
+	a.World().RunSafe(func() { err = a.stopJournalLocked(-1) })
+	a.serveJournal()
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	replayMatches(t, rec, want, func(rep *App) []string { return rep.SnapshotSimulation() })
+}
+
 // TestAJournalOpenedMidRunDoesNotPerturb drives one input sequence twice, opening a
 // journal mid-run on one of them, and requires the two to stand alike at the opening
 // and on every tick after: the opening carries the run's own side, so nothing a
@@ -1253,7 +1299,8 @@ func TestAnOpeningKeepsTheRunsOwnCursor(t *testing.T) {
 
 // TestNoJournalOpensWhileANewGameStarts: between a reset's cleanup and the boot spawn
 // that brings the roster back, an opening is refused, and once the game has started
-// it opens on every cursor.
+// it opens on every cursor. A live run's scheduler starts the game once the lock the
+// reset was dispatched under frees, so the reset is dispatched as its loop does.
 func TestNoJournalOpensWhileANewGameStarts(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x7E5, 120, 40)
@@ -1261,9 +1308,10 @@ func TestNoJournalOpensWhileANewGameStarts(t *testing.T) {
 	tickUntilCursor(t, a)
 	spawnCursor(t, a)
 	a.Tick(30)
-	if !a.Reset(false) {
-		t.Fatal("reset refused")
-	}
+	a.World().RunSafe(func() {
+		a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
+		a.scheduler.SettleLocked()
+	})
 	a.cfg.JournalSink = journal.NewCapture()
 	if _, err := a.openJournal(); err == nil {
 		t.Fatal("a journal opened while the new game was starting")

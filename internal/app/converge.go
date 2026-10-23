@@ -425,7 +425,7 @@ func (a *App) thaw() {
 // or it hosts no session, and nobody here can end it. Caller MUST hold updateMutex,
 // between two ticks.
 func (a *App) thawLocked() (held bool) {
-	if a.ctx.TimeCtl.Frozen() || a.cfg.scriptedSession || !a.world.IsSessionCoordinator() {
+	if a.ctx.TimeCtl.Holds(engine.HoldFreeze) || a.cfg.scriptedSession || !a.world.IsSessionCoordinator() {
 		a.releaseHold("Resumed")
 		return false
 	}

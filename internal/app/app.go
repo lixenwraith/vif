@@ -474,6 +474,7 @@ func (a *App) applyPlay() {
 	a.ctx.MouseDisabled.Store(!p.Mouse)
 	a.ctx.OverlayHUD.Store(p.HUD)
 	a.ctx.Relaying.Store(p.Relay)
+	a.ctx.WaitStart.Store(p.Wait && a.cfg.Mode.OwnsInput())
 }
 
 // livePlay is the run's [play] as it stands: what the next run starts from and
@@ -485,6 +486,9 @@ func (a *App) livePlay() paths.Play {
 	p.FollowMouse = a.ctx.MouseFreeMode.Load()
 	p.HUD = a.ctx.OverlayHUD.Load()
 	p.Relay = a.ctx.Relaying.Load()
+	if a.cfg.Mode.OwnsInput() { // a run nobody plays never waits, whatever the setting
+		p.Wait = a.ctx.WaitStart.Load()
+	}
 	a.audioPlay(&p)
 	return p
 }
