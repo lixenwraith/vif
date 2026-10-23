@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -450,7 +449,7 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := &seatSource{botSource: botSource{d}, holder: new(atomic.Bool), screen: &person.seatScreen,
+	src := &seatSource{botSource: botSource{d}, screen: &person.seatScreen,
 		run: seated, shown: screen{160, 45}}
 	if _, err := src.Step(); err != nil {
 		t.Fatal(err)

@@ -139,7 +139,7 @@ func (a *App) addSeatLocked(spec string) error {
 // the handshake its holder serves checks. Caller holds updateMutex.
 func (a *App) seatConfigLocked() (Config, error) {
 	if a.sessionTransportLocked() == nil {
-		if err := a.openSessionLocked(); err != nil {
+		if err := a.openSessionLocked(nil); err != nil {
 			return Config{}, err
 		}
 	}
@@ -217,7 +217,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				s.app.Store(b)
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"peer", s.id.Load(), "slot", s.slot.Load())
-				return &seatSource{botSource: botSource{d}, holder: forkCell(a), screen: &a.seatScreen,
+				return &seatSource{botSource: botSource{d}, ends: a.seatEnds(b), screen: &a.seatScreen,
 					run: b, shown: screen{cfg.Width, cfg.Height}}, nil
 			})
 		// Under seatsMu, so an ask lands before this or finds no run
@@ -249,23 +249,35 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 // nobody took the session over.
 func forkCell(a *App) *atomic.Bool { return a.world.Resources.Status.Bools.Get("network.fork") }
 
+// seatEnds is what ends seat, one of this run's, besides this run halting it: the
+// seat's fork or this run's. A play run's loop takes its fork into a session of its
+// own and seats its bots again there (forked), so nothing but the run ends its seats.
+func (a *App) seatEnds(seat *App) []*atomic.Bool {
+	if a.cfg.Mode == ModePlay {
+		return nil
+	}
+	return []*atomic.Bool{forkCell(seat), forkCell(a)}
+}
+
 // screen is a terminal's size in cells.
 type screen struct{ w, h int }
 
-// seatSource ends a seat once its holder is left with no session: a holder that
-// left its session takes its bots along. A seat follows its holder's screen as it
-// is published, between two of its steps.
+// seatSource ends a seat once its session is gone for it (seatEnds): a holder left
+// with no session takes its bots along. A seat follows its holder's screen as it is
+// published, between two of its steps.
 type seatSource struct {
 	botSource
-	holder *atomic.Bool
+	ends   []*atomic.Bool
 	screen *atomic.Pointer[screen]
 	run    *App
 	shown  screen
 }
 
 func (s *seatSource) Step() (bool, error) {
-	if s.holder.Load() {
-		return false, nil
+	for _, gone := range s.ends {
+		if gone.Load() {
+			return false, nil
+		}
 	}
 	if sc := s.screen.Load(); sc != nil && *sc != s.shown {
 		s.shown = *sc

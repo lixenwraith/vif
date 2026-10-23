@@ -634,8 +634,8 @@ func (u *Authority) trySucceed() {
 // local-continuation fallback, said plainly: this instance continues its own game
 // from the last authoritative state.
 func (u *Authority) giveUp() {
-	// Read before the state is cleared: what this fork keeps is the roster it can
-	// still reach, and both halves of that answer are gone once lost is.
+	// Read before the state is cleared: the run goes on with the roster it held when
+	// its authority went.
 	roster := u.currentRoster()
 	u.mu.Lock()
 	if u.contested == 0 {
@@ -651,7 +651,6 @@ func (u *Authority) giveUp() {
 	u.statMigrating.Store(false)
 	u.statHostLost.Store(true)
 	u.publish()
-	u.inst.DropAbandonedCursors(roster, local)
 	why := "no successor was reachable"
 	if fixed {
 		why = "the session pinned its authority"
@@ -660,7 +659,7 @@ func (u *Authority) giveUp() {
 		"contested_term", uint64(term), "lost", uint64(lost), "reason", why)
 	u.inst.SetStatusMessage(
 		"Host connection lost; continuing locally from the last authoritative state", parameter.StatusAlert)
-	u.inst.Forked()
+	u.inst.Forked(roster, local)
 }
 
 // adopt installs a handoff record: the term, the authority, and the membership

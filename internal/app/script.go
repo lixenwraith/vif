@@ -182,8 +182,8 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		default:
 		}
 		// A headless bot left with no session plays for nobody; a watched one plays
-		// on, as a person does.
-		if a.dismissed.Load() || kind == "bot" && forkCell(a).Load() {
+		// on, as a person does, and a seat ends as its holder says (seatEnds).
+		if a.dismissed.Load() || kind == "bot" && a.cfg.holder == 0 && forkCell(a).Load() {
 			return false, nil
 		}
 		// Between two steps, as a presenting run's loop serves it between two waits
