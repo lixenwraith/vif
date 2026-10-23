@@ -99,15 +99,17 @@ func dialWebSocket(target string, timeout time.Duration) (conn net.Conn, err err
 		defer timer.Stop()
 		expiry = timer.C
 	}
+	// A page is told nothing of why a socket did not open, so neither is the player
 	select {
 	case <-open:
 		return c, nil
 	case <-c.closed:
 		_ = c.Close()
-		return nil, c.failure()
+		return nil, plainError{"the connection failed; the game may have ended, or the network dropped", c.failure()}
 	case <-expiry:
 		_ = c.Close()
-		return nil, fmt.Errorf("websocket: %s did not open within %s", target, timeout)
+		return nil, plainError{fmt.Sprintf("no answer within %s; the game may have ended, or the connection is too slow",
+			timeout), os.ErrDeadlineExceeded}
 	}
 }
 

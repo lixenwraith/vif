@@ -372,12 +372,13 @@ func dialJoin(cfg Config) (*joinDial, error) {
 	netCfg.Identity = buildIdentity()
 	netCfg.SessionName = cfg.SessionName
 	netCfg.Dial = cfg.relay
+	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
 	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
 	if err != nil {
 		if cfg.relay != nil {
 			return nil, fmt.Errorf("join through the holder: %w", err)
 		}
-		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)
+		return nil, fmt.Errorf("join %s: %w", network.Shown(cfg.JoinAddress), err)
 	}
 	d := &joinDial{pending: pending, offer: offer}
 	if cfg, err = ConfigForJoin(cfg, offer); err == nil {

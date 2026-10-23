@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"slices"
 	"sync"
 	"time"
@@ -971,6 +972,28 @@ func (l *AdmissionLimiter) Admit(addr net.Addr) error {
 	return nil
 }
 
+// Refund takes back one admission of addr, for a dial that started nothing.
+func (l *AdmissionLimiter) Refund(addr net.Addr) {
+	key := admissionKey(addr)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if entry, ok := l.seen[key]; ok && entry.count > 0 {
+		entry.count--
+	}
+}
+
+// Wait is how long until addr may be admitted again, zero when it may now.
+func (l *AdmissionLimiter) Wait(addr net.Addr) time.Duration {
+	key := admissionKey(addr)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entry, ok := l.seen[key]
+	if !ok || entry.count < l.burst {
+		return 0
+	}
+	return max(l.window-time.Since(entry.opened), 0) // [wall] a rate over real time
+}
+
 // sweepLocked drops the keys whose window has passed. It runs only when a new key
 // arrives, so the table is walked once per unseen host rather than per dial.
 // Caller MUST hold mu.
@@ -982,15 +1005,19 @@ func (l *AdmissionLimiter) sweepLocked(now time.Time) {
 	}
 }
 
-// admissionKey is the host half of a network address. The port is what a dialer
-// changes for free, so counting it would count nothing.
+// admissionKey is the host half of a network address, an IPv6 host's /64. The port
+// and an IPv6 address's low half are what a dialer changes for free, so counting
+// either would count nothing.
 func admissionKey(addr net.Addr) string {
 	if _, piped := addr.(inProcess); addr == nil || piped {
 		return ""
 	}
-	s := addr.String()
-	if host, _, err := net.SplitHostPort(s); err == nil {
-		return host
+	host := addr.String()
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
 	}
-	return s
+	if ip, err := netip.ParseAddr(host); err == nil && ip.Is6() && !ip.Is4In6() {
+		return netip.PrefixFrom(ip.WithZone(""), 64).Masked().String()
+	}
+	return host
 }

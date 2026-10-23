@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -22,6 +23,7 @@ type fakeSessionAllocator struct {
 	listErr   error
 	readyErr  error
 	routeErr  error
+	lists     int
 }
 
 func (f *fakeSessionAllocator) createSession(_ context.Context, req sessionRequest) (session, error) {
@@ -32,6 +34,7 @@ func (f *fakeSessionAllocator) createSession(_ context.Context, req sessionReque
 func (f *fakeSessionAllocator) limits() fleetLimits { return f.bounds }
 
 func (f *fakeSessionAllocator) listSessions(context.Context) ([]session, error) {
+	f.lists++
 	return f.sessions, f.listErr
 }
 
@@ -182,20 +185,29 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 // TestSessionCreationIsBudgetedPerAddress: one address holds at most its budget of
 // the fleet's unclaimed sessions, another is unaffected, and a request the edge did
 // not attribute is bounded by the edge alone.
+// TestSessionCreationIsBudgetedPerAddress: a create spends its address's budget,
+// one that started nothing (a full fleet) gives it back, and a refusal names the
+// seconds left in the window.
 func TestSessionCreationIsBudgetedPerAddress(t *testing.T) {
-	api := newAPIServer(&fakeSessionAllocator{created: session{ID: "abc", Port: 31700}},
-		slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{
-			Workload: workloadConfig{FirstJoin: "90s"}, ClientAddressHeader: "X-Real-IP", ClientCreates: 1,
-		}, nil, nil)
+	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700}}
+	api := newAPIServer(backend, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{
+		Workload: workloadConfig{FirstJoin: "90s"}, ClientAddressHeader: "X-Real-IP", ClientCreates: 1,
+	}, nil, nil)
 	for i, tc := range []struct {
 		player string
+		full   bool
 		want   int
 	}{
-		{"192.0.2.1", http.StatusCreated},
-		{"192.0.2.1", http.StatusTooManyRequests},
-		{"192.0.2.2", http.StatusCreated},
-		{"", http.StatusCreated},
+		{"192.0.2.1", true, http.StatusServiceUnavailable},
+		{"192.0.2.1", false, http.StatusCreated},
+		{"192.0.2.1", false, http.StatusTooManyRequests},
+		{"192.0.2.2", false, http.StatusCreated},
+		{"", false, http.StatusCreated},
 	} {
+		backend.createErr = nil
+		if tc.full {
+			backend.createErr = errFleetFull
+		}
 		request := httptest.NewRequest(http.MethodPost, "/vif/api/sessions", nil)
 		if tc.player != "" {
 			request.Header.Set("X-Real-IP", tc.player)
@@ -205,6 +217,34 @@ func TestSessionCreationIsBudgetedPerAddress(t *testing.T) {
 		if response.Code != tc.want {
 			t.Errorf("request %d from %q answered %d, want %d", i+1, tc.player, response.Code, tc.want)
 		}
+		if after, _ := strconv.Atoi(response.Header().Get("Retry-After")); tc.want == http.StatusTooManyRequests && (after < 1 || after > 90) {
+			t.Errorf("request %d was told to wait %q, want the window's seconds left", i+1, response.Header().Get("Retry-After"))
+		}
+	}
+}
+
+// TestOneReadingAnswersEveryListUntilACreate: each reading costs the API server
+// four lists and every pod a probe, and every open lobby page polls, so one reading
+// answers every list while fresh; a create makes the next list read the fleet anew.
+func TestOneReadingAnswersEveryListUntilACreate(t *testing.T) {
+	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700}}
+	api := testServer(backend)
+	list := func() {
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/vif/api/sessions", nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("list answered %d", response.Code)
+		}
+	}
+	list()
+	list()
+	if backend.lists != 1 {
+		t.Fatalf("two lists read the fleet %d times, want once", backend.lists)
+	}
+	api.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/vif/api/sessions", nil))
+	list()
+	if backend.lists != 2 {
+		t.Fatalf("the list after a create left the fleet read %d times, want twice", backend.lists)
 	}
 }
 

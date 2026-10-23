@@ -67,10 +67,10 @@ What stands between this deployment and one a stranger can install is in
 [todo](todo.md#fleet): rehearsing the install on bare Arch Linux and Ubuntu, a
 full-roster measurement for the resource values, the failures a cluster has not
 yet been put through, and promoting verified images to the node. Until
-[Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) and
-[Tighten the per-address budgets](todo.md#tighten-the-per-address-budgets) hold,
-the deployment keeps a session's own bots closed (`VIF_ALLOCATOR_BOTS_MAX=0`) and
-its per-address budgets loose.
+[Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) holds, the
+deployment keeps a session's own bots closed (`VIF_ALLOCATOR_BOTS_MAX=0`). Each
+address creates one session per first-join window and joins six times a minute,
+loose for a player whose link drops and comes back; one NAT is one address.
 
 ## 4. Security posture
 
@@ -116,8 +116,9 @@ What bounds a stranger:
   the `monitoring` namespace, everything else denied, no egress;
 - the allocator's published surface: exactly the create/list, log-stream and
   session-socket routes and the front door, bounded by the ten-session quota, the
-  90-second first-join expiry, `-client-creates` sessions per address in that
-  window, the advertised `limits` on what a caller may select, and the edge's rate
+  90-second first-join expiry, `-client-creates` sessions per address (an IPv6
+  one's /64) in that window, one reading of the fleet per 2 s however many lobby
+  pages list it, the advertised `limits` on what a caller may select, and the edge's rate
   limits on the browser route; without `-client-address-header` the API and the
   browser route charge no per-address budget. Its probe endpoints and every other
   path stay behind the node's own filter

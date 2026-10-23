@@ -332,9 +332,10 @@ address grammar in [Services](services-and-networking.md)).
 
 A browser has no terminal to print an exit error to, so the launcher keeps the
 tail of stderr and, once the program exits, shows its last line (or the crash
-that ended it) in place of the terminal. A failed join reads there with a hint to
-reload; a refused one exits 76 and reads as it is, since its reason already says
-whether a retry helps. The page then terminates the Worker and posts it nothing
+that ended it) in place of the terminal and the start screen, centred in what the
+browser's bars leave, with a Reload button. A refused join's reason says whether a
+retry helps; a socket that does not open says the game may have ended or the link is
+too slow, after `NetworkJoinConnectTimeout` (15 s) where it never answers. The page then terminates the Worker and posts it nothing
 more, so a later resize or visibility change cannot replace that reason.
 
 ## 7. External maps and assets
@@ -434,7 +435,9 @@ slower on a large grid, and says so once. It reports keys, a soft keyboard's tex
 and pastes, the pointer at its cell (a touch is the left button marked as a
 finger's, as on Android) and its size as the terminal events the host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
 hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
-hidden tab ends every hold. A hidden tab draws nothing and is handed the whole screen on return; the
+hidden tab ends every hold, a pointer's press and a finger's too, whose ends would
+reach another tab or window. A button pressed while another is held, which a
+browser reports as a move, presses as one alone does. A hidden tab draws nothing and is handed the whole screen on return; the
 run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
 (`browser.Speaker`): the Worker posts each mixer buffer that sounds, and the page
 opens an `AudioContext` at the first and plays them through an AudioWorklet

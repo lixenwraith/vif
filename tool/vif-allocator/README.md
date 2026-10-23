@@ -40,8 +40,8 @@ atomically without restarting the allocator. See
 
 | Request | Result |
 |---|---|
-| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"bots":K,"log_level":"info","scenario":"td","size":"160x48"}` | `201` and one created session. Those five fields are the whole of what a caller may choose; an omitted one takes the deployment default (no bots), an unknown one is a `400`. `429 create_budget` once the caller's address has asked for `-client-creates` sessions in one `-first-join` window. |
-| `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. |
+| `POST /vif/api/sessions` with an empty body, `{}`, or `{"players":N,"bots":K,"log_level":"info","scenario":"td","size":"160x48"}` | `201` and one created session. Those five fields are the whole of what a caller may choose; an omitted one takes the deployment default (no bots), an unknown one is a `400`. `429 create_budget` once the caller's address has created `-client-creates` sessions in one `-first-join` window, its `Retry-After` the seconds left; a refused request or a full fleet spends none. |
+| `GET /vif/api/sessions` | `200` and `{ "sessions": [...], "limits": {...} }` for live, non-completed Jobs. One reading of the fleet answers every request for 2 s, its `expires_in` counted down to each, and a create discards it. |
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
 | `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. An unavailable upstream returns `503 log_stream_unavailable`. |
@@ -218,6 +218,6 @@ their defaults; `vif-allocator -h` lists every flag.
 | `-first-join`, `-empty`, `-drain` | `90s`, `90s`, `20s` | the session's lifetime bounds, passed to its pod |
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
-| `-client-joins`, `-client-creates` | `6`, `4` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
+| `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
 | `-port-first`, `-port-last` | `31700`, `31709` | the NodePort pool, and so the fleet's size |
 | `-ready-timeout`, `-poll-interval` | `75s`, `1s` | how long a create waits for readiness, and how often it looks |

@@ -85,9 +85,11 @@ const (
 	StatusCursorChar = '█'
 
 	// StatusNetLatencyWarn/StatusNetLatencyBad colour the session badge by round
-	// trip, the reading a player already has from every other networked game.
-	StatusNetLatencyWarn = 120 * time.Millisecond
-	StatusNetLatencyBad  = 250 * time.Millisecond
+	// trip, the reading a player already has from every other networked game. Bad
+	// is a round trip whose way out outlasts the default playout lead, past which
+	// the lead grows and actions land later; warning is half of that.
+	StatusNetLatencyBad  = 2 * NetworkBarrierDelayTicks * GameUpdateInterval
+	StatusNetLatencyWarn = StatusNetLatencyBad / 2
 
 	// StatusNetLossWarnPct is the probe loss a badge names rather than absorbs.
 	StatusNetLossWarnPct = 2

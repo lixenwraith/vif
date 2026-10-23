@@ -81,6 +81,17 @@ func ParseEndpoint(target string) (Endpoint, error) {
 	return e, nil
 }
 
+// Shown is how a message names a dialled address: a WebSocket route by its host,
+// since the rest of its URL is a session key nobody reads, any other as given.
+func Shown(target string) string {
+	if e, err := ParseEndpoint(target); err == nil && e.Scheme == SchemeWebSocket {
+		if u, err := url.Parse(e.Addr); err == nil && u.Host != "" {
+			return u.Host
+		}
+	}
+	return target
+}
+
 // Listenable reports why vif cannot serve e, nil when it can. A WebSocket host is
 // plain ws on host:port and answers every path, since the session is named in-band.
 func (e Endpoint) Listenable() error {
@@ -117,11 +128,12 @@ func (e plainError) Unwrap() error { return e.cause }
 // error it does not know passes through as it is.
 func plainNetError(err error) error {
 	var (
-		op   *net.OpError
-		dns  *net.DNSError
-		ne   net.Error
-		port = -1
-		text string
+		op    *net.OpError
+		dns   *net.DNSError
+		ne    net.Error
+		plain plainError
+		port  = -1
+		text  string
 	)
 	if errors.As(err, &op) {
 		if a, ok := op.Addr.(*net.TCPAddr); ok {
@@ -131,6 +143,8 @@ func plainNetError(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case errors.As(err, &plain):
+		return err // already in the player's words
 	case errors.Is(err, os.ErrPermission) && port >= 0 && port < 1024:
 		text = "ports below 1024 need root; use one above, e.g. :7777"
 	case errors.Is(err, syscall.EADDRINUSE):

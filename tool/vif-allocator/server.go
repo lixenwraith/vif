@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,6 +24,14 @@ import (
 )
 
 const maxCreateBody = 1024
+
+// listFresh is how long one reading of the fleet answers every list request. Each
+// costs the API server four lists and every running pod a probe, which every open
+// lobby page polling every few seconds would otherwise pay; listTimeout bounds it.
+const (
+	listFresh   = 2 * time.Second
+	listTimeout = 10 * time.Second
+)
 
 type sessionAllocator interface {
 	createSession(context.Context, sessionRequest) (session, error)
@@ -42,7 +51,25 @@ type apiServer struct {
 	clientHeader string
 	unattributed atomic.Bool // warned once that the edge sent no address
 	creates      *network.AdmissionLimiter
-	createRetry  string
+	list         fleetList
+}
+
+// fleetList is the latest reading of the fleet and the one replacing it, which
+// every request arriving meanwhile waits on rather than starting its own.
+type fleetList struct {
+	mu   sync.Mutex
+	at   time.Time
+	last *fleetRead
+	read *fleetRead
+	gen  uint64 // a create's, so a reading begun before it is not kept
+}
+
+type fleetRead struct {
+	done     chan struct{}
+	gen      uint64
+	sessions []session
+	limits   fleetLimits
+	err      error
 }
 
 type sessionsResponse struct {
@@ -73,7 +100,6 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 	// the fleet's unclaimed sessions one address can hold.
 	if window, err := time.ParseDuration(cfg.Workload.FirstJoin); err == nil && cfg.ClientCreates > 0 {
 		server.creates = network.NewAdmissionLimiterOf(window, cfg.ClientCreates)
-		server.createRetry = strconv.Itoa(int(window.Seconds()))
 	}
 	server.mux.HandleFunc("/healthz", server.handleHealth)
 	server.mux.HandleFunc("/readyz", server.handleReady)
@@ -123,16 +149,13 @@ func (s *apiServer) handleReady(w http.ResponseWriter, r *http.Request) {
 func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		sessions, err := s.allocator.listSessions(r.Context())
+		sessions, limits, err := s.fleet(r.Context())
 		if err != nil {
 			s.log.Error("list sessions", "error", err)
 			writeAPIError(w, http.StatusBadGateway, "kubernetes_error", "Could not read sessions")
 			return
 		}
-		if sessions == nil {
-			sessions = []session{}
-		}
-		writeJSON(w, http.StatusOK, sessionsResponse{Sessions: sessions, Limits: s.allocator.limits()})
+		writeJSON(w, http.StatusOK, sessionsResponse{Sessions: sessions, Limits: limits})
 	case http.MethodPost:
 		request, err := parseCreateRequest(r)
 		if err != nil {
@@ -145,17 +168,25 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 				"Request body must be a JSON object naming only players, bots, log_level, scenario and size")
 			return
 		}
-		if s.creates != nil && s.creates.Admit(s.clientAddr(r)) != nil {
-			w.Header().Set("Retry-After", s.createRetry)
+		from := s.clientAddr(r)
+		if s.creates != nil && s.creates.Admit(from) != nil {
+			wait := s.creates.Wait(from)
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, int((wait+time.Second-1)/time.Second))))
 			writeAPIError(w, http.StatusTooManyRequests, "create_budget",
 				"This address has created as many sessions as it may for now; join one or try again later")
 			return
 		}
 		created, err := s.allocator.createSession(r.Context(), request)
 		if err != nil {
+			// Charged first, so one address has one create under way; a refused one
+			// started nothing and is given back, so a full fleet's retries cost none.
+			if s.creates != nil && (errors.Is(err, errRequestRefused) || errors.Is(err, errFleetFull)) {
+				s.creates.Refund(from)
+			}
 			s.writeCreateError(w, err)
 			return
 		}
+		s.forgetFleet()
 		s.log.Info("session created", "session", created.ID, "port", created.Port,
 			"players", request.Players, "bots", request.Bots, "log_level", request.LogLevel,
 			"scenario", request.Scenario, "size", request.Size)
@@ -163,6 +194,72 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
 	}
+}
+
+// fleet is the last reading, aged to now, while it is fresh, and otherwise the
+// reading under way, which the first request to need one starts.
+func (s *apiServer) fleet(ctx context.Context) ([]session, fleetLimits, error) {
+	l := &s.list
+	l.mu.Lock()
+	if age := time.Since(l.at); l.last != nil && age < listFresh {
+		last := l.last
+		l.mu.Unlock()
+		return aged(last.sessions, age), last.limits, nil
+	}
+	read := l.read
+	if read == nil {
+		read = &fleetRead{done: make(chan struct{}), gen: l.gen}
+		l.read = read
+		go s.readFleet(read)
+	}
+	l.mu.Unlock()
+	select {
+	case <-read.done:
+		return aged(read.sessions, 0), read.limits, read.err
+	case <-ctx.Done():
+		return nil, fleetLimits{}, ctx.Err()
+	}
+}
+
+// readFleet reads for every request waiting on read, detached from each of them:
+// the one that started it leaving must not cancel it for the rest.
+func (s *apiServer) readFleet(read *fleetRead) {
+	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
+	read.sessions, read.err = s.allocator.listSessions(ctx)
+	cancel()
+	read.limits = s.allocator.limits()
+	l := &s.list
+	l.mu.Lock()
+	if l.read == read {
+		l.read = nil
+	}
+	if read.err == nil && read.gen == l.gen {
+		l.last, l.at = read, time.Now()
+	}
+	l.mu.Unlock()
+	close(read.done)
+}
+
+// forgetFleet drops a reading a create made stale, and keeps any under way from
+// being kept, so the next list a page reads carries the session it was handed.
+func (s *apiServer) forgetFleet() {
+	s.list.mu.Lock()
+	s.list.gen++
+	s.list.last, s.list.read = nil, nil
+	s.list.mu.Unlock()
+}
+
+// aged is a reading as old as it is, each expiry counted down by its age: a page
+// pins expires_in to its own clock as it receives it.
+func aged(sessions []session, age time.Duration) []session {
+	out := make([]session, len(sessions))
+	copy(out, sessions)
+	for i := range out {
+		if left, err := time.ParseDuration(out[i].State.ExpiresIn); err == nil && age > 0 {
+			out[i].State.ExpiresIn = max(left-age, 0).Round(time.Second).String()
+		}
+	}
+	return out
 }
 
 // clientAddr is the player's address as the edge wrote it, nil when no header is
