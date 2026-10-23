@@ -230,6 +230,9 @@ func (p *SocketPort) ConnectionState() ConnState {
 // Addr returns the bound address, nil for a client or before Start.
 func (p *SocketPort) Addr() net.Addr { return p.transport.Addr() }
 
+// Doors are every address this port takes joins at, the one Addr names first.
+func (p *SocketPort) Doors() []net.Addr { return p.transport.Addrs() }
+
 // Peers returns the connected participants in a stable order, for a caller that
 // schedules per link rather than per session.
 func (p *SocketPort) Peers() []uint32 {

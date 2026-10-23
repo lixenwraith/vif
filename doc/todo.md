@@ -171,22 +171,6 @@ library copies.
 
 ## Browser sessions
 
-### Answer tcp, ws and wss on one host port
-
-- Priority: P3
-- Affected files: `internal/network/transport.go`, `internal/network/websocket_other.go`,
-  `cmd/vif/main.go`
-
-A host binds one protocol per listener: `-host :7777` for terminals, `ws://:7777`
-for pages served over http, `wss://:7777` with `-cert` for pages served over https.
-A person hosting at home for both terminals and pages has no second door short of
-a successor's `:host`, and a terminal joining a `wss://` door trusts only the
-system's roots, so a private certificate keeps terminals out of it. What would
-close it: the host's accept loop telling a TLS record (0x16) and an HTTP request
-(`G`) from vif's own opening frames (`door.open` already reads the first byte) and
-handing each to the upgrade, so one port answers all three; and a `-ca` a joiner
-names a private certificate's issuer by.
-
 ### Bound navigation's worst tick on busy maps
 
 - Priority: P2
@@ -229,7 +213,12 @@ logs. Creation takes one too: `network.RequestSession` is the terminal's side of
 `POST /vif/api/sessions`, and already shows a 401 or 403 as the allocator's
 message. Decide whether the expanded allocator remains the credential boundary or
 is renamed/split before adding the planned `github.com/lixenwraith/auth`
-Argon2-SCRAM dependency.
+Argon2-SCRAM dependency. A terminal's own door takes the same handshake: a
+`-selfsign` door encrypts with no authority and a joiner pins its fingerprint
+(`-ca sha256:`); the SCRAM exchange with `WithChannelBinding` over the leaf
+certificate's digest would authenticate both ends on that channel and make the pin
+optional, as `lixenwraith/chess` authenticates. Until then a browser trusts a
+self-signed door only by being told to.
 
 ### Fetch a content-addressed bundle over HTTP
 
@@ -583,34 +572,6 @@ Any out-of-lock or incremental design must keep [Multi-player](multi-player.md) 
 fence membership, pending barrier crossings not fed, the ledger settled before
 projection, the journal's place and mark, and no live tick between the final
 projection and the write. WASM gains scheduling time, not parallel CPU.
-
-### Tell both ends why a join failed
-
-- Priority: P3
-- Affected files: `internal/app/session.go`, `internal/network/session.go`,
-  `internal/network/endpoint.go`, `internal/app/loop.go`
-
-A bind or dial names the player's next step; these gaps remain:
-- A playing host never learns why a joiner was refused: accept and handshake
-  failures only reach the log, and `port.Errors()` is drained only by a lobby.
-- A site request can run 2 minutes, past the 5 s its "Joining" notice lasts.
-- A rejoin shows nothing for up to `SessionRejoinWindow`, and a join's press
-  whose seat is refused for a moment dials again that long without reading keys,
-  so its Ctrl-C waits for it (`App.takeSeat`).
-- Windows' WSAE codes miss `plainNetError` and keep the system's words.
-
-### Show a joiner waiting for its press
-
-- Priority: P3
-- Affected files: `internal/app/session.go`, `internal/app/loop.go`,
-  `internal/network/session.go`
-
-A join waiting for its player's press holds nothing in its session, so nobody there
-sees it coming: its cursor appears with its arrival, the simple option chosen when
-the press was built. A Wraith placed at the preview and dropped when the ready
-period runs out would show it, but would hold a slot the preview exists not to
-hold, so it could only take one the session has free and would give way to any
-seat.
 
 ### Close the edges of a session hold
 

@@ -2378,3 +2378,46 @@ func TestASuccessorOrdersWhoIsAwayByTheirWaits(t *testing.T) {
 		t.Fatalf("away longest first reads %v, want %v", order, want)
 	}
 }
+
+// TestAHostTakesJoinsAtEveryDoor: a host naming a tcp door and a ws door serves one
+// session at both, and a joiner at the second is seated as one at the first is.
+func TestAHostTakesJoinsAtEveryDoor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("tcp://127.0.0.1:0,ws://127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	t.Cleanup(func() { stopTicks(); host.Close() })
+	host.sessionMu.Lock()
+	doors := host.midRunPort.Doors()
+	host.sessionMu.Unlock()
+	if len(doors) != 2 || !strings.HasPrefix(doors[1].String(), "ws://") {
+		t.Fatalf("the host answers at %v; want a tcp door and a ws door", doors)
+	}
+	if host.cfg.HostAddress != "127.0.0.1:0,ws://127.0.0.1:0" {
+		t.Fatalf("the host records its doors as %q", host.cfg.HostAddress)
+	}
+	guest, _ := driveBot(t, Config{JoinAddress: doors[1].String() + "/"}, "patrol", nil)
+	waitForCursors(t, guest, 2)
+	waitForCursors(t, host, 2)
+}
+
+// TestARestartNamesTheDoorAGuestCameInBy: a host's own doors are bind addresses, so
+// a guest told the session restarts there dials the address it joined by; a
+// successor's address names a host, and is where the guest goes.
+func TestARestartNamesTheDoorAGuestCameInBy(t *testing.T) {
+	t.Parallel()
+	for payload, want := range map[string]string{":7777,wss://:7778": "", "ws://:7778": "", "10.0.0.5:7777": "10.0.0.5:7777"} {
+		apps := meshSession(t, 0xA1A3, 2, [][2]int{{1, 2}})
+		localCursors(t, apps)
+		guest := apps[1]
+		guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "10.0.0.1:7777" // a joined run with a loop; the rule is the address
+		guest.World().RunSafe(func() { guest.receiveSessionRestart(1, payload) })
+		req := guest.restart.Load()
+		if req == nil || !req.Rejoin || req.Join != want {
+			t.Errorf("a restart at %q latched %+v; want a rejoin at %q", payload, req, want)
+		}
+	}
+}

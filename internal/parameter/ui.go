@@ -45,14 +45,16 @@ var AudioText = [4]string{" X ", " S ", " M ", " O "}
 type StatusKind uint8
 
 const (
-	StatusNotice StatusKind = iota // an answer to the player, or what the run reports
-	StatusAlert                    // a failure or session change the player did not ask about
+	StatusNotice   StatusKind = iota // an answer to the player, or what the run reports
+	StatusProgress                   // what the run is waiting on, until it says otherwise
+	StatusAlert                      // a failure or session change the player did not ask about
 	StatusKindCount
 )
 
 var StatusKinds = [StatusKindCount]struct{ Min, Shown time.Duration }{
-	StatusNotice: {Shown: 5 * time.Second},
-	StatusAlert:  {Min: 3 * time.Second, Shown: 8 * time.Second},
+	StatusNotice:   {Shown: 5 * time.Second},
+	StatusProgress: {Shown: NetworkSessionRequestTimeout}, // the longest wait a run reports on
+	StatusAlert:    {Min: 3 * time.Second, Shown: 8 * time.Second},
 }
 
 // Status Bar & Modes

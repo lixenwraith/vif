@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
@@ -198,7 +200,13 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 	if a.cfg.Mode != ModePlay || !a.sessionRoleLocked().joined() {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
+	// A host's own doors are bind addresses with no host, and say the session stayed
+	// where this run joined it; a successor's address names a host, and says where.
+	if doors, err := network.Doors(addr); err == nil && doors[0].Hostless() {
+		addr = ""
+	}
 	if a.replaceWith(&restartRequest{Rejoin: true, Join: addr}) {
+		a.ctx.SetStatusMessage("Session restarting; rejoining "+network.Shown(cmp.Or(addr, a.cfg.JoinAddress))+"...", parameter.StatusProgress)
 		a.log.Info("session", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }
@@ -296,14 +304,19 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 	if !a.dialling.CompareAndSwap(false, true) {
 		return errors.New("a join is already being dialled")
 	}
-	a.ctx.SetStatusMessage("Joining "+target+"...", parameter.StatusNotice)
+	// Progress rather than a notice: a site answers once its session's pod is up.
+	if site.Scheme == network.SchemeSite {
+		a.ctx.SetStatusMessage("Requesting a session from "+site.Addr+"...", parameter.StatusProgress)
+	} else {
+		a.ctx.SetStatusMessage("Joining "+network.Shown(target)+"...", parameter.StatusProgress)
+	}
 	a.log.Info("session", "msg", "join requested", "target", target)
 	core.Go(func() {
 		defer a.dialling.Store(false)
 		link, err := target, error(nil)
 		if site.Scheme == network.SchemeSite {
 			if link, err = network.RequestSession(site.Addr, players, scenario); err == nil {
-				a.ctx.SetStatusMessage("Joining "+link+"...", parameter.StatusNotice)
+				a.ctx.SetStatusMessage("Joining "+network.Shown(link)+"...", parameter.StatusProgress)
 				if next, err = next.joining(link); err == nil {
 					err = next.Validate()
 				}
@@ -363,14 +376,11 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	if addr == "" {
 		return errors.New("host: no address")
 	}
-	e, err := network.ParseEndpoint(addr)
-	if err == nil {
-		err = e.Listenable()
-	}
+	doors, err := network.Doors(addr)
 	if err != nil {
 		return fmt.Errorf("host: %w", err)
 	}
-	addr = e.Addr
+	addr = network.DoorList(doors)
 	successor := a.sessionRoleLocked() == roleSuccessor
 	switch authority {
 	case "", AuthorityMigrate:
@@ -392,18 +402,18 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	}
 
 	// Bound before anything is written, so a port this run cannot have leaves it as
-	// it was; a startup -host bound it before the terminal started.
-	ln := a.cfg.hostListener
-	a.cfg.hostListener = nil
-	if ln == nil {
-		if ln, err = network.Listen(addr, a.cfg.hostNetwork(addr)); err != nil {
+	// it was; a startup -host bound them before the terminal started.
+	lns := a.cfg.hostListeners
+	a.cfg.hostListeners = nil
+	if lns == nil {
+		if lns, err = a.cfg.bindDoors(addr); err != nil {
 			a.cfg.FixedAuthority = fixed
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
 	}
 	if a.sessionTransportLocked() == nil {
 		if err := a.openSessionLocked(nil); err != nil {
-			_ = ln.Close()
+			closeDoors(lns)
 			a.cfg.FixedAuthority = fixed
 			return err
 		}
@@ -412,19 +422,31 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	port := a.midRunPort
 	a.sessionMu.Unlock()
 
-	if err := port.Serve(ln); err != nil {
-		_ = ln.Close()
-		a.cfg.FixedAuthority = fixed
-		return fmt.Errorf("host: %w", err)
+	for _, ln := range lns {
+		if err := port.Serve(ln); err != nil {
+			closeDoors(lns)
+			a.cfg.FixedAuthority = fixed
+			return fmt.Errorf("host: %w", err)
+		}
 	}
 	// A dial already in reads these only once it has the world lock this call holds.
 	// The policy is the session's from here: only this run's bots were offered one.
 	a.cfg.HostAddress = addr
 	a.authority.Pin(a.cfg.FixedAuthority)
-	a.log.Info("session", "msg", "hosting opened mid-run",
-		"address", ln.Addr().String(), "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
-	a.ctx.SetStatusMessage("Hosting on "+ln.Addr().String(), parameter.StatusNotice)
+	bound := doorsText(port.Doors())
+	a.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
+		"certificate", network.Fingerprint(a.cfg.TLS), "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
+	a.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
 	return nil
+}
+
+// doorsText names every door a port answers at, as a status line reads them.
+func doorsText(doors []net.Addr) string {
+	names := make([]string, len(doors))
+	for i, d := range doors {
+		names[i] = d.String()
+	}
+	return strings.Join(names, ", ")
 }
 
 // hostTakenSessionLocked is :host on a run that took its session over. Its own port
@@ -436,18 +458,26 @@ func (a *App) hostTakenSessionLocked(addr string) error {
 	if port == nil {
 		return errors.New("host: this run's session has no socket port")
 	}
-	bound := port.ListenAddr()
-	if !port.ListensOn(addr) {
-		ln, err := network.Listen(addr, a.cfg.hostNetwork(addr))
-		if err != nil {
-			return fmt.Errorf("host %s: %w", addr, err)
+	doors, _ := network.Doors(addr) // read by the caller
+	var opened []net.Listener
+	for _, d := range doors {
+		if port.ListensOn(d.Addr) {
+			continue
 		}
+		ln, err := network.Listen(d.Addr, a.cfg.hostNetwork(d.Addr))
+		if err != nil {
+			closeDoors(opened)
+			return fmt.Errorf("host %s: %w", d.Addr, err)
+		}
+		opened = append(opened, ln)
+	}
+	for _, ln := range opened {
 		if err := port.Serve(ln); err != nil {
-			_ = ln.Close()
+			closeDoors(opened)
 			return fmt.Errorf("host: %w", err)
 		}
-		bound = ln.Addr().String()
 	}
+	bound := doorsText(port.Doors())
 	a.cfg.HostAddress, a.cfg.JoinAddress = addr, ""
 	a.log.Info("session", "msg", "hosting opened on a session taken over",
 		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
@@ -747,6 +777,9 @@ func (a *App) sessionSummaryLocked() string {
 	}
 	if addr != "" {
 		where += " " + addr
+	}
+	if fp := network.Fingerprint(a.cfg.TLS); fp != "" && !a.sessionRoleLocked().joined() {
+		where += " (certificate " + fp + ")"
 	}
 	slot := a.world.Resources.Player.LocalSlot()
 	cursor := fmt.Sprintf("slot %d", slot)

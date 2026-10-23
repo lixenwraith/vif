@@ -166,6 +166,10 @@ const (
 	// so each step of a join waits as long as the next.
 	NetworkJoinPressWindow = NetworkJoinReadyTimeout
 
+	// NetworkSessionRequestTimeout bounds asking a site for a session, which answers
+	// once the session's pod is ready rather than when the request arrives. Wall time.
+	NetworkSessionRequestTimeout = 2 * time.Minute
+
 	// NetworkJoinConnectTimeout bounds a join's connect. A browser opens its socket
 	// through TLS, an HTTP upgrade and the site's proxy, round trips a loaded link
 	// stretches past the ConnectTimeout a session's own redials keep.
