@@ -212,17 +212,19 @@ func (a *App) joinLocked(target string) error {
 }
 
 // sessionRole is what a run is to its session, read from what the session wrote
-// rather than kept beside it. A guest that took the term over hosts: its port takes
-// joins as the first host's did.
+// rather than kept beside it. A guest that took the term over hosts at its own
+// port, which takes joins as the first host's did, until :host opens the door it
+// names; from then on it is a host like the one that opened the session.
 type sessionRole uint8
 
 const (
-	roleSolo   sessionRole = iota // in no session
-	roleSeats                     // in one it opened for its own bots, with no door
-	roleHost                      // coordinating one others can join
-	roleServer                    // coordinating one it plays no part in
-	roleGuest                     // in one it joined
-	roleLeft                      // in one it joined, which has nobody left but its own bots
+	roleSolo      sessionRole = iota // in no session
+	roleSeats                        // in one it opened for its own bots, with no door
+	roleHost                         // coordinating one others can join
+	roleServer                       // coordinating one it plays no part in
+	roleGuest                        // in one it joined
+	roleLeft                         // in one it joined, which has nobody left but its own bots
+	roleSuccessor                    // coordinating one it joined, at its own port
 )
 
 const inSession = "this run is already in a session"
@@ -230,12 +232,13 @@ const inSession = "this run is already in a session"
 // sessionRoles is why each role refuses :join, :host and :leave, empty where it
 // takes them.
 var sessionRoles = [...]struct{ join, host, leave string }{
-	roleSolo:   {"", "", "this run is in no session"},
-	roleSeats:  {"", "", "this run's session holds only its own bots"},
-	roleHost:   {inSession, "this run is already hosting", ""},
-	roleServer: {inSession, "this run is already hosting", "a server stays in the session it serves"},
-	roleGuest:  {inSession, inSession, ""},
-	roleLeft:   {"", inSession, ""},
+	roleSolo:      {"", "", "this run is in no session"},
+	roleSeats:     {"", "", "this run's session holds only its own bots"},
+	roleHost:      {inSession, "this run is already hosting", ""},
+	roleServer:    {inSession, "this run is already hosting", "a server stays in the session it serves"},
+	roleGuest:     {inSession, inSession, ""},
+	roleLeft:      {"", inSession, ""},
+	roleSuccessor: {inSession, "", ""},
 }
 
 func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
@@ -251,7 +254,7 @@ func (a *App) sessionRoleLocked() sessionRole {
 	case a.sessionTransportLocked() == nil:
 		return roleSolo
 	case a.cfg.JoinAddress != "" && a.world.IsSessionCoordinator():
-		return roleHost
+		return roleSuccessor
 	case a.cfg.JoinAddress != "" && a.seatsOnly():
 		return roleLeft
 	case a.cfg.JoinAddress != "":
@@ -368,13 +371,24 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 		return fmt.Errorf("host: %w", err)
 	}
 	addr = e.Addr
-	fixed := a.cfg.FixedAuthority
+	successor := a.sessionRoleLocked() == roleSuccessor
 	switch authority {
-	case "":
-	case AuthorityHost, AuthorityMigrate:
-		a.cfg.FixedAuthority = authority == AuthorityHost
+	case "", AuthorityMigrate:
+	case AuthorityHost:
+		// A session that changed hands migrates, and every player in it holds that:
+		// ending it with this run would have them read its loss in two ways.
+		if successor {
+			return errors.New("host: this session migrates, as its players already hold")
+		}
 	default:
 		return fmt.Errorf("host: authority %q is not %q or %q", authority, AuthorityHost, AuthorityMigrate)
+	}
+	if successor {
+		return a.hostTakenSessionLocked(addr)
+	}
+	fixed := a.cfg.FixedAuthority
+	if authority != "" {
+		a.cfg.FixedAuthority = authority == AuthorityHost
 	}
 
 	// Bound before anything is written, so a port this run cannot have leaves it as
@@ -410,6 +424,34 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 	a.log.Info("session", "msg", "hosting opened mid-run",
 		"address", ln.Addr().String(), "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
 	a.ctx.SetStatusMessage("Hosting on "+ln.Addr().String(), parameter.StatusNotice)
+	return nil
+}
+
+// hostTakenSessionLocked is :host on a run that took its session over. Its own port
+// takes joins already, so addr naming that port opens nothing more and any other
+// opens a second door. From here it hosts as the run that opened the session did:
+// the address it joined at names a run that is gone, and a restart reopens addr.
+func (a *App) hostTakenSessionLocked(addr string) error {
+	port, _ := a.sessionTransportLocked().(*network.SocketPort)
+	if port == nil {
+		return errors.New("host: this run's session has no socket port")
+	}
+	bound := port.ListenAddr()
+	if !port.ListensOn(addr) {
+		ln, err := network.Listen(addr, network.DebugConfig(network.RoleHost, addr))
+		if err != nil {
+			return fmt.Errorf("host %s: %w", addr, err)
+		}
+		if err := port.Serve(ln); err != nil {
+			_ = ln.Close()
+			return fmt.Errorf("host: %w", err)
+		}
+		bound = ln.Addr().String()
+	}
+	a.cfg.HostAddress, a.cfg.JoinAddress = addr, ""
+	a.log.Info("session", "msg", "hosting opened on a session taken over",
+		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
+	a.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package network
 
 import (
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,9 +99,28 @@ func (p *SocketPort) Close() error {
 	return p.transport.Stop()
 }
 
-// Serve opens a host port started with no listener to joiners on ln, which it then
-// owns: a session that held only this process's own streams takes dials from here.
+// Serve opens this port to joiners on ln, which it then owns: a session that held
+// only this process's own streams takes dials from here, and a participant that
+// already listens takes them at a second door.
 func (p *SocketPort) Serve(ln net.Listener) error { return p.transport.serve(ln, nil) }
+
+// ListensOn reports whether the port this participant bound for its peers, which
+// takes joins too, answers at addr already: a TCP address on that port with no host,
+// any host where it bound every interface, or the one it bound. A door opened there
+// would only collide with it.
+func (p *SocketPort) ListensOn(addr string) bool {
+	bound, ok := p.transport.Addr().(*net.TCPAddr)
+	e, err := ParseEndpoint(addr)
+	if p.config.AcceptPeer == nil || !ok || err != nil || e.Scheme != SchemeTCP {
+		return false
+	}
+	host, port, err := net.SplitHostPort(e.Addr)
+	if err != nil || port != strconv.Itoa(bound.Port) {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return host == "" || bound.IP.IsUnspecified() || ip != nil && (ip.IsUnspecified() || ip.Equal(bound.IP))
+}
 
 // ServeSession attaches an ordinary join gate to this port's existing peer set.
 func (p *SocketPort) ServeSession(addr string, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) (string, error) {
