@@ -901,13 +901,16 @@ void main() {
         zoomSettle = setTimeout(function() { send({ type: 'zoom', cell: cellBase }); }, ZOOM_SETTLE_MS);
     }
 
-    // zoomFrom takes Go's range and the cell kept from an earlier visit, 0 for none
+    // zoomFrom takes Go's range and the cell kept from an earlier visit, 0 for none,
+    // and answers once the grid fits it: Go waits for that before it reads its size,
+    // which a joiner reports and a dedicated host sizes a shared map from
     function zoomFrom(msg) {
         zoom = { least: msg.least, most: msg.most, step: msg.step };
         if (msg.cell && msg.cell !== cellBase) {
             cellBase = msg.cell;
             fit();
         }
+        send({ type: 'fitted' });
     }
 
     // === Fingers ===

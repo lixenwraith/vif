@@ -429,7 +429,11 @@ cell's colors by a glyph mask, rasterized from a monospace font at the cell's de
 size, so glyphs are crisp at any zoom; the mask is drawn again only when that size
 changes; a pinch, or Ctrl and the wheel, zooms the cell live within the range
 `browser.Open` hands the page, Android's, and the page reports the cell once it
-holds still, for the run to keep as Android's. Without WebGL (a Chromium build on a
+holds still, for the run to keep as Android's. `browser.Open` hands over the kept
+cell too and returns once the page has fitted its grid to it and answered
+(`fitted`, a second at most), so a run starts at the grid on screen: a joiner
+reports its size before its run takes a resize, and a dedicated host sizes a
+shared map from the first person's report. Without WebGL (a Chromium build on a
 blocklisted GPU) it paints each changed cell on a 2D canvas from the same mask,
 slower on a large grid, and says so once. It reports keys, a soft keyboard's text
 and pastes, the pointer at its cell (a touch is the left button marked as a

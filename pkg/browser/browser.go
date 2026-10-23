@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall/js"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/glyph"
@@ -23,6 +24,10 @@ import (
 // eventQueue matches the terminal's; a post never waits, since the poster is the
 // Worker's event loop, which a blocked callback would hold
 const eventQueue = 256
+
+// fitWait bounds Open's wait for the page to fit its grid to the zoom: a round trip
+// to the page's thread, so only a page that never answers runs out of it
+const fitWait = time.Second
 
 // The Worker's side of the bridge, web/worker.js: vifGrid is the grid the page
 // measured before the program started and vifSettings the settings document it
@@ -63,6 +68,8 @@ type Host struct {
 	covered atomic.Bool   // a keyboard covers the page's bottom rows
 	cell    atomic.Uint64 // the zoom, float64 bits
 	finger  bool          // a finger's press was taken; the event loop's alone
+	fitted  chan struct{} // closed once the page has fitted its grid to the zoom
+	fitOnce sync.Once
 
 	mu       sync.Mutex
 	inflight bool // a frame the page has not reported drawn
@@ -70,6 +77,10 @@ type Host struct {
 
 // Open presents on the page: the texture and the zoom go over first, then frames
 // as the page takes them. The host lives as long as the Worker, so nothing closes it.
+// The grid the page measured at its own cell is not the one it shows at a zoom kept
+// from an earlier visit, and a joiner reports its size before the run takes a
+// resize, so Open returns once the page has fitted the zoom and answered: the run
+// starts at, and a dedicated host sizes a shared map from, the grid on screen.
 func Open(a *glyph.Atlas, c Config) (*Host, error) {
 	if a == nil {
 		return nil, errors.New("browser: an atlas is required")
@@ -80,7 +91,8 @@ func Open(a *glyph.Atlas, c Config) (*Host, error) {
 			return nil, errors.New("browser: the worker defines no " + name)
 		}
 	}
-	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue), barRows: c.BarRows}
+	h := &Host{tex: glyph.NewTexture(a), events: make(chan terminal.Event, eventQueue), barRows: c.BarRows,
+		fitted: make(chan struct{})}
 	h.cell.Store(math.Float64bits(c.Cell))
 	h.keys.Post = h.post
 	h.Frames = glyph.NewFrames(h.tex, false)
@@ -93,6 +105,10 @@ func Open(a *glyph.Atlas, c Config) (*Host, error) {
 	g.Set(jsEvent, h.event)
 	g.Call(jsAtlas, bytes(h.tex.Bytes()))
 	g.Call(jsZoom, c.Cell, c.CellLeast, c.CellMost, c.CellStep)
+	select {
+	case <-h.fitted:
+	case <-time.After(fitWait): // [wall] a page that never answers starts at its own grid
+	}
 	return h, nil
 }
 
@@ -170,8 +186,8 @@ func (h *Host) present() {
 }
 
 // handle takes what the page sent: a frame drawn, a key going down or up, its keys
-// going elsewhere, text, the pointer, a keyboard over it, a zoom, a new size or a
-// request for a whole frame
+// going elsewhere, text, the pointer, a keyboard over it, a zoom, a new size, the
+// grid fitted to the zoom Open sent or a request for a whole frame
 func (h *Host) handle(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -214,6 +230,8 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 			h.setGrid(cols, rows)
 			h.post(terminal.Event{Type: terminal.EventResize, Width: cols, Height: rows})
 		}
+	case "fitted": // after the resize the fit sent, if it changed the grid
+		h.fitOnce.Do(func() { close(h.fitted) })
 	case "sync":
 		h.Sync()
 	}
