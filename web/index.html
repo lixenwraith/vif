@@ -31,6 +31,16 @@
         <polygon points="200,200 300,300 200,300" fill="gray"/>
         <path d="M100,100 L300,100 L300,300 L100,300 Z M200,100 L200,300 M100,200 L300,200 M100,100 L300,300 M300,100 L100,300" fill="none" stroke="#000" stroke-width="20"/>
     </svg>
+    <!-- Back from a game kept behind this screen: the way back to it and what else there is -->
+    <div id="menu" hidden>
+        <p id="menu-line"></p>
+        <div class="actions">
+            <button type="button" id="menu-reload">Reload</button>
+            <button type="button" id="menu-solo" hidden>Play solo</button>
+        </div>
+    </div>
+    <button type="button" id="share" aria-label="Copy this game's link" title="Copy this game's link" hidden><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>
+    <span id="share-done" role="status" hidden></span>
     <button type="button" id="controls" aria-label="Controls">?</button>
 </div>
 <div id="loading">Loading vif...</div>
@@ -51,6 +61,7 @@
                 <dt>Two fingers, tap twice</dt><dd>Show or hide the keyboard, to type commands such as :help</dd>
                 <dt>Pinch</dt><dd>Zoom in or out; the zoom is kept for next time</dd>
                 <dt>The strip at the top</dt><dd>Keyboard, Tab, Esc while typing, sound and full screen</dd>
+                <dt>Back</dt><dd>Escape; twice, this screen, with the game kept for a tap to return to</dd>
             </dl>
             <p>With a keyboard, F1 or :help lists every key and command, and :q quits.</p>
         </div>

@@ -23,7 +23,7 @@ import android.widget.TextView;
  * same words while it loads, and needs no tap.
  */
 final class StartScreen extends FrameLayout {
-    // The touch controls as web/index.html words them; Back is Android's alone
+    // The touch controls as web/index.html words them; Back is each platform's own
     private static final String[][] CONTROLS = {
             {"Tap", "Move the cursor there and fire the main weapon; hold to repeat"},
             {"Drag", "Drag the cursor with your finger"},
