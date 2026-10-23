@@ -555,17 +555,13 @@ void main() {
         }
     }
 
-    /* 76 (EX_PROTOCOL) is a refused join, whose reason already says whether a
-       retry helps, so it is shown as it is. */
-    const EXIT_REFUSED = 76;
-
     function showExit(code, reason) {
         if (code === 0) {
-            showMessage('vif has exited. Reload to start again.', false);
+            showMessage('vif has exited.', false);
             return;
         }
         reason = (reason || 'exit code ' + code).replace(/\.$/, '');
-        showMessage('vif stopped: ' + reason + (code === EXIT_REFUSED ? '.' : '. Reload to retry.'), true);
+        showMessage('vif stopped: ' + reason + '.', true);
     }
 
     // === WASM Loading ===
@@ -615,14 +611,14 @@ void main() {
             loading.textContent = 'Compiling…';
         } catch (err) {
             console.error('vif: WASM load failed', err);
-            showMessage('Failed to load vif (' + err.message + '). Reload to retry.', true);
+            showMessage('Failed to load vif (' + err.message + ').', true);
             return;
         }
 
         program = new Worker(WORKER_PATH);
         program.onerror = function(e) {
             if (!program) return;   // a timer Go left behind throws after exit; the exit stands
-            showMessage('Failed to start vif (' + e.message + '). Reload to retry.', true);
+            showMessage('Failed to start vif (' + e.message + ').', true);
         };
         program.onmessage = function(e) {
             const msg = e.data;
@@ -664,7 +660,7 @@ void main() {
                 stop();
                 break;
             case 'failed':
-                showMessage('Failed to load vif (' + msg.reason + '). Reload to retry.', true);
+                showMessage('Failed to load vif (' + msg.reason + ').', true);
                 stop();
                 break;
             }
@@ -674,7 +670,10 @@ void main() {
             bytes: bytes.buffer, argv: argv, cols: cols, rows: rows, settings: keptSettings() }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             if (program) program.postMessage({ type: 'visibility', hidden: document.hidden });
-            if (document.hidden) send({ type: 'blur' });
+            if (document.hidden) {
+                lost();
+                send({ type: 'blur' });
+            }
         });
         wireHandlers();
     }
@@ -795,7 +794,9 @@ void main() {
     let pointer = { enabled: false, motion: false };
     let lastCell = null;
     let fingerDown = false;   // a finger's press was sent and not let go
+    const pressed = new Set();         // buttons a press was sent for and no release
     const BUTTONS = [1, 2, 3, 6, 7];   // PointerEvent.button to the terminal's
+    const BITS = [1, 4, 2, 8, 16];     // PointerEvent.button to its bit in buttons
 
     function held(e) {
         if (e.pointerType === 'touch') return 1;
@@ -807,6 +808,26 @@ void main() {
         send({ type: 'mouse', x: x, y: y, button: button, action: action, mods: mods(e),
                touch: e.pointerType === 'touch' });
         lastCell = [x, y];
+        if (button === 4 || button === 5) return;   // a wheel's notch has no release
+        if (action === 1) pressed.add(button);
+        else if (action === 2) pressed.delete(button);
+    }
+
+    /* A pointer the page loses, to another tab, window or app, is let go of: its end
+       reaches that one instead, so Go would fire on for a press nobody holds, and a
+       finger left listed would make every later tap the second of a gesture. Focus
+       moving within the page, as a second button's press moves it, loses nothing. */
+    function lost() {
+        if (lastCell) {
+            for (const button of pressed) {
+                send({ type: 'mouse', x: lastCell[0], y: lastCell[1], button: button, action: 2, mods: 0, touch: fingerDown });
+            }
+        }
+        pressed.clear();
+        fingerDown = false;
+        pointers.clear();
+        reading.clear();
+        pinch = null;
     }
 
     function onPointerDown(e) {
@@ -815,7 +836,11 @@ void main() {
         if (e.pointerType === 'touch' ? touchDown(e) : !pointer.enabled) return;
         const button = e.pointerType === 'touch' ? 1 : BUTTONS[e.button];
         if (!button) return;
-        canvas.setPointerCapture(e.pointerId);
+        try {
+            canvas.setPointerCapture(e.pointerId);
+        } catch (err) {
+            // a pointer the browser no longer counts active: the press still plays
+        }
         mouse(e, button, 1);
         fingerDown = e.pointerType === 'touch';
     }
@@ -836,6 +861,11 @@ void main() {
     function onPointerMove(e) {
         if (e.pointerType === 'touch' && touchMove(e)) return;
         if (!pointer.enabled) return;
+        // A button pressed or let go while another is held comes as a move
+        if (e.pointerType !== 'touch' && e.button >= 0 && BUTTONS[e.button]) {
+            mouse(e, BUTTONS[e.button], e.buttons & BITS[e.button] ? 1 : 2);
+            return;
+        }
         const button = held(e);
         if (!button && !pointer.motion) return;
         const [x, y] = cellAt(e);
@@ -969,6 +999,7 @@ void main() {
         input.addEventListener('keydown', onKey);
         input.addEventListener('keyup', onKeyUp);
         input.addEventListener('blur', function() { send({ type: 'blur' }); });
+        window.addEventListener('blur', lost);
         input.addEventListener('input', onInput);
         input.addEventListener('compositionend', onCompositionEnd);
         input.addEventListener('paste', onPaste);
@@ -1120,11 +1151,19 @@ void main() {
         setTimeout(function() { el.hidden = true; }, 5000);
     }
 
+    // Every message here ends the run: it takes the start screen's place, with a reload
     function showMessage(msg, isError) {
         const el = document.getElementById('loading');
         el.textContent = msg;
         el.classList.remove('hidden');
         el.classList.toggle('error', isError);
+        start.hidden = true;
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.textContent = 'Reload';
+        again.addEventListener('click', function() { location.reload(); });
+        el.append(again);
+        again.focus({ preventScroll: true });
     }
 
     // === Entry Point ===
