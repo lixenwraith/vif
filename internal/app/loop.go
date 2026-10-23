@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -53,7 +54,7 @@ func Run(cfg Config) error {
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
-		cfg.hostListener = nil
+		cfg.hostListener, cfg.Host.Pressed = nil, false // the press the host took was the first game's
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
@@ -161,14 +162,11 @@ func (a *App) Loop() (*restartRequest, error) {
 		a.ctx.TimeCtl.SetPaused(false)
 	}
 
-	// A player already away, behind Android's start screen, holds the game at its
-	// first tick: the run waits for them as it began
 	var awayChan <-chan bool
 	if p, ok := a.pres.(awayPresentation); ok {
 		awayChan = p.Away()
-		a.scheduler.Prepare() // the pause settles before the clock starts
-		a.takeAway(awayChan)
 	}
+	a.holdFirstGame(awayChan)
 
 	// Prime the first tick, then start the game clock
 	a.frameReady <- struct{}{}
@@ -224,29 +222,8 @@ func (a *App) Loop() (*restartRequest, error) {
 			return nil, nil
 
 		case ev := <-eventChan:
-			// Dumb pipe: key event → machine → intent → router. The key cell shows
-			// what the machine holds, pending or completed, whatever the router does.
-			intent := a.inputMachine.Process(ev)
-			if ev.Type == terminal.EventKey {
-				a.ctx.SetLastCommand(a.inputMachine.Feedback())
-			}
-			if intent != nil {
-				before := a.pushed()
-				if !a.handleIntent(intent) {
-					return nil, nil // player quit
-				}
-				// Input events bypass the game tick wait; an intent that emitted
-				// nothing has nothing of its own to settle
-				if a.pushed() != before {
-					a.scheduler.DispatchEventsImmediately()
-				}
-			}
-
-			if ev.Type == terminal.EventResize {
-				a.handleResize(ev.Width, ev.Height)
-			}
-			if ev.Type == terminal.EventKeyReport {
-				a.keyReported(ev.Report == terminal.KeyReportReleases)
+			if !a.takeEvent(ev) {
+				return nil, nil // player quit
 			}
 
 		case away := <-awayChan:
@@ -258,7 +235,6 @@ func (a *App) Loop() (*restartRequest, error) {
 			}
 
 		case <-frameTicker.C:
-			a.keepAway()
 			if !a.frame() {
 				return nil, nil
 			}
@@ -266,17 +242,52 @@ func (a *App) Loop() (*restartRequest, error) {
 	}
 }
 
+// takeEvent passes a presentation's event down the dumb pipe: key event → machine →
+// intent → router. The key cell shows what the machine holds, pending or completed,
+// whatever the router does. False means the player quit.
+func (a *App) takeEvent(ev terminal.Event) bool {
+	intent := a.inputMachine.Process(ev)
+	if ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress {
+		a.touched = ev.Touch
+	}
+	if a.takeStart(ev, intent) {
+		intent = nil // the press that starts a waiting game is nothing else
+	}
+	if ev.Type == terminal.EventKey {
+		a.ctx.SetLastCommand(a.inputMachine.Feedback())
+	}
+	if intent != nil {
+		before := a.pushed()
+		if !a.handleIntent(intent) {
+			return false
+		}
+		// Input events bypass the game tick wait; an intent that emitted
+		// nothing has nothing of its own to settle
+		if a.pushed() != before {
+			a.scheduler.DispatchEventsImmediately()
+		}
+	}
+	if ev.Type == terminal.EventResize {
+		a.handleResize(ev.Width, ev.Height)
+	}
+	if ev.Type == terminal.EventKeyReport {
+		a.keyReported(ev.Report == terminal.KeyReportReleases)
+	}
+	return true
+}
+
 // handleResize records the terminal change and dispatches it synchronously, so the
 // orchestrator (main-loop state) resizes against dimensions the handler wrote. The
 // push takes the lock like any input: a journaled record landing mid-tick would
 // settle inside that tick, where a reproduction cannot put it. A run whose terminal
-// is its geometry publishes it for its seats to follow. An unseen game starts over
-// at the new size, as one opened at it, rather than cropped as a game in play is.
+// is its geometry publishes it for its seats to follow. A solo game waiting for its
+// start begins over at the new size, as one opened at it, rather than cropped as a
+// game in play is; its hold outlasts the reset, which ends a pause.
 func (a *App) handleResize(width, height int) {
 	a.world.RunSafe(func() {
 		a.ctx.PushLocalOrigin(event.EventScreenResize,
 			&event.ScreenResizePayload{Width: width, Height: height}, event.OriginInput)
-		if a.unseen {
+		if a.ctx.TimeCtl.Holds(engine.HoldStart) && a.world.MapSizeLocal() {
 			a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginInput)
 		}
 	})
@@ -288,10 +299,13 @@ func (a *App) handleResize(width, height int) {
 }
 
 // setAway pauses a solo run while its player is away and resumes it on return; a
-// pause the player made before leaving stays theirs to end
+// pause the player made before leaving stays theirs to end. The first return to an
+// unseen game, Android's start screen's tap, is the press that starts it.
 func (a *App) setAway(away bool) {
 	a.world.RunSafe(func() {
 		switch {
+		case !away && a.unseen && a.ctx.TimeCtl.Holds(engine.HoldStart):
+			a.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false}, event.OriginInput)
 		case away && !a.ctx.TimeCtl.IsPaused() && a.world.Session().Pausable():
 			a.ctx.PauseForInput()
 			a.awayPaused = true
@@ -306,28 +320,61 @@ func (a *App) setAway(away bool) {
 	a.scheduler.DispatchEventsImmediately()
 }
 
-// takeAway applies the away reports made before the clock starts. A run whose
-// player is away then is unseen until they come: nobody has seen its game.
-func (a *App) takeAway(reports <-chan bool) {
-	for {
+// holdFirstGame holds the run's first game at its first tick until its player's
+// press. One away before the clock starts, behind Android's start screen, is unseen
+// until they come, and their return is that press. Otherwise the setting decides,
+// unless the run joined a host, whose game it lands in, or its host took the press.
+func (a *App) holdFirstGame(reports <-chan bool) {
+	for drained := false; !drained; {
 		select {
-		case away := <-reports:
-			a.setAway(away)
+		case a.unseen = <-reports:
 		default:
-			a.unseen = a.awayPaused
-			return
+			drained = true
 		}
 	}
+	if !a.unseen && (!a.ctx.WaitStart.Load() || a.cfg.JoinAddress != "" || a.cfg.Host.Pressed) {
+		return
+	}
+	a.scheduler.Prepare() // the hold settles before the clock starts
+	a.world.RunSafe(func() { a.ctx.HoldAs(engine.HoldStart) })
+	a.scheduler.DispatchEventsImmediately()
 }
 
-// keepAway holds a run paused for its away player. A reset resumes the game it
-// starts, as the one an unseen game's resize asks for does, so the pause is made
-// again before that game's first tick.
-func (a *App) keepAway() {
-	if a.awayPaused && !a.ctx.TimeCtl.IsPaused() {
-		a.world.RunSafe(a.ctx.PauseForInput)
+// takeStart starts a waiting game at its player's press: a key going down that Ctrl
+// or Alt does not chord, or a pointer button's, as the router admits it
+func (a *App) takeStart(ev terminal.Event, intent *input.Intent) bool {
+	press := ev.Type == terminal.EventKey && ev.Action == terminal.KeyPress &&
+		ev.Modifiers&(terminal.ModCtrl|terminal.ModAlt) == 0 && (ev.Key < terminal.KeyCtrlA || ev.Key > terminal.KeyCtrlUnderscore) ||
+		ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress &&
+			(ev.MouseBtn == terminal.MouseBtnLeft || ev.MouseBtn == terminal.MouseBtnRight)
+	if !press || !a.ctx.TimeCtl.Holds(engine.HoldStart) {
+		return false
+	}
+	started := false
+	a.world.RunSafe(func() {
+		a.world.WithOrigin(event.OriginInput, func() { started = a.router.TakeStart(intent) })
+	})
+	if started {
 		a.scheduler.DispatchEventsImmediately()
 	}
+	return started
+}
+
+// startPrompt is the status line a waiting game stands with: a guest waits for its
+// host, and a player is asked for the press their last one suggests. A replay's
+// hold is the recording's, which no press ends.
+func (a *App) startPrompt() string {
+	switch {
+	case !a.cfg.Mode.OwnsInput() || !a.ctx.TimeCtl.Holds(engine.HoldStart):
+		return ""
+	case a.world.LiveSession() && !a.world.IsSessionCoordinator():
+		return "Waiting for the host to start"
+	case a.touched:
+		return "Tap to start"
+	case a.ctx.MouseDisabled.Load():
+		return "Press a key to start"
+	}
+	return "Click or press a key to start"
 }
 
 // renderContext reads everything a frame draws from, in one critical section: Config
@@ -350,13 +397,15 @@ func (a *App) renderContext() render.RenderContext {
 			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
 		}
 		out = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
+		out.Prompt = a.startPrompt()
 	})
 	if p, ok := a.pres.(coveredPresentation); ok {
 		out.StatusCovered = p.Covered()
 	}
-	// A pause made for an away player is not theirs: the game they come back to is
-	// drawn as it is, the picture Android's start screen lifts off at its tap
-	out.IsPaused = out.IsPaused && !a.awayPaused
+	// A pause made for an away player is not theirs, and a game waiting for its start
+	// has not begun: either is drawn as it is, the picture Android's start screen
+	// lifts off at its tap
+	out.IsPaused = out.IsPaused && !a.awayPaused && !a.ctx.TimeCtl.Holds(engine.HoldStart)
 	return out
 }
 

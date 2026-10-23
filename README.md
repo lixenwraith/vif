@@ -86,12 +86,14 @@ Uninstalled, `./bin/vif` plays the checkout's `wad/`. The
 
 ## Playing
 
-`F1` (or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the
+Each new game waits for a key or click to start it (`-nw` starts at once). `F1`
+(or `:help`) lists the keys, `Ctrl-G` or `F10` (or `:g`) opens the
 [configuration menu](doc/config-menu.md), and `:q` quits. Sound is on: `Ctrl-S`
-cycles through the channels, and `-mute` starts muted. The menu's sound, controls
-and HUD settings are written back for the next run, to your own `vif.toml` (the
-user root's, created at the first change when the run read none of yours); the
-rest last the run.
+cycles through the channels, and `-mute` starts muted. A flag sets its value for
+that run only. `vif.toml` holds every run's defaults, and the menu writes its
+sound, controls, HUD, relay and Wait to start settings back to your own
+`vif.toml` (the user root's, created at the first change when the run read none
+of yours); the rest last the run.
 
 `vif -h` prints every flag, to stdout; `man vif` is the same list after an
 install. The ones most runs want:

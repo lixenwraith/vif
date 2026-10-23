@@ -616,6 +616,16 @@ func (s *Scheduler) drainReset() {
 // path already holding the world lock.
 func (s *Scheduler) Settle() {
 	s.world.RunSafe(func() { s.settleLocked("settle") })
+	s.resetUndriven()
+}
+
+// resetUndriven starts the new game a settle asked for when no scheduler goroutine
+// will. A running one starts it the moment the lock frees, before any later input,
+// so a driven run, and the replay of any run, orders what follows a reset as it did.
+func (s *Scheduler) resetUndriven() {
+	if !s.running.Load() {
+		s.drainReset()
+	}
 }
 
 // SettleLocked is Settle for a caller already holding the world lock, which reads
@@ -1277,6 +1287,7 @@ func (s *Scheduler) anchorLive(session uint64) event.AnchorLive {
 // DispatchEventsImmediately processes all pending events synchronously
 func (s *Scheduler) DispatchEventsImmediately() {
 	s.world.RunSafe(func() { s.settleLocked("input") })
+	s.resetUndriven()
 }
 
 // processTick executes one clock cycle

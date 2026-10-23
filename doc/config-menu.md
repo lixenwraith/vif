@@ -2,9 +2,10 @@
 
 Press **Ctrl-G** or **F10**, hold a left press (a finger) on the status bar, or
 enter **`:g`** (`:config`) during play. Settings take effect in the current run.
-The Audio and Controls rows and the HUD are also `vif.toml`'s `[play]`: a run
-writes them back as they change, and the next run starts as this one was left;
-the rest changes this run alone, and the keymap is never rewritten.
+The Audio and Controls rows, the HUD, Relay and Wait to start are also
+`vif.toml`'s `[play]`: a run writes them back as they change, and the next run
+starts as this one was left; the rest changes this run alone, and the keymap is
+never rewritten.
 
 ## Navigation
 
@@ -55,9 +56,12 @@ unavailable in this run`).
 leaves it stopped. In a session only the host can, every participant stops at the
 same tick, anyone joining lands paused, and the host turning it off resumes
 everyone. **New game** restarts the running scenario from its first tick, as `:n`
-does. Below it, one row per scenario names what `:n <name>` would start: `main` and
-every `scenario/<name>/scenario.toml` the configuration roots hold, the running one
-marked `current`; a tap or Enter starts it, so a phone needs no name to type.
+does. **Wait to start** (`:wait`) holds each new game a person plays at its first
+tick until a key, click or tap the held game would ignore, the host's in a session;
+a scenario's own restart never waits. Below them, one row per scenario names what
+`:n <name>` would start: `main` and every `scenario/<name>/scenario.toml` the
+configuration roots hold, the running one marked `current`; a tap or Enter starts
+it, so a phone needs no name to type.
 **Scenario by name** takes what `-s` takes, a name or a path, for one the rows do
 not list. In a session only the host can start either, and its participants rejoin.
 
@@ -145,11 +149,12 @@ stay on the command line.
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
 identifies options that need a restart; it does not edit files. `[play]` is the
 exception: sound effects, music, effects volume, auto-fire, mouse input, Follow
-mouse and the telemetry HUD are written back as they change, from the menu or the
-command line, and a scenario change carries them into the next run. Every
-platform writes them the same way: the `vif.toml` the run read when it is the
-player's own, else the user root's, created at the first change; a browser keeps
-them in the site's storage
+mouse, the telemetry HUD, Relay and Wait to start are written back as they change,
+from the menu or the command line, and a scenario change carries them into the
+next run. A flag (`-mute`, `-nw`) sets its value for its run alone and is never
+written. Every platform writes them the same way: the `vif.toml` the run read when
+it is the player's own, else the user root's, created at the first change; a
+browser keeps them in the site's storage
 ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)). Only a run
 with no user root, or a browser refused its storage, keeps them to itself. The
 game speed, HUD pins and standing breakpoints stay this run's. Exact values

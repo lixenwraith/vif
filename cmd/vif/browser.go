@@ -17,7 +17,7 @@ import (
 )
 
 func init() {
-	platformHost = app.Host{Presentation: &browserHost{}, Audio: browser.Speaker()}
+	platformHost = app.Host{Presentation: &browserHost{}, Audio: browser.Speaker(), Pressed: true}
 	pageSettings = keptSettings
 	pageClaims = tabClaims{}
 }

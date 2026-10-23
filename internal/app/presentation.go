@@ -50,6 +50,9 @@ type keyReportPresentation interface {
 type Host struct {
 	Presentation Presentation
 	Audio        io.WriteCloser // takes the mixer's 44.1 kHz 16-bit stereo PCM
+	// Pressed says the host took the press its first game would wait for, as the
+	// page's start screen does before the program runs
+	Pressed bool
 }
 
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag

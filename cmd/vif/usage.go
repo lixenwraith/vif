@@ -86,6 +86,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 	}, {
 		title: "Run",
 		lines: []flagLine{
+			{names: []string{"nw", "no-wait"}, arg: "[=false]", hint: "Start each new game at once, or at a key, click or tap as -nw=false; unset, vif.toml's [play] wait stands, waiting by default"},
 			{names: []string{"seed"}, arg: "<n>", hint: "Root RNG seed; 0 draws one and logs it"},
 			{names: []string{"speed"}, arg: "<rate>", hint: `Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing`},
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},

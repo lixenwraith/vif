@@ -1280,6 +1280,28 @@ func (r *Router) heldAdmits(intent *input.Intent) bool {
 	return false
 }
 
+// TakeStart starts a waiting game at its player's press, which does nothing else: a
+// key the held game would ignore, nil when the keymap binds none or waits for more,
+// or a pointer press off the status bar, whose press opens the menu. Whatever a held
+// game takes keeps its meaning; false leaves the press to Handle.
+func (r *Router) TakeStart(intent *input.Intent) bool {
+	if !r.ctx.TimeCtl.Holds(engine.HoldStart) || !r.heldInPlay() || holdRefused(r.ctx, false) != "" {
+		return false
+	}
+	switch {
+	case intent == nil:
+	case isMouseIntent(intent.Type):
+		if r.ctx.MouseDisabled.Load() || r.onStatusBar(intent) {
+			return false
+		}
+	case r.heldAdmits(intent):
+		return false
+	}
+	r.machine.Reset()
+	r.ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false})
+	return true
+}
+
 // SetMouseModeApplier installs the terminal reporting sink. Optional: a nil
 func (r *Router) SetMouseModeApplier(fn MouseModeApplier) {
 	r.applyMouseMode = fn

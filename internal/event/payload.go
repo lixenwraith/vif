@@ -178,9 +178,10 @@ type NetworkDisconnectPayload struct {
 // --- Meta ---
 
 // GameResetPayload requests a game restart; Purge additionally clears operator
-// session state
+// session state, and Wait holds the new game until its player's first press
 type GameResetPayload struct {
 	Purge bool `toml:"purge"`
+	Wait  bool `toml:"wait"`
 }
 
 // CursorDefeatStatePayload carries one owner's combined heat/energy state.

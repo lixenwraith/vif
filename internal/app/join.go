@@ -383,9 +383,12 @@ func (a *App) releaseHold(said string) {
 	if !a.ctx.TimeCtl.Held() {
 		return
 	}
+	start := a.ctx.TimeCtl.Holds(engine.HoldStart)
 	a.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false}, event.OriginSession)
 	a.scheduler.SettleLocked()
-	a.ctx.SetStatusMessage(said, parameter.StatusNotice)
+	if !start { // the game moving is a start's answer
+		a.ctx.SetStatusMessage(said, parameter.StatusNotice)
+	}
 }
 
 // wraithKept reports whether a participant's Wraith is on its way back: a dial took
