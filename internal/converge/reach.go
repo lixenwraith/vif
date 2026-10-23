@@ -285,6 +285,16 @@ type PeerLinkGate struct{ reach atomic.Pointer[Reach] }
 // Bind hands the gate the reachability half once the run has one.
 func (g *PeerLinkGate) Bind(r *Reach) { g.reach.Store(r) }
 
+// Local is the identity a link opened here is answered with: zero until the run is
+// bound, and until a joiner's seat names it.
+func (g *PeerLinkGate) Local() network.PeerID {
+	r := g.reach.Load()
+	if r == nil {
+		return 0
+	}
+	return network.PeerID(r.inst.LocalParticipant())
+}
+
 // admit is the acceptor hook: it answers nothing until the run is bound.
 func (g *PeerLinkGate) Admit(from network.PeerID) error {
 	r := g.reach.Load()

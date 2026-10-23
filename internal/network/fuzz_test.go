@@ -45,8 +45,9 @@ func frames(msgs ...any) []byte {
 }
 
 // FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits: whatever a dialer sends, it is
-// asked first for its claims or told why it is not, and the identity Assign gave it
-// is either admitted and reported once, or released once.
+// asked first for its claims or told why it is not, nothing is assigned it before it
+// asks for its seat, and the identity Assign gave it is either admitted and reported
+// once, or released once.
 func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 	const name, digest = "0123456789abcdef", "sha256:2604b13fd259"
 	ours := sampleIdentity()
@@ -57,8 +58,10 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 	reply := sessionReply{Identity: ours, Width: 120, Height: 40}
 	refusal := sessionReply{}
 	refusal.Refuse(errors.New("join mismatch"))
-	// answered is a dialer naming no claims, then sending msgs.
-	answered := func(msgs ...any) []byte { return frames(append([]any{MsgJoinClaims, []string{}}, msgs...)...) }
+	// prepared is a dialer naming no claims, then sending msgs while it prepares;
+	// answered is one that seats at once, then sends msgs.
+	prepared := func(msgs ...any) []byte { return frames(append([]any{MsgJoinClaims, []string{}}, msgs...)...) }
+	answered := func(msgs ...any) []byte { return prepared(append([]any{MsgJoinSeat, []byte{}}, msgs...)...) }
 	whole := answered(MsgJoinReply, reply)
 	f.Add(whole, false, true, true, true)
 	f.Add(frames(MsgSessionRoute, []byte(name), MsgJoinClaims, []string{}, MsgJoinReply, reply), true, true, true, true)
@@ -78,6 +81,17 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 	f.Add(answered(MsgJoinReply, sessionReply{Identity: ours, Holder: 1, Listen: "192.0.2.2:7777"}), false, true, true, true)
 	f.Add(answered(MsgJoinReply, refusal), false, true, true, true)
 	f.Add(answered(MsgJoinReply, reply, MsgJoinReply, reply), false, true, true, true)
+	f.Add(prepared(MsgJoinPrepared, []byte{}, MsgJoinSeat, []byte{}, MsgJoinReply, reply), false, true, true, true)
+	f.Add(prepared(MsgScenarioRequest, []byte(digest), MsgJoinPrepared, []byte{}, MsgJoinSeat, []byte{}, MsgJoinReply, reply),
+		false, true, true, true)
+	f.Add(prepared(MsgScenarioRequest, []byte(digest), MsgJoinSeat, []byte{}, MsgScenarioRequest, []byte(digest)),
+		false, true, true, true)
+	f.Add(prepared(MsgJoinPrepared, []byte{}, MsgScenarioRequest, []byte(digest)), false, true, true, true)
+	f.Add(prepared(MsgJoinPrepared, []byte{}, MsgJoinPrepared, []byte{}), false, true, true, true)
+	f.Add(prepared(MsgJoinPrepared, []byte{}), false, true, true, true)
+	f.Add(prepared(MsgJoinReply, refusal), false, true, true, true)
+	f.Add(prepared(MsgJoinReply, reply), false, true, true, true)
+	f.Add(prepared(MsgJoinPrepared, []byte{}, MsgJoinSeat, []byte{}, MsgJoinReply, reply), false, true, false, true)
 	f.Add(answered(MsgJoinReply, []byte(`{"code":200,"error":"x"`)), false, true, true, true)
 	f.Add(answered(MsgEvent, []byte("not a reply")), false, true, true, true)
 	f.Add(whole[:len(whole)-1], false, true, true, true)
@@ -90,8 +104,18 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 		offer := testOffer()
 		offer.Identity = ours
 		var assigned, released, reported []PeerID
+		previewed := false
 		c := Coordinator{
+			Preview: func([]string) (SessionOffer, error) {
+				previewed = true
+				preview := offer
+				preview.Assigned = 0
+				return preview, nil
+			},
 			Assign: func([]string) (SessionOffer, error) {
+				if !previewed {
+					t.Fatal("assigned before the preview")
+				}
 				if !room {
 					return SessionOffer{}, &Refusal{Code: RefusalFull, Reason: "session is full"}
 				}
@@ -164,7 +188,7 @@ func FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant(f *testing.F) {
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, script []byte) {
 		admitted := []PeerID{3, 4}
-		gate := PeerGate{Local: 2, Identity: ours, Admit: func(from PeerID) error {
+		gate := PeerGate{Local: func() PeerID { return 2 }, Identity: ours, Admit: func(from PeerID) error {
 			if !slices.Contains(admitted, from) {
 				return errors.New("peer link: participant is not in this session")
 			}
@@ -187,7 +211,7 @@ func FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant(f *testing.F) {
 		if derr != nil || ack.Type != MsgAck || json.Unmarshal(ack.Payload, &welcome) != nil || out.Len() != 0 {
 			t.Fatalf("answered with %q", conn.out.Bytes())
 		}
-		if welcome.From != gate.Local || (welcome.Refused() == nil) != (err == nil) {
+		if welcome.From != gate.Local() || (welcome.Refused() == nil) != (err == nil) {
 			t.Fatalf("answered as %d refusing %v a link that opened: %t", welcome.From, welcome.Refused(), err == nil)
 		}
 	})

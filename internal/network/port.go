@@ -1,6 +1,7 @@
 package network
 
 import (
+	"errors"
 	"net"
 	"strconv"
 	"sync"
@@ -133,8 +134,24 @@ func (p *SocketPort) ServeConn(conn net.Conn, accept func(net.Conn) (PeerID, err
 	return p.transport.serveConn(conn, accept, admitted)
 }
 
-// ParticipantID is the canonical source order used by the barrier.
+// ParticipantID is the canonical source order used by the barrier, zero for a
+// joiner's port its seat has not named yet.
 func (p *SocketPort) ParticipantID() uint32 { return uint32(p.config.ParticipantID) }
+
+// TakeJoin hands a port built before its join was seated that join's stream and the
+// identity the seat assigned: a joiner builds its world, and this port with it,
+// before its player's press. Before Start only, since a running port has its stream.
+func (p *SocketPort) TakeJoin(j *PendingJoin) error {
+	switch {
+	case p.IsRunning():
+		return errors.New("a running port already holds its stream")
+	case j.offer.Assigned == 0:
+		return errors.New("a join hands its stream over once seated")
+	}
+	p.config.ParticipantID = j.offer.Assigned
+	p.config.preconnected, p.config.preconnectedPeer = j.conn, j.Peer()
+	return nil
+}
 
 // ListenAddr is what this participant actually bound, empty when it bound nothing.
 // A guest declares this to the coordinator rather than the address it was asked

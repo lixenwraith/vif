@@ -102,9 +102,10 @@ type peerWelcome struct {
 }
 
 // PeerGate decides whether a peer link may open here. It reads the roster and
-// allocates nothing.
+// allocates nothing. Local names this participant as each link opens: a joiner's
+// listener is bound before its seat names it.
 type PeerGate struct {
-	Local    PeerID
+	Local    func() PeerID
 	Identity PeerIdentity
 	Admit    func(from PeerID) error
 }
@@ -130,7 +131,7 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, err
 		if err := json.Unmarshal(msg.Payload, &hello); err != nil {
 			return 0, fmt.Errorf("peer link hello: %w", err)
 		}
-		reply := peerWelcome{From: g.Local, Identity: g.Identity}
+		reply := peerWelcome{From: g.Local(), Identity: g.Identity}
 		var refused error
 		if g.Identity.Protocol != 0 {
 			if refused = g.Identity.VerifyBuild(hello.Identity); refused != nil {

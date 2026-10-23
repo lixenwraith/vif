@@ -129,6 +129,13 @@ one the keymap binds to nothing included, or a left or right press off the statu
 bar. What a hold admits keeps its meaning and leaves it waiting. In a live session
 only the host's press starts it ([Multi-player §3.6](multi-player.md#36-holding-a-session)).
 
+A join the player started waits the same way, before any game is shown, for the
+press that seats it in the session: a key that types or moves (a character, Enter,
+Space, Backspace, Delete, an arrow, Home, End, Page Up, Page Down, Insert) without
+Ctrl or Alt, or a left or right click with the mouse on. Escape, Tab and the
+function keys do nothing there, and Ctrl-C or Ctrl-Q leaves
+([Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity)).
+
 ## 3. Normal-mode grammar
 
 The parser implements a focused Vim-like grammar rather than forwarding raw
@@ -348,7 +355,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:auto [on\|off\|main]`, `:a` | Cycle or set automatic fire. |
 | `:mouse enable\|disable\|free`, `:m` | Control terminal mouse input. |
 | `:host <addr> [host\|migrate]` | Open this running game to participants (`:host :7777`), under the authority policy named: `host` ends the session with this participant, `migrate` hands it to a survivor. On a run whose session holds only its bots, opens that session. On a successor, opens a door at the address beside the port its session reaches it at, or names that port, and keeps `migrate`, which its players hold; it hosts from then on. Refused while hosting or in any other session, which `:leave` leaves first. |
-| `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser looks a `vif://` link up on its site. Refused while in a session other than one holding only this run's bots, which come along, so `:leave` any other first. The game plays on while the dial runs and is replaced only once the host admits it; a refusal leaves it as it was, and a join that fails after that starts a solo game. |
+| `:join <target>` | Replace this solo game with the session at target, in any form `-join` takes; a browser looks a `vif://` link up on its site. Refused while in a session other than one holding only this run's bots, which come along, so `:leave` any other first. The game plays on while the dial runs and is replaced once the host answers, by the session waiting for the press that takes your place there (`-nw` takes it at once); a refusal leaves it as it was, and a join that fails after that starts a solo game. |
 | `:leave` | Leave the session and play on in one of your own from where the world stands, as the same participant: your bots leave with you and are seated again, each taking back its place, and the run is then in a session like the one `:bot add` opens on a solo run, which `:host` opens to others and `:join` replaces. Those left behind see you go as a lost link. Refused on a solo run, on one whose session holds only its own bots, and on a server. |
 | `:relay [on\|off]` | Toggle or set relaying for others: on, this run carries the game for a player who reaches it and not the host, as after a host loss; off, the default, only those that joined through it. Saved in `[play]`; refused in a browser. |
 | `:session` | Report the session role, address, participant, cursor slot, peer links, tick and map latch, then the authority, reachability, slowest link and snapshot cadence. |

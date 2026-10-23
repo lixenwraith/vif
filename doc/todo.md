@@ -606,8 +606,23 @@ A bind or dial names the player's next step; these gaps remain:
 - A playing host never learns why a joiner was refused: accept and handshake
   failures only reach the log, and `port.Errors()` is drained only by a lobby.
 - A site request can run 2 minutes, past the 5 s its "Joining" notice lasts.
-- A rejoin shows nothing for up to `SessionRejoinWindow`.
+- A rejoin shows nothing for up to `SessionRejoinWindow`, and a join's press
+  whose seat is refused for a moment dials again that long without reading keys,
+  so its Ctrl-C waits for it (`App.takeSeat`).
 - Windows' WSAE codes miss `plainNetError` and keep the system's words.
+
+### Show a joiner waiting for its press
+
+- Priority: P3
+- Affected files: `internal/app/session.go`, `internal/app/loop.go`,
+  `internal/network/session.go`
+
+A join waiting for its player's press holds nothing in its session, so nobody there
+sees it coming: its cursor appears with its arrival, the simple option chosen when
+the press was built. A Wraith placed at the preview and dropped when the ready
+period runs out would show it, but would hold a slot the preview exists not to
+hold, so it could only take one the session has free and would give way to any
+seat.
 
 ### Close the edges of a session hold
 

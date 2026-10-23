@@ -317,7 +317,7 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		case err != nil:
 			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
-		case !a.replaceWith(&restartRequest{Join: link, dialled: d}):
+		case !a.replaceWith(&restartRequest{Join: link, dialled: d, press: true}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})
@@ -907,7 +907,9 @@ func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer, h
 			return 0, 0, 0, err
 		}
 	}
-	offer.Held = held
+	// A hold standing for a new game's start waits for its host's press, which the
+	// joiner waits for as that, rather than as a pause.
+	offer.Held, offer.Start = held, held && a.ctx.TimeCtl.Holds(engine.HoldStart)
 	began, err := sendGate(port, offer, tick, body, offer.Assigned)
 	for i := 0; err == nil && i < len(pending); i++ {
 		if !port.Send(uint32(offer.Assigned), uint8(network.MsgEvent), pending[i]) {
@@ -1063,22 +1065,26 @@ func (a *App) resumeJoinedSession() error {
 		port.Inject(from, uint8(msg.Type), msg.Payload)
 	}
 
+	// A held session's joiner holds at the world it installed. Only the host's next
+	// epoch ends that, and it may be among what the rounds below drain: then the
+	// gap is closed as any other. A new game its host has yet to start holds at its
+	// first tick, which is why this comes before the tick-zero case.
+	if a.sessionOffer.Held {
+		a.world.RunSafe(func() {
+			switch {
+			case a.sessionOffer.Start:
+				a.ctx.HoldAs(engine.HoldStart)
+			case a.ctx.Hold(true):
+				a.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
+			}
+		})
+	}
 	// A tick-zero lobby has no gap by construction: the host is frozen at tick zero
 	// until every participant is ready, so it has produced nothing, and a probe tick
 	// here would put this instance one tick ahead of a session that has not started.
 	if !a.sessionOffer.CarriesSnapshot() || a.sessionOffer.SnapshotTick == 0 {
 		a.reportJoinLag(0)
 		return nil
-	}
-	// A held session's joiner holds at the world it installed. Only the host's next
-	// epoch ends that, and it may be among what the rounds below drain: then the
-	// gap is closed as any other.
-	if a.sessionOffer.Held {
-		a.world.RunSafe(func() {
-			if a.ctx.Hold(true) {
-				a.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
-			}
-		})
 	}
 
 	// The gap is only partly readable from what the gate held: epochs closed during

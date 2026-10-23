@@ -55,13 +55,33 @@ func (a *App) serveRelay() {
 // people it relays, as a coordinator's with the authority asked for each answer.
 func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID, error) {
 	return network.HostAcceptor(network.Coordinator{
-		Assign:   func(claims []string) (network.SessionOffer, error) { return a.relayAssign(local, claims) },
-		Release:  a.relayRelease,
-		Admit:    a.admissions.Admit,
-		Report:   func(id network.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
-		Name:     a.cfg.SessionName,
-		Scenario: a.scenarioBody,
+		Preview:     func([]string) (network.SessionOffer, error) { return a.relayPreview(local) },
+		Assign:      func(claims []string) (network.SessionOffer, error) { return a.relayAssign(local, claims) },
+		Release:     a.relayRelease,
+		Admit:       a.admissions.Admit,
+		Report:      func(id network.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
+		Name:        a.cfg.SessionName,
+		Scenario:    a.scenarioBody,
+		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
+}
+
+// relayPreview is what a dial through this run is shown while it prepares: the
+// session as this run follows it, naming nobody, with this run as the far end. The
+// authority is asked nothing until the seat, which is where it allocates and refuses.
+func (a *App) relayPreview(local network.PeerID) (network.SessionOffer, error) {
+	if a.authority != nil && a.authority.Migrating() {
+		return network.SessionOffer{}, ErrSessionHandoff
+	}
+	anchor := a.JoinAnchor()
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	o := a.offerLocked(anchor, 0)
+	// What the authority's offers say, which this run's own carried: it does not
+	// keep the roster, nor set the policy.
+	o.Roster = slices.Clone(a.sessionOffer.Roster)
+	o.FixedAuthority, o.Players, o.Relay = a.sessionOffer.FixedAuthority, a.sessionOffer.Players, local
+	return o, nil
 }
 
 // relayAssign asks the authority for an identity this run holds, or the place one of

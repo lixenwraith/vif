@@ -112,12 +112,14 @@ func (a *App) hostNetworkConfig() *network.Config {
 // admit takes or refuses a dial before anything is allocated for it.
 func (a *App) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) (network.PeerID, error) {
 	return network.HostAcceptor(network.Coordinator{
-		Assign:   a.assignParticipant,
-		Release:  a.releaseParticipant,
-		Admit:    admit,
-		Report:   a.noteJoinerReport,
-		Name:     a.cfg.SessionName,
-		Scenario: a.scenarioBody,
+		Preview:     a.previewParticipant,
+		Assign:      a.assignParticipant,
+		Release:     a.releaseParticipant,
+		Admit:       admit,
+		Report:      a.noteJoinerReport,
+		Name:        a.cfg.SessionName,
+		Scenario:    a.scenarioBody,
+		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
 }
 
@@ -379,8 +381,8 @@ func (a *App) hostSlot() uint8 {
 	return 0
 }
 
-// newJoiningApp builds the App on a dial the host accepted: the one Config carries
-// from a :join, or one made now.
+// newJoiningApp builds the App on a dial of its session: the one Config carries
+// from a :join or a redial, or one made now.
 func newJoiningApp(cfg Config) (*App, error) {
 	d := cfg.dialled
 	if d == nil {
@@ -392,13 +394,14 @@ func newJoiningApp(cfg Config) (*App, error) {
 	return d.open(cfg)
 }
 
-// joinDial is a session the host has admitted this instance to and whose scenario
-// it holds: everything a host can refuse, settled before anything is built on it.
+// joinDial is a session this instance dialled and whose scenario it holds: everything
+// a host can refuse before a world is built, settled. It holds no place there until
+// its seat, which is the press of the player whose run it opens, or comes at once.
 // It holds the handshake alone, so the run it opens is the one its caller built.
 type joinDial struct {
 	pending   *network.PendingJoin
-	offer     network.SessionOffer
-	resources resource.Options // the session's scenario, as this instance resolved it
+	offer     network.SessionOffer // the preview, then the offer its seat assigned
+	resources resource.Options     // the session's scenario, as this instance resolved it
 
 	// claim is the one the offer gives a place back under, nil for a new place, held
 	// from claims until the run built on this dial takes it.
@@ -406,29 +409,22 @@ type joinDial struct {
 	claim  *claim
 }
 
-// dialJoin dials cfg's session and adopts its offer and scenario. A peer running a
-// different protocol or simulation is refused here, before it has built a world. It
+// dialJoin dials cfg's session and prepares on its preview: the scenario it plays.
+// A peer running a different protocol or simulation is refused here, before it has
+// built a world, and nothing is held for it: its place is assigned at its seat. It
 // names every claim of its kind it keeps, so a place one of them waits under is the
-// one offered.
+// one its seat is offered.
 func dialJoin(cfg Config) (*joinDial, error) {
-	seat := cfg.holder != 0
-	netCfg := network.DebugConfig(network.RolePeer, cfg.JoinAddress)
-	netCfg.OnError = logSessionError
-	netCfg.Identity = buildIdentity()
-	netCfg.SessionName = cfg.SessionName
-	netCfg.Dial = cfg.relay
-	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
-	netCfg.Claims = cfg.claims.tokens(seat)
-	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
+	pending, preview, err := network.PreviewSession(cfg.JoinAddress, joinNetConfig(cfg))
 	if err != nil {
 		if cfg.relay != nil {
 			return nil, fmt.Errorf("join through the holder: %w", err)
 		}
 		return nil, fmt.Errorf("join %s: %w", network.Shown(cfg.JoinAddress), err)
 	}
-	d := &joinDial{pending: pending, offer: offer, claims: cfg.claims, claim: cfg.claims.take(offer, seat)}
-	if cfg, err = ConfigForJoin(cfg, offer); err == nil {
-		err = resolveJoinScenario(&cfg, pending, offer)
+	d := &joinDial{pending: pending, offer: preview, claims: cfg.claims}
+	if cfg, err = ConfigForJoin(cfg, preview); err == nil {
+		err = resolveJoinScenario(&cfg, pending, preview)
 	}
 	if err != nil {
 		d.abandon(err)
@@ -438,8 +434,37 @@ func dialJoin(cfg Config) (*joinDial, error) {
 	return d, nil
 }
 
+// joinNetConfig is the transport a dial of cfg's session runs on.
+func joinNetConfig(cfg Config) *network.Config {
+	netCfg := network.DebugConfig(network.RolePeer, cfg.JoinAddress)
+	netCfg.OnError = logSessionError
+	netCfg.Identity = buildIdentity()
+	netCfg.SessionName = cfg.SessionName
+	netCfg.Dial = cfg.relay
+	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
+	netCfg.Claims = cfg.claims.tokens(cfg.holder != 0)
+	return netCfg
+}
+
+// seat takes this dial's place before a run is built on it, for a caller that has to
+// know which place it is: a redial coming back to its own. Its claim is held from
+// here, until the run built on it takes it.
+func (d *joinDial) seat(bot bool) error {
+	offer, err := d.pending.Seat()
+	if err != nil {
+		_ = d.pending.Close()
+		return err
+	}
+	d.offer, d.claim = offer, d.claims.take(offer, bot)
+	return nil
+}
+
+// seated reports whether this dial holds its place yet.
+func (d *joinDial) seated() bool { return d.offer.Assigned != 0 }
+
 // abandon refuses the offer, which releases the identity the host assigned, or
-// gives the place back to its Wraith and the claim back to the keeper.
+// gives the place back to its Wraith and the claim back to the keeper; before its
+// seat, it ends a handshake that held nothing.
 func (d *joinDial) abandon(cause error) {
 	_ = d.pending.Complete(cause, network.JoinerReport{})
 	_ = d.pending.Close()
@@ -448,7 +473,9 @@ func (d *joinDial) abandon(cause error) {
 	}
 }
 
-// open constructs the joining App cfg describes and replies to the host.
+// open constructs the joining App cfg describes, on the preview or the offer: the
+// world is built and checked before the seat, which comes now unless this run's
+// player presses for it (Loop). A dial already seated replies here.
 func (d *joinDial) open(cfg Config) (*App, error) {
 	pending, offer := d.pending, d.offer
 	cfg.Resources, cfg.networkConfig = d.resources, pending.TransportConfig()
@@ -472,10 +499,10 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 	if listener != nil {
 		// Installed before New, because New is what builds the port that serves
 		// this listener. The gate holds the App rather than closing over it for the
-		// same reason: it does not exist yet.
+		// same reason: it does not exist yet, nor does the identity it answers with.
 		cfg.networkConfig.PreboundListener = listener
 		cfg.networkConfig.AcceptPeer = network.PeerAcceptor(network.PeerGate{
-			Local:    offer.Assigned,
+			Local:    gate.Local,
 			Identity: identityFromAnchor(offer.Anchor),
 			Admit:    gate.Admit,
 		}, cfg.networkConfig.ConnectTimeout)
@@ -488,33 +515,141 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 		d.abandon(err)
 		return nil, err
 	}
-	// The run holds the claim from here, and gives it up as it closes.
-	c := d.claim
-	if c == nil {
-		c = d.claims.issue(cfg.holder != 0)
-	}
-	a.claim.Store(c)
 	gate.Bind(a.reach)
 	a.reach.AdoptListener(listener, declared)
 	a.pendingJoin = pending
 	a.sessionOffer = offer
 	// Identity now, world and roster at the start gate: a mismatched joiner must be
-	// refused before the host spends the rest of the lobby waiting for it. The
+	// refused before the host spends a seat or the rest of the lobby on it. The
 	// position is deliberately not checked — the gate carries the host's world, so
 	// what tick it has reached is no longer this instance's problem to reproduce.
 	if err := a.JoinAt(offer.Anchor); err != nil {
-		_ = pending.Complete(err, network.JoinerReport{})
+		d.abandon(err)
 		a.Close()
 		return nil, err
 	}
-	// Reported after construction, which is the whole reason the acceptance carries
-	// it rather than the dial: only now does this instance know the terminal it
-	// got. A host with no geometry of its own uses it to size the session.
-	if err := pending.Complete(nil, a.joinerReport()); err != nil {
+	switch {
+	case d.seated():
+		err = a.bindSeat(pending, offer, d.claim)
+	case a.joinWaits():
+		err = pending.Prepared()
+	default:
+		err = a.takeSeat(false)
+	}
+	if err != nil {
 		a.Close()
-		return nil, fmt.Errorf("join reply: %w", err)
+		return nil, err
 	}
 	return a, nil
+}
+
+// joinWaits says this run's seat waits for its player's press: a dial that player
+// started, in a run a person plays, with the start wait on.
+func (a *App) joinWaits() bool {
+	return a.cfg.joinPress && a.cfg.Mode.OwnsInput() && a.ctx.WaitStart.Load()
+}
+
+// seated reports whether this joining run holds its place in its session yet.
+func (a *App) seated() bool { return a.sessionOffer.Assigned != 0 }
+
+// errSessionMoved refuses a seat in a session that started another game, or moved
+// to another host, after this run built its world: a retry builds one on that game.
+var errSessionMoved = &network.Refusal{Code: network.RefusalBehind,
+	Reason: "the session started another game while this join prepared"}
+
+// takeSeat seats this run in the session it prepared for. The host assigns its place
+// now, which binds the identity this run's port and world were built without, and
+// the run replies as it would have to an offer. Pressed for, a host that dropped the
+// handshake while its player was away, or refused for a moment, is dialled again
+// and seats at once, while the game is the one this world was built on; a seat that
+// comes at once leaves a retry to its caller, as a refused dial does.
+func (a *App) takeSeat(pressed bool) error {
+	pending := a.pendingJoin
+	offer, err := pending.Seat()
+	if err != nil {
+		_ = pending.Close()
+	}
+	var refusal *network.Refusal
+	redial := pressed && err != nil && (!errors.As(err, &refusal) || network.RetryOf(err) == network.RetrySoon)
+	for deadline := time.Now().Add(parameter.SessionRejoinWindow); redial && time.Now().Before(deadline); { // [wall] a link bound
+		a.log.Info("session", "msg", "seat dialled again", "error", err.Error())
+		pending, offer, err = a.redialSeat()
+		if redial = err != nil && network.RetryOf(err) == network.RetrySoon && !errors.Is(err, errSessionMoved); redial {
+			time.Sleep(parameter.SessionRejoinInterval)
+		}
+	}
+	if err == nil && !a.preparedFor(offer) {
+		err = errSessionMoved
+		_ = pending.Complete(err, network.JoinerReport{})
+	}
+	if err != nil {
+		return err
+	}
+	return a.bindSeat(pending, offer, a.claims.take(offer, a.cfg.holder != 0))
+}
+
+// redialSeat dials this run's session again and seats at once, while the game there
+// is the one this run's world was built on. What it dialled is closed unless it
+// seated.
+func (a *App) redialSeat() (*network.PendingJoin, network.SessionOffer, error) {
+	pending, preview, err := network.PreviewSession(a.cfg.JoinAddress, joinNetConfig(a.cfg))
+	if err != nil {
+		return nil, network.SessionOffer{}, err
+	}
+	if !a.preparedFor(preview) {
+		_ = pending.Complete(errSessionMoved, network.JoinerReport{})
+		return nil, network.SessionOffer{}, errSessionMoved
+	}
+	offer, err := pending.Seat()
+	if err != nil {
+		_ = pending.Close()
+		return nil, network.SessionOffer{}, err
+	}
+	return pending, offer, nil
+}
+
+// preparedFor reports whether o is the session this run's world was built on: the
+// game a join's anchor check names, at whatever tick it has reached, reached the way
+// this run's listener was chosen for. A map the host has resized since is the gate's
+// to adopt, as it is for any joiner.
+func (a *App) preparedFor(o network.SessionOffer) bool {
+	was, now := a.sessionOffer.Anchor.Anchor, o.Anchor.Anchor
+	return was.Seed == now.Seed && was.Session == now.Session && was.ScenarioDigest == now.ScenarioDigest &&
+		o.Relay == a.sessionOffer.Relay && o.FixedAuthority == a.sessionOffer.FixedAuthority
+}
+
+// bindSeat makes this run the participant offer assigns: its port takes the join's
+// stream and identity, its world the identity, and it holds c, the claim the place
+// was given back under, or a new one for a new place, from here. Then it replies,
+// reporting what it turned out to be. Reported after construction, which is the
+// whole reason the acceptance carries it rather than the dial: only now does this
+// instance know the terminal it got. A host with no geometry of its own uses it to
+// size the session.
+func (a *App) bindSeat(pending *network.PendingJoin, offer network.SessionOffer, c *claim) error {
+	port, err := a.socketPort()
+	if err == nil {
+		err = port.TakeJoin(pending)
+	}
+	if err != nil {
+		_ = pending.Complete(err, network.JoinerReport{})
+		if c != nil {
+			a.claims.release(c)
+		}
+		return err
+	}
+	if c == nil {
+		c = a.claims.issue(a.cfg.holder != 0)
+	}
+	// The latch reads it when the first tick opens, as it would have read it from New.
+	a.world.RunSafe(func() { a.world.Resources.Network.ParticipantID = uint32(offer.Assigned) })
+	a.sessionMu.Lock()
+	a.pendingJoin, a.sessionOffer = pending, offer
+	a.sessionMu.Unlock()
+	a.claim.Store(c)
+	if err := pending.Complete(nil, a.joinerReport()); err != nil {
+		return fmt.Errorf("join reply: %w", err)
+	}
+	return nil
 }
 
 // resolveJoinScenario makes this run hold the exact scenario the coordinator is
@@ -546,6 +681,26 @@ func resolveJoinScenario(cfg *Config, pending *network.PendingJoin, o network.Se
 	vlog.Info("app", "msg", "scenario received",
 		"scenario", sc.Name, "digest", sc.Short(), "files", sc.Files(), "bytes", len(body))
 	return nil
+}
+
+// previewParticipant is what a dial is shown while it prepares: the offer its seat
+// would carry, naming nobody. It refuses what the seat would refuse with nothing
+// allocated, and a full session only when no claim of the dial's names a place in
+// it and no player who left holds one: whether a place is taken back or given up is
+// the seat's to settle, so a dial that never seats moves nobody.
+func (a *App) previewParticipant(claims []string) (network.SessionOffer, error) {
+	anchor := a.JoinAnchor()
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	if err := a.refusedLocked(); err != nil {
+		return network.SessionOffer{}, err
+	}
+	// Counted as the seat counts it, the coordinator's own entry among them, with no
+	// roster opened for a dial that may never seat (openRosterLocked).
+	if max(len(a.sessionRoster), 1) > a.sessionCapacity() && !a.namesPlaceLocked(claims) && !a.mayYieldLocked() {
+		return network.SessionOffer{}, a.fullLocked()
+	}
+	return a.offerLocked(anchor, 0), nil
 }
 
 // assignParticipant allocates the next identity, or the place a claim the dialer
@@ -591,33 +746,8 @@ func (a *App) closeStaleLink(err error, port engine.NetworkPort) {
 func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID, claims []string) (network.SessionOffer, error) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
-
-	// A dial mid-succession is refused: the offer would name a term that is about to
-	// end, so the participant would hold a roster slot the successor's record does
-	// not carry. The refusal is distinguishable, so the joiner retries against
-	// whatever authority emerges.
-	if a.authority != nil && a.authority.Migrating() {
-		return network.SessionOffer{}, ErrSessionHandoff
-	}
-	// The same refusal for the same reason, one window earlier. Between the lobby
-	// closing on its roster and the mid-run gate being armed there is no gate that
-	// can serve a dial: the lobby's has already sent its offers, and the mid-run
-	// one waits for a capture a clock that has not started never reaches. A dialer
-	// admitted there would hold an identity and wait for a start it is not in.
-	if a.lobbyClosing.Load() {
-		return network.SessionOffer{}, ErrSessionStarting
-	}
-	// A dial while this run leaves its session would be offered a term that ends with
-	// it, on a door about to shut; its bots go back in once the run has left.
-	if a.leaving.Load() {
-		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: its host is leaving it"}
-	}
-	// A draining or expired session refuses before it allocates anything. The
-	// roster slot, the identity and the capture that would follow are all work
-	// spent on a participant this process is about to stop authoring for, and the
-	// refusal is what makes a drain a drain rather than a slower shutdown.
-	if st := a.life.State(time.Now()); !st.Admit {
-		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: " + st.Reason}
+	if err := a.refusedLocked(); err != nil {
+		return network.SessionOffer{}, err
 	}
 
 	limit := a.sessionCapacity() + 1
@@ -640,8 +770,7 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID, claims [
 			return network.SessionOffer{}, &network.Refusal{Code: network.RefusalYielding,
 				Reason: "session is full, and a player who left is giving up a place"}
 		}
-		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalFull,
-			Reason: fmt.Sprintf("session is full at %d participant(s)", a.playerCapacity())}
+		return network.SessionOffer{}, a.fullLocked()
 	}
 	assigned := a.nextParticipantLocked()
 	assigned.Holder = holder
@@ -649,6 +778,55 @@ func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID, claims [
 
 	a.sessionOffer = a.offerLocked(anchor, assigned.ID)
 	return a.sessionOffer, a.sessionOffer.Validate()
+}
+
+// refusedLocked is why this session takes no dial now, whoever dials: what a preview
+// and a seat both refuse before anything is allocated. Caller holds sessionMu.
+func (a *App) refusedLocked() error {
+	// A dial mid-succession is refused: the offer would name a term that is about to
+	// end, so the participant would hold a roster slot the successor's record does
+	// not carry. The refusal is distinguishable, so the joiner retries against
+	// whatever authority emerges.
+	if a.authority != nil && a.authority.Migrating() {
+		return ErrSessionHandoff
+	}
+	// The same refusal for the same reason, one window earlier. Between the lobby
+	// closing on its roster and the mid-run gate being armed there is no gate that
+	// can serve a dial: the lobby's has already sent its offers, and the mid-run
+	// one waits for a capture a clock that has not started never reaches. A dialer
+	// admitted there would hold an identity and wait for a start it is not in.
+	if a.lobbyClosing.Load() {
+		return ErrSessionStarting
+	}
+	// A dial while this run leaves its session would be offered a term that ends with
+	// it, on a door about to shut; its bots go back in once the run has left.
+	if a.leaving.Load() {
+		return &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: its host is leaving it"}
+	}
+	// A draining or expired session refuses before it allocates anything. The
+	// roster slot, the identity and the capture that would follow are all work
+	// spent on a participant this process is about to stop authoring for, and the
+	// refusal is what makes a drain a drain rather than a slower shutdown.
+	if st := a.life.State(time.Now()); !st.Admit {
+		return &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: " + st.Reason}
+	}
+	return nil
+}
+
+// fullLocked is the refusal of a dial a full session has no place for. Caller holds
+// sessionMu.
+func (a *App) fullLocked() error {
+	return &network.Refusal{Code: network.RefusalFull,
+		Reason: fmt.Sprintf("session is full at %d participant(s)", a.playerCapacity())}
+}
+
+// namesPlaceLocked reports whether one of the tokens a dial named is a place's in
+// this session, which its seat may take back. Caller holds sessionMu.
+func (a *App) namesPlaceLocked(tokens []string) bool {
+	return slices.ContainsFunc(tokens, func(t string) bool {
+		digest := network.ClaimDigest(t)
+		return slices.ContainsFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.Claim == digest })
+	})
 }
 
 // claimedLocked is the place one of the tokens a dial named takes back: an away
@@ -804,27 +982,45 @@ func (a *App) leaveRoster(id network.PeerID, final bool) {
 // It asks once until that dismissal applies; a bot whose holder is away waits for
 // its holder's, and a place coming back is not away. Caller holds sessionMu.
 func (a *App) yieldLocked() bool {
-	away := func(id network.PeerID) (network.RosterEntry, bool) {
-		i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
-		if _, back := a.returning[id]; i < 0 || !a.sessionRoster[i].Away || back {
-			return network.RosterEntry{}, false
-		}
-		return a.sessionRoster[i], true
-	}
-	if _, ok := away(a.yielding); ok {
+	if _, ok := a.awayLocked(a.yielding); ok {
 		return true
 	}
-	a.yielding = 0
+	a.yielding = a.yieldableLocked()
+	if a.yielding == 0 {
+		return false
+	}
+	a.dismissWraith.Store(uint32(a.yielding))
+	return true
+}
+
+// mayYieldLocked reports whether yieldLocked would find a place on its way, asking
+// nothing. Caller holds sessionMu.
+func (a *App) mayYieldLocked() bool {
+	_, ok := a.awayLocked(a.yielding)
+	return ok || a.yieldableLocked() != 0
+}
+
+// yieldableLocked is the participant away longest whose place a full session may ask
+// for: not one coming back, nor a bot whose holder is away too. Zero when nobody's
+// is. Caller holds sessionMu.
+func (a *App) yieldableLocked() network.PeerID {
 	for _, id := range a.awayOrder {
-		p, ok := away(id)
-		if _, holderAway := away(p.Holder); !ok || p.Holder != 0 && holderAway {
-			continue
+		p, ok := a.awayLocked(id)
+		if _, holderAway := a.awayLocked(p.Holder); ok && (p.Holder == 0 || !holderAway) {
+			return id
 		}
-		a.yielding = id
-		a.dismissWraith.Store(uint32(id))
-		return true
 	}
-	return false
+	return 0
+}
+
+// awayLocked is id's roster entry while it is away and not coming back. Caller holds
+// sessionMu.
+func (a *App) awayLocked(id network.PeerID) (network.RosterEntry, bool) {
+	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
+	if _, back := a.returning[id]; i < 0 || !a.sessionRoster[i].Away || back {
+		return network.RosterEntry{}, false
+	}
+	return a.sessionRoster[i], true
 }
 
 // crossPredecessorDeparture removes the authority that was lost from the roster. A

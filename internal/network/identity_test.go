@@ -113,7 +113,7 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 		t.Fatal("the host never refused the joiner")
 	}
 
-	accept := PeerAcceptor(PeerGate{Local: 2, Identity: ours}, time.Second)
+	accept := PeerAcceptor(PeerGate{Local: func() PeerID { return 2 }, Identity: ours}, time.Second)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

@@ -226,7 +226,7 @@ state, peer count and connected state.
 | Role | Behavior |
 |---|---|
 | `RoleNone` | Disabled/no-op. |
-| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer's claims, then allocates a participant identity and slot, or the place a claim takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
+| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer's claims and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a claim takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
 | `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it, and runs `AcceptSession` there for a join, which the opening frame tells from a peer link and the app admits once this participant hosts; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
@@ -303,7 +303,7 @@ The identity has two halves, because they become knowable at different moments:
 
 | Half | Fields | Checked |
 |---|---|---|
-| Build | `protocol`, `simulation`, `capture_schema`, `journal_schema`, `tick_ns` | By the dialer against the offer, before it constructs a world; and again by the coordinator. |
+| Build | `protocol`, `simulation`, `capture_schema`, `journal_schema`, `tick_ns` | By the dialer against the preview, before it constructs a world, and against the offer at its seat; and again by the coordinator. |
 | Session | `seed`, `session`, `scenario_digest` | By the coordinator only. A dialer has no world yet, so it has none of these. |
 
 `scenario_digest` is the SHA-256 of the scenario's canonical form and the only
@@ -320,12 +320,14 @@ because one that could make its peers tear down and redial on demand could empty
 session. See [Runtime and concurrency](runtime.md) for the restart itself.
 
 A joiner whose own roots hold no scenario with that digest asks the coordinator
-for one, between the offer and the reply: `MsgScenarioRequest` names the digest,
-`MsgScenarioBody` carries the deflated canonical form in capture-sized chunks. It
-sits there so the participant is running the session's scenario before it reports
-an identity that would otherwise be refused, and one request fits by construction
-— what follows the answer has to be the reply. The coordinator serves only the
-digest it is playing, refusing anything else rather than acting as a file service.
+for one while it prepares, on the preview and before its seat: `MsgScenarioRequest`
+names the digest, `MsgScenarioBody` carries the deflated canonical form in
+capture-sized chunks. It sits there so the participant is running the session's
+scenario before it reports an identity that would otherwise be refused, and before
+it holds a place it may never take. One request fits a handshake; a dial that seats
+at once makes it between the offer and the reply instead. The coordinator serves
+only the digest it is playing, refusing anything else rather than acting as a file
+service.
 
 The received scenario is held in memory for the life of the run and never written
 to disk, including into the staging world a correction resolves against. The whole
@@ -354,10 +356,11 @@ be different a second later.
 A dialer configured with no build identity (`Config.Identity`) skips its check,
 which is what leaves a harness free to dial a hand-built fixture.
 
-`Coordinator.Admit` runs before `Assign`, and it is the one decision made about a
-dialer before it costs the session anything. The expensive part of a join is not
-the handshake but what follows it: on a running host the admission sends a whole
-world, so a peer that joins and leaves in a loop costs one capture per connect.
+`Coordinator.Admit` runs before `Preview` and `Assign`, and it is the one decision
+made about a dialer before it costs the session anything. The expensive part of a
+join is not the handshake but what follows it: on a running host the admission
+sends a whole world, so a peer that joins and leaves in a loop costs one capture
+per connect.
 `network.AdmissionLimiter` gives each dialling host
 `parameter.NetworkAdmitBurst` admissions per `NetworkAdmitWindow`, keyed by address
 rather than by identity — an identity is what the attack consumes and is released
@@ -430,10 +433,25 @@ dialer answers with the tokens of the claims it keeps, at most `ClaimsKept`, bef
 anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths)). It is asked
 rather than sent with the route, so a front door that refuses the route has read
 all the dialer sent and its refusal arrives whole.
+The coordinator then previews the session (`MsgJoinPreview`, 0x07): the offer a seat
+would carry, naming nobody, after the checks a seat makes that allocate nothing
+(`Coordinator.Preview`); a full session previews only for a dialer one of whose
+claims names a place there, or while a player who left holds one, and whether that
+place is taken back or given up is the seat's to settle. On the preview the dialer
+checks the build identity, asks for the scenario it lacks, builds and checks its
+world, and says it is ready (`MsgJoinPrepared`, 0x08), which opens its **ready
+period**, `NetworkJoinPressWindow`. It asks for its place (`MsgJoinSeat`, 0x09) at
+its player's press, or at once when nobody is to press, and only then does the
+coordinator allocate; the handshake goes on as an offer and a reply. A ready period
+that runs out ends the handshake with `RefusalUnpressed`, with nothing to give back,
+so a dialer that never presses delays nobody and keeps nobody from the place. The
+dialer measures the period from its own readiness, and a press after it dials again
+and seats at once ([Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)).
 A join refused before an identity is allocated — a name that is not this
 session's, a dialling host past its admission budget, a session electing a new
 authority, closing its lobby, ending, full, full while a Wraith gives up its place
-for this dial, or a claimed place still linked or already coming back — is answered
+for this dial, a claimed place still linked or already coming back, or a seat
+asked for past its ready period — is answered
 with a `MsgJoinReply` carrying its kind and reason (`network.Refusal`) rather than
 by closing the stream. The dialer acts on
 the kind, never the wording: one table gives each kind's retry (`RetryOf`: a seat
@@ -833,6 +851,11 @@ paused or stalled, never comes near it; a stream that silent (a dropped network,
 expired NAT mapping, a sleeping machine, a frozen tab) closes through the normal
 disconnect path, which starts its departure or a succession. Clean EOF is observed
 immediately.
+
+The one wait in a handshake a person paces is a join's ready period,
+`parameter.NetworkJoinPressWindow` (5 s, the gate's own `NetworkJoinReadyTimeout`):
+the coordinator keeps a prepared dialer's stream that long for its seat and holds
+nothing else for it. Every other handshake read is bounded by `ConnectTimeout`.
 
 What the operator surface does not cover:
 

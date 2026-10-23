@@ -57,8 +57,9 @@ leaves it stopped. In a session only the host can, every participant stops at th
 same tick, anyone joining lands paused, and the host turning it off resumes
 everyone. **New game** restarts the running scenario from its first tick, as `:n`
 does. **Wait to start** (`:wait`) holds each new game a person plays at its first
-tick until a key, click or tap the held game would ignore, the host's in a session;
-a scenario's own restart never waits. Below them, one row per scenario names what
+tick until a key, click or tap the held game would ignore, the host's in a session,
+and a join for the press that takes its place there; a scenario's own restart never
+waits. Below them, one row per scenario names what
 `:n <name>` would start: `main` and every `scenario/<name>/scenario.toml` the
 configuration roots hold, the running one marked `current`; a tap or Enter starts
 it, so a phone needs no name to type.

@@ -263,10 +263,15 @@ type Config struct {
 	// to should it take that session over; Participants is a host's own.
 	sessionPlayers int
 
-	// dialled is a :join the host already admitted, dialled while the run it
+	// dialled is a :join its session already answered, dialled while the run it
 	// replaces played on; notice is what that run's failure tells the next one.
 	dialled *joinDial
 	notice  string
+
+	// joinPress says this run's join is one its player started, at launch or from a
+	// :join, whose seat waits for their press (App.joinWaits). A run dialled on its
+	// own, or whose player already pressed, takes its seat once its world is built.
+	joinPress bool
 
 	// claims is the process's claim keeper, which every run Run builds and every seat
 	// they hold shares; Normalize gives a run built another way one of its own.
@@ -352,6 +357,7 @@ func (c Config) joining(target string) (Config, error) {
 func (c Config) restarted(next *restartRequest) (Config, *Config) {
 	c.notice, c.dialled, c.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
 	c.Journal, c.journalCarried = next.Journal, next.Journal
+	c.joinPress, c.Resources.Provided = next.press, next.provided
 	if next.Scenario != "" {
 		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false
 	}
