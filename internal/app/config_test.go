@@ -181,11 +181,14 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 }
 
 // TestARestartKeepsTheCommandLineAndTakesWhatItNames: the next run is the command
-// line Run was given with what the restart named, so a pinned seed survives, and a
-// :join falls back to that run on its own; a run following nobody starts solo.
+// line Run was given with what the restart named, so a pinned seed survives. A :join
+// leaves the -players and -authority of a session it no longer hosts, and falls back
+// to that run on its own, in no session; a run following nobody starts over on its
+// own, keeping the ceiling its session was opened with.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
 	line := Config{Seed: 7, HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
+		Participants: 4, FixedAuthority: true, sessionPlayers: 3,
 		Resources: resource.Options{Scenario: "main", Embedded: true}}
 	dialled := &joinDial{}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
@@ -200,14 +203,19 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	if next.JoinAddress != "10.0.0.2:7777" || next.SessionName != "abc" || next.dialled != dialled {
 		t.Fatalf("a :join builds %q/%q on %p; want the target on its own dial", next.JoinAddress, next.SessionName, next.dialled)
 	}
-	if solo == nil || solo.Seed != 7 || solo.JoinAddress != "" || solo.SessionName != "" || solo.dialled != nil {
+	if next.Participants != 0 || next.FixedAuthority {
+		t.Fatalf("a :join keeps -players %d and a pinned authority %t; want neither, its session's coming with its offer",
+			next.Participants, next.FixedAuthority)
+	}
+	if solo == nil || solo.Seed != 7 || solo.JoinAddress != "" || solo.SessionName != "" || solo.sessionPlayers != 0 || solo.dialled != nil {
 		t.Fatalf("a :join falls back to %+v; want the same run on its own", solo)
 	}
 	if moved, _ := line.restarted(&restartRequest{Rejoin: true, Join: "10.0.0.3:7777"}); moved.JoinAddress != "10.0.0.3:7777" || moved.SessionName != "old" {
 		t.Fatalf("a rejoin dials %q/%q; want the session's moved door", moved.JoinAddress, moved.SessionName)
 	}
-	if alone, solo := line.restarted(&restartRequest{}); alone.JoinAddress != "" || solo != nil {
-		t.Fatalf("a run following nobody dials %q", alone.JoinAddress)
+	if alone, solo := line.restarted(&restartRequest{}); alone.JoinAddress != "" || solo != nil || alone.sessionPlayers != 3 {
+		t.Fatalf("a run following nobody dials %q under a ceiling of %d; want nothing dialled, the session's 3 kept",
+			alone.JoinAddress, alone.sessionPlayers)
 	}
 }
 

@@ -2,6 +2,8 @@ package app
 
 import (
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -293,6 +295,91 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	req.dialled.abandon(errors.New("the test is over"))
 }
 
+// TestASuccessorTakesPlayersAsTheFirstHostDid: a guest's own port turns a join away
+// while another participant hosts, and takes one once the guest took the session
+// over, into the term it holds and under the -players its first host set. A
+// survivor whose link to it drops redials it where the chain says, the first
+// host's door long shut, and is admitted back into its own place.
+func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	host.cfg.Participants = 4
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
+	t.Cleanup(stop)
+	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	// The first candidate is whichever guest's port the host confirmed first.
+	var chain network.SuccessionChain
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if chain = guest.authority.Chain(); len(chain) == 2 && len(successor.authority.Chain()) == 2 {
+			break
+		}
+	}
+	if len(chain) != 2 {
+		t.Fatalf("the guests hold the chain %v; want both of them in it", chain)
+	}
+	if chain[0].ID == network.PeerID(guest.localParticipant()) {
+		successor, guest = guest, successor
+	}
+	id := network.PeerID(successor.localParticipant())
+	door, _ := chain.Lookup(id)
+	if _, _, err := network.DialSession(door, network.DebugConfig(network.RolePeer, "")); !errors.Is(err, errNotHosting) ||
+		!strings.Contains(err.Error(), errNotHosting.Reason) {
+		t.Fatalf("a join at a guest's port while another participant hosts: %v; want %q", err, errNotHosting.Reason)
+	}
+	port, err := guest.socketPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(socketWait); !port.Connected(uint32(id)) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+
+	stop()
+	for _, a := range []*App{successor, guest} {
+		for deadline := time.Now().Add(socketWait); (a.authority.Holder() != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		}
+		if a.authority.Holder() != id {
+			t.Fatalf("participant %d follows %d; want the first candidate, %d", a.localParticipant(), a.authority.Holder(), id)
+		}
+	}
+	// Dialled once the session plays again, as a player meets it: a join whose gate
+	// reads the frozen world fails if the thaw lands mid-read.
+	for deadline := time.Now().Add(socketWait); successor.Context().TimeCtl.Held() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	if got := successor.playerCapacity(); got != 4 {
+		t.Fatalf("the successor holds the session to %d players; want its first host's -players, 4", got)
+	}
+	if line, want := successor.SessionSummary(), "Session hosting "+successor.reach.DeclaredAddr()+","; !strings.HasPrefix(line, want) {
+		t.Fatalf(":session on the successor reads %q; want it to open %q", line, want)
+	}
+	player, _ := driveBot(t, Config{JoinAddress: door}, "patrol", nil)
+	if got := authorityOf(player); got.Authority != id || got.Term != network.FirstTerm+1 {
+		t.Fatalf("a player that joined the successor holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
+	}
+	waitForCursors(t, successor, 4) // the first host's Wraith among them
+
+	c, gid := guest.claim.Load(), guest.localParticipant()
+	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
+	if c == nil || !(instance{successor}).DropParticipant(gid) {
+		t.Fatal("the guest holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		req = guest.restart.Load()
+	}
+	if req == nil || req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != gid ||
+		req.dialled.offer.Host != id {
+		t.Fatalf("the guest was not admitted back into its own place at the successor: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
+}
+
 // claimHeld reads whether a run of a's process is in its session under c.
 func claimHeld(a *App, c *claim) bool {
 	a.claims.mu.Lock()
@@ -405,6 +492,10 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	}
 	if !errors.Is(err, ErrSessionHandoff) {
 		t.Fatalf("the refusal is not distinguishable: %v", err)
+	}
+	// A guest's own port, which takes joins once its guest hosts, refuses the same.
+	if err := host.admitHosted(nil); !errors.Is(err, ErrSessionHandoff) {
+		t.Fatalf("a guest's port mid-succession refuses with %v; want the handoff refusal", err)
 	}
 }
 

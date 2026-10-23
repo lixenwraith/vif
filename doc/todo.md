@@ -524,9 +524,20 @@ host it lost ([Multi-player](multi-player.md#51-succession) §5.1).
 A guest whose own link to a host still running dropped, and whose redial cannot
 reach that host, walks a list nobody else is walking and forks, though a peer
 relaying for others could carry it: the host keeps its place as a Wraith, and
-taking that back needs a join under its claim through the peer, which a peer port
-does not serve. What would close it: a relayed rejoin on a peer port, as the
-`-relay` door serves one.
+taking that back needs a join under its claim through the peer, which a peer's port
+takes only once that peer hosts. What would close it: the port relaying a rejoin
+before then, as the `-relay` door does, when its player relays for others.
+
+### Serve a relay address on a run that took the session over
+
+- Priority: P3
+- Affected files: `internal/app/relay.go`
+
+A guest's `-relay` door asks the authority on its own link for every join it
+relays. Once that guest takes the session over it is the authority, so the door
+turns every dial away as the session changing hands, which the dialer retries, while
+the guest's own port takes joins. What would close it: the door admitting as the
+host's does once its run hosts, as that port does.
 
 ### Keep a late survivor in its host's group
 
@@ -597,6 +608,9 @@ these gaps:
 - A join that meets a hold mid-gate fails and is retried until the host resumes: a
   relay's gate, and a host's whose playout-lead wait the hold cuts short, wait for
   a capture past the held tick. Both could gate as a held host does.
+- A join whose gate reads the held world fails when the session resumes before the
+  read ends, as a successor does once its group reported. The gate could start over
+  running.
 - A joiner's landing hold is not journaled, so a guest journal recorded across a
   join into a held session replays the install running and the host's resume
   there announces nothing. The world a join installs could carry it, as an

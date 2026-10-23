@@ -161,7 +161,7 @@ func (a *App) seatLink() (net.Conn, error) {
 	a.world.RunSafe(func() {
 		port, _ = a.sessionTransportLocked().(*network.SocketPort)
 		if a.world.IsSessionCoordinator() {
-			accept, admitted = a.sessionAcceptor(), a.admitLateJoiner
+			accept, admitted = a.sessionAcceptor(a.admissions.Admit), a.admitLateJoiner
 		} else {
 			accept, admitted = a.relayAcceptor(network.PeerID(a.world.LocalParticipant())), a.releaseRelayedJoiner
 		}

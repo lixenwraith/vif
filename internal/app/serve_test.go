@@ -355,13 +355,15 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 // TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty: -players and max_players
 // are cursor ceilings, the lower holding, of which sessionCapacity is the guest half.
 // An explicit -players on a scripted or bot-driven host is also the lobby's party,
-// min_players raises any lobby's, and a -players under min_players is refused.
+// min_players raises any lobby's, and a -players under min_players is refused. A run
+// that joined holds to the -players its session was opened with, should it host.
 func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name         string
 		serves       bool
 		participants int
+		joined       int // the -players the offer this run joined on carried
 		low, high    int // the scenario's range: zero keeps its default, a negative low is 0
 		capacity     int
 		players      int
@@ -385,6 +387,7 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 		{name: "host/scenario min", low: 3, capacity: parameter.MaxPlayers - 1,
 			players: parameter.MaxPlayers, quorum: 2},
 		{name: "host/under min", participants: 2, low: 3, capacity: 1, players: 2, quorum: 1, refused: true},
+		{name: "joined/under min", joined: 2, low: 3, capacity: 1, players: 2, quorum: 2, refused: true},
 		{name: "serve/scenario range", serves: true, participants: 4, low: 2, high: 3,
 			capacity: 3, players: 3, quorum: 2},
 		{name: "serve/no players", serves: true, low: -1, capacity: parameter.MaxPlayers,
@@ -394,7 +397,7 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 			t.Parallel()
 			a := mustHeadless(t, 0x5E6E, 120, 40)
 			defer a.Close()
-			a.cfg.Participants = tt.participants
+			a.cfg.Participants, a.cfg.sessionPlayers = tt.participants, tt.joined
 			if tt.serves {
 				a.cfg.Mode = ModeServer
 			}

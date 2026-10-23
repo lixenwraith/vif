@@ -16,10 +16,10 @@ type MessageType uint8
 // as a drop rather than translating it.
 const (
 	// MsgSessionRoute is the one frame a dialer sends before it reads: the session
-	// name it was given, so one address can carry several. A front door reads it to
-	// place the connection, and the session refuses a name not its own, so a stale
-	// link is refused rather than seated in a stranger's match. It is a routing key,
-	// not a credential: the port is unauthenticated by decision.
+	// name it was given, empty for none, so one address can carry several. A front
+	// door reads it to place the connection, and the session refuses a name not its
+	// own, so a stale link is refused rather than seated in a stranger's match. It is
+	// a routing key, not a credential: the port is unauthenticated by decision.
 	MsgSessionRoute MessageType = 0x05 // Live: the session name a dialer is holding
 
 	// MsgJoinClaims is the coordinator asking a dialer, before it assigns a place,
