@@ -121,6 +121,14 @@ Overlay as non-blocking inspection there. `:pause` is a hold, which no mode chan
 ends: under it Normal takes no play, only `:`, the menu, help, quit, the audio
 toggle and a key's release.
 
+A new game a person plays waits at its first tick in a start hold, the `:pause`
+hold marked `engine.HoldStart`: at launch, on `:n`, the menu's New game and a map
+change, unless `[play] wait` is off (`:wait`, `-nw`). The first press the held
+game would not take starts it and does nothing else: a key without Ctrl or Alt,
+one the keymap binds to nothing included, or a left or right press off the status
+bar. What a hold admits keeps its meaning and leaves it waiting. In a live session
+only the host's press starts it ([Multi-player §3.6](multi-player.md#36-holding-a-session)).
+
 ## 3. Normal-mode grammar
 
 The parser implements a focused Vim-like grammar rather than forwarding raw

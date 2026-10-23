@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "relay", "session", "bot", "player", "g", "config", "journal",
+	"host", "join", "leave", "relay", "session", "bot", "player", "g", "config", "journal", "wait",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -104,6 +104,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleTelemetryCommand(ctx, args)
 	case "hud":
 		return applyToggle(ctx, &ctx.OverlayHUD, args, "hud", "Telemetry HUD")
+	case "wait":
+		return applyToggle(ctx, &ctx.WaitStart, args, "wait", "Wait to start")
 	case "d", "debug":
 		return handleDebugCommand(ctx, args)
 	case "h", "help", "?":
@@ -390,15 +392,16 @@ func resetGame(ctx *engine.GameContext, purge bool) bool {
 		setCommandError(ctx, "Only the host can reset a live session")
 		return false
 	}
-	// The new game starts running: a reset crossed in a held session would wait
-	// for a tick nobody reaches
+	// A reset crossed in a held session would wait for a tick nobody reaches, so the
+	// hold ends first; a new game that waits holds again as it starts
 	if ctx.TimeCtl.Held() {
 		ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: false})
 	}
+	reset := &event.GameResetPayload{Purge: purge, Wait: ctx.WaitStart.Load()}
 	if ctx.World.LiveSession() {
-		ctx.PushCrossing(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+		ctx.PushCrossing(event.EventGameResetRequest, reset)
 	} else {
-		ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+		ctx.PushEvent(event.EventGameResetRequest, reset)
 	}
 	ctx.MacroClearFlag.Store(true) // Signal macro reset
 	return true

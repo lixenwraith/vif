@@ -40,10 +40,12 @@ cell = 0
 # What the configuration menu changes in a run, written back so the next starts
 # as this one was left: the two sound channels, the effects volume (0 to 1),
 # auto-fire (off, main or on), mouse input, the cursor following the pointer, the
-# telemetry HUD, and relaying for players who reach this run and not their host.
+# telemetry HUD, relaying for players who reach this run and not their host, and
+# each new game waiting for a key, click or tap to start it.
 # A run writes this file when it is in the user root or the
 # -config-dir root, and otherwise the user root's, made from this one at the first
-# change. -mute, given either way, names both channels for that run.
+# change. A flag naming one of these, -mute for both channels or -nw for the wait,
+# sets it for that run alone; only what the player changes in the run is written.
 [play]
 effects = true
 music = true
@@ -53,3 +55,4 @@ mouse = true
 follow_mouse = true
 hud = false
 relay = false
+wait = true

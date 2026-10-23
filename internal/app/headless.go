@@ -118,8 +118,8 @@ func (a *App) Resize(width, height int) {
 }
 
 // Reset requests a new game; purge additionally clears operator session state.
-// MetaSystem's synchronous cleanup lands here, the FSM reset at the next Tick,
-// matching the interactive ordering.
+// Solo, MetaSystem's cleanup and the FSM reset both land here, as the interactive
+// scheduler runs the reset the moment the lock frees; crossed, at its tick.
 func (a *App) Reset(purge bool) bool {
 	return a.shareOperator("reset", event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
 }

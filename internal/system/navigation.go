@@ -238,12 +238,14 @@ func (s *NavigationSystem) applyWalls() {
 	config := s.world.Resources.Config
 	w, h := config.MapWidth, config.MapHeight
 	gen := s.world.Positions.WallGeneration(component.WallBlockKinetic)
+	// A restore carries the walls and passability the fields stand on, not the grids
+	// searched on them: those are refilled before any diff, which may find nothing
+	if s.derived && s.gridsAt != s.grid {
+		s.pointGrid.Fill(w, h, isWall)
+		s.compositeGrid.Fill(w, h, s.compositePassability.IsBlocked)
+		s.gridsAt = s.grid
+	}
 	if s.derived && gen == s.wallsGen {
-		if s.gridsAt != s.grid {
-			s.pointGrid.Fill(w, h, isWall)
-			s.compositeGrid.Fill(w, h, s.compositePassability.IsBlocked)
-			s.gridsAt = s.grid
-		}
 		return
 	}
 	s.wallsGen = gen

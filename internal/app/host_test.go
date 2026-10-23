@@ -1275,6 +1275,98 @@ func TestANewGameEndsAHold(t *testing.T) {
 	assertMeshParity(t, apps, 0)
 }
 
+// startPress is a player's press on a waiting game, journaled as a typed one is
+func startPress(a *App) (started bool) {
+	a.World().RunSafe(func() {
+		a.World().WithOrigin(event.OriginInput, func() { started = a.router.TakeStart(nil) })
+	})
+	a.Settle()
+	return started
+}
+
+// TestANewGameWaitsForItsHostsPress: the host's :n with the wait on crosses with it,
+// so host and guest stand at the new game's first tick however often they are
+// ticked. A guest's press starts nothing there; the host's starts both, the guest on
+// the host's next tick and with no notice, since the game moving says it.
+func TestANewGameWaitsForItsHostsPress(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A7, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	host, guest := apps[0], apps[1]
+	host.Context().WaitStart.Store(true)
+	run := host.Position().Run
+	mode.ExecuteCommand(host.Context(), "n")
+	host.Settle()
+	for range parameter.NetworkBarrierMaxDelayTicks + 4 {
+		tickAll(apps)
+	}
+	at := host.Position()
+	waiting := func(when string) {
+		t.Helper()
+		for i, a := range apps {
+			if p := a.Position(); !a.Context().TimeCtl.Holds(engine.HoldStart) || p.Run != at.Run || p.Tick != at.Tick {
+				t.Fatalf("%s, participant %d: waiting %v at %+v, want waiting at the host's %+v",
+					when, i+1, a.Context().TimeCtl.Holds(engine.HoldStart), p, at)
+			}
+		}
+	}
+	if at.Run != run+1 {
+		t.Fatalf("the host plays run %d after :n, want run %d", at.Run, run+1)
+	}
+	waiting("after :n")
+	if startPress(guest) {
+		t.Fatal("a guest's press started its host's game")
+	}
+	for range 4 {
+		tickAll(apps)
+	}
+	waiting("after the guest's press")
+	if !startPress(host) {
+		t.Fatal("the host's press did not start its game")
+	}
+	tickAll(apps)
+	for i, a := range apps {
+		if a.Context().TimeCtl.Held() || a.Position().Tick != at.Tick+1 {
+			t.Fatalf("participant %d: held %v at tick %d, want running at %d",
+				i+1, a.Context().TimeCtl.Held(), a.Position().Tick, at.Tick+1)
+		}
+	}
+	if got := guest.Context().GetStatusMessage(); got == "Resumed by the host" {
+		t.Fatalf("the guest was told %q of a start", got)
+	}
+	for range 4 {
+		tickAll(apps)
+	}
+	assertMeshParity(t, apps, 0)
+}
+
+// TestAScenariosResetNeverWaits: the reset a scenario asks for, as monitor's defeat
+// does, starts its new game running whatever the setting says, while the player's
+// :n under the same setting waits.
+func TestAScenariosResetNeverWaits(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0xA1A8, 120, 40)
+	t.Cleanup(a.Close)
+	tickUntilCursor(t, a)
+	a.Context().WaitStart.Store(true)
+	run := a.Position().Run
+	a.World().RunSafe(func() { // as the scenario's EmitEvent builds it
+		a.World().PushEvent(event.EventGameResetRequest, event.NewPayloadStruct(event.EventGameResetRequest))
+	})
+	a.Settle()
+	a.Tick(2)
+	if p := a.Position(); a.Context().TimeCtl.Held() || p.Run != run+1 || p.Tick == 0 {
+		t.Fatalf("held %v at %+v after the scenario's reset, want run %d running", a.Context().TimeCtl.Held(), p, run+1)
+	}
+	mode.ExecuteCommand(a.Context(), "n")
+	a.Settle()
+	a.Tick(2)
+	if p := a.Position(); !a.Context().TimeCtl.Holds(engine.HoldStart) || p.Run != run+2 || p.Tick != 0 {
+		t.Fatalf("waiting %v at %+v after :n, want run %d waiting at its first tick",
+			a.Context().TimeCtl.Holds(engine.HoldStart), p, run+2)
+	}
+}
+
 // TestASuccessorKeepsTheHoldTheLostHostSet: a session held when its host goes stays
 // held under its successor, whose own :pause resumes everyone. A successor a script
 // or bot drives has nobody to give one, so it resumes as its window closes.
@@ -1892,7 +1984,7 @@ func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
 		notice string
 	}{
 		{"the host's hold", func(ctx *engine.GameContext) { ctx.Hold(true) }, true, "Host connection lost; paused in a session of your own"},
-		{"a freeze", (*engine.GameContext).Freeze, false, "Host connection lost; playing on in a session of your own"},
+		{"a freeze", func(ctx *engine.GameContext) { ctx.HoldAs(engine.HoldFreeze) }, false, "Host connection lost; playing on in a session of your own"},
 	} {
 		a := mustHeadless(t, fixtureSeed, 120, 40)
 		t.Cleanup(a.Close)

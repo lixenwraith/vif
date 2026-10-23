@@ -136,6 +136,10 @@ type GameContext struct {
 	// those that joined through this run; off unless its player turns it on
 	Relaying atomic.Bool
 
+	// WaitStart holds each new game this run starts until its player's first press;
+	// only a run a person plays turns it on
+	WaitStart atomic.Bool
+
 	KeyCapture input.KeyCapture // Keys the scenario takes from play-mode parsing
 
 	// Viewer marks the command line as a replay viewer's: the recording authors the
@@ -971,9 +975,9 @@ func (ctx *GameContext) Hold(held bool) bool {
 	return true
 }
 
-// Freeze is Hold for a session whose host is changing; see TimeControl.Freeze.
-func (ctx *GameContext) Freeze() {
-	if ctx.TimeCtl.Freeze() {
+// HoldAs is Hold for a hold that waits for what kind does; see TimeControl.HoldAs.
+func (ctx *GameContext) HoldAs(kind HoldKind) {
+	if ctx.TimeCtl.HoldAs(kind) {
 		ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: true})
 	}
 }

@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"sync/atomic"
@@ -457,7 +458,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		text := ":" + r.gameCtx.GetCommandText()
 		r.renderInput(buf, lineY, leftEndX, textWidth, text, visual.RgbCommandInputText, r.gameCtx.GetCommandCursorPos()+1)
 	default:
-		msg := r.runesOf(r.gameCtx.ShownStatusMessage(realNow.UnixNano()))
+		msg := r.runesOf(cmp.Or(r.gameCtx.ShownStatusMessage(realNow.UnixNano()), ctx.Prompt))
 		// One longer than its room rises onto the items' row while it shows, as vim's
 		// long message rises over the window, and ends here; a keyboard hides that row
 		if len(msg) > textWidth && !ctx.StatusCovered {

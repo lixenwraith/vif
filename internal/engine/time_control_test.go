@@ -117,20 +117,22 @@ func TestTimeControlHoldOutlastsAPause(t *testing.T) {
 	}
 }
 
-// TestTimeControlAFreezeIsNoHostsHold: a freeze stops the clock as a hold does, but
-// it never takes over a hold standing when it came, and a hold set after it ends is
-// a host's again.
-func TestTimeControlAFreezeIsNoHostsHold(t *testing.T) {
-	tc := newTestControl()
-	if !tc.Freeze() || !tc.Held() || !tc.Frozen() {
-		t.Fatal("a freeze did not stop the clock as one")
-	}
-	tc.SetHeld(false)
-	if !tc.SetHeld(true) || tc.Frozen() {
-		t.Fatal("a hold set after a freeze read as the freeze")
-	}
-	if tc.Freeze() || tc.Frozen() {
-		t.Fatal("a freeze took over the hold standing when it came")
+// TestTimeControlAHoldKeepsItsKind: a freeze or a new game's start stops the clock as
+// a host's hold does, but never takes over a hold standing when it came, and a hold
+// set after it ends is a host's again.
+func TestTimeControlAHoldKeepsItsKind(t *testing.T) {
+	for _, kind := range []HoldKind{HoldFreeze, HoldStart} {
+		tc := newTestControl()
+		if !tc.HoldAs(kind) || !tc.Held() || !tc.Holds(kind) {
+			t.Fatalf("kind %d did not stop the clock as a hold", kind)
+		}
+		tc.SetHeld(false)
+		if !tc.SetHeld(true) || tc.Holds(kind) || !tc.Holds(HoldPause) {
+			t.Fatalf("a hold set after kind %d read as it", kind)
+		}
+		if tc.HoldAs(kind) || tc.Holds(kind) {
+			t.Fatalf("kind %d took over the hold standing when it came", kind)
+		}
 	}
 }
 

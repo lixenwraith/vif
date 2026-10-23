@@ -264,6 +264,18 @@ leaves: one hidden or suspended for five minutes must cost the other players
 nothing and resume or rejoin on return, and a session whose last guest was a
 browser must end on its own grace.
 
+### Launch the page and Android without their start screen
+
+- Priority: P3
+- Affected files: `web/terminal.js`, `web/worker.js`, `pkg/browser`,
+  `android/app/src/main/java/com/lixen/vif/StartScreen.java`
+
+Both open on their start screen whatever `[play] wait` says. The page's is up
+before its program runs, so it cannot read the setting in time, and its press is
+also the gesture a browser needs before it plays sound; Android's could close at
+once, but would flash. Running the page's program behind its screen, as Android's
+runs behind its own (`Host.Away`), would let `wait = false` skip both.
+
 ### Join a pasted game link from the Android app
 
 - Priority: P2
@@ -604,7 +616,8 @@ A bind or dial names the player's next step; these gaps remain:
   `internal/app/join.go`, `internal/system/meta.go`, `internal/app/script.go`
 
 The host's hold ([Multi-player](multi-player.md#36-holding-a-session) §3.6) leaves
-these gaps:
+these gaps, which the start wait makes common: each new game a session's host plays
+stands held until its press.
 - A join that meets a hold mid-gate fails and is retried until the host resumes: a
   relay's gate, and a host's whose playout-lead wait the hold cuts short, wait for
   a capture past the held tick. Both could gate as a held host does.

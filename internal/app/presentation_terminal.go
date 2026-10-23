@@ -25,6 +25,8 @@ type presentationState struct {
 	// unseen is a run whose player was away when its clock started, behind Android's
 	// start screen, until they come
 	unseen bool
+	// touched says the last pointer press was a finger's, which a waiting game asks for
+	touched bool
 	// cell is the zoom the presentation opened at or the run last wrote back
 	cell float64
 }

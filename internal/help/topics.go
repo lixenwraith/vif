@@ -165,6 +165,7 @@ var topics = []topicDef{
 			{Keys: ":new  :n", Desc: "New game; in a live session the host resets everyone and a guest is refused"},
 			{Keys: ":new! :n!", Desc: "Restart, clear this operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and the rate to their startup values; logging is untouched"},
 			{Keys: ":n <scenario>", Desc: "Rebuild the run on another scenario, by installed name or path; everything operator-owned restarts with it"},
+			{Keys: ":wait [on|off]", Desc: "Hold each new game until a key, click or tap starts it, in a live session the host's; on by default, -nw turns it off for a run, and a scenario's own restart never waits"},
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},
