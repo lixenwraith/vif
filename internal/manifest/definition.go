@@ -40,6 +40,7 @@ var Components = []ComponentDef{
 	{"Sigil", "SigilComponent", ""},
 	{"Nugget", "NuggetComponent", "player"},
 	{"Cursor", "CursorComponent", "shared"},
+	{"Wraith", "WraithComponent", "shared"},
 	{"Protection", "ProtectionComponent", ""},
 	{"Kinetic", "KineticComponent", ""},
 	{"Wall", "WallComponent", "shared"},

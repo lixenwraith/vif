@@ -25,20 +25,23 @@ import (
 const eventQueue = 256
 
 // The Worker's side of the bridge, web/worker.js: vifGrid is the grid the page
-// measured before the program started and vifSettings the settings document it
-// kept; vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio and vifKeepSettings post
-// the texture, the zoom, a frame, the pointer mode, a PCM buffer and the settings
-// to keep to the page; goEvent is what the page sends back, one object a message
+// measured before the program started, vifSettings the settings document it kept
+// and vifClaims the claims its tab kept; vifAtlas, vifZoom, vifFrame, vifPointer,
+// vifAudio, vifKeepSettings and vifKeepClaims post the texture, the zoom, a frame,
+// the pointer mode, a PCM buffer, the settings and the claims to keep to the page;
+// goEvent is what the page sends back, one object a message
 const (
-	jsGrid     = "vifGrid"
-	jsSettings = "vifSettings"
-	jsAtlas    = "vifAtlas"
-	jsZoom     = "vifZoom"
-	jsFrame    = "vifFrame"
-	jsPointer  = "vifPointer"
-	jsAudio    = "vifAudio"
-	jsKeep     = "vifKeepSettings"
-	jsEvent    = "goEvent"
+	jsGrid       = "vifGrid"
+	jsSettings   = "vifSettings"
+	jsClaims     = "vifClaims"
+	jsAtlas      = "vifAtlas"
+	jsZoom       = "vifZoom"
+	jsFrame      = "vifFrame"
+	jsPointer    = "vifPointer"
+	jsAudio      = "vifAudio"
+	jsKeep       = "vifKeepSettings"
+	jsKeepClaims = "vifKeepClaims"
+	jsEvent      = "goEvent"
 )
 
 // Config is what the run tells the page: the status bar's rows, whose hold a
@@ -254,17 +257,29 @@ func (speaker) Write(p []byte) (int, error) {
 func (speaker) Close() error { return nil }
 
 // Settings is the settings document the page kept from an earlier visit, nil for none
-func Settings() []byte {
-	if doc := js.Global().Get(jsSettings); doc.Type() == js.TypeString && doc.String() != "" {
+func Settings() []byte { return kept(jsSettings) }
+
+// KeepSettings hands the page the settings document to keep for the next visit
+func KeepSettings(doc []byte) { keep(jsKeep, doc) }
+
+// Claims is the claims document the tab kept from before a reload, nil for none
+func Claims() []byte { return kept(jsClaims) }
+
+// KeepClaims hands the page the claims document to keep for as long as its tab
+func KeepClaims(doc []byte) { keep(jsKeepClaims, doc) }
+
+// kept is the document the page handed over under name, nil for none
+func kept(name string) []byte {
+	if doc := js.Global().Get(name); doc.Type() == js.TypeString && doc.String() != "" {
 		return []byte(doc.String())
 	}
 	return nil
 }
 
-// KeepSettings hands the page the settings document to keep for the next visit
-func KeepSettings(doc []byte) {
-	if keep := js.Global().Get(jsKeep); keep.Type() == js.TypeFunction {
-		keep.Invoke(string(doc))
+// keep hands the page a document through the function it named
+func keep(name string, doc []byte) {
+	if f := js.Global().Get(name); f.Type() == js.TypeFunction {
+		f.Invoke(string(doc))
 	}
 }
 

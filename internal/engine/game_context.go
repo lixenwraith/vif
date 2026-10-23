@@ -78,6 +78,7 @@ type SessionParticipant struct {
 	Slot   uint8
 	Holder uint32
 	Local  bool
+	Away   bool // a Wraith waits in the slot for the participant's return
 }
 
 type BotSeat struct {

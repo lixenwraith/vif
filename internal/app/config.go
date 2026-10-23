@@ -121,6 +121,10 @@ type Config struct {
 	// makes is written back; nil keeps it to this run.
 	Play     paths.Play
 	Settings paths.SettingsStore
+
+	// ClaimStore keeps the claims this process comes back to its sessions with past
+	// its own life, which a page's reload needs; nil keeps them while it runs.
+	ClaimStore ClaimStore
 	// MusicWAV is the directory the music is recorded to as a WAV file; "" records none.
 	MusicWAV string
 
@@ -260,6 +264,10 @@ type Config struct {
 	dialled *joinDial
 	notice  string
 
+	// claims is the process's claim keeper, which every run Run builds and every seat
+	// they hold shares; Normalize gives a run built another way one of its own.
+	claims *claimKeeper
+
 	// journalCarried says Journal came from the run this one replaces, which was
 	// journaling or asked to start: one that fails to open leaves this run
 	// unjournaled, not unstarted.
@@ -368,6 +376,9 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 
 // Normalize fills unset fields that carry a defined default
 func (c *Config) Normalize() {
+	if c.claims == nil {
+		c.claims = newClaimKeeper(c.ClaimStore)
+	}
 	if c.Play.AutoFire == "" {
 		c.Play = paths.DefaultPlay()
 	}

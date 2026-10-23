@@ -146,7 +146,7 @@ func (a *App) seatConfigLocked() (Config, error) {
 	width, height := a.seatScreenLocked()
 	return Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: width, Height: height,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1, JoinAddress: seatJoin, SessionName: a.cfg.SessionName,
-		holder: network.PeerID(a.world.LocalParticipant()), relay: a.seatLink}, nil
+		holder: network.PeerID(a.world.LocalParticipant()), relay: a.seatLink, claims: a.claims}, nil
 }
 
 // seatLink opens a stream to this run for one of its bots and serves the join
@@ -281,13 +281,15 @@ func (a *App) forgetSeat(s *seat) {
 }
 
 // haltSeats halts every seat without waiting and returns them. Each link closing is
-// then the drop that was asked for, as it is for a seat dropped alone.
-func (a *App) haltSeats() []*seat {
+// then the drop that was asked for, as it is for a seat dropped alone, unless the
+// seats keep their places: then it is a lost link, whose cursor the session keeps
+// as a Wraith.
+func (a *App) haltSeats(keep bool) []*seat {
 	a.seatsMu.Lock()
 	defer a.seatsMu.Unlock()
 	seats := slices.Clone(a.seats)
 	for _, s := range seats {
-		if id := s.id.Load(); id != 0 && !s.halted() {
+		if id := s.id.Load(); id != 0 && !s.halted() && !keep {
 			a.dropped = append(a.dropped, id)
 		}
 		s.halt()
@@ -295,10 +297,10 @@ func (a *App) haltSeats() []*seat {
 	return seats
 }
 
-// closeSeats halts every seat and waits for each to leave, so a holder's bots depart
-// the session before it does.
-func (a *App) closeSeats() {
-	for _, s := range a.haltSeats() {
+// closeSeats halts every seat, keeping their places or not, and waits for each to
+// leave, so a holder's bots depart the session before it does.
+func (a *App) closeSeats(keep bool) {
+	for _, s := range a.haltSeats(keep) {
 		<-s.done
 	}
 }

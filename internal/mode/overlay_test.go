@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
@@ -83,6 +84,33 @@ func (s *menuSession) AddBot(spec string) error {
 func (s *menuSession) RemoveBot(id uint64) error {
 	s.calls = append(s.calls, fmt.Sprintf("remove %d", id))
 	return nil
+}
+
+// awaySession is a session holding the participants it is given.
+type awaySession struct {
+	menuSession
+	participants []engine.SessionParticipant
+}
+
+func (s *awaySession) Participants() []engine.SessionParticipant { return s.participants }
+
+// TestAnAwayPlayerIsListedAsAway: `:player` and the menu's drop rows tell a player
+// whose cursor waits as a Wraith from one in play.
+func TestAnAwayPlayerIsListedAsAway(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &awaySession{participants: []engine.SessionParticipant{{Slot: 1}, {Slot: 2, Away: true}}}
+	ExecuteCommand(ctx, "player")
+	if got, want := ctx.GetStatusMessage(), "Players: 1 player, 2 player (away)"; !strings.HasPrefix(got, want) {
+		t.Fatalf(":player reads %q, want it to open %q", got, want)
+	}
+	var labels []string
+	for _, o := range participantConfigOptions(ctx) {
+		labels = append(labels, o.label)
+	}
+	if want := []string{"Drop 1: player", "Drop 2: player, away"}; !slices.Equal(labels, want) {
+		t.Fatalf("the menu's drop rows read %q, want %q", labels, want)
+	}
 }
 
 // TestAHeldPressOnTheStatusBarSummonsTheMenu: a left press on the status bar

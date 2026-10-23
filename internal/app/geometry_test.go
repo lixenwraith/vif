@@ -35,7 +35,7 @@ func geometryServer(t *testing.T, w, h int) *App {
 
 func reportGeometry(t *testing.T, a *App, report network.JoinerReport) {
 	t.Helper()
-	offer, err := a.assignParticipant()
+	offer, err := a.assignParticipant(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

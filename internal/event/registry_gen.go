@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 192
+const EventTypeCount = 193
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -121,6 +121,7 @@ func InitRegistry() {
 	RegisterType("EventCursorArmRequest", EventCursorArmRequest, &CursorArmRequestPayload{})
 	RegisterType("EventCursorDespawnRequest", EventCursorDespawnRequest, &CursorDespawnRequestPayload{})
 	RegisterType("EventCursorDespawned", EventCursorDespawned, &CursorDespawnedPayload{})
+	RegisterType("EventCursorWraithRequest", EventCursorWraithRequest, &CursorWraithRequestPayload{})
 	RegisterType("EventCursorMoveRequest", EventCursorMoveRequest, &CursorMoveRequestPayload{})
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
 	RegisterType("EventCursorPredicted", EventCursorPredicted, &CursorMoveRequestPayload{})
@@ -319,6 +320,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventCursorArmRequest:                ClassLocal,
 	EventCursorDespawnRequest:            ClassShared,
 	EventCursorDespawned:                 ClassShared,
+	EventCursorWraithRequest:             ClassShared,
 	EventCursorMoveRequest:               ClassBus,
 	EventCursorMoved:                     ClassShared,
 	EventCursorPredicted:                 ClassLocal,

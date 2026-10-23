@@ -150,10 +150,10 @@ func dropOwned[T any](rows []StoreEntry[T], authored map[core.Entity]bool) []Sto
 }
 
 // RebindCursorRoster rebuilds the roster from the installed cursor store in slot
-// order, restores this instance's control (the handshake identity in a session, the
-// held assignment outside one) and its owner-authored state for cursors it held
-// before and still authors; a joiner in a new slot adopts the host's template.
-// Caller MUST hold updateMutex.
+// order, restores this instance's control (the handshake identity in a session, bar
+// a Wraith, which nobody drives; the held assignment outside one) and its
+// owner-authored state for cursors it held before and still authors; a joiner in a
+// new slot adopts the host's template. Caller MUST hold updateMutex.
 func (w *World) RebindCursorRoster(prior LocalControl) {
 	roster := w.Resources.Player
 	slots := [parameter.MaxPlayers]core.Entity{}
@@ -179,7 +179,7 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 			switch {
 			case localID != 0:
 				c.Control = component.ControlRemote
-				if c.PeerID == localID {
+				if c.PeerID == localID && !w.Components.Wraith.HasEntity(e) {
 					c.Control = component.ControlLocal
 				}
 			case prior.held[slot]:

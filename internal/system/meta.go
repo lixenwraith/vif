@@ -288,17 +288,18 @@ func (s *MetaSystem) setCursorDefeated(entity core.Entity, defeated bool) {
 }
 
 // Shared guards fold owner-authored defeat latches, never stale energy/heat mirrors.
+// A Wraith is out of play, so the players left decide; with none left, nobody lost.
 func (s *MetaSystem) publishDefeatState() {
 	roster := s.world.Resources.Player
-	all := roster.Count() > 0
-	anyDefeated := false
+	playing, all, anyDefeated := false, true, false
 	for i := range parameter.MaxPlayers {
-		if roster.Slot(uint8(i)) != 0 {
+		if e := roster.Slot(uint8(i)); e != 0 && !s.world.Components.Wraith.HasEntity(e) {
+			playing = true
 			all = all && s.defeated[i]
 			anyDefeated = anyDefeated || s.defeated[i]
 		}
 	}
-	s.statAllDefeated.Store(all)
+	s.statAllDefeated.Store(playing && all)
 	s.statAnyDefeated.Store(anyDefeated)
 }
 
@@ -413,7 +414,11 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	for i := range parameter.MaxPlayers {
 		e := s.world.Resources.Player.Slot(uint8(i))
 		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
-			roster = append(roster, engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID, Holder: c.Holder})
+			entry := engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID, Holder: c.Holder, Claim: c.Claim}
+			if w, away := s.world.Components.Wraith.GetComponent(e); away {
+				entry.Wraith, entry.Waited = true, s.world.Resources.Time.GameTime.Sub(w.Since)
+			}
+			roster = append(roster, entry)
 		}
 	}
 	s.world.Resources.Player.PrepareRestore(roster)

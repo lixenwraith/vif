@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -47,6 +48,7 @@ func (a *App) worldRosterLocked() []network.RosterEntry {
 		}
 		out = append(out, network.RosterEntry{
 			ID: network.PeerID(c.PeerID), Slot: uint8(slot), Holder: network.PeerID(c.Holder),
+			Away: w.Components.Wraith.HasEntity(e), Claim: c.Claim,
 		})
 	}
 	slices.SortFunc(out, func(a, b network.RosterEntry) int { return int(a.ID) - int(b.ID) })
@@ -157,7 +159,13 @@ func (i instance) DropAbandonedCursors(roster []network.RosterEntry, local netwo
 	i.a.dropAbandonedCursors(roster, local)
 }
 
-func (i instance) Forked() { i.a.endHostlessHold() }
+// Forked ends a hold the lost host set, and gives up the claim the run was in its
+// session under whatever links it still holds: what a fork plays is not what its
+// player brings back.
+func (i instance) Forked() {
+	i.a.endHostlessHold()
+	i.a.leaveClaim()
+}
 
 func (i instance) SetStatusMessage(msg string, kind parameter.StatusKind) {
 	i.a.ctx.SetStatusMessage(msg, kind)
@@ -285,10 +293,14 @@ func (a *App) openAuthorityLocked(o network.SessionOffer, local network.PeerID) 
 // applyAuthorityChange moves the membership a handoff carries into the places the
 // session reads it from, and switches this instance's role. Nothing is re-derived:
 // roster, slots and anchor are adopted exactly as carried, which is what makes
-// them identical on every survivor.
+// them identical on every survivor. Who is away is ordered by their Wraiths' waits,
+// and a place a dial was taking back is the predecessor's to have finished.
 func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
+	var away []network.PeerID
+	a.world.RunSafe(func() { away = a.awayOrderLocked(rec.Roster) })
 	a.sessionMu.Lock()
 	a.sessionRoster = slices.Clone(rec.Roster)
+	a.awayOrder, a.yielding, a.returning = away, 0, nil
 	a.sessionOffer.Host = rec.Authority
 	a.sessionOffer.Term = rec.Term
 	a.sessionOffer.Anchor = rec.Anchor
@@ -326,6 +338,24 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 // took the term or goes on alone, and either way its game runs again.
 func (a *App) endHostlessHold() {
 	a.world.RunSafe(func() { a.releaseHold("Resumed") })
+}
+
+// awayOrderLocked is who of roster is away, longest first, as their Wraiths wait.
+// Caller MUST hold updateMutex.
+func (a *App) awayOrderLocked(roster []network.RosterEntry) []network.PeerID {
+	since := make(map[network.PeerID]time.Time)
+	var out []network.PeerID
+	for _, p := range roster {
+		if !p.Away || p.Slot == parameter.NoPlayerSlot {
+			continue
+		}
+		if w, ok := a.world.Components.Wraith.GetComponent(a.world.Resources.Player.Slot(p.Slot)); ok {
+			since[p.ID] = w.Since
+			out = append(out, p.ID)
+		}
+	}
+	slices.SortStableFunc(out, func(x, y network.PeerID) int { return since[x].Compare(since[y]) })
+	return out
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

@@ -55,14 +55,19 @@ func identityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
 }
 
 // joinerReport is what this instance tells a coordinator about itself when it
-// accepts an offer: the geometry a dedicated host may size its map from, and the
-// identity that host refuses the join on.
+// accepts an offer: the geometry a dedicated host may size its map from, the
+// identity that host refuses the join on, and the claim it comes back with, with
+// what it brings back when the offer is the place that claim waits under.
 func (a *App) joinerReport() network.JoinerReport {
-	return network.JoinerReport{
+	r := network.JoinerReport{
 		Holder:   a.cfg.holder,
 		Width:    a.ctx.Width,
 		Height:   a.ctx.Height,
 		Identity: a.sessionIdentity(),
 		Listen:   a.reach.DeclaredAddr(),
 	}
+	if c := a.claim.Load(); c != nil {
+		r.Claim, r.Record = network.ClaimDigest(c.Token), c.Record
+	}
+	return r
 }

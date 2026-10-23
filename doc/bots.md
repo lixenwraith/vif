@@ -61,6 +61,9 @@ into the session it joins, and `:leave` takes them out of one with the run.
 - A person who joins at a guest's `-relay` address plays through the guest the
   same way but is not its bot: it holds no holder, is dropped on its own, and
   keeps its slot when the guest leaves.
+- When its holder leaves, a bot's cursor waits as a Wraith with the holder's and
+  goes when the holder's does: after two minutes, or when it is dropped. A holder
+  that comes back seats its bots again, and each takes back its own place.
 - A seated bot belongs to its holder, so it is never elected: succession
   considers only independent participants. A watched or headless bot is one and
   follows `-no-advertise` like any other.
@@ -81,7 +84,7 @@ into the session it joins, and `:leave` takes them out of one with the run.
 | `:bot` | List this run's bots: slot, graph, joining or leaving. |
 | `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a session only they can join. A count of 0 is refused. |
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
-| `:player` | List the slots: `3 player` or `4 bot of 3`. |
+| `:player` | List the slots: `3 player`, `4 bot of 3`, or `5 player (away)` for one who left. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
 
 Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The
@@ -94,10 +97,11 @@ ticking, a solo run waits.
 
 ## Telling cursors apart
 
-Every other cursor is marked with its slot, `0` to `F`; yours is unmarked. The
-status bar's `4P:1` means four cursors, yours in slot 1. `:player` tells players
-from bots and names each bot's holder. Slots identify cursors for this session
-only, and a departed slot may be reused.
+Every other cursor is marked with its slot, `0` to `F`; yours is unmarked. A player
+who left is drawn as its mark alone, in its colour, where it stood, until it is
+dropped two minutes later. The status bar's `4P:1` means four cursors, yours in
+slot 1. `:player` tells players from bots and names each bot's holder. Slots
+identify cursors for this session only, and a dropped player's slot may be reused.
 
 ## Pause, speed and session lifetime
 

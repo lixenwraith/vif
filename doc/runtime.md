@@ -178,7 +178,7 @@ flag that ends a process must not silently do nothing.
 | Flag | Meaning | Zero |
 |---|---|---|
 | `-first-join <d>` | End the run if no guest has connected within `d` of the listener binding. | Wait forever. |
-| `-empty <d>` | End the run `d` after the last guest leaves. Also the window in which a guest that dropped reclaims the slot its departure released. | Stay open. |
+| `-empty <d>` | End the run `d` after the last guest leaves. A guest that dropped leaves when its Wraith is dismissed, two minutes on ([Multi-player §5.4](multi-player.md#54-wraiths)). | Stay open. |
 | `-drain <d>` | On a termination signal, stop admitting and wait up to `d` for the roster to empty before exiting anyway. A second signal exits at once. | Exit at once. |
 
 The policy itself is `internal/lifecycle`: a pure state machine over an injected
@@ -231,9 +231,10 @@ A run whose roster empties stops its clock, and stops it at once. An empty sessi
 has nothing to simulate for, and simulating it anyway is not free: with no cursor
 on the map the gold cycle cannot place a sequence, so it fails, retries a tenth of
 a second later, and fails again for as long as the process runs. It is also what
-makes "a guest that dropped reclaims the slot its departure released" mean
-something — the world it comes back to is the world it left rather than one that
-aged without it.
+keeps the world a returning guest finds the one the session parked rather than one
+that aged without anyone. A Wraith is a guest here: the clock runs while one waits,
+which is what lets its wait run out, and the session parks once the last is
+dismissed.
 
 On an unbounded host, a world nobody reclaimed inside
 `parameter.SessionVacantReset` is replaced once and stays parked over the fresh
@@ -253,8 +254,7 @@ match; expiry then ends the process. Only `-empty=0` permits an in-process reset
 
 A server outlives its guests. Its mid-run gate is installed at construction and
 armed once the scheduler is running, so a participant that dropped can dial back
-into the slot its departure released and receive the world at whatever tick the
-session has reached. `-players` bounds how many cursors the session holds, not how
+and receive the world at whatever tick the session has reached. `-players` bounds how many cursors the session holds, not how
 many dials it will ever accept.
 
 It also outlives its own authority, and that is why `-serve` defaults to

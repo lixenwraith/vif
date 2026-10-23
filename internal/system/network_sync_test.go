@@ -2,7 +2,10 @@ package system
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -166,7 +169,7 @@ func TestLinkLossDoesNotDespawnWhereItIsObserved(t *testing.T) {
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
 	net := NewNetworkSystem(w).(*NetworkSystem)
 
-	net.noticeDeparture(7)
+	net.noticeDeparture(7, false)
 	w.Resources.Event.Queue.Consume()
 	if got := w.Resources.Player.Slot(2); got != remote {
 		t.Fatalf("slot 2 = %d after a link loss, want the cursor to survive until the crossing", got)
@@ -178,6 +181,155 @@ func TestLinkLossDoesNotDespawnWhereItIsObserved(t *testing.T) {
 	net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: 7, Slot: 2}))
 	if got := net.statDuplicates.Load(); got != before+1 {
 		t.Fatalf("duplicate notices counted = %d, want %d", got, before+1)
+	}
+}
+
+// holderWorld is a world holding participant 7's cursor in slot 2 and its bot,
+// participant 8, in slot 3, on an authority whose session layer records each
+// departure it is told of and whether it is final.
+func holderWorld(t *testing.T) (*engine.World, *NetworkSystem, map[uint32]bool) {
+	t.Helper()
+	w, _, _ := testCursorWorld(t)
+	spawnRemoteCursor(t, w, 2, 25, 5, 7)
+	bot := spawnRemoteCursor(t, w, 3, 30, 5, 8)
+	if c, ok := w.Components.Cursor.GetPtr(bot); ok {
+		c.Holder = 7
+	}
+	host, guest := network.NewLoopbackPair(1, 2)
+	t.Cleanup(func() { _ = host.Close(); _ = guest.Close() })
+	w.Resources.Network = engine.NewNetworkResource(host)
+	w.RunSafe(w.LatchSession)
+	finals := map[uint32]bool{}
+	w.Resources.Network.OnDeparture = func(id uint32, final bool) { finals[id] = final }
+	return w, NewNetworkSystem(w).(*NetworkSystem), finals
+}
+
+// departures is every participant departure the queue holds.
+func departures(w *engine.World) (out []event.ParticipantDepartedPayload) {
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.ParticipantDepartedPayload); ok && ev.Type == event.EventParticipantDeparted {
+			out = append(out, *p)
+		}
+	}
+	return out
+}
+
+// TestALinkLossTurnsAHoldersGroupWraithAndADismissalDespawnsIt: one crossing asks
+// the same of a holder's cursor and its bot's, to wait as Wraiths or to go, and
+// tells the session layer which, so a Wraith's identity and slot stay taken.
+func TestALinkLossTurnsAHoldersGroupWraithAndADismissalDespawnsIt(t *testing.T) {
+	for _, dismissed := range []bool{false, true} {
+		w, net, finals := holderWorld(t)
+		net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 7, Slot: 2, Dismissed: dismissed})
+		var asked []string
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.CursorWraithRequestPayload:
+				asked = append(asked, fmt.Sprintf("wraith %d", p.Slot))
+			case *event.CursorDespawnRequestPayload:
+				asked = append(asked, fmt.Sprintf("despawn %d", p.Slot))
+			}
+		}
+		kind := "wraith"
+		if dismissed {
+			kind = "despawn"
+		}
+		if want := []string{kind + " 3", kind + " 2"}; !slices.Equal(asked, want) {
+			t.Fatalf("a departure dismissed %t asked %v, want %v", dismissed, asked, want)
+		}
+		if final, ok := finals[7]; !ok || final != dismissed || finals[8] != dismissed || len(finals) != 2 {
+			t.Fatalf("a departure dismissed %t told the session layer %v", dismissed, finals)
+		}
+	}
+}
+
+// wraithWorld is holderWorld with both cursors turned Wraith at its current game
+// time, which it returns.
+func wraithWorld(t *testing.T) (*engine.World, *NetworkSystem, time.Time) {
+	t.Helper()
+	w, net, _ := holderWorld(t)
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	for _, slot := range []uint8{2, 3} {
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+			Payload: &event.CursorWraithRequestPayload{Slot: slot}})
+	}
+	w.Resources.Event.Queue.Consume()
+	return w, net, w.Resources.Time.GameTime
+}
+
+// TestAWraithIsDroppedOnceItHasWaitedItsTime: the authority dismisses a Wraith
+// WraithTimeout of game time after it turned, once, and a bot whose holder waits
+// too goes in its holder's dismissal rather than one of its own.
+func TestAWraithIsDroppedOnceItHasWaitedItsTime(t *testing.T) {
+	w, net, turned := wraithWorld(t)
+	expire := func(after time.Duration) []event.ParticipantDepartedPayload {
+		w.Resources.Time.GameTime = turned.Add(after)
+		net.expireWraiths()
+		return departures(w)
+	}
+	if got := expire(parameter.WraithTimeout - time.Millisecond); len(got) != 0 {
+		t.Fatalf("Wraiths short of their time were dismissed: %+v", got)
+	}
+	want := event.ParticipantDepartedPayload{Participant: 7, Slot: 2, Dismissed: true}
+	if got := expire(parameter.WraithTimeout); len(got) != 1 || got[0] != want {
+		t.Fatalf("at their time the authority dismissed %+v, want %+v alone", got, want)
+	}
+	if got := expire(2 * parameter.WraithTimeout); len(got) != 0 {
+		t.Fatalf("a dismissal already crossed was crossed again: %+v", got)
+	}
+}
+
+// TestAWraithOnItsWayBackIsNotDropped: a Wraith the session layer is giving back to
+// its participant outlives its time until the arrival takes it back.
+func TestAWraithOnItsWayBackIsNotDropped(t *testing.T) {
+	w, net, turned := wraithWorld(t)
+	back := true
+	w.Resources.Network.WraithKept = func(participant uint32) bool { return back && participant == 7 }
+	w.Resources.Time.GameTime = turned.Add(parameter.WraithTimeout)
+	if net.expireWraiths(); len(departures(w)) != 0 {
+		t.Fatal("a Wraith on its way back was dismissed")
+	}
+	back = false
+	if net.expireWraiths(); len(departures(w)) != 1 {
+		t.Fatal("a Wraith whose return fell through did not go at its time")
+	}
+}
+
+// TestAYieldedWraithIsDroppedAtOnce: the Wraith whose place the session layer gives
+// a newcomer is dismissed without waiting out its time, and only it.
+func TestAYieldedWraithIsDroppedAtOnce(t *testing.T) {
+	w, net, _ := wraithWorld(t)
+	spawnRemoteCursor(t, w, 4, 35, 5, 9)
+	NewCursorSystem(w).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+		Payload: &event.CursorWraithRequestPayload{Slot: 4}})
+	w.Resources.Event.Queue.Consume()
+	yield := uint32(9)
+	w.Resources.Network.DismissWraith = func() uint32 { id := yield; yield = 0; return id }
+	net.expireWraiths()
+	want := event.ParticipantDepartedPayload{Participant: 9, Slot: 4, Dismissed: true}
+	if got := departures(w); len(got) != 1 || got[0] != want {
+		t.Fatalf("a yield dismissed %+v, want %+v alone", got, want)
+	}
+	if net.expireWraiths(); len(departures(w)) != 0 {
+		t.Fatal("a yield was crossed twice")
+	}
+}
+
+// TestANoticeDismissesOnlyASeat: a seat its holder dropped is gone for good on
+// whichever neighbour's word reaches the authority; a player whose link closed is
+// only ever away.
+func TestANoticeDismissesOnlyASeat(t *testing.T) {
+	for _, tc := range []struct {
+		participant uint32
+		slot        uint8
+	}{{8, 3}, {7, 2}} {
+		w, net, _ := holderWorld(t)
+		net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: tc.participant,
+			Slot: tc.slot, Dismissed: true}))
+		want := event.ParticipantDepartedPayload{Participant: tc.participant, Slot: tc.slot, Dismissed: tc.participant == 8}
+		if got := departures(w); len(got) != 1 || got[0] != want {
+			t.Fatalf("a dismissing notice for participant %d crossed %+v, want %+v", tc.participant, got, want)
+		}
 	}
 }
 

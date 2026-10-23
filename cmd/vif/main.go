@@ -357,13 +357,15 @@ func logRuntimeReport(r core.RuntimeReport) {
 // windowByDefault is a vif_gui build's, which opens the window unless -g=false;
 // windowMaximized and windowFullscreen are the state it opens in. pageSettings,
 // in a browser, reads the settings the page kept over the embedded ones and is
-// where the run writes them back, a browser having no vif.toml.
+// where the run writes them back, a browser having no vif.toml; pageClaims is where
+// it keeps the claims its runs come back to their sessions with, across a reload.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
 	windowByDefault                   bool
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) paths.SettingsStore
+	pageClaims                        app.ClaimStore
 )
 
 // buildConfig translates parsed flags into the runtime configuration
@@ -411,7 +413,7 @@ func buildConfig() app.Config {
 	}
 	cfg.Bots, _ = app.BotSpecs(flagSession.bot)
 
-	cfg.Play, cfg.Settings = settings.Play, settingsStore
+	cfg.Play, cfg.Settings, cfg.ClaimStore = settings.Play, settingsStore, pageClaims
 	// -mute either way names both channels for this run; unset, [play] stands
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "mute" {

@@ -4,6 +4,7 @@
 package converge
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/network"
@@ -62,6 +63,29 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 	}
 	if got := leaf.c.role(); got != network.RolePeer {
 		t.Fatalf("the leaf holds role %d, want the peer role", got)
+	}
+}
+
+// TestAnAwayParticipantLeavesTheSelectiveStreamAlone: nothing reaches a participant
+// whose cursor waits as a Wraith, so the authority owes it no answer, and a session
+// it alone could not be answered for keeps the selective stream while it is away.
+func TestAnAwayParticipantLeavesTheSelectiveStreamAlone(t *testing.T) {
+	t.Parallel()
+	host := session(t, 2, [][2]int{{1, 2}})[0]
+	members := append(roster(2), network.RosterEntry{ID: 3, Slot: 2})
+	setRoster := func() {
+		host.world.mu.Lock()
+		host.world.roster = slices.Clone(members)
+		host.world.mu.Unlock()
+	}
+	setRoster()
+	if host.c.canAnswer([]uint32{2}) {
+		t.Fatal("the authority believed a participant it has no path to could be answered")
+	}
+	members[2].Away = true
+	setRoster()
+	if !host.c.canAnswer([]uint32{2}) {
+		t.Fatal("an away participant kept the session on whole bodies")
 	}
 }
 

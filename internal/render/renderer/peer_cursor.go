@@ -12,11 +12,13 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// Peer cursors keep their slot colour and hexadecimal label across instances.
+// Peer cursors keep their slot colour and hexadecimal label across instances. A
+// Wraith is drawn as its label alone, in its slot's colour, at the cell it holds.
 type PeerCursorRenderer struct {
-	gameCtx    *engine.GameContext
-	renderCell peerCursorCellRenderer
-	slots256   []uint8
+	gameCtx      *engine.GameContext
+	renderCell   peerCursorCellRenderer
+	renderWraith peerCursorCellRenderer
+	slots256     []uint8
 }
 
 // peerCursorCellRenderer draws one peer cursor in the colour mode chosen at construction
@@ -41,9 +43,9 @@ func NewPeerCursorRenderer(gameCtx *engine.GameContext) *PeerCursorRenderer {
 				r.slots256 = append(r.slots256, bg)
 			}
 		}
-		r.renderCell = r.cell256
+		r.renderCell, r.renderWraith = r.cell256, r.wraith256
 	} else {
-		r.renderCell = r.cellTrueColor
+		r.renderCell, r.renderWraith = r.cellTrueColor, r.wraithTrueColor
 	}
 	return r
 }
@@ -65,7 +67,11 @@ func (r *PeerCursorRenderer) Render(ctx render.RenderContext, buf *render.Render
 		if roster.IsLocal(e) {
 			return true
 		}
+		draw := r.renderCell
 		pos, ok := world.Positions.GetPosition(e)
+		if wraith, away := world.Components.Wraith.GetComponent(e); away {
+			draw, pos, ok = r.renderWraith, component.PositionComponent{X: wraith.X, Y: wraith.Y}, true
+		}
 		if !ok {
 			return true
 		}
@@ -76,7 +82,7 @@ func (r *PeerCursorRenderer) Render(ctx render.RenderContext, buf *render.Render
 
 		char := rune("0123456789ABCDEF"[c.Slot%16])
 
-		r.renderCell(buf, screenX, screenY, char, c.Slot)
+		draw(buf, screenX, screenY, char, c.Slot)
 		return true
 	})
 }
@@ -88,6 +94,14 @@ func (r *PeerCursorRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, sc
 func (r *PeerCursorRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, char rune, slot uint8) {
 	buf.SetWithBg(screenX, screenY, char, visual.RgbPeerCursorText, visual.RgbBlack)
 	buf.SetBg256(screenX, screenY, r.slots256[int(slot)%len(r.slots256)])
+}
+
+func (r *PeerCursorRenderer) wraithTrueColor(buf *render.RenderBuffer, screenX, screenY int, char rune, slot uint8) {
+	buf.SetFgOnly(screenX, screenY, char, peerCursorColor(slot), terminal.AttrNone)
+}
+
+func (r *PeerCursorRenderer) wraith256(buf *render.RenderBuffer, screenX, screenY int, char rune, slot uint8) {
+	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: r.slots256[int(slot)%len(r.slots256)]}, terminal.AttrFg256)
 }
 
 // peerCursorColor is one roster slot's colour, wrapped so a slot beyond the

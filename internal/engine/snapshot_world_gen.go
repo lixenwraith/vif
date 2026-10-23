@@ -42,6 +42,7 @@ type SharedWorldState struct {
 	Sigil        []StoreEntry[component.SigilComponent]        `json:"sigil,omitempty"`
 	Nugget       []StoreEntry[component.NuggetComponent]       `json:"nugget,omitempty"`
 	Cursor       []StoreEntry[component.CursorComponent]       `json:"cursor,omitempty"`
+	Wraith       []StoreEntry[component.WraithComponent]       `json:"wraith,omitempty"`
 	Protection   []StoreEntry[component.ProtectionComponent]   `json:"protection,omitempty"`
 	Kinetic      []StoreEntry[component.KineticComponent]      `json:"kinetic,omitempty"`
 	Wall         []StoreEntry[component.WallComponent]         `json:"wall,omitempty"`
@@ -110,6 +111,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 	s.Sigil = captureRows(w.Components.Sigil.dense, w.Components.Sigil.entities, core.DomainShared)
 	s.Nugget = captureRows(w.Components.Nugget.dense, w.Components.Nugget.entities, core.DomainShared)
 	s.Cursor = captureRows(w.Components.Cursor.dense, w.Components.Cursor.entities, core.DomainShared)
+	s.Wraith = captureRows(w.Components.Wraith.dense, w.Components.Wraith.entities, core.DomainShared)
 	s.Protection = captureRows(w.Components.Protection.dense, w.Components.Protection.entities, core.DomainShared)
 	s.Kinetic = captureRows(w.Components.Kinetic.dense, w.Components.Kinetic.entities, core.DomainShared)
 	s.Wall = captureRows(w.Components.Wall.dense, w.Components.Wall.entities, core.DomainShared)
@@ -184,6 +186,9 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	}
 	for _, en := range s.Cursor {
 		w.Components.Cursor.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
+	for _, en := range s.Wraith {
+		w.Components.Wraith.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Protection {
 		w.Components.Protection.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
@@ -470,6 +475,7 @@ type WorldOrder struct {
 	Sigil        []core.Entity `json:"sigil,omitempty"`
 	Nugget       []core.Entity `json:"nugget,omitempty"`
 	Cursor       []core.Entity `json:"cursor,omitempty"`
+	Wraith       []core.Entity `json:"wraith,omitempty"`
 	Protection   []core.Entity `json:"protection,omitempty"`
 	Kinetic      []core.Entity `json:"kinetic,omitempty"`
 	Wall         []core.Entity `json:"wall,omitempty"`
@@ -530,6 +536,7 @@ func (w *World) CaptureOrder() WorldOrder {
 	o.Sigil = orderOf(w.Components.Sigil.entities)
 	o.Nugget = orderOf(w.Components.Nugget.entities)
 	o.Cursor = orderOf(w.Components.Cursor.entities)
+	o.Wraith = orderOf(w.Components.Wraith.entities)
 	o.Protection = orderOf(w.Components.Protection.entities)
 	o.Kinetic = orderOf(w.Components.Kinetic.entities)
 	o.Wall = orderOf(w.Components.Wall.entities)
@@ -602,6 +609,9 @@ func (w *World) InstallOrder(o WorldOrder) error {
 	}
 	if err := reorderStore(w.Components.Cursor, o.Cursor); err != nil {
 		return fmt.Errorf("cursor: %w", err)
+	}
+	if err := reorderStore(w.Components.Wraith, o.Wraith); err != nil {
+		return fmt.Errorf("wraith: %w", err)
 	}
 	if err := reorderStore(w.Components.Protection, o.Protection); err != nil {
 		return fmt.Errorf("protection: %w", err)
@@ -771,6 +781,7 @@ type SharedWorldDelta struct {
 	Sigil        StoreDelta[component.SigilComponent]        `json:"sigil,omitzero"`
 	Nugget       StoreDelta[component.NuggetComponent]       `json:"nugget,omitzero"`
 	Cursor       StoreDelta[component.CursorComponent]       `json:"cursor,omitzero"`
+	Wraith       StoreDelta[component.WraithComponent]       `json:"wraith,omitzero"`
 	Protection   StoreDelta[component.ProtectionComponent]   `json:"protection,omitzero"`
 	Kinetic      StoreDelta[component.KineticComponent]      `json:"kinetic,omitzero"`
 	Wall         StoreDelta[component.WallComponent]         `json:"wall,omitzero"`
@@ -836,6 +847,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Sigil = diffStore(base.Sigil, next.Sigil, equalSigil)
 	d.Nugget = diffStore(base.Nugget, next.Nugget, equalNugget)
 	d.Cursor = diffStore(base.Cursor, next.Cursor, equalCursor)
+	d.Wraith = diffStore(base.Wraith, next.Wraith, equalWraith)
 	d.Protection = diffStore(base.Protection, next.Protection, equalProtection)
 	d.Kinetic = diffStore(base.Kinetic, next.Kinetic, equalKinetic)
 	d.Wall = diffStore(base.Wall, next.Wall, equalWall)
@@ -897,6 +909,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Sigil = applyStore(base.Sigil, d.Sigil)
 	s.Nugget = applyStore(base.Nugget, d.Nugget)
 	s.Cursor = applyStore(base.Cursor, d.Cursor)
+	s.Wraith = applyStore(base.Wraith, d.Wraith)
 	s.Protection = applyStore(base.Protection, d.Protection)
 	s.Kinetic = applyStore(base.Kinetic, d.Kinetic)
 	s.Wall = applyStore(base.Wall, d.Wall)
@@ -957,6 +970,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Sigil.Entries()
 	n += d.Nugget.Entries()
 	n += d.Cursor.Entries()
+	n += d.Wraith.Entries()
 	n += d.Protection.Entries()
 	n += d.Kinetic.Entries()
 	n += d.Wall.Entries()
@@ -1020,6 +1034,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Sigil, b.Sigil, touched, equalSigil)
 	w.Entries += countStoreDifference(a.Nugget, b.Nugget, touched, equalNugget)
 	w.Entries += countStoreDifference(a.Cursor, b.Cursor, touched, equalCursor)
+	w.Entries += countStoreDifference(a.Wraith, b.Wraith, touched, equalWraith)
 	w.Entries += countStoreDifference(a.Protection, b.Protection, touched, equalProtection)
 	w.Entries += countStoreDifference(a.Kinetic, b.Kinetic, touched, equalKinetic)
 	w.Entries += countStoreDifference(a.Wall, b.Wall, touched, equalWall)
@@ -1112,6 +1127,9 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 		target[en.Entity] = struct{}{}
 	}
 	for _, en := range s.Cursor {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Wraith {
 		target[en.Entity] = struct{}{}
 	}
 	for _, en := range s.Protection {
@@ -1283,6 +1301,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Sigil, s.Sigil)
 	reconcileStore(w.Components.Nugget, s.Nugget)
 	reconcileStore(w.Components.Cursor, s.Cursor)
+	reconcileStore(w.Components.Wraith, s.Wraith)
 	reconcileStore(w.Components.Protection, s.Protection)
 	reconcileStore(w.Components.Kinetic, s.Kinetic)
 	reconcileStore(w.Components.Wall, s.Wall)
@@ -1385,6 +1404,10 @@ func equalNugget(a, b *component.NuggetComponent) bool {
 }
 
 func equalCursor(a, b *component.CursorComponent) bool {
+	return *a == *b
+}
+
+func equalWraith(a, b *component.WraithComponent) bool {
 	return *a == *b
 }
 

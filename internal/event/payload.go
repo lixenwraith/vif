@@ -1,6 +1,7 @@
 package event
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -130,10 +131,14 @@ type NetworkConnectPayload struct {
 // takes. Like a departure it is a crossing rather than a local reaction: a joiner is
 // admitted by one instance, and every other has to add the cursor at the same tick or
 // their shared entity creation order diverges (D-11).
+// Claim is the digest the cursor carries for its participant's return; Record is
+// what a participant coming back to its Wraith brings of the game it left.
 type ParticipantJoinedPayload struct {
-	Holder      uint32 `toml:"holder"`
-	Participant uint32 `toml:"participant"`
-	Slot        uint8  `toml:"slot"`
+	Record      *CursorRecord `toml:"record"`
+	Claim       string        `toml:"claim,omitempty"`
+	Holder      uint32        `toml:"holder"`
+	Participant uint32        `toml:"participant"`
+	Slot        uint8         `toml:"slot"`
 }
 
 // ParticipantDepartedPayload names the roster slot a departed participant held. It
@@ -142,6 +147,9 @@ type ParticipantJoinedPayload struct {
 // removal has to travel as an artifact with an apply tick, like any other outcome
 // every instance must reach together.
 type ParticipantDepartedPayload struct {
+	// Dismissed removes the cursor for good, as the host's drop, a holder's seat drop
+	// and an expired or yielded Wraith do. Any other departure turns the cursor
+	// Wraith, to wait for the participant's return.
 	Dismissed   bool   `toml:"dismissed"`
 	Participant uint32 `toml:"participant"`
 	Slot        uint8  `toml:"slot"`
@@ -741,19 +749,37 @@ type CursorStatePayload struct {
 	BlinkActive  bool  `toml:"blink_active"`
 }
 
+// Record is the part of an owner's sync its player brings back to its Wraith.
+func (p *CursorStatePayload) Record() CursorRecord {
+	return CursorRecord{Charges: slices.Clone(p.WeaponCharges), Energy: p.Energy, Heat: p.Heat, HitPoints: p.HitPoints}
+}
+
 // CursorSpawnRequestPayload asks for a cursor entity
-// Center overrides X/Y; Auto overrides Slot with the lowest free index
+// Center overrides X/Y; Auto overrides Slot with the lowest free index. A request
+// for a slot its participant's own Wraith holds takes the Wraith back, at its cell
+// and with Record over the template.
 type CursorSpawnRequestPayload struct {
-	Holder  uint32 `toml:"holder"`
-	X       int    `toml:"x"`
-	Y       int    `toml:"y"`
-	Heat    int    `toml:"heat"`
-	Energy  int    `toml:"energy"`
-	Slot    uint8  `toml:"slot"`
-	Control uint8  `toml:"control"` // component.ControlKind
-	PeerID  uint32 `toml:"peer_id"` // Remote owner when Control is ControlRemote
-	Auto    bool   `toml:"auto"`
-	Center  bool   `toml:"center"`
+	Record  *CursorRecord `toml:"record"`
+	Claim   string        `toml:"claim,omitempty"` // digest of the token its participant returns with
+	Holder  uint32        `toml:"holder"`
+	X       int           `toml:"x"`
+	Y       int           `toml:"y"`
+	Heat    int           `toml:"heat"`
+	Energy  int           `toml:"energy"`
+	Slot    uint8         `toml:"slot"`
+	Control uint8         `toml:"control"` // component.ControlKind
+	PeerID  uint32        `toml:"peer_id"` // Remote owner when Control is ControlRemote
+	Auto    bool          `toml:"auto"`
+	Center  bool          `toml:"center"`
+}
+
+// CursorRecord is what a player brings back to its Wraith of the game it left: the
+// energy, heat, health and loadout its cursor last synced there.
+type CursorRecord struct {
+	Charges   []int `toml:"charges" json:"charges,omitempty"`
+	Energy    int64 `toml:"energy" json:"energy"`
+	Heat      int   `toml:"heat" json:"heat"`
+	HitPoints int   `toml:"hit_points" json:"hit_points"`
 }
 
 // CursorArmRequestPayload sets heat, energy and the ember on the cursor this instance
@@ -782,10 +808,17 @@ type CursorDespawnRequestPayload struct {
 	All    bool        `toml:"all"`
 }
 
-// CursorDespawnedPayload announces a destroyed cursor
+// CursorDespawnedPayload announces a cursor leaving play. A Wraith keeps its entity,
+// so Entity names a destroyed cursor or one that holds nothing but its slot.
 type CursorDespawnedPayload struct {
 	Entity core.Entity `toml:"entity"`
 	Slot   uint8       `toml:"slot"`
+}
+
+// CursorWraithRequestPayload names the slot whose cursor turns Wraith: its
+// participant left, and the cursor waits where it stood for it to come back.
+type CursorWraithRequestPayload struct {
+	Slot uint8 `toml:"slot"`
 }
 
 // CursorMoveRequestPayload asks for an absolute placement of an explicitly named cursor;
