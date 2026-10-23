@@ -15,7 +15,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
-	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
 )
 
@@ -420,12 +419,9 @@ func (a *App) openSessionLocked() error {
 	// journal records the write as it records a join's, and a replay makes it.
 	journal := a.world.Resources.Event.Queue.Journal()
 	place, mark := a.Position(), journal.Mark()
-	var before snapshot.SharedCapture
-	if journal != nil {
-		var err error
-		if before, err = a.captureSharedLocked(); err != nil {
-			return fmt.Errorf("host: %w", err)
-		}
+	before, err := a.captureSharedLocked()
+	if err != nil {
+		return fmt.Errorf("host: %w", err)
 	}
 
 	// A run goes on under the identity it already has: what the session it left
@@ -482,14 +478,20 @@ func (a *App) openSessionLocked() error {
 	// no peer is connected — publish returns on an empty roster — so a host waiting
 	// alone pays a ticker and no world reads.
 	a.corrections.StartPump()
-	if journal != nil {
-		after, err := a.captureSharedLocked()
-		if err == nil {
-			err = a.journalWritten(journal, place, mark, a.world.LocalParticipant(), a.barrierLocked(), before, after)
-		}
-		if err != nil {
-			a.journalLostLocked(journal, err)
-		}
+
+	// The run takes its write as an install takes it, journal or not, so what an
+	// install derives from the world it writes (the spatial gauges, what carriers
+	// publish as they load) stands here as it does on the replay that installs it.
+	after, err := a.captureSharedLocked()
+	if err == nil {
+		_, err = a.writeSharedLocked(after, &before, true, false)
+	}
+	if err == nil && journal != nil {
+		err = a.journalWritten(journal, place, mark, a.world.LocalParticipant(), a.barrierLocked(), before, after)
+	}
+	if err != nil {
+		a.log.Error("session", "msg", "opened session not taken as written", "error", err.Error())
+		a.journalLostLocked(journal, err)
 	}
 
 	a.log.Info("session", "msg", "session opened", "tick", a.Position().Tick)
