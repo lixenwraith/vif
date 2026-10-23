@@ -200,17 +200,6 @@ registry deriving the grids to keep from the live navigators, so a data-driven
 species' footprint costs one row. A 2×2 coarse field is not planned: it changes
 the answer, and the shared grid already took the cost it would have saved.
 
-### Tighten the per-address budgets
-
-- Priority: P2
-- Affected files: `deploy/guest/vif-allocator.env`, `tool/vif-allocator`
-
-The allocator budgets each player address 6 joins a minute over both proxied
-routes and 4 creations per `-first-join` window, loose while one address carries
-several test clients; the target is one of each. One NAT is one address, so loosen
-joins before creations if households report refusals, and key IPv6 on its /64
-first.
-
 ### Budget a fleet pod's joins per player
 
 - Priority: P3
