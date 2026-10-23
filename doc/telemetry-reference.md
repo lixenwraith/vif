@@ -122,7 +122,7 @@ These owners describe this instance's place in a session. The `NetworkSystem` ro
 |---|---|---|---|---|---|
 | Connection | `network.{peers,connected,state,map_latched}`, `context.map_locked` | `NewNetworkSystem` (`map_locked` by the game context) | `publishConnectionTelemetry` every poll | `Init`; `state` rests at `off`. `MetaSystem.handleGameReset` republishes `map_locked` | Status bar: `state`. `:session`: `peers`, `map_latched` |
 | Barrier and crossings | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,corrections_received,join_lag_ticks,lag_ticks,stale}`, `network.barrier_{deferred,applied_local,applied_peer,late,delay_ticks,ran_without_peer,peer_lag_ticks,peer_artifacts,peer_applied}`, `network.artifacts_{refused,refused_tick,schedule_full,pre_install,authority_superseded,restored}`, `network.commit_{late,void,refused_raw}` | `NewNetworkSystem` | Transport polling, admission, playout, commit and the per-tick lag measurement; `join_lag_ticks` once a join catches up | `Init` | Status bar: `stale`, `lag_ticks` |
-| Relay and transport | `network.{relay_forwarded,relay_duplicates,transport_lost_in,transport_lost_out}` | `NewNetworkSystem` | Flood relay of artifacts, corrections and departures; `publishTransportLoss` | `Init` | Generic only |
+| Relay and transport | `network.{relay_forwarded,relay_duplicates,relay_refused,transport_lost_in,transport_lost_out}` | `NewNetworkSystem` | Flood relay of artifacts, corrections and departures; raw artifacts a run does not carry; `publishTransportLoss` | `Init` | Generic only |
 | Parity | `network.{digest_mismatches,drift_part,drift_tick}` | `NewNetworkSystem` | Runtime digest comparison | `Init` | Generic only |
 | Link measurement | `network.link_{rtt_ms,jitter_ms,bps,loss_pct,peer,saturated}` | `NewNetworkSystem` | `publishLinkMeasurement` every tick, copied from the transport's per-peer estimate | `Init` | Status bar: `link_rtt_ms`, `link_loss_pct`. `:session`: all but `link_saturated` |
 | Pacing | `network.pace_{late_ticks,trim_permille,steps}` | `NewNetworkSystem` | Guest tick pacing against authority epochs | `Init` | Generic only |
@@ -252,6 +252,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.corrections_received` (int) | Authoritative corrections reassembled from the wire |
 | `network.relay_forwarded` (int) | Artifact batches and correction chunks this instance passed down to the participants behind it, and departure notices it flooded |
 | `network.relay_duplicates` (int) | Epochs, syncs and chunks already admitted arriving again, and crossing sequences already taken, whatever epoch carried them |
+| `network.relay_refused` (int) | On a guest: raw epochs and syncs dropped from a participant it does not carry, one that neither joined through it nor is behind it while its player does not relay for others (`:relay`) |
 | `network.transport_lost_in`, `network.transport_lost_out` (int) | Inbound notifications a full poll buffer discarded, and outbound frames a peer's send queue refused. A new loss is also logged |
 | `network.digest_mismatches` (int) | Runtime parity samples that disagreed. A gauge under weakened D-11, not a fault |
 | `network.drift_part` (string), `network.drift_tick` (int) | The first surface, in this order, that differed at the last disagreement: positions, kinetics, combat, context, status or snapshot, or `combined` when only the whole hash did. Then its tick |
@@ -263,16 +264,16 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.pace_trim_permille`, `network.pace_steps` (int) | The trim pacing applies to the tick interval (positive runs slower), and whole-tick steps taken for an error too large to trim |
 | `network.term` (int) | The authority term this instance acts under. An artifact from an older term is ignored; one from a term nobody handed this instance is refused |
 | `network.authority` (int) | The participant authoring the shared world |
-| `network.migrations` (int) | Handoffs this instance took part in, as successor or follower |
+| `network.migrations` (int) | Handoffs this instance took part in, as the candidate that took the term or a follower |
 | `network.term_refused` (int) | Artifacts naming a term nobody handed this instance: a fork, or an instance that skipped a succession |
 | `network.term_stale` (int) | Artifacts from a term the session has left. Non-zero across every handoff and not an error |
 | `network.handoff_bytes` (int) | Bytes of succession frames this instance received and drained: loss reports, handoff records and peer lists |
-| `network.fork` (bool) | A succession ended with no handoff, because no successor was reachable or the session pinned its authority, and this instance continues as an explicit local fork. An adopted handoff clears it, as does a session the run opens, which a person's run does at once (`App.forked`) |
+| `network.fork` (bool) | A succession ended with no handoff, because no candidate answered, the run lost its path to its authority, or the session pinned its authority, and this instance continues as an explicit local fork. An adopted handoff clears it, as does a session the run opens, which a person's run does at once (`App.forked`) |
 | `network.migrating` (bool) | A succession is open, or a handoff was adopted less than `NetworkMigrationBadgeTicks` ago. The status bar shows `Migrating`, with `rejoin_attempts` when non-zero, over `Host lost`. Dials are refused while the succession is open (`Authority.Migrating`), not for the tail |
 | `network.host_lost` (bool) | The authority went and this instance continues from the last authoritative state: a guest lost its link to the authority, or a succession ended as a fork. An adopted handoff clears it, as does a session the run opens. It outranks every badge but `Migrating` (`Host lost`), and `:session` names it |
 | `network.evicted` (int) | Participants this authority dropped, under the slow policy or for exceeding the ingress byte budget |
-| `network.chain` (int) | Participants in the succession chain. `:session` reports it as "confirmed reachable". A participant that declared no port plays, and is elected only when the chain names no survivor ([Multiplayer](multi-player.md) §5.3) |
-| `network.rejoin_attempts` (int) | Passes down the chain, while a succession is contested, that found no link to any successor |
+| `network.chain` (int) | Participants in the succession chain. `:session` reports it as "confirmed reachable". A participant that declared no port plays, and is never a candidate ([Multiplayer](multi-player.md) §5.3) |
+| `network.rejoin_attempts` (int) | Passes down the succession list, one a second, while this instance walks it or has no path to its authority |
 | `network.listening` (bool) | This instance bound a port peers can dial back. False on a leaf: a `-no-advertise` run, or one whose bind failed |
 
 ### Snapshot and correction

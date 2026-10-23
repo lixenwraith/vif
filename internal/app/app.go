@@ -49,10 +49,10 @@ type restartRequest struct {
 	Host string
 
 	// Rejoin says the next run follows this session rather than leads it, and Join
-	// where to dial when the command line's address is not where the session is
-	// now — succession moves the door. Join alone is a :join target, which dialled
-	// holds already admitted. With neither the next run is solo, which is what an
-	// authority with an empty roster has actually become.
+	// where to dial now that succession moved the door. Join alone is a :join target
+	// that dialled holds already admitted; dialled alone is this run's own door,
+	// redialled once its host went. With none the next run is solo, which is what an
+	// authority with an empty roster has become.
 	Rejoin  bool
 	Join    string
 	dialled *joinDial
@@ -468,6 +468,7 @@ func (a *App) applyPlay() {
 	a.ctx.MouseFreeMode.Store(p.FollowMouse)
 	a.ctx.MouseDisabled.Store(!p.Mouse)
 	a.ctx.OverlayHUD.Store(p.HUD)
+	a.ctx.Relaying.Store(p.Relay)
 }
 
 // livePlay is the run's [play] as it stands: what the next run starts from and
@@ -478,6 +479,7 @@ func (a *App) livePlay() paths.Play {
 	p.Mouse = !a.ctx.MouseDisabled.Load()
 	p.FollowMouse = a.ctx.MouseFreeMode.Load()
 	p.HUD = a.ctx.OverlayHUD.Load()
+	p.Relay = a.ctx.Relaying.Load()
 	a.audioPlay(&p)
 	return p
 }

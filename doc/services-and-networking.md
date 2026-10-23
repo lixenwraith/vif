@@ -593,37 +593,35 @@ a split brain to report rather than a fast successor to follow.
 
 | Message | Payload | Sent by |
 |---|---|---|
-| `MsgAuthorityReport` (0x2C) | term, sender, the participant lost | every survivor, flooded once |
-| `MsgAuthorityHandoff` (0x2E) | term, authority, predecessor, the roster, the anchor, the succession chain without the predecessor, and the newest tick the successor retains | the designated successor, before it publishes anything |
+| `MsgAuthorityReport` (0x2C) | term, sender, the participant lost, and the link it follows its host through | every survivor, flooded once: a notice at the lost term, a membership report at the term it joined |
+| `MsgAuthorityHandoff` (0x2E) | term, authority, predecessor, the roster, the anchor, the succession chain without the predecessor, and the newest tick the host retains | the candidate whose turn came, before it publishes anything |
 
 Both are flooded and deduplicated by content rather than by a hop count: a report
-says one thing once and a handoff is adopted once. The report carries no election
-input, because the election has none — it carries the *news*, which is load-bearing
-on its own: the departure crossing that would have said the authority is gone has
-exactly one producer and that producer is what went, so a participant two links away
-learns of the loss here or not at all. The successor's first act under the new term
-is to cross that departure itself. The report is also how the successor knows its
-group is in: it resumes once every survivor's has reached it
-([Multiplayer](multi-player.md#51-succession) §5.1), so a survivor that adopts the
-record first sends one then, and one already adopted still forwards a late one.
+says one thing once and a handoff is adopted once; a survivor forwards a record only
+to the links it carries. A notice carries no election input, because the election
+has none — it carries the *news*, which is load-bearing on its own: the departure
+crossing that would have said the authority is gone has exactly one producer and
+that producer is what went, so a participant two links away learns of the loss here
+or not at all. The host's first act under its term is to cross that departure
+itself. A membership report is how the host counts its group: it resumes once every
+survivor's has reached it ([Multiplayer](multi-player.md#51-succession) §5.1), and a
+survivor that follows it through a relay names that relay, which carries it from
+then on.
 
-There is no vote. `network.DesignatedSuccessor` names the first surviving
-participant in the succession chain that holds its own seat (a bot's seat has a
-holder), else the lowest such ID on the roster. Every survivor computes it from
-state it already holds, so at most one instance can conclude that it is the
-successor and at most one can claim the term, without a round trip. A quorum could
-not supply that here anyway: in a session of two the one survivor is half the
-closed roster, so a rule requiring a strict majority elects nobody. The successor's
-one self-check is retention, because an instance with nothing retained has no
-baseline for a delta to name; a receiver's check is that the record names the
-successor its own roster designates.
-
-Every survivor freezes its clock when it sees the loss, so the wait runs on the wall:
-a survivor that hears no record within `parameter.NetworkSuccessionWindow` (5 s)
-cannot reach the successor, continues locally, and says so. A session opened under
-`-authority host` (the default for `-serve`) or `:host <addr> host` pins its
-authority: the loss is still flooded, but every survivor continues locally at once
-rather than waiting for a record that is not coming.
+There is no vote. `network.SuccessionCandidates` lists the chain's participants in
+join order, less the one lost, one away and a bot, and candidate *k* takes the lost
+term plus *k* once *k − 1* windows of `parameter.NetworkSuccessionWindow` (5 s on
+the wall, since the session stands frozen) passed. Every survivor reads the list
+from state it already holds, so no two candidates claim one term, without a round
+trip. A quorum could not supply that here anyway: in a session of two the one
+survivor is half the closed roster, so a rule requiring a strict majority elects
+nobody. A host's one self-check is retention, because an instance with nothing
+retained has no baseline for a delta to name; a receiver's check is that the record
+names the candidate its own list puts at that term, and that it replaces the host
+this receiver followed. A survivor whose turn passes and to which no record came
+continues locally, and says so. A session opened under `-authority host` (the
+default for `-serve`) or `:host <addr> host` pins its authority: the loss is still
+flooded, and every survivor continues locally once its redial of the host ends.
 
 The closed roster the succession counts against is read from the *world* rather
 than from the offer that admitted this instance: a mid-run joiner is offered the
@@ -728,7 +726,7 @@ under an authoritative host a guest is *expected* to disagree between correction
 The digest does not flood, select an authority, repair state, or cross a partition;
 what repairs a disagreement is the next correction. Losing the comparison edge is
 still reported directly. A guest that loses the authority runs the succession (§8);
-one that cannot reach a successor goes on from the last authoritative state, a
+one that reaches no candidate goes on from the last authoritative state, a
 person's run in a session of its own and any other as a local fork that keeps
 `Host lost` visible.
 
@@ -837,24 +835,24 @@ immediately.
 What the operator surface does not cover:
 
 - `-join` dials one address, and beyond it a participant opens only a link to
-  the current successor (multi-player.md §5.3), so the links a shipped binary
+  the first candidate (multi-player.md §5.3), so the links a shipped binary
   builds are a star and a successor chain even though the relay makes any graph
   work. Per-peer correction cadence follows the same shape: it is a property of a
   direct link, and a participant reached by relay rides its neighbour's schedule
   for *corrections* while being answered by that neighbour's retention for
   *repairs*. It is also what the succession rule is shaped around: a star's leaves
-  reach nobody but the successor once its centre goes, so the successor has to be
-  a function of the roster rather than of a vote;
+  reach nobody but the candidates once its centre goes, so who hosts has to be a
+  function of the chain rather than of a vote;
 - a partition has no digest edge between its components;
 - live pause/speed/step are refused, because a suspended participant has no way
   back into the running session; a coordinator whose only links are its own bot
   seats may still pause;
 - no lag compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
-- host loss hands the term to the designated successor (§8), and every survivor
-  that cannot reach it, or every survivor when the session pinned its authority,
-  goes on apart: a person's run in a session of its own that keeps every place, a
-  script or bot as an explicit independent local fork. Losing the successor in
+- host loss hands the term down the succession list (§8), and every survivor
+  that reaches no candidate, or every survivor when the session pinned its
+  authority, goes on apart: a person's run in a session of its own that keeps every
+  place, a script or bot as an explicit independent local fork. Losing the host in
   turn runs the next succession among those still linked. Partition merging is
   not built, and refusing to merge is what happens instead: a fork that meets a
   higher term refuses it and reports it;
@@ -915,23 +913,25 @@ all of them and recovery when the qdisc is removed. It is opt-in behind
 on the machine.
 
 The authority term and the succession have their own set, and it is split the same
-way for the same reason. The succession rule is a pure function of the roster, the
-participant lost and the chain, so `TestTheSuccessionOrderIsTheOrderTheRuleElects`,
-`TestTheSuccessorIsTheRostersLowestSurvivor`,
-`TestOnlyTheDesignatedSuccessorMayHoldATerm` and `TestAPinnedAuthorityDoesNotMove`
-take it apart directly. The whole handoff is driven over the in-process mesh, where
-a topology that is not a star can be expressed —
-`TestTheFirstGuestSucceedsAHostThatLeaves`,
+way for the same reason. The list is a function of the roster, the participant lost
+and the chain, so `TestSuccessionReadsTheChain`, `TestEachCandidateTakesItsOwnTerm`
+and `TestAPinnedAuthorityDoesNotMove` take it apart directly, and the walk —
+`TestTheWalkWaitsOnARedial`, `TestTheWalkDialsEachCandidateInTurn`,
+`TestTheWalkGoesDownTheList`, `TestASurvivorCarriesOnlyWhomItRelaysFor` and
+`TestACutOffParticipantGoesOnAlone` — runs on the converge fixture. The whole
+handoff is driven over the in-process mesh, where a topology that is not a star can
+be expressed — `TestTheFirstGuestSucceedsAHostThatLeaves`,
 `TestSuccessionElectsOneParticipantOnEverySurvivor`,
 `TestSuccessionSkipsALeaf`,
 `TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor`,
-`TestAnUnreachableSuccessorLeavesTheRestForking`,
+`TestAGuestNoCandidateReachesForks`,
 `TestMembershipIsByteIdenticalAcrossAHandoff`,
 `TestTheFirstCorrectionAfterAHandoffIsHashOnly` and
 `TestMeshParityAcrossAHandoff`. The wire gate and the refusals are
 `TestTheTermGateRefusesWhatNobodyHandedThisInstance` and
-`TestASecondHandoffForOneTermIsRefused`; the admission half is
-`TestAJoinerDiallingMidHandoffIsRefused`, over a real socket.
+`TestASurvivorFollowsOneRecordPerLoss`; the admission half is
+`TestAJoinerDiallingMidHandoffIsRefused`, and the redial
+`TestAGuestWhoseLinkDroppedRedialsItsPlace`, over a real socket.
 
 The relay role's are `TestARelayedParticipantKeepsTheSelectiveStream`,
 `TestARelayedAnswerProvesTheAuthoritysRoot`, `TestARelayThatDroppedTheManifestSaysSo`

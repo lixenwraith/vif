@@ -8,10 +8,9 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 )
 
-// TestSuccessionSkipsALeaf is what the chain buys the election: the roster's
-// lowest survivor declared no port, so no survivor could dial it, and under the
-// roster rule alone it would take the term and author alone. The chain travels in
-// the offer, so every survivor skips it and elects the same next candidate.
+// TestSuccessionSkipsALeaf is what the chain buys the election: a survivor that
+// declared no port is no candidate, since nobody could dial it. The chain travels in
+// the offer, so every survivor skips it and follows the same candidate.
 func TestSuccessionSkipsALeaf(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}}, 3)
@@ -29,7 +28,7 @@ func TestSuccessionSkipsALeaf(t *testing.T) {
 	}
 	for i, a := range survivors {
 		if got := authorityOf(a).Authority; got != 3 {
-			t.Fatalf("participant %d elected %d, want the first survivor in the chain",
+			t.Fatalf("participant %d follows %d, want the chain's first candidate",
 				i+2, got)
 		}
 	}

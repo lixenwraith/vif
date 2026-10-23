@@ -72,9 +72,9 @@ func primeRetention(t *testing.T, apps []*App) {
 
 // TestSuccessionElectsOneParticipantOnEverySurvivor is the migration criterion.
 //
-// The successor has to be a function of the closed roster and the survivor set
-// rather than of who noticed the loss first, or two survivors would adopt two
-// different authorities and the session would have forked while appearing not to.
+// The successor has to be a function of the chain and who went rather than of who
+// noticed the loss first, or two survivors would adopt two different authorities
+// and the session would have forked while appearing not to.
 func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
@@ -103,11 +103,10 @@ func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 			t.Fatalf("participant %d entered term %d, want exactly one increment",
 				i+2, got.Term)
 		}
-		// The roster-lowest survivor, not the first to notice. Both survivors are
-		// linked to each other and to nothing else, so both are eligible and the
-		// tie is broken by the roster.
+		// The chain's first candidate, not the first to notice: both survivors
+		// read the same list.
 		if got.Authority != 2 {
-			t.Fatalf("participant %d elected participant %d, want the roster-lowest survivor",
+			t.Fatalf("participant %d elected participant %d, want the first candidate",
 				i+2, got.Authority)
 		}
 		if got.Fork {
@@ -121,7 +120,7 @@ func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 		t.Fatalf("participant 2 counted %d handoffs, want exactly one", got)
 	}
 	if !survivors[0].authority.State().Authoring() {
-		t.Fatal("the elected successor does not consider itself the authority")
+		t.Fatal("the first candidate does not consider itself the authority")
 	}
 	if survivors[1].authority.State().Authoring() {
 		t.Fatal("a participant that was not elected considers itself the authority")
@@ -162,82 +161,6 @@ func TestASessionStandsStillWhileItsHostChanges(t *testing.T) {
 	}
 }
 
-// TestTheSuccessorIsTheRostersLowestSurvivor pins the succession rule itself: no
-// reports, no links, no votes. When the centre of a star goes every survivor is
-// alone, so a quorum rule elects nobody in the one shape the CLI builds; a function
-// of the roster elects the same participant on every survivor without any of them
-// exchanging anything.
-func TestTheSuccessorIsTheRostersLowestSurvivor(t *testing.T) {
-	t.Parallel()
-	roster := []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
-
-	// The host goes: the first guest the coordinator admitted takes over, because
-	// identities are handed out lowest-free-first in arrival order.
-	if got, ok := network.DesignatedSuccessor(roster, 1, nil); !ok || got != 2 {
-		t.Fatalf("successor to the host = %d (ok=%t), want the first guest", got, ok)
-	}
-	// A later loss skips whoever is gone and nothing else.
-	if got, ok := network.DesignatedSuccessor(roster, 2, nil); !ok || got != 1 {
-		t.Fatalf("successor to participant 2 = %d (ok=%t), want 1", got, ok)
-	}
-	// A cursorless coordinator is not in the world's roster at all, so the
-	// participant it lost is simply not among the candidates.
-	guests := []network.RosterEntry{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}}
-	if got, ok := network.DesignatedSuccessor(guests, 1, nil); !ok || got != 2 {
-		t.Fatalf("successor on a dedicated host's roster = %d (ok=%t), want 2", got, ok)
-	}
-	// The two-participant session, which a quorum could never serve: one survivor
-	// of a roster of two is not a majority of two, and it is the whole session.
-	if got, ok := network.DesignatedSuccessor(
-		[]network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}, 1, nil); !ok || got != 2 {
-		t.Fatalf("the sole survivor of a pair = %d (ok=%t), want it to take the term", got, ok)
-	}
-	// Nobody left is nothing to continue.
-	if got, ok := network.DesignatedSuccessor(
-		[]network.RosterEntry{{ID: 1, Slot: 0}}, 1, nil); ok {
-		t.Fatalf("a roster with no survivor designated %d", got)
-	}
-}
-
-// TestAnAwayParticipantIsNoSuccessor: a Wraith's participant has no link to serve a
-// term from, so the rule passes it over on the chain and on the roster alike, and a
-// session whose only other participant is away has no survivor.
-func TestAnAwayParticipantIsNoSuccessor(t *testing.T) {
-	t.Parallel()
-	roster := []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1, Away: true}, {ID: 3, Slot: 2}}
-	if got, ok := network.DesignatedSuccessor(roster, 1, nil); !ok || got != 3 {
-		t.Fatalf("successor to the host past an away guest = %d (ok=%t), want 3", got, ok)
-	}
-	chain := network.SuccessionChain{{ID: 2, Addr: "mesh"}, {ID: 3, Addr: "mesh"}}
-	if got, ok := network.DesignatedSuccessor(roster, 1, chain); !ok || got != 3 {
-		t.Fatalf("successor down a chain led by an away guest = %d (ok=%t), want 3", got, ok)
-	}
-	if got, ok := network.DesignatedSuccessor(roster[:2], 1, nil); ok {
-		t.Fatalf("a roster whose only guest is away designated %d", got)
-	}
-}
-
-// TestOnlyTheDesignatedSuccessorMayHoldATerm is the receiving end of the same
-// rule, and the whole of what replaced the vote: a receiver refuses a record
-// naming anyone but the successor its own roster designates, so a survivor that
-// decided from its own view alone cannot make itself the authority.
-func TestOnlyTheDesignatedSuccessorMayHoldATerm(t *testing.T) {
-	t.Parallel()
-	roster := []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
-	base := network.HandoffRecord{
-		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1,
-		Roster: roster,
-	}
-	if err := base.Validate(roster, nil); err != nil {
-		t.Fatalf("the designated successor's own record was refused: %v", err)
-	}
-	rival := base
-	rival.Authority = 3
-	if err := rival.Validate(roster, nil); err == nil {
-		t.Fatal("a record naming a participant the roster does not designate was accepted")
-	}
-}
-
 // TestTheFirstGuestSucceedsAHostThatLeaves is the case every real session is, and the
 // one a quorum rule could never serve: one survivor out of a roster of two is a
 // majority of nothing, so under a vote it could only fork — a guest playing on with a
@@ -270,125 +193,104 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 		t.Fatal("the successor still reports the host as lost")
 	}
 
-	// And it authors a roster of one: the predecessor's cursor goes with the term,
-	// which is the successor's first act under it.
+	// And it plays on with the host's place waiting as a Wraith for its player: the
+	// predecessor's departure is the successor's first act under the term.
 	for range 2*parameter.NetworkSuccessionTicks + 4 {
 		guest.Tick(1)
 		guest.ApplyPendingCorrections()
 	}
-	var count int
 	var own core.Entity
-	guest.World().RunSafe(func() {
-		count = guest.World().Resources.Player.Count()
-		own = guest.World().Resources.Player.Slot(1)
-	})
+	guest.World().RunSafe(func() { own = guest.World().Resources.Player.Slot(1) })
 	if own == 0 {
 		t.Fatal("the successor dropped its own cursor")
 	}
-	if count != 1 {
-		t.Fatalf("the successor holds %d cursors, want only its own", count)
+	if !wraithIn(guest, 0) {
+		t.Fatal("the host's place does not wait as a Wraith")
 	}
 }
 
-// TestAnUnreachableSuccessorLeavesTheRestForking is the rule's cost and its benefit
-// in one run. A chain with the authority in the middle: losing it leaves 1 and 3 with
-// no link at all, so 1 takes the term alone and 3 computes the same successor, cannot
-// hear it, and forks explicitly. Both then drop the participants they will never hear
-// from again, because with no link left there is no destruction tick to agree.
-func TestAnUnreachableSuccessorLeavesTheRestForking(t *testing.T) {
+// TestAGuestNoCandidateReachesForks: the centre of a star goes and its guests share
+// no link. The first candidate takes the term alone; the other guest walks the list
+// without reaching it and forks once its turn is over, giving up its claim, so what
+// it plays from there is not what its player brings back. The host keeps the
+// place of each participant it lost as a Wraith, and its own claim.
+func TestAGuestNoCandidateReachesForks(t *testing.T) {
 	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}}, 2)
 	localCursors(t, apps)
 	primeRetention(t, apps)
-
-	// Move authorship to participant 2 first, so the participant that goes is the
-	// articulation point rather than a leaf.
-	handOff(t, apps, 1)
-
-	closeParticipant(apps[1])
-	successor, cutOff := apps[0], apps[2]
-	survivors := []*App{successor, cutOff}
-	settleAuthority(t, survivors, func() bool {
-		return authorityOf(successor).Authority == 1 && authorityOf(cutOff).Fork &&
-			!successor.Context().TimeCtl.Held()
-	})
-
-	if got := authorityOf(successor); got.Authority != 1 || got.Fork {
-		t.Fatalf("the roster's successor did not take the term: %+v", got)
-	}
-	if got := authorityOf(successor).Term; got != network.FirstTerm+2 {
-		t.Fatalf("the successor entered term %d, want one increment past the handoff", got)
-	}
-	if boolOf(successor, "network.host_lost") {
-		t.Fatal("the successor still reports the authority as lost")
-	}
-	if got := authorityOf(cutOff); !got.Fork {
-		t.Fatalf("the cut-off survivor did not fall back to local continuation: %+v", got)
-	}
-	if got := authorityOf(cutOff).Term; got != network.FirstTerm+1 {
-		t.Fatalf("the cut-off survivor moved to term %d without hearing a handoff", got)
-	}
-	if !boolOf(cutOff, "network.host_lost") {
-		t.Fatal("the cut-off survivor forked without reporting the loss")
-	}
-
-	// Each continues with the cursor it simulates and no others. The participants
-	// on the far side of the loss — the authority that went, and behind it the one
-	// that was only ever reachable through it — are cursors nothing will move
-	// again, and no departure either instance can observe describes them. Left
-	// there they are players that cannot be played and cannot leave.
-	for range 2*parameter.NetworkSuccessionTicks + 4 {
-		tickAll(survivors)
-	}
-	for i, a := range survivors {
-		slot := uint8(2 * i) // participants 1 and 3, in slots 0 and 2
-		var count int
-		var own core.Entity
-		a.World().RunSafe(func() {
-			count = a.World().Resources.Player.Count()
-			own = a.World().Resources.Player.Slot(slot)
-		})
-		if own == 0 {
-			t.Fatalf("survivor %d dropped its own cursor in slot %d", i, slot)
-		}
-		if count != 1 {
-			t.Fatalf("survivor %d holds %d cursors after continuing alone, want only its own",
-				i, count)
-		}
-	}
-}
-
-// TestAForkFreezesItsPlayersRecordAndASuccessorDoesNot: a run its session gave up
-// gives up its claim, so what it plays from there is not what its player brings
-// back; the successor carrying the session on keeps its own, though it reaches
-// nobody and drops the cursors it cannot.
-func TestAForkFreezesItsPlayersRecordAndASuccessorDoesNot(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}})
-	localCursors(t, apps)
-	primeRetention(t, apps)
-	handOff(t, apps, 1)
 	claims := make([]*claim, len(apps))
 	for i, a := range apps {
 		claims[i] = a.claims.issue(false)
 		a.claim.Store(claims[i])
 	}
 
-	closeParticipant(apps[1])
-	successor, cutOff := apps[0], apps[2]
+	closeParticipant(apps[0])
+	successor, cutOff := apps[1], apps[2]
 	survivors := []*App{successor, cutOff}
 	settleAuthority(t, survivors, func() bool {
-		return authorityOf(successor).Authority == 1 && authorityOf(cutOff).Fork
+		return authorityOf(successor).Authority == 2 && authorityOf(cutOff).Fork &&
+			!successor.Context().TimeCtl.Held()
 	})
+	if got := authorityOf(successor); got.Authority != 2 || got.Fork || got.Term != network.FirstTerm+1 {
+		t.Fatalf("the first candidate did not take the next term: %+v", got)
+	}
+	if boolOf(successor, "network.host_lost") {
+		t.Fatal("the successor still reports the authority as lost")
+	}
+	if got := authorityOf(cutOff); !got.Fork || got.Term != network.FirstTerm || !boolOf(cutOff, "network.host_lost") {
+		t.Fatalf("the guest no candidate reached did not fork where it stood, saying so: %+v", got)
+	}
+
 	for range 2*parameter.NetworkSuccessionTicks + 4 {
 		tickAll(survivors)
+	}
+	for _, slot := range []uint8{0, 2} {
+		if !wraithIn(successor, slot) {
+			t.Fatalf("the host keeps no Wraith in slot %d", slot)
+		}
+	}
+	var count int
+	cutOff.World().RunSafe(func() { count = cutOff.World().Resources.Player.Count() })
+	if count != 1 {
+		t.Fatalf("the fork holds %d cursors, want only its own", count)
 	}
 	if cutOff.claim.Load() != nil || claimHeld(cutOff, claims[2]) {
 		t.Fatal("the fork still holds the claim its player comes back under")
 	}
-	if successor.claim.Load() != claims[0] || !claimHeld(successor, claims[0]) {
+	if successor.claim.Load() != claims[1] || !claimHeld(successor, claims[1]) {
 		t.Fatal("the successor gave up the claim it carries its session on under")
 	}
+}
+
+// TestAGuestWhoseLinkDroppedRedialsItsPlace: a person's run whose own link to its
+// host dropped, the host still there, dials the host's door again under the claim
+// its place waits under; the dial the host admits back into that place is what the
+// run is replaced by.
+func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	t.Cleanup(func() { stopTicks(); host.Close() })
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	c, id := guest.claim.Load(), guest.localParticipant()
+	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
+	if c == nil || !(instance{host}).DropParticipant(id) {
+		t.Fatal("the guest holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		req = guest.restart.Load()
+	}
+	if req == nil || req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id {
+		t.Fatalf("the guest was not admitted back into its own place: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
 }
 
 // claimHeld reads whether a run of a's process is in its session under c.
@@ -396,33 +298,6 @@ func claimHeld(a *App, c *claim) bool {
 	a.claims.mu.Lock()
 	defer a.claims.mu.Unlock()
 	return c.held
-}
-
-// handOff moves authorship to apps[to], for a test whose subject is what happens
-// after a migration rather than the migration itself. The record travels the way a
-// real one does — in through the transport seam, adopted between two ticks — so
-// what the session ends up holding is what a succession would have left it.
-func handOff(t *testing.T, apps []*App, to int) {
-	t.Helper()
-	held := apps[to].authority.State()
-	body, err := network.EncodeHandoff(network.HandoffRecord{
-		Term:        held.Term + 1,
-		Authority:   network.PeerID(to + 1),
-		Predecessor: 1,
-		Roster:      held.Roster,
-		Anchor:      held.Anchor,
-	})
-	if err != nil {
-		t.Fatalf("encode the handoff: %v", err)
-	}
-	for _, a := range apps {
-		a.receiveAuthorityFrame(uint8(network.MsgAuthorityHandoff), 0, body)
-		a.ApplyPendingCorrections()
-		if got := a.authority.State(); got.Term != held.Term+1 {
-			t.Fatalf("participant %d holds term %d after the handoff, want %d",
-				a.localParticipant(), got.Term, held.Term+1)
-		}
-	}
 }
 
 // TestMembershipIsByteIdenticalAcrossAHandoff's other half. The
@@ -491,11 +366,10 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 }
 
 // TestAJoinerDiallingMidHandoffIsRefused is the admission half. A dial that lands
-// while the session is electing must not be half-admitted into a term that is about
-// to end: it would hold a roster slot the successor's record does not carry and
-// would receive an authority that has stopped publishing. The refusal is
-// distinguishable so the joiner can retry — the retry itself is an ordinary join,
-// pinned by the mid-run gate criteria.
+// mid-succession must not be half-admitted into a term about to end, holding a
+// slot the next host's record does not carry from an authority that stopped
+// publishing. The refusal is one the joiner retries, as an ordinary join the
+// mid-run gate criteria pin.
 func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3017
@@ -509,14 +383,15 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	addr := host.HostAddr()
 
 	// A session this instance follows rather than authors, and then the loss of
-	// whoever was authoring it: the succession opens on the real path, and stands
-	// down at once because this instance has retained nothing to author from. What
-	// is being tested is the admission gate, which reads "is a succession running"
-	// rather than "who went".
+	// whoever was authoring it: the succession opens on the real path, and this
+	// instance's turn passes with nothing retained to author from, the walk open for
+	// its window. What is being tested is the admission gate, which reads "is a
+	// succession running" rather than "who went".
 	host.openAuthority(network.SessionOffer{
 		Anchor: host.JoinAnchor(), Host: 2, Assigned: engine.CoordinatorParticipant,
 		Term:   network.FirstTerm,
 		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
+		Chain:  network.SuccessionChain{{ID: engine.CoordinatorParticipant, Addr: addr}},
 	}, engine.CoordinatorParticipant)
 	host.reportPeerLost(2)
 	host.ApplyPendingCorrections()
@@ -721,7 +596,7 @@ func TestMeshParityAcrossAHandoff(t *testing.T) {
 	}
 	successor := survivors[0]
 	if !successor.authority.State().Authoring() {
-		t.Fatal("the roster-lowest survivor is not authoring")
+		t.Fatal("the first candidate is not authoring")
 	}
 
 	advance := func() { tickAll(survivors) }

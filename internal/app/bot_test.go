@@ -1132,8 +1132,9 @@ func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 }
 
 // TestAPersonFindsAnotherPathWhenItsRelayLeaves: left with no link, a relayed
-// participant walks the chain to another guest, which carries its artifacts from
-// then on; the session goes on with its relay's cursor waiting as a Wraith.
+// participant walks the chain to another guest whose player relays for others,
+// which carries its artifacts from then on; the session goes on with its relay's
+// cursor waiting as a Wraith.
 func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
@@ -1143,6 +1144,7 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	relay, leave := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	other, _ := driveBot(t, Config{JoinAddress: addr}, "patrol", nil)
+	other.ctx.Relaying.Store(true)
 	waitForCursors(t, host, 4)
 	waitListening(t, relayAddr)
 	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)

@@ -16,13 +16,11 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// meshSession builds n participants on one seed and links them into the given
-// topology; links are the pairs of participant IDs that share a stream, written
-// from the host outward, and everything else is reached by relay. A link to a
-// participant with no path yet is the one it joined through; any other is a peer
-// link, as the succession chain opens. chain, when given, is the succession
-// candidate list a real session would publish — it travels in the offer, so a
-// fixture that wants a leaf out of the candidates leaves it out.
+// meshSession builds n participants on one seed linked into the given topology:
+// links pair the participant IDs that share a stream, host outward, and the rest is
+// reached by relay; a participant's first link is the one it joined through, any
+// other a peer link. chain is the candidate list the offer carries, every guest in
+// join order unless given, so a fixture that wants a leaf leaves it out.
 func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...network.PeerID) []*App {
 	t.Helper()
 	return meshSessionOf(t, Config{Seed: seed, Width: 120, Height: 40,
@@ -34,6 +32,11 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...netw
 func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...network.PeerID) []*App {
 	t.Helper()
 
+	if len(chain) == 0 {
+		for id := 2; id <= n; id++ {
+			chain = append(chain, network.PeerID(id))
+		}
+	}
 	offer := network.SessionOffer{
 		Host:     1,
 		Assigned: 2,

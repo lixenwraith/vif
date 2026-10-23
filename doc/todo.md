@@ -488,11 +488,57 @@ convergence floor") or lost their links within seconds.
 A person who cannot reach the host joins at a guest's `-relay` address and plays
 through it; the session is a tree, raw artifacts go up and the authority's down,
 and a relayed person whose relay leaves walks the chain to another participant
-(multi-player.md §5). What is left is finding that address: a relay's address is
+relaying for others (multi-player.md §5). What is left is finding that address: a relay's address is
 handed out of band like the host's, nothing publishes which participants relay,
 and a NAT between a person and every relay is not crossed. A browser relays only
 its own bots. Verify a relayed topology under `LinkShape`s, asserting hash-only
 convergence and the authority's per-link fan-out.
+
+### Move a relayed survivor to its host
+
+- Priority: P3
+- Affected files: `internal/converge/authority.go`, `internal/system/network.go`
+- Guide: [Multi-player](multi-player.md#51-succession) §5.1
+
+A survivor that reached its new host only through a candidate relaying for others
+follows that host through it for the rest of the session, its artifacts a hop
+longer than they need be and the relay's player carrying traffic it offered for a
+host loss. What would close it: the far survivor, once following, dials the host at
+its chain address and moves its up link there, the relay letting it go.
+
+### Redial a relay that left
+
+- Priority: P3
+- Affected files: `internal/app/converge.go`, `internal/converge/reach.go`
+
+A person whose relay's link dropped walks the chain for a participant that relays
+for others, and forks when none does; it does not redial the relay's `-relay`
+door, which a relay whose link only blipped would answer, as a guest redials the
+host it lost ([Multi-player](multi-player.md#51-succession) §5.1).
+
+### Carry a dropped guest back to a live host
+
+- Priority: P3
+- Affected files: `internal/app/relay.go`, `internal/converge/authority.go`
+
+A guest whose own link to a host still running dropped, and whose redial cannot
+reach that host, walks a list nobody else is walking and forks, though a peer
+relaying for others could carry it: the host keeps its place as a Wraith, and
+taking that back needs a join under its claim through the peer, which a peer port
+does not serve. What would close it: a relayed rejoin on a peer port, as the
+`-relay` door serves one.
+
+### Keep a late survivor in its host's group
+
+- Priority: P3
+- Affected files: `internal/converge/authority.go`, `internal/app/session.go`
+
+A host sends away every independent participant that reported no membership at its
+term a convergence floor after it resumes, so a survivor whose report arrives later
+finds its own cursor a Wraith, which only a return under its claim gives back
+([Multi-player](multi-player.md#8-remaining-gaps) §8). What would close it: a
+membership report after the floor taking the place back as a claim does, over the
+link it already holds.
 
 ### Decide the authority's fan-out and publication cadence
 
@@ -673,17 +719,17 @@ The record is built to be replaced: one type, made in one place
 session holds, have the coordinator fill the arrival from its own world instead of
 the joiner's report, and drop the record from the keeper and the report.
 
-### Drop the cursors a linked instance cannot reach
+### Drop the cursors a linked fork cannot reach
 
 - Priority: P3
-- Affected files: `internal/app/session.go`, `internal/converge/authority.go`
+- Affected files: `internal/app/session.go`, `internal/app/converge.go`
 
-`dropAbandonedCursors` acts only on an instance left with no link, so a successor
-some survivors could not reach, or a fork with no loop still linked to its own bots,
-keeps every roster entry, and a participant it has no path to stays a cursor nothing
-moves ([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). Decide who
-produces those departures, and at which tick, on an instance that still has peers
-to agree one with.
+`dropAbandonedCursors` acts only on an instance left with no link, so a script's or
+a bot's fork still linked to its own bots keeps every roster entry, and a
+participant it has no path to stays a cursor nothing moves
+([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). A host already
+keeps those its group lost as Wraiths; such a fork could cross the same departures
+for its bots to apply.
 
 ### Merge two sessions
 
