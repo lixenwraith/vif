@@ -100,7 +100,7 @@ func (p *SocketPort) Close() error {
 
 // Serve opens a host port started with no listener to joiners on ln, which it then
 // owns: a session that held only this process's own streams takes dials from here.
-func (p *SocketPort) Serve(ln net.Listener) error { return p.transport.serve(ln, nil, true) }
+func (p *SocketPort) Serve(ln net.Listener) error { return p.transport.serve(ln, nil) }
 
 // ServeSession attaches an ordinary join gate to this port's existing peer set.
 func (p *SocketPort) ServeSession(addr string, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) (string, error) {
