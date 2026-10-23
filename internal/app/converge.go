@@ -74,14 +74,19 @@ func (i instance) Downstream() (out []uint32) {
 }
 
 // DrainOffTick translates whatever the endpoint holds without advancing a tick, so
-// a manifest, a request or a repair is acted on the moment it lands.
+// a manifest, a request or a repair is acted on the moment it lands, and a resume
+// once the drain that carried it is done.
 func (i instance) DrainOffTick() {
 	i.a.world.RunSafe(func() {
 		for _, sys := range i.a.world.Systems() {
 			if d, ok := sys.(interface{ DrainOffTick() }); ok {
 				d.DrainOffTick()
-				return
+				break
 			}
+		}
+		if i.a.hostResumed {
+			i.a.hostResumed = false
+			i.a.releaseHold("Resumed by the host")
 		}
 	})
 }

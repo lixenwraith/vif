@@ -372,11 +372,12 @@ links and answers the link probe off the tick, so a hold times nobody out.
 
 The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
 no epoch, so the first one its next tick produces, admitted past a guest's own
-tick (`NetworkResource.OnAuthorityAhead`), resumes that guest. `:new` ends a hold
-before its reset crosses, which would otherwise wait for a tick nobody reaches.
-Taking the term and forking end a hold the lost host left (§5.1). An end no
-command made is journaled as the request a command makes, since a replay has no
-link to hear it.
+tick (`NetworkResource.OnAuthorityAhead`), resumes that guest once the drain that
+carried it is done. `:new` ends a hold before its reset crosses, which would
+otherwise wait for a tick nobody reaches. Taking the term and forking end a hold
+the lost host left (§5.1). An end no command made goes through the request a
+command makes, settled at once: the hold ends in the pass that dispatches it, on
+the run as on its replay, which has no link to hear it.
 
 A joiner admitted to a held session lands held. Its gate captures the held tick
 itself, since a held session never reaches the playout lead past it, and sends
