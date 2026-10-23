@@ -252,20 +252,6 @@ who would rather fetch a scenario than unpack one. What it needs before it is
 written is whose signature makes bytes trustworthy, which origins may serve them,
 and how long a fetched container is kept.
 
-### Let a browser tab leave and come back
-
-- Priority: P2
-- Affected files: `web/terminal.js`, `web/worker.js`, `internal/app/loop.go`,
-  `internal/lifecycle`
-- Guide: [Build profiles](multi-platform.md#a-hidden-tab)
-
-A hidden tab draws nothing and repaints once on return, and a reload inside the
-Wraith wait takes its place back with the tab's claim
-([Multi-player](multi-player.md#54-wraiths) §5.4). What remains is a tab that
-leaves: one hidden or suspended for five minutes must cost the other players
-nothing and resume or rejoin on return, and a session whose last guest was a
-browser must end on its own grace.
-
 ### Launch the page and Android without their start screen
 
 - Priority: P3
@@ -309,7 +295,7 @@ Distribution-specific detail lives in [Packaging](packaging.md).
 
 ### Promote a nightly build to the first stable release
 
-- Priority: P0
+- Priority: P1
 - Affected files: `doc/packaging.md`, `README.md`
 - Prerequisite: choose a nightly commit after the complete verification gate
   passes

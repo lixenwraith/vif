@@ -132,7 +132,7 @@ It should produce no output. The container is one static binary in
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental; plays in Alacritty, with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer and `AudioTrack` (§8); the wad as the system root |
-| `js/wasm` | Solo play and session join; a tab that leaves is still being commissioned ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets, each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a hidden tab leaves after five minutes and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets, each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `pkg/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
@@ -205,12 +205,19 @@ whole screen once. Drawing on would hold frames behind the page's throttled time
 the host hands the page one at a time, so even then one waits, never a backlog to
 replay.
 
-A browser that freezes the tab instead, as Chrome may under its energy or memory
-saving and mobile browsers readily do, stops the Worker, so nothing reads the
-socket. The session drops the participant after `NetworkLinkDeadAfter` (5 s) of
-silence, as it drops any silent peer, and on return the page shows "Host connection
-lost; continuing locally from the last authoritative state"; reloading the same
-link rejoins while the session lives.
+A joined page hidden for five minutes (`LEAVE_HIDDEN_MS` in `web/terminal.js`)
+leaves: the page ends its Worker, the session sees the link close and the cursor
+waits as a Wraith ([Multiplayer §5.4](multi-player.md#54-wraiths)), dismissed after
+`WraithTimeout`, so a session nobody else plays empties and ends on its grace. Shown
+again after that long hidden, the page reloads, which rejoins with the tab's claim
+while the place waits and as a new player after; a shorter absence costs the others
+nothing and resumes where it was. A browser that freezes the tab instead, as Chrome
+may under its energy or memory saving and mobile browsers readily do, stops the
+Worker, so nothing reads the socket: the session drops the participant after
+`NetworkLinkDeadAfter` (5 s) of silence, as it drops any silent peer, and on return
+the Worker redials its host under its claim ([Multiplayer §5.1](multi-player.md#51-succession))
+and takes its place back while the Wraith waits; a tab frozen past the five minutes
+reloads as a hidden one does.
 
 ### Where WebSocket is spoken
 
@@ -575,11 +582,10 @@ go vet ./...
 node --check web/terminal.js web/worker.js web/audio-worklet.js
 ```
 
-Compilation is not runtime certification. What the browser route still has to
-show is a tab that leaves, hidden or suspended, and a session whose last guest was
-a browser ([TODO](todo.md#let-a-browser-tab-leave-and-come-back)). Linux and FreeBSD release
-checks should include a real terminal; audio-capable artifacts also need at least
-one real or `null`/WAV backend smoke test. Windows is played by hand, not
+Compilation is not runtime certification. A hidden tab's leave and return (§5) is
+checked by hand in a browser, since no test harness hides a tab. Linux and FreeBSD
+release checks should include a real terminal; audio-capable artifacts also need at
+least one real or `null`/WAV backend smoke test. Windows is played by hand, not
 certified on the release path; its known issues are in §4.
 
 Two policy decisions stay separate from transport, and both are open in todo:
