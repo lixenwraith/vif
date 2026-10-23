@@ -493,6 +493,10 @@ func (a *App) redialDoor(cfg Config, addr string, lost network.PeerID, c *claim)
 	dial.JoinAddress = addr
 	for a.authority.Redialing(lost) {
 		d, err := dialJoin(dial)
+		if err == nil {
+			// Seated at once: which place the host offers is what the redial asks.
+			err = d.seat(cfg.holder != 0)
+		}
 		if err != nil {
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
 				a.log.Info("session", "msg", "lost host refused the redial", "error", err.Error())

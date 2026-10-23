@@ -59,7 +59,7 @@ Four ways to be in a session, which differ in less than the flag names suggest:
 | `-host <addr>` | yes | yes | yes | none — plays from its first tick, opens once its clock runs; a script or bot waits in one (§1.2) | `migrate` |
 | `-serve <addr>` | yes | no | no | its first guest: nobody plays until one arrives | `host` |
 | `:host <addr> [host\|migrate]` | yes | yes | yes | none — the session opens at the tick it is running | the word given, else the run's; a successor's stays `migrate` |
-| `-join <addr>` | in a migrate session, one of its own; with `-relay <addr>`, one that admits people who cannot reach the host | yes | yes | waits for the host's start gate | adopted from the offer |
+| `-join <addr>` | in a migrate session, one of its own; with `-relay <addr>`, one that admits people who cannot reach the host | yes | yes | waits for its player's press ([Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)), then for the host's start gate | adopted from the offer |
 
 The guest's port is what makes migration mean anything. The coordinator completes
 the declared address from the connection it arrived on and publishes it,
@@ -305,9 +305,12 @@ sequenceDiagram
 ```
 
 `-join` adds a pre-composition step: `newSessionApp` dials, receives the host's
-offer and `JournalAnchor`, adopts its seed, configuration identity and map latch,
-takes the scenario's bytes from the coordinator when no root here holds them, and
-only then calls `New`. Until the start gate installs the session's world, a
+preview of its offer and `JournalAnchor`, adopts its seed, configuration identity
+and map latch, takes the scenario's bytes from the coordinator when no root here
+holds them, and only then calls `New`. The preview holds no place: the seat that
+names the run's participant follows the built and checked world, at once or at its
+player's press (`App.takeSeat`), and binds that identity into the port and world
+`New` made without it. Until the start gate installs the session's world, a
 presenting joiner draws its status line alone: the world it composed stands in on
 the map its dial was offered, which a server sizing its session from its first
 guest changes at the gate. A dedicated host or a scripted or bot-driven `-host`

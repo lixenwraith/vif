@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -297,6 +298,156 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 		t.Fatal("peer disconnect stopped the host listener")
 	}
 	waitInbound(t, host, func(in Inbound) bool { return in.Kind == InboundDisconnect && in.Peer == 2 })
+}
+
+// pressHost serves offer through a coordinator that previews it, counting the
+// places it assigns and gives back, with window as its ready period.
+func pressHost(t *testing.T, offer SessionOffer, window time.Duration) (host *SocketPort, assigned, released *atomic.Int32) {
+	t.Helper()
+	preview := offer
+	preview.Assigned = 0
+	assigned, released = new(atomic.Int32), new(atomic.Int32)
+	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{
+		Preview: func([]string) (SessionOffer, error) { return preview, nil },
+		Assign: func([]string) (SessionOffer, error) {
+			assigned.Add(1)
+			return offer, nil
+		},
+		Release:     func(PeerID) { released.Add(1) },
+		PressWindow: window,
+	}, time.Second)
+	host = NewSocketPort(hostCfg)
+	t.Cleanup(func() { _ = host.Close() })
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	return host, assigned, released
+}
+
+// TestAPreparingDialHoldsNothingUntilItsSeat: a dial reads the session, prepares and
+// waits for its press holding no place, and is assigned one at its seat, which hands
+// a port built before it the stream and the identity; the order before the press
+// assigned the place at the dial.
+func TestAPreparingDialHoldsNothingUntilItsSeat(t *testing.T) {
+	offer := testOffer()
+	host, assigned, _ := pressHost(t, offer, 0)
+	pending, preview, err := PreviewSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pending.Close()
+	unseated := pending.TransportConfig()
+	if preview.Assigned != 0 || preview.Host != offer.Host || unseated.ParticipantID != 0 || unseated.preconnected != nil {
+		t.Fatalf("a preview assigned %d, and a port built on it holds identity %d", preview.Assigned, unseated.ParticipantID)
+	}
+	if err := pending.Prepared(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond) // the host reads the prepared frame and waits on
+	if n := assigned.Load(); n != 0 {
+		t.Fatalf("%d place(s) assigned before the seat", n)
+	}
+	seated, err := pending.Seat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seated.Assigned != offer.Assigned || assigned.Load() != 1 {
+		t.Fatalf("seated as %d with %d assignment(s)", seated.Assigned, assigned.Load())
+	}
+	guest := NewSocketPort(unseated)
+	defer guest.Close()
+	if err := guest.TakeJoin(pending); err != nil {
+		t.Fatal(err)
+	}
+	if guest.ParticipantID() != uint32(offer.Assigned) {
+		t.Fatalf("the port took identity %d at the seat, want %d", guest.ParticipantID(), offer.Assigned)
+	}
+	if err := pending.Complete(nil, JoinerReport{}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return host.PeerCount() == 1 }, host.Changes(), "host peer")
+	final, err := json.Marshal(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !host.Send(uint32(offer.Assigned), uint8(MsgStart), final) {
+		t.Fatal("host could not send start gate")
+	}
+	if _, err := pending.WaitStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := pending.Ready(); err != nil {
+		t.Fatal(err)
+	}
+	if err := guest.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return guest.Connected(uint32(offer.Host)) }, guest.Changes(), "the port on the join's stream")
+}
+
+// TestAPressAfterTheReadyPeriodLeavesNothingHeld: a prepared dial nobody presses for
+// is dropped when its ready period ends, with nothing assigned or given back, and a
+// press after that is told so; one past the period as this end measures it does not
+// try the stream at all.
+func TestAPressAfterTheReadyPeriodLeavesNothingHeld(t *testing.T) {
+	host, assigned, released := pressHost(t, testOffer(), 50*time.Millisecond)
+	pending, _, err := PreviewSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pending.Close()
+	if err := pending.Prepared(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-host.Errors():
+		if !errors.Is(err, &Refusal{Code: RefusalUnpressed}) {
+			t.Fatalf("the host ended the handshake with %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the host held a handshake past its ready period")
+	}
+	if assigned.Load() != 0 || released.Load() != 0 || host.PeerCount() != 0 {
+		t.Fatalf("a dial nobody pressed for: %d assigned, %d released, %d peer(s)", assigned.Load(), released.Load(), host.PeerCount())
+	}
+	// Told on the stream, or finding it closed: either way the press dials again.
+	if _, err := pending.Seat(); err == nil || RetryOf(err) == RetryNever {
+		t.Fatalf("a press after the ready period: %v", err)
+	}
+
+	late, _, err := PreviewSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer late.Close()
+	if err := late.Prepared(); err != nil {
+		t.Fatal(err)
+	}
+	late.prepared = time.Now().Add(-parameter.NetworkJoinPressWindow)
+	if _, err := late.Seat(); !errors.Is(err, ErrPressLapsed) || assigned.Load() != 0 {
+		t.Fatalf("a press this end saw lapse: %v, %d assigned", err, assigned.Load())
+	}
+}
+
+// TestAPreviewRefusesAnotherBuildBeforeAnySeat: a build that cannot share the session
+// learns it from the preview, before it builds a world, and the host assigns it
+// nothing; the order before the press told it in the offer, a place already held.
+func TestAPreviewRefusesAnotherBuildBeforeAnySeat(t *testing.T) {
+	offer := testOffer()
+	offer.Identity = sampleIdentity()
+	offer.Identity.Protocol++
+	host, assigned, _ := pressHost(t, offer, 0)
+	cfg := DebugConfig(RolePeer, "")
+	cfg.Identity = sampleIdentity()
+	if _, _, err := PreviewSession(host.Addr().String(), cfg); !errors.Is(err, &Refusal{Code: RefusalIdentity}) {
+		t.Fatalf("another build previewed the session: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if n := assigned.Load(); n != 0 {
+		t.Fatalf("another build was assigned %d place(s)", n)
+	}
 }
 
 func waitFor(t *testing.T, ready func() bool, changes <-chan struct{}, what string) {

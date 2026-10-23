@@ -5,6 +5,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -50,6 +51,9 @@ func Run(cfg Config) error {
 		defer term.Release()
 		cfg.Host.Presentation = term
 	}
+	// A join the player started at launch is seated at their press, unless the host
+	// they launched from already took it.
+	cfg.joinPress = cfg.JoinAddress != "" && !cfg.Host.Pressed
 	rejoin := false
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
@@ -114,6 +118,9 @@ func openRun(cfg Config, rejoin bool) (*App, error) {
 		case retry == network.RetryNever || !rejoin && retry != network.RetrySoon || !time.Now().Before(deadline):
 			return nil, err
 		}
+		// A dial the run before handed over ends with the attempt that failed on it,
+		// as a seat refused once the world was built does: the next one dials afresh.
+		cfg.dialled = nil
 		time.Sleep(parameter.SessionRejoinInterval)
 	}
 }
@@ -134,6 +141,11 @@ func (a *App) Loop() (*restartRequest, error) {
 		// no key and no signal to leave on.
 		if err := a.pollTerminalEarly(); err != nil {
 			return nil, err
+		}
+		if !a.seated() {
+			if next, err := a.awaitJoinPress(sigChan); next != nil || err != nil {
+				return next, err
+			}
 		}
 		if err := a.startJoinSession(sigChan); err != nil {
 			return nil, err
@@ -358,6 +370,69 @@ func (a *App) takeStart(ev terminal.Event, intent *input.Intent) bool {
 		a.scheduler.DispatchEventsImmediately()
 	}
 	return started
+}
+
+// awaitJoinPress seats this joining run at its player's press, its world built and
+// checked and its session told it is ready. A press after the host's ready period
+// dials again (takeSeat); a session that started another game meanwhile is joined
+// anew by the next run, which the press already seats.
+func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) {
+	a.showJoinStatus(a.joinPrompt())
+	for {
+		select {
+		case <-signals:
+			return nil, errSessionSignalled
+		case ev := <-a.lobbyEvents():
+			if a.lobbyEventCancels(ev) {
+				return nil, errSessionCanceled
+			}
+			if ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress {
+				a.touched = ev.Touch
+			}
+			if !joinPress(ev, a.ctx.MouseDisabled.Load()) {
+				a.showJoinStatus(a.joinPrompt()) // redrawn after a resize, and asked as a touch was
+				continue
+			}
+			a.showJoinStatus("Joining " + network.Shown(a.cfg.JoinAddress) + "...")
+			err := a.takeSeat(true)
+			if errors.Is(err, errSessionMoved) {
+				// Pressed already, and holding the bots it was to seat once it was in.
+				a.log.Info("session", "msg", "joining the session's new game", "join", network.Shown(a.cfg.JoinAddress))
+				return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided, Bots: a.cfg.Bots}, nil
+			}
+			return nil, err
+		}
+	}
+}
+
+// joinPress reports whether ev is the press that seats a waiting join: a key going
+// down, unchorded by Ctrl or Alt, that types or moves, or a pointer button's press
+// while the mouse is on. Escape, Tab and the function keys seat nobody, so a key
+// reached for out of habit is not a join.
+func joinPress(ev terminal.Event, mouseOff bool) bool {
+	switch ev.Type {
+	case terminal.EventKey:
+		return ev.Action == terminal.KeyPress && ev.Modifiers&(terminal.ModCtrl|terminal.ModAlt) == 0 &&
+			(ev.Key == terminal.KeyRune || ev.Key == terminal.KeyEnter ||
+				ev.Key >= terminal.KeyBackspace && ev.Key <= terminal.KeyInsert)
+	case terminal.EventMouse:
+		return !mouseOff && ev.MouseAction == terminal.MouseActionPress &&
+			(ev.MouseBtn == terminal.MouseBtnLeft || ev.MouseBtn == terminal.MouseBtnRight)
+	}
+	return false
+}
+
+// joinPrompt is the status line a join waiting for its press stands with, asking for
+// the press the player's last suggests, as startPrompt does.
+func (a *App) joinPrompt() string {
+	host := network.Shown(a.cfg.JoinAddress)
+	switch {
+	case a.touched:
+		return "Tap to join " + host
+	case a.ctx.MouseDisabled.Load():
+		return "Press a key to join " + host
+	}
+	return "Click or press a key to join " + host
 }
 
 // startPrompt is the status line a waiting game stands with: a guest waits for its

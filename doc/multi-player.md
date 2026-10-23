@@ -69,7 +69,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Replay | A guest retains a bounded suffix of its own crossings and of what it applied from others; a projection re-applies each past the installed capture's fence for its source, at its own tick. |
 | Crossing ordering | The capture header carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
-| Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
+| Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. A person's join prepares on a preview that holds no place and is seated at their press (§5). |
 | Roster | Every admitted peer holds an identity; a roster slot binds it to a cursor and makes it a participant. The coordinator of a dedicated host holds no slot, so it is a peer and not a participant, and a session of one guest has one participant in a roster of two. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed: a join whose link cannot carry one whole world per floor window is refused (`Corrections.AdmitLink`). Past admission it is reported as `snapshot.cadence_floor_breached` (D-24): by the authority for a link whose plan cannot hold it, and by a guest no whole world reached within the floor plus its grace. |
 | Playout lead | Per participant (§3.5): the worst recent age at which the authority committed its epochs, read off the committed copies, plus a relay tick; a participant behind a relay reads it off the same copies. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
@@ -393,7 +393,10 @@ A joiner admitted to a held session lands held. Its gate captures the held tick
 itself, since a held session never reaches the playout lead past it, and sends
 after the world the crossings still scheduled past that tick
 (`NetworkSystem.PendingAfter`), which a capture there does not contain; the
-offer's `Held` holds the joiner at the world it installed.
+offer's `Held` holds the joiner at the world it installed. A joiner admitted while
+its host's new game waits for the host's press is held as a start
+(`SessionOffer.Start`): it waits as every guest there does, and the host's first
+epoch starts it with nothing said.
 
 ## 4. Correction pipeline
 
@@ -509,6 +512,24 @@ a capture far enough past admission to include pre-admission epochs and refuses 
 catch-up gap past `NetworkJoinCatchUpTicks`, or one still wider than
 `NetworkJoinLagTicks` (the default lead) once it has caught up; a bot seat retries
 either, since a fresh attempt brings a fresher world.
+
+A join its player started (`-join` at launch, `:join`, the Multiplayer page) holds
+nothing in the session until their press. Its handshake previews the session
+([Services §8](services-and-networking.md#8-wire-frame-and-session-messages)); the
+run fetches the scenario it lacks, builds and checks its world on the preview, says
+it is ready, and asks on its status line: "Click or press a key to join *host*",
+"Press a key" with the mouse off, "Tap" after a touch. A key that types or moves, or
+a click, seats it; Escape, Tab, the function keys and chords do not, and Ctrl-C
+leaves (`joinPress`). The seat binds the identity the run's port and world were
+built without (`SocketPort.TakeJoin`), and the run replies and meets the gate as
+any joiner does. The host keeps the handshake for a ready period of 5 s; a press
+after it dials again and seats the world already built while the session plays the
+game it was built for, and a session that started another game meanwhile is joined
+anew, already pressed (`App.takeSeat`). A run no player is pressing for seats at
+once: a bot seat, a redial after a lost host, a run following its session to a new
+game, a page or Android host that took its own start press, and any run with the
+wait off (`-nw`, `[play] wait = false`). Nothing stands in for the waiting player on
+the map; its cursor appears with its arrival.
 
 The session is a tree rooted at the authority: the shipped CLI builds a star, a
 guest seating bots or relaying people (`-relay`) adds a level, and in a migrate

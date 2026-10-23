@@ -159,6 +159,13 @@ const (
 	// crossings would arrive after the ticks they name.
 	NetworkJoinReadyTimeout = 5 * time.Second
 
+	// NetworkJoinPressWindow is a joiner's ready period: how long a coordinator keeps
+	// the handshake of a dialer that prepared, and holds nothing else for it, waiting
+	// for its player's press. Past it the candidate is dropped, freeing the handshake
+	// for the next dial; a later press dials again. Aligned with the gate's bound,
+	// so each step of a join waits as long as the next.
+	NetworkJoinPressWindow = NetworkJoinReadyTimeout
+
 	// NetworkJoinConnectTimeout bounds a join's connect. A browser opens its socket
 	// through TLS, an HTTP upgrade and the site's proxy, round trips a loaded link
 	// stretches past the ConnectTimeout a session's own redials keep.

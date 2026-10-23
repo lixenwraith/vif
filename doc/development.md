@@ -193,7 +193,7 @@ and the audio buffer; a flag on the command line wins
 
 | Flag | Purpose |
 |---|---|
-| `-nw`, `-no-wait[=false]` | Start each new game at once rather than at its player's key, click or tap; `-nw=false` waits. Unset, `vif.toml`'s `[play] wait` stands, waiting by default. |
+| `-nw`, `-no-wait[=false]` | Start each new game, and seat each join, at once rather than at its player's key, click or tap; `-nw=false` waits. Unset, `vif.toml`'s `[play] wait` stands, waiting by default. |
 | `-seed <n>` | Root RNG seed; zero draws one and logs it. |
 | `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or autonomous bots it is the run's wall pace instead and additionally accepts `max`. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
