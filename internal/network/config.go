@@ -44,7 +44,9 @@ type Config struct {
 	// Address to bind (server) or connect to (client)
 	Address string
 
-	// TLS configuration (nil = plaintext, debug only)
+	// TLS is the wss route's: the certificate a wss:// listener serves, and what a
+	// wss:// dial trusts in place of the system's roots. Nil serves no wss. TCP and
+	// ws stay plaintext whatever it holds: a session is trusted-peer by decision.
 	TLS *tls.Config
 
 	// Connection limits
@@ -125,7 +127,6 @@ func DefaultConfig() *Config {
 	return &Config{
 		Role:            RoleNone,
 		Address:         ":7777",
-		TLS:             nil, // Must be explicitly configured for production
 		MaxPeers:        16,
 		MaxHandshakes:   8,
 		ConnectTimeout:  5 * time.Second,
@@ -138,11 +139,10 @@ func DefaultConfig() *Config {
 	}
 }
 
-// DebugConfig returns config with TLS disabled for local testing
+// DebugConfig returns the defaults for one role at one address.
 func DebugConfig(role Role, addr string) *Config {
 	cfg := DefaultConfig()
 	cfg.Role = role
 	cfg.Address = addr
-	cfg.TLS = nil
 	return cfg
 }

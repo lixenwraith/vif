@@ -28,7 +28,7 @@ func TestAClosedBrowserSocketCallsNothingBack(t *testing.T) {
 			close() { setTimeout(() => this.fire("close", {code: 1000}), 0); }
 			send() {}
 		};`)
-	conn, err := dialWebSocket("wss://site.example/vif/ws/0123456789abcdef", time.Second)
+	conn, err := dialWebSocket("wss://site.example/vif/ws/0123456789abcdef", time.Second, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

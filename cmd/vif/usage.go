@@ -32,8 +32,10 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 	return []flagSection{{
 		title: "Session",
 		lines: []flagLine{
-			{names: []string{"host"}, arg: "<addr>", hint: "Play at once and open the game to participants, e.g. :7777 or ws://:7777"},
-			{names: []string{"serve"}, arg: "<addr>", hint: "Bind a headless session with no local cursor, e.g. :7777 or ws://:7777"},
+			{names: []string{"host"}, arg: "<addr>", hint: "Play at once and open the game to participants, e.g. :7777, ws://:7777 or wss://:7777"},
+			{names: []string{"serve"}, arg: "<addr>", hint: "Bind a headless session with no local cursor, e.g. :7777, ws://:7777 or wss://:7777"},
+			{names: []string{"cert"}, arg: "<file>", hint: "Certificate chain a wss:// host serves, PEM; for -host, -serve or :host"},
+			{names: []string{"key"}, arg: "<file>", hint: "The certificate's private key, PEM; default the -cert file"},
 			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given"},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(

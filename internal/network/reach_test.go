@@ -153,7 +153,7 @@ func TestBindPeerFallsBackWhenThePortIsTaken(t *testing.T) {
 	}
 	defer held.Close()
 
-	ln, err := BindPeer(held.Addr().String(), DebugConfig(RolePeer, ""))
+	ln, err := BindPeer(held.Addr().String())
 	if err != nil {
 		t.Fatalf("bind fell over instead of falling back: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 	offer.Roster = []RosterEntry{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}, {ID: 4, Slot: 2}}
 	admitted := make(chan PeerID, 4)
 	port := func(bind string, local PeerID, gate func(PeerID) error) *SocketPort {
-		ln, err := BindPeer(bind, nil)
+		ln, err := BindPeer(bind)
 		if err != nil {
 			t.Fatalf("bind: %v", err)
 		}

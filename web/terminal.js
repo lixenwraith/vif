@@ -708,9 +708,32 @@ void main() {
             if (document.hidden) {
                 lost();
                 send({ type: 'blur' });
+                if (joined && playing && program && !hiddenAt) {
+                    hiddenAt = Date.now();
+                    leaveTimer = setTimeout(leave, LEAVE_HIDDEN_MS);
+                }
+                return;
             }
+            clearTimeout(leaveTimer);
+            if (left || hiddenAt && Date.now() - hiddenAt >= LEAVE_HIDDEN_MS) location.reload();
+            hiddenAt = 0;
         });
         wireHandlers();
+    }
+
+    /* A joined page hidden this long leaves its session: its Worker is ended, so the
+       session sees the player go, the cursor waits as a Wraith, and a session nobody
+       else plays ends on its grace. Shown again after that long hidden, whether ended
+       here or frozen by the browser past it, the page reloads, which rejoins with the
+       tab's claim while the place waits and as a new player after. A shorter absence
+       costs the others nothing: the Worker keeps the link up while hidden. */
+    const LEAVE_HIDDEN_MS = 5 * 60 * 1000;
+    let hiddenAt = 0, leaveTimer = 0, left = false;
+
+    function leave() {
+        if (!document.hidden || !program) return;
+        left = true;
+        stop();
     }
 
     /* An ended program takes no more messages: a resize or a key posted to it

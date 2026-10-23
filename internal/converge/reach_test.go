@@ -5,8 +5,6 @@ package converge
 import (
 	"net"
 	"testing"
-
-	"github.com/lixenwraith/vif/internal/network"
 )
 
 // TestADeclaredAddressIsCompletedFromTheConnection is why a guest declares a port
@@ -38,8 +36,6 @@ func TestADeclaredAddressIsCompletedFromTheConnection(t *testing.T) {
 // actually bound in either case.
 func TestBindAdvertisedDeclaresWhatItBound(t *testing.T) {
 	t.Parallel()
-	cfg := network.DebugConfig(network.RolePeer, "")
-
 	held, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -47,7 +43,7 @@ func TestBindAdvertisedDeclaresWhatItBound(t *testing.T) {
 	defer held.Close()
 	_, heldPort, _ := net.SplitHostPort(held.Addr().String())
 
-	ln, declared := BindAdvertised("", "127.0.0.1:"+heldPort, cfg)
+	ln, declared := BindAdvertised("", "127.0.0.1:"+heldPort)
 	if ln == nil {
 		t.Fatal("the default bind gave up instead of falling back")
 	}
@@ -62,13 +58,13 @@ func TestBindAdvertisedDeclaresWhatItBound(t *testing.T) {
 
 	// A host address with no port is the failure case, and it is a leaf rather than
 	// an error: the participant plays and declares nothing.
-	if ln, declared := BindAdvertised("", "not-an-address", cfg); ln != nil || declared != "" {
+	if ln, declared := BindAdvertised("", "not-an-address"); ln != nil || declared != "" {
 		t.Fatalf("a host address with no port bound %v and declared %q", ln, declared)
 	}
 
 	// An explicit -listen is declared whole, because the operator named a host the
 	// coordinator must not overwrite from the connection.
-	pinned, pinnedDeclared := BindAdvertised("127.0.0.1:0", "127.0.0.1:"+heldPort, cfg)
+	pinned, pinnedDeclared := BindAdvertised("127.0.0.1:0", "127.0.0.1:"+heldPort)
 	if pinned == nil {
 		t.Fatal("an explicit -listen did not bind")
 	}

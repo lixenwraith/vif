@@ -94,7 +94,7 @@ func newHostingApp(cfg Config) (*App, error) {
 
 // hostNetworkConfig captures the App before the service starts its accept loop.
 func (a *App) hostNetworkConfig() *network.Config {
-	netCfg := network.DebugConfig(network.RoleHost, a.cfg.HostAddress)
+	netCfg := a.cfg.hostNetwork(a.cfg.HostAddress)
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = a.sessionCapacity()
 	netCfg.OnError = logSessionError
@@ -494,7 +494,7 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 	var declared string
 	gate := &converge.PeerLinkGate{}
 	if !offer.FixedAuthority && !cfg.NoAdvertise && buildHasSocketNetwork && (offer.Relay == 0 || cfg.ListenAddress != "") {
-		listener, declared = converge.BindAdvertised(cfg.ListenAddress, cfg.JoinAddress, cfg.networkConfig)
+		listener, declared = converge.BindAdvertised(cfg.ListenAddress, cfg.JoinAddress)
 	}
 	if listener != nil {
 		// Installed before New, because New is what builds the port that serves

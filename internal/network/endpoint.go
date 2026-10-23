@@ -2,6 +2,8 @@ package network
 
 import (
 	"bytes"
+	"cmp"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,6 +83,12 @@ func ParseEndpoint(target string) (Endpoint, error) {
 	return e, nil
 }
 
+// Secure reports a wss:// endpoint: a WebSocket under TLS, which a page served over
+// https can open and a host serves only with a certificate.
+func (e Endpoint) Secure() bool {
+	return e.Scheme == SchemeWebSocket && strings.HasPrefix(e.Addr, "wss://")
+}
+
 // Shown is how a message names a dialled address: a WebSocket route by its host,
 // since the rest of its URL is a session key nobody reads, any other as given.
 func Shown(target string) string {
@@ -93,7 +101,8 @@ func Shown(target string) string {
 }
 
 // Listenable reports why vif cannot serve e, nil when it can. A WebSocket host is
-// plain ws on host:port and answers every path, since the session is named in-band.
+// ws or wss on host:port and answers every path, since the session is named in-band;
+// whether a wss one has its certificate is Listen's to say.
 func (e Endpoint) Listenable() error {
 	switch e.Scheme {
 	case SchemeTCP:
@@ -105,13 +114,26 @@ func (e Endpoint) Listenable() error {
 	switch {
 	case err != nil:
 		return err
-	case u.Scheme != "ws":
-		return errors.New("vif serves plain ws; wss is a TLS edge's to terminate")
 	case strings.Trim(u.Path, "/") != "" || u.RawQuery != "" || u.User != nil:
-		return errors.New("a WebSocket host binds ws://host:port and answers on every path")
+		return errors.New("a WebSocket host binds ws(s)://host:port and answers on every path")
 	}
 	_, _, err = net.SplitHostPort(u.Host)
 	return err
+}
+
+// LoadTLS reads the certificate chain a wss:// host serves and its key, PEM files;
+// an empty keyFile reads the key from the certificate's file. The configuration
+// speaks HTTP/1.1 alone, the only protocol the upgrade is made over.
+func LoadTLS(certFile, keyFile string) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, cmp.Or(keyFile, certFile))
+	if err != nil {
+		return nil, fmt.Errorf("certificate %s: %w", certFile, err)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+		NextProtos:   []string{"http/1.1"},
+	}, nil
 }
 
 // plainError is what a player is told about a network failure in place of the
@@ -128,12 +150,13 @@ func (e plainError) Unwrap() error { return e.cause }
 // error it does not know passes through as it is.
 func plainNetError(err error) error {
 	var (
-		op    *net.OpError
-		dns   *net.DNSError
-		ne    net.Error
-		plain plainError
-		port  = -1
-		text  string
+		op     *net.OpError
+		dns    *net.DNSError
+		ne     net.Error
+		verify *tls.CertificateVerificationError
+		plain  plainError
+		port   = -1
+		text   string
 	)
 	if errors.As(err, &op) {
 		if a, ok := op.Addr.(*net.TCPAddr); ok {
@@ -159,6 +182,8 @@ func plainNetError(err error) error {
 		text = "unreachable from this network"
 	case errors.As(err, &ne) && ne.Timeout():
 		text = "no answer; check the address and the host's firewall or port forward"
+	case errors.As(err, &verify):
+		text = "the host's certificate is not one this machine trusts"
 	default:
 		return err
 	}

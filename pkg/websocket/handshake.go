@@ -52,9 +52,10 @@ func (e *HandshakeError) Error() string {
 
 // Dial opens a ws or wss URL, passing its path and query through unchanged. Its
 // Origin is the URL's own, what a page served from that host sends: it guards a
-// browser's cookies, which a native client does not hold. Without a deadline in
-// ctx the handshake is bounded by handshakeTimeout.
-func Dial(ctx context.Context, rawURL string) (*Conn, error) {
+// browser's cookies, which a native client does not hold. A wss URL is opened with
+// tlsCfg, nil for the system's roots; the server's name and HTTP/1.1 are set here.
+// Without a deadline in ctx the handshake is bounded by handshakeTimeout.
+func Dial(ctx context.Context, rawURL string, tlsCfg *tls.Config) (*Conn, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,13 @@ func Dial(ctx context.Context, rawURL string) (*Conn, error) {
 	_ = raw.SetDeadline(deadline)
 	conn := raw
 	if u.Scheme == "wss" {
-		secure := tls.Client(raw, &tls.Config{ServerName: u.Hostname(), NextProtos: []string{"http/1.1"}})
+		if tlsCfg == nil {
+			tlsCfg = &tls.Config{}
+		} else {
+			tlsCfg = tlsCfg.Clone()
+		}
+		tlsCfg.ServerName, tlsCfg.NextProtos = cmp.Or(tlsCfg.ServerName, u.Hostname()), []string{"http/1.1"}
+		secure := tls.Client(raw, tlsCfg)
 		if err := secure.HandshakeContext(ctx); err != nil {
 			_ = raw.Close()
 			return nil, err

@@ -1,7 +1,9 @@
 # Generated from cmd/vif/usage.go by TestGeneratedFilesAreTheHelpTable; do not edit.
 complete -c vif -f
-complete -c vif -o host -x -d 'Play at once and open the game to participants, e.g. :7777 or ws://:7777'
-complete -c vif -o serve -x -d 'Bind a headless session with no local cursor, e.g. :7777 or ws://:7777'
+complete -c vif -o host -x -d 'Play at once and open the game to participants, e.g. :7777, ws://:7777 or wss://:7777'
+complete -c vif -o serve -x -d 'Bind a headless session with no local cursor, e.g. :7777, ws://:7777 or wss://:7777'
+complete -c vif -o cert -x -d 'Certificate chain a wss:// host serves, PEM; for -host, -serve or :host'
+complete -c vif -o key -x -d 'The certificate\'s private key, PEM; default the -cert file'
 complete -c vif -o join -x -d 'Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given'
 complete -c vif -o name -x -d 'Name this host answers to, so one address can serve several sessions'
 complete -c vif -o players -x -d 'Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested'
