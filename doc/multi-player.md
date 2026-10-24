@@ -412,9 +412,9 @@ each direct peer according to that link's cadence:
    half the convergence floor the keyframe cadence sends none. A participant behind
    a relay proves it in the relay's own answer.
 4. Otherwise the receiver asks for the section summaries, compares page hashes only
-   in differing sections, and the authority returns the pages that differ. A repair
-   wider than one frame or than the keyframe it stands in for is not sent: the peer
-   gets the keyframe, and whole bodies for a few publications.
+   in differing sections, and the authority returns the pages that differ, chunked
+   as a body is. A repair wider than the keyframe it stands in for is not sent: the
+   peer gets the keyframe, and whole bodies for a few publications.
 5. Validate every page hash, reconstruct the authority root, stage the result and
    commit it between ticks. A set is one baseline, applied whole or not at all.
 6. Refuse stale, foreign, malformed, or unverifiable repairs. One that fails its
@@ -451,7 +451,7 @@ sync by the run its batch names, since a guest's last epochs of a run reach the
 authority a round trip after the reset applied there. The run after this one is
 the exception: its first world reaches a guest whose reset is still on its way, so
 the chunk header carries the run, the assembly orders transfers by run then tick,
-and `Apply` keeps such a body at the head of its inbox until the reset enters it. A body leaves in
+and `Apply` keeps such a body at the head of its inbox until the reset enters it. A body or a repair leaves in
 `SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
 what its latest echo reports received — drains within `SnapshotBulkQueue` past the
 round trip, so an epoch waits behind a chunk, not a world. What a link still

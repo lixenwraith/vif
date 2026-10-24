@@ -95,7 +95,7 @@ approaches:
 |---|---|
 | Wire bytes after the link's deflate, by message kind, on the socket path | N1–N3 |
 | CPU by stage on host and guest: JSON and TOML encode and decode, per-link deflate and inflate, FNV against row encoding inside seal and index, the digest | N2, N9, N12, N15 |
-| Keyframes by reason — schedule, floor, request, repair wider than a frame, failed proof, the bodies after a fallback — and how many are encoded for how many sent | N6, N8 |
+| Keyframes by reason — schedule, floor, request, repair wider than the keyframe, failed proof, the bodies after a fallback — and how many are encoded for how many sent | N8 |
 | Plain bytes per section of a td keyframe | N8, N9 |
 | Lock hold by part: stores, carriers, status, comparison, write, each projected tick | N10, N11 |
 | Repairs by cause: the sections carried, and whether the authority committed one of the receiver's crossings late or void since its last proof | N5, and the next divergence fix |
@@ -199,6 +199,7 @@ against a run-to-run spread of about 2%.
 | Baseline, framed → wire; CPU | 16.0 → 2.32; 0.09 | 91.3 → 9.99; 0.16 | 1,552 → 125; 0.64 | 94.7 → 61.5; 0.40 (0.13 keyframes/s) | 514 → 359; 1.06 (0.53/s) |
 | Bodies raw past the stream, codec at level 6 | 16.0 → 2.46; 0.09 | 91.3 → 10.4; 0.16 | 1,559 → 127; 0.67 | 80.8 → 62.0; 0.43 (0.13/s) | 140 → 13.6; 0.77 (none) |
 | Syncs of the cells that are set | 14.1 → 2.43; 0.09 | 80.0 → 10.4; 0.16 | 1,326 → 124; 0.64 | 88.6 → 71.1; 0.44 (0.13/s) | 175 → 60.9; 0.67 (0.13/s) |
+| Repairs chunked, bounded by the keyframe | 14.1 → 2.43; 0.09 | 80.0 → 10.3; 0.17 | 1,324 → 124; 0.62 | 76.9 → 59.7; 0.42 (0.13/s) | 189 → 73.4; 0.71 (0.13/s) |
 
 - **Bodies raw, codec at level 6.** A td keyframe is 360 kB where level 1 gave 501
   and the stream's second pass over that 398: td's framed body bytes fall a fifth
@@ -214,6 +215,12 @@ against a run-to-run spread of about 2%.
   zero cells against their predecessors; TOML's share of the process at 16 players
   goes from 2.9% to 1.9%, inside the spread. The immunity array became a slice so
   an unspent one is omitted too.
+- **Repairs chunked, bounded by the keyframe.** No repair in these runs was wider
+  than a frame (`keyframe_fallbacks` 0 on every row before and after), so the rows
+  read as the run before them; the step it removes, a 48 kB repair giving way to a
+  360 kB keyframe, is held by its test and waits for a run where td's storm
+  provokes it. What changed in the rows: an epoch behind a repair now waits one
+  4 KiB chunk rather than up to 48 kB.
 
 ## 3. Approaches
 
@@ -226,7 +233,6 @@ In the table − lowers a cost, + raises it and · leaves it. Projections come f
 | N2 | A binary wire codec | − | − | − | · | low, then medium | a four-move epoch 567 → ~50 B before deflate |
 | N3 | Owner syncs that carry what changed | − | · | − | · | low | syncs ~10× smaller before deflate |
 | N5 | A one-round-trip descent | · | · | ± | − | medium | a repair one round trip sooner |
-| N6 | Repairs as wide as the keyframe they replace | − | · | − | − | low | the 48 kB → 516 kB step at td |
 | N7 | Aligned publication rounds | − | · | · | + | low | td rounds 7.2 → ~5 a second |
 | N8 | Keyframes from cached sections | − | + | + | · | medium | keyframe deflate in proportion to the sections that moved |
 | N9 | A binary row codec | − | − | − | · | high | rows 3–10× smaller before deflate |
@@ -328,23 +334,6 @@ does not repair, which the receiver's own index proves — the todo's candidate.
 - *CPU*: none new; the receiver builds those page hashes to compute its root.
 - *Projected*: matters where repairs are frequent — at td with two players 22% of
   manifests are not answered hash-only.
-
-### N6. Repairs as wide as the keyframe they replace
-
-A repair wider than `SnapshotShardBytesMax` (48 kB, one frame) is replaced by a
-keyframe — 516 kB at td — and the peer takes whole bodies for a few publications
-after. Chunk shard sets as bodies are chunked
-([Pace repairs as bodies are paced](todo.md#pace-repairs-as-bodies-are-paced)) and
-bound a repair by the keyframe it stands in for rather than by a frame, which keeps
-multi-player §4's rule that a repair never costs more than that keyframe.
-
-- *Bandwidth and CPU*: removes the step from a 48 kB repair to a 516 kB keyframe, and
-  that keyframe's seal and deflate; §2's keyframes by reason say how much of td's
-  2.18 MB/s it is.
-- *Latency*: a chunked repair waits on its link's backlog as a body does, and the
-  epochs behind it wait one chunk.
-- *Challenges*: few — the chunk assembly exists for bodies, and a set still applies
-  whole.
 
 ### N7. Aligned publication rounds
 
@@ -495,14 +484,17 @@ Each approach lands alone, re-runs §2's matrix and updates multi-player §6.
 | Phase | Approaches | Why |
 |---|---|---|
 | 0 | §2's readings | Taken in §2.2 for bytes by kind on the wire and CPU by stage; the rest go into the same harness as an approach needs them |
-| 1 | N6, N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the repair path, then the command stream's constants for their CPU |
+| 1 | N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the repair path, then the command stream's constants for their CPU |
 | 2 | N10, N12, N8, N11's capture as a copy | CPU and lock at the map limit, on the host and the browser guest |
 | 3 | N2 step 2, N9, N13, N11's projection, N15, N14 | Formats and structure: the journal, the capture schema, retention, topology |
 
 N2's second step follows its first; N13 and the column layout build on N9; N10's
 row cache is cheaper on N9's rows.
 
-**Decided, on §2.3.** Syncs carry the cells that are set (N3's `omitempty`): 36–43%
+**Decided, on §2.3.** A repair is chunked and paced as a body is and bounded by the
+keyframe it stands in for (N6), the measured one at the authority and the transfer
+ceiling at a relay, which measures none ([todo](todo.md#bound-a-relayed-repair-by-a-keyframe)).
+Syncs carry the cells that are set (N3's `omitempty`): 36–43%
 off their framed bytes and 1–3% off the wire; the presence mask and the
 send-on-change step wait for N2. Bodies pass the link raw, compressed once at level 6 (N4's
 first step). The codec's level was 1 and the link's level-7 stream took a fifth off

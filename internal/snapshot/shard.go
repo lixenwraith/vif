@@ -205,9 +205,8 @@ func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest,
 // === sender: building the repair ===
 
 // BuildShardSet answers one request from the manifest the sender retained for the
-// tick it names. A set past SnapshotShardBytesMax, checked on the encoded bytes a
-// frame and an allocation are counted in, is not built: a keyframe is then both
-// smaller and stronger.
+// tick it names; the sender weighs the encoded set against the keyframe it stands
+// in for.
 func BuildShardSet(mine *Manifest, req CorrectionRequest) (CorrectionShardSet, int, error) {
 	set := CorrectionShardSet{
 		Version:   ManifestVersion,

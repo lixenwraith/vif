@@ -596,13 +596,15 @@ asks for them with `index`. A request is a receiver's answer to one: an
 acknowledgement that the roots agreed, that ask, or the page hashes of the sections
 that did not. A shard set is the repair the second kind provokes.
 
-None of the three is chunked. Each is bounded to one transport frame by
-construction — `parameter.SnapshotShardBytesMax` caps a repair well inside the
-65,535-byte payload field — and a repair too wide for one frame is not a repair:
-the host answers it with a keyframe, which is chunked, self-sufficient and already
-part of the protocol. All three use a capture's 10-byte envelope. A shard set is
-deflated in it; a manifest and a request carry the plain codec, because they repeat
-their predecessors and compress against them on the link's stream.
+A manifest and a request are one frame each. A shard set is chunked and paced as a
+correction body is (`SnapshotCorrectionChunkBytes`), so an epoch behind it waits one
+chunk, and it is bounded by the keyframe it stands in for: the one the authority has
+measured, or the transfer ceiling at a relay, which measures none. A repair wider
+than that is not a repair: the host answers it with a keyframe, which is
+self-sufficient. All three use a capture's 10-byte envelope. A shard set is deflated
+in it and passes the link raw; a manifest and a request carry the plain codec,
+because they repeat their predecessors and compress against them on the link's
+stream.
 
 A manifest travels outward one link at a time. A participant with more than one
 link forwards the newest one it answered to the participants behind it — but only

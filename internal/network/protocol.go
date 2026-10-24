@@ -132,8 +132,8 @@ const (
 	// The selective-correction exchange: a manifest indexes the capture a correction
 	// would carry, sent on each peer's cadence; a request, sent back to the peer the
 	// manifest came from, names the pages a receiver could not reproduce; a shard set
-	// is that peer's repair. None is chunked: one that would outgrow a frame (see
-	// parameter.SnapshotShardBytesMax) gives way to a whole, chunked keyframe.
+	// is that peer's repair, chunked as a correction body is and bounded by the
+	// keyframe it stands in for, which answers a wider one.
 	MsgStateManifest MessageType = 0x28 // Live: a correction manifest, root and section hashes
 	MsgStateRequest  MessageType = 0x29 // Live: one receiver's answer to a manifest
 	MsgStateShard    MessageType = 0x2A // Live: the pages one request asked for
