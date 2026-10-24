@@ -446,7 +446,7 @@ func (p *player) adopt(c *replayCopy) {
 			o.Resize(p.termW, p.termH) // a full repaint; only for a size it was not built for
 		}
 	}
-	system.HandOverSound(twin.world, old.world)
+	system.HandOverAudio(twin.world, old.world)
 	twin.world.Resources.Status.TakeRecorder(old.world.Resources.Status)
 	twin.ctx.ReplaySeek = p.seekLater
 	old.log.Mute(true)

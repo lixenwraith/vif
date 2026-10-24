@@ -52,9 +52,9 @@ type Settings struct {
 // Play is the [play] table: how a run starts, and what the configuration menu
 // changes in it; a run with a settings file writes it back as it is left.
 type Play struct {
-	Effects     bool    `toml:"effects"`
+	Sfx         bool    `toml:"sfx"`
 	Music       bool    `toml:"music"`
-	Volume      float64 `toml:"volume"`
+	SfxVolume   float64 `toml:"sfx_volume"`
 	AutoFire    string  `toml:"auto_fire"`
 	Mouse       bool    `toml:"mouse"`
 	FollowMouse bool    `toml:"follow_mouse"`
@@ -69,8 +69,8 @@ func (p Play) check() error {
 	default:
 		return fmt.Errorf("play.auto_fire %q is not off, main or on", p.AutoFire)
 	}
-	if p.Volume < 0 || p.Volume > 1 {
-		return fmt.Errorf("play.volume %g is not between 0 and 1", p.Volume)
+	if p.SfxVolume < 0 || p.SfxVolume > 1 {
+		return fmt.Errorf("play.sfx_volume %g is not between 0 and 1", p.SfxVolume)
 	}
 	return nil
 }

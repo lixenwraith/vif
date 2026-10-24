@@ -75,14 +75,14 @@ func cmdExport(s *Session, a []string) error {
 		if err != nil {
 			return fmt.Errorf("variant %q: not an index", a[2])
 		}
-		sets := audio.RenderVariants(d, audio.SFXParams{})
+		sets := audio.RenderVariants(d, audio.SoundShape{})
 		if vi < 0 || vi >= len(sets) {
 			return fmt.Errorf("variant %d out of range, have %d", vi, len(sets))
 		}
 		buf = sets[vi]
 	} else {
 		var err error
-		if buf, err = audio.RenderPreview(d, audio.SFXParams{}); err != nil {
+		if buf, err = audio.RenderPreview(d, audio.SoundShape{}); err != nil {
 			return err
 		}
 	}

@@ -130,7 +130,7 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	store := FileStore{Path: file}
 	was := DefaultPlay()
 	now := was
-	now.Effects, now.Volume, now.AutoFire, now.HUD = false, 0.35, "main", true
+	now.Sfx, now.SfxVolume, now.AutoFire, now.HUD = false, 0.35, "main", true
 	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
@@ -142,21 +142,21 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 		t.Fatalf("a new file did not start as the embedded one:\n%s", got)
 	}
 
-	text := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\neffects = false\nhud = false # old\n\n# about audio\n[audio]\nbuffer_ms = 20"
+	text := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\nsfx = false\nhud = false # old\n\n# about audio\n[audio]\nbuffer_ms = 20"
 	if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	was = now
-	now.HUD, now.Mouse, now.Volume = false, false, 0.25
+	now.HUD, now.Mouse, now.SfxVolume = false, false, 0.25
 	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
-	want := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\neffects = false\nhud = false\n" +
-		"mouse = false\nvolume = 0.25\n\n# about audio\n[audio]\nbuffer_ms = 20\n"
+	want := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\nsfx = false\nhud = false\n" +
+		"mouse = false\nsfx_volume = 0.25\n\n# about audio\n[audio]\nbuffer_ms = 20\n"
 	if got, _ := os.ReadFile(file); string(got) != want {
 		t.Fatalf("written keys:\n%s\nwant:\n%s", got, want)
 	}
-	if s, _, err = LoadSettings(dir); err != nil || s.Play.Mouse || s.Play.Volume != 0.25 || s.Audio.BufferMs != 20 || filepath.Base(s.Paths.Log) != "logs" {
+	if s, _, err = LoadSettings(dir); err != nil || s.Play.Mouse || s.Play.SfxVolume != 0.25 || s.Audio.BufferMs != 20 || filepath.Base(s.Paths.Log) != "logs" {
 		t.Fatalf("after the write: %+v %+v, %v", s.Play, s.Paths, err)
 	}
 	if err := SavePlay(store, now, now); err != nil {
@@ -172,7 +172,7 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := os.ReadFile(file); string(got) != "[audio]\nbuffer_ms = 30\n\n[play]\nhud = false\nmouse = false\nvolume = 0.25\n" {
+	if got, _ := os.ReadFile(file); string(got) != "[audio]\nbuffer_ms = 30\n\n[play]\nhud = false\nmouse = false\nsfx_volume = 0.25\n" {
 		t.Fatalf("appended table:\n%s", got)
 	}
 }
@@ -254,7 +254,7 @@ func FuzzSavePlayKeepsTheDocument(f *testing.F) {
 	f.Add(string(asset.DefaultSettings), true, 0.25)
 	f.Add("", false, 1.0)
 	f.Add("[play]\nhud = true\n", false, 0.0)
-	f.Add("[audio]\nbuffer_ms = 20\n[ \"play\" ] # mine\n'effects'=true", true, 0.5)
+	f.Add("[audio]\nbuffer_ms = 20\n[ \"play\" ] # mine\n'sfx'=true", true, 0.5)
 	f.Add("play.hud = true\n", false, 0.5)
 	f.Fuzz(func(t *testing.T, doc string, hud bool, volume float64) {
 		before, err := ParseSettings([]byte(doc))
@@ -262,7 +262,7 @@ func FuzzSavePlayKeepsTheDocument(f *testing.F) {
 			t.Skip()
 		}
 		now := before.Play
-		now.HUD, now.Volume = hud, volume
+		now.HUD, now.SfxVolume = hud, volume
 		store := &memStore{doc: []byte(doc)}
 		if err := SavePlay(store, before.Play, now); err != nil {
 			if string(store.doc) != doc {

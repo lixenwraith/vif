@@ -924,11 +924,11 @@ picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
 
 - Priority: P2
 - Affected files: `internal/mode/config_menu.go`, `internal/paths/settings.go`
-- `[play]` persists the sound channels, effects volume, auto-fire, mouse, pointer
+- `[play]` persists the audio channels, sfx volume, auto-fire, mouse, pointer
   following and the HUD, and a scenario change carries them over. What `:new`
   keeps beyond those (rate, pins, standing breakpoints) a restart or scenario
   change still drops. Music gain needs an authoritative readback before joining
-  effects volume in the menu. Keymap, backend, paths and colour depth remain
+  the sfx volume in the menu. Keymap, backend, paths and colour depth remain
   startup settings; `:d break` stays on the command line, since a row cannot take
   its arguments.
 
@@ -976,6 +976,28 @@ visible cost over the same poses: 0.6% of drawn cells appear or vanish at the
 edges, 1.8% take another rim glyph and 0.5% another color, and the footprint's
 edges move by a cell in places, so contact and wall clearing shift with them.
 Revisit only if `:d prof` ranks `sys kraken` or `draw kraken` high again.
+
+## Audio
+
+### Rename the audio mute event to the audio vocabulary
+
+- Priority: P2
+- Affected files: `internal/event/type.go`, `internal/event/payload.go`,
+  `internal/system/audio.go`, `internal/mode/config_menu.go`, `doc/audio.md`
+
+`EventSoundMuteToggle` changes the audio channel mask, sfx and music alike, so it
+is `EventAudioMuteToggle`, the request beside `EventAudioMuteChanged`, with its
+payload. It waits for the netcode work to settle the event registry and journal
+schema the rename regenerates and bumps.
+
+### Spin off `pkg/audio` as its own module
+
+- Priority: P2
+- Affected files: `pkg/audio`, `pkg/audio/model`, `pkg/tomlmacro`, `cmd/soundlab`
+
+Two in-repository imports remain: `pkg/vmath` for three hash and stream
+constants, which inline, and `pkg/tomlmacro` for the macros both document
+loaders expand, which moves with it or into `lixenwraith/toml`.
 
 ## Genetic library
 

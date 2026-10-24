@@ -94,7 +94,7 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 			receiver.cfg.ColorMode = tc.mode
 			receiver.cfg.ColorModeSet = true
 			receiver.cfg.AudioBackend = "local-audio"
-			receiver.cfg.Play.Effects, receiver.cfg.Play.Volume = false, 0.125
+			receiver.cfg.Play.Sfx, receiver.cfg.Play.SfxVolume = false, 0.125
 			receiver.cfg.LogScope = "afs"
 			receiver.cfg.Resources.Keymap = "local-keymap.toml"
 			receiver.cfg.Resources.Music = "local-music.toml"

@@ -18,19 +18,19 @@ import (
 type AudioService struct {
 	audioEngine *audio.AudioEngine
 
-	effects, music bool    // the channels open at start
-	volume         float64 // the effects volume at start
-	initBackend    string
-	initBuffer     time.Duration
-	src            AudioSource
-	sink           io.WriteCloser // the host's speakers; nil finds a backend by name
+	sfx, music  bool    // the channels open at start
+	sfxVolume   float64 // the sfx volume at start
+	initBackend string
+	initBuffer  time.Duration
+	src         AudioSource
+	sink        io.WriteCloser // the host's speakers; nil finds a backend by name
 }
 
-func NewAudioService(effects, music bool, volume float64, forceBackend string, buffer time.Duration, src AudioSource, sink io.WriteCloser) *AudioService {
+func NewAudioService(sfx, music bool, sfxVolume float64, forceBackend string, buffer time.Duration, src AudioSource, sink io.WriteCloser) *AudioService {
 	return &AudioService{
-		effects:     effects,
+		sfx:         sfx,
 		music:       music,
-		volume:      volume,
+		sfxVolume:   sfxVolume,
 		initBackend: forceBackend,
 		initBuffer:  buffer,
 		src:         src,
@@ -43,15 +43,15 @@ func (s *AudioService) Dependencies() []string { return nil }
 
 func (s *AudioService) Init() error {
 	config := audio.DefaultAudioConfig()
-	config.Enabled = s.effects || s.music
-	config.MasterVolume = s.volume
+	config.Enabled = s.sfx || s.music
+	config.SfxVolume = s.sfxVolume
 	config.ForceBackend = s.initBackend
 	config.Buffer = s.initBuffer
 	config.Sink = s.sink
 
-	// Inject game-specific parameters, breaking cyclic dependency
-	config.EffectVolumes = parameter.GameEffectVolumes
-	config.EffectShapes = parameter.GameEffectShapes
+	// The game's sfx mix, injected so pkg/audio stays free of it
+	config.SfxLevels = parameter.SfxLevels
+	config.SoundShapes = parameter.SfxShapes
 
 	// pkg/audio ships no specs or authored patterns; both banks are embedder data.
 	base, err := parameter.BuiltinSounds()
@@ -79,7 +79,7 @@ func (s *AudioService) Init() error {
 	if err != nil {
 		return fmt.Errorf("audio: %w", err) // a configuration the player wrote
 	}
-	eng.SetEffectMuted(!s.effects)
+	eng.SetSfxMuted(!s.sfx)
 	eng.SetMusicMuted(!s.music)
 	s.audioEngine = eng
 	return nil
@@ -101,9 +101,9 @@ func (s *AudioService) Start() error {
 	// Registration, freeze and preload completed inside audioEngine.Start, on the
 	// ErrNoAudioBackend path too, so the table resolves whether or not a device was
 	// found, and Hub.StartAll precedes the first tick, so no sound was requested yet.
-	// Fatal by design: a missing name means soundTable and the shipped bank
+	// Fatal by design: a missing name means sfxTable and the shipped bank
 	// disagree, and every Play of it would be a bad-ID rejection.
-	if err := parameter.ResolveSounds(); err != nil {
+	if err := parameter.ResolveSfx(); err != nil {
 		return fmt.Errorf("audio service: %w", err)
 	}
 

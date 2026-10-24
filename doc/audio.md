@@ -1,9 +1,21 @@
 # Audio Architecture
 
-vif includes a pure-Go synthesis, effects, mixing, and music-sequencing
+vif includes a pure-Go synthesis, sound effect, mixing, and music-sequencing
 engine. It streams raw PCM to an external host process/device; there is no CGO
 audio dependency. Game policy is layered over the reusable `pkg/audio` engine
 by the audio service and the `AudioSystem`/`MusicSystem` pair.
+
+Three words name what it plays, in code and documents alike:
+
+- **audio** is everything: the engine, its service and backend, and the
+  speakers' channel mask, pause and telemetry;
+- **music** is what the sequencer plays: patterns (beats, melodies, basses and
+  fills) on the music bus, arranged by the conductor;
+- **sfx**, a sound effect, is a sound played on a trigger outside the music, on
+  the sfx bus.
+
+A **sound** is the synthesized one-shot both draw on: an sfx plays one, and so
+does each drum of the music's kit (§5, §7).
 
 ## 1. Layered design
 
@@ -16,17 +28,20 @@ flowchart TD
     PCM --> Backend["host process, OSS, WAV, or null"]
 ```
 
-| Layer | Responsibility |
-|---|---|
-| `internal/service.AudioService` | Configure, construct, start/stop, and contribute the engine capability. |
-| `internal/system.AudioSystem` | Translate game sound/mute/pause events and publish audio telemetry. |
-| `internal/system.MusicSystem` | Map APM and explicit music events to tempo, intensity, harmony, and patterns. |
-| `pkg/audio.AudioEngine` | Public thread-safe control surface, sound/pattern registries, backend lifecycle/failover. |
-| `pkg/audio.Mixer` | Own all live voices/sequencer state and render output buffers. |
-| Backend | Consume signed 16-bit little-endian stereo frames. |
+- `internal/service.AudioService` configures, constructs, starts and stops the
+  engine and contributes it as a capability.
+- `internal/system.AudioSystem` plays requested sfx, applies mute and pause, and
+  publishes audio telemetry.
+- `internal/system.MusicSystem` maps APM and explicit music events to tempo,
+  intensity, harmony and patterns.
+- `pkg/audio.AudioEngine` is the thread-safe control surface: the sound and
+  pattern registries and the backend's lifecycle and failover.
+- `pkg/audio.Mixer` owns every live voice and the sequencer, and renders the
+  output buffers.
+- The backend consumes signed 16-bit little-endian stereo frames.
 
-`pkg/audio` carries no ECS or APM concept. The app injects effect volumes and
-shapes, and `MusicSystem` interprets the game's five-second APM signal.
+`pkg/audio` carries no ECS or APM concept. The app injects its sfx levels and
+sound shapes, and `MusicSystem` interprets the game's five-second APM signal.
 
 Runtime mode and build capability select whether this layer exists. In a full
 build, `ModePlay`, `ModeReplay` and `ModeScript` register the audio service;
@@ -55,8 +70,8 @@ the engine does not rewind (`system.HandOverSound`).
 | Buffer duration | 50 ms; `vif.toml` `[audio] buffer_ms`, 10–200 in steps of 10 |
 | Frames per buffer | 441 per 10 ms (2,205 at 50) |
 
-Every mixer pass drains pending commands, renders music and effects into
-separate floating-point buses, sidechain-ducks music under effects, applies the
+Every mixer pass drains pending commands, renders music and sfx into
+separate floating-point buses, sidechain-ducks music under sfx, applies the
 pause gain ramp, holds the sum under a peak limiter (it sees each peak 64
 samples ahead and ramps its gain over that time, releasing over 80 ms, so
 stacked kicks duck without a click), converts samples, and writes one PCM
@@ -126,8 +141,8 @@ sequenceDiagram
 
 Playback, transport, tempo, patterns, harmony, and hot reload share one command
 channel, preserving arrival order. Pause and music mute are flags the mixer
-reads each pass, and effect mute rejects a play before it is queued. The live
-sequencer, pattern players, voices, active effects, and buses are confined to
+reads each pass, and sfx mute rejects a play before it is queued. The live
+sequencer, pattern players, voices, sounding sfx, and buses are confined to
 the mixer goroutine and need no inner locks.
 
 Commands sent before `Start` are retained in a 64-entry ordered buffer. After
@@ -139,10 +154,11 @@ through the game status registry.
 Shutdown stops the mixer/backend with a bounded wait so a wedged audio process
 cannot prevent restoration of the terminal's raw mode.
 
-## 5. Sound effects
+## 5. Sounds and sound effects
 
-Sound effects are declarative `SoundDef` values. A sound contains one or more
-layers, optional intermediate buses, and processor chains:
+A sound is a declarative `SoundDef`: one or more layers, optional intermediate
+buses, and processor chains. `Play` sounds one as an sfx; the drum kit plays
+four as instruments (§7).
 
 ```mermaid
 flowchart LR
@@ -165,30 +181,31 @@ At startup the engine:
 2. loads a resolved optional `audio/sounds.toml`, replacing same-name
    definitions;
 3. freezes the name-to-ID registry;
-4. pre-renders the variant cache, under the game's per-sound shapes, and the
-   drum kit;
-5. resolves the game's per-sound volumes by stable sound name;
+4. pre-renders the variant cache, under the game's sound shapes
+   (`SoundShapes`), and the drum kit;
+5. resolves the game's sfx levels (`SfxLevels`) by stable sound name;
 6. registers `melody_gen`, `BasePatterns` and a resolved `audio/music.toml`
    (same name replaces), and builds the group arrangement before probing
    backends.
 
-Each effect normally has three pre-rendered variants. The mixer rotates variants
-to reduce repetition, allows at most two concurrent instances per sound ID and
-12 effects globally, and steals according to its admission policy when needed.
-Rapid repeats within 250 ms attenuate toward a 0.25 floor and recover over 600
-ms. Active effects duck the music bus to 70%, with fast attack and slower
-release.
+Each sound normally has three pre-rendered variants. The mixer rotates variants
+to reduce repetition, allows at most two concurrent sfx per sound and 12 in all,
+and steals according to its admission policy when needed. Rapid repeats within
+250 ms attenuate toward a 0.25 floor and recover over 600 ms. Sounding sfx duck
+the music bus to 70%, with fast attack and slower release; the sfx volume
+(`SfxVolume`, the player's `[play] sfx_volume`) scales every sfx and leaves the
+music alone.
 
 Sound IDs are process-local registration values. Configuration and persistent
-documents must use names, not numeric IDs: a scenario names a sound with
-`EventSoundRequest { sound = "chime" }`, or gives a button one, and `AudioSystem`
-resolves the name as it plays. Such a name skips startup resolution, so a
+documents must use names, not numeric IDs: a scenario requests an sfx by its
+sound's name, `EventSoundRequest { sound = "chime" }`, or gives a button one, and
+`AudioSystem` resolves the name as it plays. Such a name skips startup resolution, so a
 mistyped one is silent and counts only as a bad-ID rejection.
 
 ## 6. Mixer buses, mute, and pause
 
-Effects and music have independent mute bits. `Ctrl-S` cycles the composed game
-mask through silence, effects-only, music-only, and both. Every build starts with
+Sfx and music have independent mute bits. `Ctrl-S` cycles the composed audio
+mask through silence, sfx only, music only, and both. Every build starts with
 both on, as the embedded `vif.toml`'s `[play]` says, until the player's own
 settings say otherwise; `-mute` starts a run muted. Each change is written back
 for the next run, and system and config events can change channels
@@ -223,7 +240,7 @@ A pattern has up to 64 steps, 32 tracks, and 512 events per track. A track sets
 its instrument, chord-following, and humanization; its events set step position,
 velocity, scale degree, octave, duration, and probability. Tonal voices are a
 table of instruments, each an oscillator stage through a resonant low-pass under
-a filter envelope into an ADSR; the drum kit uses cached effects. The pad and
+a filter envelope into an ADSR; the drum kit plays cached sounds. The pad and
 the lead are band-limited saws; the pluck a delay line a noise burst sets
 ringing. The bass and the piano are modal voices: a string as its partials, each
 a decaying phasor at `k·f0` stretched by the string's inharmonicity, at the
@@ -373,7 +390,7 @@ and `[audio] buffer_ms`, so a key another vif build wrote is named and skipped
 where the game refuses it. A save writes where the next run reads
 first: the `-config-music`/`-config-sounds` file when given, else
 `audio/<file>` under `-config-dir` or else the user root, shadowing any copy in
-a lower root. It does not apply the game's per-sound volumes and shapes, so its
+a lower root. It does not apply the game's sfx levels and sound shapes, so its
 auditions and exports play a spec as authored.
 
 The working document and live registry are separate: edits do not affect audio
@@ -384,13 +401,14 @@ reference.
 
 ## 11. Extension checklist
 
-For a new game sound:
+For a new sound effect:
 
 1. author and validate a named sound definition;
 2. add it to `internal/asset/audio` or a tested override document;
-3. for a sound Go emits, add the semantic name to the game's sound table and
-   volume/shape policy, and run startup resolution so a missing mapping fails
-   early; a sound only configuration names needs neither;
+3. for an sfx Go emits, add its sound's name to the game's sfx table
+   (`parameter.SfxSet`, `sfxTable`) with its level and shape, and run startup
+   resolution so a missing mapping fails early; an sfx only configuration names
+   needs neither;
 4. emit `EventSoundRequest` from the mechanic rather than calling the engine
    from arbitrary systems;
 5. verify rapid-fire, polyphony, mute, pause, silent-backend, and 256-command
@@ -401,16 +419,21 @@ events and keep the sequencer unaware of gameplay concepts.
 
 ## 12. Source map
 
-| Concern | Primary source |
-|---|---|
-| Engine/backend lifecycle | `pkg/audio/engine.go`, `detector.go`, `wav.go` |
-| Mixer/SFX admission | `pkg/audio/mixer.go`, `cache.go`, `drumkit.go`, `sound_render.go` |
-| Sound schema, loading and registry | `pkg/audio/sound_spec.go`, `sound_valid.go`, `sound_load.go`, `sound_registry.go` |
-| Shared protocol identifiers | `pkg/audio/model` |
-| Shipped sound and music banks | `internal/asset/audio/*.toml`, `internal/parameter.BuiltinSounds`, `BuiltinPatterns` |
-| Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `harmony.go`, `motif.go`, `track.go`, `voice.go` |
-| Game service | `internal/service/adapter_audio.go` |
-| Game event adapters | `internal/system/audio.go`, `music.go`; `sound.go` holds the mask both publish and the handover; `audio_none.go` the null systems |
-| Mode/build selection and replay default | `internal/app/config.go`, `audio.go`, `audio_none.go`, `play.go` |
-| Game policy | `internal/parameter/audio.go`, `music.go`, `sfx.go`, `sfx_audio.go` |
-| Authoring tool | `cmd/soundlab`, `cmd/soundlab/README.md` |
+- Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
+- Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `drumkit.go`,
+  `sound_render.go`
+- Sound schema, loading and registry: `pkg/audio/sound_spec.go`,
+  `sound_valid.go`, `sound_load.go`, `sound_registry.go`
+- Shared protocol identifiers: `pkg/audio/model`
+- Shipped sound and music banks: `internal/asset/audio/*.toml`,
+  `internal/parameter.BuiltinSounds`, `BuiltinPatterns`
+- Sequencer and patterns: `pkg/audio/sequencer.go`, `pattern*.go`, `harmony.go`,
+  `motif.go`, `track.go`, `voice.go`
+- Game service: `internal/service/adapter_audio.go`
+- Game event adapters: `internal/system/audio.go`, `music.go`; `speakers.go`
+  holds the mask both publish and the handover; `audio_none.go` the null systems
+- Mode and build selection, replay default: `internal/app/config.go`,
+  `audio.go`, `audio_none.go`, `play.go`
+- Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
+  `sfx_audio.go`
+- Authoring tool: `cmd/soundlab`, `cmd/soundlab/README.md`

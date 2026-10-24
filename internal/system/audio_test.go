@@ -62,7 +62,7 @@ func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *test
 	for range 8 {
 		dispatch(event.GameEvent{Type: event.EventSoundMuteToggle})
 		assertMask(parameter.AudioChanNone)
-		if !player.IsEffectMuted() || !player.IsMusicMuted() || player.IsMusicPlaying() {
+		if !player.IsSfxMuted() || !player.IsMusicMuted() || player.IsMusicPlaying() {
 			t.Fatal("mute cycle started a disabled channel")
 		}
 	}
@@ -70,7 +70,7 @@ func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *test
 	dispatch(event.GameEvent{Type: event.EventMusicStart})
 	assertMask(parameter.AudioChanNone)
 	command("audio", true)
-	assertMask(parameter.AudioChanEffects)
+	assertMask(parameter.AudioChanSfx)
 	command("music", true)
 	assertMask(parameter.AudioChanAll)
 	w.Resources.Time.DeltaTime = 50 * time.Millisecond
@@ -94,10 +94,10 @@ func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *test
 	assertMask(parameter.AudioChanAll)
 	dispatch(event.GameEvent{Type: event.EventGamePauseChanged, Payload: &event.GamePausePayload{Paused: false}})
 	dispatch(event.GameEvent{Type: event.EventMusicStop})
-	assertMask(parameter.AudioChanEffects)
+	assertMask(parameter.AudioChanSfx)
 	setMask(parameter.AudioChanNone)
 	setMask(parameter.AudioChanAll)
-	assertMask(parameter.AudioChanEffects)
+	assertMask(parameter.AudioChanSfx)
 	dispatch(event.GameEvent{Type: event.EventMusicStart})
 	assertMask(parameter.AudioChanAll)
 	command("audio", false)
@@ -162,8 +162,8 @@ func TestARebuiltCopyTakesOverTheSpeakers(t *testing.T) {
 	settle("presented world's music did not start", player.IsMusicPlaying)
 	dispatch(gate(false)) // the copy stands before a region opened the music gate
 
-	HandOverSound(to, from)
-	if to.Resources.Audio == nil || from.Resources.Audio != nil || !player.IsMusicMuted() || mask(to) != int64(parameter.AudioChanEffects) {
+	HandOverAudio(to, from)
+	if to.Resources.Audio == nil || from.Resources.Audio != nil || !player.IsMusicMuted() || mask(to) != int64(parameter.AudioChanSfx) {
 		t.Fatalf("handed over: copy mask %d, music muted %v", mask(to), player.IsMusicMuted())
 	}
 	dispatch(gate(true))

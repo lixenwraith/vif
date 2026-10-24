@@ -68,7 +68,7 @@ func init() {
 		"fill":  {"fill on|off", "slot-2 phrase auto-fill; soundlab starts with it off", 1, 1, cmdFill},
 		"key":   {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
 		"mute":  {"mute music|sfx|all|none", "absolute channel mute state", 1, 1, cmdMute},
-		"vol":   {"vol <f>", "master volume 0..1", 1, 1, cmdVol},
+		"vol":   {"vol <f>", "sfx volume 0..1; music keeps its own level", 1, 1, cmdVol},
 		"wait":  {"wait <ms>", "sleep (scripted audition pacing)", 1, 1, cmdWait},
 	}
 }

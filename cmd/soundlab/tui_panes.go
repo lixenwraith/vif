@@ -156,7 +156,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 	if unset {
 		st.Fg = a.theme.HintFg
 	}
-	sfx := tui.Style{Fg: a.theme.HintFg}
+	sufSt := tui.Style{Fg: a.theme.HintFg}
 
 	switch fv.Kind() {
 	case reflect.Struct:
@@ -168,7 +168,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
 			Expandable: true, Expanded: exp,
-			Style: st, Suffix: suf, SuffixStyle: sfx,
+			Style: st, Suffix: suf, SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs},
 		})
 		if exp {
@@ -190,7 +190,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
 			Expandable: n > 0, Expanded: exp,
-			Style: st, Suffix: suf, SuffixStyle: sfx,
+			Style: st, Suffix: suf, SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs, slice: true},
 		})
 		if exp {
@@ -205,7 +205,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 		}
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
-			Style: lst, Suffix: "= " + formatLeaf(fv), SuffixStyle: sfx,
+			Style: lst, Suffix: "= " + formatLeaf(fv), SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs, leaf: true, ro: depth == 0 && key == "name"},
 		})
 	}
@@ -217,7 +217,7 @@ func (a *tuiApp) emitElem(name string, ev reflect.Value, segs []string, i, depth
 	if unset {
 		st.Fg = a.theme.HintFg
 	}
-	sfx := tui.Style{Fg: a.theme.HintFg}
+	sufSt := tui.Style{Fg: a.theme.HintFg}
 	label := "[" + strconv.Itoa(i) + "]"
 
 	if ev.Kind() == reflect.Struct {
@@ -225,7 +225,7 @@ func (a *tuiApp) emitElem(name string, ev reflect.Value, segs []string, i, depth
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: label, Depth: depth,
 			Expandable: true, Expanded: exp,
-			Style: st, Suffix: summarize(ev), SuffixStyle: sfx,
+			Style: st, Suffix: summarize(ev), SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs, elem: true},
 		})
 		if exp {
@@ -235,7 +235,7 @@ func (a *tuiApp) emitElem(name string, ev reflect.Value, segs []string, i, depth
 	}
 	a.nodes = append(a.nodes, tui.TreeNode{
 		Key: full, Label: label, Depth: depth,
-		Style: st, Suffix: "= " + formatLeaf(ev), SuffixStyle: sfx,
+		Style: st, Suffix: "= " + formatLeaf(ev), SuffixStyle: sufSt,
 		Data: &nodeMeta{segs: segs, leaf: true, elem: true},
 	})
 }

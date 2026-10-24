@@ -19,7 +19,7 @@ var (
 	flagConfigDir = flag.String("config-dir", "", "Configuration root holding audio/ (as vif)")
 	flagMusic     = flag.String("config-music", "", "Music pattern override TOML (as vif)")
 	flagSounds    = flag.String("config-sounds", "", "Sound definition override TOML (as vif)")
-	flagVol       = flag.Float64("vol", 0.7, "Master volume 0..1")
+	flagVol       = flag.Float64("vol", 0.7, "Sound effect volume 0..1; music keeps its own level")
 	flagTUI       = flag.Bool("tui", false, "Full-screen TUI (default: line REPL)")
 )
 

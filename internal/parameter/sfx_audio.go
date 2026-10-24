@@ -15,47 +15,48 @@ func BuiltinSounds() ([]*audio.SoundDef, error) {
 	return audio.LoadSoundsFS(asset.DefaultSounds, asset.DefaultSoundFiles...)
 }
 
-type soundSpec struct {
+// sfxSpec is one sound effect: the sound it plays, its level and its render shape
+type sfxSpec struct {
 	name  string
 	slot  *audio.SoundID
-	vol   float64
-	shape audio.SFXParams
+	level float64
+	shape audio.SoundShape
 }
 
-var soundTable = []soundSpec{
-	{"error", &Sfx.Error, 0.7, audio.SFXParams{}},
-	{"bell", &Sfx.Bell, 0.9, audio.SFXParams{Length: 0.85}},
-	{"whoosh", &Sfx.Whoosh, 0.4, audio.SFXParams{Length: 0.8}},
-	{"coin", &Sfx.Coin, 0.5, audio.SFXParams{}},
-	{"shield", &Sfx.Shield, 0.7, audio.SFXParams{}},
-	{"zap", &Sfx.Zap, 0.45, audio.SFXParams{}},
-	{"crackle", &Sfx.Crackle, 0.55, audio.SFXParams{}},
-	{"metalhit", &Sfx.MetalHit, 0.6, audio.SFXParams{}},
-	{"explosion", &Sfx.Explosion, 0.6, audio.SFXParams{}},
-	{"bullet", &Sfx.Bullet, 0.25, audio.SFXParams{}},
-	{"ring", &Sfx.Ring, 0.6, audio.SFXParams{}},
+var sfxTable = []sfxSpec{
+	{"error", &Sfx.Error, 0.7, audio.SoundShape{}},
+	{"bell", &Sfx.Bell, 0.9, audio.SoundShape{Length: 0.85}},
+	{"whoosh", &Sfx.Whoosh, 0.4, audio.SoundShape{Length: 0.8}},
+	{"coin", &Sfx.Coin, 0.5, audio.SoundShape{}},
+	{"shield", &Sfx.Shield, 0.7, audio.SoundShape{}},
+	{"zap", &Sfx.Zap, 0.45, audio.SoundShape{}},
+	{"crackle", &Sfx.Crackle, 0.55, audio.SoundShape{}},
+	{"metalhit", &Sfx.MetalHit, 0.6, audio.SoundShape{}},
+	{"explosion", &Sfx.Explosion, 0.6, audio.SoundShape{}},
+	{"bullet", &Sfx.Bullet, 0.25, audio.SoundShape{}},
+	{"ring", &Sfx.Ring, 0.6, audio.SoundShape{}},
 }
 
 var (
-	GameEffectVolumes = make(map[string]float64, len(soundTable))
-	GameEffectShapes  = make(map[string]audio.SFXParams, len(soundTable))
+	SfxLevels = make(map[string]float64, len(sfxTable))
+	SfxShapes = make(map[string]audio.SoundShape, len(sfxTable))
 )
 
 func init() {
-	for i := range soundTable {
-		e := &soundTable[i]
-		GameEffectVolumes[e.name] = e.vol
-		if e.shape != (audio.SFXParams{}) {
-			GameEffectShapes[e.name] = e.shape
+	for i := range sfxTable {
+		e := &sfxTable[i]
+		SfxLevels[e.name] = e.level
+		if e.shape != (audio.SoundShape{}) {
+			SfxShapes[e.name] = e.shape
 		}
 	}
 }
 
-// ResolveSounds binds the game's names after the audio registry freezes.
-func ResolveSounds() error {
+// ResolveSfx binds the game's names after the audio registry freezes.
+func ResolveSfx() error {
 	var missing []string
-	for i := range soundTable {
-		e := &soundTable[i]
+	for i := range sfxTable {
+		e := &sfxTable[i]
 		id := audio.SoundIDByName(e.name)
 		if id == audio.SoundNone {
 			missing = append(missing, e.name)
@@ -63,7 +64,7 @@ func ResolveSounds() error {
 		*e.slot = id
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("unresolved sound specs: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("sfx naming no sound: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }

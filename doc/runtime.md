@@ -775,7 +775,7 @@ state loss and is logged when observed.
 | APM history | `GameState.mu` plus atomic published totals | Scheduler admits gestures at dispatch and rolls history. |
 | Target groups | `TargetResource` RW lock | Navigation writes; species/genetic code reads snapshots. |
 | Status metric values | Per-value atomics; set closed by `Registry.Freeze` | Systems cache pointers during construction; snapshots and the recorder load atomically off the world lock. |
-| Audio sequencer, voices, active effects | Mixer-goroutine confinement | Other goroutines send bounded commands or read atomic mirrors. |
+| Audio sequencer, voices, sounding sfx | Mixer-goroutine confinement | Other goroutines send bounded commands or read atomic mirrors. |
 | Service registry/lifecycle | `service.Hub.mu` | Composition/start/stop paths only. |
 | Network inbound buffer | Bounded channel | Transport callbacks push without blocking; active `NetworkSystem` sessions drain at the tick poll boundary. |
 

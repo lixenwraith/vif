@@ -106,12 +106,12 @@ source = { kind = "osc", freq_start = 440 }
 	}
 }
 
-// SFXParams arrives from the embedder after ValidateSound has run, so the
+// A SoundShape arrives from the embedder after ValidateSound has run, so the
 // composed scale is what has to be clamped.
 func TestShapingClamp(t *testing.T) {
 	maxSamples := int(MaxSoundDuration*maxLengthScale*AudioSampleRate) + 1
 	for _, d := range testBank() {
-		for _, b := range RenderVariants(d, SFXParams{Pitch: 64, Length: 1e6}) {
+		for _, b := range RenderVariants(d, SoundShape{Pitch: 64, Length: 1e6}) {
 			if len(b) > maxSamples {
 				t.Fatalf("%s: %d samples exceeds the length clamp", d.Name, len(b))
 			}
@@ -343,7 +343,7 @@ func TestWAVBackendCapture(t *testing.T) {
 	}
 }
 
-// TestMusicRecordingIsTheMusicAlone: effects never reach the recording, and it
+// TestMusicRecordingIsTheMusicAlone: sfx never reach the recording, and it
 // grows only while the sequencer plays.
 func TestMusicRecordingIsTheMusicAlone(t *testing.T) {
 	t.Cleanup(ResetRegistries)
@@ -380,7 +380,7 @@ func TestMusicRecordingIsTheMusicAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n := pcm(silent); n != 0 {
-		t.Fatalf("an effect with no music playing recorded %d bytes", n)
+		t.Fatalf("an sfx with no music playing recorded %d bytes", n)
 	}
 	ae.StartMusic()
 	time.Sleep(3 * AudioBufferDuration)
@@ -395,7 +395,7 @@ func TestWriteWAVFraming(t *testing.T) {
 		Name:     "test_tone",
 		Duration: 0.1,
 		Layer:    []Layer{{Source: Source{Kind: "osc", Wave: "sine", Freq: 440}}},
-	}, SFXParams{})
+	}, SoundShape{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +416,7 @@ func FuzzLoadSoundsTOML(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		got, _ := LoadSoundsTOML(data)
 		for _, d := range got {
-			buf, err := RenderPreview(d, SFXParams{})
+			buf, err := RenderPreview(d, SoundShape{})
 			if err != nil {
 				t.Fatalf("%s: validated at load but failed to render: %v", d.Name, err)
 			}
@@ -589,7 +589,7 @@ func TestPlayBufferAuditions(t *testing.T) {
 	buf, err := RenderPreview(&SoundDef{
 		Name: "unsaved", Duration: 0.1,
 		Layer: []Layer{{Source: Source{Kind: "osc", Wave: "sine", Freq: 440}}},
-	}, SFXParams{})
+	}, SoundShape{})
 	if err != nil {
 		t.Fatal(err)
 	}

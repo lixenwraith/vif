@@ -66,7 +66,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `play`/`hit`/`note` | `play <name> [vol]` | Audition. `hit` plays a drum; `note` runs through the melodic sequencer slot. |
 | `slot` | `slot <0\|1\|2\|3> <pat\|-> [fade_ms] [q]` | Transport assignment; dirty patterns auto-apply. |
 | `music`/`bpm`/`swing`/`fill`/`key` | `music start\|stop\|reset` | Transport, tempo, shuffle, slot-2 auto-fill, harmony. |
-| `mute`/`vol`/`wait` | `mute music\|sfx\|all\|none` | Channel mute, master volume, scripted pause. |
+| `mute`/`vol`/`wait` | `mute music\|sfx\|all\|none` | Channel mute, sfx volume (music keeps its level), scripted pause. |
 | `help`/`quit` | `help [verb\|keys]` | Usage, the TUI key reference, exit. |
 
 ## Scripting & Headless Demo

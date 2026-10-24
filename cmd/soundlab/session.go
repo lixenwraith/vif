@@ -75,10 +75,10 @@ func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
 
 // NewSession starts the engine on the banks and overrides the game would load, and
 // seeds each document from its override so a save writes back what the game reads.
-func NewSession(backend string, masterVol float64, out io.Writer, files audioFiles) (*Session, error) {
+func NewSession(backend string, sfxVolume float64, out io.Writer, files audioFiles) (*Session, error) {
 	cfg := audio.DefaultAudioConfig()
 	cfg.Enabled = true
-	cfg.MasterVolume = masterVol
+	cfg.SfxVolume = sfxVolume
 	cfg.ForceBackend = backend
 	cfg.Buffer = files.buffer
 	// The same banks the game registers, from the same embedded assets.

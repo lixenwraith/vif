@@ -26,7 +26,7 @@ func cmdPlay(s *Session, a []string) error {
 	// RenderPreview is the per-keystroke path: one canonical take, validated
 	// first, so an in-editor mutation that would produce non-finite samples
 	// is reported rather than played.
-	buf, err := audio.RenderPreview(d, audio.SFXParams{})
+	buf, err := audio.RenderPreview(d, audio.SoundShape{})
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func cmdMute(s *Session, a []string) error {
 		return fmt.Errorf("want music|sfx|all|none, got %q", a[0])
 	}
 	s.eng.SetMusicMuted(music)
-	s.eng.SetEffectMuted(sfx)
+	s.eng.SetSfxMuted(sfx)
 	return nil
 }
 
@@ -218,7 +218,7 @@ func cmdVol(s *Session, a []string) error {
 	if err != nil {
 		return fmt.Errorf("vol %q: not a float", a[0])
 	}
-	s.eng.SetVolume(f)
+	s.eng.SetSfxVolume(f)
 	return nil
 }
 
