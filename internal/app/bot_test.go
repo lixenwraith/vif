@@ -632,14 +632,13 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 	} {
 		holder := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 		t.Cleanup(holder.Close)
-		holder.cfg.Mode = tt.mode
 		seated := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 		t.Cleanup(seated.Close)
 		d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.localParticipant())
 		if err != nil {
 			t.Fatal(err)
 		}
-		src := &seatSource{botSource: botSource{d}, ends: holder.seatEnds(seated), screen: &holder.seatScreen,
+		src := &seatSource{botSource: botSource{d}, ends: holder.seatEnds(tt.mode, seated), screen: &holder.seatScreen,
 			run: seated, shown: screen{BotWidth, BotHeight}}
 		tt.fork(holder, seated)
 		more, err := src.Step()

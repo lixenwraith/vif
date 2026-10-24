@@ -1,7 +1,9 @@
 package network
 
 import (
+	"fmt"
 	"net"
+	"slices"
 	"testing"
 	"time"
 )
@@ -61,5 +63,52 @@ func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
 	}
 	if msg := <-received; msg == nil || msg.Type != MsgSessionRestart {
 		t.Fatalf("the peer read %+v, want the queued restart notice", msg)
+	}
+}
+
+// TestALinkBundlesEpochsAndKeepsTheirOrder: what a link is sent of epochs and syncs
+// leaves as one MsgBundle when the port releases it, and a frame of another kind
+// releases what the link is owed before it, so a link reads its frames in the order
+// they were sent.
+func TestALinkBundlesEpochsAndKeepsTheirOrder(t *testing.T) {
+	port := NewSocketPort(DebugConfig(RoleHost, "127.0.0.1:0"))
+	defer port.transport.peers.Close()
+	client, server := net.Pipe()
+	defer client.Close()
+	if _, err := port.transport.peers.AddConnectionAs(server, 2, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []struct {
+		kind MessageType
+		body string
+	}{{MsgEvent, "a"}, {MsgStateSync, "b"}, {MsgDisconnect, "c"}, {MsgEvent, "d"}} {
+		if !port.Send(2, uint8(f.kind), []byte(f.body)) {
+			t.Fatalf("the link refused %#x", f.kind)
+		}
+	}
+	port.Release()
+	_ = client.SetReadDeadline(time.Now().Add(5 * time.Second))
+	stream := openFlateStream(client, 0, 0)
+	var got []string
+	for range 3 {
+		var header [HeaderSize]byte
+		msg, err := stream.readFrame(MaxPayloadSize, header[:])
+		if err != nil {
+			t.Fatalf("after %v: %v", got, err)
+		}
+		frame := fmt.Sprintf("%#x:%s", msg.Type, msg.Payload)
+		if msg.Type == MsgBundle {
+			frame = "bundle:"
+			_ = Unbundle(msg.Payload, func(kind MessageType, body []byte) { frame += fmt.Sprintf(" %#x:%s", kind, body) })
+		}
+		got = append(got, frame)
+	}
+	want := []string{
+		fmt.Sprintf("bundle: %#x:a %#x:b", MsgEvent, MsgStateSync),
+		fmt.Sprintf("%#x:c", MsgDisconnect),
+		fmt.Sprintf("bundle: %#x:d", MsgEvent),
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("the link read %v, want %v", got, want)
 	}
 }

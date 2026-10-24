@@ -284,7 +284,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 
 	// The gate again compresses against bytes only the join's decoder has seen, so
 	// the port has to read on through that decoder.
-	if !host.Send(2, uint8(MsgEvent), final) {
+	if !host.Send(2, uint8(MsgStateDigest), final) {
 		t.Fatal("host send failed")
 	}
 	waitInbound(t, guest, func(in Inbound) bool {
@@ -292,7 +292,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	})
 
 	body := []byte("framed payload")
-	if !guest.Send(1, uint8(MsgEvent), body) {
+	if !guest.Send(1, uint8(MsgStateDigest), body) {
 		t.Fatal("guest send failed")
 	}
 	waitInbound(t, host, func(in Inbound) bool {

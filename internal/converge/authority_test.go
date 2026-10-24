@@ -20,8 +20,8 @@ func chainOf(ids ...network.PeerID) network.SuccessionChain {
 }
 
 // record is the handoff a criterion hands to an instance, carrying the membership
-// that instance closed on — a record whose roster is not byte-identical is refused
-// before anything is read from it.
+// that instance closed on — a record whose players are not those the receiver holds
+// is refused before anything is read from it.
 func record(u *Authority, term network.AuthorityTerm, authority, predecessor network.PeerID) network.HandoffRecord {
 	held := u.State()
 	return network.HandoffRecord{

@@ -76,6 +76,25 @@ func TestAnAddressIsNotRosterIdentity(t *testing.T) {
 	}
 }
 
+// TestABotIsNotRosterIdentityAcrossAHandoff: a seat crosses at its holder's word,
+// which a receiver behind its relay may hold unapplied when the record reaches it,
+// so a record is validated against the players alone.
+func TestABotIsNotRosterIdentityAcrossAHandoff(t *testing.T) {
+	players := []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}}
+	rec := HandoffRecord{
+		Term: FirstTerm + 1, Authority: 2, Predecessor: 1,
+		Roster: append(slices.Clone(players), RosterEntry{ID: 3, Slot: 2, Holder: 2}),
+		Chain:  SuccessionChain{{ID: 2, Addr: "a"}},
+	}
+	if err := rec.Validate(players, rec.Chain, FirstTerm); err != nil {
+		t.Fatalf("a record carrying a seat the receiver has not spawned was refused: %v", err)
+	}
+	rec.Roster = append(slices.Clone(players), RosterEntry{ID: 4, Slot: 2})
+	if err := rec.Validate(players, rec.Chain, FirstTerm); err == nil {
+		t.Fatal("a record carrying a player the receiver does not hold was accepted")
+	}
+}
+
 func TestChainAppendKeepsPosition(t *testing.T) {
 	c := SuccessionChain(nil).Append(3, "c").Append(2, "b").Append(3, "c2")
 	if len(c) != 2 || c[0].ID != 3 || c[0].Addr != "c2" || c[1].ID != 2 {

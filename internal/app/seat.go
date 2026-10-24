@@ -116,13 +116,6 @@ func (a *App) addSeatLocked(spec string) error {
 	if err != nil {
 		return err
 	}
-	// A holder whose clock stops when paused stops its seats with it; a driven one
-	// steps through a pause, and so do they. A hold reaches them as the crossing it
-	// is, at the tick every participant stops at.
-	var hold func() bool
-	if !a.cfg.Mode.Driven() {
-		hold = a.ctx.TimeCtl.OwnPause
-	}
 	s := &seat{spec: spec, graph: graph, stop: make(chan os.Signal), done: make(chan struct{})}
 	a.seatsMu.Lock()
 	a.seatSerial++
@@ -130,7 +123,8 @@ func (a *App) addSeatLocked(spec string) error {
 	a.seats = append(a.seats, s)
 	a.seatsMu.Unlock()
 	cfg.log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
-	core.Go(func() { a.playSeat(s, cfg, hold) })
+	mode := a.cfg.Mode // the seat's goroutine reads nothing of its holder's config
+	core.Go(func() { a.playSeat(s, cfg, mode) })
 	return nil
 }
 
@@ -188,12 +182,19 @@ func (a *App) seatScreenLocked() (int, int) {
 }
 
 // playSeat runs one seat until its holder halts it, its graph quits, or the session
-// ends for it, standing still while hold reports true. A join refused while the
-// session starts or hands off is retried, as the refusal asks; any other failure
-// ends it.
-func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
+// ends for it (seatEnds), standing still while its holder's pause does. A join
+// refused while the session starts or hands off is retried, as the refusal asks;
+// any other failure ends it. mode is the holder's, read as it was seated.
+func (a *App) playSeat(s *seat, cfg Config, mode Mode) {
 	defer close(s.done)
 	defer a.forgetSeat(s)
+	// A holder whose clock stops when paused stops its seats with it; a driven one
+	// steps through a pause, and so do they. A hold reaches them as the crossing it
+	// is, at the tick every participant stops at.
+	var hold func() bool
+	if !mode.Driven() {
+		hold = a.ctx.TimeCtl.OwnPause
+	}
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
 	for {
 		var (
@@ -217,7 +218,7 @@ func (a *App) playSeat(s *seat, cfg Config, hold func() bool) {
 				s.app.Store(b)
 				a.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 					"peer", s.id.Load(), "slot", s.slot.Load())
-				return &seatSource{botSource: botSource{d}, ends: a.seatEnds(b), screen: &a.seatScreen,
+				return &seatSource{botSource: botSource{d}, ends: a.seatEnds(mode, b), screen: &a.seatScreen,
 					run: b, shown: screen{cfg.Width, cfg.Height}}, nil
 			})
 		// Under seatsMu, so an ask lands before this or finds no run
@@ -252,8 +253,8 @@ func forkCell(a *App) *atomic.Bool { return a.world.Resources.Status.Bools.Get("
 // seatEnds is what ends seat, one of this run's, besides this run halting it: the
 // seat's fork or this run's. A play run's loop takes its fork into a session of its
 // own and seats its bots again there (forked), so nothing but the run ends its seats.
-func (a *App) seatEnds(seat *App) []*atomic.Bool {
-	if a.cfg.Mode == ModePlay {
+func (a *App) seatEnds(mode Mode, seat *App) []*atomic.Bool {
+	if mode == ModePlay {
 		return nil
 	}
 	return []*atomic.Bool{forkCell(seat), forkCell(a)}
