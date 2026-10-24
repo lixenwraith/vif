@@ -10,7 +10,7 @@ type soundCache struct {
 
 func newSoundCache() *soundCache { return &soundCache{} }
 
-func (c *soundCache) preloadAll(shapes map[string]SFXParams) {
+func (c *soundCache) preloadAll(shapes map[string]SoundShape) {
 	defs := registeredSounds()
 	c.store = make([][]floatBuffer, len(defs))
 	for id := 1; id < len(defs); id++ {

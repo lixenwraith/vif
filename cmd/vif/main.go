@@ -434,7 +434,7 @@ func buildConfig() app.Config {
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "mute":
-			cfg.Play.Effects, cfg.Play.Music = !*flagMute, !*flagMute
+			cfg.Play.Sfx, cfg.Play.Music = !*flagMute, !*flagMute
 		case "nw", "no-wait":
 			cfg.Play.Wait = !*flagNoWait
 		}

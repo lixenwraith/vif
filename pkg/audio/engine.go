@@ -1,3 +1,8 @@
+// Package audio is a pure-Go synthesis, sound effect and music engine streaming
+// 16-bit stereo PCM to a player process, a device or a writer. Audio is all it
+// plays: sfx, sound effects played on a trigger, and music, the patterns its
+// sequencer plays. A sound is the synthesized one-shot both draw on: an sfx plays
+// one, as does each drum of the music's kit.
 package audio
 
 import (
@@ -53,9 +58,9 @@ type AudioEngine struct {
 	cache  *soundCache
 	mixer  *Mixer
 
-	// volumes is the per-SoundID effect level, resolved once from the
+	// levels is the per-SoundID sfx level, resolved once from the
 	// name-keyed config at Start. Guarded by mu with config; read on Play.
-	volumes []float64
+	levels []float64
 	// specErr retains non-fatal problems in the embedder's sound TOML.
 	// Written on the wiring goroutine before the mixer exists; read-only after.
 	specErr error
@@ -78,11 +83,11 @@ type AudioEngine struct {
 	stderrTail *tailBuffer
 	musicWAV   *wavSink // RecordMusic's file, closed by Stop
 
-	running     atomic.Bool
-	paused      atomic.Bool
-	effectMuted atomic.Bool
-	musicMuted  atomic.Bool
-	silentMode  atomic.Bool
+	running    atomic.Bool
+	paused     atomic.Bool
+	sfxMuted   atomic.Bool
+	musicMuted atomic.Bool
+	silentMode atomic.Bool
 
 	// rejected counts Play rejections by reason. The pre-mixer gates leave no
 	// trace in played/dropped, so without it a zeroed SoundID table would go
@@ -116,7 +121,7 @@ func NewAudioEngine(cfg ...*AudioConfig) (*AudioEngine, error) {
 		stderrTail: &tailBuffer{},
 		stopChan:   make(chan struct{}),
 	}
-	ae.effectMuted.Store(!config.Enabled)
+	ae.sfxMuted.Store(!config.Enabled)
 	ae.musicMuted.Store(!config.Enabled)
 	return ae, nil
 }
@@ -148,9 +153,9 @@ func (ae *AudioEngine) Start() error {
 	}
 	freezeSounds()
 
-	ae.cache.preloadAll(ae.config.EffectShapes)
+	ae.cache.preloadAll(ae.config.SoundShapes)
 	kit := buildDrumKit(ae.cache)
-	ae.resolveVolumes()
+	ae.resolveLevels()
 	registerMelodyGen()
 	for _, p := range ae.config.BasePatterns {
 		if RegisterPattern(p) == PatternSilence {
@@ -383,7 +388,7 @@ func (ae *AudioEngine) FadeOut() {
 }
 
 // RecordMusic writes the music bus alone, as it plays, to a WAV file at path;
-// effects, mutes and pauses are not in it. Stop closes the file.
+// sfx, mutes and pauses are not in it. Stop closes the file.
 func (ae *AudioEngine) RecordMusic(path string) error {
 	if ae.mixer == nil {
 		return errors.New("music recording needs a running mixer; -ab null runs one without a device")
@@ -403,7 +408,7 @@ func (ae *AudioEngine) RecordMusic(path string) error {
 	return nil
 }
 
-// SetPaused toggles the paused state (music frozen + effects gated)
+// SetPaused toggles the paused state (music frozen + sfx gated)
 func (ae *AudioEngine) SetPaused(paused bool) {
 	ae.paused.Store(paused)
 	if ae.mixer != nil {
@@ -411,23 +416,23 @@ func (ae *AudioEngine) SetPaused(paused bool) {
 	}
 }
 
-// resolveVolumes builds the per-ID effect level once from the name-keyed
+// resolveLevels builds the per-ID sfx level once from the name-keyed
 // config, so Play indexes a slice rather than looking up a name per shot.
-func (ae *AudioEngine) resolveVolumes() {
+func (ae *AudioEngine) resolveLevels() {
 	defs := registeredSounds()
 	v := make([]float64, len(defs))
 	ae.mu.RLock()
-	m := ae.config.EffectVolumes
+	m := ae.config.SfxLevels
 	ae.mu.RUnlock()
 	for i := 1; i < len(defs); i++ {
 		lvl, ok := m[defs[i].Name]
 		if !ok {
-			lvl = DefaultEffectVolume
+			lvl = DefaultSfxLevel
 		}
 		v[i] = lvl
 	}
 	ae.mu.Lock()
-	ae.volumes = v
+	ae.levels = v
 	ae.mu.Unlock()
 }
 
@@ -444,7 +449,7 @@ func (ae *AudioEngine) Play(id SoundID) bool {
 	case ae.paused.Load():
 		ae.rejected[RejPaused].Add(1)
 		return false
-	case ae.effectMuted.Load():
+	case ae.sfxMuted.Load():
 		ae.rejected[RejMuted].Add(1)
 		return false
 	case ae.mixer == nil:
@@ -453,10 +458,10 @@ func (ae *AudioEngine) Play(id SoundID) bool {
 	}
 
 	ae.mu.RLock()
-	vol := ae.config.MasterVolume
-	ok := id > 0 && int(id) < len(ae.volumes)
+	vol := ae.config.SfxVolume
+	ok := id > 0 && int(id) < len(ae.levels)
 	if ok {
-		vol *= ae.volumes[id]
+		vol *= ae.levels[id]
 	}
 	ae.mu.RUnlock()
 	if !ok {
@@ -498,7 +503,7 @@ func (ae *AudioEngine) send(c audioCmd) bool {
 	return ae.mixer.Send(c)
 }
 
-func (ae *AudioEngine) IsEffectMuted() bool { return ae.effectMuted.Load() }
+func (ae *AudioEngine) IsSfxMuted() bool { return ae.sfxMuted.Load() }
 
 func (ae *AudioEngine) IsEnabled() bool {
 	return ae.running.Load() && !ae.silentMode.Load()
@@ -506,7 +511,7 @@ func (ae *AudioEngine) IsEnabled() bool {
 
 func (ae *AudioEngine) IsRunning() bool { return ae.running.Load() }
 
-func (ae *AudioEngine) SetEffectMuted(muted bool) { ae.effectMuted.Store(muted) }
+func (ae *AudioEngine) SetSfxMuted(muted bool) { ae.sfxMuted.Store(muted) }
 
 func (ae *AudioEngine) SetMusicMuted(muted bool) {
 	ae.musicMuted.Store(muted)
@@ -535,7 +540,7 @@ func (ae *AudioEngine) SetMusicSwing(a float64) { ae.send(audioCmd{op: cmdSwing,
 
 func (ae *AudioEngine) SetMusicVolume(vol float64) { ae.send(audioCmd{op: cmdMusicVol, f1: vol}) }
 
-// SetPattern targets a sequencer slot (0=rhythm, 1=melody, 2=free)
+// SetPattern targets a sequencer slot: 0 rhythm, 1 melody, 2 fill, 3 bass
 func (ae *AudioEngine) SetPattern(slot int, p PatternID, crossfadeSamples int, quantize bool) {
 	ae.send(audioCmd{op: cmdPattern, slot: int8(slot), pattern: p, i1: crossfadeSamples, b: quantize})
 }
@@ -579,13 +584,13 @@ func (ae *AudioEngine) BackendName() string {
 
 func (ae *AudioEngine) IsSilent() bool { return ae.silentMode.Load() }
 
-func (ae *AudioEngine) Volume() float64 {
+func (ae *AudioEngine) SfxVolume() float64 {
 	ae.mu.RLock()
 	defer ae.mu.RUnlock()
-	return ae.config.MasterVolume
+	return ae.config.SfxVolume
 }
 
-func (ae *AudioEngine) SetVolume(vol float64) {
+func (ae *AudioEngine) SetSfxVolume(vol float64) {
 	if vol < 0 {
 		vol = 0
 	} else if vol > 1 {
@@ -593,7 +598,7 @@ func (ae *AudioEngine) SetVolume(vol float64) {
 	}
 
 	ae.mu.Lock()
-	ae.config.MasterVolume = vol
+	ae.config.SfxVolume = vol
 	ae.mu.Unlock()
 }
 
@@ -606,7 +611,7 @@ func (ae *AudioEngine) SetConfig(cfg *AudioConfig) {
 	ae.mu.Lock()
 	ae.config = cfg
 	ae.mu.Unlock()
-	ae.resolveVolumes()
+	ae.resolveLevels()
 }
 
 // SetIntensity draws a tier's rhythm and melody from its configured pools;
@@ -624,10 +629,10 @@ func (ae *AudioEngine) DefineSound(d *SoundDef) (SoundID, error) {
 		return SoundNone, err
 	}
 	ae.mu.RLock()
-	shape := ae.config.EffectShapes[d.Name]
+	shape := ae.config.SoundShapes[d.Name]
 	ae.mu.RUnlock()
 	bufs := RenderVariants(d, shape)
-	ae.resolveVolumes() // covers a newly appended ID
+	ae.resolveLevels() // covers a newly appended ID
 
 	if ae.mixer == nil {
 		return id, nil // pre-Start: preloadAll renders from the registry
@@ -656,49 +661,49 @@ func (ae *AudioEngine) DefinePattern(p *Pattern) (PatternID, error) {
 
 // PlayBuffer auditions a caller-rendered buffer without registering it — the
 // path for an unsaved spec. The mixer owns the slice for the life of the voice;
-// do not mutate it afterward. Volume is absolute, not scaled by the effect
-// table, but master volume and the mute/pause gates still apply.
+// do not mutate it afterward. Volume is absolute, not scaled by SfxLevels, but
+// the sfx volume and the mute/pause gates still apply.
 func (ae *AudioEngine) PlayBuffer(buf []float64, volume float64) bool {
-	if !ae.running.Load() || ae.paused.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
+	if !ae.running.Load() || ae.paused.Load() || ae.sfxMuted.Load() || ae.silentMode.Load() {
 		return false
 	}
 	if ae.mixer == nil || len(buf) == 0 {
 		return false
 	}
 	ae.mu.RLock()
-	vol := ae.config.MasterVolume * volume
+	vol := ae.config.SfxVolume * volume
 	ae.mu.RUnlock()
 	return ae.mixer.Send(audioCmd{op: cmdPlayBuffer, buf: buf, f1: vol})
 }
 
-// SetEffectShape updates render shaping for one sound and re-renders it. This
+// SetSoundShape updates render shaping for one sound and re-renders it. This
 // is the slider-drag path: shaping is a render-time input, so it cannot be
 // applied at playback.
-func (ae *AudioEngine) SetEffectShape(name string, p SFXParams) error {
+func (ae *AudioEngine) SetSoundShape(name string, p SoundShape) error {
 	d := SoundDefByName(name)
 	if d == nil {
 		return fmt.Errorf("sound %q: not registered", name)
 	}
 	ae.mu.Lock()
-	if ae.config.EffectShapes == nil {
-		ae.config.EffectShapes = make(map[string]SFXParams)
+	if ae.config.SoundShapes == nil {
+		ae.config.SoundShapes = make(map[string]SoundShape)
 	}
-	ae.config.EffectShapes[name] = p
+	ae.config.SoundShapes[name] = p
 	ae.mu.Unlock()
 	_, err := ae.DefineSound(d)
 	return err
 }
 
-// SetEffectVolume updates one sound's mix level. Applied at Play, so no
-// re-render.
-func (ae *AudioEngine) SetEffectVolume(name string, vol float64) {
+// SetSfxLevel updates the level one sound plays at as sfx; Play applies it, so
+// nothing re-renders.
+func (ae *AudioEngine) SetSfxLevel(name string, vol float64) {
 	ae.mu.Lock()
-	if ae.config.EffectVolumes == nil {
-		ae.config.EffectVolumes = make(map[string]float64)
+	if ae.config.SfxLevels == nil {
+		ae.config.SfxLevels = make(map[string]float64)
 	}
-	ae.config.EffectVolumes[name] = vol
+	ae.config.SfxLevels[name] = vol
 	ae.mu.Unlock()
-	ae.resolveVolumes()
+	ae.resolveLevels()
 }
 
 // Transport reports the sequencer playhead. The position freezes rather than

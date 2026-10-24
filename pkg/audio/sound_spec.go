@@ -7,7 +7,7 @@ import "slices"
 // Conventions:
 //   - Times are seconds, frequencies Hz, gains linear.
 //   - A zero-valued field means "unset" and resolves to the neutral default
-//     documented on the field (the SFXParams.norm convention: 0 -> 1.0).
+//     documented on the field (the SoundShape convention: 0 -> 1.0).
 //   - Order-sensitive structure lives in arrays, never maps, so Marshal
 //     (which sorts keys) round-trips audio-identically.
 //   - Source frequencies always track pitch variance; processor frequencies
@@ -24,8 +24,8 @@ type SoundSpecFile struct {
 type SoundDef struct {
 	Name string `toml:"name"`
 
-	// Desc is per-layer annotation that survives Marshal, for the same reason
-	// SoundDef.Desc does: an editor's first save strips TOML comments.
+	// Desc is an annotation that survives Marshal: an editor's first save strips
+	// TOML comments.
 	Desc string `toml:"desc,omitempty"`
 	// Duration is the master buffer length. 0 derives it from the layers as
 	// max(offset+length), which then requires every layer to set length.
@@ -34,14 +34,14 @@ type SoundDef struct {
 	Norm float64 `toml:"norm,omitempty"`
 	// Raw skips peak normalization; levels become the spec's responsibility.
 	Raw bool `toml:"raw,omitempty"`
-	// FixedLength pins every time value against SFXParams.Length and the
+	// FixedLength pins every time value against SoundShape.Length and the
 	// length variant walk. Pitch still varies.
 	FixedLength bool `toml:"fixed_length,omitempty"`
 
-	// Variants is the pre-rendered take count; 0 = SFXVariants.
+	// Variants is the pre-rendered take count; 0 = SoundVariants.
 	Variants int `toml:"variants,omitempty"`
 	// PitchWalk / LengthWalk are peak-to-peak deviation across the variant
-	// set; 0 = SFXPitchWalk / SFXDecayWalk.
+	// set; 0 = SoundPitchWalk / SoundLengthWalk.
 	PitchWalk  float64 `toml:"pitch_walk,omitempty"`
 	LengthWalk float64 `toml:"length_walk,omitempty"`
 

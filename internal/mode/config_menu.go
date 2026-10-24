@@ -59,18 +59,18 @@ var configPages = []configPage{
 			command: "relay", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Relaying.Load()) }, disabled: relayUnavailable},
 	}, extra: sessionConfigOptions},
-	{key: "audio", label: "Audio", description: "Music, sound effects and effects volume.", options: []configOption{
-		{key: "effects", label: "Sound effects", description: "Game sound effects; independent of music.",
-			read: audioChannelValue(parameter.AudioChanEffects), change: toggleAudioChannel(parameter.AudioChanEffects), disabled: audioUnavailable},
+	{key: "audio", label: "Audio", description: "Sound effects, their volume, and music.", options: []configOption{
+		{key: "sfx", label: "Sound effects", description: "Game sound effects; independent of music.",
+			read: audioChannelValue(parameter.AudioChanSfx), change: toggleAudioChannel(parameter.AudioChanSfx), disabled: audioUnavailable},
 		{key: "music", label: "Music", description: "Procedural music; independent of sound effects.",
 			read: audioChannelValue(parameter.AudioChanMusic), change: toggleAudioChannel(parameter.AudioChanMusic), disabled: audioUnavailable},
-		{key: "volume", label: "Effects volume", description: "Sound effect volume, in steps of 5%. Muting keeps this level.",
+		{key: "sfx_volume", label: "Sfx volume", description: "Sound effect volume, in steps of 5%; music is not affected. Muting keeps this level.",
 			read: func(ctx *engine.GameContext) string {
-				return fmt.Sprintf("%.0f%%", ctx.World.Resources.EffectsVolume()*100)
+				return fmt.Sprintf("%.0f%%", ctx.World.Resources.SfxVolume()*100)
 			},
 			change: func(ctx *engine.GameContext, d int) {
 				r := ctx.World.Resources
-				r.SetEffectsVolume((math.Round(r.EffectsVolume()*100) + float64(d*5)) / 100)
+				r.SetSfxVolume((math.Round(r.SfxVolume()*100) + float64(d*5)) / 100)
 			}, disabled: audioUnavailable},
 	}},
 	{key: "controls", label: "Controls", description: "Auto-fire and mouse behavior.", options: []configOption{

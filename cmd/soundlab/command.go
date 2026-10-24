@@ -68,7 +68,7 @@ func init() {
 		"fill":  {"fill on|off", "slot-2 phrase auto-fill; soundlab starts with it off", 1, 1, cmdFill},
 		"key":   {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
 		"mute":  {"mute music|sfx|all|none", "absolute channel mute state", 1, 1, cmdMute},
-		"vol":   {"vol <f>", "master volume 0..1", 1, 1, cmdVol},
+		"vol":   {"vol <f>", "sfx volume 0..1; music keeps its own level", 1, 1, cmdVol},
 		"wait":  {"wait <ms>", "sleep (scripted audition pacing)", 1, 1, cmdWait},
 	}
 }
@@ -124,25 +124,81 @@ func dispatch(s *Session, line string) error {
 	return c.fn(s, args)
 }
 
-// keyHelp is the TUI's key reference, the ? overlay and `help keys`
-var keyHelp = []string{
-	"browser    j/k PgUp/PgDn move   g/G ends   / find next   h/l sounds|patterns   enter inspect",
-	"           space play|pause   0-3 slot in|out   b beat editor   a/v/r apply validate revert",
-	"           n new   c clone   w write one   + mix into   d d delete",
-	"inspector  j/k move   h/l fold   H/L all   enter edit   a add   x delete   space play   esc close",
-	"log        j/k PgUp/PgDn scroll   g/G ends",
-	"keys (p)   z x c v b n m , and q w e r t y u i white keys   s d g h j 2 3 5 6 7 black keys",
-	"           [ ] octave   up/down velocity   tab next tonal voice   ^S record then commit   esc close",
-	"beat (b)   h/j/k/l move   space toggle hit   +/- 1-9 0 velocity   t next voice of the family   T other family",
-	"           a/x track   enter apply and play in slot 0   ^S save   esc close",
-	"           the frame and title in the focus color say which strip has the keys; the panes give theirs up",
-	"global     tab browser|log   p keys   m music reset   ^S save   : command   ? keys   ^Q quit",
+// keyHelp is one line of the TUI's key reference: the keys and what they do
+type keyHelp struct{ keys, what string }
+
+// helpSection is the key reference of one view; the ? overlay shows the view's
+// own and the global keys, `help keys` all of them
+type helpSection struct {
+	title string
+	lines []keyHelp
+}
+
+var (
+	helpBrowse = helpSection{"browser", []keyHelp{
+		{"j k PgUp PgDn", "move; g G the ends; / finds the next name containing a term"},
+		{"h l", "patterns ⇄ sounds"},
+		{"space", "play a sound; put a pattern in its role's slot, or play and pause"},
+		{"0-3", "put the pattern in that slot, or take it out"},
+		{"b", "beat editor on the pattern"},
+		{"p", "keys: play the tonal voices, record a take"},
+		{"enter", "inspect: j k move, h l fold, H L all, enter edit, a add, x delete"},
+		{"a v r", "apply, validate, revert"},
+		{"n c w", "new, clone, write one to a file"},
+		{"+ / d d", "mix into another / delete"},
+		{"tab", "browser ⇄ log; m resets the music"},
+	}}
+	helpKeys = helpSection{"keys", []keyHelp{
+		{"z s x … m", "play the first octave from C, q 2 w … u the second"},
+		{"i 9 o 0 p", "the third's C to E; , l . ; / the second's again"},
+		{"• ●", "a note of the key, its root"},
+		{"tab ⇧tab", "next, previous voice"},
+		{"[ ] ← →", "octave"},
+		{"↑ ↓", "velocity"},
+		{"- =", "note length"},
+		{"^S", "record; again commits the take as a pattern, rec_N"},
+		{"\\", "take of 1, 2 or 4 bars"},
+		{"⌫", "drop the take's last note"},
+		{"esc", "close, committing a take"},
+	}}
+	helpBeat = helpSection{"beat", []keyHelp{
+		{"h l ← →", "step; H L a beat, PgUp PgDn a bar, g G the ends"},
+		{"j k ↑ ↓", "track; in the roll, pitch (PgUp PgDn an octave)"},
+		{"space", "hit or note on and off"},
+		{"enter", "apply, and play it in its role's slot"},
+		{"1-9 0 + -", "velocity, .1 to 1; nudge it"},
+		{"p", "chance: 1, .75, .5, .25"},
+		{"[ ] , . { }", "length, degree, octave of a note"},
+		{"t T", "next voice of the family, the other family"},
+		{"f", "follow the chord"},
+		{"a / x x", "add a track of the voice in hand / delete the track"},
+		{"s", "steps: the pattern's length"},
+		{"r", "piano roll of a tonal track, and back"},
+		{"esc", "close"},
+	}}
+	helpGlobal = helpSection{"everywhere", []keyHelp{
+		{":", "command line; help lists the commands"},
+		{"? / ^S / ^Q", "these keys / save / quit"},
+	}}
+)
+
+func helpFor(v view) helpSection {
+	switch v {
+	case viewKeys:
+		return helpKeys
+	case viewBeat:
+		return helpBeat
+	}
+	return helpBrowse
 }
 
 func cmdHelp(s *Session, a []string) error {
 	if len(a) == 1 && a[0] == "keys" {
-		for _, l := range keyHelp {
-			fmt.Fprintln(s.out, l)
+		for _, sec := range []helpSection{helpBrowse, helpKeys, helpBeat, helpGlobal} {
+			fmt.Fprintln(s.out, sec.title)
+			for _, l := range sec.lines {
+				fmt.Fprintf(s.out, "  %-14s %s\n", l.keys, l.what)
+			}
 		}
 		return nil
 	}

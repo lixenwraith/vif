@@ -40,8 +40,8 @@ func (*unavailableAudioSystem) EventTypes() []event.EventType {
 
 func (*unavailableAudioSystem) HandleEvent(event.GameEvent) {}
 
-// HandOverSound has no speakers to move.
-func HandOverSound(to, from *engine.World) {}
+// HandOverAudio has no speakers to move.
+func HandOverAudio(to, from *engine.World) {}
 
 type unavailableMusicSystem struct{}
 

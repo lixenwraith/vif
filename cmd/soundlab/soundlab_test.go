@@ -8,12 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/terminal/tui"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/pkg/audio"
@@ -323,12 +323,7 @@ func TestTUIPromptAndBeat(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 
-	a := &tuiApp{
-		s: s, log: newLogBuffer(100),
-		exp: tui.NewTreeExpansion(), tree: tui.NewTreeState(10),
-		cmdField: tui.NewTextFieldState(""), editField: tui.NewTextFieldState(""),
-		kind: kindPattern,
-	}
+	a := newTUIApp(s, newLogBuffer(100))
 	enter := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter}
 	space := terminal.Event{Type: terminal.EventKey, Key: terminal.KeySpace}
 	right := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'l'}
@@ -348,7 +343,7 @@ func TestTUIPromptAndBeat(t *testing.T) {
 	}
 
 	a.enterBeat() // item 6: fresh `new` seed opens cleanly
-	if a.mode != modeBeat || a.beat == nil {
+	if a.view != viewBeat || a.beat == nil {
 		t.Fatal("B on a new-seeded pattern must enter beat mode")
 	}
 	a.beatKey(space) // seed has an event at pos 0: toggle deletes it
@@ -485,12 +480,7 @@ func TestAutoSlotAssign(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 
-	a := &tuiApp{
-		s: s, log: newLogBuffer(50),
-		exp: tui.NewTreeExpansion(), tree: tui.NewTreeState(10),
-		cmdField: tui.NewTextFieldState(""), editField: tui.NewTextFieldState(""),
-		kind: kindPattern,
-	}
+	a := newTUIApp(s, newLogBuffer(50))
 	runOrFatal(t, s, &out, "new pattern ap")
 	a.cursorTo("ap")
 
@@ -517,12 +507,7 @@ func TestDeleteKey(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 
-	a := &tuiApp{
-		s: s, log: newLogBuffer(50),
-		exp: tui.NewTreeExpansion(), tree: tui.NewTreeState(10),
-		cmdField: tui.NewTextFieldState(""), editField: tui.NewTextFieldState(""),
-		kind: kindPattern,
-	}
+	a := newTUIApp(s, newLogBuffer(50))
 	runOrFatal(t, s, &out, "new pattern dp")
 	a.cursorTo("dp")
 
@@ -538,6 +523,94 @@ func TestDeleteKey(t *testing.T) {
 	a.deleteSel()
 	if s.pats.has("dp") {
 		t.Fatal("second same-name d must delete")
+	}
+}
+
+// TestTakeLandsOnTheKeysDegrees: a take's notes become the degrees of the key
+// that sound the pitches played, a chord's notes kept apart on their step, and a
+// note outside the key moves to the nearest degree, the lower on a tie.
+func TestTakeLandsOnTheKeysDegrees(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "key 40 phrygian") // E2: E F G A B C D
+	a := newTUIApp(s, newLogBuffer(50))
+	for _, n := range []struct{ pos, midi int }{{0, 52}, {4, 55}, {4, 59}, {8, 54}} { // E3, G3+B3, F#3
+		a.keys.take = append(a.keys.take, takeNote{pos: n.pos, midi: n.midi, vel: 0.8, dur: 2, instr: audio.InstrPiano})
+	}
+	a.finishRecording()
+	d, ok := s.pats.get("rec_1")
+	if !ok || len(d.Track) != 1 {
+		t.Fatalf("want rec_1 with one track:\n%s", strings.Join(a.log.lines, "\n"))
+	}
+	type at struct{ pos, deg, oct int }
+	var got []at
+	for _, e := range d.Track[0].Event {
+		got = append(got, at{e.Pos, e.Deg, e.Oct})
+	}
+	if want := []at{{0, 0, 1}, {4, 2, 1}, {4, 4, 1}, {8, 1, 1}}; !slices.Equal(got, want) {
+		t.Fatalf("take events %v, want %v (F#3 on F)", got, want)
+	}
+}
+
+// TestTooSmallTakesNoKeys: on a screen too small for the views a key does nothing
+// but quit, and the ticker asks for no frame.
+func TestTooSmallTakesNoKeys(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	a := newTUIApp(s, newLogBuffer(50))
+	a.w, a.h, a.dirty = minW-1, minH, false
+	lines := len(a.log.lines)
+	for _, r := range "pb: m" {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+	a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyNone})
+	if a.view != viewBrowse || a.mode != modeNormal || len(a.log.lines) != lines || a.dirty {
+		t.Fatalf("a hidden view acted: view %d mode %d dirty %v log %q", a.view, a.mode, a.dirty, a.log.lines)
+	}
+	a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlQ})
+	if !a.quit {
+		t.Fatal("^Q must still quit")
+	}
+}
+
+// TestRollPlacesANoteOnItsPitch: the roll puts a note at the cursor's pitch, and
+// . moves it a degree up, into the next octave past the scale's last degree.
+func TestRollPlacesANoteOnItsPitch(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "new pattern rl\nset rl.track.0.instr lead\ndel rl.track.0.event.0")
+	a := newTUIApp(s, newLogBuffer(100))
+	a.cursorTo("rl")
+	a.enterBeat()
+	key := func(r rune) { a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}) }
+	key('r') // an empty track opens on the second octave's root
+	for range 6 {
+		key('k')
+	}
+	key(' ')
+	key('.')
+	d, _ := s.pats.get("rl")
+	if evs := d.Track[0].Event; len(evs) != 1 || evs[0].Pos != 0 || evs[0].Deg != 0 || evs[0].Oct != 3 {
+		t.Fatalf("want one note at step 0, degree 0 of octave 3, got %+v", evs)
+	}
+}
+
+// TestUnknownSettingsAreSkipped: a vif.toml another vif build wrote, with a table
+// this one does not know, still gives soundlab its mixer period.
+func TestUnknownSettingsAreSkipped(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, t.TempDir())
+	doc := "[later]\nwindow = true\n[audio]\nbuffer_ms = 20\n"
+	if err := os.WriteFile(filepath.Join(dir, paths.SettingsFile), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := resolveAudioFiles(dir, "", "")
+	if err != nil || f.skipped == nil || f.buffer != 20*time.Millisecond {
+		t.Fatalf("resolve = %+v, %v; want buffer 20ms with the unknown table named", f, err)
 	}
 }
 

@@ -1,5 +1,7 @@
 package audio
 
+import "slices"
+
 var scaleTable = [ScaleCount][]int{
 	ScaleMinor:         {0, 2, 3, 5, 7, 8, 10},
 	ScaleHarmonicMinor: {0, 2, 3, 5, 7, 8, 11},
@@ -7,6 +9,15 @@ var scaleTable = [ScaleCount][]int{
 	ScaleDorian:        {0, 2, 3, 5, 7, 9, 10},
 	ScaleMinorPent:     {0, 3, 5, 7, 10},
 	ScaleMajor:         {0, 2, 4, 5, 7, 9, 11},
+}
+
+// ScaleIntervals returns a scale's semitone offsets from its root, those pattern
+// degrees resolve through; nil for an unknown scale
+func ScaleIntervals(s ScaleID) []int {
+	if s < 0 || s >= ScaleCount {
+		return nil
+	}
+	return slices.Clone(scaleTable[s])
 }
 
 // harmony is the mixer-confined tonal context: key, scale, chord progression

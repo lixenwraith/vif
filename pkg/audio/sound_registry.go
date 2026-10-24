@@ -25,27 +25,19 @@ var (
 // real sound (the SoundNone sentinel is omitted). Setup and editor path only.
 func RegisteredSounds() []*SoundDef { return registeredSounds()[1:] }
 
-// ResetRegistries clears the sound and pattern registries and unfreezes sound
-// registration, so a later AudioEngine.Start rebuilds both from scratch.
-//
-// Process-wide, unsynchronized against a running mixer, and it invalidates
-// every SoundID and PatternID previously handed out — including the ones cached
-// in parameter.Sfx, which must be re-resolved. Call it only with no engine
-// running: after Stop, before the next Start. The game never calls this; it
-// exists for editors and tests, which build and tear down engines repeatedly in
-// one process.
+// ResetRegistries clears both registries and unfreezes sound registration for a
+// later Start, invalidating every SoundID and PatternID handed out, an embedder's
+// cached ones included. Process-wide and unsynchronized: call it only with no
+// engine running, between a Stop and the next Start, as editors and tests do.
 func ResetRegistries() {
 	resetSoundRegistry()
 	resetPatternRegistry()
 }
 
-// RegisterSound validates and installs a spec. An existing name is replaced in
-// place, keeping its ID, mirroring RegisterPattern.
-//
-// The freeze taken at Start blocks *new* names only: soundCache.store,
-// Mixer.sfxVar/lastPlay/rapidVol and AudioEngine.volumes are all sized from the
-// registry at Start, so a late append would exceed them. Replacing a known name
-// changes no table size and is always allowed.
+// RegisterSound validates and installs a spec, replacing a known name in place
+// under its ID as RegisterPattern does. The freeze taken at Start refuses new
+// names only: the cache, the mixer's per-SoundID tables and the engine's levels
+// are sized then, and a replacement changes none of them.
 func RegisterSound(d *SoundDef) (SoundID, error) {
 	if err := ValidateSound(d); err != nil {
 		return SoundNone, err

@@ -20,7 +20,7 @@ Go: doomgeneric and every C port are out. The candidate is
 [gore](https://github.com/AndreRenaud/gore), doomgeneric converted with
 `modernc.org/ccgo/v4` and cleaned by hand, standard library only. Its frontend
 contract is small: `DrawFrame(*image.RGBA)` once a tic, `GetEvent` for keys and
-the mouse, and `CacheSound`/`PlaySound` with 8-bit mono 11025 Hz effects. It has
+the mouse, and `CacheSound`/`PlaySound` with 8-bit mono 11025 Hz sound effects. It has
 no music, keeps global state (one game per process) and still uses `unsafe` in
 places.
 
@@ -39,7 +39,7 @@ alternative and is tens of thousands of lines: out of scope.
 | Blocker | Where it is today | What closes it | Size |
 |---|---|---|---|
 | Cells, not pixels | `render.Surface` and every host draw a cell grid ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)) | A half-block frame converter in `pkg/ascimage` (§3.2); a pixel path for graphical hosts later | ~150; pixel path ~400 |
-| Effects | The mixer is synthesized and 44.1 kHz stereo | Resample each 8-bit lump to float once, at `CacheSound`, and play it through `AudioEngine.PlayBuffer`; centered and unstoppable, since that call has no pan and no voice handle | ~100 |
+| Sound effects | The mixer is synthesized and 44.1 kHz stereo | Resample each 8-bit lump to float once, at `CacheSound`, and play it through `AudioEngine.PlayBuffer`; centered and unstoppable, since that call has no pan and no voice handle | ~100 |
 | Music | Doom's is MUS played on OPL2 FM from the `GENMIDI` bank | An OPL2 emulator in Go, or MUS channels mapped onto the sequencer's voices; deferred, as gore defers it | ~1,000–1,500 |
 | Game data | No IWAD can ship in `wad/` | The player supplies one (§3.3) | ~80 |
 
@@ -120,7 +120,7 @@ useful without Doom.
 2. Hosts: window `KeyRelease`, page `keyup`, Android key up. Built.
 3. `pkg/ascimage`: a half-block converter into a caller's cells. ~150 lines.
 4. `vif-doom` (GPL-2.0): a gore frontend per host (frame to cells to `Flush`, host
-   events to Doom keys, effects to `PlayBuffer`), IWAD resolution, the hold
+   events to Doom keys, sound effects to `PlayBuffer`), IWAD resolution, the hold
    fallback, and a keymap with vi keys beside Doom's. ~800–1,200 lines.
 
 That leaves about 1,000 to 1,500 lines to first play in a terminal, window and

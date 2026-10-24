@@ -43,7 +43,7 @@ unavailable in this run`).
 | Game | Pause; a new game; a row per scenario the configuration roots hold, which starts it; another scenario by name or path. |
 | Bots | Add bots by count and policy; remove a bot held by this run or cancel its admission. |
 | Multiplayer | Host this run, join an existing session, request an allocated session, leave the session, relay for others, inspect status, drop a player with its bots or an individual bot (host only). |
-| Audio | Music, sound effects, effects volume in 5% steps. |
+| Audio | Sound effects, their volume in 5% steps, music. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
 | Simulation | Solo speed from 1/8x through 8x; a replay's restart. |
@@ -149,7 +149,7 @@ stay on the command line.
 
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
 identifies options that need a restart; it does not edit files. `[play]` is the
-exception: sound effects, music, effects volume, auto-fire, mouse input, Follow
+exception: sound effects, music, sfx volume, auto-fire, mouse input, Follow
 mouse, the telemetry HUD, Relay and Wait to start are written back as they change,
 from the menu or the command line, and a scenario change carries them into the
 next run. A flag (`-mute`, `-nw`) sets its value for its run alone and is never

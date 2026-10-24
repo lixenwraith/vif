@@ -8,11 +8,11 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
-// HandOverSound moves the speakers from a presented world to a copy rebuilt to
+// HandOverAudio moves the speakers from a presented world to a copy rebuilt to
 // replace it, which replayed without them. The engine plays on rather than
 // rewinding, so the viewer's preference and the conductor's state go with it; the
 // gates the copy replayed then decide what sounds.
-func HandOverSound(to, from *engine.World) {
+func HandOverAudio(to, from *engine.World) {
 	ta, fa := systemOf[*AudioSystem](to), systemOf[*AudioSystem](from)
 	if ta == nil || fa == nil {
 		return
@@ -42,8 +42,8 @@ func systemOf[T engine.System](w *engine.World) T {
 func publishAudioMask(world *engine.World, player *audio.AudioEngine) {
 	m := parameter.AudioChanNone
 	if player != nil && player.IsEnabled() {
-		if !player.IsEffectMuted() {
-			m |= parameter.AudioChanEffects
+		if !player.IsSfxMuted() {
+			m |= parameter.AudioChanSfx
 		}
 		if !player.IsMusicMuted() && player.IsMusicPlaying() {
 			m |= parameter.AudioChanMusic
@@ -55,6 +55,6 @@ func publishAudioMask(world *engine.World, player *audio.AudioEngine) {
 		mask = -1
 	}
 	reg.Ints.Get("audio.mask").Store(mask)
-	reg.Bools.Get("audio.effect_muted").Store(m&parameter.AudioChanEffects == 0)
+	reg.Bools.Get("audio.sfx_muted").Store(m&parameter.AudioChanSfx == 0)
 	reg.Bools.Get("audio.music_muted").Store(m&parameter.AudioChanMusic == 0)
 }

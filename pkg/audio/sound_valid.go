@@ -134,7 +134,7 @@ func ValidateSound(d *SoundDef) error {
 
 	n := d.Variants
 	if n < 1 {
-		n = SFXVariants
+		n = SoundVariants
 	}
 	ops = (ops + dur*float64(AudioSampleRate)*float64(1+len(d.Chain))) * float64(n)
 	if ops > maxRenderOps {

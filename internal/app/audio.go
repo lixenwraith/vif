@@ -27,18 +27,18 @@ func (a *App) initAudioService() error {
 		return err
 	}
 	p := a.cfg.Play
-	return a.hub.Register(service.NewAudioService(p.Effects, p.Music, p.Volume, a.cfg.AudioBackend, a.cfg.AudioBuffer, src, a.cfg.Host.Audio))
+	return a.hub.Register(service.NewAudioService(p.Sfx, p.Music, p.SfxVolume, a.cfg.AudioBackend, a.cfg.AudioBuffer, src, a.cfg.Host.Audio))
 }
 
-// audioPlay reads the channels and the volume as the player left them
+// audioPlay reads the channels and the sfx volume as the player left them
 func (a *App) audioPlay(p *paths.Play) {
 	r := a.world.Resources.Audio
 	if r == nil || r.Engine == nil {
 		return
 	}
 	pref := uint8(r.Pref.Load())
-	p.Effects, p.Music = pref&parameter.AudioChanEffects != 0, pref&parameter.AudioChanMusic != 0
-	p.Volume = r.Engine.Volume()
+	p.Sfx, p.Music = pref&parameter.AudioChanSfx != 0, pref&parameter.AudioChanMusic != 0
+	p.SfxVolume = r.Engine.SfxVolume()
 }
 
 // reportAudioSpec says in play that a malformed sounds.toml or music.toml fell back to

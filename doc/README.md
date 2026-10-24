@@ -31,7 +31,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
-| [Audio](audio.md) | Domain detail | How are effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
+| [Audio](audio.md) | Domain detail | How are sound effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
 | [Navigation](navigation-design.md) | Domain detail | How do flow fields, passability tiers, target groups, the snake lock, loot's pursuit and route graphs move species, and what does each cost? |
 | [AI, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Generic kinetic analysis](generic-kinetic.md) | Future design | Which kinetic paths exist, why one universal motion system is unsafe today, and how could they be consolidated incrementally? A design for future implementation. |

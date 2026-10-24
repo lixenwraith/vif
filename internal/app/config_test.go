@@ -275,7 +275,7 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, paths.SettingsFile)
 	a, err := NewHeadless(Config{Seed: 1, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
-		Play: paths.Play{AutoFire: "off", HUD: true, Volume: 0.5}, Settings: paths.FileStore{Path: file}})
+		Play: paths.Play{AutoFire: "off", HUD: true, SfxVolume: 0.5}, Settings: paths.FileStore{Path: file}})
 	if err != nil {
 		t.Fatal(err)
 	}

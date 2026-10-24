@@ -23,14 +23,14 @@ func loadBuiltins(t *testing.T) []*audio.SoundDef {
 	return defs
 }
 
-// A SoundSet field with no soundTable row stays SoundNone forever, and
+// A SfxSet field with no sfxTable row stays SoundNone forever, and
 // AudioEngine.Play discards it without touching played or dropped. That is the
 // exact regression this test exists to catch: silent at runtime, invisible in
 // telemetry, no compile error.
-func TestSoundTableCoversSoundSet(t *testing.T) {
-	bound := make(map[uintptr]string, len(soundTable))
-	for i := range soundTable {
-		bound[reflect.ValueOf(soundTable[i].slot).Pointer()] = soundTable[i].name
+func TestSfxTableCoversSfxSet(t *testing.T) {
+	bound := make(map[uintptr]string, len(sfxTable))
+	for i := range sfxTable {
+		bound[reflect.ValueOf(sfxTable[i].slot).Pointer()] = sfxTable[i].name
 	}
 
 	v := reflect.ValueOf(&Sfx).Elem()
@@ -40,27 +40,27 @@ func TestSoundTableCoversSoundSet(t *testing.T) {
 	for i := range tp.NumField() {
 		f := tp.Field(i)
 		if f.Type != idType {
-			t.Errorf("SoundSet.%s: type %s, want audio.SoundID", f.Name, f.Type)
+			t.Errorf("SfxSet.%s: type %s, want audio.SoundID", f.Name, f.Type)
 			continue
 		}
 		if _, ok := bound[v.Field(i).Addr().Pointer()]; !ok {
-			t.Errorf("SoundSet.%s has no soundTable row; it will never resolve", f.Name)
+			t.Errorf("SfxSet.%s has no sfxTable row; it will never resolve", f.Name)
 		}
 	}
 }
 
 // The game's names must exist in the shipped bank. A user sounds.toml
 // overrides existing names against a frozen registry; it cannot introduce one,
-// so a name absent here fails ResolveSounds and aborts startup.
-func TestSoundTableNamesAreBuiltin(t *testing.T) {
+// so a name absent here fails ResolveSfx and aborts startup.
+func TestSfxTableNamesAreBuiltin(t *testing.T) {
 	defs := loadBuiltins(t)
 	known := make(map[string]bool, len(defs))
 	for _, d := range defs {
 		known[d.Name] = true
 	}
-	for i := range soundTable {
-		if !known[soundTable[i].name] {
-			t.Errorf("sound %q has no built-in spec", soundTable[i].name)
+	for i := range sfxTable {
+		if !known[sfxTable[i].name] {
+			t.Errorf("sound %q has no built-in spec", sfxTable[i].name)
 		}
 	}
 }
@@ -102,13 +102,13 @@ func TestShippedGroupsCoverEveryTier(t *testing.T) {
 // last writer. Aliasing is expressed by pointing two rows at one slot, never
 // by repeating a name.
 func TestSoundTableNamesUnique(t *testing.T) {
-	seen := make(map[string]int, len(soundTable))
-	for i := range soundTable {
-		if j, dup := seen[soundTable[i].name]; dup {
-			t.Errorf("sound %q duplicated at rows %d and %d", soundTable[i].name, j, i)
+	seen := make(map[string]int, len(sfxTable))
+	for i := range sfxTable {
+		if j, dup := seen[sfxTable[i].name]; dup {
+			t.Errorf("sound %q duplicated at rows %d and %d", sfxTable[i].name, j, i)
 			continue
 		}
-		seen[soundTable[i].name] = i
+		seen[sfxTable[i].name] = i
 	}
 }
 
@@ -128,7 +128,7 @@ func checkBuffer(t *testing.T, name string, buf []float64) float64 {
 
 func TestBuiltinSoundsRender(t *testing.T) {
 	for _, d := range loadBuiltins(t) {
-		buf, err := audio.RenderPreview(d, audio.SFXParams{})
+		buf, err := audio.RenderPreview(d, audio.SoundShape{})
 		if err != nil {
 			t.Fatalf("%s: %v", d.Name, err)
 		}
@@ -158,11 +158,11 @@ func TestBuiltinSoundsRoundTrip(t *testing.T) {
 		t.Fatalf("round trip produced %d sounds, want %d", len(back), len(defs))
 	}
 	for i := range defs {
-		a, err := audio.RenderPreview(defs[i], audio.SFXParams{})
+		a, err := audio.RenderPreview(defs[i], audio.SoundShape{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		b, err := audio.RenderPreview(back[i], audio.SFXParams{})
+		b, err := audio.RenderPreview(back[i], audio.SoundShape{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -427,7 +427,7 @@ one shown, except that a notice does not displace an alert younger than its
 minimum, and each leaves after its kind's wall time. Its
 colors come from one palette per color mode: the theme's in truecolor, and on a
 text console fixed entries, each apart from the items beside it and with the text
-that reads best on it. The audio state is a letter: X muted, S effects, M music,
+that reads best on it. The audio state is a letter: X muted, S sfx, M music,
 O both; it is absent without an audio engine.
 
 The relative row and column gutters number only the rows and columns the

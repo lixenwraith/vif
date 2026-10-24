@@ -8,6 +8,7 @@ package main
 // set/add/del/unset can reach.
 
 import (
+	"cmp"
 	"fmt"
 	"reflect"
 	"slices"
@@ -69,6 +70,19 @@ func (a *tuiApp) selName() string {
 		return ""
 	}
 	return ns[c]
+}
+
+// addressableSel is the selection when the command grammar can name it
+func (a *tuiApp) addressableSel() (string, bool) {
+	n := a.selName()
+	if n == "" {
+		return "", false
+	}
+	if !addressable(n) {
+		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", n)
+		return "", false
+	}
+	return n, true
 }
 
 // addressable rejects names the command grammar cannot express. Creation
@@ -140,8 +154,7 @@ func (a *tuiApp) walkStruct(name string, sv reflect.Value, segs []string, depth 
 // emitField renders one field. A nil pointer sub-table (Burst, Vibrato) is walked
 // through its zero value so fields that do not exist yet can be browsed and edited
 // (set's create-on-write resolve allocates on commit); the substituted subtree
-// renders dimmed. A leaf also dims when its tag is omitempty and its value zero:
-// the fields a save would omit, which resolve to package defaults.
+// renders dimmed, as does a zero omitempty leaf, which a save omits as a default.
 func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, depth int, unset, omitEmpty bool) {
 	full := name + "." + strings.Join(segs, ".")
 	for fv.Kind() == reflect.Pointer {
@@ -156,7 +169,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 	if unset {
 		st.Fg = a.theme.HintFg
 	}
-	sfx := tui.Style{Fg: a.theme.HintFg}
+	sufSt := tui.Style{Fg: a.theme.HintFg}
 
 	switch fv.Kind() {
 	case reflect.Struct:
@@ -168,7 +181,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
 			Expandable: true, Expanded: exp,
-			Style: st, Suffix: suf, SuffixStyle: sfx,
+			Style: st, Suffix: suf, SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs},
 		})
 		if exp {
@@ -190,7 +203,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
 			Expandable: n > 0, Expanded: exp,
-			Style: st, Suffix: suf, SuffixStyle: sfx,
+			Style: st, Suffix: suf, SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs, slice: true},
 		})
 		if exp {
@@ -205,7 +218,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 		}
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
-			Style: lst, Suffix: "= " + formatLeaf(fv), SuffixStyle: sfx,
+			Style: lst, Suffix: "= " + formatLeaf(fv), SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs, leaf: true, ro: depth == 0 && key == "name"},
 		})
 	}
@@ -217,7 +230,7 @@ func (a *tuiApp) emitElem(name string, ev reflect.Value, segs []string, i, depth
 	if unset {
 		st.Fg = a.theme.HintFg
 	}
-	sfx := tui.Style{Fg: a.theme.HintFg}
+	sufSt := tui.Style{Fg: a.theme.HintFg}
 	label := "[" + strconv.Itoa(i) + "]"
 
 	if ev.Kind() == reflect.Struct {
@@ -225,7 +238,7 @@ func (a *tuiApp) emitElem(name string, ev reflect.Value, segs []string, i, depth
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: label, Depth: depth,
 			Expandable: true, Expanded: exp,
-			Style: st, Suffix: summarize(ev), SuffixStyle: sfx,
+			Style: st, Suffix: summarize(ev), SuffixStyle: sufSt,
 			Data: &nodeMeta{segs: segs, elem: true},
 		})
 		if exp {
@@ -235,7 +248,7 @@ func (a *tuiApp) emitElem(name string, ev reflect.Value, segs []string, i, depth
 	}
 	a.nodes = append(a.nodes, tui.TreeNode{
 		Key: full, Label: label, Depth: depth,
-		Style: st, Suffix: "= " + formatLeaf(ev), SuffixStyle: sfx,
+		Style: st, Suffix: "= " + formatLeaf(ev), SuffixStyle: sufSt,
 		Data: &nodeMeta{segs: segs, leaf: true, elem: true},
 	})
 }
@@ -294,243 +307,369 @@ func (a *tuiApp) leafPrefill(name string, segs []string) string {
 
 func (a *tuiApp) render() {
 	w, h := a.w, a.h
-	if w < 4 || h < 4 {
+	if w <= 0 || h <= 0 {
 		return
 	}
-	cells := make([]terminal.Cell, w*h)
-	for i := range cells {
-		cells[i] = terminal.Cell{Rune: ' ', Fg: a.theme.Fg, Bg: a.theme.Bg}
+	if len(a.cells) != w*h {
+		a.cells = make([]terminal.Cell, w*h)
 	}
-	root := tui.NewRegion(cells, w, 0, 0, w, h)
-	if w < 60 || h < 16 {
-		root.Text(0, 0, "soundlab: terminal too small (need 60x16)", a.theme.Warning, a.theme.Bg, terminal.AttrNone)
-		a.term.Flush(cells, w, h)
+	for i := range a.cells {
+		a.cells[i] = terminal.Cell{Rune: ' ', Fg: a.theme.Fg, Bg: a.theme.Bg}
+	}
+	root := tui.NewRegion(a.cells, w, 0, 0, w, h)
+	a.sig = a.engineSig()
+	if a.tooSmall() {
+		a.renderTooSmall(root)
+		a.term.Flush(a.cells, w, h)
 		return
-	}
-
-	// The strip between the log and the input line belongs to at most one
-	// mode at a time: the keys or the beat grid, each under a family row and in
-	// a frame. Its height is decided here, before the vertical split, so the
-	// panes above shrink to fit.
-	stripH := 0
-	switch a.mode {
-	case modeKeys:
-		stripH = keysRowsH + 3
-	case modeBeat:
-		if d := a.beatPat(); d != nil {
-			stripH = min(max(len(d.Track), 2), 6) + 3 // grows with tracks, capped
-		}
 	}
 
 	header, rest := tui.SplitVFixed(root, 1)
-	stripH = min(stripH, max(rest.H-1-logPaneH-3, 0)) // a short terminal keeps its log
-	body, bottom := tui.SplitVFixed(rest, rest.H-1-stripH)
-	var strip, input tui.Region
-	if stripH > 0 {
-		strip, input = tui.SplitVFixed(bottom, stripH)
-	} else {
-		input = bottom
-	}
-	main, logR := tui.SplitVFixed(body, body.H-logPaneH)
-	brR, mixR := tui.SplitHFixed(main, main.W*36/100)
-
+	body, footer := tui.SplitVFixed(rest, rest.H-1)
 	a.renderHeader(header)
-	a.renderBrowser(brR)
-	a.renderMixer(mixR)
-	a.renderLog(logR)
-	switch a.mode {
-	case modeBeat:
-		a.renderBeat(a.stripPane(strip, "beat · "+a.beat.name))
-	case modeKeys:
-		a.renderKeys(a.stripPane(strip, "keys"))
+	switch a.view {
+	case viewKeys:
+		a.renderKeysView(body)
+	case viewBeat:
+		a.renderBeatView(body)
+	default:
+		a.renderBrowse(body)
 	}
-	a.renderInput(input)
-	if a.focus == focusInspector {
+	a.renderFooter(footer)
+	if a.view == viewBrowse && a.focus == focusInspector {
 		a.renderInspector(root)
 	}
 	if a.help {
 		a.renderHelp(root)
 	}
-
-	a.term.Flush(cells, w, h)
+	a.term.Flush(a.cells, w, h)
 }
 
-// borderFg is the focus color on the focused pane, unless a strip has the keys
+// renderTooSmall centers the shortfall, each line wrapped to the width there is,
+// in place of every pane: nothing the keys would act on is drawn
+func (a *tuiApp) renderTooSmall(r tui.Region) {
+	type line struct {
+		s  string
+		fg color.RGB
+	}
+	var ls []line
+	add := func(s string, fg color.RGB) {
+		for _, w := range tui.WrapText(s, max(r.W-2, 1)) {
+			ls = append(ls, line{w, fg})
+		}
+	}
+	add(fmt.Sprintf("soundlab needs a terminal of at least %d×%d", minW, minH), a.theme.Warning)
+	add(fmt.Sprintf("this one is %d×%d", a.w, a.h), a.theme.Fg)
+	if a.quitArmed {
+		add("unsaved changes: ^Q again discards them", a.theme.Warning)
+	} else {
+		add("enlarge it to go on, or ^Q to quit", a.theme.HintFg)
+	}
+	y := max((r.H-len(ls))/2, 0)
+	for i, l := range ls {
+		r.TextCenter(y+i, l.s, l.fg, a.theme.Bg, terminal.AttrNone)
+	}
+}
+
+// renderHeader names the program and the view on the left and the engine's state
+// on the right, dropping the least important sections first when narrow
+func (a *tuiApp) renderHeader(r tui.Region) {
+	r.Fill(a.theme.HeaderBg)
+	title := " soundlab"
+	switch a.view {
+	case viewKeys:
+		title += " › keys"
+	case viewBeat:
+		title += " › beat"
+	}
+	r.Text(0, 0, title, a.theme.HeaderFg, a.theme.HeaderBg, terminal.AttrBold)
+	tw := tui.RuneLen(title) + 1
+
+	lab := tui.Style{Fg: a.theme.HintFg}
+	val := tui.Style{Fg: a.theme.HeaderFg}
+	warn := tui.Style{Fg: a.theme.Warning}
+	g := a.sig
+	sym := "■"
+	if g.running {
+		sym = "▶"
+	}
+	secs := []tui.BarSection{
+		{Value: sym + " " + transportPos(g.bar, g.step), ValueStyle: val, Priority: 5},
+		{Label: "bpm ", Value: strconv.Itoa(a.s.bpm), LabelStyle: lab, ValueStyle: val, Priority: 4},
+		{Value: a.s.keyName(), ValueStyle: val, Priority: 2},
+	}
+	if g.musicMuted {
+		secs = append(secs, tui.BarSection{Value: "music muted", ValueStyle: warn, Priority: 5})
+	}
+	var names [audio.MusicSlots]string
+	for i := range names {
+		names[i] = patName(g.slots[i])
+	}
+	slots := len(secs)
+	secs = append(secs, tui.BarSection{Label: "slots ", Value: strings.Join(names[:], "·"), LabelStyle: lab, ValueStyle: val, Priority: 1})
+	if a.s.sounds.modified || a.s.pats.modified {
+		secs = append(secs, tui.BarSection{Value: "● unsaved", ValueStyle: warn, Priority: 4})
+	}
+	if n := len(a.s.sounds.dirty) + len(a.s.pats.dirty); n > 0 {
+		secs = append(secs, tui.BarSection{Label: "unapplied ", Value: strconv.Itoa(n), LabelStyle: lab, ValueStyle: warn, Priority: 3})
+	}
+	be := g.backend
+	if g.silent || be == "" {
+		be = "silent"
+	}
+	secs = append(secs, tui.BarSection{Value: be, ValueStyle: lab, Priority: 2})
+
+	// Slot names shorten to what the row leaves them before any section drops
+	right := r.Sub(tw, 0, r.W-tw, 1)
+	used := 2
+	for _, s := range secs {
+		used += tui.RuneLen(s.Label) + tui.RuneLen(s.Value) + 3
+	}
+	// below six cells a name says nothing, and the bar drops the section instead
+	if per := (tui.RuneLen(secs[slots].Value)-(used-right.W))/len(names) - 1; used > right.W && per >= 6 {
+		for j := range names {
+			names[j] = tui.Truncate(names[j], per)
+		}
+		secs[slots].Value = strings.Join(names[:], "·")
+	}
+	right.StatusBar(0, secs, tui.BarOpts{Bg: a.theme.HeaderBg, Align: tui.BarAlignRight,
+		SepStyle: tui.Style{Fg: a.theme.Border}})
+}
+
+// transportPos is a playhead as bar.beat.sixteenth, counting from one
+func transportPos(bar int64, step int) string {
+	in := step % audio.StepsPerBar
+	return fmt.Sprintf("%d.%d.%d", bar+1, in/audio.StepsPerBeat+1, in%audio.StepsPerBeat+1)
+}
+
+// renderBrowse lays out the browser beside the mixer over the log, the log taking
+// a third of the body and never fewer than two lines
+func (a *tuiApp) renderBrowse(r tui.Region) {
+	logH := min(max(r.H/3, 4), 12)
+	main, logR := tui.SplitVFixed(r, r.H-logH)
+	brW := min(max(main.W*2/5, 30), 52)
+	brR, mixR := tui.SplitHFixed(main, brW)
+	a.renderBrowser(brR)
+	a.renderMixer(mixR)
+	a.renderLog(logR, a.borderFg(focusLog))
+}
+
+// borderFg is the focus color on the focused pane of the browse view
 func (a *tuiApp) borderFg(f focusArea) color.RGB {
-	if a.focus == f && !a.stripActive() {
+	if a.view == viewBrowse && a.focus == f {
 		return a.theme.Selected
 	}
 	return a.theme.Border
 }
 
-// stripActive reports whether the keys or the beat editor has the keyboard
-func (a *tuiApp) stripActive() bool {
-	return a.mode == modeKeys || a.mode == modeBeat
-}
-
-// stripPane frames the strip in the focus color, which the panes above give up
-func (a *tuiApp) stripPane(r tui.Region, title string) tui.Region {
-	return r.Pane(tui.PaneOpts{
-		Title: title, Border: tui.LineSingle,
-		BorderFg: a.theme.Selected, TitleFg: a.theme.Selected, Bg: a.theme.Bg,
-	})
-}
-
-func (a *tuiApp) renderHeader(r tui.Region) {
-	r.Fill(a.theme.HeaderBg)
-	r.Text(1, 0, "soundlab", a.theme.HeaderFg, a.theme.HeaderBg, terminal.AttrBold)
-
-	bar, step, running := a.s.eng.Transport()
-	sym := "■"
-	if running {
-		sym = "▶"
-	}
-	be := a.s.eng.BackendName()
-	if a.s.eng.IsSilent() || be == "" {
-		be = "silent"
-	}
-	lab := tui.Style{Fg: a.theme.HintFg}
-	val := tui.Style{Fg: a.theme.HeaderFg}
-
-	rest := []tui.BarSection{
-		{Label: "bpm ", Value: strconv.Itoa(a.s.bpm), LabelStyle: lab, ValueStyle: val, Priority: 2},
-		{Label: "dirty ", Value: strconv.Itoa(len(a.s.sounds.dirty) + len(a.s.pats.dirty)), LabelStyle: lab, ValueStyle: val, Priority: 2},
-		{Value: be, ValueStyle: val, Priority: 1},
-	}
-	if a.s.sounds.modified || a.s.pats.modified {
-		rest = append([]tui.BarSection{
-			{Value: "● unsaved", ValueStyle: tui.Style{Fg: a.theme.Warning}, Priority: 2},
-		}, rest...)
-	}
-	trans := tui.BarSection{Value: fmt.Sprintf("%s %d:%02d", sym, bar, step), ValueStyle: val, Priority: 3}
-
-	// Slot names shorten only when the full form does not fit: measure the
-	// fixed sections, give the slots whatever width remains.
-	var names [audio.MusicSlots]string
-	full := 0
-	for i := range names {
-		names[i] = patName(a.s.eng.SlotPattern(i))
-		full += tui.RuneLen(names[i])
-	}
-	fixed := 1 + tui.RuneLen("soundlab") + 2 + tui.RuneLen(trans.Value) + 3
-	for _, s := range rest {
-		fixed += tui.RuneLen(s.Label) + tui.RuneLen(s.Value) + 3
-	}
-	budget := r.W - fixed - tui.RuneLen("slots ") - (len(names) - 1) // '·' separators
-	if full > budget {
-		per := max(budget/len(names), 6)
-		for i := range names {
-			names[i] = tui.Truncate(names[i], per)
-		}
-	}
-	secs := append([]tui.BarSection{
-		trans,
-		{Label: "slots ", Value: strings.Join(names[:], "·"), LabelStyle: lab, ValueStyle: val, Priority: 1},
-	}, rest...)
-	r.StatusBar(0, secs, tui.BarOpts{Bg: a.theme.HeaderBg, Align: tui.BarAlignRight})
+// column is one fixed-width field of a browser row after the name
+type column struct {
+	head string
+	w    int
 }
 
 func (a *tuiApp) renderBrowser(r tui.Region) {
-	ns, np := len(a.s.sounds.order), len(a.s.pats.order)
-	title := fmt.Sprintf("[sounds %d]  patterns %d", ns, np)
-	if a.kind == kindPattern {
-		title = fmt.Sprintf("sounds %d  [patterns %d]", ns, np)
+	content := r.Pane(tui.PaneOpts{Border: tui.LineSingle, BorderFg: a.borderFg(focusBrowser), Bg: a.theme.Bg})
+	// The tabs are the title: patterns first, the active one lit
+	x := 2
+	for _, k := range []int{kindPattern, kindSound} {
+		n := len(a.s.pats.order)
+		if k == kindSound {
+			n = len(a.s.sounds.order)
+		}
+		tab := fmt.Sprintf(" %ss %d ", kindWord(k), n)
+		fg, attr := a.theme.HintFg, terminal.AttrNone
+		if k == a.kind {
+			fg, attr = a.theme.HeaderFg, terminal.AttrBold
+		}
+		r.Text(x, 0, tab, fg, a.theme.Bg, attr)
+		x += tui.RuneLen(tab) + 1
 	}
-	content := r.Pane(tui.PaneOpts{
-		Title: title, Border: tui.LineSingle,
-		BorderFg: a.borderFg(focusBrowser), TitleFg: a.theme.HeaderFg, Bg: a.theme.Bg,
-	})
+
 	names := a.browserNames()
 	if len(names) == 0 {
-		content.Text(0, 0, "empty — :builtin sound|pattern or :load", a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+		content.TextBlock(0, 0, "empty — :builtin "+kindWord(a.kind)+" or :load", a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
 		return
 	}
-	// A header row names the columns; the name takes what the pane has left
-	nameW := max(content.W-16, 12)
-	head := fmt.Sprintf("  %-*s %5s %6s", nameW, "name", "steps", "tracks")
+	cols := []column{{"role", 6}, {"steps", 5}, {"trk", 3}}
 	if a.kind == kindSound {
-		head = fmt.Sprintf("  %-*s %5s %6s", nameW, "name", "layer", "secs")
+		cols = []column{{"role", 4}, {"layer", 5}, {"secs", 5}}
 	}
-	content.Text(0, 0, head, a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
-	content = content.Sub(0, 1, content.W, content.H-1)
+	// Columns drop from the right until the name keeps a dozen cells
+	avail := content.W - 2
+	for len(cols) > 0 && avail-colsWidth(cols) < 12 {
+		cols = cols[:len(cols)-1]
+	}
+	nameW := max(avail-colsWidth(cols), 1)
+	content.Text(2, 0, rowText("name", nameW, cols, func(c column) string { return c.head }), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+	list := content.Sub(0, 1, content.W, content.H-1)
+
 	items := make([]tui.ListItem, 0, len(names))
 	for _, n := range names {
-		var it tui.ListItem
+		it := tui.ListItem{Icon: tui.IconBullet, IconFg: a.theme.Unselected, TextStyle: tui.Style{Fg: a.theme.Fg}}
+		var field func(column) string
 		if a.kind == kindSound {
 			d, _ := a.s.sounds.get(n)
-			it.Text = fmt.Sprintf("%-*s %5d %6.2f", nameW, tui.Truncate(n, nameW), len(d.Layer), soundDur(d))
-			it.Icon, it.IconFg = tui.IconBullet, a.theme.Unselected
+			role := "sfx"
+			if i, ok := audio.InstrumentByName(n); ok && i.IsDrum() {
+				role = "drum"
+			}
+			field = func(c column) string {
+				switch c.head {
+				case "role":
+					return role
+				case "layer":
+					return strconv.Itoa(len(d.Layer))
+				}
+				return strconv.FormatFloat(soundDur(d), 'f', 2, 64)
+			}
 			if a.s.sounds.isDirty(n) {
 				it.Icon, it.IconFg = '*', a.theme.Warning
 			}
 		} else {
 			d, _ := a.s.pats.get(n)
-			it.Text = fmt.Sprintf("%-*s %5d %6d", nameW, tui.Truncate(n, nameW), d.Steps, len(d.Track))
-			it.Icon, it.IconFg = tui.IconBullet, a.theme.Unselected
-
-			isDirty := a.s.pats.isDirty(n)
-			if isDirty {
+			field = func(c column) string {
+				switch c.head {
+				case "role":
+					return cmp.Or(d.Role, "-")
+				case "steps":
+					return strconv.Itoa(d.Steps)
+				}
+				return strconv.Itoa(len(d.Track))
+			}
+			dirty := a.s.pats.isDirty(n)
+			if dirty {
 				it.Icon, it.IconFg = '*', a.theme.Warning
 			}
-
 			if id := audio.PatternIDByName(n); id != audio.PatternSilence {
-				for si := range audio.MusicSlots {
-					if a.s.eng.SlotPattern(si) == id {
-						it.Icon = rune('0' + si)
-						if isDirty {
-							it.IconFg = a.theme.Warning
-						} else {
-							it.IconFg = a.theme.Selected
-						}
-						break
+				if si := a.slotOf(id); si >= 0 {
+					it.Icon, it.IconFg = rune('0'+si), a.theme.Selected
+					if dirty {
+						it.IconFg = a.theme.Warning
 					}
 				}
 			}
 		}
-		it.TextStyle = tui.Style{Fg: a.theme.Fg}
+		it.Text = rowText(n, nameW, cols, field)
 		items = append(items, it)
 	}
-	c := a.brCursor[a.kind]
-	if c > len(items)-1 {
-		c = len(items) - 1
-		a.brCursor[a.kind] = c
-	}
-	a.brPageH = content.H
-	a.brScroll[a.kind] = tui.AdjustScroll(c, a.brScroll[a.kind], content.H, len(items))
+	c := min(a.brCursor[a.kind], len(items)-1)
+	a.brCursor[a.kind] = c
+	a.brPageH = list.H
+	a.brScroll[a.kind] = tui.AdjustScroll(c, a.brScroll[a.kind], list.H, len(items))
 	cur := a.theme.FocusBg
-	if a.focus == focusBrowser && !a.stripActive() {
+	if a.focus == focusBrowser {
 		cur = a.theme.CursorBg
 	}
-	content.List(items, c, a.brScroll[a.kind], tui.ListOpts{CursorBg: cur, DefaultBg: a.theme.Bg})
+	list.List(items, c, a.brScroll[a.kind], tui.ListOpts{CursorBg: cur, DefaultBg: a.theme.Bg})
 }
 
-// slotRoles name what each sequencer slot plays
+func colsWidth(cols []column) int {
+	w := 0
+	for _, c := range cols {
+		w += c.w + 1
+	}
+	return w
+}
+
+// rowText lays a name and its columns out at fixed widths, the columns right-aligned
+func rowText(name string, nameW int, cols []column, field func(column) string) string {
+	var b strings.Builder
+	b.WriteString(tui.PadRight(tui.Truncate(name, nameW), nameW))
+	for _, c := range cols {
+		b.WriteByte(' ')
+		b.WriteString(tui.PadLeft(tui.Truncate(field(c), c.w), c.w))
+	}
+	return b.String()
+}
+
+// slotRoles name what each sequencer slot plays, as a pattern's role names it
 var slotRoles = [audio.MusicSlots]string{"rhythm", "melody", "fill", "bass"}
 
-// renderMixer shows what each slot sounds, as a mixer would: the pattern's grid for
-// the bar at the playhead under the group, motif and tiers it was drawn with.
-// Enter on the browser opens the full inspector over it.
+// renderMixer shows what each slot sounds on one timeline: as many bars of the
+// sequencer's four-bar cycle as fit, around the playhead, each pattern repeating
+// across them as it plays, under the group, motif and tiers it was drawn with.
 func (a *tuiApp) renderMixer(r tui.Region) {
 	content := r.Pane(tui.PaneOpts{
 		Title: "mixer", Border: tui.LineSingle,
 		BorderFg: a.theme.Border, TitleFg: a.theme.HeaderFg, Bg: a.theme.Bg,
 	})
-	_, step, running := a.s.eng.Transport()
-	secH := content.H / audio.MusicSlots
-	if secH < 2 {
-		return
+	g := a.sig
+	tl := fitTimeline(content.W - mixLabW)
+	// A slot takes its title and tracks; spare rows spread between the slots, and
+	// a short pane gives each an even share
+	var need [audio.MusicSlots]int
+	total := 0
+	for i := range need {
+		need[i] = 1
+		if p := audio.GetPattern(g.slots[i]); p != nil {
+			need[i] += len(p.Tracks)
+		}
+		total += need[i]
 	}
+	y := 0
 	for slot := range audio.MusicSlots {
-		a.renderSlot(content.Sub(0, slot*secH, content.W, secH), slot, step, running)
+		h := need[slot]
+		if total > content.H {
+			h = max(content.H/audio.MusicSlots, 1)
+		} else {
+			h += (content.H - total) / audio.MusicSlots
+		}
+		if slot == audio.MusicSlots-1 || y+h > content.H {
+			h = content.H - y
+		}
+		if h > 0 {
+			a.renderSlot(content.Sub(0, y, content.W, h), slot, tl)
+		}
+		y += h
 	}
 }
 
-func (a *tuiApp) renderSlot(r tui.Region, slot, step int, running bool) {
-	pat := audio.GetPattern(a.s.eng.SlotPattern(slot))
-	r.Divider(0, "", tui.LineSingle, a.theme.Border)
-	title := fmt.Sprintf(" %d %s ", slot, slotRoles[slot])
-	if pat == nil {
-		r.Text(1, 0, title+" - ", a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+// mixerHeight is the rows the mixer pane wants for what the slots hold
+func (a *tuiApp) mixerHeight() int {
+	h := 2
+	for _, id := range a.sig.slots {
+		h++
+		if p := audio.GetPattern(id); p != nil {
+			h += len(p.Tracks)
+		}
+	}
+	return h
+}
+
+// mixLabW is the mixer's instrument column
+const mixLabW = 7
+
+// timeline is a window of the sequencer's four-bar cycle: bars of cw cells a step
+type timeline struct{ bars, cw int }
+
+// fitTimeline shows the most bars that fit w, then widens their steps
+func fitTimeline(w int) timeline {
+	width := func(t timeline) int {
+		n := t.bars * audio.StepsPerBar
+		return n*t.cw + n/audio.StepsPerBeat - 1
+	}
+	t := timeline{bars: 1, cw: 1}
+	for _, b := range []int{4, 2} {
+		if width(timeline{b, 1}) <= w {
+			t.bars = b
+			break
+		}
+	}
+	for t.cw < 3 && width(timeline{t.bars, t.cw + 1}) <= w {
+		t.cw++
+	}
+	return t
+}
+
+func (a *tuiApp) renderSlot(r tui.Region, slot int, tl timeline) {
+	g := a.sig
+	pat := audio.GetPattern(g.slots[slot])
+	title := fmt.Sprintf("%d %s ", slot, slotRoles[slot])
+	r.Text(0, 0, title, a.theme.HeaderFg, a.theme.Bg, terminal.AttrBold)
+	tx := tui.RuneLen(title)
+	if pat == nil || pat.Steps <= 0 {
+		r.Text(tx, 0, "-", a.theme.Unselected, a.theme.Bg, terminal.AttrNone)
 		return
 	}
 	var tiers []string
@@ -539,69 +678,213 @@ func (a *tuiApp) renderSlot(r tui.Region, slot, step int, running bool) {
 			tiers = append(tiers, audio.Intensity(t).String())
 		}
 	}
-	local := step % pat.Steps
-	win := local - local%audio.StepsPerBar
-	info := fmt.Sprintf(" %s · %s · %s · %s ", pat.Name, strings.Join(pat.Groups, "+"), pat.Motif, strings.Join(tiers, " "))
-	if bars := pat.Steps / audio.StepsPerBar; bars > 1 {
-		info += fmt.Sprintf("bar %d/%d ", win/audio.StepsPerBar+1, bars)
-	}
-	r.Text(1, 0, title, a.theme.HeaderFg, a.theme.Bg, terminal.AttrBold)
-	r.Text(1+tui.RuneLen(title), 0, tui.Truncate(info, r.W-2-tui.RuneLen(title)), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
-
-	rows := r.H - 1
-	for ti := range pat.Tracks {
-		if ti >= rows {
-			break
+	info := pat.Name
+	for _, s := range []string{strings.Join(pat.Groups, "+"), pat.Motif, strings.Join(tiers, " ")} {
+		if s != "" {
+			info += " · " + s
 		}
+	}
+	if bars := pat.Steps / audio.StepsPerBar; bars > 1 {
+		info += fmt.Sprintf(" · bar %d/%d", g.step%pat.Steps/audio.StepsPerBar+1, bars)
+	}
+	r.Text(tx, 0, tui.Truncate(info, r.W-tx), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+
+	span := tl.bars * audio.StepsPerBar
+	first := g.step - g.step%span // the window holding the playhead
+	rows := r.H - 1
+	for ti := 0; ti < len(pat.Tracks) && ti < rows; ti++ {
 		y := 1 + ti
 		if ti == rows-1 && len(pat.Tracks) > rows {
-			r.Text(1, y, fmt.Sprintf("+%d more", len(pat.Tracks)-rows+1), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+			r.Text(0, y, fmt.Sprintf("+%d more", len(pat.Tracks)-rows+1), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
 			break
 		}
 		tr := &pat.Tracks[ti]
-		r.Text(1, y, fmt.Sprintf("%-6s", tr.Instr), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
-		for st := range audio.StepsPerBar {
+		r.Text(0, y, tui.Truncate(tr.Instr.String(), mixLabW-1), a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+		for i := range span {
+			c := first + i
+			pos := c % pat.Steps
 			var vel float64
 			for _, ev := range tr.Events {
-				if ev.Pos == win+st {
+				if ev.Pos == pos {
 					vel = max(vel, ev.Vel)
 				}
 			}
-			ch := '·'
-			switch {
-			case vel >= 0.75:
-				ch = '█'
-			case vel >= 0.5:
-				ch = '▆'
-			case vel >= 0.25:
-				ch = '▃'
-			case vel > 0:
-				ch = '▁'
+			ch, fg := velGlyph(vel), a.theme.Fg
+			if vel == 0 {
+				ch, fg = '·', a.theme.Unselected
 			}
 			bg := a.theme.Bg
-			if running && win+st == local {
+			if g.running && c == g.step {
 				bg = a.theme.CursorBg
 			}
-			r.Cell(8+st+st/4, y, ch, a.theme.Fg, bg, terminal.AttrNone)
+			x := mixLabW + i*tl.cw + i/audio.StepsPerBeat
+			if i > 0 && i%audio.StepsPerBar == 0 {
+				r.Cell(x-1, y, '│', a.theme.Border, a.theme.Bg, terminal.AttrNone)
+			}
+			for k := range tl.cw {
+				c := ch
+				if k > 0 && (vel == 0 || k == tl.cw-1) {
+					c = ' ' // a hit fills its step but its last cell; a rest shows one dot
+				}
+				r.Cell(x+k, y, c, fg, bg, terminal.AttrNone)
+			}
 		}
 	}
 }
 
-// renderHelp lays the key reference over everything; any key takes it down
-func (a *tuiApp) renderHelp(root tui.Region) {
-	opts := tui.DefaultOverlayOpts("keys — any key closes")
-	opts.Bg, opts.Fg, opts.TitleBg, opts.TitleFg = a.theme.Bg, a.theme.Selected, a.theme.HeaderBg, a.theme.HeaderFg
-	w := 0
-	for _, l := range keyHelp {
-		w = max(w, tui.RuneLen(l))
+// velGlyph draws a velocity as a block's height
+func velGlyph(v float64) rune { return meterGlyph(v, 1, 0) }
+
+// logLines wraps the log to width w, oldest first
+func (a *tuiApp) logLines(w int) []string {
+	var out []string
+	for _, l := range a.log.lines {
+		out = append(out, tui.WrapText(l, max(w, 1))...)
 	}
-	opts.Width, opts.Height = min(w+4, root.W-2), min(len(keyHelp)+2, root.H-2)
-	content := root.Overlay(opts).Content
-	for y, l := range keyHelp {
-		if y >= content.H {
-			break
+	return out
+}
+
+func (a *tuiApp) renderLog(r tui.Region, border color.RGB) {
+	content := r.Pane(tui.PaneOpts{
+		Title: "log", Border: tui.LineSingle,
+		BorderFg: border, TitleFg: a.theme.HeaderFg, Bg: a.theme.Bg,
+	})
+	lines := a.logLines(content.W)
+	a.logScroll = min(a.logScroll, max(len(lines)-content.H, 0))
+	start := max(len(lines)-content.H-a.logScroll, 0)
+	for y := 0; y < content.H && start+y < len(lines); y++ {
+		l := lines[start+y]
+		content.Text(0, y, l, a.logFg(l), a.theme.Bg, terminal.AttrNone)
+	}
+}
+
+// renderMessage is the log's last line, for a view that has no room for the pane
+func (a *tuiApp) renderMessage(r tui.Region) {
+	if n := len(a.log.lines); n > 0 {
+		l := a.log.lines[n-1]
+		r.Text(1, 0, tui.Truncate(l, r.W-2), a.logFg(l), a.theme.Bg, terminal.AttrNone)
+	}
+}
+
+func (a *tuiApp) logFg(l string) color.RGB {
+	switch {
+	case strings.HasPrefix(l, "> "):
+		return a.theme.HintFg
+	case strings.HasPrefix(l, "error:"):
+		return a.theme.Error
+	}
+	return a.theme.Fg
+}
+
+// stackBelow gives an editor view the rows it wants and the rest of the body to
+// what helps beside it: the mixer and the log when there is room for both, the
+// log alone, or on a short screen the log's last line. It returns the view's.
+func (a *tuiApp) stackBelow(r tui.Region, want int) tui.Region {
+	want = min(want, r.H-1)
+	if r.H-want < 5 {
+		top, msg := tui.SplitVFixed(r, r.H-1)
+		a.renderMessage(msg)
+		return top
+	}
+	top, rest := tui.SplitVFixed(r, want)
+	if mixH := a.mixerHeight(); rest.H-mixH >= 6 {
+		mix, logR := tui.SplitVFixed(rest, mixH)
+		a.renderMixer(mix)
+		a.renderLog(logR, a.theme.Border)
+		return top
+	}
+	a.renderLog(rest, a.theme.Border)
+	return top
+}
+
+// viewPane frames an editor view in the focus color: it has the keys. The title
+// is drawn here, a rune a column, as Pane's places its runes by byte.
+func (a *tuiApp) viewPane(r tui.Region, title string) tui.Region {
+	c := r.Pane(tui.PaneOpts{Border: tui.LineRounded, BorderFg: a.theme.Selected, Bg: a.theme.Bg})
+	r.Text(2, 0, tui.Truncate(" "+title+" ", r.W-4), a.theme.HeaderFg, a.theme.Bg, terminal.AttrBold)
+	return c
+}
+
+func (a *tuiApp) renderFooter(r tui.Region) {
+	switch a.mode {
+	case modeCommand:
+		r.TextField(a.cmdField, tui.TextFieldOpts{Prefix: ":", Focused: true, Border: tui.LineNone})
+		return
+	case modeEdit:
+		pre := tui.Truncate(a.editPath, r.W/2) + " = "
+		r.TextField(a.editField, tui.TextFieldOpts{Prefix: pre, Focused: true, Border: tui.LineNone})
+		return
+	case modePrompt:
+		r.TextField(a.editField, tui.TextFieldOpts{Prefix: a.promptLabel, Focused: true, Border: tui.LineNone})
+		return
+	}
+	r.Fill(a.theme.HeaderBg)
+	r.Text(1, 0, tui.Truncate(a.footHint(), r.W-2), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
+}
+
+// footHint names the keys that matter where the keyboard is; ? has the rest
+func (a *tuiApp) footHint() string {
+	switch a.view {
+	case viewKeys:
+		return a.keysHint()
+	case viewBeat:
+		return a.beatHint()
+	}
+	switch a.focus {
+	case focusInspector:
+		return "j/k move  h/l fold  enter edit  a add  x del  space play  esc close  ? keys"
+	case focusLog:
+		return "j/k scroll  g/G ends  tab browser  : cmd  ? keys  ^Q quit"
+	}
+	if a.kind == kindPattern {
+		return "j/k move  space play  0-3 slot  b beat  p keys  enter inspect  h/l sounds  : cmd  ? keys  ^Q quit"
+	}
+	return "j/k move  space play  p keys  enter inspect  h/l patterns  / find  : cmd  ? keys  ^Q quit"
+}
+
+// renderHelp lays the view's key reference, then the global keys, over
+// everything: keys in a column, what they do wrapped beside them
+func (a *tuiApp) renderHelp(root tui.Region) {
+	th := &a.theme
+	secs := []helpSection{helpFor(a.view), helpGlobal}
+	keyW := 0
+	for _, sec := range secs {
+		for _, l := range sec.lines {
+			keyW = max(keyW, tui.RuneLen(l.keys))
 		}
-		content.Text(1, y, tui.Truncate(l, content.W-2), a.theme.Fg, a.theme.Bg, terminal.AttrNone)
+	}
+	opts := tui.DefaultOverlayOpts("keys — j/k scroll, any other key closes")
+	opts.Bg, opts.Fg, opts.TitleBg, opts.TitleFg = th.Bg, th.Selected, th.HeaderBg, th.HeaderFg
+	opts.Width = min(root.W-2, 96)
+	whatW := max(opts.Width-4-keyW-3, 10)
+	type row struct {
+		keys, what string
+		title      bool
+	}
+	var rows []row
+	for _, sec := range secs {
+		rows = append(rows, row{keys: sec.title, title: true})
+		for _, l := range sec.lines {
+			for i, w := range tui.WrapText(l.what, whatW) {
+				k := ""
+				if i == 0 {
+					k = l.keys
+				}
+				rows = append(rows, row{keys: k, what: w})
+			}
+		}
+	}
+	opts.Height = min(len(rows)+2, root.H-2)
+	content := root.Overlay(opts).Content
+	a.helpTop = min(a.helpTop, max(len(rows)-content.H, 0))
+	for y := 0; y < content.H && a.helpTop+y < len(rows); y++ {
+		r := rows[a.helpTop+y]
+		if r.title {
+			content.Text(1, y, r.keys, th.HeaderFg, th.Bg, terminal.AttrBold)
+			continue
+		}
+		content.Text(2, y, r.keys, th.Selected, th.Bg, terminal.AttrNone)
+		content.Text(3+keyW, y, r.what, th.Fg, th.Bg, terminal.AttrNone)
 	}
 }
 
@@ -614,7 +897,7 @@ func (a *tuiApp) renderInspector(root tui.Region) {
 	}
 	opts := tui.DefaultOverlayOpts(title + " — esc closes")
 	opts.Bg, opts.Fg, opts.TitleBg, opts.TitleFg = a.theme.Bg, a.theme.Selected, a.theme.HeaderBg, a.theme.HeaderFg
-	opts.Width, opts.Height = root.W*8/10, root.H*8/10
+	opts.Width, opts.Height = min(root.W*8/10, 120), min(root.H*8/10, 48)
 	content := root.Overlay(opts).Content
 	if name == "" {
 		content.Text(0, 0, "select an entry in the browser (Enter)", a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
@@ -636,76 +919,4 @@ func (a *tuiApp) renderInspector(root tui.Region) {
 	content.Tree(a.nodes, a.tree.Cursor, a.tree.Scroll, tui.TreeOpts{
 		CursorBg: a.theme.CursorBg, DefaultBg: a.theme.Bg, LineMode: tui.TreeLinesNone,
 	})
-}
-
-func (a *tuiApp) renderLog(r tui.Region) {
-	content := r.Pane(tui.PaneOpts{
-		Title: "log", Border: tui.LineSingle,
-		BorderFg: a.borderFg(focusLog), TitleFg: a.theme.HeaderFg, Bg: a.theme.Bg,
-	})
-	lines := a.log.lines
-	if maxUp := len(lines) - content.H; a.logScroll > maxUp {
-		if maxUp < 0 {
-			maxUp = 0
-		}
-		a.logScroll = maxUp
-	}
-	start := max(len(lines)-content.H-a.logScroll, 0)
-	for y := range content.H {
-		li := start + y
-		if li >= len(lines) {
-			break
-		}
-		fg := a.theme.Fg
-		if strings.HasPrefix(lines[li], "> ") {
-			fg = a.theme.HintFg
-		} else if strings.HasPrefix(lines[li], "error:") {
-			fg = a.theme.Error
-		}
-		content.Text(0, y, lines[li], fg, a.theme.Bg, terminal.AttrNone)
-	}
-}
-
-func (a *tuiApp) renderInput(r tui.Region) {
-	switch a.mode {
-	case modeCommand:
-		r.TextField(a.cmdField, tui.TextFieldOpts{Prefix: ":", Focused: true, Border: tui.LineNone})
-	case modeEdit:
-		pre := tui.Truncate(a.editPath, r.W/2) + " = "
-		r.TextField(a.editField, tui.TextFieldOpts{Prefix: pre, Focused: true, Border: tui.LineNone})
-	case modeKeys:
-		r.Fill(a.theme.HeaderBg)
-		recBadge := ""
-		if a.rec {
-			recBadge = "REC ● "
-		}
-		msg := fmt.Sprintf("KEYS %s%s  z/q rows play  [ ] octave  ↑↓ velocity  tab voice  ^S record  esc close",
-			recBadge, a.keysInstr)
-		r.Text(1, 0, tui.Truncate(msg, r.W-2), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
-	case modeBeat:
-		r.Fill(a.theme.HeaderBg)
-		msg := fmt.Sprintf("BEAT %s  hjkl move  space toggle  +/- 1-9 0 vel  t/T voice|family  a/x track  enter apply+play  esc close",
-			a.beat.name)
-		r.Text(1, 0, tui.Truncate(msg, r.W-2), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
-	case modePrompt:
-		r.TextField(a.editField, tui.TextFieldOpts{Prefix: a.promptLabel, Focused: true, Border: tui.LineNone})
-	default:
-		r.Fill(a.theme.HeaderBg)
-		r.Text(1, 0, a.footHint(), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
-	}
-}
-
-// footHint names the keys that matter where the focus is; ? has the rest
-func (a *tuiApp) footHint() string {
-	switch a.focus {
-	case focusInspector:
-		return "j/k move  h/l fold  enter edit  a add  x del  space play  esc close  ? keys"
-	case focusLog:
-		return "j/k scroll  g/G ends  tab browser  : cmd  ? keys  ^Q quit"
-	default: // focusBrowser
-		if a.kind == kindPattern {
-			return "j/k move  / find  space play  0-3 slot  enter inspect  b beat  p keys  : cmd  ? keys  ^Q quit"
-		}
-		return "j/k move  / find  space play  enter inspect  h/l patterns  p keys  : cmd  ? keys  ^Q quit"
-	}
 }

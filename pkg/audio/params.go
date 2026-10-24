@@ -2,9 +2,8 @@ package audio
 
 import "time"
 
-// Engine constants. The audio package is standalone: every value the mixer,
-// sequencer and synthesis path reads lives here. Game policy — APM mapping,
-// arrangement tiers, per-sound mix levels — lives in parameter.
+// Engine constants: every value the mixer, sequencer and synthesis path read.
+// An embedder's policy (what moves the tiers, its per-sound levels) stays with it.
 
 // --- Hardware / stream format ---
 const (
@@ -33,7 +32,7 @@ const (
 
 // --- Mixer bus policy ---
 const (
-	MusicDuckAmount  = 0.7 // music gain under active SFX
+	MusicDuckAmount  = 0.7 // music gain under sounding sfx
 	MusicDuckAttack  = 10 * time.Millisecond
 	MusicDuckRelease = 100 * time.Millisecond
 
@@ -46,11 +45,11 @@ const (
 	LimiterRelease   = 80 * time.Millisecond
 )
 
-// --- SFX policy ---
+// --- Sfx policy ---
 const (
-	SFXVariants   = 3  // pre-rendered variants per sound effect
-	MaxSFXPerType = 2  // concurrent instances per SoundID (most-progressed stolen)
-	MaxActiveSFX  = 12 // global concurrent SFX cap
+	SoundVariants  = 3  // pre-rendered variants per sound a spec does not count
+	MaxSfxPerSound = 2  // concurrent sfx per SoundID (most-progressed stolen)
+	MaxActiveSfx   = 12 // global concurrent sfx cap
 
 	// Rapid-fire dampening: repeats inside the cooldown attenuate, then
 	// recover proportionally over RapidFireRecovery
