@@ -851,6 +851,7 @@ func (c *Corrections) applyRepair(body []byte) {
 	c.flushForward()
 	m.ShardsApplied.Add(int64(rep.Pages))
 	m.PagesRepaired.Add(int64(rep.Pages))
+	m.RepairSections.Store(strings.Join(rep.Sections, ","))
 	m.EntitiesRepaired.Add(int64(rep.Entities))
 	m.CellsRepaired.Add(int64(rep.Rows))
 	c.log.Debug("converge", "msg", "repair applied",

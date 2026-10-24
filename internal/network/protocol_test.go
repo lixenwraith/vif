@@ -106,7 +106,7 @@ func TestADeflatedBodyPassesTheStreamRaw(t *testing.T) {
 		{
 			{Type: MsgEvent, Payload: []byte("an epoch")},
 			{Type: MsgStateSync, Payload: []byte("a sync behind it")},
-			{Type: MsgStateDigest, Payload: []byte("a digest behind that")},
+			{Type: MsgDisconnect, Payload: []byte("a departure behind that")},
 		},
 		{
 			{Type: MsgEvent, Payload: []byte("the next epoch")},

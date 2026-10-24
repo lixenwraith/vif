@@ -345,7 +345,6 @@ func (a *App) bindSessionHooks(r *engine.NetworkResource) {
 			}
 		}
 	}
-	r.SharedDigest = a.sharedDigestLocked
 	// The correction queue takes bytes and nothing else: this runs inside a tick,
 	// and decoding or installing a correction here would do both under the lock the
 	// install itself needs.

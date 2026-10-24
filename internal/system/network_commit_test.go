@@ -558,7 +558,6 @@ func TestALeftSessionAppliesNothingButTheRunsOwn(t *testing.T) {
 	s.relay = 1
 	s.mu.Unlock()
 	s.states = append(s.states, pendingState{applyTick: 108, source: 1, payload: syncFor(0, 1, 1, 40)})
-	s.pendingDigest[1] = stateDigest{Tick: 108, Hash: 7, Valid: true}
 
 	s.LeaveSession()
 	if got := s.AppliedCrossingFences().Seq(1); got != 0 {
@@ -567,8 +566,8 @@ func TestALeftSessionAppliesNothingButTheRunsOwn(t *testing.T) {
 	if len(s.scheduled) != 1 || s.scheduled[0].source != 2 || s.scheduled[0].frame.Seq != 1 {
 		t.Errorf("scheduled %+v after leaving; want this instance's own crossing alone", s.scheduled)
 	}
-	if len(s.states) != 0 || s.pendingDigest[1].Valid || s.relay != 0 {
-		t.Errorf("the left session keeps %d syncs, digest %+v and relay %d", len(s.states), s.pendingDigest[1], s.relay)
+	if len(s.states) != 0 || s.relay != 0 {
+		t.Errorf("the left session keeps %d syncs and relay %d", len(s.states), s.relay)
 	}
 }
 

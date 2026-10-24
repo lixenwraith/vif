@@ -303,7 +303,9 @@ nobody defers by anyone else's. The authority stamps every committed copy with t
 epoch's age at commit (`WireBatch.Age`): how many of its own ticks after production
 it applied the epoch, which is the up path and the clock offset the producer's lead
 has to cover, measured where they are paid. A guest reads its lead every tick
-(`ownLead`): the age of its newest epoch to come back committed plus
+(`ownLead`): the worst age at which its epochs came back committed since the last
+reading, the newest epoch's standing in between, since a spike on a stream holds
+a burst that returns in one tick and the newest alone would hide it, plus
 `NetworkRelaySlackTicks` for the authority to relay it, held between
 `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`; the authority's
 own is the minimum, one tick, and a guest no copy has reached uses the default
@@ -312,7 +314,9 @@ reaches it down its path, so no link has to measure a trip for it. The lead in
 force is the worst reading of the last `NetworkBarrierRenegotiateTicks` (`leadOf`):
 it rises at once and falls only as the higher readings age out of the window, to
 the highest still in it, so a momentary trough is not climbed back a tick at a time
-and a passed spike does not step down one tick a window. The age rather than a
+and a passed spike does not step down one tick a window; the window is five
+seconds, longer than the spikes a slow link repeats, so a spike's lead holds until
+the next ([netcode design §3.5](netcode-design.md#35-the-divergence-harness)). The age rather than a
 probed round trip: a probe measures both directions and a stall on the way down
 raised a lead the way up never needed. Each change is a local, journaled
 `EventPlayoutLead`, so a reproduction switches on the same tick.
@@ -933,10 +937,9 @@ could make the netcode cheaper in [Netcode design](netcode-design.md).
    integrity hash — so a `float64` that drifted on another platform is repaired
    exactly like any integer that drifted. Two things remain:
 
-   - The digest hashes float bits (`digest.f64` is `math.Float64bits`), so a
-     one-ULP difference flips `network.digest_mismatches` and sets
-     `network.drift_part`. That is diagnostic noise on a mixed-platform session,
-     not a simulation fault.
+   - A manifest hashes float bits, so a one-ULP difference on a mixed-platform
+     session is a page repair each cadence: diagnostic noise, not a simulation
+     fault.
    - A journal replayed on a different platform has no authority to repair
      against, so a float difference there accumulates. Replay determinism is
      guaranteed within one implementation build.

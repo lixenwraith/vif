@@ -481,7 +481,10 @@ and a relayed person whose relay leaves walks the chain to another participant
 relaying for others (multi-player.md §5). What is left is finding that address: a relay's address is
 handed out of band like the host's, nothing publishes which participants relay,
 and a NAT between a person and every relay is not crossed. A browser relays only
-its own bots. Verify a relayed topology under `LinkShape`s, asserting hash-only
+its own bots. Relay trees the authority chooses are dropped
+([netcode design §4, Dropped](netcode-design.md#dropped)): a relay stays what a
+person chooses, and this item and the two after it are its correctness. Verify a
+relayed topology under `LinkShape`s, asserting hash-only
 convergence and the authority's per-link fan-out.
 
 ### Move a relayed survivor to its host
@@ -579,27 +582,27 @@ stands held until its press.
 - A script that `:pause`s itself never resumes: its driven loop takes no step
   while held, so its timeline never reaches the next action. Refuse it there.
 
-### Find why a storm spawn diverges on a guest
+### Commit Shared FSM transitions through the authority
 
 - Priority: P1
-- Affected files: `internal/system/storm.go`, `internal/converge/correction.go`
+- Affected files: `internal/fsm/machine.go`, `internal/engine/scheduler.go`,
+  `internal/system/network.go`, `internal/event/type.go`
+- Guide: [Netcode design §4 batch 2](netcode-design.md#4-phase-2)
 
-In a fleet run over a 160 ms link (2026-10-15), each of a guest's three storm spawns
-was followed within 19-66 ticks by one of the run's only large corrections (321
-entities, a 678-cell repair, 208 entities), while every other install wrote nothing.
-In a second run over 110 ms none did: both storms spawned at one tick on the guest
-and its two seats. The blue attack never fired in either run, and the first run's
-corrections came before one could have, so the divergent input is at the spawn
-itself: the FSM tick on a predicted quasar kill (`machine.go` dispatches a
-`PhasePredicted` `EventSpeciesKilled` like any other), the sweep's victims, or the
-three z-jitter draws. The repair logs now name the sections a repair carries; the
-next recording of that shape says which. The seats' recurring one-page, eight-cell
-repairs are a section of exactly eight rows, `streams` or `systems`, and not the
-storm. If it is inherent, a forced keyframe at the spawn tick lands the snap once and
-early instead of as a repair. A terminal guest at the site (2026-10-24) saw it again:
-a storm spawn was followed within four ticks by repairs of 499 and 558 cells across
-`meta`, `status`, `w.combat`, `w.header`, `w.member`, `w.positions` and
-`w.protection`, then `w.stormcircle` pages ([netcode design §3.4](netcode-design.md#34-at-the-site)).
+Each of a guest's storm spawns at the site was followed by one of the run's only
+large corrections (499 and 558 cells across `meta`, `status`, `w.combat`,
+`w.header`, `w.member`, `w.positions`, `w.protection`, then `w.stormcircle`). The
+divergence harness ([netcode design §3.5](netcode-design.md#35-the-divergence-harness))
+raised a storm at one simulation tick on both ends over every shape and nothing
+diverged, so the spawn is not the cause: the FSM's transition tick is. `StormSetup`
+is entered from `QuasarEscalate` on `kills.quasar`, a per-instance counter that
+re-syncs only through a `meta` repair, and a guest's FSM also ticks on predicted
+kills, so two instances enter the state on different ticks and spawn from different
+draws. The same mechanism is the `status` repairs seven ticks after a main-region
+transition seen earlier at the site. What closes it: the authority's FSM alone
+evaluates a Shared region's guards and its transition is a crossing committed and
+applied at one tick everywhere, running on_enter there; guests follow. The `fsm`
+section stays as the proof and `StormSetup`'s liveness transition goes.
 
 ### Split combat telemetry by domain
 
@@ -632,22 +635,6 @@ returns to.
 
 ## Netcode
 
-### Find the status cell that differs after a Shared FSM transition
-
-- Priority: P2
-- Affected files: `internal/app/capture.go`, `internal/snapshot/surface.go`
-
-In a session at the site (a terminal relaying for its bot, an Android and a browser
-guest, a 112 ms round trip) the bot was repaired in the `status` section twice in
-400 ticks, 22 cells each time, seven ticks after a main-region transition
-(`MainGoldActive → MainDecayWait`, `MainDecayWait → MainDecayWave`), and the terminal's
-digest mismatched on `status` at the first. A status key that passes `SharedKey`
-differs between instances for a few ticks around a transition, and a page repair of
-1.7 kB answers it each time. Reproduce with a host and a guest over a transition and
-compare the status pages; deny the key, or derive it from the tick. A later session
-at the site (a terminal guest, 2026-10-24) repaired `status` 31 times in 76 s, 19–22
-cells each, the most repaired section by far.
-
 ### Price the log's and journal's 50 ms sync
 
 - Priority: P3
@@ -679,16 +666,6 @@ td's rows in `TestNetcodeReadingsOverSockets` vary run to run with what the stor
 does to the roster: at four players keyframes ran at none, 0.13 and 0.53 a second
 across runs on one machine, so a row compares two items only where their keyframe
 rate agrees. Seed what varies, or run the row several times and report the median.
-
-### Omit a zero fixed array in the TOML encoder
-
-- Priority: P3
-- Affected files: `internal/event/payload.go`
-
-`lixenwraith/toml` omits an `omitempty` array only when its length is zero, so a
-fixed array is never omitted, and `CursorStatePayload.DamageImmunitySpent` became a
-slice to be omitted while unspent. An encoder treating an all-zero array as empty
-would let the payload keep the component's type.
 
 ## Session membership
 
