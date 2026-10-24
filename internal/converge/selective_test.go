@@ -328,6 +328,43 @@ func TestAManifestNoNewerThanTheProvedWorldIsRefused(t *testing.T) {
 	}
 }
 
+// TestAManifestInHandIsAnsweredInPlace: an index that arrived before its tick is
+// answered off the live rows as that tick closes, with no capture, when its root
+// agrees; one whose root differs is captured at that close, so the repair has rows.
+func TestAManifestInHandIsAnsweredInPlace(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	host.world.advance(1)
+	if err := host.c.Publish(); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	deliver([]*run{guest}, 1)
+	guest.world.advance(1)
+	guest.c.TickClosed(2)
+	if guest.world.indexed != 1 || guest.world.captured != 0 {
+		t.Fatalf("an agreeing tick closed with %d indexes and %d captures, want one index alone", guest.world.indexed, guest.world.captured)
+	}
+	guest.c.Apply()
+	if guest.stat("snapshot.corrections_hash_only") != 1 || guest.stat("snapshot.manifests_in_place") != 1 {
+		t.Fatalf("hash-only %d, in place %d; want the index in hand answered in place", guest.stat("snapshot.corrections_hash_only"), guest.stat("snapshot.manifests_in_place"))
+	}
+
+	host.world.advance(1)
+	if err := host.c.Publish(); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	deliver([]*run{guest}, 1)
+	guest.world.setWorld(capture(3, 1))
+	guest.c.TickClosed(3)
+	if guest.world.indexed != 2 || guest.world.captured != 1 {
+		t.Fatalf("a differing tick closed with %d indexes and %d captures, want the capture its repair needs", guest.world.indexed, guest.world.captured)
+	}
+	guest.c.Apply()
+	if guest.stat("snapshot.corrections_hash_only") != 1 || guest.stat("snapshot.manifests_in_place") != 1 {
+		t.Fatal("a differing root was answered as proved")
+	}
+}
+
 // TestARequestThePeerHasOutgrownIsNotServed: a page request for a tick the peer has
 // since proved it holds is not built or sent, since the repair would only be
 // refused; the proof is the newest hash-only answer.

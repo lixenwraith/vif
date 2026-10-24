@@ -1411,11 +1411,13 @@ func newStoreEncoders() []storeEncoder {
 	return []storeEncoder{
 		&rowEncoder[component.PositionComponent]{
 			read:  func(s *SharedWorldState) []StoreEntry[component.PositionComponent] { return s.Positions },
+			live:  func(w *World) ([]component.PositionComponent, []core.Entity) { return w.Positions.dense, w.Positions.entities },
 			equal: equalPositions,
 		},
 {{- range .Components }}
 		&rowEncoder[component.{{ .Type }}]{
 			read:  func(s *SharedWorldState) []StoreEntry[component.{{ .Type }}] { return s.{{ .Field }} },
+			live:  func(w *World) ([]component.{{ .Type }}, []core.Entity) { return w.Components.{{ .Field }}.dense, w.Components.{{ .Field }}.entities },
 			equal: equal{{ .Field }},
 		},
 {{- end }}

@@ -50,7 +50,11 @@ type Instance interface {
 	CaptureShared() (snapshot.SharedCapture, error)
 	// CaptureSharedLocked is the read without its seal, for TickClosed, which runs
 	// under the world lock; a comparison needs no integrity hash, only the index.
+	// IndexSharedLocked is the index alone, built there off the live rows against
+	// the authority and term a manifest names, with the capture's every part but
+	// those rows: what a root that agrees needs, and a root that differs does not.
 	CaptureSharedLocked() (snapshot.SharedCapture, error)
+	IndexSharedLocked(authority uint32, term network.AuthorityTerm) (*snapshot.Manifest, snapshot.SharedCapture, error)
 	InstallCapture(snapshot.SharedCapture) (engine.WorldDifference, error)
 	AdoptAuthority(snapshot.CaptureHeader)
 	VerifyCaptureIdentity(snapshot.CaptureHeader) error

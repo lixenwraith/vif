@@ -40,10 +40,11 @@ type Telemetry struct {
 	KeyframeAge, Held, Jumped, Projected *atomic.Int64
 
 	// The index exchange: what it cost, and how often it proved convergence
-	// outright. HashOnly is the case the design is for; ManifestsOffTick counts the
-	// ones that arrived after their tick and were compared against a later world.
-	ManifestSent, ManifestRecv, ManifestBytesSent, ManifestBytesRecv *atomic.Int64
-	HashOnly, SectionsCompared, PagesCompared, ManifestsOffTick      *atomic.Int64
+	// outright. HashOnly is the case the design is for, InPlace the share of it
+	// indexed off the live world as its tick closed, with no capture; ManifestsOffTick
+	// counts the ones that arrived after their tick and were compared against a later world.
+	ManifestSent, ManifestRecv, ManifestBytesSent, ManifestBytesRecv     *atomic.Int64
+	HashOnly, InPlace, SectionsCompared, PagesCompared, ManifestsOffTick *atomic.Int64
 
 	// The repair, counted at every point a shard can be at, so a gap between two
 	// of them names which side dropped it.
@@ -114,6 +115,7 @@ func NewTelemetry(reg *status.Registry) Telemetry {
 		ManifestBytesSent: i("snapshot.manifest_bytes_sent"),
 		ManifestBytesRecv: i("snapshot.manifest_bytes_received"),
 		HashOnly:          i("snapshot.corrections_hash_only"),
+		InPlace:           i("snapshot.manifests_in_place"),
 		ManifestsOffTick:  i("snapshot.manifests_off_tick"),
 		SectionsCompared:  i("snapshot.sections_compared"), PagesCompared: i("snapshot.pages_compared"),
 

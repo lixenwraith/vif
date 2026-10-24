@@ -88,223 +88,388 @@ var SharedWorldStoreCount = len(SharedWorldStoreNames)
 func newStoreEncoders() []storeEncoder {
 	return []storeEncoder{
 		&rowEncoder[component.PositionComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.PositionComponent] { return s.Positions },
+			read: func(s *SharedWorldState) []StoreEntry[component.PositionComponent] { return s.Positions },
+			live: func(w *World) ([]component.PositionComponent, []core.Entity) {
+				return w.Positions.dense, w.Positions.entities
+			},
 			equal: equalPositions,
 		},
 		&rowEncoder[component.GlyphComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.GlyphComponent] { return s.Glyph },
+			read: func(s *SharedWorldState) []StoreEntry[component.GlyphComponent] { return s.Glyph },
+			live: func(w *World) ([]component.GlyphComponent, []core.Entity) {
+				return w.Components.Glyph.dense, w.Components.Glyph.entities
+			},
 			equal: equalGlyph,
 		},
 		&rowEncoder[component.SigilComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SigilComponent] { return s.Sigil },
+			read: func(s *SharedWorldState) []StoreEntry[component.SigilComponent] { return s.Sigil },
+			live: func(w *World) ([]component.SigilComponent, []core.Entity) {
+				return w.Components.Sigil.dense, w.Components.Sigil.entities
+			},
 			equal: equalSigil,
 		},
 		&rowEncoder[component.NuggetComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.NuggetComponent] { return s.Nugget },
+			read: func(s *SharedWorldState) []StoreEntry[component.NuggetComponent] { return s.Nugget },
+			live: func(w *World) ([]component.NuggetComponent, []core.Entity) {
+				return w.Components.Nugget.dense, w.Components.Nugget.entities
+			},
 			equal: equalNugget,
 		},
 		&rowEncoder[component.CursorComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.CursorComponent] { return s.Cursor },
+			read: func(s *SharedWorldState) []StoreEntry[component.CursorComponent] { return s.Cursor },
+			live: func(w *World) ([]component.CursorComponent, []core.Entity) {
+				return w.Components.Cursor.dense, w.Components.Cursor.entities
+			},
 			equal: equalCursor,
 		},
 		&rowEncoder[component.WraithComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.WraithComponent] { return s.Wraith },
+			read: func(s *SharedWorldState) []StoreEntry[component.WraithComponent] { return s.Wraith },
+			live: func(w *World) ([]component.WraithComponent, []core.Entity) {
+				return w.Components.Wraith.dense, w.Components.Wraith.entities
+			},
 			equal: equalWraith,
 		},
 		&rowEncoder[component.ProtectionComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.ProtectionComponent] { return s.Protection },
+			read: func(s *SharedWorldState) []StoreEntry[component.ProtectionComponent] { return s.Protection },
+			live: func(w *World) ([]component.ProtectionComponent, []core.Entity) {
+				return w.Components.Protection.dense, w.Components.Protection.entities
+			},
 			equal: equalProtection,
 		},
 		&rowEncoder[component.KineticComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.KineticComponent] { return s.Kinetic },
+			read: func(s *SharedWorldState) []StoreEntry[component.KineticComponent] { return s.Kinetic },
+			live: func(w *World) ([]component.KineticComponent, []core.Entity) {
+				return w.Components.Kinetic.dense, w.Components.Kinetic.entities
+			},
 			equal: equalKinetic,
 		},
 		&rowEncoder[component.WallComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.WallComponent] { return s.Wall },
+			read: func(s *SharedWorldState) []StoreEntry[component.WallComponent] { return s.Wall },
+			live: func(w *World) ([]component.WallComponent, []core.Entity) {
+				return w.Components.Wall.dense, w.Components.Wall.entities
+			},
 			equal: equalWall,
 		},
 		&rowEncoder[component.LootComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.LootComponent] { return s.Loot },
+			read: func(s *SharedWorldState) []StoreEntry[component.LootComponent] { return s.Loot },
+			live: func(w *World) ([]component.LootComponent, []core.Entity) {
+				return w.Components.Loot.dense, w.Components.Loot.entities
+			},
 			equal: equalLoot,
 		},
 		&rowEncoder[component.GatewayComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.GatewayComponent] { return s.Gateway },
+			read: func(s *SharedWorldState) []StoreEntry[component.GatewayComponent] { return s.Gateway },
+			live: func(w *World) ([]component.GatewayComponent, []core.Entity) {
+				return w.Components.Gateway.dense, w.Components.Gateway.entities
+			},
 			equal: equalGateway,
 		},
 		&rowEncoder[component.EnergyComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.EnergyComponent] { return s.Energy },
+			read: func(s *SharedWorldState) []StoreEntry[component.EnergyComponent] { return s.Energy },
+			live: func(w *World) ([]component.EnergyComponent, []core.Entity) {
+				return w.Components.Energy.dense, w.Components.Energy.entities
+			},
 			equal: equalEnergy,
 		},
 		&rowEncoder[component.HeatComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.HeatComponent] { return s.Heat },
+			read: func(s *SharedWorldState) []StoreEntry[component.HeatComponent] { return s.Heat },
+			live: func(w *World) ([]component.HeatComponent, []core.Entity) {
+				return w.Components.Heat.dense, w.Components.Heat.entities
+			},
 			equal: equalHeat,
 		},
 		&rowEncoder[component.ShieldComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.ShieldComponent] { return s.Shield },
+			read: func(s *SharedWorldState) []StoreEntry[component.ShieldComponent] { return s.Shield },
+			live: func(w *World) ([]component.ShieldComponent, []core.Entity) {
+				return w.Components.Shield.dense, w.Components.Shield.entities
+			},
 			equal: equalShield,
 		},
 		&rowEncoder[component.BoostComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.BoostComponent] { return s.Boost },
+			read: func(s *SharedWorldState) []StoreEntry[component.BoostComponent] { return s.Boost },
+			live: func(w *World) ([]component.BoostComponent, []core.Entity) {
+				return w.Components.Boost.dense, w.Components.Boost.entities
+			},
 			equal: equalBoost,
 		},
 		&rowEncoder[component.WeaponComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.WeaponComponent] { return s.Weapon },
+			read: func(s *SharedWorldState) []StoreEntry[component.WeaponComponent] { return s.Weapon },
+			live: func(w *World) ([]component.WeaponComponent, []core.Entity) {
+				return w.Components.Weapon.dense, w.Components.Weapon.entities
+			},
 			equal: equalWeapon,
 		},
 		&rowEncoder[component.OrbComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.OrbComponent] { return s.Orb },
+			read: func(s *SharedWorldState) []StoreEntry[component.OrbComponent] { return s.Orb },
+			live: func(w *World) ([]component.OrbComponent, []core.Entity) {
+				return w.Components.Orb.dense, w.Components.Orb.entities
+			},
 			equal: equalOrb,
 		},
 		&rowEncoder[component.PingComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.PingComponent] { return s.Ping },
+			read: func(s *SharedWorldState) []StoreEntry[component.PingComponent] { return s.Ping },
+			live: func(w *World) ([]component.PingComponent, []core.Entity) {
+				return w.Components.Ping.dense, w.Components.Ping.entities
+			},
 			equal: equalPing,
 		},
 		&rowEncoder[component.CursorViewComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.CursorViewComponent] { return s.CursorView },
+			read: func(s *SharedWorldState) []StoreEntry[component.CursorViewComponent] { return s.CursorView },
+			live: func(w *World) ([]component.CursorViewComponent, []core.Entity) {
+				return w.Components.CursorView.dense, w.Components.CursorView.entities
+			},
 			equal: equalCursorView,
 		},
 		&rowEncoder[component.ParticleComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.ParticleComponent] { return s.Particle },
+			read: func(s *SharedWorldState) []StoreEntry[component.ParticleComponent] { return s.Particle },
+			live: func(w *World) ([]component.ParticleComponent, []core.Entity) {
+				return w.Components.Particle.dense, w.Components.Particle.entities
+			},
 			equal: equalParticle,
 		},
 		&rowEncoder[component.TracerComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.TracerComponent] { return s.Tracer },
+			read: func(s *SharedWorldState) []StoreEntry[component.TracerComponent] { return s.Tracer },
+			live: func(w *World) ([]component.TracerComponent, []core.Entity) {
+				return w.Components.Tracer.dense, w.Components.Tracer.entities
+			},
 			equal: equalTracer,
 		},
 		&rowEncoder[component.NavigationComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.NavigationComponent] { return s.Navigation },
+			read: func(s *SharedWorldState) []StoreEntry[component.NavigationComponent] { return s.Navigation },
+			live: func(w *World) ([]component.NavigationComponent, []core.Entity) {
+				return w.Components.Navigation.dense, w.Components.Navigation.entities
+			},
 			equal: equalNavigation,
 		},
 		&rowEncoder[component.CombatComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.CombatComponent] { return s.Combat },
+			read: func(s *SharedWorldState) []StoreEntry[component.CombatComponent] { return s.Combat },
+			live: func(w *World) ([]component.CombatComponent, []core.Entity) {
+				return w.Components.Combat.dense, w.Components.Combat.entities
+			},
 			equal: equalCombat,
 		},
 		&rowEncoder[component.GenotypeComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.GenotypeComponent] { return s.Genotype },
+			read: func(s *SharedWorldState) []StoreEntry[component.GenotypeComponent] { return s.Genotype },
+			live: func(w *World) ([]component.GenotypeComponent, []core.Entity) {
+				return w.Components.Genotype.dense, w.Components.Genotype.entities
+			},
 			equal: equalGenotype,
 		},
 		&rowEncoder[component.LightningComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.LightningComponent] { return s.Lightning },
+			read: func(s *SharedWorldState) []StoreEntry[component.LightningComponent] { return s.Lightning },
+			live: func(w *World) ([]component.LightningComponent, []core.Entity) {
+				return w.Components.Lightning.dense, w.Components.Lightning.entities
+			},
 			equal: equalLightning,
 		},
 		&rowEncoder[component.MissileComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.MissileComponent] { return s.Missile },
+			read: func(s *SharedWorldState) []StoreEntry[component.MissileComponent] { return s.Missile },
+			live: func(w *World) ([]component.MissileComponent, []core.Entity) {
+				return w.Components.Missile.dense, w.Components.Missile.entities
+			},
 			equal: equalMissile,
 		},
 		&rowEncoder[component.MountComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.MountComponent] { return s.Mount },
+			read: func(s *SharedWorldState) []StoreEntry[component.MountComponent] { return s.Mount },
+			live: func(w *World) ([]component.MountComponent, []core.Entity) {
+				return w.Components.Mount.dense, w.Components.Mount.entities
+			},
 			equal: equalMount,
 		},
 		&rowEncoder[component.RayComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.RayComponent] { return s.Ray },
+			read: func(s *SharedWorldState) []StoreEntry[component.RayComponent] { return s.Ray },
+			live: func(w *World) ([]component.RayComponent, []core.Entity) {
+				return w.Components.Ray.dense, w.Components.Ray.entities
+			},
 			equal: equalRay,
 		},
 		&rowEncoder[component.SpiritComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SpiritComponent] { return s.Spirit },
+			read: func(s *SharedWorldState) []StoreEntry[component.SpiritComponent] { return s.Spirit },
+			live: func(w *World) ([]component.SpiritComponent, []core.Entity) {
+				return w.Components.Spirit.dense, w.Components.Spirit.entities
+			},
 			equal: equalSpirit,
 		},
 		&rowEncoder[component.MaterializeComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.MaterializeComponent] { return s.Materialize },
+			read: func(s *SharedWorldState) []StoreEntry[component.MaterializeComponent] { return s.Materialize },
+			live: func(w *World) ([]component.MaterializeComponent, []core.Entity) {
+				return w.Components.Materialize.dense, w.Components.Materialize.entities
+			},
 			equal: equalMaterialize,
 		},
 		&rowEncoder[component.TargetComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.TargetComponent] { return s.Target },
+			read: func(s *SharedWorldState) []StoreEntry[component.TargetComponent] { return s.Target },
+			live: func(w *World) ([]component.TargetComponent, []core.Entity) {
+				return w.Components.Target.dense, w.Components.Target.entities
+			},
 			equal: equalTarget,
 		},
 		&rowEncoder[component.TargetAnchorComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.TargetAnchorComponent] { return s.TargetAnchor },
+			read: func(s *SharedWorldState) []StoreEntry[component.TargetAnchorComponent] { return s.TargetAnchor },
+			live: func(w *World) ([]component.TargetAnchorComponent, []core.Entity) {
+				return w.Components.TargetAnchor.dense, w.Components.TargetAnchor.entities
+			},
 			equal: equalTargetAnchor,
 		},
 		&rowEncoder[component.DrainComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.DrainComponent] { return s.Drain },
+			read: func(s *SharedWorldState) []StoreEntry[component.DrainComponent] { return s.Drain },
+			live: func(w *World) ([]component.DrainComponent, []core.Entity) {
+				return w.Components.Drain.dense, w.Components.Drain.entities
+			},
 			equal: equalDrain,
 		},
 		&rowEncoder[component.QuasarComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.QuasarComponent] { return s.Quasar },
+			read: func(s *SharedWorldState) []StoreEntry[component.QuasarComponent] { return s.Quasar },
+			live: func(w *World) ([]component.QuasarComponent, []core.Entity) {
+				return w.Components.Quasar.dense, w.Components.Quasar.entities
+			},
 			equal: equalQuasar,
 		},
 		&rowEncoder[component.SwarmComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SwarmComponent] { return s.Swarm },
+			read: func(s *SharedWorldState) []StoreEntry[component.SwarmComponent] { return s.Swarm },
+			live: func(w *World) ([]component.SwarmComponent, []core.Entity) {
+				return w.Components.Swarm.dense, w.Components.Swarm.entities
+			},
 			equal: equalSwarm,
 		},
 		&rowEncoder[component.StormComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.StormComponent] { return s.Storm },
+			read: func(s *SharedWorldState) []StoreEntry[component.StormComponent] { return s.Storm },
+			live: func(w *World) ([]component.StormComponent, []core.Entity) {
+				return w.Components.Storm.dense, w.Components.Storm.entities
+			},
 			equal: equalStorm,
 		},
 		&rowEncoder[component.StormCircleComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.StormCircleComponent] { return s.StormCircle },
+			read: func(s *SharedWorldState) []StoreEntry[component.StormCircleComponent] { return s.StormCircle },
+			live: func(w *World) ([]component.StormCircleComponent, []core.Entity) {
+				return w.Components.StormCircle.dense, w.Components.StormCircle.entities
+			},
 			equal: equalStormCircle,
 		},
 		&rowEncoder[component.BulletComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.BulletComponent] { return s.Bullet },
+			read: func(s *SharedWorldState) []StoreEntry[component.BulletComponent] { return s.Bullet },
+			live: func(w *World) ([]component.BulletComponent, []core.Entity) {
+				return w.Components.Bullet.dense, w.Components.Bullet.entities
+			},
 			equal: equalBullet,
 		},
 		&rowEncoder[component.PylonComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.PylonComponent] { return s.Pylon },
+			read: func(s *SharedWorldState) []StoreEntry[component.PylonComponent] { return s.Pylon },
+			live: func(w *World) ([]component.PylonComponent, []core.Entity) {
+				return w.Components.Pylon.dense, w.Components.Pylon.entities
+			},
 			equal: equalPylon,
 		},
 		&rowEncoder[component.SnakeComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeComponent] { return s.Snake },
+			read: func(s *SharedWorldState) []StoreEntry[component.SnakeComponent] { return s.Snake },
+			live: func(w *World) ([]component.SnakeComponent, []core.Entity) {
+				return w.Components.Snake.dense, w.Components.Snake.entities
+			},
 			equal: equalSnake,
 		},
 		&rowEncoder[component.SnakeHeadComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeHeadComponent] { return s.SnakeHead },
+			read: func(s *SharedWorldState) []StoreEntry[component.SnakeHeadComponent] { return s.SnakeHead },
+			live: func(w *World) ([]component.SnakeHeadComponent, []core.Entity) {
+				return w.Components.SnakeHead.dense, w.Components.SnakeHead.entities
+			},
 			equal: equalSnakeHead,
 		},
 		&rowEncoder[component.SnakeBodyComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeBodyComponent] { return s.SnakeBody },
+			read: func(s *SharedWorldState) []StoreEntry[component.SnakeBodyComponent] { return s.SnakeBody },
+			live: func(w *World) ([]component.SnakeBodyComponent, []core.Entity) {
+				return w.Components.SnakeBody.dense, w.Components.SnakeBody.entities
+			},
 			equal: equalSnakeBody,
 		},
 		&rowEncoder[component.SnakeMemberComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SnakeMemberComponent] { return s.SnakeMember },
+			read: func(s *SharedWorldState) []StoreEntry[component.SnakeMemberComponent] { return s.SnakeMember },
+			live: func(w *World) ([]component.SnakeMemberComponent, []core.Entity) {
+				return w.Components.SnakeMember.dense, w.Components.SnakeMember.entities
+			},
 			equal: equalSnakeMember,
 		},
 		&rowEncoder[component.EyeComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.EyeComponent] { return s.Eye },
+			read: func(s *SharedWorldState) []StoreEntry[component.EyeComponent] { return s.Eye },
+			live: func(w *World) ([]component.EyeComponent, []core.Entity) {
+				return w.Components.Eye.dense, w.Components.Eye.entities
+			},
 			equal: equalEye,
 		},
 		&rowEncoder[component.TowerComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.TowerComponent] { return s.Tower },
+			read: func(s *SharedWorldState) []StoreEntry[component.TowerComponent] { return s.Tower },
+			live: func(w *World) ([]component.TowerComponent, []core.Entity) {
+				return w.Components.Tower.dense, w.Components.Tower.entities
+			},
 			equal: equalTower,
 		},
 		&rowEncoder[component.KrakenComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.KrakenComponent] { return s.Kraken },
+			read: func(s *SharedWorldState) []StoreEntry[component.KrakenComponent] { return s.Kraken },
+			live: func(w *World) ([]component.KrakenComponent, []core.Entity) {
+				return w.Components.Kraken.dense, w.Components.Kraken.entities
+			},
 			equal: equalKraken,
 		},
 		&rowEncoder[component.HeaderComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.HeaderComponent] { return s.Header },
+			read: func(s *SharedWorldState) []StoreEntry[component.HeaderComponent] { return s.Header },
+			live: func(w *World) ([]component.HeaderComponent, []core.Entity) {
+				return w.Components.Header.dense, w.Components.Header.entities
+			},
 			equal: equalHeader,
 		},
 		&rowEncoder[component.MemberComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.MemberComponent] { return s.Member },
+			read: func(s *SharedWorldState) []StoreEntry[component.MemberComponent] { return s.Member },
+			live: func(w *World) ([]component.MemberComponent, []core.Entity) {
+				return w.Components.Member.dense, w.Components.Member.entities
+			},
 			equal: equalMember,
 		},
 		&rowEncoder[component.FlashComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.FlashComponent] { return s.Flash },
+			read: func(s *SharedWorldState) []StoreEntry[component.FlashComponent] { return s.Flash },
+			live: func(w *World) ([]component.FlashComponent, []core.Entity) {
+				return w.Components.Flash.dense, w.Components.Flash.entities
+			},
 			equal: equalFlash,
 		},
 		&rowEncoder[component.FadeoutComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.FadeoutComponent] { return s.Fadeout },
+			read: func(s *SharedWorldState) []StoreEntry[component.FadeoutComponent] { return s.Fadeout },
+			live: func(w *World) ([]component.FadeoutComponent, []core.Entity) {
+				return w.Components.Fadeout.dense, w.Components.Fadeout.entities
+			},
 			equal: equalFadeout,
 		},
 		&rowEncoder[component.SplashComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.SplashComponent] { return s.Splash },
+			read: func(s *SharedWorldState) []StoreEntry[component.SplashComponent] { return s.Splash },
+			live: func(w *World) ([]component.SplashComponent, []core.Entity) {
+				return w.Components.Splash.dense, w.Components.Splash.entities
+			},
 			equal: equalSplash,
 		},
 		&rowEncoder[component.MarkerComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.MarkerComponent] { return s.Marker },
+			read: func(s *SharedWorldState) []StoreEntry[component.MarkerComponent] { return s.Marker },
+			live: func(w *World) ([]component.MarkerComponent, []core.Entity) {
+				return w.Components.Marker.dense, w.Components.Marker.entities
+			},
 			equal: equalMarker,
 		},
 		&rowEncoder[component.ButtonComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.ButtonComponent] { return s.Button },
+			read: func(s *SharedWorldState) []StoreEntry[component.ButtonComponent] { return s.Button },
+			live: func(w *World) ([]component.ButtonComponent, []core.Entity) {
+				return w.Components.Button.dense, w.Components.Button.entities
+			},
 			equal: equalButton,
 		},
 		&rowEncoder[component.DeathComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.DeathComponent] { return s.Death },
+			read: func(s *SharedWorldState) []StoreEntry[component.DeathComponent] { return s.Death },
+			live: func(w *World) ([]component.DeathComponent, []core.Entity) {
+				return w.Components.Death.dense, w.Components.Death.entities
+			},
 			equal: equalDeath,
 		},
 		&rowEncoder[component.TimerComponent]{
-			read:  func(s *SharedWorldState) []StoreEntry[component.TimerComponent] { return s.Timer },
+			read: func(s *SharedWorldState) []StoreEntry[component.TimerComponent] { return s.Timer },
+			live: func(w *World) ([]component.TimerComponent, []core.Entity) {
+				return w.Components.Timer.dense, w.Components.Timer.entities
+			},
 			equal: equalTimer,
 		},
 	}
