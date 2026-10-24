@@ -467,8 +467,12 @@ and pastes, the pointer at its cell (a touch is the left button marked as a
 finger's, as on Android) and its size as the terminal events the host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
 hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
 hidden tab ends every hold, a pointer's press and a finger's too, whose ends would
-reach another tab or window. A button pressed while another is held, which a
-browser reports as a move, presses as one alone does. A hidden tab draws nothing and is handed the whole screen on return; the
+reach another tab or window. The page keeps for the browser what a terminal
+emulator keeps for itself, a Meta or Alt chord, a Ctrl-Shift chord (Ctrl-Shift-V
+pastes, as Shift-Insert does) and F5, F11 and F12; every other key is the game's,
+the Ctrl-letter chords and the other function keys among them. A button pressed
+while another is held, which a browser reports as a move, presses as one alone
+does. A hidden tab draws nothing and is handed the whole screen on return; the
 run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
 (`browser.Speaker`): the Worker posts each mixer buffer that sounds, and the page
 opens an `AudioContext` at the first and plays them through an AudioWorklet

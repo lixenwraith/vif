@@ -617,8 +617,12 @@ func (a *allocator) routeSession(ctx context.Context, id string) (string, error)
 		return "", fmt.Errorf("list EndpointSlices: %w", err)
 	}
 	addresses := readyAddresses(slices)
+	var skipped []string
 	for _, item := range pods {
-		if !isManaged(item.Metadata.Labels) || !podReady(item) || !addresses[item.Status.PodIP] {
+		managed, ready, routed := isManaged(item.Metadata.Labels), podReady(item), addresses[item.Status.PodIP]
+		if !managed || !ready || !routed {
+			skipped = append(skipped, fmt.Sprintf("%s %s managed=%t ready=%t endpoint=%t",
+				item.Metadata.Name, item.Status.Phase, managed, ready, routed))
 			continue
 		}
 		state, err := a.health.probe(ctx, item.Status.PodIP)
@@ -626,7 +630,7 @@ func (a *allocator) routeSession(ctx context.Context, id string) (string, error)
 			return "", fmt.Errorf("read pod health: %w", err)
 		}
 		if !state.Live {
-			return "", errSessionUnroutable
+			return "", fmt.Errorf("%w: %s is not live: %s", errSessionUnroutable, item.Metadata.Name, state.Reason)
 		}
 		// The same answer the create path waits for. A session at capacity or
 		// draining refuses the dial itself; refusing here costs it nothing and
@@ -639,7 +643,7 @@ func (a *allocator) routeSession(ctx context.Context, id string) (string, error)
 	if len(pods) == 0 {
 		return "", errSessionUnknown
 	}
-	return "", errSessionUnroutable
+	return "", fmt.Errorf("%w: %s", errSessionUnroutable, strings.Join(skipped, "; "))
 }
 
 // sessionRefusing is a live pod's refusal, of the kind its phase names: a session
