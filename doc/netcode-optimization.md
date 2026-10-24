@@ -19,7 +19,7 @@ and the wire carries what a receiver cannot re-derive:
 | Stream | Carries | Encoding | Rate and fan-out |
 |---|---|---|---|
 | Epoch (`MsgEvent`) | one source's closed tick of D-3 crossings, empty ones included | JSON `WireBatch`; each frame's payload is the journal's TOML text | every tick per source; raw up in one `MsgBundle`, the committed copy down every link, the producer's own included |
-| Owner sync (`MsgStateSync`) | one cursor's D-13 cells | the epoch's JSON envelope over a 27-field TOML payload | every `NetworkSyncTicks` (6) per cursor, committed and relayed like an epoch |
+| Owner sync (`MsgStateSync`) | one cursor's D-13 cells | the epoch's JSON envelope over a TOML payload of the cells that are set | every `NetworkSyncTicks` (6) per cursor, committed and relayed like an epoch |
 | Correction | a manifest root, then index, page hashes and shards; or a keyframe | JSON; keyframes and shard sets deflated by the snapshot codec | per peer every 2–60 ticks; a whole world or a hash-only proof within each 60-tick floor |
 | Control | link probe and echo (5 Hz), state digest (every 6 ticks), roster, succession | small | per link |
 
@@ -198,6 +198,7 @@ against a run-to-run spread of about 2%.
 |---|---:|---:|---:|---:|---:|
 | Baseline, framed → wire; CPU | 16.0 → 2.32; 0.09 | 91.3 → 9.99; 0.16 | 1,552 → 125; 0.64 | 94.7 → 61.5; 0.40 (0.13 keyframes/s) | 514 → 359; 1.06 (0.53/s) |
 | Bodies raw past the stream, codec at level 6 | 16.0 → 2.46; 0.09 | 91.3 → 10.4; 0.16 | 1,559 → 127; 0.67 | 80.8 → 62.0; 0.43 (0.13/s) | 140 → 13.6; 0.77 (none) |
+| Syncs of the cells that are set | 14.1 → 2.43; 0.09 | 80.0 → 10.4; 0.16 | 1,326 → 124; 0.64 | 88.6 → 71.1; 0.44 (0.13/s) | 175 → 60.9; 0.67 (0.13/s) |
 
 - **Bodies raw, codec at level 6.** A td keyframe is 360 kB where level 1 gave 501
   and the stream's second pass over that 398: td's framed body bytes fall a fifth
@@ -207,6 +208,12 @@ against a run-to-run spread of about 2%.
   tower, which sends no bodies, pays the run header — a kind byte, a wire length
   and a frame count a burst a link — about 2% of its wire. Deflate's share of the
   process is unchanged inside its run-to-run spread (6–12% at 16 players).
+- **Syncs of the cells that are set.** Sync bytes fall 36% framed on the tower and
+  43% at td, where cursors idle more — a tower sync at 16 players from about 850 to
+  540 B framed — and the wire by 1–3%, since the stream was already compressing the
+  zero cells against their predecessors; TOML's share of the process at 16 players
+  goes from 2.9% to 1.9%, inside the spread. The immunity array became a slice so
+  an unspent one is omitted too.
 
 ## 3. Approaches
 
@@ -284,14 +291,15 @@ epoch is about 567 bytes. Two steps:
 
 ### N3. Owner syncs that carry what changed
 
-A sync is 27 fields every six ticks per cursor; in the fleet run 17 were zero in a
-595-byte TOML, and syncs were a fifth of the command stream. In order of cost:
-`omitempty` on `CursorStatePayload`, as other payloads carry; with N2 a presence
-mask; then a sync sent only when a field differs from the last one sent, with a
-refresh every K syncs, so a frame a full queue refused costs bounded staleness. A
-sync stays a whole state, never a delta on an unacknowledged base, so a loss costs
-one refresh rather than a broken chain. Cells every receiver re-derives (the
-shield's inverse squares from its radii) leave the payload.
+A sync is 27 cells every six ticks per cursor, and syncs were a fifth of the command
+stream. `omitempty` on `CursorStatePayload` landed (§2.3): a sync carries the cells
+that are set, and the immunity array became a slice so an unspent one is omitted
+too. Next, in order of cost: with N2 a presence mask; then a sync sent only when a
+cell differs from the last one sent, with a refresh every K syncs, so a frame a full
+queue refused costs bounded staleness. A sync stays a whole state, never a delta on
+an unacknowledged base, so a loss costs one refresh rather than a broken chain.
+Cells every receiver re-derives (the shield's inverse squares from its radii) leave
+the payload.
 
 - *Bandwidth*: 736 syncs a second of 760 bytes at 16 players, 0.56 MB/s before
   deflate, about a tenth with a mask, less again while cursors idle; how much less
@@ -487,14 +495,16 @@ Each approach lands alone, re-runs §2's matrix and updates multi-player §6.
 | Phase | Approaches | Why |
 |---|---|---|
 | 0 | §2's readings | Taken in §2.2 for bytes by kind on the wire and CPU by stage; the rest go into the same harness as an approach needs them |
-| 1 | N3's `omitempty`, N6, N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the repair path, then the command stream's constants for their CPU |
+| 1 | N6, N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the repair path, then the command stream's constants for their CPU |
 | 2 | N10, N12, N8, N11's capture as a copy | CPU and lock at the map limit, on the host and the browser guest |
 | 3 | N2 step 2, N9, N13, N11's projection, N15, N14 | Formats and structure: the journal, the capture schema, retention, topology |
 
 N2's second step follows its first; N13 and the column layout build on N9; N10's
 row cache is cheaper on N9's rows.
 
-**Decided, on §2.3.** Bodies pass the link raw, compressed once at level 6 (N4's
+**Decided, on §2.3.** Syncs carry the cells that are set (N3's `omitempty`): 36–43%
+off their framed bytes and 1–3% off the wire; the presence mask and the
+send-on-change step wait for N2. Bodies pass the link raw, compressed once at level 6 (N4's
 first step). The codec's level was 1 and the link's level-7 stream took a fifth off
 its output, so a level-1 body carried raw would have cost td a quarter more wire;
 at level 6 a td keyframe is 360 kB against 398 after both passes, and the host's
@@ -508,6 +518,6 @@ players on the tower is 124 kB/s after deflate, which a home uplink carries, so
 relay trees chosen by the authority (N14) wait for a measured uplink that does not.
 Publication rounds stay the union of the peers' due ticks, 5 a second in the
 readings, until N7 aligns them. The command stream's constants are cut in phase 1
-as the wire column judges them, not the framed one: N3's `omitempty` first, then
-N1, whose frames-less echo is what a guest with nothing behind it was reading the
-marker of, then N2's envelope.
+as the wire column judges them, not the framed one: N1 next, whose frames-less
+echo is what a guest with nothing behind it was reading the marker of, then N2's
+envelope.

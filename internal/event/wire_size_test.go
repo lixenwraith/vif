@@ -59,6 +59,11 @@ func TestWireEncodingBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A sync carries the cells that are set: this one, with its energy, heat, hit
+	// points, shield and two charged weapons, is under half the 27-cell frame.
+	if n := len(stateBody) + network.HeaderSize; n > 450 {
+		t.Fatalf("one owner-state sync: %d bytes exceeds the 450-byte budget", n)
+	}
 	t.Logf("one owner-state sync: %d bytes", len(stateBody)+network.HeaderSize)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

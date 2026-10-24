@@ -938,7 +938,8 @@ whole bodies it serves, R being the union of its peers' due ticks rather than a 
 5 Hz; a guest costs 20·T_sim + A·(capture + index) + installs·(stage + projection +
 compare and write), A being the manifests it answers. A star's authority relays every
 participant's epochs and owner syncs to every other, (N−1)² of each: at 16 players
-4,444 epochs (190 B tower, 510 B td) and 736 syncs (760 B) a second.
+4,444 epochs (190 B tower, 510 B td) and 736 syncs (about 540 B, the cells that are
+set) a second.
 
 What that means for scaling:
 
