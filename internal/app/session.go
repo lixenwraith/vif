@@ -117,10 +117,18 @@ func (a *App) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) (networ
 		Release:     a.releaseParticipant,
 		Admit:       admit,
 		Report:      a.noteJoinerReport,
+		Prepared:    a.showJoinerPrepared,
 		Name:        a.cfg.SessionName,
 		Scenario:    a.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
+}
+
+// showJoinerPrepared tells this run's player who is about to join: a dialer whose
+// world is built and whose player has the ready period to press in. Nothing stands
+// for it on the map, since its place is assigned at the press.
+func (a *App) showJoinerPrepared(addr net.Addr) {
+	a.ctx.SetStatusMessage("A player at "+addr.String()+" is ready to join; waiting for their press", parameter.StatusNotice)
 }
 
 // admitHosted is a guest's port admitting a dial: it does once this run holds the
@@ -443,6 +451,7 @@ func joinNetConfig(cfg Config) *network.Config {
 	netCfg.Dial = cfg.relay
 	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
 	netCfg.Claims = cfg.claims.tokens(cfg.holder != 0)
+	netCfg.TLS = cfg.Trust
 	return netCfg
 }
 
@@ -534,7 +543,7 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 	case a.joinWaits():
 		err = pending.Prepared()
 	default:
-		err = a.takeSeat(false)
+		err = a.takeSeat(false, nil)
 	}
 	if err != nil {
 		a.Close()
@@ -561,9 +570,10 @@ var errSessionMoved = &network.Refusal{Code: network.RefusalBehind,
 // now, which binds the identity this run's port and world were built without, and
 // the run replies as it would have to an offer. Pressed for, a host that dropped the
 // handshake while its player was away, or refused for a moment, is dialled again
-// and seats at once, while the game is the one this world was built on; a seat that
-// comes at once leaves a retry to its caller, as a refused dial does.
-func (a *App) takeSeat(pressed bool) error {
+// and seats at once, while the game is the one this world was built on, saying so
+// and reading the player's Ctrl-C between dials; a seat that comes at once leaves a
+// retry to its caller, as a refused dial does.
+func (a *App) takeSeat(pressed bool, signals <-chan os.Signal) error {
 	pending := a.pendingJoin
 	offer, err := pending.Seat()
 	if err != nil {
@@ -573,9 +583,18 @@ func (a *App) takeSeat(pressed bool) error {
 	redial := pressed && err != nil && (!errors.As(err, &refusal) || network.RetryOf(err) == network.RetrySoon)
 	for deadline := time.Now().Add(parameter.SessionRejoinWindow); redial && time.Now().Before(deadline); { // [wall] a link bound
 		a.log.Info("session", "msg", "seat dialled again", "error", err.Error())
+		a.showJoinStatus("Joining " + network.Shown(a.cfg.JoinAddress) + "... (" + err.Error() + ")")
 		pending, offer, err = a.redialSeat()
 		if redial = err != nil && network.RetryOf(err) == network.RetrySoon && !errors.Is(err, errSessionMoved); redial {
-			time.Sleep(parameter.SessionRejoinInterval)
+			select {
+			case <-signals:
+				return errSessionSignalled
+			case ev := <-a.lobbyEvents():
+				if a.lobbyEventCancels(ev) {
+					return errSessionCanceled
+				}
+			case <-time.After(parameter.SessionRejoinInterval):
+			}
 		}
 	}
 	if err == nil && !a.preparedFor(offer) {

@@ -28,17 +28,23 @@ the [play] settings; a flag given on the command line wins.
 .SH OPTIONS
 .SS Session
 .TP
-.B \-host <addr>
-Play at once and open the game to participants, e.g. :7777, ws://:7777 or wss://:7777
+.B \-host <doors>
+Play at once and open the game to participants at one or more doors, comma\-separated: :7777 for tcp, ws://:7777 or wss://:7777 for WebSocket
 .TP
-.B \-serve <addr>
-Bind a headless session with no local cursor, e.g. :7777, ws://:7777 or wss://:7777
+.B \-serve <doors>
+Bind a headless session with no local cursor at one or more doors, e.g. :7777 or :7777,wss://:7778
 .TP
 .B \-cert <file>
-Certificate chain a wss:// host serves, PEM; for \-host, \-serve or :host
+Certificate chain a wss:// door serves, PEM; for \-host, \-serve or :host
 .TP
 .B \-key <file>
 The certificate's private key, PEM; default the \-cert file
+.TP
+.B \-selfsign
+Serve wss:// with a certificate made for this run, in place of \-cert; a joiner trusts it by its fingerprint
+.TP
+.B \-ca <file|sha256:hex>
+What a wss:// host's certificate is trusted by when joining: a PEM file of its issuer, or the certificate's own fingerprint
 .TP
 .B \-join <addr>
 Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given

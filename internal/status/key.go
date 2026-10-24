@@ -119,6 +119,8 @@ func splitKey(key string) (group, name, playerSlot string) {
 		case strings.HasPrefix(name, "relay_"), strings.HasPrefix(name, "transport_"),
 			strings.HasPrefix(name, "link_"):
 			return "network.link", name, ""
+		case strings.HasPrefix(name, "sent_"), strings.HasPrefix(name, "wire_"):
+			return "network.wire", name, ""
 		case strings.HasPrefix(name, "pace_"), strings.HasPrefix(name, "commit_"):
 			return "network.pace", name, ""
 		}

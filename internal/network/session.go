@@ -286,6 +286,10 @@ type Coordinator struct {
 	// parameter.NetworkJoinPressWindow.
 	PressWindow time.Duration
 
+	// Prepared says a dialer from addr is ready and its player has the ready period
+	// to press in, so the session can show whom it is about to seat. Nil shows nobody.
+	Prepared func(addr net.Addr)
+
 	// Report carries what a joiner said about itself once its acceptance arrives.
 	// It runs after Assign and only for a handshake that completed, so what it
 	// describes is a participant the session actually holds.
@@ -474,6 +478,9 @@ func (h *hostHandshake) awaitSeat(claims []string) error {
 		case msg.Type == MsgJoinPrepared && !prepared:
 			prepared = true
 			window = cmp.Or(h.c.PressWindow, parameter.NetworkJoinPressWindow)
+			if h.c.Prepared != nil {
+				h.c.Prepared(h.conn.RemoteAddr())
+			}
 		case msg.Type == MsgJoinReply:
 			// The dialer gave up before its seat, and says why.
 			var reply sessionReply

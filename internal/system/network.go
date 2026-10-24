@@ -109,6 +109,9 @@ type NetworkSystem struct {
 	statHostLost       *atomic.Bool
 	statLostIn         *atomic.Int64
 	statLostOut        *atomic.Int64
+	statSentKind       [network.KindCount]*atomic.Int64
+	statWireOut        *atomic.Int64
+	statWireIn         *atomic.Int64
 	statRelayed        *atomic.Int64
 	statDuplicates     *atomic.Int64
 	statDigestMismatch *atomic.Int64
@@ -429,6 +432,11 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statHostLost = reg.Bools.Get("network.host_lost")
 	s.statLostIn = s.intStat(reg, "network.transport_lost_in")
 	s.statLostOut = s.intStat(reg, "network.transport_lost_out")
+	for k := range s.statSentKind {
+		s.statSentKind[k] = s.intStat(reg, "network.sent_"+network.ByteKind(k).String()+"_bytes")
+	}
+	s.statWireOut = s.intStat(reg, "network.wire_bytes_out")
+	s.statWireIn = s.intStat(reg, "network.wire_bytes_in")
 	s.statRelayed = s.intStat(reg, "network.relay_forwarded")
 	s.statDuplicates = s.intStat(reg, "network.relay_duplicates")
 	s.statDigestMismatch = s.intStat(reg, "network.digest_mismatches")
@@ -1390,6 +1398,7 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 	}
 	s.flushUpstream(p)
 	s.publishTransportLoss(p)
+	s.publishLinkBytes(p)
 	s.publishLinkMeasurement(p, completedTick)
 	if r := s.world.Resources.Network; r != nil && r.OnTickClosed != nil && s.enabled {
 		r.OnTickClosed(completedTick)
@@ -1931,6 +1940,22 @@ func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 	s.world.Log().Warn("net", "msg", "transport loss",
 		"inbound_dropped", in, "outbound_refused", out)
 	s.lastLostIn, s.lastLostOut = in, out
+}
+
+// publishLinkBytes exposes what the links carried, by kind before the stream's
+// deflate and on the wire after it: the reading the netcode is planned by, which
+// an in-process mesh, which deflates nothing, has no figures for.
+func (s *NetworkSystem) publishLinkBytes(p engine.NetworkPort) {
+	totals, ok := p.(interface{ LinkTotals() network.LinkTotals })
+	if !ok {
+		return
+	}
+	t := totals.LinkTotals()
+	for k, stat := range s.statSentKind {
+		stat.Store(int64(t.Framed[k]))
+	}
+	s.statWireOut.Store(int64(t.WireOut))
+	s.statWireIn.Store(int64(t.WireIn))
 }
 
 // flushCrossings freezes the epoch under the producer lock, so concurrent crossings

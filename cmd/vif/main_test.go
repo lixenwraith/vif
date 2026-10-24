@@ -260,14 +260,17 @@ func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 		}
 	}
 	for _, f := range []sessionFlags{{join: "ftp://host.example:21"}, {host: "wss://site.example/vif/ws", cert: "host.pem"}, {host: "host.example"},
-		{host: "https://site.example"},
-		{serve: "wss://:7777"}, {key: "host.pem"}, {host: "ws://:7777/vif/"}, {join: "host.example:7777", listen: "ws://:7778"}} {
+		{host: "https://site.example"}, {host: ":7777,:7778/name"}, {host: ":7777,"},
+		{serve: "wss://:7777"}, {serve: ":7777,wss://:7778"}, {key: "host.pem"}, {host: "ws://:7777/vif/"}, {join: "host.example:7777", listen: "ws://:7778"},
+		{host: "wss://:7777", cert: "host.pem", selfsign: true}, {ca: "issuer.pem"}, {host: ":7777", ca: "issuer.pem"}} {
 		if err := f.validateInvocation(false, false, ""); err == nil {
 			t.Errorf("%+v was accepted", f)
 		}
 	}
 	for _, f := range []sessionFlags{{host: "ws://:7777"}, {serve: "ws://127.0.0.1:7777/"}, {join: "https://site.example", players: 2},
-		{serve: "wss://:7777", cert: "host.pem"}, {host: "wss://:7777", cert: "host.pem", key: "key.pem"}, {cert: "host.pem"}} {
+		{serve: "wss://:7777", cert: "host.pem"}, {host: "wss://:7777", cert: "host.pem", key: "key.pem"}, {cert: "host.pem"},
+		{host: ":7777,ws://:7778"}, {serve: "tcp://127.0.0.1:7777, wss://:7778", selfsign: true}, {selfsign: true},
+		{join: "wss://host.example:7778/", ca: "sha256:00"}} {
 		if err := f.validateInvocation(false, false, ""); err != nil {
 			t.Errorf("%+v was refused: %v", f, err)
 		}

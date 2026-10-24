@@ -154,7 +154,7 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `-host <bind-address>` | Bind before the terminal starts, so a port the run cannot have ends it with the reason on stderr, as a `-join` that cannot dial does; then play at once and serve the listener when the clock starts, exactly as `:host` does. A rebuilt run that cannot reopen its door plays on solo. |
 | `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
-| `:host <addr> [host\|migrate]` | Open a run that is **already playing**, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. A successor serves it beside the port its session reaches it at, or takes that port when the address names it, and hosts from then on. A run that hosts already, or is in any other session it joined, refuses it by its [session role](multi-player.md#1-vocabulary-and-boundaries). |
+| `:host <doors> [host\|migrate]` | Open a run that is **already playing**, at one or more doors, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. A successor serves it beside the port its session reaches it at, or takes that port when the address names it, and hosts from then on. A run that hosts already, or is in any other session it joined, refuses it by its [session role](multi-player.md#1-vocabulary-and-boundaries). |
 | `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. A run that hosts, or is in a joined session that still has others in it, refuses it by its session role. |
 | `:leave` | Takes a host or a guest out of its session into one of its own, as the same participant under the next term, the world as it stands ([Multiplayer §5.5](multi-player.md#55-leaving-a-session)). The command only asks: the run's loop serves it outside the world lock, since closing the port it leaves waits for handshakes that take that lock, and refuses a dial at the old door meanwhile. Its bots leave first, their places kept as Wraiths in the session left, and are seated again once that door is shut. A solo run, one whose session holds only its own bots, and a server refuse it by its session role. |
 | `:session` | One line: hosting or joined, by the role held now, and the address (a successor hosts at the one it declared until `:host` names one), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
@@ -170,10 +170,13 @@ typed onto another route's port, is looked up by its name in `GET /vif/api/sessi
 of the site that issued it (the link's own origin, then its host's `https`), and the
 routes listed for this build are dialled. A route's own refusal stands, and a site
 that answers but does not list the session says so. The scheme picks the transport
-and tcp is the default. A host's bound address (`-host`, `-serve`, `:host`) is tcp,
-plain `ws://host:port` or `wss://host:port`, one protocol per listener, the last
-serving the certificate `-cert` and `-key` name; `-listen` is tcp, which participants
-link to each other over; any other scheme is refused (§7.3).
+and tcp is the default. A host's bound address (`-host`, `-serve`, `:host`) is one
+or more **doors**, comma-separated (`network.Doors`), each tcp, plain `ws://host:port`
+or `wss://host:port`, one protocol per listener and one session behind them all, so
+`:7777,wss://:7778` takes terminals and pages at once; a `wss://` door serves the
+certificate `-cert` and `-key` name, or one `-selfsign` makes for the run. `-listen`
+is tcp, which participants link to each other over; any other scheme is refused
+(§7.3).
 
 `-host` and `:host` are one path: the host plays from its first tick and a joiner
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
@@ -249,10 +252,15 @@ per-address admission see a WebSocket joiner as they see a TCP one; its HTTP
 request is bounded in time and size, and Origin is not checked, since the join
 handshake is the admission. A `wss://` listener wraps that port in TLS with
 `Config.TLS`, the certificate `-cert` and `-key` name (`network.LoadTLS`: PEM, the
-key in the certificate's file when `-key` is not given, TLS 1.2 or later, HTTP/1.1
-alone), and is refused without one; the same field is what a native `wss://` dial
-trusts in place of the system's roots, which a browser's dial never consults. TCP
-and `ws` stay plaintext whatever it holds. A bind or dial that fails is reported as
+key in the certificate's file when `-key` is not given) or the one `-selfsign` makes
+for the run (`network.SelfSignedTLS`: a P-256 key, no authority, the doors' hosts and
+this machine's loopback as its names, whose fingerprint `:session` and the log
+print), TLS 1.2 or later and HTTP/1.1 alone, and is refused without one. The same
+field on a dial is what a native `wss://` join trusts in place of the system's roots
+(`network.TrustTLS`, `-ca`): a PEM file of the issuers to trust, or `sha256:<hex>`
+pinning the certificate itself, which is how a self-signed door is joined and what a
+later authenticating handshake would bind to. A browser's dial consults neither:
+its own trust decides. TCP and `ws` stay plaintext whatever either holds. A bind or dial that fails is reported as
 what the player can do (`plainNetError`): a port below 1024, a port in use, an
 address not of this machine, a name not found, nothing listening, an unreachable
 network, no answer, a certificate this machine does not trust; a dial that connects
@@ -317,10 +325,13 @@ names, and the same name may cover an edit. The anchor's `scenario_id` is a look
 hint and what the log records say. The corpus is player domain and not compared.
 
 `MsgSessionRestart` is the coordinator saying the session is rebuilding on another
-scenario. Its payload is the address to redial — the one the authority listens on,
-or the one it declared when it inherited the session, so a restart follows a
-migrated authority — and the offer a participant is given when it redials names
-what is being played. It is taken only from the participant the term names,
+scenario. Its payload is the address to redial — the doors the authority listens
+at, or the address it declared when it inherited the session, so a restart follows
+a migrated authority — and the offer a participant is given when it redials names
+what is being played. A host's own doors are bind addresses with no host, and a
+guest reads them as the session staying where it joined it: it redials the address
+it came in by, whichever door that was; a successor's address names a host, and is
+where it goes. It is taken only from the participant the term names,
 because one that could make its peers tear down and redial on demand could empty a
 session. See [Runtime and concurrency](runtime.md) for the restart itself.
 
@@ -445,7 +456,9 @@ claims names a place there, or while a player who left holds one, and whether th
 place is taken back or given up is the seat's to settle. On the preview the dialer
 checks the build identity, asks for the scenario it lacks, builds and checks its
 world, and says it is ready (`MsgJoinPrepared`, 0x08), which opens its **ready
-period**, `NetworkJoinPressWindow`. It asks for its place (`MsgJoinSeat`, 0x09) at
+period**, `NetworkJoinPressWindow`, and tells the coordinator's player who is about
+to join (`Coordinator.Prepared`, a status notice naming the dialer's address), since
+nothing stands for the dialer on the map before its seat. It asks for its place (`MsgJoinSeat`, 0x09) at
 its player's press, or at once when nobody is to press, and only then does the
 coordinator allocate; the handshake goes on as an offer and a reply. A ready period
 that runs out ends the handshake with `RefusalUnpressed`, with nothing to give back,
@@ -879,7 +892,10 @@ What the operator surface does not cover:
   seats may still pause;
 - no lag compensation;
 - trusted plaintext peers over tcp and `ws`; no authentication, and a `wss://`
-  door's certificate names the host to a browser, not the player to the host;
+  door's certificate names the host to a browser, not the player to the host. A
+  self-signed door names nobody until a joiner pins it; what would authenticate
+  both ends without an authority is a later handshake bound to that certificate
+  ([todo](todo.md#add-browser-admission-authentication));
 - host loss hands the term down the succession list (§8), and every survivor
   that reaches no candidate, or every survivor when the session pinned its
   authority, goes on apart: a person's run in a session of its own that keeps every

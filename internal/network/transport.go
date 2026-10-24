@@ -104,15 +104,33 @@ func (t *Transport) serveAsPeer() error {
 	return t.listen(t.config.ListenAddress, t.config.AcceptPeer)
 }
 
-// startServer accepts joiners, on no listener when it was given neither one nor an
-// address: a session opened only for this process's own streams (ServeConn).
+// startServer accepts joiners at every door Address names, on no listener when it
+// was given neither a door nor a port: a session opened only for this process's own
+// streams (ServeConn).
 func (t *Transport) startServer() error {
-	if t.config.PreboundListener == nil && t.config.Address == "" {
+	if ln := t.config.PreboundListener; ln != nil {
+		return t.serve(ln, nil)
+	}
+	if t.config.Address == "" {
 		return nil
 	}
-	if err := t.listen(t.config.Address, nil); err != nil {
+	doors, err := Doors(t.config.Address)
+	var opened []net.Listener
+	for i := 0; err == nil && i < len(doors); i++ {
+		var ln net.Listener
+		if ln, err = Listen(doors[i].Addr, t.config); err == nil {
+			opened = append(opened, ln)
+		}
+	}
+	if err != nil {
+		for _, ln := range opened {
+			_ = ln.Close()
+		}
 		t.running.Store(false)
 		return err
+	}
+	for _, ln := range opened {
+		_ = t.serve(ln, nil) // running: serve refuses only a stopped transport
 	}
 	return nil
 }
@@ -426,6 +444,9 @@ func (t *Transport) Peers() []PeerID { return t.peers.Peers() }
 // Bytes reports one link's cumulative decoded and queued frame bytes.
 func (t *Transport) Bytes(id PeerID) (in, out uint64, ok bool) { return t.peers.Bytes(id) }
 
+// Totals are the bytes every link carried, by kind before deflate and on the wire.
+func (t *Transport) Totals() LinkTotals { return t.peers.Totals() }
+
 // Connected reports whether one peer is still attached.
 func (t *Transport) Connected(id PeerID) bool { return t.peers.Connected(id) }
 
@@ -440,6 +461,20 @@ func (t *Transport) Addr() net.Addr {
 		return nil
 	}
 	return t.listener.Addr()
+}
+
+// Addrs are every door's bound address, the one Addr names first.
+func (t *Transport) Addrs() []net.Addr {
+	t.listenMu.Lock()
+	defer t.listenMu.Unlock()
+	if t.listener == nil {
+		return nil
+	}
+	addrs := []net.Addr{t.listener.Addr()}
+	for _, ln := range t.extraListeners {
+		addrs = append(addrs, ln.Addr())
+	}
+	return addrs
 }
 
 // report publishes an asynchronous accept or handshake failure.

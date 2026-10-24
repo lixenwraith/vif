@@ -1,10 +1,12 @@
 #compdef vif
 # Generated from cmd/vif/usage.go by TestGeneratedFilesAreTheHelpTable; do not edit.
 _arguments \
-  '-host[Play at once and open the game to participants, e.g. :7777, ws://:7777 or wss://:7777]:addr: ' \
-  '-serve[Bind a headless session with no local cursor, e.g. :7777, ws://:7777 or wss://:7777]:addr: ' \
-  '-cert[Certificate chain a wss:// host serves, PEM; for -host, -serve or :host]:file: ' \
+  '-host[Play at once and open the game to participants at one or more doors, comma-separated: :7777 for tcp, ws://:7777 or wss://:7777 for WebSocket]:doors: ' \
+  '-serve[Bind a headless session with no local cursor at one or more doors, e.g. :7777 or :7777,wss://:7778]:doors: ' \
+  '-cert[Certificate chain a wss:// door serves, PEM; for -host, -serve or :host]:file: ' \
   '-key[The certificate'\''s private key, PEM; default the -cert file]:file: ' \
+  '-selfsign[Serve wss:// with a certificate made for this run, in place of -cert; a joiner trusts it by its fingerprint]' \
+  '-ca[What a wss:// host'\''s certificate is trusted by when joining: a PEM file of its issuer, or the certificate'\''s own fingerprint]:file|sha256:hex: ' \
   '-join[Join a session at \[tcp://|vif://\]host:port\[/name\] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given]:addr: ' \
   '-name[Name this host answers to, so one address can serve several sessions]:name: ' \
   '-players[Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested]:n: ' \

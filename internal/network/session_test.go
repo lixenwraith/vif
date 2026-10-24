@@ -749,6 +749,9 @@ func TestAWssHostIsJoinedByADialerThatTrustsItsCertificate(t *testing.T) {
 	}
 	trusting := DebugConfig(RolePeer, "")
 	trusting.TLS = &tls.Config{RootCAs: pool}
+	if byFile, err := TrustTLS(certFile); err != nil || byFile.RootCAs == nil {
+		t.Fatalf("-ca reading the certificate's own file: %v", err)
+	}
 	pending, got, err := DialSession(route, trusting)
 	if err != nil {
 		t.Fatalf("a dial trusting the host's certificate was refused: %v", err)
@@ -796,4 +799,96 @@ func writeSelfSigned(t *testing.T, file string) *x509.CertPool {
 	pool := x509.NewCertPool()
 	pool.AddCert(cert)
 	return pool
+}
+
+// TestAHostServesEveryDoorItNames: a tcp door and a ws door in one -host serve one
+// session, and a dialer at either is offered its place.
+func TestAHostServesEveryDoorItNames(t *testing.T) {
+	offer := testOffer()
+	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0,ws://127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{
+		Assign: func([]string) (SessionOffer, error) { return offer, nil },
+	}, time.Second)
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	doors := host.Doors()
+	if len(doors) != 2 || doors[0].Network() != "tcp" || !strings.HasPrefix(doors[1].String(), "ws://") {
+		t.Fatalf("the host answers at %v; want a tcp door and a ws door", doors)
+	}
+	for _, door := range []string{doors[0].String(), doors[1].String() + "/"} {
+		pending, got, err := DialSession(door, DebugConfig(RolePeer, ""))
+		if err != nil {
+			t.Fatalf("a dial at %s was refused: %v", door, err)
+		}
+		pending.Close()
+		if got.Assigned != offer.Assigned {
+			t.Fatalf("%s offered %d, want %d", door, got.Assigned, offer.Assigned)
+		}
+	}
+	for _, list := range []string{":7777/name", "wss://:7777/vif/ws", "127.0.0.1:0,", "https://site.example"} {
+		if _, err := Doors(list); err == nil {
+			t.Errorf("Doors(%q) was accepted", list)
+		}
+	}
+	for addr, hostless := range map[string]bool{":7777": true, "0.0.0.0:7777": true, "ws://:7778": true, "wss://[::]:7778": true,
+		"127.0.0.1:7777": false, "host.example:7777": false, "ws://host.example:7778": false} {
+		e, err := ParseEndpoint(addr)
+		if err != nil || e.Hostless() != hostless {
+			t.Errorf("%s hostless: %v, %v; want %v", addr, e.Hostless(), err, hostless)
+		}
+	}
+}
+
+// TestASelfSignedDoorIsJoinedByItsFingerprint: a wss door made for the run is
+// trusted by nobody's authority, and a dialer pins its fingerprint instead; one that
+// pins another is told the certificate is not the one it names.
+func TestASelfSignedDoorIsJoinedByItsFingerprint(t *testing.T) {
+	serverTLS, err := SelfSignedTLS([]string{"host.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	offer := testOffer()
+	hostCfg := DebugConfig(RoleHost, "wss://127.0.0.1:0")
+	hostCfg.TLS = serverTLS
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{
+		Assign: func([]string) (SessionOffer, error) { return offer, nil },
+	}, time.Second)
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	route := host.Addr().String() + "/"
+
+	pin := Fingerprint(serverTLS)
+	if !strings.HasPrefix(pin, "sha256:") || len(pin) != len("sha256:")+64 {
+		t.Fatalf("fingerprint %q", pin)
+	}
+	wrong := DebugConfig(RolePeer, "")
+	if wrong.TLS, err = TrustTLS("sha256:" + strings.Repeat("00", 32)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := DialSession(route, wrong); err == nil || err.Error() != "the host's certificate is not the one -ca pins" {
+		t.Fatalf("a dial pinning another certificate: %v", err)
+	}
+	pinned := DebugConfig(RolePeer, "")
+	if pinned.TLS, err = TrustTLS(pin); err != nil {
+		t.Fatal(err)
+	}
+	pending, got, err := DialSession(route, pinned)
+	if err != nil {
+		t.Fatalf("a dial pinning the door's certificate was refused: %v", err)
+	}
+	defer pending.Close()
+	if got.Assigned != offer.Assigned {
+		t.Fatalf("offer assigned %d, want %d", got.Assigned, offer.Assigned)
+	}
+	if _, err := TrustTLS("sha256:abc"); err == nil {
+		t.Fatal("a short fingerprint was accepted")
+	}
 }

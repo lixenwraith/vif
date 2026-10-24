@@ -23,14 +23,12 @@ limit_req_zone  $proxy_protocol_addr zone=vif_ws_req:10m rate=12r/m;
 
 # The Content-Security-Policy on the page that *opens* the socket — the one
 # loading the WASM build, not the one listing sessions — must permit it. CSP 3
-# says 'self' covers wss:// on the page's own host; naming it as well costs
-# nothing and needs no browser to have implemented that clause. A page carrying
-# its own <meta> policy intersects with the header, so both want the value:
+# says 'self' covers wss:// on the page's own host, which not every browser
+# implements; and a page joins a game a terminal hosts at its own wss:// door too,
+# another origin, which only the bare scheme covers. A page carrying its own
+# <meta> policy intersects with the header, so both want the value:
 #
-#   connect-src 'self' wss://<site-host>;
-#
-# A page that is to join a game a terminal hosts at its own wss:// door needs that
-# origin too, which only a bare scheme covers: connect-src 'self' wss:;
+#   connect-src 'self' wss:;
 
 # --- server context, inside the site's TLS server block ---
 

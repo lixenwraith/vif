@@ -6,10 +6,9 @@ and the approaches that could spend less, each landable and measurable on its ow
 that decide between approaches, §3 the approaches and §4 their order. Nothing in
 §3 is implemented. Bare section numbers are this document's; "multi-player §n" is
 [Multiplayer](multi-player.md) and D-n the [domain model](domain-design.md).
-Figures are multi-player §6's and the fleet run's in
-[todo](todo.md#decide-the-authoritys-fan-out-and-publication-cadence) unless a line
-names another source. An approach that lands is described in those documents and
-leaves this one.
+Figures are multi-player §6's, §2.2's socket readings and a fleet run's (one guest
+with two seats over a 110 ms link, 2026-10-15) unless a line names another source.
+An approach that lands is described in those documents and leaves this one.
 
 ## 1. The netcode today
 
@@ -111,16 +110,80 @@ One matrix judges every approach, on harnesses that exist:
 | Map | tower, td | `TestATowerGuestAnswersHashOnly` (multi-player §6's shape), `TestCostAtTheStormHighWater`, `BenchmarkCaptureAtStormHighWater` |
 | Players | 2, 4, 16 | the same, seated with bots |
 | Link | in-process; four-tick links; staged latency, loss and byte budget | `network.LinkShape`, `TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers` |
-| Path | in-process mesh; TCP with deflate; WebSocket to a browser | a socket variant of multi-player §6's shape; a browser joiner |
+| Path | in-process mesh; TCP with deflate; WebSocket to a browser | `TestNetcodeReadingsOverSockets` (§6's shape over sockets, `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`); a browser joiner |
 | Host | native at `GOMAXPROCS=1`; a fleet pod at 500m CPU; a WASM guest | `BenchmarkHeadlessTicks`; [Measure a full roster](todo.md#measure-a-full-roster) |
 | Load | idle; a move every third tick and a shot every sixth; the storm high water | multi-player §6's profile, the storm fixture |
 
 Metrics, from multi-player §7's telemetry where it exists: CPU-s/s by stage;
-world-lock hold, p50 and p99; egress before and after deflate by kind; the hash-only
-share; repair and keyframe bytes; `snapshot.correction_*` and
-`snapshot.projected_ticks`; `network.barrier_delay_ticks` and `network.commit_late`;
-heap in use. An approach lands when it moves its target and leaves the hash-only
+world-lock hold, p50 and p99; egress before and after deflate by kind
+(`network.sent_<kind>_bytes` framed before each link's deflate, `network.wire_bytes_out`
+after it); the hash-only share; repair and keyframe bytes; `snapshot.correction_*`
+and `snapshot.projected_ticks`; `network.barrier_delay_ticks` and
+`network.commit_late`; heap in use. An approach lands when it moves its target and leaves the hash-only
 share, correction magnitude and the protocol tests where they were.
+
+### 2.2 Readings
+
+`TestNetcodeReadingsOverSockets` on 2026-10-24, one process on four cores, every
+instance paced at the tick: the host's egress per simulated second, framed before
+each link's deflate by what the frames carried, and on the wire after it.
+
+| Row | Epochs | Syncs | Digests | Bodies | Repairs | Control | Framed | Wire | Wire/framed |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| tower, 2 | 6.8 kB/s | 5.2 kB/s | 0.8 kB/s | 0 | 2.8 kB/s | 0.4 kB/s | 16 kB/s | 2.3 kB/s | 0.14 |
+| tower, 4 | 47 kB/s | 32 kB/s | 2.4 kB/s | 0 | 8.7 kB/s | 1.3 kB/s | 91 kB/s | 10 kB/s | 0.11 |
+| tower, 16 | 841 kB/s | 633 kB/s | 12 kB/s | 0 | 58 kB/s | 6.7 kB/s | 1.55 MB/s | 124 kB/s | 0.08 |
+| td, 2 | 13 kB/s | 4.8 kB/s | 0.8 kB/s | 96 kB/s | 2.7 kB/s | 0.4 kB/s | 117 kB/s | 79 kB/s | 0.68 |
+| td, 4 | 97 kB/s | 29 kB/s | 2.3 kB/s | 489 kB/s | 20 kB/s | 1.3 kB/s | 638 kB/s | 411 kB/s | 0.64 |
+
+Beside them: 5 rounds a second on every row; keyframes none on the tower, 0.13 and
+0.27 a second at td with no fallback; every tower manifest and 98.6% of td's at two
+players answered hash-only, 69% at td with four, where repairs ran at 1.4 shard sets
+and 12 pages a second (8 kB/s framed); a host tick with its publication 1.3–1.7 ms
+on the tower and 7.3–8.1 ms at td; the whole process 0.09, 0.17 and 0.61 CPU-s per
+simulated second on the tower at 2, 4 and 16 players and 0.37 and 0.84 at td with 2
+and 4, its heap 38, 118 and 493 MiB and 328 and 992 MiB. The framed figures agree
+with multi-player §6's in-process ones (1.55 against 1.64 MB/s at 16 players).
+
+CPU by stage, the share of the process's sampled time in the measured window, every
+instance together, so the runtime's shares are the process's and not one host's:
+
+| Stage | tower, 4 | tower, 16 | td, 2 | td, 4 |
+|---|---:|---:|---:|---:|
+| Simulation and everything unlisted | 40% | 39% | 28% | 35% |
+| Allocation and garbage collection | 12% | 11% | 30% | 24% |
+| Scheduler and other runtime | 11% | 11% | 19% | 15% |
+| Sockets and system calls | 13% | 6.5% | 3.1% | 1.6% |
+| Per-link deflate | 4.7% | 12% | 0.2% | 4.2% |
+| Inflate | – | 0.4% | 0.7% | 1.2% |
+| JSON encode and decode | 5.3% | 6.9% | 4.2% | 7.0% |
+| TOML encode and decode | – | 2.6% | – | – |
+| FNV hashing | 9.9% | 7.0% | 11% | 7.7% |
+| Seal, index and keyframe encode | 4.1% | 3.5% | 2.1% | 3.4% |
+| Protocol (`converge`, `network`) | 0.6% | 0.2% | 1.9% | 0.9% |
+
+What the readings decide:
+
+- **The per-link stream takes 86–92% off the command stream.** Epoch and sync
+  envelopes and TOML payloads compress 7–12× against their own history, better as
+  players grow, so N1, N2 and N3 cut framed bytes 2–10× and wire bytes by a fraction
+  of 124 kB/s at 16 players; their worth is CPU — JSON and TOML 7–10%, the deflate
+  that scales with their framed bytes 12% at 16 players, and the allocation behind
+  the collector's 11–30% — and the browser guest's one thread. N4's second step, one
+  dictionary deflate for every link, is refuted: no preset dictionary matches a
+  per-link history that compresses this well.
+- **At td the bodies are the egress and deflate does nothing for them**: whole
+  corrections, deflated once by the snapshot codec, are 77–82% of the framed bytes
+  and pass through each link's deflate for a 0.64–0.68 ratio that is the command
+  stream's share alone. N4's first step, a pre-compressed body carried raw past the
+  stream, is td's cheapest win; N6 and N5 follow it there, where 31% of manifests
+  at four players are not answered hash-only and keyframes run at a quarter a
+  second.
+- **FNV is 7–11% and the seal and index 2–4%**, so N12 pays, before or after N10's
+  in-place root; N15's digest hash is part of that share.
+- Not yet taken, and the harness is where they go: keyframes by reason (`keyframes`
+  and `keyframe_fallbacks` alone are read), plain bytes per section, lock hold by
+  part, repairs by cause, heap by owner, and the WebSocket path to a browser.
 
 ## 3. Approaches
 
@@ -388,9 +451,9 @@ page, which is rare, and N9's encoding makes the pages small.
 
 The protocol already relays down a tree: `-relay`, `forwardDown`, proofs carried in
 a relay's answer. The authority could assign participants with measured headroom to
-relay subtrees, turning its egress from O(N²) into O(N·k). The open parts are in
-[Decide the authority's fan-out](todo.md#decide-the-authoritys-fan-out-and-publication-cadence)
-and [Reach a relay](todo.md#reach-a-relay-without-an-address-in-hand).
+relay subtrees, turning its egress from O(N²) into O(N·k). §4 decided against it on
+§2.2's wire reading until a measured uplink needs it; the open parts are in
+[Reach a relay](todo.md#reach-a-relay-without-an-address-in-hand).
 
 - *Bandwidth*: the root's egress divided by the fan-out; each relay pays its
   subtree's.
@@ -421,12 +484,20 @@ Each approach lands alone, re-runs §2's matrix and updates multi-player §6.
 
 | Phase | Approaches | Why |
 |---|---|---|
-| 0 | §2's readings | Every projection in §3 rests on bytes before deflate or whole-stage timings |
-| 1 | N3's `omitempty`, N1, N2 step 1, N6, N7, N5, N4 step 1 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the command stream's constants and the repair path's latency |
-| 2 | N10, N8, N11's capture as a copy, N12 if measured | CPU and lock at the map limit, on the host and the browser guest |
+| 0 | §2's readings | Taken in §2.2 for bytes by kind on the wire and CPU by stage; the rest go into the same harness as an approach needs them |
+| 1 | N4 step 1, N3's `omitempty`, N6, N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: td's bodies past the stream first, then the repair path, then the command stream's constants for their CPU |
+| 2 | N10, N12, N8, N11's capture as a copy | CPU and lock at the map limit, on the host and the browser guest |
 | 3 | N2 step 2, N9, N13, N11's projection, N15, N14 | Formats and structure: the journal, the capture schema, retention, topology |
 
-N4's second step needs N1; N2's second step follows its first; N13 and the column
-layout build on N9; N10's row cache is cheaper on N9's rows. §2's after-deflate
-reading orders phase 1: if the stream already compresses JSON envelopes well, N1 and
-N2 pay in CPU more than in bytes, and N5 and N6 move up.
+N2's second step follows its first; N13 and the column layout build on N9; N10's
+row cache is cheaper on N9's rows. N4's second step is dropped on §2.2's reading.
+
+**Decided, on §2.2.** The star stays, with the authority the only publisher and
+every participant's epochs and syncs relayed down every link: its wire cost at 16
+players on the tower is 124 kB/s after deflate, which a home uplink carries, so
+relay trees chosen by the authority (N14) wait for a measured uplink that does not.
+Publication rounds stay the union of the peers' due ticks, 5 a second in the
+readings, until N7 aligns them. The command stream's constants are cut in phase 1
+as the wire column judges them, not the framed one: N3's `omitempty` first, then
+N1, whose frames-less echo is what a guest with nothing behind it was reading the
+marker of, then N2's envelope.

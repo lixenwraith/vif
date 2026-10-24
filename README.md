@@ -120,8 +120,10 @@ install. The ones most runs want:
 A host plays from its first tick and admits players while it runs, sending each a
 snapshot of the world at whatever tick the game has reached; a player who
 dropped comes back the same way. `-host ws://:7777` serves WebSocket instead of
-TCP, which is how a browser joins, and `-host wss://:7777 -cert host.pem` serves
-it under TLS, which a page served over https needs. Sessions are trusted-peer: a
+TCP, which is how a browser joins; `-host :7777,wss://:7778 -cert host.pem` serves
+both, the second under TLS, which a page served over https needs, and `-selfsign`
+in place of `-cert` makes a certificate for the run that a terminal joins with
+`-ca sha256:<its fingerprint>`. Sessions are trusted-peer: a
 dial is rate-limited and bounded in what it can allocate, but nobody is
 authenticated, so a host reachable from an untrusted network needs that in front
 of it. [Multiplayer](doc/multi-player.md) has the design.
