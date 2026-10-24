@@ -109,11 +109,24 @@ func (p *Peer) Send(msg *Message) bool {
 	case p.sendCh <- msg:
 		n := uint64(HeaderSize + len(msg.Payload))
 		p.OutBytes.Add(n)
-		p.outKind[msg.Type.Kind()].Add(n)
+		p.countKind(msg)
 		return true
 	default:
 		return false // Queue full
 	}
+}
+
+// countKind adds a frame's bytes to the kind it carries, a bundle's entry by entry
+// so epochs and syncs read apart whether or not they shared a frame.
+func (p *Peer) countKind(msg *Message) {
+	if msg.Type != MsgBundle {
+		p.outKind[msg.Type.Kind()].Add(uint64(HeaderSize + len(msg.Payload)))
+		return
+	}
+	p.outKind[KindEpoch].Add(HeaderSize)
+	_ = Unbundle(msg.Payload, func(kind MessageType, body []byte) {
+		p.outKind[kind.Kind()].Add(uint64(3 + len(body)))
+	})
 }
 
 // totals is what this link carried: framed bytes by kind and the wire's.

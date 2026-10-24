@@ -496,7 +496,10 @@ cannot produce pages for. `MsgAuthorityReport` (0x2C) and `MsgAuthorityHandoff`
 (0x20) is the address map and `MsgConnect`/`MsgAck` (0x02/0x04) open a peer link
 ([Multiplayer](multi-player.md) §5.3). A guest linked to the authority packs a
 tick's raw epochs and syncs, its own and those it carries, into one `MsgBundle`
-(0x19) while they fit a frame. A guest admitting its own bot asks the coordinator
+(0x19) while they fit a frame, and the authority, or a relay, packs the copies it
+committed or forwards in a tick with its own epoch and syncs into one for each link
+behind it, so a link reads one frame a tick; a correction chunk travels alone. A
+guest admitting its own bot asks the coordinator
 on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
 retire a failed join; the first two are answered on that link with
 `MsgRelayAdmit` (0x2F). The epoch is JSON containing journal-registry TOML

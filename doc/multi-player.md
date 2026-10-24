@@ -541,8 +541,9 @@ link is up, down or beside. A participant's **up** link is the authority if it
 holds one, else the relay it joined through (`NetworkResource.Relay`) or adopted;
 its **down** links are those that send it raw artifacts or were served a join
 within the epoch window, every link at the authority. Raw artifacts go up, one
-bundle a tick; committed epochs, owner syncs and correction chunks go down, each
-admitted once within a bounded window; a peer link carries succession records and
+bundle a tick; committed epochs and owner syncs go down, one bundle a link a tick
+with the sender's own, and correction chunks beside them, each admitted once within
+a bounded window; a peer link carries succession records and
 departure notices, which still flood. Corrections retain the authority's term,
 tick, hashes, and chunks across relays.
 

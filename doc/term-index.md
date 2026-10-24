@@ -153,7 +153,7 @@ code does not have yet, described only by a design such as
 
 **bullet** (also: BulletComponent, BulletSystem) — A straight-line projectile with contact damage, stopped by walls and bounds and ended by its lifetime: a cursor's turret bullets resolve against species, and a hostile one (a mounted turret's, such as the storm's red circle) strikes cursors and shields. [Combat §2](combat.md#2-layers) · `internal/component` `BulletComponent`; `internal/system` `BulletSystem`
 
-**bundle** (also: MsgBundle) — One session message packing several frames for one peer, such as a guest's tick of raw epochs and owner syncs bound for the authority; a frame too large to share travels alone. [Services and networking §8](services-and-networking.md#8-wire-frame-and-session-messages) · `internal/network` `Bundle`, `Unbundle`
+**bundle** (also: MsgBundle) — One session message packing several frames for one peer: a guest's tick of raw epochs and owner syncs bound for the authority, or the committed copies and own epoch and syncs an authority or relay sends a link behind it each tick; a frame too large to share travels alone, as a correction chunk does. [Services and networking §8](services-and-networking.md#8-wire-frame-and-session-messages) · `internal/network` `Bundle`, `Unbundle`
 
 **burn** (also: StatusBurn, CombatAttackBurn) — The charged disruptor pulse's chained over-time status: `BurnDamage` every `BurnPeriod` for `BurnDuration`, credited to the last refresher; only a ward refuses it, and it spends no immunity window. [Combat §5](combat.md#5-resolution-statuses-and-what-crosses) · `internal/component` `StatusBurn`, `CombatAttackBurn`
 

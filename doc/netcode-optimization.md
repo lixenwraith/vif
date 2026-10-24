@@ -18,7 +18,7 @@ and the wire carries what a receiver cannot re-derive:
 
 | Stream | Carries | Encoding | Rate and fan-out |
 |---|---|---|---|
-| Epoch (`MsgEvent`) | one source's closed tick of D-3 crossings, empty ones included | JSON `WireBatch`; each frame's payload is the journal's TOML text | every tick per source; raw up in one `MsgBundle`, the committed copy down every link, the producer's own included |
+| Epoch (`MsgEvent`) | one source's closed tick of D-3 crossings, empty ones included | JSON `WireBatch`; each frame's payload is the journal's TOML text | every tick per source; raw up in one `MsgBundle`, the committed copies down every link in one `MsgBundle` a tick with the authority's own, the producer's own included |
 | Owner sync (`MsgStateSync`) | one cursor's D-13 cells | the epoch's JSON envelope over a TOML payload of the cells that are set | every `NetworkSyncTicks` (6) per cursor, committed and relayed like an epoch |
 | Correction | a manifest root, then index, page hashes and shards; or a keyframe | JSON; keyframes and shard sets deflated by the snapshot codec | per peer every 2–60 ticks; a whole world or a hash-only proof within each 60-tick floor |
 | Control | link probe and echo (5 Hz), state digest (every 6 ticks), roster, succession | small | per link |
@@ -202,6 +202,7 @@ against a run-to-run spread of about 2%.
 | Repairs chunked, bounded by the keyframe | 14.1 → 2.43; 0.09 | 80.0 → 10.3; 0.17 | 1,324 → 124; 0.62 | 76.9 → 59.7; 0.42 (0.13/s) | 189 → 73.4; 0.71 (0.13/s) |
 | The descent in one round trip | 14.6 → 2.43; 0.08 | 81.5 → 10.3; 0.16 | 1,330 → 123; 0.59 | 88.0 → 70.4; 0.40 (0.13/s) | 207 → 92.0; 0.76 (0.20/s) |
 | Cadences a power of two, due ticks aligned | 14.6 → 2.44; 0.09 | 81.4 → 10.4; 0.16 | 1,331 → 123; 0.60 | 87.9 → 70.3; 0.40 (0.13/s) | 193 → 77.7; 0.80 (0.13/s) |
+| The down path bundled, one frame a link a drain and a close | 14.7 → 2.44; 0.09 | 80.3 → 10.0; 0.16 | 1,291 → 109; 0.60 | 88.2 → 70.5; 0.43 (0.13/s) | 129 → 14.6; 0.67 (none) |
 
 - **Bodies raw, codec at level 6.** A td keyframe is 360 kB where level 1 gave 501
   and the stream's second pass over that 398: td's framed body bytes fall a fifth
@@ -236,6 +237,14 @@ against a run-to-run spread of about 2%.
   the rows read as the run before them, and the rule is held by its test. It pays
   where cadences differ: at 16 players on td multi-player §6 counted 7.2 rounds a
   second against a nominal 5.
+- **The down path bundled.** The copies the authority commits in a drain leave each
+  link as one `MsgBundle` when the drain ends, and its own epoch and syncs as one at
+  the close, in place of a frame per source: 4% off the wire at four players and 11%
+  at 16, where 16 frame headers a tick a link became two. Bundling the close with the
+  drain's copies into one frame was measured too and refused: the copies left one
+  tick body later, and in the harness's lockstep, where a guest sits no closer than
+  the host's next tick, the first guests read them a tick late and the tower's
+  hash-only share fell to 99.3%.
 
 ## 3. Approaches
 
@@ -244,7 +253,7 @@ In the table − lowers a cost, + raises it and · leaves it. Projections come f
 
 | | Approach | CPU | Mem | Bandwidth | Latency | Complexity | Projected |
 |---|---|:-:|:-:|:-:|:-:|---|---|
-| N1 | One committed frame per link per tick | − | · | − | + ms | medium | down messages 4,444 → 300 a second at 16 players; ~40% of tower epoch bytes |
+| N1 | A frames-less echo | · | · | − | · | low | a leaf's own epochs off its downlink |
 | N2 | A binary wire codec | − | − | − | · | low, then medium | a four-move epoch 567 → ~50 B before deflate |
 | N3 | Owner syncs that carry what changed | − | · | − | · | low | syncs ~10× smaller before deflate |
 | N8 | Keyframes from cached sections | − | + | + | · | medium | keyframe deflate in proportion to the sections that moved |
@@ -256,31 +265,20 @@ In the table − lowers a cost, + raises it and · leaves it. Projections come f
 | N14 | Relay trees chosen by the authority | · | · | − | + | high | root egress O(N²) → O(N·k) |
 | N15 | One parity mechanism | − | · | − | · | low | an O(E) hash every 6 ticks per instance |
 
-### N1. One committed frame per link per tick
+### N1. A frames-less echo
 
-The authority commits and relays inside the drain that opens its tick and sends its
-own epoch and syncs as the tick closes, each a message of its own: per link per
-tick, one per source. Instead, at the close of tick T it sends each link one frame:
-the run and T once, its own epoch and syncs, and every copy committed in T's drain,
-each as a source marker `{source, produced tick, frames}` with void frames removed.
-The markers keep what reads epochs unchanged: the per-source epoch and sequence
-windows, the fences, and pacing (`observeAuthorityEpoch`). The body is encoded once
-for every link; each link's copy ends with a tail for the sources it carries — each
-epoch's `Age` and the frames committed late or void — in place of frames that
-link's producers already hold, which is the todo's frames-less echo. A relay
-forwards the body and splits the tail among the links behind it.
+The authority sends each link one frame a tick, the copies it committed in the
+tick's drain and its own epoch and syncs bundled (landed; §2.3). What the bundle
+still carries is each producer's own committed copy with its frames, which the
+producer already holds: a link with nothing behind it needs only the marker — the
+epoch's `Age`, and which frames were committed late or void — and a relay's link
+needs the frames for the participants behind it alone. In the fleet run the echo was
+a quarter of a two-seat guest's downlink.
 
-- *CPU*: one encode a tick instead of one per epoch; a guest decodes 20 frames a
-  second rather than 20·N, and framing and queueing fall alike.
-- *Bandwidth*: the per-epoch envelope — about 70 bytes of JSON and a 12-byte frame
-  header, around 40% of a tower epoch's 190 — becomes a few bytes per source, and
-  the echo, a quarter of a two-seat guest's downlink in the fleet run, loses its
-  frames. Every link still receives every source's crossings.
-- *Latency*: a copy committed at T's opening leaves at its close, later by the tick
-  body (1–3 ms at td), inside `NetworkRelaySlackTicks`.
-- *Challenges*: hop counting moves to the frame and duplicate suppression to the
-  marker; `adoptRelay` finds its own epochs inside a frame; eviction
-  (`driveEviction`) counts raw epochs upstream, which do not change.
+- *Bandwidth*: a leaf's own epochs off its downlink, 1/N of it on a star.
+- *Challenges*: the authority has to know which links have nobody behind them
+  (`Relayed` in their answers, the roster's holders); `noteOwnCommit` has to take a
+  marker that carries no frames; with N2's envelope the marker is a few bytes.
 
 ### N2. A binary wire codec
 
@@ -468,7 +466,9 @@ Each approach lands alone, re-runs §2's matrix and updates multi-player §6.
 N2's second step follows its first; N13 and the column layout build on N9; N10's
 row cache is cheaper on N9's rows.
 
-**Decided, on §2.3.** A peer's cadence is a power of two of ticks and it is due at
+**Decided, on §2.3.** The down path is bundled (N1's first step): what a drain commits
+leaves each link as one frame, and the tick's own epoch and syncs as one; the frames-less
+echo remains §3's N1. A peer's cadence is a power of two of ticks and it is due at
 multiples of it (N7), so peers on different cadences share rounds and the host's
 round rate is its fastest peer's. The descent is one round trip (N5): the manifest carries its
 partition, a receiver whose root differs answers with the page hashes of every
