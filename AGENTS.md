@@ -83,6 +83,10 @@ It is the contract, not a suggestion.
 
 - `doc/` is already long. Condense when you touch it; append only for a new concept
   or scope.
+- Docs are read in terminals, where a Markdown table renders as its source. Lay
+  tabular content out as a nested list; a matrix of figures goes in a fenced code
+  block with its columns aligned by spaces, which the terminal keeps. A table that
+  neither fits, or that converting would only lengthen, stays a table.
 - `doc/term-index.md` cites identifiers and section anchors: a rename of either, or
   a new term of art, updates its entry.
 - A gap you are deferring goes in `doc/todo.md`: extend the item it belongs to, or

@@ -1851,7 +1851,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	// Passed on to the participants behind this instance, as every committed
 	// artifact is: without it a relayed session would have crossings but no
 	// corrections.
-	if s.sendDown(from, network.MsgStateCorrection, body) {
+	if s.sendDown(from, network.MsgStateCorrection, body, 0, nil) {
 		s.statRelayed.Add(1)
 	}
 	if !done {
@@ -1993,7 +1993,7 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 		return
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{
-		Source: source, Run: s.localRun(), ProducedTick: epoch, Frames: pending,
+		Source: source, Run: s.localRun(), ProducedTick: epoch, Frames: pending, Leaf: s.leaf(),
 	})
 	if err != nil {
 		s.statDrop.Add(int64(len(pending)))
@@ -2378,7 +2378,7 @@ func (s *NetworkSystem) Downstream() []uint32 {
 		return peers
 	}
 	tick := s.localTick()
-	return slices.DeleteFunc(peers, func(id uint32) bool { return !s.behind(id, tick) })
+	return slices.DeleteFunc(slices.Clone(peers), func(id uint32) bool { return !s.behind(id, tick) })
 }
 
 // relayRaw passes a raw artifact on toward the authority, one hop further.
@@ -2425,26 +2425,31 @@ func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
 }
 
 // sendDown passes one artifact to the participants behind this instance but the
-// link it arrived on, every link at the authority. Reports whether any took it. The
-// port bundles epochs and syncs a link until release sends them (BundlingPort).
-func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body []byte) bool {
+// link it arrived on, every link at the authority; the link of source, when one is
+// named, takes own in its place, or nothing when own is nil. Reports whether any
+// took it. The port bundles epochs and syncs a link until a release (BundlingPort).
+func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body []byte, source uint32, own []byte) bool {
 	p := s.port()
 	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return false
 	}
-	if s.isCoordinator() {
-		if except == 0 {
-			p.Broadcast(uint8(kind), body)
-		} else {
-			p.BroadcastExcept(except, uint8(kind), body)
-		}
+	link, ok := p.(engine.LinkMeasuringPort)
+	if !ok {
+		p.BroadcastExcept(except, uint8(kind), body)
 		return true
 	}
 	tick, sent := s.localTick(), false
-	for id := range uint32(len(s.downAt)) {
-		if id != except && s.behind(id, tick) && p.Send(id, uint8(kind), body) {
-			sent = true
+	for _, id := range link.Peers() {
+		if id == except || !(s.isCoordinator() || s.behind(id, tick)) {
+			continue
 		}
+		b := body
+		if id == source {
+			if b = own; b == nil {
+				continue
+			}
+		}
+		sent = p.Send(id, uint8(kind), b) || sent
 	}
 	return sent
 }
@@ -2614,7 +2619,8 @@ func (s *NetworkSystem) leadOf(target uint64) uint64 {
 
 // forwardDown passes one admitted committed epoch down unchanged but for the hop
 // count: Source, ProducedTick and each frame's ApplyTick and sequence make the
-// artifact identical everywhere, so a relay never restamps them.
+// artifact identical everywhere, so a relay never restamps them. A leaf's own copy
+// returns to it as its age alone, and its own sync not at all.
 func (s *NetworkSystem) forwardDown(from uint32, kind network.MessageType, batch event.WireBatch) {
 	if batch.Hops >= parameter.NetworkRelayHopLimit {
 		s.statDrop.Add(1)
@@ -2624,15 +2630,28 @@ func (s *NetworkSystem) forwardDown(from uint32, kind network.MessageType, batch
 	}
 	batch.Hops++
 	body, err := event.EncodeWireBatch(batch)
+	var own []byte
+	if err == nil && batch.Leaf && batch.Committed && kind == network.MsgEvent {
+		batch.Frames = nil
+		own, err = event.EncodeWireBatch(batch)
+	}
 	if err != nil {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
 		s.world.Log().Warn("net", "msg", "relay not encoded", "error", err.Error())
 		return
 	}
-	if s.sendDown(from, kind, body) {
+	source := uint32(0)
+	if batch.Leaf && batch.Committed {
+		source = batch.Source
+	}
+	if s.sendDown(from, kind, body, source, own) {
 		s.statRelayed.Add(1)
 	}
 }
+
+// leaf reports that nobody is behind this instance, so a committed copy of its own
+// need not bring its frames back.
+func (s *NetworkSystem) leaf() bool { return len(s.Downstream()) == 0 }
 
 // applyDue publishes due artifacts in the same source/sequence order everywhere.
 func (s *NetworkSystem) applyDue(nextTick uint64) {
@@ -2834,7 +2853,7 @@ func (s *NetworkSystem) sendCursorState(p engine.NetworkPort) {
 			f.ApplyTick = s.localTick() + 1
 		}
 		body, err := event.EncodeWireBatch(event.WireBatch{
-			Source: s.participantID(), Run: s.localRun(), Frames: []event.ScheduledWireFrame{f},
+			Source: s.participantID(), Run: s.localRun(), Frames: []event.ScheduledWireFrame{f}, Leaf: s.leaf(),
 		})
 		if err != nil {
 			s.statDrop.Add(1)

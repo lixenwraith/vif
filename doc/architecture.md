@@ -434,7 +434,9 @@ participant so a correction cannot undo an action it simply had not received.
 
 Cadence responds to round-trip time, variation, delivered bytes, saturation, and
 correction demand, while a fixed whole-world convergence floor prevents adaptation
-from weakening recovery.
+from weakening recovery. The wire itself, four streams over one deflated link per
+direction with a bundle per link, the pipeline's steps and the readings that judge
+them are [Netcode design](netcode-design.md).
 
 Losing the authority is answered by the session's `-authority` policy. With
 `migrate` the survivors walk the succession list — the participants that advertised

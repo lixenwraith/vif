@@ -126,7 +126,9 @@ in place of `-cert` makes a certificate for the run, which a terminal joins as i
 is, encrypted and unauthenticated, or pins with `-ca`. Sessions are trusted-peer: a
 dial is rate-limited and bounded in what it can allocate, but nobody is
 authenticated, so a host reachable from an untrusted network needs that in front
-of it. [Multiplayer](doc/multi-player.md) has the design.
+of it. [Multiplayer](doc/multi-player.md) has the session design and
+[Netcode design](doc/netcode-design.md) the wire, the correction pipeline and their
+readings.
 
 `deploy/` runs the lobby's game servers: a `scratch` image of the static
 `vif_headless` binary, K3s objects for one Job per game, and `vif-allocator`,
