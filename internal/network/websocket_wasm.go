@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"sync"
 	"syscall/js"
@@ -107,12 +108,25 @@ func dialWebSocket(target string, timeout time.Duration, _ *tls.Config) (conn ne
 		return c, nil
 	case <-c.closed:
 		_ = c.Close()
-		return nil, plainError{"the connection failed; the game may have ended, or the network dropped", c.failure()}
+		return nil, plainError{connectionFailed(target), c.failure()}
 	case <-expiry:
 		_ = c.Close()
 		return nil, plainError{fmt.Sprintf("no answer within %s; the game may have ended, or the connection is too slow",
 			timeout), os.ErrDeadlineExceeded}
 	}
+}
+
+// connectionFailed is what a socket the browser would not open reads as. A page is
+// told nothing of why, so a wss:// door on another host than the page's own is also
+// told how a self-signed certificate is trusted: by opening the door once.
+func connectionFailed(target string) string {
+	text := "the connection failed; the game may have ended, or the network dropped"
+	u, err := url.Parse(target)
+	page := js.Global().Get("location")
+	if err != nil || u.Scheme != "wss" || !page.Truthy() || u.Hostname() == page.Get("hostname").String() {
+		return text
+	}
+	return text + "; a door with a self-signed certificate is trusted by opening https://" + u.Host + " in this browser once"
 }
 
 // on registers one retained listener; Close removes and releases every one of
