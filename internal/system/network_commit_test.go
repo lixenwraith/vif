@@ -842,3 +842,31 @@ func TestOnlyTheAuthorityRunningPastAGuestResumesIt(t *testing.T) {
 		t.Fatalf("the authority's epoch past the guest resumed it %d times, want 1", resumed)
 	}
 }
+
+// TestATransitionFromAGuestIsRefused: a Shared FSM moves on what the authority's
+// machine took, so a transition any other participant crosses applies nowhere.
+func TestATransitionFromAGuestIsRefused(t *testing.T) {
+	t.Parallel()
+	s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
+	f, msg := event.NewWireFrame(event.GameEvent{Type: event.EventFSMTransition, Domain: core.DomainPlayer,
+		Payload: &event.FSMTransitionPayload{Region: "storm", Owner: 3}})
+	if msg != "" {
+		t.Fatalf("encode transition: %s", msg)
+	}
+	f.Seq = 1
+	body, err := event.EncodeWireBatch(event.WireBatch{Source: 2, ProducedTick: 99,
+		Frames: []event.ScheduledWireFrame{{Frame: f, ApplyTick: 101}}})
+	if err != nil {
+		t.Fatalf("encode batch: %v", err)
+	}
+	s.scheduleCrossings(2, body)
+	s.applyDue(101)
+	for _, ev := range s.world.Resources.Event.Queue.Consume() {
+		if ev.Type == event.EventFSMTransition {
+			t.Fatal("a guest's transition was applied")
+		}
+	}
+	if got := s.statForged.Load(); got != 1 {
+		t.Fatalf("%d claims counted, want the guest's transition", got)
+	}
+}

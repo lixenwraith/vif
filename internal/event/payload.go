@@ -259,6 +259,23 @@ type FSMRegionPayload struct {
 	State  string `toml:"state,omitempty"`
 }
 
+// FSMTransitionPayload is one transition the authority's FSM took, committed and
+// applied at one tick on every instance (D-20). Owner and Index name it in the
+// graph every instance shares; Vars are the fields its trigger captured.
+type FSMTransitionPayload struct {
+	Vars    []FSMVar  `toml:"vars,omitempty"`
+	Region  string    `toml:"region"`
+	Owner   int       `toml:"owner"`
+	Index   int       `toml:"index"`
+	Trigger EventType `toml:"trigger,omitempty"`
+}
+
+// FSMVar is one FSM variable a transition sets.
+type FSMVar struct {
+	Name  string `toml:"name"`
+	Value int64  `toml:"value"`
+}
+
 // --- Nugget ---
 
 // NuggetCollectedPayload signals successful personal nugget collection.

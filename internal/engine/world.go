@@ -581,6 +581,21 @@ func (w *World) Project() { w.projects.Store(true) }
 // journal or a projection's live world does. A hold stops neither.
 func (w *World) Reproduces() bool { return w.followJournal.Load() || w.projects.Load() }
 
+// FollowsTransitions reports a world whose shared machine moves only by the
+// transitions the authority committed (D-20): a live guest's, a replay's of a live
+// session, or a projection's, which re-applies what its instance applied.
+func (w *World) FollowsTransitions() bool {
+	s := w.Session()
+	return (s.Live && (!s.Coordinator() || w.followJournal.Load())) || w.projects.Load()
+}
+
+// ProposesTransitions reports the authority's live world, whose machine crosses
+// each transition it takes; a reproduction of it takes them from its records.
+func (w *World) ProposesTransitions() bool {
+	s := w.Session()
+	return s.Live && s.Coordinator() && !w.Reproduces()
+}
+
 // LiveSession reports whether this world is currently sharing ticks with peers.
 // A local multi-cursor setup has no transport and remains operator-controlled.
 func (w *World) LiveSession() bool {

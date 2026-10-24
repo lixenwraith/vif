@@ -132,6 +132,8 @@ const (
 	EventCycleDamageMultiplierReset
 	// EventFSMRegionRequest (FSMRegionPayload) [shared] signals FSM to change the active region
 	EventFSMRegionRequest
+	// EventFSMTransition (FSMTransitionPayload) [bus] is one transition the authority's FSM took, applied at one tick everywhere
+	EventFSMTransition
 
 	// --- Nugget ---
 

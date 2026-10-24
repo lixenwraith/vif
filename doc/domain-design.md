@@ -441,12 +441,17 @@ once, which is what `LootSystem` and `BoostSystem` consume. Recording is idempot
 so the re-derivation a rollback forces costs nothing. See
 [Multiplayer](multi-player.md) §3.4.
 
-### D-20 — Shared FSM regions use replicated triggers
+### D-20 — Shared FSM regions move on the authority's transitions
 
-Every FSM region is Shared state. A transition trigger must therefore be present
-on every instance; a `Local` event cannot steer a Shared region. Per-instance
-effects are emitted by the local owning system or by a cursor-scoped action without
-moving the region differently.
+Every FSM region is Shared state, and in a live session the authority's machine
+alone evaluates its guards: a transition it takes is a crossing
+(`EventFSMTransition`) applied at one tick on every instance, the authority's
+included, where its actions and the target's on_enter run; a guest's machine
+evaluates nothing and follows, so a guard may read what the authority alone holds
+(`kills.*`, `TimeInState`), which is the authority's by construction. A `Local`
+event still cannot steer a region: it would move it for the authority's player
+alone. Per-instance effects are emitted by the local owning system or by a
+cursor-scoped action without moving the region differently.
 
 ### D-21 — Simulation time is tick-derived
 

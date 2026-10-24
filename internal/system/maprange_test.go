@@ -54,7 +54,7 @@ var allowedMapRanges = map[string]string{
 	"mergeStates:addition":                       "load-time; merges into a map",
 	"Machine.GetStateID:nodes":                   "returns first name match; names are unique",
 	"Machine.compileActions:PayloadVars":         "collects payload fields, sorted before use",
-	"Machine.capturePayloadVars:captureVars":     "distinct payload fields to distinct variables",
+	"payloadVars:captureVars":                    "collects captured variables, sorted before return",
 	"ApplyPayloadVars:vars":                      "distinct dot-paths to distinct payload fields",
 	"ParticleSystem.applyDrainImpulses:impulses": "one write per distinct entity; accumulation is dense-ordered",
 	"NavigationSystem.CopyState:groups":          "copies each entry under its own key",

@@ -128,10 +128,12 @@ transitions = [...]                 # Transition rules
 
 `Tick` — evaluated every game tick; use with guard to control timing.
 
-A region is shared state, so an event trigger must be one every instance holds: a
-`[local]` event (its class in `internal/event/type.go`) cannot steer a region (D-20).
-The loader accepts one; `TestFSMTriggersAreReplicated` holds the shipped scenarios
-to the rule.
+A region is shared state: in a live session the authority's machine takes its
+transitions and every instance applies each at one tick, a playout lead after the
+authority took it, so a chain of states pays a lead a hop. A `[local]` event (its
+class in `internal/event/type.go`) cannot steer a region, since only the
+authority's player could move it (D-20). The loader accepts one;
+`TestFSMTriggersAreReplicated` holds the shipped scenarios to the rule.
 
 ### Variable Capture from Payloads
 
