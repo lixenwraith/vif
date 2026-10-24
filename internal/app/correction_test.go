@@ -525,16 +525,21 @@ func TestHostRefusesARosterCrossingFromAnyoneElse(t *testing.T) {
 
 // TestSessionLagIsMeasuredEveryTick. Measuring the gap only at admission leaves a
 // guest whose machine falls behind mid-session producing artifacts that reach the
-// host after the ticks they name, with no way to know.
+// host after the ticks they name, with no way to know. The lag is the gap to the
+// newest peer tick, read every tick; stale is pacing's own verdict, a window of the
+// authority's epochs outside its band by more than a trim answers, so the margin
+// pacing holds on purpose never reads as a fault.
 func TestSessionLagIsMeasuredEveryTick(t *testing.T) {
 	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
 	mirrorCursors(t, a, b)
-
-	for range 4 {
-		a.Tick(1)
-		b.Tick(1)
+	inStep := func(ticks int) {
+		for range ticks {
+			a.Tick(1)
+			b.Tick(1)
+		}
 	}
+	inStep(parameter.NetworkPaceWindow + 4)
 	if lag := statOf(b, "network.lag_ticks"); lag != 0 {
 		t.Fatalf("a participant in step reports %d ticks of lag", lag)
 	}
@@ -543,17 +548,18 @@ func TestSessionLagIsMeasuredEveryTick(t *testing.T) {
 	}
 
 	// Only the host advances: the guest falls behind exactly as a slow machine
-	// would, and the measurement has to say so without anything asking it to.
-	for range parameter.SnapshotStaleTicks + 4 {
+	// would, and once a window of epochs has shown it the measurement says so
+	// without anything asking it to.
+	behind := parameter.NetworkPaceStepTicks + 4
+	for range behind {
 		a.Tick(1)
 	}
-	b.Tick(1)
-	if lag := statOf(b, "network.lag_ticks"); lag <= int64(parameter.SnapshotStaleTicks) {
-		t.Fatalf("a guest %d ticks behind reports %d ticks of lag",
-			parameter.SnapshotStaleTicks+4, lag)
+	inStep(parameter.NetworkPaceWindow + parameter.NetworkPaceServedTicks + 4)
+	if lag := statOf(b, "network.lag_ticks"); lag != int64(behind) {
+		t.Fatalf("a guest %d ticks behind reports %d ticks of lag", behind, lag)
 	}
 	if !statBoolOf(b, "network.stale") {
-		t.Fatal("a guest past the playout lead is not reported stale")
+		t.Fatal("a guest a step behind the authority's epochs is not reported stale")
 	}
 }
 

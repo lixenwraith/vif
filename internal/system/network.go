@@ -191,6 +191,9 @@ type NetworkSystem struct {
 	paceCount   int
 	paceLatest  int64
 	paceKnown   bool
+	// paceStale is pacing's verdict that this instance is out of step: its last
+	// decision stepped, or the latest arrival was late beyond the band.
+	paceStale   bool
 	paceSettled uint64
 
 	// pathAge is the age at which the authority committed the newest of this
@@ -468,7 +471,7 @@ func (s *NetworkSystem) Init() {
 	s.statConnection.Store("off") // the link has a resting value; the counters do not
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
-	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled = 0, 0, false, 0
+	s.paceCount, s.paceLatest, s.paceKnown, s.paceSettled, s.paceStale = 0, 0, false, 0, false
 	s.pathAge, s.pathEpoch = 0, 0
 	s.downAt = [participantSlots]uint64{}
 	s.leadCount, s.leadPushed = 0, 0
@@ -2390,6 +2393,7 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	latest, earliest := slices.Max(s.paceSamples[:]), slices.Min(s.paceSamples[:])
 	trim, step := paceDecision(latest, earliest)
 	s.paceLatest, s.paceKnown = latest-step, true
+	s.paceStale = step != 0 || latest-parameter.NetworkAheadTicks > parameter.NetworkPaceBandTicks
 	s.statPaceLate.Store(latest)
 	s.statPaceTrim.Store(int64(trim))
 	r.Pace.Store(trim)
@@ -2678,8 +2682,12 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 	}
 }
 
-// Staleness compares the newest observed peer tick with the local tick.
-// It warns when this participant may miss the playout lead; it does not gate play.
+// publishStaleness reports how far behind the newest peer tick this instance
+// stands (network.lag_ticks: on a paced guest, the margin its pacing holds) and
+// whether it is out of step (network.stale): pacing's own verdict, read off the
+// same window and band that pace it, so the badge derives nothing of its own. Ahead
+// beyond the band, committed crossings reach it late; behind by a step, its lead
+// grows. Neither gates play.
 func (s *NetworkSystem) publishStaleness(nextTick uint64) {
 	newest := s.NewestPeerEpoch()
 	lag := uint64(0)
@@ -2687,7 +2695,7 @@ func (s *NetworkSystem) publishStaleness(nextTick uint64) {
 		lag = newest - local
 	}
 	s.statLag.Store(int64(lag))
-	s.statStale.Store(lag > parameter.SnapshotStaleTicks)
+	s.statStale.Store(s.paceKnown && s.paceStale)
 }
 
 // remoteParticipants counts the rostered cursors another instance simulates.
@@ -2988,7 +2996,7 @@ type networkState struct {
 	paceSamples                                [parameter.NetworkPaceWindow]int64
 	paceCount                                  int
 	paceLatest, pathAge                        int64
-	paceKnown                                  bool
+	paceKnown, paceStale                       bool
 	paceSettled, pathEpoch                     uint64
 	leadWindow                                 [parameter.NetworkBarrierRenegotiateTicks]uint64
 	leadCount, leadPushed                      uint64
@@ -3011,7 +3019,7 @@ func (s *NetworkSystem) CopyState() any {
 		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed, expiring: s.expiring,
 		suffix:      slices.Clone(s.suffix),
 		paceSamples: s.paceSamples, paceCount: s.paceCount, pathAge: s.pathAge,
-		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
+		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceStale: s.paceStale, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
 		leadWindow: s.leadWindow, leadCount: s.leadCount, leadPushed: s.leadPushed,
 		lastLostIn: s.lastLostIn, lastLostOut: s.lastLostOut,
 	}
@@ -3039,7 +3047,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.expiring = c.expiring
 	s.suffix = slices.Clone(c.suffix)
 	s.paceSamples, s.paceCount, s.pathAge = c.paceSamples, c.paceCount, c.pathAge
-	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch
+	s.paceLatest, s.paceKnown, s.paceStale, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceStale, c.paceSettled, c.pathEpoch
 	s.leadWindow, s.leadCount, s.leadPushed = c.leadWindow, c.leadCount, c.leadPushed
 	s.lastLostIn, s.lastLostOut = c.lastLostIn, c.lastLostOut
 	return nil
