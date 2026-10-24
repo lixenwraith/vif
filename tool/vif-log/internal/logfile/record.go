@@ -51,6 +51,10 @@ type Record struct {
 	Fields []Field
 	Bad    bool
 
+	// Payloads renders a journal record's payload through its anchor's table; nil
+	// shows the bytes as written.
+	Payloads *PayloadSchema
+
 	msgIdx  int    // index into Fields of the discriminator, -1 if none
 	buf     []byte // column rendering scratch, reused across calls
 	scratch []byte // value rendering scratch, flattened into buf
@@ -216,6 +220,13 @@ func (r *Record) Display(f Field) string {
 func (r *Record) appendDisplay(dst []byte, f Field) []byte {
 	switch f.Kind {
 	case KStr:
+		if f.Key == "payload" && r.Payloads != nil {
+			if ev, ok := r.Get("ev"); ok {
+				if text, err := r.Payloads.Render(string(strTok(ev.Val)), strTok(f.Val)); err == nil {
+					return append(dst, text...)
+				}
+			}
+		}
 		return appendUnquoted(dst, f.Val)
 	case KNum:
 		if u := DurationUnit(f.Key); u != DurNone {

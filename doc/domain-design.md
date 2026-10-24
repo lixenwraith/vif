@@ -680,8 +680,8 @@ application events are not retransmitted. Newer corrections and keyframes recove
 state.
 
 At 20 ticks/s the event stream is small relative to authoritative state: with the
-message header, an empty epoch is 19 bytes, four cursor moves are 147 bytes, and
-one owner-state sync of the cells that are set about 249 bytes. At the storm
+message header, an empty epoch is 19 bytes, four cursor moves are 55 bytes, and
+one owner-state sync of the cells that are set about 82 bytes. At the storm
 high-water fixture (`TestCostAtTheStormHighWater` logs these), a plain capture is
 about 299 KiB, a compressed keyframe about 16.1 KiB, a compressed delta about
 6.8 KiB, and a converged manifest exchange 546 bytes.

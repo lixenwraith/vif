@@ -506,7 +506,7 @@ func (a *App) summary(m logfile.Meta) string {
 	if err != nil {
 		return ""
 	}
-	a.rec.Parse(m, line)
+	a.parse(m, line)
 	return a.rec.FieldsText()
 }
 
@@ -536,7 +536,7 @@ func (a *App) renderDetail(r tui.Region) {
 		c.Text(0, 0, "read: "+err.Error(), a.th.Error, a.th.Bg, terminal.AttrNone)
 		return
 	}
-	a.rec.Parse(m, line)
+	a.parse(m, line)
 
 	rows := make([]detailRow, 0, 10+len(a.rec.Fields))
 

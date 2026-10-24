@@ -869,7 +869,7 @@ Journal record fields are:
 | `seq` | Original queue slot/order; legitimately sparse because system events share the queue. |
 | `jrun`, `jtick`, `boundary` | Replay lattice position. |
 | `origin`, `domain`, `ev` | Producer class, the domain the event was pushed in, and registered event name. |
-| `payload` | TOML text encoded from the registered payload prototype. |
+| `payload` | The registered payload prototype in its generated codec (`event/payload_gen.go`), base64; absent for a nil payload. |
 | `encode_err` | Why a payload could not be captured, absent otherwise; replay refuses that record. |
 | `crossing` | This instance's own crossing sequence the barrier applied it under, absent otherwise. Every such crossing is a record, a system-derived one included, at the place it interleaved with its peers'; a replay's barrier applies none of its own, and restores the identity, by which an own placement settles the D-18 queue. |
 
@@ -878,6 +878,9 @@ rotated file soon receives a self-description. It carries:
 
 - journal schema, dense sequence position, root seed, RNG session, and exact
   speed ladder token;
+- `payloads`, every event's payload struct and every struct's fields and kinds
+  (`event.PayloadSchema`), by which `vif-log` renders a record's payload without
+  the build that wrote it;
 - current `run`/`tick` plus `start_run`/`start_tick`, which remember where the
   journal originally opened;
 - the scenario's name and the digest of its canonical form, and the content

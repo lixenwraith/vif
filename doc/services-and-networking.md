@@ -506,12 +506,17 @@ retire a failed join; the first two are answered on that link with
 (committed, leaf), then source, run, produced tick, hops, age and frame count, and
 per frame its event as the registry's index, a flag byte holding the producer's
 domain, its sequence as a delta from the frame before, its apply tick as a delta
-from the frame before or, for the first, from the produced tick, and the journal's
-TOML payload behind its length; counts and ticks are uvarints, the age and the
-deltas varints, so an epoch's constants are a byte or two each. A receiver refuses
-a body the encoder could not have written: an event outside the registry, a domain
-or flag outside the enum, a count or length past the bytes. Representative
-complete-frame budgets are pinned by `TestWireEncodingBudget`. Only the
+from the frame before or, for the first, from the produced tick, and its payload
+behind its length; counts and ticks are uvarints, the age and the deltas varints,
+so an epoch's constants are a byte or two each. The payload is the generated
+codec's (`event/payload_gen.go`, which the journal writes too): a presence mask, a
+bit a field, then each set field in declaration order, signed integers as zigzag
+varints, unsigned as varints, a float64 as its bits, a string or slice behind its
+length, a fixed array whole, a nested struct inline. A receiver refuses a body the
+encoder could not have written: an event outside the registry, a domain or flag
+outside the enum, a count or length past the bytes, a payload with bytes its codec
+does not read. Representative complete-frame budgets are pinned by
+`TestWireEncodingBudget`. Only the
 authentication codes 0x30 and 0x31 are reserved placeholders, which nothing sends
 and `NetworkSystem` counts as drops. Raw participant input has no code: 0x10 stays
 reserved, since a peer sends the
