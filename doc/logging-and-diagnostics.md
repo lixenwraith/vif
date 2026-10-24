@@ -878,9 +878,6 @@ rotated file soon receives a self-description. It carries:
 
 - journal schema, dense sequence position, root seed, RNG session, and exact
   speed ladder token;
-- `payloads`, every event's payload struct and every struct's fields and kinds
-  (`event.PayloadSchema`), by which `vif-log` renders a record's payload without
-  the build that wrote it;
 - current `run`/`tick` plus `start_run`/`start_tick`, which remember where the
   journal originally opened;
 - the scenario's name and the digest of its canonical form, and the content

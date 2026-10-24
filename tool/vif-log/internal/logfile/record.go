@@ -1,7 +1,12 @@
 package logfile
 
 import (
+	"encoding/base64"
+	"sync"
+
 	"bytes"
+	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/event"
 	"strconv"
 )
 
@@ -50,10 +55,6 @@ type Record struct {
 	Trace  string
 	Fields []Field
 	Bad    bool
-
-	// Payloads renders a journal record's payload through its anchor's table; nil
-	// shows the bytes as written.
-	Payloads *PayloadSchema
 
 	msgIdx  int    // index into Fields of the discriminator, -1 if none
 	buf     []byte // column rendering scratch, reused across calls
@@ -220,9 +221,9 @@ func (r *Record) Display(f Field) string {
 func (r *Record) appendDisplay(dst []byte, f Field) []byte {
 	switch f.Kind {
 	case KStr:
-		if f.Key == "payload" && r.Payloads != nil {
+		if f.Key == "payload" {
 			if ev, ok := r.Get("ev"); ok {
-				if text, err := r.Payloads.Render(string(strTok(ev.Val)), strTok(f.Val)); err == nil {
+				if text, ok := payloadText(string(strTok(ev.Val)), strTok(f.Val)); ok {
 					return append(dst, text...)
 				}
 			}
@@ -271,3 +272,29 @@ func trimFloat(tok []byte) []byte {
 	}
 	return tok
 }
+
+// payloadText decodes a journal record's payload with the game's own codec and
+// shows the prototype as its TOML, the text the journal used to carry; a payload
+// another build wrote shows as written.
+func payloadText(ev string, b64 []byte) ([]byte, bool) {
+	registry.Do(event.EnsureRegistry)
+	et, ok := event.GetEventType(ev)
+	if !ok {
+		return nil, false
+	}
+	raw, err := base64.StdEncoding.AppendDecode(nil, b64)
+	if err != nil {
+		return nil, false
+	}
+	p, err := event.DecodePayload(et, raw)
+	if err != nil || p == nil {
+		return nil, false
+	}
+	text, err := toml.Marshal(p)
+	if err != nil {
+		return nil, false
+	}
+	return bytes.TrimRight(text, "\n"), true
+}
+
+var registry sync.Once

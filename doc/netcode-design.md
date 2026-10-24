@@ -580,9 +580,9 @@ schema 37). The approaches are in three batches, and §5 orders them by iteratio
   varints, float64 as its bits, strings and slices behind a length, a fixed array
   as its fields (`DamageImmunitySpent` is the component's type again), a nested
   struct inline, a pointer by its bit. The journal writes the same bytes, base64
-  in its record, with `event.PayloadSchema`, every event's fields and kinds, in
-  each anchor as `payloads`, which `vif-log` renders a payload by without the
-  build that wrote it; the TOML tags stay for authored scripts and `:emit`.
+  in its record, and `vif-log` decodes them with the same codec and shows the
+  prototype as its TOML, so the two cannot drift; the TOML tags stay for that,
+  for authored scripts and for `:emit`.
 - Left: the correction exchange's envelope: manifests, requests and shard sets
   carry the header's per-tick fields and leave the session identity the handshake
   checked.

@@ -53,12 +53,10 @@ func (s vlogSink) Record(r JournalRecord) {
 	s.file.Write(s.log, SubJournalRecord, kv...)
 }
 
-// Anchor writes one header record, with the payload schema a reader on another
-// build renders the records' payloads by.
+// Anchor writes one header record
 func (s vlogSink) Anchor(a JournalAnchor) {
 	s.file.Write(s.log, SubJournalAnchor,
 		"schema", a.Schema,
-		"payloads", PayloadSchema,
 		"jseq", a.JSeq,
 		"jrun", a.Run,
 		"jtick", a.Tick,

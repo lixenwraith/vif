@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -92,61 +91,6 @@ type App struct {
 
 	rec  logfile.Record
 	fctx filter.Ctx
-
-	// schemas caches each journal anchor's payload table by the anchor's record;
-	// anchors lists each source's anchor records by offset, for the lookup.
-	schemas   map[int32]*logfile.PayloadSchema
-	anchors   map[uint16][]int32
-	anchorsAt int
-}
-
-// parse reads one record for display, with the payload table of the journal
-// anchor before it, so a payload renders as the text the game shows.
-func (a *App) parse(m logfile.Meta, line []byte) {
-	a.rec.Payloads = nil
-	if m.Dom != logfile.DomNone {
-		a.rec.Payloads = a.schemaFor(m)
-	}
-	a.rec.Parse(m, line)
-}
-
-// schemaFor is the payload table of the nearest anchor at or before m in its
-// own file, parsed once per anchor; nil without one.
-func (a *App) schemaFor(m logfile.Meta) *logfile.PayloadSchema {
-	metas := a.idx.Metas()
-	if len(metas) != a.anchorsAt {
-		a.anchors, a.anchorsAt = map[uint16][]int32{}, len(metas)
-		for i := range metas {
-			if metas[i].Flags&logfile.FlagAnchor != 0 {
-				a.anchors[metas[i].Src] = append(a.anchors[metas[i].Src], int32(i))
-			}
-		}
-		for _, list := range a.anchors {
-			sort.Slice(list, func(i, j int) bool { return metas[list[i]].Off < metas[list[j]].Off })
-		}
-	}
-	list := a.anchors[m.Src]
-	n := sort.Search(len(list), func(i int) bool { return metas[list[i]].Off > m.Off })
-	if n == 0 {
-		return nil
-	}
-	rec := list[n-1]
-	if ps, ok := a.schemas[rec]; ok {
-		return ps
-	}
-	if a.schemas == nil {
-		a.schemas = map[int32]*logfile.PayloadSchema{}
-	}
-	var ps *logfile.PayloadSchema
-	if line, err := a.rd.Line(metas[rec]); err == nil {
-		var r logfile.Record
-		r.Parse(metas[rec], line)
-		if f, ok := r.Get("payloads"); ok {
-			ps, _ = logfile.ParsePayloadSchema(r.Display(f))
-		}
-	}
-	a.schemas[rec] = ps
-	return ps
 }
 
 // New builds the viewer. start may be log files, one directory to browse, or
