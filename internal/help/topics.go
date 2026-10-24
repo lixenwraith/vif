@@ -171,7 +171,7 @@ var topics = []topicDef{
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},
 			{Keys: ":auto [on|off|main]", Desc: "Cycle or set auto-fire; both weapons by default"},
 			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
-			{Keys: ":host <addr>", Desc: "Open this running game to participants, e.g. :host :7777; they join at the current tick"},
+			{Keys: ":host <doors>", Desc: "Open this running game to participants at one or more doors, e.g. :host :7777 or :host :7777,wss://:7778; they join at the current tick"},
 			{Keys: ":join <target>", Desc: "Leave this solo game for the session at target, in any form -join takes, which seats you at your press; a failed join plays on solo"},
 			{Keys: ":leave", Desc: "Leave the session and play on in one of your own from where it stands; your bots come along, and :host or :join opens or finds another"},
 			{Keys: ":relay [on|off]", Desc: "Carry the game for players who reach this run and not their host, as after a host loss; off by default, and one that joined through this run is carried either way"},

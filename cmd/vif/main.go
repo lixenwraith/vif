@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -165,6 +166,15 @@ func main() {
 	}
 	if sessionErr == nil && flagSession.cert != "" {
 		sessionTLS, sessionErr = network.LoadTLS(flagSession.cert, flagSession.key)
+	}
+	if sessionErr == nil && flagSession.selfsign {
+		if sessionTLS, sessionErr = network.SelfSignedTLS(flagSession.doorHosts()); sessionErr == nil {
+			fmt.Printf("-selfsign: a wss:// door serves a certificate made for this run; a terminal joins it with -ca %s\n",
+				network.Fingerprint(sessionTLS))
+		}
+	}
+	if sessionErr == nil && flagSession.ca != "" {
+		sessionTrust, sessionErr = network.TrustTLS(flagSession.ca)
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
@@ -370,7 +380,7 @@ var (
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) paths.SettingsStore
 	pageClaims                        app.ClaimStore
-	sessionTLS                        *tls.Config // -cert and -key, read once validated
+	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 )
 
 // buildConfig translates parsed flags into the runtime configuration
@@ -396,11 +406,11 @@ func buildConfig() app.Config {
 		join := endpoint(flagSession.join)
 		cfg.JoinAddress, cfg.SessionName = join.Addr, cmp.Or(join.Name, cfg.SessionName)
 	}
-	cfg.HostAddress, cfg.ListenAddress = endpoint(flagSession.host).Addr, endpoint(flagSession.listen).Addr
-	cfg.RelayAddress, cfg.TLS = endpoint(flagSession.relay).Addr, sessionTLS
+	cfg.HostAddress, cfg.ListenAddress = doorList(flagSession.host), endpoint(flagSession.listen).Addr
+	cfg.RelayAddress, cfg.TLS, cfg.Trust = endpoint(flagSession.relay).Addr, sessionTLS, sessionTrust
 
 	if flagSession.serve != "" {
-		cfg.HostAddress = endpoint(flagSession.serve).Addr
+		cfg.HostAddress = doorList(flagSession.serve)
 		cfg.ProbeAddress = flagSession.probe
 		cfg.Lifetime = flagSession.lifetime()
 	}
@@ -535,6 +545,8 @@ type sessionFlags struct {
 	noAdvertise bool
 	relay       string
 	cert, key   string
+	selfsign    bool
+	ca          string
 
 	// slow is the eviction policy a host applies to a participant that cannot keep
 	// up; see converge.SlowPolicy.
@@ -560,12 +572,14 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 }
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.host, "host", "", "Host a session on a bind address, :7777 for tcp, ws://:7777 or wss://:7777 for WebSocket")
+	fs.StringVar(&f.host, "host", "", "Host a session at one or more doors, comma-separated: :7777 for tcp, ws://:7777 or wss://:7777 for WebSocket")
 	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given")
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
-	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777, ws://:7777 or wss://:7777")
+	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player at one or more doors, e.g. :7777 or :7777,wss://:7778")
 	fs.StringVar(&f.cert, "cert", "", "Certificate chain a wss:// host serves, a PEM file; for -host, -serve or :host")
 	fs.StringVar(&f.key, "key", "", "The certificate's private key, a PEM file; default the -cert file")
+	fs.BoolVar(&f.selfsign, "selfsign", false, "Serve wss:// with a certificate made for this run, in place of -cert; a joiner trusts it by its fingerprint, -ca sha256:...")
+	fs.StringVar(&f.ca, "ca", "", "What a wss:// host's certificate is trusted by when joining: a PEM file of its issuer, or sha256:<hex> of the certificate itself")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,
@@ -617,11 +631,17 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bot != "" ||
 		f.authority != "" || f.listen != "" || f.noAdvertise || f.relay != "" || f.name != "" || f.cert != "" || f.key != "" ||
-		f.lifetime().Bounded()) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -no-advertise, -relay, -name, -cert, -key and the session lifetime bounds are available only in interactive play")
+		f.selfsign || f.ca != "" || f.lifetime().Bounded()) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -no-advertise, -relay, -name, -cert, -key, -selfsign, -ca and the session lifetime bounds are available only in interactive play")
 	}
 	if f.key != "" && f.cert == "" {
 		return fmt.Errorf("-key is the key of a -cert certificate")
+	}
+	if f.selfsign && f.cert != "" {
+		return fmt.Errorf("-selfsign makes a certificate for this run; -cert names one")
+	}
+	if f.ca != "" && f.join == "" {
+		return fmt.Errorf("-ca is what a joiner trusts a wss:// host by; it takes a -join")
 	}
 	if _, err := app.BotSpecs(f.bot); err != nil {
 		return err
@@ -632,10 +652,21 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.name != "" && (f.join != "" || (f.host == "" && f.serve == "")) {
 		return fmt.Errorf("-name is what a host answers to; a joiner names the session in its -join target")
 	}
+	for _, a := range []struct{ flag, target string }{{"-host", f.host}, {"-serve", f.serve}} {
+		doors, err := network.Doors(a.target)
+		for _, d := range doors {
+			if d.Secure() && f.cert == "" && !f.selfsign {
+				err = errors.New("a wss:// door serves a certificate; give one with -cert or make one with -selfsign")
+			}
+		}
+		if a.target != "" && err != nil {
+			return fmt.Errorf("%s: %w", a.flag, err)
+		}
+	}
 	for _, a := range []struct {
 		flag, target string
 		binds        bool
-	}{{"-join", f.join, false}, {"-host", f.host, true}, {"-serve", f.serve, true}, {"-listen", f.listen, true}, {"-relay", f.relay, true}} {
+	}{{"-join", f.join, false}, {"-listen", f.listen, true}, {"-relay", f.relay, true}} {
 		if a.target == "" {
 			continue
 		}
@@ -644,15 +675,12 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		case err != nil:
 		case a.binds && e.Name != "":
 			err = errors.New("a bound address names no session; a host answers to -name")
-		case a.binds && a.flag != "-host" && a.flag != "-serve" && e.Scheme == network.SchemeWebSocket:
+		case a.binds && e.Scheme == network.SchemeWebSocket:
 			err = errors.New("participants link to each other over tcp")
 		case a.binds:
 			err = e.Listenable()
 		case e.Name != "":
 			err = validSessionName(e.Name)
-		}
-		if err == nil && a.binds && e.Secure() && f.cert == "" {
-			err = errors.New("a wss:// host serves a certificate; give one with -cert")
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", a.flag, err)
@@ -688,6 +716,30 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 func endpoint(target string) network.Endpoint {
 	e, _ := network.ParseEndpoint(target)
 	return e
+}
+
+// doorList is a host's doors as validateInvocation read them; "" binds none.
+func doorList(target string) string {
+	if target == "" {
+		return ""
+	}
+	doors, _ := network.Doors(target)
+	return network.DoorList(doors)
+}
+
+// doorHosts are the hosts the wss:// doors of -host and -serve name, which a
+// certificate made for the run is issued to.
+func (f sessionFlags) doorHosts() []string {
+	var hosts []string
+	for _, target := range []string{f.host, f.serve} {
+		doors, _ := network.Doors(target)
+		for _, d := range doors {
+			if u, err := url.Parse(d.Addr); err == nil && d.Secure() && u.Hostname() != "" {
+				hosts = append(hosts, u.Hostname())
+			}
+		}
+	}
+	return hosts
 }
 
 // validSessionName holds a name to what a URL path, a Kubernetes object name and a

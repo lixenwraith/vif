@@ -3,19 +3,28 @@ package network
 import (
 	"bytes"
 	"cmp"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Scheme is how a session's bytes travel. TCP carries native play at both ends; a
@@ -89,6 +98,51 @@ func (e Endpoint) Secure() bool {
 	return e.Scheme == SchemeWebSocket && strings.HasPrefix(e.Addr, "wss://")
 }
 
+// Hostless reports a bind address naming a port and no host, every interface: it
+// says where a run listens, never where to dial it.
+func (e Endpoint) Hostless() bool {
+	host := ""
+	if e.Scheme == SchemeWebSocket {
+		if u, err := url.Parse(e.Addr); err == nil {
+			host = u.Hostname()
+		}
+	} else if h, _, err := net.SplitHostPort(e.Addr); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	return host == "" || ip != nil && ip.IsUnspecified()
+}
+
+// Doors reads the addresses a host binds, comma-separated, each tcp, ws or wss and
+// none naming a session: one session answers at every door, so a tcp door beside a
+// ws or wss one takes terminals and pages at once.
+func Doors(list string) ([]Endpoint, error) {
+	var doors []Endpoint
+	for _, target := range strings.Split(list, ",") {
+		e, err := ParseEndpoint(strings.TrimSpace(target))
+		if err == nil && e.Name != "" {
+			err = errors.New("a bound address names no session; a host answers to -name")
+		}
+		if err == nil {
+			err = e.Listenable()
+		}
+		if err != nil {
+			return nil, err
+		}
+		doors = append(doors, e)
+	}
+	return doors, nil
+}
+
+// DoorList is the list Doors read, each door as it is bound.
+func DoorList(doors []Endpoint) string {
+	addrs := make([]string, len(doors))
+	for i, d := range doors {
+		addrs[i] = d.Addr
+	}
+	return strings.Join(addrs, ",")
+}
+
 // Shown is how a message names a dialled address: a WebSocket route by its host,
 // since the rest of its URL is a session key nobody reads, any other as given.
 func Shown(target string) string {
@@ -122,18 +176,108 @@ func (e Endpoint) Listenable() error {
 }
 
 // LoadTLS reads the certificate chain a wss:// host serves and its key, PEM files;
-// an empty keyFile reads the key from the certificate's file. The configuration
-// speaks HTTP/1.1 alone, the only protocol the upgrade is made over.
+// an empty keyFile reads the key from the certificate's file.
 func LoadTLS(certFile, keyFile string) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(certFile, cmp.Or(keyFile, certFile))
 	if err != nil {
 		return nil, fmt.Errorf("certificate %s: %w", certFile, err)
 	}
+	return serverTLS(cert), nil
+}
+
+// SelfSignedTLS makes the certificate a wss:// host serves for this run alone, with
+// no authority behind it: a P-256 key and the names given, this machine's loopback
+// among them. A joiner trusts it by its fingerprint (TrustTLS), a browser by being
+// told to; what authenticates the host without either is a later handshake bound to
+// this certificate.
+func SelfSignedTLS(hosts []string) (*tls.Config, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 127))
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now() // [wall] a certificate's validity is the world's clock
+	template := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: "vif"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(selfSignedValidity),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	for _, h := range append([]string{"localhost", "127.0.0.1", "::1"}, hosts...) {
+		switch ip := net.ParseIP(h); {
+		case h == "":
+		case ip != nil && !slices.ContainsFunc(template.IPAddresses, ip.Equal):
+			template.IPAddresses = append(template.IPAddresses, ip)
+		case ip == nil && !slices.Contains(template.DNSNames, h):
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		return nil, err
+	}
+	return serverTLS(tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}), nil
+}
+
+// selfSignedValidity outlasts any run; a browser accepts a private certificate of
+// any length.
+const selfSignedValidity = 365 * 24 * time.Hour
+
+// serverTLS is what a wss:// door speaks: TLS 1.2 or later, and HTTP/1.1 alone, the
+// only protocol the upgrade is made over.
+func serverTLS(cert tls.Certificate) *tls.Config {
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
 		NextProtos:   []string{"http/1.1"},
-	}, nil
+	}
+}
+
+// Fingerprint names a door's certificate as a joiner pins it: sha256: and the hex
+// digest of its leaf; empty for a configuration serving none.
+func Fingerprint(cfg *tls.Config) string {
+	if cfg == nil || len(cfg.Certificates) == 0 || len(cfg.Certificates[0].Certificate) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256(cfg.Certificates[0].Certificate[0])
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// TrustTLS is what a wss:// dial trusts a host's certificate by, in place of the
+// system's roots: sha256:<hex> pins the certificate itself, how a self-signed door is
+// joined, and anything else is a PEM file of the issuers to trust.
+func TrustTLS(spec string) (*tls.Config, error) {
+	if digest, ok := strings.CutPrefix(spec, "sha256:"); ok {
+		want, err := hex.DecodeString(digest)
+		if err != nil || len(want) != sha256.Size {
+			return nil, fmt.Errorf("%q: a fingerprint is sha256: and 64 hex digits", spec)
+		}
+		pin := [sha256.Size]byte(want)
+		return &tls.Config{
+			InsecureSkipVerify: true, // the pin below is the verification; no authority is asked
+			VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
+				if len(raw) == 0 || sha256.Sum256(raw[0]) != pin {
+					return plainError{"the host's certificate is not the one -ca pins", errors.New("certificate pin mismatch")}
+				}
+				return nil
+			},
+		}, nil
+	}
+	pemBytes, err := os.ReadFile(spec)
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pemBytes) {
+		return nil, fmt.Errorf("%s holds no certificate", spec)
+	}
+	return &tls.Config{RootCAs: pool}, nil
 }
 
 // plainError is what a player is told about a network failure in place of the
@@ -170,15 +314,15 @@ func plainNetError(err error) error {
 		return err // already in the player's words
 	case errors.Is(err, os.ErrPermission) && port >= 0 && port < 1024:
 		text = "ports below 1024 need root; use one above, e.g. :7777"
-	case errors.Is(err, syscall.EADDRINUSE):
+	case isErrno(err, sysErrno.addrInUse):
 		text = "the port is in use; choose another"
-	case errors.Is(err, syscall.EADDRNOTAVAIL):
+	case isErrno(err, sysErrno.addrNotAvail):
 		text = "not an address of this machine; bind :port or one of its own"
 	case errors.As(err, &dns) && dns.IsNotFound:
 		text = "host name not found"
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case isErrno(err, sysErrno.connRefused):
 		text = "nothing is listening there; is the host running on that port?"
-	case errors.Is(err, syscall.EHOSTUNREACH), errors.Is(err, syscall.ENETUNREACH):
+	case isErrno(err, sysErrno.unreachable):
 		text = "unreachable from this network"
 	case errors.As(err, &ne) && ne.Timeout():
 		text = "no answer; check the address and the host's firewall or port forward"
@@ -190,15 +334,16 @@ func plainNetError(err error) error {
 	return plainError{text, err}
 }
 
+// isErrno reports whether err is one of the system's codes for a failure.
+func isErrno(err error, codes []error) bool {
+	return slices.ContainsFunc(codes, func(code error) bool { return errors.Is(err, code) })
+}
+
 // wsAddr names a WebSocket endpoint in the syntax -join reads.
 type wsAddr string
 
 func (a wsAddr) Network() string { return "websocket" }
 func (a wsAddr) String() string  { return string(a) }
-
-// sessionRequestTimeout outlasts the allocator's own bound: it answers once the new
-// session's pod is ready, not when the request arrives.
-const sessionRequestTimeout = 2 * time.Minute
 
 // RequestSession asks site's allocator for a new session and returns the link this
 // build joins it by. players and scenario choose from what the site advertises,
@@ -211,7 +356,7 @@ func RequestSession(site string, players int, scenario string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := &http.Client{Timeout: sessionRequestTimeout}
+	client := &http.Client{Timeout: parameter.NetworkSessionRequestTimeout}
 	resp, err := client.Post(site+"/vif/api/sessions", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err

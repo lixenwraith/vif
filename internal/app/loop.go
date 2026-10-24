@@ -36,12 +36,12 @@ func Run(cfg Config) error {
 	// A port the player asked for that this run cannot have ends it before the
 	// terminal starts, as a -join that cannot dial does.
 	if cfg.resumeHost != "" && buildHasSocketNetwork {
-		ln, err := network.Listen(cfg.resumeHost, cfg.hostNetwork(cfg.resumeHost))
+		lns, err := cfg.bindDoors(cfg.resumeHost)
 		if err != nil {
 			return fmt.Errorf("host %s: %w", cfg.resumeHost, err)
 		}
-		defer ln.Close() // the run's port closes it first; one that never served it must not keep it
-		cfg.hostListener = ln
+		defer closeDoors(lns) // the run's port closes them first; one that never served them must not keep them
+		cfg.hostListeners = lns
 	}
 	// One terminal for every run: a replacement redraws on it instead of leaving
 	// and re-entering the screen. The first run's hub opens it; Run releases it.
@@ -58,7 +58,7 @@ func Run(cfg Config) error {
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
-		cfg.hostListener, cfg.Host.Pressed = nil, false // the press the host took was the first game's
+		cfg.hostListeners, cfg.Host.Pressed = nil, false // the press the host took was the first game's
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
@@ -221,6 +221,7 @@ func (a *App) Loop() (*restartRequest, error) {
 			return &restartRequest{Notice: "Removed by the host; started a local game"}, nil
 		}
 		if req := a.restart.Load(); req != nil {
+			a.frame() // the notice of what the next run waits on, drawn while it is built
 			return req, nil
 		}
 		if a.leaving.Load() {
@@ -250,8 +251,36 @@ func (a *App) Loop() (*restartRequest, error) {
 			if !a.frame() {
 				return nil, nil
 			}
+
+		case err := <-a.doorErrors():
+			a.showDoorError(err)
 		}
 	}
+}
+
+// doorErrors is where the port this run takes joins at reports a dial it refused or
+// lost, nil for a run with none; the loop shows each, as a lobby does, since only
+// the log heard a playing host's.
+func (a *App) doorErrors() <-chan error {
+	a.sessionMu.Lock()
+	port := a.midRunPort
+	a.sessionMu.Unlock()
+	if port == nil {
+		port, _ = a.socketPort()
+	}
+	if port == nil {
+		return nil
+	}
+	return port.Errors()
+}
+
+func (a *App) showDoorError(err error) {
+	var refused *network.Refusal
+	if errors.As(err, &refused) {
+		a.ctx.SetStatusMessage("Join refused: "+refused.Reason, parameter.StatusAlert)
+		return
+	}
+	a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
 }
 
 // takeEvent passes a presentation's event down the dumb pipe: key event → machine →
@@ -394,7 +423,7 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 				continue
 			}
 			a.showJoinStatus("Joining " + network.Shown(a.cfg.JoinAddress) + "...")
-			err := a.takeSeat(true)
+			err := a.takeSeat(true, signals)
 			if errors.Is(err, errSessionMoved) {
 				// Pressed already, and holding the bots it was to seat once it was in.
 				a.log.Info("session", "msg", "joining the session's new game", "join", network.Shown(a.cfg.JoinAddress))

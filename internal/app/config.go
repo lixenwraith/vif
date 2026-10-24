@@ -170,9 +170,11 @@ type Config struct {
 	// start gate.
 	HostAddress string
 
-	// TLS is the certificate a wss:// door serves, -cert and -key; nil opens none.
-	// It is the run's, so a door :host opens later serves it too.
-	TLS *tls.Config
+	// TLS is the certificate a wss:// door serves, -cert and -key or the one -selfsign
+	// made for the run; nil opens none. It is the run's, so a door :host opens later
+	// serves it too. Trust is what a wss:// dial trusts a host by, -ca; nil is the
+	// system's roots.
+	TLS, Trust *tls.Config
 
 	// JoinAddress is the session this run joins, at startup or through :join, at
 	// whatever tick the host has reached. The host's offer supplies simulation
@@ -256,9 +258,9 @@ type Config struct {
 	// HostAddress because nothing waits in a startup lobby: guests use the mid-run gate.
 	resumeHost string
 
-	// hostListener is the first run's -host, bound before its terminal started; the
-	// run serves it once its clock runs.
-	hostListener net.Listener
+	// hostListeners are the first run's -host doors, bound before its terminal
+	// started; the run serves them once its clock runs.
+	hostListeners []net.Listener
 
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
 	// transport detail private leaves Config's public session surface role-neutral.
@@ -396,11 +398,35 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 	return c, nil
 }
 
-// hostNetwork is the transport a door this run opens at addr is served with.
+// hostNetwork is the transport the doors this run opens at addr are served with.
 func (c Config) hostNetwork(addr string) *network.Config {
 	cfg := network.DebugConfig(network.RoleHost, addr)
 	cfg.TLS = c.TLS
 	return cfg
+}
+
+// bindDoors binds every door addr names, none when one cannot be had.
+func (c Config) bindDoors(addr string) ([]net.Listener, error) {
+	doors, err := network.Doors(addr)
+	if err != nil {
+		return nil, err
+	}
+	var lns []net.Listener
+	for _, d := range doors {
+		ln, err := network.Listen(d.Addr, c.hostNetwork(d.Addr))
+		if err != nil {
+			closeDoors(lns)
+			return nil, err
+		}
+		lns = append(lns, ln)
+	}
+	return lns, nil
+}
+
+func closeDoors(lns []net.Listener) {
+	for _, ln := range lns {
+		_ = ln.Close()
+	}
 }
 
 // Normalize fills unset fields that carry a defined default
@@ -445,11 +471,7 @@ func (c Config) Validate() error {
 		}
 	}
 	if c.HostAddress != "" {
-		host, err := network.ParseEndpoint(c.HostAddress)
-		if err == nil {
-			err = host.Listenable()
-		}
-		if err != nil {
+		if _, err := network.Doors(c.HostAddress); err != nil {
 			return err
 		}
 	}

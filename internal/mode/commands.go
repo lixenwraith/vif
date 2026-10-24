@@ -1073,7 +1073,7 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true}
 	}
 	if len(args) != 1 && len(args) != 2 {
-		setCommandError(ctx, "Usage: :host <addr> [host|migrate]  (e.g. :host :7777 migrate, :host ws://:7777)")
+		setCommandError(ctx, "Usage: :host <doors> [host|migrate]  (e.g. :host :7777 migrate, :host :7777,wss://:7778)")
 		return CommandResult{Continue: true}
 	}
 	authority := ""

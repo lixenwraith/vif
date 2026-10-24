@@ -60,6 +60,7 @@ func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID
 		Release:     a.relayRelease,
 		Admit:       a.admissions.Admit,
 		Report:      func(id network.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
+		Prepared:    a.showJoinerPrepared,
 		Name:        a.cfg.SessionName,
 		Scenario:    a.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
