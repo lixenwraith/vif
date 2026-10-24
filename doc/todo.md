@@ -579,20 +579,6 @@ stands held until its press.
 - A script that `:pause`s itself never resumes: its driven loop takes no step
   while held, so its timeline never reaches the next action. Refuse it there.
 
-### Pace repairs as bodies are paced
-
-- Priority: P3
-- Affected files: `internal/converge/selective.go`, `internal/converge/correction.go`,
-  `internal/snapshot/shard.go`
-- Guide: [Netcode optimization](netcode-optimization.md#n6-repairs-as-wide-as-the-keyframe-they-replace) N6
-
-A repair set waits for a busy link in the per-peer queue a body uses, but leaves as
-one frame of up to `SnapshotShardBytesMax` (48 kB), so on a link at the tower's floor
-it can hold the epochs behind it for two seconds, where an epoch waits behind at most
-one 4 KiB body chunk ([Multi-player](multi-player.md#4-correction-pipeline) §4).
-Sending it in `SnapshotCorrectionChunkBytes` chunks, as a body is, bounds that too.
-Repairs at 20 kB/s have so far been a few kilobytes.
-
 ### Find why a storm spawn diverges on a guest
 
 - Priority: P1
@@ -640,6 +626,39 @@ ends in an error, such as a refused join, shows it on the start screen, as the p
 does; today Android finishes the activity and leaves the reason in logcat. Open:
 host, list or both; a second screen or rows on this one; what a session that ends
 returns to.
+
+## Netcode
+
+### Bound a relayed repair by a keyframe
+
+- Priority: P3
+- Affected files: `internal/converge/relay.go`, `internal/converge/correction.go`
+
+A repair the authority serves is bounded by the keyframe it has measured; a relay
+serving from retention measures none and bounds by `MaxSnapshotBytes`, so a widely
+diverged participant behind a relay can be sent a repair larger than the whole world
+the authority would have sent it. Record the size of the whole bodies a guest
+installs and let a relay price against the last.
+
+### Make the td readings repeatable
+
+- Priority: P3
+- Affected files: `internal/app/readings_test.go`
+
+td's rows in `TestNetcodeReadingsOverSockets` vary run to run with what the storm
+does to the roster: at four players keyframes ran at none, 0.13 and 0.53 a second
+across runs on one machine, so a row compares two items only where their keyframe
+rate agrees. Seed what varies, or run the row several times and report the median.
+
+### Omit a zero fixed array in the TOML encoder
+
+- Priority: P3
+- Affected files: `internal/event/payload.go`
+
+`lixenwraith/toml` omits an `omitempty` array only when its length is zero, so a
+fixed array is never omitted, and `CursorStatePayload.DamageImmunitySpent` became a
+slice to be omitted while unspent. An encoder treating an all-zero array as empty
+would let the payload keep the component's type.
 
 ## Session membership
 

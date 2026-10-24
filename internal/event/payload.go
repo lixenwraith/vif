@@ -128,11 +128,10 @@ type NetworkConnectPayload struct {
 }
 
 // ParticipantJoinedPayload names the roster slot a participant arriving mid-run
-// takes. Like a departure it is a crossing rather than a local reaction: a joiner is
-// admitted by one instance, and every other has to add the cursor at the same tick or
-// their shared entity creation order diverges (D-11).
-// Claim is the digest the cursor carries for its participant's return; Record is
-// what a participant coming back to its Wraith brings of the game it left.
+// takes. Like a departure it is a crossing rather than a local reaction: every
+// instance has to add the cursor at the same tick or their shared entity creation
+// order diverges (D-11). Claim is the digest the cursor carries for its participant's
+// return; Record is what one coming back to its Wraith brings of the game it left.
 type ParticipantJoinedPayload struct {
 	Record      *CursorRecord `toml:"record"`
 	Claim       string        `toml:"claim,omitempty"`
@@ -711,43 +710,44 @@ type CompositeDestroyRequestPayload struct {
 
 // --- Cursor ---
 
-// CursorStatePayload carries owner-authored Shared values (D-13). Shield and combat
-// values are cursor fields, never private player entity handles; durations are ns.
+// CursorStatePayload carries owner-authored Shared values (D-13), each cell omitted
+// while zero, so a sync is the size of what is set. Shield and combat values are
+// cursor fields, never private player entity handles; durations are ns.
 type CursorStatePayload struct {
-	WeaponCharges  []int   `toml:"weapon_charges"`
-	WeaponCooldown []int64 `toml:"weapon_cooldown"`
+	WeaponCharges  []int   `toml:"weapon_charges,omitempty"`
+	WeaponCooldown []int64 `toml:"weapon_cooldown,omitempty"`
 
-	Entity core.Entity `toml:"entity"` // shared, so both instances name the same one
-	Seq    uint64      `toml:"seq"`    // owner's sync counter; a reordered packet is dropped
+	Entity core.Entity `toml:"entity,omitempty"` // shared, so both instances name the same one
+	Seq    uint64      `toml:"seq,omitempty"`    // owner's sync counter; a reordered packet is dropped
 
-	Energy   int64 `toml:"energy"`
-	Heat     int   `toml:"heat"`
-	Overheat int   `toml:"overheat"`
+	Energy   int64 `toml:"energy,omitempty"`
+	Heat     int   `toml:"heat,omitempty"`
+	Overheat int   `toml:"overheat,omitempty"`
 
-	ShieldRadiusX float64 `toml:"shield_radius_x"`
-	ShieldRadiusY float64 `toml:"shield_radius_y"`
-	ShieldInvRxSq float64 `toml:"shield_inv_rx_sq"`
-	ShieldInvRySq float64 `toml:"shield_inv_ry_sq"`
+	ShieldRadiusX float64 `toml:"shield_radius_x,omitempty"`
+	ShieldRadiusY float64 `toml:"shield_radius_y,omitempty"`
+	ShieldInvRxSq float64 `toml:"shield_inv_rx_sq,omitempty"`
+	ShieldInvRySq float64 `toml:"shield_inv_ry_sq,omitempty"`
 
-	BoostRemaining   int64 `toml:"boost_remaining"`
-	BoostTotal       int64 `toml:"boost_total"`
-	MainFireCooldown int64 `toml:"main_fire_cooldown"`
+	BoostRemaining   int64 `toml:"boost_remaining,omitempty"`
+	BoostTotal       int64 `toml:"boost_total,omitempty"`
+	MainFireCooldown int64 `toml:"main_fire_cooldown,omitempty"`
 
-	HitPoints           int                                     `toml:"hit_points"`
-	DamageImmunity      int64                                   `toml:"damage_immunity"`
-	DamageImmunitySpent [component.CombatAttackTypeCount]uint32 `toml:"damage_immunity_spent"`
+	HitPoints           int      `toml:"hit_points,omitempty"`
+	DamageImmunity      int64    `toml:"damage_immunity,omitempty"`
+	DamageImmunitySpent []uint32 `toml:"damage_immunity_spent,omitempty"` // by component.CombatAttackType; absent while none is spent
 
-	ErrorFlash     int64 `toml:"error_flash"`
-	BurstFlash     int64 `toml:"burst_flash"`
-	BlinkRemaining int64 `toml:"blink_remaining"`
-	BlinkType      int   `toml:"blink_type"`
-	BlinkLevel     int   `toml:"blink_level"`
+	ErrorFlash     int64 `toml:"error_flash,omitempty"`
+	BurstFlash     int64 `toml:"burst_flash,omitempty"`
+	BlinkRemaining int64 `toml:"blink_remaining,omitempty"`
+	BlinkType      int   `toml:"blink_type,omitempty"`
+	BlinkLevel     int   `toml:"blink_level,omitempty"`
 
-	Slot         uint8 `toml:"slot"`
-	EmberActive  bool  `toml:"ember_active"`
-	ShieldActive bool  `toml:"shield_active"`
-	BoostActive  bool  `toml:"boost_active"`
-	BlinkActive  bool  `toml:"blink_active"`
+	Slot         uint8 `toml:"slot,omitempty"`
+	EmberActive  bool  `toml:"ember_active,omitempty"`
+	ShieldActive bool  `toml:"shield_active,omitempty"`
+	BoostActive  bool  `toml:"boost_active,omitempty"`
+	BlinkActive  bool  `toml:"blink_active,omitempty"`
 }
 
 // Record is the part of an owner's sync its player brings back to its Wraith.

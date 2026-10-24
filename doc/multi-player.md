@@ -412,9 +412,9 @@ each direct peer according to that link's cadence:
    half the convergence floor the keyframe cadence sends none. A participant behind
    a relay proves it in the relay's own answer.
 4. Otherwise the receiver asks for the section summaries, compares page hashes only
-   in differing sections, and the authority returns the pages that differ. A repair
-   wider than one frame or than the keyframe it stands in for is not sent: the peer
-   gets the keyframe, and whole bodies for a few publications.
+   in differing sections, and the authority returns the pages that differ, chunked
+   as a body is. A repair wider than the keyframe it stands in for is not sent: the
+   peer gets the keyframe, and whole bodies for a few publications.
 5. Validate every page hash, reconstruct the authority root, stage the result and
    commit it between ticks. A set is one baseline, applied whole or not at all.
 6. Refuse stale, foreign, malformed, or unverifiable repairs. One that fails its
@@ -451,7 +451,7 @@ sync by the run its batch names, since a guest's last epochs of a run reach the
 authority a round trip after the reset applied there. The run after this one is
 the exception: its first world reaches a guest whose reset is still on its way, so
 the chunk header carries the run, the assembly orders transfers by run then tick,
-and `Apply` keeps such a body at the head of its inbox until the reset enters it. A body leaves in
+and `Apply` keeps such a body at the head of its inbox until the reset enters it. A body or a repair leaves in
 `SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
 what its latest echo reports received — drains within `SnapshotBulkQueue` past the
 round trip, so an epoch waits behind a chunk, not a world. What a link still
@@ -901,8 +901,8 @@ it decides where it goes.
 
 The same shape over sockets, with each link's deflate, is read in
 [Netcode optimization §2.2](netcode-optimization.md#22-readings): the wire carries
-8% of the framed command stream at 16 players on the tower, and td's whole bodies
-nearly as framed.
+8% of the framed command stream at 16 players on the tower, and td's whole bodies as
+framed, since a body the snapshot codec deflated passes each link raw.
 
 Measured on the in-process mesh at `GOMAXPROCS=1` (a 2.1 GHz Xeon container), in the
 shape of `TestATowerGuestAnswersHashOnly`: a star with four-tick links, the authority
@@ -922,7 +922,7 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 | Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-then seals and indexes the capture; a keyframe is 80 / 516 kB compressed. The seal,
+then seals and indexes the capture; a keyframe is about 26 / 360 kB compressed. The seal,
 the index and a keyframe reuse the bytes and hash of every row whose owned copy
 still compares equal, and navigation rebuilds its wall grid only when a wall moved
 and compares grids only when their generation moved. At 16 players, rounds four
@@ -938,7 +938,8 @@ whole bodies it serves, R being the union of its peers' due ticks rather than a 
 5 Hz; a guest costs 20·T_sim + A·(capture + index) + installs·(stage + projection +
 compare and write), A being the manifests it answers. A star's authority relays every
 participant's epochs and owner syncs to every other, (N−1)² of each: at 16 players
-4,444 epochs (190 B tower, 510 B td) and 736 syncs (760 B) a second.
+4,444 epochs (190 B tower, 510 B td) and 736 syncs (about 540 B, the cells that are
+set) a second.
 
 What that means for scaling:
 
