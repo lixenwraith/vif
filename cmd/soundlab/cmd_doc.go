@@ -103,12 +103,10 @@ func cmdExport(s *Session, a []string) error {
 	return nil
 }
 
-// cmdWrite exports one document entry as a standalone TOML document. It is
-// an export, not a save: the working document still diverges from its
-// provenance file, so dirty and modified are deliberately untouched — save
-// owns the baseline (see doc[T]). Document-only resolution, matching show:
-// what the browser displays is what writes, with the same sounds-shadow-
-// patterns precedence as docRoot.
+// cmdWrite exports one document entry as a standalone TOML document: an export,
+// not a save, so dirty and modified stay as they are (save owns the baseline,
+// see doc[T]). It reads the document alone, as show does, a sound shadowing a
+// pattern of its name as in docRoot.
 func cmdWrite(s *Session, a []string) error {
 	name, file := a[0], a[1]
 	if d, ok := s.sounds.get(name); ok {

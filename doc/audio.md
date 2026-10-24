@@ -375,8 +375,10 @@ live tooling to update a playing registry.
 same engine. It offers:
 
 - a command REPL;
-- a full-screen TUI with browser, structural inspector, keys recording, and
-  beat-grid editing;
+- a full-screen TUI: a browser of patterns and sounds beside a mixer that draws
+  every slot on one timeline, a structural inspector, the keys view (a drawn
+  keyboard that plays the tonal voices and records a take onto the key's
+  degrees) and the beat view (a step grid, and a piano roll for a tonal track);
 - headless `.slab` script execution;
 - validation, live registry apply/revert, audition, sequencer slot assignment,
   TOML save, and WAV export.
