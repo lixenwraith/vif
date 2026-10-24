@@ -7,7 +7,8 @@ and the wire carries what a receiver cannot re-derive. §1 is the wire, §2 the
 correction pipeline, §3 the readings, §4 phase 2, the approaches not yet landed in
 their batches, each with what of it is in and what it still needs, and §5 their
 order by iteration. Phase 1, four iterations in 2026-10, is what §1–§3 describe as
-built, with phase 2's first two, the wire codec. Bare section numbers
+built, with phase 2's first three: the wire codec and the authority's FSM
+transitions. Bare section numbers
 are this document's; "multi-player §n" is [Multiplayer](multi-player.md), which
 holds the session contract, event timing, membership and succession; "services §n"
 is [Services and networking](services-and-networking.md), which holds the
@@ -271,8 +272,9 @@ Host egress, framed before deflate      5 kB/s      0.23 MB/s   0.07 MB/s   5.05
 Heap in use per instance                70 MiB      90 MiB      210 MiB     250 MiB
 ```
 
-The egress rows are the binary wire codec's (protocol 24), read over sockets in
-§3.3's shape, which the in-process figures agreed with; td 16's are phase 1's,
+The egress rows are the binary wire codec's (protocol 24, and the same at 25),
+read over sockets in §3.3's shape, which the in-process figures agreed with; td
+16's are phase 1's,
 before the codec, since the socket harness cannot seat its roster
 ([todo](todo.md#measure-a-full-roster)).
 
@@ -363,7 +365,11 @@ repaired 15 pages and took two keyframes; the whole process 0.08, 0.14 and
 0.36 and 0.54 at td with 2 and 4, its heap 40, 84 and 324–471 MiB and 311 and
 663 MiB. With the codec's field tables in place of its generated functions,
 three tower-16 readings later the same day read 0.54–0.55, which the codec's
-own microbenchmarks cannot account for and a quieter machine should settle. td's bodies and CPU move run to run with what its storm does to the
+own microbenchmarks cannot account for and a quieter machine should settle; with
+the authority's FSM transitions (protocol 25) the tower's rows read the same
+within the spread (epochs 1.0, 5.9 and 89.1 kB/s framed, the wire 1.56, 6.47 and
+73.1) and the process 0.09, 0.17 and 0.59, a transition being one crossing of
+some twenty bytes a lead apart. td's bodies and CPU move run to run with what its storm does to the
 roster (a keyframe every eight seconds on both td rows here, none to half a
 second of them on other readings), so its rows compare only where the keyframe
 rate agrees, and the tower's wire has a run-to-run spread of about 2%. The framed
@@ -458,6 +464,14 @@ the pod authoring, 76 s at DEBUG on 2026-10-24, read from its log and journal:
   own crossings, 40% as many bytes again, came back to it in full as the echo until
   a leaf's copy lost its frames (§1).
 
+A second terminal guest of the pod the same day, with the codec in place, a
+browser and an Android client beside it and a bot on the Android one, read no
+issue: the only warnings were a bot refused on a full session, the journal shows a
+run reset and the bot seated under its holder, and the lead sat between 8 and 19
+ticks on a link of about three ticks' round trip, held up by the worst age in its
+300-tick window while the client's terminal lost its window focus, a stall of the
+client rather than the link.
+
 ### 3.5 The divergence harness
 
 `VIF_DIVERGENCE=1 go test ./internal/app -run TestADivergenceOverAShapedLinkNamesItsRows -v`
@@ -517,38 +531,51 @@ sparse     pg 1    kf 2   lc 6    lead 7 (7)     pg 1   kf 1  lc 3  lcp 4  lead 
 heavy      pg 300  kf 7   lc 57   lead 9 (9)     pg 49  kf 7  lc 0  lcp 0  lead 14 (15)
 ```
 
-The wire codec (phase 2, iterations 1 and 2) over the same four shapes: on the
-main each iteration started from (the staleness change had moved the lossy
-shapes' pages from the table above), with the envelope, and with the payload
-codec, 1,200 ticks each:
+Phase 2's iterations over the same four shapes: on the main each started from
+(the staleness change had moved the lossy shapes' pages from the table above),
+with the envelope, with the payload codec, and with the authority's FSM
+transitions (`fsm`), 1,200 ticks each:
 
 ```
 shape      stage     pg  kf  lc  lcp  lead     manifests
 fieldlike  main      31   3   1    0  8 (9)    284
            envelope  18   4   1    0  8 (9)    276
            payload   31   2   1    0  8 (9)    270
+           fsm       23   5   1    0  8 (9)    175
 rare       main       3   3   0    6  11 (13)  273
            envelope   8   2   0   11  11 (13)  267
            payload    3   2   0    6  11 (13)  261
+           fsm       29   2   0    4  11 (13)  261
 sparse     main       1   1   3    4  9 (10)   292
            envelope   1   1   3    4  9 (10)   287
            payload    1   1   3    4  9 (10)   284
+           fsm        6   2   3   10  9 (10)   281
 heavy      main      61   5   0    0  14 (15)  134
            envelope  84   7   0    3  13 (15)  132
            payload   99   5   0    0  14 (15)   97
+           fsm      119   4   0    1  14 (15)  124
 ```
 
-Late commits and the lead hold on every shape through both steps and sparse is
-identical; pages and late copies move where the link is lossy or jittery, since
-the link meter reads the bytes it delivered and the correction cadence follows
-its throughput, so a command stream of a fraction of the bytes is a different
-fight from the first repair on. The manifests the guest received fall with the
-bytes on every shape, to 97 from 134 on heavy loss: a thinner stream reads as a
-slower link to the meter, which is the cadence's to answer
-([todo](todo.md#read-the-cadence-against-a-thin-command-stream)).
+Late commits and the lead hold on every shape through every step; pages and late
+copies move where the link is lossy or jittery, since the link meter reads the
+bytes it delivered and the correction cadence follows its throughput, so a
+command stream of a fraction of the bytes is a different fight from the first
+repair on. The manifests the guest received fall with the bytes on every shape,
+to 97 from 134 on heavy loss: a thinner stream reads as a slower link to the
+meter, which is the cadence's to answer
+([todo](todo.md#read-the-cadence-against-a-thin-command-stream)). The `fsm` step
+is a different fight again from the storm region's entry on: the region's own
+storm now spawns when the raised one dies instead of the region adopting the
+raised one by liveness, so the rows after it are not the codec's to compare;
+the late counts and the lead are, and hold.
 
-What the harness cannot yet read: a Shared FSM transition (the embedded scenario
-has none in its 1,200 ticks), and the pacing knobs other than their steady state.
+The harness prints the storm region's transitions too, from both ends' records:
+the scenario enters `StormSetup` from the quasar kills at tick 798–928 by shape,
+retries its refused spawn every 12 ticks while the storm the harness raised lives
+(the retry loop the liveness transition used to cut short), takes `StormActive` on
+its own spawn and ends through `StormDecision` and `StormVictory` on its death,
+every transition at one tick on both ends over every shape. What it cannot yet
+read: the pacing knobs other than their steady state.
 
 ## 4. Phase 2
 
@@ -557,9 +584,10 @@ it can land. The costs name what it lowers (−), raises (+) and leaves (·), in
 order CPU, memory, bandwidth, latency; projections come from §1's figures and §3
 confirms or refutes them. Phase 1 closed with the six-tick wire digest retired
 (protocol 22): parity is the correction exchange's, and a repair names its sections
-in `snapshot.repair_sections`. Phase 2's first two iterations landed the binary
+in `snapshot.repair_sections`. Phase 2's first three iterations landed the binary
 wire codec, its envelope (protocol 23) and its payload (protocol 24, journal
-schema 37). The approaches are in three batches, and §5 orders them by iteration.
+schema 37), and the authority's FSM transitions (protocol 25, journal schema 38).
+The approaches are in three batches, and §5 orders them by iteration.
 
 ### Batch 1: the wire
 
@@ -628,23 +656,29 @@ schema 37). The approaches are in three batches, and §5 orders them by iteratio
 
 ### Shared FSM transitions committed by the authority
 
-- Costs: · · · +; complexity medium. The lead's latency on a transition, nothing on
-  a tick.
-- Projected: the storm-spawn keyframe (§3.4, 499 and 558 cells) and the repairs that
-  follow a region transition gone; the `StormSetup` liveness workaround with them.
-- In: the FSM position is compared and repaired (`fsm` section), and an installed
-  state runs no on_enter, so a region whose on_enter spawns carries a liveness
-  transition for a receiver corrected into it.
-- Left: the authority's FSM alone evaluates the guards of a Shared region; a
-  transition it takes is a crossing (`EventFSMTransition`: region, target)
-  committed and applied at one tick on every instance, which runs on_enter there,
-  so a storm spawns from the same draws everywhere. A guest's FSM stops evaluating
-  Shared guards and follows. The `fsm` section stays as the proof.
-- Needs: a decision on guards that read per-instance status (`StatusIntCompare` on
-  `kills.*`, `StateTimeExceeds` on the tick-derived `TimeInState`), which become
-  the authority's by construction; the journal records the crossing as any other;
-  the harness runs over a transition once a scenario the embedded one spawns has
-  one within its ticks.
+- Costs: · · · +; complexity medium. Measured: a playout lead on every transition
+  a region takes, nothing on a tick, and a crossing of some twenty bytes each.
+- In (protocol 25, journal schema 38): in a live session the authority's machine
+  alone evaluates a region's guards, and a transition a guard passes is a crossing
+  (`EventFSMTransition`: the region, the state owning the transition, its index
+  there, its trigger and the variables it captured) the authority commits as any
+  other, applied at one tick on every instance, the authority's included, where
+  the transition's actions and the target's on_enter run, so a storm spawns from
+  the same draws everywhere. A guest's machine evaluates nothing and follows
+  (`Machine.Steer`, `Machine.Apply`); so do a replay of a live session and a
+  projection, from their records. A region with a transition in flight evaluates
+  nothing until it lands; an internal transition parks nothing, so every event it
+  counts crosses, in order. A reset's own settle, one artifact every instance
+  applies at one tick, takes its transitions in place, as a solo run does. Guards
+  that read per-instance status (`kills.*`, `TimeInState`) are the authority's by
+  construction (D-20). The `fsm` section stays as the proof, `StormSetup`'s
+  liveness transition is gone, and §3.5's harness reads the storm region's
+  transitions at one tick on both ends over every shape.
+- Left: a chain of states that each hand on by an unguarded `Tick` pays a lead a
+  hop, the tower's setup ten of them
+  ([todo](todo.md#fold-an-unguarded-chain-into-one-crossing)).
+- Needs: nothing further; the site's storm-spawn keyframes (§3.4) are the reading
+  that judges it.
 
 ### Converged answers without a capture
 
@@ -765,8 +799,9 @@ alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
 1. The codec's envelope (batch 1): landed, protocol 23 (§4).
 2. The codec's payload (batch 1): landed, protocol 24 and journal schema 37, the
    syncs' presence mask with it (§4).
-3. Shared FSM transitions committed by the authority (batch 2), with a scenario the
-   harness can run over a transition.
+3. Shared FSM transitions committed by the authority (batch 2): landed, protocol
+   25 and journal schema 38, the harness reading the storm region's transitions
+   (§3.5, §4).
 4. Converged answers without a capture and the faster hash (batch 2): CPU and the
    lock at the map limit, on the host and the browser guest.
 5. Keyframes from cached sections (batch 3); the binary row codec, retention by
@@ -776,17 +811,17 @@ alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
 ### Brief for the next session
 
 Repository `lixenwraith/vif`, AGENTS.md is the contract. Netcode phase 2, iteration
-3 of 5 (§5): Shared FSM transitions committed by the authority. Read
-[netcode design](netcode-design.md) §2, §3.5, §4 batch 2 and §5, then `internal/fsm`
-(the shared machine's guards and transitions), `internal/event/wire.go` (`OnWire`,
-`stampedCrossings`) and `internal/system/network.go` (`scheduleCrossings`,
-`barrierBound`). Land it alone: the authority's FSM alone evaluates a Shared
-region's guards, and a transition it takes is a crossing (`EventFSMTransition`:
-region, target) committed and applied at one tick on every instance, which runs
-on_enter there; a guest's FSM stops evaluating Shared guards and follows; the
-`fsm` section stays as the proof; decide the guards that read per-instance status
-(`kills.*`, `TimeInState`), which become the authority's by construction; give the
-harness a scenario with a transition inside its 1,200 ticks. Bump the protocol and
-the journal schema as the crossing needs; one test per rule; re-run §3.1's matrix
-and §3.5's four shapes and update §3.1, §3.3 and §3.5. Do not start the converged
-answer or the faster hash in this iteration.
+4 of 5 (§5): converged answers without a capture, and the faster deterministic
+hash. Read [netcode design](netcode-design.md) §2, §3.1, §3.3, §4 batch 2 and §5,
+then `internal/converge` (the correction exchange: a guest's answer to a manifest,
+`Corrections.TickClosed`), `internal/snapshot` (the capture, its seal and index,
+the row hashes the encoder reuses) and `pkg/vmath` (the FNV constants). Land both
+alone: keep an owned copy and row hash for each live row, compare the live stores
+with their copies at the close of the tick a manifest names, rehash only the rows
+that differ and compute the root in place, and capture only when the root
+differs; then a word-at-a-time hash of the xxh64 class in `pkg/vmath`, fixed
+across platforms and processes, bumping `ManifestVersion` and `Schema`. One test
+holds the in-place root to what a capture and index produce, normalisation and
+owner-authored exclusions included; one test per rule otherwise. Re-run §3.1's
+matrix, §3.3's readings and §3.5's four shapes and update §3.1, §3.3 and §3.5. Do
+not start batch 3 in this iteration.

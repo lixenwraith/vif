@@ -23,8 +23,9 @@ type RegionState struct {
 	Paused        bool
 
 	triggers triggerMask // union over ActivePath; rebuilt on every commit
-	// exiting marks a running exit phase; terminated, a TerminateRegion it issued
-	exiting, terminated bool
+	// exiting marks a running exit phase; terminated, a TerminateRegion it issued;
+	// proposed, a transition handed to Propose and not yet applied
+	exiting, terminated, proposed bool
 }
 
 // Machine is the generic Hierarchical Finite State Machine runtime with parallel region support
@@ -89,6 +90,16 @@ type Machine[T any] struct {
 	// OnRegion observes region lifecycle: init, spawn, terminate, pause,
 	// resume. nil disables.
 	OnRegion func(op, region string, state StateID)
+
+	// Propose takes a transition whose guard passed while the machine proposes
+	// instead of taking it: the authority of a session crosses it, and Apply takes
+	// it at the tick every instance agreed on.
+	Propose func(region string, owner StateID, index int, trigger event.EventType, vars []event.FSMVar)
+
+	// following keeps the machine from evaluating any transition: it moves by
+	// Apply alone, on what the authority committed (D-20); proposing hands each
+	// transition it evaluates to Propose.
+	following, proposing bool
 }
 
 // Node represents a state in the hierarchy
