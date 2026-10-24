@@ -584,28 +584,6 @@ stands held until its press.
 - A script that `:pause`s itself never resumes: its driven loop takes no step
   while held, so its timeline never reaches the next action. Refuse it there.
 
-### Commit Shared FSM transitions through the authority
-
-- Priority: P1, netcode phase 2 iteration 3 ([netcode design §5](netcode-design.md#5-order-and-iterations))
-- Affected files: `internal/fsm/machine.go`, `internal/engine/scheduler.go`,
-  `internal/system/network.go`, `internal/event/type.go`
-- Guide: [Netcode design §4 batch 2](netcode-design.md#4-phase-2)
-
-Each of a guest's storm spawns at the site was followed by one of the run's only
-large corrections (499 and 558 cells across `meta`, `status`, `w.combat`,
-`w.header`, `w.member`, `w.positions`, `w.protection`, then `w.stormcircle`). The
-divergence harness ([netcode design §3.5](netcode-design.md#35-the-divergence-harness))
-raised a storm at one simulation tick on both ends over every shape and nothing
-diverged, so the spawn is not the cause: the FSM's transition tick is. `StormSetup`
-is entered from `QuasarEscalate` on `kills.quasar`, a per-instance counter that
-re-syncs only through a `meta` repair, and a guest's FSM also ticks on predicted
-kills, so two instances enter the state on different ticks and spawn from different
-draws. The same mechanism is the `status` repairs seven ticks after a main-region
-transition seen earlier at the site. What closes it: the authority's FSM alone
-evaluates a Shared region's guards and its transition is a crossing committed and
-applied at one tick everywhere, running on_enter there; guests follow. The `fsm`
-section stays as the proof and `StormSetup`'s liveness transition goes.
-
 ### Split combat telemetry by domain
 
 - Priority: P3
@@ -670,6 +648,22 @@ with its payload, late counts unchanged: the link meter reads throughput from th
 bytes it delivered, and a command stream of a fifth the bytes reads as a slower
 link, so the cadence lengthened under loss. Read what the meter and the floor
 decide on a thin stream, and whether the probe's bytes should carry the reading.
+
+### Fold an unguarded chain into one crossing
+
+- Priority: P3
+- Affected files: `internal/fsm/machine.go`, `internal/engine/scheduler.go`
+- Guide: [Netcode design §4 batch 2](netcode-design.md#4-phase-2)
+
+A transition is the authority's and applies a playout lead after it was taken
+([D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions)),
+so a chain of states that each hand on by an unguarded `Tick`, the tower's setup
+of ten hops, pays a lead a hop: 30 ticks on the harness, seconds at the site.
+Taking the unguarded hop in place on every instance is safe only where nothing
+else could have moved the region first: no guarded `Tick` before it in the leaf
+and no event transition on the leaf or its ancestors, since the authority evaluates
+those and a guest does not. Decide whether such states are marked at load and
+taken in place, or whether the authority crosses the chain's end.
 
 ### Make the td readings repeatable
 

@@ -1382,6 +1382,51 @@ func towerFight(t *testing.T, cfg Config, shape network.LinkShape) (host, guest 
 	}
 }
 
+// TestAGuestFollowsTheAuthoritysTransitions: a region's transitions are the
+// authority's and apply at one tick on every instance (D-20), so the guest's
+// machine moves exactly where and when the host's did.
+func TestAGuestFollowsTheAuthoritysTransitions(t *testing.T) {
+	apps := meshSessionOf(t, towerScenario(t, 0x70E4), 2, [][2]int{{1, 2}})
+	host, guest := apps[0], apps[1]
+	for _, a := range apps {
+		transportOf(t, a).SetShape(network.LinkShape{LatencyTicks: 3})
+		injectExCommand(t, a, "god")
+	}
+	type move struct {
+		tick  uint64
+		state string
+	}
+	moves := map[*App][]move{}
+	observe := func(a *App) {
+		var state string
+		a.World().RunSafe(func() { state = a.World().Resources.Status.Strings.Get("fsm.tower.state").Load() })
+		if n := len(moves[a]); n == 0 || moves[a][n-1].state != state {
+			moves[a] = append(moves[a], move{tickOf(a), state})
+		}
+	}
+	// The region starts at one tick on both, as a shared FSM re-derives it; the
+	// setup it enters moves through several states before its fight.
+	for _, a := range apps {
+		a.World().RunSafe(func() {
+			a.World().PushEventDomain(event.EventFSMRegionRequest,
+				&event.FSMRegionPayload{Op: event.RegionSpawn, Region: "tower", State: "TowerSetup"},
+				core.DomainShared)
+		})
+		a.Settle()
+	}
+	for range 300 {
+		tickAll(apps)
+		observe(host)
+		observe(guest)
+	}
+	if len(moves[guest]) < 3 {
+		t.Fatalf("the guest's tower region moved %v, want the setup's transitions", moves[guest])
+	}
+	if !reflect.DeepEqual(moves[host], moves[guest]) {
+		t.Fatalf("the guest moved %v, the host %v", moves[guest], moves[host])
+	}
+}
+
 // TestATowerGuestAnswersHashOnly: in the tower region both participants fight, so
 // owner-authored cursor state moves every tick, snakes rewrite their segments in
 // place and overlays toggle. None of it may reach the compared world, or a guest

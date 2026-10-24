@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/event"
@@ -190,29 +191,86 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 		}
 	}
 
+	if m.following || region.proposed {
+		return
+	}
 	// Evaluate Tick Transitions (Event == 0), bubble up
 	currID := region.ActiveStateID
 	for currID != StateNone {
 		node := m.nodes[currID]
 		for i := range node.Transitions {
 			trans := &node.Transitions[i]
-			if trans.Event == 0 {
-				if trans.Guard == nil || trans.Guard(ctx, region, nil) {
-					if trans.Internal {
-						// Actions only, no state change
-						if m.OnTransition != nil {
-							m.OnTransition(region.Name, region.ActiveStateID,
-								region.ActiveStateID, event.EventNone, true)
-						}
-						m.executeActions(ctx, region, region.ActiveStateID, trans.Actions)
-						return
-					}
-					m.transitionRegion(ctx, region, trans.TargetID, event.EventNone, trans.Actions)
-					return
-				}
+			if trans.Event == 0 && (trans.Guard == nil || trans.Guard(ctx, region, nil)) {
+				m.take(ctx, region, currID, i, event.EventNone, nil)
+				return
 			}
 		}
 		currID = node.ParentID
+	}
+}
+
+// take moves a region by the transition its guard passed: in place, or through
+// Propose, which hands it to the authority's barrier and parks the region until
+// Apply brings it back at the committed tick. An internal one changes no state,
+// so it parks nothing: every event it counts is proposed, in order.
+func (m *Machine[T]) take(ctx T, region *RegionState, owner StateID, index int, trigger event.EventType, payload any) {
+	trans := &m.nodes[owner].Transitions[index]
+	vars := payloadVars(payload, trans.CaptureVars)
+	if m.proposing && m.Propose != nil {
+		region.proposed = !trans.Internal
+		m.Propose(region.Name, owner, index, trigger, vars)
+		return
+	}
+	m.commit(ctx, region, trans, trigger, vars)
+}
+
+// commit takes a transition now: its captured variables, then its actions alone
+// for an internal one, else the exit, transition and enter phases.
+func (m *Machine[T]) commit(ctx T, region *RegionState, trans *Transition[T], trigger event.EventType, vars []event.FSMVar) {
+	for _, v := range vars {
+		m.variables[v.Name] = v.Value
+	}
+	if trans.Internal {
+		if m.OnTransition != nil {
+			m.OnTransition(region.Name, region.ActiveStateID, region.ActiveStateID, trigger, true)
+		}
+		m.executeActions(ctx, region, region.ActiveStateID, trans.Actions)
+		return
+	}
+	m.transitionRegion(ctx, region, trans.TargetID, trigger, trans.Actions)
+}
+
+// Apply takes the transition the authority committed, whatever this machine would
+// have evaluated: a region that follows moves by these alone. A state change,
+// taken or refused, is the one the region was parked for; an internal one leaves
+// the park to it.
+func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
+	region, ok := m.regions[p.Region]
+	if !ok {
+		return fmt.Errorf("region %q is not active", p.Region)
+	}
+	owner := StateID(p.Owner)
+	node, ok := m.nodes[owner]
+	if !ok || !slices.Contains(region.ActivePath, owner) || p.Index < 0 || p.Index >= len(node.Transitions) {
+		region.proposed = false
+		return fmt.Errorf("region %q in %s has no transition %d of state %d", p.Region, m.StateName(region.ActiveStateID), p.Index, p.Owner)
+	}
+	trans := &node.Transitions[p.Index]
+	region.proposed = region.proposed && trans.Internal
+	m.commit(ctx, region, trans, p.Trigger, p.Vars)
+	return nil
+}
+
+// Steer sets who moves the machine: following, Apply alone; proposing, Propose
+// and then Apply; neither, the machine itself, in place. A change drops what was
+// proposed and not applied, so nothing waits on an authority this is no longer.
+func (m *Machine[T]) Steer(following, proposing bool) {
+	if following == m.following && proposing == m.proposing {
+		return
+	}
+	m.following, m.proposing = following, proposing
+	for _, name := range m.regionOrder {
+		m.regions[name].proposed = false
 	}
 }
 
@@ -300,7 +358,7 @@ func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
 
 // handleEventInRegion processes event in a single region
 func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.GameEvent) bool {
-	if region.ActiveStateID == StateNone || !region.triggers.has(ev.Type) {
+	if region.ActiveStateID == StateNone || !region.triggers.has(ev.Type) || m.following || region.proposed {
 		return false
 	}
 
@@ -310,25 +368,9 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 		node := m.nodes[currID]
 		for i := range node.Transitions {
 			trans := &node.Transitions[i]
-			if trans.Event == ev.Type {
-				if trans.Guard == nil || trans.Guard(ctx, region, ev.Payload) {
-					// Capture payload fields into FSM variables before transition
-					// Variables are available in target state on_enter actions
-					if len(trans.CaptureVars) > 0 {
-						m.capturePayloadVars(ev.Payload, trans.CaptureVars)
-					}
-					if trans.Internal {
-						// Consume event; no exit/enter, TimeInState unaffected
-						if m.OnTransition != nil {
-							m.OnTransition(region.Name, region.ActiveStateID,
-								region.ActiveStateID, ev.Type, true)
-						}
-						m.executeActions(ctx, region, region.ActiveStateID, trans.Actions)
-						return true
-					}
-					m.transitionRegion(ctx, region, trans.TargetID, ev.Type, trans.Actions)
-					return true
-				}
+			if trans.Event == ev.Type && (trans.Guard == nil || trans.Guard(ctx, region, ev.Payload)) {
+				m.take(ctx, region, currID, i, ev.Type, ev.Payload)
+				return true
 			}
 		}
 		currID = node.ParentID
@@ -336,26 +378,22 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 	return false
 }
 
-// capturePayloadVars extracts payload struct fields into FSM variables
-// Handles int, uint (including core.Entity), float, and bool types
-// Field resolution: toml struct tag first, then Go field name
-func (m *Machine[T]) capturePayloadVars(payload any, captureVars map[string]string) {
+// payloadVars reads the payload fields a transition captures into variables, by
+// toml tag then Go field name, in name order so the same capture encodes alike.
+func payloadVars(payload any, captureVars map[string]string) []event.FSMVar {
 	if payload == nil || len(captureVars) == 0 {
-		return
+		return nil
 	}
-
-	// Shared cached resolver
 	v := StructValue(payload)
 	if !v.IsValid() {
-		return
+		return nil
 	}
-
+	vars := make([]event.FSMVar, 0, len(captureVars))
 	for key, varName := range captureVars {
 		field := FieldByTag(v, key)
 		if !field.IsValid() {
 			continue
 		}
-
 		var value int64
 		switch field.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -371,9 +409,10 @@ func (m *Machine[T]) capturePayloadVars(payload any, captureVars map[string]stri
 		default:
 			continue
 		}
-
-		m.variables[varName] = value
+		vars = append(vars, event.FSMVar{Name: varName, Value: value})
 	}
+	slices.SortFunc(vars, func(a, b event.FSMVar) int { return strings.Compare(a.Name, b.Name) })
+	return vars
 }
 
 // transitionRegion performs state change within a specific region
