@@ -1031,6 +1031,14 @@ type OffTickDrainPort interface {
 	DrainOffTick(dst []network.Inbound) int
 }
 
+// BundlingPort holds what a link is sent of the kinds that travel bundled
+// (MessageType.Bundles) until Release sends it as one frame, or a frame of another
+// kind follows it on that link and sends it first: a link reads its frames in the
+// order they were sent. A port without it sends a frame per artifact.
+type BundlingPort interface {
+	Release()
+}
+
 // PeerDialingPort is a transport a participant may open its own links on, which is
 // what makes a session more than the star `-join` builds. It is asserted for rather
 // than required for the same reason LinkMeasuringPort is: a transport that cannot

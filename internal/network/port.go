@@ -31,6 +31,11 @@ type SocketPort struct {
 	readyMu   sync.Mutex
 	confirmed map[PeerID]bool
 
+	// pending is what each link is owed of the kinds that travel bundled, until
+	// Release sends it or a frame of another kind, which follows it, sends it first.
+	pendMu  sync.Mutex
+	pending map[PeerID]*Bundle
+
 	// The link measurement is entirely the port's. Probes leave on a timer of
 	// their own rather than on a tick, because a stalled or paused instance still
 	// has a link and a link that has gone quiet is exactly what a probe is for;
@@ -68,6 +73,7 @@ func NewSocketPort(cfg *Config) *SocketPort {
 	p.config.OnError = p.reportError
 	p.meters = make(map[PeerID]*linkMeter)
 	p.confirmed = make(map[PeerID]bool)
+	p.pending = make(map[PeerID]*Bundle)
 	p.probeStop = make(chan struct{})
 	p.probeDone = make(chan struct{})
 	p.transport = NewTransport(&p.config)
@@ -171,9 +177,21 @@ func (p *SocketPort) DialPeer(addr string) error {
 	return p.transport.DialPeer(addr, p.config.ParticipantID)
 }
 
-// Send queues one framed message for a canonical participant.
+// Send queues one framed message for a canonical participant: a kind that bundles
+// waits for the link's next Release, any other releases the link before it.
 func (p *SocketPort) Send(peerID uint32, msgType uint8, payload []byte) bool {
-	return p.transport.Send(PeerID(peerID), NewMessage(MessageType(msgType), payload))
+	id, kind := PeerID(peerID), MessageType(msgType)
+	p.pendMu.Lock()
+	defer p.pendMu.Unlock()
+	if kind.Bundles() {
+		if !p.transport.Connected(id) {
+			return false
+		}
+		p.pend(id).Add(kind, payload)
+		return true
+	}
+	p.releaseLocked(id)
+	return p.transport.Send(id, NewMessage(kind, payload))
 }
 
 // Broadcast queues one independently sequenced frame per peer. A peer whose send
@@ -184,11 +202,64 @@ func (p *SocketPort) Broadcast(msgType uint8, payload []byte) {
 }
 
 // BroadcastExcept queues one frame per peer but one, for relaying an artifact onward
-// without returning it to the link it arrived on.
+// without returning it to the link it arrived on; it bundles as Send does.
 func (p *SocketPort) BroadcastExcept(exclude uint32, msgType uint8, payload []byte) {
-	refused := p.transport.BroadcastExcept(PeerID(exclude), NewMessage(MessageType(msgType), payload))
+	kind := MessageType(msgType)
+	p.pendMu.Lock()
+	defer p.pendMu.Unlock()
+	if kind.Bundles() {
+		for _, id := range p.transport.Peers() {
+			if uint32(id) != exclude {
+				p.pend(id).Add(kind, payload)
+			}
+		}
+		return
+	}
+	for id := range p.pending {
+		if uint32(id) != exclude {
+			p.releaseLocked(id)
+		}
+	}
+	refused := p.transport.BroadcastExcept(PeerID(exclude), NewMessage(kind, payload))
 	if refused > 0 {
 		p.refused.Add(uint64(refused))
+	}
+}
+
+// Release sends each link what it is owed, as one frame.
+func (p *SocketPort) Release() {
+	p.pendMu.Lock()
+	defer p.pendMu.Unlock()
+	for id := range p.pending {
+		p.releaseLocked(id)
+	}
+}
+
+// pend is one link's bundle. Caller holds pendMu.
+func (p *SocketPort) pend(id PeerID) *Bundle {
+	b, ok := p.pending[id]
+	if !ok {
+		b = &Bundle{}
+		p.pending[id] = b
+	}
+	return b
+}
+
+// releaseLocked sends one link what it is owed; a link that is gone is owed nothing.
+// Caller holds pendMu.
+func (p *SocketPort) releaseLocked(id PeerID) {
+	b := p.pending[id]
+	if b == nil || len(b.out) == 0 {
+		return
+	}
+	frames := b.Take()
+	if !p.transport.Connected(id) {
+		return
+	}
+	for i := range frames {
+		if !p.transport.Send(id, &frames[i]) {
+			p.refused.Add(1)
+		}
 	}
 }
 

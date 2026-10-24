@@ -216,15 +216,6 @@ type NetworkSystem struct {
 	// carries only once its player turned relaying on; see carries.
 	served [participantSlots]bool
 
-	// upstream is this tick's raw artifacts for the authority on a guest linked to
-	// it, its own and those it carries; Flush sends them as one frame.
-	upstream network.Bundle
-
-	// down is what each link behind this instance is owed: the copies a drain
-	// commits leave it as one frame when the drain ends, and the tick's own epoch and
-	// syncs as one when it closes.
-	down [participantSlots]network.Bundle
-
 	// leadWindow holds the own lead's reading at each of the last
 	// NetworkBarrierRenegotiateTicks ticks, leadCount how many have been read, and
 	// leadPushed the change already pushed and not yet dispatched.
@@ -506,8 +497,6 @@ func (s *NetworkSystem) Init() {
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
-	s.upstream = network.Bundle{}
-	s.down = [participantSlots]network.Bundle{}
 
 	// Held derivations go for the reason the replay suffix below does: a reward the
 	// authority never proved belongs to the run that predicted it, and that run has
@@ -1386,7 +1375,7 @@ func (s *NetworkSystem) Receive(nextTick uint64) (live bool) {
 	s.publishConnectionTelemetry(p)
 	if s.enabled && p != nil {
 		s.drain(p)
-		s.flushDownstream(p)
+		s.release(p)
 	}
 	s.applyDue(nextTick)
 	s.publishBarrierTelemetry(nextTick, p)
@@ -1403,8 +1392,7 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 	if s.enabled && p != nil && p.IsRunning() && s.ticks%parameter.NetworkSyncTicks == 0 {
 		s.sendCursorState(p)
 	}
-	s.flushUpstream(p)
-	s.flushDownstream(p)
+	s.release(p)
 	s.publishTransportLoss(p)
 	s.publishLinkBytes(p)
 	s.publishLinkMeasurement(p, completedTick)
@@ -1553,7 +1541,7 @@ func (s *NetworkSystem) DrainOffTick() {
 		poll = off.DrainOffTick
 	}
 	s.drainWith(p, poll)
-	s.flushDownstream(p)
+	s.release(p)
 }
 
 // drainWith is one poll of the endpoint, whichever door it came through.
@@ -1804,7 +1792,7 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 		s.scheduleCursorState(from, msg.Payload)
 	case network.MsgBundle:
 		err := network.Unbundle(msg.Payload, func(kind network.MessageType, body []byte) {
-			if kind == network.MsgEvent || kind == network.MsgStateSync {
+			if kind.Bundles() {
 				s.dispatchMessage(from, &network.Message{Type: kind, Payload: body})
 			} else {
 				s.statDrop.Add(1)
@@ -2410,17 +2398,19 @@ func (s *NetworkSystem) relayRaw(kind network.MessageType, batch event.WireBatch
 	s.sendUp(kind, body)
 }
 
-// sendUp carries one raw artifact toward the authority, in this tick's bundle for
-// the link to it. With no such link and the authority alive this instance is behind
-// a relay that left: it offers the artifact on every link not behind it, and
-// adoptRelay takes whichever returns its epochs. With the authority lost it holds
-// its own for the handoff to resend.
+// sendUp carries one raw artifact toward the authority on the link to it. With no
+// such link and the authority alive this instance is behind a relay that left: it
+// offers the artifact on every link not behind it, and adoptRelay takes whichever
+// returns its epochs. With the authority lost it holds its own for the handoff to
+// resend.
 func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
-	if s.up() != 0 {
-		s.upstream.Add(kind, body)
+	p := s.port()
+	if to := s.up(); to != 0 {
+		if p == nil || !p.Send(to, uint8(kind), body) {
+			s.statDrop.Add(1)
+		}
 		return
 	}
-	p := s.port()
 	link, ok := p.(engine.LinkMeasuringPort)
 	if !ok || s.statHostLost.Load() {
 		s.statDrop.Add(1)
@@ -2435,15 +2425,14 @@ func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
 }
 
 // sendDown passes one artifact to the participants behind this instance but the
-// link it arrived on, every link at the authority: into the tick's bundle for each
-// link, or on its own when the codec deflated it. Reports whether any link takes it.
+// link it arrived on, every link at the authority. Reports whether any took it. The
+// port bundles epochs and syncs a link until release sends them (BundlingPort).
 func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body []byte) bool {
 	p := s.port()
 	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return false
 	}
-	link, ok := p.(engine.LinkMeasuringPort)
-	if !ok {
+	if s.isCoordinator() {
 		if except == 0 {
 			p.Broadcast(uint8(kind), body)
 		} else {
@@ -2452,50 +2441,28 @@ func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body [
 		return true
 	}
 	tick, sent := s.localTick(), false
-	for _, id := range link.Peers() {
-		if id == except || int(id) >= len(s.down) || !(s.isCoordinator() || s.behind(id, tick)) {
-			continue
+	for id := range uint32(len(s.downAt)) {
+		if id != except && s.behind(id, tick) && p.Send(id, uint8(kind), body) {
+			sent = true
 		}
-		if kind.Precompressed() {
-			sent = p.Send(id, uint8(kind), body) || sent
-			continue
-		}
-		s.down[id].Add(kind, body)
-		sent = true
 	}
 	return sent
-}
-
-// flushDownstream sends each link behind this instance what it has been owed since
-// the last flush, as one frame.
-func (s *NetworkSystem) flushDownstream(p engine.NetworkPort) {
-	for id := range s.down {
-		for _, m := range s.down[id].Take() {
-			if p == nil || !p.Send(uint32(id), uint8(m.Type), m.Payload) {
-				s.statDrop.Add(1)
-			}
-		}
-	}
 }
 
 // sendOwn sends one of this instance's own artifacts: the authority's are committed
 // as sent and go down every link, a guest's go up raw.
 func (s *NetworkSystem) sendOwn(p engine.NetworkPort, kind network.MessageType, body []byte) {
 	if s.isCoordinator() {
-		s.sendDown(0, kind, body)
+		p.Broadcast(uint8(kind), body)
 		return
 	}
 	s.sendUp(kind, body)
 }
 
-// flushUpstream sends this tick's bundle up. One whose path went with a handoff is
-// lost, as an epoch in flight to a departed authority is; the handoff resends.
-func (s *NetworkSystem) flushUpstream(p engine.NetworkPort) {
-	to := s.up()
-	for _, m := range s.upstream.Take() {
-		if p == nil || to == 0 || !p.Send(to, uint8(m.Type), m.Payload) {
-			s.statDrop.Add(1)
-		}
+// release sends each link what a drain or the tick's close left it, as one frame.
+func (s *NetworkSystem) release(p engine.NetworkPort) {
+	if b, ok := p.(engine.BundlingPort); ok {
+		b.Release()
 	}
 }
 

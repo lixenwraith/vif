@@ -13,6 +13,9 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash # pipefail: a test step filtered to its failures keeps go test's status
 
     steps:
     - name: Checkout code
@@ -48,23 +51,25 @@ jobs:
         GOOS=js GOARCH=wasm go build ./...
         CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags 'novlog vif_noaudio' ./...
 
+    # A passing package says nothing: the log keeps a failure's output, what a step
+    # prints on its own and the race detector's reports.
     - name: Test the desktop window package
-      run: CGO_ENABLED=0 go test ./pkg/window
+      run: CGO_ENABLED=0 go test ./pkg/window 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
     # js/wasm caps a program's argv and environment together at 8 KiB, which a
     # runner's environment passes, so these run under Node with almost none of it.
     - name: Test the browser build
       run: |
         wasm_exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"
-        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" ./pkg/browser
-        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" -run Browser ./internal/network
+        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" ./pkg/browser 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
+        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" -run Browser ./internal/network 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
     - name: Vet and test the Android host module
       working-directory: android
-      run: go vet ./... && go test ./...
+      run: go vet ./... && go test ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
     - name: Run tests with race detector
-      run: go test -race -v ./...
+      run: go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
       env:
         # Halt immediately on race condition and output logs to files prefixed with "race"
         GORACE: "halt_on_error=1 log_path=race"

@@ -494,12 +494,13 @@ epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
 cannot produce pages for. `MsgAuthorityReport` (0x2C) and `MsgAuthorityHandoff`
 (0x2E) carry the succession; 0x2D is retired rather than reused. `MsgPeerList`
 (0x20) is the address map and `MsgConnect`/`MsgAck` (0x02/0x04) open a peer link
-([Multiplayer](multi-player.md) §5.3). A guest linked to the authority packs a
-tick's raw epochs and syncs, its own and those it carries, into one `MsgBundle`
-(0x19) while they fit a frame, and the authority, or a relay, packs the copies it
-committed or forwards in a tick with its own epoch and syncs into one for each link
-behind it, so a link reads one frame a tick; a correction chunk travels alone. A
-guest admitting its own bot asks the coordinator
+([Multiplayer](multi-player.md) §5.3). The port packs the epochs and syncs a link
+is sent (`MessageType.Bundles`) into one `MsgBundle` (0x19) while they fit a frame
+and releases each link's when a drain ends and when the tick closes: raw epochs go
+up and committed copies down with the sender's own, a frame or two a link a tick
+whatever the roster. A frame of any other kind releases the link's bundle before
+it, so a link reads its frames in the order they were sent; a correction chunk
+travels alone. A guest admitting its own bot asks the coordinator
 on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
 retire a failed join; the first two are answered on that link with
 `MsgRelayAdmit` (0x2F). The epoch is JSON containing journal-registry TOML
@@ -742,8 +743,8 @@ and released only after the common start gate, so the host's lobby wait cannot a
 shared timers before a later-created joiner reaches tick one.
 
 An instance sends only to the peers it is linked to, and knows each link as up,
-down or beside. A guest bundles its own raw epochs and those of the participants
-behind it for its one link up — the authority, else the relay it joined through or
+down or beside. A guest sends its own raw epochs and those of the participants
+behind it up its one link — the authority, else the relay it joined through or
 adopted (`NetworkResource.Relay`) — and a guest with no such link and the
 authority alive offers them on every link not behind it, adopting the first that
 returns them committed; with the authority lost it holds them for the handoff to

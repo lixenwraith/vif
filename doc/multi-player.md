@@ -439,9 +439,10 @@ session every participant also holds a peer link to the first candidate (§5.3).
 link is up, down or beside. A participant's **up** link is the authority if it
 holds one, else the relay it joined through (`NetworkResource.Relay`) or adopted;
 its **down** links are those that send it raw artifacts or were served a join
-within the epoch window, every link at the authority. Raw artifacts go up, one
-bundle a tick; committed epochs and owner syncs go down, one bundle a link a tick
-with the sender's own, and correction chunks beside them, each admitted once within
+within the epoch window, every link at the authority. Raw artifacts go up;
+committed epochs and owner syncs go down with the sender's own; a link bundles
+them, released when a drain ends, when the tick closes and before any other frame,
+and correction chunks travel beside them, each admitted once within
 a bounded window; a peer link carries succession records and
 departure notices, which still flood. Corrections retain the authority's term,
 tick, hashes, and chunks across relays.
@@ -572,8 +573,10 @@ higher term met later, because partition merging is not implemented.
 
 ### 5.2 The roster after a loss
 
-A handoff preserves the surviving roster exactly; only the lost predecessor and its
-bots may differ when their departures straddle the handoff. The host produces the
+A handoff preserves the surviving players exactly; the lost predecessor may differ
+when its departure straddles the handoff, and any bot may: a seat crosses at its
+holder's word, and a receiver a playout behind its relay may hold that crossing
+unapplied when the record reaches it. The host produces the
 predecessor's departure as the ordinary crossing, because it may, and the place
 waits as a Wraith (§5.4). A convergence floor (`NetworkSuccessionTicks`) after its
 group resumes, every independent participant that reported no membership at its
@@ -635,8 +638,8 @@ instance binds it, and authorship never leaves the machine that started the worl
 
 **An address is not roster identity.** `RosterEntry` is compared by value:
 `SameRoster` sorts two rosters and calls `slices.Equal`, and
-`HandoffRecord.Validate` refuses a record whose surviving roster — everyone but the
-predecessor and its bots — is not identical to the receiver's. An `Addr` field on
+`HandoffRecord.Validate` refuses a record whose surviving players — everyone but the
+predecessor and the bots — are not identical to the receiver's. An `Addr` field on
 that struct would make a guest that rebound its port look like a different roster
 and fail every handoff.
 
