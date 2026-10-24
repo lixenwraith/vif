@@ -45,8 +45,9 @@ type Config struct {
 	Address string
 
 	// TLS is the wss route's: the certificate a wss:// listener serves, and what a
-	// wss:// dial trusts in place of the system's roots. Nil serves no wss. TCP and
-	// ws stay plaintext whatever it holds: a session is trusted-peer by decision.
+	// wss:// dial trusts in place of the system's roots and a self-signed door taken
+	// as it is. Nil serves no wss. TCP and ws stay plaintext whatever it holds: a
+	// session is trusted-peer by decision.
 	TLS *tls.Config
 
 	// Connection limits

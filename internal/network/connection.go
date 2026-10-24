@@ -2,6 +2,7 @@ package network
 
 import (
 	"bufio"
+	"cmp"
 	"compress/flate"
 	"errors"
 	"fmt"
@@ -550,7 +551,7 @@ func dial(target string, cfg *Config) (net.Conn, error) {
 	var conn net.Conn
 	switch {
 	case e.Scheme == SchemeWebSocket:
-		conn, err = dialWebSocket(e.Addr, cfg.ConnectTimeout, cfg.TLS)
+		conn, err = dialWebSocket(withHost(e.Addr), cfg.ConnectTimeout, cmp.Or(cfg.TLS, dialTLS()))
 	case !buildDialsTCP:
 		err = errors.New("TCP unavailable in a browser")
 	default:

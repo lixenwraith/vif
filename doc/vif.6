@@ -41,10 +41,10 @@ Certificate chain a wss:// door serves, PEM; for \-host, \-serve or :host
 The certificate's private key, PEM; default the \-cert file
 .TP
 .B \-selfsign
-Serve wss:// with a certificate made for this run, in place of \-cert; a joiner trusts it by its fingerprint
+Serve wss:// with a certificate made for this run, in place of \-cert: encrypted, and taken as it is by a terminal that joins
 .TP
 .B \-ca <file|sha256:hex>
-What a wss:// host's certificate is trusted by when joining: a PEM file of its issuer, or the certificate's own fingerprint
+What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self\-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint
 .TP
 .B \-join <addr>
 Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given

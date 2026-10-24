@@ -5,8 +5,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -711,12 +711,14 @@ func TestAParticipantIsACursorNotARosterEntry(t *testing.T) {
 }
 
 // TestAWssHostIsJoinedByADialerThatTrustsItsCertificate serves a session over wss
-// from one binary: the door speaks TLS with the certificate it was given, a dialer
-// that trusts none of the host's is turned away before the offer, and one that does
-// is admitted as a ws dialer is. A wss door opens only with a certificate.
+// from one binary under a certificate a private authority issued: the door speaks
+// TLS with it, a dialer that trusts neither the authority nor a self-signed leaf is
+// turned away before the offer, and one given the authority's PEM (-ca) is admitted
+// as a ws dialer is. A wss door opens only with a certificate.
 func TestAWssHostIsJoinedByADialerThatTrustsItsCertificate(t *testing.T) {
-	certFile := filepath.Join(t.TempDir(), "host.pem")
-	pool := writeSelfSigned(t, certFile)
+	dir := t.TempDir()
+	certFile, caFile := filepath.Join(dir, "host.pem"), filepath.Join(dir, "ca.pem")
+	writeIssued(t, certFile, caFile)
 	serverTLS, err := LoadTLS(certFile, "")
 	if err != nil {
 		t.Fatal(err)
@@ -743,18 +745,17 @@ func TestAWssHostIsJoinedByADialerThatTrustsItsCertificate(t *testing.T) {
 	}
 
 	if _, _, err := DialSession(route, DebugConfig(RolePeer, "")); err == nil {
-		t.Fatal("a dial trusting none of the host's certificate was admitted")
-	} else if err.Error() != "the host's certificate is not one this machine trusts" {
+		t.Fatal("a dial trusting none of the host's authority was admitted")
+	} else if err.Error() != "the host's certificate is not one this machine trusts; -ca names what to trust it by" {
 		t.Fatalf("an untrusted certificate read %q", err)
 	}
 	trusting := DebugConfig(RolePeer, "")
-	trusting.TLS = &tls.Config{RootCAs: pool}
-	if byFile, err := TrustTLS(certFile); err != nil || byFile.RootCAs == nil {
-		t.Fatalf("-ca reading the certificate's own file: %v", err)
+	if trusting.TLS, err = TrustTLS(caFile); err != nil {
+		t.Fatal(err)
 	}
 	pending, got, err := DialSession(route, trusting)
 	if err != nil {
-		t.Fatalf("a dial trusting the host's certificate was refused: %v", err)
+		t.Fatalf("a dial trusting the host's authority was refused: %v", err)
 	}
 	defer pending.Close()
 	if got.Assigned != offer.Assigned {
@@ -762,23 +763,41 @@ func TestAWssHostIsJoinedByADialerThatTrustsItsCertificate(t *testing.T) {
 	}
 }
 
-// writeSelfSigned writes a certificate for 127.0.0.1 and its key to one PEM file,
-// as -cert alone reads them, and returns the pool that trusts it.
-func writeSelfSigned(t *testing.T, file string) *x509.CertPool {
+// writeIssued writes a certificate for 127.0.0.1 issued by a private authority, with
+// its key, to certFile as -cert alone reads them, and the authority's certificate to
+// caFile as -ca reads it.
+func writeIssued(t *testing.T, certFile, caFile string) {
 	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test authority"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		KeyUsage: x509.KeyUsageCertSign, BasicConstraintsValid: true, IsCA: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, ca, ca, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, err = x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
+	leaf := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
 	}
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	der, err := x509.CreateCertificate(rand.Reader, leaf, ca, &key.PublicKey, caKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -789,16 +808,12 @@ func writeSelfSigned(t *testing.T, file string) *x509.CertPool {
 	var pemFile bytes.Buffer
 	_ = pem.Encode(&pemFile, &pem.Block{Type: "CERTIFICATE", Bytes: der})
 	_ = pem.Encode(&pemFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
-	if err := os.WriteFile(file, pemFile.Bytes(), 0o600); err != nil {
+	if err := os.WriteFile(certFile, pemFile.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cert, err := x509.ParseCertificate(der)
-	if err != nil {
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	pool := x509.NewCertPool()
-	pool.AddCert(cert)
-	return pool
 }
 
 // TestAHostServesEveryDoorItNames: a tcp door and a ws door in one -host serve one
@@ -819,7 +834,8 @@ func TestAHostServesEveryDoorItNames(t *testing.T) {
 	if len(doors) != 2 || doors[0].Network() != "tcp" || !strings.HasPrefix(doors[1].String(), "ws://") {
 		t.Fatalf("the host answers at %v; want a tcp door and a ws door", doors)
 	}
-	for _, door := range []string{doors[0].String(), doors[1].String() + "/"} {
+	_, wsPort, _ := net.SplitHostPort(strings.TrimPrefix(doors[1].String(), "ws://"))
+	for _, door := range []string{doors[0].String(), doors[1].String() + "/", "ws://:" + wsPort + "/"} {
 		pending, got, err := DialSession(door, DebugConfig(RolePeer, ""))
 		if err != nil {
 			t.Fatalf("a dial at %s was refused: %v", door, err)
@@ -843,10 +859,11 @@ func TestAHostServesEveryDoorItNames(t *testing.T) {
 	}
 }
 
-// TestASelfSignedDoorIsJoinedByItsFingerprint: a wss door made for the run is
-// trusted by nobody's authority, and a dialer pins its fingerprint instead; one that
-// pins another is told the certificate is not the one it names.
-func TestASelfSignedDoorIsJoinedByItsFingerprint(t *testing.T) {
+// TestASelfSignedDoorIsJoinedAsItIs: a wss door made for the run has nobody's
+// authority behind it and a dialer with no -ca takes it as it is, encrypted and
+// unauthenticated; one pinning its fingerprint is admitted too, and one pinning
+// another is told the certificate is not the one it names.
+func TestASelfSignedDoorIsJoinedAsItIs(t *testing.T) {
 	serverTLS, err := SelfSignedTLS([]string{"host.example"})
 	if err != nil {
 		t.Fatal(err)
@@ -869,6 +886,11 @@ func TestASelfSignedDoorIsJoinedByItsFingerprint(t *testing.T) {
 	if !strings.HasPrefix(pin, "sha256:") || len(pin) != len("sha256:")+64 {
 		t.Fatalf("fingerprint %q", pin)
 	}
+	plain, _, err := DialSession(route, DebugConfig(RolePeer, ""))
+	if err != nil {
+		t.Fatalf("a dial with no -ca was refused by a self-signed door: %v", err)
+	}
+	plain.Close()
 	wrong := DebugConfig(RolePeer, "")
 	if wrong.TLS, err = TrustTLS("sha256:" + strings.Repeat("00", 32)); err != nil {
 		t.Fatal(err)
