@@ -792,10 +792,12 @@ void main() {
     /* Keys arrive on the hidden field: a hardware key as keydown and keyup by its
        code, a soft keyboard's or a paste's text as input events once the browser has
        composed it. A key the game takes never reaches the field; one left to the
-       browser (a Meta chord, a Ctrl chord a terminal has no byte for, paste) keeps
-       its meaning there. */
+       browser keeps its meaning there: the chords a terminal emulator keeps for
+       itself (Meta or Alt, Ctrl-Shift, F5, F11 and F12), paste, and a Ctrl chord a
+       terminal has no byte for. */
     const NAMED = /^(Escape|Enter|Tab|Backspace|Delete|Arrow(Up|Down|Left|Right)|Home|End|Page(Up|Down)|Insert|F([1-9]|1[0-2]))$/;
     const CTRL = /^[a-zA-Z @[\\\]^_?]$/;   // the characters whose Ctrl chord a terminal sends
+    const BROWSER = /^F(5|11|12)$/;        // the function keys the browser keeps
 
     function mods(e) {
         return (e.shiftKey ? 1 : 0) | (e.altKey ? 2 : 0) | (e.ctrlKey ? 4 : 0) | (e.metaKey ? 8 : 0);
@@ -803,9 +805,8 @@ void main() {
 
     function onKey(e) {
         arm();
-        if (e.isComposing || e.metaKey) return;
-        // Ctrl-Shift-V and Shift-Insert paste, as in a terminal; the text arrives below
-        if (e.shiftKey && ((e.ctrlKey && e.key === 'V') || e.key === 'Insert')) return;
+        if (e.isComposing || e.metaKey || e.altKey || (e.ctrlKey && e.shiftKey) || BROWSER.test(e.key)) return;
+        if (e.shiftKey && e.key === 'Insert') return;   // pastes, as Ctrl-Shift-V does; the text arrives below
         const char = [...e.key].length === 1;
         if (!(char ? !e.ctrlKey || CTRL.test(e.key) : NAMED.test(e.key))) return;
         send({ type: 'key', key: e.key, mods: mods(e), code: e.code, repeat: e.repeat });

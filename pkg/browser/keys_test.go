@@ -25,14 +25,12 @@ func TestAKeyPressReportsWhatATerminalReports(t *testing.T) {
 		{"a", 0, char('a', 0)},
 		{"A", shift, char('A', 0)},
 		{" ", 0, char(' ', 0)},
-		{"x", alt, char('x', terminal.ModAlt)},
 		{"λ", 0, char('λ', 0)},
 		{"c", ctrl, key(terminal.KeyCtrlC, 0)},
 		{"C", ctrl | shift, key(terminal.KeyCtrlC, 0)},
 		{"h", ctrl, key(terminal.KeyBackspace, 0)},
 		{"[", ctrl, key(terminal.KeyEscape, 0)},
 		{" ", ctrl, key(terminal.KeyCtrlSpace, 0)},
-		{"g", ctrl | alt, key(terminal.KeyCtrlG, terminal.ModAlt)},
 		{"Enter", 0, key(terminal.KeyEnter, 0)},
 		{"Enter", ctrl, key(terminal.KeyEnter, 0)},
 		{"Tab", 0, key(terminal.KeyTab, 0)},
@@ -40,7 +38,6 @@ func TestAKeyPressReportsWhatATerminalReports(t *testing.T) {
 		{"Backspace", 0, key(terminal.KeyBackspace, 0)},
 		{"Delete", ctrl, key(terminal.KeyDelete, terminal.ModCtrl)},
 		{"ArrowUp", shift, key(terminal.KeyUp, terminal.ModShift)},
-		{"F5", alt, key(terminal.KeyF5, terminal.ModAlt)},
 	} {
 		if got, ok := keyEvent(c.key, c.mods); !ok || got != c.want {
 			t.Errorf("%q with %03b: %+v %v, want %+v", c.key, c.mods, got, ok, c.want)

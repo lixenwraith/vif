@@ -33,7 +33,8 @@ var namedKeys = map[string]terminal.Key{
 // keyEvent is the terminal event for a key press: key as the browser resolved it with
 // Shift applied, mods the modifier bits. ok is false for a key a terminal never sees:
 // a modifier alone, a dead key, a Meta chord, or the "Unidentified" a soft keyboard
-// sends ahead of its text.
+// sends ahead of its text. An Alt chord never arrives: the page leaves it to the
+// browser, as it leaves the browser's other chords.
 func keyEvent(key string, mods uint8) (terminal.Event, bool) {
 	ev := terminal.Event{Type: terminal.EventKey}
 	if mods&modMeta != 0 {
@@ -63,9 +64,6 @@ func keyEvent(key string, mods uint8) (terminal.Event, bool) {
 		ev.Key = k
 	} else {
 		ev.Key, ev.Rune = terminal.KeyRune, r
-	}
-	if mods&modAlt != 0 {
-		ev.Modifiers = terminal.ModAlt
 	}
 	return ev, true
 }
