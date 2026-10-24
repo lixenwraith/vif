@@ -76,10 +76,11 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 		t.Fatalf("lossy item = %#v, %t", item, ok)
 	}
 
-	// Being behind the session outranks both: it says whether this participant's own
-	// actions are still landing on time, which is the one a player can act on.
+	// Being out of step outranks both: it says whether this participant's own
+	// actions are still landing on time, which is the one a player can act on. The
+	// number is how far, whichever way pacing read it.
 	r.statStale.Store(true)
-	r.statLag.Store(7)
+	r.statPaceLate.Store(-7)
 	item, ok = r.networkBadge()
 	if !ok || item.text != " 2P:0 42ms desync 7 " || item.bg != visual.RgbNetWarnBg {
 		t.Fatalf("stale item = %#v, %t", item, ok)
@@ -161,7 +162,7 @@ func TestStatusBarNetworkCellHoldsItsWidth(t *testing.T) {
 	first, _ := r.networkItem()
 
 	r.statStale.Store(true)
-	r.statLag.Store(7)
+	r.statPaceLate.Store(7)
 	if item, _ := r.networkItem(); item.text != first.text {
 		t.Fatalf("the cell changed to %q inside its hold", item.text)
 	}

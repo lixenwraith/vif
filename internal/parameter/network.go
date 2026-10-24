@@ -32,7 +32,9 @@ const (
 	// that late on it too, and are repaired there, so only it pays.
 	NetworkAheadTicks = 0
 
-	// NetworkPaceBandTicks is the dead zone a guest's pacing rests in: the latest
+	// NetworkPaceBandTicks is the dead zone a guest's pacing rests in, and the one
+	// line the staleness badge reads (network.stale): outside it beyond a trim, ahead
+	// past the band or behind by a step, this instance is out of step. The latest
 	// authority epoch in a window lands between this many ticks early and
 	// NetworkAheadTicks late.
 	NetworkPaceBandTicks = 1
@@ -304,13 +306,6 @@ const (
 	// receiver also pays the transfer and the install. One nominal keyframe period is
 	// the smallest margin that cannot fire on a healthy link.
 	SnapshotFloorGraceTicks = SnapshotCorrectionTicks * SnapshotKeyframeCorrections
-
-	// SnapshotStaleTicks is how far behind the session's newest observed tick this
-	// instance may stand before the staleness indicator blames the link. It is the
-	// default playout lead, as NetworkJoinLagTicks is: past it this participant's
-	// crossings reach the host after the tick they name. Fixed rather than live, so
-	// the indicator does not flicker with the lead it reads.
-	SnapshotStaleTicks = NetworkBarrierDelayTicks
 
 	// SnapshotCorrectionQueue bounds the corrections one instance may hold
 	// un-applied. A correction supersedes every earlier one, so the queue is

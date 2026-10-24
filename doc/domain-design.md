@@ -607,8 +607,8 @@ green, amber or red by the worst of the round trip and its qualifier. At most on
 qualifier shows, worst first:
 
 - `slow!`: no feasible cadence satisfies the keyframe floor;
-- `desync t`: this instance is t ticks behind, far enough that the receive lead
-  is being missed;
+- `desync t`: this instance is t ticks out of step with the authority's epochs,
+  beyond what its pacing trims quietly;
 - `loss p%`: probes went unanswered often enough for the link to be the cause;
 - `slow`: the cadence backed off and prediction is carrying more.
 

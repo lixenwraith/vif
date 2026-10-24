@@ -833,8 +833,9 @@ The useful runtime signals are:
   already represented them;
 - `network.artifacts_authority_superseded`: the subset discarded by the authority
   sequence fence rather than by tick;
-- `network.lag_ticks`, `network.stale`, and `network.barrier_late`: whether this
-  instance is behind the session and applying crossings late, and
+- `network.lag_ticks`, `network.stale`, and `network.barrier_late`: how far behind
+  the newest peer tick this instance stands (a paced guest's margin), whether its
+  pacing reads it out of step, and whether it applies crossings late, and
   `network.barrier_delay_ticks` its own lead (§3.5); `playout lead adopted` logs each
   change;
 - `network.pace_late_ticks`, `network.pace_trim_permille` and `network.pace_steps`:
