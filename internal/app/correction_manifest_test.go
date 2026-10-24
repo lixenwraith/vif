@@ -89,11 +89,9 @@ func TestEqualRootsProduceOnlyHashTraffic(t *testing.T) {
 		t.Fatalf("a converged request produced %d shards", len(set.Shards))
 	}
 
-	// The root alone is what travels to a receiver that agrees, and it has to be
-	// materially smaller than the correction it replaces.
-	root := host.Summary()
-	root.Sections = nil
-	manifestBody, err := snapshot.EncodeManifest(root)
+	// The root and partition are what travels to a receiver that agrees, and it has
+	// to be materially smaller than the correction it replaces.
+	manifestBody, err := snapshot.EncodeManifest(host.Summary())
 	if err != nil {
 		t.Fatalf("manifest encode: %v", err)
 	}
@@ -127,16 +125,16 @@ func TestOneMismatchRepairsOnlyItsPage(t *testing.T) {
 	}
 
 	req, _, _ := snapshot.CompareRequest(guest, host.Summary())
-	if len(req.Sections) != 1 || req.Sections[0].ID != snapshot.StoreSectionPrefix+"glyph" {
-		t.Fatalf("the descent asked for %v, want only the glyph store", requestedSections(req))
+	if len(req.Sections) != len(host.Summaries()) {
+		t.Fatalf("the answer paged %d sections, want every one of %d", len(req.Sections), len(host.Summaries()))
 	}
 
 	set, repaired, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
-	if repaired != 1 || len(set.Shards) != 1 {
-		t.Fatalf("one changed cell moved %d pages", repaired)
+	if repaired != 1 || len(set.Shards) != 1 || set.Shards[0].Section != snapshot.StoreSectionPrefix+"glyph" {
+		t.Fatalf("one changed cell moved %d pages (%v)", repaired, requestedSections(req))
 	}
 	if err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
 		t.Fatalf("validate: %v", err)
@@ -174,25 +172,20 @@ func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 		t.Fatalf("guest manifest: %v", err)
 	}
 	req, _, _ := snapshot.CompareRequest(guest, host.Summary())
-	got := requestedSections(req)
 	want := map[string]bool{snapshot.StoreSectionPrefix + "glyph": true, snapshot.SectionStatus: true, snapshot.SectionMeta: true}
-	if len(got) != len(want) {
-		t.Fatalf("the descent asked for %v, want exactly %v", got, keysOf(want))
-	}
-	for _, id := range got {
-		if !want[id] {
-			t.Fatalf("the descent asked for unrelated section %q", id)
-		}
-	}
-
 	set, _, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
+	got := map[string]bool{}
 	for _, sh := range set.Shards {
 		if !want[sh.Section] {
 			t.Fatalf("the repair carried unrelated section %q", sh.Section)
 		}
+		got[sh.Section] = true
+	}
+	if len(got) != len(want) {
+		t.Fatalf("the repair carried %v, want exactly %v", keysOf(got), keysOf(want))
 	}
 	if err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
 		t.Fatalf("validate: %v", err)
@@ -591,13 +584,7 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 		t.Fatalf("authority manifest: %v", err)
 	}
 	indexDur := time.Since(indexStart)
-	manifestBody, err := snapshot.EncodeManifest(authority.Summary())
-	if err != nil {
-		t.Fatalf("manifest encode: %v", err)
-	}
-	root := authority.Summary()
-	root.Sections = nil
-	rootBody, err := snapshot.EncodeManifest(root)
+	rootBody, err := snapshot.EncodeManifest(authority.Summary())
 	if err != nil {
 		t.Fatalf("root encode: %v", err)
 	}
@@ -658,14 +645,11 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 		t.Fatal("the repaired capture does not reproduce the authority's root")
 	}
 
-	// A receiver that disagrees asks for the sections before it can choose pages.
-	indexAsk, _, _ := snapshot.CompareRequest(stale, root)
 	convergedWire := len(rootBody) + len(ackBody)
-	repairWire := len(rootBody) + len(mustEncodeRequest(t, indexAsk)) + len(manifestBody) +
-		len(requestBody) + len(shardBody)
-	t.Logf("index: %d sections, %d bytes | converged exchange %d bytes "+
+	repairWire := len(rootBody) + len(requestBody) + len(shardBody)
+	t.Logf("index: %d sections, root %d bytes | converged exchange %d bytes "+
 		"(%d section hashes compared, %d page hashes) | build %9s compare %9s",
-		len(authority.Summary().Sections), len(manifestBody), convergedWire,
+		len(authority.Summaries()), len(rootBody), convergedWire,
 		sections, hashedPages, indexDur, compareDur)
 	t.Logf("repair: %d pages over %d entities and %d cells | request %d bytes (%d page hashes) | "+
 		"shards %d bytes, %d each on average | whole exchange %d bytes | build %9s | "+
@@ -742,14 +726,14 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	}
 
 	rows := 0
-	for _, sec := range authority.Summary().Sections {
+	for _, sec := range authority.Summaries() {
 		rows += int(sec.Rows)
 	}
 	t.Logf("one repair of %d pages: direct %d B on the authority's link | relayed %d B on the "+
 		"authority's link and %d B on the relay's | relay retention holds %d records of "+
 		"%d sections and %d indexed rows",
 		pages, repairWire, len(rootBody), repairWire, parameter.SnapshotManifestRetention,
-		len(authority.Summary().Sections), rows)
+		len(authority.Summaries()), rows)
 
 	// A relayed answer is the authority's content, so it may carry nothing beyond
 	// the served-by stamp. Compared before compression, which moves by tens of bytes

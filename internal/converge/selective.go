@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -141,15 +142,13 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 			return nil, fmt.Errorf("correction manifest encode: %w", err)
 		}
 		if len(b) > network.MaxPayloadSize {
-			// Section summaries and a header outgrowing a frame would mean a section
-			// vector no descent could be cheap over; fall back rather than chunk it.
+			// A header and partition outgrowing a frame would mean a section vector
+			// no descent could be cheap over; fall back rather than chunk it.
 			return nil, fmt.Errorf("correction manifest is %d bytes, past one frame", len(b))
 		}
 		bodies[next] = b
 		return b, nil
 	}
-
-	summary.Sections = nil // the root leads; see CorrectionManifest.Sections
 
 	var missed []uint32
 	sent, bytes := 0, 0
@@ -158,7 +157,7 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		if p == nil {
 			continue
 		}
-		b, err := body(tick + p.plan.CadenceTicks)
+		b, err := body(p.nextDue(tick))
 		if err != nil {
 			return due, err
 		}
@@ -187,25 +186,6 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		c.recordSelectiveSizeLocked(bytes / sent)
 	}
 	return missed, nil
-}
-
-// sendIndex answers a receiver whose root differed with the section summaries of
-// the index it was sent, from retention; an adopted index serves as well as an
-// authored one, because its root is provably the authority's.
-func (c *Corrections) sendIndex(port engine.NetworkPort, id uint32, tick uint64) bool {
-	c.publishMu.Lock()
-	held, ok := c.retainedAtLocked(tick)
-	c.publishMu.Unlock()
-	if !ok || port == nil {
-		return false
-	}
-	body, err := snapshot.EncodeManifest(held.index.Summary())
-	if err != nil || len(body) > network.MaxPayloadSize {
-		return false
-	}
-	c.sendOwed(port, id, owedSend{typ: network.MsgStateManifest, frames: [][]byte{body}, tick: tick})
-	c.tel.ManifestBytesSent.Add(int64(len(body)))
-	return true
 }
 
 // retainLocked adds one capture and its index to the bounded ring.
@@ -353,17 +333,13 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 			"peer", pending.from, "tick", req.Tick, "proved", proved)
 		return
 	}
-	if req.Index && !req.Keyframe && c.sendIndex(port, pending.from, req.Tick) {
-		return
-	}
-
 	// A request this instance did not author the answer to is a relayed one. It is
 	// served from retention if that retention holds the tick, and refused in words
 	// if it does not — never with a body from a different baseline, and never by
 	// forwarding the request onward, which would be the routing layer this protocol
 	// deliberately does not have.
 	if !authored {
-		if req.Keyframe || req.Index {
+		if req.Keyframe {
 			c.sendUnserved(port, pending.from, req, "a relay cannot author a whole world")
 			return
 		}
@@ -374,10 +350,9 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		return
 	}
 
-	// An index that could not be sent is answered as a whole world.
 	c.publishMu.Lock()
 	held, ok = c.retainedAtLocked(req.Tick)
-	if !ok || req.Keyframe || req.Index {
+	if !ok || req.Keyframe {
 		c.publishMu.Unlock()
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
@@ -385,6 +360,11 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	m.ShardsRequested.Add(int64(countRequestedPages(req)))
 	set, pages, err := snapshot.BuildShardSet(held.index, req)
 	c.publishMu.Unlock()
+	if err == nil && pages == 0 {
+		// The roots differed and no page did: the two hold different sections or
+		// identities, which no page repairs.
+		err = errors.New("no page differs under the receiver's partition")
+	}
 	if err != nil {
 		m.ShardsRefused.Add(1)
 		c.log.Debug("converge", "msg", "repair not built",
@@ -541,15 +521,8 @@ func (c *Corrections) applySelective() {
 	}
 	// Only the newest manifest opens an exchange: an older one describes a state
 	// the authority has moved past, and answering it would spend a round trip
-	// repairing this instance onto a world nobody holds any more. A section index
-	// answering an exchange already under way is still taken, so a newer root does
-	// not strand a descent a cadence from its repair.
+	// repairing this instance onto a world nobody holds any more.
 	newest := manifests[len(manifests)-1]
-	for _, body := range manifests[:len(manifests)-1] {
-		if c.awaitedIndex(body) {
-			c.answerManifest(body, 0)
-		}
-	}
 	// Compared at the tick it describes, for the reason a correction is applied
 	// there: this instance's world moves, and an index over a tick it has not
 	// reached would name every page different and buy a repair of nothing. Past
@@ -566,18 +539,6 @@ func (c *Corrections) applySelective() {
 	}
 	c.holdForward(newest, from, tick)
 	c.flushForward()
-}
-
-// awaitedIndex reports whether body is a section index for a tick this instance
-// is awaiting a repair for.
-func (c *Corrections) awaitedIndex(body []byte) bool {
-	want, err := snapshot.DecodeManifest(body)
-	if err != nil || want.Sections == nil {
-		return false
-	}
-	c.selectiveMu.Lock()
-	defer c.selectiveMu.Unlock()
-	return slices.ContainsFunc(c.selective.awaiting, func(a *awaitingRepair) bool { return a.tick == want.Header.Tick })
 }
 
 // manifestAhead reports how far ahead of this instance's clock a manifest's tick
@@ -729,27 +690,19 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		return 0
 	}
 
-	// The sections of an index whose root this instance already answered are
-	// compared against the world that answer read, not a fresh one.
 	started := time.Now() // [wall] telemetry only; outside the world lock
-	var (
-		mine  snapshot.SharedCapture
-		index *snapshot.Manifest
-	)
-	if prior := c.takeAwaiting(want.Header.Tick); prior != nil && want.Sections != nil {
-		mine, index = prior.capture, prior.index
-	} else {
-		if mine, err = c.worldAt(want.Header.Tick); err != nil {
-			c.log.Warn("converge", "msg", "manifest comparison not captured", "error", err.Error())
-			return 0
-		}
-		// Compared under the authority's term, so a capture stamped just before a
-		// handoff was adopted does not differ from the index for that reason alone.
-		mine.Header.Term = want.Header.Term
-		if index, err = c.inst.Encoder().Build(mine, want.Authority); err != nil {
-			c.log.Warn("converge", "msg", "manifest comparison not indexed", "error", err.Error())
-			return 0
-		}
+	mine, err := c.worldAt(want.Header.Tick)
+	if err != nil {
+		c.log.Warn("converge", "msg", "manifest comparison not captured", "error", err.Error())
+		return 0
+	}
+	// Compared under the authority's term, so a capture stamped just before a
+	// handoff was adopted does not differ from the index for that reason alone.
+	mine.Header.Term = want.Header.Term
+	index, err := c.inst.Encoder().Build(mine, want.Authority)
+	if err != nil {
+		c.log.Warn("converge", "msg", "manifest comparison not indexed", "error", err.Error())
+		return 0
 	}
 	req, sections, pages := snapshot.CompareRequest(index, want)
 	req.Term = want.Header.Term

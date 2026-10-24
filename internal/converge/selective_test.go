@@ -179,18 +179,14 @@ func diverge(guest *run, spread int) {
 func outstandingRepair(t *testing.T, host, guest *run, corrupt func(*snapshot.CorrectionShardSet)) ([]byte, uint64) {
 	t.Helper()
 	// A publication the guest has to descend into: not a keyframe, so it leads with
-	// the index. The guest is level with the host, because an index is answered at
-	// the tick it describes; one round delivers it and lets the guest answer, and the
-	// request that comes back is intercepted here rather than served.
+	// the root. The guest is level with the host, because a manifest is answered at
+	// the tick it describes; one round delivers it and lets the guest answer with its
+	// page hashes, and the request that goes back is intercepted here, not served.
 	host.world.advance(1)
 	guest.world.advance(1)
 	if err := host.c.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	// The index leads with its root; the guest's differs, so it asks for the
-	// sections and answers those.
-	deliver([]*run{guest}, 1)
-	deliver([]*run{host}, 1)
 	deliver([]*run{guest}, 1)
 
 	guest.c.selectiveMu.Lock()
@@ -401,10 +397,10 @@ func TestADivergedAnswerDoesNotForfeitAPeersProof(t *testing.T) {
 	}
 }
 
-// TestADescentSurvivesANewerRoot: a section index for a tick the guest awaits a
-// repair for is answered beside a newer root, so a cadence shorter than the descent
-// does not strand every repair a tick from being built.
-func TestADescentSurvivesANewerRoot(t *testing.T) {
+// TestARootMismatchIsRepairedInOneRoundTrip: a manifest carries its partition, so a
+// receiver whose root differs answers at once with its page hashes and the repair
+// arrives one round trip after the root, with no section index between.
+func TestARootMismatchIsRepairedInOneRoundTrip(t *testing.T) {
 	t.Parallel()
 	host, guest := exchange(t)
 	diverge(guest, 9)
@@ -413,17 +409,11 @@ func TestADescentSurvivesANewerRoot(t *testing.T) {
 	if err := host.c.Publish(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	deliver([]*run{guest}, 1) // the root differs: an index request
-	deliver([]*run{host}, 1)  // the section index leaves
-	host.world.advance(1)
-	guest.world.advance(1)
-	if err := host.c.Publish(); err != nil { // a newer root lands beside it
-		t.Fatalf("publish: %v", err)
-	}
-	deliver([]*run{guest}, 1)
-	deliver([]*run{host}, 1)
-	if host.stat("snapshot.shards_sent") == 0 {
-		t.Fatal("the newer root stranded the descent: no page request was answered")
+	deliver([]*run{guest}, 1) // the root differs: the guest answers with its page hashes
+	deliver([]*run{host}, 1)  // the repair leaves
+	deliver([]*run{guest}, 1) // and lands
+	if guest.stat("snapshot.pages_repaired") == 0 {
+		t.Fatalf("no repair landed one round trip after the root (%d shards sent)", host.stat("snapshot.shards_sent"))
 	}
 }
 

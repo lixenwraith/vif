@@ -165,12 +165,46 @@ func TestACommittedCopyRestartsItsHopCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.scheduleCrossings(2, body)
-	if len(port.sent) != 1 {
-		t.Fatalf("the authority sent %d copies, want the committed one", len(port.sent))
+	s.Flush(100)
+	if len(port.sent) != 1 || port.sent[0].kind != network.MsgBundle {
+		t.Fatalf("the authority sent %+v, want one bundle with the committed copy", port.sent)
 	}
-	got, err := event.DecodeWireBatch(port.sent[0].body)
-	if err != nil || !got.Committed || got.Hops != 1 {
-		t.Fatalf("committed copy leaves with %d hops (committed %t, err %v), want 1", got.Hops, got.Committed, err)
+	var got event.WireBatch
+	_ = network.Unbundle(port.sent[0].body, func(kind network.MessageType, body []byte) {
+		if b, err := event.DecodeWireBatch(body); err == nil && kind == network.MsgEvent && b.Source == 3 {
+			got = b
+		}
+	})
+	if !got.Committed || got.Hops != 1 {
+		t.Fatalf("committed copy leaves with %d hops (committed %t), want 1", got.Hops, got.Committed)
+	}
+}
+
+// TestTheAuthoritySendsEachLinkOneFrameATick: the copies the authority commits and
+// its own epoch leave each link as one frame when the drain ends or the tick closes,
+// so a link reads one or two frames a tick whatever the roster.
+func TestTheAuthoritySendsEachLinkOneFrameATick(t *testing.T) {
+	t.Parallel()
+	port := &linkedPort{peers: []uint32{2, 3}}
+	s := sessionSystem(t, 1, 100, port)
+	s.scheduleCrossings(2, rawBatch(t, 2, 100, 104))
+	s.scheduleCrossings(3, rawBatch(t, 3, 100, 104))
+	if len(port.sent) != 0 {
+		t.Fatalf("%d frames left before the tick closed", len(port.sent))
+	}
+	s.Flush(100)
+	if len(port.sent) != 2 {
+		t.Fatalf("the authority sent %d frames, want one per link", len(port.sent))
+	}
+	for _, f := range port.sent {
+		var sources []uint32
+		if err := network.Unbundle(f.body, func(kind network.MessageType, body []byte) {
+			if b, err := event.DecodeWireBatch(body); err == nil && kind == network.MsgEvent {
+				sources = append(sources, b.Source)
+			}
+		}); err != nil || f.kind != network.MsgBundle || !slices.Equal(sources, []uint32{2, 3, 1}) {
+			t.Fatalf("link %d read %v (%v) as %#x, want every committed epoch then the authority's", f.to, sources, err, f.kind)
+		}
 	}
 }
 
@@ -440,12 +474,13 @@ func TestAResentCrossingIsCommittedOnceAndAGapIsFilled(t *testing.T) {
 	if !slices.Equal(seqs, []uint64{1, 2, 3}) {
 		t.Fatalf("the authority scheduled sequences %v, want each once", seqs)
 	}
-	if len(port.sent) != 2 {
-		t.Fatalf("the authority committed %d epochs, want both", len(port.sent))
+	authority.Flush(100)
+	if len(port.sent) != 1 {
+		t.Fatalf("the authority sent %d frames, want its one bundle", len(port.sent))
 	}
-	copy, err := event.DecodeWireBatch(port.sent[1].body)
-	if err != nil || len(copy.Frames) != 1 || copy.Frames[0].Frame.Seq != 3 {
-		t.Fatalf("the resend's committed copy carries %+v (%v), want sequence 3 alone", copy.Frames, err)
+	copies := committedFrom(port.sent[0].body, 2)
+	if len(copies) != 2 || len(copies[1].Frames) != 1 || copies[1].Frames[0].Frame.Seq != 3 {
+		t.Fatalf("the committed copies are %+v, want both epochs with the resend's carrying sequence 3 alone", copies)
 	}
 	if got := authority.statDuplicates.Load(); got != 1 {
 		t.Fatalf("%d duplicates counted, want the repeated sequence", got)
@@ -640,10 +675,24 @@ func TestAGuestForwardsDownOnlyToThoseBehindIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	guest.receiveCorrection(1, chunks[0])
-	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{3, 3}) {
-		t.Fatalf("the guest sent to %v and flooded %d frames, want the copy and the chunk to participant 3 alone",
+	guest.Flush(100)
+	// The chunk at once, the guest's own epoch up, then the bundle with the copy.
+	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{3, 1, 3}) ||
+		port.sent[0].kind != network.MsgStateCorrection || len(committedFrom(port.sent[2].body, 5)) != 1 {
+		t.Fatalf("the guest sent to %v and flooded %d frames, want the chunk and the copy to participant 3 alone",
 			got, len(port.flooded))
 	}
+}
+
+// committedFrom is the committed epochs of one source a bundle carries, in order.
+func committedFrom(bundle []byte, source uint32) []event.WireBatch {
+	var out []event.WireBatch
+	_ = network.Unbundle(bundle, func(kind network.MessageType, body []byte) {
+		if b, err := event.DecodeWireBatch(body); err == nil && kind == network.MsgEvent && b.Committed && b.Source == source {
+			out = append(out, b)
+		}
+	})
+	return out
 }
 
 // TestAGuestCarriesOnlyWhomItRelaysFor: a raw epoch on a link this guest does not
@@ -692,11 +741,12 @@ func TestTheAuthorityReturnsTheCommittedCopyToItsProducer(t *testing.T) {
 	port := &linkedPort{peers: []uint32{2}}
 	s := sessionSystem(t, 1, 100, port)
 	s.scheduleCrossings(2, rawBatch(t, 2, 100, 104))
-	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{0}) {
-		t.Fatalf("the authority sent to %v and flooded %d frames, want one broadcast", got, len(port.flooded))
+	s.Flush(100)
+	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{2}) {
+		t.Fatalf("the authority sent to %v and flooded %d frames, want the producer's own link", got, len(port.flooded))
 	}
-	if got, err := event.DecodeWireBatch(port.sent[0].body); err != nil || !got.Committed || got.Age != 1 {
-		t.Fatalf("the broadcast is not the committed copy aged a tick (committed %t, age %d, err %v)", got.Committed, got.Age, err)
+	if copies := committedFrom(port.sent[0].body, 2); len(copies) != 1 || copies[0].Age != 1 {
+		t.Fatalf("the producer's link carries %+v, want its committed copy aged a tick", copies)
 	}
 }
 
