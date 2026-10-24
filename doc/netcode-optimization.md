@@ -25,7 +25,7 @@ and the wire carries what a receiver cannot re-derive:
 
 Each link is one TCP or WebSocket stream per direction, deflated at level 7
 (`NetworkStreamLevel`) against its own history, so a broadcast is deflated once per
-link and a body the snapshot codec already deflated is deflated again. The manifest
+link; a body the snapshot codec deflated passes it raw. The manifest
 is a tree — root; a section per store and per carrier; up to 64 pages a section,
 rows bucketed by a hash of their identity; rows — hashed with byte-serial FNV-1a
 over each row's JSON, and row reuse keeps the JSON and hash of each row whose owned
@@ -93,8 +93,8 @@ approaches:
 
 | Reading | Decides |
 |---|---|
-| Wire bytes after the link's deflate, by message kind, on the socket path | N1–N3; N4's second step |
-| CPU by stage on host and guest: JSON and TOML encode and decode, per-link deflate and inflate, the second deflate of bodies, FNV against row encoding inside seal and index, the digest | N2, N4, N9, N12, N15 |
+| Wire bytes after the link's deflate, by message kind, on the socket path | N1–N3 |
+| CPU by stage on host and guest: JSON and TOML encode and decode, per-link deflate and inflate, FNV against row encoding inside seal and index, the digest | N2, N9, N12, N15 |
 | Keyframes by reason — schedule, floor, request, repair wider than a frame, failed proof, the bodies after a fallback — and how many are encoded for how many sent | N6, N8 |
 | Plain bytes per section of a td keyframe | N8, N9 |
 | Lock hold by part: stores, carriers, status, comparison, write, each projected tick | N10, N11 |
@@ -169,21 +169,44 @@ What the readings decide:
   players grow, so N1, N2 and N3 cut framed bytes 2–10× and wire bytes by a fraction
   of 124 kB/s at 16 players; their worth is CPU — JSON and TOML 7–10%, the deflate
   that scales with their framed bytes 12% at 16 players, and the allocation behind
-  the collector's 11–30% — and the browser guest's one thread. N4's second step, one
-  dictionary deflate for every link, is refuted: no preset dictionary matches a
-  per-link history that compresses this well.
-- **At td the bodies are the egress and deflate does nothing for them**: whole
-  corrections, deflated once by the snapshot codec, are 77–82% of the framed bytes
-  and pass through each link's deflate for a 0.64–0.68 ratio that is the command
-  stream's share alone. N4's first step, a pre-compressed body carried raw past the
-  stream, is td's cheapest win; N6 and N5 follow it there, where 31% of manifests
-  at four players are not answered hash-only and keyframes run at a quarter a
-  second.
+  the collector's 11–30% — and the browser guest's one thread. One dictionary
+  deflate for every link in place of the per-link stream is refuted: no preset
+  dictionary matches a per-link history that compresses this well.
+- **At td the bodies are the egress**: whole corrections are 77–82% of the framed
+  bytes, and the 0.64–0.68 ratio was not the command stream's alone: the link's
+  level-7 stream took a fifth off the snapshot codec's level-1 output. Compressing
+  a body once at the level the wire gets and carrying it raw past the stream keeps
+  that fifth and the host's second pass (landed; §2.3). N6 and N5 follow it there,
+  where 31% of manifests at four players are not answered hash-only and keyframes
+  run at a quarter a second.
 - **FNV is 7–11% and the seal and index 2–4%**, so N12 pays, before or after N10's
   in-place root; N15's digest hash is part of that share.
 - Not yet taken, and the harness is where they go: keyframes by reason (`keyframes`
   and `keyframe_fallbacks` alone are read), plain bytes per section, lock hold by
   part, repairs by cause, heap by owner, and the WebSocket path to a browser.
+
+### 2.3 Phase 1, item by item
+
+The same harness on the same machine, 2026-10-24, one run per item on top of the
+ones before it: the host's egress per simulated second framed and on the wire, in
+kB/s, and the process's CPU-s per simulated second. td's rows compare only where
+their keyframe rate agrees, since what its storm does to the roster differs run to
+run (none to 0.5 keyframes a second at four players), and the tower's wire is read
+against a run-to-run spread of about 2%.
+
+| Change | tower, 2 | tower, 4 | tower, 16 | td, 2 | td, 4 |
+|---|---:|---:|---:|---:|---:|
+| Baseline, framed → wire; CPU | 16.0 → 2.32; 0.09 | 91.3 → 9.99; 0.16 | 1,552 → 125; 0.64 | 94.7 → 61.5; 0.40 (0.13 keyframes/s) | 514 → 359; 1.06 (0.53/s) |
+| Bodies raw past the stream, codec at level 6 | 16.0 → 2.46; 0.09 | 91.3 → 10.4; 0.16 | 1,559 → 127; 0.67 | 80.8 → 62.0; 0.43 (0.13/s) | 140 → 13.6; 0.77 (none) |
+
+- **Bodies raw, codec at level 6.** A td keyframe is 360 kB where level 1 gave 501
+  and the stream's second pass over that 398: td's framed body bytes fall a fifth
+  and its wire stays where the two passes had it, now one pass. The codec's pass is
+  33 ms a keyframe instead of 12, and the stream's 9 ms a link over it is gone, so
+  the host gains from three links up and a guest inflates each body once. The
+  tower, which sends no bodies, pays the run header — a kind byte, a wire length
+  and a frame count a burst a link — about 2% of its wire. Deflate's share of the
+  process is unchanged inside its run-to-run spread (6–12% at 16 players).
 
 ## 3. Approaches
 
@@ -195,7 +218,6 @@ In the table − lowers a cost, + raises it and · leaves it. Projections come f
 | N1 | One committed frame per link per tick | − | · | − | + ms | medium | down messages 4,444 → 300 a second at 16 players; ~40% of tower epoch bytes |
 | N2 | A binary wire codec | − | − | − | · | low, then medium | a four-move epoch 567 → ~50 B before deflate |
 | N3 | Owner syncs that carry what changed | − | · | − | · | low | syncs ~10× smaller before deflate |
-| N4 | Compress once | − | · | · | · | medium | the second deflate of td's 2.18 MB/s of bodies |
 | N5 | A one-round-trip descent | · | · | ± | − | medium | a repair one round trip sooner |
 | N6 | Repairs as wide as the keyframe they replace | − | · | − | − | low | the 48 kB → 516 kB step at td |
 | N7 | Aligned publication rounds | − | · | · | + | low | td rounds 7.2 → ~5 a second |
@@ -276,26 +298,6 @@ shield's inverse squares from its radii) leave the payload.
   depends on which cells change every tick (heat, energy).
 - *Determinism and latency*: unchanged — a sync is still committed at one tick for
   every instance, and mirrors already lag by `NetworkSyncTicks`.
-
-### N4. Compress once
-
-Keyframes and shard sets leave the snapshot codec deflated, then pass through every
-link's level-7 stream, whose matcher finds nothing to take, once per link.
-
-1. Carry a pre-compressed body beside the stream: the link frames its deflate output
-   in segments, so a frame flagged `FlagCompressed`, reserved today, travels raw
-   between two segments.
-2. Then weigh a broadcast frame (N1's shared body) compressed once with a preset
-   dictionary (`flate.NewWriterDict`) against once per link with each link's history.
-   The per-link stream was chosen for small repetitive frames; §2's after-deflate
-   reading says where the two cross.
-
-- *CPU*: the host stops re-deflating body bytes — 2.18 MB/s at td with 16 players,
-  tens of milliseconds a second at level 7 by estimate — and a browser inflates each
-  body once.
-- *Bandwidth*: none; a raw body is no larger than one deflated twice.
-- *Challenges*: the link format changes on the TCP and WebSocket paths alike
-  (`flateStream`), and its reader interleaves segments and raw frames on one stream.
 
 ### N5. A one-round-trip descent
 
@@ -485,12 +487,20 @@ Each approach lands alone, re-runs §2's matrix and updates multi-player §6.
 | Phase | Approaches | Why |
 |---|---|---|
 | 0 | §2's readings | Taken in §2.2 for bytes by kind on the wire and CPU by stage; the rest go into the same harness as an approach needs them |
-| 1 | N4 step 1, N3's `omitempty`, N6, N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: td's bodies past the stream first, then the repair path, then the command stream's constants for their CPU |
+| 1 | N3's `omitempty`, N6, N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the repair path, then the command stream's constants for their CPU |
 | 2 | N10, N12, N8, N11's capture as a copy | CPU and lock at the map limit, on the host and the browser guest |
 | 3 | N2 step 2, N9, N13, N11's projection, N15, N14 | Formats and structure: the journal, the capture schema, retention, topology |
 
 N2's second step follows its first; N13 and the column layout build on N9; N10's
-row cache is cheaper on N9's rows. N4's second step is dropped on §2.2's reading.
+row cache is cheaper on N9's rows.
+
+**Decided, on §2.3.** Bodies pass the link raw, compressed once at level 6 (N4's
+first step). The codec's level was 1 and the link's level-7 stream took a fifth off
+its output, so a level-1 body carried raw would have cost td a quarter more wire;
+at level 6 a td keyframe is 360 kB against 398 after both passes, and the host's
+pass is 33 ms instead of 12 plus 9 a link. A run cut on the inflater's window
+would deliver its last frame before its marker, so a raw frame due there travels in
+the run. N4's second step, a dictionary deflate, is dropped on §2.2.
 
 **Decided, on §2.2.** The star stays, with the authority the only publisher and
 every participant's epochs and syncs relayed down every link: its wire cost at 16

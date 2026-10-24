@@ -901,8 +901,8 @@ it decides where it goes.
 
 The same shape over sockets, with each link's deflate, is read in
 [Netcode optimization §2.2](netcode-optimization.md#22-readings): the wire carries
-8% of the framed command stream at 16 players on the tower, and td's whole bodies
-nearly as framed.
+8% of the framed command stream at 16 players on the tower, and td's whole bodies as
+framed, since a body the snapshot codec deflated passes each link raw.
 
 Measured on the in-process mesh at `GOMAXPROCS=1` (a 2.1 GHz Xeon container), in the
 shape of `TestATowerGuestAnswersHashOnly`: a star with four-tick links, the authority
@@ -922,7 +922,7 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 | Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-then seals and indexes the capture; a keyframe is 80 / 516 kB compressed. The seal,
+then seals and indexes the capture; a keyframe is about 26 / 360 kB compressed. The seal,
 the index and a keyframe reuse the bytes and hash of every row whose owned copy
 still compares equal, and navigation rebuilds its wall grid only when a wall moved
 and compares grids only when their generation moved. At 16 players, rounds four

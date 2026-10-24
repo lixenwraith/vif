@@ -431,12 +431,19 @@ payload, so a partial stream read never reaches the game. Per-peer send assigns
 sequence and ack values at actual write time; broadcast clones a message per peer.
 Ack is observational—there is no retransmission policy.
 
-The handshake travels plain. From the join reply on, each direction of a link is
-one deflate stream (`NetworkStreamLevel`), so a frame compresses against every frame
-before it; a coordinator that refuses the reply writes its refusal on that stream,
-where the joiner reads it. The writer takes the frames queued within `NetworkWriteLinger` of a
-burst's first and sync-flushes once. Go's levels 1-6 drop their history on a flushed
-block under 128 bytes, which is most bursts; 7 keeps it.
+The handshake travels plain. From the join reply on, each direction of a link is a
+sequence of segments, each opened by a kind byte: a **deflate run**, its wire length
+and frame count as uvarints and then frames deflated at `NetworkStreamLevel` against
+every run before it, or one **raw frame**, whose body the snapshot codec deflated
+already (`MessageType.Precompressed`: capture, correction and scenario chunks, shard
+sets) and which a run would only deflate again. A coordinator that refuses the reply
+writes its refusal on that stream, where the joiner reads it. The writer takes the
+frames queued within `NetworkWriteLinger` of a burst's first and flushes the run once,
+and before each raw frame; the run's count tells the reader how many frames the
+inflater still owes it, so no raw frame is read as deflate. A run is never cut on the
+inflater's 32 KiB window, where its last frame would be delivered before the flush
+marker is read: a raw frame due there travels in the run. Go's levels 1-6 drop their
+history on a flushed block under 128 bytes, which is most bursts; 7 keeps it.
 
 Control messages carry join offer/reply, start/ready gates and disconnect notices.
 `MsgSessionRoute` (0x05) is the exception to the coordinator speaking first: every

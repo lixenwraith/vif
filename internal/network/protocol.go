@@ -29,6 +29,16 @@ var byteKindNames = [KindCount]string{"epoch", "sync", "digest", "correction", "
 
 func (k ByteKind) String() string { return byteKindNames[k] }
 
+// Precompressed reports whether t carries a body the snapshot codec deflated, which
+// a link passes raw past its own stream rather than deflating twice.
+func (t MessageType) Precompressed() bool {
+	switch t {
+	case MsgStateSnapshot, MsgStateCorrection, MsgStateShard, MsgScenarioBody:
+		return true
+	}
+	return false
+}
+
 // Kind is the family t's bytes count under.
 func (t MessageType) Kind() ByteKind {
 	switch t {
@@ -64,13 +74,11 @@ const (
 	// the route has read all a dialer sent and its refusal arrives whole.
 	MsgJoinClaims MessageType = 0x06 // Live: the claims a dialer comes back with
 
-	// Preparing, which holds nothing in the session. A preview is the offer an
-	// assignment would make, with no identity in it: the dialer checks its build,
-	// fetches the scenario and builds its world on it. Prepared says it did and waits
-	// for its player's press, which opens the coordinator's ready period; seat is the
-	// press, or a dialer that needs none, and the coordinator assigns its place only
-	// then, answering with the offer. A ready period that runs out with no seat ends
-	// the handshake, and nothing was held to give back.
+	// Preparing holds nothing in the session. A preview is the offer an assignment
+	// would make, with no identity in it, which the dialer builds its world on.
+	// Prepared opens the coordinator's ready period for the player's press; seat is
+	// the press, or a dialer that needs none, and only then is a place assigned. A
+	// ready period that runs out ends the handshake with nothing to give back.
 	MsgJoinPreview  MessageType = 0x07 // Live: the session a dialer prepares for
 	MsgJoinPrepared MessageType = 0x08 // Live: the dialer is ready and waits for its press
 	MsgJoinSeat     MessageType = 0x09 // Live: the dialer asks for its place now
@@ -191,9 +199,8 @@ const MaxPayloadSize = 65535
 
 // Header flags
 const (
-	FlagNone       uint8 = 0x00
-	FlagNeedAck    uint8 = 0x01 // Sender expects acknowledgment
-	FlagCompressed uint8 = 0x02 // Payload is compressed (future)
+	FlagNone    uint8 = 0x00
+	FlagNeedAck uint8 = 0x01 // Sender expects acknowledgment
 )
 
 // Message represents a framed network message
@@ -205,9 +212,13 @@ type Message struct {
 	Payload []byte
 }
 
-// Encode writes the message to a writer with length prefix
+// Encode writes the message to a writer with length prefix; an opened link stream
+// takes it as a frame of its own.
 func (m *Message) Encode(w io.Writer) error {
 	var header [HeaderSize]byte
+	if s, ok := w.(*flateStream); ok && s.w != nil {
+		return s.writeFrame(m, header[:])
+	}
 	return m.encode(w, header[:])
 }
 
