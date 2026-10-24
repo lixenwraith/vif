@@ -361,7 +361,9 @@ but for one of three tower-16 readings, on which a guest that projected 11 ticks
 repaired 15 pages and took two keyframes; the whole process 0.08, 0.14 and
 0.48–0.50 CPU-s per simulated second on the tower at 2, 4 and 16 players and
 0.36 and 0.54 at td with 2 and 4, its heap 40, 84 and 324–471 MiB and 311 and
-663 MiB. td's bodies and CPU move run to run with what its storm does to the
+663 MiB. With the codec's field tables in place of its generated functions,
+three tower-16 readings later the same day read 0.54–0.55, which the codec's
+own microbenchmarks cannot account for and a quieter machine should settle. td's bodies and CPU move run to run with what its storm does to the
 roster (a keyframe every eight seconds on both td rows here, none to half a
 second of them on other readings), so its rows compare only where the keyframe
 rate agrees, and the tower's wire has a run-to-run spread of about 2%. The framed
@@ -583,8 +585,10 @@ schema 37). The approaches are in three batches, and §5 orders them by iteratio
   type again), a nested struct inline, a pointer by its bit. A table a struct
   rather than a function a struct took 554 kB off the browser build and 238 kB off
   the native one, and the path reads no type information: the registry's
-  prototypes are generated constructors, and a decode costs 0.3–0.5 µs with one
-  allocation per slice. The journal writes the same bytes, base64 in its record,
+  prototypes are generated constructors. A decode costs what the generated
+  functions did, 0.24–0.44 µs with one allocation per slice; an encode 0.15–0.25
+  µs against their 0.09–0.13, a switch a field, at some twenty encodes a second
+  per instance. The journal writes the same bytes, base64 in its record,
   and `vif-log` decodes them with the same codec and shows the prototype as its
   TOML, so the two cannot drift; the TOML tags stay for that, for authored scripts
   and for `:emit`.
