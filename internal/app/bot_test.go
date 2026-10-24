@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -122,7 +123,7 @@ func TestASoloBotRunIsAPureFunctionOfItsSeed(t *testing.T) {
 		if !played {
 			t.Fatalf("%s journaled no input, so its equality proves nothing", name)
 		}
-		if !slices.Equal(runs[0], runs[1]) {
+		if !reflect.DeepEqual(runs[0], runs[1]) {
 			t.Fatalf("%s: one seed journaled %d and %d records that differ", name, len(runs[0]), len(runs[1]))
 		}
 	}

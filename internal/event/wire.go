@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/core"
 )
 
@@ -103,12 +102,12 @@ type WireSink interface {
 }
 
 // WireFrame is one artifact on the wire: its event as the registry's index, the
-// domain its producer stamped, the journal's TOML text as the payload, so one
-// encoder serves replay and transport, and its source-local sequence.
+// domain its producer stamped, the payload in the generated codec, which the
+// journal writes too, and its source-local sequence.
 type WireFrame struct {
 	Event   EventType
 	Domain  core.Domain
-	Payload string
+	Payload []byte
 	Seq     uint64
 }
 
@@ -151,18 +150,34 @@ func NewWireFrame(ev GameEvent) (WireFrame, string) {
 	return WireFrame{Event: ev.Type, Domain: ev.Domain, Payload: payload, Seq: ev.Seq}, ""
 }
 
-// Decode allocates a fresh payload from the registry prototype and decodes the
-// frame's text into it. Empty text means the producer pushed nil.
-func (f WireFrame) Decode() (any, error) {
-	if f.Payload == "" {
+// Decode is DecodePayload for the frame's event.
+func (f WireFrame) Decode() (any, error) { return DecodePayload(f.Event, f.Payload) }
+
+// payloadCodec is the generated codec every registered payload carries: a
+// presence mask, then each present field in declaration order (payload_gen.go).
+type payloadCodec interface {
+	appendPayload(b []byte) []byte
+	readPayload(r *wireReader)
+}
+
+// DecodePayload allocates a fresh payload from the registry prototype and reads
+// the bytes into it. No bytes means the producer pushed nil; bytes the codec does
+// not consume are a payload of another build.
+func DecodePayload(et EventType, b []byte) (any, error) {
+	if len(b) == 0 {
 		return nil, nil
 	}
-	p := NewPayloadStruct(f.Event)
+	p := NewPayloadStruct(et)
 	if p == nil {
-		return nil, fmt.Errorf("wire: %s carries payload text with no registry prototype", GetEventName(f.Event))
+		return nil, fmt.Errorf("wire: %s carries a payload with no registry prototype", GetEventName(et))
 	}
-	if err := toml.Unmarshal([]byte(f.Payload), p); err != nil {
-		return nil, err
+	r := wireReader{b: b}
+	p.(payloadCodec).readPayload(&r)
+	if r.err != nil {
+		return nil, fmt.Errorf("wire: %s payload: %w", GetEventName(et), r.err)
+	}
+	if len(r.b) != 0 {
+		return nil, fmt.Errorf("wire: %s payload leaves %d bytes unread", GetEventName(et), len(r.b))
 	}
 	return p, nil
 }
@@ -251,7 +266,9 @@ func DecodeWireBatch(b []byte) (WireBatch, error) {
 		fl := r.u8()
 		seq += uint64(r.varint())
 		tick += uint64(r.varint())
-		f.Frame.Payload = string(r.bytes(r.uvarint()))
+		if payload := r.bytes(r.uvarint()); len(payload) != 0 {
+			f.Frame.Payload = append([]byte(nil), payload...)
+		}
 		if r.err != nil {
 			return WireBatch{}, r.err
 		}
@@ -310,6 +327,17 @@ func (r *wireReader) varint() int64 {
 	return v
 }
 
+func (r *wireReader) u64() uint64 {
+	if len(r.b) < 8 {
+		r.fail()
+		return 0
+	}
+	v := binary.LittleEndian.Uint64(r.b)
+	r.b = r.b[8:]
+	return v
+}
+
+// bytes aliases the body: a caller that keeps them copies them.
 func (r *wireReader) bytes(n uint64) []byte {
 	if n > uint64(len(r.b)) {
 		r.fail()
@@ -318,4 +346,15 @@ func (r *wireReader) bytes(n uint64) []byte {
 	v := r.b[:n]
 	r.b = r.b[n:]
 	return v
+}
+
+// length reads a count the bytes behind it can hold, so a corrupt count cannot
+// allocate past the body.
+func (r *wireReader) length() int {
+	n := r.uvarint()
+	if n > uint64(len(r.b)) {
+		r.fail()
+		return 0
+	}
+	return int(n)
 }

@@ -659,6 +659,18 @@ diverged participant behind a relay can be sent a repair larger than the whole w
 the authority would have sent it. Record the size of the whole bodies a guest
 installs and let a relay price against the last.
 
+### Read the cadence against a thin command stream
+
+- Priority: P3
+- Affected files: `pkg/linkpace`, `internal/network/probe.go`
+
+The divergence harness's heavy shape (netcode design §3.5) delivered the guest 134
+manifests in 1,200 ticks before the binary wire codec, 132 with its envelope and 97
+with its payload, late counts unchanged: the link meter reads throughput from the
+bytes it delivered, and a command stream of a fifth the bytes reads as a slower
+link, so the cadence lengthened under loss. Read what the meter and the floor
+decide on a thin stream, and whether the probe's bytes should carry the reading.
+
 ### Make the td readings repeatable
 
 - Priority: P3

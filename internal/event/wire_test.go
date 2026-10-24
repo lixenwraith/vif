@@ -22,13 +22,13 @@ func TestWireEncodingBudget(t *testing.T) {
 		budget int
 	}{
 		{
-			name: "four cursor moves", count: 4, typeID: event.EventCursorMoveRequest, budget: 200,
+			name: "four cursor moves", count: 4, typeID: event.EventCursorMoveRequest, budget: 80,
 			build: func(i int) any {
 				return &event.CursorMoveRequestPayload{Entity: core.Entity(100 + i), X: 40 + i, Y: 12}
 			},
 		},
 		{
-			name: "six resolved shield hits", count: 6, typeID: event.EventCombatAttackAreaCrossingRequest, budget: 1700,
+			name: "six resolved shield hits", count: 6, typeID: event.EventCombatAttackAreaCrossingRequest, budget: 220,
 			build: func(i int) any {
 				return &event.CombatAttackAreaRequestPayload{
 					HitEntities: []core.Entity{core.Entity(200 + i*3), core.Entity(201 + i*3), core.Entity(202 + i*3)},
@@ -62,9 +62,9 @@ func TestWireEncodingBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A sync carries the cells that are set: this one, with its energy, heat, hit
-	// points, shield and two charged weapons, is under half the 27-cell frame.
-	if n := len(stateBody) + network.HeaderSize; n > 300 {
-		t.Fatalf("one owner-state sync: %d bytes exceeds the 300-byte budget", n)
+	// points, shield and two charged weapons, is a third of the 27-cell frame.
+	if n := len(stateBody) + network.HeaderSize; n > 120 {
+		t.Fatalf("one owner-state sync: %d bytes exceeds the 120-byte budget", n)
 	}
 	t.Logf("one owner-state sync: %d bytes", len(stateBody)+network.HeaderSize)
 	for _, tc := range tests {
@@ -102,9 +102,9 @@ func TestAWireBatchRoundTripsItsEnvelope(t *testing.T) {
 		{
 			Run: 3, ProducedTick: 1 << 40, Source: 17, Hops: 2, Committed: true, Age: -4, Leaf: true,
 			Frames: []event.ScheduledWireFrame{
-				{Frame: event.WireFrame{Event: event.EventCursorMoveRequest, Domain: core.DomainPlayer, Payload: "x = 1\n", Seq: 9}, ApplyTick: 1<<40 + 5},
+				{Frame: event.WireFrame{Event: event.EventCursorMoveRequest, Domain: core.DomainPlayer, Payload: []byte("x = 1\n"), Seq: 9}, ApplyTick: 1<<40 + 5},
 				{Frame: event.WireFrame{Event: event.EventCombatAttackDirectRequest, Domain: core.DomainShared, Seq: 7}, ApplyTick: 1<<40 - 1},
-				{Frame: event.WireFrame{Event: event.EventCursorStateSync, Domain: core.DomainShared, Payload: "slot = 1\n"}},
+				{Frame: event.WireFrame{Event: event.EventCursorStateSync, Domain: core.DomainShared, Payload: []byte("slot = 1\n")}},
 			},
 		},
 	} {

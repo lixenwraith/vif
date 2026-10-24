@@ -228,7 +228,7 @@ func compileScriptAction(index int, spec ScriptAction) (compiledScriptAction, er
 		if err != nil {
 			return a, err
 		}
-		if _, err := DecodePayload(et, spec.Payload); err != nil {
+		if _, err := decodeScriptPayload(et, spec.Payload); err != nil {
 			return a, fmt.Errorf("%s payload: %w", name, err)
 		}
 		a.kind, a.eventType, a.payload, a.domain = scriptEvent, et, spec.Payload, domain
@@ -397,7 +397,7 @@ func (d *ScriptDriver) execute(a compiledScriptAction) error {
 			return errors.New("command quit the game")
 		}
 	case scriptEvent:
-		payload, err := DecodePayload(a.eventType, a.payload)
+		payload, err := decodeScriptPayload(a.eventType, a.payload)
 		if err != nil {
 			return err
 		}
@@ -417,4 +417,20 @@ func injectCommand(inject func(...*input.Intent) bool, command string) bool {
 		}
 	}
 	return true
+}
+
+// decodeScriptPayload allocates a typed event payload and decodes the TOML an
+// author wrote into it. Empty text is a nil payload.
+func decodeScriptPayload(et event.EventType, text string) (any, error) {
+	if text == "" {
+		return nil, nil
+	}
+	p := event.NewPayloadStruct(et)
+	if p == nil {
+		return nil, errors.New("payload text with no registry prototype")
+	}
+	if err := toml.Unmarshal([]byte(text), p); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
