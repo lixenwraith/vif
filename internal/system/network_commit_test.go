@@ -70,7 +70,7 @@ func rawBatch(t *testing.T, source uint32, produced uint64, applyTicks ...uint64
 	frames := make([]event.ScheduledWireFrame, len(applyTicks))
 	for i, at := range applyTicks {
 		frames[i] = event.ScheduledWireFrame{ApplyTick: at, Frame: event.WireFrame{
-			Event: "EventGoldJumpRequest", Domain: "shared", Seq: uint64(i + 1),
+			Event: event.EventGoldJumpRequest, Domain: core.DomainShared, Seq: uint64(i + 1),
 		}}
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{Source: source, ProducedTick: produced, Frames: frames})
@@ -158,7 +158,7 @@ func TestACommittedCopyRestartsItsHopCount(t *testing.T) {
 	body, err := event.EncodeWireBatch(event.WireBatch{
 		Source: 3, ProducedTick: 100, Hops: parameter.NetworkRelayHopLimit - 1,
 		Frames: []event.ScheduledWireFrame{{ApplyTick: 104, Frame: event.WireFrame{
-			Event: "EventGoldJumpRequest", Domain: "shared", Seq: 1,
+			Event: event.EventGoldJumpRequest, Domain: core.DomainShared, Seq: 1,
 		}}},
 	})
 	if err != nil {
@@ -367,7 +367,7 @@ func seqBatch(t *testing.T, source uint32, produced, applyTick uint64, seqs ...u
 	frames := make([]event.ScheduledWireFrame, len(seqs))
 	for i, seq := range seqs {
 		frames[i] = event.ScheduledWireFrame{ApplyTick: applyTick, Frame: event.WireFrame{
-			Event: "EventGoldJumpRequest", Domain: "shared", Seq: seq,
+			Event: event.EventGoldJumpRequest, Domain: core.DomainShared, Seq: seq,
 		}}
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{Source: source, ProducedTick: produced, Frames: frames})
@@ -550,9 +550,9 @@ func TestALeftSessionAppliesNothingButTheRunsOwn(t *testing.T) {
 	if s.AppliedCrossingFences().Seq(1) == 0 {
 		t.Fatal("the authority's first crossing raised no fence; the case below proves nothing")
 	}
-	own := barrierArtifact{frame: event.WireFrame{Event: "EventGoldJumpRequest", Domain: "shared", Seq: 1}, applyTick: 108, source: 2}
+	own := barrierArtifact{frame: event.WireFrame{Event: event.EventGoldJumpRequest, Domain: core.DomainShared, Seq: 1}, applyTick: 108, source: 2}
 	arrival := own
-	arrival.frame.Event, arrival.frame.Seq, arrival.authored = "EventParticipantJoined", 2, true
+	arrival.frame.Event, arrival.frame.Seq, arrival.authored = event.EventParticipantJoined, 2, true
 	s.mu.Lock()
 	s.scheduled = append(s.scheduled, own, arrival)
 	s.relay = 1

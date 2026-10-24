@@ -3,6 +3,7 @@ package system
 import (
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
@@ -170,8 +171,8 @@ func TestTheTickSpanBoundsRetention(t *testing.T) {
 // frameAt is one retained crossing, distinguishable by sequence.
 func frameAt(seq uint64) event.WireFrame {
 	return event.WireFrame{
-		Event:   "EventCursorMoveRequest",
-		Domain:  "player",
+		Event:   event.EventCursorMoveRequest,
+		Domain:  core.DomainPlayer,
 		Payload: "x = 1\n",
 		Seq:     seq,
 	}

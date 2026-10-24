@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -19,8 +20,8 @@ func boundsBatch(t *testing.T, source uint32, produced, applyTick uint64, n, pad
 	for i := range n {
 		frames = append(frames, event.ScheduledWireFrame{
 			Frame: event.WireFrame{
-				Event:   "EventGoldJumpRequest",
-				Domain:  "shared",
+				Event:   event.EventGoldJumpRequest,
+				Domain:  core.DomainShared,
 				Payload: strings.Repeat("x", pad),
 				Seq:     produced*uint64(n) + uint64(i+1), // one producer's sequences never repeat
 			},

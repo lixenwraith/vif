@@ -384,7 +384,9 @@ Job's deadline allows, which tick slips and correction magnitude need. Requests,
 limits and the quota totals then come from that measurement rather than from
 single-guest history and estimates. It passes with no OOM, liveness restart,
 sustained tick slip or growing correction magnitude, the deadline ending each
-session.
+session. The socket readings (`TestNetcodeReadingsOverSockets`) cannot seat
+sixteen td guests inside their join wait, so the td-16 column of netcode design
+§3.1 has not been re-read since phase 1 and is this measurement's to take.
 
 ### Apply the fleet log retention on the node
 

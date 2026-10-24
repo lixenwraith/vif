@@ -502,11 +502,19 @@ it, so a link reads its frames in the order they were sent; a correction chunk
 travels alone. A guest admitting its own bot asks the coordinator
 on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
 retire a failed join; the first two are answered on that link with
-`MsgRelayAdmit` (0x2F). The epoch is JSON containing journal-registry TOML
-payloads; representative complete-frame budgets are pinned by
-`TestWireEncodingBudget`. Only the authentication codes 0x30 and 0x31 are reserved
-placeholders, which nothing sends and `NetworkSystem` counts as drops. Raw
-participant input has no code: 0x10 stays reserved, since a peer sends the
+`MsgRelayAdmit` (0x2F). An epoch or a sync is the binary envelope: a flag byte
+(committed, leaf), then source, run, produced tick, hops, age and frame count, and
+per frame its event as the registry's index, a flag byte holding the producer's
+domain, its sequence as a delta from the frame before, its apply tick as a delta
+from the frame before or, for the first, from the produced tick, and the journal's
+TOML payload behind its length; counts and ticks are uvarints, the age and the
+deltas varints, so an epoch's constants are a byte or two each. A receiver refuses
+a body the encoder could not have written: an event outside the registry, a domain
+or flag outside the enum, a count or length past the bytes. Representative
+complete-frame budgets are pinned by `TestWireEncodingBudget`. Only the
+authentication codes 0x30 and 0x31 are reserved placeholders, which nothing sends
+and `NetworkSystem` counts as drops. Raw participant input has no code: 0x10 stays
+reserved, since a peer sends the
 resolved D-3 artifact, never the keystroke that produced it.
 
 `MsgLinkProbe` (0x14) and `MsgLinkEcho` (0x15) are the only round trip this
