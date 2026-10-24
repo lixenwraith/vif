@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/vlog"
 )
 
 // retainedCapture is one published capture and its index, kept so the host can
@@ -855,6 +856,10 @@ func (c *Corrections) applyRepair(body []byte) {
 	c.log.Debug("converge", "msg", "repair applied",
 		"tick", repaired.Header.Tick, "pages", rep.Pages,
 		"sections", strings.Join(rep.Sections, ","), "cells", rep.Rows)
+	if c.log.On("converge", vlog.LevelDebug) {
+		c.log.Debug("converge", "msg", "repair rows", "tick", repaired.Header.Tick,
+			"rows", strings.Join(snapshot.RepairRows(awaiting.capture, repaired, 12), " | "))
+	}
 }
 
 // requestKeyframe asks the peer its manifest came from for a whole world and

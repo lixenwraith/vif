@@ -199,8 +199,10 @@ type NetworkSystem struct {
 	paceSettled uint64
 
 	// pathAge is the age at which the authority committed the newest of this
-	// instance's own epochs, and pathEpoch which one; see noteOwnCommit.
+	// instance's own epochs, pathEpoch which one, and pathWorst the worst age a copy
+	// returned since the lead last read one; see noteOwnCommit.
 	pathAge   int64
+	pathWorst int64
 	pathEpoch uint64
 
 	// downAt is, per link, the tick a raw artifact last arrived on it or the
@@ -2567,6 +2569,7 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		return
 	}
 	target := s.ownLead()
+	s.pathWorst = 0
 	if s.leadCount == 0 {
 		s.leadOf(r.BarrierDelayTicks) // the lead in force is the window's first reading
 	}
@@ -2582,8 +2585,10 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 // ownLead is this tick's reading of the lead: the age at which the authority
 // committed this instance's newest epoch, which is the up path and the clock
 // offset measured where they are paid, plus a tick for the authority to relay the
-// crossing. Until an epoch has come back the default stands; the authority waits
-// one tick. The reading reaches a participant behind a relay on the same copy.
+// crossing. A spike on a stream holds a burst of epochs that return in one tick,
+// so the worst age since the last reading counts, not the newest alone. Until an
+// epoch has come back the default stands; the authority waits one tick. The
+// reading reaches a participant behind a relay on the same copy.
 func (s *NetworkSystem) ownLead() uint64 {
 	if s.participantID() == s.authorityParticipant() {
 		return parameter.NetworkBarrierMinDelayTicks
@@ -2591,12 +2596,13 @@ func (s *NetworkSystem) ownLead() uint64 {
 	if s.pathEpoch == 0 {
 		return parameter.NetworkBarrierDelayTicks
 	}
-	ticks := s.pathAge + parameter.NetworkRelaySlackTicks
+	ticks := max(s.pathAge, s.pathWorst) + parameter.NetworkRelaySlackTicks
 	return uint64(min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks))
 }
 
 // noteOwnCommit records an own epoch returned committed, reporting whether this is
-// its first copy, and takes the newest one's age at commit as the lead's reading.
+// its first copy, and takes the newest one's age at commit, and the worst since
+// the last reading, as the lead's.
 func (s *NetworkSystem) noteOwnCommit(batch event.WireBatch) bool {
 	s.mu.Lock()
 	fresh := s.ownCommitted.admit(batch.ProducedTick, parameter.NetworkSequenceWindow)
@@ -2604,6 +2610,7 @@ func (s *NetworkSystem) noteOwnCommit(batch event.WireBatch) bool {
 	if batch.ProducedTick > s.pathEpoch {
 		s.pathEpoch, s.pathAge = batch.ProducedTick, batch.Age
 	}
+	s.pathWorst = max(s.pathWorst, batch.Age)
 	return fresh
 }
 

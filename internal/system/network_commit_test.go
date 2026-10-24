@@ -274,9 +274,9 @@ func TestAGuestStepsOnceForOneLateness(t *testing.T) {
 	t.Parallel()
 	guest := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
 	r := guest.world.Resources.Network
-	window := func(from uint64) {
-		for i := range uint64(parameter.NetworkPaceWindow) {
-			guest.observeAuthorityEpoch(from + i)
+	window := func(from uint64) { // a window of epochs all this late, at a standing tick
+		for range parameter.NetworkPaceWindow {
+			guest.observeAuthorityEpoch(from)
 		}
 	}
 	window(60)
@@ -335,6 +335,25 @@ func TestAGuestStampsWithTheAgeItsEpochsCommitAt(t *testing.T) {
 	guest.scheduleCrossings(2, body)
 	if got, want := guest.ownLead(), uint64(4+parameter.NetworkRelaySlackTicks); got != want {
 		t.Fatalf("lead with the newest epoch committed 4 ticks old = %d, want %d", got, want)
+	}
+	// A spike returns a burst in one tick: the reading is its worst age, not the
+	// newest epoch's, and the next reading starts over from the newest.
+	for _, c := range []struct {
+		produced uint64
+		age      int64
+	}{{89, 9}, {90, 6}} {
+		body, err = event.EncodeWireBatch(event.WireBatch{Source: 3, ProducedTick: c.produced, Committed: true, Age: c.age})
+		if err != nil {
+			t.Fatal(err)
+		}
+		guest.scheduleCrossings(2, body)
+	}
+	if got, want := guest.ownLead(), uint64(9+parameter.NetworkRelaySlackTicks); got != want {
+		t.Fatalf("lead after a burst committed 9 and 6 ticks old = %d, want the worst, %d", got, want)
+	}
+	guest.driveOwnLead(port)
+	if got, want := guest.ownLead(), uint64(6+parameter.NetworkRelaySlackTicks); got != want {
+		t.Fatalf("lead once the burst was read = %d, want the newest epoch's, %d", got, want)
 	}
 	authority := sessionSystem(t, 1, 100, port)
 	if got := authority.ownLead(); got != parameter.NetworkBarrierMinDelayTicks {

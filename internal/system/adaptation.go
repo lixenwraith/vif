@@ -154,9 +154,13 @@ func (s *AdaptationSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventSpeciesKilled:
+		// Only a tracked death scores, and the list is compared: a player-domain
+		// drain's death pending on one instance alone would read as a divergence.
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
-			s.pendingDeaths = append(s.pendingDeaths, *payload)
-			s.buffers.Observe(0, len(s.pendingDeaths))
+			if _, tracked := s.tracking[payload.Entity]; tracked {
+				s.pendingDeaths = append(s.pendingDeaths, *payload)
+				s.buffers.Observe(0, len(s.pendingDeaths))
+			}
 		}
 	}
 }

@@ -1,9 +1,13 @@
 package snapshot
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lixenwraith/vif/internal/core"
@@ -239,6 +243,97 @@ type ShardRepair struct {
 	Rows     int
 	Entities int
 	Sections []string // the ids of the sections the set touched, sorted
+}
+
+// RepairRows names up to limit rows a repair moved, as the receiver held each and
+// as the authority does: component rows by store and entity, the rest by section
+// and name. A cursor's owner-authored cells and its control are left out, as the
+// index leaves them; a row one side lacks reads as absent.
+func RepairRows(before, after SharedCapture, limit int) []string {
+	var out []string
+	add := func(section, key string, mine, theirs json.RawMessage) {
+		if len(out) < limit && !bytes.Equal(mine, theirs) {
+			out = append(out, section+" "+key+": "+clipRow(mine)+" -> "+clipRow(theirs))
+		}
+	}
+	cursors := ownerAuthoredCursors(after)
+	mine, theirs := worldRows(before), worldRows(after)
+	for _, store := range slices.Sorted(maps.Keys(theirs)) {
+		for _, e := range slices.Sorted(maps.Keys(theirs[store])) {
+			if ownerAuthoredStores[store] && cursors[e] {
+				continue
+			}
+			add(StoreSectionPrefix+store, strconv.FormatUint(uint64(e), 10), mine[store][e], theirs[store][e])
+		}
+		for _, e := range slices.Sorted(maps.Keys(mine[store])) {
+			if _, ok := theirs[store][e]; !ok && !(ownerAuthoredStores[store] && cursors[e]) {
+				add(StoreSectionPrefix+store, strconv.FormatUint(uint64(e), 10), mine[store][e], nil)
+			}
+		}
+	}
+	for _, part := range []struct {
+		id   string
+		rows func(SharedCapture) ([]ManifestRow, error)
+	}{{SectionMeta, metaRows}, {SectionStreams, streamRows}, {SectionSystems, systemRows}, {SectionStatus, statusRows}, {SectionFSM, fsmRows}} {
+		a, errA := part.rows(before)
+		b, errB := part.rows(after)
+		if errA != nil || errB != nil {
+			continue
+		}
+		was := make(map[string]json.RawMessage, len(a))
+		for _, r := range a {
+			was[r.Name] = r.Value
+		}
+		for _, r := range b {
+			add(part.id, r.Name, was[r.Name], r.Value)
+		}
+	}
+	return out
+}
+
+// worldRows is a world's component rows by store and entity, the cursor's
+// normalised as the index normalises it.
+func worldRows(cap SharedCapture) map[string]map[core.Entity]json.RawMessage {
+	out := map[string]map[core.Entity]json.RawMessage{}
+	raw, err := json.Marshal(cap.World)
+	if err != nil {
+		return out
+	}
+	var stores map[string]json.RawMessage
+	if json.Unmarshal(raw, &stores) != nil {
+		return out
+	}
+	for name, body := range stores {
+		var rows []struct {
+			Entity core.Entity     `json:"e"`
+			Value  json.RawMessage `json:"v"`
+		}
+		if len(body) == 0 || body[0] != '[' || json.Unmarshal(body, &rows) != nil {
+			continue
+		}
+		byEntity := make(map[core.Entity]json.RawMessage, len(rows))
+		for _, r := range rows {
+			v := r.Value
+			if name == cursorStoreName {
+				if n, err := normaliseStoreValue(name, v); err == nil {
+					v = n
+				}
+			}
+			byEntity[r.Entity] = v
+		}
+		out[name] = byEntity
+	}
+	return out
+}
+
+func clipRow(v json.RawMessage) string {
+	if v == nil {
+		return "absent"
+	}
+	if len(v) > 160 {
+		return string(v[:157]) + "..."
+	}
+	return string(v)
 }
 
 // ValidateShardSet refuses a set before anything is spliced: an unknown version or
