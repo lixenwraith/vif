@@ -66,15 +66,16 @@ func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain, hel
 	if h.Authority == 0 || h.Predecessor == 0 || h.Authority == h.Predecessor {
 		return errors.New("handoff names invalid predecessor or authority")
 	}
-	// The lost process's bots may have crossed their departures before its link
-	// closed. Only that subtree can differ across the handoff boundary.
-	withoutLost := func(in []RosterEntry) []RosterEntry {
+	// Only players may author, so only they must agree: the lost process may have
+	// crossed its departure before its link closed, and a seat crosses at its holder's
+	// word, which a receiver a playout behind its relay may hold unapplied still.
+	players := func(in []RosterEntry) []RosterEntry {
 		return slices.DeleteFunc(slices.Clone(in), func(p RosterEntry) bool {
-			return p.ID == h.Predecessor || p.Holder == h.Predecessor
+			return p.ID == h.Predecessor || p.Holder != 0
 		})
 	}
-	if !SameRoster(withoutLost(h.Roster), withoutLost(roster)) {
-		return errors.New("handoff carries a different surviving roster")
+	if !SameRoster(players(h.Roster), players(roster)) {
+		return errors.New("handoff carries different surviving players")
 	}
 	// The whole of the split-brain check, and the receiver makes it for itself
 	// rather than counting evidence the record brought with it: the candidate a

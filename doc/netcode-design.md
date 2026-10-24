@@ -367,6 +367,7 @@ against a run-to-run spread of about 2%.
 | The descent in one round trip | 14.6 → 2.43; 0.08 | 81.5 → 10.3; 0.16 | 1,330 → 123; 0.59 | 88.0 → 70.4; 0.40 (0.13/s) | 207 → 92.0; 0.76 (0.20/s) |
 | Cadences a power of two, due ticks aligned | 14.6 → 2.44; 0.09 | 81.4 → 10.4; 0.16 | 1,331 → 123; 0.60 | 87.9 → 70.3; 0.40 (0.13/s) | 193 → 77.7; 0.80 (0.13/s) |
 | The down path bundled, one frame a link a drain and a close | 14.7 → 2.44; 0.09 | 80.3 → 10.0; 0.16 | 1,291 → 109; 0.60 | 88.2 → 70.5; 0.43 (0.13/s) | 129 → 14.6; 0.67 (none) |
+| The bundle the port's, a link's order kept | 14.7 → 2.46; 0.09 | 80.4 → 10.0; 0.16 | 1,291 → 111; 0.60 | 20.4 → 3.20; 0.37 (none) | 163 → 49.7; 0.74 (0.07/s) |
 
 - **Bodies raw, codec at level 6.** A td keyframe is 360 kB where level 1 gave 501
   and the stream's second pass over that 398: td's framed body bytes fall a fifth
@@ -408,7 +409,15 @@ against a run-to-run spread of about 2%.
   drain's copies into one frame was measured too and refused: the copies left one
   tick body later, and in the harness's lockstep, where a guest sits no closer than
   the host's next tick, the first guests read them a tick late and the tower's
-  hash-only share fell to 99.3%.
+  hash-only share fell to 99.3%. The bundle is the port's, and a frame of any other
+  kind releases the link's before it: the first cut bundled in the network system,
+  where the handoff record a holder sends when its host drops, which the session
+  layer puts on the port directly, overtook the epochs the holder had relayed in the
+  same drain. What that exposed is the receiver's side of a handoff: a bot a playout
+  behind its relay read the record against a world that had not applied its own
+  seat's crossing yet, refused it as a different roster, and forked. The record's
+  check now compares the players alone (multi-player §5.2); a seat crosses at its
+  holder's word and is reconciled after the handoff as the roster is.
 
 ## 4. What remains
 
@@ -630,9 +639,10 @@ Each approach lands alone, re-runs §3's matrix and updates §3.1.
 N2's second step follows its first; N13 and the column layout build on N9; N10's
 row cache is cheaper on N9's rows.
 
-**Decided, on §3.4.** The down path is bundled (N1's first step): what a drain
-commits leaves each link as one frame, and the tick's own epoch and syncs as one;
-the frames-less echo remains §4's N1. A peer's cadence is a power of two of ticks
+**Decided, on §3.4.** The down path is bundled (N1's first step): the port packs
+what a link is sent of epochs and syncs, up or down, and releases it when a drain
+ends, when the tick closes and before a frame of any other kind, so a link keeps
+its order; the frames-less echo remains §4's N1. A peer's cadence is a power of two of ticks
 and it is due at multiples of it (N7), so peers on different cadences share rounds
 and the host's round rate is its fastest peer's. The descent is one round trip (N5):
 the manifest carries its partition, a receiver whose root differs answers with the
