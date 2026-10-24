@@ -540,25 +540,6 @@ finds its own cursor a Wraith, which only a return under its claim gives back
 membership report after the floor taking the place back as a claim does, over the
 link it already holds.
 
-### Decide the authority's fan-out and publication cadence
-
-- Priority: P2
-- Affected files: `internal/system/network.go`, `internal/converge/correction.go`
-- Guide: [Netcode optimization](netcode-optimization.md#3-approaches) N1, N3, N5, N7, N14
-
-A star's authority sends every participant's epochs and owner syncs down to every
-other, the producer's own copy included: at 16 players 4,444 epochs and 736 syncs a
-second, 1.4 MB/s framed on the tower map and 2.8 MB/s on td before deflate. Rounds
-follow the union of peer deadlines, 7.2 a second at td, and whole bodies add 2.2 MB/s
-there. On one guest with two seats over a 110 ms link (a fleet run on 2026-10-15) the
-command stream was nine tenths of about 64 kB/s both ways before deflate: owner
-syncs, a 595-byte TOML of 27 fields of which 17 were zero, every six ticks per cursor
-and twice over, a fifth; the explosion batch crossings a quarter; the producer's own
-committed echo, which a guest with nothing behind it reads only the marker of, a
-quarter of the downlink. The candidates are message-set and cadence changes that
-cut constants where relays (`-relay`) move the quadratic term off the host; the
-guide weighs each.
-
 ### Project a correction outside the live lock
 
 - Priority: P2

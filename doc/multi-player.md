@@ -899,6 +899,11 @@ it decides where it goes.
 
 ## 6. Current operating point
 
+The same shape over sockets, with each link's deflate, is read in
+[Netcode optimization §2.2](netcode-optimization.md#22-readings): the wire carries
+8% of the framed command stream at 16 players on the tower, and td's whole bodies
+nearly as framed.
+
 Measured on the in-process mesh at `GOMAXPROCS=1` (a 2.1 GHz Xeon container), in the
 shape of `TestATowerGuestAnswersHashOnly`: a star with four-tick links, the authority
 playing, every participant moving one tick in three and firing one in six, 300 ticks
