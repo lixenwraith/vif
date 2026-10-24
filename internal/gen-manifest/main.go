@@ -822,7 +822,7 @@ func InitRegistry() {
 	registryInit = true
 
 {{- range .Events }}
-	RegisterType("{{ .Name }}", {{ .Name }}, {{ if .Payload }}&{{ .Payload }}{}{{ else }}nil{{ end }})
+	RegisterType("{{ .Name }}", {{ .Name }})
 {{- end }}
 
 }

@@ -1,7 +1,6 @@
 package event
 
 import (
-	"reflect"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/core"
@@ -293,20 +292,23 @@ func (j *Journal) record(ev *GameEvent, st Stamp) {
 	})
 }
 
-// encodePayload writes a payload in its generated codec. Only the registry
+// encodePayload writes a payload through its table. Only the registry
 // prototype's own type, by pointer, round-trips, so anything else is reported
 // rather than silently encoded.
 func encodePayload(et EventType, p any) (b []byte, encErr string) {
 	if p == nil {
 		return nil, ""
 	}
-	proto, ok := typeToPayload[et]
-	if !ok {
+	if et < 0 || et >= EventTypeCount || payloadCodecs[et] == nil {
 		return nil, "no registry prototype"
 	}
-	c, ok := p.(payloadCodec)
-	if !ok || reflect.TypeOf(p).Elem() != proto {
-		return nil, "payload type " + reflect.TypeOf(p).String() + " is not the registered prototype"
+	pc, ok := p.(payloadCodec)
+	if !ok {
+		return nil, "payload has no codec"
 	}
-	return c.appendPayload(make([]byte, 0, 64)), ""
+	c, ptr := pc.codec()
+	if c != payloadCodecs[et] {
+		return nil, "payload type is not the registered prototype"
+	}
+	return appendStruct(make([]byte, 0, 64), ptr, c), ""
 }

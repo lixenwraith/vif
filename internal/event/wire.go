@@ -153,13 +153,6 @@ func NewWireFrame(ev GameEvent) (WireFrame, string) {
 // Decode is DecodePayload for the frame's event.
 func (f WireFrame) Decode() (any, error) { return DecodePayload(f.Event, f.Payload) }
 
-// payloadCodec is the generated codec every registered payload carries: a
-// presence mask, then each present field in declaration order (payload_gen.go).
-type payloadCodec interface {
-	appendPayload(b []byte) []byte
-	readPayload(r *wireReader)
-}
-
 // DecodePayload allocates a fresh payload from the registry prototype and reads
 // the bytes into it. No bytes means the producer pushed nil; bytes the codec does
 // not consume are a payload of another build.
@@ -172,7 +165,8 @@ func DecodePayload(et EventType, b []byte) (any, error) {
 		return nil, fmt.Errorf("wire: %s carries a payload with no registry prototype", GetEventName(et))
 	}
 	r := wireReader{b: b}
-	p.(payloadCodec).readPayload(&r)
+	c, ptr := p.(payloadCodec).codec()
+	readStruct(&r, ptr, c)
 	if r.err != nil {
 		return nil, fmt.Errorf("wire: %s payload: %w", GetEventName(et), r.err)
 	}
