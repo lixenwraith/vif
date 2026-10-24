@@ -29,6 +29,10 @@ var byteKindNames = [KindCount]string{"epoch", "sync", "digest", "correction", "
 
 func (k ByteKind) String() string { return byteKindNames[k] }
 
+// Bundles reports whether frames of kind t travel bundled: what a link is sent of a
+// tick's epochs and syncs leaves as one MsgBundle.
+func (t MessageType) Bundles() bool { return t == MsgEvent || t == MsgStateSync }
+
 // Precompressed reports whether t carries a body the snapshot codec deflated, which
 // a link passes raw past its own stream rather than deflating twice.
 func (t MessageType) Precompressed() bool {
