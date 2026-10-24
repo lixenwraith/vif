@@ -492,17 +492,18 @@ N2's second step follows its first; N13 and the column layout build on N9; N10's
 row cache is cheaper on N9's rows.
 
 **Decided, on §2.3.** A repair is chunked and paced as a body is and bounded by the
-keyframe it stands in for (N6), the measured one at the authority and the transfer
-ceiling at a relay, which measures none ([todo](todo.md#bound-a-relayed-repair-by-a-keyframe)).
-Syncs carry the cells that are set (N3's `omitempty`): 36–43%
-off their framed bytes and 1–3% off the wire; the presence mask and the
-send-on-change step wait for N2. Bodies pass the link raw, compressed once at level 6 (N4's
-first step). The codec's level was 1 and the link's level-7 stream took a fifth off
-its output, so a level-1 body carried raw would have cost td a quarter more wire;
-at level 6 a td keyframe is 360 kB against 398 after both passes, and the host's
-pass is 33 ms instead of 12 plus 9 a link. A run cut on the inflater's window
-would deliver its last frame before its marker, so a raw frame due there travels in
-the run. N4's second step, a dictionary deflate, is dropped on §2.2.
+keyframe it stands in for (N6): the measured one at the authority, the transfer
+ceiling at a relay, which measures none
+([todo](todo.md#bound-a-relayed-repair-by-a-keyframe)). Syncs carry the cells that
+are set (N3's `omitempty`), 36–43% off their framed bytes and 1–3% off the wire; the
+presence mask and the send-on-change step wait for N2. Bodies pass the link raw,
+compressed once at level 6 (N4's first step): the codec's level was 1 and the link's
+level-7 stream took a fifth off its output, so a level-1 body carried raw would have
+cost td a quarter more wire, where at level 6 a td keyframe is 360 kB against 398
+after both passes and the host's pass is 33 ms instead of 12 plus 9 a link. A run
+cut on the inflater's window would deliver its last frame before its marker, so a
+raw frame due there travels in the run. N4's second step, a dictionary deflate, is
+dropped on §2.2.
 
 **Decided, on §2.2.** The star stays, with the authority the only publisher and
 every participant's epochs and syncs relayed down every link: its wire cost at 16
