@@ -1,4 +1,4 @@
-// Package model contains the audio identifiers shared with the game protocol.
+// Package model contains the audio identifiers an embedder's events carry.
 // It has no mixer, backend, filesystem, or synthesis dependencies.
 package model
 

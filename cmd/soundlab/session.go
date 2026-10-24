@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/lixenwraith/toml"
@@ -30,7 +31,11 @@ type Session struct {
 	// bpm mirrors the last requested tempo so `note` can size durations in
 	// steps. The sequencer clamps and beat-quantizes its own copy; one pending
 	// change of skew does not matter for an audition length.
-	bpm      int
+	bpm int
+	// root and scale mirror the harmony `key` set, which the mixer keeps to
+	// itself: the editors name notes and place a played one on a degree by them
+	root     int
+	scale    audio.ScaleID
 	startErr error
 	files    audioFiles
 }
@@ -42,20 +47,26 @@ type audioFiles struct {
 	music, sounds             string // "" = the embedded bank
 	musicTarget, soundsTarget string // "" = no configuration root
 	buffer                    time.Duration
+	skipped                   error // vif.toml keys this build does not know
 }
 
 // resolveAudioFiles applies vif's -config-dir, -config-music and -config-sounds,
-// and vif.toml's [paths] root and [audio] buffer_ms as vif does
+// and vif.toml's [paths] root and [audio] buffer_ms as vif does. Those are all it
+// reads, so a key another vif build knows is skipped rather than refused.
 func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
 	if err := paths.CheckRoot(dir); err != nil {
 		return audioFiles{}, err
 	}
 	settings, _, err := paths.LoadSettings(dir)
+	var f audioFiles
+	if errors.As(err, new(paths.UnknownKeys)) {
+		f.skipped, err = err, nil
+	}
 	if err != nil {
 		return audioFiles{}, err
 	}
 	roots := paths.ConfigRoots(cmp.Or(dir, settings.Paths.Root))
-	f := audioFiles{buffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
+	f.buffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
 	if f.music, err = paths.ConfigFile(roots, music, paths.AudioDirName, paths.MusicConfigFile); err != nil {
 		return f, fmt.Errorf("music config: %w", err)
 	}
@@ -69,10 +80,10 @@ func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
 
 // NewSession starts the engine on the banks and overrides the game would load, and
 // seeds each document from its override so a save writes back what the game reads.
-func NewSession(backend string, masterVol float64, out io.Writer, files audioFiles) (*Session, error) {
+func NewSession(backend string, sfxVolume float64, out io.Writer, files audioFiles) (*Session, error) {
 	cfg := audio.DefaultAudioConfig()
 	cfg.Enabled = true
-	cfg.MasterVolume = masterVol
+	cfg.SfxVolume = sfxVolume
 	cfg.ForceBackend = backend
 	cfg.Buffer = files.buffer
 	// The same banks the game registers, from the same embedded assets.
@@ -103,6 +114,8 @@ func NewSession(backend string, masterVol float64, out io.Writer, files audioFil
 		pats:   newPatternDoc(),
 		out:    out,
 		bpm:    audio.DefaultBPM,
+		root:   audio.DefaultRootNote,
+		scale:  audio.ScalePhrygian,
 		files:  files,
 	}
 	// A failed Start latches silent mode but the engine stays valid, and
@@ -113,6 +126,9 @@ func NewSession(backend string, masterVol float64, out io.Writer, files audioFil
 	// to a random fill once per phrase — game drama, editor confusion. Forced
 	// off here; :fill on restores it for auditioning the fill bank.
 	s.eng.SetAutoFill(false)
+	if files.skipped != nil {
+		fmt.Fprintf(out, "%v: skipped, soundlab reads only [paths] root and [audio] buffer_ms\n", files.skipped)
+	}
 	if err := eng.SpecError(); err != nil {
 		fmt.Fprintf(out, "override errors, the game falls back the same way:\n%v\n", err)
 	}
@@ -488,4 +504,50 @@ func soundDur(d *audio.SoundDef) float64 {
 		}
 	}
 	return m
+}
+
+// pitch is the MIDI note a degree and octave above the root sound in the mirrored
+// key, as the sequencer resolves a track that does not follow the chord
+func (s *Session) pitch(deg, oct int) int {
+	sc := audio.ScaleIntervals(s.scale)
+	n := len(sc)
+	oct += deg / n
+	if deg %= n; deg < 0 {
+		deg += n
+		oct--
+	}
+	return min(max(s.root+12*oct+sc[deg], 0), 127)
+}
+
+// degreeOf is the degree and octave nearest midi in the mirrored key, the lower
+// on a tie, and whether midi is exactly that degree
+func (s *Session) degreeOf(midi int) (deg, oct int, exact bool) {
+	sc := audio.ScaleIntervals(s.scale)
+	semis := midi - s.root
+	oct = semis / 12
+	if semis < 0 && semis%12 != 0 {
+		oct--
+	}
+	within := semis - 12*oct
+	best, bestD := 0, 12
+	for i, iv := range sc {
+		if d := max(within-iv, iv-within); d < bestD {
+			best, bestD = i, d
+		}
+	}
+	if 12-within < bestD { // the next octave's root is nearer
+		return 0, oct + 1, false
+	}
+	return best, oct, bestD == 0
+}
+
+// keyName is the mirrored key as the header shows it, "E2 phrygian"
+func (s *Session) keyName() string { return noteName(s.root) + " " + scaleName(s.scale) }
+
+var pitchNames = [12]string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+
+// noteName is a MIDI note in scientific pitch, middle C (60) being C4
+func noteName(midi int) string {
+	midi = min(max(midi, 0), 127)
+	return pitchNames[midi%12] + strconv.Itoa(midi/12-1)
 }

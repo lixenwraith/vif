@@ -19,15 +19,15 @@ type AudioResource struct {
 	Pref   atomic.Int32
 }
 
-func (r *Resource) EffectsVolume() float64 {
+func (r *Resource) SfxVolume() float64 {
 	if r.Audio == nil || r.Audio.Engine == nil {
 		return 0
 	}
-	return r.Audio.Engine.Volume()
+	return r.Audio.Engine.SfxVolume()
 }
 
-func (r *Resource) SetEffectsVolume(volume float64) {
+func (r *Resource) SetSfxVolume(volume float64) {
 	if r.Audio != nil && r.Audio.Engine != nil {
-		r.Audio.Engine.SetVolume(volume)
+		r.Audio.Engine.SetSfxVolume(volume)
 	}
 }

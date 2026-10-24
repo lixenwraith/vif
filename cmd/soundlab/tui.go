@@ -8,6 +8,7 @@ package main
 // script, which is what keeps the scripted E2E authoritative.
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -28,26 +29,34 @@ const (
 	focusBrowser focusArea = iota
 	focusInspector
 	focusLog
-	focusCount
 )
 
+// view is what the body shows: the browser with the mixer and log, or one of the
+// two editors that take the body over
+type view int
+
+const (
+	viewBrowse view = iota
+	viewKeys
+	viewBeat
+)
+
+// uiMode is where typed keys go: the view, or a line being typed in the footer
 type uiMode int
 
 const (
 	modeNormal uiMode = iota
 	modeCommand
 	modeEdit
-	modePrompt // one-shot named-input line for n/c
-	modeKeys
-	modeBeat
+	modePrompt // one-shot named-input line for n/c/w/+ and first saves
 )
 
 const (
-	kindSound   = 0
-	kindPattern = 1
-	logPaneH    = 9
-	keysRowsH   = 2
+	kindPattern = 0
+	kindSound   = 1
 	tickEvery   = 100 * time.Millisecond
+	// minW and minH fit the keys view's drawn keyboard and the beat grid's bar
+	minW, minH = 60, 16
 )
 
 // palette is the shell's colors by role
@@ -55,6 +64,7 @@ type palette struct {
 	Bg, Fg, FocusBg, CursorBg, HeaderBg, HeaderFg color.RGB
 	Selected, Unselected, Warning, Error          color.RGB
 	Border, HintFg                                color.RGB
+	Ivory, Ebony, KeyLine                         color.RGB
 }
 
 var defaultPalette = palette{
@@ -62,8 +72,21 @@ var defaultPalette = palette{
 	FocusBg: color.RGB{R: 30, G: 35, B: 45}, CursorBg: color.RGB{R: 50, G: 50, B: 70},
 	HeaderBg: color.RGB{R: 40, G: 60, B: 90}, HeaderFg: color.RGB{R: 255, G: 255, B: 255},
 	Selected: color.RGB{R: 80, G: 200, B: 80}, Unselected: color.RGB{R: 100, G: 100, B: 100},
-	Warning: color.RGB{R: 255, G: 80, B: 80}, Error: color.RGB{R: 255, G: 80, B: 80},
+	Warning: color.RGB{R: 255, G: 180, B: 60}, Error: color.RGB{R: 255, G: 80, B: 80},
 	Border: color.RGB{R: 60, G: 80, B: 100}, HintFg: color.RGB{R: 100, G: 180, B: 200},
+	Ivory: color.RGB{R: 225, G: 222, B: 210}, Ebony: color.RGB{R: 34, G: 34, B: 40},
+	KeyLine: color.RGB{R: 120, G: 118, B: 110},
+}
+
+// engineSig is the engine state the screen shows; a tick redraws only when it moved
+type engineSig struct {
+	bar        int64
+	step       int
+	running    bool
+	slots      [audio.MusicSlots]audio.PatternID
+	backend    string
+	silent     bool
+	musicMuted bool
 }
 
 type tuiApp struct {
@@ -74,6 +97,11 @@ type tuiApp struct {
 
 	w, h  int
 	quit  bool
+	dirty bool // something changed since the last frame
+	sig   engineSig
+	cells []terminal.Cell
+
+	view  view
 	focus focusArea
 	mode  uiMode
 
@@ -97,39 +125,41 @@ type tuiApp struct {
 
 	promptLabel  string
 	promptCommit func(string) // one-shot; consumed by promptKey
-	promptReturn uiMode       // mode restored on close; chained prompts inherit it
 
 	logScroll int
 
-	keysOct     int
-	keysVel     float64
-	keysInstr   audio.InstrumentType
-	keysLit     map[rune]int // keycap -> ticks of highlight remaining
-	keysStarted bool         // the keys strip auto-started the transport; Esc stops it again
-
-	rec      bool
-	recSteps []audio.StepDef
-	recInstr audio.InstrumentType
-	recN     int
-
+	keys keysState
 	beat *beatState
 
 	quitArmed  bool   // one warning issued for unsaved-on-quit
 	delArmed   string // browser 'd' pressed once for this name; second press deletes
 	hintedFill bool   // slot-2 auto-fill hint shown once
-	help       bool   // the key overlay is up; any key takes it down
+	help       bool   // the key overlay is up; any key but j/k takes it down
+	helpTop    int    // the overlay's first row shown
 }
 
-func runTUI(s *Session) error {
-	lb := newLogBuffer(500)
-	s.out = lb
+func newTUIApp(s *Session, lb *logBuffer) *tuiApp {
+	return &tuiApp{
+		s: s, log: lb, theme: defaultPalette, dirty: true,
+		exp:       tui.NewTreeExpansion(),
+		tree:      tui.NewTreeState(10),
+		cmdField:  tui.NewTextFieldState(""),
+		editField: tui.NewTextFieldState(""),
+		keys:      newKeysState(),
+	}
+}
+
+// runTUI takes over the terminal; lb is the log the session already writes to
+func runTUI(s *Session, lb *logBuffer) error {
 	// Close's wedged-mixer warning must reach a visible stream after the
 	// alternate screen is gone. Deferred first, so it runs after Fini.
 	defer func() { s.out = os.Stdout }()
 
 	term := terminal.New()
 	if err := term.Init(); err != nil {
-		s.out = os.Stdout
+		for _, l := range lb.lines {
+			fmt.Println(l)
+		}
 		return err
 	}
 	defer term.Fini()
@@ -150,9 +180,8 @@ func runTUI(s *Session) error {
 	}()
 
 	// The transport readout animates without input: a ticker wakes the
-	// blocking PollEvent through the synthetic channel. KeyNone is what
-	// unknown escape sequences already decode to, so the app tolerates it
-	// by construction.
+	// blocking PollEvent with KeyNone, which unknown escape sequences already
+	// decode to, so the app tolerates it by construction.
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
@@ -168,58 +197,53 @@ func runTUI(s *Session) error {
 		}
 	}()
 
-	w, h := term.Size()
-	a := &tuiApp{
-		s: s, term: term, log: lb, theme: defaultPalette,
-		w: w, h: h,
-		exp:       tui.NewTreeExpansion(),
-		tree:      tui.NewTreeState(10),
-		cmdField:  tui.NewTextFieldState(""),
-		editField: tui.NewTextFieldState(""),
-		keysOct:   3,
-		keysVel:   0.8,
-		keysInstr: audio.InstrPiano,
-		keysLit:   map[rune]int{},
-	}
-	fmt.Fprintln(lb, "soundlab TUI — ':' commands, p keys, b beat(pattern), m music reset, ^S save, ^Q quit")
-	if s.startErr != nil {
-		fmt.Fprintf(lb, "audio backend: %v (silent mode)\n", s.startErr)
-	}
+	a := newTUIApp(s, lb)
+	a.term = term
+	a.w, a.h = term.Size()
+	fmt.Fprintln(lb, "soundlab — p keys, b beat editor, : commands, ? keys, ^S save, ^Q quit")
 	// An empty session has nothing to browse; the TUI seeds builtins per
 	// empty document. REPL and scripts stay unseeded — they own their state.
+	if len(s.pats.order) == 0 {
+		_ = s.seedBuiltinPatterns()
+	}
 	if len(s.sounds.order) == 0 {
 		if err := s.seedBuiltinSounds(); err != nil {
 			fmt.Fprintf(lb, "seed sounds: %v\n", err)
 		}
 	}
-	if len(s.pats.order) == 0 {
-		_ = s.seedBuiltinPatterns()
-	}
 
 	for !a.quit {
-		a.render()
+		if a.dirty {
+			a.dirty = false
+			a.render()
+		}
 		a.handle(term.PollEvent())
 	}
 	return nil
 }
 
-// exec runs one command line, echoing it and any error into the log pane.
-func (a *tuiApp) exec(line string) {
+// tooSmall is a terminal the views cannot be laid out in; it shows a notice alone
+func (a *tuiApp) tooSmall() bool { return a.w < minW || a.h < minH }
+
+// exec runs one command line, echoing it and any error into the log pane, and
+// returns the error for a caller whose next step depends on it.
+func (a *tuiApp) exec(line string) error {
 	fmt.Fprintf(a.log, "> %s\n", line)
-	a.execQ(line)
+	return a.execQ(line)
 }
 
 // execQ runs without echoing the command — the keys would otherwise flood
 // the log with one line per note. Errors still surface.
-func (a *tuiApp) execQ(line string) {
-	if err := Execute(a.s, line); err != nil {
-		if errors.Is(err, errQuit) {
-			a.requestQuit()
-			return
-		}
+func (a *tuiApp) execQ(line string) error {
+	a.logScroll = 0 // new output re-sticks the log to its tail
+	err := Execute(a.s, line)
+	switch {
+	case errors.Is(err, errQuit):
+		a.requestQuit()
+	case err != nil:
 		fmt.Fprintf(a.log, "error: %v\n", err)
 	}
-	a.logScroll = 0 // new output re-sticks the log to its tail
+	return err
 }
 
 // requestQuit guards unsaved work once, then quits. Applies to Ctrl+Q and
@@ -233,35 +257,35 @@ func (a *tuiApp) requestQuit() {
 	a.quit = true
 }
 
-// saveModified writes every document that diverges from disk. Provenance
-// path when there is one; otherwise prompt for a file — erroring on a
-// builtin/new-seeded document made ^S useless exactly when it matters.
+// saveModified writes every document that diverges from disk: to its provenance
+// path, or, the first time, to a path a prompt asks for, offering the file the
+// next vif run reads first.
 func (a *tuiApp) saveModified() {
 	if !a.s.sounds.modified && !a.s.pats.modified {
 		fmt.Fprintln(a.log, "nothing to save — no document diverges from disk")
 		return
 	}
-	if a.s.sounds.modified {
-		if a.s.sounds.src == "" {
-			a.promptSavePath("sound")
-			return // resumes from the commit
-		}
-		a.exec("save sound")
-	}
 	if a.s.pats.modified {
 		if a.s.pats.src == "" {
-			a.promptSavePath("pattern")
-			return
+			a.promptSavePath("pattern", a.s.files.musicTarget)
+			return // resumes from the commit
 		}
 		a.exec("save pattern")
+	}
+	if a.s.sounds.modified {
+		if a.s.sounds.src == "" {
+			a.promptSavePath("sound", a.s.files.soundsTarget)
+			return
+		}
+		a.exec("save sound")
 	}
 }
 
 // promptSavePath asks for a first-save path, then resumes saveModified so
 // the other document gets its turn (or its own prompt). A failed save
 // leaves modified set, so the next pass re-prompts; Escape bails out.
-func (a *tuiApp) promptSavePath(kind string) {
-	a.openPrompt("save "+kind+" -> file: ", kind+"s.toml", func(file string) {
+func (a *tuiApp) promptSavePath(kind, target string) {
+	a.openPrompt("save "+kind+" -> file: ", cmp.Or(target, kind+"s.toml"), func(file string) {
 		a.exec("save " + kind + " " + file)
 		if a.s.sounds.modified || a.s.pats.modified {
 			a.saveModified()
@@ -272,12 +296,8 @@ func (a *tuiApp) promptSavePath(kind string) {
 // promptMix: '+' in the browser — pull the selection's tracks/layers into a
 // named destination. cp's direction (selection = src) for consistency.
 func (a *tuiApp) promptMix() {
-	src := a.selName()
-	if src == "" {
-		return
-	}
-	if !addressable(src) {
-		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", src)
+	src, ok := a.addressableSel()
+	if !ok {
 		return
 	}
 	a.openPrompt("mix "+src+" into: ", "", func(dst string) {
@@ -290,39 +310,46 @@ func (a *tuiApp) handle(ev terminal.Event) {
 	switch ev.Type {
 	case terminal.EventResize:
 		a.w, a.h = ev.Width, ev.Height
+		a.dirty = true
 		return
 	case terminal.EventClosed:
 		a.quit = true // signal path: must exit so the deferred Fini runs
 		return
 	case terminal.EventError:
 		fmt.Fprintf(a.log, "input error: %v\n", ev.Err)
+		a.dirty = true
 		return
 	case terminal.EventKey:
 	default:
 		return
 	}
 	if ev.Key == terminal.KeyNone {
-		// Ticker wake (or unknown escape): decay key highlights, render.
-		for k, t := range a.keysLit {
-			if t <= 1 {
-				delete(a.keysLit, k)
-			} else {
-				a.keysLit[k] = t - 1
-			}
-		}
+		a.tick()
 		return
 	}
 	if ev.Key == terminal.KeyCtrlQ || ev.Key == terminal.KeyCtrlC {
 		a.requestQuit()
+		a.dirty = true
 		return
 	}
+	if a.tooSmall() {
+		return // nothing it would act on is on screen, and nothing redraws
+	}
+	a.dirty = true
 	if a.help {
-		a.help = false
+		switch {
+		case ev.Key == terminal.KeyDown || ev.Key == terminal.KeyRune && ev.Rune == 'j':
+			a.helpTop++
+		case ev.Key == terminal.KeyUp || ev.Key == terminal.KeyRune && ev.Rune == 'k':
+			a.helpTop = max(a.helpTop-1, 0)
+		default:
+			a.help, a.helpTop = false, 0
+		}
 		return
 	}
 
 	// Any other real key withdraws pending destructive confirms; 'd' must
-	// survive this to be its own second press.
+	// survive this to be its own second press (the beat view keeps its own 'x').
 	a.quitArmed = false
 	if ev.Key != terminal.KeyRune || ev.Rune != 'd' {
 		a.delArmed = ""
@@ -333,15 +360,46 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		a.commandKey(ev)
 	case modeEdit:
 		a.editKey(ev)
-	case modeKeys:
-		a.keysKey(ev)
-	case modeBeat:
-		a.beatKey(ev)
 	case modePrompt:
 		a.promptKey(ev)
 	default:
-		a.normalKey(ev)
+		switch a.view {
+		case viewKeys:
+			a.keysKey(ev)
+		case viewBeat:
+			a.beatKey(ev)
+		default:
+			a.normalKey(ev)
+		}
 	}
+}
+
+// tick decays the keys' highlights and redraws only when the engine moved, so an
+// idle screen, or one too small to show anything, is left alone
+func (a *tuiApp) tick() {
+	if a.tooSmall() {
+		return
+	}
+	if a.keys.decay() || a.engineSig() != a.sig {
+		a.dirty = true
+	}
+}
+
+func (a *tuiApp) engineSig() engineSig {
+	e := a.s.eng
+	g := engineSig{backend: e.BackendName(), silent: e.IsSilent(), musicMuted: e.IsMusicMuted()}
+	g.bar, g.step, g.running = e.Transport()
+	for i := range g.slots {
+		g.slots[i] = e.SlotPattern(i)
+	}
+	return g
+}
+
+// openCommand opens the command line in any view; Enter runs it there
+func (a *tuiApp) openCommand() {
+	a.mode = modeCommand
+	a.cmdField.Clear()
+	a.histIdx = len(a.history)
 }
 
 func (a *tuiApp) normalKey(ev terminal.Event) {
@@ -351,9 +409,7 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 	}
 	switch {
 	case r == ':':
-		a.mode = modeCommand
-		a.cmdField.Clear()
-		a.histIdx = len(a.history)
+		a.openCommand()
 		return
 	case r == 'p':
 		a.enterKeys()
@@ -365,12 +421,10 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 		if a.kind == kindPattern {
 			a.enterBeat()
 		} else {
-			fmt.Fprintln(a.log, "beat mode edits a pattern — h/l to the patterns tab first")
+			fmt.Fprintln(a.log, "the beat editor edits a pattern — h/l to the patterns tab first")
 		}
 		return
 	case ev.Key == terminal.KeyCtrlS:
-		// Normal-mode save; the keys strip owns ^S for recording (mode-scoped),
-		// which is why this is not a global intercept in handle().
 		a.saveModified()
 		return
 	case r == '?':
@@ -431,9 +485,9 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		*c += max(a.brPageH-1, 1)
 	case ev.Key == terminal.KeyPageUp:
 		*c -= max(a.brPageH-1, 1)
-	case r == 'g':
+	case r == 'g' || ev.Key == terminal.KeyHome:
 		*c = 0
-	case r == 'G':
+	case r == 'G' || ev.Key == terminal.KeyEnd:
 		*c = len(ns) - 1
 	case r == '/':
 		a.promptSearch()
@@ -465,25 +519,15 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		a.nameCmd("revert")
 	}
 	ns = a.browserNames()
-	if *c > len(ns)-1 {
-		*c = len(ns) - 1
-	}
-	if *c < 0 {
-		*c = 0
-	}
+	*c = min(max(*c, 0), max(len(ns)-1, 0))
 }
 
-// deleteSel arms-then-deletes the selection, quitArmed-style. The arm
-// message states what survives: del is always document-level — an applied
-// entry keeps its registry copy until process exit; an entry that was never
-// applied or saved exists only here and the discard is final.
+// deleteSel arms-then-deletes the selection, quitArmed-style. The arm message
+// states what survives: del is document-level, so an applied entry keeps its
+// registry copy; one never applied or saved exists only here.
 func (a *tuiApp) deleteSel() {
-	n := a.selName()
-	if n == "" {
-		return
-	}
-	if !addressable(n) {
-		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", n)
+	n, ok := a.addressableSel()
+	if !ok {
 		return
 	}
 	if a.delArmed != n {
@@ -500,49 +544,33 @@ func (a *tuiApp) deleteSel() {
 	a.exec("del " + n)
 }
 
-func (a *tuiApp) audition() {
-	n := a.selName()
-	if n == "" {
-		return
-	}
-	if !addressable(n) {
-		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", n)
-		return
-	}
-	a.exec("play " + n)
-}
-
 // auditionSel is the space action, shared by browser and inspector: sounds
 // audition immediately; patterns ensure they are audible.
 func (a *tuiApp) auditionSel() {
-	if a.kind == kindSound {
-		a.audition()
+	if a.kind == kindPattern {
+		a.playPattern()
 		return
 	}
-	a.playPattern()
+	if n, ok := a.addressableSel(); ok {
+		a.exec("play " + n)
+	}
 }
 
-// playPattern makes space mean "hear this": already in a slot → transport
-// play/pause; otherwise lowest empty slot via assignSlot (auto-apply,
-// auto-start, fill hint). SlotPattern is the sequencer-published readout —
-// one step stale at worst; the race outcome is a same-slot re-assign or a
-// transport toggle, both benign.
+// playPattern makes space mean "hear this": already in a slot, it toggles the
+// transport; otherwise it takes its role's slot, or the lowest empty one, through
+// assignSlot (auto-apply, auto-start, fill hint).
 func (a *tuiApp) playPattern() {
-	n := a.selName()
-	if n == "" {
+	n, ok := a.addressableSel()
+	if !ok {
 		return
 	}
-	if !addressable(n) {
-		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", n)
+	if id := audio.PatternIDByName(n); id != audio.PatternSilence && a.slotOf(id) >= 0 {
+		a.toggleMusic()
 		return
 	}
-	if id := audio.PatternIDByName(n); id != audio.PatternSilence {
-		for i := range audio.MusicSlots {
-			if a.s.eng.SlotPattern(i) == id {
-				a.toggleMusic()
-				return
-			}
-		}
+	if slot := a.roleSlot(n); slot >= 0 && a.s.eng.SlotPattern(slot) == audio.PatternSilence {
+		a.assignSlot(slot)
+		return
 	}
 	for i := range audio.MusicSlots {
 		if a.s.eng.SlotPattern(i) == audio.PatternSilence {
@@ -553,27 +581,53 @@ func (a *tuiApp) playPattern() {
 	fmt.Fprintln(a.log, "all slots full — 0-3 replaces a slot (same key again clears it)")
 }
 
-// assignSlot toggles the cursor pattern in a slot: assigning the pattern a
-// slot already holds clears the slot instead, so one key both layers and
-// un-layers, and clearing the last sounding slot stops the transport. Assignment
-// auto-starts the transport — the pattern must sound — and while it runs lands
-// on the next bar, so the new pattern enters in step with what plays.
+// slotOf is the slot sounding id, -1 for none
+func (a *tuiApp) slotOf(id audio.PatternID) int {
+	for i := range audio.MusicSlots {
+		if a.s.eng.SlotPattern(i) == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// roleSlot is the slot the game draws a pattern's role into, -1 for a pattern
+// without one
+func (a *tuiApp) roleSlot(name string) int {
+	if d, ok := a.s.pats.get(name); ok {
+		for i, r := range slotRoles {
+			if d.Role == r {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// assignSlot toggles the cursor pattern in a slot: assigning the pattern a slot
+// already holds clears it, so one key both layers and un-layers, and clearing the
+// last sounding slot stops the transport. Assignment starts the transport, and
+// while it runs lands on the next bar, so the pattern enters in step.
 func (a *tuiApp) assignSlot(slot int) {
 	if a.kind != kindPattern {
 		fmt.Fprintln(a.log, "slots take patterns — space auditions a sound")
 		return
 	}
-	n := a.selName()
-	if n == "" || !addressable(n) {
+	n, ok := a.addressableSel()
+	if !ok {
 		return
 	}
+	a.placeInSlot(slot, n)
+}
+
+// placeInSlot puts a pattern in a slot, out of any other, and starts the transport
+func (a *tuiApp) placeInSlot(slot int, n string) {
 	if id := audio.PatternIDByName(n); id != audio.PatternSilence {
 		if a.s.eng.SlotPattern(slot) == id {
 			a.exec(fmt.Sprintf("slot %d -", slot))
 			a.stopIfClear(slot)
 			return
 		}
-		// Enforce exclusivity: clear from any other active slots
 		for i := range audio.MusicSlots {
 			if i != slot && a.s.eng.SlotPattern(i) == id {
 				a.exec(fmt.Sprintf("slot %d -", i))
@@ -613,15 +667,9 @@ func (a *tuiApp) stopIfClear(cleared int) {
 }
 
 func (a *tuiApp) nameCmd(verb string) {
-	n := a.selName()
-	if n == "" {
-		return
+	if n, ok := a.addressableSel(); ok {
+		a.exec(verb + " " + n)
 	}
-	if !addressable(n) {
-		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", n)
-		return
-	}
-	a.exec(verb + " " + n)
 }
 
 func (a *tuiApp) inspectorKey(ev terminal.Event, r rune) {
@@ -658,8 +706,6 @@ func (a *tuiApp) inspectorKey(ev terminal.Event, r rune) {
 		}
 	case ev.Key == terminal.KeySpace || r == ' ':
 		a.auditionSel()
-	case ev.Key == terminal.KeyEscape:
-		a.focus = focusBrowser
 	case ev.Key == terminal.KeyEscape:
 		a.focus = focusBrowser
 	}
@@ -716,7 +762,6 @@ func (a *tuiApp) inspectorAdd(m *nodeMeta) {
 	if m == nil {
 		return
 	}
-	name := a.selName()
 	var segs []string
 	switch {
 	case m.slice:
@@ -727,7 +772,7 @@ func (a *tuiApp) inspectorAdd(m *nodeMeta) {
 		fmt.Fprintln(a.log, "a: cursor a list or a list element to append")
 		return
 	}
-	p := name + "." + strings.Join(segs, ".")
+	p := a.selName() + "." + strings.Join(segs, ".")
 	a.exec("add " + p)
 	a.exp.Expand(p)
 }
@@ -754,9 +799,7 @@ func (a *tuiApp) logKey(ev terminal.Event, r rune) {
 	case r == 'g':
 		a.logScroll = 1 << 20 // clamped to the top at render
 	}
-	if a.logScroll < 0 {
-		a.logScroll = 0
-	}
+	a.logScroll = max(a.logScroll, 0)
 }
 
 func (a *tuiApp) commandKey(ev terminal.Event) {
@@ -816,7 +859,6 @@ func (a *tuiApp) editKey(ev terminal.Event) {
 func (a *tuiApp) openPrompt(label, prefill string, commit func(string)) {
 	a.promptLabel = label
 	a.promptCommit = commit
-	a.promptReturn = a.mode // beat's ^S must land back in the grid
 	a.editField.SetValue(prefill)
 	a.mode = modePrompt
 }
@@ -826,15 +868,14 @@ func (a *tuiApp) promptKey(ev terminal.Event) {
 	case terminal.KeyEnter:
 		val := strings.TrimSpace(a.editField.Value())
 		commit := a.promptCommit
-		// Restore before commit: a commit that opens the next prompt
-		// (chained saveModified) must capture the original return mode.
-		a.mode, a.promptCommit = a.promptReturn, nil
+		// Close before commit: a commit may open the next prompt (chained saves)
+		a.mode, a.promptCommit = modeNormal, nil
 		if val == "" || commit == nil {
 			return
 		}
 		commit(val)
 	case terminal.KeyEscape:
-		a.mode, a.promptCommit = a.promptReturn, nil
+		a.mode, a.promptCommit = modeNormal, nil
 	default:
 		a.editField.HandleKey(ev.Key, ev.Rune, ev.Modifiers)
 	}
@@ -861,10 +902,7 @@ func (a *tuiApp) promptSearch() {
 // promptNew: 'n' in the browser. Kind is captured at open so a later tab
 // switch cannot retarget the command.
 func (a *tuiApp) promptNew() {
-	kind := "sound"
-	if a.kind == kindPattern {
-		kind = "pattern"
-	}
+	kind := kindWord(a.kind)
 	a.openPrompt("new "+kind+" name: ", "", func(name string) {
 		a.exec("new " + kind + " " + name)
 		a.cursorTo(name) // no-op when new failed: the entry does not exist
@@ -873,15 +911,10 @@ func (a *tuiApp) promptNew() {
 
 // promptClone: 'c' in the browser, prefilled with the source name — the
 // common case is a suffix edit. Commit lands the cursor on the copy and
-// opens it in the inspector with the primary list pre-expanded: the
-// clone-and-tweak flow without the Enter+l hop.
+// opens it in the inspector with the primary list pre-expanded.
 func (a *tuiApp) promptClone() {
-	src := a.selName()
-	if src == "" {
-		return
-	}
-	if !addressable(src) {
-		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", src)
+	src, ok := a.addressableSel()
+	if !ok {
 		return
 	}
 	a.openPrompt("cp "+src+" -> ", src, func(dst string) {
@@ -899,18 +932,20 @@ func (a *tuiApp) promptClone() {
 }
 
 // promptWrite: 'w' in the browser — standalone single-entry export of the
-// selection. Prefilled with <name>.toml; paths with spaces are outside the
-// command grammar, same as everywhere else.
+// selection, prefilled with <name>.toml.
 func (a *tuiApp) promptWrite() {
-	n := a.selName()
-	if n == "" {
-		return
-	}
-	if !addressable(n) {
-		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", n)
+	n, ok := a.addressableSel()
+	if !ok {
 		return
 	}
 	a.openPrompt("write "+n+" -> file: ", n+".toml", func(file string) {
 		a.exec("write " + n + " " + file)
 	})
+}
+
+func kindWord(kind int) string {
+	if kind == kindPattern {
+		return "pattern"
+	}
+	return "sound"
 }

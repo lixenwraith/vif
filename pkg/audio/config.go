@@ -6,21 +6,21 @@ import (
 	"time"
 )
 
-// DefaultEffectVolume is the neutral per-sound level shipped by the package.
-// Embedders overlay EffectVolumes / EffectShapes at service wiring; no
-// game-specific mix lives here
-const DefaultEffectVolume = 0.7
+// DefaultSfxLevel is the level a sound plays at as sfx when SfxLevels names
+// none; the embedder's mix lives in SfxLevels and SoundShapes, not here
+const DefaultSfxLevel = 0.7
 
 // AudioConfig holds engine configuration; the sample rate is the constant
 // AudioSampleRate.
 type AudioConfig struct {
-	Enabled      bool
-	MasterVolume float64
-	// Keyed by sound name: SoundIDs are assigned at Start, so the embedder
-	// cannot hold one at config time.
-	EffectVolumes map[string]float64
-	EffectShapes  map[string]SFXParams
-	ForceBackend  string
+	Enabled bool
+	// SfxVolume scales every sound effect, 0..1; music plays at its own level
+	SfxVolume float64
+	// Keyed by sound name, as SoundIDs are assigned at Start: the level a sound
+	// plays at as sfx, and the shaping it renders under, sfx or drum.
+	SfxLevels    map[string]float64
+	SoundShapes  map[string]SoundShape
+	ForceBackend string
 	// Sink is the host's speakers: a writer that takes the stream in place of any
 	// backend found by name, closed with the engine.
 	Sink io.WriteCloser
@@ -45,5 +45,5 @@ func bufferFrames(d time.Duration) int {
 
 // DefaultAudioConfig returns a neutral configuration
 func DefaultAudioConfig() *AudioConfig {
-	return &AudioConfig{Enabled: false, MasterVolume: 0.5}
+	return &AudioConfig{Enabled: false, SfxVolume: 0.5}
 }

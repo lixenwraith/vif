@@ -478,7 +478,7 @@ run is not paused ([§5](#a-hidden-tab)). Its speakers are `Host.Audio`
 opens an `AudioContext` at the first and plays them through an AudioWorklet
 (`web/audio-worklet.js`) that holds two buffers ahead and goes silent when the
 Worker falls behind, as a tick longer than a mixer period makes it; rendering a
-50 ms buffer with music and effects playing costs the Worker's thread about 1.3 ms.
+50 ms buffer with music and sfx playing costs the Worker's thread about 1.3 ms.
 A muted game posts nothing; the touch strip's speaker button sends Ctrl-S, as a
 keyboard would, to cycle the channels.
 

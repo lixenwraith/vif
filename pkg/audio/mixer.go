@@ -290,7 +290,7 @@ func (m *Mixer) startSound(st SoundID, vol float64) {
 	m.admit(activeSound{st: st, buffer: buf, volume: vol * m.rapidVol[st]})
 }
 
-// renderTick renders one buffer: music bus, SFX bus, duck, pause, limit, write
+// renderTick renders one buffer: music bus, sfx bus, duck, pause, limit, write
 func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, duckAtk, duckRel, limRel float64) {
 	isPaused := m.paused.Load()
 
@@ -306,13 +306,13 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 		}
 	}
 
-	// SFX tails always render; pause gain fades them out
+	// Sfx tails always render; pause gain fades them out
 	sfxLive := len(m.active) > 0
 	if sfxLive {
 		m.active = m.mixActive(m.sfxBuf, n)
 	}
 
-	// sidechain duck — music dips under active effects
+	// sidechain duck — music dips under sounding sfx
 	duckTarget := 1.0
 	if sfxLive {
 		duckTarget = MusicDuckAmount
@@ -442,9 +442,9 @@ func (m *Mixer) admit(ns activeSound) {
 		}
 	}
 	switch {
-	case cnt >= MaxSFXPerType:
+	case cnt >= MaxSfxPerSound:
 		m.active[victim] = ns
-	case len(m.active) >= MaxActiveSFX:
+	case len(m.active) >= MaxActiveSfx:
 		g := 0
 		for i := range m.active {
 			if m.active[i].pos > m.active[g].pos {

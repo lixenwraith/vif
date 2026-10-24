@@ -4,7 +4,9 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/pkg/audio"
@@ -26,7 +28,7 @@ func cmdPlay(s *Session, a []string) error {
 	// RenderPreview is the per-keystroke path: one canonical take, validated
 	// first, so an in-editor mutation that would produce non-finite samples
 	// is reported rather than played.
-	buf, err := audio.RenderPreview(d, audio.SFXParams{})
+	buf, err := audio.RenderPreview(d, audio.SoundShape{})
 	if err != nil {
 		return err
 	}
@@ -165,13 +167,21 @@ func cmdFill(s *Session, a []string) error {
 	return nil
 }
 
-var scaleByName = map[string]audio.ScaleID{
-	"phrygian":       audio.ScalePhrygian,
-	"minor":          audio.ScaleMinor,
-	"harmonic_minor": audio.ScaleHarmonicMinor,
-	"dorian":         audio.ScaleDorian,
-	"minor_pent":     audio.ScaleMinorPent,
-	"major":          audio.ScaleMajor,
+// scaleNames are the scales `key` takes, by ScaleID
+var scaleNames = [audio.ScaleCount]string{
+	audio.ScalePhrygian:      "phrygian",
+	audio.ScaleMinor:         "minor",
+	audio.ScaleHarmonicMinor: "harmonic_minor",
+	audio.ScaleDorian:        "dorian",
+	audio.ScaleMinorPent:     "minor_pent",
+	audio.ScaleMajor:         "major",
+}
+
+func scaleName(id audio.ScaleID) string {
+	if id >= 0 && id < audio.ScaleCount {
+		return scaleNames[id]
+	}
+	return "unknown"
 }
 
 func cmdKey(s *Session, a []string) error {
@@ -179,10 +189,11 @@ func cmdKey(s *Session, a []string) error {
 	if err != nil {
 		return fmt.Errorf("root %q: not a MIDI note number", a[0])
 	}
-	sc, ok := scaleByName[a[1]]
-	if !ok {
-		return fmt.Errorf("unknown scale %q (phrygian minor harmonic_minor dorian minor_pent major)", a[1])
+	i := slices.Index(scaleNames[:], a[1])
+	if i < 0 {
+		return fmt.Errorf("unknown scale %q (%s)", a[1], strings.Join(scaleNames[:], " "))
 	}
+	sc := audio.ScaleID(i)
 	var prog []int
 	for _, p := range a[2:] {
 		n, err := strconv.Atoi(p)
@@ -192,6 +203,10 @@ func cmdKey(s *Session, a []string) error {
 		prog = append(prog, n)
 	}
 	s.eng.SetHarmony(root, sc, prog) // nil prog keeps the current progression
+	if root > 0 && root < 128 {
+		s.root = root // the engine keeps its root for any other
+	}
+	s.scale = sc
 	return nil
 }
 
@@ -209,7 +224,7 @@ func cmdMute(s *Session, a []string) error {
 		return fmt.Errorf("want music|sfx|all|none, got %q", a[0])
 	}
 	s.eng.SetMusicMuted(music)
-	s.eng.SetEffectMuted(sfx)
+	s.eng.SetSfxMuted(sfx)
 	return nil
 }
 
@@ -218,7 +233,7 @@ func cmdVol(s *Session, a []string) error {
 	if err != nil {
 		return fmt.Errorf("vol %q: not a float", a[0])
 	}
-	s.eng.SetVolume(f)
+	s.eng.SetSfxVolume(f)
 	return nil
 }
 

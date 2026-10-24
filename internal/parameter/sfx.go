@@ -2,11 +2,11 @@ package parameter
 
 import "github.com/lixenwraith/vif/pkg/audio/model"
 
-// SoundSet is the game's sound-effect ID table. The zero value is model.SoundNone,
-// which Play counts as a bad-ID rejection, so AudioService.Start treats an unresolved
-// table as fatal. Written once in AudioService.Start before the tick and render
-// goroutines exist, read-only afterward: no lock, nothing on the emit path.
-type SoundSet struct {
+// SfxSet is the game's sfx table: the sound each effect Go emits plays. The zero
+// value is model.SoundNone, which Play counts as a bad-ID rejection, so
+// AudioService.Start treats an unresolved table as fatal. Written once there before
+// the tick and render goroutines exist, read-only afterward: no lock on the emit path.
+type SfxSet struct {
 	Error     model.SoundID
 	Bell      model.SoundID
 	Whoosh    model.SoundID
@@ -22,4 +22,4 @@ type SoundSet struct {
 
 // Sfx is the resolved table. Emit sites read it at emit time, never cache a field
 // at construction: manifest.BuildSystems runs before Hub.StartAll resolves it.
-var Sfx SoundSet
+var Sfx SfxSet

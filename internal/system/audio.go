@@ -12,8 +12,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
-// AudioSystem consumes sound request events and plays audio
-// Decouples game systems from direct AudioEngine access
+// AudioSystem plays requested sound effects, so no game system calls the engine,
+// and owns what the speakers sound, music included: the channel mask, the pause
+// and the audio telemetry. MusicSystem conducts the music itself.
 type AudioSystem struct {
 	world  *engine.World
 	player *audio.AudioEngine
@@ -48,7 +49,7 @@ func NewAudioSystem(world *engine.World) engine.System {
 	s.statPlayed = reg.Ints.Get("audio.played")
 	s.statDropped = reg.Ints.Get("audio.dropped")
 	reg.Ints.Get("audio.mask")
-	reg.Bools.Get("audio.effect_muted")
+	reg.Bools.Get("audio.sfx_muted")
 	reg.Bools.Get("audio.music_muted")
 	for i, n := range audio.RejectNames() {
 		s.statReject[i] = reg.Ints.Get("audio.rej_" + n)
@@ -76,8 +77,8 @@ func (s *AudioSystem) Init() {
 	s.basePlayed, s.baseDropped = s.player.Stats()
 	s.baseReject = s.player.Rejections()
 	if !s.initialized {
-		if !s.player.IsEffectMuted() {
-			s.mask |= parameter.AudioChanEffects
+		if !s.player.IsSfxMuted() {
+			s.mask |= parameter.AudioChanSfx
 		}
 		if !s.player.IsMusicMuted() {
 			s.mask |= parameter.AudioChanMusic
@@ -86,7 +87,7 @@ func (s *AudioSystem) Init() {
 	}
 	s.world.Resources.Audio.Pref.Store(int32(s.mask))
 	// Initial playback waits for MusicSystem's update after scenario gates settle.
-	s.player.SetEffectMuted(s.mask&parameter.AudioChanEffects == 0)
+	s.player.SetSfxMuted(s.mask&parameter.AudioChanSfx == 0)
 	s.player.SetMusicMuted(s.mask&parameter.AudioChanMusic == 0)
 	publishAudioMask(s.world, s.player)
 }
@@ -111,7 +112,7 @@ func (s *AudioSystem) EventTypes() []event.EventType {
 	}
 }
 
-// HandleEvent processes sound request events
+// HandleEvent plays sfx requests and applies pause and mute changes
 func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 
@@ -180,7 +181,7 @@ func (s *AudioSystem) applyMask(m uint8) {
 	}
 	s.world.Resources.Audio.Pref.Store(int32(m))
 	m = s.gated()
-	s.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
+	s.player.SetSfxMuted(m&parameter.AudioChanSfx == 0)
 	// Close the music bus immediately; MusicSystem owns sequencer start and resume.
 	if m&parameter.AudioChanMusic == 0 {
 		s.player.SetMusicMuted(true)
@@ -214,7 +215,7 @@ func (s *AudioSystem) takeOver(from *AudioSystem) (m uint8, ok bool) {
 	from.player = nil
 	s.world.Resources.Audio.Pref.Store(int32(s.mask))
 	m = s.gated()
-	s.player.SetEffectMuted(m&parameter.AudioChanEffects == 0)
+	s.player.SetSfxMuted(m&parameter.AudioChanSfx == 0)
 	publishAudioMask(s.world, s.player)
 	return m, true
 }

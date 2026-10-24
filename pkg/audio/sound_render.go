@@ -7,10 +7,10 @@ import (
 	"slices"
 )
 
-// SFXParams is embedder-supplied per-sound shaping applied at render time.
+// SoundShape is embedder-supplied per-sound shaping applied at render time.
 // Zero fields mean "unmodified". Length is ignored by specs marked
 // fixed_length.
-type SFXParams struct {
+type SoundShape struct {
 	Pitch  float64 `toml:"pitch,omitempty"`
 	Length float64 `toml:"length,omitempty"`
 }
@@ -22,16 +22,17 @@ func norm(v float64) float64 {
 	return v
 }
 
-// Deterministic per-variant deviation walk (peak-to-peak).
+// Deterministic per-variant deviation walk (peak-to-peak), the default of a
+// spec's pitch_walk and length_walk.
 const (
-	SFXPitchWalk = 0.10
-	SFXDecayWalk = 0.24
+	SoundPitchWalk  = 0.10
+	SoundLengthWalk = 0.24
 )
 
 type variance struct{ pitch, length float64 }
 
-// Shaping bounds. ValidateSound bounds the spec; it cannot see SFXParams,
-// which arrive from the embedder at render time. Clamping the composed value
+// Shaping bounds. ValidateSound bounds the spec; it cannot see a SoundShape,
+// which arrives from the embedder at render time. Clamping the composed value
 // is what makes checkFreq's Nyquist guarantee actually hold, and what stops a
 // stray Length from allocating a multi-minute buffer during Start.
 const (
@@ -56,17 +57,17 @@ func clampScale(v, lo, hi float64) float64 {
 // Each render draws from an rng seeded by (name, variant index), so noise
 // realizations are stable regardless of registration order: overriding or
 // inserting a sound cannot perturb any other sound's timbre.
-func RenderVariants(d *SoundDef, p SFXParams) []floatBuffer {
+func RenderVariants(d *SoundDef, p SoundShape) []floatBuffer {
 	n := d.Variants
 	if n < 1 {
-		n = SFXVariants
+		n = SoundVariants
 	}
 	pw, lw := d.PitchWalk, d.LengthWalk
 	if pw == 0 {
-		pw = SFXPitchWalk
+		pw = SoundPitchWalk
 	}
 	if lw == 0 {
-		lw = SFXDecayWalk
+		lw = SoundLengthWalk
 	}
 	bp, bl := norm(p.Pitch), norm(p.Length)
 	if d.FixedLength {
@@ -90,7 +91,7 @@ func RenderVariants(d *SoundDef, p SFXParams) []floatBuffer {
 // 200ms spec. Validation runs first, so a mutation that would produce non-finite
 // samples is reported rather than played. The result is the canonical sound, not
 // variant 0: the variants deviate from it either way. RenderVariants renders the set.
-func RenderPreview(d *SoundDef, p SFXParams) ([]float64, error) {
+func RenderPreview(d *SoundDef, p SoundShape) ([]float64, error) {
 	if err := ValidateSound(d); err != nil {
 		return nil, err
 	}
