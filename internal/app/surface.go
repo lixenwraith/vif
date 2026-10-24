@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
@@ -18,12 +17,6 @@ func (a *App) SnapshotSimulation() []string { return a.snapshotLines(true) }
 func (a *App) SnapshotShared() (lines []string) {
 	a.world.RunSafe(func() { lines = snapshot.SharedLines(a.ctx, a.world) })
 	return lines
-}
-
-// sharedDigestLocked is the session's drift gauge over that same surface.
-// Caller MUST hold updateMutex.
-func (a *App) sharedDigestLocked(detail bool) engine.SharedStateDigest {
-	return snapshot.SharedDigest(a.ctx, a.world, detail)
 }
 
 // snapshotLines reads both emitters in one critical section: SnapshotContext reads

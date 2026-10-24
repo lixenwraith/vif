@@ -208,49 +208,6 @@ func SharedLines(ctx *engine.GameContext, w *engine.World) []string {
 	return lines
 }
 
-// SharedDigest hashes exactly SharedLines' surface into one transport-sized
-// value. detail additionally hashes each record on its own, so a mismatch names
-// the record rather than the category. Caller MUST hold the world lock.
-func SharedDigest(ctx *engine.GameContext, w *engine.World, detail bool) engine.SharedStateDigest {
-	wd, digestLine, context, status := SharedSurface(ctx, w)
-	var groups map[string]uint64
-	if detail {
-		groups = make(map[string]uint64, len(context)+len(status))
-		for _, line := range context {
-			groups[RecordName(line)] = uint64(newHash().text(line))
-		}
-		for _, line := range status {
-			groups[RecordName(line)] = uint64(newHash().text(line))
-		}
-		groups["world"] = uint64(newHash().text(digestLine))
-	}
-	slices.Sort(context)
-	slices.Sort(status)
-
-	fold := func(lines []string) hash {
-		h := newHash()
-		for _, line := range lines {
-			h = h.text(line)
-		}
-		return h
-	}
-	lines := append(slices.Clone(context), status...)
-	slices.Sort(lines)
-	surface := fold(lines)
-	lines = append(lines, digestLine)
-	slices.Sort(lines)
-	return engine.SharedStateDigest{
-		Hash:      uint64(fold(lines)),
-		Positions: uint64(wd.Positions),
-		Kinetics:  uint64(wd.Kinetics),
-		Combat:    uint64(wd.Combat),
-		Context:   uint64(fold(context)),
-		Status:    uint64(fold(status)),
-		Surface:   uint64(surface),
-		Groups:    groups,
-	}
-}
-
 // Lines is the whole-instance surface: the both-domain digest, every context
 // record and every registry cell. simOnly drops the operator surface, which
 // describes how a run is watched and driven. Caller MUST hold the world lock.

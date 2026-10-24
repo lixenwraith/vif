@@ -11,21 +11,20 @@ import (
 type MessageType uint8
 
 // ByteKind is the family a frame's bytes are counted under, so a link's traffic is
-// read by what it carries: the command stream (epochs, syncs, digests), whole
+// read by what it carries: the command stream (epochs and syncs), whole
 // corrections, the repair exchange, and control.
 type ByteKind uint8
 
 const (
 	KindEpoch ByteKind = iota
 	KindSync
-	KindDigest
 	KindCorrection
 	KindRepair
 	KindControl
 	KindCount
 )
 
-var byteKindNames = [KindCount]string{"epoch", "sync", "digest", "correction", "repair", "control"}
+var byteKindNames = [KindCount]string{"epoch", "sync", "correction", "repair", "control"}
 
 func (k ByteKind) String() string { return byteKindNames[k] }
 
@@ -50,8 +49,6 @@ func (t MessageType) Kind() ByteKind {
 		return KindEpoch
 	case MsgStateSync:
 		return KindSync
-	case MsgStateDigest:
-		return KindDigest
 	case MsgStateCorrection, MsgStateSnapshot:
 		return KindCorrection
 	case MsgStateManifest, MsgStateRequest, MsgStateShard, MsgStateUnserved:
@@ -89,9 +86,8 @@ const (
 
 	// Game. 0x10 is reserved and stays so: raw participant input is not a message
 	// kind — a peer sends the resolved D-3 artifact, never the keystroke.
-	MsgStateSync   MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
-	MsgEvent       MessageType = 0x12 // Live: one closed barrier production epoch
-	MsgStateDigest MessageType = 0x13 // Live: periodic shared-world parity probe
+	MsgStateSync MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
+	MsgEvent     MessageType = 0x12 // Live: one closed barrier production epoch
 
 	// MsgLinkProbe and MsgLinkEcho are the only round trip the protocol times; every
 	// other measurement is one-directional. The transport answers a probe before it

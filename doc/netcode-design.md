@@ -4,8 +4,10 @@ The netcode as built, the readings that judge it, and what is still to change. v
 is not lockstep: every instance runs the whole Shared simulation at 20 ticks a
 second, a guest predicting it and the authority correcting it (multi-player §10.3),
 and the wire carries what a receiver cannot re-derive. §1 is the wire, §2 the
-correction pipeline, §3 the readings, §4 the approaches not yet landed, each with
-what of it is in and what it still needs, and §5 their order. Bare section numbers
+correction pipeline, §3 the readings, §4 phase 2, the approaches not yet landed in
+their batches, each with what of it is in and what it still needs, and §5 their
+order by iteration. Phase 1, four iterations in 2026-10, is what §1–§3 describe as
+built. Bare section numbers
 are this document's; "multi-player §n" is [Multiplayer](multi-player.md), which
 holds the session contract, event timing, membership and succession; "services §n"
 is [Services and networking](services-and-networking.md), which holds the
@@ -419,7 +421,7 @@ the pod authoring, 76 s at DEBUG on 2026-10-24, read from its log and journal:
   `w.combat`, `systems` and `w.positions`; a storm spawn was followed within four
   ticks by repairs of 499 and 558 cells across `meta`, `status`, `w.combat`,
   `w.header`, `w.member`, `w.positions` and `w.protection`, then `w.stormcircle`
-  pages, which is the open [storm divergence](todo.md#find-why-a-storm-spawn-diverges-on-a-guest).
+  pages, whose cause §3.5 found: the FSM's transition tick.
 - **The storm's bandwidth**: the committed copies the guest received carried 25–50 kB
   of crossing payload per five seconds between storms and 134–144 kB during one,
   three quarters of it `CombatAttackAreaCrossingRequest` and
@@ -429,12 +431,79 @@ the pod authoring, 76 s at DEBUG on 2026-10-24, read from its log and journal:
   own crossings, 40% as many bytes again, came back to it in full as the echo until
   a leaf's copy lost its frames (§1).
 
-## 4. What remains
+### 3.5 The divergence harness
+
+`VIF_DIVERGENCE=1 go test ./internal/app -run TestADivergenceOverAShapedLinkNamesItsRows -v`
+fights a host and a guest for 1,200 ticks over an in-process mesh link shaped both
+ways (`VIF_DIVERGENCE_SHAPE=latency,jitter,every,loss`, in ticks and frames: the
+default `3,3,97,0`, field-like `2,2,3,100`, sparse `3,3,251,0`, heavy `4,3,41,50`),
+paces the guest from its real trim and step, raises a storm at one simulation tick
+on both ends, and prints what the link cost (late commits, late copies, pages and
+cells repaired, keyframes, the lead held and the highest held) with every repair
+and the rows it moved (`snapshot.RepairRows`, the debug record `repair rows`). It
+is deterministic run to run, so a change is read against the same fight; the fight
+is chaotic, so pages repaired move with any change of timing and the late counts
+are the robust measure. Pacing's dynamics were also modelled apart, by integrating
+`paceDecision` against periodic spikes.
+
+What it found on 2026-10-24, each fixed where it says:
+
+- The lead never learned a spike. A spike on a stream holds a burst of epochs that
+  return committed in one tick, and `noteOwnCommit` kept the newest epoch's age,
+  so `ownLead` read the steady age every tick. It reads the worst age since its
+  last reading now. Symmetric field-like link: late commits 309 to 1, keyframes 14
+  to 6, hash-only 52% to 92%.
+- A spike's reading fell out of a 60-tick window before a slow link's next spike
+  came, so every spike beyond a second cost a correction; a reading holds 300
+  ticks (`NetworkBarrierRenegotiateTicks`). Rare spikes: late commits 33 to 0,
+  pages repaired 32 to 3.
+- The pace window of ten epochs forgot a down-path spike before the next; it reads
+  60 (`NetworkPaceWindow`; heavy jitter: late copies 71 to 0, pages repaired 215 to
+  49). Both settings cost a jittery link one to three ticks of lead and a steady
+  link nothing.
+- The recurring eight-cell `systems` repair at the site was adaptation and genetic
+  pending every species death: a player-domain drain's death pends on one instance
+  alone. Only a tracked death pends.
+- A 22-cell `status` repair was `explosion.triggered`, a shared system counting a
+  player-domain death's burst where it happened; `explosion.*` left the compared
+  surface. `nav.recomputes` and `swarm.physics_steps` differ too, only when the
+  state they derive from does, and stay: they are the cheap detector a navigation
+  test relies on, and their page repair rides the state's.
+- A storm raised at one simulation tick on both ends never diverges, over any
+  shape. The storm-spawn divergence at the site is the FSM's transition tick:
+  `StormSetup` is entered from `QuasarEscalate` on `kills.quasar`, a per-instance
+  counter (`kills.*` is outside the compared surface and re-syncs only through a
+  `meta` repair), and a guest's FSM ticks on predicted kills too. Two instances
+  enter the state on different ticks, spawn from different draws, and a keyframe
+  follows. The fix is structural: §4's first item of batch 2.
+
+The four shapes before and after, 1,200 ticks each (pg pages repaired, kf
+keyframes, lc late commits, lcp late copies, lead held at the end with the highest
+in brackets; before is the lead's newest-age reading at the 60-tick and ten-epoch
+windows, measured before the harness paced):
+
+```
+shape      before                                after
+fieldlike  pg 298  kf 14  lc 309  lead 5 (6)     pg 10  kf 2  lc 1  lcp 0  lead 8 (9)
+rare       pg 16   kf 3   lc 43   lead 7 (7)     pg 3   kf 3  lc 0  lcp 6  lead 11 (13)
+sparse     pg 1    kf 2   lc 6    lead 7 (7)     pg 1   kf 1  lc 3  lcp 4  lead 9 (10)
+heavy      pg 300  kf 7   lc 57   lead 9 (9)     pg 49  kf 7  lc 0  lcp 0  lead 14 (15)
+```
+
+What the harness cannot yet read: a Shared FSM transition (the embedded scenario
+has none in its 1,200 ticks), and the pacing knobs other than their steady state.
+
+## 4. Phase 2
 
 Each approach below says what of it is in, what is left and what it needs before
 it can land. The costs name what it lowers (−), raises (+) and leaves (·), in the
 order CPU, memory, bandwidth, latency; projections come from §1's figures and §3
-confirms or refutes them.
+confirms or refutes them. Phase 1 closed with the six-tick wire digest retired
+(protocol 22): parity is the correction exchange's, and a repair names its sections
+in `snapshot.repair_sections`. The approaches are in three batches, and §5 orders
+them by iteration.
+
+### Batch 1: the wire
 
 ### A binary wire codec
 
@@ -458,10 +527,17 @@ confirms or refutes them.
 - Why: it removes reflection-driven JSON and TOML from every crossing at every
   receiver, allocation and garbage a WASM guest pays for on its one thread, and
   shrinks the replay suffix (`SnapshotReplayBytes`) and the barrier schedule.
-- Needs: step 2 is a decision, since it makes the journal binary and bumps its
-  schema; slices (`WeaponCharges`) take a length prefix; class, stamped-domain and
-  `Derived` rules stay in the registry; the codec's version joins the protocol the
-  handshake compares.
+- Decided (2026-10-24): both steps land, on the codec simulation over the site's
+  storm traffic, where the attack crossings' TOML deflates 16× and the binary 3.6×
+  and the binary halves the framed bytes. Fixed arrays encode as fixed fields,
+  which closes the TOML encoder's zero-array omission (`DamageImmunitySpent`
+  returns to the component's type). A batch event for the attack crossings is
+  subsumed: a hit's cost is its envelope, and hits leave seven sites for one
+  handler, so a batch would be a second mechanism for what the envelope removes.
+- Needs: step 2 makes the journal binary and bumps its schema; slices
+  (`WeaponCharges`) take a length prefix; class, stamped-domain and `Derived` rules
+  stay in the registry; the codec's version joins the protocol the handshake
+  compares.
 
 ### Owner syncs that carry what changed
 
@@ -479,6 +555,28 @@ confirms or refutes them.
 - Needs: the envelope first; determinism and latency are unchanged, a sync still
   committed at one tick for every instance and mirrors already lagging by
   `NetworkSyncTicks`.
+
+### Batch 2: one tick for every instance
+
+### Shared FSM transitions committed by the authority
+
+- Costs: · · · +; complexity medium. The lead's latency on a transition, nothing on
+  a tick.
+- Projected: the storm-spawn keyframe (§3.4, 499 and 558 cells) and the repairs that
+  follow a region transition gone; the `StormSetup` liveness workaround with them.
+- In: the FSM position is compared and repaired (`fsm` section), and an installed
+  state runs no on_enter, so a region whose on_enter spawns carries a liveness
+  transition for a receiver corrected into it.
+- Left: the authority's FSM alone evaluates the guards of a Shared region; a
+  transition it takes is a crossing (`EventFSMTransition`: region, target)
+  committed and applied at one tick on every instance, which runs on_enter there,
+  so a storm spawns from the same draws everywhere. A guest's FSM stops evaluating
+  Shared guards and follows. The `fsm` section stays as the proof.
+- Needs: a decision on guards that read per-instance status (`StatusIntCompare` on
+  `kills.*`, `StateTimeExceeds` on the tick-derived `TimeInState`), which become
+  the authority's by construction; the journal records the crossing as any other;
+  the harness runs over a transition once a scenario the embedded one spawns has
+  one within its ticks.
 
 ### Converged answers without a capture
 
@@ -509,6 +607,8 @@ confirms or refutes them.
   `hash/maphash`; it bumps `ManifestVersion` and `Schema`.
 - Needs: nothing but the bump. Row reuse already limits hashing to rows that
   changed, and §3.3 found the share real.
+
+### Batch 3: formats and structure
 
 ### Keyframes from cached sections
 
@@ -575,52 +675,47 @@ confirms or refutes them.
 - Needs: the binary row codec first, which makes the pages small; CPU rises only on
   serving a page, which is rare.
 
-### One parity mechanism
-
-- Costs: − · − ·; complexity low.
-- Projected: one O(E) hash every six ticks per instance less.
-- In: nothing. Every instance hashes its Shared world for a `MsgStateDigest` every
-  `NetworkDigestTicks` (6), a diagnostic that feeds `network.digest_mismatches` and
-  `network.drift_part` and nothing else (D-23), while the manifest exchange proves
-  parity every round, section by section.
-- Left: name the first differing section in the manifest answer, a finer
-  `network.drift_part` than a digest category, and retire the digest.
-- Needs: a decision. Drift would be seen at the cadence (2–60 ticks) rather than
-  every six, and the digest's noise on a mixed-platform session (multi-player §8
-  item 3) would go with it.
-
-### Relay trees chosen by the authority
-
-- Costs: · · − +; complexity high.
-- Projected: root egress O(N²) → O(N·k).
-- In: the protocol relays down a tree already: `-relay`, `forwardDown`, proofs
-  carried in a relay's answer.
-- Left: the authority assigning participants with measured headroom to relay
-  subtrees; choosing and re-choosing relays, re-parenting when one leaves, a relayed
-  participant inheriting its relay's cadence
-  ([domain model §7](domain-design.md#7-current-limits)), a browser relaying only
-  its own bots. The open parts are in
-  [Reach a relay](todo.md#reach-a-relay-without-an-address-in-hand).
-- Needs: a measured uplink that the star does not fit. Decided against on §3.3: the
-  star's wire at 16 players on the tower is 108 kB/s after deflate, which a home
-  uplink carries; a fleet pod runs out of CPU first. A relayed participant's
-  crossings and corrections take one more hop, and its lead rises by that hop.
-
 ### Dropped
 
 - A dictionary deflate for every link in place of the per-link stream: refuted by
   §3.3, no preset dictionary matches a per-link history that compresses 7–12×.
+- Relay trees chosen by the authority: the star's wire at 16 players on the tower is
+  108 kB/s after deflate, which a home uplink carries, and a fleet pod runs out of
+  CPU first; a relayed participant's crossings and corrections take one more hop
+  and its lead rises by it. A relay stays what a person chooses (`-relay`), and the
+  relay's own open items stay in the todo
+  ([Reach a relay](todo.md#reach-a-relay-without-an-address-in-hand) and the two
+  after it): they are correctness, not topology.
+- A wire digest beside the manifest exchange: retired in phase 1's last iteration,
+  3.6–4.1% of a guest's CPU for a category the repair names exactly.
 
-## 5. Order
+## 5. Order and iterations
 
-Each approach lands alone, re-runs §3's matrix and updates §3.1.
+Phase 2 is five iterations, one task, branch and PR each, in this order. Each lands
+alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
 
-1. The envelope of the binary wire codec: low complexity, local to
-   `internal/event`, `internal/system/network.go` and `internal/network`, the
-   command stream's constants for their CPU.
-2. Converged answers without a capture, the faster hash, keyframes from cached
-   sections, the capture as a copy: CPU and lock at the map limit, on the host and
-   the browser guest.
-3. The codec's payload step, the binary row codec, retention by reference, the
-   projection out of the lock, one parity mechanism, relay trees: formats and
-   structure, the journal, the capture schema, retention, topology.
+1. The codec's envelope (batch 1): local to `internal/event`,
+   `internal/system/network.go` and `internal/network`; protocol 23.
+2. The codec's payload (batch 1): the generated payload codec, the journal's binary
+   schema with its name table, `vif-log` rendering it, fixed arrays as fixed
+   fields; then owner syncs with a presence mask on the envelope.
+3. Shared FSM transitions committed by the authority (batch 2), with a scenario the
+   harness can run over a transition.
+4. Converged answers without a capture and the faster hash (batch 2): CPU and the
+   lock at the map limit, on the host and the browser guest.
+5. Keyframes from cached sections (batch 3); the binary row codec, retention by
+   reference and the projection out of the lock follow it as iterations of their
+   own when their batch is reached.
+
+### Brief for the next session
+
+Repository `lixenwraith/vif`, AGENTS.md is the contract. Netcode phase 2, iteration
+1 of 5 (§5): the binary wire codec's envelope. Read [netcode design](netcode-design.md)
+§1, §4 batch 1 and §5, then `internal/event/wire.go`, `internal/system/network.go`
+(`scheduleCrossings`, `forwardDown`, `sendOwn`) and `internal/network/protocol.go`.
+Land the envelope alone: event as registry index, domain as a flag byte, sequence
+and apply tick as varint deltas, payloads still TOML; bump the protocol; one test
+per rule; re-run §3.1's matrix and §3.5's harness over its four shapes and update
+§3.1 and §3.5. Issues to close on the way: none open against the envelope; the
+payload step (iteration 2) folds the TOML zero-array omission. Do not start the
+payload, the FSM crossing or the converged answer in this iteration.

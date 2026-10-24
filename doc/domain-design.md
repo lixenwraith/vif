@@ -592,11 +592,13 @@ flood gate and keyframe floor count subtrees.
 
 ### 4.3 Runtime parity
 
-Instances exchange category digests for the same surface as `SnapshotShared`. A
-mismatch counts in `network.digest_mismatches` and `network.drift_part` names the
-first part that differs: `positions`, `kinetics`, `combat`, `context`, `status`,
-`snapshot` (the compared status surface), or `combined`. Guests are expected to
-differ provisionally, so a digest is diagnostic rather than a failure state.
+Parity is the correction exchange's: every manifest compares the `SnapshotShared`
+surface section by section at the cadence, and a repair names the sections it
+moved in `snapshot.repair_sections` and, at debug, the rows. Guests are expected to
+differ provisionally, so a repair is the ordinary course rather than a failure
+state. The wire digest that once sampled the same surface every six ticks is
+retired: it cost an O(E) hash per instance and named a category the repair names
+exactly.
 
 The player-visible distinction is one badge. A connected link shows
 `nP:s <round trip>` — n players and this instance's hexadecimal slot s, omitted for

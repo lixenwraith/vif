@@ -40,6 +40,12 @@ type LinkShape struct {
 	// rather than random, so a failing case is a case rather than a seed.
 	LossEvery int
 
+	// JitterTicks is a spike: the frames of every JitterEvery-th drain wait this
+	// many drains more. In order, so a jittered link varies its wait and reorders
+	// nothing, as a stream does.
+	JitterTicks uint64
+	JitterEvery uint64
+
 	// BytesPerTick is the release budget, spent as a token bucket rather than
 	// reset each tick. That distinction is the whole of whether the shape is a
 	// bottleneck at all: a budget that resets lets one frame of any size through
@@ -288,11 +294,14 @@ func (p *MeshPort) deliver(in Inbound) {
 			return // nothing repairs one
 		}
 	}
-	p.queue = append(p.queue, meshFrame{
-		in:        in,
-		releaseAt: p.drains + p.shape.LatencyTicks,
-		bytes:     bytes,
-	})
+	releaseAt := p.drains + p.shape.LatencyTicks
+	if p.shape.JitterEvery > 0 && p.drains%p.shape.JitterEvery == 0 {
+		releaseAt += p.shape.JitterTicks
+	}
+	if n := len(p.queue); n > 0 && p.queue[n-1].releaseAt > releaseAt {
+		releaseAt = p.queue[n-1].releaseAt
+	}
+	p.queue = append(p.queue, meshFrame{in: in, releaseAt: releaseAt, bytes: bytes})
 }
 
 // Send delivers to one direct neighbour; a participant that is not a neighbour is

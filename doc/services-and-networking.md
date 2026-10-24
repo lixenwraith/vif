@@ -486,8 +486,7 @@ and a first join retry only a `RetrySoon` kind, a rejoin anything but
 `RetryNever`) and the advice its player reads after the reason, and `cmd/vif` exits
 76 (`EX_PROTOCOL`) on any refusal. A relayed join's answer (`RelayAdmit`) and a peer
 link's `MsgAck` carry the same two fields. Gameplay uses `MsgEvent` for a closed crossing
-epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
-`MsgStateDigest` for the periodic shared-world parity probe. Authority travels as
+epoch and `MsgStateSync` for one owner-authored cursor snapshot. Authority travels as
 `MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the
 `MsgStateManifest`/`MsgStateRequest`/`MsgStateShard` exchange below, with
 `MsgStateUnserved` (0x2B) as the answer a retention holder gives to a request it
@@ -772,16 +771,11 @@ keeps the bounds every participant adopted. A departure is itself a crossing and
 rather than where the lost link was observed, and only then is its identity free: a
 dial in between is assigned another, not one the departure would disconnect.
 
-At the same six-tick cadence, direct neighbours exchange a run/tick/hash sample
-over the exact `SnapshotShared` comparison surface, plus category hashes. A
-mismatch increments `network.digest_mismatches`, names the first differing part in
-`network.drift_part` (`positions`, `kinetics`, `combat`, `context`, `status`, then
-`snapshot` for the rest of the surface, or `combined`) with `network.drift_tick`,
-and that is the whole of what it does: a drift gauge rather than a verdict, because
-under an authoritative host a guest is *expected* to disagree between corrections.
-The digest does not flood, select an authority, repair state, or cross a partition;
-what repairs a disagreement is the next correction. Losing the comparison edge is
-still reported directly. A guest that loses the authority runs the succession (§8);
+Parity is proved by the correction exchange alone: every manifest compares the
+whole Shared surface section by section, and a repair names the sections it moved
+in `snapshot.repair_sections` and, at debug, the rows. A guest is *expected* to
+disagree between corrections under an authoritative host, so a disagreement is a
+repair, not a verdict. A guest that loses the authority runs the succession (§8);
 one that reaches no candidate goes on from the last authoritative state, a
 person's run in a session of its own and any other as a local fork that keeps
 `Host lost` visible.

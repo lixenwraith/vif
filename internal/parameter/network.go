@@ -17,9 +17,11 @@ const (
 	NetworkBarrierMaxDelayTicks = 20
 
 	// NetworkBarrierRenegotiateTicks is how long a reading holds in the window a
-	// participant's own lead is the worst of: raising is immediate, lowering waits
-	// until every higher reading has aged out.
-	NetworkBarrierRenegotiateTicks = SnapshotFloorKeyframeTicks
+	// guest's lead is the worst of: five seconds, longer than the spikes a slow link
+	// repeats, so a spike's lead holds until the next instead of costing a correction
+	// each time, as it did at a keyframe period (divergence harness, rare spikes: late
+	// commits 33 to 0).
+	NetworkBarrierRenegotiateTicks = 300
 
 	// NetworkRelaySlackTicks is the tick a guest's lead leaves the authority to
 	// relay its crossing to the others before they reach the tick it names.
@@ -37,8 +39,10 @@ const (
 
 	// NetworkPaceWindow is how many authority epochs one pace decision reads; the
 	// latest of them trims and the earliest steps, so one jittered arrival never
-	// moves whole ticks.
-	NetworkPaceWindow = 10
+	// moves whole ticks. A second of them: a spike holds the margin it asked for
+	// until the next within the second, where ten forgot it before the next came
+	// (divergence harness, heavy jitter: late copies 71 to 0).
+	NetworkPaceWindow = 60
 
 	// NetworkPaceGainPermille and NetworkPacePermilleMax trim a guest's tick interval
 	// per tick of error, and bound it: the world runs up to 8% fast or slow while a
@@ -87,11 +91,6 @@ const (
 	// NetworkSyncTicks is the period between owner-authored state syncs (D-13).
 	// One cursor's payload is small; this keeps remote presentation responsive.
 	NetworkSyncTicks = 6
-
-	// NetworkDigestTicks is the cadence of runtime D-11 parity probes. Adjacent
-	// peers compare the same completed tick; equality on every mesh edge implies
-	// equality across the connected session graph.
-	NetworkDigestTicks = NetworkSyncTicks
 
 	// NetworkResyncNoticeTicks keeps the green SYNCED acknowledgement visible for
 	// one second after the last mismatching peer agrees again.

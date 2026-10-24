@@ -1084,26 +1084,6 @@ type LinkMeasuringPort interface {
 	ObserveTransfer(peer uint32, bytes int64, elapsed time.Duration)
 }
 
-// SharedStateDigest is the runtime D-11 probe. Hash covers the complete
-// SnapshotShared surface; the parts make a mismatch diagnosable without sending
-// the snapshot itself.
-type SharedStateDigest struct {
-	Hash      uint64
-	Positions uint64
-	Kinetics  uint64
-	Combat    uint64
-	Context   uint64
-	Status    uint64
-	Surface   uint64
-
-	// Groups is one hash per snapshot record, present only when the caller asked
-	// for detail. A category tells an operator that the status surface disagrees;
-	// it does not say which of a hundred records did, and a host's own log cannot
-	// answer that on its own. Detail is therefore requested only while a mismatch
-	// is already outstanding, so a healthy session carries none of it.
-	Groups map[string]uint64
-}
-
 // NetworkResource wraps the network endpoint for ECS access
 type NetworkResource struct {
 	Port              NetworkPort
@@ -1112,11 +1092,6 @@ type NetworkResource struct {
 	// Relay is the participant this instance joined through when that is not the
 	// authority: its path to the authority until a link to it exists.
 	Relay uint32
-	// SharedDigest is supplied by App after construction. NetworkSystem calls it
-	// under the world lock when publishing periodic runtime parity probes.
-	// detail asks for the per-record breakdown, which costs a map on the wire and
-	// is worth it only once something disagrees.
-	SharedDigest func(detail bool) SharedStateDigest
 
 	// OnDeparture is called under the world lock when a participant leaves. A final
 	// departure returns its identity to the pool; any other leaves the identity and

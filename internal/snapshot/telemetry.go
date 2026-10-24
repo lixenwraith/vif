@@ -53,6 +53,7 @@ type Telemetry struct {
 	// What a repair moved, and what refused one. Neither refusal is an error
 	// condition: both end at the keyframe fallback.
 	PagesRepaired, EntitiesRepaired, CellsRepaired    *atomic.Int64
+	RepairSections                                    *status.AtomicString // the sections the last repair moved
 	ProofFailures, BaselineRefusals, KeyframeFallback *atomic.Int64
 
 	// HashUS is what indexing and comparing one capture cost outside the world
@@ -79,6 +80,7 @@ type Telemetry struct {
 func NewTelemetry(reg *status.Registry) Telemetry {
 	i := reg.Ints.Get
 	b := reg.Bools.Get
+	t := reg.Strings.Get
 	return Telemetry{
 		CaptureUS: i("snapshot.capture_us"), EncodeUS: i("snapshot.encode_us"),
 		Bytes: i("snapshot.bytes"), StageUS: i("snapshot.stage_us"),
@@ -123,6 +125,7 @@ func NewTelemetry(reg *status.Registry) Telemetry {
 
 		PagesRepaired: i("snapshot.pages_repaired"), EntitiesRepaired: i("snapshot.entities_repaired"),
 		CellsRepaired: i("snapshot.cells_repaired"), ProofFailures: i("snapshot.proof_failures"),
+		RepairSections:   t("snapshot.repair_sections"),
 		BaselineRefusals: i("snapshot.baseline_refusals"),
 		KeyframeFallback: i("snapshot.keyframe_fallbacks"),
 

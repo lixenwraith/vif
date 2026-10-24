@@ -846,7 +846,7 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		}
 		p.deferred = append(p.deferred, msg)
 		return true
-	case MsgEvent, MsgStateSync, MsgBundle, MsgStateDigest, MsgDisconnect:
+	case MsgEvent, MsgStateSync, MsgBundle, MsgDisconnect:
 		// Bound peer-controlled admission buffering; retain the newest traffic.
 		if len(p.deferred) >= maxDeferredJoinFrames {
 			p.deferred = append(p.deferred[:0], p.deferred[1:]...)
