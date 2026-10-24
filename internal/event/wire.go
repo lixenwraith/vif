@@ -135,6 +135,10 @@ type WireBatch struct {
 	// committed, on the committed copy: the up path and the clock offset its
 	// producer's lead has to cover, measured where it matters.
 	Age int64 `json:"age,omitempty"`
+
+	// Leaf marks a producer with nobody behind it, which reads its committed copy
+	// for its age alone: the copy returns to it without the frames it holds.
+	Leaf bool `json:"leaf,omitempty"`
 }
 
 // NewWireFrame encodes one crossing; an unencodable payload reports why rather
