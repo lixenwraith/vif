@@ -3,7482 +3,1898 @@
 package event
 
 import (
-	"encoding/binary"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/pkg/audio/model"
-	"math"
 	"time"
+	"unsafe"
 )
 
-func (p *LevelSetupPayload) appendPayload(b []byte) []byte { return appendLevelSetupPayload(b, p) }
-func (p *LevelSetupPayload) readPayload(r *wireReader)     { readLevelSetupPayload(r, p) }
-
-func appendLevelSetupPayload(b []byte, p *LevelSetupPayload) []byte {
-	var m [1]byte
-	if p.Width != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.ClearEntities {
-		m[0] |= 1 << 2
-	}
-	if p.PreserveLoot {
-		m[0] |= 1 << 3
-	}
-	if p.CropOnResize {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	return b
-}
-
-func readLevelSetupPayload(r *wireReader, p *LevelSetupPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Height = int(r.varint())
-	}
-	p.ClearEntities = m[0]&(1<<2) != 0
-	p.PreserveLoot = m[0]&(1<<3) != 0
-	p.CropOnResize = m[0]&(1<<4) != 0
-}
-
-func (p *ScreenResizePayload) appendPayload(b []byte) []byte { return appendScreenResizePayload(b, p) }
-func (p *ScreenResizePayload) readPayload(r *wireReader)     { readScreenResizePayload(r, p) }
-
-func appendScreenResizePayload(b []byte, p *ScreenResizePayload) []byte {
-	var m [1]byte
-	if p.Width != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	return b
-}
-
-func readScreenResizePayload(r *wireReader, p *ScreenResizePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Height = int(r.varint())
-	}
-}
-
-func (p *SoundRequestPayload) appendPayload(b []byte) []byte { return appendSoundRequestPayload(b, p) }
-func (p *SoundRequestPayload) readPayload(r *wireReader)     { readSoundRequestPayload(r, p) }
-
-func appendSoundRequestPayload(b []byte, p *SoundRequestPayload) []byte {
-	var m [1]byte
-	if p.ID != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Name != "" {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.ID))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Name)))
-		b = append(b, p.Name...)
-	}
-	return b
-}
-
-func readSoundRequestPayload(r *wireReader, p *SoundRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.ID = model.SoundID(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Name = string(r.bytes(r.uvarint()))
-	}
-}
-
-func (p *SoundMuteTogglePayload) appendPayload(b []byte) []byte {
-	return appendSoundMuteTogglePayload(b, p)
-}
-func (p *SoundMuteTogglePayload) readPayload(r *wireReader) { readSoundMuteTogglePayload(r, p) }
-
-func appendSoundMuteTogglePayload(b []byte, p *SoundMuteTogglePayload) []byte {
-	var m [1]byte
-	if p.Mode != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Mask != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Mode))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Mask))
-	}
-	return b
-}
-
-func readSoundMuteTogglePayload(r *wireReader, p *SoundMuteTogglePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Mode = SoundMuteToggleMode(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Mask = uint8(r.uvarint())
-	}
-}
-
-func (p *AudioMuteChangedPayload) appendPayload(b []byte) []byte {
-	return appendAudioMuteChangedPayload(b, p)
-}
-func (p *AudioMuteChangedPayload) readPayload(r *wireReader) { readAudioMuteChangedPayload(r, p) }
-
-func appendAudioMuteChangedPayload(b []byte, p *AudioMuteChangedPayload) []byte {
-	var m [1]byte
-	if p.Mask != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Mask))
-	}
-	return b
-}
-
-func readAudioMuteChangedPayload(r *wireReader, p *AudioMuteChangedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Mask = uint8(r.uvarint())
-	}
-}
-
-func (p *MusicStartPayload) appendPayload(b []byte) []byte { return appendMusicStartPayload(b, p) }
-func (p *MusicStartPayload) readPayload(r *wireReader)     { readMusicStartPayload(r, p) }
-
-func appendMusicStartPayload(b []byte, p *MusicStartPayload) []byte {
-	var m [1]byte
-	if p.BPM != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Intensity != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.BeatPattern != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.MelodyPattern != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.BPM))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Intensity))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.BeatPattern))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.MelodyPattern))
-	}
-	return b
-}
-
-func readMusicStartPayload(r *wireReader, p *MusicStartPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.BPM = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Intensity = model.Intensity(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.BeatPattern = model.PatternID(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.MelodyPattern = model.PatternID(r.varint())
-	}
-}
-
-func (p *BeatPatternRequestPayload) appendPayload(b []byte) []byte {
-	return appendBeatPatternRequestPayload(b, p)
-}
-func (p *BeatPatternRequestPayload) readPayload(r *wireReader) { readBeatPatternRequestPayload(r, p) }
-
-func appendBeatPatternRequestPayload(b []byte, p *BeatPatternRequestPayload) []byte {
-	var m [1]byte
-	if p.Pattern != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.TransitionTime != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Quantize {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Pattern))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.TransitionTime))
-	}
-	return b
-}
-
-func readBeatPatternRequestPayload(r *wireReader, p *BeatPatternRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Pattern = model.PatternID(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.TransitionTime = time.Duration(r.varint())
-	}
-	p.Quantize = m[0]&(1<<2) != 0
-}
-
-func (p *MelodyNoteRequestPayload) appendPayload(b []byte) []byte {
-	return appendMelodyNoteRequestPayload(b, p)
-}
-func (p *MelodyNoteRequestPayload) readPayload(r *wireReader) { readMelodyNoteRequestPayload(r, p) }
-
-func appendMelodyNoteRequestPayload(b []byte, p *MelodyNoteRequestPayload) []byte {
-	var m [1]byte
-	if p.Note != 0 {
-		m[0] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.Velocity)) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Instrument != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Note))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Velocity)))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Instrument))
-	}
-	return b
-}
-
-func readMelodyNoteRequestPayload(r *wireReader, p *MelodyNoteRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Note = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Velocity = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Instrument = model.InstrumentType(r.varint())
-	}
-}
-
-func (p *MelodyPatternRequestPayload) appendPayload(b []byte) []byte {
-	return appendMelodyPatternRequestPayload(b, p)
-}
-func (p *MelodyPatternRequestPayload) readPayload(r *wireReader) {
-	readMelodyPatternRequestPayload(r, p)
-}
-
-func appendMelodyPatternRequestPayload(b []byte, p *MelodyPatternRequestPayload) []byte {
-	var m [1]byte
-	if p.Pattern != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.RootNote != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.TransitionTime != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Quantize {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Pattern))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.RootNote))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.TransitionTime))
-	}
-	return b
-}
-
-func readMelodyPatternRequestPayload(r *wireReader, p *MelodyPatternRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Pattern = model.PatternID(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.RootNote = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.TransitionTime = time.Duration(r.varint())
-	}
-	p.Quantize = m[0]&(1<<3) != 0
-}
-
-func (p *MusicIntensityPayload) appendPayload(b []byte) []byte {
-	return appendMusicIntensityPayload(b, p)
-}
-func (p *MusicIntensityPayload) readPayload(r *wireReader) { readMusicIntensityPayload(r, p) }
-
-func appendMusicIntensityPayload(b []byte, p *MusicIntensityPayload) []byte {
-	var m [1]byte
-	if p.Intensity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.TransitionTime != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Intensity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.TransitionTime))
-	}
-	return b
-}
-
-func readMusicIntensityPayload(r *wireReader, p *MusicIntensityPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Intensity = model.Intensity(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.TransitionTime = time.Duration(r.varint())
-	}
-}
-
-func (p *MusicTempoPayload) appendPayload(b []byte) []byte { return appendMusicTempoPayload(b, p) }
-func (p *MusicTempoPayload) readPayload(r *wireReader)     { readMusicTempoPayload(r, p) }
-
-func appendMusicTempoPayload(b []byte, p *MusicTempoPayload) []byte {
-	var m [1]byte
-	if p.BPM != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.TransitionTime != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.BPM))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.TransitionTime))
-	}
-	return b
-}
-
-func readMusicTempoPayload(r *wireReader, p *MusicTempoPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.BPM = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.TransitionTime = time.Duration(r.varint())
-	}
-}
-
-func (p *MusicSeedPayload) appendPayload(b []byte) []byte { return appendMusicSeedPayload(b, p) }
-func (p *MusicSeedPayload) readPayload(r *wireReader)     { readMusicSeedPayload(r, p) }
-
-func appendMusicSeedPayload(b []byte, p *MusicSeedPayload) []byte {
-	var m [1]byte
-	if p.Seed != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Seed))
-	}
-	return b
-}
-
-func readMusicSeedPayload(r *wireReader, p *MusicSeedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Seed = int64(r.varint())
-	}
-}
-
-func (p *MusicSwingPayload) appendPayload(b []byte) []byte { return appendMusicSwingPayload(b, p) }
-func (p *MusicSwingPayload) readPayload(r *wireReader)     { readMusicSwingPayload(r, p) }
-
-func appendMusicSwingPayload(b []byte, p *MusicSwingPayload) []byte {
-	var m [1]byte
-	if math.Float64bits(float64(p.Amount)) != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Amount)))
-	}
-	return b
-}
-
-func readMusicSwingPayload(r *wireReader, p *MusicSwingPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Amount = float64(math.Float64frombits(r.u64()))
-	}
-}
-
-func (p *NetworkConnectPayload) appendPayload(b []byte) []byte {
-	return appendNetworkConnectPayload(b, p)
-}
-func (p *NetworkConnectPayload) readPayload(r *wireReader) { readNetworkConnectPayload(r, p) }
-
-func appendNetworkConnectPayload(b []byte, p *NetworkConnectPayload) []byte {
-	var m [1]byte
-	if p.PeerID != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.PeerID))
-	}
-	return b
-}
-
-func readNetworkConnectPayload(r *wireReader, p *NetworkConnectPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.PeerID = uint32(r.uvarint())
-	}
-}
-
-func (p *NetworkDisconnectPayload) appendPayload(b []byte) []byte {
-	return appendNetworkDisconnectPayload(b, p)
-}
-func (p *NetworkDisconnectPayload) readPayload(r *wireReader) { readNetworkDisconnectPayload(r, p) }
-
-func appendNetworkDisconnectPayload(b []byte, p *NetworkDisconnectPayload) []byte {
-	var m [1]byte
-	if p.PeerID != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.PeerID))
-	}
-	return b
-}
-
-func readNetworkDisconnectPayload(r *wireReader, p *NetworkDisconnectPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.PeerID = uint32(r.uvarint())
-	}
-}
-
-func appendCursorRecord(b []byte, p *CursorRecord) []byte {
-	var m [1]byte
-	if len(p.Charges) != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Energy != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Heat != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.HitPoints != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Charges)))
-		for i0 := range p.Charges {
-			b = binary.AppendVarint(b, int64(p.Charges[i0]))
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Energy))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Heat))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.HitPoints))
-	}
-	return b
-}
-
-func readCursorRecord(r *wireReader, p *CursorRecord) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Charges = make([]int, r.length())
-		for i0 := range p.Charges {
-			p.Charges[i0] = int(r.varint())
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Energy = int64(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Heat = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.HitPoints = int(r.varint())
-	}
-}
-
-func (p *ParticipantJoinedPayload) appendPayload(b []byte) []byte {
-	return appendParticipantJoinedPayload(b, p)
-}
-func (p *ParticipantJoinedPayload) readPayload(r *wireReader) { readParticipantJoinedPayload(r, p) }
-
-func appendParticipantJoinedPayload(b []byte, p *ParticipantJoinedPayload) []byte {
-	var m [1]byte
-	if p.Record != nil {
-		m[0] |= 1 << 0
-	}
-	if p.Claim != "" {
-		m[0] |= 1 << 1
-	}
-	if p.Holder != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Participant != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Slot != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = appendCursorRecord(b, p.Record)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Claim)))
-		b = append(b, p.Claim...)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Holder))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Participant))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readParticipantJoinedPayload(r *wireReader, p *ParticipantJoinedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Record = new(CursorRecord)
-		readCursorRecord(r, p.Record)
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Claim = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Holder = uint32(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Participant = uint32(r.uvarint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-}
-
-func (p *ParticipantDepartedPayload) appendPayload(b []byte) []byte {
-	return appendParticipantDepartedPayload(b, p)
-}
-func (p *ParticipantDepartedPayload) readPayload(r *wireReader) { readParticipantDepartedPayload(r, p) }
-
-func appendParticipantDepartedPayload(b []byte, p *ParticipantDepartedPayload) []byte {
-	var m [1]byte
-	if p.Dismissed {
-		m[0] |= 1 << 0
-	}
-	if p.Participant != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Slot != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Participant))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readParticipantDepartedPayload(r *wireReader, p *ParticipantDepartedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	p.Dismissed = m[0]&(1<<0) != 0
-	if m[0]&(1<<1) != 0 {
-		p.Participant = uint32(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-}
-
-func (p *PlayoutLeadPayload) appendPayload(b []byte) []byte { return appendPlayoutLeadPayload(b, p) }
-func (p *PlayoutLeadPayload) readPayload(r *wireReader)     { readPlayoutLeadPayload(r, p) }
-
-func appendPlayoutLeadPayload(b []byte, p *PlayoutLeadPayload) []byte {
-	var m [1]byte
-	if p.Ticks != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Ticks))
-	}
-	return b
-}
-
-func readPlayoutLeadPayload(r *wireReader, p *PlayoutLeadPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Ticks = uint64(r.uvarint())
-	}
-}
-
-func (p *CursorStatePayload) appendPayload(b []byte) []byte { return appendCursorStatePayload(b, p) }
-func (p *CursorStatePayload) readPayload(r *wireReader)     { readCursorStatePayload(r, p) }
-
-func appendCursorStatePayload(b []byte, p *CursorStatePayload) []byte {
-	var m [4]byte
-	if len(p.WeaponCharges) != 0 {
-		m[0] |= 1 << 0
-	}
-	if len(p.WeaponCooldown) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Entity != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Seq != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Energy != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.Heat != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Overheat != 0 {
-		m[0] |= 1 << 6
-	}
-	if math.Float64bits(float64(p.ShieldRadiusX)) != 0 {
-		m[0] |= 1 << 7
-	}
-	if math.Float64bits(float64(p.ShieldRadiusY)) != 0 {
-		m[1] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.ShieldInvRxSq)) != 0 {
-		m[1] |= 1 << 1
-	}
-	if math.Float64bits(float64(p.ShieldInvRySq)) != 0 {
-		m[1] |= 1 << 2
-	}
-	if p.BoostRemaining != 0 {
-		m[1] |= 1 << 3
-	}
-	if p.BoostTotal != 0 {
-		m[1] |= 1 << 4
-	}
-	if p.MainFireCooldown != 0 {
-		m[1] |= 1 << 5
-	}
-	if p.HitPoints != 0 {
-		m[1] |= 1 << 6
-	}
-	if p.DamageImmunity != 0 {
-		m[1] |= 1 << 7
-	}
-	if p.DamageImmunitySpent != ([10]uint32{}) {
-		m[2] |= 1 << 0
-	}
-	if p.ErrorFlash != 0 {
-		m[2] |= 1 << 1
-	}
-	if p.BurstFlash != 0 {
-		m[2] |= 1 << 2
-	}
-	if p.BlinkRemaining != 0 {
-		m[2] |= 1 << 3
-	}
-	if p.BlinkType != 0 {
-		m[2] |= 1 << 4
-	}
-	if p.BlinkLevel != 0 {
-		m[2] |= 1 << 5
-	}
-	if p.Slot != 0 {
-		m[2] |= 1 << 6
-	}
-	if p.EmberActive {
-		m[2] |= 1 << 7
-	}
-	if p.ShieldActive {
-		m[3] |= 1 << 0
-	}
-	if p.BoostActive {
-		m[3] |= 1 << 1
-	}
-	if p.BlinkActive {
-		m[3] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.WeaponCharges)))
-		for i0 := range p.WeaponCharges {
-			b = binary.AppendVarint(b, int64(p.WeaponCharges[i0]))
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.WeaponCooldown)))
-		for i0 := range p.WeaponCooldown {
-			b = binary.AppendVarint(b, int64(p.WeaponCooldown[i0]))
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Seq))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Energy))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.Heat))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendVarint(b, int64(p.Overheat))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.ShieldRadiusX)))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.ShieldRadiusY)))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.ShieldInvRxSq)))
-	}
-	if m[1]&(1<<2) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.ShieldInvRySq)))
-	}
-	if m[1]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.BoostRemaining))
-	}
-	if m[1]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.BoostTotal))
-	}
-	if m[1]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.MainFireCooldown))
-	}
-	if m[1]&(1<<6) != 0 {
-		b = binary.AppendVarint(b, int64(p.HitPoints))
-	}
-	if m[1]&(1<<7) != 0 {
-		b = binary.AppendVarint(b, int64(p.DamageImmunity))
-	}
-	if m[2]&(1<<0) != 0 {
-		for i0 := range p.DamageImmunitySpent {
-			b = binary.AppendUvarint(b, uint64(p.DamageImmunitySpent[i0]))
-		}
-	}
-	if m[2]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.ErrorFlash))
-	}
-	if m[2]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.BurstFlash))
-	}
-	if m[2]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.BlinkRemaining))
-	}
-	if m[2]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.BlinkType))
-	}
-	if m[2]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.BlinkLevel))
-	}
-	if m[2]&(1<<6) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readCursorStatePayload(r *wireReader, p *CursorStatePayload) {
-	var m [4]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.WeaponCharges = make([]int, r.length())
-		for i0 := range p.WeaponCharges {
-			p.WeaponCharges[i0] = int(r.varint())
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.WeaponCooldown = make([]int64, r.length())
-		for i0 := range p.WeaponCooldown {
-			p.WeaponCooldown[i0] = int64(r.varint())
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Seq = uint64(r.uvarint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Energy = int64(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.Heat = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.Overheat = int(r.varint())
-	}
-	if m[0]&(1<<7) != 0 {
-		p.ShieldRadiusX = float64(math.Float64frombits(r.u64()))
-	}
-	if m[1]&(1<<0) != 0 {
-		p.ShieldRadiusY = float64(math.Float64frombits(r.u64()))
-	}
-	if m[1]&(1<<1) != 0 {
-		p.ShieldInvRxSq = float64(math.Float64frombits(r.u64()))
-	}
-	if m[1]&(1<<2) != 0 {
-		p.ShieldInvRySq = float64(math.Float64frombits(r.u64()))
-	}
-	if m[1]&(1<<3) != 0 {
-		p.BoostRemaining = int64(r.varint())
-	}
-	if m[1]&(1<<4) != 0 {
-		p.BoostTotal = int64(r.varint())
-	}
-	if m[1]&(1<<5) != 0 {
-		p.MainFireCooldown = int64(r.varint())
-	}
-	if m[1]&(1<<6) != 0 {
-		p.HitPoints = int(r.varint())
-	}
-	if m[1]&(1<<7) != 0 {
-		p.DamageImmunity = int64(r.varint())
-	}
-	if m[2]&(1<<0) != 0 {
-		for i0 := range p.DamageImmunitySpent {
-			p.DamageImmunitySpent[i0] = uint32(r.uvarint())
-		}
-	}
-	if m[2]&(1<<1) != 0 {
-		p.ErrorFlash = int64(r.varint())
-	}
-	if m[2]&(1<<2) != 0 {
-		p.BurstFlash = int64(r.varint())
-	}
-	if m[2]&(1<<3) != 0 {
-		p.BlinkRemaining = int64(r.varint())
-	}
-	if m[2]&(1<<4) != 0 {
-		p.BlinkType = int(r.varint())
-	}
-	if m[2]&(1<<5) != 0 {
-		p.BlinkLevel = int(r.varint())
-	}
-	if m[2]&(1<<6) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-	p.EmberActive = m[2]&(1<<7) != 0
-	p.ShieldActive = m[3]&(1<<0) != 0
-	p.BoostActive = m[3]&(1<<1) != 0
-	p.BlinkActive = m[3]&(1<<2) != 0
-}
-
-func (p *SessionStatePayload) appendPayload(b []byte) []byte { return appendSessionStatePayload(b, p) }
-func (p *SessionStatePayload) readPayload(r *wireReader)     { readSessionStatePayload(r, p) }
-
-func appendSessionStatePayload(b []byte, p *SessionStatePayload) []byte {
-	var m [1]byte
-	if p.Live {
-		m[0] |= 1 << 0
-	}
-	if p.Participant != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Authority != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.SeatsOnly {
-		m[0] |= 1 << 3
-	}
-	if p.Peers != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Participant))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Authority))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Peers))
-	}
-	return b
-}
-
-func readSessionStatePayload(r *wireReader, p *SessionStatePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	p.Live = m[0]&(1<<0) != 0
-	if m[0]&(1<<1) != 0 {
-		p.Participant = uint32(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Authority = uint32(r.uvarint())
-	}
-	p.SeatsOnly = m[0]&(1<<3) != 0
-	if m[0]&(1<<4) != 0 {
-		p.Peers = uint32(r.uvarint())
-	}
-}
-
-func (p *GameResetPayload) appendPayload(b []byte) []byte { return appendGameResetPayload(b, p) }
-func (p *GameResetPayload) readPayload(r *wireReader)     { readGameResetPayload(r, p) }
-
-func appendGameResetPayload(b []byte, p *GameResetPayload) []byte {
-	var m [1]byte
-	if p.Purge {
-		m[0] |= 1 << 0
-	}
-	if p.Wait {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	return b
-}
-
-func readGameResetPayload(r *wireReader, p *GameResetPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	p.Purge = m[0]&(1<<0) != 0
-	p.Wait = m[0]&(1<<1) != 0
-}
-
-func (p *MetaStatusMessagePayload) appendPayload(b []byte) []byte {
-	return appendMetaStatusMessagePayload(b, p)
-}
-func (p *MetaStatusMessagePayload) readPayload(r *wireReader) { readMetaStatusMessagePayload(r, p) }
-
-func appendMetaStatusMessagePayload(b []byte, p *MetaStatusMessagePayload) []byte {
-	var m [1]byte
-	if p.Message != "" {
-		m[0] |= 1 << 0
-	}
-	if p.Alert {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Message)))
-		b = append(b, p.Message...)
-	}
-	return b
-}
-
-func readMetaStatusMessagePayload(r *wireReader, p *MetaStatusMessagePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Message = string(r.bytes(r.uvarint()))
-	}
-	p.Alert = m[0]&(1<<1) != 0
-}
-
-func (p *MetaSystemCommandPayload) appendPayload(b []byte) []byte {
-	return appendMetaSystemCommandPayload(b, p)
-}
-func (p *MetaSystemCommandPayload) readPayload(r *wireReader) { readMetaSystemCommandPayload(r, p) }
-
-func appendMetaSystemCommandPayload(b []byte, p *MetaSystemCommandPayload) []byte {
-	var m [1]byte
-	if p.SystemName != "" {
-		m[0] |= 1 << 0
-	}
-	if p.Enabled {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.SystemName)))
-		b = append(b, p.SystemName...)
-	}
-	return b
-}
-
-func readMetaSystemCommandPayload(r *wireReader, p *MetaSystemCommandPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.SystemName = string(r.bytes(r.uvarint()))
-	}
-	p.Enabled = m[0]&(1<<1) != 0
-}
-
-func (p *GamePausePayload) appendPayload(b []byte) []byte { return appendGamePausePayload(b, p) }
-func (p *GamePausePayload) readPayload(r *wireReader)     { readGamePausePayload(r, p) }
-
-func appendGamePausePayload(b []byte, p *GamePausePayload) []byte {
-	var m [1]byte
-	if p.Paused {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	return b
-}
-
-func readGamePausePayload(r *wireReader, p *GamePausePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	p.Paused = m[0]&(1<<0) != 0
-}
-
-func (p *GameSpeedPayload) appendPayload(b []byte) []byte { return appendGameSpeedPayload(b, p) }
-func (p *GameSpeedPayload) readPayload(r *wireReader)     { readGameSpeedPayload(r, p) }
-
-func appendGameSpeedPayload(b []byte, p *GameSpeedPayload) []byte {
-	var m [1]byte
-	if p.Num != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Den != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Num))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Den))
-	}
-	return b
-}
-
-func readGameSpeedPayload(r *wireReader, p *GameSpeedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Num = int64(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Den = int64(r.varint())
-	}
-}
-
-func (p *GameStepPayload) appendPayload(b []byte) []byte { return appendGameStepPayload(b, p) }
-func (p *GameStepPayload) readPayload(r *wireReader)     { readGameStepPayload(r, p) }
-
-func appendGameStepPayload(b []byte, p *GameStepPayload) []byte {
-	var m [1]byte
-	if p.Mode != "" {
-		m[0] |= 1 << 0
-	}
-	if p.Region != "" {
-		m[0] |= 1 << 1
-	}
-	if p.Event != "" {
-		m[0] |= 1 << 2
-	}
-	if p.Ticks != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Num != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.Den != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Pause {
-		m[0] |= 1 << 6
-	}
-	if p.Off {
-		m[0] |= 1 << 7
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Mode)))
-		b = append(b, p.Mode...)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Region)))
-		b = append(b, p.Region...)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Event)))
-		b = append(b, p.Event...)
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Ticks))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Num))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.Den))
-	}
-	return b
-}
-
-func readGameStepPayload(r *wireReader, p *GameStepPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Mode = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Region = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Event = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Ticks = int64(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Num = int64(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.Den = int64(r.varint())
-	}
-	p.Pause = m[0]&(1<<6) != 0
-	p.Off = m[0]&(1<<7) != 0
-}
-
-func (p *FSMRegionPayload) appendPayload(b []byte) []byte { return appendFSMRegionPayload(b, p) }
-func (p *FSMRegionPayload) readPayload(r *wireReader)     { readFSMRegionPayload(r, p) }
-
-func appendFSMRegionPayload(b []byte, p *FSMRegionPayload) []byte {
-	var m [1]byte
-	if p.Op != "" {
-		m[0] |= 1 << 0
-	}
-	if p.Region != "" {
-		m[0] |= 1 << 1
-	}
-	if p.State != "" {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Op)))
-		b = append(b, p.Op...)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Region)))
-		b = append(b, p.Region...)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.State)))
-		b = append(b, p.State...)
-	}
-	return b
-}
-
-func readFSMRegionPayload(r *wireReader, p *FSMRegionPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Op = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Region = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.State = string(r.bytes(r.uvarint()))
-	}
-}
-
-func (p *NuggetCollectedPayload) appendPayload(b []byte) []byte {
-	return appendNuggetCollectedPayload(b, p)
-}
-func (p *NuggetCollectedPayload) readPayload(r *wireReader) { readNuggetCollectedPayload(r, p) }
-
-func appendNuggetCollectedPayload(b []byte, p *NuggetCollectedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readNuggetCollectedPayload(r *wireReader, p *NuggetCollectedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *NuggetDestroyedPayload) appendPayload(b []byte) []byte {
-	return appendNuggetDestroyedPayload(b, p)
-}
-func (p *NuggetDestroyedPayload) readPayload(r *wireReader) { readNuggetDestroyedPayload(r, p) }
-
-func appendNuggetDestroyedPayload(b []byte, p *NuggetDestroyedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readNuggetDestroyedPayload(r *wireReader, p *NuggetDestroyedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *NuggetJumpRequestPayload) appendPayload(b []byte) []byte {
-	return appendNuggetJumpRequestPayload(b, p)
-}
-func (p *NuggetJumpRequestPayload) readPayload(r *wireReader) { readNuggetJumpRequestPayload(r, p) }
-
-func appendNuggetJumpRequestPayload(b []byte, p *NuggetJumpRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readNuggetJumpRequestPayload(r *wireReader, p *NuggetJumpRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *GoldSpawnedPayload) appendPayload(b []byte) []byte { return appendGoldSpawnedPayload(b, p) }
-func (p *GoldSpawnedPayload) readPayload(r *wireReader)     { readGoldSpawnedPayload(r, p) }
-
-func appendGoldSpawnedPayload(b []byte, p *GoldSpawnedPayload) []byte {
-	var m [1]byte
-	if p.HeaderEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Length != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.HeaderEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Length))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	return b
-}
-
-func readGoldSpawnedPayload(r *wireReader, p *GoldSpawnedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.HeaderEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Length = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-}
-
-func (p *GoldCompletionPayload) appendPayload(b []byte) []byte {
-	return appendGoldCompletionPayload(b, p)
-}
-func (p *GoldCompletionPayload) readPayload(r *wireReader) { readGoldCompletionPayload(r, p) }
-
-func appendGoldCompletionPayload(b []byte, p *GoldCompletionPayload) []byte {
-	var m [1]byte
-	if p.HeaderEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Entity != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.HeaderEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readGoldCompletionPayload(r *wireReader, p *GoldCompletionPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.HeaderEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *GoldJumpRequestPayload) appendPayload(b []byte) []byte {
-	return appendGoldJumpRequestPayload(b, p)
-}
-func (p *GoldJumpRequestPayload) readPayload(r *wireReader) { readGoldJumpRequestPayload(r, p) }
-
-func appendGoldJumpRequestPayload(b []byte, p *GoldJumpRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readGoldJumpRequestPayload(r *wireReader, p *GoldJumpRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func appendColorRGB(b []byte, p *color.RGB) []byte {
-	var m [1]byte
-	if p.R != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.G != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.B != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.R))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.G))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.B))
-	}
-	return b
-}
-
-func readColorRGB(r *wireReader, p *color.RGB) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.R = uint8(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.G = uint8(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.B = uint8(r.uvarint())
-	}
-}
-
-func (p *SplashTimerRequestPayload) appendPayload(b []byte) []byte {
-	return appendSplashTimerRequestPayload(b, p)
-}
-func (p *SplashTimerRequestPayload) readPayload(r *wireReader) { readSplashTimerRequestPayload(r, p) }
-
-func appendSplashTimerRequestPayload(b []byte, p *SplashTimerRequestPayload) []byte {
-	var m [2]byte
-	if p.AnchorEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	m[0] |= 1 << 1
-	if p.OriginX != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.OriginY != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.MarginLeft != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.MarginRight != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.MarginTop != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.MarginBottom != 0 {
-		m[0] |= 1 << 7
-	}
-	if p.Duration != 0 {
-		m[1] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.AnchorEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = appendColorRGB(b, &p.Color)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginX))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginY))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.MarginLeft))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.MarginRight))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendVarint(b, int64(p.MarginTop))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendVarint(b, int64(p.MarginBottom))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	return b
-}
-
-func readSplashTimerRequestPayload(r *wireReader, p *SplashTimerRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.AnchorEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		readColorRGB(r, &p.Color)
-	}
-	if m[0]&(1<<2) != 0 {
-		p.OriginX = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.OriginY = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.MarginLeft = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.MarginRight = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.MarginTop = int(r.varint())
-	}
-	if m[0]&(1<<7) != 0 {
-		p.MarginBottom = int(r.varint())
-	}
-	if m[1]&(1<<0) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-}
-
-func (p *SplashTimerCancelPayload) appendPayload(b []byte) []byte {
-	return appendSplashTimerCancelPayload(b, p)
-}
-func (p *SplashTimerCancelPayload) readPayload(r *wireReader) { readSplashTimerCancelPayload(r, p) }
-
-func appendSplashTimerCancelPayload(b []byte, p *SplashTimerCancelPayload) []byte {
-	var m [1]byte
-	if p.AnchorEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.AnchorEntity))
-	}
-	return b
-}
-
-func readSplashTimerCancelPayload(r *wireReader, p *SplashTimerCancelPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.AnchorEntity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *EnergyAddPayload) appendPayload(b []byte) []byte { return appendEnergyAddPayload(b, p) }
-func (p *EnergyAddPayload) readPayload(r *wireReader)     { readEnergyAddPayload(r, p) }
-
-func appendEnergyAddPayload(b []byte, p *EnergyAddPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Delta != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Percentage {
-		m[0] |= 1 << 2
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Delta))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Type))
-	}
-	return b
-}
-
-func readEnergyAddPayload(r *wireReader, p *EnergyAddPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Delta = int(r.varint())
-	}
-	p.Percentage = m[0]&(1<<2) != 0
-	if m[0]&(1<<3) != 0 {
-		p.Type = component.EnergyDeltaType(r.varint())
-	}
-}
-
-func (p *EnergySetPayload) appendPayload(b []byte) []byte { return appendEnergySetPayload(b, p) }
-func (p *EnergySetPayload) readPayload(r *wireReader)     { readEnergySetPayload(r, p) }
-
-func appendEnergySetPayload(b []byte, p *EnergySetPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Value != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Weapons {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Value))
-	}
-	return b
-}
-
-func readEnergySetPayload(r *wireReader, p *EnergySetPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Value = int(r.varint())
-	}
-	p.Weapons = m[0]&(1<<2) != 0
-}
-
-func (p *EnergyCrossedZeroPayload) appendPayload(b []byte) []byte {
-	return appendEnergyCrossedZeroPayload(b, p)
-}
-func (p *EnergyCrossedZeroPayload) readPayload(r *wireReader) { readEnergyCrossedZeroPayload(r, p) }
-
-func appendEnergyCrossedZeroPayload(b []byte, p *EnergyCrossedZeroPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readEnergyCrossedZeroPayload(r *wireReader, p *EnergyCrossedZeroPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *EnergyGlyphConsumedPayload) appendPayload(b []byte) []byte {
-	return appendEnergyGlyphConsumedPayload(b, p)
-}
-func (p *EnergyGlyphConsumedPayload) readPayload(r *wireReader) { readEnergyGlyphConsumedPayload(r, p) }
-
-func appendEnergyGlyphConsumedPayload(b []byte, p *EnergyGlyphConsumedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Level != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Type))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Level))
-	}
-	return b
-}
-
-func readEnergyGlyphConsumedPayload(r *wireReader, p *EnergyGlyphConsumedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Type = component.GlyphType(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Level = component.GlyphLevel(r.varint())
-	}
-}
-
-func (p *EnergyBlinkPayload) appendPayload(b []byte) []byte { return appendEnergyBlinkPayload(b, p) }
-func (p *EnergyBlinkPayload) readPayload(r *wireReader)     { readEnergyBlinkPayload(r, p) }
-
-func appendEnergyBlinkPayload(b []byte, p *EnergyBlinkPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Level != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Type))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Level))
-	}
-	return b
-}
-
-func readEnergyBlinkPayload(r *wireReader, p *EnergyBlinkPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Type = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Level = int(r.varint())
-	}
-}
-
-func (p *EnergyBlinkStopPayload) appendPayload(b []byte) []byte {
-	return appendEnergyBlinkStopPayload(b, p)
-}
-func (p *EnergyBlinkStopPayload) readPayload(r *wireReader) { readEnergyBlinkStopPayload(r, p) }
-
-func appendEnergyBlinkStopPayload(b []byte, p *EnergyBlinkStopPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readEnergyBlinkStopPayload(r *wireReader, p *EnergyBlinkStopPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *ShieldActivatePayload) appendPayload(b []byte) []byte {
-	return appendShieldActivatePayload(b, p)
-}
-func (p *ShieldActivatePayload) readPayload(r *wireReader) { readShieldActivatePayload(r, p) }
-
-func appendShieldActivatePayload(b []byte, p *ShieldActivatePayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readShieldActivatePayload(r *wireReader, p *ShieldActivatePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *ShieldDeactivatePayload) appendPayload(b []byte) []byte {
-	return appendShieldDeactivatePayload(b, p)
-}
-func (p *ShieldDeactivatePayload) readPayload(r *wireReader) { readShieldDeactivatePayload(r, p) }
-
-func appendShieldDeactivatePayload(b []byte, p *ShieldDeactivatePayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readShieldDeactivatePayload(r *wireReader, p *ShieldDeactivatePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *ShieldDrainRequestPayload) appendPayload(b []byte) []byte {
-	return appendShieldDrainRequestPayload(b, p)
-}
-func (p *ShieldDrainRequestPayload) readPayload(r *wireReader) { readShieldDrainRequestPayload(r, p) }
-
-func appendShieldDrainRequestPayload(b []byte, p *ShieldDrainRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Value != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Value))
-	}
-	return b
-}
-
-func readShieldDrainRequestPayload(r *wireReader, p *ShieldDrainRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Value = int(r.varint())
-	}
-}
-
-func (p *WeaponAddRequestPayload) appendPayload(b []byte) []byte {
-	return appendWeaponAddRequestPayload(b, p)
-}
-func (p *WeaponAddRequestPayload) readPayload(r *wireReader) { readWeaponAddRequestPayload(r, p) }
-
-func appendWeaponAddRequestPayload(b []byte, p *WeaponAddRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Weapon != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Weapon))
-	}
-	return b
-}
-
-func readWeaponAddRequestPayload(r *wireReader, p *WeaponAddRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Weapon = component.WeaponType(r.varint())
-	}
-}
-
-func (p *WeaponRemoveRequestPayload) appendPayload(b []byte) []byte {
-	return appendWeaponRemoveRequestPayload(b, p)
-}
-func (p *WeaponRemoveRequestPayload) readPayload(r *wireReader) { readWeaponRemoveRequestPayload(r, p) }
-
-func appendWeaponRemoveRequestPayload(b []byte, p *WeaponRemoveRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Weapon != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Weapon))
-	}
-	return b
-}
-
-func readWeaponRemoveRequestPayload(r *wireReader, p *WeaponRemoveRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Weapon = component.WeaponType(r.varint())
-	}
-}
-
-func (p *WeaponFireRequestPayload) appendPayload(b []byte) []byte {
-	return appendWeaponFireRequestPayload(b, p)
-}
-func (p *WeaponFireRequestPayload) readPayload(r *wireReader) { readWeaponFireRequestPayload(r, p) }
-
-func appendWeaponFireRequestPayload(b []byte, p *WeaponFireRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readWeaponFireRequestPayload(r *wireReader, p *WeaponFireRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *FireSpecialRequestPayload) appendPayload(b []byte) []byte {
-	return appendFireSpecialRequestPayload(b, p)
-}
-func (p *FireSpecialRequestPayload) readPayload(r *wireReader) { readFireSpecialRequestPayload(r, p) }
-
-func appendFireSpecialRequestPayload(b []byte, p *FireSpecialRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readFireSpecialRequestPayload(r *wireReader, p *FireSpecialRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *MountRequestPayload) appendPayload(b []byte) []byte { return appendMountRequestPayload(b, p) }
-func (p *MountRequestPayload) readPayload(r *wireReader)     { readMountRequestPayload(r, p) }
-
-func appendMountRequestPayload(b []byte, p *MountRequestPayload) []byte {
-	var m [1]byte
-	if p.Host != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Weapon != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.IntervalMs != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Range != 0 {
-		m[0] |= 1 << 3
-	}
-	if math.Float64bits(float64(p.Muzzle)) != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.Lane != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Width != 0 {
-		m[0] |= 1 << 6
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Host))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Weapon))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.IntervalMs))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Range))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Muzzle)))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.Lane))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	return b
-}
-
-func readMountRequestPayload(r *wireReader, p *MountRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Host = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Weapon = component.WeaponType(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.IntervalMs = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Range = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Muzzle = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<5) != 0 {
-		p.Lane = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.Width = int(r.varint())
-	}
-}
-
-func (p *HeatAddRequestPayload) appendPayload(b []byte) []byte {
-	return appendHeatAddRequestPayload(b, p)
-}
-func (p *HeatAddRequestPayload) readPayload(r *wireReader) { readHeatAddRequestPayload(r, p) }
-
-func appendHeatAddRequestPayload(b []byte, p *HeatAddRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Delta != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Delta))
-	}
-	return b
-}
-
-func readHeatAddRequestPayload(r *wireReader, p *HeatAddRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Delta = int(r.varint())
-	}
-}
-
-func (p *HeatSetRequestPayload) appendPayload(b []byte) []byte {
-	return appendHeatSetRequestPayload(b, p)
-}
-func (p *HeatSetRequestPayload) readPayload(r *wireReader) { readHeatSetRequestPayload(r, p) }
-
-func appendHeatSetRequestPayload(b []byte, p *HeatSetRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Value != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Value))
-	}
-	return b
-}
-
-func readHeatSetRequestPayload(r *wireReader, p *HeatSetRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Value = int(r.varint())
-	}
-}
-
-func (p *HeatSpendRequestPayload) appendPayload(b []byte) []byte {
-	return appendHeatSpendRequestPayload(b, p)
-}
-func (p *HeatSpendRequestPayload) readPayload(r *wireReader) { readHeatSpendRequestPayload(r, p) }
-
-func appendHeatSpendRequestPayload(b []byte, p *HeatSpendRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Amount != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Amount))
-	}
-	return b
-}
-
-func readHeatSpendRequestPayload(r *wireReader, p *HeatSpendRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Amount = int(r.varint())
-	}
-}
-
-func (p *HeatBurstPayload) appendPayload(b []byte) []byte { return appendHeatBurstPayload(b, p) }
-func (p *HeatBurstPayload) readPayload(r *wireReader)     { readHeatBurstPayload(r, p) }
-
-func appendHeatBurstPayload(b []byte, p *HeatBurstPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readHeatBurstPayload(r *wireReader, p *HeatBurstPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *BoostActivatePayload) appendPayload(b []byte) []byte {
-	return appendBoostActivatePayload(b, p)
-}
-func (p *BoostActivatePayload) readPayload(r *wireReader) { readBoostActivatePayload(r, p) }
-
-func appendBoostActivatePayload(b []byte, p *BoostActivatePayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	return b
-}
-
-func readBoostActivatePayload(r *wireReader, p *BoostActivatePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-}
-
-func (p *BoostDeactivatePayload) appendPayload(b []byte) []byte {
-	return appendBoostDeactivatePayload(b, p)
-}
-func (p *BoostDeactivatePayload) readPayload(r *wireReader) { readBoostDeactivatePayload(r, p) }
-
-func appendBoostDeactivatePayload(b []byte, p *BoostDeactivatePayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readBoostDeactivatePayload(r *wireReader, p *BoostDeactivatePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *BoostExtendPayload) appendPayload(b []byte) []byte { return appendBoostExtendPayload(b, p) }
-func (p *BoostExtendPayload) readPayload(r *wireReader)     { readBoostExtendPayload(r, p) }
-
-func appendBoostExtendPayload(b []byte, p *BoostExtendPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	return b
-}
-
-func readBoostExtendPayload(r *wireReader, p *BoostExtendPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-}
-
-func (p *BoostRewardPayload) appendPayload(b []byte) []byte { return appendBoostRewardPayload(b, p) }
-func (p *BoostRewardPayload) readPayload(r *wireReader)     { readBoostRewardPayload(r, p) }
-
-func appendBoostRewardPayload(b []byte, p *BoostRewardPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readBoostRewardPayload(r *wireReader, p *BoostRewardPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *CharacterTypedPayload) appendPayload(b []byte) []byte {
-	return appendCharacterTypedPayload(b, p)
-}
-func (p *CharacterTypedPayload) readPayload(r *wireReader) { readCharacterTypedPayload(r, p) }
-
-func appendCharacterTypedPayload(b []byte, p *CharacterTypedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Char != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readCharacterTypedPayload(r *wireReader, p *CharacterTypedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Char = rune(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Y = int(r.varint())
-	}
-}
-
-func (p *DeleteRequestPayload) appendPayload(b []byte) []byte {
-	return appendDeleteRequestPayload(b, p)
-}
-func (p *DeleteRequestPayload) readPayload(r *wireReader) { readDeleteRequestPayload(r, p) }
-
-func appendDeleteRequestPayload(b []byte, p *DeleteRequestPayload) []byte {
-	var m [1]byte
-	if p.RangeType != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.StartX != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.EndX != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.StartY != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.EndY != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.RangeType))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.StartX))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.EndX))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.StartY))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.EndY))
-	}
-	return b
-}
-
-func readDeleteRequestPayload(r *wireReader, p *DeleteRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.RangeType = DeleteRangeType(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.StartX = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.EndX = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.StartY = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.EndY = int(r.varint())
-	}
-}
-
-func (p *KeyCapturePayload) appendPayload(b []byte) []byte { return appendKeyCapturePayload(b, p) }
-func (p *KeyCapturePayload) readPayload(r *wireReader)     { readKeyCapturePayload(r, p) }
-
-func appendKeyCapturePayload(b []byte, p *KeyCapturePayload) []byte {
-	var m [1]byte
-	if p.Keys != "" {
-		m[0] |= 1 << 0
-	}
-	if p.Entity != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Releases {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Keys)))
-		b = append(b, p.Keys...)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readKeyCapturePayload(r *wireReader, p *KeyCapturePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Keys = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	p.Releases = m[0]&(1<<2) != 0
-}
-
-func (p *InputPayload) appendPayload(b []byte) []byte { return appendInputPayload(b, p) }
-func (p *InputPayload) readPayload(r *wireReader)     { readInputPayload(r, p) }
-
-func appendInputPayload(b []byte, p *InputPayload) []byte {
-	var m [1]byte
-	if p.Slot != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Key != "" {
-		m[0] |= 1 << 1
-	}
-	if p.Source != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Tick != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Lost {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Key)))
-		b = append(b, p.Key...)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Source))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Tick))
-	}
-	return b
-}
-
-func readInputPayload(r *wireReader, p *InputPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Key = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Source = InputSource(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Tick = uint64(r.uvarint())
-	}
-	p.Lost = m[0]&(1<<4) != 0
-}
-
-func (p *InputReportPayload) appendPayload(b []byte) []byte { return appendInputReportPayload(b, p) }
-func (p *InputReportPayload) readPayload(r *wireReader)     { readInputReportPayload(r, p) }
-
-func appendInputReportPayload(b []byte, p *InputReportPayload) []byte {
-	var m [1]byte
-	if p.Slot != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Releases {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readInputReportPayload(r *wireReader, p *InputReportPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-	p.Releases = m[0]&(1<<1) != 0
-}
-
-func (p *PingGridRequestPayload) appendPayload(b []byte) []byte {
-	return appendPingGridRequestPayload(b, p)
-}
-func (p *PingGridRequestPayload) readPayload(r *wireReader) { readPingGridRequestPayload(r, p) }
-
-func appendPingGridRequestPayload(b []byte, p *PingGridRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	return b
-}
-
-func readPingGridRequestPayload(r *wireReader, p *PingGridRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-}
-
-func (p *MaterializeRequestPayload) appendPayload(b []byte) []byte {
-	return appendMaterializeRequestPayload(b, p)
-}
-func (p *MaterializeRequestPayload) readPayload(r *wireReader) { readMaterializeRequestPayload(r, p) }
-
-func appendMaterializeRequestPayload(b []byte, p *MaterializeRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Type))
-	}
-	return b
-}
-
-func readMaterializeRequestPayload(r *wireReader, p *MaterializeRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Type = component.SpawnType(r.varint())
-	}
-}
-
-func (p *MaterializeCompletedPayload) appendPayload(b []byte) []byte {
-	return appendMaterializeCompletedPayload(b, p)
-}
-func (p *MaterializeCompletedPayload) readPayload(r *wireReader) {
-	readMaterializeCompletedPayload(r, p)
-}
-
-func appendMaterializeCompletedPayload(b []byte, p *MaterializeCompletedPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Type))
-	}
-	return b
-}
-
-func readMaterializeCompletedPayload(r *wireReader, p *MaterializeCompletedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Type = component.SpawnType(r.varint())
-	}
-}
-
-func (p *MaterializeAreaRequestPayload) appendPayload(b []byte) []byte {
-	return appendMaterializeAreaRequestPayload(b, p)
-}
-func (p *MaterializeAreaRequestPayload) readPayload(r *wireReader) {
-	readMaterializeAreaRequestPayload(r, p)
-}
-
-func appendMaterializeAreaRequestPayload(b []byte, p *MaterializeAreaRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.AreaWidth != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.AreaHeight != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.AreaWidth))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.AreaHeight))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Type))
-	}
-	return b
-}
-
-func readMaterializeAreaRequestPayload(r *wireReader, p *MaterializeAreaRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.AreaWidth = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.AreaHeight = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Type = component.SpawnType(r.varint())
-	}
-}
-
-func (p *FlashRequestPayload) appendPayload(b []byte) []byte { return appendFlashRequestPayload(b, p) }
-func (p *FlashRequestPayload) readPayload(r *wireReader)     { readFlashRequestPayload(r, p) }
-
-func appendFlashRequestPayload(b []byte, p *FlashRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Char != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	return b
-}
-
-func readFlashRequestPayload(r *wireReader, p *FlashRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Char = rune(r.varint())
-	}
-}
-
-func appendCrossingID(b []byte, p *CrossingID) []byte {
-	var m [1]byte
-	if p.CrossingSource != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.CrossingSeq != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.CrossingSource))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.CrossingSeq))
-	}
-	return b
-}
-
-func readCrossingID(r *wireReader, p *CrossingID) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.CrossingSource = uint32(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.CrossingSeq = uint64(r.uvarint())
-	}
-}
-
-func (p *ExplosionRequestPayload) appendPayload(b []byte) []byte {
-	return appendExplosionRequestPayload(b, p)
-}
-func (p *ExplosionRequestPayload) readPayload(r *wireReader) { readExplosionRequestPayload(r, p) }
-
-func appendExplosionRequestPayload(b []byte, p *ExplosionRequestPayload) []byte {
-	var m [1]byte
-	m[0] |= 1 << 0
-	if p.Entity != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 3
-	}
-	if math.Float64bits(float64(p.Radius)) != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.Attack != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Charged {
-		m[0] |= 1 << 6
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = appendCrossingID(b, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Radius)))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.Attack))
-	}
-	return b
-}
-
-func readExplosionRequestPayload(r *wireReader, p *ExplosionRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		readCrossingID(r, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Radius = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<5) != 0 {
-		p.Attack = component.CombatAttackType(r.varint())
-	}
-	p.Charged = m[0]&(1<<6) != 0
-}
-
-func appendExplosionCenterEntry(b []byte, p *ExplosionCenterEntry) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readExplosionCenterEntry(r *wireReader, p *ExplosionCenterEntry) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-}
-
-func (p *ExplosionBatchRequestPayload) appendPayload(b []byte) []byte {
-	return appendExplosionBatchRequestPayload(b, p)
-}
-func (p *ExplosionBatchRequestPayload) readPayload(r *wireReader) {
-	readExplosionBatchRequestPayload(r, p)
-}
-
-func appendExplosionBatchRequestPayload(b []byte, p *ExplosionBatchRequestPayload) []byte {
-	var m [1]byte
-	m[0] |= 1 << 0
-	if len(p.Centers) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Entity != 0 {
-		m[0] |= 1 << 2
-	}
-	if math.Float64bits(float64(p.Radius)) != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Attack != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = appendCrossingID(b, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Centers)))
-		for i0 := range p.Centers {
-			b = appendExplosionCenterEntry(b, &p.Centers[i0])
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Radius)))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Attack))
-	}
-	return b
-}
-
-func readExplosionBatchRequestPayload(r *wireReader, p *ExplosionBatchRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		readCrossingID(r, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Centers = make([]ExplosionCenterEntry, r.length())
-		for i0 := range p.Centers {
-			readExplosionCenterEntry(r, &p.Centers[i0])
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Radius = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Attack = component.CombatAttackType(r.varint())
-	}
-}
-
-func (p *ExplosionVisualRequestPayload) appendPayload(b []byte) []byte {
-	return appendExplosionVisualRequestPayload(b, p)
-}
-func (p *ExplosionVisualRequestPayload) readPayload(r *wireReader) {
-	readExplosionVisualRequestPayload(r, p)
-}
-
-func appendExplosionVisualRequestPayload(b []byte, p *ExplosionVisualRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if math.Float64bits(float64(p.Radius)) != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Radius)))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Type))
-	}
-	return b
-}
-
-func readExplosionVisualRequestPayload(r *wireReader, p *ExplosionVisualRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Radius = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Type = ExplosionType(r.uvarint())
-	}
-}
-
-func (p *ExplosionVisualBatchRequestPayload) appendPayload(b []byte) []byte {
-	return appendExplosionVisualBatchRequestPayload(b, p)
-}
-func (p *ExplosionVisualBatchRequestPayload) readPayload(r *wireReader) {
-	readExplosionVisualBatchRequestPayload(r, p)
-}
-
-func appendExplosionVisualBatchRequestPayload(b []byte, p *ExplosionVisualBatchRequestPayload) []byte {
-	var m [1]byte
-	if len(p.Centers) != 0 {
-		m[0] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.Radius)) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Centers)))
-		for i0 := range p.Centers {
-			b = appendExplosionCenterEntry(b, &p.Centers[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Radius)))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Type))
-	}
-	return b
-}
-
-func readExplosionVisualBatchRequestPayload(r *wireReader, p *ExplosionVisualBatchRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Centers = make([]ExplosionCenterEntry, r.length())
-		for i0 := range p.Centers {
-			readExplosionCenterEntry(r, &p.Centers[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Radius = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Type = ExplosionType(r.uvarint())
-	}
-}
-
-func (p *PulseVisualRequestPayload) appendPayload(b []byte) []byte {
-	return appendPulseVisualRequestPayload(b, p)
-}
-func (p *PulseVisualRequestPayload) readPayload(r *wireReader) { readPulseVisualRequestPayload(r, p) }
-
-func appendPulseVisualRequestPayload(b []byte, p *PulseVisualRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Palette != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Palette))
-	}
-	return b
-}
-
-func readPulseVisualRequestPayload(r *wireReader, p *PulseVisualRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Palette = component.WeaponPalette(r.uvarint())
-	}
-}
-
-func (p *ParticleSpawnPayload) appendPayload(b []byte) []byte {
-	return appendParticleSpawnPayload(b, p)
-}
-func (p *ParticleSpawnPayload) readPayload(r *wireReader) { readParticleSpawnPayload(r, p) }
-
-func appendParticleSpawnPayload(b []byte, p *ParticleSpawnPayload) []byte {
-	var m [1]byte
-	if p.Behavior != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Char != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Level != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.SkipStartCell {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Behavior))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Level))
-	}
-	return b
-}
-
-func readParticleSpawnPayload(r *wireReader, p *ParticleSpawnPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Behavior = component.ParticleBehavior(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Char = rune(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Level = component.GlyphLevel(r.varint())
-	}
-	p.SkipStartCell = m[0]&(1<<5) != 0
-}
-
-func (p *ParticleWavePayload) appendPayload(b []byte) []byte { return appendParticleWavePayload(b, p) }
-func (p *ParticleWavePayload) readPayload(r *wireReader)     { readParticleWavePayload(r, p) }
-
-func appendParticleWavePayload(b []byte, p *ParticleWavePayload) []byte {
-	var m [1]byte
-	if p.Behavior != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Button != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Behavior))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Button))
-	}
-	return b
-}
-
-func readParticleWavePayload(r *wireReader, p *ParticleWavePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Behavior = component.ParticleBehavior(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Button = int(r.varint())
-	}
-}
-
-func (p *ParticleVortexPayload) appendPayload(b []byte) []byte {
-	return appendParticleVortexPayload(b, p)
-}
-func (p *ParticleVortexPayload) readPayload(r *wireReader) { readParticleVortexPayload(r, p) }
-
-func appendParticleVortexPayload(b []byte, p *ParticleVortexPayload) []byte {
-	var m [1]byte
-	if p.Behavior != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Button != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.DurationMs != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Behavior))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Button))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.DurationMs))
-	}
-	return b
-}
-
-func readParticleVortexPayload(r *wireReader, p *ParticleVortexPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Behavior = component.ParticleBehavior(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Button = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.DurationMs = int64(r.varint())
-	}
-}
-
-func (p *DeathRequestPayload) appendPayload(b []byte) []byte { return appendDeathRequestPayload(b, p) }
-func (p *DeathRequestPayload) readPayload(r *wireReader)     { readDeathRequestPayload(r, p) }
-
-func appendDeathRequestPayload(b []byte, p *DeathRequestPayload) []byte {
-	var m [1]byte
-	if len(p.Entities) != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.EffectEvent != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Behavior != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Entities)))
-		for i0 := range p.Entities {
-			b = binary.AppendUvarint(b, uint64(p.Entities[i0]))
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.EffectEvent))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Behavior))
-	}
-	return b
-}
-
-func readDeathRequestPayload(r *wireReader, p *DeathRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entities = make([]core.Entity, r.length())
-		for i0 := range p.Entities {
-			p.Entities[i0] = core.Entity(r.uvarint())
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.EffectEvent = EventType(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Behavior = component.ParticleBehavior(r.uvarint())
-	}
-}
-
-func (p *CompositeMemberDestroyedPayload) appendPayload(b []byte) []byte {
-	return appendCompositeMemberDestroyedPayload(b, p)
-}
-func (p *CompositeMemberDestroyedPayload) readPayload(r *wireReader) {
-	readCompositeMemberDestroyedPayload(r, p)
-}
-
-func appendCompositeMemberDestroyedPayload(b []byte, p *CompositeMemberDestroyedPayload) []byte {
-	var m [1]byte
-	if p.HeaderEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.MemberEntity != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Entity != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Char != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.RemainingCount != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.HeaderEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.MemberEntity))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.RemainingCount))
-	}
-	return b
-}
-
-func readCompositeMemberDestroyedPayload(r *wireReader, p *CompositeMemberDestroyedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.HeaderEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.MemberEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Char = rune(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.RemainingCount = int(r.varint())
-	}
-}
-
-func (p *CompositeIntegrityBreachPayload) appendPayload(b []byte) []byte {
-	return appendCompositeIntegrityBreachPayload(b, p)
-}
-func (p *CompositeIntegrityBreachPayload) readPayload(r *wireReader) {
-	readCompositeIntegrityBreachPayload(r, p)
-}
-
-func appendCompositeIntegrityBreachPayload(b []byte, p *CompositeIntegrityBreachPayload) []byte {
-	var m [1]byte
-	if p.HeaderEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Behavior != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.LostCount != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.RemainingCount != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.HeaderEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Behavior))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.LostCount))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.RemainingCount))
-	}
-	return b
-}
-
-func readCompositeIntegrityBreachPayload(r *wireReader, p *CompositeIntegrityBreachPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.HeaderEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Behavior = component.Behavior(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.LostCount = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.RemainingCount = int(r.varint())
-	}
-}
-
-func (p *CompositeDestroyRequestPayload) appendPayload(b []byte) []byte {
-	return appendCompositeDestroyRequestPayload(b, p)
-}
-func (p *CompositeDestroyRequestPayload) readPayload(r *wireReader) {
-	readCompositeDestroyRequestPayload(r, p)
-}
-
-func appendCompositeDestroyRequestPayload(b []byte, p *CompositeDestroyRequestPayload) []byte {
-	var m [1]byte
-	if p.HeaderEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Effect != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.HeaderEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Effect))
-	}
-	return b
-}
-
-func readCompositeDestroyRequestPayload(r *wireReader, p *CompositeDestroyRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.HeaderEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Effect = EventType(r.varint())
-	}
-}
-
-func (p *CursorSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendCursorSpawnRequestPayload(b, p)
-}
-func (p *CursorSpawnRequestPayload) readPayload(r *wireReader) { readCursorSpawnRequestPayload(r, p) }
-
-func appendCursorSpawnRequestPayload(b []byte, p *CursorSpawnRequestPayload) []byte {
-	var m [2]byte
-	if p.Record != nil {
-		m[0] |= 1 << 0
-	}
-	if p.Claim != "" {
-		m[0] |= 1 << 1
-	}
-	if p.Holder != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.Heat != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Energy != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.Slot != 0 {
-		m[0] |= 1 << 7
-	}
-	if p.Control != 0 {
-		m[1] |= 1 << 0
-	}
-	if p.PeerID != 0 {
-		m[1] |= 1 << 1
-	}
-	if p.Auto {
-		m[1] |= 1 << 2
-	}
-	if p.Center {
-		m[1] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = appendCursorRecord(b, p.Record)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Claim)))
-		b = append(b, p.Claim...)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Holder))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.Heat))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendVarint(b, int64(p.Energy))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Control))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.PeerID))
-	}
-	return b
-}
-
-func readCursorSpawnRequestPayload(r *wireReader, p *CursorSpawnRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Record = new(CursorRecord)
-		readCursorRecord(r, p.Record)
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Claim = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Holder = uint32(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.Heat = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.Energy = int(r.varint())
-	}
-	if m[0]&(1<<7) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-	if m[1]&(1<<0) != 0 {
-		p.Control = uint8(r.uvarint())
-	}
-	if m[1]&(1<<1) != 0 {
-		p.PeerID = uint32(r.uvarint())
-	}
-	p.Auto = m[1]&(1<<2) != 0
-	p.Center = m[1]&(1<<3) != 0
-}
-
-func (p *CursorSpawnedPayload) appendPayload(b []byte) []byte {
-	return appendCursorSpawnedPayload(b, p)
-}
-func (p *CursorSpawnedPayload) readPayload(r *wireReader) { readCursorSpawnedPayload(r, p) }
-
-func appendCursorSpawnedPayload(b []byte, p *CursorSpawnedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Slot != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readCursorSpawnedPayload(r *wireReader, p *CursorSpawnedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-}
-
-func (p *CursorArmRequestPayload) appendPayload(b []byte) []byte {
-	return appendCursorArmRequestPayload(b, p)
-}
-func (p *CursorArmRequestPayload) readPayload(r *wireReader) { readCursorArmRequestPayload(r, p) }
-
-func appendCursorArmRequestPayload(b []byte, p *CursorArmRequestPayload) []byte {
-	var m [1]byte
-	if p.Heat != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Energy != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Ember {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Heat))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Energy))
-	}
-	return b
-}
-
-func readCursorArmRequestPayload(r *wireReader, p *CursorArmRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Heat = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Energy = int(r.varint())
-	}
-	p.Ember = m[0]&(1<<2) != 0
-}
-
-func (p *CursorDespawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendCursorDespawnRequestPayload(b, p)
-}
-func (p *CursorDespawnRequestPayload) readPayload(r *wireReader) {
-	readCursorDespawnRequestPayload(r, p)
-}
-
-func appendCursorDespawnRequestPayload(b []byte, p *CursorDespawnRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Slot != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.All {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readCursorDespawnRequestPayload(r *wireReader, p *CursorDespawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-	p.All = m[0]&(1<<2) != 0
-}
-
-func (p *CursorDespawnedPayload) appendPayload(b []byte) []byte {
-	return appendCursorDespawnedPayload(b, p)
-}
-func (p *CursorDespawnedPayload) readPayload(r *wireReader) { readCursorDespawnedPayload(r, p) }
-
-func appendCursorDespawnedPayload(b []byte, p *CursorDespawnedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Slot != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readCursorDespawnedPayload(r *wireReader, p *CursorDespawnedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-}
-
-func (p *CursorWraithRequestPayload) appendPayload(b []byte) []byte {
-	return appendCursorWraithRequestPayload(b, p)
-}
-func (p *CursorWraithRequestPayload) readPayload(r *wireReader) { readCursorWraithRequestPayload(r, p) }
-
-func appendCursorWraithRequestPayload(b []byte, p *CursorWraithRequestPayload) []byte {
-	var m [1]byte
-	if p.Slot != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readCursorWraithRequestPayload(r *wireReader, p *CursorWraithRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-}
-
-func (p *CursorMoveRequestPayload) appendPayload(b []byte) []byte {
-	return appendCursorMoveRequestPayload(b, p)
-}
-func (p *CursorMoveRequestPayload) readPayload(r *wireReader) { readCursorMoveRequestPayload(r, p) }
-
-func appendCursorMoveRequestPayload(b []byte, p *CursorMoveRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Pointer {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readCursorMoveRequestPayload(r *wireReader, p *CursorMoveRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-	p.Pointer = m[0]&(1<<3) != 0
-}
-
-func (p *CursorMovedPayload) appendPayload(b []byte) []byte { return appendCursorMovedPayload(b, p) }
-func (p *CursorMovedPayload) readPayload(r *wireReader)     { readCursorMovedPayload(r, p) }
-
-func appendCursorMovedPayload(b []byte, p *CursorMovedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readCursorMovedPayload(r *wireReader, p *CursorMovedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-}
-
-func (p *CursorDefeatStatePayload) appendPayload(b []byte) []byte {
-	return appendCursorDefeatStatePayload(b, p)
-}
-func (p *CursorDefeatStatePayload) readPayload(r *wireReader) { readCursorDefeatStatePayload(r, p) }
-
-func appendCursorDefeatStatePayload(b []byte, p *CursorDefeatStatePayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Defeated {
-		m[0] |= 1 << 1
-	}
-	if p.ProducedTick != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.ProducedTick))
-	}
-	return b
-}
-
-func readCursorDefeatStatePayload(r *wireReader, p *CursorDefeatStatePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	p.Defeated = m[0]&(1<<1) != 0
-	if m[0]&(1<<2) != 0 {
-		p.ProducedTick = uint64(r.uvarint())
-	}
-}
-
-func (p *CursorSetLocalPayload) appendPayload(b []byte) []byte {
-	return appendCursorSetLocalPayload(b, p)
-}
-func (p *CursorSetLocalPayload) readPayload(r *wireReader) { readCursorSetLocalPayload(r, p) }
-
-func appendCursorSetLocalPayload(b []byte, p *CursorSetLocalPayload) []byte {
-	var m [1]byte
-	if p.Slot != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Slot))
-	}
-	return b
-}
-
-func readCursorSetLocalPayload(r *wireReader, p *CursorSetLocalPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Slot = uint8(r.uvarint())
-	}
-}
-
-func (p *SpeciesCreatedPayload) appendPayload(b []byte) []byte {
-	return appendSpeciesCreatedPayload(b, p)
-}
-func (p *SpeciesCreatedPayload) readPayload(r *wireReader) { readSpeciesCreatedPayload(r, p) }
-
-func appendSpeciesCreatedPayload(b []byte, p *SpeciesCreatedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Species != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.SubType != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.MemberCount != 0 {
-		m[0] |= 1 << 5
-	}
-	if len(p.Genes) != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.EvalID != 0 {
-		m[0] |= 1 << 7
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Species))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.SubType))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.MemberCount))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Genes)))
-		for i0 := range p.Genes {
-			b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Genes[i0])))
-		}
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.EvalID))
-	}
-	return b
-}
-
-func readSpeciesCreatedPayload(r *wireReader, p *SpeciesCreatedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Species = component.SpeciesType(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.SubType = uint8(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.MemberCount = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.Genes = make([]float64, r.length())
-		for i0 := range p.Genes {
-			p.Genes[i0] = float64(math.Float64frombits(r.u64()))
-		}
-	}
-	if m[0]&(1<<7) != 0 {
-		p.EvalID = uint64(r.uvarint())
-	}
-}
-
-func (p *SpeciesKilledPayload) appendPayload(b []byte) []byte {
-	return appendSpeciesKilledPayload(b, p)
-}
-func (p *SpeciesKilledPayload) readPayload(r *wireReader) { readSpeciesKilledPayload(r, p) }
-
-func appendSpeciesKilledPayload(b []byte, p *SpeciesKilledPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.KillerEntity != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Species != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.SubType != 0 {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.KillerEntity))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Species))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.SubType))
-	}
-	return b
-}
-
-func readSpeciesKilledPayload(r *wireReader, p *SpeciesKilledPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.KillerEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Species = component.SpeciesType(r.uvarint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.SubType = uint8(r.uvarint())
-	}
-}
-
-func (p *DrainDefeatedPayload) appendPayload(b []byte) []byte {
-	return appendDrainDefeatedPayload(b, p)
-}
-func (p *DrainDefeatedPayload) readPayload(r *wireReader) { readDrainDefeatedPayload(r, p) }
-
-func appendDrainDefeatedPayload(b []byte, p *DrainDefeatedPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readDrainDefeatedPayload(r *wireReader, p *DrainDefeatedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *FuseQuasarRequestPayload) appendPayload(b []byte) []byte {
-	return appendFuseQuasarRequestPayload(b, p)
-}
-func (p *FuseQuasarRequestPayload) readPayload(r *wireReader) { readFuseQuasarRequestPayload(r, p) }
-
-func appendFuseQuasarRequestPayload(b []byte, p *FuseQuasarRequestPayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readFuseQuasarRequestPayload(r *wireReader, p *FuseQuasarRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *FuseSwarmRequestPayload) appendPayload(b []byte) []byte {
-	return appendFuseSwarmRequestPayload(b, p)
-}
-func (p *FuseSwarmRequestPayload) readPayload(r *wireReader) { readFuseSwarmRequestPayload(r, p) }
-
-func appendFuseSwarmRequestPayload(b []byte, p *FuseSwarmRequestPayload) []byte {
-	var m [1]byte
-	if p.DrainA != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.DrainB != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Effect != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.DrainA))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.DrainB))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Effect))
-	}
-	return b
-}
-
-func readFuseSwarmRequestPayload(r *wireReader, p *FuseSwarmRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.DrainA = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.DrainB = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Effect = FuseEffect(r.varint())
-	}
-}
-
-func (p *CursorScopePayload) appendPayload(b []byte) []byte { return appendCursorScopePayload(b, p) }
-func (p *CursorScopePayload) readPayload(r *wireReader)     { readCursorScopePayload(r, p) }
-
-func appendCursorScopePayload(b []byte, p *CursorScopePayload) []byte {
-	var m [1]byte
-	if p.Entity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	return b
-}
-
-func readCursorScopePayload(r *wireReader, p *CursorScopePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *QuasarSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendQuasarSpawnRequestPayload(b, p)
-}
-func (p *QuasarSpawnRequestPayload) readPayload(r *wireReader) { readQuasarSpawnRequestPayload(r, p) }
-
-func appendQuasarSpawnRequestPayload(b []byte, p *QuasarSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readQuasarSpawnRequestPayload(r *wireReader, p *QuasarSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-}
-
-func (p *SwarmSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendSwarmSpawnRequestPayload(b, p)
-}
-func (p *SwarmSpawnRequestPayload) readPayload(r *wireReader) { readSwarmSpawnRequestPayload(r, p) }
-
-func appendSwarmSpawnRequestPayload(b []byte, p *SwarmSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readSwarmSpawnRequestPayload(r *wireReader, p *SwarmSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-}
-
-func (p *KrakenSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendKrakenSpawnRequestPayload(b, p)
-}
-func (p *KrakenSpawnRequestPayload) readPayload(r *wireReader) { readKrakenSpawnRequestPayload(r, p) }
-
-func appendKrakenSpawnRequestPayload(b []byte, p *KrakenSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readKrakenSpawnRequestPayload(r *wireReader, p *KrakenSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-}
-
-func (p *WindStartPayload) appendPayload(b []byte) []byte { return appendWindStartPayload(b, p) }
-func (p *WindStartPayload) readPayload(r *wireReader)     { readWindStartPayload(r, p) }
-
-func appendWindStartPayload(b []byte, p *WindStartPayload) []byte {
-	var m [1]byte
-	if math.Float64bits(float64(p.Force)) != 0 {
-		m[0] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.Direction)) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Force)))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Direction)))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	return b
-}
-
-func readWindStartPayload(r *wireReader, p *WindStartPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Force = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Direction = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-}
-
-func (p *DriftStartPayload) appendPayload(b []byte) []byte { return appendDriftStartPayload(b, p) }
-func (p *DriftStartPayload) readPayload(r *wireReader)     { readDriftStartPayload(r, p) }
-
-func appendDriftStartPayload(b []byte, p *DriftStartPayload) []byte {
-	var m [1]byte
-	if math.Float64bits(float64(p.Direction)) != 0 {
-		m[0] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.Speed)) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.DurationMs != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Direction)))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Speed)))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.DurationMs))
-	}
-	return b
-}
-
-func readDriftStartPayload(r *wireReader, p *DriftStartPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Direction = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Speed = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.DurationMs = int64(r.varint())
-	}
-}
-
-func (p *StrobeRequestPayload) appendPayload(b []byte) []byte {
-	return appendStrobeRequestPayload(b, p)
-}
-func (p *StrobeRequestPayload) readPayload(r *wireReader) { readStrobeRequestPayload(r, p) }
-
-func appendStrobeRequestPayload(b []byte, p *StrobeRequestPayload) []byte {
-	var m [1]byte
-	m[0] |= 1 << 0
-	if math.Float64bits(float64(p.Intensity)) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.DurationMs != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Cursor != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = appendColorRGB(b, &p.Color)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Intensity)))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.DurationMs))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Cursor))
-	}
-	return b
-}
-
-func readStrobeRequestPayload(r *wireReader, p *StrobeRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		readColorRGB(r, &p.Color)
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Intensity = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.DurationMs = int64(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Cursor = core.Entity(r.uvarint())
-	}
-}
-
-func (p *SpiritSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendSpiritSpawnRequestPayload(b, p)
-}
-func (p *SpiritSpawnRequestPayload) readPayload(r *wireReader) { readSpiritSpawnRequestPayload(r, p) }
-
-func appendSpiritSpawnRequestPayload(b []byte, p *SpiritSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.StartX != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.StartY != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.TargetX != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.TargetY != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Char != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.BaseColor != 0 {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.StartX))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.StartY))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.TargetX))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.TargetY))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.BaseColor))
-	}
-	return b
-}
-
-func readSpiritSpawnRequestPayload(r *wireReader, p *SpiritSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.StartX = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.StartY = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.TargetX = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.TargetY = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Char = rune(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.BaseColor = component.SpiritColor(r.varint())
-	}
-}
-
-func (p *LightningSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendLightningSpawnRequestPayload(b, p)
-}
-func (p *LightningSpawnRequestPayload) readPayload(r *wireReader) {
-	readLightningSpawnRequestPayload(r, p)
-}
-
-func appendLightningSpawnRequestPayload(b []byte, p *LightningSpawnRequestPayload) []byte {
-	var m [2]byte
-	if p.Owner != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.OriginX != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.OriginY != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.TargetX != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.TargetY != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.OriginEntity != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.TargetEntity != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.PathSeed != 0 {
-		m[0] |= 1 << 7
-	}
-	if p.Duration != 0 {
-		m[1] |= 1 << 0
-	}
-	if p.ColorType != 0 {
-		m[1] |= 1 << 1
-	}
-	if p.Tracked {
-		m[1] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Owner))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginX))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginY))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.TargetX))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.TargetY))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.OriginEntity))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetEntity))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.PathSeed))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.ColorType))
-	}
-	return b
-}
-
-func readLightningSpawnRequestPayload(r *wireReader, p *LightningSpawnRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Owner = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.OriginX = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.OriginY = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.TargetX = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.TargetY = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.OriginEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.TargetEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<7) != 0 {
-		p.PathSeed = uint64(r.uvarint())
-	}
-	if m[1]&(1<<0) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-	if m[1]&(1<<1) != 0 {
-		p.ColorType = component.LightningColorType(r.uvarint())
-	}
-	p.Tracked = m[1]&(1<<2) != 0
-}
-
-func (p *LightningUpdateRequestPayload) appendPayload(b []byte) []byte {
-	return appendLightningUpdateRequestPayload(b, p)
-}
-func (p *LightningUpdateRequestPayload) readPayload(r *wireReader) {
-	readLightningUpdateRequestPayload(r, p)
-}
-
-func appendLightningUpdateRequestPayload(b []byte, p *LightningUpdateRequestPayload) []byte {
-	var m [1]byte
-	if p.Owner != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.TargetX != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.TargetY != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Owner))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.TargetX))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.TargetY))
-	}
-	return b
-}
-
-func readLightningUpdateRequestPayload(r *wireReader, p *LightningUpdateRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Owner = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.TargetX = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.TargetY = int(r.varint())
-	}
-}
-
-func (p *LightningDespawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendLightningDespawnRequestPayload(b, p)
-}
-func (p *LightningDespawnRequestPayload) readPayload(r *wireReader) {
-	readLightningDespawnRequestPayload(r, p)
-}
-
-func appendLightningDespawnRequestPayload(b []byte, p *LightningDespawnRequestPayload) []byte {
-	var m [1]byte
-	if p.Owner != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.TargetEntity != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Owner))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetEntity))
-	}
-	return b
-}
-
-func readLightningDespawnRequestPayload(r *wireReader, p *LightningDespawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Owner = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.TargetEntity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *CombatAttackDirectRequestPayload) appendPayload(b []byte) []byte {
-	return appendCombatAttackDirectRequestPayload(b, p)
-}
-func (p *CombatAttackDirectRequestPayload) readPayload(r *wireReader) {
-	readCombatAttackDirectRequestPayload(r, p)
-}
-
-func appendCombatAttackDirectRequestPayload(b []byte, p *CombatAttackDirectRequestPayload) []byte {
-	var m [2]byte
-	m[0] |= 1 << 0
-	if p.OwnerEntity != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.OriginEntity != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.TargetEntity != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.HitEntity != 0 {
-		m[0] |= 1 << 4
-	}
-	if math.Float64bits(float64(p.OriginVelX)) != 0 {
-		m[0] |= 1 << 5
-	}
-	if math.Float64bits(float64(p.OriginVelY)) != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.OriginX != 0 {
-		m[0] |= 1 << 7
-	}
-	if p.OriginY != 0 {
-		m[1] |= 1 << 0
-	}
-	if p.AttackType != 0 {
-		m[1] |= 1 << 1
-	}
-	if p.HasOrigin {
-		m[1] |= 1 << 2
-	}
-	if p.HasVelocity {
-		m[1] |= 1 << 3
-	}
-	if p.ChainDepth != 0 {
-		m[1] |= 1 << 4
-	}
-	if p.RootAttackType != 0 {
-		m[1] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = appendCrossingID(b, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.OwnerEntity))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.OriginEntity))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetEntity))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.HitEntity))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.OriginVelX)))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.OriginVelY)))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginX))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginY))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.AttackType))
-	}
-	if m[1]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.ChainDepth))
-	}
-	if m[1]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.RootAttackType))
-	}
-	return b
-}
-
-func readCombatAttackDirectRequestPayload(r *wireReader, p *CombatAttackDirectRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		readCrossingID(r, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		p.OwnerEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.OriginEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.TargetEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.HitEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.OriginVelX = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<6) != 0 {
-		p.OriginVelY = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<7) != 0 {
-		p.OriginX = int(r.varint())
-	}
-	if m[1]&(1<<0) != 0 {
-		p.OriginY = int(r.varint())
-	}
-	if m[1]&(1<<1) != 0 {
-		p.AttackType = component.CombatAttackType(r.varint())
-	}
-	p.HasOrigin = m[1]&(1<<2) != 0
-	p.HasVelocity = m[1]&(1<<3) != 0
-	if m[1]&(1<<4) != 0 {
-		p.ChainDepth = uint8(r.uvarint())
-	}
-	if m[1]&(1<<5) != 0 {
-		p.RootAttackType = component.CombatAttackType(r.varint())
-	}
-}
-
-func (p *CombatAttackAreaRequestPayload) appendPayload(b []byte) []byte {
-	return appendCombatAttackAreaRequestPayload(b, p)
-}
-func (p *CombatAttackAreaRequestPayload) readPayload(r *wireReader) {
-	readCombatAttackAreaRequestPayload(r, p)
-}
-
-func appendCombatAttackAreaRequestPayload(b []byte, p *CombatAttackAreaRequestPayload) []byte {
-	var m [2]byte
-	m[0] |= 1 << 0
-	if len(p.HitEntities) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.AttackType != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.OwnerEntity != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.OriginEntity != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.TargetEntity != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.HasOrigin {
-		m[0] |= 1 << 6
-	}
-	if p.OriginX != 0 {
-		m[0] |= 1 << 7
-	}
-	if p.OriginY != 0 {
-		m[1] |= 1 << 0
-	}
-	if p.ChainDepth != 0 {
-		m[1] |= 1 << 1
-	}
-	if p.RootAttackType != 0 {
-		m[1] |= 1 << 2
-	}
-	if p.Scale != 0 {
-		m[1] |= 1 << 3
-	}
-	if p.Charged {
-		m[1] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = appendCrossingID(b, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.HitEntities)))
-		for i0 := range p.HitEntities {
-			b = binary.AppendUvarint(b, uint64(p.HitEntities[i0]))
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.AttackType))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.OwnerEntity))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.OriginEntity))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetEntity))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginX))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginY))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.ChainDepth))
-	}
-	if m[1]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.RootAttackType))
-	}
-	if m[1]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Scale))
-	}
-	return b
-}
-
-func readCombatAttackAreaRequestPayload(r *wireReader, p *CombatAttackAreaRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		readCrossingID(r, &p.CrossingID)
-	}
-	if m[0]&(1<<1) != 0 {
-		p.HitEntities = make([]core.Entity, r.length())
-		for i0 := range p.HitEntities {
-			p.HitEntities[i0] = core.Entity(r.uvarint())
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		p.AttackType = component.CombatAttackType(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.OwnerEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.OriginEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.TargetEntity = core.Entity(r.uvarint())
-	}
-	p.HasOrigin = m[0]&(1<<6) != 0
-	if m[0]&(1<<7) != 0 {
-		p.OriginX = int(r.varint())
-	}
-	if m[1]&(1<<0) != 0 {
-		p.OriginY = int(r.varint())
-	}
-	if m[1]&(1<<1) != 0 {
-		p.ChainDepth = uint8(r.uvarint())
-	}
-	if m[1]&(1<<2) != 0 {
-		p.RootAttackType = component.CombatAttackType(r.varint())
-	}
-	if m[1]&(1<<3) != 0 {
-		p.Scale = uint8(r.uvarint())
-	}
-	p.Charged = m[1]&(1<<4) != 0
-}
-
-func (p *CombatHealRequestPayload) appendPayload(b []byte) []byte {
-	return appendCombatHealRequestPayload(b, p)
-}
-func (p *CombatHealRequestPayload) readPayload(r *wireReader) { readCombatHealRequestPayload(r, p) }
-
-func appendCombatHealRequestPayload(b []byte, p *CombatHealRequestPayload) []byte {
-	var m [1]byte
-	if p.TargetEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Amount != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Amount))
-	}
-	return b
-}
-
-func readCombatHealRequestPayload(r *wireReader, p *CombatHealRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.TargetEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Amount = int(r.varint())
-	}
-}
-
-func (p *LootSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendLootSpawnRequestPayload(b, p)
-}
-func (p *LootSpawnRequestPayload) readPayload(r *wireReader) { readLootSpawnRequestPayload(r, p) }
-
-func appendLootSpawnRequestPayload(b []byte, p *LootSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.Type != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Type))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	return b
-}
-
-func readLootSpawnRequestPayload(r *wireReader, p *LootSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Type = component.LootType(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-}
-
-func appendComponentCursorDamage(b []byte, p *component.CursorDamage) []byte {
-	var m [1]byte
-	if p.EnergyDrain != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.HeatDelta != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.EnergyDrain))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.HeatDelta))
-	}
-	return b
-}
-
-func readComponentCursorDamage(r *wireReader, p *component.CursorDamage) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.EnergyDrain = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.HeatDelta = int(r.varint())
-	}
-}
-
-func (p *MissileSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendMissileSpawnRequestPayload(b, p)
-}
-func (p *MissileSpawnRequestPayload) readPayload(r *wireReader) { readMissileSpawnRequestPayload(r, p) }
-
-func appendMissileSpawnRequestPayload(b []byte, p *MissileSpawnRequestPayload) []byte {
-	var m [1]byte
-	if len(p.Targets) != 0 {
-		m[0] |= 1 << 0
-	}
-	if len(p.HitEntities) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.OwnerEntity != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.OriginX != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.OriginY != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.Count != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Hostile {
-		m[0] |= 1 << 6
-	}
-	m[0] |= 1 << 7
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Targets)))
-		for i0 := range p.Targets {
-			b = binary.AppendUvarint(b, uint64(p.Targets[i0]))
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.HitEntities)))
-		for i0 := range p.HitEntities {
-			b = binary.AppendUvarint(b, uint64(p.HitEntities[i0]))
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.OwnerEntity))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginX))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.OriginY))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.Count))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = appendComponentCursorDamage(b, &p.Damage)
-	}
-	return b
-}
-
-func readMissileSpawnRequestPayload(r *wireReader, p *MissileSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Targets = make([]core.Entity, r.length())
-		for i0 := range p.Targets {
-			p.Targets[i0] = core.Entity(r.uvarint())
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.HitEntities = make([]core.Entity, r.length())
-		for i0 := range p.HitEntities {
-			p.HitEntities[i0] = core.Entity(r.uvarint())
-		}
-	}
-	if m[0]&(1<<2) != 0 {
-		p.OwnerEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.OriginX = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.OriginY = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.Count = int(r.varint())
-	}
-	p.Hostile = m[0]&(1<<6) != 0
-	if m[0]&(1<<7) != 0 {
-		readComponentCursorDamage(r, &p.Damage)
-	}
-}
-
-func (p *BulletSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendBulletSpawnRequestPayload(b, p)
-}
-func (p *BulletSpawnRequestPayload) readPayload(r *wireReader) { readBulletSpawnRequestPayload(r, p) }
-
-func appendBulletSpawnRequestPayload(b []byte, p *BulletSpawnRequestPayload) []byte {
-	var m [2]byte
-	if math.Float64bits(float64(p.OriginX)) != 0 {
-		m[0] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.OriginY)) != 0 {
-		m[0] |= 1 << 1
-	}
-	if math.Float64bits(float64(p.VelX)) != 0 {
-		m[0] |= 1 << 2
-	}
-	if math.Float64bits(float64(p.VelY)) != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Owner != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.MaxLifetime != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Hostile {
-		m[0] |= 1 << 6
-	}
-	m[0] |= 1 << 7
-	if p.Attack != 0 {
-		m[1] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.OriginX)))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.OriginY)))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.VelX)))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.VelY)))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Owner))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.MaxLifetime))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = appendComponentCursorDamage(b, &p.Damage)
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Attack))
-	}
-	return b
-}
-
-func readBulletSpawnRequestPayload(r *wireReader, p *BulletSpawnRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.OriginX = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.OriginY = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.VelX = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<3) != 0 {
-		p.VelY = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Owner = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.MaxLifetime = time.Duration(r.varint())
-	}
-	p.Hostile = m[0]&(1<<6) != 0
-	if m[0]&(1<<7) != 0 {
-		readComponentCursorDamage(r, &p.Damage)
-	}
-	if m[1]&(1<<0) != 0 {
-		p.Attack = component.CombatAttackType(r.varint())
-	}
-}
-
-func (p *MarkerSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendMarkerSpawnRequestPayload(b, p)
-}
-func (p *MarkerSpawnRequestPayload) readPayload(r *wireReader) { readMarkerSpawnRequestPayload(r, p) }
-
-func appendMarkerSpawnRequestPayload(b []byte, p *MarkerSpawnRequestPayload) []byte {
-	var m [2]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Width != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 3
-	}
-	if math.Float64bits(float64(p.Intensity)) != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.Duration != 0 {
-		m[0] |= 1 << 5
-	}
-	if math.Float64bits(float64(p.PulseRate)) != 0 {
-		m[0] |= 1 << 6
-	}
-	m[0] |= 1 << 7
-	if p.Shape != 0 {
-		m[1] |= 1 << 0
-	}
-	if p.FadeMode != 0 {
-		m[1] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Intensity)))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.Duration))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.PulseRate)))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = appendColorRGB(b, &p.Color)
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Shape))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.FadeMode))
-	}
-	return b
-}
-
-func readMarkerSpawnRequestPayload(r *wireReader, p *MarkerSpawnRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Height = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Intensity = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<5) != 0 {
-		p.Duration = time.Duration(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.PulseRate = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<7) != 0 {
-		readColorRGB(r, &p.Color)
-	}
-	if m[1]&(1<<0) != 0 {
-		p.Shape = component.MarkerShape(r.uvarint())
-	}
-	if m[1]&(1<<1) != 0 {
-		p.FadeMode = uint8(r.uvarint())
-	}
-}
-
-func (p *ButtonSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendButtonSpawnRequestPayload(b, p)
-}
-func (p *ButtonSpawnRequestPayload) readPayload(r *wireReader) { readButtonSpawnRequestPayload(r, p) }
-
-func appendButtonSpawnRequestPayload(b []byte, p *ButtonSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.Key != "" {
-		m[0] |= 1 << 0
-	}
-	m[0] |= 1 << 1
-	if p.Sound != "" {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Key)))
-		b = append(b, p.Key...)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = appendColorRGB(b, &p.Color)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Sound)))
-		b = append(b, p.Sound...)
-	}
-	return b
-}
-
-func readButtonSpawnRequestPayload(r *wireReader, p *ButtonSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Key = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<1) != 0 {
-		readColorRGB(r, &p.Color)
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Sound = string(r.bytes(r.uvarint()))
-	}
-}
-
-func (p *ButtonLightRequestPayload) appendPayload(b []byte) []byte {
-	return appendButtonLightRequestPayload(b, p)
-}
-func (p *ButtonLightRequestPayload) readPayload(r *wireReader) { readButtonLightRequestPayload(r, p) }
-
-func appendButtonLightRequestPayload(b []byte, p *ButtonLightRequestPayload) []byte {
-	var m [1]byte
-	if p.Button != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.DurationMs != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Button))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.DurationMs))
-	}
-	return b
-}
-
-func readButtonLightRequestPayload(r *wireReader, p *ButtonLightRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Button = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.DurationMs = int64(r.varint())
-	}
-}
-
-func (p *MotionMarkerShowPayload) appendPayload(b []byte) []byte {
-	return appendMotionMarkerShowPayload(b, p)
-}
-func (p *MotionMarkerShowPayload) readPayload(r *wireReader) { readMotionMarkerShowPayload(r, p) }
-
-func appendMotionMarkerShowPayload(b []byte, p *MotionMarkerShowPayload) []byte {
-	var m [1]byte
-	if p.DirectionX != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.DirectionY != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.DirectionX))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.DirectionY))
-	}
-	return b
-}
-
-func readMotionMarkerShowPayload(r *wireReader, p *MotionMarkerShowPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.DirectionX = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.DirectionY = int(r.varint())
-	}
-}
-
-func (p *ModeChangedPayload) appendPayload(b []byte) []byte { return appendModeChangedPayload(b, p) }
-func (p *ModeChangedPayload) readPayload(r *wireReader)     { readModeChangedPayload(r, p) }
-
-func appendModeChangedPayload(b []byte, p *ModeChangedPayload) []byte {
-	var m [1]byte
-	if p.Mode != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Mode))
-	}
-	return b
-}
-
-func readModeChangedPayload(r *wireReader, p *ModeChangedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Mode = core.GameMode(r.uvarint())
-	}
-}
-
-func (p *WallSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendWallSpawnRequestPayload(b, p)
-}
-func (p *WallSpawnRequestPayload) readPayload(r *wireReader) { readWallSpawnRequestPayload(r, p) }
-
-func appendWallSpawnRequestPayload(b []byte, p *WallSpawnRequestPayload) []byte {
-	var m [2]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Char != 0 {
-		m[0] |= 1 << 2
-	}
-	m[0] |= 1 << 3
-	m[0] |= 1 << 4
-	if p.CollisionMode != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.BoxStyle != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.RenderFg {
-		m[0] |= 1 << 7
-	}
-	if p.RenderBg {
-		m[1] |= 1 << 0
-	}
-	if p.BlockMask != 0 {
-		m[1] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = appendColorRGB(b, &p.FgColor)
-	}
-	if m[0]&(1<<4) != 0 {
-		b = appendColorRGB(b, &p.BgColor)
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.CollisionMode))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BoxStyle))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BlockMask))
-	}
-	return b
-}
-
-func readWallSpawnRequestPayload(r *wireReader, p *WallSpawnRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Char = rune(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		readColorRGB(r, &p.FgColor)
-	}
-	if m[0]&(1<<4) != 0 {
-		readColorRGB(r, &p.BgColor)
-	}
-	if m[0]&(1<<5) != 0 {
-		p.CollisionMode = WallBatchCollisionMode(r.uvarint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.BoxStyle = component.BoxDrawStyle(r.uvarint())
-	}
-	p.RenderFg = m[0]&(1<<7) != 0
-	p.RenderBg = m[1]&(1<<0) != 0
-	if m[1]&(1<<1) != 0 {
-		p.BlockMask = component.WallBlockMask(r.uvarint())
-	}
-}
-
-func appendComponentWallVisualConfig(b []byte, p *component.WallVisualConfig) []byte {
-	var m [1]byte
-	if p.Char != 0 {
-		m[0] |= 1 << 0
-	}
-	m[0] |= 1 << 1
-	m[0] |= 1 << 2
-	if p.RenderFg {
-		m[0] |= 1 << 3
-	}
-	if p.RenderBg {
-		m[0] |= 1 << 4
-	}
-	if p.BoxStyle != 0 {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = appendColorRGB(b, &p.FgColor)
-	}
-	if m[0]&(1<<2) != 0 {
-		b = appendColorRGB(b, &p.BgColor)
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BoxStyle))
-	}
-	return b
-}
-
-func readComponentWallVisualConfig(r *wireReader, p *component.WallVisualConfig) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Char = rune(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		readColorRGB(r, &p.FgColor)
-	}
-	if m[0]&(1<<2) != 0 {
-		readColorRGB(r, &p.BgColor)
-	}
-	p.RenderFg = m[0]&(1<<3) != 0
-	p.RenderBg = m[0]&(1<<4) != 0
-	if m[0]&(1<<5) != 0 {
-		p.BoxStyle = component.BoxDrawStyle(r.uvarint())
-	}
-}
-
-func appendComponentWallCellDef(b []byte, p *component.WallCellDef) []byte {
-	var m [1]byte
-	if p.OffsetX != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.OffsetY != 0 {
-		m[0] |= 1 << 1
-	}
-	m[0] |= 1 << 2
-	if p.Attrs != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.OffsetX))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.OffsetY))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = appendComponentWallVisualConfig(b, &p.WallVisualConfig)
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Attrs))
-	}
-	return b
-}
-
-func readComponentWallCellDef(r *wireReader, p *component.WallCellDef) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.OffsetX = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.OffsetY = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		readComponentWallVisualConfig(r, &p.WallVisualConfig)
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Attrs = terminal.Attr(r.uvarint())
-	}
-}
-
-func (p *WallBatchSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendWallBatchSpawnRequestPayload(b, p)
-}
-func (p *WallBatchSpawnRequestPayload) readPayload(r *wireReader) {
-	readWallBatchSpawnRequestPayload(r, p)
-}
-
-func appendWallBatchSpawnRequestPayload(b []byte, p *WallBatchSpawnRequestPayload) []byte {
-	var m [1]byte
-	if len(p.Cells) != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.BlockMask != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.BoxStyle != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.CollisionMode != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Composite {
-		m[0] |= 1 << 6
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Cells)))
-		for i0 := range p.Cells {
-			b = appendComponentWallCellDef(b, &p.Cells[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BlockMask))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BoxStyle))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.CollisionMode))
-	}
-	return b
-}
-
-func readWallBatchSpawnRequestPayload(r *wireReader, p *WallBatchSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Cells = make([]component.WallCellDef, r.length())
-		for i0 := range p.Cells {
-			readComponentWallCellDef(r, &p.Cells[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.BlockMask = component.WallBlockMask(r.uvarint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.BoxStyle = component.BoxDrawStyle(r.uvarint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.CollisionMode = WallBatchCollisionMode(r.uvarint())
-	}
-	p.Composite = m[0]&(1<<6) != 0
-}
-
-func (p *WallCompositeSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendWallCompositeSpawnRequestPayload(b, p)
-}
-func (p *WallCompositeSpawnRequestPayload) readPayload(r *wireReader) {
-	readWallCompositeSpawnRequestPayload(r, p)
-}
-
-func appendWallCompositeSpawnRequestPayload(b []byte, p *WallCompositeSpawnRequestPayload) []byte {
-	var m [1]byte
-	if len(p.Cells) != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.BlockMask != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.CollisionMode != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.BoxStyle != 0 {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Cells)))
-		for i0 := range p.Cells {
-			b = appendComponentWallCellDef(b, &p.Cells[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BlockMask))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.CollisionMode))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BoxStyle))
-	}
-	return b
-}
-
-func readWallCompositeSpawnRequestPayload(r *wireReader, p *WallCompositeSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Cells = make([]component.WallCellDef, r.length())
-		for i0 := range p.Cells {
-			readComponentWallCellDef(r, &p.Cells[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.BlockMask = component.WallBlockMask(r.uvarint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.CollisionMode = WallBatchCollisionMode(r.uvarint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.BoxStyle = component.BoxDrawStyle(r.uvarint())
-	}
-}
-
-func (p *WallPatternSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendWallPatternSpawnRequestPayload(b, p)
-}
-func (p *WallPatternSpawnRequestPayload) readPayload(r *wireReader) {
-	readWallPatternSpawnRequestPayload(r, p)
-}
-
-func appendWallPatternSpawnRequestPayload(b []byte, p *WallPatternSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.Path != "" {
-		m[0] |= 1 << 0
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.BlockMask != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.CollisionMode != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Path)))
-		b = append(b, p.Path...)
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BlockMask))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.CollisionMode))
-	}
-	return b
-}
-
-func readWallPatternSpawnRequestPayload(r *wireReader, p *WallPatternSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Path = string(r.bytes(r.uvarint()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.BlockMask = component.WallBlockMask(r.uvarint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.CollisionMode = WallBatchCollisionMode(r.uvarint())
-	}
-}
-
-func appendMazeRoomSpec(b []byte, p *MazeRoomSpec) []byte {
-	var m [1]byte
-	if p.CenterX != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.CenterY != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Width != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.CenterX))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.CenterY))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	return b
-}
-
-func readMazeRoomSpec(r *wireReader, p *MazeRoomSpec) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.CenterX = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.CenterY = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Height = int(r.varint())
-	}
-}
-
-func (p *MazeSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendMazeSpawnRequestPayload(b, p)
-}
-func (p *MazeSpawnRequestPayload) readPayload(r *wireReader) { readMazeSpawnRequestPayload(r, p) }
-
-func appendMazeSpawnRequestPayload(b []byte, p *MazeSpawnRequestPayload) []byte {
-	var m [2]byte
-	if len(p.Rooms) != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.CellWidth != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.CellHeight != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.RoomCount != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.DefaultRoomWidth != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.DefaultRoomHeight != 0 {
-		m[0] |= 1 << 5
-	}
-	if math.Float64bits(float64(p.Braiding)) != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.BlockMask != 0 {
-		m[0] |= 1 << 7
-	}
-	m[1] |= 1 << 0
-	if p.CollisionMode != 0 {
-		m[1] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Rooms)))
-		for i0 := range p.Rooms {
-			b = appendMazeRoomSpec(b, &p.Rooms[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.CellWidth))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.CellHeight))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.RoomCount))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.DefaultRoomWidth))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.DefaultRoomHeight))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Braiding)))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BlockMask))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = appendComponentWallVisualConfig(b, &p.Visual)
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.CollisionMode))
-	}
-	return b
-}
-
-func readMazeSpawnRequestPayload(r *wireReader, p *MazeSpawnRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Rooms = make([]MazeRoomSpec, r.length())
-		for i0 := range p.Rooms {
-			readMazeRoomSpec(r, &p.Rooms[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.CellWidth = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.CellHeight = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.RoomCount = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.DefaultRoomWidth = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.DefaultRoomHeight = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.Braiding = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<7) != 0 {
-		p.BlockMask = component.WallBlockMask(r.uvarint())
-	}
-	if m[1]&(1<<0) != 0 {
-		readComponentWallVisualConfig(r, &p.Visual)
-	}
-	if m[1]&(1<<1) != 0 {
-		p.CollisionMode = WallBatchCollisionMode(r.uvarint())
-	}
-}
-
-func (p *WallDespawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendWallDespawnRequestPayload(b, p)
-}
-func (p *WallDespawnRequestPayload) readPayload(r *wireReader) { readWallDespawnRequestPayload(r, p) }
-
-func appendWallDespawnRequestPayload(b []byte, p *WallDespawnRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Width != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.All {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	return b
-}
-
-func readWallDespawnRequestPayload(r *wireReader, p *WallDespawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Height = int(r.varint())
-	}
-	p.All = m[0]&(1<<4) != 0
-}
-
-func (p *WallMaskChangeRequestPayload) appendPayload(b []byte) []byte {
-	return appendWallMaskChangeRequestPayload(b, p)
-}
-func (p *WallMaskChangeRequestPayload) readPayload(r *wireReader) {
-	readWallMaskChangeRequestPayload(r, p)
-}
-
-func appendWallMaskChangeRequestPayload(b []byte, p *WallMaskChangeRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Width != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.BlockMask != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.BlockMask))
-	}
-	return b
-}
-
-func readWallMaskChangeRequestPayload(r *wireReader, p *WallMaskChangeRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Height = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.BlockMask = component.WallBlockMask(r.uvarint())
-	}
-}
-
-func (p *WallSpawnedPayload) appendPayload(b []byte) []byte { return appendWallSpawnedPayload(b, p) }
-func (p *WallSpawnedPayload) readPayload(r *wireReader)     { readWallSpawnedPayload(r, p) }
-
-func appendWallSpawnedPayload(b []byte, p *WallSpawnedPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Width != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Count != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.HeaderEntity != 0 {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Count))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.HeaderEntity))
-	}
-	return b
-}
-
-func readWallSpawnedPayload(r *wireReader, p *WallSpawnedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Height = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Count = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.HeaderEntity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *WallDespawnedPayload) appendPayload(b []byte) []byte {
-	return appendWallDespawnedPayload(b, p)
-}
-func (p *WallDespawnedPayload) readPayload(r *wireReader) { readWallDespawnedPayload(r, p) }
-
-func appendWallDespawnedPayload(b []byte, p *WallDespawnedPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Width != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Height != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Count != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Width))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Height))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.Count))
-	}
-	return b
-}
-
-func readWallDespawnedPayload(r *wireReader, p *WallDespawnedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Width = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Height = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Count = int(r.varint())
-	}
-}
-
-func (p *FadeoutSpawnPayload) appendPayload(b []byte) []byte { return appendFadeoutSpawnPayload(b, p) }
-func (p *FadeoutSpawnPayload) readPayload(r *wireReader)     { readFadeoutSpawnPayload(r, p) }
-
-func appendFadeoutSpawnPayload(b []byte, p *FadeoutSpawnPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Char != 0 {
-		m[0] |= 1 << 2
-	}
-	m[0] |= 1 << 3
-	m[0] |= 1 << 4
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.Char))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = appendColorRGB(b, &p.FgColor)
-	}
-	if m[0]&(1<<4) != 0 {
-		b = appendColorRGB(b, &p.BgColor)
-	}
-	return b
-}
-
-func readFadeoutSpawnPayload(r *wireReader, p *FadeoutSpawnPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Char = rune(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		readColorRGB(r, &p.FgColor)
-	}
-	if m[0]&(1<<4) != 0 {
-		readColorRGB(r, &p.BgColor)
-	}
-}
-
-func (p *PylonSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendPylonSpawnRequestPayload(b, p)
-}
-func (p *PylonSpawnRequestPayload) readPayload(r *wireReader) { readPylonSpawnRequestPayload(r, p) }
-
-func appendPylonSpawnRequestPayload(b []byte, p *PylonSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.RadiusX != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.RadiusY != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.MinHP != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.MaxHP != 0 {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.RadiusX))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.RadiusY))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.MinHP))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.MaxHP))
-	}
-	return b
-}
-
-func readPylonSpawnRequestPayload(r *wireReader, p *PylonSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.RadiusX = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.RadiusY = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.MinHP = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.MaxHP = int(r.varint())
-	}
-}
-
-func (p *SnakeSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendSnakeSpawnRequestPayload(b, p)
-}
-func (p *SnakeSpawnRequestPayload) readPayload(r *wireReader) { readSnakeSpawnRequestPayload(r, p) }
-
-func appendSnakeSpawnRequestPayload(b []byte, p *SnakeSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.SegmentCount != 0 {
-		m[0] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.SegmentCount))
-	}
-	return b
-}
-
-func readSnakeSpawnRequestPayload(r *wireReader, p *SnakeSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.SegmentCount = int(r.varint())
-	}
-}
-
-func (p *TargetGroupUpdatePayload) appendPayload(b []byte) []byte {
-	return appendTargetGroupUpdatePayload(b, p)
-}
-func (p *TargetGroupUpdatePayload) readPayload(r *wireReader) { readTargetGroupUpdatePayload(r, p) }
-
-func appendTargetGroupUpdatePayload(b []byte, p *TargetGroupUpdatePayload) []byte {
-	var m [1]byte
-	if p.GroupID != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.Entity != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.PosX != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.PosY != 0 {
-		m[0] |= 1 << 4
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.GroupID))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Type))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Entity))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.PosX))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.PosY))
-	}
-	return b
-}
-
-func readTargetGroupUpdatePayload(r *wireReader, p *TargetGroupUpdatePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.GroupID = uint8(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Type = component.TargetType(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.Entity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.PosX = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.PosY = int(r.varint())
-	}
-}
-
-func (p *TargetGroupRemovePayload) appendPayload(b []byte) []byte {
-	return appendTargetGroupRemovePayload(b, p)
-}
-func (p *TargetGroupRemovePayload) readPayload(r *wireReader) { readTargetGroupRemovePayload(r, p) }
-
-func appendTargetGroupRemovePayload(b []byte, p *TargetGroupRemovePayload) []byte {
-	var m [1]byte
-	if p.GroupID != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.GroupID))
-	}
-	return b
-}
-
-func readTargetGroupRemovePayload(r *wireReader, p *TargetGroupRemovePayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.GroupID = uint8(r.uvarint())
-	}
-}
-
-func (p *RouteGraphRequestPayload) appendPayload(b []byte) []byte {
-	return appendRouteGraphRequestPayload(b, p)
-}
-func (p *RouteGraphRequestPayload) readPayload(r *wireReader) { readRouteGraphRequestPayload(r, p) }
-
-func appendRouteGraphRequestPayload(b []byte, p *RouteGraphRequestPayload) []byte {
-	var m [1]byte
-	if p.SourceX != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.SourceY != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.RouteGraphID != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.TargetGroupID != 0 {
-		m[0] |= 1 << 3
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.SourceX))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.SourceY))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.RouteGraphID))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetGroupID))
-	}
-	return b
-}
-
-func readRouteGraphRequestPayload(r *wireReader, p *RouteGraphRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.SourceX = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.SourceY = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.RouteGraphID = uint32(r.uvarint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.TargetGroupID = uint8(r.uvarint())
-	}
-}
-
-func (p *RouteGraphComputedPayload) appendPayload(b []byte) []byte {
-	return appendRouteGraphComputedPayload(b, p)
-}
-func (p *RouteGraphComputedPayload) readPayload(r *wireReader) { readRouteGraphComputedPayload(r, p) }
-
-func appendRouteGraphComputedPayload(b []byte, p *RouteGraphComputedPayload) []byte {
-	var m [1]byte
-	if p.RouteCount != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.RouteGraphID != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.RouteCount))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.RouteGraphID))
-	}
-	return b
-}
-
-func readRouteGraphComputedPayload(r *wireReader, p *RouteGraphComputedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.RouteCount = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.RouteGraphID = uint32(r.uvarint())
-	}
-}
-
-func (p *EyeSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendEyeSpawnRequestPayload(b, p)
-}
-func (p *EyeSpawnRequestPayload) readPayload(r *wireReader) { readEyeSpawnRequestPayload(r, p) }
-
-func appendEyeSpawnRequestPayload(b []byte, p *EyeSpawnRequestPayload) []byte {
-	var m [1]byte
-	if len(p.Genes) != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.EvalID != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.X != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.RouteID != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.RouteGraphID != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.TargetGroupID != 0 {
-		m[0] |= 1 << 7
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Genes)))
-		for i0 := range p.Genes {
-			b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Genes[i0])))
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.EvalID))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.RouteID))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.RouteGraphID))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Type))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetGroupID))
-	}
-	return b
-}
-
-func readEyeSpawnRequestPayload(r *wireReader, p *EyeSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Genes = make([]float64, r.length())
-		for i0 := range p.Genes {
-			p.Genes[i0] = float64(math.Float64frombits(r.u64()))
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.EvalID = uint64(r.uvarint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.RouteID = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.RouteGraphID = uint32(r.uvarint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.Type = component.EyeType(r.uvarint())
-	}
-	if m[0]&(1<<7) != 0 {
-		p.TargetGroupID = uint8(r.uvarint())
-	}
-}
-
-func (p *TowerSpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendTowerSpawnRequestPayload(b, p)
-}
-func (p *TowerSpawnRequestPayload) readPayload(r *wireReader) { readTowerSpawnRequestPayload(r, p) }
-
-func appendTowerSpawnRequestPayload(b []byte, p *TowerSpawnRequestPayload) []byte {
-	var m [1]byte
-	if p.X != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Y != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.RadiusX != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.RadiusY != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.MinHP != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.MaxHP != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.Type != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.TargetGroupID != 0 {
-		m[0] |= 1 << 7
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendVarint(b, int64(p.X))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.Y))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.RadiusX))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.RadiusY))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.MinHP))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.MaxHP))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Type))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.TargetGroupID))
-	}
-	return b
-}
-
-func readTowerSpawnRequestPayload(r *wireReader, p *TowerSpawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.X = int(r.varint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Y = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.RadiusX = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.RadiusY = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.MinHP = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.MaxHP = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.Type = component.TowerType(r.uvarint())
-	}
-	if m[0]&(1<<7) != 0 {
-		p.TargetGroupID = uint8(r.uvarint())
-	}
-}
-
-func (p *GatewaySpawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendGatewaySpawnRequestPayload(b, p)
-}
-func (p *GatewaySpawnRequestPayload) readPayload(r *wireReader) { readGatewaySpawnRequestPayload(r, p) }
-
-func appendGatewaySpawnRequestPayload(b []byte, p *GatewaySpawnRequestPayload) []byte {
-	var m [2]byte
-	if p.AnchorEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.BaseIntervalMs != 0 {
-		m[0] |= 1 << 1
-	}
-	if math.Float64bits(float64(p.RateMultiplier)) != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.RateAccelIntervalMs != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.MinIntervalMs != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.OffsetX != 0 {
-		m[0] |= 1 << 5
-	}
-	if p.OffsetY != 0 {
-		m[0] |= 1 << 6
-	}
-	if p.Species != 0 {
-		m[0] |= 1 << 7
-	}
-	if p.SubType != 0 {
-		m[1] |= 1 << 0
-	}
-	if p.GroupID != 0 {
-		m[1] |= 1 << 1
-	}
-	if p.UseRouteGraph {
-		m[1] |= 1 << 2
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.AnchorEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendVarint(b, int64(p.BaseIntervalMs))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.RateMultiplier)))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.RateAccelIntervalMs))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendVarint(b, int64(p.MinIntervalMs))
-	}
-	if m[0]&(1<<5) != 0 {
-		b = binary.AppendVarint(b, int64(p.OffsetX))
-	}
-	if m[0]&(1<<6) != 0 {
-		b = binary.AppendVarint(b, int64(p.OffsetY))
-	}
-	if m[0]&(1<<7) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Species))
-	}
-	if m[1]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.SubType))
-	}
-	if m[1]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.GroupID))
-	}
-	return b
-}
-
-func readGatewaySpawnRequestPayload(r *wireReader, p *GatewaySpawnRequestPayload) {
-	var m [2]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.AnchorEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.BaseIntervalMs = int(r.varint())
-	}
-	if m[0]&(1<<2) != 0 {
-		p.RateMultiplier = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<3) != 0 {
-		p.RateAccelIntervalMs = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.MinIntervalMs = int(r.varint())
-	}
-	if m[0]&(1<<5) != 0 {
-		p.OffsetX = int(r.varint())
-	}
-	if m[0]&(1<<6) != 0 {
-		p.OffsetY = int(r.varint())
-	}
-	if m[0]&(1<<7) != 0 {
-		p.Species = uint8(r.uvarint())
-	}
-	if m[1]&(1<<0) != 0 {
-		p.SubType = uint8(r.uvarint())
-	}
-	if m[1]&(1<<1) != 0 {
-		p.GroupID = uint8(r.uvarint())
-	}
-	p.UseRouteGraph = m[1]&(1<<2) != 0
-}
-
-func (p *GatewayDespawnRequestPayload) appendPayload(b []byte) []byte {
-	return appendGatewayDespawnRequestPayload(b, p)
-}
-func (p *GatewayDespawnRequestPayload) readPayload(r *wireReader) {
-	readGatewayDespawnRequestPayload(r, p)
-}
-
-func appendGatewayDespawnRequestPayload(b []byte, p *GatewayDespawnRequestPayload) []byte {
-	var m [1]byte
-	if p.AnchorEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.AnchorEntity))
-	}
-	return b
-}
-
-func readGatewayDespawnRequestPayload(r *wireReader, p *GatewayDespawnRequestPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.AnchorEntity = core.Entity(r.uvarint())
-	}
-}
-
-func (p *GatewayDespawnedPayload) appendPayload(b []byte) []byte {
-	return appendGatewayDespawnedPayload(b, p)
-}
-func (p *GatewayDespawnedPayload) readPayload(r *wireReader) { readGatewayDespawnedPayload(r, p) }
-
-func appendGatewayDespawnedPayload(b []byte, p *GatewayDespawnedPayload) []byte {
-	var m [1]byte
-	if p.GatewayEntity != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.AnchorEntity != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.GatewayEntity))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.AnchorEntity))
-	}
-	return b
-}
-
-func readGatewayDespawnedPayload(r *wireReader, p *GatewayDespawnedPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.GatewayEntity = core.Entity(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.AnchorEntity = core.Entity(r.uvarint())
-	}
-}
-
-func appendParameterBoundDef(b []byte, p *ParameterBoundDef) []byte {
-	var m [1]byte
-	if math.Float64bits(float64(p.Min)) != 0 {
-		m[0] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.Max)) != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Min)))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.Max)))
-	}
-	return b
-}
-
-func readParameterBoundDef(r *wireReader, p *ParameterBoundDef) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Min = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Max = float64(math.Float64frombits(r.u64()))
-	}
-}
-
-func (p *GeneticRegisterSpeciesPayload) appendPayload(b []byte) []byte {
-	return appendGeneticRegisterSpeciesPayload(b, p)
-}
-func (p *GeneticRegisterSpeciesPayload) readPayload(r *wireReader) {
-	readGeneticRegisterSpeciesPayload(r, p)
-}
-
-func appendGeneticRegisterSpeciesPayload(b []byte, p *GeneticRegisterSpeciesPayload) []byte {
-	var m [1]byte
-	if len(p.Bounds) != 0 {
-		m[0] |= 1 << 0
-	}
-	if math.Float64bits(float64(p.PerturbationStdDev)) != 0 {
-		m[0] |= 1 << 1
-	}
-	if p.GeneCount != 0 {
-		m[0] |= 1 << 2
-	}
-	if p.ProbeBins != 0 {
-		m[0] |= 1 << 3
-	}
-	if p.Species != 0 {
-		m[0] |= 1 << 4
-	}
-	if p.IsComposite {
-		m[0] |= 1 << 5
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(len(p.Bounds)))
-		for i0 := range p.Bounds {
-			b = appendParameterBoundDef(b, &p.Bounds[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(p.PerturbationStdDev)))
-	}
-	if m[0]&(1<<2) != 0 {
-		b = binary.AppendVarint(b, int64(p.GeneCount))
-	}
-	if m[0]&(1<<3) != 0 {
-		b = binary.AppendVarint(b, int64(p.ProbeBins))
-	}
-	if m[0]&(1<<4) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Species))
-	}
-	return b
-}
-
-func readGeneticRegisterSpeciesPayload(r *wireReader, p *GeneticRegisterSpeciesPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.Bounds = make([]ParameterBoundDef, r.length())
-		for i0 := range p.Bounds {
-			readParameterBoundDef(r, &p.Bounds[i0])
-		}
-	}
-	if m[0]&(1<<1) != 0 {
-		p.PerturbationStdDev = float64(math.Float64frombits(r.u64()))
-	}
-	if m[0]&(1<<2) != 0 {
-		p.GeneCount = int(r.varint())
-	}
-	if m[0]&(1<<3) != 0 {
-		p.ProbeBins = int(r.varint())
-	}
-	if m[0]&(1<<4) != 0 {
-		p.Species = component.SpeciesType(r.uvarint())
-	}
-	p.IsComposite = m[0]&(1<<5) != 0
-}
-
-func (p *GeneticAbandonEvalPayload) appendPayload(b []byte) []byte {
-	return appendGeneticAbandonEvalPayload(b, p)
-}
-func (p *GeneticAbandonEvalPayload) readPayload(r *wireReader) { readGeneticAbandonEvalPayload(r, p) }
-
-func appendGeneticAbandonEvalPayload(b []byte, p *GeneticAbandonEvalPayload) []byte {
-	var m [1]byte
-	if p.EvalID != 0 {
-		m[0] |= 1 << 0
-	}
-	if p.Species != 0 {
-		m[0] |= 1 << 1
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.EvalID))
-	}
-	if m[0]&(1<<1) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.Species))
-	}
-	return b
-}
-
-func readGeneticAbandonEvalPayload(r *wireReader, p *GeneticAbandonEvalPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.EvalID = uint64(r.uvarint())
-	}
-	if m[0]&(1<<1) != 0 {
-		p.Species = component.SpeciesType(r.uvarint())
-	}
-}
-
-func (p *DebugFlowGroupPayload) appendPayload(b []byte) []byte {
-	return appendDebugFlowGroupPayload(b, p)
-}
-func (p *DebugFlowGroupPayload) readPayload(r *wireReader) { readDebugFlowGroupPayload(r, p) }
-
-func appendDebugFlowGroupPayload(b []byte, p *DebugFlowGroupPayload) []byte {
-	var m [1]byte
-	if p.GroupID != 0 {
-		m[0] |= 1 << 0
-	}
-	b = append(b, m[:]...)
-	if m[0]&(1<<0) != 0 {
-		b = binary.AppendUvarint(b, uint64(p.GroupID))
-	}
-	return b
-}
-
-func readDebugFlowGroupPayload(r *wireReader, p *DebugFlowGroupPayload) {
-	var m [1]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-	if m[0]&(1<<0) != 0 {
-		p.GroupID = uint8(r.uvarint())
-	}
-}
+// payloadNew allocates each event's registered payload.
+var payloadNew = [EventTypeCount]func() any{
+	EventLevelSetup:                      func() any { return new(LevelSetupPayload) },
+	EventScreenResize:                    func() any { return new(ScreenResizePayload) },
+	EventSoundRequest:                    func() any { return new(SoundRequestPayload) },
+	EventSoundMuteToggle:                 func() any { return new(SoundMuteTogglePayload) },
+	EventAudioMuteChanged:                func() any { return new(AudioMuteChangedPayload) },
+	EventMusicStart:                      func() any { return new(MusicStartPayload) },
+	EventBeatPatternRequest:              func() any { return new(BeatPatternRequestPayload) },
+	EventMelodyNoteRequest:               func() any { return new(MelodyNoteRequestPayload) },
+	EventMelodyPatternRequest:            func() any { return new(MelodyPatternRequestPayload) },
+	EventMusicIntensityChange:            func() any { return new(MusicIntensityPayload) },
+	EventMusicTempoChange:                func() any { return new(MusicTempoPayload) },
+	EventMusicSeedRequest:                func() any { return new(MusicSeedPayload) },
+	EventMusicSwingRequest:               func() any { return new(MusicSwingPayload) },
+	EventNetworkConnect:                  func() any { return new(NetworkConnectPayload) },
+	EventNetworkDisconnect:               func() any { return new(NetworkDisconnectPayload) },
+	EventParticipantJoined:               func() any { return new(ParticipantJoinedPayload) },
+	EventParticipantDeparted:             func() any { return new(ParticipantDepartedPayload) },
+	EventPlayoutLead:                     func() any { return new(PlayoutLeadPayload) },
+	EventCursorStateSync:                 func() any { return new(CursorStatePayload) },
+	EventSessionState:                    func() any { return new(SessionStatePayload) },
+	EventGameResetRequest:                func() any { return new(GameResetPayload) },
+	EventMetaStatusMessageRequest:        func() any { return new(MetaStatusMessagePayload) },
+	EventMetaSystemCommandRequest:        func() any { return new(MetaSystemCommandPayload) },
+	EventGamePauseRequest:                func() any { return new(GamePausePayload) },
+	EventGamePauseChanged:                func() any { return new(GamePausePayload) },
+	EventGameSpeedRequest:                func() any { return new(GameSpeedPayload) },
+	EventGameSpeedChanged:                func() any { return new(GameSpeedPayload) },
+	EventGameStepRequest:                 func() any { return new(GameStepPayload) },
+	EventGameHoldRequest:                 func() any { return new(GamePausePayload) },
+	EventFSMRegionRequest:                func() any { return new(FSMRegionPayload) },
+	EventNuggetCollected:                 func() any { return new(NuggetCollectedPayload) },
+	EventNuggetDestroyed:                 func() any { return new(NuggetDestroyedPayload) },
+	EventNuggetJumpRequest:               func() any { return new(NuggetJumpRequestPayload) },
+	EventGoldSpawned:                     func() any { return new(GoldSpawnedPayload) },
+	EventGoldCompleted:                   func() any { return new(GoldCompletionPayload) },
+	EventGoldTimeout:                     func() any { return new(GoldCompletionPayload) },
+	EventGoldDestroyed:                   func() any { return new(GoldCompletionPayload) },
+	EventGoldJumpRequest:                 func() any { return new(GoldJumpRequestPayload) },
+	EventSplashTimerRequest:              func() any { return new(SplashTimerRequestPayload) },
+	EventSplashTimerCancel:               func() any { return new(SplashTimerCancelPayload) },
+	EventEnergyAddRequest:                func() any { return new(EnergyAddPayload) },
+	EventEnergySetRequest:                func() any { return new(EnergySetPayload) },
+	EventEnergyCrossedZero:               func() any { return new(EnergyCrossedZeroPayload) },
+	EventEnergyGlyphConsumed:             func() any { return new(EnergyGlyphConsumedPayload) },
+	EventEnergyBlinkStart:                func() any { return new(EnergyBlinkPayload) },
+	EventEnergyBlinkStop:                 func() any { return new(EnergyBlinkStopPayload) },
+	EventShieldActivate:                  func() any { return new(ShieldActivatePayload) },
+	EventShieldDeactivate:                func() any { return new(ShieldDeactivatePayload) },
+	EventShieldDrainRequest:              func() any { return new(ShieldDrainRequestPayload) },
+	EventWeaponAddRequest:                func() any { return new(WeaponAddRequestPayload) },
+	EventWeaponRemoveRequest:             func() any { return new(WeaponRemoveRequestPayload) },
+	EventWeaponFireRequest:               func() any { return new(WeaponFireRequestPayload) },
+	EventFireSpecialRequest:              func() any { return new(FireSpecialRequestPayload) },
+	EventMountRequest:                    func() any { return new(MountRequestPayload) },
+	EventHeatAddRequest:                  func() any { return new(HeatAddRequestPayload) },
+	EventHeatSetRequest:                  func() any { return new(HeatSetRequestPayload) },
+	EventHeatSpendRequest:                func() any { return new(HeatSpendRequestPayload) },
+	EventHeatBurst:                       func() any { return new(HeatBurstPayload) },
+	EventEmberSpent:                      func() any { return new(HeatBurstPayload) },
+	EventBoostActivate:                   func() any { return new(BoostActivatePayload) },
+	EventBoostDeactivate:                 func() any { return new(BoostDeactivatePayload) },
+	EventBoostExtend:                     func() any { return new(BoostExtendPayload) },
+	EventBoostReward:                     func() any { return new(BoostRewardPayload) },
+	EventCharacterTyped:                  func() any { return new(CharacterTypedPayload) },
+	EventDeleteRequest:                   func() any { return new(DeleteRequestPayload) },
+	EventKeyCaptureRequest:               func() any { return new(KeyCapturePayload) },
+	EventInputPressed:                    func() any { return new(InputPayload) },
+	EventInputReleased:                   func() any { return new(InputPayload) },
+	EventInputPressEcho:                  func() any { return new(InputPayload) },
+	EventInputReleaseEcho:                func() any { return new(InputPayload) },
+	EventInputReport:                     func() any { return new(InputReportPayload) },
+	EventPingGridRequest:                 func() any { return new(PingGridRequestPayload) },
+	EventMaterializeRequest:              func() any { return new(MaterializeRequestPayload) },
+	EventMaterializeComplete:             func() any { return new(MaterializeCompletedPayload) },
+	EventMaterializeAreaRequest:          func() any { return new(MaterializeAreaRequestPayload) },
+	EventFlashSpawnOneRequest:            func() any { return new(FlashRequestPayload) },
+	EventExplosionRequest:                func() any { return new(ExplosionRequestPayload) },
+	EventExplosionBatchRequest:           func() any { return new(ExplosionBatchRequestPayload) },
+	EventExplosionVisualRequest:          func() any { return new(ExplosionVisualRequestPayload) },
+	EventExplosionVisualBatchRequest:     func() any { return new(ExplosionVisualBatchRequestPayload) },
+	EventPulseVisualRequest:              func() any { return new(PulseVisualRequestPayload) },
+	EventParticleSpawnOne:                func() any { return new(ParticleSpawnPayload) },
+	EventParticleWave:                    func() any { return new(ParticleWavePayload) },
+	EventParticleVortex:                  func() any { return new(ParticleVortexPayload) },
+	EventDeathBatch:                      func() any { return new(DeathRequestPayload) },
+	EventCompositeMemberDestroyed:        func() any { return new(CompositeMemberDestroyedPayload) },
+	EventCompositeIntegrityBreach:        func() any { return new(CompositeIntegrityBreachPayload) },
+	EventCompositeDestroyRequest:         func() any { return new(CompositeDestroyRequestPayload) },
+	EventCursorSpawnRequest:              func() any { return new(CursorSpawnRequestPayload) },
+	EventCursorSpawned:                   func() any { return new(CursorSpawnedPayload) },
+	EventCursorArmRequest:                func() any { return new(CursorArmRequestPayload) },
+	EventCursorDespawnRequest:            func() any { return new(CursorDespawnRequestPayload) },
+	EventCursorDespawned:                 func() any { return new(CursorDespawnedPayload) },
+	EventCursorWraithRequest:             func() any { return new(CursorWraithRequestPayload) },
+	EventCursorMoveRequest:               func() any { return new(CursorMoveRequestPayload) },
+	EventCursorMoved:                     func() any { return new(CursorMovedPayload) },
+	EventCursorPredicted:                 func() any { return new(CursorMoveRequestPayload) },
+	EventCursorDefeatState:               func() any { return new(CursorDefeatStatePayload) },
+	EventCursorSetLocalRequest:           func() any { return new(CursorSetLocalPayload) },
+	EventCursorLocalChanged:              func() any { return new(CursorSetLocalPayload) },
+	EventSpeciesCreated:                  func() any { return new(SpeciesCreatedPayload) },
+	EventSpeciesKilled:                   func() any { return new(SpeciesKilledPayload) },
+	EventSpeciesKillConfirmed:            func() any { return new(SpeciesKilledPayload) },
+	EventDrainDefeated:                   func() any { return new(DrainDefeatedPayload) },
+	EventFuseQuasarRequest:               func() any { return new(FuseQuasarRequestPayload) },
+	EventFuseSwarmRequest:                func() any { return new(FuseSwarmRequestPayload) },
+	EventDrainPause:                      func() any { return new(CursorScopePayload) },
+	EventDrainResume:                     func() any { return new(CursorScopePayload) },
+	EventQuasarSpawnRequest:              func() any { return new(QuasarSpawnRequestPayload) },
+	EventSwarmSpawnRequest:               func() any { return new(SwarmSpawnRequestPayload) },
+	EventKrakenSpawnRequest:              func() any { return new(KrakenSpawnRequestPayload) },
+	EventWindStart:                       func() any { return new(WindStartPayload) },
+	EventDriftStart:                      func() any { return new(DriftStartPayload) },
+	EventGrayoutStart:                    func() any { return new(CursorScopePayload) },
+	EventGrayoutEnd:                      func() any { return new(CursorScopePayload) },
+	EventStrobeRequest:                   func() any { return new(StrobeRequestPayload) },
+	EventSpiritSpawnRequest:              func() any { return new(SpiritSpawnRequestPayload) },
+	EventLightningSpawnRequest:           func() any { return new(LightningSpawnRequestPayload) },
+	EventLightningUpdateRequest:          func() any { return new(LightningUpdateRequestPayload) },
+	EventLightningDespawnRequest:         func() any { return new(LightningDespawnRequestPayload) },
+	EventCombatAttackDirectRequest:       func() any { return new(CombatAttackDirectRequestPayload) },
+	EventCombatAttackAreaRequest:         func() any { return new(CombatAttackAreaRequestPayload) },
+	EventCombatAttackAreaCrossingRequest: func() any { return new(CombatAttackAreaRequestPayload) },
+	EventCombatHealRequest:               func() any { return new(CombatHealRequestPayload) },
+	EventLootSpawnRequest:                func() any { return new(LootSpawnRequestPayload) },
+	EventMissileSpawnRequest:             func() any { return new(MissileSpawnRequestPayload) },
+	EventBulletSpawnRequest:              func() any { return new(BulletSpawnRequestPayload) },
+	EventMarkerSpawnRequest:              func() any { return new(MarkerSpawnRequestPayload) },
+	EventButtonSpawnRequest:              func() any { return new(ButtonSpawnRequestPayload) },
+	EventButtonLightRequest:              func() any { return new(ButtonLightRequestPayload) },
+	EventMotionMarkerShowColored:         func() any { return new(MotionMarkerShowPayload) },
+	EventModeChanged:                     func() any { return new(ModeChangedPayload) },
+	EventWallSpawnRequest:                func() any { return new(WallSpawnRequestPayload) },
+	EventWallBatchSpawnRequest:           func() any { return new(WallBatchSpawnRequestPayload) },
+	EventWallCompositeSpawnRequest:       func() any { return new(WallCompositeSpawnRequestPayload) },
+	EventWallPatternSpawnRequest:         func() any { return new(WallPatternSpawnRequestPayload) },
+	EventMazeSpawnRequest:                func() any { return new(MazeSpawnRequestPayload) },
+	EventWallDespawnRequest:              func() any { return new(WallDespawnRequestPayload) },
+	EventWallMaskChangeRequest:           func() any { return new(WallMaskChangeRequestPayload) },
+	EventWallSpawned:                     func() any { return new(WallSpawnedPayload) },
+	EventWallDespawned:                   func() any { return new(WallDespawnedPayload) },
+	EventFadeoutSpawnOne:                 func() any { return new(FadeoutSpawnPayload) },
+	EventPylonSpawnRequest:               func() any { return new(PylonSpawnRequestPayload) },
+	EventSnakeSpawnRequest:               func() any { return new(SnakeSpawnRequestPayload) },
+	EventTargetGroupUpdate:               func() any { return new(TargetGroupUpdatePayload) },
+	EventTargetGroupRemove:               func() any { return new(TargetGroupRemovePayload) },
+	EventRouteGraphRequest:               func() any { return new(RouteGraphRequestPayload) },
+	EventRouteGraphComputed:              func() any { return new(RouteGraphComputedPayload) },
+	EventEyeSpawnRequest:                 func() any { return new(EyeSpawnRequestPayload) },
+	EventTowerSpawnRequest:               func() any { return new(TowerSpawnRequestPayload) },
+	EventGatewaySpawnRequest:             func() any { return new(GatewaySpawnRequestPayload) },
+	EventGatewayDespawnRequest:           func() any { return new(GatewayDespawnRequestPayload) },
+	EventGatewayDespawned:                func() any { return new(GatewayDespawnedPayload) },
+	EventGeneticRegisterSpecies:          func() any { return new(GeneticRegisterSpeciesPayload) },
+	EventGeneticAbandonEval:              func() any { return new(GeneticAbandonEvalPayload) },
+	EventDebugFlowToggle:                 func() any { return new(DebugFlowGroupPayload) },
+	EventDebugGraphToggle:                func() any { return new(DebugFlowGroupPayload) },
+}
+
+// payloadCodecs is each event's payload table.
+var payloadCodecs = [EventTypeCount]*structCodec{
+	EventLevelSetup:                      &codecLevelSetupPayload,
+	EventScreenResize:                    &codecScreenResizePayload,
+	EventSoundRequest:                    &codecSoundRequestPayload,
+	EventSoundMuteToggle:                 &codecSoundMuteTogglePayload,
+	EventAudioMuteChanged:                &codecAudioMuteChangedPayload,
+	EventMusicStart:                      &codecMusicStartPayload,
+	EventBeatPatternRequest:              &codecBeatPatternRequestPayload,
+	EventMelodyNoteRequest:               &codecMelodyNoteRequestPayload,
+	EventMelodyPatternRequest:            &codecMelodyPatternRequestPayload,
+	EventMusicIntensityChange:            &codecMusicIntensityPayload,
+	EventMusicTempoChange:                &codecMusicTempoPayload,
+	EventMusicSeedRequest:                &codecMusicSeedPayload,
+	EventMusicSwingRequest:               &codecMusicSwingPayload,
+	EventNetworkConnect:                  &codecNetworkConnectPayload,
+	EventNetworkDisconnect:               &codecNetworkDisconnectPayload,
+	EventParticipantJoined:               &codecParticipantJoinedPayload,
+	EventParticipantDeparted:             &codecParticipantDepartedPayload,
+	EventPlayoutLead:                     &codecPlayoutLeadPayload,
+	EventCursorStateSync:                 &codecCursorStatePayload,
+	EventSessionState:                    &codecSessionStatePayload,
+	EventGameResetRequest:                &codecGameResetPayload,
+	EventMetaStatusMessageRequest:        &codecMetaStatusMessagePayload,
+	EventMetaSystemCommandRequest:        &codecMetaSystemCommandPayload,
+	EventGamePauseRequest:                &codecGamePausePayload,
+	EventGamePauseChanged:                &codecGamePausePayload,
+	EventGameSpeedRequest:                &codecGameSpeedPayload,
+	EventGameSpeedChanged:                &codecGameSpeedPayload,
+	EventGameStepRequest:                 &codecGameStepPayload,
+	EventGameHoldRequest:                 &codecGamePausePayload,
+	EventFSMRegionRequest:                &codecFSMRegionPayload,
+	EventNuggetCollected:                 &codecNuggetCollectedPayload,
+	EventNuggetDestroyed:                 &codecNuggetDestroyedPayload,
+	EventNuggetJumpRequest:               &codecNuggetJumpRequestPayload,
+	EventGoldSpawned:                     &codecGoldSpawnedPayload,
+	EventGoldCompleted:                   &codecGoldCompletionPayload,
+	EventGoldTimeout:                     &codecGoldCompletionPayload,
+	EventGoldDestroyed:                   &codecGoldCompletionPayload,
+	EventGoldJumpRequest:                 &codecGoldJumpRequestPayload,
+	EventSplashTimerRequest:              &codecSplashTimerRequestPayload,
+	EventSplashTimerCancel:               &codecSplashTimerCancelPayload,
+	EventEnergyAddRequest:                &codecEnergyAddPayload,
+	EventEnergySetRequest:                &codecEnergySetPayload,
+	EventEnergyCrossedZero:               &codecEnergyCrossedZeroPayload,
+	EventEnergyGlyphConsumed:             &codecEnergyGlyphConsumedPayload,
+	EventEnergyBlinkStart:                &codecEnergyBlinkPayload,
+	EventEnergyBlinkStop:                 &codecEnergyBlinkStopPayload,
+	EventShieldActivate:                  &codecShieldActivatePayload,
+	EventShieldDeactivate:                &codecShieldDeactivatePayload,
+	EventShieldDrainRequest:              &codecShieldDrainRequestPayload,
+	EventWeaponAddRequest:                &codecWeaponAddRequestPayload,
+	EventWeaponRemoveRequest:             &codecWeaponRemoveRequestPayload,
+	EventWeaponFireRequest:               &codecWeaponFireRequestPayload,
+	EventFireSpecialRequest:              &codecFireSpecialRequestPayload,
+	EventMountRequest:                    &codecMountRequestPayload,
+	EventHeatAddRequest:                  &codecHeatAddRequestPayload,
+	EventHeatSetRequest:                  &codecHeatSetRequestPayload,
+	EventHeatSpendRequest:                &codecHeatSpendRequestPayload,
+	EventHeatBurst:                       &codecHeatBurstPayload,
+	EventEmberSpent:                      &codecHeatBurstPayload,
+	EventBoostActivate:                   &codecBoostActivatePayload,
+	EventBoostDeactivate:                 &codecBoostDeactivatePayload,
+	EventBoostExtend:                     &codecBoostExtendPayload,
+	EventBoostReward:                     &codecBoostRewardPayload,
+	EventCharacterTyped:                  &codecCharacterTypedPayload,
+	EventDeleteRequest:                   &codecDeleteRequestPayload,
+	EventKeyCaptureRequest:               &codecKeyCapturePayload,
+	EventInputPressed:                    &codecInputPayload,
+	EventInputReleased:                   &codecInputPayload,
+	EventInputPressEcho:                  &codecInputPayload,
+	EventInputReleaseEcho:                &codecInputPayload,
+	EventInputReport:                     &codecInputReportPayload,
+	EventPingGridRequest:                 &codecPingGridRequestPayload,
+	EventMaterializeRequest:              &codecMaterializeRequestPayload,
+	EventMaterializeComplete:             &codecMaterializeCompletedPayload,
+	EventMaterializeAreaRequest:          &codecMaterializeAreaRequestPayload,
+	EventFlashSpawnOneRequest:            &codecFlashRequestPayload,
+	EventExplosionRequest:                &codecExplosionRequestPayload,
+	EventExplosionBatchRequest:           &codecExplosionBatchRequestPayload,
+	EventExplosionVisualRequest:          &codecExplosionVisualRequestPayload,
+	EventExplosionVisualBatchRequest:     &codecExplosionVisualBatchRequestPayload,
+	EventPulseVisualRequest:              &codecPulseVisualRequestPayload,
+	EventParticleSpawnOne:                &codecParticleSpawnPayload,
+	EventParticleWave:                    &codecParticleWavePayload,
+	EventParticleVortex:                  &codecParticleVortexPayload,
+	EventDeathBatch:                      &codecDeathRequestPayload,
+	EventCompositeMemberDestroyed:        &codecCompositeMemberDestroyedPayload,
+	EventCompositeIntegrityBreach:        &codecCompositeIntegrityBreachPayload,
+	EventCompositeDestroyRequest:         &codecCompositeDestroyRequestPayload,
+	EventCursorSpawnRequest:              &codecCursorSpawnRequestPayload,
+	EventCursorSpawned:                   &codecCursorSpawnedPayload,
+	EventCursorArmRequest:                &codecCursorArmRequestPayload,
+	EventCursorDespawnRequest:            &codecCursorDespawnRequestPayload,
+	EventCursorDespawned:                 &codecCursorDespawnedPayload,
+	EventCursorWraithRequest:             &codecCursorWraithRequestPayload,
+	EventCursorMoveRequest:               &codecCursorMoveRequestPayload,
+	EventCursorMoved:                     &codecCursorMovedPayload,
+	EventCursorPredicted:                 &codecCursorMoveRequestPayload,
+	EventCursorDefeatState:               &codecCursorDefeatStatePayload,
+	EventCursorSetLocalRequest:           &codecCursorSetLocalPayload,
+	EventCursorLocalChanged:              &codecCursorSetLocalPayload,
+	EventSpeciesCreated:                  &codecSpeciesCreatedPayload,
+	EventSpeciesKilled:                   &codecSpeciesKilledPayload,
+	EventSpeciesKillConfirmed:            &codecSpeciesKilledPayload,
+	EventDrainDefeated:                   &codecDrainDefeatedPayload,
+	EventFuseQuasarRequest:               &codecFuseQuasarRequestPayload,
+	EventFuseSwarmRequest:                &codecFuseSwarmRequestPayload,
+	EventDrainPause:                      &codecCursorScopePayload,
+	EventDrainResume:                     &codecCursorScopePayload,
+	EventQuasarSpawnRequest:              &codecQuasarSpawnRequestPayload,
+	EventSwarmSpawnRequest:               &codecSwarmSpawnRequestPayload,
+	EventKrakenSpawnRequest:              &codecKrakenSpawnRequestPayload,
+	EventWindStart:                       &codecWindStartPayload,
+	EventDriftStart:                      &codecDriftStartPayload,
+	EventGrayoutStart:                    &codecCursorScopePayload,
+	EventGrayoutEnd:                      &codecCursorScopePayload,
+	EventStrobeRequest:                   &codecStrobeRequestPayload,
+	EventSpiritSpawnRequest:              &codecSpiritSpawnRequestPayload,
+	EventLightningSpawnRequest:           &codecLightningSpawnRequestPayload,
+	EventLightningUpdateRequest:          &codecLightningUpdateRequestPayload,
+	EventLightningDespawnRequest:         &codecLightningDespawnRequestPayload,
+	EventCombatAttackDirectRequest:       &codecCombatAttackDirectRequestPayload,
+	EventCombatAttackAreaRequest:         &codecCombatAttackAreaRequestPayload,
+	EventCombatAttackAreaCrossingRequest: &codecCombatAttackAreaRequestPayload,
+	EventCombatHealRequest:               &codecCombatHealRequestPayload,
+	EventLootSpawnRequest:                &codecLootSpawnRequestPayload,
+	EventMissileSpawnRequest:             &codecMissileSpawnRequestPayload,
+	EventBulletSpawnRequest:              &codecBulletSpawnRequestPayload,
+	EventMarkerSpawnRequest:              &codecMarkerSpawnRequestPayload,
+	EventButtonSpawnRequest:              &codecButtonSpawnRequestPayload,
+	EventButtonLightRequest:              &codecButtonLightRequestPayload,
+	EventMotionMarkerShowColored:         &codecMotionMarkerShowPayload,
+	EventModeChanged:                     &codecModeChangedPayload,
+	EventWallSpawnRequest:                &codecWallSpawnRequestPayload,
+	EventWallBatchSpawnRequest:           &codecWallBatchSpawnRequestPayload,
+	EventWallCompositeSpawnRequest:       &codecWallCompositeSpawnRequestPayload,
+	EventWallPatternSpawnRequest:         &codecWallPatternSpawnRequestPayload,
+	EventMazeSpawnRequest:                &codecMazeSpawnRequestPayload,
+	EventWallDespawnRequest:              &codecWallDespawnRequestPayload,
+	EventWallMaskChangeRequest:           &codecWallMaskChangeRequestPayload,
+	EventWallSpawned:                     &codecWallSpawnedPayload,
+	EventWallDespawned:                   &codecWallDespawnedPayload,
+	EventFadeoutSpawnOne:                 &codecFadeoutSpawnPayload,
+	EventPylonSpawnRequest:               &codecPylonSpawnRequestPayload,
+	EventSnakeSpawnRequest:               &codecSnakeSpawnRequestPayload,
+	EventTargetGroupUpdate:               &codecTargetGroupUpdatePayload,
+	EventTargetGroupRemove:               &codecTargetGroupRemovePayload,
+	EventRouteGraphRequest:               &codecRouteGraphRequestPayload,
+	EventRouteGraphComputed:              &codecRouteGraphComputedPayload,
+	EventEyeSpawnRequest:                 &codecEyeSpawnRequestPayload,
+	EventTowerSpawnRequest:               &codecTowerSpawnRequestPayload,
+	EventGatewaySpawnRequest:             &codecGatewaySpawnRequestPayload,
+	EventGatewayDespawnRequest:           &codecGatewayDespawnRequestPayload,
+	EventGatewayDespawned:                &codecGatewayDespawnedPayload,
+	EventGeneticRegisterSpecies:          &codecGeneticRegisterSpeciesPayload,
+	EventGeneticAbandonEval:              &codecGeneticAbandonEvalPayload,
+	EventDebugFlowToggle:                 &codecDebugFlowGroupPayload,
+	EventDebugGraphToggle:                &codecDebugFlowGroupPayload,
+}
+
+func (p *LevelSetupPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecLevelSetupPayload, unsafe.Pointer(p)
+}
+
+var codecLevelSetupPayload = structCodec{size: unsafe.Sizeof(LevelSetupPayload{}), fields: []field{
+	{off: unsafe.Offsetof(LevelSetupPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LevelSetupPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LevelSetupPayload{}.ClearEntities), kind: kindBool},
+	{off: unsafe.Offsetof(LevelSetupPayload{}.PreserveLoot), kind: kindBool},
+	{off: unsafe.Offsetof(LevelSetupPayload{}.CropOnResize), kind: kindBool},
+}}
+
+func (p *ScreenResizePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecScreenResizePayload, unsafe.Pointer(p)
+}
+
+var codecScreenResizePayload = structCodec{size: unsafe.Sizeof(ScreenResizePayload{}), fields: []field{
+	{off: unsafe.Offsetof(ScreenResizePayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ScreenResizePayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *SoundRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSoundRequestPayload, unsafe.Pointer(p)
+}
+
+var codecSoundRequestPayload = structCodec{size: unsafe.Sizeof(SoundRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SoundRequestPayload{}.ID), kind: kindInt, size: unsafe.Sizeof(model.SoundID(0))},
+	{off: unsafe.Offsetof(SoundRequestPayload{}.Name), kind: kindString},
+}}
+
+func (p *SoundMuteTogglePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSoundMuteTogglePayload, unsafe.Pointer(p)
+}
+
+var codecSoundMuteTogglePayload = structCodec{size: unsafe.Sizeof(SoundMuteTogglePayload{}), fields: []field{
+	{off: unsafe.Offsetof(SoundMuteTogglePayload{}.Mode), kind: kindUint, size: unsafe.Sizeof(SoundMuteToggleMode(0))},
+	{off: unsafe.Offsetof(SoundMuteTogglePayload{}.Mask), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *AudioMuteChangedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecAudioMuteChangedPayload, unsafe.Pointer(p)
+}
+
+var codecAudioMuteChangedPayload = structCodec{size: unsafe.Sizeof(AudioMuteChangedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(AudioMuteChangedPayload{}.Mask), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *MusicStartPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMusicStartPayload, unsafe.Pointer(p)
+}
+
+var codecMusicStartPayload = structCodec{size: unsafe.Sizeof(MusicStartPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MusicStartPayload{}.BPM), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MusicStartPayload{}.Intensity), kind: kindInt, size: unsafe.Sizeof(model.Intensity(0))},
+	{off: unsafe.Offsetof(MusicStartPayload{}.BeatPattern), kind: kindInt, size: unsafe.Sizeof(model.PatternID(0))},
+	{off: unsafe.Offsetof(MusicStartPayload{}.MelodyPattern), kind: kindInt, size: unsafe.Sizeof(model.PatternID(0))},
+}}
+
+func (p *BeatPatternRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBeatPatternRequestPayload, unsafe.Pointer(p)
+}
+
+var codecBeatPatternRequestPayload = structCodec{size: unsafe.Sizeof(BeatPatternRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BeatPatternRequestPayload{}.Pattern), kind: kindInt, size: unsafe.Sizeof(model.PatternID(0))},
+	{off: unsafe.Offsetof(BeatPatternRequestPayload{}.TransitionTime), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(BeatPatternRequestPayload{}.Quantize), kind: kindBool},
+}}
+
+func (p *MelodyNoteRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMelodyNoteRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMelodyNoteRequestPayload = structCodec{size: unsafe.Sizeof(MelodyNoteRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MelodyNoteRequestPayload{}.Note), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MelodyNoteRequestPayload{}.Velocity), kind: kindFloat},
+	{off: unsafe.Offsetof(MelodyNoteRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(MelodyNoteRequestPayload{}.Instrument), kind: kindInt, size: unsafe.Sizeof(model.InstrumentType(0))},
+}}
+
+func (p *MelodyPatternRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMelodyPatternRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMelodyPatternRequestPayload = structCodec{size: unsafe.Sizeof(MelodyPatternRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MelodyPatternRequestPayload{}.Pattern), kind: kindInt, size: unsafe.Sizeof(model.PatternID(0))},
+	{off: unsafe.Offsetof(MelodyPatternRequestPayload{}.RootNote), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MelodyPatternRequestPayload{}.TransitionTime), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(MelodyPatternRequestPayload{}.Quantize), kind: kindBool},
+}}
+
+func (p *MusicIntensityPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMusicIntensityPayload, unsafe.Pointer(p)
+}
+
+var codecMusicIntensityPayload = structCodec{size: unsafe.Sizeof(MusicIntensityPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MusicIntensityPayload{}.Intensity), kind: kindInt, size: unsafe.Sizeof(model.Intensity(0))},
+	{off: unsafe.Offsetof(MusicIntensityPayload{}.TransitionTime), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *MusicTempoPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMusicTempoPayload, unsafe.Pointer(p)
+}
+
+var codecMusicTempoPayload = structCodec{size: unsafe.Sizeof(MusicTempoPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MusicTempoPayload{}.BPM), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MusicTempoPayload{}.TransitionTime), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *MusicSeedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMusicSeedPayload, unsafe.Pointer(p)
+}
+
+var codecMusicSeedPayload = structCodec{size: unsafe.Sizeof(MusicSeedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MusicSeedPayload{}.Seed), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+}}
+
+func (p *MusicSwingPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMusicSwingPayload, unsafe.Pointer(p)
+}
+
+var codecMusicSwingPayload = structCodec{size: unsafe.Sizeof(MusicSwingPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MusicSwingPayload{}.Amount), kind: kindFloat},
+}}
+
+func (p *NetworkConnectPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecNetworkConnectPayload, unsafe.Pointer(p)
+}
+
+var codecNetworkConnectPayload = structCodec{size: unsafe.Sizeof(NetworkConnectPayload{}), fields: []field{
+	{off: unsafe.Offsetof(NetworkConnectPayload{}.PeerID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+}}
+
+func (p *NetworkDisconnectPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecNetworkDisconnectPayload, unsafe.Pointer(p)
+}
+
+var codecNetworkDisconnectPayload = structCodec{size: unsafe.Sizeof(NetworkDisconnectPayload{}), fields: []field{
+	{off: unsafe.Offsetof(NetworkDisconnectPayload{}.PeerID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+}}
+
+var codecCursorRecord = structCodec{size: unsafe.Sizeof(CursorRecord{}), fields: []field{
+	{off: unsafe.Offsetof(CursorRecord{}.Charges), kind: kindSlice, elem: &field{kind: kindInt, size: unsafe.Sizeof(int(0))}, stride: unsafe.Sizeof(int(0)), make: func(p unsafe.Pointer, n int) { *(*[]int)(p) = make([]int, n) }},
+	{off: unsafe.Offsetof(CursorRecord{}.Energy), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorRecord{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorRecord{}.HitPoints), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *ParticipantJoinedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecParticipantJoinedPayload, unsafe.Pointer(p)
+}
+
+var codecParticipantJoinedPayload = structCodec{size: unsafe.Sizeof(ParticipantJoinedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Record), kind: kindPtr, sub: &codecCursorRecord, new: func(p unsafe.Pointer) { *(**CursorRecord)(p) = new(CursorRecord) }},
+	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Claim), kind: kindString},
+	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Holder), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Participant), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *ParticipantDepartedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecParticipantDepartedPayload, unsafe.Pointer(p)
+}
+
+var codecParticipantDepartedPayload = structCodec{size: unsafe.Sizeof(ParticipantDepartedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ParticipantDepartedPayload{}.Dismissed), kind: kindBool},
+	{off: unsafe.Offsetof(ParticipantDepartedPayload{}.Participant), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(ParticipantDepartedPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *PlayoutLeadPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecPlayoutLeadPayload, unsafe.Pointer(p)
+}
+
+var codecPlayoutLeadPayload = structCodec{size: unsafe.Sizeof(PlayoutLeadPayload{}), fields: []field{
+	{off: unsafe.Offsetof(PlayoutLeadPayload{}.Ticks), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+}}
+
+func (p *CursorStatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorStatePayload, unsafe.Pointer(p)
+}
+
+var codecCursorStatePayload = structCodec{size: unsafe.Sizeof(CursorStatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorStatePayload{}.WeaponCharges), kind: kindSlice, elem: &field{kind: kindInt, size: unsafe.Sizeof(int(0))}, stride: unsafe.Sizeof(int(0)), make: func(p unsafe.Pointer, n int) { *(*[]int)(p) = make([]int, n) }},
+	{off: unsafe.Offsetof(CursorStatePayload{}.WeaponCooldown), kind: kindSlice, elem: &field{kind: kindInt, size: unsafe.Sizeof(int64(0))}, stride: unsafe.Sizeof(int64(0)), make: func(p unsafe.Pointer, n int) { *(*[]int64)(p) = make([]int64, n) }},
+	{off: unsafe.Offsetof(CursorStatePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.Seq), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.Energy), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.Overheat), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldRadiusX), kind: kindFloat},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldRadiusY), kind: kindFloat},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldInvRxSq), kind: kindFloat},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldInvRySq), kind: kindFloat},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BoostRemaining), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BoostTotal), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.MainFireCooldown), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.HitPoints), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunity), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunitySpent), kind: kindArray, n: 10, elem: &field{kind: kindUint, size: unsafe.Sizeof(uint32(0))}, stride: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ErrorFlash), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BurstFlash), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkRemaining), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkType), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkLevel), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.EmberActive), kind: kindBool},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldActive), kind: kindBool},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BoostActive), kind: kindBool},
+	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkActive), kind: kindBool},
+}}
+
+func (p *SessionStatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSessionStatePayload, unsafe.Pointer(p)
+}
+
+var codecSessionStatePayload = structCodec{size: unsafe.Sizeof(SessionStatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(SessionStatePayload{}.Live), kind: kindBool},
+	{off: unsafe.Offsetof(SessionStatePayload{}.Participant), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(SessionStatePayload{}.Authority), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(SessionStatePayload{}.SeatsOnly), kind: kindBool},
+	{off: unsafe.Offsetof(SessionStatePayload{}.Peers), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+}}
+
+func (p *GameResetPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGameResetPayload, unsafe.Pointer(p)
+}
+
+var codecGameResetPayload = structCodec{size: unsafe.Sizeof(GameResetPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GameResetPayload{}.Purge), kind: kindBool},
+	{off: unsafe.Offsetof(GameResetPayload{}.Wait), kind: kindBool},
+}}
+
+func (p *MetaStatusMessagePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMetaStatusMessagePayload, unsafe.Pointer(p)
+}
+
+var codecMetaStatusMessagePayload = structCodec{size: unsafe.Sizeof(MetaStatusMessagePayload{}), fields: []field{
+	{off: unsafe.Offsetof(MetaStatusMessagePayload{}.Message), kind: kindString},
+	{off: unsafe.Offsetof(MetaStatusMessagePayload{}.Alert), kind: kindBool},
+}}
+
+func (p *MetaSystemCommandPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMetaSystemCommandPayload, unsafe.Pointer(p)
+}
+
+var codecMetaSystemCommandPayload = structCodec{size: unsafe.Sizeof(MetaSystemCommandPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MetaSystemCommandPayload{}.SystemName), kind: kindString},
+	{off: unsafe.Offsetof(MetaSystemCommandPayload{}.Enabled), kind: kindBool},
+}}
+
+func (p *GamePausePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGamePausePayload, unsafe.Pointer(p)
+}
+
+var codecGamePausePayload = structCodec{size: unsafe.Sizeof(GamePausePayload{}), fields: []field{
+	{off: unsafe.Offsetof(GamePausePayload{}.Paused), kind: kindBool},
+}}
+
+func (p *GameSpeedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGameSpeedPayload, unsafe.Pointer(p)
+}
+
+var codecGameSpeedPayload = structCodec{size: unsafe.Sizeof(GameSpeedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GameSpeedPayload{}.Num), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(GameSpeedPayload{}.Den), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+}}
+
+func (p *GameStepPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGameStepPayload, unsafe.Pointer(p)
+}
+
+var codecGameStepPayload = structCodec{size: unsafe.Sizeof(GameStepPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GameStepPayload{}.Mode), kind: kindString},
+	{off: unsafe.Offsetof(GameStepPayload{}.Region), kind: kindString},
+	{off: unsafe.Offsetof(GameStepPayload{}.Event), kind: kindString},
+	{off: unsafe.Offsetof(GameStepPayload{}.Ticks), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(GameStepPayload{}.Num), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(GameStepPayload{}.Den), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(GameStepPayload{}.Pause), kind: kindBool},
+	{off: unsafe.Offsetof(GameStepPayload{}.Off), kind: kindBool},
+}}
+
+func (p *FSMRegionPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFSMRegionPayload, unsafe.Pointer(p)
+}
+
+var codecFSMRegionPayload = structCodec{size: unsafe.Sizeof(FSMRegionPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FSMRegionPayload{}.Op), kind: kindString},
+	{off: unsafe.Offsetof(FSMRegionPayload{}.Region), kind: kindString},
+	{off: unsafe.Offsetof(FSMRegionPayload{}.State), kind: kindString},
+}}
+
+func (p *NuggetCollectedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecNuggetCollectedPayload, unsafe.Pointer(p)
+}
+
+var codecNuggetCollectedPayload = structCodec{size: unsafe.Sizeof(NuggetCollectedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(NuggetCollectedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *NuggetDestroyedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecNuggetDestroyedPayload, unsafe.Pointer(p)
+}
+
+var codecNuggetDestroyedPayload = structCodec{size: unsafe.Sizeof(NuggetDestroyedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(NuggetDestroyedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *NuggetJumpRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecNuggetJumpRequestPayload, unsafe.Pointer(p)
+}
+
+var codecNuggetJumpRequestPayload = structCodec{size: unsafe.Sizeof(NuggetJumpRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(NuggetJumpRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *GoldSpawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGoldSpawnedPayload, unsafe.Pointer(p)
+}
+
+var codecGoldSpawnedPayload = structCodec{size: unsafe.Sizeof(GoldSpawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GoldSpawnedPayload{}.HeaderEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(GoldSpawnedPayload{}.Length), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GoldSpawnedPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *GoldCompletionPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGoldCompletionPayload, unsafe.Pointer(p)
+}
+
+var codecGoldCompletionPayload = structCodec{size: unsafe.Sizeof(GoldCompletionPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GoldCompletionPayload{}.HeaderEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(GoldCompletionPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *GoldJumpRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGoldJumpRequestPayload, unsafe.Pointer(p)
+}
+
+var codecGoldJumpRequestPayload = structCodec{size: unsafe.Sizeof(GoldJumpRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GoldJumpRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+var codecColorRGB = structCodec{size: unsafe.Sizeof(color.RGB{}), fields: []field{
+	{off: unsafe.Offsetof(color.RGB{}.R), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(color.RGB{}.G), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(color.RGB{}.B), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *SplashTimerRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSplashTimerRequestPayload, unsafe.Pointer(p)
+}
+
+var codecSplashTimerRequestPayload = structCodec{size: unsafe.Sizeof(SplashTimerRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.Color), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.OriginX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.OriginY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.MarginLeft), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.MarginRight), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.MarginTop), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.MarginBottom), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *SplashTimerCancelPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSplashTimerCancelPayload, unsafe.Pointer(p)
+}
+
+var codecSplashTimerCancelPayload = structCodec{size: unsafe.Sizeof(SplashTimerCancelPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SplashTimerCancelPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *EnergyAddPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecEnergyAddPayload, unsafe.Pointer(p)
+}
+
+var codecEnergyAddPayload = structCodec{size: unsafe.Sizeof(EnergyAddPayload{}), fields: []field{
+	{off: unsafe.Offsetof(EnergyAddPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(EnergyAddPayload{}.Delta), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(EnergyAddPayload{}.Percentage), kind: kindBool},
+	{off: unsafe.Offsetof(EnergyAddPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.EnergyDeltaType(0))},
+}}
+
+func (p *EnergySetPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecEnergySetPayload, unsafe.Pointer(p)
+}
+
+var codecEnergySetPayload = structCodec{size: unsafe.Sizeof(EnergySetPayload{}), fields: []field{
+	{off: unsafe.Offsetof(EnergySetPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(EnergySetPayload{}.Value), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(EnergySetPayload{}.Weapons), kind: kindBool},
+}}
+
+func (p *EnergyCrossedZeroPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecEnergyCrossedZeroPayload, unsafe.Pointer(p)
+}
+
+var codecEnergyCrossedZeroPayload = structCodec{size: unsafe.Sizeof(EnergyCrossedZeroPayload{}), fields: []field{
+	{off: unsafe.Offsetof(EnergyCrossedZeroPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *EnergyGlyphConsumedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecEnergyGlyphConsumedPayload, unsafe.Pointer(p)
+}
+
+var codecEnergyGlyphConsumedPayload = structCodec{size: unsafe.Sizeof(EnergyGlyphConsumedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(EnergyGlyphConsumedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(EnergyGlyphConsumedPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.GlyphType(0))},
+	{off: unsafe.Offsetof(EnergyGlyphConsumedPayload{}.Level), kind: kindInt, size: unsafe.Sizeof(component.GlyphLevel(0))},
+}}
+
+func (p *EnergyBlinkPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecEnergyBlinkPayload, unsafe.Pointer(p)
+}
+
+var codecEnergyBlinkPayload = structCodec{size: unsafe.Sizeof(EnergyBlinkPayload{}), fields: []field{
+	{off: unsafe.Offsetof(EnergyBlinkPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(EnergyBlinkPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(EnergyBlinkPayload{}.Level), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *EnergyBlinkStopPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecEnergyBlinkStopPayload, unsafe.Pointer(p)
+}
+
+var codecEnergyBlinkStopPayload = structCodec{size: unsafe.Sizeof(EnergyBlinkStopPayload{}), fields: []field{
+	{off: unsafe.Offsetof(EnergyBlinkStopPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *ShieldActivatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecShieldActivatePayload, unsafe.Pointer(p)
+}
+
+var codecShieldActivatePayload = structCodec{size: unsafe.Sizeof(ShieldActivatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(ShieldActivatePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *ShieldDeactivatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecShieldDeactivatePayload, unsafe.Pointer(p)
+}
+
+var codecShieldDeactivatePayload = structCodec{size: unsafe.Sizeof(ShieldDeactivatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(ShieldDeactivatePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *ShieldDrainRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecShieldDrainRequestPayload, unsafe.Pointer(p)
+}
+
+var codecShieldDrainRequestPayload = structCodec{size: unsafe.Sizeof(ShieldDrainRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ShieldDrainRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(ShieldDrainRequestPayload{}.Value), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *WeaponAddRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWeaponAddRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWeaponAddRequestPayload = structCodec{size: unsafe.Sizeof(WeaponAddRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WeaponAddRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(WeaponAddRequestPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
+}}
+
+func (p *WeaponRemoveRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWeaponRemoveRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWeaponRemoveRequestPayload = structCodec{size: unsafe.Sizeof(WeaponRemoveRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WeaponRemoveRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(WeaponRemoveRequestPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
+}}
+
+func (p *WeaponFireRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWeaponFireRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWeaponFireRequestPayload = structCodec{size: unsafe.Sizeof(WeaponFireRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WeaponFireRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *FireSpecialRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFireSpecialRequestPayload, unsafe.Pointer(p)
+}
+
+var codecFireSpecialRequestPayload = structCodec{size: unsafe.Sizeof(FireSpecialRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FireSpecialRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *MountRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMountRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMountRequestPayload = structCodec{size: unsafe.Sizeof(MountRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MountRequestPayload{}.Host), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.IntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Range), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Muzzle), kind: kindFloat},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Lane), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *HeatAddRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecHeatAddRequestPayload, unsafe.Pointer(p)
+}
+
+var codecHeatAddRequestPayload = structCodec{size: unsafe.Sizeof(HeatAddRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(HeatAddRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(HeatAddRequestPayload{}.Delta), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *HeatSetRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecHeatSetRequestPayload, unsafe.Pointer(p)
+}
+
+var codecHeatSetRequestPayload = structCodec{size: unsafe.Sizeof(HeatSetRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(HeatSetRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(HeatSetRequestPayload{}.Value), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *HeatSpendRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecHeatSpendRequestPayload, unsafe.Pointer(p)
+}
+
+var codecHeatSpendRequestPayload = structCodec{size: unsafe.Sizeof(HeatSpendRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(HeatSpendRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(HeatSpendRequestPayload{}.Amount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *HeatBurstPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecHeatBurstPayload, unsafe.Pointer(p)
+}
+
+var codecHeatBurstPayload = structCodec{size: unsafe.Sizeof(HeatBurstPayload{}), fields: []field{
+	{off: unsafe.Offsetof(HeatBurstPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *BoostActivatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBoostActivatePayload, unsafe.Pointer(p)
+}
+
+var codecBoostActivatePayload = structCodec{size: unsafe.Sizeof(BoostActivatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(BoostActivatePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(BoostActivatePayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *BoostDeactivatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBoostDeactivatePayload, unsafe.Pointer(p)
+}
+
+var codecBoostDeactivatePayload = structCodec{size: unsafe.Sizeof(BoostDeactivatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(BoostDeactivatePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *BoostExtendPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBoostExtendPayload, unsafe.Pointer(p)
+}
+
+var codecBoostExtendPayload = structCodec{size: unsafe.Sizeof(BoostExtendPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BoostExtendPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(BoostExtendPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *BoostRewardPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBoostRewardPayload, unsafe.Pointer(p)
+}
+
+var codecBoostRewardPayload = structCodec{size: unsafe.Sizeof(BoostRewardPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BoostRewardPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *CharacterTypedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCharacterTypedPayload, unsafe.Pointer(p)
+}
+
+var codecCharacterTypedPayload = structCodec{size: unsafe.Sizeof(CharacterTypedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CharacterTypedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CharacterTypedPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(CharacterTypedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CharacterTypedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *DeleteRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDeleteRequestPayload, unsafe.Pointer(p)
+}
+
+var codecDeleteRequestPayload = structCodec{size: unsafe.Sizeof(DeleteRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DeleteRequestPayload{}.RangeType), kind: kindInt, size: unsafe.Sizeof(DeleteRangeType(0))},
+	{off: unsafe.Offsetof(DeleteRequestPayload{}.StartX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(DeleteRequestPayload{}.EndX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(DeleteRequestPayload{}.StartY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(DeleteRequestPayload{}.EndY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *KeyCapturePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecKeyCapturePayload, unsafe.Pointer(p)
+}
+
+var codecKeyCapturePayload = structCodec{size: unsafe.Sizeof(KeyCapturePayload{}), fields: []field{
+	{off: unsafe.Offsetof(KeyCapturePayload{}.Keys), kind: kindString},
+	{off: unsafe.Offsetof(KeyCapturePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(KeyCapturePayload{}.Releases), kind: kindBool},
+}}
+
+func (p *InputPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecInputPayload, unsafe.Pointer(p)
+}
+
+var codecInputPayload = structCodec{size: unsafe.Sizeof(InputPayload{}), fields: []field{
+	{off: unsafe.Offsetof(InputPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(InputPayload{}.Key), kind: kindString},
+	{off: unsafe.Offsetof(InputPayload{}.Source), kind: kindUint, size: unsafe.Sizeof(InputSource(0))},
+	{off: unsafe.Offsetof(InputPayload{}.Tick), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+	{off: unsafe.Offsetof(InputPayload{}.Lost), kind: kindBool},
+}}
+
+func (p *InputReportPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecInputReportPayload, unsafe.Pointer(p)
+}
+
+var codecInputReportPayload = structCodec{size: unsafe.Sizeof(InputReportPayload{}), fields: []field{
+	{off: unsafe.Offsetof(InputReportPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(InputReportPayload{}.Releases), kind: kindBool},
+}}
+
+func (p *PingGridRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecPingGridRequestPayload, unsafe.Pointer(p)
+}
+
+var codecPingGridRequestPayload = structCodec{size: unsafe.Sizeof(PingGridRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(PingGridRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(PingGridRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *MaterializeRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMaterializeRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMaterializeRequestPayload = structCodec{size: unsafe.Sizeof(MaterializeRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MaterializeRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+}}
+
+func (p *MaterializeCompletedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMaterializeCompletedPayload, unsafe.Pointer(p)
+}
+
+var codecMaterializeCompletedPayload = structCodec{size: unsafe.Sizeof(MaterializeCompletedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+}}
+
+func (p *MaterializeAreaRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMaterializeAreaRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMaterializeAreaRequestPayload = structCodec{size: unsafe.Sizeof(MaterializeAreaRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+}}
+
+func (p *FlashRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFlashRequestPayload, unsafe.Pointer(p)
+}
+
+var codecFlashRequestPayload = structCodec{size: unsafe.Sizeof(FlashRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FlashRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FlashRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FlashRequestPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+}}
+
+var codecCrossingID = structCodec{size: unsafe.Sizeof(CrossingID{}), fields: []field{
+	{off: unsafe.Offsetof(CrossingID{}.CrossingSource), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(CrossingID{}.CrossingSeq), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+}}
+
+func (p *ExplosionRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecExplosionRequestPayload, unsafe.Pointer(p)
+}
+
+var codecExplosionRequestPayload = structCodec{size: unsafe.Sizeof(ExplosionRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ExplosionRequestPayload{}.CrossingID), kind: kindStruct, sub: &codecCrossingID},
+	{off: unsafe.Offsetof(ExplosionRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(ExplosionRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ExplosionRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ExplosionRequestPayload{}.Radius), kind: kindFloat},
+	{off: unsafe.Offsetof(ExplosionRequestPayload{}.Attack), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+	{off: unsafe.Offsetof(ExplosionRequestPayload{}.Charged), kind: kindBool},
+}}
+
+var codecExplosionCenterEntry = structCodec{size: unsafe.Sizeof(ExplosionCenterEntry{}), fields: []field{
+	{off: unsafe.Offsetof(ExplosionCenterEntry{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ExplosionCenterEntry{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *ExplosionBatchRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecExplosionBatchRequestPayload, unsafe.Pointer(p)
+}
+
+var codecExplosionBatchRequestPayload = structCodec{size: unsafe.Sizeof(ExplosionBatchRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ExplosionBatchRequestPayload{}.CrossingID), kind: kindStruct, sub: &codecCrossingID},
+	{off: unsafe.Offsetof(ExplosionBatchRequestPayload{}.Centers), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecExplosionCenterEntry}, stride: unsafe.Sizeof(ExplosionCenterEntry{}), make: func(p unsafe.Pointer, n int) { *(*[]ExplosionCenterEntry)(p) = make([]ExplosionCenterEntry, n) }},
+	{off: unsafe.Offsetof(ExplosionBatchRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(ExplosionBatchRequestPayload{}.Radius), kind: kindFloat},
+	{off: unsafe.Offsetof(ExplosionBatchRequestPayload{}.Attack), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+}}
+
+func (p *ExplosionVisualRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecExplosionVisualRequestPayload, unsafe.Pointer(p)
+}
+
+var codecExplosionVisualRequestPayload = structCodec{size: unsafe.Sizeof(ExplosionVisualRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ExplosionVisualRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ExplosionVisualRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ExplosionVisualRequestPayload{}.Radius), kind: kindFloat},
+	{off: unsafe.Offsetof(ExplosionVisualRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(ExplosionVisualRequestPayload{}.Type), kind: kindUint, size: unsafe.Sizeof(ExplosionType(0))},
+}}
+
+func (p *ExplosionVisualBatchRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecExplosionVisualBatchRequestPayload, unsafe.Pointer(p)
+}
+
+var codecExplosionVisualBatchRequestPayload = structCodec{size: unsafe.Sizeof(ExplosionVisualBatchRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ExplosionVisualBatchRequestPayload{}.Centers), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecExplosionCenterEntry}, stride: unsafe.Sizeof(ExplosionCenterEntry{}), make: func(p unsafe.Pointer, n int) { *(*[]ExplosionCenterEntry)(p) = make([]ExplosionCenterEntry, n) }},
+	{off: unsafe.Offsetof(ExplosionVisualBatchRequestPayload{}.Radius), kind: kindFloat},
+	{off: unsafe.Offsetof(ExplosionVisualBatchRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(ExplosionVisualBatchRequestPayload{}.Type), kind: kindUint, size: unsafe.Sizeof(ExplosionType(0))},
+}}
+
+func (p *PulseVisualRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecPulseVisualRequestPayload, unsafe.Pointer(p)
+}
+
+var codecPulseVisualRequestPayload = structCodec{size: unsafe.Sizeof(PulseVisualRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(PulseVisualRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PulseVisualRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PulseVisualRequestPayload{}.Palette), kind: kindUint, size: unsafe.Sizeof(component.WeaponPalette(0))},
+}}
+
+func (p *ParticleSpawnPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecParticleSpawnPayload, unsafe.Pointer(p)
+}
+
+var codecParticleSpawnPayload = structCodec{size: unsafe.Sizeof(ParticleSpawnPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ParticleSpawnPayload{}.Behavior), kind: kindUint, size: unsafe.Sizeof(component.ParticleBehavior(0))},
+	{off: unsafe.Offsetof(ParticleSpawnPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ParticleSpawnPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ParticleSpawnPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(ParticleSpawnPayload{}.Level), kind: kindInt, size: unsafe.Sizeof(component.GlyphLevel(0))},
+	{off: unsafe.Offsetof(ParticleSpawnPayload{}.SkipStartCell), kind: kindBool},
+}}
+
+func (p *ParticleWavePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecParticleWavePayload, unsafe.Pointer(p)
+}
+
+var codecParticleWavePayload = structCodec{size: unsafe.Sizeof(ParticleWavePayload{}), fields: []field{
+	{off: unsafe.Offsetof(ParticleWavePayload{}.Behavior), kind: kindUint, size: unsafe.Sizeof(component.ParticleBehavior(0))},
+	{off: unsafe.Offsetof(ParticleWavePayload{}.Button), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *ParticleVortexPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecParticleVortexPayload, unsafe.Pointer(p)
+}
+
+var codecParticleVortexPayload = structCodec{size: unsafe.Sizeof(ParticleVortexPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ParticleVortexPayload{}.Behavior), kind: kindUint, size: unsafe.Sizeof(component.ParticleBehavior(0))},
+	{off: unsafe.Offsetof(ParticleVortexPayload{}.Button), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ParticleVortexPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+}}
+
+func (p *DeathRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDeathRequestPayload, unsafe.Pointer(p)
+}
+
+var codecDeathRequestPayload = structCodec{size: unsafe.Sizeof(DeathRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DeathRequestPayload{}.Entities), kind: kindSlice, elem: &field{kind: kindUint, size: unsafe.Sizeof(core.Entity(0))}, stride: unsafe.Sizeof(core.Entity(0)), make: func(p unsafe.Pointer, n int) { *(*[]core.Entity)(p) = make([]core.Entity, n) }},
+	{off: unsafe.Offsetof(DeathRequestPayload{}.EffectEvent), kind: kindInt, size: unsafe.Sizeof(EventType(0))},
+	{off: unsafe.Offsetof(DeathRequestPayload{}.Behavior), kind: kindUint, size: unsafe.Sizeof(component.ParticleBehavior(0))},
+}}
+
+func (p *CompositeMemberDestroyedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCompositeMemberDestroyedPayload, unsafe.Pointer(p)
+}
+
+var codecCompositeMemberDestroyedPayload = structCodec{size: unsafe.Sizeof(CompositeMemberDestroyedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CompositeMemberDestroyedPayload{}.HeaderEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CompositeMemberDestroyedPayload{}.MemberEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CompositeMemberDestroyedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CompositeMemberDestroyedPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(CompositeMemberDestroyedPayload{}.RemainingCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *CompositeIntegrityBreachPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCompositeIntegrityBreachPayload, unsafe.Pointer(p)
+}
+
+var codecCompositeIntegrityBreachPayload = structCodec{size: unsafe.Sizeof(CompositeIntegrityBreachPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CompositeIntegrityBreachPayload{}.HeaderEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CompositeIntegrityBreachPayload{}.Behavior), kind: kindUint, size: unsafe.Sizeof(component.Behavior(0))},
+	{off: unsafe.Offsetof(CompositeIntegrityBreachPayload{}.LostCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CompositeIntegrityBreachPayload{}.RemainingCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *CompositeDestroyRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCompositeDestroyRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCompositeDestroyRequestPayload = structCodec{size: unsafe.Sizeof(CompositeDestroyRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CompositeDestroyRequestPayload{}.HeaderEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CompositeDestroyRequestPayload{}.Effect), kind: kindInt, size: unsafe.Sizeof(EventType(0))},
+}}
+
+func (p *CursorSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCursorSpawnRequestPayload = structCodec{size: unsafe.Sizeof(CursorSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Record), kind: kindPtr, sub: &codecCursorRecord, new: func(p unsafe.Pointer) { *(**CursorRecord)(p) = new(CursorRecord) }},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Claim), kind: kindString},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Holder), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Energy), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Control), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.PeerID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Auto), kind: kindBool},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Center), kind: kindBool},
+}}
+
+func (p *CursorSpawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorSpawnedPayload, unsafe.Pointer(p)
+}
+
+var codecCursorSpawnedPayload = structCodec{size: unsafe.Sizeof(CursorSpawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorSpawnedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CursorSpawnedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorSpawnedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorSpawnedPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *CursorArmRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorArmRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCursorArmRequestPayload = structCodec{size: unsafe.Sizeof(CursorArmRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorArmRequestPayload{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorArmRequestPayload{}.Energy), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorArmRequestPayload{}.Ember), kind: kindBool},
+}}
+
+func (p *CursorDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorDespawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCursorDespawnRequestPayload = structCodec{size: unsafe.Sizeof(CursorDespawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorDespawnRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CursorDespawnRequestPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(CursorDespawnRequestPayload{}.All), kind: kindBool},
+}}
+
+func (p *CursorDespawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorDespawnedPayload, unsafe.Pointer(p)
+}
+
+var codecCursorDespawnedPayload = structCodec{size: unsafe.Sizeof(CursorDespawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorDespawnedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CursorDespawnedPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *CursorWraithRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorWraithRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCursorWraithRequestPayload = structCodec{size: unsafe.Sizeof(CursorWraithRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorWraithRequestPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *CursorMoveRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorMoveRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCursorMoveRequestPayload = structCodec{size: unsafe.Sizeof(CursorMoveRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorMoveRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CursorMoveRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorMoveRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorMoveRequestPayload{}.Pointer), kind: kindBool},
+}}
+
+func (p *CursorMovedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorMovedPayload, unsafe.Pointer(p)
+}
+
+var codecCursorMovedPayload = structCodec{size: unsafe.Sizeof(CursorMovedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorMovedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CursorMovedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorMovedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *CursorDefeatStatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorDefeatStatePayload, unsafe.Pointer(p)
+}
+
+var codecCursorDefeatStatePayload = structCodec{size: unsafe.Sizeof(CursorDefeatStatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorDefeatStatePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CursorDefeatStatePayload{}.Defeated), kind: kindBool},
+	{off: unsafe.Offsetof(CursorDefeatStatePayload{}.ProducedTick), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+}}
+
+func (p *CursorSetLocalPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorSetLocalPayload, unsafe.Pointer(p)
+}
+
+var codecCursorSetLocalPayload = structCodec{size: unsafe.Sizeof(CursorSetLocalPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorSetLocalPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *SpeciesCreatedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSpeciesCreatedPayload, unsafe.Pointer(p)
+}
+
+var codecSpeciesCreatedPayload = structCodec{size: unsafe.Sizeof(SpeciesCreatedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.MemberCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.Genes), kind: kindSlice, elem: &field{kind: kindFloat}, stride: unsafe.Sizeof(float64(0)), make: func(p unsafe.Pointer, n int) { *(*[]float64)(p) = make([]float64, n) }},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.EvalID), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+}}
+
+func (p *SpeciesKilledPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSpeciesKilledPayload, unsafe.Pointer(p)
+}
+
+var codecSpeciesKilledPayload = structCodec{size: unsafe.Sizeof(SpeciesKilledPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SpeciesKilledPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(SpeciesKilledPayload{}.KillerEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(SpeciesKilledPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpeciesKilledPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpeciesKilledPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(SpeciesKilledPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *DrainDefeatedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDrainDefeatedPayload, unsafe.Pointer(p)
+}
+
+var codecDrainDefeatedPayload = structCodec{size: unsafe.Sizeof(DrainDefeatedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DrainDefeatedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *FuseQuasarRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFuseQuasarRequestPayload, unsafe.Pointer(p)
+}
+
+var codecFuseQuasarRequestPayload = structCodec{size: unsafe.Sizeof(FuseQuasarRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FuseQuasarRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *FuseSwarmRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFuseSwarmRequestPayload, unsafe.Pointer(p)
+}
+
+var codecFuseSwarmRequestPayload = structCodec{size: unsafe.Sizeof(FuseSwarmRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.DrainA), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.DrainB), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.Effect), kind: kindInt, size: unsafe.Sizeof(FuseEffect(0))},
+}}
+
+func (p *CursorScopePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorScopePayload, unsafe.Pointer(p)
+}
+
+var codecCursorScopePayload = structCodec{size: unsafe.Sizeof(CursorScopePayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorScopePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *QuasarSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecQuasarSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecQuasarSpawnRequestPayload = structCodec{size: unsafe.Sizeof(QuasarSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(QuasarSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(QuasarSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *SwarmSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSwarmSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecSwarmSpawnRequestPayload = structCodec{size: unsafe.Sizeof(SwarmSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SwarmSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SwarmSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *KrakenSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecKrakenSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecKrakenSpawnRequestPayload = structCodec{size: unsafe.Sizeof(KrakenSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *WindStartPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWindStartPayload, unsafe.Pointer(p)
+}
+
+var codecWindStartPayload = structCodec{size: unsafe.Sizeof(WindStartPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WindStartPayload{}.Force), kind: kindFloat},
+	{off: unsafe.Offsetof(WindStartPayload{}.Direction), kind: kindFloat},
+	{off: unsafe.Offsetof(WindStartPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *DriftStartPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDriftStartPayload, unsafe.Pointer(p)
+}
+
+var codecDriftStartPayload = structCodec{size: unsafe.Sizeof(DriftStartPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DriftStartPayload{}.Direction), kind: kindFloat},
+	{off: unsafe.Offsetof(DriftStartPayload{}.Speed), kind: kindFloat},
+	{off: unsafe.Offsetof(DriftStartPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+}}
+
+func (p *StrobeRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecStrobeRequestPayload, unsafe.Pointer(p)
+}
+
+var codecStrobeRequestPayload = structCodec{size: unsafe.Sizeof(StrobeRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(StrobeRequestPayload{}.Color), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(StrobeRequestPayload{}.Intensity), kind: kindFloat},
+	{off: unsafe.Offsetof(StrobeRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(StrobeRequestPayload{}.Cursor), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *SpiritSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSpiritSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecSpiritSpawnRequestPayload = structCodec{size: unsafe.Sizeof(SpiritSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.StartX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.StartY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.TargetX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.TargetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.BaseColor), kind: kindInt, size: unsafe.Sizeof(component.SpiritColor(0))},
+}}
+
+func (p *LightningSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecLightningSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecLightningSpawnRequestPayload = structCodec{size: unsafe.Sizeof(LightningSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.Owner), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.OriginX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.OriginY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.TargetX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.TargetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.OriginEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.TargetEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.PathSeed), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.ColorType), kind: kindUint, size: unsafe.Sizeof(component.LightningColorType(0))},
+	{off: unsafe.Offsetof(LightningSpawnRequestPayload{}.Tracked), kind: kindBool},
+}}
+
+func (p *LightningUpdateRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecLightningUpdateRequestPayload, unsafe.Pointer(p)
+}
+
+var codecLightningUpdateRequestPayload = structCodec{size: unsafe.Sizeof(LightningUpdateRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(LightningUpdateRequestPayload{}.Owner), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(LightningUpdateRequestPayload{}.TargetX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LightningUpdateRequestPayload{}.TargetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *LightningDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecLightningDespawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecLightningDespawnRequestPayload = structCodec{size: unsafe.Sizeof(LightningDespawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(LightningDespawnRequestPayload{}.Owner), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(LightningDespawnRequestPayload{}.TargetEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *CombatAttackDirectRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCombatAttackDirectRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCombatAttackDirectRequestPayload = structCodec{size: unsafe.Sizeof(CombatAttackDirectRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.CrossingID), kind: kindStruct, sub: &codecCrossingID},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.OwnerEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.OriginEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.TargetEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.HitEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.OriginVelX), kind: kindFloat},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.OriginVelY), kind: kindFloat},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.OriginX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.OriginY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.AttackType), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.HasOrigin), kind: kindBool},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.HasVelocity), kind: kindBool},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.ChainDepth), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(CombatAttackDirectRequestPayload{}.RootAttackType), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+}}
+
+func (p *CombatAttackAreaRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCombatAttackAreaRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCombatAttackAreaRequestPayload = structCodec{size: unsafe.Sizeof(CombatAttackAreaRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.CrossingID), kind: kindStruct, sub: &codecCrossingID},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.HitEntities), kind: kindSlice, elem: &field{kind: kindUint, size: unsafe.Sizeof(core.Entity(0))}, stride: unsafe.Sizeof(core.Entity(0)), make: func(p unsafe.Pointer, n int) { *(*[]core.Entity)(p) = make([]core.Entity, n) }},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.AttackType), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.OwnerEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.OriginEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.TargetEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.HasOrigin), kind: kindBool},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.OriginX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.OriginY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.ChainDepth), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.RootAttackType), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.Scale), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(CombatAttackAreaRequestPayload{}.Charged), kind: kindBool},
+}}
+
+func (p *CombatHealRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCombatHealRequestPayload, unsafe.Pointer(p)
+}
+
+var codecCombatHealRequestPayload = structCodec{size: unsafe.Sizeof(CombatHealRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CombatHealRequestPayload{}.TargetEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(CombatHealRequestPayload{}.Amount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *LootSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecLootSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecLootSpawnRequestPayload = structCodec{size: unsafe.Sizeof(LootSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.Type), kind: kindUint, size: unsafe.Sizeof(component.LootType(0))},
+	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+var codecComponentCursorDamage = structCodec{size: unsafe.Sizeof(component.CursorDamage{}), fields: []field{
+	{off: unsafe.Offsetof(component.CursorDamage{}.EnergyDrain), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(component.CursorDamage{}.HeatDelta), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *MissileSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMissileSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMissileSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MissileSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.Targets), kind: kindSlice, elem: &field{kind: kindUint, size: unsafe.Sizeof(core.Entity(0))}, stride: unsafe.Sizeof(core.Entity(0)), make: func(p unsafe.Pointer, n int) { *(*[]core.Entity)(p) = make([]core.Entity, n) }},
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.HitEntities), kind: kindSlice, elem: &field{kind: kindUint, size: unsafe.Sizeof(core.Entity(0))}, stride: unsafe.Sizeof(core.Entity(0)), make: func(p unsafe.Pointer, n int) { *(*[]core.Entity)(p) = make([]core.Entity, n) }},
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.OwnerEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.OriginX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.OriginY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.Count), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.Hostile), kind: kindBool},
+	{off: unsafe.Offsetof(MissileSpawnRequestPayload{}.Damage), kind: kindStruct, sub: &codecComponentCursorDamage},
+}}
+
+func (p *BulletSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBulletSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecBulletSpawnRequestPayload = structCodec{size: unsafe.Sizeof(BulletSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.OriginX), kind: kindFloat},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.OriginY), kind: kindFloat},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.VelX), kind: kindFloat},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.VelY), kind: kindFloat},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.Owner), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.MaxLifetime), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.Hostile), kind: kindBool},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.Damage), kind: kindStruct, sub: &codecComponentCursorDamage},
+	{off: unsafe.Offsetof(BulletSpawnRequestPayload{}.Attack), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+}}
+
+func (p *MarkerSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMarkerSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMarkerSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MarkerSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Intensity), kind: kindFloat},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.PulseRate), kind: kindFloat},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Color), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Shape), kind: kindUint, size: unsafe.Sizeof(component.MarkerShape(0))},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.FadeMode), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *ButtonSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecButtonSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecButtonSpawnRequestPayload = structCodec{size: unsafe.Sizeof(ButtonSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ButtonSpawnRequestPayload{}.Key), kind: kindString},
+	{off: unsafe.Offsetof(ButtonSpawnRequestPayload{}.Color), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(ButtonSpawnRequestPayload{}.Sound), kind: kindString},
+}}
+
+func (p *ButtonLightRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecButtonLightRequestPayload, unsafe.Pointer(p)
+}
+
+var codecButtonLightRequestPayload = structCodec{size: unsafe.Sizeof(ButtonLightRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ButtonLightRequestPayload{}.Button), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(ButtonLightRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+}}
+
+func (p *MotionMarkerShowPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMotionMarkerShowPayload, unsafe.Pointer(p)
+}
+
+var codecMotionMarkerShowPayload = structCodec{size: unsafe.Sizeof(MotionMarkerShowPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MotionMarkerShowPayload{}.DirectionX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MotionMarkerShowPayload{}.DirectionY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *ModeChangedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecModeChangedPayload, unsafe.Pointer(p)
+}
+
+var codecModeChangedPayload = structCodec{size: unsafe.Sizeof(ModeChangedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(ModeChangedPayload{}.Mode), kind: kindUint, size: unsafe.Sizeof(core.GameMode(0))},
+}}
+
+func (p *WallSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWallSpawnRequestPayload = structCodec{size: unsafe.Sizeof(WallSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.FgColor), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.BgColor), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.BoxStyle), kind: kindUint, size: unsafe.Sizeof(component.BoxDrawStyle(0))},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.RenderFg), kind: kindBool},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.RenderBg), kind: kindBool},
+	{off: unsafe.Offsetof(WallSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
+}}
+
+var codecComponentWallVisualConfig = structCodec{size: unsafe.Sizeof(component.WallVisualConfig{}), fields: []field{
+	{off: unsafe.Offsetof(component.WallVisualConfig{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(component.WallVisualConfig{}.FgColor), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(component.WallVisualConfig{}.BgColor), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(component.WallVisualConfig{}.RenderFg), kind: kindBool},
+	{off: unsafe.Offsetof(component.WallVisualConfig{}.RenderBg), kind: kindBool},
+	{off: unsafe.Offsetof(component.WallVisualConfig{}.BoxStyle), kind: kindUint, size: unsafe.Sizeof(component.BoxDrawStyle(0))},
+}}
+
+var codecComponentWallCellDef = structCodec{size: unsafe.Sizeof(component.WallCellDef{}), fields: []field{
+	{off: unsafe.Offsetof(component.WallCellDef{}.OffsetX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(component.WallCellDef{}.OffsetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(component.WallCellDef{}.WallVisualConfig), kind: kindStruct, sub: &codecComponentWallVisualConfig},
+	{off: unsafe.Offsetof(component.WallCellDef{}.Attrs), kind: kindUint, size: unsafe.Sizeof(terminal.Attr(0))},
+}}
+
+func (p *WallBatchSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallBatchSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWallBatchSpawnRequestPayload = structCodec{size: unsafe.Sizeof(WallBatchSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallBatchSpawnRequestPayload{}.Cells), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecComponentWallCellDef}, stride: unsafe.Sizeof(component.WallCellDef{}), make: func(p unsafe.Pointer, n int) { *(*[]component.WallCellDef)(p) = make([]component.WallCellDef, n) }},
+	{off: unsafe.Offsetof(WallBatchSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallBatchSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallBatchSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
+	{off: unsafe.Offsetof(WallBatchSpawnRequestPayload{}.BoxStyle), kind: kindUint, size: unsafe.Sizeof(component.BoxDrawStyle(0))},
+	{off: unsafe.Offsetof(WallBatchSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+	{off: unsafe.Offsetof(WallBatchSpawnRequestPayload{}.Composite), kind: kindBool},
+}}
+
+func (p *WallCompositeSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallCompositeSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWallCompositeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(WallCompositeSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallCompositeSpawnRequestPayload{}.Cells), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecComponentWallCellDef}, stride: unsafe.Sizeof(component.WallCellDef{}), make: func(p unsafe.Pointer, n int) { *(*[]component.WallCellDef)(p) = make([]component.WallCellDef, n) }},
+	{off: unsafe.Offsetof(WallCompositeSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallCompositeSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallCompositeSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
+	{off: unsafe.Offsetof(WallCompositeSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+	{off: unsafe.Offsetof(WallCompositeSpawnRequestPayload{}.BoxStyle), kind: kindUint, size: unsafe.Sizeof(component.BoxDrawStyle(0))},
+}}
+
+func (p *WallPatternSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallPatternSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWallPatternSpawnRequestPayload = structCodec{size: unsafe.Sizeof(WallPatternSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallPatternSpawnRequestPayload{}.Path), kind: kindString},
+	{off: unsafe.Offsetof(WallPatternSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallPatternSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallPatternSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
+	{off: unsafe.Offsetof(WallPatternSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+}}
+
+var codecMazeRoomSpec = structCodec{size: unsafe.Sizeof(MazeRoomSpec{}), fields: []field{
+	{off: unsafe.Offsetof(MazeRoomSpec{}.CenterX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeRoomSpec{}.CenterY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeRoomSpec{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeRoomSpec{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *MazeSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecMazeSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecMazeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MazeSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Rooms), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecMazeRoomSpec}, stride: unsafe.Sizeof(MazeRoomSpec{}), make: func(p unsafe.Pointer, n int) { *(*[]MazeRoomSpec)(p) = make([]MazeRoomSpec, n) }},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.CellWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.CellHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.RoomCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.DefaultRoomWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.DefaultRoomHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Braiding), kind: kindFloat},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
+	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+}}
+
+func (p *WallDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallDespawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWallDespawnRequestPayload = structCodec{size: unsafe.Sizeof(WallDespawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallDespawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnRequestPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnRequestPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnRequestPayload{}.All), kind: kindBool},
+}}
+
+func (p *WallMaskChangeRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallMaskChangeRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWallMaskChangeRequestPayload = structCodec{size: unsafe.Sizeof(WallMaskChangeRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallMaskChangeRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallMaskChangeRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallMaskChangeRequestPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallMaskChangeRequestPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallMaskChangeRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
+}}
+
+func (p *WallSpawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallSpawnedPayload, unsafe.Pointer(p)
+}
+
+var codecWallSpawnedPayload = structCodec{size: unsafe.Sizeof(WallSpawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallSpawnedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallSpawnedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallSpawnedPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallSpawnedPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallSpawnedPayload{}.Count), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallSpawnedPayload{}.HeaderEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *WallDespawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWallDespawnedPayload, unsafe.Pointer(p)
+}
+
+var codecWallDespawnedPayload = structCodec{size: unsafe.Sizeof(WallDespawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WallDespawnedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnedPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnedPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(WallDespawnedPayload{}.Count), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *FadeoutSpawnPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFadeoutSpawnPayload, unsafe.Pointer(p)
+}
+
+var codecFadeoutSpawnPayload = structCodec{size: unsafe.Sizeof(FadeoutSpawnPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.FgColor), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.BgColor), kind: kindStruct, sub: &codecColorRGB},
+}}
+
+func (p *PylonSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecPylonSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecPylonSpawnRequestPayload = structCodec{size: unsafe.Sizeof(PylonSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.RadiusX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.RadiusY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.MinHP), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(PylonSpawnRequestPayload{}.MaxHP), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *SnakeSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSnakeSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecSnakeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(SnakeSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SnakeSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SnakeSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SnakeSpawnRequestPayload{}.SegmentCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *TargetGroupUpdatePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecTargetGroupUpdatePayload, unsafe.Pointer(p)
+}
+
+var codecTargetGroupUpdatePayload = structCodec{size: unsafe.Sizeof(TargetGroupUpdatePayload{}), fields: []field{
+	{off: unsafe.Offsetof(TargetGroupUpdatePayload{}.GroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(TargetGroupUpdatePayload{}.Type), kind: kindUint, size: unsafe.Sizeof(component.TargetType(0))},
+	{off: unsafe.Offsetof(TargetGroupUpdatePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(TargetGroupUpdatePayload{}.PosX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(TargetGroupUpdatePayload{}.PosY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *TargetGroupRemovePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecTargetGroupRemovePayload, unsafe.Pointer(p)
+}
+
+var codecTargetGroupRemovePayload = structCodec{size: unsafe.Sizeof(TargetGroupRemovePayload{}), fields: []field{
+	{off: unsafe.Offsetof(TargetGroupRemovePayload{}.GroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *RouteGraphRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecRouteGraphRequestPayload, unsafe.Pointer(p)
+}
+
+var codecRouteGraphRequestPayload = structCodec{size: unsafe.Sizeof(RouteGraphRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.SourceX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.SourceY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.RouteGraphID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.TargetGroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *RouteGraphComputedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecRouteGraphComputedPayload, unsafe.Pointer(p)
+}
+
+var codecRouteGraphComputedPayload = structCodec{size: unsafe.Sizeof(RouteGraphComputedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(RouteGraphComputedPayload{}.RouteCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(RouteGraphComputedPayload{}.RouteGraphID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+}}
+
+func (p *EyeSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecEyeSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecEyeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(EyeSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.Genes), kind: kindSlice, elem: &field{kind: kindFloat}, stride: unsafe.Sizeof(float64(0)), make: func(p unsafe.Pointer, n int) { *(*[]float64)(p) = make([]float64, n) }},
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.EvalID), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.RouteID), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.RouteGraphID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.Type), kind: kindUint, size: unsafe.Sizeof(component.EyeType(0))},
+	{off: unsafe.Offsetof(EyeSpawnRequestPayload{}.TargetGroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *TowerSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecTowerSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecTowerSpawnRequestPayload = structCodec{size: unsafe.Sizeof(TowerSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.RadiusX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.RadiusY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.MinHP), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.MaxHP), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.Type), kind: kindUint, size: unsafe.Sizeof(component.TowerType(0))},
+	{off: unsafe.Offsetof(TowerSpawnRequestPayload{}.TargetGroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
+func (p *GatewaySpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGatewaySpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecGatewaySpawnRequestPayload = structCodec{size: unsafe.Sizeof(GatewaySpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.BaseIntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.RateMultiplier), kind: kindFloat},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.RateAccelIntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.MinIntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.OffsetX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.OffsetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.GroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.UseRouteGraph), kind: kindBool},
+}}
+
+func (p *GatewayDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGatewayDespawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecGatewayDespawnRequestPayload = structCodec{size: unsafe.Sizeof(GatewayDespawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GatewayDespawnRequestPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *GatewayDespawnedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGatewayDespawnedPayload, unsafe.Pointer(p)
+}
+
+var codecGatewayDespawnedPayload = structCodec{size: unsafe.Sizeof(GatewayDespawnedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GatewayDespawnedPayload{}.GatewayEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(GatewayDespawnedPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+var codecParameterBoundDef = structCodec{size: unsafe.Sizeof(ParameterBoundDef{}), fields: []field{
+	{off: unsafe.Offsetof(ParameterBoundDef{}.Min), kind: kindFloat},
+	{off: unsafe.Offsetof(ParameterBoundDef{}.Max), kind: kindFloat},
+}}
+
+func (p *GeneticRegisterSpeciesPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGeneticRegisterSpeciesPayload, unsafe.Pointer(p)
+}
+
+var codecGeneticRegisterSpeciesPayload = structCodec{size: unsafe.Sizeof(GeneticRegisterSpeciesPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GeneticRegisterSpeciesPayload{}.Bounds), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecParameterBoundDef}, stride: unsafe.Sizeof(ParameterBoundDef{}), make: func(p unsafe.Pointer, n int) { *(*[]ParameterBoundDef)(p) = make([]ParameterBoundDef, n) }},
+	{off: unsafe.Offsetof(GeneticRegisterSpeciesPayload{}.PerturbationStdDev), kind: kindFloat},
+	{off: unsafe.Offsetof(GeneticRegisterSpeciesPayload{}.GeneCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GeneticRegisterSpeciesPayload{}.ProbeBins), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GeneticRegisterSpeciesPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(GeneticRegisterSpeciesPayload{}.IsComposite), kind: kindBool},
+}}
+
+func (p *GeneticAbandonEvalPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGeneticAbandonEvalPayload, unsafe.Pointer(p)
+}
+
+var codecGeneticAbandonEvalPayload = structCodec{size: unsafe.Sizeof(GeneticAbandonEvalPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GeneticAbandonEvalPayload{}.EvalID), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+	{off: unsafe.Offsetof(GeneticAbandonEvalPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+}}
+
+func (p *DebugFlowGroupPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDebugFlowGroupPayload, unsafe.Pointer(p)
+}
+
+var codecDebugFlowGroupPayload = structCodec{size: unsafe.Sizeof(DebugFlowGroupPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DebugFlowGroupPayload{}.GroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}

@@ -574,15 +574,20 @@ schema 37). The approaches are in three batches, and §5 orders them by iteratio
   its sequence and apply tick as varint deltas from the frame before (the first
   apply tick from the produced tick) and its payload behind a length. The payload
   (protocol 24, journal schema 37): `gen-manifest` type-checks the event package
-  and writes `payload_gen.go`, a codec for every registered payload struct and
-  every struct reachable from one: a presence mask, a bit a field, then each set
-  field in declaration order, signed integers as zigzag varints, unsigned as
-  varints, float64 as its bits, strings and slices behind a length, a fixed array
-  as its fields (`DamageImmunitySpent` is the component's type again), a nested
-  struct inline, a pointer by its bit. The journal writes the same bytes, base64
-  in its record, and `vif-log` decodes them with the same codec and shows the
-  prototype as its TOML, so the two cannot drift; the TOML tags stay for that,
-  for authored scripts and for `:emit`.
+  and writes `payload_gen.go`, a field table for every registered payload struct
+  and every struct reachable from one, each field's offset, kind and width, which
+  one walk encodes and decodes through (`codec.go`): a presence mask, a bit a
+  field, then each set field in declaration order, signed integers as zigzag
+  varints, unsigned as varints, float64 as its bits, strings and slices behind a
+  length, a fixed array as its fields (`DamageImmunitySpent` is the component's
+  type again), a nested struct inline, a pointer by its bit. A table a struct
+  rather than a function a struct took 554 kB off the browser build and 238 kB off
+  the native one, and the path reads no type information: the registry's
+  prototypes are generated constructors, and a decode costs 0.3–0.5 µs with one
+  allocation per slice. The journal writes the same bytes, base64 in its record,
+  and `vif-log` decodes them with the same codec and shows the prototype as its
+  TOML, so the two cannot drift; the TOML tags stay for that, for authored scripts
+  and for `:emit`.
 - Left: the correction exchange's envelope: manifests, requests and shard sets
   carry the header's per-tick fields and leave the session identity the handshake
   checked.
