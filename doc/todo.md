@@ -545,7 +545,7 @@ link it already holds.
 
 - Priority: P2
 - Affected files: `internal/app/snapshot_stage.go`
-- Guide: [Netcode design](netcode-design.md#n11-less-work-under-the-live-lock) N11
+- Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
 At td an install that projects nothing already holds the live lock 40–70 ms for the
 capture pair, comparison and write, and each projected tick adds up to a simulation
@@ -596,7 +596,10 @@ three z-jitter draws. The repair logs now name the sections a repair carries; th
 next recording of that shape says which. The seats' recurring one-page, eight-cell
 repairs are a section of exactly eight rows, `streams` or `systems`, and not the
 storm. If it is inherent, a forced keyframe at the spawn tick lands the snap once and
-early instead of as a repair.
+early instead of as a repair. A terminal guest at the site (2026-10-24) saw it again:
+a storm spawn was followed within four ticks by repairs of 499 and 558 cells across
+`meta`, `status`, `w.combat`, `w.header`, `w.member`, `w.positions` and
+`w.protection`, then `w.stormcircle` pages ([netcode design §3.4](netcode-design.md#34-at-the-site)).
 
 ### Split combat telemetry by domain
 
@@ -641,7 +644,9 @@ guest, a 112 ms round trip) the bot was repaired in the `status` section twice i
 digest mismatched on `status` at the first. A status key that passes `SharedKey`
 differs between instances for a few ticks around a transition, and a page repair of
 1.7 kB answers it each time. Reproduce with a host and a guest over a transition and
-compare the status pages; deny the key, or derive it from the tick.
+compare the status pages; deny the key, or derive it from the tick. A later session
+at the site (a terminal guest, 2026-10-24) repaired `status` 31 times in 76 s, 19–22
+cells each, the most repaired section by far.
 
 ### Price the log's and journal's 50 ms sync
 

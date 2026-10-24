@@ -749,7 +749,9 @@ adopted (`NetworkResource.Relay`) — and a guest with no such link and the
 authority alive offers them on every link not behind it, adopting the first that
 returns them committed; with the authority lost it holds them for the handoff to
 resend. The authority sends a committed copy down every link, the producer's
-included, and each node passes a copy it has not seen down to the links behind it
+included, which reads it for its age: a producer with nobody behind it (`Leaf`) gets
+its epoch's copy without the frames it holds and its sync's not at all. Each node
+passes a copy it has not seen down to the links behind it
 (`InboundConnect.Served` marks a served join behind a node from its admission, raw
 traffic marks the rest); the per-source epoch and sequence windows stop a copy
 arriving twice (`NetworkRelayHopLimit` is only the backstop for a bug in it).

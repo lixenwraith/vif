@@ -683,18 +683,48 @@ func TestAGuestCarriesOnlyWhomItRelaysFor(t *testing.T) {
 }
 
 // TestTheAuthorityReturnsTheCommittedCopyToItsProducer: the commit goes down every
-// link, the producer's included, which is how a guest learns what was committed.
+// link, the producer's included, which is how a guest learns what was committed;
+// a leaf's own copy returns as its age alone, its frames being ones it holds.
 func TestTheAuthorityReturnsTheCommittedCopyToItsProducer(t *testing.T) {
 	t.Parallel()
-	port := &linkedPort{peers: []uint32{2}}
+	port := &linkedPort{peers: []uint32{2, 3}}
 	s := sessionSystem(t, 1, 100, port)
 	s.scheduleCrossings(2, rawBatch(t, 2, 100, 104))
-	if got := sentTo(port); len(port.flooded) != 0 || !slices.Equal(got, []uint32{0}) {
-		t.Fatalf("the authority sent to %v and flooded %d frames, want one broadcast", got, len(port.flooded))
+	if got := sentTo(port); !slices.Equal(got, []uint32{2, 3}) {
+		t.Fatalf("the authority sent to %v, want every link, the producer's included", got)
 	}
-	if got, err := event.DecodeWireBatch(port.sent[0].body); err != nil || !got.Committed || got.Age != 1 {
-		t.Fatalf("the broadcast is not the committed copy aged a tick (committed %t, age %d, err %v)", got.Committed, got.Age, err)
+	if got, err := event.DecodeWireBatch(port.sent[0].body); err != nil || !got.Committed || got.Age != 1 || len(got.Frames) != 1 {
+		t.Fatalf("the producer's copy is not the committed epoch aged a tick (committed %t, age %d, %d frames, err %v)",
+			got.Committed, got.Age, len(got.Frames), err)
 	}
+	port.sent = nil
+	leaf, err := event.DecodeWireBatch(rawBatch(t, 3, 100, 104))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf.Leaf = true
+	body, err := event.EncodeWireBatch(leaf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.scheduleCrossings(3, body)
+	if got := sentTo(port); !slices.Equal(got, []uint32{2, 3}) || len(committedFrames(t, port.sent[0].body)) != 1 {
+		t.Fatalf("the leaf's commit went to %v, want its frames on the other link and its age on its own", got)
+	}
+	if got, err := event.DecodeWireBatch(port.sent[1].body); err != nil || !got.Committed || got.Age != 1 || len(got.Frames) != 0 {
+		t.Fatalf("the leaf's own copy carries %d frames (committed %t, age %d, err %v), want its age alone",
+			len(got.Frames), got.Committed, got.Age, err)
+	}
+}
+
+// committedFrames decodes one sent epoch's frames.
+func committedFrames(t *testing.T, body []byte) []event.ScheduledWireFrame {
+	t.Helper()
+	b, err := event.DecodeWireBatch(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b.Frames
 }
 
 // TestAParticipantWithNoPathAdoptsTheLinkThatReturnsItsEpochs: with neither the
