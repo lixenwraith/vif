@@ -111,15 +111,16 @@ One matrix judges every approach, on harnesses that exist:
 | Map | tower, td | `TestATowerGuestAnswersHashOnly` (multi-player §6's shape), `TestCostAtTheStormHighWater`, `BenchmarkCaptureAtStormHighWater` |
 | Players | 2, 4, 16 | the same, seated with bots |
 | Link | in-process; four-tick links; staged latency, loss and byte budget | `network.LinkShape`, `TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers` |
-| Path | in-process mesh; TCP with deflate; WebSocket to a browser | a socket variant of multi-player §6's shape; a browser joiner |
+| Path | in-process mesh; TCP with deflate; WebSocket to a browser | `TestNetcodeReadingsOverSockets` (§6's shape over sockets, `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`); a browser joiner |
 | Host | native at `GOMAXPROCS=1`; a fleet pod at 500m CPU; a WASM guest | `BenchmarkHeadlessTicks`; [Measure a full roster](todo.md#measure-a-full-roster) |
 | Load | idle; a move every third tick and a shot every sixth; the storm high water | multi-player §6's profile, the storm fixture |
 
 Metrics, from multi-player §7's telemetry where it exists: CPU-s/s by stage;
-world-lock hold, p50 and p99; egress before and after deflate by kind; the hash-only
-share; repair and keyframe bytes; `snapshot.correction_*` and
-`snapshot.projected_ticks`; `network.barrier_delay_ticks` and `network.commit_late`;
-heap in use. An approach lands when it moves its target and leaves the hash-only
+world-lock hold, p50 and p99; egress before and after deflate by kind
+(`network.sent_<kind>_bytes` framed before each link's deflate, `network.wire_bytes_out`
+after it); the hash-only share; repair and keyframe bytes; `snapshot.correction_*`
+and `snapshot.projected_ticks`; `network.barrier_delay_ticks` and
+`network.commit_late`; heap in use. An approach lands when it moves its target and leaves the hash-only
 share, correction magnitude and the protocol tests where they were.
 
 ## 3. Approaches

@@ -10,6 +10,42 @@ import (
 // MessageType identifies the semantic meaning of a message
 type MessageType uint8
 
+// ByteKind is the family a frame's bytes are counted under, so a link's traffic is
+// read by what it carries: the command stream (epochs, syncs, digests), whole
+// corrections, the repair exchange, and control.
+type ByteKind uint8
+
+const (
+	KindEpoch ByteKind = iota
+	KindSync
+	KindDigest
+	KindCorrection
+	KindRepair
+	KindControl
+	KindCount
+)
+
+var byteKindNames = [KindCount]string{"epoch", "sync", "digest", "correction", "repair", "control"}
+
+func (k ByteKind) String() string { return byteKindNames[k] }
+
+// Kind is the family t's bytes count under.
+func (t MessageType) Kind() ByteKind {
+	switch t {
+	case MsgEvent, MsgBundle:
+		return KindEpoch
+	case MsgStateSync:
+		return KindSync
+	case MsgStateDigest:
+		return KindDigest
+	case MsgStateCorrection, MsgStateSnapshot:
+		return KindCorrection
+	case MsgStateManifest, MsgStateRequest, MsgStateShard, MsgStateUnserved:
+		return KindRepair
+	}
+	return KindControl
+}
+
 // Live message types are the ones a session actually exchanges. The reserved codes
 // hold their place in the numbering for capabilities the transport does not have
 // yet; nothing sends or accepts them, and NetworkSystem counts an unrecognised type

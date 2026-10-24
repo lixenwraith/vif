@@ -444,6 +444,9 @@ func (t *Transport) Peers() []PeerID { return t.peers.Peers() }
 // Bytes reports one link's cumulative decoded and queued frame bytes.
 func (t *Transport) Bytes(id PeerID) (in, out uint64, ok bool) { return t.peers.Bytes(id) }
 
+// Totals are the bytes every link carried, by kind before deflate and on the wire.
+func (t *Transport) Totals() LinkTotals { return t.peers.Totals() }
+
 // Connected reports whether one peer is still attached.
 func (t *Transport) Connected(id PeerID) bool { return t.peers.Connected(id) }
 

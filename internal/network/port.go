@@ -396,6 +396,10 @@ func (p *SocketPort) Errors() <-chan error { return p.errors }
 // Dropped reports transport notifications lost to a full poll buffer.
 func (p *SocketPort) Dropped() uint64 { return p.dropped.Load() }
 
+// LinkTotals are the bytes this port's links carried, framed by kind before their
+// deflate and on the wire after it, over every link it has had.
+func (p *SocketPort) LinkTotals() LinkTotals { return p.transport.Totals() }
+
 // Refused reports outbound frames a peer's send queue could not take.
 func (p *SocketPort) Refused() uint64 { return p.refused.Load() }
 

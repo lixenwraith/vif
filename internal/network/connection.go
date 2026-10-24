@@ -53,6 +53,10 @@ type Peer struct {
 	InBytes  atomic.Uint64
 	OutBytes atomic.Uint64
 
+	// outKind is OutBytes by what the frames carried, the reading a link's traffic is
+	// planned by; the stream counts the wire bytes they became.
+	outKind [KindCount]atomic.Uint64
+
 	// served is a stream this end admitted through a join handshake, so the
 	// participant on it is behind this one; a dialled or peer link is not.
 	served bool
@@ -104,11 +108,37 @@ func (p *Peer) Send(msg *Message) bool {
 
 	select {
 	case p.sendCh <- msg:
-		p.OutBytes.Add(uint64(HeaderSize + len(msg.Payload)))
+		n := uint64(HeaderSize + len(msg.Payload))
+		p.OutBytes.Add(n)
+		p.outKind[msg.Type.Kind()].Add(n)
 		return true
 	default:
 		return false // Queue full
 	}
+}
+
+// totals is what this link carried: framed bytes by kind and the wire's.
+func (p *Peer) totals() (t LinkTotals) {
+	for k := range t.Framed {
+		t.Framed[k] = p.outKind[k].Load()
+	}
+	t.WireIn, t.WireOut = p.stream.in.Load(), p.stream.out.Load()
+	return t
+}
+
+// LinkTotals are the bytes a transport's links carried, over every link it has had:
+// framed before the stream's deflate, by what they carried, and on the wire after it.
+type LinkTotals struct {
+	Framed          [KindCount]uint64
+	WireIn, WireOut uint64
+}
+
+func (t *LinkTotals) add(o LinkTotals) {
+	for k := range t.Framed {
+		t.Framed[k] += o.Framed[k]
+	}
+	t.WireIn += o.WireIn
+	t.WireOut += o.WireOut
 }
 
 // closeFlush bounds the flush a closing link gives the frames already queued on
@@ -235,6 +265,9 @@ type flateStream struct {
 	r  io.Reader
 	bw *bufio.Writer
 	w  *flate.Writer
+
+	// in and out are the wire's bytes, read before inflate and written after deflate.
+	in, out atomic.Uint64
 }
 
 // openFlateStream opens conn's stream in place, so every holder of a join's stream
@@ -245,11 +278,29 @@ func openFlateStream(conn net.Conn, readBuf, writeBuf int) *flateStream {
 		s = &flateStream{Conn: conn}
 	}
 	if s.w == nil {
-		s.bw = bufio.NewWriterSize(s.Conn, max(writeBuf, 4096))
+		s.bw = bufio.NewWriterSize(wireCounter{s.Conn, &s.out}, max(writeBuf, 4096))
 		s.w, _ = flate.NewWriter(s.bw, parameter.NetworkStreamLevel) // a valid level cannot fail
-		s.r = flate.NewReader(bufio.NewReaderSize(s.Conn, max(readBuf, 4096)))
+		s.r = flate.NewReader(bufio.NewReaderSize(wireCounter{s.Conn, &s.in}, max(readBuf, 4096)))
 	}
 	return s
+}
+
+// wireCounter counts the bytes one side of a stream moves over its socket.
+type wireCounter struct {
+	net.Conn
+	n *atomic.Uint64
+}
+
+func (c wireCounter) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.n.Add(uint64(n))
+	return n, err
+}
+
+func (c wireCounter) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	c.n.Add(uint64(n))
+	return n, err
 }
 
 func (s *flateStream) Read(p []byte) (int, error) {
@@ -283,6 +334,7 @@ type PeerManager struct {
 	peers    map[PeerID]*Peer
 	maxPeers int
 	config   *Config
+	gone     LinkTotals // what the links that closed carried
 
 	// Callbacks
 	onConnect    func(id PeerID, served bool)
@@ -359,6 +411,7 @@ func (pm *PeerManager) monitorPeer(peer *Peer) {
 
 	pm.mu.Lock()
 	delete(pm.peers, peer.ID)
+	pm.gone.add(peer.totals())
 	pm.mu.Unlock()
 
 	if pm.onDisconnect != nil {
@@ -448,6 +501,17 @@ func (pm *PeerManager) Bytes(id PeerID) (in, out uint64, ok bool) {
 		return 0, 0, false
 	}
 	return peer.InBytes.Load(), peer.OutBytes.Load(), true
+}
+
+// Totals are the bytes every link carried, the closed ones included.
+func (pm *PeerManager) Totals() LinkTotals {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	t := pm.gone
+	for _, peer := range pm.peers {
+		t.add(peer.totals())
+	}
+	return t
 }
 
 // PeerCount returns current connected peer count
