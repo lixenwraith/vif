@@ -158,7 +158,7 @@ type StatusBarRenderer struct {
 	// map latch — are read in the status snapshot and in :session, not here.
 	statNet         *status.AtomicString
 	statStale       *atomic.Bool
-	statLag         *atomic.Int64
+	statPaceLate    *atomic.Int64
 	statRTT         *atomic.Int64
 	statLoss        *atomic.Int64
 	statHostLost    *atomic.Bool
@@ -217,7 +217,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statBreak:     statusReg.Strings.Get("engine.breakpoint"),
 		statNet:       statusReg.Strings.Get("network.state"),
 		statStale:     statusReg.Bools.Get("network.stale"),
-		statLag:       statusReg.Ints.Get("network.lag_ticks"),
+		statPaceLate:  statusReg.Ints.Get("network.pace_late_ticks"),
 		statRTT:       statusReg.Ints.Get("network.link_rtt_ms"),
 		statLoss:      statusReg.Ints.Get("network.link_loss_pct"),
 		statHostLost:  statusReg.Bools.Get("network.host_lost"),
@@ -625,7 +625,9 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	}
 
 	// slow!     no cadence delivers a whole world inside the guaranteed window;
-	// desync n  this instance is n ticks behind, so its crossings land late;
+	// desync n  this instance is n ticks out of step with the authority's epochs,
+	//           beyond what its pacing trims quietly: ahead, so committed
+	//           crossings reach it late, or behind by a step, so its lead grows;
 	// loss n%   probes went unanswered often enough for the link to be the cause;
 	// slow      the cadence backed off and prediction carries more.
 	rtt := r.statRTT.Load()
@@ -642,7 +644,8 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	case r.statFloor.Load() && r.statCadence.Load() != 0:
 		text, severity = text+" slow! ", severityFailing
 	case r.statStale.Load():
-		text, severity = fmt.Sprintf("%s desync %d ", text, r.statLag.Load()), max(severity, severityDegrading)
+		late := r.statPaceLate.Load()
+		text, severity = fmt.Sprintf("%s desync %d ", text, max(late, -late)), max(severity, severityDegrading)
 	case loss >= parameter.StatusNetLossWarnPct:
 		text, severity = fmt.Sprintf("%s loss %d%% ", text, loss), max(severity, severityDegrading)
 	case r.statConstrained.Load() && r.statCadence.Load() != 0:

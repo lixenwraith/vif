@@ -848,13 +848,15 @@ Four measurements reach the status bar, as one badge rather than four items.
 `network.link_rtt_ms` is the round trip to the worst peer, which the badge always
 draws and colours by `StatusNetLatencyWarn`/`Bad`: it is the number a player
 already reads in every other networked game, and the one they can act on without
-knowing what a cadence is. `network.lag_ticks` is how far behind the newest tick
-any peer has been seen closing this instance stands, taken every tick rather than
-once at admission, with `network.stale` set past `SnapshotStaleTicks` — the
-default playout lead, past which this participant's own crossings reach the host
-after the ticks they name;
-the badge names it `desync`, since a lag measured in ticks is not the delay the
-round trip already states. `network.link_loss_pct` is the share of probes sent
+knowing what a cadence is. `network.stale` is pacing's own verdict (multi-player
+§3.5), read off the window and band that pace this instance rather than a
+threshold of the badge's: its last decision stepped, or the latest authority epoch
+landed late beyond `NetworkPaceBandTicks`, so either committed crossings reach it
+late or its lead is growing; the badge names it `desync` with
+`network.pace_late_ticks`, since a gap measured in ticks is not the delay the round
+trip already states. `network.lag_ticks`, how far behind the newest peer tick this
+instance stands, is the margin pacing holds on a jittery link and qualifies
+nothing. `network.link_loss_pct` is the share of probes sent
 while no echo had come back for `NetworkProbeLostAfter`, named past
 `StatusNetLossWarnPct`. And the `snapshot.cadence` group is the operating point,
 of which the bar draws only which of two conditions holds — `cadence_constrained`,

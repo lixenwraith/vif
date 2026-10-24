@@ -247,8 +247,8 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.commit_late`, `network.commit_void` (int) | On the authority: guest crossings committed at its next tick because they arrived after their own, and the subset too late to apply, which only closed their source's fence |
 | `network.commit_refused_raw` (int) | On a guest: another participant's raw epochs, passed toward the authority and not applied |
 | `network.join_lag_ticks` (int) | Ticks this participant still stood behind after its join caught up, reported by `App.finishCatchUp`. Above `NetworkJoinLagTicks`, the join is refused |
-| `network.lag_ticks` (int) | How far behind the newest tick any peer closed this instance stands, measured every tick. Zero on the authority |
-| `network.stale` (bool) | That lag exceeds `SnapshotStaleTicks`, so this participant's crossings reach the host after the ticks they name. Always false on the authority. The status bar shows `desync <lag_ticks>` |
+| `network.lag_ticks` (int) | How far behind the newest tick any peer closed this instance stands, measured every tick: on a paced guest the margin its pacing holds, not a fault. Zero on the authority |
+| `network.stale` (bool) | Pacing's verdict that this instance is out of step: its last decision stepped, or the latest authority epoch of the window landed late beyond `NetworkPaceBandTicks`. Ahead, committed crossings reach it late; behind by a step, its lead grows. The badge reads it as `desync` with `pace_late_ticks`. Always false on the authority |
 | `network.corrections_received` (int) | Authoritative corrections reassembled from the wire |
 | `network.relay_forwarded` (int) | Artifact batches and correction chunks this instance passed down to the participants behind it, and departure notices it flooded |
 | `network.relay_duplicates` (int) | Epochs, syncs and chunks already admitted arriving again, and crossing sequences already taken, whatever epoch carried them |
