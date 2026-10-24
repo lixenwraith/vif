@@ -54,6 +54,9 @@ type stub struct {
 	late    map[uint32]uint64
 	ingress map[uint32]uint64
 	dropped []uint32
+
+	// How the world was read as ticks closed: captured whole, or indexed in place.
+	captured, indexed int
 }
 
 // adopted is one call the succession made on the run: the record it moved to,
@@ -130,7 +133,23 @@ func (s *stub) CaptureShared() (snapshot.SharedCapture, error) {
 	return s.world, nil
 }
 
-func (s *stub) CaptureSharedLocked() (snapshot.SharedCapture, error) { return s.world, nil }
+func (s *stub) CaptureSharedLocked() (snapshot.SharedCapture, error) {
+	s.captured++
+	return s.world, nil
+}
+
+// IndexSharedLocked indexes the stub's capture as a live world would be, counting
+// the answers that needed no capture.
+func (s *stub) IndexSharedLocked(authority uint32, term network.AuthorityTerm) (*snapshot.Manifest, snapshot.SharedCapture, error) {
+	s.indexed++
+	light := s.world
+	light.World = engine.SharedWorldState{NextEntity: light.World.NextEntity, Created: light.World.Created, Destroyed: light.World.Destroyed}
+	light.Header.Term = term
+	whole := s.world
+	whole.Header.Term = term
+	index, err := s.enc.Build(whole, authority)
+	return index, light, err
+}
 
 func (s *stub) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
 	s.mu.Lock()

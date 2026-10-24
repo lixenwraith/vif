@@ -217,11 +217,28 @@ func (m *Machine[T]) take(ctx T, region *RegionState, owner StateID, index int, 
 	trans := &m.nodes[owner].Transitions[index]
 	vars := payloadVars(payload, trans.CaptureVars)
 	if m.proposing && m.Propose != nil {
-		region.proposed = !trans.Internal
+		region.proposed, region.target = !trans.Internal, trans.TargetID
 		m.Propose(region.Name, owner, index, trigger, vars)
 		return
 	}
 	m.commit(ctx, region, trans, trigger, vars)
+}
+
+// parkedEventsMax bounds what a region holds for a transition that never lands.
+const parkedEventsMax = 32
+
+// reactsAlong reports whether the path to state reacts to an event type.
+func (m *Machine[T]) reactsAlong(state StateID, et event.EventType) bool {
+	node, ok := m.nodes[state]
+	if !ok {
+		return false
+	}
+	for _, id := range node.Path {
+		if n, ok := m.nodes[id]; ok && n.triggers.has(et) {
+			return true
+		}
+	}
+	return false
 }
 
 // commit takes a transition now: its captured variables, then its actions alone
@@ -252,12 +269,25 @@ func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
 	owner := StateID(p.Owner)
 	node, ok := m.nodes[owner]
 	if !ok || !slices.Contains(region.ActivePath, owner) || p.Index < 0 || p.Index >= len(node.Transitions) {
-		region.proposed = false
+		region.proposed, region.parked = false, nil
 		return fmt.Errorf("region %q in %s has no transition %d of state %d", p.Region, m.StateName(region.ActiveStateID), p.Index, p.Owner)
 	}
 	trans := &node.Transitions[p.Index]
-	region.proposed = region.proposed && trans.Internal
+	if trans.Internal {
+		m.commit(ctx, region, trans, p.Trigger, p.Vars)
+		return nil
+	}
+	region.proposed = false
+	parked := region.parked
+	region.parked = nil
 	m.commit(ctx, region, trans, p.Trigger, p.Vars)
+	// What arrived during the wait reaches the state entered, in order; a
+	// transition one takes parks the rest again.
+	for _, ev := range parked {
+		if r, ok := m.regions[region.Name]; ok && r == region {
+			m.handleEventInRegion(ctx, region, ev)
+		}
+	}
 	return nil
 }
 
@@ -270,7 +300,7 @@ func (m *Machine[T]) Steer(following, proposing bool) {
 	}
 	m.following, m.proposing = following, proposing
 	for _, name := range m.regionOrder {
-		m.regions[name].proposed = false
+		m.regions[name].proposed, m.regions[name].parked = false, nil
 	}
 }
 
@@ -356,9 +386,22 @@ func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
 	return handled
 }
 
-// handleEventInRegion processes event in a single region
+// handleEventInRegion processes event in a single region. A region with a
+// transition in flight parks an event its target reacts to, so a lead-long wait
+// loses nothing the state about to be entered would have seen.
 func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.GameEvent) bool {
-	if region.ActiveStateID == StateNone || !region.triggers.has(ev.Type) || m.following || region.proposed {
+	if region.ActiveStateID == StateNone || m.following {
+		return false
+	}
+	if region.proposed {
+		if !m.reactsAlong(region.target, ev.Type) || len(region.parked) >= parkedEventsMax {
+			return false
+		}
+		ev.Payload = event.ClonePayload(ev.Payload)
+		region.parked = append(region.parked, ev)
+		return true
+	}
+	if !region.triggers.has(ev.Type) {
 		return false
 	}
 

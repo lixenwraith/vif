@@ -26,6 +26,11 @@ type RegionState struct {
 	// exiting marks a running exit phase; terminated, a TerminateRegion it issued;
 	// proposed, a transition handed to Propose and not yet applied
 	exiting, terminated, proposed bool
+	// target is the proposed transition's state, and parked the events that reached
+	// the region while proposed and that state's path reacts to, each with a copy
+	// of its payload, replayed there once the transition lands
+	target StateID
+	parked []event.GameEvent
 }
 
 // Machine is the generic Hierarchical Finite State Machine runtime with parallel region support

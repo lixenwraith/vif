@@ -1,7 +1,6 @@
 package snapshot
 
 import (
-	"github.com/lixenwraith/vif/pkg/vmath"
 	"math"
 	"slices"
 	"strconv"
@@ -10,23 +9,21 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// hash is a running FNV-1a hash over simulation state
-type hash uint64
+// hash is a running word hash over simulation state; sum is the value to compare.
+type hash vmath.Hash64
 
-func newHash() hash { return hash(vmath.FNVOffset64) }
+func newHash() hash { return hash(vmath.NewHash64()) }
 
-func (h hash) u64(v uint64) hash {
-	for i := range 8 {
-		h ^= hash(byte(v >> (8 * i)))
-		h *= hash(vmath.FNVPrime64)
-	}
-	return h
-}
-
-func (h hash) i64(v int64) hash   { return h.u64(uint64(v)) }
-func (h hash) f64(v float64) hash { return h.u64(math.Float64bits(v)) }
+func (h hash) u64(v uint64) hash   { return hash(vmath.Hash64(h).Word(v)) }
+func (h hash) i64(v int64) hash    { return h.u64(uint64(v)) }
+func (h hash) f64(v float64) hash  { return h.u64(math.Float64bits(v)) }
+func (h hash) text(v string) hash  { return hash(vmath.Hash64(h).String(v)) }
+func (h hash) bytes(v []byte) hash { return hash(vmath.Hash64(h).Bytes(v)) }
+func (h hash) sum() uint64         { return vmath.Hash64(h).Sum() }
+func (h hash) String() string      { return strconv.FormatUint(h.sum(), 16) }
 
 func (h hash) b(v bool) hash {
 	if v {
@@ -34,24 +31,6 @@ func (h hash) b(v bool) hash {
 	}
 	return h.u64(0)
 }
-
-func (h hash) text(v string) hash {
-	for i := range len(v) {
-		h ^= hash(v[i])
-		h *= hash(vmath.FNVPrime64)
-	}
-	return h.u64(uint64(len(v)))
-}
-
-func (h hash) bytes(v []byte) hash {
-	for _, c := range v {
-		h ^= hash(c)
-		h *= hash(vmath.FNVPrime64)
-	}
-	return h.u64(uint64(len(v)))
-}
-
-func (h hash) String() string { return strconv.FormatUint(uint64(h), 16) }
 
 // WorldDigest hashes the state the status registry does not carry: entity
 // placement, sub-cell motion, and combat timers. Split per store so a diff
@@ -79,8 +58,8 @@ func (wd WorldDigest) Line(entities bool) string {
 
 // Journal is the digest as a journal carries it, unstamped.
 func (wd WorldDigest) Journal() event.JournalDigest {
-	return event.JournalDigest{Positions: uint64(wd.Positions), Kinetics: uint64(wd.Kinetics),
-		Combat: uint64(wd.Combat), Entities: uint64(wd.Entities)}
+	return event.JournalDigest{Positions: wd.Positions.sum(), Kinetics: wd.Kinetics.sum(),
+		Combat: wd.Combat.sum(), Entities: wd.Entities.sum()}
 }
 
 // DigestWorld hashes one domain scope, so two instances compare shared state

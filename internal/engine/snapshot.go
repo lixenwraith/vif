@@ -72,3 +72,9 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 		"mouse_disabled", ctx.MouseDisabled.Load(),
 		"auto_fire", ctx.AutoFire.Load())
 }
+
+// SharedAllocator reads the shared allocator's counters, a capture's meta section
+// without any row. Caller MUST hold updateMutex.
+func (w *World) SharedAllocator() (next uint64, created, destroyed int64) {
+	return w.nextEntityID[core.DomainShared], w.createdCount[core.DomainShared].Load(), w.destroyedCount[core.DomainShared].Load()
+}
