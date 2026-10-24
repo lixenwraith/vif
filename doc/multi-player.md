@@ -353,7 +353,8 @@ evicted with the bots it holds once what it sends over the window passes
 `NetworkIngressBytesPerSecond` for itself, each bot it holds and each person the
 authority has no link to (`driveIngress`). `-slow-window 0` turns off both. The
 authority sends every committed copy down each of its links, the producer's
-included, so a producer knows which of its epochs were committed. On a handoff a
+included, so a producer knows which of its epochs were committed; one with nobody
+behind it reads the copy's age alone, its frames left off (netcode §1). On a handoff a
 guest resends to the successor, in its next epoch, the retained crossings of the
 epochs that never came back (`ResendUncommitted`); the successor commits them late
 and refuses by sequence any it already holds from the predecessor's copies, so a
