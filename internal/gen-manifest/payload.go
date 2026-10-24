@@ -13,31 +13,22 @@ import (
 
 const eventPkgPath = "github.com/lixenwraith/vif/internal/event"
 
-// PayloadCodec is one struct's generated encoder and decoder: a presence mask,
-// then each present field in declaration order.
+// PayloadCodec is one struct's generated field table.
 type PayloadCodec struct {
-	Name    string // function suffix, qualified for a struct of another package
-	Type    string // the type as the event package writes it
-	Payload bool   // registered as an event payload, so it carries the codec methods
-	Mask    int    // mask bytes
-	Fields  []PayloadField
-}
-
-// PayloadField is one field's three generated parts.
-type PayloadField struct {
-	Present string // sets the field's mask bit when the field is not zero
-	Encode  string // appends the field; empty for a bool, whose bit is its value
-	Decode  string // reads the field when its bit is set
+	Name    string   // variable suffix, qualified for a struct of another package
+	Type    string   // the type as the event package writes it
+	Payload bool     // registered as an event payload, so it carries the codec method
+	Fields  []string // one field literal each, in declaration order
 }
 
 // PayloadDefs is the template input for event/payload_gen.go.
 type PayloadDefs struct {
 	Codecs  []PayloadCodec
+	Events  []EventDef
 	Imports []string
-	Math    bool
 }
 
-// payloadCodecs type-checks the event package and renders a codec for every
+// payloadCodecs type-checks the event package and renders a field table for every
 // registered payload struct and every struct reachable from one.
 func payloadCodecs(events EventDefs) PayloadDefs {
 	imp := importer.ForCompiler(token.NewFileSet(), "source", nil)
@@ -46,6 +37,7 @@ func payloadCodecs(events EventDefs) PayloadDefs {
 		panic(fmt.Sprintf("type-check %s: %v", eventPkgPath, err))
 	}
 	g := &payloadGen{imports: map[string]string{}, seen: map[string]int{}}
+	var withPayload []EventDef
 	for _, e := range events.Events {
 		if e.Payload == "" {
 			continue
@@ -59,21 +51,20 @@ func payloadCodecs(events EventDefs) PayloadDefs {
 			panic(fmt.Sprintf("payload %s is not a struct", e.Payload))
 		}
 		g.codec(n, true)
+		withPayload = append(withPayload, e)
 	}
 	imports := make([]string, 0, len(g.imports))
 	for path := range g.imports {
 		imports = append(imports, path)
 	}
 	sort.Strings(imports)
-	return PayloadDefs{Codecs: g.codecs, Imports: imports, Math: g.math}
+	return PayloadDefs{Codecs: g.codecs, Events: withPayload, Imports: imports}
 }
 
 type payloadGen struct {
 	codecs  []PayloadCodec
 	seen    map[string]int // type string to codec index, -1 while in progress
 	imports map[string]string
-	math    bool
-	depth   int
 }
 
 func isStruct(n *types.Named) bool {
@@ -92,58 +83,38 @@ func (g *payloadGen) typeString(t types.Type) string {
 	})
 }
 
-// codecName is the function suffix for a struct: its name, qualified by its
-// package's for one from outside the event package.
+// codecName is a struct's table name: its own, qualified by its package's for one
+// from outside the event package.
 func (g *payloadGen) codecName(n *types.Named) string {
 	if n.Obj().Pkg().Path() == eventPkgPath {
-		return n.Obj().Name()
+		return "codec" + n.Obj().Name()
 	}
 	p := n.Obj().Pkg().Name()
-	return strings.ToUpper(p[:1]) + p[1:] + n.Obj().Name()
+	return "codec" + strings.ToUpper(p[:1]) + p[1:] + n.Obj().Name()
 }
 
-// codec renders n's codec once, nested structs first so the file reads bottom-up.
+// codec renders n's table once, nested structs first so the file reads bottom-up.
 func (g *payloadGen) codec(n *types.Named, payload bool) string {
 	name := g.codecName(n)
 	key := g.typeString(n)
 	if i, ok := g.seen[key]; ok {
-		if i >= 0 && payload && !g.codecs[i].Payload {
+		if i >= 0 && payload {
 			g.codecs[i].Payload = true
 		}
 		return name
 	}
 	g.seen[key] = -1
 	st := n.Underlying().(*types.Struct)
-	var fields []PayloadField
-	bit := 0
+	var fields []string
 	for i := range st.NumFields() {
 		f := st.Field(i)
-		tag := reflect.StructTag(st.Tag(i)).Get("toml")
-		if !f.Exported() || tag == "-" {
+		if !f.Exported() || reflect.StructTag(st.Tag(i)).Get("toml") == "-" {
 			continue // never encoded, as the text codec never did
 		}
 		where := key + "." + f.Name()
-		expr := "p." + f.Name()
-		mask := fmt.Sprintf("m[%d]&(1<<%d) != 0", bit/8, bit%8)
-		set := fmt.Sprintf("m[%d] |= 1 << %d", bit/8, bit%8)
-		pf := PayloadField{}
-		switch k := kindOf(f.Type()); k {
-		case 'b':
-			pf.Present = "if " + expr + " {\n" + set + "\n}"
-			pf.Decode = expr + " = " + mask
-		case 'T':
-			pf.Present = set
-			pf.Encode = "if " + mask + " {\n" + g.encode(f.Type(), expr, where) + "\n}"
-			pf.Decode = "if " + mask + " {\n" + g.decode(f.Type(), expr, where) + "\n}"
-		default:
-			pf.Present = "if " + g.present(f.Type(), expr, where) + " {\n" + set + "\n}"
-			pf.Encode = "if " + mask + " {\n" + g.encode(f.Type(), expr, where) + "\n}"
-			pf.Decode = "if " + mask + " {\n" + g.decode(f.Type(), expr, where) + "\n}"
-		}
-		fields = append(fields, pf)
-		bit++
+		fields = append(fields, "{off: unsafe.Offsetof("+key+"{}."+f.Name()+"), "+g.desc(f.Type(), where)+"}")
 	}
-	g.codecs = append(g.codecs, PayloadCodec{Name: name, Type: key, Payload: payload, Mask: (bit + 7) / 8, Fields: fields})
+	g.codecs = append(g.codecs, PayloadCodec{Name: name, Type: key, Payload: payload, Fields: fields})
 	g.seen[key] = len(g.codecs) - 1
 	return name
 }
@@ -182,88 +153,55 @@ func kindOf(t types.Type) byte {
 	return 0
 }
 
-func (g *payloadGen) present(t types.Type, expr, where string) string {
+// desc renders the kind part of a field literal for a value of type t.
+func (g *payloadGen) desc(t types.Type, where string) string {
+	size := func() string { return "size: unsafe.Sizeof(" + g.typeString(t) + "(0))" }
 	switch kindOf(t) {
-	case 'i', 'u':
-		return expr + " != 0"
+	case 'b':
+		return "kind: kindBool"
+	case 'i':
+		return "kind: kindInt, " + size()
+	case 'u':
+		return "kind: kindUint, " + size()
 	case 'f':
-		g.math = true
-		return "math.Float64bits(float64(" + expr + ")) != 0"
+		return "kind: kindFloat"
 	case 's':
-		return expr + ` != ""`
+		return "kind: kindString"
 	case 'S':
-		return "len(" + expr + ") != 0"
+		elem := t.Underlying().(*types.Slice).Elem()
+		ts := g.typeString(t)
+		return "kind: kindSlice, " + g.elem(elem, where) +
+			", make: func(p unsafe.Pointer, n int) { *(*" + ts + ")(p) = make(" + ts + ", n) }"
 	case 'A':
-		if k := kindOf(t.Underlying().(*types.Array).Elem()); k == 0 || k == 'S' || k == 'p' || k == 'T' {
-			panic(fmt.Sprintf("%s: an array of %s has no zero test", where, t))
+		a := t.Underlying().(*types.Array)
+		if k := kindOf(a.Elem()); k == 'S' || k == 'p' || k == 'T' || k == 's' {
+			panic(fmt.Sprintf("%s: an array of %s has no byte-wise zero test", where, a.Elem()))
 		}
-		return expr + " != (" + g.typeString(t) + "{})"
-	case 'p':
-		return expr + " != nil"
-	}
-	panic(fmt.Sprintf("%s: %s has no codec", where, t))
-}
-
-// encode renders the statements appending expr, a value of type t.
-func (g *payloadGen) encode(t types.Type, expr, where string) string {
-	switch kindOf(t) {
-	case 'i':
-		return "b = binary.AppendVarint(b, int64(" + expr + "))"
-	case 'u':
-		return "b = binary.AppendUvarint(b, uint64(" + expr + "))"
-	case 'f':
-		g.math = true
-		return "b = binary.LittleEndian.AppendUint64(b, math.Float64bits(float64(" + expr + ")))"
-	case 's':
-		return "b = binary.AppendUvarint(b, uint64(len(" + expr + ")))\nb = append(b, " + expr + "...)"
-	case 'S':
-		return "b = binary.AppendUvarint(b, uint64(len(" + expr + ")))\n" + g.loop(t.Underlying().(*types.Slice).Elem(), expr, where, g.encode)
-	case 'A':
-		return g.loop(t.Underlying().(*types.Array).Elem(), expr, where, g.encode)
-	case 'p':
-		return "b = append" + g.codec(t.Underlying().(*types.Pointer).Elem().(*types.Named), false) + "(b, " + expr + ")"
-	case 'T':
-		return "b = append" + g.codec(t.(*types.Named), false) + "(b, &" + expr + ")"
-	}
-	panic(fmt.Sprintf("%s: %s has no codec", where, t))
-}
-
-// decode renders the statements reading expr, a settable value of type t.
-func (g *payloadGen) decode(t types.Type, expr, where string) string {
-	switch kindOf(t) {
-	case 'i':
-		return expr + " = " + g.typeString(t) + "(r.varint())"
-	case 'u':
-		return expr + " = " + g.typeString(t) + "(r.uvarint())"
-	case 'f':
-		g.math = true
-		return expr + " = " + g.typeString(t) + "(math.Float64frombits(r.u64()))"
-	case 's':
-		return expr + " = " + g.typeString(t) + "(r.bytes(r.uvarint()))"
-	case 'S':
-		return expr + " = make(" + g.typeString(t) + ", r.length())\n" + g.loop(t.Underlying().(*types.Slice).Elem(), expr, where, g.decode)
-	case 'A':
-		return g.loop(t.Underlying().(*types.Array).Elem(), expr, where, g.decode)
+		return fmt.Sprintf("kind: kindArray, n: %d, %s", a.Len(), g.elem(a.Elem(), where))
 	case 'p':
 		n := t.Underlying().(*types.Pointer).Elem().(*types.Named)
-		return expr + " = new(" + g.typeString(n) + ")\nread" + g.codec(n, false) + "(r, " + expr + ")"
+		ts := g.typeString(n)
+		return "kind: kindPtr, sub: &" + g.codec(n, false) +
+			", new: func(p unsafe.Pointer) { *(**" + ts + ")(p) = new(" + ts + ") }"
 	case 'T':
-		return "read" + g.codec(t.(*types.Named), false) + "(r, &" + expr + ")"
+		return "kind: kindStruct, sub: &" + g.codec(t.(*types.Named), false)
 	}
 	panic(fmt.Sprintf("%s: %s has no codec", where, t))
 }
 
-// loop renders one statement per element of expr; an element has no mask, so a
-// bool element has no encoding.
-func (g *payloadGen) loop(elem types.Type, expr, where string, each func(types.Type, string, string) string) string {
+// elem renders a slice's or array's element: its descriptor and its stride.
+func (g *payloadGen) elem(elem types.Type, where string) string {
 	if k := kindOf(elem); k == 'b' || k == 0 {
 		panic(fmt.Sprintf("%s: elements of %s have no codec", where, elem))
 	}
-	i := fmt.Sprintf("i%d", g.depth)
-	g.depth++
-	body := each(elem, expr+"["+i+"]", where+"[]")
-	g.depth--
-	return "for " + i + " := range " + expr + " {\n" + body + "\n}"
+	stride := "unsafe.Sizeof(" + g.typeString(elem) + "{})"
+	if kindOf(elem) != 'T' {
+		stride = "unsafe.Sizeof(" + g.typeString(elem) + "(0))"
+	}
+	if kindOf(elem) == 's' {
+		stride = `unsafe.Sizeof("")`
+	}
+	return "elem: &field{" + g.desc(elem, where+"[]") + "}, stride: " + stride
 }
 
 var payloadTemplate = template.Must(template.New("payload").Parse(`// Code generated by gen-manifest; DO NOT EDIT.
@@ -271,42 +209,33 @@ var payloadTemplate = template.Must(template.New("payload").Parse(`// Code gener
 package event
 
 import (
-	"encoding/binary"
-{{- if .Math }}
-	"math"
-{{- end }}
+	"unsafe"
 {{- range .Imports }}
 	"{{ . }}"
 {{- end }}
 )
 
-{{ range .Codecs }}
-{{- if .Payload }}
-func (p *{{ .Type }}) appendPayload(b []byte) []byte { return append{{ .Name }}(b, p) }
-func (p *{{ .Type }}) readPayload(r *wireReader)   { read{{ .Name }}(r, p) }
-{{ end }}
-func append{{ .Name }}(b []byte, p *{{ .Type }}) []byte {
-	var m [{{ .Mask }}]byte
-{{- range .Fields }}
-	{{ .Present }}
+// payloadNew allocates each event's registered payload.
+var payloadNew = [EventTypeCount]func() any{
+{{- range .Events }}
+	{{ .Name }}: func() any { return new({{ .Payload }}) },
 {{- end }}
-	b = append(b, m[:]...)
-{{- range .Fields }}
-{{- if .Encode }}
-	{{ .Encode }}
-{{- end }}
-{{- end }}
-	return b
 }
 
-func read{{ .Name }}(r *wireReader, p *{{ .Type }}) {
-	var m [{{ .Mask }}]byte
-	for i := range m {
-		m[i] = r.u8()
-	}
-{{- range .Fields }}
-	{{ .Decode }}
+// payloadCodecs is each event's payload table.
+var payloadCodecs = [EventTypeCount]*structCodec{
+{{- range .Events }}
+	{{ .Name }}: &codec{{ .Payload }},
 {{- end }}
 }
+{{ range .Codecs }}
+{{- if .Payload }}
+func (p *{{ .Type }}) codec() (*structCodec, unsafe.Pointer) { return &{{ .Name }}, unsafe.Pointer(p) }
+{{ end }}
+var {{ .Name }} = structCodec{size: unsafe.Sizeof({{ .Type }}{}), fields: []field{
+{{- range .Fields }}
+	{{ . }},
+{{- end }}
+}}
 {{ end }}
 `))

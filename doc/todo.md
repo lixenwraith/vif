@@ -586,7 +586,7 @@ stands held until its press.
 
 ### Commit Shared FSM transitions through the authority
 
-- Priority: P1
+- Priority: P1, netcode phase 2 iteration 3 ([netcode design §5](netcode-design.md#5-order-and-iterations))
 - Affected files: `internal/fsm/machine.go`, `internal/engine/scheduler.go`,
   `internal/system/network.go`, `internal/event/type.go`
 - Guide: [Netcode design §4 batch 2](netcode-design.md#4-phase-2)

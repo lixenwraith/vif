@@ -1,40 +1,26 @@
 package event
 
 import (
-	"reflect"
 	"strings"
 	"sync"
 )
 
 var (
-	nameToType    = make(map[string]EventType)
-	typeToName    = make(map[EventType]string)
-	typeToPayload = make(map[EventType]reflect.Type)
-	registryInit  = false
+	nameToType   = make(map[string]EventType)
+	typeToName   = make(map[EventType]string)
+	registryInit = false
 )
 
-// RegisterType maps a string name to an EventType and its payload struct type
-// payloadInstance should be a pointer to the payload struct (e.g., &SpawnChangePayload{})
-// Pass nil if the event has no payload
-// Called only from generated code and registerAliases
-func RegisterType(name string, et EventType, payloadInstance any) {
-	// Don't allow duplicate events
+// RegisterType maps a string name to an EventType; its payload, if any, is the
+// generated table's (payload_gen.go). Called only from generated code.
+func RegisterType(name string, et EventType) {
 	if _, dup := nameToType[name]; dup {
 		panic("event: duplicate registration for " + name)
 	}
 	nameToType[name] = et
-
 	// First registration wins, so an alias cannot displace the canonical name in the reverse map
 	if _, exists := typeToName[et]; !exists {
 		typeToName[et] = name
-	}
-
-	if payloadInstance != nil {
-		t := reflect.TypeOf(payloadInstance)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-		typeToPayload[et] = t
 	}
 }
 
@@ -63,14 +49,13 @@ func RangeEvents(fn func(name string, et EventType, payload any)) {
 	}
 }
 
-// NewPayloadStruct returns a new pointer to a zero-value payload struct for the event type
-// Returns nil if no payload is registered
+// NewPayloadStruct returns a new pointer to a zero-value payload struct for the
+// event type, nil for an event with no payload or none in the registry's range.
 func NewPayloadStruct(et EventType) any {
-	t, ok := typeToPayload[et]
-	if !ok {
+	if et < 0 || et >= EventTypeCount || payloadNew[et] == nil {
 		return nil
 	}
-	return reflect.New(t).Interface()
+	return payloadNew[et]()
 }
 
 // EnsureRegistry initialises the event registry exactly once, safe against
