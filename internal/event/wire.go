@@ -6,7 +6,8 @@
 package event
 
 import (
-	"encoding/json"
+	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/lixenwraith/toml"
@@ -101,44 +102,43 @@ type WireSink interface {
 	Flush(completedTick uint64)
 }
 
-// WireFrame is one artifact on the wire. The payload is the same TOML text the
-// journal writes, so one encoder serves replay and transport.
+// WireFrame is one artifact on the wire: its event as the registry's index, the
+// domain its producer stamped, the journal's TOML text as the payload, so one
+// encoder serves replay and transport, and its source-local sequence.
 type WireFrame struct {
-	Event   string `json:"ev"`
-	Domain  string `json:"domain"`
-	Payload string `json:"payload"`
-	Seq     uint64 `json:"seq"`
+	Event   EventType
+	Domain  core.Domain
+	Payload string
+	Seq     uint64
 }
 
 // ScheduledWireFrame names the simulation tick at whose opening an artifact applies.
 type ScheduledWireFrame struct {
-	Frame     WireFrame `json:"frame"`
-	ApplyTick uint64    `json:"apply_tick"`
+	Frame     WireFrame
+	ApplyTick uint64
 }
 
-// WireBatch closes one participant's production epoch, even an empty one. Source is
-// every receiver's ordering key and, with ProducedTick, names the epoch, so a copy
-// arriving by a second mesh path is recognised. Run names the run the ticks count
-// in: a receiver in another run has no tick for the frames and refuses the batch.
-// Hops counts links since the copy's origin (its producer, or the authority that
-// committed it) and bounds relay loops. Committed marks the authority's copy,
-// carrying the apply ticks it chose.
+// WireBatch closes one participant's production epoch, even an empty one. Source
+// and ProducedTick name the epoch, so a copy arriving by a second mesh path is
+// recognised; a receiver in another Run has no tick for the frames and refuses it.
+// Hops counts links since the copy's origin, its producer or the authority that
+// committed it, and bounds relay loops; Committed marks the authority's copy.
 type WireBatch struct {
-	Frames       []ScheduledWireFrame `json:"frames,omitempty"`
-	Run          uint64               `json:"run"`
-	ProducedTick uint64               `json:"produced_tick"`
-	Source       uint32               `json:"source"`
-	Hops         uint8                `json:"hops,omitempty"`
-	Committed    bool                 `json:"committed,omitempty"`
+	Frames       []ScheduledWireFrame
+	Run          uint64
+	ProducedTick uint64
+	Source       uint32
+	Hops         uint8
+	Committed    bool
 
 	// Age is how many of the authority's ticks after its production an epoch was
 	// committed, on the committed copy: the up path and the clock offset its
 	// producer's lead has to cover, measured where it matters.
-	Age int64 `json:"age,omitempty"`
+	Age int64
 
 	// Leaf marks a producer with nobody behind it, which reads its committed copy
 	// for its age alone: the copy returns to it without the frames it holds.
-	Leaf bool `json:"leaf,omitempty"`
+	Leaf bool
 }
 
 // NewWireFrame encodes one crossing; an unencodable payload reports why rather
@@ -148,55 +148,174 @@ func NewWireFrame(ev GameEvent) (WireFrame, string) {
 	if encErr != "" {
 		return WireFrame{}, encErr
 	}
-	return WireFrame{
-		Event:   GetEventName(ev.Type),
-		Domain:  core.DomainNames[ev.Domain],
-		Payload: payload,
-		Seq:     ev.Seq,
-	}, ""
+	return WireFrame{Event: ev.Type, Domain: ev.Domain, Payload: payload, Seq: ev.Seq}, ""
 }
 
-// Decode resolves a frame back into the event a peer pushed. The registry
-// prototype decides the payload type, so an unknown name is an error rather than
-// a nil payload the consumer would have to guess at.
-func (f WireFrame) Decode() (EventType, any, core.Domain, error) {
-	et, ok := GetEventType(f.Event)
-	if !ok {
-		return EventNone, nil, core.DomainShared, fmt.Errorf("wire: unknown event %q", f.Event)
-	}
-	domain, ok := core.ParseDomain(f.Domain)
-	if !ok {
-		return EventNone, nil, core.DomainShared, fmt.Errorf("wire: unknown domain %q", f.Domain)
-	}
-	payload, err := decodeFramePayload(et, f.Payload)
-	if err != nil {
-		return EventNone, nil, core.DomainShared, err
-	}
-	return et, payload, domain, nil
-}
-
-// decodeFramePayload allocates a fresh payload from the registry prototype and
-// decodes the frame text into it. Empty text means the producer pushed nil.
-func decodeFramePayload(et EventType, text string) (any, error) {
-	if text == "" {
+// Decode allocates a fresh payload from the registry prototype and decodes the
+// frame's text into it. Empty text means the producer pushed nil.
+func (f WireFrame) Decode() (any, error) {
+	if f.Payload == "" {
 		return nil, nil
 	}
-	p := NewPayloadStruct(et)
+	p := NewPayloadStruct(f.Event)
 	if p == nil {
-		return nil, fmt.Errorf("wire: %s carries payload text with no registry prototype", GetEventName(et))
+		return nil, fmt.Errorf("wire: %s carries payload text with no registry prototype", GetEventName(f.Event))
 	}
-	if err := toml.Unmarshal([]byte(text), p); err != nil {
+	if err := toml.Unmarshal([]byte(f.Payload), p); err != nil {
 		return nil, err
 	}
 	return p, nil
 }
 
-// EncodeWireBatch serializes one closed barrier production epoch.
-func EncodeWireBatch(batch WireBatch) ([]byte, error) { return json.Marshal(batch) }
+// The envelope. A batch is [flags][source][run][produced tick][hops][age][frame
+// count], then each frame [event][flags][sequence][apply tick][payload length]
+// [payload]: counts and ticks as uvarints, the age and the deltas as varints, a
+// sequence relative to the frame before and an apply tick to the frame before or,
+// for the first, to the produced tick, and the flag bytes below.
+const (
+	batchCommitted = 0x01
+	batchLeaf      = 0x02
+	frameDomain    = 0x03 // the producer's domain, in the frame flags' low bits
 
-// DecodeWireBatch decodes one barrier production epoch.
+	// minFrameBytes bounds the frames a body can hold, so a count cannot allocate
+	// more than the bytes behind it.
+	minFrameBytes = 5
+)
+
+// EncodeWireBatch serializes one closed barrier production epoch.
+func EncodeWireBatch(batch WireBatch) ([]byte, error) {
+	size := 24
+	for i := range batch.Frames {
+		size += 16 + len(batch.Frames[i].Frame.Payload)
+	}
+	flags := byte(0)
+	if batch.Committed {
+		flags |= batchCommitted
+	}
+	if batch.Leaf {
+		flags |= batchLeaf
+	}
+	b := append(make([]byte, 0, size), flags)
+	b = binary.AppendUvarint(b, uint64(batch.Source))
+	b = binary.AppendUvarint(b, batch.Run)
+	b = binary.AppendUvarint(b, batch.ProducedTick)
+	b = append(b, batch.Hops)
+	b = binary.AppendVarint(b, batch.Age)
+	b = binary.AppendUvarint(b, uint64(len(batch.Frames)))
+	seq, tick := uint64(0), batch.ProducedTick
+	for i := range batch.Frames {
+		f := &batch.Frames[i]
+		if f.Frame.Event <= EventNone || f.Frame.Event >= EventTypeCount {
+			return nil, fmt.Errorf("wire: event %d is not in the registry", f.Frame.Event)
+		}
+		if f.Frame.Domain >= core.DomainCount {
+			return nil, fmt.Errorf("wire: unknown domain %d", f.Frame.Domain)
+		}
+		b = binary.AppendUvarint(b, uint64(f.Frame.Event))
+		b = append(b, byte(f.Frame.Domain))
+		b = binary.AppendVarint(b, int64(f.Frame.Seq-seq))
+		b = binary.AppendVarint(b, int64(f.ApplyTick-tick))
+		b = binary.AppendUvarint(b, uint64(len(f.Frame.Payload)))
+		b = append(b, f.Frame.Payload...)
+		seq, tick = f.Frame.Seq, f.ApplyTick
+	}
+	return b, nil
+}
+
+// DecodeWireBatch decodes one barrier production epoch, refusing a body the
+// encoder could not have written rather than reading past it.
 func DecodeWireBatch(b []byte) (WireBatch, error) {
+	r := wireReader{b: b}
 	var out WireBatch
-	err := json.Unmarshal(b, &out)
-	return out, err
+	flags := r.u8()
+	out.Committed, out.Leaf = flags&batchCommitted != 0, flags&batchLeaf != 0
+	out.Source = uint32(r.uvarint())
+	out.Run = r.uvarint()
+	out.ProducedTick = r.uvarint()
+	out.Hops = r.u8()
+	out.Age = r.varint()
+	n := r.uvarint()
+	if r.err != nil {
+		return WireBatch{}, r.err
+	}
+	if n > uint64(len(r.b))/minFrameBytes {
+		return WireBatch{}, fmt.Errorf("wire: %d frames claimed in %d bytes", n, len(r.b))
+	}
+	if n > 0 {
+		out.Frames = make([]ScheduledWireFrame, 0, n)
+	}
+	seq, tick := uint64(0), out.ProducedTick
+	for range n {
+		var f ScheduledWireFrame
+		et := r.uvarint()
+		fl := r.u8()
+		seq += uint64(r.varint())
+		tick += uint64(r.varint())
+		f.Frame.Payload = string(r.bytes(r.uvarint()))
+		if r.err != nil {
+			return WireBatch{}, r.err
+		}
+		if et == 0 || et >= EventTypeCount {
+			return WireBatch{}, fmt.Errorf("wire: unknown event %d", et)
+		}
+		if fl&^frameDomain != 0 || core.Domain(fl&frameDomain) >= core.DomainCount {
+			return WireBatch{}, fmt.Errorf("wire: unknown frame flags %#x", fl)
+		}
+		f.Frame.Event, f.Frame.Domain, f.Frame.Seq, f.ApplyTick = EventType(et), core.Domain(fl&frameDomain), seq, tick
+		out.Frames = append(out.Frames, f)
+	}
+	return out, nil
+}
+
+// wireReader walks a body with one sticky error, so a decoder reads its fields
+// straight and checks once.
+type wireReader struct {
+	b   []byte
+	err error
+}
+
+func (r *wireReader) fail() {
+	if r.err == nil {
+		r.err = errors.New("wire: body truncated")
+	}
+}
+
+func (r *wireReader) u8() byte {
+	if len(r.b) == 0 {
+		r.fail()
+		return 0
+	}
+	v := r.b[0]
+	r.b = r.b[1:]
+	return v
+}
+
+func (r *wireReader) uvarint() uint64 {
+	v, n := binary.Uvarint(r.b)
+	if n <= 0 {
+		r.fail()
+		return 0
+	}
+	r.b = r.b[n:]
+	return v
+}
+
+func (r *wireReader) varint() int64 {
+	v, n := binary.Varint(r.b)
+	if n <= 0 {
+		r.fail()
+		return 0
+	}
+	r.b = r.b[n:]
+	return v
+}
+
+func (r *wireReader) bytes(n uint64) []byte {
+	if n > uint64(len(r.b)) {
+		r.fail()
+		return nil
+	}
+	v := r.b[:n]
+	r.b = r.b[n:]
+	return v
 }
