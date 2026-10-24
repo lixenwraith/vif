@@ -524,10 +524,9 @@ flowchart TD
   state, as `StormSetupRetry`, td's `StSpawnRetry` and gold's retry on
   `EventGoldSpawnFailed` do. After a flat delay, the active state's defensive
   timeout would retire a region whose spawn was refused as if it had been fought.
-  A receiver installed into the setup never ran its `on_enter`, so the setup also
-  admits it by liveness, as `StormSetup` does on `storm.active`, and what an entry
-  action establishes for a later guard has to be carried state, such as an FSM
-  variable set through `StatusToVar`.
+  What an entry action establishes for a later guard has to be carried state, such
+  as an FSM variable set through `StatusToVar`: a receiver installed into a state
+  never ran its `on_enter`.
 - Keep actions small; complex mechanics should remain Go systems triggered by a
   typed event.
 

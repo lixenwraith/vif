@@ -170,8 +170,7 @@ func NewScheduler(
 		resetChan:  resetChan,
 		stopChan:   make(chan struct{}),
 
-		fsm: fsm.NewMachine[*World](),
-
+		fsm:                 fsm.NewMachine[*World](),
 		eventLoopInterval:   parameter.EventLoopInterval,
 		eventLoopBackoffMax: parameter.EventLoopBackoffMax,
 
@@ -215,13 +214,20 @@ func NewScheduler(
 
 // EventTypes returns the event types the scheduler handles directly
 func (s *Scheduler) EventTypes() []event.EventType {
-	return []event.EventType{event.EventFSMRegionRequest}
+	return []event.EventType{event.EventFSMRegionRequest, event.EventFSMTransition}
 }
 
-// HandleEvent applies a region operation to the scheduler-owned FSM.
-// Runs inside dispatchOnePass with the world lock held; anything the operation
-// emits settles on a later pass.
+// HandleEvent applies a region operation, or a transition the authority
+// committed, to the scheduler-owned FSM. Runs inside dispatchOnePass with the
+// world lock held; anything it emits settles on a later pass.
 func (s *Scheduler) HandleEvent(ev event.GameEvent) {
+	if t, ok := ev.Payload.(*event.FSMTransitionPayload); ok {
+		if err := s.fsm.Apply(s.world, t); err != nil {
+			s.world.Log().Warn("fsm", "msg", "committed transition refused",
+				"region", t.Region, "owner", t.Owner, "index", t.Index, "error", err.Error())
+		}
+		return
+	}
 	p, ok := ev.Payload.(*event.FSMRegionPayload)
 	if !ok {
 		s.report("region: missing payload")
@@ -277,6 +283,24 @@ func (s *Scheduler) applyRegionOp(p *event.FSMRegionPayload) error {
 
 	// Every op changes the active set, so every op reconciles
 	return s.applySystemConfig()
+}
+
+// steerFSM sets who moves the shared machine at this tick (D-20): in a live
+// session the authority proposes each transition as a crossing and applies it
+// with everyone else at the committed tick, and a guest follows; alone, the
+// machine takes its transitions in place.
+func (s *Scheduler) steerFSM() {
+	s.fsm.Steer(s.world.FollowsTransitions(), s.world.ProposesTransitions())
+}
+
+// proposeTransition crosses one transition of the authority's FSM, in the player
+// domain: the decision is the authority's alone, as an input is its player's, and
+// its outcome is every instance's. The origin is the machine's own, whatever
+// event's dispatch the transition fell in: a network one would not cross again.
+func (s *Scheduler) proposeTransition(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar) {
+	s.world.PushEventFull(event.EventFSMTransition, &event.FSMTransitionPayload{
+		Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars,
+	}, event.OriginSystem, core.DomainPlayer)
 }
 
 // report surfaces a scheduler-side message in the status bar
@@ -416,6 +440,7 @@ func (s *Scheduler) LoadScenarioFromFS(fsys fs.FS, entry string, registerCompone
 func (s *Scheduler) initLoadedScenario() error {
 	// Before Init: the initial region entries must reach the observer
 	s.bindFSMTelemetry()
+	s.fsm.Propose = s.proposeTransition
 	s.publishInputHorizon()
 
 	if err := s.fsm.Init(s.world); err != nil {
@@ -1242,8 +1267,11 @@ func (s *Scheduler) executeReset() {
 	s.dispatchAndProcessEvents("reset")
 	s.fsmHeld = false
 
-	// 6. Reset FSM state - This will trigger OnEnter actions
+	// 6. Reset FSM state - This will trigger OnEnter actions. The reset is one
+	//    artifact every instance applies at one tick, so what its settle makes the
+	//    machine take is agreed already: in place, with no crossing to wait for.
 	s.publishInputHorizon()
+	s.fsm.Steer(false, false)
 	if err := s.fsm.Reset(s.world); err != nil {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}
@@ -1256,6 +1284,7 @@ func (s *Scheduler) executeReset() {
 	// 8. Settle FSM-reset events before releasing the lock. No boundary bump: this
 	//    is a phase of the reset, reached identically by a run and its replay.
 	s.dispatchAndProcessEvents("reset")
+	s.steerFSM()
 
 	// 9. This game's streams are drawn, so the next game's differ while staying a
 	//    function of the root seed
@@ -1376,6 +1405,7 @@ func (s *Scheduler) processTick() {
 		// 3. Initial Settling: Resolve everything pushed since the last tick closed.
 
 		// Ensures FSM and Systems start with a consistent, settled world
+		s.steerFSM()
 		s.dispatchAndProcessEvents("pre")
 		if ended = s.ResetPending(); ended {
 			return

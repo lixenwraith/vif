@@ -2622,7 +2622,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 // authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32, authored bool) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold:
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold, event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
 	default:
 		return true

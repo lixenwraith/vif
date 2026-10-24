@@ -51,7 +51,7 @@ func TestADivergenceOverAShapedLinkNamesItsRows(t *testing.T) {
 	t.Logf("before the storm: %s", before)
 	t.Logf("after the storm:  %s", after)
 	vlog.Stop()
-	for _, line := range repairRowsLogged(t, path) {
+	for _, line := range fightLogged(t, path) {
 		t.Log(line)
 	}
 }
@@ -153,9 +153,10 @@ func divergenceReading(host, guest *App, leadMax int64) string {
 	}, ", ")
 }
 
-// repairRowsLogged reads the repairs and keyframes the guest installed and the rows
-// each repair moved, one line per repair or row.
-func repairRowsLogged(t *testing.T, path string) []string {
+// fightLogged reads the repairs and keyframes the guest installed, the rows each
+// repair moved and the storm region's transitions, one line per repair, row or
+// transition; both instances log a transition, so one taken alike appears twice.
+func fightLogged(t *testing.T, path string) []string {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
@@ -175,6 +176,10 @@ func repairRowsLogged(t *testing.T, path string) []string {
 				Sections string `json:"sections"`
 				Cells    int    `json:"cells"`
 				Entities int    `json:"correction_entities"`
+				Region   string `json:"region"`
+				From     string `json:"from"`
+				To       string `json:"to"`
+				Via      string `json:"via"`
 			} `json:"fields"`
 		}
 		if json.Unmarshal(sc.Bytes(), &rec) != nil {
@@ -188,6 +193,10 @@ func repairRowsLogged(t *testing.T, path string) []string {
 		case "repair rows":
 			for _, row := range strings.Split(rec.Fields.Rows, " | ") {
 				out = append(out, "    "+row)
+			}
+		case "transition":
+			if rec.Fields.Region == "storm" {
+				out = append(out, "tick "+itoa(int64(rec.Tick))+" storm "+rec.Fields.From+" -> "+rec.Fields.To+" via "+rec.Fields.Via)
 			}
 		}
 	}

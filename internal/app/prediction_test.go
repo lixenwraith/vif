@@ -25,7 +25,8 @@ func TestTowerLootSurvivesVictoryAndMultiplayerCorrection(t *testing.T) {
 			&event.FSMRegionPayload{Op: event.RegionSpawn, Region: "tower", State: "TowerSetup"}, event.OriginDebug)
 		a.Settle()
 	}
-	for range 12 {
+	// Each of the setup's transitions is the authority's, applied a lead later
+	for range 60 {
 		advance()
 	}
 	drops := make([]core.Entity, len(apps))
@@ -48,7 +49,7 @@ func TestTowerLootSurvivesVictoryAndMultiplayerCorrection(t *testing.T) {
 			zeroHitPoints(host, member.Entity, owners[0])
 		}
 	}
-	for range 3 {
+	for range 12 {
 		advance()
 	}
 	if host.World().Resources.Status.Strings.Get("fsm.tower.state").Load() != "-" {
