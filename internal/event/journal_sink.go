@@ -28,8 +28,8 @@ type vlogSink struct {
 func VlogSink(f *vlog.JournalFile, l *vlog.Log) JournalSink { return vlogSink{file: f, log: l} }
 
 // Record writes one event record; every argument is an immutable value, as
-// vlog formats asynchronously on its own goroutine. encode_err and crossing are
-// written only when set: most records are neither broken nor an own crossing.
+// vlog formats asynchronously on its own goroutine. The payload, base64, and
+// encode_err and crossing are written only when set.
 func (s vlogSink) Record(r JournalRecord) {
 	kv := []any{
 		"jseq", r.JSeq,
@@ -40,7 +40,9 @@ func (s vlogSink) Record(r JournalRecord) {
 		"origin", r.Origin.String(),
 		"domain", r.Domain.String(),
 		"ev", GetEventName(r.Type),
-		"payload", r.Payload,
+	}
+	if len(r.Payload) != 0 {
+		kv = append(kv, "payload", base64.StdEncoding.EncodeToString(r.Payload))
 	}
 	if r.EncodeErr != "" {
 		kv = append(kv, "encode_err", r.EncodeErr)

@@ -407,13 +407,13 @@ origin, and replay reinjects records in queue-slot order. `EventQueue.Note`
 journals a record that is never dispatched, such as `EventCursorPredicted` or
 `EventSessionState`, at the slot the next publish takes.
 
-`JournalRecord` stores TOML payload text against the generated registry
-prototype, with its journal, queue and own crossing sequences and the producer
-domain; `JournalRecord.Replicated` selects the records every instance of one
-seed must agree on. Anchors every 600 ticks, digests every 20 and the worlds
-this instance installed rather than simulated complete the schema; their shapes
-and the replay constraints are in
-[Logging and diagnostics](logging-and-diagnostics.md) §9.
+`JournalRecord` stores the generated codec's bytes for the registered prototype
+(`payload_gen.go`), with its journal, queue and own crossing sequences and the
+producer domain; `JournalRecord.Replicated` selects the records every instance
+of one seed must agree on. Anchors every 600 ticks, digests every 20 and the
+worlds this instance installed rather than simulated complete the schema; their
+shapes and the replay constraints are in [Logging and
+diagnostics](logging-and-diagnostics.md) §9.
 
 ## 9. Event catalog and payload contracts
 

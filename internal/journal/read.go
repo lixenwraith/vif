@@ -41,7 +41,7 @@ type recordFields struct {
 	Origin    string `json:"origin"`
 	Domain    string `json:"domain"`
 	Ev        string `json:"ev"`
-	Payload   string `json:"payload"`
+	Payload   []byte `json:"payload"`
 	EncodeErr string `json:"encode_err"`
 	JSeq      uint64 `json:"jseq"`
 	Seq       uint64 `json:"seq"`

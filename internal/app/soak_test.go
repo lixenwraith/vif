@@ -773,7 +773,7 @@ func mutatePayload(_ *vmath.FastRand, recs []event.JournalRecord) ([]event.Journ
 		if recs[i].Type != event.EventCursorMoveRequest {
 			continue
 		}
-		decoded, err := journal.DecodePayload(recs[i].Type, recs[i].Payload)
+		decoded, err := event.DecodePayload(recs[i].Type, recs[i].Payload)
 		p, ok := decoded.(*event.CursorMoveRequestPayload)
 		if err != nil || !ok {
 			continue
@@ -782,7 +782,12 @@ func mutatePayload(_ *vmath.FastRand, recs []event.JournalRecord) ([]event.Journ
 		if p.X == x {
 			x = 2
 		}
-		recs[i].Payload = fmt.Sprintf("entity = %d\nx = %d\ny = 1\n", p.Entity, x)
+		f, encErr := event.NewWireFrame(event.GameEvent{Type: recs[i].Type,
+			Payload: &event.CursorMoveRequestPayload{Entity: p.Entity, X: x, Y: 1}})
+		if encErr != "" {
+			continue
+		}
+		recs[i].Payload = f.Payload
 		return recs, fmt.Sprintf("rewrote final cursor move jseq %d", recs[i].JSeq), true
 	}
 	return recs, "", false

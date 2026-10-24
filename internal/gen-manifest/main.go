@@ -180,12 +180,14 @@ func main() {
 
 	events := parseEvents("../event")
 	generateFile("../event/registry_gen.go", eventRegistryTemplate, events)
+	payloads := payloadCodecs(events)
+	generateFile("../event/payload_gen.go", payloadTemplate, payloads)
 
 	inputEnums := parseInputTypes("../input")
 	generateFile("../input/strings_gen.go", inputStringsTemplate, inputEnums)
 
-	fmt.Printf("Generated: %d components, %d systems, %d renderers, %d events, %d input enums\n",
-		len(defs.Components), len(defs.Systems), len(defs.Renderers), len(events.Events), len(inputEnums))
+	fmt.Printf("Generated: %d components, %d systems, %d renderers, %d events, %d payload codecs, %d input enums\n",
+		len(defs.Components), len(defs.Systems), len(defs.Renderers), len(events.Events), len(payloads.Codecs), len(inputEnums))
 }
 
 func parseDefinitions(path string) Definitions {
