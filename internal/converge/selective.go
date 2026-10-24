@@ -54,6 +54,14 @@ type awaitingRepair struct {
 	from     uint32
 }
 
+// readWorld is this instance's world as one tick closed: a whole capture an index
+// is built over later, or the index built in place as the tick closed beside a
+// capture without rows, which proves a root and repairs nothing.
+type readWorld struct {
+	capture snapshot.SharedCapture
+	index   *snapshot.Manifest // nil over a whole capture
+}
+
 // selectiveState is the exchange half of the correction protocol, on whichever side
 // this run turns out to be. selectiveMu rather than publishMu covers it, and that is
 // a lock-order rule: the order here is publishMu then the world lock, and inbound
@@ -89,9 +97,11 @@ type selectiveState struct {
 
 	// want holds the ticks an index has named or promised this instance, and at the
 	// worlds TickClosed read as each closed; answerManifest takes the one its index
-	// describes. Both hold the newest two.
-	want []uint64
-	at   []snapshot.SharedCapture
+	// describes. Both hold the newest two. newest is the last manifest to arrive,
+	// decoded, which a tick closing under it is indexed against in place.
+	want   []uint64
+	at     []readWorld
+	newest snapshot.CorrectionManifest
 
 	// wantKeyframe records that this receiver has asked for a whole world and is
 	// waiting for one, so a manifest arriving in the meantime is answered with the
@@ -589,35 +599,45 @@ func (c *Corrections) holdsRetention(tick uint64) bool {
 	return ok
 }
 
-// worldAt is this instance's world at tick: the reading TickClosed took there, or
-// the present when none was taken, which is counted.
-func (c *Corrections) worldAt(tick uint64) (snapshot.SharedCapture, error) {
+// worldAt is this instance's world at the tick want names: the reading TickClosed
+// took there, with its index when one was built in place against want, or the
+// present when neither was taken, which is counted.
+func (c *Corrections) worldAt(want snapshot.CorrectionManifest) (snapshot.SharedCapture, *snapshot.Manifest, error) {
 	var (
-		at    snapshot.SharedCapture
+		at    readWorld
 		found bool
 	)
 	c.selectiveMu.Lock()
 	kept := c.selective.at[:0]
-	for _, cap := range c.selective.at {
-		switch {
-		case cap.Header.Tick == tick:
-			at, found = cap, true
-		case cap.Header.Tick > tick:
-			kept = append(kept, cap)
+	for _, r := range c.selective.at {
+		switch tick := r.capture.Header.Tick; {
+		case tick == want.Header.Tick:
+			at, found = r, true
+		case tick > want.Header.Tick:
+			kept = append(kept, r)
 		}
 	}
 	c.selective.at = kept
 	c.selectiveMu.Unlock()
-	if found {
-		return at, nil
+	if found && at.index == nil {
+		return at.capture, nil, nil
 	}
+	if found && at.index.Root() == want.Root && at.index.Summary().Authority == want.Authority &&
+		at.capture.Header.Term == want.Header.Term {
+		return at.capture, at.index, nil
+	}
+	// An index built against another manifest proves nothing about this one, and
+	// its capture holds no rows to repair: the present answers, off its tick.
 	c.tel.ManifestsOffTick.Add(1)
-	return c.inst.CaptureShared()
+	cap, err := c.inst.CaptureShared()
+	return cap, nil, err
 }
 
 // TickClosed runs under the world lock after every tick. A guest reads its world
-// here when an index names or promises this tick; a host wakes its pump, so a
-// publication describes the tick that just closed rather than a timer's phase.
+// here when an index names or promises this tick, in place when that index is in
+// hand and its root agrees, so the answer the design is for copies nothing; a host
+// wakes its pump, so a publication describes the tick that just closed rather than
+// a timer's phase.
 func (c *Corrections) TickClosed(tick uint64) {
 	if c.authority.isAuthority() {
 		c.signal()
@@ -628,6 +648,7 @@ func (c *Corrections) TickClosed(tick uint64) {
 	if wanted {
 		c.selective.want = slices.DeleteFunc(c.selective.want, func(t uint64) bool { return t <= tick })
 	}
+	newest, wantKeyframe := c.selective.newest, c.selective.wantKeyframe
 	c.selectiveMu.Unlock()
 	if !wanted {
 		if c.holdingThrough(tick) {
@@ -635,15 +656,38 @@ func (c *Corrections) TickClosed(tick uint64) {
 		}
 		return
 	}
-	at, err := c.inst.CaptureSharedLocked()
-	if err != nil {
-		c.log.Warn("converge", "msg", "manifest tick not captured", "tick", tick, "error", err.Error())
-		return
+	var read readWorld
+	if at := c.inst.Position(); newest.Header.Tick == tick && newest.Header.Run == at.Run && !wantKeyframe {
+		index, light, err := c.inst.IndexSharedLocked(newest.Authority, newest.Header.Term)
+		if err != nil {
+			c.log.Warn("converge", "msg", "manifest tick not indexed", "tick", tick, "error", err.Error())
+		} else if index.Root() == newest.Root && !c.provingWorld() {
+			read = readWorld{capture: light, index: index}
+			c.tel.InPlace.Add(1)
+		}
+	}
+	if read.index == nil {
+		// The root differs, so a repair needs the rows, or a join waits for a whole
+		// world: the capture, whose rows the index just encoded are reused by.
+		at, err := c.inst.CaptureSharedLocked()
+		if err != nil {
+			c.log.Warn("converge", "msg", "manifest tick not captured", "tick", tick, "error", err.Error())
+			return
+		}
+		read.capture = at
 	}
 	c.selectiveMu.Lock()
-	c.selective.at = keepNewest(append(c.selective.at, at), 2)
+	c.selective.at = keepNewest(append(c.selective.at, read), 2)
 	c.selectiveMu.Unlock()
 	c.signal()
+}
+
+// provingWorld reports a join waiting on this instance for a world it proves,
+// which an index alone cannot hand over.
+func (c *Corrections) provingWorld() bool {
+	c.installedMu.Lock()
+	defer c.installedMu.Unlock()
+	return len(c.proving) > 0
 }
 
 // signal wakes whichever loop this run drives without blocking the tick.
@@ -692,18 +736,20 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 	}
 
 	started := time.Now() // [wall] telemetry only; outside the world lock
-	mine, err := c.worldAt(want.Header.Tick)
+	mine, index, err := c.worldAt(want)
 	if err != nil {
 		c.log.Warn("converge", "msg", "manifest comparison not captured", "error", err.Error())
 		return 0
 	}
-	// Compared under the authority's term, so a capture stamped just before a
-	// handoff was adopted does not differ from the index for that reason alone.
-	mine.Header.Term = want.Header.Term
-	index, err := c.inst.Encoder().Build(mine, want.Authority)
-	if err != nil {
-		c.log.Warn("converge", "msg", "manifest comparison not indexed", "error", err.Error())
-		return 0
+	whole := index == nil
+	if whole {
+		// Compared under the authority's term, so a capture stamped just before a
+		// handoff was adopted does not differ from the index for that reason alone.
+		mine.Header.Term = want.Header.Term
+		if index, err = c.inst.Encoder().Build(mine, want.Authority); err != nil {
+			c.log.Warn("converge", "msg", "manifest comparison not indexed", "error", err.Error())
+			return 0
+		}
 	}
 	req, sections, pages := snapshot.CompareRequest(index, want)
 	req.Term = want.Header.Term
@@ -731,7 +777,9 @@ func (c *Corrections) answerManifest(body []byte, arrived int64) uint64 {
 		m.HashOnly.Add(1)
 		c.proved(want.Header.Tick)
 		mine.Header = want.Header
-		c.offerProved(mine)
+		if whole {
+			c.offerProved(mine) // an index's capture holds no rows to hand a join
+		}
 		if at := c.inst.Position(); at.Run == want.Header.Run && at.Tick <= want.Header.Tick {
 			c.adoptAuthority(mine, index)
 		}
@@ -929,6 +977,7 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 			append(c.selective.manifests, body), parameter.SnapshotCorrectionQueue)
 		if m, err := snapshot.DecodeManifest(body); err == nil {
 			at := c.inst.Position()
+			c.selective.newest = m
 			for _, t := range []uint64{m.Header.Tick, m.Next} {
 				if m.Header.Run == at.Run && t > at.Tick && !slices.Contains(c.selective.want, t) {
 					c.selective.want = keepNewest(append(c.selective.want, t), 2)

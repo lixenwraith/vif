@@ -16,7 +16,7 @@ import (
 // Schema. The schema says what a capture contains; this says how it is
 // partitioned and hashed. Either moving invalidates a comparison, and a receiver
 // has to be able to say which one did.
-const ManifestVersion = 3
+const ManifestVersion = 4
 
 // The section ids that are not component stores. Component store sections take
 // their ids from engine.SharedWorldStoreNames, which is generated beside the
@@ -152,6 +152,17 @@ func ownerAuthoredCursors(cap SharedCapture) map[core.Entity]bool {
 	return out
 }
 
+// liveOwnerAuthoredCursors is ownerAuthoredCursors read off the live store.
+func liveOwnerAuthoredCursors(w *engine.World) map[core.Entity]bool {
+	out := make(map[core.Entity]bool, parameter.MaxPlayers)
+	for _, e := range w.Components.Cursor.Entities() {
+		if c, ok := w.Components.Cursor.GetPtr(e); ok && e.Domain() == core.DomainShared && c.PeerID != 0 {
+			out[e] = true
+		}
+	}
+	return out
+}
+
 // newSection partitions one section's rows and hashes them.
 //
 // The partition is by entity or name rather than by position, so a row added or
@@ -208,7 +219,7 @@ func rowPage(row ManifestRow, pages uint32) uint32 {
 	if pages <= 1 {
 		return 0
 	}
-	return uint32(newHash().text(row.Name).u64(uint64(row.Entity))) & (pages - 1)
+	return uint32(newHash().text(row.Name).u64(uint64(row.Entity)).sum()) & (pages - 1)
 }
 
 // pageHash commits to a page's identity and to its rows in canonical order.
@@ -221,7 +232,7 @@ func pageHash(section string, page uint32, rows []ManifestRow) uint64 {
 	for _, row := range rows {
 		h = h.u64(rowHash(row.Name, row.Entity, row.Value))
 	}
-	return uint64(h)
+	return h.sum()
 }
 
 // pageHashOf is pageHash over rows already hashed: members index hashes.
@@ -230,7 +241,7 @@ func pageHashOf(section string, page uint32, members []int32, hashes []uint64) u
 	for _, c := range members {
 		h = h.u64(hashes[c])
 	}
-	return uint64(h)
+	return h.sum()
 }
 
 func pageHasher(section string, page uint32, rows int) hash {
@@ -240,7 +251,7 @@ func pageHasher(section string, page uint32, rows int) hash {
 
 // rowHash commits to one row's identity and bytes.
 func rowHash(name string, entity core.Entity, value []byte) uint64 {
-	return uint64(newHash().text(hashDomainRow).text(name).u64(uint64(entity)).bytes(value))
+	return newHash().text(hashDomainRow).text(name).u64(uint64(entity)).bytes(value).sum()
 }
 
 // sectionHash commits to a section's identity and to its page hashes in order.
@@ -250,7 +261,7 @@ func sectionHash(section string, pages []uint64) uint64 {
 	for _, p := range pages {
 		h = h.u64(p)
 	}
-	return uint64(h)
+	return h.sum()
 }
 
 // The root includes identity and section hashes, but excludes tick-local
@@ -263,7 +274,7 @@ func manifestRoot(h CaptureHeader, authority uint32, sections []SectionSummary) 
 	for _, s := range sections {
 		w = w.text(s.ID).u64(uint64(s.Pages)).u64(uint64(s.Rows)).u64(s.Hash)
 	}
-	return uint64(w)
+	return w.sum()
 }
 
 // Rebuild only repaired sections; unchanged sections retain their immutable

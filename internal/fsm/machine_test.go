@@ -158,14 +158,16 @@ transitions = [
 ]
 [states.B]
 on_enter = [{ action = "EmitEvent", event = "EventStrobeRequest" }]
+transitions = [{ trigger = "EventSpeciesKilled", target = "C" }]
 [states.C]
 `
 
 // TestAProposedTransitionWaitsForItsApply: a proposing machine hands a
 // passed transition over with the fields it captured and moves only when Apply
-// brings it back, evaluating nothing for that region in between, while an
-// internal one parks nothing, so every event it counts is proposed; an apply
-// whose owning state the region has left is refused.
+// brings it back; in between it parks the events the state it is entering
+// reacts to and replays them there, while an internal transition parks nothing,
+// so every event it counts is proposed; an apply whose owning state the region
+// has left is refused.
 func TestAProposedTransitionWaitsForItsApply(t *testing.T) {
 	m, trace, err := loadMachine(t, proposedDoc)
 	if err != nil {
@@ -193,19 +195,25 @@ func TestAProposedTransitionWaitsForItsApply(t *testing.T) {
 		t.Fatalf("proposal = %+v, want A's first transition on EventSpeciesCreated capturing made=4", *p)
 	}
 	m.Update(trace, 20*time.Millisecond)
-	if m.HandleEvent(trace, killed) || len(proposed) != 3 || m.GetRegionState("r") != "A" {
-		t.Fatalf("while proposed: %d proposals, state %q; want the region parked in A", len(proposed), m.GetRegionState("r"))
+	if !m.HandleEvent(trace, killed) || len(proposed) != 3 || m.GetRegionState("r") != "A" {
+		t.Fatalf("while proposed: %d proposals, state %q; want the region parked in A holding the kill B reacts to", len(proposed), m.GetRegionState("r"))
 	}
 	for _, q := range proposed[:2] {
 		if err := m.Apply(trace, q); err != nil {
 			t.Fatalf("apply internal: %v", err)
 		}
 	}
-	if m.HandleEvent(trace, killed) || m.GetVar("dead") != 2 || m.GetRegionState("r") != "A" {
-		t.Fatalf("after the internal applies: dead %d, state %q; want 2 counted in A, still parked", m.GetVar("dead"), m.GetRegionState("r"))
+	if m.GetVar("dead") != 2 || m.GetRegionState("r") != "A" || len(proposed) != 3 {
+		t.Fatalf("after the internal applies: dead %d, state %q, %d proposals; want 2 counted in A, still parked", m.GetVar("dead"), m.GetRegionState("r"), len(proposed))
 	}
 	if err := m.Apply(trace, p); err != nil || m.GetRegionState("r") != "B" || m.GetVar("made") != 4 || len(*trace) != 1 {
 		t.Fatalf("apply: err %v, state %q, made %d, events %v; want B entered with made=4", err, m.GetRegionState("r"), m.GetVar("made"), *trace)
+	}
+	if len(proposed) != 4 || proposed[3].Trigger != event.EventSpeciesKilled {
+		t.Fatalf("%d proposals after entering B; want the parked kill replayed there and proposed", len(proposed))
+	}
+	if err := m.Apply(trace, proposed[3]); err != nil || m.GetRegionState("r") != "C" {
+		t.Fatalf("apply the replayed kill: err %v, state %q, want C", err, m.GetRegionState("r"))
 	}
 	if err := m.Apply(trace, p); err == nil {
 		t.Fatal("a transition of a state the region has left was applied")

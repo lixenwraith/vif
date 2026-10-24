@@ -85,7 +85,7 @@ func integrityOf(cap SharedCapture, stores [][]engine.StoreRow) (uint64, error) 
 			h = h.u64(r.Hash)
 		}
 	}
-	return uint64(h), nil
+	return h.sum(), nil
 }
 
 // EncodeCapture renders a capture in the bounded compressed wire envelope.
@@ -156,6 +156,26 @@ func appendField(dst []byte, key string, v any) ([]byte, error) {
 
 // Build indexes a detached capture outside the world lock.
 func (e *Encoder) Build(cap SharedCapture, authority uint32) (*Manifest, error) {
+	stores, err := e.rows.Encode(&cap.World, storeRowHash)
+	if err != nil {
+		return nil, fmt.Errorf("manifest: %w", err)
+	}
+	return e.build(cap, authority, stores, ownerAuthoredCursors(cap))
+}
+
+// BuildLive indexes the live world where it stands: cap carries every part of a
+// capture but its store rows, which are read in place rather than copied, so an
+// answer that proves the world costs the index and nothing else. Caller MUST hold
+// the world lock.
+func (e *Encoder) BuildLive(w *engine.World, cap SharedCapture, authority uint32) (*Manifest, error) {
+	stores, err := e.rows.EncodeLive(w, storeRowHash)
+	if err != nil {
+		return nil, fmt.Errorf("manifest: %w", err)
+	}
+	return e.build(cap, authority, stores, liveOwnerAuthoredCursors(w))
+}
+
+func (e *Encoder) build(cap SharedCapture, authority uint32, stores [][]engine.StoreRow, cursors map[core.Entity]bool) (*Manifest, error) {
 	m := &Manifest{
 		summary: CorrectionManifest{
 			Version:   ManifestVersion,
@@ -167,7 +187,7 @@ func (e *Encoder) Build(cap SharedCapture, authority uint32) (*Manifest, error) 
 		sections:  make(map[string]*section, engine.SharedWorldStoreCount+5),
 		index:     make(map[string]int, engine.SharedWorldStoreCount+5),
 	}
-	secs, err := e.sectionsFor(cap, nil)
+	secs, err := e.sectionsOver(cap, nil, stores, cursors)
 	if err != nil {
 		return nil, err
 	}
@@ -181,9 +201,18 @@ func (e *Encoder) Build(cap SharedCapture, authority uint32) (*Manifest, error) 
 	return m, nil
 }
 
-// sectionsFor builds the sections want names, every one when want is nil, in the
-// order the root absorbs them.
+// sectionsFor builds the sections want names over a capture's own rows.
 func (e *Encoder) sectionsFor(cap SharedCapture, want map[string]bool) ([]*section, error) {
+	stores, err := e.rows.Encode(&cap.World, storeRowHash)
+	if err != nil {
+		return nil, fmt.Errorf("manifest: %w", err)
+	}
+	return e.sectionsOver(cap, want, stores, ownerAuthoredCursors(cap))
+}
+
+// sectionsOver builds the sections want names, every one when want is nil, in the
+// order the root absorbs them, over rows already encoded.
+func (e *Encoder) sectionsOver(cap SharedCapture, want map[string]bool, stores [][]engine.StoreRow, cursors map[core.Entity]bool) ([]*section, error) {
 	wants := func(id string) bool { return want == nil || want[id] }
 	out := make([]*section, 0, engine.SharedWorldStoreCount+5)
 	if wants(SectionMeta) {
@@ -193,11 +222,6 @@ func (e *Encoder) sectionsFor(cap SharedCapture, want map[string]bool) ([]*secti
 		}
 		out = append(out, newSection(SectionMeta, rows))
 	}
-	stores, err := e.rows.Encode(&cap.World, storeRowHash)
-	if err != nil {
-		return nil, fmt.Errorf("manifest: %w", err)
-	}
-	cursors := ownerAuthoredCursors(cap)
 	e.mu.Lock()
 	if e.sections == nil {
 		e.sections = make([]*storeSection, len(stores))

@@ -7,8 +7,8 @@ and the wire carries what a receiver cannot re-derive. §1 is the wire, §2 the
 correction pipeline, §3 the readings, §4 phase 2, the approaches not yet landed in
 their batches, each with what of it is in and what it still needs, and §5 their
 order by iteration. Phase 1, four iterations in 2026-10, is what §1–§3 describe as
-built, with phase 2's first three: the wire codec and the authority's FSM
-transitions. Bare section numbers
+built, with phase 2's first four: the wire codec, the authority's FSM
+transitions, and answers indexed in place under a word hash. Bare section numbers
 are this document's; "multi-player §n" is [Multiplayer](multi-player.md), which
 holds the session contract, event timing, membership and succession; "services §n"
 is [Services and networking](services-and-networking.md), which holds the
@@ -59,9 +59,11 @@ sends its copy down gives its own link the epoch without its frames and no sync 
 all, since it holds both.
 
 The manifest is a tree: root; a section per store and per carrier; up to 64 pages a
-section, rows bucketed by a hash of their identity; rows, hashed with byte-serial
-FNV-1a over each row's JSON, where row reuse keeps the JSON and hash of each row
-whose owned copy still compares equal. Equal roots send no state. The root travels
+section, rows bucketed by a hash of their identity; rows, hashed a word at a time
+(`vmath.Hash64`) over each row's JSON, where row reuse keeps the JSON and hash of
+each row whose owned copy still compares equal. A guest indexes the live rows in
+place as the tick a manifest names closes and captures nothing while the roots
+agree. Equal roots send no state. The root travels
 with its partition, the page count of each section paged more than once, so a
 receiver whose root differs answers at once with the page hashes of every section
 under it: one round trip from the root to the repair.
@@ -369,7 +371,13 @@ own microbenchmarks cannot account for and a quieter machine should settle; with
 the authority's FSM transitions (protocol 25) the tower's rows read the same
 within the spread (epochs 1.0, 5.9 and 89.1 kB/s framed, the wire 1.56, 6.47 and
 73.1) and the process 0.09, 0.17 and 0.59, a transition being one crossing of
-some twenty bytes a lead apart. td's bodies and CPU move run to run with what its storm does to the
+some twenty bytes a lead apart; with the word hash and the index read in place
+(manifest version 4) the bytes read the same again and the process 0.09, 0.15
+and 0.49, a guest tick 12.5 ms against 16.8 at 16 players, td 0.36 at 2. The
+in-place answer never runs here: these guests tick in step with the host, so a
+manifest reaches them after the tick it names and the promised tick is captured
+as before; the paced guest of §3.5, a lead behind, answers 248 of 261 manifests
+in place. td's bodies and CPU move run to run with what its storm does to the
 roster (a keyframe every eight seconds on both td rows here, none to half a
 second of them on other readings), so its rows compare only where the keyframe
 rate agrees, and the tower's wire has a run-to-run spread of about 2%. The framed
@@ -422,8 +430,9 @@ What the readings decide:
   output, which is why a body is compressed once at level 6 and passes the link
   raw: a td keyframe is 360 kB against 398 after both passes and 501 at level 1, the
   codec's pass 33 ms instead of 12 plus 9 a link.
-- **FNV is 7–11% and the seal and index 2–4%**, so a faster hash pays, before or
-  after the in-place root; the digest's hash is part of that share.
+- **FNV was 7–11% and the seal and index 2–4%**, so a faster hash paid: the word
+  hash of iteration 4 folds eight bytes for what a byte cost, and the profile
+  above is the one taken before it.
 - **The command stream's constants are small on the wire.** Bundled links took 4%
   off the wire at four players and 11% at 16, where 16 frame headers a tick a link
   became two; the leaf's echo 14% at two players and 8% at four, 1/N of the epochs
@@ -533,8 +542,9 @@ heavy      pg 300  kf 7   lc 57   lead 9 (9)     pg 49  kf 7  lc 0  lcp 0  lead 
 
 Phase 2's iterations over the same four shapes: on the main each started from
 (the staleness change had moved the lossy shapes' pages from the table above),
-with the envelope, with the payload codec, and with the authority's FSM
-transitions (`fsm`), 1,200 ticks each:
+with the envelope, with the payload codec, with the authority's FSM transitions
+(`fsm`), and with the index read in place under the word hash and the events a
+parked region replays (`place`), 1,200 ticks each:
 
 ```
 shape      stage     pg  kf  lc  lcp  lead     manifests
@@ -542,18 +552,22 @@ fieldlike  main      31   3   1    0  8 (9)    284
            envelope  18   4   1    0  8 (9)    276
            payload   31   2   1    0  8 (9)    270
            fsm       23   5   1    0  8 (9)    175
+           place     56   5   1    0  8 (9)    170
 rare       main       3   3   0    6  11 (13)  273
            envelope   8   2   0   11  11 (13)  267
            payload    3   2   0    6  11 (13)  261
            fsm       29   2   0    4  11 (13)  261
+           place     24   2   0    4  11 (13)  261
 sparse     main       1   1   3    4  9 (10)   292
            envelope   1   1   3    4  9 (10)   287
            payload    1   1   3    4  9 (10)   284
            fsm        6   2   3   10  9 (10)   281
+           place      5   2   3    6  9 (10)   279
 heavy      main      61   5   0    0  14 (15)  134
            envelope  84   7   0    3  13 (15)  132
            payload   99   5   0    0  14 (15)   97
            fsm      119   4   0    1  14 (15)  124
+           place    116   4   0    1  14 (15)  124
 ```
 
 Late commits and the lead hold on every shape through every step; pages and late
@@ -567,15 +581,19 @@ meter, which is the cadence's to answer
 is a different fight again from the storm region's entry on: the region's own
 storm now spawns when the raised one dies instead of the region adopting the
 raised one by liveness, so the rows after it are not the codec's to compare;
-the late counts and the lead are, and hold.
+the late counts and the lead are, and hold. The `place` step moves the sparse
+fight once more: an event a parked region used to drop now replays, so the
+scenario's own storm comes at tick 508 instead of 904 and the harness's raise
+finds one active; late counts and lead hold again.
 
 The harness prints the storm region's transitions too, from both ends' records:
 the scenario enters `StormSetup` from the quasar kills at tick 798–928 by shape,
 retries its refused spawn every 12 ticks while the storm the harness raised lives
 (the retry loop the liveness transition used to cut short), takes `StormActive` on
 its own spawn and ends through `StormDecision` and `StormVictory` on its death,
-every transition at one tick on both ends over every shape. What it cannot yet
-read: the pacing knobs other than their steady state.
+every transition at one tick on both ends over every shape, and how many
+manifests the guest answered in place, 248 of 261 on the default shape. What it
+cannot yet read: the pacing knobs other than their steady state.
 
 ## 4. Phase 2
 
@@ -584,10 +602,11 @@ it can land. The costs name what it lowers (−), raises (+) and leaves (·), in
 order CPU, memory, bandwidth, latency; projections come from §1's figures and §3
 confirms or refutes them. Phase 1 closed with the six-tick wire digest retired
 (protocol 22): parity is the correction exchange's, and a repair names its sections
-in `snapshot.repair_sections`. Phase 2's first three iterations landed the binary
+in `snapshot.repair_sections`. Phase 2's first four iterations landed the binary
 wire codec, its envelope (protocol 23) and its payload (protocol 24, journal
-schema 37), and the authority's FSM transitions (protocol 25, journal schema 38).
-The approaches are in three batches, and §5 orders them by iteration.
+schema 37), the authority's FSM transitions (protocol 25, journal schema 38), and
+the index read in place under a word hash (manifest version 4, capture schema
+24). The approaches are in three batches, and §5 orders them by iteration.
 
 ### Batch 1: the wire
 
@@ -666,9 +685,11 @@ The approaches are in three batches, and §5 orders them by iteration.
   the transition's actions and the target's on_enter run, so a storm spawns from
   the same draws everywhere. A guest's machine evaluates nothing and follows
   (`Machine.Steer`, `Machine.Apply`); so do a replay of a live session and a
-  projection, from their records. A region with a transition in flight evaluates
-  nothing until it lands; an internal transition parks nothing, so every event it
-  counts crosses, in order. A reset's own settle, one artifact every instance
+  projection, from their records. A region with a transition in flight takes
+  nothing until it lands and parks the events the state it is entering reacts
+  to, replaying them there, so a quasar killed while its region's gold cycle
+  crossed still ends the region; an internal transition parks nothing, so every
+  event it counts crosses, in order. A reset's own settle, one artifact every instance
   applies at one tick, takes its transitions in place, as a solo run does. Guards
   that read per-instance status (`kills.*`, `TimeInState`) are the authority's by
   construction (D-20). The `fsm` section stays as the proof, `StormSetup`'s
@@ -682,33 +703,36 @@ The approaches are in three batches, and §5 orders them by iteration.
 
 ### Converged answers without a capture
 
-- Costs: − · · −; complexity medium.
-- Projected: a guest's capture on 95% of its answers.
-- In: nothing. A guest answers each manifest with a capture and an index, as the
-  host builds them, although 94–95% of answers at 16 players are hash-only and need
-  only a root.
-- Left: keep an owned copy and row hash for each live row, as the encoder does for a
-  capture; at the close of the tick the manifest names (`Corrections.TickClosed`,
-  under the tick's lock) walk the live stores, compare each row with its copy,
-  rehash only the rows that differ and compute the root in place; capture only
-  when the root differs, at that same close. A paced guest holds the manifest
-  before it runs the tick (§2.1), so the root is in hand as the tick closes; a
-  manifest that arrives later takes today's path.
-- Needs: the in-place root must equal what a capture and index produce,
-  normalisation and owner-authored exclusions included, held by one test. The cache
-  compares values it owns, so it is not the rejected write counter.
+- Costs: − · · −; complexity medium. Measured: §3.3.
+- In: a guest holding a manifest as the tick it names closes indexes the live
+  stores in place under the tick's lock (`Encoder.BuildLive`, `RowEncoder.EncodeLive`):
+  each shared cell is compared with the encoder's owned copy where it stands, only
+  a cell that moved is encoded and hashed again, and the sections and root come
+  from the same reuse a capture's index has. The capture's other parts (the
+  allocator's counters, the streams, the carriers, the status surface, the
+  machine's position) are read beside it; the store rows are not copied. When the
+  root agrees the answer needs nothing more (`snapshot.manifests_in_place`); when
+  it differs, or a join waits on this instance for a world it proves, the whole
+  capture is taken at that same close and its index reuses the rows just encoded.
+  A manifest that arrives after its tick, or one promised by `Next` whose index has
+  not arrived, takes the captured path as before, counted off tick when neither
+  reading was taken. One test holds the in-place index to a capture's, root,
+  sections and pages, normalisation and the owner-authored exclusions included.
+- Left: nothing; the encoder still compares values it owns.
+- Needs: nothing further.
 
 ### A faster deterministic hash
 
-- Costs: − · · ·; complexity low.
-- Projected: hashing about ten times faster, at the 7–11% share §3.3 measured.
-- In: nothing. FNV-1a is byte-serial, one dependent 64-bit multiply per byte, a
-  few hundred megabytes a second.
-- Left: a word-at-a-time hash of the xxh64 class, written in `pkg/vmath` beside the
-  FNV constants, fixed across platforms and processes, which rules out
-  `hash/maphash`; it bumps `ManifestVersion` and `Schema`.
-- Needs: nothing but the bump. Row reuse already limits hashing to rows that
-  changed, and §3.3 found the share real.
+- Costs: − · · ·; complexity low. Measured: 4.6 GB/s against FNV-1a's 0.25 on a
+  181-byte row (`BenchmarkHash64Row`), eighteen times.
+- In: `vmath.Hash64`, a word-at-a-time hash of the xxHash64 round and avalanche,
+  one multiply, rotate and multiply per eight bytes, fixed across platforms and
+  processes, which `hash/maphash` is not; strings fold without a copy, a tail as one
+  word and the length after it. Every snapshot hash (row, page, section, root,
+  integrity, the journal digest) is its sum; manifest version 4 and capture schema
+  24.
+- Left: nothing.
+- Needs: nothing further.
 
 ### Batch 3: formats and structure
 
@@ -802,8 +826,8 @@ alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
 3. Shared FSM transitions committed by the authority (batch 2): landed, protocol
    25 and journal schema 38, the harness reading the storm region's transitions
    (§3.5, §4).
-4. Converged answers without a capture and the faster hash (batch 2): CPU and the
-   lock at the map limit, on the host and the browser guest.
+4. Converged answers without a capture and the faster hash (batch 2): landed,
+   manifest version 4 and capture schema 24 (§3.3, §4).
 5. Keyframes from cached sections (batch 3); the binary row codec, retention by
    reference and the projection out of the lock follow it as iterations of their
    own when their batch is reached.
@@ -811,17 +835,15 @@ alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
 ### Brief for the next session
 
 Repository `lixenwraith/vif`, AGENTS.md is the contract. Netcode phase 2, iteration
-4 of 5 (§5): converged answers without a capture, and the faster deterministic
-hash. Read [netcode design](netcode-design.md) §2, §3.1, §3.3, §4 batch 2 and §5,
-then `internal/converge` (the correction exchange: a guest's answer to a manifest,
-`Corrections.TickClosed`), `internal/snapshot` (the capture, its seal and index,
-the row hashes the encoder reuses) and `pkg/vmath` (the FNV constants). Land both
-alone: keep an owned copy and row hash for each live row, compare the live stores
-with their copies at the close of the tick a manifest names, rehash only the rows
-that differ and compute the root in place, and capture only when the root
-differs; then a word-at-a-time hash of the xxh64 class in `pkg/vmath`, fixed
-across platforms and processes, bumping `ManifestVersion` and `Schema`. One test
-holds the in-place root to what a capture and index produce, normalisation and
-owner-authored exclusions included; one test per rule otherwise. Re-run §3.1's
-matrix, §3.3's readings and §3.5's four shapes and update §3.1, §3.3 and §3.5. Do
-not start batch 3 in this iteration.
+5 of 5 (§5): keyframes from cached sections. Read [netcode design](netcode-design.md)
+§2, §3.1, §3.3, §4 batch 3 and §5, then `internal/snapshot` (`Encoder.appendCapture`,
+`EncodeCapture`, `EncodeCorrection`, the section cache in `encoder.go` and the wire
+envelope in `codec.go`) and `internal/converge` (`takeKeyframe`, `KeyframeAt`,
+`ProvedWorld`, the install path a keyframe takes). Land it alone: compress each
+section on its own, keep its compressed bytes while its section hash holds, send a
+keyframe and a join's capture as one container of section blobs with a decoder
+that reassembles the capture; integrity stays over rows. Bump `Schema` and the
+protocol as the container needs; one test per rule; measure a td keyframe's
+encode before and after. Re-run §3.1's matrix, §3.3's readings and §3.5's four
+shapes and update §3.1, §3.3 and §3.5. Do not start the binary row codec,
+retention by reference or the projection out of the lock in this iteration.

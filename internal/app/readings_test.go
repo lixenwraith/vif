@@ -150,11 +150,12 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 		delta("snapshot.keyframe_fallbacks"), delta("snapshot.shards_sent"), delta("snapshot.correction_bytes_sent"),
 		delta("snapshot.shard_bytes_sent"), delta("snapshot.manifest_bytes_sent"),
 		float64(hostTime.Microseconds())/1000/measured, statOf(host, "network.chain"))
-	var manifests, hashOnly, applied, repaired, projected, lag int64
+	var manifests, hashOnly, inPlace, applied, repaired, projected, lag int64
 	for i, g := range guests {
 		now := snapshotStats(g)
 		manifests += now["snapshot.manifests_received"] - guestBefore[i]["snapshot.manifests_received"]
 		hashOnly += now["snapshot.corrections_hash_only"] - guestBefore[i]["snapshot.corrections_hash_only"]
+		inPlace += now["snapshot.manifests_in_place"] - guestBefore[i]["snapshot.manifests_in_place"]
 		applied += now["snapshot.corrections_applied"] - guestBefore[i]["snapshot.corrections_applied"]
 		repaired += now["snapshot.pages_repaired"] - guestBefore[i]["snapshot.pages_repaired"]
 		projected = max(projected, now["snapshot.projected_ticks"])
@@ -164,8 +165,8 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 	if manifests > 0 {
 		share = 100 * float64(hashOnly) / float64(manifests)
 	}
-	t.Logf("  guests: manifests %d, hash-only %.1f%%, corrections applied %d, pages repaired %d, projected ticks at most %d, lag at most %d; "+
-		"guest ticks %.1f ms each over all guests", manifests, share, applied, repaired, projected, lag,
+	t.Logf("  guests: manifests %d, hash-only %.1f%% (%d in place), corrections applied %d, pages repaired %d, projected ticks at most %d, lag at most %d; "+
+		"guest ticks %.1f ms each over all guests", manifests, share, inPlace, applied, repaired, projected, lag,
 		float64(guestTime.Microseconds())/1000/measured)
 	t.Logf("  process: %.2f CPU-s per simulated second over %d instances, heap in use %d MiB",
 		(cpuAfter-cpuBefore)/seconds, players, mem.HeapInuse>>20)

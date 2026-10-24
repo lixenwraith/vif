@@ -131,11 +131,21 @@ func (a *App) CaptureShared() (snapshot.SharedCapture, error) {
 // read with the body, so nothing applied between them can fall outside what the
 // header says the body contains. Caller MUST hold updateMutex.
 func (a *App) captureSharedLocked() (snapshot.SharedCapture, error) {
+	cap, err := a.captureLightLocked()
+	if err == nil {
+		cap.World = a.world.CaptureSharedWorld()
+	}
+	return cap, err
+}
+
+// captureLightLocked is a capture without its store rows: what an index built in
+// place needs beside the rows it reads where they stand. Caller MUST hold updateMutex.
+func (a *App) captureLightLocked() (snapshot.SharedCapture, error) {
 	var (
 		cap snapshot.SharedCapture
 		err error
 	)
-	cap.World = a.world.CaptureSharedWorld()
+	cap.World.NextEntity, cap.World.Created, cap.World.Destroyed = a.world.SharedAllocator()
 	cap.Streams = a.world.Resources.Rand.SaveStreams(core.DomainShared)
 	cap.FSM = a.scheduler.ExportFSM()
 	cap.Status = a.captureStatusLocked()

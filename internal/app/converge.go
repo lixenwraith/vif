@@ -136,6 +136,18 @@ func (i instance) CaptureSharedLocked() (snapshot.SharedCapture, error) {
 	return i.a.captureSharedLocked()
 }
 
+// IndexSharedLocked indexes the live world under its lock against the authority
+// and term a manifest names, copying nothing but the index's own.
+func (i instance) IndexSharedLocked(authority uint32, term network.AuthorityTerm) (*snapshot.Manifest, snapshot.SharedCapture, error) {
+	light, err := i.a.captureLightLocked()
+	if err != nil {
+		return nil, snapshot.SharedCapture{}, err
+	}
+	light.Header.Term = term
+	index, err := i.a.encoder.BuildLive(i.a.world, light, authority)
+	return index, light, err
+}
+
 // InstallCapture resolves a capture against the staging world, projects it to this
 // instance's tick and commits it between two ticks, reporting how far this instance
 // had drifted from the projection.

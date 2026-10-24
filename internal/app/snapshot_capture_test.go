@@ -721,3 +721,47 @@ func TestAGAScenarioStagesAcrossAReset(t *testing.T) {
 		t.Fatalf("an install after a reset both took: %v", err)
 	}
 }
+
+// TestAnIndexReadInPlaceMatchesTheCaptures: the index built off the live world as
+// a tick closes is the one a capture of that world indexes, root, sections and
+// pages alike, normalisation and the owner-authored exclusions included, on a
+// first build and on one reusing the rows of the build before.
+func TestAnIndexReadInPlaceMatchesTheCaptures(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x1DEC, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	guest := apps[1]
+	for round := range 2 {
+		for range 40 {
+			tickAll(apps)
+		}
+		guest.World().RunSafe(func() {
+			light, err := guest.captureLightLocked()
+			if err != nil || len(light.World.Positions) != 0 {
+				t.Fatalf("round %d: light capture: err %v, %d position rows, want none", round, err, len(light.World.Positions))
+			}
+			live, err := guest.encoder.BuildLive(guest.world, light, 1)
+			if err != nil {
+				t.Fatalf("round %d: live index: %v", round, err)
+			}
+			cap, err := guest.captureSharedLocked()
+			if err != nil {
+				t.Fatalf("round %d: capture: %v", round, err)
+			}
+			whole, err := snapshot.BuildManifest(cap, 1)
+			if err != nil {
+				t.Fatalf("round %d: index: %v", round, err)
+			}
+			rows := 0
+			for _, s := range whole.Summaries() {
+				rows += int(s.Rows)
+			}
+			if rows < 2*parameter.SnapshotManifestPageRows {
+				t.Fatalf("round %d: %d rows prove too little", round, rows)
+			}
+			if live.Root() != whole.Root() || !reflect.DeepEqual(live.Summaries(), whole.Summaries()) {
+				t.Fatalf("round %d: the index read in place differs from the capture's", round)
+			}
+		})
+	}
+}

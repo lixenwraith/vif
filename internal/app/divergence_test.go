@@ -142,6 +142,7 @@ func divergenceReading(host, guest *App, leadMax int64) string {
 	}
 	return strings.Join([]string{
 		"manifests " + itoa(manifests), "hash-only " + ftoa(share) + "%",
+		"in place " + itoa(statOf(guest, "snapshot.manifests_in_place")),
 		"pages repaired " + itoa(statOf(guest, "snapshot.pages_repaired")),
 		"cells repaired " + itoa(statOf(guest, "snapshot.cells_repaired")),
 		"keyframes " + itoa(statOf(host, "snapshot.keyframes")),
