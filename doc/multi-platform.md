@@ -252,11 +252,15 @@ one binds a `wss://` door and serves the certificate `-cert` and `-key` name, or
 `-selfsign` makes for the run, as does `:host wss://:7778` in a run started with
 either; the dialling browser must trust that certificate (one a public authority
 issued for the host's name, or a self-signed one the player's browser was told to
-trust by opening `https://host:7778` once), and its page's `connect-src` must allow
-the host's origin. A terminal joins it with `-join wss://host:7778/<name>` under
-the system's trust roots, or `-ca` naming the issuer's PEM file or the
-certificate's own fingerprint, `sha256:<hex>`, which the host's `:session` and log
-print and which is how a self-signed door is joined.
+trust by opening `https://host:7778` once, which the door answers with a line saying
+so), and its page's `connect-src` must allow the host's origin. A terminal joins it
+with `-join wss://host:7778/<name>`: a certificate the system's roots vouch for, or
+a self-signed one taken as it is, encrypted and naming nobody, open to a man in the
+middle until the handshake planned in
+[todo](todo.md#add-browser-admission-authentication) binds to it; `-ca` names an
+issuer's PEM file or pins the certificate's own fingerprint, `sha256:<hex>`, which
+the host prints at startup and `:session` reads, for a player who wants that
+authentication now.
 
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
 address, as it sees front-door players, so per-player admission is the

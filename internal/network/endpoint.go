@@ -98,6 +98,16 @@ func (e Endpoint) Secure() bool {
 	return e.Scheme == SchemeWebSocket && strings.HasPrefix(e.Addr, "wss://")
 }
 
+// withHost completes a WebSocket URL with no host: it is this machine, as a
+// host-less host:port is to TCP, and a browser's WebSocket refuses one without.
+func withHost(target string) string {
+	if u, err := url.Parse(target); err == nil && u.Hostname() == "" {
+		u.Host = net.JoinHostPort("localhost", u.Port())
+		return u.String()
+	}
+	return target
+}
+
 // Hostless reports a bind address naming a port and no host, every interface: it
 // says where a run listens, never where to dial it.
 func (e Endpoint) Hostless() bool {
@@ -249,9 +259,42 @@ func Fingerprint(cfg *tls.Config) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// TrustTLS is what a wss:// dial trusts a host's certificate by, in place of the
-// system's roots: sha256:<hex> pins the certificate itself, how a self-signed door is
-// joined, and anything else is a PEM file of the issuers to trust.
+// dialTLS is what a wss:// dial trusts with no -ca: a certificate the system's roots
+// vouch for, or a self-signed one taken as it is, which encrypts the link and names
+// nobody; what authenticates a self-signed door is a later handshake bound to its
+// certificate, or -ca pinning it.
+func dialTLS() *tls.Config {
+	return &tls.Config{
+		InsecureSkipVerify: true, // verified below, with a self-signed door accepted
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return errors.New("the host sent no certificate")
+			}
+			leaf := cs.PeerCertificates[0]
+			opts := x509.VerifyOptions{DNSName: cs.ServerName, Intermediates: x509.NewCertPool()}
+			for _, c := range cs.PeerCertificates[1:] {
+				opts.Intermediates.AddCert(c)
+			}
+			_, err := leaf.Verify(opts)
+			if err == nil || selfSigned(leaf) {
+				return nil
+			}
+			return plainError{"the host's certificate is not one this machine trusts; -ca names what to trust it by", err}
+		},
+	}
+}
+
+// selfSigned reports a certificate that is its own issuer: no authority stands
+// behind it, and none is asked about it.
+func selfSigned(c *x509.Certificate) bool {
+	return bytes.Equal(c.RawIssuer, c.RawSubject) &&
+		c.CheckSignature(c.SignatureAlgorithm, c.RawTBSCertificate, c.Signature) == nil
+}
+
+// TrustTLS is what a wss:// dial trusts a host's certificate by when -ca names it,
+// in place of the system's roots and the self-signed door dialTLS takes as it is:
+// sha256:<hex> pins the certificate itself, and anything else is a PEM file of the
+// issuers to trust.
 func TrustTLS(spec string) (*tls.Config, error) {
 	if digest, ok := strings.CutPrefix(spec, "sha256:"); ok {
 		want, err := hex.DecodeString(digest)
@@ -327,7 +370,7 @@ func plainNetError(err error) error {
 	case errors.As(err, &ne) && ne.Timeout():
 		text = "no answer; check the address and the host's firewall or port forward"
 	case errors.As(err, &verify):
-		text = "the host's certificate is not one this machine trusts"
+		text = "the host's certificate is not one this machine trusts; -ca names what to trust it by"
 	default:
 		return err
 	}
