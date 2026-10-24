@@ -25,13 +25,8 @@ const writeLinger = parameter.NetworkWriteLinger
 
 // dialWebSocket opens a session route natively, for a network that blocks the TCP
 // port. A refusal before the upgrade carries the allocator's JSON error, and its
-// message is reported as a join reply's reason is. A URL with no host is this
-// machine, as a host-less host:port is to TCP.
+// message is reported as a join reply's reason is.
 func dialWebSocket(target string, timeout time.Duration, tlsCfg *tls.Config) (net.Conn, error) {
-	if u, err := url.Parse(target); err == nil && u.Hostname() == "" {
-		u.Host = net.JoinHostPort("localhost", u.Port())
-		target = u.String()
-	}
 	ctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -105,6 +100,12 @@ func listenWebSocket(target string, timeout time.Duration, tlsCfg *tls.Config) (
 }
 
 func (l *wsListener) upgrade(w http.ResponseWriter, r *http.Request) {
+	// A browser opened to the door itself, which is how it is told to trust a
+	// self-signed certificate, is answered with what it reached.
+	if r.Method == http.MethodGet && !websocket.IsUpgrade(r) {
+		_, _ = io.WriteString(w, "vif serves a game here; a browser that opened this page trusts its door and can join it.\n")
+		return
+	}
 	h, err := websocket.Check(w, r)
 	if err != nil {
 		status := http.StatusBadRequest

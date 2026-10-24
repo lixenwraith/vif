@@ -169,7 +169,7 @@ func main() {
 	}
 	if sessionErr == nil && flagSession.selfsign {
 		if sessionTLS, sessionErr = network.SelfSignedTLS(flagSession.doorHosts()); sessionErr == nil {
-			fmt.Printf("-selfsign: a wss:// door serves a certificate made for this run; a terminal joins it with -ca %s\n",
+			fmt.Printf("-selfsign: a wss:// door encrypts with a certificate made for this run, %s; a terminal joins it as it is, or pins it with -ca\n",
 				network.Fingerprint(sessionTLS))
 		}
 	}
@@ -578,8 +578,8 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player at one or more doors, e.g. :7777 or :7777,wss://:7778")
 	fs.StringVar(&f.cert, "cert", "", "Certificate chain a wss:// host serves, a PEM file; for -host, -serve or :host")
 	fs.StringVar(&f.key, "key", "", "The certificate's private key, a PEM file; default the -cert file")
-	fs.BoolVar(&f.selfsign, "selfsign", false, "Serve wss:// with a certificate made for this run, in place of -cert; a joiner trusts it by its fingerprint, -ca sha256:...")
-	fs.StringVar(&f.ca, "ca", "", "What a wss:// host's certificate is trusted by when joining: a PEM file of its issuer, or sha256:<hex> of the certificate itself")
+	fs.BoolVar(&f.selfsign, "selfsign", false, "Serve wss:// with a certificate made for this run, in place of -cert: encrypted, and taken as it is by a terminal that joins")
+	fs.StringVar(&f.ca, "ca", "", "What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or sha256:<hex> pinning the certificate itself")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,

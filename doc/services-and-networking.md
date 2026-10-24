@@ -256,11 +256,13 @@ key in the certificate's file when `-key` is not given) or the one `-selfsign` m
 for the run (`network.SelfSignedTLS`: a P-256 key, no authority, the doors' hosts and
 this machine's loopback as its names, whose fingerprint `:session` and the log
 print), TLS 1.2 or later and HTTP/1.1 alone, and is refused without one. The same
-field on a dial is what a native `wss://` join trusts in place of the system's roots
-(`network.TrustTLS`, `-ca`): a PEM file of the issuers to trust, or `sha256:<hex>`
-pinning the certificate itself, which is how a self-signed door is joined and what a
-later authenticating handshake would bind to. A browser's dial consults neither:
-its own trust decides. TCP and `ws` stay plaintext whatever either holds. A bind or dial that fails is reported as
+field on a dial is what a native `wss://` join trusts when `-ca` names it
+(`network.TrustTLS`): a PEM file of the issuers to trust, or `sha256:<hex>` pinning
+the certificate itself. With none, the dial trusts what the system's roots vouch for
+and takes a self-signed door as it is (`dialTLS`): encrypted, naming nobody, open to
+a man in the middle until a later handshake binds to the certificate. A browser's
+dial consults neither: its own trust decides. TCP and `ws` stay plaintext whatever
+either holds. A bind or dial that fails is reported as
 what the player can do (`plainNetError`): a port below 1024, a port in use, an
 address not of this machine, a name not found, nothing listening, an unreachable
 network, no answer, a certificate this machine does not trust; a dial that connects
@@ -893,9 +895,10 @@ What the operator surface does not cover:
 - no lag compensation;
 - trusted plaintext peers over tcp and `ws`; no authentication, and a `wss://`
   door's certificate names the host to a browser, not the player to the host. A
-  self-signed door names nobody until a joiner pins it; what would authenticate
-  both ends without an authority is a later handshake bound to that certificate
-  ([todo](todo.md#add-browser-admission-authentication));
+  self-signed door encrypts and names nobody: a native join takes it as it is, open
+  to a man in the middle until a later handshake bound to that certificate
+  authenticates both ends ([todo](todo.md#add-browser-admission-authentication)),
+  unless `-ca` pins it now;
 - host loss hands the term down the succession list (§8), and every survivor
   that reaches no candidate, or every survivor when the session pinned its
   authority, goes on apart: a person's run in a session of its own that keeps every

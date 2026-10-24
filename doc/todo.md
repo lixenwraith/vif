@@ -214,11 +214,12 @@ logs. Creation takes one too: `network.RequestSession` is the terminal's side of
 message. Decide whether the expanded allocator remains the credential boundary or
 is renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency. A terminal's own door takes the same handshake: a
-`-selfsign` door encrypts with no authority and a joiner pins its fingerprint
-(`-ca sha256:`); the SCRAM exchange with `WithChannelBinding` over the leaf
-certificate's digest would authenticate both ends on that channel and make the pin
-optional, as `lixenwraith/chess` authenticates. Until then a browser trusts a
-self-signed door only by being told to.
+`-selfsign` door encrypts with no authority and a native joiner takes it as it is,
+open to a man in the middle until the SCRAM exchange with `WithChannelBinding` over
+the leaf certificate's digest authenticates both ends on that channel, as
+`lixenwraith/chess` authenticates; `-ca` pins it meanwhile. A browser trusts a
+self-signed door only by being told to: pinning from a page needs WebTransport's
+`serverCertificateHashes`, which the route does not speak.
 
 ### Fetch a content-addressed bundle over HTTP
 

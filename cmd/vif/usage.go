@@ -36,8 +36,8 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"serve"}, arg: "<doors>", hint: "Bind a headless session with no local cursor at one or more doors, e.g. :7777 or :7777,wss://:7778"},
 			{names: []string{"cert"}, arg: "<file>", hint: "Certificate chain a wss:// door serves, PEM; for -host, -serve or :host"},
 			{names: []string{"key"}, arg: "<file>", hint: "The certificate's private key, PEM; default the -cert file"},
-			{names: []string{"selfsign"}, hint: "Serve wss:// with a certificate made for this run, in place of -cert; a joiner trusts it by its fingerprint"},
-			{names: []string{"ca"}, arg: "<file|sha256:hex>", hint: "What a wss:// host's certificate is trusted by when joining: a PEM file of its issuer, or the certificate's own fingerprint"},
+			{names: []string{"selfsign"}, hint: "Serve wss:// with a certificate made for this run, in place of -cert: encrypted, and taken as it is by a terminal that joins"},
+			{names: []string{"ca"}, arg: "<file|sha256:hex>", hint: "What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint"},
 			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given"},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
