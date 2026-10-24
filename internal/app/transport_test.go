@@ -719,12 +719,13 @@ func testWireFrameRoundTrip(t *testing.T) {
 		t.Fatalf("decode batch = (%d, %v), want one frame", len(batch.Frames), err)
 	}
 
-	et, payload, domain, err := batch.Frames[0].Frame.Decode()
+	f := batch.Frames[0].Frame
+	payload, err := f.Decode()
 	if err != nil {
 		t.Fatalf("decode frame: %v", err)
 	}
-	if et != event.EventCombatAttackDirectRequest || domain != core.DomainShared {
-		t.Fatalf("decoded = (%v, %v), want the direct attack in the shared domain", et, domain)
+	if f.Event != event.EventCombatAttackDirectRequest || f.Domain != core.DomainShared {
+		t.Fatalf("decoded = (%v, %v), want the direct attack in the shared domain", f.Event, f.Domain)
 	}
 	got, ok := payload.(*event.CombatAttackDirectRequestPayload)
 	if !ok || *got != *want {
@@ -749,7 +750,7 @@ func testCursorStateRoundTrip(t *testing.T) {
 	if encErr != "" {
 		t.Fatalf("encode: %s", encErr)
 	}
-	_, payload, _, err := frame.Decode()
+	payload, err := frame.Decode()
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}

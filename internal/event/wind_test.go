@@ -43,12 +43,12 @@ func TestWindStartPayloadFrameRoundTrip(t *testing.T) {
 	if encodeErr != "" {
 		t.Fatalf("encode: %s", encodeErr)
 	}
-	et, payload, domain, err := frame.Decode()
+	payload, err := frame.Decode()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if et != EventWindStart || domain != core.DomainShared || !reflect.DeepEqual(payload, want) {
+	if frame.Event != EventWindStart || frame.Domain != core.DomainShared || !reflect.DeepEqual(payload, want) {
 		t.Fatalf("round trip = (%v, %#v, %v), want (%v, %#v, %v)",
-			et, payload, domain, EventWindStart, want, core.DomainShared)
+			frame.Event, payload, frame.Domain, EventWindStart, want, core.DomainShared)
 	}
 }

@@ -378,12 +378,11 @@ type barrierArtifact struct {
 	authored bool
 }
 
-// frameBytes is what one artifact costs a bounded buffer. The schedule and the
-// replay suffix measure the same thing the same way, so their two ceilings stay
-// comparable rather than drifting into two ideas of a frame's size.
-func frameBytes(f event.WireFrame) int {
-	return len(f.Payload) + len(f.Event) + len(f.Domain)
-}
+// frameBytes is what one artifact costs a bounded buffer: its payload, the only
+// part of it that grows. The schedule and the replay suffix measure the same thing
+// the same way, so their two ceilings stay comparable rather than drifting into
+// two ideas of a frame's size.
+func frameBytes(f event.WireFrame) int { return len(f.Payload) }
 
 func NewNetworkSystem(world *engine.World) engine.System {
 	s := &NetworkSystem{world: world}
@@ -717,8 +716,7 @@ func (s *NetworkSystem) forgetParticipant(participant uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgetLocked(func(source uint32) bool { return source == participant }, func(a barrierArtifact) bool {
-		et, ok := event.GetEventType(a.frame.Event)
-		return a.source == participant && (!ok || !barrierBound(et))
+		return a.source == participant && !barrierBound(a.frame.Event)
 	})
 }
 
@@ -732,7 +730,7 @@ func (s *NetworkSystem) LeaveSession() {
 	defer s.mu.Unlock()
 	local := s.localSource
 	s.forgetLocked(func(source uint32) bool { return source != local }, func(a barrierArtifact) bool {
-		et, _ := event.GetEventType(a.frame.Event)
+		et := a.frame.Event
 		return a.source != local || et == event.EventParticipantJoined || et == event.EventParticipantDeparted
 	})
 	s.relay = 0
@@ -943,7 +941,7 @@ func (s *NetworkSystem) retainLocked(frame event.WireFrame, produced, applyTick 
 		frame:    event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick},
 		produced: produced,
 		origin:   origin,
-		bytes:    len(frame.Payload) + len(frame.Event) + len(frame.Domain),
+		bytes:    frameBytes(frame),
 	}
 	s.suffix = append(s.suffix, rec)
 	s.suffixBytes += rec.bytes
@@ -1043,7 +1041,7 @@ func (s *NetworkSystem) PendingAfter(tick uint64) []event.WireBatch {
 // retainedContainedLocked is snapshotContainsLocked against a capture being
 // projected rather than the one last installed. Caller MUST hold mu.
 func (s *NetworkSystem) retainedContainedLocked(a barrierArtifact, tick uint64, fences network.CrossingFences) bool {
-	if et, ok := event.GetEventType(a.frame.Event); ok && !barrierBound(et) {
+	if !barrierBound(a.frame.Event) {
 		fence := fences.Seq(network.PeerID(a.source))
 		return fence != 0 && a.frame.Seq <= fence
 	}
@@ -1184,7 +1182,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 				// world rather than through CursorSystem, so it settles its D-18
 				// prediction here too.
 				s.closeAppliedCrossingLocked(a.frame.Seq)
-				if et, ok := event.GetEventType(a.frame.Event); ok && et == event.EventCursorMoveRequest {
+				if a.frame.Event == event.EventCursorMoveRequest {
 					s.world.Resources.Player.Reconcile(component.PositionComponent{}, true)
 				}
 			}
@@ -1217,7 +1215,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 			continue
 		}
 		retained = append(retained, a)
-		if et, ok := event.GetEventType(a.frame.Event); ok && barrierBound(et) {
+		if barrierBound(a.frame.Event) {
 			restored++
 			s.scheduled = append(s.scheduled, a)
 			s.scheduledBytes += frameBytes(a.frame)
@@ -1258,7 +1256,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 // names no fence for is kept: a duplicate is repaired by the next correction, a
 // discarded action is not. bySequence reports a fence decided. Caller holds mu.
 func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, bySequence bool) {
-	if et, ok := event.GetEventType(a.frame.Event); ok && !barrierBound(et) {
+	if !barrierBound(a.frame.Event) {
 		if fence := s.snapshotFences.Seq(network.PeerID(a.source)); fence != 0 {
 			contained = a.frame.Seq <= fence
 			return contained, contained
@@ -2066,7 +2064,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 			// the committed copy with the void frames.
 			if f.Frame.Seq != 0 && !s.seqs[batch.Source].admit(f.Frame.Seq, parameter.NetworkSequenceWindow) {
 				repeated++
-				f.Frame.Event = ""
+				f.Frame.Event = event.EventNone
 				continue
 			}
 			a := barrierArtifact{
@@ -2077,7 +2075,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 				if a.applyTick < next {
 					late++
 					if next-a.applyTick > parameter.NetworkCommitLateTicks {
-						a.void, f.Frame.Event = true, ""
+						a.void, f.Frame.Event = true, event.EventNone
 						void++
 					}
 					a.applyTick, f.ApplyTick = next, next
@@ -2148,7 +2146,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		return
 	}
 	// A void frame applies nowhere else, so it is not relayed; its fence closes here.
-	batch.Frames = slices.DeleteFunc(batch.Frames, func(f event.ScheduledWireFrame) bool { return f.Frame.Event == "" })
+	batch.Frames = slices.DeleteFunc(batch.Frames, func(f event.ScheduledWireFrame) bool { return f.Frame.Event == event.EventNone })
 	if committing {
 		batch.Age = int64(next) - int64(batch.ProducedTick)
 	}
@@ -2566,7 +2564,8 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 			s.noteAppliedFrom(a.source, a.frame.Seq)
 			continue
 		}
-		et, payload, domain, err := a.frame.Decode()
+		et, domain := a.frame.Event, a.frame.Domain
+		payload, err := a.frame.Decode()
 		if err != nil {
 			s.statDrop.Add(1)
 			continue
@@ -2827,9 +2826,9 @@ func (s *NetworkSystem) scheduleCursorState(from uint32, body []byte) {
 	}
 	fresh := batch.Frames[:0]
 	for _, f := range batch.Frames {
-		et, payload, _, err := f.Frame.Decode()
+		payload, err := f.Frame.Decode()
 		p, ok := payload.(*event.CursorStatePayload)
-		if err != nil || et != event.EventCursorStateSync || !ok || int(p.Slot) >= parameter.MaxPlayers {
+		if err != nil || f.Frame.Event != event.EventCursorStateSync || !ok || int(p.Slot) >= parameter.MaxPlayers {
 			s.statDrop.Add(1)
 			continue
 		}
