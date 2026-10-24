@@ -201,6 +201,7 @@ against a run-to-run spread of about 2%.
 | Syncs of the cells that are set | 14.1 → 2.43; 0.09 | 80.0 → 10.4; 0.16 | 1,326 → 124; 0.64 | 88.6 → 71.1; 0.44 (0.13/s) | 175 → 60.9; 0.67 (0.13/s) |
 | Repairs chunked, bounded by the keyframe | 14.1 → 2.43; 0.09 | 80.0 → 10.3; 0.17 | 1,324 → 124; 0.62 | 76.9 → 59.7; 0.42 (0.13/s) | 189 → 73.4; 0.71 (0.13/s) |
 | The descent in one round trip | 14.6 → 2.43; 0.08 | 81.5 → 10.3; 0.16 | 1,330 → 123; 0.59 | 88.0 → 70.4; 0.40 (0.13/s) | 207 → 92.0; 0.76 (0.20/s) |
+| Cadences a power of two, due ticks aligned | 14.6 → 2.44; 0.09 | 81.4 → 10.4; 0.16 | 1,331 → 123; 0.60 | 87.9 → 70.3; 0.40 (0.13/s) | 193 → 77.7; 0.80 (0.13/s) |
 
 - **Bodies raw, codec at level 6.** A td keyframe is 360 kB where level 1 gave 501
   and the stream's second pass over that 398: td's framed body bytes fall a fifth
@@ -230,6 +231,11 @@ against a run-to-run spread of about 2%.
   round trip sooner, and in a session at the site, where 6% of repairs arrived
   after the receiver had moved past their tick, that round trip is the one that
   was lost.
+- **Cadences a power of two, due ticks aligned.** The harness's peers already
+  shared one cadence and one phase, so its rounds were 5 a second before and after;
+  the rows read as the run before them, and the rule is held by its test. It pays
+  where cadences differ: at 16 players on td multi-player §6 counted 7.2 rounds a
+  second against a nominal 5.
 
 ## 3. Approaches
 
@@ -241,7 +247,6 @@ In the table − lowers a cost, + raises it and · leaves it. Projections come f
 | N1 | One committed frame per link per tick | − | · | − | + ms | medium | down messages 4,444 → 300 a second at 16 players; ~40% of tower epoch bytes |
 | N2 | A binary wire codec | − | − | − | · | low, then medium | a four-move epoch 567 → ~50 B before deflate |
 | N3 | Owner syncs that carry what changed | − | · | − | · | low | syncs ~10× smaller before deflate |
-| N7 | Aligned publication rounds | − | · | · | + | low | td rounds 7.2 → ~5 a second |
 | N8 | Keyframes from cached sections | − | + | + | · | medium | keyframe deflate in proportion to the sections that moved |
 | N9 | A binary row codec | − | − | − | · | high | rows 3–10× smaller before deflate |
 | N10 | Converged answers without a capture | − | · | · | − | medium | a guest's capture on 95% of its answers |
@@ -320,20 +325,6 @@ the payload.
   depends on which cells change every tick (heat, energy).
 - *Determinism and latency*: unchanged — a sync is still committed at one tick for
   every instance, and mirrors already lag by `NetworkSyncTicks`.
-
-### N7. Aligned publication rounds
-
-The round rate is the union of the peers' due ticks — 7.2 a second at td with 16
-players against a nominal 5 — and each round is a capture under the lock, a seal and
-an index. Quantise each peer's cadence to a power of two and its due ticks to one
-phase (`tick % cadence == 0`): peers on different cadences then share rounds, and R
-is the fastest cadence present rather than the union.
-
-- *CPU and lock*: up to 2.2 rounds a second fewer at td, about 70 ms of CPU a second,
-  nearly half of it under the lock.
-- *Latency*: after a plan change a peer waits up to one cadence for its phase.
-- *Challenges*: few; the floor, the hold window and the `Next` promise are untouched,
-  since `Next` already names the next tick a peer is indexed at.
 
 ### N8. Keyframes from cached sections
 
@@ -470,14 +461,16 @@ Each approach lands alone, re-runs §2's matrix and updates multi-player §6.
 | Phase | Approaches | Why |
 |---|---|---|
 | 0 | §2's readings | Taken in §2.2 for bytes by kind on the wire and CPU by stage; the rest go into the same harness as an approach needs them |
-| 1 | N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the command stream's constants for their CPU |
+| 1 | N1, N2 step 1 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the command stream's constants for their CPU |
 | 2 | N10, N12, N8, N11's capture as a copy | CPU and lock at the map limit, on the host and the browser guest |
 | 3 | N2 step 2, N9, N13, N11's projection, N15, N14 | Formats and structure: the journal, the capture schema, retention, topology |
 
 N2's second step follows its first; N13 and the column layout build on N9; N10's
 row cache is cheaper on N9's rows.
 
-**Decided, on §2.3.** The descent is one round trip (N5): the manifest carries its
+**Decided, on §2.3.** A peer's cadence is a power of two of ticks and it is due at
+multiples of it (N7), so peers on different cadences share rounds and the host's
+round rate is its fastest peer's. The descent is one round trip (N5): the manifest carries its
 partition, a receiver whose root differs answers with the page hashes of every
 section under it, and the index message is gone; the shard set still carries every
 section summary. A repair is chunked and paced as a body is and bounded by the
@@ -498,8 +491,7 @@ dropped on §2.2.
 every participant's epochs and syncs relayed down every link: its wire cost at 16
 players on the tower is 124 kB/s after deflate, which a home uplink carries, so
 relay trees chosen by the authority (N14) wait for a measured uplink that does not.
-Publication rounds stay the union of the peers' due ticks, 5 a second in the
-readings, until N7 aligns them. The command stream's constants are cut in phase 1
+The command stream's constants are cut in phase 1
 as the wire column judges them, not the framed one: N1 next, whose frames-less
 echo is what a guest with nothing behind it was reading the marker of, then N2's
 envelope.

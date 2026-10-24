@@ -401,7 +401,9 @@ epoch starts it with nothing said.
 ## 4. Correction pipeline
 
 The host publishes one authoritative capture on the session timeline, then serves
-each direct peer according to that link's cadence:
+each direct peer according to that link's cadence, a power of two of ticks the peer
+is due at multiples of, so peers on different cadences share rounds and the host's
+round rate is its fastest peer's:
 
 1. Build a deterministic manifest over component stores, allocator values, RNG
    streams, declared system state, status surface, and shared FSM state.

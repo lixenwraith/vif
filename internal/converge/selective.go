@@ -157,7 +157,7 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		if p == nil {
 			continue
 		}
-		b, err := body(tick + p.plan.CadenceTicks)
+		b, err := body(p.nextDue(tick))
 		if err != nil {
 			return due, err
 		}

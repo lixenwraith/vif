@@ -431,7 +431,7 @@ func (c *Corrections) publishRound(force bool) error {
 			sent++
 		}
 		p.sent++
-		p.nextTick = tick + p.plan.CadenceTicks
+		p.nextTick = p.nextDue(tick)
 	}
 	c.releaseLocked(port)
 
@@ -655,6 +655,7 @@ func (c *Corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 		p.plan.Constrained = p.plan.Constrained || !p.drains(sizes.Keyframe)
 		// A long round trip spaces this peer's indexes, so each descent stays retained.
 		p.plan.CadenceTicks = max(p.plan.CadenceTicks, min(answerSpacing(m.RTT), c.bounds.MaxCadenceTicks))
+		p.plan.CadenceTicks = alignedCadence(p.plan.CadenceTicks, c.bounds.MaxCadenceTicks)
 
 		if base == 0 || p.plan.CadenceTicks < base {
 			base = p.plan.CadenceTicks
@@ -689,6 +690,22 @@ func (c *Corrections) retirePlan() {
 func (c *Corrections) retirePlanLocked() {
 	c.breached, c.saidFloor = false, false
 	c.publishPlanTelemetryLocked(nil)
+}
+
+// alignedCadence is cadence raised to a power of two, capped at limit: with every
+// peer due at a multiple of its cadence, peers on different cadences share rounds and
+// the host's round rate is its fastest peer's rather than the union of them all.
+func alignedCadence(cadence, limit uint64) uint64 {
+	aligned := uint64(1)
+	for aligned < cadence {
+		aligned *= 2
+	}
+	return min(aligned, limit)
+}
+
+// nextDue is the first multiple of this peer's cadence after tick.
+func (p *peerPublisher) nextDue(tick uint64) uint64 {
+	return (tick/p.plan.CadenceTicks + 1) * p.plan.CadenceTicks
 }
 
 // answerSpacing is the fewest ticks between two indexes to one peer that keeps the
