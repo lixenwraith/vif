@@ -588,7 +588,7 @@ separate live input groups. Four deliberately small action forms exist:
   count and target character;
 - a string of semantic text-character intents;
 - a complete ex-command round trip;
-- a registered event plus journal-compatible TOML payload and, when needed, an
+- a registered event plus an authored TOML payload and, when needed, an
   explicit replication domain.
 
 The script's `ticks` is a hard bound, so a process terminates without terminal

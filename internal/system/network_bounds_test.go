@@ -22,7 +22,7 @@ func boundsBatch(t *testing.T, source uint32, produced, applyTick uint64, n, pad
 			Frame: event.WireFrame{
 				Event:   event.EventGoldJumpRequest,
 				Domain:  core.DomainShared,
-				Payload: strings.Repeat("x", pad),
+				Payload: []byte(strings.Repeat("x", pad)),
 				Seq:     produced*uint64(n) + uint64(i+1), // one producer's sequences never repeat
 			},
 			ApplyTick: applyTick,

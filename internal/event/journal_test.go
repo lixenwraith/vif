@@ -1,11 +1,11 @@
 package event
 
 import (
+	"math"
 	"reflect"
 	"strconv"
 	"testing"
 
-	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
 )
 
@@ -20,8 +20,9 @@ func (c *captureSink) Anchor(a JournalAnchor) { c.anchors = append(c.anchors, a)
 func (c *captureSink) Capture(JournalCapture) {}
 func (c *captureSink) Finish(Stamp)           {}
 
-// TestJournalPayloadRoundTrip populates every registered prototype, encodes it,
-// and decodes it back. A field TOML cannot carry fails here, not at replay.
+// TestJournalPayloadRoundTrip populates every registered prototype, encodes it
+// in its generated codec and decodes it back; the zero value too, since an
+// absent field has to read as zero, and a negative zero keeps its sign.
 func TestJournalPayloadRoundTrip(t *testing.T) {
 	InitRegistry()
 	RangeEvents(func(name string, et EventType, proto any) {
@@ -29,35 +30,26 @@ func TestJournalPayloadRoundTrip(t *testing.T) {
 			return
 		}
 		t.Run(name, func(t *testing.T) {
-			n := 0
-			fillValue(reflect.ValueOf(proto).Elem(), &n)
-
-			text, encErr := encodePayload(et, proto)
-			if encErr != "" {
-				t.Fatalf("encode: %s", encErr)
-			}
-			back := NewPayloadStruct(et)
-			if err := toml.Unmarshal([]byte(text), back); err != nil {
-				t.Fatalf("decode: %v\n%s", err, text)
-			}
-			if !reflect.DeepEqual(proto, back) {
-				t.Fatalf("round trip mismatch\nwant %#v\ngot  %#v\ntoml:\n%s", proto, back, text)
+			for _, fill := range []bool{true, false} {
+				if fill {
+					n := 0
+					fillValue(reflect.ValueOf(proto).Elem(), &n)
+				} else {
+					proto = NewPayloadStruct(et)
+				}
+				b, encErr := encodePayload(et, proto)
+				if encErr != "" {
+					t.Fatalf("encode: %s", encErr)
+				}
+				back, err := DecodePayload(et, b)
+				if err != nil {
+					t.Fatalf("decode: %v", err)
+				}
+				if !reflect.DeepEqual(proto, back) {
+					t.Fatalf("round trip mismatch\nwant %#v\ngot  %#v", proto, back)
+				}
 			}
 		})
-	})
-}
-
-// TestPayloadFieldsEncodable rejects payload field types the encoder drops
-// silently: a struct with no exported fields emits an empty table and decodes
-// to zero, so the round-trip test cannot see the loss.
-func TestPayloadFieldsEncodable(t *testing.T) {
-	InitRegistry()
-	seen := make(map[reflect.Type]bool)
-	RangeEvents(func(name string, et EventType, proto any) {
-		if proto == nil {
-			return
-		}
-		checkEncodable(t, name, reflect.TypeOf(proto).Elem(), seen)
 	})
 }
 
@@ -79,31 +71,6 @@ func TestRecycledExplosionRetainsStorageButNoArtifactState(t *testing.T) {
 	}
 }
 
-// checkEncodable walks a payload type and flags any nested struct the encoder
-// would emit as an empty table
-func checkEncodable(t *testing.T, where string, typ reflect.Type, seen map[reflect.Type]bool) {
-	for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
-		typ = typ.Elem()
-	}
-	if typ.Kind() != reflect.Struct || seen[typ] {
-		return
-	}
-	seen[typ] = true
-
-	exported := 0
-	for i := range typ.NumField() {
-		f := typ.Field(i)
-		if f.PkgPath != "" || f.Tag.Get("toml") == "-" {
-			continue
-		}
-		exported++
-		checkEncodable(t, where+"."+f.Name, f.Type, seen)
-	}
-	if typ.NumField() > 0 && exported == 0 {
-		t.Errorf("%s: %s has no encodable fields; it marshals to an empty table", where, typ)
-	}
-}
-
 // fillValue sets every settable field to a distinctive non-zero value, so a
 // dropped field shows as a mismatch rather than a zero-equals-zero match
 func fillValue(v reflect.Value, n *int) {
@@ -118,6 +85,10 @@ func fillValue(v reflect.Value, n *int) {
 		v.SetUint(uint64(*n%100 + 1))
 	case reflect.Float32, reflect.Float64:
 		*n++
+		if *n%7 == 0 {
+			v.SetFloat(math.Copysign(0, -1))
+			return
+		}
 		v.SetFloat(float64(*n%100) + 0.5)
 	case reflect.String:
 		*n++
@@ -128,6 +99,13 @@ func fillValue(v reflect.Value, n *int) {
 			fillValue(s.Index(i), n)
 		}
 		v.Set(s)
+	case reflect.Array:
+		for i := range v.Len() {
+			fillValue(v.Index(i), n)
+		}
+	case reflect.Pointer:
+		v.Set(reflect.New(v.Type().Elem()))
+		fillValue(v.Elem(), n)
 	case reflect.Struct:
 		for i := range v.NumField() {
 			if v.Type().Field(i).PkgPath == "" {

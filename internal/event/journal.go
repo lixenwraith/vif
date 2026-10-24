@@ -1,18 +1,17 @@
 package event
 
 import (
-	"github.com/lixenwraith/vif/internal/parameter"
 	"reflect"
 	"sync/atomic"
 
-	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 36
+const JournalSchema = 37
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -23,9 +22,10 @@ type Stamp struct {
 }
 
 // JournalRecord is one replayable event, produced synchronously at push time.
-// Payload is TOML text that decodes into the registry prototype for Type.
+// Payload is the generated codec's bytes, decoding into the registry prototype
+// for Type (DecodePayload).
 type JournalRecord struct {
-	Payload   string
+	Payload   []byte
 	EncodeErr string // non-empty when Payload could not be produced
 	JSeq      uint64 // dense record counter; a gap is exactly one lost record
 	Seq       uint64 // queue slot, legitimately sparse in the journal
@@ -293,26 +293,20 @@ func (j *Journal) record(ev *GameEvent, st Stamp) {
 	})
 }
 
-// encodePayload marshals a payload to TOML text. Only the registry prototype's
-// own type round-trips, so a mismatch is reported rather than silently encoded.
-func encodePayload(et EventType, p any) (text, encErr string) {
+// encodePayload writes a payload in its generated codec. Only the registry
+// prototype's own type, by pointer, round-trips, so anything else is reported
+// rather than silently encoded.
+func encodePayload(et EventType, p any) (b []byte, encErr string) {
 	if p == nil {
-		return "", ""
+		return nil, ""
 	}
 	proto, ok := typeToPayload[et]
 	if !ok {
-		return "", "no registry prototype"
+		return nil, "no registry prototype"
 	}
-	t := reflect.TypeOf(p)
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
+	c, ok := p.(payloadCodec)
+	if !ok || reflect.TypeOf(p).Elem() != proto {
+		return nil, "payload type " + reflect.TypeOf(p).String() + " is not the registered prototype"
 	}
-	if t != proto {
-		return "", "payload type " + t.String() + " is not the registered prototype"
-	}
-	b, err := toml.Marshal(p)
-	if err != nil {
-		return "", err.Error()
-	}
-	return string(b), ""
+	return c.appendPayload(make([]byte, 0, 64)), ""
 }

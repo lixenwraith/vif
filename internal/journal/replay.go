@@ -2,12 +2,10 @@ package journal
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/event"
 )
 
@@ -408,9 +406,9 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 		if err := checkRecord(rec); err != nil {
 			return fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
 		}
-		payload, err := DecodePayload(rec.Type, rec.Payload)
+		payload, err := event.DecodePayload(rec.Type, rec.Payload)
 		if err != nil {
-			return fmt.Errorf("replay: jseq %d %s: %w", rec.JSeq, event.GetEventName(rec.Type), err)
+			return fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
 		}
 		queued = d.target.PushRecord(*rec, payload) || queued
 	}
@@ -467,20 +465,4 @@ func checkRecord(rec *event.JournalRecord) error {
 		return fmt.Errorf("origin %s is not a journaled producer", rec.Origin)
 	}
 	return nil
-}
-
-// DecodePayload allocates a typed event payload and decodes journal-compatible
-// TOML into it. Empty text represents a nil payload.
-func DecodePayload(et event.EventType, text string) (any, error) {
-	if text == "" {
-		return nil, nil
-	}
-	p := event.NewPayloadStruct(et)
-	if p == nil {
-		return nil, errors.New("payload text with no registry prototype")
-	}
-	if err := toml.Unmarshal([]byte(text), p); err != nil {
-		return nil, err
-	}
-	return p, nil
 }

@@ -7,7 +7,7 @@ and the wire carries what a receiver cannot re-derive. §1 is the wire, §2 the
 correction pipeline, §3 the readings, §4 phase 2, the approaches not yet landed in
 their batches, each with what of it is in and what it still needs, and §5 their
 order by iteration. Phase 1, four iterations in 2026-10, is what §1–§3 describe as
-built, with phase 2's first, the wire envelope. Bare section numbers
+built, with phase 2's first two, the wire codec. Bare section numbers
 are this document's; "multi-player §n" is [Multiplayer](multi-player.md), which
 holds the session contract, event timing, membership and succession; "services §n"
 is [Services and networking](services-and-networking.md), which holds the
@@ -21,12 +21,14 @@ Four streams carry what a receiver cannot re-derive:
 - **Epoch** (`MsgEvent`): one source's closed tick of D-3 crossings, empty ones
   included. A `WireBatch` in the binary envelope (services §8): each frame its
   event as the registry's index, its domain in a flag byte, its sequence and apply
-  tick as varint deltas, and the journal's TOML text as its payload. Every tick per
-  source: raw up the one link toward the authority, the committed copy down every
-  link, the producer's own included.
-- **Owner sync** (`MsgStateSync`): one cursor's D-13 cells, the ones that are set.
-  The epoch's envelope over a TOML payload. Every `NetworkSyncTicks` (6) per
-  cursor, committed and relayed as an epoch is.
+  tick as varint deltas, and its payload in the generated codec the journal writes
+  too (`payload_gen.go`): a presence mask, then each set field in declaration
+  order as a varint, a float64's bits, or a length-prefixed string or slice. Every
+  tick per source: raw up the one link toward the authority, the committed copy
+  down every link, the producer's own included.
+- **Owner sync** (`MsgStateSync`): one cursor's D-13 cells, the ones that are set,
+  which the codec's mask names. The epoch's envelope. Every `NetworkSyncTicks` (6)
+  per cursor, committed and relayed as an epoch is.
 - **Correction**: a manifest root with its partition, then the receiver's page
   hashes and the shards that differ; or a keyframe. JSON, with keyframes and shard
   sets deflated by the snapshot codec at level 6. Per peer every 2–60 ticks; a whole
@@ -67,13 +69,13 @@ Per simulated second a host costs 20·T_sim + R·(capture + seal + index) plus t
 bodies it serves, R being its publication rounds, and a guest 20·T_sim +
 A·(capture + index) plus its installs, A being the manifests it answers. At 16
 players (§3.1, which times seal, index, keyframe and tick on a slower container;
-the tower's egress is the envelope's, td's from before it):
+the tower's egress is the binary codec's, td's from before it):
 
 ```
                                         Tower 239x64        td 500x250
-Host egress before deflate              0.57 MB/s           5.05 MB/s
-  of it epochs and owner syncs          87%                 56%
-  of it bodies and repairs              12%                 43%
+Host egress before deflate              0.23 MB/s           5.05 MB/s
+  of it epochs and owner syncs          69%                 56%
+  of it bodies and repairs              28%                 43%
 Rounds a second                         4.6                 7.2
 Capture under the world lock, a round   1.2 ms              14 ms
 Seal, index, keyframe                   1.8, 2.4, 7.6 ms    5, 12, 58 ms
@@ -263,15 +265,15 @@ to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
 Players                                 Tower 2     Tower 16    td 2        td 16
 Publication rounds a second             4.5         4.6         1.5         7.2
 Manifests answered hash-only            94%         94%         78%         95%
-Host egress, framed before deflate      6 kB/s      0.57 MB/s   0.08 MB/s   5.05 MB/s
-  of it epochs and owner syncs          3 kB/s      0.49 MB/s   6 kB/s      2.82 MB/s
-  of it correction bodies and repairs   3 kB/s      0.07 MB/s   71 kB/s     2.18 MB/s
+Host egress, framed before deflate      5 kB/s      0.23 MB/s   0.07 MB/s   5.05 MB/s
+  of it epochs and owner syncs          1 kB/s      0.16 MB/s   2 kB/s      2.82 MB/s
+  of it correction bodies and repairs   3 kB/s      0.07 MB/s   70 kB/s     2.18 MB/s
 Heap in use per instance                70 MiB      90 MiB      210 MiB     250 MiB
 ```
 
-The egress rows are the envelope's (protocol 23), read over sockets in §3.3's
-shape, which the in-process figures agreed with; td 16's are phase 1's, before the
-envelope, since the socket harness cannot seat its roster
+The egress rows are the binary wire codec's (protocol 24), read over sockets in
+§3.3's shape, which the in-process figures agreed with; td 16's are phase 1's,
+before the codec, since the socket harness cannot seat its roster
 ([todo](todo.md#measure-a-full-roster)).
 
 Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
@@ -291,8 +293,9 @@ whole bodies it serves, R being the union of its peers' due ticks rather than a 
 5 Hz; a guest costs 20·T_sim + A·(capture + index) + installs·(stage + projection +
 compare and write), A being the manifests it answers. A star's authority relays every
 participant's epochs and owner syncs to every other, (N−1)² of each: at 16 players
-4,444 epochs (56 B on the tower in the envelope, 190 before it; td's 510 B is from
-before it) and 736 syncs (about 330 B, the cells that are set) a second.
+4,444 epochs (20 B on the tower in the binary codec, 56 with its envelope alone
+and 190 before it; td's 510 B is from before it) and 736 syncs (about 95 B, the
+cells the mask names set) a second.
 
 What that means for scaling:
 
@@ -305,7 +308,8 @@ What that means for scaling:
 - **A td guest cost 0.4–0.5 CPU-s/s natively before row reuse,** more than a
   browser's single WASM thread holds; the tower map cost a guest about 0.1.
 - **Bandwidth is quadratic before it is anything else.** Epoch and owner-sync fan-out
-  is 87% of the tower host's egress at 16 players; at td whole bodies come close.
+  is 69% of the tower host's egress at 16 players, the manifests' page hashes most
+  of the rest; at td whole bodies come close.
 - **The live lock is held by the O(E) capture and comparison** before any projection,
   so shrinking them comes before moving projection out of the lock.
 
@@ -338,35 +342,38 @@ were.
 
 ### 3.3 Readings over sockets
 
-`TestNetcodeReadingsOverSockets` on 2026-10-24 with the envelope (protocol 23),
-one process on four cores, every instance paced at the tick: the host's egress per
-simulated second, framed before each link's deflate by what the frames carried,
-and on the wire after it, in kB/s.
+`TestNetcodeReadingsOverSockets` on 2026-10-24 with the binary wire codec
+(protocol 24), one process on four cores, every instance paced at the tick: the
+host's egress per simulated second, framed before each link's deflate by what the
+frames carried, and on the wire after it, in kB/s.
 
 ```
 Row        Epochs  Syncs  Bodies  Repairs  Control  Framed  Wire   Wire/framed
-tower, 2      1.7    1.1       0      3.3      0.4     6.4   1.60   0.25
-tower, 4     15.5   10.0       0     10.2      1.3    37.1   7.09   0.19
-tower, 16   247    246         0     65.7      6.7   566    88.0   0.16
-td, 2         5.5    0.8    67.5      3.2      0.4    77.4  69.8    0.90
-td, 4        49.0    7.4    60.0      9.8      1.3   128    68.0    0.53
+tower, 2      1.0    0.3       0      3.3      0.4     5.0   1.54   0.30
+tower, 4      5.8    2.8       0     10.2      1.3    20.2   6.45   0.32
+tower, 16    88.6   69.7       0     65.6      6.7   231    74.7   0.32
+td, 2         1.9    0.2    67.3      3.1      0.4    73.1  68.9    0.94
+td, 4        14.4    2.2    61.0     10.0      1.3    89.0  68.3    0.77
 ```
 
-Beside them: 5 rounds a second on every row; every manifest answered hash-only;
-the whole process 0.08, 0.15 and 0.52 CPU-s per simulated second on the tower at
-2, 4 and 16 players and 0.37 and 0.53 at td with 2 and 4, its heap 47, 85 and
-408 MiB and 285 and 922 MiB. td's bodies and CPU move run to run with what its
-storm does to the roster (a keyframe every eight seconds on both td rows here,
-none to half a second of them on other readings), so its rows compare only where
-the keyframe rate agrees, and the tower's wire has a run-to-run spread of about
-2%. The framed figures agree with §3.1's in-process ones. The same morning before
-the envelope, the tower's epochs framed 4.8, 41.0 and 825 kB/s and its syncs 1.6,
-15.2 and 382, its wire 1.70, 7.94 and 101 kB/s at 0.17, 0.12 and 0.08 of the
-framed bytes, the process 0.08, 0.15 and 0.58 CPU-s/s, and td's epochs 7.4 and
-84.0; before bodies passed the link raw, syncs carried their set cells, repairs
-were chunked, the descent took one round trip, links were bundled and a leaf's
-echo lost its frames, the tower's wire read 2.32, 9.99 and 125 kB/s, its framed
-bytes 16.0, 91.3 and 1,552.
+Beside them: 5 rounds a second on every row; every manifest answered hash-only,
+but for one of three tower-16 readings, on which a guest that projected 11 ticks
+repaired 15 pages and took two keyframes; the whole process 0.08, 0.14 and
+0.48–0.50 CPU-s per simulated second on the tower at 2, 4 and 16 players and
+0.36 and 0.54 at td with 2 and 4, its heap 40, 84 and 324–471 MiB and 311 and
+663 MiB. td's bodies and CPU move run to run with what its storm does to the
+roster (a keyframe every eight seconds on both td rows here, none to half a
+second of them on other readings), so its rows compare only where the keyframe
+rate agrees, and the tower's wire has a run-to-run spread of about 2%. The framed
+figures agree with §3.1's in-process ones. The same day before the codec, the
+tower's epochs framed 4.8, 41.0 and 825 kB/s and its syncs 1.6, 15.2 and 382, its
+wire 1.70, 7.94 and 101 kB/s at 0.17, 0.12 and 0.08 of the framed bytes, the
+process 0.08, 0.15 and 0.58 CPU-s/s, and td's epochs 7.4 and 84.0; with the
+envelope alone, epochs 1.7, 15.5 and 247, syncs 1.1, 10.0 and 246, the wire 1.60,
+7.09 and 88.0 and the process 0.52 at 16 players; before bodies passed the link
+raw, syncs carried their set cells, repairs were chunked, the descent took one
+round trip, links were bundled and a leaf's echo lost its frames, the tower's
+wire read 2.32, 9.99 and 125 kB/s, its framed bytes 16.0, 91.3 and 1,552.
 
 CPU by stage, the share of the process's sampled time in the measured window,
 every instance together, so the runtime's shares are the process's and not one
@@ -389,17 +396,19 @@ Protocol (converge, network)            0.6%       0.2%        1.9%    0.9%
 
 What the readings decide:
 
-- **The envelope took 62–70% off the tower's framed epochs, 31–36% off its syncs
-  and 6–13% off its wire.** The per-link stream had compressed the JSON keys against
-  its history already, 7–12× over the command stream, so halving the framed bytes
-  at 16 players took 13% off the wire, and the stream now takes 4–6× off what is
-  left, the TOML payloads. The codec's worth is CPU, a tenth off the process at 16
-  players on one reading each (0.58 to 0.52 CPU-s/s) with the payloads still TOML;
-  the payload step takes the JSON and TOML shares that remain, the deflate that
-  scales with the framed bytes, the allocation behind the collector's 11–30%, and
-  the browser guest's one thread. One dictionary deflate for every link in place of
-  the per-link stream is refuted: no preset dictionary matches a per-link history
-  that compresses this well.
+- **The codec took 79–89% off the tower's framed epochs, 80–82% off its syncs and
+  10–26% off its wire**, the envelope and the payload about half each. The per-link
+  stream had compressed the JSON and TOML keys against its history already, 7–12×
+  over the command stream, so the framed bytes fell five times further than the
+  wire, and the stream now takes 3× off what is left, which is the values. The
+  codec's worth is CPU and allocation: the process 0.58 to 0.49 CPU-s per
+  simulated second at 16 players, the JSON and TOML shares and the deflate that
+  scaled with their bytes gone from every receiver, the browser guest's one thread
+  included. The manifests' page hashes, 66 kB/s framed and JSON still, are the
+  largest framed stream after the epochs now, which converged answers and the
+  binary row codec take up. One dictionary deflate for every link in place of the
+  per-link stream is refuted: no preset dictionary matches a per-link history that
+  compresses this well.
 - **At td the bodies are the egress**: whole corrections are 77–86% of the framed
   bytes. The link's level-7 stream took a fifth off the snapshot codec's level-1
   output, which is why a body is compressed once at level 6 and passes the link
@@ -506,23 +515,35 @@ sparse     pg 1    kf 2   lc 6    lead 7 (7)     pg 1   kf 1  lc 3  lcp 4  lead 
 heavy      pg 300  kf 7   lc 57   lead 9 (9)     pg 49  kf 7  lc 0  lcp 0  lead 14 (15)
 ```
 
-The envelope (phase 2, iteration 1) over the same four shapes, read before and
-after it on the main the iteration started from (which the staleness change had
-moved the lossy shapes' pages on):
+The wire codec (phase 2, iterations 1 and 2) over the same four shapes: on the
+main each iteration started from (the staleness change had moved the lossy
+shapes' pages from the table above), with the envelope, and with the payload
+codec, 1,200 ticks each:
 
 ```
-shape      before                             after
-fieldlike  pg 31 kf 3 lc 1 lcp 0 lead 8 (9)    pg 18 kf 4 lc 1 lcp 0 lead 8 (9)
-rare       pg 3  kf 3 lc 0 lcp 6 lead 11 (13)  pg 8  kf 2 lc 0 lcp 11 lead 11 (13)
-sparse     pg 1  kf 1 lc 3 lcp 4 lead 9 (10)   pg 1  kf 1 lc 3 lcp 4 lead 9 (10)
-heavy      pg 61 kf 5 lc 0 lcp 0 lead 14 (15)  pg 84 kf 7 lc 0 lcp 3 lead 13 (15)
+shape      stage     pg  kf  lc  lcp  lead     manifests
+fieldlike  main      31   3   1    0  8 (9)    284
+           envelope  18   4   1    0  8 (9)    276
+           payload   31   2   1    0  8 (9)    270
+rare       main       3   3   0    6  11 (13)  273
+           envelope   8   2   0   11  11 (13)  267
+           payload    3   2   0    6  11 (13)  261
+sparse     main       1   1   3    4  9 (10)   292
+           envelope   1   1   3    4  9 (10)   287
+           payload    1   1   3    4  9 (10)   284
+heavy      main      61   5   0    0  14 (15)  134
+           envelope  84   7   0    3  13 (15)  132
+           payload   99   5   0    0  14 (15)   97
 ```
 
-Late commits and the lead held on every shape and sparse is identical; pages and
-late copies moved where the link is lossy or jittery, since the link meter reads
-the bytes it delivered and the correction cadence follows its throughput, so a
-command stream of two fifths the framed bytes is a different fight from the first
-repair on.
+Late commits and the lead hold on every shape through both steps and sparse is
+identical; pages and late copies move where the link is lossy or jittery, since
+the link meter reads the bytes it delivered and the correction cadence follows
+its throughput, so a command stream of a fraction of the bytes is a different
+fight from the first repair on. The manifests the guest received fall with the
+bytes on every shape, to 97 from 134 on heavy loss: a thinner stream reads as a
+slower link to the meter, which is the cadence's to answer
+([todo](todo.md#read-the-cadence-against-a-thin-command-stream)).
 
 What the harness cannot yet read: a Shared FSM transition (the embedded scenario
 has none in its 1,200 ticks), and the pacing knobs other than their steady state.
@@ -534,34 +555,37 @@ it can land. The costs name what it lowers (−), raises (+) and leaves (·), in
 order CPU, memory, bandwidth, latency; projections come from §1's figures and §3
 confirms or refutes them. Phase 1 closed with the six-tick wire digest retired
 (protocol 22): parity is the correction exchange's, and a repair names its sections
-in `snapshot.repair_sections`. Phase 2's first iteration landed the codec's
-envelope (protocol 23). The approaches are in three batches, and §5 orders them by
-iteration.
+in `snapshot.repair_sections`. Phase 2's first two iterations landed the binary
+wire codec, its envelope (protocol 23) and its payload (protocol 24, journal
+schema 37). The approaches are in three batches, and §5 orders them by iteration.
 
 ### Batch 1: the wire
 
 ### A binary wire codec
 
 - Costs: − − − ·; complexity low for the envelope, medium for the payload.
-- Projected: a four-move epoch from 147 bytes framed to about 50 once the payload
-  is binary; less after deflate, since the stream already compresses repeated keys
-  against its history.
+- Measured, framed with the message header: the empty epoch 52 to 19 bytes, four
+  moves 575 to 147 to 55, a sync 391 to 249 to 82, six shield hits 2,307 to 1,543
+  to 151, the envelope first and the payload after it; the tower's epochs and
+  syncs at 16 players are read in §3.1 and §3.3.
 - In: the envelope (protocol 23). A `WireFrame` names its event by registry index
   and its domain by value; the batch is a flag byte, source, run, produced tick,
   hops, age and frame count, each frame its event, a flag byte holding the domain,
   its sequence and apply tick as varint deltas from the frame before (the first
-  apply tick from the produced tick) and the journal's TOML text, so one payload
-  encoder still serves replay and transport. Framed with the header: the empty
-  epoch 52 to 19 bytes, four moves 575 to 147, a sync 391 to 249, six shield hits
-  2,307 to 1,543; the tower's epochs and syncs at 16 players are read in §3.1 and
-  §3.3.
-- Left: the **payload**, a codec generated beside `registry_gen.go` for every
-  payload struct, fixed field order, varints, float64 as its bits, which the
-  journal uses too, with a name table in its anchor so it reads across builds and
-  `vif-log` rendering the text it shows today; a binary wire beside a TOML journal
-  would be two encoders for one payload. With it the correction exchange's
-  envelope: manifests, requests and shard sets carry the header's per-tick fields
-  and leave the session identity the handshake checked.
+  apply tick from the produced tick) and its payload behind a length. The payload
+  (protocol 24, journal schema 37): `gen-manifest` type-checks the event package
+  and writes `payload_gen.go`, a codec for every registered payload struct and
+  every struct reachable from one: a presence mask, a bit a field, then each set
+  field in declaration order, signed integers as zigzag varints, unsigned as
+  varints, float64 as its bits, strings and slices behind a length, a fixed array
+  as its fields (`DamageImmunitySpent` is the component's type again), a nested
+  struct inline, a pointer by its bit. The journal writes the same bytes, base64
+  in its record, and `vif-log` decodes them with the same codec and shows the
+  prototype as its TOML, so the two cannot drift; the TOML tags stay for that,
+  for authored scripts and for `:emit`.
+- Left: the correction exchange's envelope: manifests, requests and shard sets
+  carry the header's per-tick fields and leave the session identity the handshake
+  checked.
 - Why: it removes reflection-driven JSON and TOML from every crossing at every
   receiver, allocation and garbage a WASM guest pays for on its one thread, and
   shrinks the replay suffix (`SnapshotReplayBytes`) and the barrier schedule.
@@ -572,27 +596,24 @@ iteration.
   returns to the component's type). A batch event for the attack crossings is
   subsumed: a hit's cost is its envelope, and hits leave seven sites for one
   handler, so a batch would be a second mechanism for what the envelope removes.
-- Needs: step 2 makes the journal binary and bumps its schema; slices
-  (`WeaponCharges`) take a length prefix; class, stamped-domain and `Derived` rules
-  stay in the registry; the codec's version joins the protocol the handshake
-  compares.
+- Needs: nothing further; the codec's layout is the protocol's and the journal
+  schema's, and class, stamped-domain and `Derived` rules stay in the registry.
 
 ### Owner syncs that carry what changed
 
 - Costs: − · − ·; complexity low.
 - Projected: 736 syncs a second at 16 players, 0.56 MB/s before deflate at their
   old size, to about a tenth with a presence mask and less again while cursors idle.
-- In: a sync carries the cells that are set (`omitempty` on `CursorStatePayload`,
-  the immunity array a slice so an unspent one is omitted): 36–43% off its framed
-  bytes, 1–3% off the wire.
-- Left: with the envelope a presence mask; then a sync sent only when a cell
-  differs from the last one sent, with a refresh every K syncs, so a frame a full
-  queue refused costs bounded staleness. A sync stays a whole state, never a delta
-  on an unacknowledged base. Cells every receiver re-derives (the shield's inverse
-  squares from its radii) leave the payload.
-- Needs: the envelope first; determinism and latency are unchanged, a sync still
-  committed at one tick for every instance and mirrors already lagging by
-  `NetworkSyncTicks`.
+- In: a sync carries the cells that are set, named by the codec's presence mask,
+  a bit a cell, so an unset cell costs nothing: a fighting cursor's sync is 82
+  bytes framed with the header, 391 before the codec.
+- Left: a sync sent only when a cell differs from the last one sent, with a
+  refresh every K syncs, so a frame a full queue refused costs bounded staleness.
+  A sync stays a whole state, never a delta on an unacknowledged base. Cells every
+  receiver re-derives (the shield's inverse squares from its radii) leave the
+  payload.
+- Needs: determinism and latency are unchanged, a sync still committed at one
+  tick for every instance and mirrors already lagging by `NetworkSyncTicks`.
 
 ### Batch 2: one tick for every instance
 
@@ -733,9 +754,8 @@ Phase 2 is five iterations, one task, branch and PR each, in this order. Each la
 alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
 
 1. The codec's envelope (batch 1): landed, protocol 23 (§4).
-2. The codec's payload (batch 1): the generated payload codec, the journal's binary
-   schema with its name table, `vif-log` rendering it, fixed arrays as fixed
-   fields; then owner syncs with a presence mask on the envelope.
+2. The codec's payload (batch 1): landed, protocol 24 and journal schema 37, the
+   syncs' presence mask with it (§4).
 3. Shared FSM transitions committed by the authority (batch 2), with a scenario the
    harness can run over a transition.
 4. Converged answers without a capture and the faster hash (batch 2): CPU and the
@@ -747,16 +767,17 @@ alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
 ### Brief for the next session
 
 Repository `lixenwraith/vif`, AGENTS.md is the contract. Netcode phase 2, iteration
-2 of 5 (§5): the binary wire codec's payload. Read [netcode design](netcode-design.md)
-§1, §4 batch 1 and §5, then `internal/event/wire.go` and `journal.go`,
-`internal/gen-manifest` (which writes `registry_gen.go`), `tool/vif-log` and
-`internal/system/network.go` (`readCursorState`, `scheduleCursorState`). Land the
-payload: a codec generated beside `registry_gen.go` for every payload struct, fixed
-field order, varints, float64 as its bits, slices length-prefixed, fixed arrays as
-fixed fields (`DamageImmunitySpent` returns to the component's type, which closes
-the TOML zero-array omission); the journal written in it with a name table in its
-anchor and `vif-log` rendering the text it shows today; then owner syncs with a
-presence mask on the envelope. Bump the journal schema and the protocol; one test
-per rule; re-run §3.1's matrix and §3.5's harness over its four shapes and update
-§3.1, §3.3 and §3.5. Do not start the FSM crossing or the converged answer in this
-iteration.
+3 of 5 (§5): Shared FSM transitions committed by the authority. Read
+[netcode design](netcode-design.md) §2, §3.5, §4 batch 2 and §5, then `internal/fsm`
+(the shared machine's guards and transitions), `internal/event/wire.go` (`OnWire`,
+`stampedCrossings`) and `internal/system/network.go` (`scheduleCrossings`,
+`barrierBound`). Land it alone: the authority's FSM alone evaluates a Shared
+region's guards, and a transition it takes is a crossing (`EventFSMTransition`:
+region, target) committed and applied at one tick on every instance, which runs
+on_enter there; a guest's FSM stops evaluating Shared guards and follows; the
+`fsm` section stays as the proof; decide the guards that read per-instance status
+(`kills.*`, `TimeInState`), which become the authority's by construction; give the
+harness a scenario with a transition inside its 1,200 ticks. Bump the protocol and
+the journal schema as the crossing needs; one test per rule; re-run §3.1's matrix
+and §3.5's four shapes and update §3.1, §3.3 and §3.5. Do not start the converged
+answer or the faster hash in this iteration.

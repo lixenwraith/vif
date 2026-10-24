@@ -26,7 +26,7 @@ A journal record is not shaped like a diagnostic one, and the viewer indexes the
 * **Domain attribution.** `fields.domain` is resolved during the index pass into the `Meta` row, at no cost in memory — it fits in the struct's tail padding. Selecting a domain is therefore a byte comparison per record and never reads a line.
 * **Anchors as landmarks.** An anchor is the journal's self-describing header, re-emitted on a cadence so a rotated file replays standalone. `n` / `N` jump between landmarks — stat snapshot heads in a diagnostic log, anchors in a capture — and an anchor row is marked `⚑`.
 * **Dropped-record detection.** `jseq` is dense by construction, so any step other than `+1` is a lost record. The status bar reports the break count as `jgaps`; a non-zero count means the capture will not replay as it stands.
-* **Payloads stay on one row.** A payload is TOML and carries newlines. The list and search text flatten control characters in place; the detail pane keeps them and wraps, so the payload reads as the document it is.
+* **Payloads are decoded by the game's codec.** A record's payload is the game's binary codec, base64 in the line; the viewer imports `internal/event`, decodes it with `event.DecodePayload` and shows the prototype as its TOML, so the viewer reads exactly the journals its build writes and cannot drift from the game. The list row and the detail pane render it; a search over `fields` reads the line as written; a payload the codec refuses shows as the base64.
 * **Anchor durations.** `tick_ns` renders through the duration table (`50ms`, not `50000000`).
 
 ### Domain

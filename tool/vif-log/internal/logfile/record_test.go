@@ -1,8 +1,12 @@
 package logfile
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
+
+	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // parse runs one line through the index and the record parser the way the
@@ -93,5 +97,32 @@ func TestAnchorTickIntervalRendersAsADuration(t *testing.T) {
 	}
 	if got := r.Display(f); got != "50ms" {
 		t.Errorf("Display(tick_ns) = %q, want 50ms", got)
+	}
+}
+
+// TestAPayloadShowsAsThePrototypesTOML: a journal record's payload is decoded by
+// the game's own codec and shown as the TOML its prototype marshals to, so the
+// viewer and the game cannot drift; bytes the codec refuses show as written.
+func TestAPayloadShowsAsThePrototypesTOML(t *testing.T) {
+	event.EnsureRegistry()
+	frame, encErr := event.NewWireFrame(event.GameEvent{Type: event.EventCursorMoveRequest,
+		Payload: &event.CursorMoveRequestPayload{Entity: 7, X: 3, Y: -2, Pointer: true}})
+	if encErr != "" {
+		t.Fatal(encErr)
+	}
+	b64 := base64.StdEncoding.EncodeToString(frame.Payload)
+	r, _, _ := parse(t, jrn(7, 3, "player", "EventCursorMoveRequest", b64))
+	f, ok := r.Get("payload")
+	if !ok {
+		t.Fatal("the record carries no payload field")
+	}
+	want, _ := toml.Marshal(&event.CursorMoveRequestPayload{Entity: 7, X: 3, Y: -2, Pointer: true})
+	if got := r.Display(f); got != strings.TrimRight(string(want), "\n") {
+		t.Fatalf("payload shown as %q, want %q", got, want)
+	}
+	r, _, _ = parse(t, jrn(8, 3, "player", "EventCursorMoveRequest", b64[:len(b64)-4]))
+	f, _ = r.Get("payload")
+	if got := r.Display(f); got != b64[:len(b64)-4] {
+		t.Fatalf("a payload the codec refuses shown as %q, want the bytes as written", got)
 	}
 }

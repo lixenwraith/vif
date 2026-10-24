@@ -173,7 +173,7 @@ func frameAt(seq uint64) event.WireFrame {
 	return event.WireFrame{
 		Event:   event.EventCursorMoveRequest,
 		Domain:  core.DomainPlayer,
-		Payload: "x = 1\n",
+		Payload: []byte("x = 1\n"),
 		Seq:     seq,
 	}
 }

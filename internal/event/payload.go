@@ -733,9 +733,9 @@ type CursorStatePayload struct {
 	BoostTotal       int64 `toml:"boost_total,omitempty"`
 	MainFireCooldown int64 `toml:"main_fire_cooldown,omitempty"`
 
-	HitPoints           int      `toml:"hit_points,omitempty"`
-	DamageImmunity      int64    `toml:"damage_immunity,omitempty"`
-	DamageImmunitySpent []uint32 `toml:"damage_immunity_spent,omitempty"` // by component.CombatAttackType; absent while none is spent
+	HitPoints           int                                     `toml:"hit_points,omitempty"`
+	DamageImmunity      int64                                   `toml:"damage_immunity,omitempty"`
+	DamageImmunitySpent [component.CombatAttackTypeCount]uint32 `toml:"damage_immunity_spent,omitempty"` // by component.CombatAttackType
 
 	ErrorFlash     int64 `toml:"error_flash,omitempty"`
 	BurstFlash     int64 `toml:"burst_flash,omitempty"`

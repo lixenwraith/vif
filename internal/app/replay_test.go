@@ -1901,9 +1901,11 @@ func TestCursorMoveRequestAppliesWithoutRouter(t *testing.T) {
 		t.Fatal("cursor move command was not journaled")
 	}
 	last := records[len(records)-1]
-	if last.Type != event.EventCursorMoveRequest || !strings.Contains(last.Payload, "entity = 1") {
-		t.Fatalf("last journal record = %s %q, want addressed cursor move",
-			event.GetEventName(last.Type), last.Payload)
+	payload, err := event.DecodePayload(last.Type, last.Payload)
+	move, ok := payload.(*event.CursorMoveRequestPayload)
+	if last.Type != event.EventCursorMoveRequest || err != nil || !ok || move.Entity != player {
+		t.Fatalf("last journal record = %s %+v (%v), want addressed cursor move",
+			event.GetEventName(last.Type), payload, err)
 	}
 }
 

@@ -869,7 +869,7 @@ Journal record fields are:
 | `seq` | Original queue slot/order; legitimately sparse because system events share the queue. |
 | `jrun`, `jtick`, `boundary` | Replay lattice position. |
 | `origin`, `domain`, `ev` | Producer class, the domain the event was pushed in, and registered event name. |
-| `payload` | TOML text encoded from the registered payload prototype. |
+| `payload` | The registered payload prototype in its generated codec (`event/payload_gen.go`), base64; absent for a nil payload. |
 | `encode_err` | Why a payload could not be captured, absent otherwise; replay refuses that record. |
 | `crossing` | This instance's own crossing sequence the barrier applied it under, absent otherwise. Every such crossing is a record, a system-derived one included, at the place it interleaved with its peers'; a replay's barrier applies none of its own, and restores the identity, by which an own placement settles the D-18 queue. |
 
