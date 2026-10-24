@@ -120,16 +120,17 @@ type tuiApp struct {
 	help       bool   // the key overlay is up; any key takes it down
 }
 
-func runTUI(s *Session) error {
-	lb := newLogBuffer(500)
-	s.out = lb
+// runTUI takes over the terminal; lb is the log the session already writes to
+func runTUI(s *Session, lb *logBuffer) error {
 	// Close's wedged-mixer warning must reach a visible stream after the
 	// alternate screen is gone. Deferred first, so it runs after Fini.
 	defer func() { s.out = os.Stdout }()
 
 	term := terminal.New()
 	if err := term.Init(); err != nil {
-		s.out = os.Stdout
+		for _, l := range lb.lines {
+			fmt.Println(l)
+		}
 		return err
 	}
 	defer term.Fini()
@@ -182,9 +183,6 @@ func runTUI(s *Session) error {
 		keysLit:   map[rune]int{},
 	}
 	fmt.Fprintln(lb, "soundlab TUI — ':' commands, p keys, b beat(pattern), m music reset, ^S save, ^Q quit")
-	if s.startErr != nil {
-		fmt.Fprintf(lb, "audio backend: %v (silent mode)\n", s.startErr)
-	}
 	// An empty session has nothing to browse; the TUI seeds builtins per
 	// empty document. REPL and scripts stay unseeded — they own their state.
 	if len(s.sounds.order) == 0 {

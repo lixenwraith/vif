@@ -368,7 +368,9 @@ Soundlab registers the same sound and pattern banks the game does, from the same
 embedded assets, and takes vif's `-config-dir`, `-config-music` and
 `-config-sounds`. It resolves both overrides through `internal/paths` exactly as
 the game does, registers them, and opens them as its documents, so its registry
-and the game's hold identical specs. A save writes where the next run reads
+and the game's hold identical specs. Of `vif.toml` it reads only `[paths] root`
+and `[audio] buffer_ms`, so a key another vif build wrote is named and skipped
+where the game refuses it. A save writes where the next run reads
 first: the `-config-music`/`-config-sounds` file when given, else
 `audio/<file>` under `-config-dir` or else the user root, shadowing any copy in
 a lower root. It does not apply the game's per-sound volumes and shapes, so its

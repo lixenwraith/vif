@@ -541,6 +541,22 @@ func TestDeleteKey(t *testing.T) {
 	}
 }
 
+// TestUnknownSettingsAreSkipped: a vif.toml another vif build wrote, with a table
+// this one does not know, still gives soundlab its mixer period.
+func TestUnknownSettingsAreSkipped(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, t.TempDir())
+	doc := "[later]\nwindow = true\n[audio]\nbuffer_ms = 20\n"
+	if err := os.WriteFile(filepath.Join(dir, paths.SettingsFile), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := resolveAudioFiles(dir, "", "")
+	if err != nil || f.skipped == nil || f.buffer != 20*time.Millisecond {
+		t.Fatalf("resolve = %+v, %v; want buffer 20ms with the unknown table named", f, err)
+	}
+}
+
 // TestAudioFilesFollowVif is the rule that soundlab reads the override vif reads, and
 // that an untitled save lands where the next vif run reads first: an installed system
 // root is shadowed from the user root, never written.

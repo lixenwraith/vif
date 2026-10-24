@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -83,8 +84,26 @@ var DefaultPlay = sync.OnceValue(func() Play {
 	return s.Play
 })
 
+// UnknownKeys names the keys a settings document holds that this build has no
+// field for. The game refuses such a document; a tool that reads only some of it
+// may go on, as every key it does know has been read by the time this is returned.
+type UnknownKeys []string
+
+func (u UnknownKeys) Error() string {
+	q := make([]string, len(u))
+	for i, k := range u {
+		q[i] = strconv.Quote(k)
+	}
+	if len(q) == 1 {
+		return "unknown key " + q[0]
+	}
+	return "unknown keys " + strings.Join(q, ", ")
+}
+
 // LoadSettings reads the first vif.toml the roots of override hold, over the
 // embedded one, and names the file it read: "" when the embedded one stands alone.
+// A file naming keys this build does not know fails with UnknownKeys, the settings
+// and the file read in full alongside it.
 func LoadSettings(override string) (Settings, string, error) {
 	path := FindFile(ConfigRoots(override), "", SettingsFile)
 	if path == "" {
@@ -96,18 +115,23 @@ func LoadSettings(override string) (Settings, string, error) {
 		return Settings{}, "", err
 	}
 	s, err := ParseSettings(data)
-	if err != nil {
+	var unknown UnknownKeys
+	if err != nil && !errors.As(err, &unknown) {
 		return Settings{}, "", fmt.Errorf("%s: %w", path, err)
 	}
 	s.resolve(filepath.Dir(path))
 	if err := CheckRoot(s.Paths.Root); err != nil {
 		return Settings{}, "", fmt.Errorf("%s: paths.root: %w", path, err)
 	}
+	if unknown != nil {
+		return s, path, fmt.Errorf("%s: %w", path, unknown)
+	}
 	return s, path, nil
 }
 
 // ParseSettings reads a settings document over the embedded one, as LoadSettings
-// reads a file; a path in it stays as it is written.
+// reads a file; a path in it stays as it is written. Unknown keys fail as
+// UnknownKeys with the settings read in full.
 func ParseSettings(data []byte) (Settings, error) {
 	var s Settings
 	if err := decodeSettings(asset.DefaultSettings, &s); err != nil {
@@ -115,6 +139,9 @@ func ParseSettings(data []byte) (Settings, error) {
 	}
 	if len(data) > 0 {
 		if err := decodeSettings(data, &s); err != nil {
+			if _, ok := err.(UnknownKeys); ok {
+				return s, err
+			}
 			return Settings{}, err
 		}
 	}
@@ -158,13 +185,12 @@ func rebase(data []byte, dir string) ([]byte, error) {
 	return setKeys(data, "paths", body), nil
 }
 
+// decodeSettings reads data over s; the decoder skips keys s has no field for, which
+// are reported once everything known has been read and checked
 func decodeSettings(data []byte, s *Settings) error {
 	raw, err := toml.NewParser(data).Parse()
 	if err != nil {
 		return err
-	}
-	if key := unknownKey(raw, reflect.TypeFor[Settings]()); key != "" {
-		return fmt.Errorf("unknown key %q", key)
 	}
 	if err := toml.Decode(raw, s); err != nil {
 		return err
@@ -172,7 +198,13 @@ func decodeSettings(data []byte, s *Settings) error {
 	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
 		return fmt.Errorf("presentation.cell %g is not 0 or between %g and %g", c, parameter.CellLeast, parameter.CellMost)
 	}
-	return s.Play.check()
+	if err := s.Play.check(); err != nil {
+		return err
+	}
+	if keys := unknownKeys(raw, reflect.TypeFor[Settings](), ""); len(keys) > 0 {
+		return keys
+	}
+	return nil
 }
 
 // SettingsStore holds the settings document a run writes back for the next run to
@@ -342,25 +374,25 @@ func unquote(k string) string {
 	return k
 }
 
-// unknownKey names the first key raw holds that t has no field for, so a misspelt
-// setting is refused rather than left silently at its default.
-func unknownKey(raw map[string]any, t reflect.Type) string {
+// unknownKeys names every key raw holds that t has no field for, under prefix, so a
+// misspelt setting is never left silently at its default.
+func unknownKeys(raw map[string]any, t reflect.Type, prefix string) UnknownKeys {
 	fields := make(map[string]reflect.Type, t.NumField())
 	for i := range t.NumField() {
 		fields[t.Field(i).Tag.Get("toml")] = t.Field(i).Type
 	}
+	var bad UnknownKeys
 	for _, k := range slices.Sorted(maps.Keys(raw)) {
 		ft, ok := fields[k]
 		if !ok {
-			return k
+			bad = append(bad, prefix+k)
+			continue
 		}
 		if table, ok := raw[k].(map[string]any); ok && ft.Kind() == reflect.Struct {
-			if bad := unknownKey(table, ft); bad != "" {
-				return k + "." + bad
-			}
+			bad = append(bad, unknownKeys(table, ft, prefix+k+".")...)
 		}
 	}
-	return ""
+	return bad
 }
 
 // settingsPath resolves one path value: "~/" is the home directory and a relative

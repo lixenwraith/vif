@@ -42,20 +42,26 @@ type audioFiles struct {
 	music, sounds             string // "" = the embedded bank
 	musicTarget, soundsTarget string // "" = no configuration root
 	buffer                    time.Duration
+	skipped                   error // vif.toml keys this build does not know
 }
 
 // resolveAudioFiles applies vif's -config-dir, -config-music and -config-sounds,
-// and vif.toml's [paths] root and [audio] buffer_ms as vif does
+// and vif.toml's [paths] root and [audio] buffer_ms as vif does. Those are all it
+// reads, so a key another vif build knows is skipped rather than refused.
 func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
 	if err := paths.CheckRoot(dir); err != nil {
 		return audioFiles{}, err
 	}
 	settings, _, err := paths.LoadSettings(dir)
+	var f audioFiles
+	if errors.As(err, new(paths.UnknownKeys)) {
+		f.skipped, err = err, nil
+	}
 	if err != nil {
 		return audioFiles{}, err
 	}
 	roots := paths.ConfigRoots(cmp.Or(dir, settings.Paths.Root))
-	f := audioFiles{buffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
+	f.buffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
 	if f.music, err = paths.ConfigFile(roots, music, paths.AudioDirName, paths.MusicConfigFile); err != nil {
 		return f, fmt.Errorf("music config: %w", err)
 	}
@@ -113,6 +119,9 @@ func NewSession(backend string, masterVol float64, out io.Writer, files audioFil
 	// to a random fill once per phrase — game drama, editor confusion. Forced
 	// off here; :fill on restores it for auditioning the fill bank.
 	s.eng.SetAutoFill(false)
+	if files.skipped != nil {
+		fmt.Fprintf(out, "%v: skipped, soundlab reads only [paths] root and [audio] buffer_ms\n", files.skipped)
+	}
 	if err := eng.SpecError(); err != nil {
 		fmt.Fprintf(out, "override errors, the game falls back the same way:\n%v\n", err)
 	}

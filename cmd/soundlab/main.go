@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -39,7 +40,15 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	s, err := NewSession(backend, *flagVol, os.Stdout, files)
+	// The TUI's log takes what the session says from the start, which stdout would
+	// show only after the full screen closes
+	tui := *flagTUI && *flagScript == ""
+	var out io.Writer = os.Stdout
+	lb := newLogBuffer(500)
+	if tui {
+		out = lb
+	}
+	s, err := NewSession(backend, *flagVol, out, files)
 	if err != nil {
 		return err
 	}
@@ -56,11 +65,11 @@ func run() error {
 		defer f.Close()
 		return runScript(s, f)
 	}
-	if *flagTUI {
+	if tui {
 		// runTUI owns terminal teardown; signals become a clean loop exit so
 		// the deferred Fini always runs. The REPL's exit-on-signal handler
 		// must not be installed alongside it.
-		return runTUI(s)
+		return runTUI(s, lb)
 	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)

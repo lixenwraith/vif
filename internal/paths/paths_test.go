@@ -1,10 +1,12 @@
 package paths
 
 import (
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,15 +97,24 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 	}
 }
 
-func TestSettingsRefuseAnUnknownKey(t *testing.T) {
+// TestSettingsNameEveryUnknownKey: the game refuses a file naming keys it does not
+// know, and the error names each one while the keys it knows read in full, so
+// soundlab can go on with an older or newer vif.toml.
+func TestSettingsNameEveryUnknownKey(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(SystemRootsEnv, t.TempDir())
-	if err := os.WriteFile(filepath.Join(root, SettingsFile), []byte("[paths]\nlogs = \"x\"\n"), 0o644); err != nil {
+	doc := "[paths]\nlogs = \"x\"\n[audio]\nbuffer_ms = 20\n[later]\nkey = 1\n"
+	if err := os.WriteFile(filepath.Join(root, SettingsFile), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := LoadSettings(root); err == nil || !strings.Contains(err.Error(), "paths.logs") {
-		t.Fatalf("error = %v, want one naming paths.logs", err)
+	s, path, err := LoadSettings(root)
+	var unknown UnknownKeys
+	if !errors.As(err, &unknown) || !slices.Equal(unknown, UnknownKeys{"later", "paths.logs"}) {
+		t.Fatalf("error = %v, want UnknownKeys naming later and paths.logs", err)
+	}
+	if s.Audio.BufferMs != 20 || path != filepath.Join(root, SettingsFile) {
+		t.Errorf("read %q with buffer_ms %d, want the file's 20 read alongside", path, s.Audio.BufferMs)
 	}
 }
 

@@ -30,7 +30,7 @@ go run ./cmd/soundlab -headless -s script.slab
 - `-tui`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts leave that to `builtin`.
 - `-headless`: Discard audio output (`-ab null`).
 - `-s <file>`: Execute a `.slab` script file line-by-line and exit.
-- `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way, with `vif.toml`'s `[paths] root` and `[audio] buffer_ms` read as vif reads them. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first.
+- `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way, with `vif.toml`'s `[paths] root` and `[audio] buffer_ms` read as vif reads them; any key this build does not know is named and skipped. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first.
 - `-ab <name>`: Force audio backend (`pacat`, `aplay`, `null`, `wav:out.wav`).
 - `-vol <f>`: Master volume 0..1 (default 0.7).
 
