@@ -21,3 +21,4 @@ journal/**/*.jsonl
 /stage/
 tool/vif-allocator/vif-allocator
 *.exe
+/soundlab
