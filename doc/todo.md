@@ -545,7 +545,7 @@ link it already holds.
 
 - Priority: P2
 - Affected files: `internal/app/snapshot_stage.go`
-- Guide: [Netcode optimization](netcode-optimization.md#n11-less-work-under-the-live-lock) N11
+- Guide: [Netcode design](netcode-design.md#n11-less-work-under-the-live-lock) N11
 
 At td an install that projects nothing already holds the live lock 40–70 ms for the
 capture pair, comparison and write, and each projected tick adds up to a simulation

@@ -245,7 +245,7 @@ The whole commit — projection and write — runs under the live world lock, so
 live tick can land between the tick the projection reached and the write.
 
 A capture ahead of the clock is a join or a jump and is adopted at its own tick;
-within `NetworkHoldTicks` it waits (§4.1).
+within `NetworkHoldTicks` it waits ([Netcode design §2.1](netcode-design.md#21-the-playout-buffer)).
 
 Consecutive simulation events are not coalesced on the wire. Two cursor placements
 may consume different glyphs or cause different collision and progression effects;
@@ -400,108 +400,7 @@ epoch starts it with nothing said.
 
 ## 4. Correction pipeline
 
-The host publishes one authoritative capture on the session timeline, then serves
-each direct peer according to that link's cadence, a power of two of ticks the peer
-is due at multiples of, so peers on different cadences share rounds and the host's
-round rate is its fastest peer's:
-
-1. Build a deterministic manifest over component stores, allocator values, RNG
-   streams, declared system state, status surface, and shared FSM state.
-2. Send the root and header, with the partition: the page count of each section
-   paged more than once.
-3. If the receiver produces the same root, acknowledge a hash-only correction and
-   install the authority header without transferring state. That answer proves the
-   receiver holds the authority's world, so while every peer has proved it within
-   half the convergence floor the keyframe cadence sends none. A participant behind
-   a relay proves it in the relay's own answer.
-4. Otherwise the receiver answers with the page hashes of every section of its own
-   index under that partition, and the authority returns the pages that differ,
-   chunked as a body is: one round trip from the root to the repair. A repair wider
-   than the keyframe it stands in for is not sent: the peer gets the keyframe, and
-   whole bodies for a few publications.
-5. Validate every page hash, reconstruct the authority root, stage the result and
-   commit it between ticks. A set is one baseline, applied whole or not at all.
-6. Refuse stale, foreign, malformed, or unverifiable repairs. One that fails its
-   proof or its install asks its manifest's sender for a whole world. A relay
-   cannot author one, so it answers `MsgStateUnserved`, as it does for a tick it
-   does not retain, and the receiver takes the next whole world the authority sends.
-
-The environment is a declared system-state carrier. A capture therefore includes
-its base force, normalized direction, remaining duration and application phase;
-the general RNG section includes the environment stream position, and Shared
-component pages include the species kinetic result. Player drains remain local
-and resume from the same per-tick samples after an install. The capture also
-carries an active drift and its per-level phases; installing them moves no glyph,
-so each instance's own text continues from where it is.
-
-The owner-authored cells of every cursor a participant owns, the authority's
-included, are outside the hashed surface: each instance holds another's as a mirror
-up to `NetworkSyncTicks` old, the sync stream is their carrier, and comparing them
-would have a guest whose peer is fighting repair nearly every manifest. Cursor control
-assignment is normalised for hashing and repair. The correction magnitude leaves
-out the same cells, and all of them are re-bound locally after installation.
-
-The manifest root intentionally excludes tick-local header metadata so a predictor
-can compare state with an earlier authority tick. A shard set must nevertheless
-match the manifest's authority term, participant, and crossing fence; this binds
-the ordering metadata used to prune queued events. Its capture integrity may
-differ on a relay whose equal canonical state has another dense-store order.
-
-Nothing acknowledges or retransmits a correction; the newest in the run supersedes,
-so loss costs freshness rather than correctness. A reset restarts the tick count, so
-on a run change each end drops what it keyed by tick and refuses an artifact naming
-another run: a correction by its header (`Corrections.followRun`), an epoch or owner
-sync by the run its batch names, since a guest's last epochs of a run reach the
-authority a round trip after the reset applied there. The run after this one is
-the exception: its first world reaches a guest whose reset is still on its way, so
-the chunk header carries the run, the assembly orders transfers by run then tick,
-and `Apply` keeps such a body at the head of its inbox until the reset enters it. A body or a repair leaves in
-`SnapshotCorrectionChunkBytes` chunks while the link's backlog — bytes sent beyond
-what its latest echo reports received — drains within `SnapshotBulkQueue` past the
-round trip, so an epoch waits behind a chunk, not a world. What a link still
-delivering one is owed next, whether body, index answer or repair, waits behind it,
-the newest replacing the older and nothing partial replacing a whole world, and
-leaves once the link drains, released between every two ticks rather than by the
-next publication: a late or lost frame costs a round trip, never a stall. A
-request naming a tick the authority has let go was overtaken by the index since and
-is not answered unless it asks for a whole world, nor is one naming a tick the peer
-has since proved it holds, whose answer the receiver would refuse as outgrown — as
-it refuses an index or a repair no newer than the world it last proved, rather than
-comparing it off its tick. Indexes to a peer are spaced by its round trip, so a
-descent's request finds its tick retained. A link that
-cannot deliver a keyframe within `SnapshotKeyframeDrain` takes none on schedule: it
-meets the floor with proofs, takes a whole world on request and reports
-constrained. Echoes carry the answering side's clock, and delivery rate is
-timed on it, since echoes a stalled path releases together arrive microseconds apart.
-
-### 4.1 The playout buffer
-
-The paths deliver worlds of different ages: a whole body is one one-way delay old,
-a selective repair three — the root, then a round trip for the page hashes.
-Adopting each capture's tick would step the clock by up to two one-way delays and
-every shared actor with it, so a capture behind the clock is projected (§3.3) and
-moves nothing; the buffer is for the other direction.
-
-A correction describing a tick this instance has not reached, within
-`NetworkHoldTicks`, is held until it has. A manifest ahead of the clock is held the
-same way, and the world it is compared against is read at the close of exactly the
-tick it names (`Corrections.TickClosed`, under the tick's lock), so a guest that runs
-past that tick before the corrector answers still answers for it. Each manifest also
-promises the tick of the next one (`CorrectionManifest.Next`), which a guest reads
-as it closes too, so an index that arrives late is still compared tick-exactly. One
-whose tick was read neither way is compared against the present and counted in
-`snapshot.manifests_off_tick`; the repair it buys is correct but carries state a
-tick-exact comparison would not have. The newest arrival while one waits replaces
-it, so at most one is ever delayed and never by more than the hold window. One
-further ahead is adopted at its own tick as the jump it is, counted in
-`snapshot.corrections_jumped`, and supersedes the one still waiting: installed
-after it, that one would rewind the world past every crossing applied since. A
-hash-only acknowledgement behind the clock is not adopted: the world already equals
-it, and adopting its tick would be the rewind.
-
-The host publishes at the close of the tick it describes rather than on a timer's
-phase: `TickClosed` wakes its pump, so an index leaves with the epoch of the same
-tick and reaches a paced guest before that guest runs the tick.
+The pipeline, the descent and the playout buffer are [Netcode design §2](netcode-design.md#2-the-correction-pipeline).
 
 ## 5. Membership, topology, and authority continuity
 
@@ -902,62 +801,7 @@ it decides where it goes.
 
 ## 6. Current operating point
 
-The same shape over sockets, with each link's deflate, is read in
-[Netcode optimization §2.2](netcode-optimization.md#22-readings): the wire carries
-8% of the framed command stream at 16 players on the tower, and td's whole bodies as
-framed, since a body the snapshot codec deflated passes each link raw.
-
-Measured on the in-process mesh at `GOMAXPROCS=1` (a 2.1 GHz Xeon container), in the
-shape of `TestATowerGuestAnswersHashOnly`: a star with four-tick links, the authority
-playing, every participant moving one tick in three and firing one in six, 300 ticks
-after 120 of warm-up. Rates are per simulated second; host and guest figures time
-their own calls in one shared process, so garbage collection falls on whoever
-allocates. Absolute values move with the machine and the scenario; the shape is what
-to plan by. Tower is the 239×64 tower region, td the 500×250 `td` scenario.
-
-| Players | Tower, 2 | Tower, 16 | td, 2 | td, 16 |
-|---|---:|---:|---:|---:|
-| Publication rounds a second | 4.5 | 4.6 | 1.5 | 7.2 |
-| Manifests answered hash-only | 94% | 94% | 78% | 95% |
-| Host egress, framed before deflate | 20 kB/s | 1.64 MB/s | 0.28 MB/s | 5.05 MB/s |
-| … of it epochs and owner syncs | 5 kB/s | 1.39 MB/s | 11 kB/s | 2.82 MB/s |
-| … of it correction bodies and repairs | 11 kB/s | 0.17 MB/s | 0.27 MB/s | 2.18 MB/s |
-| Heap in use per instance | 70 MiB | 90 MiB | 210 MiB | 250 MiB |
-
-Per round the host captures under the world lock (about 1.2 ms tower, 14 ms td),
-then seals and indexes the capture; a keyframe is about 26 / 360 kB compressed. The seal,
-the index and a keyframe reuse the bytes and hash of every row whose owned copy
-still compares equal, and navigation rebuilds its wall grid only when a wall moved
-and compares grids only when their generation moved. At 16 players, rounds four
-ticks apart (on a slower container than the table's), the seal costs 1.8 ms on the
-tower map and 5 ms on td, the index 2.4 and 12 ms, a keyframe 7.6 and 58 ms (mostly
-deflate), and a simulation tick 1.1 and 2.6 ms. An install that projects nothing
-holds the live lock 7–10 / 40–70 ms, and each projected tick adds up to a simulation
-tick. Sealing, indexing and encoding run outside the lock, but on the one thread a
-browser guest has.
-
-Per simulated second the host costs 20·T_sim + R·(capture + seal + index) plus the
-whole bodies it serves, R being the union of its peers' due ticks rather than a fixed
-5 Hz; a guest costs 20·T_sim + A·(capture + index) + installs·(stage + projection +
-compare and write), A being the manifests it answers. A star's authority relays every
-participant's epochs and owner syncs to every other, (N−1)² of each: at 16 players
-4,444 epochs (190 B tower, 510 B td) and 736 syncs (about 540 B, the cells that are
-set) a second.
-
-What that means for scaling:
-
-- **Protocol, not simulation, bounds the map limit.** Before row reuse, td with 16
-  players needed about 1.4 cores of a host, 86% of it protocol: rounds of capture,
-  seal and index cost about 100 ms each, 0.7 CPU-s/s at 7.2 rounds, and whole bodies
-  most of the rest; the fleet pod's 500m CPU held the tower map at 16 players and
-  not td. Row reuse takes about nine tenths off the seal and index, which leaves the
-  capture under the lock the largest part of a round.
-- **A td guest cost 0.4–0.5 CPU-s/s natively before row reuse,** more than a
-  browser's single WASM thread holds; the tower map cost a guest about 0.1.
-- **Bandwidth is quadratic before it is anything else.** Epoch and owner-sync fan-out
-  is 85% of the tower host's egress at 16 players; at td whole bodies come close.
-- **The live lock is held by the O(E) capture and comparison** before any projection,
-  so shrinking them comes before moving projection out of the lock.
+The operating point and the readings behind it are [Netcode design §3](netcode-design.md#3-readings).
 
 ## 7. Diagnostics and operations
 
@@ -967,7 +811,7 @@ The useful runtime signals are:
   `snapshot.correction_cells`: how far prediction moved when authority arrived;
 - `snapshot.corrections_held` and `snapshot.corrections_jumped`: how often the
   playout buffer deferred one because this instance had not reached the tick it
-  describes, and how often one was too far ahead to wait for (§4.1);
+  describes, and how often one was too far ahead to wait for (netcode design §2.1);
 - `snapshot.projected_ticks`: how far behind the clock the last correction was,
   which is the distance the projection simulated (§3.3);
 - `snapshot.replay_records`, `snapshot.replay_skipped`, and
@@ -1042,7 +886,7 @@ where they can be compared against each other.
 
 Each entry says what is actually absent rather than what is imperfect, and how to see
 it. Planned multiplayer work is in [the todo list](todo.md#multiplayer), and what
-could make the netcode cheaper in [Netcode optimization](netcode-optimization.md).
+could make the netcode cheaper in [Netcode design](netcode-design.md).
 
 ### Deferred by decision
 
