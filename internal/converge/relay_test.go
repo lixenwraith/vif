@@ -114,8 +114,8 @@ func TestARelayedAnswerProvesTheAuthoritysRoot(t *testing.T) {
 		Tick: want.Header.Tick, Run: want.Header.Run, Session: want.Header.Session,
 		Term: want.Header.Term,
 		Sections: []snapshot.SectionRequest{{
-			ID: snapshot.StoreSectionPrefix + "positions", Pages: want.Sections[1].Pages,
-			Hash: make([]uint64, want.Sections[1].Pages),
+			ID: snapshot.StoreSectionPrefix + "positions", Pages: index.Summaries()[1].Pages,
+			Hash: make([]uint64, index.Summaries()[1].Pages),
 		}},
 	}
 	set, pages, err := snapshot.BuildShardSet(index, req)

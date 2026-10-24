@@ -39,12 +39,9 @@ type CorrectionRequest struct {
 	// the convergence floor has elapsed without one arriving.
 	Keyframe bool `json:"keyframe,omitempty"`
 
-	// Index asks for the section summaries of a manifest that arrived as its root
-	// alone: the roots differed, and pages can only be chosen section by section.
-	Index bool `json:"index,omitempty"`
-
 	// Sections is empty exactly when the roots matched, which is the healthy case
-	// and the one this protocol exists to make cheap.
+	// and the one this protocol exists to make cheap; otherwise it is every section
+	// of the receiver's index, paged as the manifest's partition declares.
 	Sections []SectionRequest `json:"sections,omitempty"`
 
 	// Relayed names the participants this answer's sender forwards the manifest to
@@ -63,7 +60,7 @@ type RelayedLeaf struct {
 
 // Converged reports whether this request asks for nothing: the hash-only case.
 func (r CorrectionRequest) Converged() bool {
-	return !r.Keyframe && !r.Index && len(r.Sections) == 0
+	return !r.Keyframe && len(r.Sections) == 0
 }
 
 // CorrectionShard is one repaired page. Rows is the page's whole content, bounded
@@ -160,10 +157,10 @@ func DecodeShardSet(b []byte) (CorrectionShardSet, error) {
 
 // === receiver: the descent ===
 
-// CompareRequest is what a receiver answers a manifest with. The descent stops at
-// the first level that agrees: equal roots end it with an empty request, otherwise
-// only the differing sections' page hashes are sent. A section the receiver does
-// not know is reported wholly mismatching, since it has no page hash to offer.
+// CompareRequest is what a receiver answers a manifest with: equal roots an empty
+// request, otherwise the page hashes of every section of its own index under the
+// sender's partition, so the sender compares where the content is and the descent
+// is one round trip. The sections are the build's, so both sides hold the same set.
 func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest, int, int) {
 	req := CorrectionRequest{
 		Version: ManifestVersion,
@@ -173,31 +170,15 @@ func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest,
 		Session: want.Header.Session,
 		Root:    mine.Root(),
 	}
-	sections, pages := len(want.Sections), 0
+	sections, pages := len(mine.list), 0
 	if mine.Root() == want.Root {
 		return req, sections, pages
 	}
-	if want.Sections == nil {
-		req.Index = true
-		return req, sections, pages
-	}
-	for _, s := range want.Sections {
-		theirs, ok := mine.section(s.ID)
-		if ok && theirs.Hash == s.Hash && theirs.Pages == s.Pages {
-			continue
-		}
-		hashes, ok := mine.repartition(s.ID, s.Pages)
-		if !ok {
-			hashes = make([]uint64, s.Pages)
-		}
+	for _, s := range mine.list {
+		theirs := max(want.Partition[s.ID], 1)
+		hashes, _ := mine.repartition(s.ID, theirs)
 		pages += len(hashes)
-		req.Sections = append(req.Sections, SectionRequest{ID: s.ID, Pages: s.Pages, Hash: hashes})
-	}
-	// The roots differed but every section agreed. That can only happen when the
-	// two sides hold different *sets* of sections or different identities, and
-	// neither is repairable by a page: the only sound answer is a whole world.
-	if len(req.Sections) == 0 {
-		req.Keyframe = true
+		req.Sections = append(req.Sections, SectionRequest{ID: s.ID, Pages: theirs, Hash: hashes})
 	}
 	return req, sections, pages
 }
@@ -205,8 +186,8 @@ func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest,
 // === sender: building the repair ===
 
 // BuildShardSet answers one request from the manifest the sender retained for the
-// tick it names; the sender weighs the encoded set against the keyframe it stands
-// in for.
+// tick it names, with every page whose hash the request did not reproduce; the
+// sender weighs the encoded set against the keyframe it stands in for.
 func BuildShardSet(mine *Manifest, req CorrectionRequest) (CorrectionShardSet, int, error) {
 	set := CorrectionShardSet{
 		Version:   ManifestVersion,
@@ -214,7 +195,7 @@ func BuildShardSet(mine *Manifest, req CorrectionRequest) (CorrectionShardSet, i
 		Header:    mine.summary.Header,
 		Root:      mine.Root(),
 		Authority: mine.authority,
-		Sections:  mine.summary.Sections,
+		Sections:  mine.list,
 	}
 	pages := 0
 	for _, sr := range req.Sections {

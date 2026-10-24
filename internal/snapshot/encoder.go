@@ -173,10 +173,11 @@ func (e *Encoder) Build(cap SharedCapture, authority uint32) (*Manifest, error) 
 	}
 	for _, sec := range secs {
 		m.sections[sec.ID] = sec
-		m.index[sec.ID] = len(m.summary.Sections)
-		m.summary.Sections = append(m.summary.Sections, sec.SectionSummary)
+		m.index[sec.ID] = len(m.list)
+		m.list = append(m.list, sec.SectionSummary)
+		m.partition(sec.SectionSummary)
 	}
-	m.summary.Root = manifestRoot(cap.Header, authority, m.summary.Sections)
+	m.summary.Root = manifestRoot(cap.Header, authority, m.list)
 	return m, nil
 }
 

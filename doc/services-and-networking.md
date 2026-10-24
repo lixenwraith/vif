@@ -496,7 +496,10 @@ cannot produce pages for. `MsgAuthorityReport` (0x2C) and `MsgAuthorityHandoff`
 (0x20) is the address map and `MsgConnect`/`MsgAck` (0x02/0x04) open a peer link
 ([Multiplayer](multi-player.md) §5.3). A guest linked to the authority packs a
 tick's raw epochs and syncs, its own and those it carries, into one `MsgBundle`
-(0x19) while they fit a frame. A guest admitting its own bot asks the coordinator
+(0x19) while they fit a frame, and the authority, or a relay, packs the copies it
+committed or forwards in a tick with its own epoch and syncs into one for each link
+behind it, so a link reads one frame a tick; a correction chunk travels alone. A
+guest admitting its own bot asks the coordinator
 on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
 retire a failed join; the first two are answered on that link with
 `MsgRelayAdmit` (0x2F). The epoch is JSON containing journal-registry TOML
@@ -590,11 +593,12 @@ installed from a prefix.
 `MsgStateManifest` (0x28), `MsgStateRequest` (0x29) and `MsgStateShard` (0x2A) are
 the selective exchange, and they are the only three messages in this
 protocol that form a request/response pair carrying game state. A manifest is a
-compact index over the same capture a correction would have carried: the root and
-the capture header, and one summary per section once a receiver whose root differed
-asks for them with `index`. A request is a receiver's answer to one: an
-acknowledgement that the roots agreed, that ask, or the page hashes of the sections
-that did not. A shard set is the repair the second kind provokes.
+compact index over the same capture a correction would have carried: the root, the
+capture header and the partition, each section's page count where it is more than
+one. A request is a receiver's answer to one: an acknowledgement that the roots
+agreed, or the page hashes of every section of its own index under that partition.
+A shard set is the repair the second kind provokes, so a repair is one round trip
+from its root.
 
 A manifest and a request are one frame each. A shard set is chunked and paced as a
 correction body is (`SnapshotCorrectionChunkBytes`), so an epoch behind it waits one

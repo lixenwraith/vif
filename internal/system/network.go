@@ -220,6 +220,11 @@ type NetworkSystem struct {
 	// it, its own and those it carries; Flush sends them as one frame.
 	upstream network.Bundle
 
+	// down is what each link behind this instance is owed: the copies a drain
+	// commits leave it as one frame when the drain ends, and the tick's own epoch and
+	// syncs as one when it closes.
+	down [participantSlots]network.Bundle
+
 	// leadWindow holds the own lead's reading at each of the last
 	// NetworkBarrierRenegotiateTicks ticks, leadCount how many have been read, and
 	// leadPushed the change already pushed and not yet dispatched.
@@ -502,6 +507,7 @@ func (s *NetworkSystem) Init() {
 	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
 	s.upstream = network.Bundle{}
+	s.down = [participantSlots]network.Bundle{}
 
 	// Held derivations go for the reason the replay suffix below does: a reward the
 	// authority never proved belongs to the run that predicted it, and that run has
@@ -1380,6 +1386,7 @@ func (s *NetworkSystem) Receive(nextTick uint64) (live bool) {
 	s.publishConnectionTelemetry(p)
 	if s.enabled && p != nil {
 		s.drain(p)
+		s.flushDownstream(p)
 	}
 	s.applyDue(nextTick)
 	s.publishBarrierTelemetry(nextTick, p)
@@ -1397,6 +1404,7 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 		s.sendCursorState(p)
 	}
 	s.flushUpstream(p)
+	s.flushDownstream(p)
 	s.publishTransportLoss(p)
 	s.publishLinkBytes(p)
 	s.publishLinkMeasurement(p, completedTick)
@@ -1545,6 +1553,7 @@ func (s *NetworkSystem) DrainOffTick() {
 		poll = off.DrainOffTick
 	}
 	s.drainWith(p, poll)
+	s.flushDownstream(p)
 }
 
 // drainWith is one poll of the endpoint, whichever door it came through.
@@ -2426,13 +2435,15 @@ func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
 }
 
 // sendDown passes one artifact to the participants behind this instance but the
-// link it arrived on, every link at the authority. Reports whether any took it.
+// link it arrived on, every link at the authority: into the tick's bundle for each
+// link, or on its own when the codec deflated it. Reports whether any link takes it.
 func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body []byte) bool {
 	p := s.port()
 	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return false
 	}
-	if s.isCoordinator() {
+	link, ok := p.(engine.LinkMeasuringPort)
+	if !ok {
 		if except == 0 {
 			p.Broadcast(uint8(kind), body)
 		} else {
@@ -2441,19 +2452,37 @@ func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body [
 		return true
 	}
 	tick, sent := s.localTick(), false
-	for id := range uint32(len(s.downAt)) {
-		if id != except && s.behind(id, tick) && p.Send(id, uint8(kind), body) {
-			sent = true
+	for _, id := range link.Peers() {
+		if id == except || int(id) >= len(s.down) || !(s.isCoordinator() || s.behind(id, tick)) {
+			continue
 		}
+		if kind.Precompressed() {
+			sent = p.Send(id, uint8(kind), body) || sent
+			continue
+		}
+		s.down[id].Add(kind, body)
+		sent = true
 	}
 	return sent
+}
+
+// flushDownstream sends each link behind this instance what it has been owed since
+// the last flush, as one frame.
+func (s *NetworkSystem) flushDownstream(p engine.NetworkPort) {
+	for id := range s.down {
+		for _, m := range s.down[id].Take() {
+			if p == nil || !p.Send(uint32(id), uint8(m.Type), m.Payload) {
+				s.statDrop.Add(1)
+			}
+		}
+	}
 }
 
 // sendOwn sends one of this instance's own artifacts: the authority's are committed
 // as sent and go down every link, a guest's go up raw.
 func (s *NetworkSystem) sendOwn(p engine.NetworkPort, kind network.MessageType, body []byte) {
 	if s.isCoordinator() {
-		p.Broadcast(uint8(kind), body)
+		s.sendDown(0, kind, body)
 		return
 	}
 	s.sendUp(kind, body)
