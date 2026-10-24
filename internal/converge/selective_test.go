@@ -547,3 +547,41 @@ func TestAPeerThatProvedTheWorldIsNotSentAKeyframe(t *testing.T) {
 		}
 	}
 }
+
+// TestARepairTravelsInChunksAndIsBoundedByTheKeyframe: a shard set leaves as a body
+// does, in chunks the receiver applies only once whole, and a repair's width is
+// judged against the keyframe it stands in for rather than against a frame.
+func TestARepairTravelsInChunksAndIsBoundedByTheKeyframe(t *testing.T) {
+	t.Parallel()
+	host, guest := exchange(t)
+	diverge(guest, 9)
+	body, tick := outstandingRepair(t, host, guest, nil)
+
+	chunks, err := network.EncodeSnapshotChunksOf(1, tick, body, 64)
+	if err != nil || len(chunks) < 3 {
+		t.Fatalf("chunking the repair: %v (%d chunks)", err, len(chunks))
+	}
+	from := uint32(host.world.local)
+	for _, chunk := range chunks[:len(chunks)-1] {
+		guest.c.ReceiveSelective(uint8(network.MsgStateShard), from, chunk)
+	}
+	guest.c.applySelective()
+	if guest.stat("snapshot.pages_repaired") != 0 {
+		t.Fatal("a repair was applied before its last chunk arrived")
+	}
+	guest.c.ReceiveSelective(uint8(network.MsgStateShard), from, chunks[len(chunks)-1])
+	guest.c.applySelective()
+	if guest.stat("snapshot.pages_repaired") == 0 {
+		t.Fatal("the assembled repair was not applied")
+	}
+
+	host.c.publishMu.Lock()
+	host.c.sizes.Keyframe = 3 * network.MaxPayloadSize
+	host.c.publishMu.Unlock()
+	if !host.c.repairIsWorthSending(2 * network.MaxPayloadSize) {
+		t.Fatal("a repair wider than a frame but narrower than the keyframe was refused")
+	}
+	if host.c.repairIsWorthSending(4 * network.MaxPayloadSize) {
+		t.Fatal("a repair wider than the keyframe was sent")
+	}
+}

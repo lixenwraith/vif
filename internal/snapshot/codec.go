@@ -13,16 +13,11 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 )
 
-// Snapshot bodies have a deliberately small, versioned envelope before the
-// transport chunks them:
-//
-//	[magic:4][version:1][codec:1][plain bytes:4][compressed JSON]
-//
-// The JSON remains the schema and integrity surface. Compression is only a wire
-// concern, outside the world lock, so it reduces joins and corrections without
-// changing capture, diff or reconcile semantics. The declared plain size is what a
-// receiver bounds decompression by, against the expansion ceiling rather than the
-// wire one: the two differ by the ratio the codec achieves on a walled map.
+// A snapshot body travels in a small versioned envelope,
+// [magic:4][version:1][codec:1][plain bytes:4][JSON, deflated or plain]. The JSON
+// stays the schema and integrity surface; compression is a wire concern outside the
+// world lock. A receiver bounds decompression by the declared plain size, against
+// the expansion ceiling rather than the wire one.
 const (
 	snapshotWireHeader  = 10
 	snapshotWireVersion = 1
@@ -33,19 +28,19 @@ const (
 var (
 	snapshotWireMagic = [4]byte{'V', 'I', 'F', 'S'}
 	snapshotDeflaters = sync.Pool{New: func() any {
-		w, err := flate.NewWriter(io.Discard, flate.BestSpeed)
+		w, err := flate.NewWriter(io.Discard, flate.DefaultCompression)
 		if err != nil {
-			panic(err) // BestSpeed is a standard-library constant and cannot fail.
+			panic(err) // a standard-library level cannot fail
 		}
 		return w
 	}}
 	snapshotInflaters = sync.Pool{New: func() any { return flate.NewReader(bytes.NewReader(nil)) }}
 )
 
-// EncodeJSON marshals the schema body and compresses it for transport.
-// BestSpeed is intentional: the storm high-water measurement shows most of the
-// available byte reduction at this level while keeping encode work below a
-// millisecond on the reference machine.
+// EncodeJSON marshals the schema body and compresses it for transport, at the level
+// the wire gets: a deflated body passes each link's stream raw. Level 6 takes a td
+// keyframe to 0.72 of level 1's bytes in three times its 12 ms, and the deeper
+// levels buy nothing more for far longer.
 func EncodeJSON(v any) ([]byte, error) { return encodeJSON(v, snapshotCodecFlate) }
 
 // EncodePlainJSON is EncodeJSON left for the link's stream to compress: a small

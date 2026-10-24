@@ -375,18 +375,6 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 			}
 		})
 	}
-
-	// Oversize is refused by the sender rather than by the validator: past the
-	// bound a repair is a capture with per-page overhead, and the keyframe the
-	// caller falls back to is both smaller and self-sufficient.
-	body, err := snapshot.EncodeShardSet(good)
-	if err != nil {
-		t.Fatalf("encode: %v", err)
-	}
-	if len(body) > parameter.SnapshotShardBytesMax {
-		t.Fatalf("a one-page repair is %d bytes, past the %d-byte bound",
-			len(body), parameter.SnapshotShardBytesMax)
-	}
 }
 
 // TestOneSetIsOneBaseline is the protocol half: a repair carries its

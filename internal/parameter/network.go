@@ -340,13 +340,6 @@ const (
 	// tick let go was overtaken by a later index and is not answered.
 	SnapshotManifestRetention = 4
 
-	// SnapshotShardBytesMax bounds one repair. A shard set larger than this is not
-	// a repair, it is a capture with extra steps: the host sends a keyframe
-	// instead, which is smaller once the mismatch is that wide because it carries
-	// no per-page identity or proof. It is also what keeps a repair inside one
-	// transport frame.
-	SnapshotShardBytesMax = 48 << 10
-
 	// SnapshotManifestSilenceCorrections is how many manifests, beyond those its
 	// round trip and backlog hold in flight, a peer may leave unanswered before it
 	// is sent whole bodies again. Every manifest is answered, so silence means the

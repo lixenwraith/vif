@@ -863,7 +863,8 @@ func (p *PendingJoin) next() (*Message, error) {
 	if p.base.ReadTimeout > 0 {
 		_ = p.conn.SetReadDeadline(time.Now().Add(p.base.ReadTimeout))
 	}
-	msg, err := Decode(p.conn)
+	var header [HeaderSize]byte
+	msg, err := p.conn.readFrame(MaxPayloadSize, header[:])
 	if ne := net.Error(nil); errors.As(err, &ne) && ne.Timeout() {
 		return nil, plainError{"the host stopped answering", err}
 	}

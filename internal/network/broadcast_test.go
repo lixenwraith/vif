@@ -49,7 +49,8 @@ func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
 	}
 	received := make(chan *Message, 1)
 	go func() {
-		msg, _ := Decode(openFlateStream(client, 0, 0))
+		var header [HeaderSize]byte
+		msg, _ := openFlateStream(client, 0, 0).readFrame(MaxPayloadSize, header[:])
 		received <- msg
 	}()
 	pm.Broadcast(NewMessage(MsgSessionRestart, []byte("host:7777")))

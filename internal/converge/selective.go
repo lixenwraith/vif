@@ -63,9 +63,11 @@ type selectiveState struct {
 	requests []pendingRequest
 
 	// Guest: the newest manifest that has arrived and not been answered, the
-	// baselines whose repairs are outstanding, the repairs that have arrived, and
-	// the cannot-serve answers a relaying neighbour returned instead of one.
+	// baselines whose repairs are outstanding, the repair arriving in chunks and
+	// those that have arrived, and the cannot-serve answers a relaying neighbour
+	// returned instead of one.
 	manifests [][]byte
+	shards    network.SnapshotAssembly
 	shardSets [][]byte
 	unserved  [][]byte
 	awaiting  []*awaitingRepair
@@ -392,18 +394,21 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	}
 
 	body, err := snapshot.EncodeShardSet(set)
-	if err != nil || !c.repairIsWorthSending(len(body)) {
-		// A repair this wide is not repairing anything: past the frame bound it does
-		// not fit, and past the measured keyframe size the whole world is smaller.
+	var chunks [][]byte
+	if err == nil && c.repairIsWorthSending(len(body)) {
+		chunks, err = network.EncodeSnapshotChunksOf(set.Header.Run, req.Tick, body, parameter.SnapshotCorrectionChunkBytes)
+	}
+	if err != nil || chunks == nil {
+		// A repair wider than the world it stands in for is not repairing anything.
 		// The peer is dropped out of the exchange for a few publications and served
-		// whole bodies, then tried again — the condition is the world's rather than
+		// whole bodies, then tried again: the condition is the world's rather than
 		// the peer's and it ends when the storm does.
 		m.KeyframeFallback.Add(1)
 		c.widen(pending.from)
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
-	c.sendOwed(port, pending.from, owedSend{typ: network.MsgStateShard, frames: [][]byte{body}, tick: req.Tick})
+	c.sendOwed(port, pending.from, owedSend{typ: network.MsgStateShard, frames: chunks, tick: req.Tick})
 	m.ShardsSent.Add(int64(pages))
 	m.ShardBytesSent.Add(int64(len(body)))
 	c.publishMu.Lock()
@@ -425,17 +430,16 @@ func (c *Corrections) widen(id uint32) {
 }
 
 // repairIsWorthSending reports whether a repair of this size is still cheaper than
-// the whole world it stands in for. Two bounds: SnapshotShardBytesMax is the
-// protocol's, past which a repair no longer fits one frame, and the measured
-// keyframe size is the session's, past which it has stopped being an optimisation.
+// the whole world it stands in for: the keyframe this instance has measured, or the
+// transfer ceiling where it has none, as a relay serving from retention has not.
 func (c *Corrections) repairIsWorthSending(bytes int) bool {
-	if bytes > parameter.SnapshotShardBytesMax || bytes > network.MaxPayloadSize {
-		return false
-	}
 	c.publishMu.Lock()
 	keyframe := c.sizes.Keyframe
 	c.publishMu.Unlock()
-	return keyframe == 0 || int64(bytes) < keyframe
+	if keyframe == 0 {
+		return bytes <= network.MaxSnapshotBytes
+	}
+	return int64(bytes) < keyframe
 }
 
 // countRequestedPages is how many pages a request put in play, which is the unit
@@ -973,8 +977,19 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 			}
 		}
 	case network.MsgStateShard:
-		c.selective.shardSets = keepNewest(
-			append(c.selective.shardSets, body), parameter.SnapshotCorrectionQueue)
+		// Chunked as a body is, one transfer at a time: a repair is never forwarded,
+		// so no second path brings a copy of a chunk.
+		admitted, done, err := c.selective.shards.AddChunk(body)
+		switch {
+		case err != nil:
+			c.selective.shards = network.SnapshotAssembly{}
+			c.tel.ShardsRefused.Add(1)
+		case admitted && done:
+			_, set := c.selective.shards.Result()
+			c.selective.shards = network.SnapshotAssembly{}
+			c.selective.shardSets = keepNewest(
+				append(c.selective.shardSets, set), parameter.SnapshotCorrectionQueue)
+		}
 	case network.MsgStateUnserved:
 		if len(c.selective.unserved) < parameter.SnapshotCorrectionQueue {
 			c.selective.unserved = append(c.selective.unserved, body)

@@ -164,11 +164,15 @@ func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 	}
 	set.Served = c.inst.LocalParticipant()
 	body, err := snapshot.EncodeShardSet(set)
-	if err != nil || len(body) > parameter.SnapshotShardBytesMax || len(body) > network.MaxPayloadSize {
+	var chunks [][]byte
+	if err == nil && c.repairIsWorthSending(len(body)) {
+		chunks, err = network.EncodeSnapshotChunksOf(set.Header.Run, req.Tick, body, parameter.SnapshotCorrectionChunkBytes)
+	}
+	if err != nil || chunks == nil {
 		c.sendUnserved(port, pending.from, req, "the repair is wider than a relayed answer may carry")
 		return true
 	}
-	c.sendOwed(port, pending.from, owedSend{typ: network.MsgStateShard, frames: [][]byte{body}, tick: req.Tick})
+	c.sendOwed(port, pending.from, owedSend{typ: network.MsgStateShard, frames: chunks, tick: req.Tick})
 	m := c.tel
 	m.ShardsSent.Add(int64(pages))
 	m.ShardBytesSent.Add(int64(len(body)))

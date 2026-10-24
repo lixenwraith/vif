@@ -2879,7 +2879,9 @@ func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.C
 	}
 	if c, ok := s.world.Components.Combat.GetComponent(cursor); ok {
 		p.HitPoints, p.DamageImmunity = c.HitPoints, int64(c.RemainingDamageImmunity)
-		p.DamageImmunitySpent = c.DamageImmunitySpent
+		if c.DamageImmunitySpent != ([component.CombatAttackTypeCount]uint32{}) {
+			p.DamageImmunitySpent = c.DamageImmunitySpent[:]
+		}
 	}
 	if c, ok := s.world.Components.CursorView.GetComponent(cursor); ok {
 		p.ErrorFlash, p.BurstFlash = int64(c.ErrorFlashRemaining), int64(c.BurstFlashRemaining)
@@ -3052,7 +3054,8 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	if c, ok := s.world.Components.Combat.GetPtr(cursor); ok {
 		c.HitPoints = p.HitPoints
 		c.RemainingDamageImmunity = time.Duration(p.DamageImmunity)
-		c.DamageImmunitySpent = p.DamageImmunitySpent
+		c.DamageImmunitySpent = [component.CombatAttackTypeCount]uint32{}
+		copy(c.DamageImmunitySpent[:], p.DamageImmunitySpent)
 	}
 	if c, ok := s.world.Components.CursorView.GetPtr(cursor); ok {
 		c.ErrorFlashRemaining = time.Duration(p.ErrorFlash)
