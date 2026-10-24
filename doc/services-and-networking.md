@@ -590,11 +590,12 @@ installed from a prefix.
 `MsgStateManifest` (0x28), `MsgStateRequest` (0x29) and `MsgStateShard` (0x2A) are
 the selective exchange, and they are the only three messages in this
 protocol that form a request/response pair carrying game state. A manifest is a
-compact index over the same capture a correction would have carried: the root and
-the capture header, and one summary per section once a receiver whose root differed
-asks for them with `index`. A request is a receiver's answer to one: an
-acknowledgement that the roots agreed, that ask, or the page hashes of the sections
-that did not. A shard set is the repair the second kind provokes.
+compact index over the same capture a correction would have carried: the root, the
+capture header and the partition, each section's page count where it is more than
+one. A request is a receiver's answer to one: an acknowledgement that the roots
+agreed, or the page hashes of every section of its own index under that partition.
+A shard set is the repair the second kind provokes, so a repair is one round trip
+from its root.
 
 A manifest and a request are one frame each. A shard set is chunked and paced as a
 correction body is (`SnapshotCorrectionChunkBytes`), so an epoch behind it waits one

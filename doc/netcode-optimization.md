@@ -29,9 +29,9 @@ link; a body the snapshot codec deflated passes it raw. The manifest
 is a tree — root; a section per store and per carrier; up to 64 pages a section,
 rows bucketed by a hash of their identity; rows — hashed with byte-serial FNV-1a
 over each row's JSON, and row reuse keeps the JSON and hash of each row whose owned
-copy still compares equal. Equal roots send no state. The root travels alone, so a
-first mismatch costs two round trips after it, for the index and then for the
-receiver's page hashes, before the shards arrive.
+copy still compares equal. Equal roots send no state. The root travels with its
+partition, so a mismatch costs one round trip after it, for the receiver's page
+hashes, before the shards arrive.
 
 Per simulated second a host costs 20·T_sim + R·(capture + seal + index) plus the
 bodies it serves, R being its publication rounds, and a guest 20·T_sim +
@@ -98,7 +98,7 @@ approaches:
 | Keyframes by reason — schedule, floor, request, repair wider than the keyframe, failed proof, the bodies after a fallback — and how many are encoded for how many sent | N8 |
 | Plain bytes per section of a td keyframe | N8, N9 |
 | Lock hold by part: stores, carriers, status, comparison, write, each projected tick | N10, N11 |
-| Repairs by cause: the sections carried, and whether the authority committed one of the receiver's crossings late or void since its last proof | N5, and the next divergence fix |
+| Repairs by cause: the sections carried, and whether the authority committed one of the receiver's crossings late or void since its last proof | the next divergence fix |
 | Heap by owner: retention ring, staging world, encoder caches | N9, N13 |
 
 ### 2.1 Scenarios
@@ -200,6 +200,7 @@ against a run-to-run spread of about 2%.
 | Bodies raw past the stream, codec at level 6 | 16.0 → 2.46; 0.09 | 91.3 → 10.4; 0.16 | 1,559 → 127; 0.67 | 80.8 → 62.0; 0.43 (0.13/s) | 140 → 13.6; 0.77 (none) |
 | Syncs of the cells that are set | 14.1 → 2.43; 0.09 | 80.0 → 10.4; 0.16 | 1,326 → 124; 0.64 | 88.6 → 71.1; 0.44 (0.13/s) | 175 → 60.9; 0.67 (0.13/s) |
 | Repairs chunked, bounded by the keyframe | 14.1 → 2.43; 0.09 | 80.0 → 10.3; 0.17 | 1,324 → 124; 0.62 | 76.9 → 59.7; 0.42 (0.13/s) | 189 → 73.4; 0.71 (0.13/s) |
+| The descent in one round trip | 14.6 → 2.43; 0.08 | 81.5 → 10.3; 0.16 | 1,330 → 123; 0.59 | 88.0 → 70.4; 0.40 (0.13/s) | 207 → 92.0; 0.76 (0.20/s) |
 
 - **Bodies raw, codec at level 6.** A td keyframe is 360 kB where level 1 gave 501
   and the stream's second pass over that 398: td's framed body bytes fall a fifth
@@ -221,6 +222,14 @@ against a run-to-run spread of about 2%.
   360 kB keyframe, is held by its test and waits for a run where td's storm
   provokes it. What changed in the rows: an epoch behind a repair now waits one
   4 KiB chunk rather than up to 48 kB.
+- **The descent in one round trip.** The partition on every manifest adds a fifth
+  to the manifest bytes framed (2.8 → 3.3 kB/s at two players) and nothing to the
+  wire, where it repeats; a differing root costs the receiver's whole page vector
+  up the link, 1.6 → 2.1 kB/s of ingress at td with two players. What moved: the
+  ticks a td guest projects on a repair fell from 3–8 to 1, the repair landing a
+  round trip sooner, and in a session at the site, where 6% of repairs arrived
+  after the receiver had moved past their tick, that round trip is the one that
+  was lost.
 
 ## 3. Approaches
 
@@ -232,7 +241,6 @@ In the table − lowers a cost, + raises it and · leaves it. Projections come f
 | N1 | One committed frame per link per tick | − | · | − | + ms | medium | down messages 4,444 → 300 a second at 16 players; ~40% of tower epoch bytes |
 | N2 | A binary wire codec | − | − | − | · | low, then medium | a four-move epoch 567 → ~50 B before deflate |
 | N3 | Owner syncs that carry what changed | − | · | − | · | low | syncs ~10× smaller before deflate |
-| N5 | A one-round-trip descent | · | · | ± | − | medium | a repair one round trip sooner |
 | N7 | Aligned publication rounds | − | · | · | + | low | td rounds 7.2 → ~5 a second |
 | N8 | Keyframes from cached sections | − | + | + | · | medium | keyframe deflate in proportion to the sections that moved |
 | N9 | A binary row codec | − | − | − | · | high | rows 3–10× smaller before deflate |
@@ -312,28 +320,6 @@ the payload.
   depends on which cells change every tick (heat, energy).
 - *Determinism and latency*: unchanged — a sync is still committed at one tick for
   every instance, and mirrors already lag by `NetworkSyncTicks`.
-
-### N5. A one-round-trip descent
-
-A receiver cannot send page hashes with its first answer because it does not know
-the sender's partition (`SectionSummary.Pages`). Carry the partition beside the root
-— a page exponent byte per multi-page section — and a receiver whose root differs
-answers with its whole index: every section hash, and the page hashes of every
-multi-page section under the sender's partition. The authority, or a relay from
-retention (`serveRelayed`), compares it with the retained index and answers with the
-shards: root, index, shards. The shard set then drops the summaries of sections it
-does not repair, which the receiver's own index proves — the todo's candidate.
-
-- *Latency*: a repair lands a round trip sooner — at a 150 ms round trip, three ticks
-  less to project and three fewer of divergence before it lands — and fewer requests
-  are overtaken by a newer index.
-- *Bandwidth*: the root grows by tens of bytes for every peer, a differing answer by
-  the receiver's index (a few kilobytes at td, on a minority of manifests), and the
-  index message goes. Exponents can go only to peers whose last answer differed if
-  the bytes on every manifest matter.
-- *CPU*: none new; the receiver builds those page hashes to compute its root.
-- *Projected*: matters where repairs are frequent — at td with two players 22% of
-  manifests are not answered hash-only.
 
 ### N7. Aligned publication rounds
 
@@ -484,14 +470,17 @@ Each approach lands alone, re-runs §2's matrix and updates multi-player §6.
 | Phase | Approaches | Why |
 |---|---|---|
 | 0 | §2's readings | Taken in §2.2 for bytes by kind on the wire and CPU by stage; the rest go into the same harness as an approach needs them |
-| 1 | N5, N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the repair path, then the command stream's constants for their CPU |
+| 1 | N1, N2 step 1, N7 | Low complexity, local to `internal/system/network.go`, `internal/converge` and `internal/network`: the command stream's constants for their CPU |
 | 2 | N10, N12, N8, N11's capture as a copy | CPU and lock at the map limit, on the host and the browser guest |
 | 3 | N2 step 2, N9, N13, N11's projection, N15, N14 | Formats and structure: the journal, the capture schema, retention, topology |
 
 N2's second step follows its first; N13 and the column layout build on N9; N10's
 row cache is cheaper on N9's rows.
 
-**Decided, on §2.3.** A repair is chunked and paced as a body is and bounded by the
+**Decided, on §2.3.** The descent is one round trip (N5): the manifest carries its
+partition, a receiver whose root differs answers with the page hashes of every
+section under it, and the index message is gone; the shard set still carries every
+section summary. A repair is chunked and paced as a body is and bounded by the
 keyframe it stands in for (N6): the measured one at the authority, the transfer
 ceiling at a relay, which measures none
 ([todo](todo.md#bound-a-relayed-repair-by-a-keyframe)). Syncs carry the cells that

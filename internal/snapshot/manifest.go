@@ -16,7 +16,7 @@ import (
 // Schema. The schema says what a capture contains; this says how it is
 // partitioned and hashed. Either moving invalidates a comparison, and a receiver
 // has to be able to say which one did.
-const ManifestVersion = 2
+const ManifestVersion = 3
 
 // The section ids that are not component stores. Component store sections take
 // their ids from engine.SharedWorldStoreNames, which is generated beside the
@@ -100,10 +100,11 @@ type CorrectionManifest struct {
 	// Owner-authored cursor cells are excluded for all participants (D-13).
 	Authority uint32 `json:"authority"`
 
-	// Sections is every section, or none: a publication leads with the root alone,
-	// because a receiver that agrees needs nothing more, and one that does not asks
-	// for them. Never a subset, which would be meaningful only against another index.
-	Sections []SectionSummary `json:"sections,omitempty"`
+	// Partition is the page count of each section with more than one page; a
+	// section absent from it has one. A receiver whose root differs answers with its
+	// page hashes under it, so the descent is one round trip, and a root that agrees
+	// costs the partition and nothing more.
+	Partition map[string]uint32 `json:"partition,omitempty"`
 
 	// Next is the tick the sender means to index for this receiver next, outside the
 	// root: the receiver reads its own world there as that tick closes, so an index
@@ -124,8 +125,9 @@ type section struct {
 // built it. Only the CorrectionManifest half ever reaches the wire.
 type Manifest struct {
 	summary   CorrectionManifest
+	list      []SectionSummary // every section, in the order the root absorbs them
 	sections  map[string]*section
-	index     map[string]int // section id to its slot in summary.Sections
+	index     map[string]int // section id to its slot in list
 	authority uint32
 	enc       *Encoder // what built it, which a repair's rebuild reuses
 }
@@ -280,18 +282,31 @@ func (m *Manifest) rebuild(cap SharedCapture, ids []string) error {
 	}
 	for _, sec := range secs {
 		m.sections[sec.ID] = sec
-		m.summary.Sections[m.index[sec.ID]] = sec.SectionSummary
+		m.list[m.index[sec.ID]] = sec.SectionSummary
+		m.partition(sec.SectionSummary)
 	}
 	m.summary.Header = cap.Header
-	m.summary.Root = manifestRoot(cap.Header, m.authority, m.summary.Sections)
+	m.summary.Root = manifestRoot(cap.Header, m.authority, m.list)
 	return nil
+}
+
+// partition records s's page count on the wire half where it is more than one.
+func (m *Manifest) partition(s SectionSummary) {
+	if s.Pages > 1 {
+		if m.summary.Partition == nil {
+			m.summary.Partition = make(map[string]uint32)
+		}
+		m.summary.Partition[s.ID] = s.Pages
+	} else {
+		delete(m.summary.Partition, s.ID)
+	}
 }
 
 // Adopt rebinds the index to the header of a world it already describes: the root
 // absorbs only session identity, which a proved-equal root already shares.
 func (m *Manifest) Adopt(h CaptureHeader) {
 	m.summary.Header = h
-	m.summary.Root = manifestRoot(h, m.authority, m.summary.Sections)
+	m.summary.Root = manifestRoot(h, m.authority, m.list)
 }
 
 // Root returns the manifest's root hash.
@@ -308,12 +323,15 @@ func (m *Manifest) section(id string) (*section, bool) {
 
 // Sections lists the index's sections in the order the root absorbs them.
 func (m *Manifest) Sections() []string {
-	out := make([]string, 0, len(m.summary.Sections))
-	for _, s := range m.summary.Sections {
+	out := make([]string, 0, len(m.list))
+	for _, s := range m.list {
 		out = append(out, s.ID)
 	}
 	return out
 }
+
+// Summaries is every section's summary in root order, which a shard set carries.
+func (m *Manifest) Summaries() []SectionSummary { return m.list }
 
 // SectionRows returns one section's canonical rows, for callers auditing what the
 // index commits to. The rows are the manifest's own; treat them as read-only.

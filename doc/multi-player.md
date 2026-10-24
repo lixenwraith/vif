@@ -405,16 +405,18 @@ each direct peer according to that link's cadence:
 
 1. Build a deterministic manifest over component stores, allocator values, RNG
    streams, declared system state, status surface, and shared FSM state.
-2. Send the root and header alone.
+2. Send the root and header, with the partition: the page count of each section
+   paged more than once.
 3. If the receiver produces the same root, acknowledge a hash-only correction and
    install the authority header without transferring state. That answer proves the
    receiver holds the authority's world, so while every peer has proved it within
    half the convergence floor the keyframe cadence sends none. A participant behind
    a relay proves it in the relay's own answer.
-4. Otherwise the receiver asks for the section summaries, compares page hashes only
-   in differing sections, and the authority returns the pages that differ, chunked
-   as a body is. A repair wider than the keyframe it stands in for is not sent: the
-   peer gets the keyframe, and whole bodies for a few publications.
+4. Otherwise the receiver answers with the page hashes of every section of its own
+   index under that partition, and the authority returns the pages that differ,
+   chunked as a body is: one round trip from the root to the repair. A repair wider
+   than the keyframe it stands in for is not sent: the peer gets the keyframe, and
+   whole bodies for a few publications.
 5. Validate every page hash, reconstruct the authority root, stage the result and
    commit it between ticks. A set is one baseline, applied whole or not at all.
 6. Refuse stale, foreign, malformed, or unverifiable repairs. One that fails its
@@ -463,10 +465,8 @@ request naming a tick the authority has let go was overtaken by the index since 
 is not answered unless it asks for a whole world, nor is one naming a tick the peer
 has since proved it holds, whose answer the receiver would refuse as outgrown — as
 it refuses an index or a repair no newer than the world it last proved, rather than
-comparing it off its tick. A section index for a tick a receiver is awaiting a
-repair for is answered beside a newer root, so a cadence shorter than the descent
-does not strand it. Indexes to a peer are spaced by its round trip, so a descent's
-second request finds its tick retained. A link that
+comparing it off its tick. Indexes to a peer are spaced by its round trip, so a
+descent's request finds its tick retained. A link that
 cannot deliver a keyframe within `SnapshotKeyframeDrain` takes none on schedule: it
 meets the floor with proofs, takes a whole world on request and reports
 constrained. Echoes carry the answering side's clock, and delivery rate is
@@ -475,10 +475,10 @@ timed on it, since echoes a stalled path releases together arrive microseconds a
 ### 4.1 The playout buffer
 
 The paths deliver worlds of different ages: a whole body is one one-way delay old,
-a selective repair five — the root, then a round trip each for the index and the
-page hashes. Adopting each capture's tick would step the clock by up to four
-one-way delays and every shared actor with it, so a capture behind the clock is
-projected (§3.3) and moves nothing; the buffer is for the other direction.
+a selective repair three — the root, then a round trip for the page hashes.
+Adopting each capture's tick would step the clock by up to two one-way delays and
+every shared actor with it, so a capture behind the clock is projected (§3.3) and
+moves nothing; the buffer is for the other direction.
 
 A correction describing a tick this instance has not reached, within
 `NetworkHoldTicks`, is held until it has. A manifest ahead of the clock is held the

@@ -629,6 +629,31 @@ returns to.
 
 ## Netcode
 
+### Find the status cell that differs after a Shared FSM transition
+
+- Priority: P2
+- Affected files: `internal/app/capture.go`, `internal/snapshot/surface.go`
+
+In a session at the site (a terminal relaying for its bot, an Android and a browser
+guest, a 112 ms round trip) the bot was repaired in the `status` section twice in
+400 ticks, 22 cells each time, seven ticks after a main-region transition
+(`MainGoldActive → MainDecayWait`, `MainDecayWait → MainDecayWave`), and the terminal's
+digest mismatched on `status` at the first. A status key that passes `SharedKey`
+differs between instances for a few ticks around a transition, and a page repair of
+1.7 kB answers it each time. Reproduce with a host and a guest over a transition and
+compare the status pages; deny the key, or derive it from the tick.
+
+### Price the log's and journal's 50 ms sync
+
+- Priority: P3
+- Affected files: `internal/vlog/vlog.go`
+
+With `-log DEBUG` and a journal open, the same session's terminal ran 14% system CPU
+and about 6,000 block writes a second (`proc.io_write_s`) for some 80 kB/s of
+records: both files sync every `flushIntervalMs` (50 ms). The journal's crash
+promise needs it; the log's does not. Measure a log that syncs on its own cadence,
+or only on WARN and above.
+
 ### Bound a relayed repair by a keyframe
 
 - Priority: P3
