@@ -34,8 +34,9 @@ var deniedSharedPrefix = []string{
 	"death.", "timer.",
 	// Combat resolves targets in both domains from one set of counters, so the
 	// whole group is a mixed aggregate; the shared combat digest carries its
-	// shared half.
-	"combat.",
+	// shared half. Explosion answers requests from both: a player-domain death's
+	// burst is counted where it happens.
+	"combat.", "explosion.",
 	// Kill tallies mix shared species with the player-domain drain.
 	"kills.",
 	// The corpus is player domain: each instance reads its own roots and nothing

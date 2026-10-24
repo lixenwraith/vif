@@ -189,3 +189,4 @@ until its rename to vif in September 2026.
 - Journals across resets, then opened and closed mid-run
 - Windows play notes; a README for each release archive
 - Netcode design: bodies raw past the link, bundled links, one-trip descent, leaf echo
+- Netcode phase 1 closed: the divergence harness, a lead that learns a spike, the wire digest retired

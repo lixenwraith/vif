@@ -124,6 +124,10 @@ also writes the event registry, only when an event or manifest definition change
 - Do not run the full `go test ./...`, `go vet ./...` or `script/test.sh all`
   sweeps; they cost more time than they catch. The user runs them.
 - Do not run `-race` tests unless investigating a known/suspected race issue.
+- A change to pacing, the lead, the compared surface or a shared system's state
+  runs the divergence harness over its four shapes before and after (netcode
+  design §3.5) and reads the late counts, which are robust, over pages repaired,
+  which are chaotic.
 
 ## Deployment facts
 

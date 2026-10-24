@@ -183,10 +183,15 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventSpeciesKilled:
+		// Only a tracked death completes an evaluation, and the list is compared: a
+		// player-domain drain's death pending on one instance alone would read as a
+		// divergence.
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
 			s.mu.Lock()
-			s.pendingDeaths = append(s.pendingDeaths, *payload)
-			s.buffers.Observe(1, len(s.pendingDeaths))
+			if _, tracked := s.tracking[payload.Entity]; tracked {
+				s.pendingDeaths = append(s.pendingDeaths, *payload)
+				s.buffers.Observe(1, len(s.pendingDeaths))
+			}
 			s.mu.Unlock()
 		}
 

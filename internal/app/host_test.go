@@ -25,7 +25,6 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
-	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
 func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
@@ -1587,118 +1586,6 @@ func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
 		if centers != want {
 			t.Fatalf("participant %d has %d missile visual centers, want %d", i+1, centers, want)
 		}
-	}
-}
-
-// TestRuntimeDigestIsADriftGaugeRatherThanAVerdict: a digest mismatch is counted and
-// the disagreeing surface named, never escalated to a DESYNC or DIVERGED state. That
-// verdict says two instances re-deriving one world lost an artifact for good, which
-// does not hold for a guest that predicts and is corrected.
-func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
-	t.Parallel()
-	apps := meshSession(t, 0xD165E57, 2, [][2]int{{1, 2}})
-	localCursors(t, apps)
-
-	var target core.Entity
-	var original component.PositionComponent
-	for range 8 {
-		apps[0].World().RunSafe(func() {
-			for _, e := range apps[0].World().Components.Header.Entities() {
-				if e.Domain() == core.DomainShared {
-					target = e
-					original, _ = apps[0].World().Positions.GetPosition(e)
-					break
-				}
-			}
-		})
-		if target != 0 {
-			break
-		}
-		tickAll(apps)
-	}
-	if target == 0 {
-		t.Fatal("no shared composite available for the drift probe")
-	}
-
-	apps[0].World().RunSafe(func() {
-		p := original
-		p.X++
-		apps[0].World().Positions.SetPosition(target, p)
-	})
-	for range 3*parameter.NetworkDigestTicks + 2 {
-		tickAll(apps)
-	}
-
-	for i, a := range apps {
-		reg := a.World().Resources.Status
-		if reg.Ints.Get("network.digest_mismatches").Load() == 0 {
-			t.Fatalf("participant %d counted no mismatch against a corrupted position", i+1)
-		}
-		if got := reg.Strings.Get("network.drift_part").Load(); got != "positions" {
-			t.Fatalf("participant %d named %q as the drifting surface, want positions", i+1, got)
-		}
-		if reg.Ints.Get("network.drift_tick").Load() == 0 {
-			t.Fatalf("participant %d named no tick for the drift it reported", i+1)
-		}
-	}
-
-	// No sync state is published under another name either: a session cannot enter
-	// a state the next correction does not leave, so there is none to report.
-	for _, key := range []string{"network.sync_state", "network.sync_part", "network.sync_records"} {
-		if apps[0].World().Resources.Status.Strings.Has(key) {
-			t.Fatalf("%s is still registered; DESYNC and DIVERGED were retired", key)
-		}
-	}
-	if apps[0].World().Resources.Status.Bools.Has("network.diverged") {
-		t.Fatal("network.diverged is still registered; DESYNC and DIVERGED were retired")
-	}
-
-	// And the authority closes it: a correction repairs a disagreement, including
-	// one nothing in the simulation caused.
-	advance := func() { tickAll(apps) }
-	want := deliverCorrection(t, apps[0], apps[1:], advance)
-	assertCorrected(t, want, apps[1], "guest after a corrupted position")
-}
-
-// TestSharedSnapshotExcludesLocalSchedulerTiming pins what the live digest needs and
-// the manual-clock harness cannot produce: two real schedulers have different wall
-// origins and miss different deadlines while completing the same absolute tick. The
-// set is narrow — engine.SimTime derives elapsed game time from the tick, so it is
-// compared, and so is the gold deadline a joiner installs rather than re-derives.
-func TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, 0xD165E58, 120, 40)
-	b := mustHeadless(t, 0xD165E58, 120, 40)
-	defer a.Close()
-	defer b.Close()
-	tickUntilCursor(t, a)
-	tickUntilCursor(t, b)
-
-	a.World().Resources.Status.Ints.Get("engine.tick_slips").Store(3)
-	assertSharedParity(t, a, b, 0)
-
-	// The elapsed-game-time half pins game time to the tick: read from a pacing
-	// clock, every shared reader measuring now.Sub(stored), such as the quasar's
-	// speed step, would cross its threshold on a different tick per instance.
-	elapsed := func(x *App) int64 {
-		return x.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Load()
-	}
-	if elapsed(a) != elapsed(b) {
-		t.Fatalf("elapsed game time %d vs %d at the same tick", elapsed(a), elapsed(b))
-	}
-	if want := int64(a.World().Resources.Game.State.GetGameTicks()) *
-		parameter.GameUpdateInterval.Milliseconds(); elapsed(a) != want {
-		t.Fatalf("elapsed game time %d, want tick * interval = %d", elapsed(a), want)
-	}
-
-	// The key is inside the compared surface, so a clock that drifts back onto the
-	// wall fails here rather than surfacing as a kinetics digest mismatch minutes in.
-	a.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Store(17_000)
-	if !snapshot.SharedKey("time.game_elapsed_ms") {
-		t.Fatal("time.game_elapsed_ms is excluded from the shared surface again")
-	}
-	if _, _, _, differs := snapshot.FirstDiff(a.SnapshotShared(), b.SnapshotShared()); !differs {
-		t.Fatal("a forged elapsed game time did not move the shared snapshot")
 	}
 }
 

@@ -93,33 +93,28 @@ type NetworkSystem struct {
 	statState    *atomic.Int64
 	statDrop     *atomic.Int64
 
-	statDeferred       *atomic.Int64
-	statAppliedLocal   *atomic.Int64
-	statAppliedPeer    *atomic.Int64
-	statLate           *atomic.Int64
-	statDelayTicks     *atomic.Int64
-	statRanWithout     *atomic.Int64
-	statPeerLag        *atomic.Int64
-	statPeerArtifacts  *atomic.Int64
-	statPeerApplied    *atomic.Bool
-	statPeers          *atomic.Int64
-	statConnected      *atomic.Bool
-	statConnection     *status.AtomicString
-	statMapLatched     *atomic.Bool
-	statHostLost       *atomic.Bool
-	statLostIn         *atomic.Int64
-	statLostOut        *atomic.Int64
-	statSentKind       [network.KindCount]*atomic.Int64
-	statWireOut        *atomic.Int64
-	statWireIn         *atomic.Int64
-	statRelayed        *atomic.Int64
-	statDuplicates     *atomic.Int64
-	statDigestMismatch *atomic.Int64
+	statDeferred      *atomic.Int64
+	statAppliedLocal  *atomic.Int64
+	statAppliedPeer   *atomic.Int64
+	statLate          *atomic.Int64
+	statDelayTicks    *atomic.Int64
+	statRanWithout    *atomic.Int64
+	statPeerLag       *atomic.Int64
+	statPeerArtifacts *atomic.Int64
+	statPeerApplied   *atomic.Bool
+	statPeers         *atomic.Int64
+	statConnected     *atomic.Bool
+	statConnection    *status.AtomicString
+	statMapLatched    *atomic.Bool
+	statHostLost      *atomic.Bool
+	statLostIn        *atomic.Int64
+	statLostOut       *atomic.Int64
+	statSentKind      [network.KindCount]*atomic.Int64
+	statWireOut       *atomic.Int64
+	statWireIn        *atomic.Int64
+	statRelayed       *atomic.Int64
+	statDuplicates    *atomic.Int64
 
-	digestHistory  [parameter.NetworkEpochWindow]stateDigest
-	pendingDigest  [participantSlots]stateDigest
-	statDriftPart  *status.AtomicString
-	statDriftTick  *atomic.Int64
 	statPreInstall *atomic.Int64
 	statSuperseded *atomic.Int64
 
@@ -199,8 +194,10 @@ type NetworkSystem struct {
 	paceSettled uint64
 
 	// pathAge is the age at which the authority committed the newest of this
-	// instance's own epochs, and pathEpoch which one; see noteOwnCommit.
+	// instance's own epochs, pathEpoch which one, and pathWorst the worst age a copy
+	// returned since the lead last read one; see noteOwnCommit.
 	pathAge   int64
+	pathWorst int64
 	pathEpoch uint64
 
 	// downAt is, per link, the tick a raw artifact last arrived on it or the
@@ -272,22 +269,6 @@ func (s *NetworkSystem) textStat(reg *status.Registry, key string) *status.Atomi
 	c := reg.Strings.Get(key)
 	s.resetStrings = append(s.resetStrings, c)
 	return c
-}
-
-// stateDigest names one completed shared-world state. Valid distinguishes a real
-// run-zero/tick-zero hash from an empty ring slot.
-type stateDigest struct {
-	Run       uint64 `json:"run"`
-	Tick      uint64 `json:"tick"`
-	Hash      uint64 `json:"hash"`
-	Positions uint64 `json:"positions"`
-	Kinetics  uint64 `json:"kinetics"`
-	Combat    uint64 `json:"combat"`
-	Context   uint64 `json:"context"`
-	Status    uint64 `json:"status"`
-	Surface   uint64 `json:"surface"`
-
-	Valid bool `json:"-"`
 }
 
 // epochWindow admits each source epoch once within NetworkEpochWindow.
@@ -374,8 +355,8 @@ func (w *window) newest() uint64 { return w.high }
 
 // participantSlots sizes every array this system indexes by participant identity.
 // The coordinator hands out 1..MaxPlayers+1 and never zero; one name for every
-// declaration keeps a short array from silently dropping the epochs, corrections,
-// digests and departure of the identity at the top of the range.
+// declaration keeps a short array from silently dropping the epochs, corrections
+// and departure of the identity at the top of the range.
 const participantSlots = parameter.MaxPlayers + 2
 
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick,
@@ -435,9 +416,6 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statWireIn = s.intStat(reg, "network.wire_bytes_in")
 	s.statRelayed = s.intStat(reg, "network.relay_forwarded")
 	s.statDuplicates = s.intStat(reg, "network.relay_duplicates")
-	s.statDigestMismatch = s.intStat(reg, "network.digest_mismatches")
-	s.statDriftPart = s.textStat(reg, "network.drift_part")
-	s.statDriftTick = s.intStat(reg, "network.drift_tick")
 	s.statRefusedTick = s.intStat(reg, "network.artifacts_refused_tick")
 	s.statScheduleFull = s.intStat(reg, "network.artifacts_schedule_full")
 	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
@@ -494,8 +472,6 @@ func (s *NetworkSystem) Init() {
 	s.pathAge, s.pathEpoch = 0, 0
 	s.downAt = [participantSlots]uint64{}
 	s.leadCount, s.leadPushed = 0, 0
-	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
-	s.pendingDigest = [participantSlots]stateDigest{}
 	s.snapshot = network.SnapshotAssembly{}
 
 	// Held derivations go for the reason the replay suffix below does: a reward the
@@ -749,7 +725,6 @@ func (s *NetworkSystem) forgetParticipant(participant uint32) {
 // session's. Its own crossings still apply. Caller holds the world lock.
 func (s *NetworkSystem) LeaveSession() {
 	s.states = s.states[:0] // owner syncs are other participants'; an own one is only forwarded
-	s.pendingDigest = [participantSlots]stateDigest{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	local := s.localSource
@@ -1567,7 +1542,6 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 			s.world.LatchSession()
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
 			dropped := s.reportDisconnect(uint32(in.Peer), p.PeerCount())
-			s.forgetDigestPeer(uint32(in.Peer))
 			s.noticeDeparture(uint32(in.Peer), dropped)
 		case network.InboundMessage:
 			if r := s.world.Resources.Network; r != nil && in.Msg != nil && int(in.Peer) < len(r.Ingress) {
@@ -1578,8 +1552,7 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 	}
 }
 
-// reportDisconnect names link loss when it happens, which a digest cannot: once the
-// edge is gone nothing on it sends a mismatching one. Losing the authority is
+// reportDisconnect names link loss when it happens. Losing the authority is
 // called out apart on a guest, which plays on from the last authoritative state
 // until a succession settles. It reports whether the link was a seat this run
 // dropped.
@@ -1612,13 +1585,6 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) (dropped 
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
 	return false
-}
-
-func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
-	if peer == 0 || int(peer) >= len(s.pendingDigest) {
-		return
-	}
-	s.pendingDigest[peer] = stateDigest{}
 }
 
 // noticeDeparture changes no shared cursor: only a direct neighbour sees a lost
@@ -1776,8 +1742,8 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 		s.world.Resources.Config.CropOnResize && latched)
 }
 
-// dispatchMessage admits the three steady-state message kinds the domain model
-// defines: the D-3 artifact epoch, D-13 owner-authored sync and D-11 parity digest.
+// dispatchMessage admits the steady-state message kinds the domain model defines:
+// the D-3 artifact epoch and the D-13 owner-authored sync.
 // Raw participant input is not one of them — a peer sends the resolved artifact,
 // never the keystroke that produced it — so an unrecognised type is counted and
 // discarded rather than translated.
@@ -1801,8 +1767,6 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 		if err != nil {
 			s.statDrop.Add(1)
 		}
-	case network.MsgStateDigest:
-		s.receiveStateDigest(from, msg.Payload)
 	case network.MsgDisconnect:
 		s.receiveDeparture(from, msg.Payload)
 	case network.MsgStateCorrection:
@@ -2002,103 +1966,6 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 	}
 	s.sendOwn(p, network.MsgEvent, body)
 	s.statSent.Add(int64(len(pending)))
-	if completedTick%parameter.NetworkDigestTicks == 0 {
-		s.sendStateDigest(p, completedTick)
-	}
-}
-
-// sendStateDigest publishes one completed-tick hash to direct neighbours. Digest
-// messages need no mesh flood: if each edge agrees, the connected graph agrees.
-func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint64) {
-	r := s.world.Resources.Network
-	if r == nil || r.SharedDigest == nil {
-		return
-	}
-	// Digests are diagnostic: normal prediction differences do not justify sending
-	// per-record hashes. Detailed comparisons remain available to offline tools.
-	digest := r.SharedDigest(false)
-	sample := stateDigest{
-		Run:       s.world.Resources.Event.Queue.Stamp().Run,
-		Tick:      completedTick,
-		Hash:      digest.Hash,
-		Positions: digest.Positions,
-		Kinetics:  digest.Kinetics,
-		Combat:    digest.Combat,
-		Context:   digest.Context,
-		Status:    digest.Status,
-		Surface:   digest.Surface,
-		Valid:     true,
-	}
-	s.recordStateDigest(sample)
-	body, err := json.Marshal(sample)
-	if err != nil {
-		s.statDrop.Add(1)
-		return
-	}
-	p.Broadcast(uint8(network.MsgStateDigest), body)
-}
-
-// receiveStateDigest compares immediately when this tick is already in local
-// history, or holds the peer sample until the local Flush reaches it.
-func (s *NetworkSystem) receiveStateDigest(from uint32, body []byte) {
-	if from == 0 || int(from) >= len(s.pendingDigest) {
-		s.statDrop.Add(1)
-		return
-	}
-	var remote stateDigest
-	if err := json.Unmarshal(body, &remote); err != nil {
-		s.statDrop.Add(1)
-		return
-	}
-	remote.Valid = true
-	local := s.digestHistory[remote.Tick%uint64(len(s.digestHistory))]
-	if local.Valid && local.Run == remote.Run && local.Tick == remote.Tick {
-		s.compareStateDigest(from, local, remote)
-		return
-	}
-	s.pendingDigest[from] = remote
-}
-
-func (s *NetworkSystem) recordStateDigest(local stateDigest) {
-	s.digestHistory[local.Tick%uint64(len(s.digestHistory))] = local
-	for peer := 1; peer < len(s.pendingDigest); peer++ {
-		remote := s.pendingDigest[peer]
-		if !remote.Valid || remote.Run != local.Run || remote.Tick != local.Tick {
-			continue
-		}
-		s.pendingDigest[peer] = stateDigest{}
-		s.compareStateDigest(uint32(peer), local, remote)
-	}
-}
-
-// Digest disagreement is a gauge under D-11, not a failure verdict: guests
-// predict between authoritative corrections.
-func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDigest) {
-	if local.Hash == remote.Hash {
-		return
-	}
-	s.statDigestMismatch.Add(1)
-	s.statDriftPart.StoreIfChanged(digestDifference(local, remote))
-	s.statDriftTick.Store(int64(local.Tick))
-}
-
-func digestDifference(local, remote stateDigest) string {
-	switch {
-	case local.Positions != remote.Positions:
-		return "positions"
-	case local.Kinetics != remote.Kinetics:
-		return "kinetics"
-	case local.Combat != remote.Combat:
-		return "combat"
-	case local.Context != remote.Context:
-		return "context"
-	case local.Status != remote.Status:
-		return "status"
-	case local.Surface != remote.Surface:
-		return "snapshot"
-	default:
-		return "combined"
-	}
 }
 
 // scheduleCrossings admits one production epoch. The authority commits a guest's
@@ -2567,6 +2434,7 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		return
 	}
 	target := s.ownLead()
+	s.pathWorst = 0
 	if s.leadCount == 0 {
 		s.leadOf(r.BarrierDelayTicks) // the lead in force is the window's first reading
 	}
@@ -2582,8 +2450,10 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 // ownLead is this tick's reading of the lead: the age at which the authority
 // committed this instance's newest epoch, which is the up path and the clock
 // offset measured where they are paid, plus a tick for the authority to relay the
-// crossing. Until an epoch has come back the default stands; the authority waits
-// one tick. The reading reaches a participant behind a relay on the same copy.
+// crossing. A spike on a stream holds a burst of epochs that return in one tick,
+// so the worst age since the last reading counts, not the newest alone. Until an
+// epoch has come back the default stands; the authority waits one tick. The
+// reading reaches a participant behind a relay on the same copy.
 func (s *NetworkSystem) ownLead() uint64 {
 	if s.participantID() == s.authorityParticipant() {
 		return parameter.NetworkBarrierMinDelayTicks
@@ -2591,12 +2461,13 @@ func (s *NetworkSystem) ownLead() uint64 {
 	if s.pathEpoch == 0 {
 		return parameter.NetworkBarrierDelayTicks
 	}
-	ticks := s.pathAge + parameter.NetworkRelaySlackTicks
+	ticks := max(s.pathAge, s.pathWorst) + parameter.NetworkRelaySlackTicks
 	return uint64(min(max(ticks, parameter.NetworkBarrierMinDelayTicks), parameter.NetworkBarrierMaxDelayTicks))
 }
 
 // noteOwnCommit records an own epoch returned committed, reporting whether this is
-// its first copy, and takes the newest one's age at commit as the lead's reading.
+// its first copy, and takes the newest one's age at commit, and the worst since
+// the last reading, as the lead's.
 func (s *NetworkSystem) noteOwnCommit(batch event.WireBatch) bool {
 	s.mu.Lock()
 	fresh := s.ownCommitted.admit(batch.ProducedTick, parameter.NetworkSequenceWindow)
@@ -2604,6 +2475,7 @@ func (s *NetworkSystem) noteOwnCommit(batch event.WireBatch) bool {
 	if batch.ProducedTick > s.pathEpoch {
 		s.pathEpoch, s.pathAge = batch.ProducedTick, batch.Age
 	}
+	s.pathWorst = max(s.pathWorst, batch.Age)
 	return fresh
 }
 
@@ -3112,8 +2984,6 @@ type networkState struct {
 	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
 	states                                     []pendingState
 	departed, expiring                         [participantSlots]bool
-	digestHistory                              [parameter.NetworkEpochWindow]stateDigest
-	pendingDigest                              [participantSlots]stateDigest
 	suffix                                     []localCrossing
 	paceSamples                                [parameter.NetworkPaceWindow]int64
 	paceCount                                  int
@@ -3139,7 +3009,7 @@ func (s *NetworkSystem) CopyState() any {
 		appliedPeerSeq: s.appliedPeerSeq, downAt: s.downAt, relay: s.relay, snapshotFences: slices.Clone(s.snapshotFences),
 		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
 		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed, expiring: s.expiring,
-		digestHistory: s.digestHistory, pendingDigest: s.pendingDigest, suffix: slices.Clone(s.suffix),
+		suffix:      slices.Clone(s.suffix),
 		paceSamples: s.paceSamples, paceCount: s.paceCount, pathAge: s.pathAge,
 		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
 		leadWindow: s.leadWindow, leadCount: s.leadCount, leadPushed: s.leadPushed,
@@ -3167,7 +3037,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
 	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
 	s.expiring = c.expiring
-	s.digestHistory, s.pendingDigest, s.suffix = c.digestHistory, c.pendingDigest, slices.Clone(c.suffix)
+	s.suffix = slices.Clone(c.suffix)
 	s.paceSamples, s.paceCount, s.pathAge = c.paceSamples, c.paceCount, c.pathAge
 	s.paceLatest, s.paceKnown, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceSettled, c.pathEpoch
 	s.leadWindow, s.leadCount, s.leadPushed = c.leadWindow, c.leadCount, c.leadPushed
