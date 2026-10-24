@@ -108,7 +108,14 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 	cancel()
 	if err != nil {
 		var refused *network.Refusal
-		if !errors.As(err, &refused) && !errors.Is(err, errSessionUnroutable) {
+		switch {
+		case errors.As(err, &refused):
+		case errors.Is(err, errSessionUnroutable):
+			// Which check found the pod out of reach is for the log; the dialer is
+			// told only that it is.
+			r.log.Warn("session unroutable", "session", id, "error", err)
+			err = errSessionUnroutable
+		default:
 			r.log.Error("route session", "session", id, "error", err)
 			err = errors.New("could not resolve the session")
 		}
