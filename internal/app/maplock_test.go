@@ -113,7 +113,7 @@ func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
 		t.Fatalf("host session: %v", err)
 	}
 	host.Tick(1)
-	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host)); err != nil {
+	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host), 0); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
 	assertSharedParity(t, host, guest, 0)

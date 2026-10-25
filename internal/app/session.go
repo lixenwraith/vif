@@ -1348,7 +1348,7 @@ func (a *App) startJoinSession(signals <-chan os.Signal) error {
 	}
 	a.showJoinStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)",
 		cap.Header.Tick, len(body)))
-	if err := a.JoinSessionAt(final, cap); err != nil {
+	if err := a.JoinSessionAt(final, cap, len(body)); err != nil {
 		return fmt.Errorf("join roster: %w", err)
 	}
 	if err := a.pendingJoin.Ready(); err != nil {

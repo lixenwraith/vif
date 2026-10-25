@@ -552,9 +552,10 @@ link it already holds.
 - Affected files: `internal/app/snapshot_stage.go`
 - Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
-At td an install that projects nothing already holds the live lock 40–70 ms for the
-capture pair, comparison and write, and each projected tick adds up to a simulation
-tick, so a repair 16 ticks behind holds it past 100 ms. Reduce the O(E) part first.
+An answer no longer captures under the lock (netcode design §4, converged
+answers); an install still holds it 40–70 ms at td for the capture pair, the
+comparison and the write, and each projected tick adds up to a simulation tick, so
+a repair 16 ticks behind holds it past 100 ms. Reduce the O(E) part first.
 Any out-of-lock or incremental design must keep [Multi-player](multi-player.md) §3.3:
 fence membership, pending barrier crossings not fed, the ledger settled before
 projection, the journal's place and mark, and no live tick between the final
@@ -625,17 +626,6 @@ and about 6,000 block writes a second (`proc.io_write_s`) for some 80 kB/s of
 records: both files sync every `flushIntervalMs` (50 ms). The journal's crash
 promise needs it; the log's does not. Measure a log that syncs on its own cadence,
 or only on WARN and above.
-
-### Bound a relayed repair by a keyframe
-
-- Priority: P3
-- Affected files: `internal/converge/relay.go`, `internal/converge/correction.go`
-
-A repair the authority serves is bounded by the keyframe it has measured; a relay
-serving from retention measures none and bounds by `MaxSnapshotBytes`, so a widely
-diverged participant behind a relay can be sent a repair larger than the whole world
-the authority would have sent it. Record the size of the whole bodies a guest
-installs and let a relay price against the last.
 
 ### Read the cadence against a thin command stream
 

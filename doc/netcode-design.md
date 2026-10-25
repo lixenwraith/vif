@@ -144,7 +144,7 @@ round rate is its fastest peer's:
    chunked as a body is: one round trip from the root to the repair. A repair wider
    than the keyframe it stands in for is not sent: the peer gets the keyframe, and
    whole bodies for a few publications. A relay, which measures no keyframe, bounds
-   by the transfer ceiling ([todo](todo.md#bound-a-relayed-repair-by-a-keyframe)).
+   by the whole worlds it installed.
 5. Validate every page hash, reconstruct the authority root, stage the result and
    commit it between ticks. A set is one baseline, applied whole or not at all.
 6. Refuse stale, foreign, malformed, or unverifiable repairs. One that fails its

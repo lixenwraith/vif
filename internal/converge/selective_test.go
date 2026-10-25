@@ -611,4 +611,12 @@ func TestARepairTravelsInChunksAndIsBoundedByTheKeyframe(t *testing.T) {
 	if host.c.repairIsWorthSending(4 * network.MaxPayloadSize) {
 		t.Fatal("a repair wider than the keyframe was sent")
 	}
+	// A relay measures no keyframe of its own and prices against the whole world
+	// it installed, here the one the exchange opened with.
+	if guest.c.repairIsWorthSending(network.MaxSnapshotBytes / 2) {
+		t.Fatal("a relay sent a repair wider than the keyframe it installed")
+	}
+	if !guest.c.repairIsWorthSending(64) {
+		t.Fatal("a relay refused a repair narrower than the keyframe it installed")
+	}
 }

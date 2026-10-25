@@ -620,7 +620,7 @@ from its root.
 A manifest and a request are one frame each. A shard set is chunked and paced as a
 correction body is (`SnapshotCorrectionChunkBytes`), so an epoch behind it waits one
 chunk, and it is bounded by the keyframe it stands in for: the one the authority has
-measured, or the transfer ceiling at a relay, which measures none. A repair wider
+measured, or at a relay, which measures none, the whole worlds it installed. A repair wider
 than that is not a repair: the host answers it with a keyframe, which is
 self-sufficient. All three use a capture's 10-byte envelope. A shard set is deflated
 in it and passes the link raw; a manifest and a request carry the plain codec,

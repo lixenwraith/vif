@@ -1159,7 +1159,7 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 		if !c.inst.Encoder().Verify(full) {
 			return snapshot.SharedCapture{}, errors.New("correction keyframe does not match its integrity hash")
 		}
-		c.SetBaseline(full)
+		c.SetBaseline(full, len(body))
 		return full, nil
 	}
 	base, ok := c.baselineCapture()
@@ -1399,11 +1399,18 @@ func (c *Corrections) holdingThrough(tick uint64) bool {
 
 // SetBaseline records the keyframe later deltas are computed against, and the
 // tick the convergence floor is measured from.
-func (c *Corrections) SetBaseline(cap snapshot.SharedCapture) {
+func (c *Corrections) SetBaseline(cap snapshot.SharedCapture, bytes int) {
 	c.followRun()
 	c.installedMu.Lock()
 	c.installed, c.haveBase, c.keyTick = cap, true, cap.Header.Tick
 	c.installedMu.Unlock()
+	// What the whole world cost on the wire is what a relay, which measures no
+	// keyframe of its own, bounds the repairs it serves by.
+	if bytes > 0 {
+		c.publishMu.Lock()
+		c.recordSizeLocked(true, bytes)
+		c.publishMu.Unlock()
+	}
 	// A whole world is the answer to every request the selective exchange can
 	// make, so whatever this instance was waiting for it is no longer waiting.
 	c.clearKeyframeWait()
