@@ -2260,7 +2260,7 @@ func TestASuccessorOrdersWhoIsAwayByTheirWaits(t *testing.T) {
 	}
 	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
 	var order []link.PeerID
-	roster := (instance{host}).WorldRoster()
+	roster := host.instance().WorldRoster()
 	host.world.RunSafe(func() { order = host.awayOrderLocked(roster) })
 	if want := []link.PeerID{guests[1].Assigned, guests[0].Assigned}; !slices.Equal(order, want) {
 		t.Fatalf("away longest first reads %v, want %v", order, want)

@@ -364,7 +364,7 @@ func cursorCell(t *testing.T, a *App, slot uint8) component.PositionComponent {
 // replaySourceOf reaches the barrier that retains the suffix.
 func replaySourceOf(t *testing.T, a *App) replaySource {
 	t.Helper()
-	src, _ := a.replaySource()
+	src, _ := a.glue.replaySource()
 	if src == nil {
 		t.Fatal("this run has no barrier to retain a suffix")
 	}

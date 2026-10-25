@@ -1458,6 +1458,14 @@ func (a *App) activateNetworkSessionLocked() {
 	}
 }
 
+// assignedParticipant is the identity the offer assigned this run, which a world it
+// writes before its transport attaches is recorded as.
+func (a *App) assignedParticipant() uint32 {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	return uint32(a.sessionOffer.Assigned)
+}
+
 // barrierLocked reports whether this run's crossing barrier owns its crossings.
 // Caller MUST hold updateMutex.
 func (a *App) barrierLocked() bool {

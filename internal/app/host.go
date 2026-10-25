@@ -495,7 +495,7 @@ func (a *App) openSessionLocked(kept []network.RosterEntry) error {
 	// journal records the write as it records a join's, and a replay makes it.
 	journal := a.world.Resources.Event.Queue.Journal()
 	place, mark := a.Position(), journal.Mark()
-	before, err := a.captureSharedLocked()
+	before, err := a.glue.captureSharedLocked()
 	if err != nil {
 		return fmt.Errorf("host: %w", err)
 	}
@@ -564,12 +564,12 @@ func (a *App) openSessionLocked(kept []network.RosterEntry) error {
 	// The run takes its write as an install takes it, journal or not, so what an
 	// install derives from the world it writes (the spatial gauges, what carriers
 	// publish as they load) stands here as it does on the replay that installs it.
-	after, err := a.captureSharedLocked()
+	after, err := a.glue.captureSharedLocked()
 	if err == nil {
-		_, err = a.writeSharedLocked(after, &before, true, false)
+		_, err = a.glue.writeSharedLocked(after, &before, true, false)
 	}
 	if err == nil && journal != nil {
-		err = a.journalWritten(journal, place, mark, a.world.LocalParticipant(), a.barrierLocked(), before, after)
+		err = a.glue.journalWritten(journal, place, mark, a.world.LocalParticipant(), a.barrierLocked(), before, after)
 	}
 	if err != nil {
 		a.log.Error("session", "msg", "opened session not taken as written", "error", err.Error())
@@ -1173,7 +1173,7 @@ func (a *App) finishCatchUp(held []*link.Message, caught uint64) error {
 	a.reportJoinLag(remaining)
 	a.log.Info("session", "msg", "join caught up", "held_frames", len(held),
 		"caught_up_ticks", caught, "tick", a.Position().Tick, "lag_ticks", remaining)
-	a.telemetry.CatchUp.Store(int64(caught))
+	a.glue.telemetry.CatchUp.Store(int64(caught))
 	if remaining > parameter.NetworkJoinLagTicks {
 		return joinBehind("still %d ticks after catching up, lead is %d", remaining, parameter.NetworkJoinLagTicks)
 	}

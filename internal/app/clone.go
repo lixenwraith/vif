@@ -44,7 +44,7 @@ type checkpoint struct {
 // checkpointLocked reads a replay copy and where its driver stands, into reuse's
 // storage when one is given. Caller MUST hold updateMutex.
 func (a *App) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy) (*checkpoint, error) {
-	systems, err := a.captureSystemStatesLocked()
+	systems, err := captureSystemStatesLocked(a.world)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy)
 		queue:     a.world.Resources.Event.Queue.CopyOut(),
 		scheduler: a.scheduler.CopyOut(),
 		systems:   systems,
-		status:    a.statusCellsLocked(a.statusKeysLocked(func(string) bool { return true })),
+		status:    statusCellsLocked(a.world, statusKeysLocked(a.world, func(string) bool { return true })),
 		paused:    a.ctx.TimeCtl.IsPaused(),
 		scale:     a.ctx.TimeCtl.Scale(),
 		width:     a.ctx.Width,
@@ -116,7 +116,7 @@ func (a *App) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
 	if unknown := c.world.LoadStreams(a.world.Resources.Rand); len(unknown) > 0 {
 		return fmt.Errorf("restore: RNG streams this copy does not issue: %v", unknown)
 	}
-	savers := a.sharedStateSaversLocked()
+	savers := sharedStateSaversLocked(a.world)
 	for _, rec := range c.systems {
 		if err := savers[rec.System].LoadShared(rec.Data); err != nil {
 			return fmt.Errorf("restore %s: %w", rec.System, err)
@@ -152,7 +152,7 @@ func (a *App) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
 	if err := service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(c.content); err != nil {
 		return err
 	}
-	a.installStatusLocked(c.status)
+	installStatusLocked(a.world, c.status)
 	d.Resume(c.driver)
 	return nil
 }

@@ -15,11 +15,18 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// instance is the App as the authority protocol sees it: the world a correction is
-// read from and written to, and nothing else. Every method takes the world lock
-// itself, which is what keeps converge.Instance's contract — "never called while
-// the caller holds it" — a property of this file rather than of every call site.
-type instance struct{ a *App }
+// instance is the App as the authority protocol sees it: the correction glue over
+// its world, and beside it the run's membership, which the protocol moves. Every
+// method takes the world lock itself, which is what keeps converge.Instance's
+// contract — "never called while the caller holds it" — a property of this file
+// rather than of every call site.
+type instance struct {
+	*corrector
+	a *App
+}
+
+// instance is the run as converge reads it.
+func (a *App) instance() instance { return instance{&a.glue, a} }
 
 func (i instance) Position() event.Stamp { return i.a.Position() }
 func (i instance) Driven() bool          { return i.a.cfg.Mode.Driven() }
@@ -132,28 +139,28 @@ func (i instance) DrainOffTick() {
 	})
 }
 
-func (i instance) CaptureShared() (snapshot.SharedCapture, error) { return i.a.CaptureShared() }
-func (i instance) CaptureSharedLocked() (snapshot.SharedCapture, error) {
-	return i.a.captureSharedLocked()
+// CaptureSharedLocked is the read without its seal, for a comparison under the lock.
+func (c *corrector) CaptureSharedLocked() (snapshot.SharedCapture, error) {
+	return c.captureSharedLocked()
 }
 
 // IndexSharedLocked indexes the live world under its lock against the authority
 // and term a manifest names, copying nothing but the index's own.
-func (i instance) IndexSharedLocked(authority uint32, term network.AuthorityTerm) (*snapshot.Manifest, snapshot.SharedCapture, error) {
-	light, err := i.a.captureLightLocked()
+func (c *corrector) IndexSharedLocked(authority uint32, term network.AuthorityTerm) (*snapshot.Manifest, snapshot.SharedCapture, error) {
+	light, err := c.captureLightLocked()
 	if err != nil {
 		return nil, snapshot.SharedCapture{}, err
 	}
 	light.Header.Term = term
-	index, err := i.a.encoder.BuildLive(i.a.world, light, authority)
+	index, err := c.encoder.BuildLive(c.world, light, authority)
 	return index, light, err
 }
 
 // InstallCapture resolves a capture against the staging world, projects it to this
 // instance's tick and commits it between two ticks, reporting how far this instance
 // had drifted from the projection.
-func (i instance) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
-	staged, err := i.a.stageProved(cap)
+func (c *corrector) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
+	staged, err := c.stageProved(cap)
 	if err != nil {
 		return engine.WorldDifference{}, err
 	}
@@ -163,18 +170,15 @@ func (i instance) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDiffer
 	return staged.Difference(), nil
 }
 
-func (i instance) Encoder() *snapshot.Encoder { return &i.a.encoder }
-func (i instance) VerifyCaptureIdentity(h snapshot.CaptureHeader) error {
-	return i.a.verifyCaptureIdentity(h)
-}
+func (c *corrector) Encoder() *snapshot.Encoder { return &c.encoder }
 
 // AdoptAuthority takes a header whose world this instance already holds: the
 // barrier's fences move to it and the ledger is settled against this world, which
 // the authority has just proved is its own.
-func (i instance) AdoptAuthority(h snapshot.CaptureHeader) {
-	i.a.world.RunSafe(func() { i.a.adoptSnapshotBarrierLocked(h) })
-	i.a.confirmPredictions(h.Tick, i.a)
-	i.a.world.RunSafe(func() { i.a.telemetry.InstallTick.Store(int64(h.Tick)) })
+func (c *corrector) AdoptAuthority(h snapshot.CaptureHeader) {
+	c.world.RunSafe(func() { c.adoptSnapshotBarrierLocked(h) })
+	c.confirmPredictions(h.Tick, c.world)
+	c.world.RunSafe(func() { c.telemetry.InstallTick.Store(int64(h.Tick)) })
 }
 
 // DropParticipant closes one participant's link; a direct neighbour observes the

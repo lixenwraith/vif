@@ -736,15 +736,15 @@ func TestAnIndexReadInPlaceMatchesTheCaptures(t *testing.T) {
 			tickAll(apps)
 		}
 		guest.World().RunSafe(func() {
-			light, err := guest.captureLightLocked()
+			light, err := guest.glue.captureLightLocked()
 			if err != nil || len(light.World.Positions) != 0 {
 				t.Fatalf("round %d: light capture: err %v, %d position rows, want none", round, err, len(light.World.Positions))
 			}
-			live, err := guest.encoder.BuildLive(guest.world, light, 1)
+			live, err := guest.glue.encoder.BuildLive(guest.world, light, 1)
 			if err != nil {
 				t.Fatalf("round %d: live index: %v", round, err)
 			}
-			cap, err := guest.captureSharedLocked()
+			cap, err := guest.glue.captureSharedLocked()
 			if err != nil {
 				t.Fatalf("round %d: capture: %v", round, err)
 			}

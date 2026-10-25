@@ -390,7 +390,7 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 	if err := moved.InstallShared(early); err != nil {
 		t.Fatalf("install early: %v", err)
 	}
-	diff, err := moved.reconcileShared(late)
+	diff, err := moved.glue.reconcileShared(late)
 	if err != nil {
 		t.Fatalf("reconcile late: %v", err)
 	}

@@ -1127,14 +1127,17 @@ the last frame flushed.
 `internal/app` is 33,000 lines, 11,500 of them production code, and `App` is
 the receiver of nearly every method: session hosting and joining (`session.go`,
 `host.go`, `join.go`, `relay.go`, `seat.go`, `claim.go`), replay and its
-checkpoints (`play.go`, `clone.go`, `replay.go`, `replay_suffix.go`,
-`journal.go`), the correction glue (`converge.go`, `capture.go`,
-`snapshot_stage.go`), the loops (`loop.go`, `script.go`), presentation and
-configuration (`app.go`, `config.go`, `presentation*.go`, `audio*.go`) and the
-dedicated host (`serve.go`, `probe.go`). The boundary that already exists is the
-one to extend: `converge.Instance` is the whole of what the authority protocol
-asks of a run, so the correction glue is a type implementing it over a world and
-an encoder, not methods on `App`. Next the membership: hosting, joining, seats,
+checkpoints (`play.go`, `clone.go`, `replay.go`, `journal.go`), the loops
+(`loop.go`, `script.go`), presentation and configuration (`app.go`,
+`config.go`, `presentation*.go`, `audio*.go`) and the dedicated host
+(`serve.go`, `probe.go`). The boundary that already exists is the one to
+extend: `converge.Instance` is the whole of what the authority protocol asks of
+a run. The correction glue is split: `corrector` (`corrector.go`, `capture.go`,
+`snapshot_stage.go`, `replay_suffix.go`) captures, stages, projects and installs
+over the world and the capture encoder and reads the run through
+`correctionRun`; `instance` composes it with the run's membership into the
+`Instance`, and `App` forwards `CaptureShared`, `InstallShared`, `StageShared`
+and `VerifyCapture` to it. Next the membership: hosting, joining, seats,
 claims and the relay desk read and write the roster, the offer and the transport
 and could be one `session` type with the run as its narrow interface, as
 `converge` has, with `host_test.go` and `join_test.go` moving with it. Replay

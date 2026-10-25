@@ -24,7 +24,6 @@ import (
 	"github.com/lixenwraith/vif/internal/probe"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/service"
-	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/system"
 	"github.com/lixenwraith/vif/internal/vlog"
 	link "github.com/lixenwraith/vif/pkg/network"
@@ -204,13 +203,11 @@ type App struct {
 	// reset by whatever closed the last session.
 	admissions *network.AdmissionLimiter
 
-	// telemetry is reserved during construction so a capture or an install can
-	// publish its cost into a registry that is frozen by then.
-	telemetry snapshot.Telemetry
-	encoder   snapshot.Encoder // capture encodings the seal, the index and the journal share
-
-	sharedStatus statusKeys // the registry keys a capture carries; world lock
-	hostResumed  bool       // a held guest's drain admitted the host's resume; world lock
+	// glue is the correction glue over this run's world: what the authority protocol
+	// reads and writes, and what a journal's written worlds and a join's install go
+	// through. It reads the run through correctionRun.
+	glue        corrector
+	hostResumed bool // a held guest's drain admitted the host's resume; world lock
 
 	// The three halves of the authority protocol, built together because they hold
 	// references to each other: corrections is what this instance publishes and
@@ -219,14 +216,6 @@ type App struct {
 	corrections *converge.Corrections
 	authority   *converge.Authority
 	reach       *converge.Reach
-
-	// staging is the second world a capture resolves into before it is written into
-	// this one, built on first use and re-used for the life of the run: building one
-	// per install costs 9 to 31 ms, which a correction five times a second cannot
-	// afford.
-	stageMu   sync.Mutex
-	staging   *App
-	stagedFor stagingKey
 
 	// seats are the bots this run holds. seatsMu is taken under the world lock and
 	// never takes it.
@@ -440,15 +429,15 @@ func (a *App) initWorld() {
 	a.world.Resources.Status.EnableRecorder(recDepth)
 
 	// Corpus telemetry needs the registry NewGameContext creates
-	service.MustGet[*service.ContentService](a.hub, "content").
-		PublishStatus(a.world.Resources.Status)
-	a.telemetry = snapshot.NewTelemetry(a.world.Resources.Status)
+	content := service.MustGet[*service.ContentService](a.hub, "content")
+	content.PublishStatus(a.world.Resources.Status)
+	a.glue.open(a, a.world, a.log, content, &a.scenario)
 	// The protocol is built here rather than before init because it reads the
 	// telemetry cells and the status registry this world owns. Nothing can reach
 	// it earlier: the transport hooks bound above answer nothing until the service
 	// is started, which is after construction returns.
 	a.corrections, a.authority, a.reach =
-		converge.New(instance{a}, a.telemetry, a.world.Resources.Status)
+		converge.New(a.instance(), a.glue.telemetry, a.world.Resources.Status)
 	if a.cfg.SlowPolicy != nil {
 		a.authority.SetSlowPolicy(*a.cfg.SlowPolicy)
 	}
@@ -600,6 +589,7 @@ func (a *App) initScheduler() error {
 		a.frameReady,
 	)
 	a.ctx.ResetChan = resetChan
+	a.glue.scheduler = a.scheduler
 	a.scheduler.SetJournalDigest(a.journalDigestLocked)
 
 	if err := a.scheduler.LoadScenarioFromFS(
@@ -646,7 +636,7 @@ func (a *App) Close() {
 	a.reach.Close()
 	a.closeProbe()
 	a.closeMidRunPort()
-	a.discardStagingWorld()
+	a.glue.discardStagingWorld()
 	a.hub.StopAll()
 	a.closedAtExit, a.closedAtExitAs = a.closeJournal()
 

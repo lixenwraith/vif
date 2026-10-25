@@ -216,7 +216,7 @@ func waitForCursors(t *testing.T, a *App, n int) {
 		}
 	})
 	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s; status %q", held, n, a.Position(), a.SessionSummary(),
-		a.seatsSummary()+fmt.Sprint((instance{a}).WorldRoster()), a.ctx.GetStatusMessage())
+		a.seatsSummary()+fmt.Sprint(a.instance().WorldRoster()), a.ctx.GetStatusMessage())
 }
 
 // places reads the cursor and the participant on each slot whose cursor match takes.
@@ -260,7 +260,7 @@ func waitForWraiths(t *testing.T, a *App, n int) {
 			return
 		}
 	}
-	t.Fatalf("the world holds %d Wraiths, want %d; roster %+v", held, n, (instance{a}).WorldRoster())
+	t.Fatalf("the world holds %d Wraiths, want %d; roster %+v", held, n, a.instance().WorldRoster())
 }
 
 // TestAHoldersBotsComeAndGoAsParticipants: a run with bots and no session opens one
@@ -408,7 +408,7 @@ func TestAGuestsBotsWaitWithIt(t *testing.T) {
 	id := link.PeerID(guest.localParticipant())
 	leave()
 	waitForWraiths(t, host, 2)
-	roster := (instance{host}).WorldRoster()
+	roster := host.instance().WorldRoster()
 	for _, p := range roster {
 		if gone := p.ID == id || p.Holder == id; p.Away != gone {
 			t.Fatalf("the host holds %+v after participant %d left with its bot; roster %+v", p, id, roster)
@@ -703,7 +703,7 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 		t.Fatalf("the host holds %d links and the guest %d, want 2 each", h, g)
 	}
 	local := link.PeerID(guest.localParticipant())
-	roster := (instance{host}).WorldRoster()
+	roster := host.instance().WorldRoster()
 	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.Holder == local })
 	if i < 0 {
 		t.Fatalf("the host holds no bot of participant %d: %+v", local, roster)
@@ -1081,7 +1081,7 @@ func waitListening(t *testing.T, addr string) {
 // cursorOf is the cursor a participant drives, as another instance holds it.
 func cursorOf(t *testing.T, a *App, participant uint32) core.Entity {
 	t.Helper()
-	roster := (instance{a}).WorldRoster()
+	roster := a.instance().WorldRoster()
 	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return uint32(e.ID) == participant })
 	if i < 0 {
 		t.Fatalf("participant %d is not in the roster %+v", participant, roster)
@@ -1120,7 +1120,7 @@ func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 		waitForCursors(t, a, 4)
 	}
 	id := person.localParticipant()
-	roster := (instance{host}).WorldRoster()
+	roster := host.instance().WorldRoster()
 	if i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return uint32(e.ID) == id }); i < 0 || roster[i].Holder != 0 {
 		t.Fatalf("the host holds the relayed person as %+v, want an independent participant", roster)
 	}

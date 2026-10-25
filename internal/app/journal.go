@@ -417,7 +417,7 @@ func (a *App) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Rec
 // in, written against twin's settled boot, with the operator state and the run's own
 // side beside it. Caller MUST hold updateMutex.
 func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
-	cap, err := a.captureSharedLocked()
+	cap, err := a.glue.captureSharedLocked()
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
@@ -430,11 +430,11 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 		return event.JournalCapture{}, err
 	}
 	var boot snapshot.SharedCapture
-	twin.world.RunSafe(func() { boot, err = twin.captureSharedLocked() })
+	twin.world.RunSafe(func() { boot, err = twin.glue.captureSharedLocked() })
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
-	d, err := a.encoder.DiffWritten(boot, cap)
+	d, err := a.glue.encoder.DiffWritten(boot, cap)
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
@@ -480,7 +480,7 @@ func (a *App) ownStateLocked() (ownState, error) {
 		Side:    a.world.CapturePlayerSide(),
 		Content: service.MustGet[*service.ContentService](a.hub, "content").CursorState(),
 		Events:  a.world.Resources.Event.Queue.Telemetry(),
-		Status:  a.statusCellsLocked(a.statusKeysLocked(func(k string) bool { return !ownedStatusKey(k) })),
+		Status:  statusCellsLocked(a.world, statusKeysLocked(a.world, func(k string) bool { return !ownedStatusKey(k) })),
 		Order:   a.world.CaptureOrder(),
 	}
 	own.Side.Streams = slices.DeleteFunc(own.Side.Streams, ownedStream)
@@ -530,7 +530,7 @@ func (a *App) installOwnLocked(own ownState) error {
 		return err
 	}
 	a.world.Resources.Event.Queue.SetTelemetry(own.Events)
-	a.installStatusLocked(own.Status)
+	installStatusLocked(a.world, own.Status)
 	// Last, once both domains' rows stand: the shared write and the settle placed theirs
 	if err := a.world.InstallOrder(own.Order); err != nil {
 		return fmt.Errorf("the run's order: %w", err)
@@ -566,7 +566,7 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 		return fmt.Errorf("RNG streams this run does not issue: %v", unknown)
 	}
 	a.world.Resources.Rand.LoadStreams(core.DomainPlayer, kept)
-	savers := a.sharedStateSaversLocked()
+	savers := sharedStateSaversLocked(a.world)
 	for _, rec := range c.systems {
 		if slices.Contains(ownedSystems, rec.System) {
 			continue
@@ -599,7 +599,7 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 		Floats:  slices.DeleteFunc(c.status.Floats, func(s snapshot.FloatCell) bool { return ownedStatusKey(s.Key) }),
 		Strings: slices.DeleteFunc(c.status.Strings, func(s snapshot.StringCell) bool { return ownedStatusKey(s.Key) }),
 	}
-	a.installStatusLocked(c.status)
+	installStatusLocked(a.world, c.status)
 	if at, got := a.Position(), a.journalDigestLocked(); at != c.at || got != c.digest {
 		return fmt.Errorf("the run stands at %+v with digest %+v after taking on the journal's opening, which stands at %+v with %+v",
 			at, got, c.at, c.digest)

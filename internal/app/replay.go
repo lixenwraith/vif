@@ -174,8 +174,8 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 	var err error
 	a.world.RunSafe(func() {
 		var before, cap snapshot.SharedCapture
-		if before, err = a.captureSharedLocked(); err == nil {
-			cap, err = a.encoder.ApplyWritten(before, d)
+		if before, err = a.glue.captureSharedLocked(); err == nil {
+			cap, err = a.glue.encoder.ApplyWritten(before, d)
 		}
 		if err != nil {
 			return
@@ -188,7 +188,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		_, err = a.writeSharedLocked(cap, &before, true, c.Opens)
+		_, err = a.glue.writeSharedLocked(cap, &before, true, c.Opens)
 		if err == nil && c.Opens {
 			err = a.openedLocked(c, own)
 		}

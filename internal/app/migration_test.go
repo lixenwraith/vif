@@ -283,7 +283,7 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	waitForCursors(t, host, 2)
 	c, id := guest.claim.Load(), guest.localParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
-	if c == nil || !(instance{host}).DropParticipant(id) {
+	if c == nil || !host.instance().DropParticipant(id) {
 		t.Fatal("the guest holds no claim, or its link would not drop")
 	}
 	var req *restartRequest
@@ -389,7 +389,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 
 	c, gid := guest.claim.Load(), guest.localParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
-	if c == nil || !(instance{successor}).DropParticipant(gid) {
+	if c == nil || !successor.instance().DropParticipant(gid) {
 		t.Fatal("the guest holds no claim, or its link would not drop")
 	}
 	var req *restartRequest

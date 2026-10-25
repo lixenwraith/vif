@@ -99,7 +99,7 @@ func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, 
 	a.openAuthority(o, o.Assigned)
 	a.scheduler.Settle()
 
-	staged, err := a.StageShared(cap)
+	staged, err := a.glue.StageShared(cap)
 	if err != nil {
 		return fmt.Errorf("join capture: %w", err)
 	}
