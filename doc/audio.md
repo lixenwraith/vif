@@ -218,6 +218,11 @@ ends fades the same way before the engine stops. Muted, `MusicSystem` sends only
 what outlasts the mute (patterns, tempo): a start or a note waits for the unmute,
 and an unmute does not restart music the run stopped.
 
+A sequencer slot mutes alone (`SetSlotMuted`): its pattern plays on in time,
+silent, so it comes back on the step it has reached, and the mute outlasts a
+change of pattern. The game leaves every slot sounding; soundlab's mixer mutes
+them one by one.
+
 Disabling `audio` gates both channels; disabling `music` gates music alone.
 Mute keys still update the user's preference, but cannot open a disabled channel.
 Re-enabling restores that preference. The status bar reports effective playback,
@@ -376,9 +381,9 @@ same engine. It offers:
 
 - a command REPL;
 - a full-screen TUI: a browser of patterns and sounds beside a mixer that draws
-  every slot on one timeline, a structural inspector, the keys view (a drawn
-  keyboard that plays the tonal voices and records a take onto the key's
-  degrees) and the beat view (a step grid, and a piano roll for a tonal track);
+  every slot on one timeline and mutes a slot, a structural inspector, and the
+  pattern editor, new or on an existing pattern: a drawn keyboard that records
+  takes onto the key's degrees, and a step grid with a piano roll;
 - headless `.slab` script execution;
 - validation, live registry apply/revert, audition, sequencer slot assignment,
   TOML save, and WAV export.

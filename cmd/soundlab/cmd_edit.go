@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/lixenwraith/vif/pkg/audio"
@@ -294,6 +295,57 @@ func cmdMix(s *Session, a []string) error {
 		return nil
 	}
 	return fmt.Errorf("%q: not in any document", src)
+}
+
+// cmdTake adds a track of one tonal voice playing the notes of a take, each at its
+// step on the degree of the mirrored key nearest its pitch, the later of two on one
+// step and pitch kept: what the keys write when a recording ends
+func cmdTake(s *Session, a []string) error {
+	d, ok := s.pats.get(a[0])
+	if !ok {
+		return fmt.Errorf("%q: no such pattern in the document", a[0])
+	}
+	instr, ok := audio.InstrumentByName(a[1])
+	if !ok || instr.IsDrum() {
+		return fmt.Errorf("%q: not a tonal voice", a[1])
+	}
+	type at struct{ pos, deg, oct int }
+	notes, snapped := map[at]audio.StepDef{}, 0
+	for _, n := range a[2:] {
+		f := strings.Split(n, ":")
+		e := audio.StepDef{Dur: 1, Vel: 0.8}
+		var midi int
+		_, err := fmt.Sscan(f[0], &e.Pos)
+		if err == nil && len(f) > 1 {
+			_, err = fmt.Sscan(f[1], &midi)
+		}
+		if err == nil && len(f) > 2 {
+			_, err = fmt.Sscan(f[2], &e.Dur)
+		}
+		if err == nil && len(f) > 3 {
+			_, err = fmt.Sscan(f[3], &e.Vel)
+		}
+		if err != nil || len(f) < 2 || len(f) > 4 || e.Pos < 0 || e.Pos >= d.Steps {
+			return fmt.Errorf("note %q: want <pos>:<midi>[:<steps>[:<vel>]], pos under %d", n, d.Steps)
+		}
+		exact := false
+		if e.Deg, e.Oct, exact = s.degreeOf(midi); !exact {
+			snapped++
+		}
+		notes[at{e.Pos, e.Deg, e.Oct}] = e
+	}
+	tr := audio.TrackDef{Instr: instr.String(), Humanize: 0.15}
+	for _, e := range notes {
+		tr.Event = append(tr.Event, e)
+	}
+	slices.SortFunc(tr.Event, func(x, y audio.StepDef) int { return cmpInts(x.Pos, y.Pos, x.Oct, y.Oct, x.Deg, y.Deg) })
+	d.Track = append(d.Track, tr)
+	s.pats.markDirty(a[0])
+	fmt.Fprintf(s.out, "take: %d note(s) into %s, track %d (%s)\n", len(tr.Event), a[0], len(d.Track)-1, instr)
+	if snapped > 0 {
+		fmt.Fprintf(s.out, "%d note(s) outside %s moved to the nearest degree\n", snapped, s.keyName())
+	}
+	return nil
 }
 
 func cmdUnset(s *Session, a []string) error {

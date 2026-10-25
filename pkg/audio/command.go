@@ -14,6 +14,7 @@ const (
 	cmdMusicVol
 	cmdPattern
 	cmdMask
+	cmdSlotMute
 	cmdHarmony
 	cmdNote
 	cmdMusicStart

@@ -88,6 +88,7 @@ type AudioEngine struct {
 	sfxMuted   atomic.Bool
 	musicMuted atomic.Bool
 	silentMode atomic.Bool
+	slotMuted  [MusicSlots]atomic.Bool
 
 	// rejected counts Play rejections by reason. The pre-mixer gates leave no
 	// trace in played/dropped, so without it a zeroed SoundID table would go
@@ -548,6 +549,21 @@ func (ae *AudioEngine) SetPattern(slot int, p PatternID, crossfadeSamples int, q
 // SetTrackMask enables/disables tracks within a slot's pattern
 func (ae *AudioEngine) SetTrackMask(slot int, mask uint32) {
 	ae.send(audioCmd{op: cmdMask, slot: int8(slot), i2: int(mask)})
+}
+
+// SetSlotMuted silences a slot or lets it sound again. Its pattern plays on in
+// time either way, and the mute outlasts a change of pattern.
+func (ae *AudioEngine) SetSlotMuted(slot int, muted bool) {
+	if slot < 0 || slot >= MusicSlots {
+		return
+	}
+	ae.slotMuted[slot].Store(muted)
+	ae.send(audioCmd{op: cmdSlotMute, slot: int8(slot), b: muted})
+}
+
+// IsSlotMuted reports a slot's mute
+func (ae *AudioEngine) IsSlotMuted(slot int) bool {
+	return slot >= 0 && slot < MusicSlots && ae.slotMuted[slot].Load()
 }
 
 // SetHarmony updates key, scale, and chord progression

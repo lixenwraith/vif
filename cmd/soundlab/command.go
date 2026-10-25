@@ -48,6 +48,7 @@ func init() {
 		"cp":    {"cp <src> <dst>", "duplicate an entry", 2, 2, cmdCp},
 		"mv":    {"mv <src> <dst>", "rename (sound noise variants re-roll: rng seeds from name)", 2, 2, cmdMv},
 		"mix":   {"mix <src> <dst>", "append src's tracks/layers into dst (same kind; src unchanged; validate dst after)", 2, 2, cmdMix},
+		"take":  {"take <pattern> <voice> <pos>:<midi>[:<steps>[:<vel>]]...", "add a track of a tonal voice playing the notes at their steps, each on the key's nearest degree", 3, -1, cmdTake},
 		"set":   {"set <name.path> <value...>", "set a leaf field; value may contain spaces", 2, -1, cmdSet},
 		"add":   {"add <name.path>", "append a zero element to a list field", 1, 1, cmdAdd},
 		"del":   {"del <name>|<name.path.idx>", "delete a document entry or a list element", 1, 1, cmdDel},
@@ -67,7 +68,7 @@ func init() {
 		"swing": {"swing <f>", "shuffle 0..0.5", 1, 1, cmdSwing},
 		"fill":  {"fill on|off", "slot-2 phrase auto-fill; soundlab starts with it off", 1, 1, cmdFill},
 		"key":   {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
-		"mute":  {"mute music|sfx|all|none", "absolute channel mute state", 1, 1, cmdMute},
+		"mute":  {"mute music|sfx|all|none | mute slot <0-3> on|off", "absolute channel mute state, or one slot's (its pattern plays on in time)", 1, 3, cmdMute},
 		"vol":   {"vol <f>", "sfx volume 0..1; music keeps its own level", 1, 1, cmdVol},
 		"wait":  {"wait <ms>", "sleep (scripted audition pacing)", 1, 1, cmdWait},
 	}
@@ -140,13 +141,20 @@ var (
 		{"h l", "patterns ⇄ sounds"},
 		{"space", "play a sound; put a pattern in its role's slot, or play and pause"},
 		{"0-3", "put the pattern in that slot, or take it out"},
-		{"b", "beat editor on the pattern"},
-		{"p", "keys: a scratch keyboard of the tonal voices over the music; a take is the one thing it writes"},
+		{"n", "new: a pattern opens in the editor, empty, playing along in a free slot; a sound in the inspector"},
+		{"e", "edit: a pattern in the editor's grid, a sound in the inspector"},
 		{"enter", "inspect: j k move, h l fold, H L all, enter edit, a add, x delete"},
 		{"a v r", "apply, validate, revert"},
-		{"n c w", "new, clone, write one to a file"},
+		{"c w", "clone, write one to a file"},
 		{"+ / d d", "mix into another / delete"},
 		{"m", "the music back to its first bar"},
+	}}
+	helpEditor = helpSection{"editor", []keyHelp{
+		{"tab ⇧tab", "the keys, the grid, then the mixer"},
+		{"enter", "apply, and play it in its slot"},
+		{"^R", "record a take over the pattern's length; again writes it in, a track a voice"},
+		{"^D ^D", "delete the pattern, out of its slot too"},
+		{"esc", "close; the pattern stays, ^S saves it"},
 	}}
 	helpKeys = helpSection{"keys", []keyHelp{
 		{"z s x … m", "play the first octave from C, q 2 w … u the second"},
@@ -156,52 +164,52 @@ var (
 		{"← → { }", "octave"},
 		{"- =", "velocity"},
 		{"[ ]", "note length"},
-		{"^R", "record; again commits the take as a pattern, rec_N"},
-		{"\\", "take of 1, 2 or 4 bars"},
+		{"\\", "the pattern's length: 1, 2 or 4 bars"},
 		{"⌫", "drop the take's last note"},
-		{"esc", "back to the browser or the beat view, committing a take"},
 	}}
-	helpBeat = helpSection{"beat", []keyHelp{
+	helpGrid = helpSection{"grid", []keyHelp{
 		{"h l ← →", "step; H L a beat, PgUp PgDn a bar, g G the ends"},
 		{"j k ↑ ↓", "track; in the roll, pitch (PgUp PgDn an octave)"},
 		{"space", "hit or note on and off"},
-		{"enter", "apply, and play it in its role's slot"},
 		{"1-9 0 + -", "velocity, .1 to 1; nudge it"},
 		{"c", "chance: 1, .75, .5, .25"},
-		{"p", "keys over the music, the pattern left as it is; esc comes back"},
 		{"[ ] , . { }", "length, degree, octave of a note"},
 		{"t T", "next voice of the family, the other family"},
 		{"f", "follow the chord"},
 		{"a / x x", "add a track of the voice in hand / delete the track"},
 		{"s", "steps: the pattern's length"},
 		{"r", "piano roll of a tonal track, and back"},
-		{"esc", "close"},
 	}}
 	helpMixer = helpSection{"mixer", []keyHelp{
 		{"j k ↑ ↓", "the slots' titles and tracks; PgUp PgDn a page, g G the ends"},
 		{"", "the rows stay where the cursor leaves them"},
+		{"space m", "mute the cursor's slot, or let it sound; it plays on in time"},
+		{"e / n", "edit what the cursor's slot plays / a new pattern in it"},
 	}}
 	helpGlobal = helpSection{"everywhere", []keyHelp{
-		{"tab ⇧tab", "next, previous pane: the browser, mixer and log, or an editor and the mixer"},
+		{"tab ⇧tab", "next, previous pane: the browser, mixer and log, or the editor's tabs and the mixer"},
 		{"esc", "from the mixer or the log back to the view's own pane"},
+		{"< >", "tempo down, up by 5 bpm"},
 		{":", "command line; help lists the commands"},
 		{"? / ^S / ^Q", "these keys / save / quit"},
 	}}
 )
 
-func helpFor(v view) helpSection {
-	switch v {
-	case viewKeys:
-		return helpKeys
-	case viewBeat:
-		return helpBeat
+// helpFor is the key reference of where the keys are: the browser, or the editor
+// and the tab it shows
+func (a *tuiApp) helpFor() []helpSection {
+	if a.view != viewEdit || a.ed == nil {
+		return []helpSection{helpBrowse}
 	}
-	return helpBrowse
+	if a.ed.tab == focusKeys {
+		return []helpSection{helpEditor, helpKeys}
+	}
+	return []helpSection{helpEditor, helpGrid}
 }
 
 func cmdHelp(s *Session, a []string) error {
 	if len(a) == 1 && a[0] == "keys" {
-		for _, sec := range []helpSection{helpBrowse, helpKeys, helpBeat, helpMixer, helpGlobal} {
+		for _, sec := range []helpSection{helpBrowse, helpEditor, helpKeys, helpGrid, helpMixer, helpGlobal} {
 			fmt.Fprintln(s.out, sec.title)
 			for _, l := range sec.lines {
 				fmt.Fprintf(s.out, "  %-14s %s\n", l.keys, l.what)

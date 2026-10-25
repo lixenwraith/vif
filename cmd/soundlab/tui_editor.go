@@ -2,10 +2,10 @@
 
 package main
 
-// The beat view: a pattern's tracks on a step grid, or one tonal track as a
-// piano roll, over a document PatternDef. Every edit issues a command line
-// through Execute (set/add/del), so the view is a macro keyboard over the same
-// table: script parity holds, dirty tracking is free, and the inspector agrees.
+// The pattern editor: one pattern, new or edited, on two tabs. Keys plays the
+// tonal voices and records takes into it; grid lays its tracks on a step grid, or
+// one tonal track as a piano roll. Every edit issues a command line through
+// Execute (set/add/del/take), so a script can make it and dirty tracking is free.
 
 import (
 	"fmt"
@@ -19,30 +19,31 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
-const beatDefaultVel = 0.8
+const gridDefaultVel = 0.8
 
-// chances are the probabilities p walks, 1 being always
+// chances are the probabilities c walks, 1 being always
 var chances = []float64{1, 0.75, 0.5, 0.25}
 
-// beatState is the beat view's cursor over its pattern
-type beatState struct {
+// editState is the pattern editor: the pattern, the tab shown, and the grid's
+// cursor over it
+type editState struct {
 	name      string
+	tab       focusArea // focusKeys or focusGrid, the one shown while the mixer has the keys
 	trk, step int
 	roll      bool // the cursor's tonal track as a piano roll
 	pitch     int  // the roll's cursor: octave*len(scale) + degree
 	top       int  // the first track row shown, or the roll's highest pitch
 	left      int  // the first step shown when the pattern is wider than the view
 	xArmed    bool // x pressed once on this track
+	delArmed  bool // ^D pressed once
 	rh        int  // rows a track takes, more on a tall screen
 	// what the next note placed takes, carried from the last one touched
 	deg, oct, dur int
 }
 
-func (a *tuiApp) enterBeat() {
-	n, ok := a.addressableSel()
-	if !ok {
-		return
-	}
+// openEditor edits the document's pattern n on a tab, the keys or the grid,
+// closing the pattern in hand first
+func (a *tuiApp) openEditor(n string, tab focusArea) {
 	d, ok := a.s.pats.get(n)
 	if !ok {
 		return
@@ -51,18 +52,102 @@ func (a *tuiApp) enterBeat() {
 		fmt.Fprintf(a.log, "%q: steps %d — set %s.steps first\n", n, d.Steps, n)
 		return
 	}
-	a.beat = &beatState{name: n, oct: 2, dur: 2}
-	a.view, a.focus = viewBeat, focusMain
+	if a.ed != nil {
+		a.closeEditor()
+	}
+	a.ed = &editState{name: n, tab: tab, oct: 2, dur: 2}
+	a.view, a.focus, a.kind = viewEdit, tab, kindPattern
+	a.cursorTo(n)
 }
 
-// beatPat re-reads the document every access: grid edits go through Execute,
-// which mutates the doc, and holding a stale pointer across that would show
-// pre-edit state. nil when not in beat mode or the pattern was deleted.
-func (a *tuiApp) beatPat() *audio.PatternDef {
-	if a.beat == nil {
+// closeEditor goes back to the browser, on the pattern, writing a take being
+// recorded into it first
+func (a *tuiApp) closeEditor() {
+	if a.keys.rec {
+		a.finishRecording()
+	}
+	a.view, a.focus, a.ed, a.fresh = viewBrowse, focusMain, nil, ""
+}
+
+// editDelete deletes the pattern on a second ^D and takes it out of its slot
+func (a *tuiApp) editDelete() {
+	ed := a.ed
+	if !ed.delArmed {
+		ed.delArmed = true
+		fmt.Fprintf(a.log, "delete %q? ^D again deletes it, out of its slot too\n", ed.name)
+		return
+	}
+	if id := audio.PatternIDByName(ed.name); id != audio.PatternSilence {
+		if slot := a.slotOf(id); slot >= 0 {
+			a.exec(fmt.Sprintf("slot %d -", slot))
+			a.stopIfClear(slot)
+		}
+	}
+	a.keys.rec, a.keys.take = false, a.keys.take[:0] // a take goes with its pattern
+	a.exec("del " + ed.name)
+	a.closeEditor()
+}
+
+// homeSlot is the slot the editor plays a pattern in: the one it plays in, its
+// role's, the first silent one, else slot 2, the free layer
+func (a *tuiApp) homeSlot(n string) int {
+	if id := audio.PatternIDByName(n); id != audio.PatternSilence {
+		if slot := a.slotOf(id); slot >= 0 {
+			return slot
+		}
+	}
+	if slot := a.roleSlot(n); slot >= 0 {
+		return slot
+	}
+	for i := range audio.MusicSlots {
+		if a.s.eng.SlotPattern(i) == audio.PatternSilence {
+			return i
+		}
+	}
+	return 2
+}
+
+// editorKey takes the editor's own keys, then hands the rest to the tab or the
+// mixer that has them
+func (a *tuiApp) editorKey(ev terminal.Event) {
+	d := a.edPat()
+	if d == nil { // deleted out from under the editor via :del
+		a.closeEditor()
+		return
+	}
+	r := rune(0)
+	if ev.Key == terminal.KeyRune {
+		r = ev.Rune
+	}
+	if ev.Key != terminal.KeyCtrlD {
+		a.ed.delArmed = false
+	}
+	switch {
+	case ev.Key == terminal.KeyEscape:
+		a.closeEditor()
+	case ev.Key == terminal.KeyEnter:
+		a.editPlay()
+	case ev.Key == terminal.KeyCtrlD:
+		a.editDelete()
+	case ev.Key == terminal.KeyCtrlR:
+		a.focus, a.ed.tab = focusKeys, focusKeys
+		a.toggleRecord(d)
+	case a.focus == focusMixer:
+		a.mixerKey(ev, r)
+	case a.focus == focusKeys:
+		a.keysKey(ev)
+	default:
+		a.gridKey(ev, d, r)
+	}
+}
+
+// edPat re-reads the document on every access: edits go through Execute, which
+// replaces what a held pointer would show. nil when the pattern was deleted.
+func (a *tuiApp) edPat() *audio.PatternDef {
+	if a.ed == nil {
 		return nil
 	}
-	d, _ := a.s.pats.get(a.beat.name)
+	d, _ := a.s.pats.get(a.ed.name)
 	return d
 }
 
@@ -99,7 +184,7 @@ func (a *tuiApp) splitPitch(p int) (oct, deg int) {
 // targets are the events the cursor edits: every one starting at its step on its
 // track, or in the roll the one at its pitch
 func (a *tuiApp) targets(d *audio.PatternDef) []int {
-	b := a.beat
+	b := a.ed
 	if b.trk < 0 || b.trk >= len(d.Track) {
 		return nil
 	}
@@ -113,40 +198,19 @@ func (a *tuiApp) targets(d *audio.PatternDef) []int {
 }
 
 func (a *tuiApp) tonalTrack(d *audio.PatternDef) bool {
-	if a.beat.trk < 0 || a.beat.trk >= len(d.Track) {
+	if a.ed.trk < 0 || a.ed.trk >= len(d.Track) {
 		return false
 	}
-	i, ok := audio.InstrumentByName(d.Track[a.beat.trk].Instr)
+	i, ok := audio.InstrumentByName(d.Track[a.ed.trk].Instr)
 	return ok && !i.IsDrum()
 }
 
-func (a *tuiApp) beatKey(ev terminal.Event) {
-	b := a.beat
-	d := a.beatPat()
-	if d == nil { // deleted out from under the editor via :del
-		a.view, a.beat = viewBrowse, nil
-		return
-	}
-	r := rune(0)
-	if ev.Key == terminal.KeyRune {
-		r = ev.Rune
-	}
+func (a *tuiApp) gridKey(ev terminal.Event, d *audio.PatternDef, r rune) {
+	b := a.ed
 	if r != 'x' {
 		b.xArmed = false
 	}
 	switch {
-	case ev.Key == terminal.KeyEscape:
-		a.view, a.beat = viewBrowse, nil
-		return
-	case ev.Key == terminal.KeyEnter:
-		a.beatPlay(d)
-		return
-	case r == 'p':
-		a.enterKeys()
-		return
-	case a.focus == focusMixer:
-		a.mixerKey(ev, r)
-		return
 	case ev.Key == terminal.KeyLeft || r == 'h':
 		b.step--
 	case ev.Key == terminal.KeyRight || r == 'l':
@@ -184,18 +248,18 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 	case r == 'G' || ev.Key == terminal.KeyEnd:
 		b.step = d.Steps - 1
 	case ev.Key == terminal.KeySpace || r == ' ':
-		a.beatToggle(d)
+		a.gridToggle(d)
 	case r == '+' || r == '=':
-		a.beatEach(d, func(e audio.StepDef) (string, string) { return "vel", fmtF(min(max(e.Vel+0.1, 0.05), 1)) })
+		a.gridEach(d, func(e audio.StepDef) (string, string) { return "vel", fmtF(min(max(e.Vel+0.1, 0.05), 1)) })
 	case r == '-':
-		a.beatEach(d, func(e audio.StepDef) (string, string) { return "vel", fmtF(min(max(e.Vel-0.1, 0.05), 1)) })
+		a.gridEach(d, func(e audio.StepDef) (string, string) { return "vel", fmtF(min(max(e.Vel-0.1, 0.05), 1)) })
 	case r >= '1' && r <= '9':
 		v := float64(r-'0') / 10
-		a.beatEach(d, func(audio.StepDef) (string, string) { return "vel", fmtF(v) })
+		a.gridEach(d, func(audio.StepDef) (string, string) { return "vel", fmtF(v) })
 	case r == '0':
-		a.beatEach(d, func(audio.StepDef) (string, string) { return "vel", "1" })
+		a.gridEach(d, func(audio.StepDef) (string, string) { return "vel", "1" })
 	case r == 'c':
-		a.beatEach(d, func(e audio.StepDef) (string, string) {
+		a.gridEach(d, func(e audio.StepDef) (string, string) {
 			c := slices.Index(chances, cmpF(e.Prob, 1))
 			return "prob", fmtF(chances[(c+1)%len(chances)])
 		})
@@ -204,22 +268,22 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 		if r == '[' {
 			dd = -1
 		}
-		a.beatTonal(d, func(e audio.StepDef) (string, string) {
+		a.gridTonal(d, func(e audio.StepDef) (string, string) {
 			b.dur = min(max(max(e.Dur, 1)+dd, 1), audio.MaxPatternLen)
 			return "dur", strconv.Itoa(b.dur)
 		})
-	case r == ',' || r == '<':
-		a.beatShift(d, -1)
-	case r == '.' || r == '>':
-		a.beatShift(d, 1)
+	case r == ',':
+		a.gridShift(d, -1)
+	case r == '.':
+		a.gridShift(d, 1)
 	case r == '{':
-		a.beatShift(d, -a.scaleLen())
+		a.gridShift(d, -a.scaleLen())
 	case r == '}':
-		a.beatShift(d, a.scaleLen())
+		a.gridShift(d, a.scaleLen())
 	case r == 't':
-		a.beatCycleInstr(d, false)
+		a.gridCycleInstr(d, false)
 	case r == 'T':
-		a.beatCycleInstr(d, true)
+		a.gridCycleInstr(d, true)
 	case r == 'f':
 		if len(d.Track) > 0 {
 			a.exec(fmt.Sprintf("set %s.track.%d.follow_chord %t", b.name, b.trk, !d.Track[b.trk].FollowChord))
@@ -230,7 +294,7 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 			instr = d.Track[b.trk].Instr // a new lane layers the voice in hand
 		}
 		a.exec(fmt.Sprintf("add %s.track", b.name))
-		if d2 := a.beatPat(); d2 != nil {
+		if d2 := a.edPat(); d2 != nil {
 			ti := len(d2.Track) - 1
 			// A zero TrackDef has no instrument and cannot validate; seed it.
 			a.exec(fmt.Sprintf("set %s.track.%d.instr %s", b.name, ti, instr))
@@ -258,22 +322,22 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 		if b.roll {
 			b.pitch = a.rollStart(d)
 			lo, hi := a.pitchSpan(d)
-			b.top = hi + (a.beatRows(d)-(hi-lo+1))/2 // the notes in the middle
+			b.top = hi + (a.gridRows(d)-(hi-lo+1))/2 // the notes in the middle
 		}
 	}
-	a.beatClamp()
+	a.editClamp()
 }
 
-// beatClamp keeps the cursor on the pattern after a key moved it or an edit
+// editClamp keeps the cursor on the pattern after a key moved it or an edit
 // changed the pattern, and leaves the roll when its track stops being tonal
-func (a *tuiApp) beatClamp() {
-	b := a.beat
+func (a *tuiApp) editClamp() {
+	b := a.ed
 	if b == nil {
 		return
 	}
-	d := a.beatPat()
+	d := a.edPat()
 	if d == nil {
-		a.view, a.beat = viewBrowse, nil
+		a.closeEditor()
 		return
 	}
 	b.trk = min(max(b.trk, 0), max(len(d.Track)-1, 0))
@@ -286,7 +350,7 @@ func (a *tuiApp) beatClamp() {
 // rollStart is the pitch the roll opens on: the cursor step's note, else the
 // track's lowest, else the second octave's root, where the shipped lines sit
 func (a *tuiApp) rollStart(d *audio.PatternDef) int {
-	b := a.beat
+	b := a.ed
 	evs := d.Track[b.trk].Event
 	for _, e := range evs {
 		if e.Pos == b.step {
@@ -303,11 +367,11 @@ func (a *tuiApp) rollStart(d *audio.PatternDef) int {
 	return 2 * a.scaleLen()
 }
 
-// beatToggle adds a hit or note at the cursor, or removes what is there. A note
+// gridToggle adds a hit or note at the cursor, or removes what is there. A note
 // takes the roll's pitch, or in the grid goes on from the line's last note before
 // it, its pitch, length and velocity.
-func (a *tuiApp) beatToggle(d *audio.PatternDef) {
-	b := a.beat
+func (a *tuiApp) gridToggle(d *audio.PatternDef) {
+	b := a.ed
 	if len(d.Track) == 0 {
 		fmt.Fprintln(a.log, "no tracks — a adds one")
 		return
@@ -318,7 +382,7 @@ func (a *tuiApp) beatToggle(d *audio.PatternDef) {
 		}
 		return
 	}
-	tonal, vel := a.tonalTrack(d), beatDefaultVel
+	tonal, vel := a.tonalTrack(d), gridDefaultVel
 	switch prev := lastBefore(d.Track[b.trk].Event, b.step); {
 	case tonal && b.roll:
 		b.oct, b.deg = a.splitPitch(b.pitch)
@@ -356,28 +420,28 @@ func lastBefore(evs []audio.StepDef, step int) *audio.StepDef {
 	return last
 }
 
-// beatEach sets one field of every target to what edit returns for it
-func (a *tuiApp) beatEach(d *audio.PatternDef, edit func(audio.StepDef) (key, val string)) {
-	b := a.beat
+// gridEach sets one field of every target to what edit returns for it
+func (a *tuiApp) gridEach(d *audio.PatternDef, edit func(audio.StepDef) (key, val string)) {
+	b := a.ed
 	for _, i := range a.targets(d) {
 		key, val := edit(d.Track[b.trk].Event[i])
 		a.exec(fmt.Sprintf("set %s.track.%d.event.%d.%s %s", b.name, b.trk, i, key, val))
 	}
 }
 
-// beatTonal is beatEach on a tonal track; a drum has no pitch or length
-func (a *tuiApp) beatTonal(d *audio.PatternDef, edit func(audio.StepDef) (key, val string)) {
+// gridTonal is gridEach on a tonal track; a drum has no pitch or length
+func (a *tuiApp) gridTonal(d *audio.PatternDef, edit func(audio.StepDef) (key, val string)) {
 	if !a.tonalTrack(d) {
 		fmt.Fprintln(a.log, "a drum has no pitch or length — t/T moves the track to a voice")
 		return
 	}
-	a.beatEach(d, edit)
+	a.gridEach(d, edit)
 }
 
-// beatShift moves the targets by dp degrees, carrying across octaves, and the
+// gridShift moves the targets by dp degrees, carrying across octaves, and the
 // roll's cursor with them
-func (a *tuiApp) beatShift(d *audio.PatternDef, dp int) {
-	b := a.beat
+func (a *tuiApp) gridShift(d *audio.PatternDef, dp int) {
+	b := a.ed
 	if !a.tonalTrack(d) {
 		fmt.Fprintln(a.log, "a drum has no pitch — t/T moves the track to a voice")
 		return
@@ -394,10 +458,10 @@ func (a *tuiApp) beatShift(d *audio.PatternDef, dp int) {
 	}
 }
 
-// beatCycleInstr moves the track to the next voice of its family, drums among
+// gridCycleInstr moves the track to the next voice of its family, drums among
 // drums and tonal voices among themselves, or with other to the other family
-func (a *tuiApp) beatCycleInstr(d *audio.PatternDef, other bool) {
-	b := a.beat
+func (a *tuiApp) gridCycleInstr(d *audio.PatternDef, other bool) {
+	b := a.ed
 	if len(d.Track) == 0 {
 		return
 	}
@@ -422,14 +486,14 @@ func (a *tuiApp) beatCycleInstr(d *audio.PatternDef, other bool) {
 
 // promptSteps asks for the pattern's length; a shorter one drops the events past it
 func (a *tuiApp) promptSteps(d *audio.PatternDef) {
-	name := a.beat.name
+	name := a.ed.name
 	a.openPrompt(fmt.Sprintf("steps of %s (1-%d): ", name, audio.MaxPatternLen), strconv.Itoa(d.Steps), func(v string) {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > audio.MaxPatternLen {
 			fmt.Fprintf(a.log, "steps %q: want 1 to %d\n", v, audio.MaxPatternLen)
 			return
 		}
-		cur := a.beatPat()
+		cur := a.edPat()
 		if cur == nil {
 			return
 		}
@@ -441,32 +505,32 @@ func (a *tuiApp) promptSteps(d *audio.PatternDef) {
 			}
 		}
 		a.exec(fmt.Sprintf("set %s.steps %d", name, n))
-		a.beatClamp()
+		a.editClamp()
 	})
 }
 
-// beatPlay applies the pattern and plays it in its role's slot, slot 0 for none,
-// starting the transport: the edit-listen loop the view exists for
-func (a *tuiApp) beatPlay(d *audio.PatternDef) {
-	b := a.beat
-	if a.exec("apply "+b.name) != nil {
+// editPlay applies the pattern and plays it in its home slot, starting the
+// transport: the edit-listen loop the editor exists for
+func (a *tuiApp) editPlay() {
+	n := a.ed.name
+	if a.exec("apply "+n) != nil {
 		return // an older registered copy must not play as this one; the log says why
 	}
-	slot := max(a.roleSlot(b.name), 0)
-	if id := audio.PatternIDByName(b.name); a.s.eng.SlotPattern(slot) == id {
+	slot := a.homeSlot(n)
+	if id := audio.PatternIDByName(n); a.s.eng.SlotPattern(slot) == id {
 		if !a.s.eng.IsMusicPlaying() && !a.s.eng.IsMusicMuted() {
 			a.exec("music start")
 		}
 		return
 	}
-	a.placeInSlot(slot, b.name)
+	a.placeInSlot(slot, n)
 }
 
-func (a *tuiApp) beatHint() string {
-	if a.beat != nil && a.beat.roll {
-		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  c chance  r grid  enter play  p keys  tab mixer  esc close  ? keys"
+func (a *tuiApp) gridHint() string {
+	if a.ed != nil && a.ed.roll {
+		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  c chance  r grid  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
 	}
-	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  r roll  s steps  enter play  p keys  tab mixer  esc close  ? keys"
+	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  r roll  s steps  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
 }
 
 // gridFit is how a pattern's steps lie across a width: cw cells a step and a
@@ -502,13 +566,13 @@ func (g gridFit) x(step int) int {
 	return s*g.cw + s/audio.StepsPerBeat
 }
 
-// beatLabW is the beat view's column of track names, or of the roll's pitches
-const beatLabW = 8
+// gridLabW is the grid's column of track names, or of the roll's pitches
+const gridLabW = 8
 
-// beatRows is the rows the grid or the roll wants: every track, or the notes'
+// gridRows is the rows the grid or the roll wants: every track, or the notes'
 // span of pitches with an octave's headroom, at least two octaves
-func (a *tuiApp) beatRows(d *audio.PatternDef) int {
-	if !a.beat.roll {
+func (a *tuiApp) gridRows(d *audio.PatternDef) int {
+	if !a.ed.roll {
 		return min(max(len(d.Track), 3), 32)
 	}
 	n := a.scaleLen()
@@ -519,38 +583,83 @@ func (a *tuiApp) beatRows(d *audio.PatternDef) int {
 // pitchSpan is the lowest and highest pitch of the roll's track, the cursor's
 // pitch alone when it is empty
 func (a *tuiApp) pitchSpan(d *audio.PatternDef) (lo, hi int) {
-	lo, hi = a.beat.pitch, a.beat.pitch
-	for _, e := range d.Track[a.beat.trk].Event {
+	lo, hi = a.ed.pitch, a.ed.pitch
+	for _, e := range d.Track[a.ed.trk].Event {
 		lo, hi = min(lo, a.pitchOf(e)), max(hi, a.pitchOf(e))
 	}
 	return lo, hi
 }
 
-// beatViewH is the height the beat view wants: the frame, the family and ruler,
+// gridViewH is the height the grid tab wants: the frame, the family and ruler,
 // the grid or roll, and two rows of detail
-func (a *tuiApp) beatViewH(d *audio.PatternDef) int { return 2 + 2 + a.beatRows(d)*a.beat.rh + 2 }
+func (a *tuiApp) gridViewH(d *audio.PatternDef) int { return 2 + 2 + a.gridRows(d)*a.ed.rh + 2 }
 
-func (a *tuiApp) renderBeatView(r tui.Region) {
-	b := a.beat
-	d := a.beatPat()
-	if b == nil || d == nil {
-		a.view, a.beat = viewBrowse, nil
+// renderEditor frames the pattern under its tabs and draws the tab shown, the
+// mixer beneath where it fits; both tabs are a Tab away
+func (a *tuiApp) renderEditor(r tui.Region) {
+	b, d := a.ed, a.edPat()
+	if b == nil || d == nil { // deleted out from under the editor via :del
+		a.closeEditor()
 		a.renderBrowse(r)
 		return
 	}
-	th := &a.theme
+	a.panes = append(a.panes, focusKeys, focusGrid)
+	if a.focus == focusKeys || a.focus == focusGrid {
+		b.tab = a.focus
+	}
+	if b.tab == focusKeys {
+		a.renderKeys(a.editFrame(a.stackBelow(r, a.keysViewH(r.W, d)), d), d)
+		return
+	}
 	// A track's rows grow with its cells, to half a cell's width, on a screen tall
 	// enough that the view still takes no more than half the body
-	g := fitGrid(d.Steps, r.W-2-beatLabW, b.step, b.left)
+	g := fitGrid(d.Steps, r.W-2-gridLabW, b.step, b.left)
 	b.rh = 1
 	if !b.roll && len(d.Track) > 0 {
 		b.rh = min(3, max(g.cw/2, 1), max((r.H/2-6)/len(d.Track), 1))
 	}
-	r = a.stackBelow(r, a.beatViewH(d))
-	frame := a.viewPane(r, a.beatTitle(d))
+	a.renderGrid(a.editFrame(a.stackBelow(r, a.gridViewH(d)), d), d, g)
+}
+
+// editFrame frames the editor in the focus color while a tab has the keys: the
+// tabs on its top border, the one shown lit, then whether the pattern is new or
+// edited, and what it is
+func (a *tuiApp) editFrame(r tui.Region, d *audio.PatternDef) tui.Region {
+	th := &a.theme
+	border := th.Border
+	if a.focus == focusKeys || a.focus == focusGrid {
+		border = th.Selected
+	}
+	c := r.Pane(tui.PaneOpts{Border: tui.LineRounded, BorderFg: border, Bg: th.Bg})
+	x := 2
+	for _, t := range []struct {
+		f    focusArea
+		name string
+	}{{focusKeys, "keys"}, {focusGrid, "grid"}} {
+		fg, attr := th.HintFg, terminal.AttrNone
+		if t.f == a.ed.tab {
+			fg, attr = th.HeaderFg, terminal.AttrBold
+		}
+		r.Text(x, 0, " "+t.name+" ", fg, th.Bg, attr)
+		x += tui.RuneLen(t.name) + 3
+	}
+	state, fg := "edit", th.HintFg
+	if a.fresh == d.Name {
+		state, fg = "new", th.Warning
+	}
+	r.Text(x, 0, " "+state+" ", fg, th.Bg, terminal.AttrBold)
+	x += len(state) + 2
+	r.Text(x, 0, tui.Truncate(a.editTitle(d)+" ", max(r.W-x-2, 0)), th.HeaderFg, th.Bg, terminal.AttrBold)
+	return c
+}
+
+// renderGrid draws the grid tab, kept to the grid's width and centered: the
+// cursor track's voice family, the ruler, the grid or roll, and two rows of detail
+func (a *tuiApp) renderGrid(frame tui.Region, d *audio.PatternDef, g gridFit) {
+	b, th := a.ed, &a.theme
 	b.left = g.first
 	// Wide cells leave room: the view keeps to the grid's width, centered
-	contentW := min(frame.W, max(beatLabW+gridSpan(g.count, g.cw), 64))
+	contentW := min(frame.W, max(gridLabW+gridSpan(g.count, g.cw), 64))
 	c := frame.Sub((frame.W-contentW)/2, 0, contentW, frame.H)
 
 	mode := "grid"
@@ -569,29 +678,24 @@ func (a *tuiApp) renderBeatView(r tui.Region) {
 	if id := audio.PatternIDByName(b.name); id != audio.PatternSilence && a.slotOf(id) >= 0 && a.sig.running {
 		play = a.sig.step % d.Steps
 	}
-	a.drawRuler(c.Sub(beatLabW, 1, c.W-beatLabW, 1), g, play)
-	rows := min(a.beatRows(d)*b.rh, max(c.H-4, 0))
+	a.drawRuler(c.Sub(gridLabW, 1, c.W-gridLabW, 1), g, play)
+	rows := min(a.gridRows(d)*b.rh, max(c.H-4, 0))
 	body := c.Sub(0, 2, c.W, rows)
 	if b.roll {
-		a.drawRoll(body, d, g, beatLabW, play)
+		a.drawRoll(body, d, g, gridLabW, play)
 	} else {
-		a.drawGrid(body, d, g, beatLabW, play, b.rh)
+		a.drawGrid(body, d, g, gridLabW, play, b.rh)
 	}
-	a.drawBeatDetail(c.Sub(0, 2+rows, c.W, 2), d)
+	a.drawGridDetail(c.Sub(0, 2+rows, c.W, 2), d)
 }
 
-// beatTitle names the pattern and where the game draws it
-func (a *tuiApp) beatTitle(d *audio.PatternDef) string {
-	parts := []string{"beat · " + d.Name}
+// editTitle names the pattern, where the game draws it and the slot it plays in
+func (a *tuiApp) editTitle(d *audio.PatternDef) string {
+	parts := []string{d.Name}
 	if d.Role != "" {
 		parts = append(parts, d.Role)
 	}
-	bars := d.Steps / audio.StepsPerBar
-	if d.Steps%audio.StepsPerBar == 0 && bars > 0 {
-		parts = append(parts, fmt.Sprintf("%d bar%s", bars, map[bool]string{true: "s"}[bars > 1]))
-	} else {
-		parts = append(parts, fmt.Sprintf("%d steps", d.Steps))
-	}
+	parts = append(parts, lengthWord(d.Steps))
 	if len(d.Groups) > 0 {
 		parts = append(parts, strings.Join(d.Groups, "+"))
 	}
@@ -601,10 +705,25 @@ func (a *tuiApp) beatTitle(d *audio.PatternDef) string {
 	if len(d.Tiers) > 0 {
 		parts = append(parts, strings.Join(d.Tiers, " "))
 	}
+	if id := audio.PatternIDByName(d.Name); id != audio.PatternSilence && a.slotOf(id) >= 0 {
+		parts = append(parts, fmt.Sprintf("slot %d", a.slotOf(id)))
+	}
 	if a.s.pats.isDirty(d.Name) {
 		parts = append(parts, "unapplied")
 	}
 	return strings.Join(parts, " · ")
+}
+
+// lengthWord is a pattern's length in bars, or in steps when not whole bars
+func lengthWord(steps int) string {
+	switch bars := steps / audio.StepsPerBar; {
+	case steps%audio.StepsPerBar != 0 || bars == 0:
+		return stepsWord(steps)
+	case bars == 1:
+		return "1 bar"
+	default:
+		return fmt.Sprintf("%d bars", bars)
+	}
 }
 
 // drawRuler numbers the bars and marks the beats over the steps shown
@@ -643,7 +762,7 @@ func (a *tuiApp) cellBg(cursor bool, s, play int) color.RGB {
 // tonal note as its degree (+ for a chord) with its length drawn on, a chance
 // under 1 dimmed
 func (a *tuiApp) drawGrid(r tui.Region, d *audio.PatternDef, g gridFit, labW, play, rh int) {
-	b := a.beat
+	b := a.ed
 	th := &a.theme
 	vis := max(r.H/rh, 1)
 	if b.trk < b.top {
@@ -769,7 +888,7 @@ func meterGlyph(vel float64, rows, up int) rune {
 // drawRoll draws the cursor's track as a piano roll: a row per pitch of the
 // mirrored key, high at the top, each note a bar as long as it sounds
 func (a *tuiApp) drawRoll(r tui.Region, d *audio.PatternDef, g gridFit, labW, play int) {
-	b := a.beat
+	b := a.ed
 	th := &a.theme
 	tr := &d.Track[b.trk]
 	if b.pitch > b.top {
@@ -826,9 +945,9 @@ func (a *tuiApp) drawRoll(r tui.Region, d *audio.PatternDef, g gridFit, labW, pl
 	}
 }
 
-// drawBeatDetail spells out the cursor's track and what lies under the cursor
-func (a *tuiApp) drawBeatDetail(r tui.Region, d *audio.PatternDef) {
-	b := a.beat
+// drawGridDetail spells out the cursor's track and what lies under the cursor
+func (a *tuiApp) drawGridDetail(r tui.Region, d *audio.PatternDef) {
+	b := a.ed
 	th := &a.theme
 	if len(d.Track) == 0 {
 		return
