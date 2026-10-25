@@ -25,7 +25,7 @@ type wsRouter struct {
 	route  *tcpRouter
 }
 
-// holds bounds the connections one session carries through this allocator, over
+// holds bounds the connections one session carries through this router, over
 // the front door and the browser route alike. The pod's per-address limiter cannot:
 // every proxied participant reaches it from the node.
 type holds struct {

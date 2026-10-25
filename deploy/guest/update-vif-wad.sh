@@ -39,7 +39,7 @@ layout=
 # The categories the fleet serves. content/ is not one and will not be: glyphs are
 # player domain, read on each player's own machine. audio/ is not one yet, because
 # a dedicated host renders nothing. Adding a category is this line, wadCategories
-# in tool/vif-allocator/manifest.go, and the mounts in deploy/k3s/30-session.yaml.
+# in tool/vif-router/manifest.go, and the mounts in deploy/k3s/30-session.yaml.
 categories="scenario image"
 
 die() { echo "$0: $*" >&2; exit 1; }

@@ -45,7 +45,7 @@ var ErrSessionStarting = &network.Refusal{Code: network.RefusalStarting, Reason:
 
 // ErrSessionEnding is the kind of refusal a draining or expired session gives a
 // dial. It is the opposite of ErrSessionStarting: this run is leaving, so retrying
-// against it is exactly the wrong answer, and an allocator reading it should place
+// against it is exactly the wrong answer, and a router reading it should place
 // the participant somewhere else.
 var ErrSessionEnding = &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending"}
 
@@ -1143,7 +1143,7 @@ func (m *membership) hostOffer() (network.SessionOffer, error) {
 	defer m.sessionMu.Unlock()
 	if len(m.sessionRoster) == 0 {
 		// No joiner ever arrived; describe the two-participant lobby this host opened.
-		// Through the allocator rather than beside it: a dedicated host holds no slot,
+		// Through the router rather than beside it: a dedicated host holds no slot,
 		// so its guest takes slot zero and a second rule here would disagree.
 		m.openRosterLocked()
 		m.sessionRoster = append(m.sessionRoster, m.nextParticipantLocked())

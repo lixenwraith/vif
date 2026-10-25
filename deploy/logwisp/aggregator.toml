@@ -45,7 +45,7 @@ check_interval_ms = 100
 raw = true
 from = "start"
 
-# The unauthenticated stream is reachable only on loopback. The allocator exposes
+# The unauthenticated stream is reachable only on loopback. The router exposes
 # it as a byte proxy; no browser or remote host connects here.
 #
 # client_buffer_size clears the burst above. The sink queues a whole release per

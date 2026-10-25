@@ -259,7 +259,7 @@ many dials it will ever accept.
 
 It also outlives its own authority, and that is why `-serve` defaults to
 `-authority host`. A dedicated host *is* the session: its address is what the
-allocator handed out and what every guest holds, so if the process goes, the answer
+router handed out and what every guest holds, so if the process goes, the answer
 is an orchestrator putting another one at that address and the guests dialling back
 — not a guest declaring itself the host. This is policy, not a limit:
 a migrate session's guests declare ports and its survivors walk the published chain

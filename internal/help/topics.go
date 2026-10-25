@@ -190,7 +190,7 @@ var topics = []topicDef{
 			{Actions: []string{"overlay_close"}, Scope: input.SectionOverlay, Desc: "Back to categories, then close; changes stay applied"},
 			{Keys: "Values in brackets", Desc: "Unavailable or read only; the explanation below gives the reason"},
 			{Keys: "Bots", Desc: "Add by count and policy; remove this run's bots by cursor slot or cancel a joining bot. Host before adding bots if remote players should join"},
-			{Keys: "Multiplayer", Desc: "Host, join a link, or request a vif-allocator session with player count and scenario; progress appears in the status bar"},
+			{Keys: "Multiplayer", Desc: "Host, join a link, or request a vif-router session with player count and scenario; progress appears in the status bar"},
 			{Actions: []string{"motion_up", "motion_down"}, Scope: input.SectionText, Desc: "Forms: move between fields; Left/Right and Home/End edit the cursor position"},
 			{Actions: []string{"text_confirm"}, Scope: input.SectionText, Desc: "Forms: submit all fields; Escape cancels without submitting"},
 			{Keys: "This run", Desc: "No settings are written to disk. Solo play pauses while the menu is open and a live session runs on; Game > Pause stops either. Replays keep only viewer controls"},

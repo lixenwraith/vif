@@ -21,7 +21,7 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	if err := run(os.Args[1:], logger); err != nil {
-		logger.Error("allocator stopped", "error", err)
+		logger.Error("router stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -95,7 +95,7 @@ func run(args []string, logger *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("allocator listening", "address", cfg.Listen, "route", cfg.RouteListen,
+		logger.Info("router listening", "address", cfg.Listen, "route", cfg.RouteListen,
 			"image", cfg.Allocator.Workload.Image)
 		errCh <- server.Serve(listener)
 	}()
@@ -123,7 +123,7 @@ func run(args []string, logger *slog.Logger) error {
 }
 
 // notifyReady answers systemd's Type=notify, so `systemctl start` returns when the
-// allocator answers rather than when it forked — every caller that restarts it then
+// router answers rather than when it forked — every caller that restarts it then
 // probes it was racing the bind. Outside systemd NOTIFY_SOCKET is unset and this
 // does nothing.
 func notifyReady(logger *slog.Logger) {

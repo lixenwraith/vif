@@ -79,7 +79,7 @@ func newKubeClient(apiURL, namespace, caFile, tokenFile string, requestTimeout t
 
 	transport := &http.Transport{
 		// The API is node-local. Never let a process-wide proxy setting send the
-		// allocator credential or Kubernetes traffic off the guest.
+		// router credential or Kubernetes traffic off the guest.
 		Proxy: nil,
 		DialContext: (&net.Dialer{
 			Timeout:   3 * time.Second,

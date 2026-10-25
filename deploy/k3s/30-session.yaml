@@ -1,5 +1,5 @@
 # One allocated session: one Job, one pod, one Service. A template render-session.sh
-# fills; tool/vif-allocator/manifest.go builds the same objects in Go.
+# fills; tool/vif-router/manifest.go builds the same objects in Go.
 # A Job, not a Deployment: a session ends with its process exiting zero, and no
 # replacement pod could inherit the world it held in memory.
 apiVersion: batch/v1
@@ -23,7 +23,7 @@ spec:
   # seconds; this ends one they never do: a wedged or abused session, or one its
   # own bots occupy with nobody else in it.
   activeDeadlineSeconds: 3600
-  # Long enough for an allocator or an operator to read why the session ended,
+  # Long enough for a router or an operator to read why the session ended,
   # short enough that finished objects do not accumulate against count/jobs.
   ttlSecondsAfterFinished: 120
   template:
@@ -92,7 +92,7 @@ spec:
             - ":7777"
             - "-probe"
             - ":7778"
-            # The name every route carries: the allocator's front door places a
+            # The name every route carries: the router's front door places a
             # player by it, and this session refuses a link that named another, so
             # a reused NodePort or a stale link is a refusal rather than a seat in a
             # stranger's match. See doc/kubernetes-fleet.md §9.
@@ -148,7 +148,7 @@ spec:
               containerPort: 7778
               protocol: TCP
           # Deployment state, never request state. A caller chooses from what the
-          # allocator advertises and nothing else; this is where an operator puts a
+          # router advertises and nothing else; this is where an operator puts a
           # GODEBUG or a locale for the whole fleet. Optional, so an absent map is
           # not a pod that will not start.
           envFrom:
@@ -197,7 +197,7 @@ spec:
             failureThreshold: 3
           # No readiness probe: the Service's one backend is the session, so taking it
           # out would break the session rather than reroute it. The handshake refuses
-          # a dial, and the allocator reads `ready` and `phase` from the health body.
+          # a dial, and the router reads `ready` and `phase` from the health body.
       volumes:
         # This claim exposes only the node-affine, tmpfs-backed local PV. The pod
         # remains Restricted and never mounts a direct hostPath.
@@ -213,7 +213,7 @@ spec:
 ---
 # The session's endpoint, one per session: players of one match must reach one
 # process. The probe port stays off it, reachable only inside the cluster through
-# the pod IP (the kubelet, Prometheus and the node's allocator).
+# the pod IP (the kubelet, Prometheus and the node's router).
 apiVersion: v1
 kind: Service
 metadata:
@@ -226,7 +226,7 @@ metadata:
     app.kubernetes.io/component: session
     app.kubernetes.io/part-of: vif-fleet
     vif.lixenwraith.dev/session: "${SESSION_ID}"
-  # Set by the allocator to the Job's UID, so deleting the Job removes this with
+  # Set by the router to the Job's UID, so deleting the Job removes this with
   # it. A Service that outlived its session would hold a node port against the
   # quota and advertise a match that no longer exists.
   ownerReferences:

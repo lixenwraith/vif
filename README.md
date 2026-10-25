@@ -131,7 +131,7 @@ of it. [Multiplayer](doc/multi-player.md) has the session design and
 readings.
 
 `deploy/` runs the lobby's game servers: a `scratch` image of the static
-`vif_headless` binary, K3s objects for one Job per game, and `vif-allocator`,
+`vif_headless` binary, K3s objects for one Job per game, and `vif-router`,
 which creates games on request and routes each by name.
 [doc/kube-docker-deploy.md](doc/kube-docker-deploy.md) installs it and
 [doc/kubernetes-fleet.md](doc/kubernetes-fleet.md) is its design.

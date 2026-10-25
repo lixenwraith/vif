@@ -74,7 +74,7 @@ WINDOW_CHECK = if $(GO) list -e -deps -tags "$(TAGS)" $(SRC) 2>/dev/null | grep 
 # packager's build never rewrites the source it was given (doc/packaging.md §1).
 .NOTPARALLEL:
 
-.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools allocator serve install uninstall install-config wad-archive release-readme image image-check
+.PHONY: help generate dev release headless cli gui android android-install android-toolchain nolog wasm windows run test verify arch-check clean check-go tools router serve install uninstall install-config wad-archive release-readme image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -93,7 +93,7 @@ help:
 	@echo "  wasm     Build WebAssembly binary for the browser page in web/ (logging omitted)"
 	@echo "  windows  Cross-compile for Windows/amd64 (audio and logging omitted)"
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
-	@echo "  allocator Build the website-to-K3s session allocator"
+	@echo "  router Build the website-to-K3s session router"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
 	@echo "  test     Run the Go tests with the race detector"
@@ -213,8 +213,8 @@ windows: check-go $(BIN_DIR)
 tools: check-go $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
 
-allocator: check-go $(BIN_DIR)
-	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/vif-allocator ./tool/vif-allocator
+router: check-go $(BIN_DIR)
+	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/vif-router ./tool/vif-router
 
 test: generate
 	$(GO) test -race ./...

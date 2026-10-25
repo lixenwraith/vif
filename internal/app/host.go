@@ -100,7 +100,7 @@ func (c sessionControl) RequestSession(site string, players int, scenario string
 		return err
 	}
 	if e.Scheme != link.SchemeSite {
-		return errors.New("allocator site must be an http:// or https:// URL")
+		return errors.New("router site must be an http:// or https:// URL")
 	}
 	if players < 0 || players > parameter.MaxPlayers {
 		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)

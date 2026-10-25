@@ -14,11 +14,11 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 - Priority: P2
 - Affected files: the Hugo site's `vif-lobby.js`, `pkg/network/endpoint.go`,
-  `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
+  `internal/mode/config_form.go`, `tool/vif-router`, `deploy/guest/vif-router.env`,
   `deploy/k3s/10-quota.yaml`
 - Guide: [Session fleet](kubernetes-fleet.md) §6
 
-The allocator takes `bots`, but `bots_max` stays 0 until these hold:
+The router takes `bots`, but `bots_max` stays 0 until these hold:
 - The site's `vif-lobby.js` sends `bots` and reads `bots_max`; the native client
   (`network.RequestSession`, the menu's request form) sends `bots`.
 - The quota's 1000m of CPU fills at three sessions of three bots: raise it, or
@@ -40,7 +40,7 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 
 - Priority: P3
 - Affected files: `internal/app/seat.go`, `cmd/vif`, `internal/mode/config_form.go`,
-  `tool/vif-allocator`
+  `tool/vif-router`
 
 `actions_per_second` is the only knob, and nothing caps it. Options: a rate suffix
 such as `-bot 2:default@6` that `BotSpecs` parses, so `-bot`, `:bot add` and the
@@ -193,19 +193,19 @@ the answer, and the shared grid already took the cost it would have saved.
 
 - Priority: P3
 - Affected files: `internal/network/session.go` (`AdmissionLimiter`),
-  `tool/vif-allocator`
+  `tool/vif-router`
 
-A pod sees every player the allocator splices at the node's address, so its own
+A pod sees every player the router splices at the node's address, so its own
 budget of 6 joins a minute is one per session rather than one per player: a
 seventh join into one session within a minute is refused, whoever makes it,
-though the allocator has already budgeted each player. Close it when a session
+though the router has already budgeted each player. Close it when a session
 that busy appears, by exempting the node's address at the pod or by having the
-allocator name the player to it.
+router name the player to it.
 
 ### Add browser admission authentication
 
 - Priority: P2
-- Affected files: allocator/session adapter, website, future authentication
+- Affected files: router/session adapter, website, future authentication
   dependency
 - Prerequisite: every route carries real play without transport faults, the
   built-in WebSocket included; no auth layer goes in while that is being settled
@@ -213,8 +213,8 @@ allocator name the player to it.
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or
 logs. Creation takes one too: `network.RequestSession` is the terminal's side of
-`POST /vif/api/sessions`, and already shows a 401 or 403 as the allocator's
-message. Decide whether the expanded allocator remains the credential boundary or
+`POST /vif/api/sessions`, and already shows a 401 or 403 as the router's
+message. Decide whether the expanded router remains the credential boundary or
 is renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency. A terminal's own door takes the same handshake: a
 `-selfsign` door encrypts with no authority and a native joiner takes it as it is,
@@ -277,7 +277,7 @@ tapped elsewhere. Unchecked without an emulator or a phone, so not built yet.
 - Priority: P2
 - Affected files: the Hugo site's `vif-lobby.js`, `.github/workflows/release.yml`
 
-Each row of the allocator's session list names the build its session runs
+Each row of the router's session list names the build its session runs
 (`state.build`), as the refusal a page of another build reads does. The site's
 lobby can show it, and warn before a Play that would be refused once it knows the
 page's own build, which the release's web bundle does not name yet.
@@ -377,7 +377,7 @@ number from [Measure a full roster](#measure-a-full-roster).
 
 - Priority: P1
 - Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/10-quota.yaml`,
-  `tool/vif-allocator/manifest.go`
+  `tool/vif-router/manifest.go`
 - Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
 
 Drive nine sessions with headless joiners for the fleet-level readings (CPU,
@@ -407,7 +407,7 @@ hour of play.
 
 - Priority: P2
 - Affected files: `deploy/guest/update-vif-image.sh`, `.github/workflows/release.yml`,
-  `deploy/k3s/30-session.yaml`, `tool/vif-allocator`
+  `deploy/k3s/30-session.yaml`, `tool/vif-router`
 - Guide: [Fleet deploy](kube-docker-deploy.md#8-the-session-image) §8
 
 Nightly CI publishes the headless image to GHCR under moving and commit-addressed
@@ -431,11 +431,11 @@ amount of log without ending a game.
 ### Provision audio to the fleet when a host needs it
 
 - Priority: P3
-- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-allocator/manifest.go`,
+- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-router/manifest.go`,
   `deploy/k3s/30-session.yaml`
 
 What a fleet session reads from the node volume is one list in three places —
-`categories` in the installer, `wadCategories` in the allocator, and the mounts in
+`categories` in the installer, `wadCategories` in the router, and the mounts in
 the template. `scenario` and `image` are on it. `audio` goes on it the day a
 dedicated host renders anything, and `content` never does. Nothing else changes;
 the volume already carries whatever the installer puts there.
@@ -682,12 +682,12 @@ removing one; `:merge`/`:split` for whole sessions.
 
 - Priority: P2
 - Affected files: `internal/network`, `internal/app`, `internal/mode/commands.go`,
-  `tool/vif-allocator`
+  `tool/vif-router`
 
 `:player drop <slot>` lets a host drop a player with its bots, or one bot, and the
 dropped person starts a new local game. What remains: a reason the dropped client
 prints, playing on alone as after `:leave` instead of starting over, and an
-operator route on the allocator, since a dedicated host has no console. Keeping a
+operator route on the router, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
 
@@ -753,7 +753,7 @@ lagging — twelve participants under A become seven under A and five under B. B
 participant at first, ideally a fresh fleet pod. A hands B its current world under a
 new session identity rather than a new term, redirects the five, and the two worlds
 diverge from there. Late joiners already install a mid-run world; what is missing is
-the redirect and an authority, for a pod an allocator request, that starts from a
+the redirect and an authority, for a pod a router request, that starts from a
 transferred world instead of a scenario.
 
 ### Run a scenario with no players

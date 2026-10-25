@@ -288,7 +288,7 @@ Host before adding bots to solo play if remote players should join; otherwise
 bots open a session only they can join.
 .PP
 Multiplayer hosts this run, joins an address/link, or requests a session from
-an HTTP(S) vif-allocator site with a player count and scenario. Player count 0
+an HTTP(S) vif-router site with a player count and scenario. Player count 0
 and a blank scenario use server defaults. The request asks for no bots of the
 session's own; the Bots page adds bots held by this run once it has joined.
 Hosts can remove individual bots or players with all their bots

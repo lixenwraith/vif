@@ -90,7 +90,7 @@ var configForms = map[string]configFormSpec{
 		},
 	},
 	"request": {
-		label: "Request a session", description: "Ask a vif-allocator site to create a session, then join it. Availability and quotas are set by the server.", command: "join",
+		label: "Request a session", description: "Ask a vif-router site to create a session, then join it. Availability and quotas are set by the server.", command: "join",
 		fields: []configFormField{
 			{"Site", "https://lixen.com", "Allocator site's http(s):// origin. Enter creates a session and joins the returned link."},
 			{"Players", "0", "Total player slots, including you. 0 uses the server default; the server may impose a lower limit."},

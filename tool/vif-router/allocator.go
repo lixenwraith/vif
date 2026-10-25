@@ -77,7 +77,7 @@ type sessionRequest struct {
 }
 
 // fleetLimits is what the deployment will accept and what an omitted choice gets,
-// so a caller can offer only the choices this allocator would allow, and name its
+// so a caller can offer only the choices this router would allow, and name its
 // defaults, rather than discovering either by refusal. Descriptions, FixedMaps,
 // MinPlayers and MaxPlayers hold what each scenario's entry states, keyed by name;
 // one that states nothing is absent. They sit beside Scenarios so a caller that
@@ -815,7 +815,7 @@ func expiresIn(reported string, item job, now time.Time) string {
 }
 
 // webSocketURL is derived from the origin the route accepts rather than configured
-// beside it: a page handed a URL whose origin this allocator would refuse is a
+// beside it: a page handed a URL whose origin this router would refuse is a
 // player told to dial a door that will not open.
 func (a *allocator) webSocketURL(id string) string {
 	if a.cfg.WebOrigin == "" {

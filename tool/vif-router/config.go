@@ -22,7 +22,7 @@ var (
 	sizePattern     = regexp.MustCompile(`^([1-9][0-9]{0,4})x([1-9][0-9]{0,4})$`)
 	// A scenario name is one path element the game looks up under scenario/ on the
 	// read-only volume. Anything with a separator in it would be a caller choosing
-	// a path, which is not a choice this allocator offers.
+	// a path, which is not a choice this router offers.
 	scenarioPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
 
@@ -77,14 +77,14 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	var drain string
 	var logLevelMin string
 
-	set := flag.NewFlagSet("vif-allocator", flag.ContinueOnError)
+	set := flag.NewFlagSet("vif-router", flag.ContinueOnError)
 	set.SetOutput(output)
-	set.StringVar(&cfg.Listen, "listen", ":9080", "allocator HTTP listen address")
+	set.StringVar(&cfg.Listen, "listen", ":9080", "the HTTP API and probes")
 	set.StringVar(&cfg.RouteListen, "route-listen", ":7777",
 		"native front door: one TCP port for every session, whose port join_target names")
 	set.StringVar(&cfg.KubeAPI, "kube-api", "https://127.0.0.1:6443", "Kubernetes API URL")
-	set.StringVar(&cfg.KubeCAFile, "kube-ca", "/etc/vif-allocator/server-ca.crt", "Kubernetes CA certificate")
-	set.StringVar(&cfg.KubeTokenFile, "kube-token", "/etc/vif-allocator/token", "rotated ServiceAccount token file")
+	set.StringVar(&cfg.KubeCAFile, "kube-ca", "/etc/vif-router/server-ca.crt", "Kubernetes CA certificate")
+	set.StringVar(&cfg.KubeTokenFile, "kube-token", "/etc/vif-router/token", "rotated ServiceAccount token file")
 	set.StringVar(&cfg.LogStreamURL, "log-stream-url", "", "loopback LogWisp SSE URL (required)")
 	set.DurationVar(&cfg.RequestTimeout, "kube-timeout", 10*time.Second, "timeout for one Kubernetes API request")
 	set.StringVar(&cfg.Allocator.Workload.Namespace, "namespace", "vif", "Kubernetes namespace")

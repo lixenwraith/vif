@@ -1,10 +1,11 @@
-# vif-allocator
+# vif-router
 
-`vif-allocator` is the narrow boundary between the vif website and the `vif`
-namespace, and the router on two of a session's three routes. Kubernetes still
-schedules, isolates, limits, terminates and garbage-collects every session. The
-allocator only performs the fixed transaction that Kubernetes has no anonymous
-endpoint for:
+`vif-router` is the narrow boundary between the vif website and the `vif`
+namespace, and the router on two of a session's three routes. It was
+`vif-allocator` until it routed anything but pods; its allocator half keeps that
+name in the code. Kubernetes still schedules, isolates, limits, terminates and
+garbage-collects every session. The allocator only performs the fixed transaction
+that Kubernetes has no anonymous endpoint for:
 
 1. reserve a free NodePort from 31700–31709;
 2. create one non-retryable Job, whose pod answers to the session's identifier;
@@ -16,9 +17,9 @@ Each Job mounts the read-only `vif-fleet-wad` claim at `/wad/scenario` and
 `/wad/image` in its config-check init container and its session container, and the
 node-affine `vif-fleet-logs` PVC only in the session container. The game writes
 `/var/log/vif-fleet/<session-id>.jsonl` and tags every application record with
-`fields.session_id`; the allocator neither reads nor rewrites those bytes. One
+`fields.session_id`; the router neither reads nor rewrites those bytes. One
 standalone LogWisp service reads those files and binds its SSE endpoint to
-loopback. The allocator's `/vif/api/logs` handler is a byte proxy: it does not
+loopback. The router's `/vif/api/logs` handler is a byte proxy: it does not
 parse, retain, or reserialize stream events.
 
 It has no database. Jobs and Services are the durable state, and startup
@@ -28,13 +29,13 @@ valid Job owner. Completed Jobs are never resurrected.
 Build it from the repository root:
 
 ```sh
-make allocator
+make router
 ```
 
 The production service reads a short-lived ServiceAccount token from a file on
 every Kubernetes request, so the root-owned token timer can replace that file
-atomically without restarting the allocator. See
-[`doc/kube-docker-deploy.md`](../../doc/kube-docker-deploy.md#11-the-allocator).
+atomically without restarting the router. See
+[`doc/kube-docker-deploy.md`](../../doc/kube-docker-deploy.md#11-the-router).
 
 ## HTTP API
 
@@ -46,7 +47,7 @@ atomically without restarting the allocator. See
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
 | `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. An unavailable upstream returns `503 log_stream_unavailable`. |
 | `HEAD /vif/api/logs` | `200` and the stream's headers, answered here: upstream refuses a HEAD on the stream path, and a probe should not open a stream. Only the `GET` reports upstream availability. |
-| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this allocator terminates and splices to the resolved pod's game port. Published only where `-web-origin` is set; elsewhere `501 web_route_not_configured`. |
+| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this router terminates and splices to the resolved pod's game port. Published only where `-web-origin` is set; elsewhere `501 web_route_not_configured`. |
 
 An error is `{"error":{"code":"…","message":"…"}}`. A create can also answer
 `413 request_too_large` for a body over 1 KiB, `415 content_type` for one not sent
@@ -146,7 +147,7 @@ drain or the Job's one-hour `activeDeadlineSeconds` ends it.
 `LimitRange`.
 
 `id` is the session's stable public identifier and the name its pod answers to.
-`join_target`, `direct_target` and `ws_url` are opaque strings this allocator
+`join_target`, `direct_target` and `ws_url` are opaque strings this router
 produces, and no caller may rebuild one from `port`: `join_target` is the front
 door below, `direct_target` the session's own NodePort. `ws_url` is absent where the
 deployment publishes no browser route, which is what a page keyed on it reads as
@@ -154,7 +155,7 @@ deployment publishes no browser route, which is what a page keyed on it reads as
 
 `-web-origin` is one origin, not a list, and `ws_url` is built from it. A site
 answering several hostnames must therefore canonicalize: a page loaded from another
-one of them is handed a `ws_url` whose origin this allocator refuses, and a page
+one of them is handed a `ws_url` whose origin this router refuses, and a page
 that checks the URL it was given against its own location will hide the link rather
 than offer a broken one.
 
@@ -171,7 +172,7 @@ accepts an upstream a caller named: the identifier is a routing key looked up in
 Kubernetes, not an address supplied. The decision record is in
 [`doc/multi-platform.md`](../../doc/multi-platform.md#5-browser-networking).
 
-The allocator deliberately exposes no public delete endpoint: this API is
+The router deliberately exposes no public delete endpoint: this API is
 anonymous behind the site, and one player must not be able to terminate another
 player's match. Sessions expire themselves; operators retain `kubectl` and
 `deploy/k3s/session.sh delete` for exceptional cleanup.
@@ -185,7 +186,7 @@ therefore remain independent while a missing stream produces only the stable 503
 ## Front door
 
 `-route-listen` (`:7777`) is one TCP port for every session, placing at most 32
-connections at once. A dialer's first frame names the session; the allocator
+connections at once. A dialer's first frame names the session; the router
 resolves it as the browser route does, dials the pod's game port, replays the name
 and copies bytes both ways until each side has closed, or until a write has stalled
 ten seconds or the other direction ended ten seconds before. A stream that does not
@@ -198,10 +199,10 @@ with the browser route), a session unknown, unready or full, and one holding
 ## Settings
 
 The production unit sets the flags it names from the installed copy of
-`deploy/guest/vif-allocator.env`, which `update-vif-image.sh` gives the
-`VIF_ALLOCATOR_IMAGE` line; a variable left empty keeps the flag's default. The
+`deploy/guest/vif-router.env`, which `update-vif-image.sh` gives the
+`VIF_ROUTER_IMAGE` line; a variable left empty keeps the flag's default. The
 others, the Kubernetes endpoint, namespace and credential files among them, keep
-their defaults; `vif-allocator -h` lists every flag.
+their defaults; `vif-router -h` lists every flag.
 
 | Flag | Default | What it sets |
 |---|---|---|

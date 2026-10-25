@@ -28,7 +28,7 @@ import (
 // Scheme is how a session's bytes travel. TCP carries native play at both ends; a
 // WebSocket carries the same stream for a browser or a network that blocks the TCP
 // port, from the deployment's route or a host's own ws:// listener. A site names no
-// session yet: its allocator is asked for one, and the link it answers is dialled.
+// session yet: its router is asked for one, and the link it answers is dialled.
 type Scheme uint8
 
 const (
@@ -386,7 +386,7 @@ type wsAddr string
 func (a wsAddr) Network() string { return "websocket" }
 func (a wsAddr) String() string  { return string(a) }
 
-// RequestSession asks site's allocator for a new session, within timeout, and
+// RequestSession asks site's router for a new session, within timeout, and
 // returns the link this build joins it by. players and scenario choose from what the
 // site advertises, zero for its defaults; a refusal, an unauthorised one included, is
 // its message.

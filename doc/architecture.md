@@ -21,7 +21,7 @@ flowchart TD
     App --> Presentation["Terminal, desktop window, browser page or Android view"]
     App --> Audio["System audio process or sink"]
     App --> Files["TOML, text, logs, and optional WAV files"]
-    App <--> Peers["Other vif instances, directly or through the fleet allocator"]
+    App <--> Peers["Other vif instances, directly or through the fleet router"]
 ```
 
 The application owns gameplay and orchestration. It delegates terminal
@@ -376,7 +376,7 @@ desktop window too, which `-g` opens (`make gui` opens it by default).
 `make headless` builds the `vif_headless` profile, which removes terminal
 presentation and audio code while keeping TCP and WebSocket sessions. It is what
 the K3s fleet runs: one `-serve` container per session, which
-`tool/vif-allocator` creates on request and routes joins to ([Session
+`tool/vif-router` creates on request and routes joins to ([Session
 fleet](kubernetes-fleet.md)). A headless script or bot has no terminal or audio,
 but may attach the network service with `-host`/`-join`.
 
@@ -385,7 +385,7 @@ frames on a WebGL canvas (`pkg/browser`), uses embedded FSM/content/keymap
 assets without host-directory discovery, streams its sound to an AudioWorklet on
 the page, and omits logging. It cannot open a socket, so it joins a session over
 the same-origin route `wss://<site>/vif/ws/<session>`: the page's own WebSocket
-wrapped as a `net.Conn`, carrying the protocol unchanged through the allocator
+wrapped as a `net.Conn`, carrying the protocol unchanged through the router
 to the session's game port. `-host`, `-serve` and a join by anything but a
 WebSocket link are rejected, because a browser can bind nothing and dial nothing
 else. The page can supply ordinary arguments through `Go.argv`, but external
