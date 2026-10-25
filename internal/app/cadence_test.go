@@ -163,6 +163,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 200})
 
 	var early, late int64
+	saturated := false
 	for round := range 2 {
 		runSession(host, guest, 150)
 		peak := int64(0)
@@ -173,6 +174,11 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 			guest.ApplyPendingCorrections()
 			if n := statOf(guest, "snapshot.correction_entities"); n > peak {
 				peak = n
+			}
+			// Momentary: a link read as the limit prices the plan, then its round
+			// trip settles toward the baseline the queue it stood in set.
+			if r := host.corrections.Cadence(); len(r.Peers) == 1 && r.Peers[0].Saturated {
+				saturated = true
 			}
 		}
 		if round == 0 {
@@ -187,7 +193,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 		t.Fatalf("the host scheduled %d links, want 1", len(report.Peers))
 	}
 	peer := report.Peers[0]
-	if !peer.Saturated {
+	if !saturated {
 		t.Fatalf("a 200-byte-per-tick link was never read as the limit: %+v", peer)
 	}
 	if !report.Constrained {

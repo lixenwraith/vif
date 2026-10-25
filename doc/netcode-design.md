@@ -7,8 +7,9 @@ and the wire carries what a receiver cannot re-derive. §1 is the wire, §2 the
 correction pipeline, §3 the readings, §4 phase 2, the approaches not yet landed in
 their batches, each with what of it is in and what it still needs, and §5 their
 order by iteration. Phase 1, four iterations in 2026-10, is what §1–§3 describe as
-built, with phase 2's first four: the wire codec, the authority's FSM
-transitions, and answers indexed in place under a word hash. Bare section numbers
+built, with phase 2's five: the wire codec, the authority's FSM transitions,
+answers indexed in place under a word hash, and keyframes from cached sections;
+§3.6 is phase 2 in measurements. Bare section numbers
 are this document's; "multi-player §n" is [Multiplayer](multi-player.md), which
 holds the session contract, event timing, membership and succession; "services §n"
 is [Services and networking](services-and-networking.md), which holds the
@@ -93,8 +94,9 @@ Four limits follow, and §4 is sorted against them:
    players. Envelopes and encodings are constants on that term; only topology
    changes its order.
 2. **Protocol, not simulation, bounds the map.** A td host's rounds cost about
-   220 ms of CPU a second (7.2 × (14 + 5 + 12)), its keyframes up to as much again,
-   its simulation 52 ms.
+   220 ms of CPU a second (7.2 × (14 + 5 + 12)), its keyframes up to as much again
+   before cached sections took their deflate to the stores that moved (§4), its
+   simulation 52 ms.
 3. **The live lock is held by O(E) work:** captures (100 ms a second at td), an
    install's comparison and write, and each projected tick.
 4. **A browser guest has one thread** for simulation, inflate, its own captures and
@@ -238,10 +240,7 @@ reconciled after the handoff as the roster is (multi-player §5.2).
 deflate, and times stages rather than their parts; §3.3 reads the socket path. Each
 reading still missing decides an approach of §4:
 
-- Keyframes by reason, schedule, floor, request, repair wider than the keyframe,
-  failed proof, the bodies after a fallback, and how many are encoded for how many
-  sent: keyframes from cached sections.
-- Plain bytes per section of a td keyframe: cached sections, the binary row codec.
+- Plain bytes per section of a td keyframe: the binary row codec.
 - Lock hold by part, stores, carriers, status, comparison, write, each projected
   tick: converged answers without a capture, less work under the live lock.
 - Repairs by cause, the sections carried and whether the authority committed one of
@@ -287,7 +286,11 @@ copy still compares equal, and navigation rebuilds its wall grid only when a wal
 moved and compares grids only when their generation moved. At 16 players, rounds
 four ticks apart (on a slower container than the figures above), the seal costs
 1.8 ms on the tower map and 5 ms on td, the index 2.4 and 12 ms, a keyframe 7.6 and
-58 ms (mostly deflate), and a simulation tick 1.1 and 2.6 ms. An install that
+58 ms (mostly deflate), and a simulation tick 1.1 and 2.6 ms. From cached sections
+(protocol 26) a keyframe's deflate falls to the stores that moved: on four cores a
+td keyframe that one deflate took 72.7 ms encodes in 2.2 while its stores hold and
+8.6 a tick later, at the same bytes within 0.4%, and a session's first in 150
+against 158 (`BenchmarkKeyframeEncodeTD`, `TDMoving`, `TDCold`). An install that
 projects nothing holds the live lock 7–10 / 40–70 ms, and each projected tick adds up
 to a simulation tick. Sealing, indexing and encoding run outside the lock, but on
 the one thread a browser guest has.
@@ -373,8 +376,13 @@ within the spread (epochs 1.0, 5.9 and 89.1 kB/s framed, the wire 1.56, 6.47 and
 73.1) and the process 0.09, 0.17 and 0.59, a transition being one crossing of
 some twenty bytes a lead apart; with the word hash and the index read in place
 (manifest version 4) the bytes read the same again and the process 0.09, 0.15
-and 0.49, a guest tick 12.5 ms against 16.8 at 16 players, td 0.36 at 2. The
-in-place answer never runs here: these guests tick in step with the host, so a
+and 0.49, a guest tick 12.5 ms against 16.8 at 16 players, td 0.36 at 2; with
+keyframes from cached sections (protocol 26) the tower reads the same again
+(epochs 1.0, 5.9 and 89.8 kB/s framed, the wire 1.55, 6.44 and 75.2) and the
+process 0.08, 0.14 and 0.47, a guest tick 11.9 ms at 16 players, td 0.34 at 2 and
+0.46 at 4 with a keyframe every 14 s on both rows, its bodies 45.6 and 38.6 kB/s
+framed, its wire 47.3 and 45.0 and its heap 360 and 906 MiB. The in-place answer
+never runs here: these guests tick in step with the host, so a
 manifest reaches them after the tick it names and the promised tick is captured
 as before; the paced guest of §3.5, a lead behind, answers 248 of 261 manifests
 in place. td's bodies and CPU move run to run with what its storm does to the
@@ -543,8 +551,9 @@ heavy      pg 300  kf 7   lc 57   lead 9 (9)     pg 49  kf 7  lc 0  lcp 0  lead 
 Phase 2's iterations over the same four shapes: on the main each started from
 (the staleness change had moved the lossy shapes' pages from the table above),
 with the envelope, with the payload codec, with the authority's FSM transitions
-(`fsm`), and with the index read in place under the word hash and the events a
-parked region replays (`place`), 1,200 ticks each:
+(`fsm`), with the index read in place under the word hash and the events a
+parked region replays (`place`), and with keyframes from cached sections
+(`blobs`), 1,200 ticks each:
 
 ```
 shape      stage     pg  kf  lc  lcp  lead     manifests
@@ -553,21 +562,25 @@ fieldlike  main      31   3   1    0  8 (9)    284
            payload   31   2   1    0  8 (9)    270
            fsm       23   5   1    0  8 (9)    175
            place     56   5   1    0  8 (9)    170
+           blobs     34   5   1    0  8 (9)    179
 rare       main       3   3   0    6  11 (13)  273
            envelope   8   2   0   11  11 (13)  267
            payload    3   2   0    6  11 (13)  261
            fsm       29   2   0    4  11 (13)  261
            place     24   2   0    4  11 (13)  261
+           blobs     24   2   0    4  11 (13)  261
 sparse     main       1   1   3    4  9 (10)   292
            envelope   1   1   3    4  9 (10)   287
            payload    1   1   3    4  9 (10)   284
            fsm        6   2   3   10  9 (10)   281
            place      5   2   3    6  9 (10)   279
+           blobs      5   2   3    6  9 (10)   279
 heavy      main      61   5   0    0  14 (15)  134
            envelope  84   7   0    3  13 (15)  132
            payload   99   5   0    0  14 (15)   97
            fsm      119   4   0    1  14 (15)  124
            place    116   4   0    1  14 (15)  124
+           blobs    116   4   0    1  14 (15)  124
 ```
 
 Late commits and the lead hold on every shape through every step; pages and late
@@ -584,7 +597,10 @@ raised one by liveness, so the rows after it are not the codec's to compare;
 the late counts and the lead are, and hold. The `place` step moves the sparse
 fight once more: an event a parked region used to drop now replays, so the
 scenario's own storm comes at tick 508 instead of 904 and the harness's raise
-finds one active; late counts and lead hold again.
+finds one active; late counts and lead hold again. The `blobs` step leaves three
+shapes as they were and moves the field-like one's pages from 56 to 34 with nine
+more manifests, the lossy link reading the bytes it delivered; late counts and
+lead hold.
 
 The harness prints the storm region's transitions too, from both ends' records:
 the scenario enters `StormSetup` from the quasar kills at tick 798–928 by shape,
@@ -595,6 +611,39 @@ every transition at one tick on both ends over every shape, and how many
 manifests the guest answered in place, 248 of 261 on the default shape. What it
 cannot yet read: the pacing knobs other than their steady state.
 
+### 3.6 Phase 2 in measurements
+
+What each iteration changed, in the unit a player or an operator feels, read
+before and after on the same harness the same day (§3.3's sockets readings, §3.5's
+four shapes, the package benchmarks), as AGENTS.md asks of a change made for
+performance. Tower rows are 2 / 4 / 16 players.
+
+```
+Iteration                      Measured                              Before → after
+Wire codec (protocol 23, 24)   Tower epochs, framed                  4.8 / 41.0 / 825 → 1.0 / 5.8 / 88.6 kB/s
+                               Tower syncs, framed                   1.6 / 15.2 / 382 → 0.3 / 2.8 / 69.7 kB/s
+                               Tower wire                            1.70 / 7.94 / 101 → 1.54 / 6.45 / 74.7 kB/s
+                               Process at 16 players                 0.58 → 0.49 CPU-s/s
+Authority's FSM (protocol 25)  Storm region's transitions, two ends  by each end's own tick → one tick, four shapes
+                               Tower wire, process at 16             within the 2% spread; 0.54–0.55 → 0.59 CPU-s/s
+Answers in place (manifest 4)  Hash of a 181-byte row                0.25 → 4.6 GB/s
+                               Paced guest's manifests, in place     0 → 248 of 261
+                               Guest tick at 16 players              16.8 → 12.5 ms
+                               Process at 16 players                 0.59 → 0.49 CPU-s/s
+Cached sections (protocol 26)  td keyframe encode, stores held       72.7 → 2.2 ms
+                               td keyframe encode, a tick apart      61.2 → 8.6 ms
+                               td keyframe bytes                     363.2 → 361.9 kB
+                               Storm high-water capture              13.3 → 12.9 kB
+                               Process at 16, guest tick             0.49 → 0.47 CPU-s/s, 12.5 → 11.9 ms
+```
+
+Over the five the tower host's wire at 16 players fell from 101 to 75 kB/s and the
+process from 0.58 to 0.47 CPU-s per simulated second, a td keyframe's encode from
+one deflate of the world to the stores that moved, and §3.5's late commits and
+lead held on every shape at every step. What did not move: td's bodies, which are
+its egress and wait on the binary row codec, and the heap, which retention by
+reference takes.
+
 ## 4. Phase 2
 
 Each approach below says what of it is in, what is left and what it needs before
@@ -604,9 +653,10 @@ confirms or refutes them. Phase 1 closed with the six-tick wire digest retired
 (protocol 22): parity is the correction exchange's, and a repair names its sections
 in `snapshot.repair_sections`. Phase 2's first four iterations landed the binary
 wire codec, its envelope (protocol 23) and its payload (protocol 24, journal
-schema 37), the authority's FSM transitions (protocol 25, journal schema 38), and
-the index read in place under a word hash (manifest version 4, capture schema
-24). The approaches are in three batches, and §5 orders them by iteration.
+schema 37), the authority's FSM transitions (protocol 25, journal schema 38), the
+index read in place under a word hash (manifest version 4, capture schema 24) and
+keyframes from cached sections (protocol 26). The approaches are in three batches,
+and §5 orders them by iteration.
 
 ### Batch 1: the wire
 
@@ -738,19 +788,23 @@ the index read in place under a word hash (manifest version 4, capture schema
 
 ### Keyframes from cached sections
 
-- Costs: − + + ·; complexity medium.
+- Costs: − + · ·; complexity medium.
 - Projected: keyframe deflate in proportion to the sections that moved.
-- In: row reuse makes a keyframe's JSON cheap.
-- Left: its deflate still runs over the whole capture, 58 ms at td. Compress each
-  section on its own, keep its compressed bytes while its section hash holds, and
-  send a keyframe as a container of section blobs. td is a sprawling maze in which
-  every wall cell is a Shared entity with a position and a wall row, so most of a
-  keyframe would be blobs already compressed. A join's capture (`EncodeCapture`)
-  takes the same container.
-- Needs: a container format and its decoder; the cached blobs, hundreds of
-  kilobytes at td; a few percent more bandwidth, each section losing the history of
-  those before. Integrity is over rows rather than body bytes, so the proof is
-  unchanged.
+- In (protocol 26): a capture travels as sections, codec 2 of the `VIFS` envelope:
+  a count, then each part's name, plain and deflated lengths and its own deflate,
+  each bounded at the receiver by the plain size it declares. A store of
+  `SnapshotSectionBlobBytes` (16 KiB) of JSON or more is a part of its own, its
+  deflate kept by the encoder while its rows are the slice the row encoder
+  returned before; the header, the carriers, the status, the FSM and the smaller
+  stores are one `rest` object deflated each time, since alone each starts deflate
+  cold and costs a quarter of its bytes (a two-player tower keyframe 3,623 bytes
+  against 2,907 as one deflate; as `rest`, 2,935). A keyframe and a join's capture
+  are one body (`EncodeCapture`, `DecodeCapture`); integrity stays over rows.
+- Measured, four cores: a td keyframe 72.7 ms as one deflate, 2.2 while its stores
+  hold and 8.6 a tick later (61.2 before), a session's first 158 to 150; bytes
+  363.2 to 361.9 kB at td and 13.3 to 12.9 at the storm high water
+  (`BenchmarkKeyframeEncodeTD*`, `BenchmarkCaptureAtStormHighWater`). The cached
+  blobs are each large store's deflate, the keyframe's bytes once over.
 
 ### Less work under the live lock
 
@@ -828,22 +882,20 @@ alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
    (§3.5, §4).
 4. Converged answers without a capture and the faster hash (batch 2): landed,
    manifest version 4 and capture schema 24 (§3.3, §4).
-5. Keyframes from cached sections (batch 3); the binary row codec, retention by
-   reference and the projection out of the lock follow it as iterations of their
-   own when their batch is reached.
+5. Keyframes from cached sections (batch 3): landed, protocol 26 (§3.1, §3.6,
+   §4). The binary row codec, retention by reference and the projection out of the
+   lock follow as iterations of their own.
 
 ### Brief for the next session
 
-Repository `lixenwraith/vif`, AGENTS.md is the contract. Netcode phase 2, iteration
-5 of 5 (§5): keyframes from cached sections. Read [netcode design](netcode-design.md)
-§2, §3.1, §3.3, §4 batch 3 and §5, then `internal/snapshot` (`Encoder.appendCapture`,
-`EncodeCapture`, `EncodeCorrection`, the section cache in `encoder.go` and the wire
-envelope in `codec.go`) and `internal/converge` (`takeKeyframe`, `KeyframeAt`,
-`ProvedWorld`, the install path a keyframe takes). Land it alone: compress each
-section on its own, keep its compressed bytes while its section hash holds, send a
-keyframe and a join's capture as one container of section blobs with a decoder
-that reassembles the capture; integrity stays over rows. Bump `Schema` and the
-protocol as the container needs; one test per rule; measure a td keyframe's
-encode before and after. Re-run §3.1's matrix, §3.3's readings and §3.5's four
-shapes and update §3.1, §3.3 and §3.5. Do not start the binary row codec,
-retention by reference or the projection out of the lock in this iteration.
+Repository `lixenwraith/vif`, AGENTS.md is the contract. Netcode phase 2 is landed,
+five of five (§5), measured in §3.6. The next iteration is the binary row codec
+(§4 batch 3). Read [netcode design](netcode-design.md) §2, §3.1, §3.3, §3.6, §4
+batch 3 and §5, then `internal/gen-manifest` and `internal/snapshot` (`RowEncoder`,
+the section cache and the sections codec in `encoder.go` and `codec.go`). Land it
+alone: a generated binary encoding per component, fixed field order, varints,
+float64 as its bits, which is what is sealed, hashed and sent, with a readable
+rendering for `vif-log`; bump `Schema` and the protocol; one test per rule; measure
+a td keyframe's bytes and encode before and after. Re-run §3.1's matrix, §3.3's
+readings and §3.5's four shapes and update §3. Retention by reference and the
+projection out of the lock follow as iterations of their own.

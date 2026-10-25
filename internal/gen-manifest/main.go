@@ -1424,6 +1424,19 @@ func newStoreEncoders() []storeEncoder {
 	}
 }
 
+// SharedWorldDecodeStore parses store i's cells, a JSON array, into s.
+func SharedWorldDecodeStore(s *SharedWorldState, i int, data []byte) error {
+	switch i {
+	case 0:
+		return json.Unmarshal(data, &s.Positions)
+{{- range $i, $c := .Components }}
+	case {{ add1 $i }}:
+		return json.Unmarshal(data, &s.{{ $c.Field }})
+{{- end }}
+	}
+	return fmt.Errorf("store %d is not a shared store", i)
+}
+
 // SharedWorldApplyStoreRows replaces every cell of store i the page owns with rows.
 //
 // owns names the page's entities rather than the rows': a page whose content the

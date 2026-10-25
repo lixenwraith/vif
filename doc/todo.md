@@ -648,6 +648,10 @@ with its payload, late counts unchanged: the link meter reads throughput from th
 bytes it delivered, and a command stream of a fifth the bytes reads as a slower
 link, so the cadence lengthened under loss. Read what the meter and the floor
 decide on a thin stream, and whether the probe's bytes should carry the reading.
+The saturation signal's round-trip half reads inflation against the least trip
+seen, and a link queued from its join on, as the cadence test's 200-byte-per-tick
+link is, never shows its idle trip, so the flag flickers once a run settles near
+1.5× of a congested baseline; the test reads the run rather than its last sample.
 
 ### Fold an unguarded chain into one crossing
 

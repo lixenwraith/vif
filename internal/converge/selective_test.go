@@ -40,7 +40,7 @@ func TestBaselineBytesFollowTheirBaseline(t *testing.T) {
 				}
 			}
 			_, got := assembly.Result()
-			want, err := snapshot.EncodeCorrection(host.c.baseline)
+			want, err := snapshot.EncodeCapture(host.c.baseline)
 			if err != nil || !done || !bytes.Equal(got, want) {
 				t.Fatalf("fallback differs from its current baseline: complete=%t err=%v", done, err)
 			}
@@ -81,7 +81,7 @@ func TestAWholeWorldLeavesAsItsLinkDrains(t *testing.T) {
 	host, guest, runs := slowLink(t)
 	host.c.sendKeyframeTo(host.world.port, 2, host.world.Position().Tick)
 	host.c.publishMu.Lock()
-	left, total := len(host.c.peers[2].flight.frames), len(host.c.keyCorrection)
+	left, total := len(host.c.peers[2].flight.frames), len(host.c.keyBody)
 	host.c.publishMu.Unlock()
 	if total < 8*parameter.SnapshotCorrectionChunkBytes || left == 0 {
 		t.Fatalf("a %d-byte world left %d chunks behind on a slow link; want it paced", total, left)

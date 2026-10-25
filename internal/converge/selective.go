@@ -470,16 +470,16 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 			return
 		}
 	}
-	cap, body := c.baseline, c.keyCorrection
+	cap, body := c.baseline, c.keyBody
 	if body == nil {
 		var err error
-		body, err = c.inst.Encoder().EncodeCorrection(cap)
+		body, err = c.inst.Encoder().EncodeCapture(cap)
 		if err != nil {
 			c.publishMu.Unlock()
 			c.log.Warn("converge", "msg", "keyframe fallback not encoded", "error", err.Error())
 			return
 		}
-		c.keyCorrection = body
+		c.keyBody = body
 	}
 	// The peer is being served a whole world, so its standing in the selective
 	// exchange starts again from the state it is about to hold.

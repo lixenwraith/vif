@@ -567,8 +567,11 @@ capture stands as backlog for the whole session.
 size is a function of the world rather than of the format, so it is split, as a
 correction (`MsgStateCorrection`) and a scenario body are. The schema JSON first
 enters a 10-byte bounded compression envelope:
-`[magic:4][version:1][codec:1][plain bytes:4]`, followed by deflate data. The
-reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
+`[magic:4][version:1][codec:1][plain bytes:4]`, followed by deflate data; a
+capture, as a keyframe or a join's, travels in it as sections, a count and then
+each part's name, plain and deflated lengths and its own deflate, so a store that
+held since the encoder's last capture is sent from the bytes made then and a
+receiver bounds each part by the plain size it declares. The reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
 at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
 ratio is large and world-dependent: the storm high water compresses from about
 299 KiB to 16.1 KiB, and the largest map the grid holds — 500x250 walled, which
