@@ -381,6 +381,13 @@ const (
 	// merely slow is retried without the walk becoming a spin.
 	NetworkRejoinPassInterval = time.Second
 
+	// NetworkHostDialAttempts bounds a participant's dials of the authority it follows
+	// through another participant's link, for a link of its own. Each waits twice as
+	// long as the last from NetworkRejoinPassInterval, so a host the chain names at an
+	// address unreachable from here is tried for about half a minute and then
+	// followed as it was, rather than dialled for the rest of the session.
+	NetworkHostDialAttempts = 5
+
 	// NetworkMigrationBadgeTicks is how long the status bar shows MIGRATING after
 	// a handoff is adopted. The badge marks a transition rather than a state, so
 	// it is measured in ticks a person can read rather than held until something

@@ -1167,6 +1167,85 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	}
 }
 
+// TestAPersonBehindARelayReachesTheHostThatTookOver: a relayed person follows the
+// guest that took the session over through its relay when its walk's dial of that
+// guest did not go through, then dials it at its chain address and plays on a link
+// of its own, the relay letting it go.
+func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	next, _ := driveBot(t, Config{JoinAddress: addr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	for _, a := range []*App{host, next, relay, person} {
+		waitForCursors(t, a, 5)
+	}
+	id, nextID := person.membership.localParticipant(), link.PeerID(next.membership.localParticipant())
+	waitUntil(t, func() bool { _, ok := person.authority.Chain().Lookup(nextID); return ok }, "the next host in the person's chain")
+
+	// The person's chain names the next host where nothing answers, which is what a
+	// walk whose dial does not go through holds; the record it follows brings the
+	// address. From its relay, so the person floods the list to nobody.
+	chain := person.authority.Chain()
+	for i := range chain {
+		if chain[i].ID == nextID {
+			chain[i].Addr = "127.0.0.1:1"
+		}
+	}
+	held := authorityOf(person)
+	body, err := network.EncodePeerList(network.PeerListRecord{Term: held.Term, Authority: held.Authority, Chain: chain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	person.authority.Receive(uint8(network.MsgPeerList), relay.membership.localParticipant(), body)
+	if got, _ := person.authority.Chain().Lookup(nextID); got != "127.0.0.1:1" {
+		t.Fatalf("the person's chain names the next host at %q, want the address nothing answers at", got)
+	}
+
+	leave() // the host and its bot go
+	for _, a := range []*App{next, relay, person} {
+		waitForWraiths(t, a, 2)
+	}
+	waitUntil(t, func() bool {
+		r := authorityOf(person)
+		return r.Authority == nextID && !r.Migrating
+	}, "the person following the guest that took over")
+	waitUntil(t, func() bool { return person.membership.sessionTransport().PeerCount() == 2 }, "the person's own link to its host")
+	waitUntil(t, func() bool { return !slices.Contains(downstreamOf(relay), id) }, "the relay letting the person go")
+	waitForMotion(t, next, cursorOf(t, next, id), "the person's cursor on the host it reached")
+	if p := person.membership.sessionTransport().PeerCount(); p != 2 {
+		t.Fatalf("the person holds %d links, want its relay and its host", p)
+	}
+}
+
+// waitUntil waits for a running session to reach a state, a socket deadline away.
+func waitUntil(t *testing.T, done func() bool, what string) {
+	t.Helper()
+	for deadline := time.Now().Add(socketWait); !done(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: not within %s", what, socketWait)
+		}
+	}
+}
+
+// downstreamOf is the participants an instance passes the authority's artifacts to.
+func downstreamOf(a *App) (out []uint32) {
+	a.World().RunSafe(func() {
+		for _, sys := range a.World().Systems() {
+			if d, ok := sys.(interface{ Downstream() []uint32 }); ok {
+				out = d.Downstream()
+			}
+		}
+	})
+	return out
+}
+
 // TestARelayedPersonsOwnAddressReachesTheSession: a person that joins through a
 // relay and names its own -listen address is admitted, and the chain that carries
 // that address reaches the relay. The host notes the address under the world lock,

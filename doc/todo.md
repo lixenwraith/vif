@@ -467,21 +467,9 @@ handed out of band like the host's, nothing publishes which participants relay,
 and a NAT between a person and every relay is not crossed. A browser relays only
 its own bots. Relay trees the authority chooses are dropped
 ([netcode design §4, Dropped](netcode-design.md#dropped)): a relay stays what a
-person chooses, and this item and the two after it are its correctness. Verify a
+person chooses, and this item and the three after it are its correctness. Verify a
 relayed topology under `LinkShape`s, asserting hash-only
 convergence and the authority's per-link fan-out.
-
-### Move a relayed survivor to its host
-
-- Priority: P3
-- Affected files: `internal/converge/authority.go`, `internal/system/network.go`
-- Guide: [Multi-player](multi-player.md#51-succession) §5.1
-
-A survivor that reached its new host only through a candidate relaying for others
-follows that host through it for the rest of the session, its artifacts a hop
-longer than they need be and the relay's player carrying traffic it offered for a
-host loss. What would close it: the far survivor, once following, dials the host at
-its chain address and moves its up link there, the relay letting it go.
 
 ### Redial a relay that left
 
@@ -515,6 +503,17 @@ relays. Once that guest takes the session over it is the authority, so the door
 turns every dial away as the session changing hands, which the dialer retries, while
 the guest's own port takes joins. What would close it: the door admitting as the
 host's does once its run hosts, as that port does.
+
+### Pace the dial of the successor
+
+- Priority: P3
+- Affected files: `internal/converge/reach.go`
+
+A participant keeps a link to the first candidate open (`Reach.dialSuccessor`) from
+every pass of the correction loop, one dial in flight at a time: a candidate whose
+chain address refuses the connect at once is dialled again on the next pass, a
+connect a tick for the rest of the session. The dial of a followed host beside it
+backs off and stops (`NetworkHostDialAttempts`); this one wants the same pacing.
 
 ### Keep a late survivor in its host's group
 

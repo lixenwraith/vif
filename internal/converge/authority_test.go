@@ -1,10 +1,14 @@
 package converge
 
 import (
+	"errors"
 	"slices"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	link "github.com/lixenwraith/vif/pkg/network"
@@ -510,6 +514,168 @@ func TestASurvivorCarriesOnlyWhomItRelaysFor(t *testing.T) {
 	if !in {
 		t.Fatal("the host did not count the carried survivor in its group")
 	}
+}
+
+// dialingNode is a mesh node that opens links as a socket port does: a dial names
+// a participant, which the node links to, or refuses while down, as a connect that
+// does not go through.
+type dialingNode struct {
+	*link.MeshPort
+	mesh *link.Mesh
+
+	mu     sync.Mutex
+	down   bool
+	dialed []string
+}
+
+func (d *dialingNode) DialPeer(addr string) error {
+	d.mu.Lock()
+	d.dialed = append(d.dialed, addr)
+	down := d.down
+	d.mu.Unlock()
+	if down {
+		return errors.New("no route")
+	}
+	id, err := strconv.Atoi(addr)
+	if err != nil {
+		return err
+	}
+	d.mesh.Peer(link.PeerID(d.ParticipantID()), link.PeerID(id))
+	return nil
+}
+
+func (d *dialingNode) dials() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.dialed)
+}
+
+func (d *dialingNode) setDown(down bool) {
+	d.mu.Lock()
+	d.down = down
+	d.mu.Unlock()
+}
+
+// waitDials waits for the n-th dial, which runs off the loop that decided on it, and
+// for every dial in flight to end, so the next decision is not held back by one.
+func waitDials(t *testing.T, r *run, d *dialingNode, n int) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
+		r.r.mu.Lock()
+		inFlight := len(r.r.dialing)
+		r.r.mu.Unlock()
+		if d.dials() >= n && inFlight == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d dials and %d in flight, want %d and none", d.dials(), inFlight, n)
+		}
+	}
+}
+
+// followThroughRelay builds the four-participant session of
+// TestASurvivorCarriesOnlyWhomItRelaysFor with a far survivor that can dial but
+// whose walk's dial of the first candidate does not go through, and runs the
+// succession until it follows that candidate, now hosting, through participant 3.
+func followThroughRelay(t *testing.T) (*run, *dialingNode) {
+	t.Helper()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Link(1, 4)
+	mesh.Peer(2, 3)
+	mesh.Peer(3, 4)
+	far := &dialingNode{MeshPort: mesh.Node(4), mesh: mesh, down: true}
+	chain := network.SuccessionChain{{ID: 2, Addr: "2"}, {ID: 3, Addr: "3"}}
+	runs := make([]*run, 4)
+	for i := range runs {
+		var port engine.NetworkPort = mesh.Node(link.PeerID(i + 1))
+		if i == 3 {
+			port = far
+		}
+		runs[i] = newRun(t, uint32(i+1), port, roster(4))
+		runs[i].open(1, chain, false)
+	}
+	if err := runs[0].c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	_ = mesh.Node(1).Close()
+	survivors := runs[1:]
+	for _, r := range survivors {
+		r.c.QueuePeerLost(1)
+	}
+	deliver(survivors, 4)
+	if !runs[3].u.Migrating() || slices.ContainsFunc(far.dialed, func(a string) bool { return a != "2" }) {
+		t.Fatalf("the far survivor dialled %v and migrating is %t; want the first candidate alone, refused, and a walk", far.dialed, runs[3].u.Migrating())
+	}
+	runs[2].world.relaying = true
+	runs[3].u.sendReport()
+	deliver(survivors, 4)
+	if got := runs[3].u.State(); got.Authority != 2 || len(runs[3].world.handoffs) != 1 || runs[3].world.handoffs[0].via != 3 {
+		t.Fatalf("the far survivor holds %+v after %v; want the host, followed through participant 3", got, runs[3].world.handoffs)
+	}
+	// The dials so far went to the successor, kept linked before the loss, and to
+	// the host as it was adopted; the criteria count from here.
+	waitDials(t, runs[3], far, 0)
+	runs[3].r.mu.Lock()
+	runs[3].r.hostFor = 0
+	runs[3].r.mu.Unlock()
+	return runs[3], far
+}
+
+// TestAFollowerThroughARelayDialsItsHost: a survivor that follows the host through
+// a participant relaying for it dials the host at its chain address and, linked,
+// holds that link as its own; a host it cannot reach is dialled a bounded number
+// of times, each after a longer wait, and followed as it was.
+func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
+	t.Parallel()
+	t.Run("reaches it", func(t *testing.T) {
+		t.Parallel()
+		far, node := followThroughRelay(t)
+		base := node.dials()
+		node.setDown(false)
+		far.u.drive()
+		waitDials(t, far, node, base+1)
+		if !node.Connected(2) || node.dialed[base] != "2" {
+			t.Fatalf("dialled %v and linked to the host is %t; want the host's chain address, linked", node.dialed[base:], node.Connected(2))
+		}
+		far.u.drive()
+		far.u.mu.Lock()
+		direct := far.u.direct
+		far.u.mu.Unlock()
+		if _, following := far.u.followed(); !direct || following {
+			t.Fatalf("linked to its host, direct is %t and following %t; want its own link", direct, following)
+		}
+		far.u.drive()
+		if n := node.dials(); n != base+1 {
+			t.Fatalf("%d dials once linked, want the one that linked it", n-base)
+		}
+	})
+	t.Run("gives up on one it cannot reach", func(t *testing.T) {
+		t.Parallel()
+		far, node := followThroughRelay(t)
+		base := node.dials()
+		for i := 1; i <= parameter.NetworkHostDialAttempts; i++ {
+			far.u.drive()
+			far.u.drive() // paced: the second drive inside the wait dials nothing
+			waitDials(t, far, node, base+i)
+			far.r.mu.Lock()
+			wait := far.r.nextHost.Sub(time.Now()).Round(parameter.NetworkRejoinPassInterval)
+			far.r.nextHost = time.Time{} // as the wait passing
+			far.r.mu.Unlock()
+			if want := parameter.NetworkRejoinPassInterval << (i - 1); wait != want {
+				t.Fatalf("dial %d waits %v before the next, want %v", i, wait, want)
+			}
+		}
+		far.u.drive()
+		if n := node.dials() - base; n != parameter.NetworkHostDialAttempts {
+			t.Fatalf("%d dials of the host, want %d and then none", n, parameter.NetworkHostDialAttempts)
+		}
+		if _, following := far.u.followed(); !following {
+			t.Fatal("past the bound the survivor stopped following the host it has")
+		}
+	})
 }
 
 // TestACutOffParticipantGoesOnAlone: one with no path to its authority, through a

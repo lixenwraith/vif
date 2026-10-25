@@ -31,6 +31,12 @@ type Reach struct {
 	nextPass time.Time
 	passes   int
 
+	// hostFor is the authority followed through another participant's link that
+	// hostTries dials have gone to, the next no sooner than nextHost; see dialHost.
+	hostFor   link.PeerID
+	hostTries int
+	nextHost  time.Time
+
 	statChain     *atomic.Int64
 	statAttempts  *atomic.Int64
 	statListening *atomic.Bool
@@ -187,6 +193,7 @@ func (r *Reach) drive(walking bool) {
 	r.mu.Unlock()
 	r.statAttempts.Store(0)
 	r.dialSuccessor()
+	r.dialHost()
 }
 
 // cutOff reports a participant with no path to its authority that still has a
@@ -218,6 +225,44 @@ func (r *Reach) dialSuccessor() {
 	}
 	if addr, found := u.Chain().Lookup(successor); found {
 		r.dial(dialer, successor, addr)
+	}
+}
+
+// dialHost opens this instance's own link to the authority it follows through
+// another participant, at the address the chain names for it, so its artifacts go
+// one hop rather than two and the relay is let go; the coordinator a relayed
+// person joined behind has no chain address and is followed as it was. Attempts
+// back off and stop (NetworkHostDialAttempts): a host unreachable from here stays so.
+func (r *Reach) dialHost() {
+	host, ok := r.authority.followed()
+	if !ok {
+		return
+	}
+	dialer, ok := r.inst.Transport().(engine.PeerDialingPort)
+	if !ok {
+		return
+	}
+	if dialer.Connected(uint32(host)) {
+		r.authority.reachedHost(host)
+		return
+	}
+	addr, found := r.authority.Chain().Lookup(host)
+	if !found {
+		return
+	}
+	now := time.Now() // [wall] a dial is a link, not a tick
+	r.mu.Lock()
+	if r.hostFor != host {
+		r.hostFor, r.hostTries, r.nextHost = host, 0, time.Time{}
+	}
+	due := r.hostTries < parameter.NetworkHostDialAttempts && !now.Before(r.nextHost)
+	if due {
+		r.hostTries++
+		r.nextHost = now.Add(parameter.NetworkRejoinPassInterval << (r.hostTries - 1))
+	}
+	r.mu.Unlock()
+	if due {
+		r.dial(dialer, host, addr)
 	}
 }
 

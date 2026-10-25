@@ -878,6 +878,36 @@ func (u *Authority) Chain() network.SuccessionChain {
 	return slices.Clone(u.chain)
 }
 
+// followed is the authority this instance follows through another participant's
+// link rather than one of its own: a record that came through a relay, or a join
+// at one. Reach dials it for a link of its own.
+func (u *Authority) followed() (link.PeerID, bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.term == 0 || u.fork || u.contested != 0 || u.direct || u.holder == u.local {
+		return 0, false
+	}
+	return u.holder, true
+}
+
+// reachedHost notes a link of this instance's own to the authority it followed
+// through another participant: its artifacts go there now (NetworkSystem.up), the
+// relay lets it go as its window closes, and it redials that authority on a loss
+// as one that had a link does.
+func (u *Authority) reachedHost(host link.PeerID) {
+	u.mu.Lock()
+	reached := !u.direct && u.contested == 0 && u.holder == host && host != u.local
+	if reached {
+		u.direct = true
+	}
+	term := u.term
+	u.mu.Unlock()
+	if reached {
+		u.log.Info("session", "msg", "authority reached on a link of this instance's own",
+			"authority", uint64(host), "term", uint64(term))
+	}
+}
+
 // successor is the first candidate this instance would walk to if the authority
 // went now, exposed so a survivor holds a link to it before it needs one.
 func (u *Authority) successor() (link.PeerID, bool) {

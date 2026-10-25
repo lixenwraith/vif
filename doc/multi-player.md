@@ -567,7 +567,13 @@ Multiplayer page, `[play] relay`), which a browser cannot. Anything else is drop
 and counted (`network.relay_refused`), so nobody's traffic lands on a run that did
 not offer to carry it; a link already carried stays carried when relaying is turned
 off. A candidate that is not hosting answers a survivor's notice with the record it
-follows only when it carries that survivor, which then follows the host through it.
+follows only when it carries that survivor, which then follows the host through it
+and dials the host at its chain address for a link of its own (`Reach.dialHost`):
+its artifacts go there once it opens, the relay lets it go as its epoch window
+closes, and it redials that host on a loss as one that had a link does. A host
+unreachable from it is tried `NetworkHostDialAttempts` times, each after a longer
+wait, then followed through the relay for good, as is the coordinator a relayed
+person joined behind, which has no chain address.
 A participant with no path to its authority, a person whose relay left, walks every
 candidate for one that carries it and forks after a walk down the whole list
 (`Reach.cutOff`).
