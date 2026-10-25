@@ -54,7 +54,7 @@ Focused references:
   detail.
 - [TOML macros](toml-macros.md) records the macro decision and its syntax.
 - [TODO](todo.md) is the prioritized running work list for every area.
-- [Behavior machines](machine-design.md) is a design for future implementation:
+- [Behavior machines](machine-design.md) is the design and phased plan for
   per-entity species state machines and data-driven species behavior.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic package reference](../pkg/genetic/README.md) documents the reusable

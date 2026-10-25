@@ -104,9 +104,9 @@ The scenario and bot-graph decode drops keys outside `ScenarioDoc`'s tags, so a
 misspelt `on_entr` loads as absent and `-check` is silent, and `CompareInt` reads
 an omitted or unknown `op` as `eq` (`guard.go`), unchecked by the guard factories,
 so `op = "ge"` tests equality (verified by reading; `:d break stat` spells `ne`,
-`ge`, `le`). The fix is the strict `Op` and `Args` of
+`ge`, `le`). The fix is the strict `Op` and `Decode` of
 [Behavior machines](machine-design.md) §7's dialect kernel, which the editor also
-needs; until it lands, the guard factories could refuse an unknown `op` alone.
+needs and which its plan's Phase 3 lands.
 Shipped scenarios and the default bot graph use only known keys and ops.
 
 ### Author the tonal instruments as data
