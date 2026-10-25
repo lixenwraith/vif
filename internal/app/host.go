@@ -927,25 +927,35 @@ func (m *membership) sendMidRunGate(port *link.SocketPort, id link.PeerID) error
 // playout lead past the admission — an epoch flushed just before it reaches nobody
 // and is in no capture at that tick — waits for its install, and says which world
 // and how long its transfer took. A held session reaches no lead: the world is the
-// held tick's, what is scheduled past it follows, and the joiner holds there too.
+// held tick's, what is scheduled past it follows, and the joiner holds there too,
+// whether the hold stood at the gate or landed as the world was read; one that ends
+// as the world is read starts the gate over, running.
 func (m *membership) gateJoiner(port *link.SocketPort, offer network.SessionOffer, held bool,
 	world func(minTick uint64, deadline time.Time) ([]byte, uint64, error),
 ) (tick uint64, bytes int, took time.Duration, err error) {
-	at := m.run.Position()
-	minTick := at.Tick + parameter.NetworkBarrierDelayTicks
-	if held {
-		minTick = at.Tick
-	}
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
-	body, tick, err := world(minTick, deadline)
-	if err != nil {
-		return 0, 0, 0, err
-	}
+	var body []byte
 	var pending [][]byte
-	if held {
-		if pending, err = m.pendingAt(at.Run, tick); err != nil {
+	for again := true; ; again = false {
+		at := m.run.Position()
+		minTick := at.Tick + parameter.NetworkBarrierDelayTicks
+		if held {
+			minTick = at.Tick
+		}
+		if body, tick, err = world(minTick, deadline); err != nil {
 			return 0, 0, 0, err
 		}
+		// A world short of the lead is the held tick's: a hold landed as it was read.
+		if held = held || tick < minTick; !held {
+			break
+		}
+		if pending, err = m.pendingAt(at.Run, tick); err == nil {
+			break
+		}
+		if !again {
+			return 0, 0, 0, err
+		}
+		held = false // the session resumed as its world was read
 	}
 	// A hold standing for a new game's start waits for its host's press, which the
 	// joiner waits for as that, rather than as a pause.

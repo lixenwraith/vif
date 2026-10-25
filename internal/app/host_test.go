@@ -302,6 +302,48 @@ func TestAJoinerLandsInAHeldSessionHeld(t *testing.T) {
 	assertSharedParity(t, host, guest, 1)
 }
 
+// TestAJoinThroughARelayLandsInAHeldSessionHeld: a relay's gate meets a hold as the
+// host's does. The hold goes out as the held tick's round, the relay proves the held
+// world from it and hands it to the joiner, which lands held where the session
+// stands, and runs on with everyone when the host resumes.
+func TestAJoinThroughARelayLandsInAHeldSessionHeld(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	// A driven host takes no step while held, so its end is settled here, as a
+	// :pause off at its console would be.
+	hold := func(held bool) {
+		host.world.RunSafe(func() {
+			host.ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: held})
+		})
+		host.Settle()
+	}
+	hold(true)
+	waitUntil(t, func() bool { return host.Context().TimeCtl.Held() && relay.Context().TimeCtl.Held() }, "the session held")
+	at := host.Position().Tick
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	waitUntil(t, func() bool { return person.Context().TimeCtl.Held() }, "the joiner held")
+	if tick := person.Position().Tick; tick != at || host.Position().Tick != at {
+		t.Fatalf("the joiner holds at tick %d and the host stands at %d, want both at %d", tick, host.Position().Tick, at)
+	}
+	if got := person.Context().GetStatusMessage(); got != "Paused by the host" {
+		t.Fatalf("the joiner was told %q", got)
+	}
+	hold(false)
+	for _, a := range []*App{host, relay, person} {
+		waitForCursors(t, a, 4)
+	}
+	if tick := person.Position().Tick; tick <= at || person.Context().TimeCtl.Held() {
+		t.Fatalf("after the host resumed the joiner holds %v at tick %d, want running past %d",
+			person.Context().TimeCtl.Held(), tick, at)
+	}
+}
+
 // TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism: a dropped
 // participant leaves a Wraith in its slot, and what comes back is an ordinary dial,
 // which the full session admits once that Wraith gives up its place. The join runs

@@ -27,6 +27,7 @@ type stub struct {
 	mu     sync.Mutex
 	stamp  event.Stamp
 	frozen bool
+	held   bool
 	local  uint32
 	roster []network.RosterEntry
 	port   engine.NetworkPort
@@ -79,6 +80,18 @@ func (s *stub) Position() event.Stamp {
 // Driven is always true: a criterion paces its own publications, and a pump beside
 // it would be a second thing deciding when a correction leaves.
 func (s *stub) Driven() bool { return true }
+
+func (s *stub) Held() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.held
+}
+
+func (s *stub) setHeld(held bool) {
+	s.mu.Lock()
+	s.held = held
+	s.mu.Unlock()
+}
 
 func (s *stub) LocalParticipant() uint32 { return s.local }
 

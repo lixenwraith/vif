@@ -18,6 +18,9 @@ type Instance interface {
 	// measured against; Driven marks a run whose caller paces its own cadence.
 	Position() event.Stamp
 	Driven() bool
+	// Held reports a hold standing on this run, which reaches no tick until it ends;
+	// it takes no lock.
+	Held() bool
 
 	// LocalParticipant is this instance's session identity, zero outside a session.
 	LocalParticipant() uint32

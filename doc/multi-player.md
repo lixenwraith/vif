@@ -375,7 +375,9 @@ A session stops only as a whole, and only its host stops it. The host's `:pause`
 every participant applies it at one agreed tick, completes that tick and takes no
 other (`TimeControl.SetHeld`). A guest's `:pause` is refused, and a second one
 before the first lands asks nothing more. A held participant still drains its
-links and answers the link probe off the tick, so a hold times nobody out.
+links and answers the link probe off the tick, so a hold times nobody out, and the
+host sends the held tick's round once, whatever its schedule said
+(`Corrections.publishRound`), so every link proves the held world.
 
 The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
 no epoch, so the first one its next tick produces, admitted past a guest's own
@@ -400,7 +402,12 @@ A joiner admitted to a held session lands held. Its gate captures the held tick
 itself, since a held session never reaches the playout lead past it, and sends
 after the world the crossings still scheduled past that tick
 (`NetworkSystem.PendingAfter`), which a capture there does not contain; the
-offer's `Held` holds the joiner at the world it installed. A joiner admitted while
+offer's `Held` holds the joiner at the world it installed. A relay's gate does the
+same with the world it proved at the held tick (`Corrections.ProvedWorld`), kept
+while the hold stands for a join that arrives after the proof. A hold that lands
+while a gate waits for its lead ends the wait at the held tick (`KeyframeAt`,
+`ProvedWorld`), and one that ends while the held world is read starts the gate over,
+running (`membership.gateJoiner`). A joiner admitted while
 its host's new game waits for the host's press is held as a start
 (`SessionOffer.Start`): it waits as every guest there does, and the host's first
 epoch starts it with nothing said.
