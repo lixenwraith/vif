@@ -30,6 +30,11 @@ git_() { git -C "$repo_root" "$@"; }
 if [ "$diff_only" = false ] && [ -n "$(git_ status --porcelain)" ]; then
 	die "the worktree differs from HEAD; commit or stash what you mean to deploy"
 fi
+# A node commissioned with vif-allocator, the router's name before, is rewired once
+# by its own script; until then nothing here knows what is installed.
+if sudo test -f /etc/vif-allocator/allocator.env && ! sudo test -f /etc/vif-router/router.env; then
+	die "vif-allocator is installed and vif-router is not: run deploy/guest/migrate-vif-router.sh once, then this again"
+fi
 
 # Installed lines green, incoming lines red, and only on a terminal.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -110,19 +115,9 @@ check_wad() {
 	return 1
 }
 
-# The router's installed settings: the allocator's on a node not yet migrated from
-# vif-allocator, the router's name before, which `router` migrates.
-installed_router_env() {
-	if ! sudo test -f /etc/vif-router/router.env && sudo test -f /etc/vif-allocator/allocator.env; then
-		echo /etc/vif-allocator/allocator.env
-	else
-		echo /etc/vif-router/router.env
-	fi
-}
-
 check_image() {
-	sudo_copy "$(installed_router_env)" "$work/router.env"
-	installed=$(sed -n 's/^VIF_\(ROUTER\|ALLOCATOR\)_IMAGE=//p' "$work/router.env" | tail -n 1)
+	sudo_copy /etc/vif-router/router.env "$work/router.env"
+	installed=$(sed -n 's/^VIF_ROUTER_IMAGE=//p' "$work/router.env" | tail -n 1)
 	tag=${installed##*:}
 	incoming=vif:$(git_ rev-parse --short=8 HEAD)
 	if [ -n "$tag" ] && git_ rev-parse -q --verify "$tag^{commit}" >/dev/null; then
@@ -144,9 +139,6 @@ check_image() {
 check_router() {
 	status=0
 	"$guest/update-vif-router.sh" --render >"$work/router.env.next" || return 2
-	case $(installed_router_env) in
-		/etc/vif-allocator/*) echo "vif-allocator installed: the router replaces it in place" ;;
-	esac
 	sudo_copy /etc/vif-router/router.env "$work/router.env"
 	show router.env "$work/router.env" "$work/router.env.next" || status=1
 	show vif-router.service /etc/systemd/system/vif-router.service \

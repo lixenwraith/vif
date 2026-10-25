@@ -43,22 +43,12 @@ local_image=$image_name:$tag
 runtime_image=$runtime_repository:$tag
 router_env=${VIF_ROUTER_ENV:-/etc/vif-router/router.env}
 router_group=${VIF_ROUTER_GROUP:-vif-router}
-router_unit=vif-router.service
-image_var=VIF_ROUTER_IMAGE
-# A node still running vif-allocator, the router's name before, keeps its settings
-# where they were until deploy/update.sh router migrates it.
-if ! sudo test -f "$router_env" && sudo test -f /etc/vif-allocator/allocator.env; then
-	router_env=/etc/vif-allocator/allocator.env
-	router_group=vif-allocator
-	router_unit=vif-allocator.service
-	image_var=VIF_ALLOCATOR_IMAGE
-fi
 build_cache_limit=${VIF_BUILD_CACHE_LIMIT:-3gb}
 
 archive=$(mktemp "${TMPDIR:-/tmp}/vif-image.XXXXXX.tar")
 env_copy=$(mktemp "${TMPDIR:-/tmp}/vif-router-env.XXXXXX")
 router_was_active=false
-if systemctl is-active --quiet "$router_unit" 2>/dev/null; then
+if systemctl is-active --quiet vif-router.service 2>/dev/null; then
 	router_was_active=true
 fi
 # A Docker already running serves something else on this host: build with it,
@@ -102,7 +92,7 @@ cleanup() {
 	fi
 
 	if [ "$router_was_active" = true ]; then
-		sudo systemctl start "$router_unit" || cleanup_status=$?
+		sudo systemctl start vif-router.service || cleanup_status=$?
 	fi
 	if [ "$status" -eq 0 ] && [ "$cleanup_status" -ne 0 ]; then
 		status=$cleanup_status
@@ -113,7 +103,7 @@ trap cleanup EXIT HUP INT TERM
 
 if [ "$router_was_active" = true ]; then
 	echo "pausing new allocations"
-	sudo systemctl stop "$router_unit"
+	sudo systemctl stop vif-router.service
 fi
 
 if ! "$repo_root/deploy/k3s/session.sh" blockers; then
@@ -162,8 +152,8 @@ sudo k3s ctr -n k8s.io images label "$runtime_image" io.cri-containerd.pinned=pi
 if sudo test -f "$router_env"; then
 	sudo cat "$router_env" >"$env_copy"
 	# The one setting deploy/guest/vif-router.env does not carry.
-	{ grep -v "^$image_var=" "$env_copy" || true
-	  printf '%s=%s\n' "$image_var" "$runtime_image"; } >"$env_copy.next"
+	{ grep -v '^VIF_ROUTER_IMAGE=' "$env_copy" || true
+	  printf 'VIF_ROUTER_IMAGE=%s\n' "$runtime_image"; } >"$env_copy.next"
 	sudo install -o root -g "$router_group" -m 0640 "$env_copy.next" "$router_env"
 	echo "updated $router_env"
 fi
@@ -179,4 +169,4 @@ for old_image in $old_runtime_images; do
 	sudo k3s crictl rmi "$old_image"
 done
 
-echo "ready: $image_var=$runtime_image revision=$revision"
+echo "ready: VIF_ROUTER_IMAGE=$runtime_image revision=$revision"

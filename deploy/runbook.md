@@ -15,8 +15,9 @@ git pull
 
 Components are `filter` (the node's `inet vif` table), `objects` (namespace,
 quota, policy, Role), `wad`, `image`, `router` (`allocator` until the router routed
-relays; a node still running `vif-allocator` is migrated in place, see
-[deploy §11](../doc/kube-docker-deploy.md#11-the-router)) and `logwisp`. A current one is
+relays; a node still running `vif-allocator` is rewired once by
+`guest/migrate-vif-router.sh`, see [deploy §11](../doc/kube-docker-deploy.md#11-the-router))
+and `logwisp`. A current one is
 skipped. Installed lines print green and incoming ones red; a file the update
 removes prints as `deleted <path>`. `image`, `router` and `logwisp` need an empty
 fleet and refuse otherwise, naming the components that do not; `filter` and `wad`
@@ -103,6 +104,7 @@ and bounded by `-players-max`, `-log-level-min`, the installed scenarios and
 | `<component>: could not tell what is installed`, `… names no VIF_ROUTER_IMAGE; run update-vif-image.sh first` | `update.sh` checks every selected component before it changes any, and could not read this one; the line above says why. For `router` it is an installed env without `VIF_ROUTER_IMAGE`; for `logwisp`, upstream `main` unreachable. | `./deploy/update.sh image` first, or retry once upstream answers. |
 | `revision is not on LogWisp main` | A revision given to a LogWisp helper names a commit upstream `main` does not contain: a pull-request head a squash merge discarded, or one a rewritten `main` dropped. | Give a commit on `main`, or none for its head. |
 | `logwisp.service must be active before an update`, `vif-router.service must be active …` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start` the unit it names |
+| `vif-allocator is installed and vif-router is not: run deploy/guest/migrate-vif-router.sh once …` | The node was commissioned under the router's old name; `update.sh` and the router updater read nothing of the allocator's. | Run the migration once with the fleet empty, then `update.sh` as before. |
 | `missing installed file: …` | The router or LogWisp updater found nothing installed to replace: the component was never installed on this node. | Install it first, [§10](../doc/kube-docker-deploy.md#10-logwisp-the-node-log-reader) or [§11](../doc/kube-docker-deploy.md#11-the-router) of the procedure. |
 | `refusing to replace existing path: …` | `install-logwisp.sh` is the first install only, and LogWisp is already there. | `./deploy/update.sh logwisp` |
 | `the vif-fleet identity is missing; install the log tmpfs first` | `install-logwisp.sh` reads the session logs through the `vif-fleet` group, which the log tmpfs install creates. | Install the log tmpfs ([§7](../doc/kube-docker-deploy.md#7-the-nodes-log-tmpfs)) first. |
