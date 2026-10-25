@@ -707,6 +707,10 @@ func (a *tuiApp) drawMixRow(r tui.Region, row mixRow, tl timeline, cursor bool) 
 		title := fmt.Sprintf("%d %s", row.slot, slotRoles[row.slot])
 		r.Text(0, 0, title, th.HeaderFg, labBg, terminal.AttrBold)
 		tx := tui.RuneLen(title) + 1
+		if g.muted[row.slot] {
+			r.Text(tx, 0, "muted", th.Warning, th.Bg, terminal.AttrBold)
+			tx += len("muted ")
+		}
 		if pat == nil || pat.Steps <= 0 {
 			r.Text(tx, 0, "-", th.Unselected, th.Bg, terminal.AttrNone)
 			return
@@ -746,8 +750,11 @@ func (a *tuiApp) drawMixRow(r tui.Region, row mixRow, tl timeline, cursor bool) 
 			}
 		}
 		ch, fg := velGlyph(vel), th.Fg
-		if vel == 0 {
+		switch {
+		case vel == 0:
 			ch, fg = '·', th.Unselected
+		case g.muted[row.slot]:
+			fg = th.Unselected
 		}
 		bg := th.Bg
 		if g.running && c == g.step {

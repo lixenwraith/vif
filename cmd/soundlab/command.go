@@ -67,7 +67,7 @@ func init() {
 		"swing": {"swing <f>", "shuffle 0..0.5", 1, 1, cmdSwing},
 		"fill":  {"fill on|off", "slot-2 phrase auto-fill; soundlab starts with it off", 1, 1, cmdFill},
 		"key":   {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
-		"mute":  {"mute music|sfx|all|none", "absolute channel mute state", 1, 1, cmdMute},
+		"mute":  {"mute music|sfx|all|none | mute slot <0-3> on|off", "absolute channel mute state, or one slot's (its pattern plays on in time)", 1, 3, cmdMute},
 		"vol":   {"vol <f>", "sfx volume 0..1; music keeps its own level", 1, 1, cmdVol},
 		"wait":  {"wait <ms>", "sleep (scripted audition pacing)", 1, 1, cmdWait},
 	}
@@ -180,10 +180,12 @@ var (
 	helpMixer = helpSection{"mixer", []keyHelp{
 		{"j k ↑ ↓", "the slots' titles and tracks; PgUp PgDn a page, g G the ends"},
 		{"", "the rows stay where the cursor leaves them"},
+		{"space m", "mute the cursor's slot, or let it sound; it plays on in time"},
 	}}
 	helpGlobal = helpSection{"everywhere", []keyHelp{
 		{"tab ⇧tab", "next, previous pane: the browser, mixer and log, or an editor and the mixer"},
 		{"esc", "from the mixer or the log back to the view's own pane"},
+		{"< >", "tempo down, up by 5 bpm"},
 		{":", "command line; help lists the commands"},
 		{"? / ^S / ^Q", "these keys / save / quit"},
 	}}

@@ -208,9 +208,9 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 			b.dur = min(max(max(e.Dur, 1)+dd, 1), audio.MaxPatternLen)
 			return "dur", strconv.Itoa(b.dur)
 		})
-	case r == ',' || r == '<':
+	case r == ',':
 		a.beatShift(d, -1)
-	case r == '.' || r == '>':
+	case r == '.':
 		a.beatShift(d, 1)
 	case r == '{':
 		a.beatShift(d, -a.scaleLen())

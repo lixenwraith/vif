@@ -87,6 +87,7 @@ type engineSig struct {
 	step       int
 	running    bool
 	slots      [audio.MusicSlots]audio.PatternID
+	muted      [audio.MusicSlots]bool
 	backend    string
 	silent     bool
 	musicMuted bool
@@ -390,7 +391,8 @@ func (a *tuiApp) handle(ev terminal.Event) {
 
 // globalKey takes the keys that mean one thing in every view and pane: Tab and
 // Shift-Tab walk the panes on screen, Esc brings the keys back from a side pane to
-// the view's own, ? shows the keys, : opens the command line and ^S saves
+// the view's own, ? shows the keys, : opens the command line, ^S saves and < >
+// step the tempo
 func (a *tuiApp) globalKey(ev terminal.Event) bool {
 	switch {
 	case ev.Key == terminal.KeyTab || ev.Key == terminal.KeyBacktab:
@@ -403,6 +405,12 @@ func (a *tuiApp) globalKey(ev terminal.Event) bool {
 		a.help = true
 	case ev.Key == terminal.KeyRune && ev.Rune == ':':
 		a.openCommand()
+	case ev.Key == terminal.KeyRune && (ev.Rune == '<' || ev.Rune == '>'):
+		d := 5
+		if ev.Rune == '<' {
+			d = -5
+		}
+		a.exec(fmt.Sprintf("bpm %d", a.s.bpm+d))
 	default:
 		return false
 	}
@@ -439,7 +447,7 @@ func (a *tuiApp) engineSig() engineSig {
 	g := engineSig{backend: e.BackendName(), silent: e.IsSilent(), musicMuted: e.IsMusicMuted()}
 	g.bar, g.step, g.running = e.Transport()
 	for i := range g.slots {
-		g.slots[i] = e.SlotPattern(i)
+		g.slots[i], g.muted[i] = e.SlotPattern(i), e.IsSlotMuted(i)
 	}
 	return g
 }
@@ -459,9 +467,6 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 	switch {
 	case r == 'p':
 		a.enterKeys()
-		return
-	case r == 'm':
-		a.exec("music reset")
 		return
 	case r == 'b':
 		if a.kind == kindPattern {
@@ -547,6 +552,8 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		a.assignSlot(int(r - '0'))
 	case r == 'a':
 		a.nameCmd("apply")
+	case r == 'm':
+		a.exec("music reset")
 	case r == 'v':
 		a.nameCmd("validate")
 	case r == 'r':
@@ -836,6 +843,12 @@ func (a *tuiApp) mixerKey(ev terminal.Event, r rune) {
 		i = 0
 	case r == 'G' || ev.Key == terminal.KeyEnd:
 		i = len(rows) - 1
+	case ev.Key == terminal.KeySpace || r == ' ' || r == 'm':
+		slot, mute := a.mixCur.slot, "on"
+		if a.s.eng.IsSlotMuted(slot) {
+			mute = "off"
+		}
+		a.exec(fmt.Sprintf("mute slot %d %s", slot, mute))
 	}
 	a.mixCur = rows[min(max(i, 0), len(rows)-1)]
 }

@@ -765,3 +765,33 @@ func TestKeysOpenOverTheBeatView(t *testing.T) {
 		t.Fatalf("c on the seed's hit: chance %g, want 0.75", d.Track[0].Event[0].Prob)
 	}
 }
+
+// TestMixerMutesTheCursorsSlot: space and m on the mixer mute the slot under its
+// cursor and let it sound again, through the command a script runs, which where
+// reports.
+func TestMixerMutesTheCursorsSlot(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	a := newTUIApp(s, newLogBuffer(50))
+	a.term, a.w, a.h = frameTerm{}, 100, 24
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	a.render()
+	key(terminal.KeyTab, 0)
+	key(terminal.KeyDown, 0)
+	key(terminal.KeyRune, 'm')
+	if !s.eng.IsSlotMuted(1) || s.eng.IsSlotMuted(0) {
+		t.Fatal("m on slot 1's row must mute slot 1 alone")
+	}
+	key(terminal.KeySpace, ' ')
+	if s.eng.IsSlotMuted(1) {
+		t.Fatal("space must let slot 1 sound again")
+	}
+	runOrFatal(t, s, &out, "mute slot 3 on\nwhere")
+	if !strings.Contains(out.String(), "slot3=- (muted)") {
+		t.Fatalf("where must name the muted slot:\n%s", out.String())
+	}
+}
