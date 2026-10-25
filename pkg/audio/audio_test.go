@@ -668,6 +668,49 @@ func TestDrawsHoldOneGroup(t *testing.T) {
 	}
 }
 
+// TestMutedSlotPlaysOnInTime is the rule of a slot's mute: the slot sounds nothing
+// while its pattern plays on, so once the mute has faded back out it sounds as if
+// it had never been muted.
+func TestMutedSlotPlaysOnInTime(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	var evs []Step
+	for pos := 0; pos < 16; pos += 4 {
+		evs = append(evs, Step{Pos: pos, Vel: 0.8, Dur: 2})
+	}
+	id := RegisterPattern(&Pattern{Name: "pulse", Steps: 16, Tracks: []Track{{Instr: InstrBass, Events: evs}}})
+	// run plays four bars, the second and third muted when mute is set, and
+	// returns the third and fourth
+	run := func(mute bool) (muted, back []float64) {
+		s := NewSequencer(MaxBPM, nil)
+		s.SetPattern(3, id, 0, false)
+		s.Start()
+		bar := SamplesPerBar(MaxBPM)
+		s.Generate(make([]float64, bar))
+		s.SetSlotMuted(3, mute)
+		s.Generate(make([]float64, bar))
+		muted, back = make([]float64, bar), make([]float64, bar)
+		s.Generate(muted)
+		s.SetSlotMuted(3, false)
+		s.Generate(back)
+		return muted, back
+	}
+	muted, back := run(true)
+	sounding, ref := run(false)
+	var loud, silent float64
+	for i := range muted {
+		silent, loud = max(silent, math.Abs(muted[i])), max(loud, math.Abs(sounding[i]))
+	}
+	if silent != 0 || loud == 0 {
+		t.Fatalf("a muted bar peaked at %g, the same bar unmuted at %g", silent, loud)
+	}
+	for i := 2 * MinCrossfadeSamples; i < len(back); i++ {
+		if back[i] != ref[i] {
+			t.Fatalf("sample %d after the unmute is %g, %g never muted", i, back[i], ref[i])
+		}
+	}
+}
+
 // TestTransitionKeepsIncomingWhole is the rule a tier change broke: the incoming
 // pattern's downbeat sounds at full level whatever the fade, and a build-up starts
 // from as many tracks as the outgoing pattern sounded.

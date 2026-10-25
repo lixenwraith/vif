@@ -2,10 +2,10 @@
 
 package main
 
-// The keys view: the tonal voices on a tracker keyboard, drawn as a piano with
-// the key's scale marked. Notes go through Execute("note ...") like everything
-// else — quiet echo, but full script parity. A take records what was played,
-// quantized to the sixteenth, and commits it as a pattern.
+// The editor's keys tab: the tonal voices on a tracker keyboard, drawn as a piano
+// with the key's scale marked. Notes go through Execute("note ...") like
+// everything else, echoed quietly. A take records what was played over the
+// pattern's length, quantized to the sixteenth, and goes into it through take.
 
 import (
 	"fmt"
@@ -36,8 +36,8 @@ var keySemis = func() map[rune]int {
 }()
 
 var (
-	keyLengths = []int{1, 2, 4, 8, 16} // note lengths in steps, - and = walk them
-	takeBars   = []int{1, 2, 4}        // take lengths, \ walks them
+	keyLengths  = []int{1, 2, 4, 8, 16} // note lengths in steps, [ and ] walk them
+	patternBars = []int{1, 2, 4}        // the lengths \ walks a pattern through
 )
 
 func blackKey(semi int) bool {
@@ -48,18 +48,15 @@ func blackKey(semi int) bool {
 	return false
 }
 
-// keysState is the keys view: what a key plays and the take being recorded
+// keysState is the keys tab: what a key plays and the take being recorded
 type keysState struct {
-	oct     int // octave of the keyboard's first C
-	vel     float64
-	dur     int // steps a note sounds, and a take records
-	instr   audio.InstrumentType
-	lit     map[int]int // MIDI note -> ticks it stays lit
-	started bool        // the view started the transport; leaving stops it again
-	rec     bool
-	bars    int // take length
-	take    []takeNote
-	recN    int
+	oct   int // octave of the keyboard's first C
+	vel   float64
+	dur   int // steps a note sounds, and a take records
+	instr audio.InstrumentType
+	lit   map[int]int // MIDI note -> ticks it stays lit
+	rec   bool
+	take  []takeNote
 }
 
 // takeNote is one note of a take, at its step in the take
@@ -70,7 +67,7 @@ type takeNote struct {
 }
 
 func newKeysState() keysState {
-	return keysState{oct: 3, vel: 0.8, dur: 2, instr: audio.InstrPiano, lit: map[int]int{}, bars: 1}
+	return keysState{oct: 3, vel: 0.8, dur: 2, instr: audio.InstrPiano, lit: map[int]int{}}
 }
 
 // decay dims the lit keys by a tick, reporting whether any was lit
@@ -85,53 +82,9 @@ func (k *keysState) decay() bool {
 	return len(k.lit) > 0
 }
 
-func (a *tuiApp) enterKeys() {
-	if !a.s.eng.IsMusicPlaying() {
-		if a.s.eng.IsMusicMuted() {
-			fmt.Fprintln(a.log, "music is muted — :mute none, then p (the voices sound through the sequencer)")
-			return
-		}
-		a.exec("music start")
-		a.keys.started = true
-	}
-	a.view, a.focus = viewKeys, focusMain
-}
-
-// leaveKeys goes back to the view the keys opened over: the browser, or the beat
-// view and the pattern it edits, which the keys leave as they were
-func (a *tuiApp) leaveKeys() {
-	if a.keys.rec {
-		a.finishRecording()
-	}
-	a.view, a.focus = viewBrowse, focusMain
-	if a.beat != nil {
-		a.view = viewBeat
-	}
-	// Stop only a transport the view started: patterns the user had running play on
-	if a.keys.started {
-		a.exec("music stop")
-	}
-	a.keys.started = false
-}
-
+// keysKey plays the keyboard; the editor took its own keys first
 func (a *tuiApp) keysKey(ev terminal.Event) {
 	k := &a.keys
-	switch {
-	case ev.Key == terminal.KeyEscape:
-		a.leaveKeys()
-		return
-	case ev.Key == terminal.KeyCtrlR:
-		if k.rec {
-			a.finishRecording()
-			return
-		}
-		k.rec, k.take = true, k.take[:0]
-		fmt.Fprintf(a.log, "recording a %d-bar take — notes land on the sixteenth; ^R commits\n", k.bars)
-		return
-	case a.focus == focusMixer:
-		a.mixerKey(ev, ev.Rune)
-		return
-	}
 	switch ev.Key {
 	case terminal.KeyUp:
 		k.instr = nextVoice(k.instr, -1)
@@ -168,11 +121,14 @@ func (a *tuiApp) keysRune(r rune) {
 	case ']':
 		k.dur = keyLengths[min(slices.Index(keyLengths, k.dur)+1, len(keyLengths)-1)]
 	case '\\':
-		k.bars = takeBars[(slices.Index(takeBars, k.bars)+1)%len(takeBars)]
+		a.cycleBars()
 	default:
 		semi, ok := keySemis[r]
 		if !ok {
 			return
+		}
+		if !a.s.eng.IsMusicPlaying() && !a.s.eng.IsMusicMuted() {
+			a.exec("music start") // the voices sound through the sequencer
 		}
 		midi := audio.MIDINote(audio.NoteC, k.oct) + semi
 		a.execQ(fmt.Sprintf("note %d %.2f %d %s", midi, k.vel, k.dur, k.instr))
@@ -190,73 +146,79 @@ func nextVoice(i audio.InstrumentType, d int) audio.InstrumentType {
 	return audio.InstrBass + audio.InstrumentType((int(i-audio.InstrBass)+d+n)%n)
 }
 
-// captureNote places a played note at its step of the take, which repeats
-// against the transport's four-bar cycle
+// cycleBars walks the pattern through 1, 2 and 4 bars, refusing a length that
+// would cut a note off; s in the grid sets any length
+func (a *tuiApp) cycleBars() {
+	d := a.edPat()
+	next := patternBars[(slices.Index(patternBars, d.Steps/audio.StepsPerBar)+1)%len(patternBars)] * audio.StepsPerBar
+	for _, tr := range d.Track {
+		for _, e := range tr.Event {
+			if e.Pos >= next {
+				fmt.Fprintf(a.log, "%s has notes past step %d — s in the grid sets any length\n", d.Name, next)
+				return
+			}
+		}
+	}
+	a.exec(fmt.Sprintf("set %s.steps %d", d.Name, next))
+}
+
+// toggleRecord starts a take over the pattern's length, playing the pattern so
+// the take lands where it is heard, or writes the take recorded
+func (a *tuiApp) toggleRecord(d *audio.PatternDef) {
+	k := &a.keys
+	if k.rec {
+		a.finishRecording()
+		return
+	}
+	a.editPlay()
+	k.rec, k.take = true, k.take[:0]
+	fmt.Fprintf(a.log, "recording into %s over its %s — notes land on the sixteenth; ^R writes them in\n", d.Name, lengthWord(d.Steps))
+}
+
+// captureNote places a played note at the pattern's step the transport is on
 func (a *tuiApp) captureNote(midi int) {
 	_, step, running := a.s.eng.Transport()
-	if !running {
+	d := a.edPat()
+	if !running || d == nil {
 		fmt.Fprintln(a.log, "the transport is stopped — nothing to record against")
 		return
 	}
 	k := &a.keys
-	k.take = append(k.take, takeNote{pos: step % (k.bars * audio.StepsPerBar), midi: midi, vel: k.vel, dur: k.dur, instr: k.instr})
+	k.take = append(k.take, takeNote{pos: step % d.Steps, midi: midi, vel: k.vel, dur: k.dur, instr: k.instr})
 }
 
-// finishRecording writes the take as a document pattern, a track per voice
-// played, each note on the degree of the mirrored key nearest it; a later
-// note of one pitch on one step replaces the earlier
+// finishRecording writes the take into the pattern, a track per voice played,
+// through take, and applies it so the loop plays it from its next pass
 func (a *tuiApp) finishRecording() {
 	k := &a.keys
 	k.rec = false
-	if len(k.take) == 0 {
+	d := a.edPat()
+	switch {
+	case d == nil:
+		fmt.Fprintln(a.log, "the pattern is gone — take dropped")
+	case len(k.take) == 0:
 		fmt.Fprintln(a.log, "take empty — nothing written")
-		return
-	}
-	var name string
-	for {
-		k.recN++
-		name = fmt.Sprintf("rec_%d", k.recN)
-		if !a.s.pats.has(name) && !a.s.sounds.has(name) {
-			break
-		}
-	}
-	type at struct {
-		instr         audio.InstrumentType
-		pos, deg, oct int
-	}
-	notes, snapped := map[at]audio.StepDef{}, 0
-	var voices []audio.InstrumentType
-	for _, n := range k.take {
-		deg, oct, exact := a.s.degreeOf(n.midi)
-		if !exact {
-			snapped++
-		}
-		notes[at{n.instr, n.pos, deg, oct}] = audio.StepDef{Pos: n.pos, Vel: n.vel, Deg: deg, Oct: oct, Dur: n.dur}
-		if !slices.Contains(voices, n.instr) {
-			voices = append(voices, n.instr)
-		}
-	}
-	d := &audio.PatternDef{Name: name, Steps: k.bars * audio.StepsPerBar}
-	for _, v := range voices {
-		tr := audio.TrackDef{Instr: v.String(), Humanize: 0.15}
-		for key, ev := range notes {
-			if key.instr == v {
-				tr.Event = append(tr.Event, ev)
+	default:
+		var voices []audio.InstrumentType
+		for _, n := range k.take {
+			if !slices.Contains(voices, n.instr) {
+				voices = append(voices, n.instr)
 			}
 		}
-		slices.SortFunc(tr.Event, func(x, y audio.StepDef) int {
-			return cmpInts(x.Pos, y.Pos, x.Oct, y.Oct, x.Deg, y.Deg)
-		})
-		d.Track = append(d.Track, tr)
+		for _, v := range voices {
+			line := fmt.Sprintf("take %s %s", d.Name, v)
+			for _, n := range k.take {
+				if n.instr == v {
+					line += fmt.Sprintf(" %d:%d:%d:%s", n.pos, n.midi, n.dur, fmtF(n.vel))
+				}
+			}
+			if a.execQ(line) != nil {
+				return
+			}
+		}
+		a.exec("apply " + d.Name)
 	}
-	a.s.pats.put(d, true)
-	k.take = k.take[:0] // the keys start clean again; the pattern holds the take
-	a.kind = kindPattern
-	a.cursorTo(name)
-	fmt.Fprintf(a.log, "recorded %d note(s) into %s, %d bar(s) — in the browser space plays it, b edits it\n", len(notes), name, k.bars)
-	if snapped > 0 {
-		fmt.Fprintf(a.log, "%d note(s) outside %s moved to the nearest degree\n", snapped, a.s.keyName())
-	}
+	k.take = k.take[:0]
 }
 
 // cmpInts orders by pairs of ints in turn, (x0, y0) first
@@ -270,7 +232,7 @@ func cmpInts(pairs ...int) int {
 }
 
 func (a *tuiApp) keysHint() string {
-	return "z…p play  ↑↓ voice  ←→ octave  - = velocity  [ ] length  ^R record  \\ take  ⌫ undo  tab mixer  esc close  ? keys"
+	return "z…p play  ↑↓ voice  ←→ octave  - = velocity  [ ] length  ^R record  \\ bars  ⌫ undo  enter play  tab grid  esc close  ? keys"
 }
 
 // whiteKeys counts the keyboard's white keys
@@ -309,24 +271,19 @@ func takeLayout(w, bars int) (cw, perRow, rows int) {
 
 const takeLabel = "take "
 
-// keysViewH is the height the keys view wants at width w: the frame, two rows of
+// keysViewH is the height the keys tab wants at width w: the frame, two rows of
 // settings and a gap, the keyboard with its names, a gap and the take
-func (a *tuiApp) keysViewH(w int) int {
+func (a *tuiApp) keysViewH(w int, d *audio.PatternDef) int {
 	_, kh := keysLayout(w - 2)
-	_, _, rows := takeLayout(w-2, a.keys.bars)
+	_, _, rows := takeLayout(w-2, barsOf(d.Steps))
 	return 2 + 3 + kh + 1 + 1 + rows
 }
 
-func (a *tuiApp) renderKeysView(r tui.Region) {
+// renderKeys draws the keys tab: the voice and velocity, the key, the range and
+// what ^R records into, the keyboard, and the take over the pattern's length
+func (a *tuiApp) renderKeys(c tui.Region, d *audio.PatternDef) {
 	k := &a.keys
-	r = a.stackBelow(r, a.keysViewH(r.W))
-	title := "keys · " + k.instr.String()
-	if k.rec {
-		title = "● recording · " + k.instr.String()
-	}
-	c := a.viewPane(r, title)
 	th := &a.theme
-
 	x := instrFamilyRow(c, instrFamily(k.instr), k.instr, th)
 	meter := velMeter(k.vel, 10)
 	if mx := c.W - tui.RuneLen(meter); mx > x {
@@ -335,29 +292,25 @@ func (a *tuiApp) renderKeysView(r tui.Region) {
 	lo := audio.MIDINote(audio.NoteC, k.oct)
 	info := fmt.Sprintf("%s · %s–%s · note %s", a.s.keyName(), noteName(lo), noteName(lo+len(keyCaps)-1), stepsWord(k.dur))
 	c.Text(0, 1, tui.Truncate(info, c.W), th.Fg, th.Bg, terminal.AttrNone)
-	take := fmt.Sprintf("take %d bar", k.bars)
-	if k.bars > 1 {
-		take += "s"
-	}
+	take, fg := "^R records into "+d.Name, th.HintFg
 	if k.rec {
-		take = fmt.Sprintf("● %s · %d note(s)", take, len(k.take))
+		take, fg = fmt.Sprintf("● recording into %s · %d note(s)", d.Name, len(k.take)), th.Error
 	}
 	if tx := c.W - tui.RuneLen(take); tx > tui.RuneLen(info)+1 {
-		fg := th.HintFg
-		if k.rec {
-			fg = th.Error
-		}
 		c.Text(tx, 1, take, fg, th.Bg, terminal.AttrBold)
 	}
 
 	kw, kh := keysLayout(c.W)
 	x0 := max((c.W-whiteKeys*kw)/2, 0)
 	a.drawKeyboard(c.Sub(x0, 3, whiteKeys*kw, kh+1), lo, kw, kh)
-	tcw, perRow, rows := takeLayout(c.W, k.bars)
+	tcw, perRow, rows := takeLayout(c.W, barsOf(d.Steps))
 	tw := tui.RuneLen(takeLabel) + perRow*(1+audio.StepsPerBar*tcw)
 	ty := min(5+kh, c.H-rows)
-	a.drawTake(c.Sub(max((c.W-tw)/2, 0), ty, tw, rows), tcw, perRow)
+	a.drawTake(c.Sub(max((c.W-tw)/2, 0), ty, tw, rows), d.Steps, tcw, perRow)
 }
+
+// barsOf is the bars steps run over, the last one partly
+func barsOf(steps int) int { return (steps + audio.StepsPerBar - 1) / audio.StepsPerBar }
 
 // drawKeyboard draws the keys from MIDI note lo, white keys kw wide and kh tall
 // with the black keys over their upper rows, then the Cs' names under them
@@ -435,10 +388,10 @@ func (a *tuiApp) drawKeyboard(r tui.Region, lo, kw, kh int) {
 	}
 }
 
-// drawTake shows the take bar by bar, cw cells a step and perRow bars a row, a
-// note as its degree (* for a chord) and, while recording, the step the
-// transport is at lit
-func (a *tuiApp) drawTake(r tui.Region, cw, perRow int) {
+// drawTake shows the take bar by bar over the pattern's steps, cw cells a step and
+// perRow bars a row, a note as its degree (* for a chord) and, while recording,
+// the step the transport is at lit
+func (a *tuiApp) drawTake(r tui.Region, steps, cw, perRow int) {
 	k := &a.keys
 	th := &a.theme
 	at := map[int][]takeNote{}
@@ -448,15 +401,15 @@ func (a *tuiApp) drawTake(r tui.Region, cw, perRow int) {
 	_, step, running := a.s.eng.Transport()
 	play := -1
 	if running && k.rec {
-		play = step % (k.bars * audio.StepsPerBar)
+		play = step % steps
 	}
 	r.Text(0, 0, takeLabel, th.HintFg, th.Bg, terminal.AttrNone)
-	for b := range k.bars {
+	for b := range barsOf(steps) {
 		y := b / perRow
 		x := tui.RuneLen(takeLabel) + b%perRow*(1+audio.StepsPerBar*cw)
 		r.Cell(x, y, '│', th.Border, th.Bg, terminal.AttrNone)
 		x++
-		for s := range audio.StepsPerBar {
+		for s := range min(audio.StepsPerBar, steps-b*audio.StepsPerBar) {
 			pos := b*audio.StepsPerBar + s
 			ch, fg := '·', th.Unselected
 			if s%audio.StepsPerBeat == 0 {

@@ -33,6 +33,9 @@ type slotState struct {
 	fillSavedID PatternID // slot 2: restored after auto-fill bar
 	inFill      bool
 	drawn       bool // the tier's pool chose this slot's pattern, so a phrase may vary it
+
+	muted bool    // the slot plays on in time, silent
+	quiet float64 // how far the mute has faded the slot, 1 silent
 }
 
 func (ss *slotState) player() *PatternPlayer { return ss.players[ss.live] }
@@ -64,6 +67,18 @@ func (ss *slotState) sample() float64 {
 		}
 	}
 	return out
+}
+
+// level is the slot's gain under its mute, which fades in and out over
+// MinCrossfadeSamples so a mute declicks as a pattern swap does
+func (ss *slotState) level() float64 {
+	switch {
+	case ss.muted && ss.quiet < 1:
+		ss.quiet = min(ss.quiet+1/float64(MinCrossfadeSamples), 1)
+	case !ss.muted && ss.quiet > 0:
+		ss.quiet = max(ss.quiet-1/float64(MinCrossfadeSamples), 0)
+	}
+	return 1 - ss.quiet
 }
 
 // begin makes id the live pattern, retiring the current one over fade samples, and
@@ -275,7 +290,7 @@ func (s *Sequencer) Generate(buf []float64) {
 
 		var mix float64
 		for si := range s.slots {
-			mix += s.slots[si].sample() * s.gains[si]
+			mix += s.slots[si].sample() * s.gains[si] * s.slots[si].level()
 		}
 		if s.startGain < 1 {
 			s.startGain += s.startInc
@@ -562,6 +577,12 @@ func (s *Sequencer) SetMask(slot int, mask uint32) {
 	if slot >= 0 && slot < MusicSlots {
 		s.slots[slot].revealN = 0 // external control overrides reveal automation
 		s.slots[slot].player().SetMask(mask)
+	}
+}
+
+func (s *Sequencer) SetSlotMuted(slot int, muted bool) {
+	if slot >= 0 && slot < MusicSlots {
+		s.slots[slot].muted = muted
 	}
 }
 

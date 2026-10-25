@@ -1019,6 +1019,34 @@ Revisit only if `:d prof` ranks `sys kraken` or `draw kraken` high again.
 
 ## Audio
 
+### Bring soundlab to Android (soundlab mobile)
+
+- Priority: P1
+- Affected files: `cmd/soundlab`, `android/game`, `android/app`,
+  `doc/multi-platform.md`
+
+Soundlab runs on Android in-process, as the game does, over the same engine and
+the user root's `audio/` documents, so a pattern written on the phone plays in the
+phone's game. The engine already runs there (`AudioConfig.Sink` takes the
+`Speaker`), and the host already turns taps, drags, keys and the system
+keyboard's text into `terminal.Event`s and flushes cell frames through
+`glyph.Frames`. What remains:
+
+1. The session, documents, command table and `Execute`, with the TUI, move out of
+   `cmd/soundlab`'s `package main` into `internal/soundlab`; `cmd/soundlab` keeps
+   its flags and the REPL. The TUI already runs over `terminal.Terminal` alone.
+2. A `terminal.Terminal` over the Android view (its grid as `Size`, its event
+   queue as `PollEvent`, `glyph.Frames.Flush`) runs it, started by a second bound
+   entry beside `game.Start` that hands `NewSession` the `Speaker` as its sink;
+   the start screen offers soundlab beside the game.
+3. Touch: the TUI reads keys alone. A tap hit-tests what was drawn: a key of the
+   keyboard plays its note, a step toggles, a tab or a pane takes the keys, a mixer
+   row mutes its slot, a browser row selects. A strip of buttons stands for the
+   keys a phone lacks (record, play, delete, save, new, edit, tempo, Tab, Esc), and
+   the system keyboard serves `:` and the prompts, as in the game.
+4. Size: the views need 60×16 cells. A phone held landscape fits at the default
+   cell; portrait needs the pinch zoom out, or a keyboard of fewer keys.
+
 ### Rename the audio mute event to the audio vocabulary
 
 - Priority: P2

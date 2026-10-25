@@ -211,6 +211,12 @@ func cmdKey(s *Session, a []string) error {
 }
 
 func cmdMute(s *Session, a []string) error {
+	if a[0] == "slot" {
+		return muteSlot(s, a[1:])
+	}
+	if len(a) > 1 {
+		return fmt.Errorf("usage: %s", commands["mute"].usage)
+	}
 	var music, sfx bool
 	switch a[0] {
 	case "music":
@@ -226,6 +232,23 @@ func cmdMute(s *Session, a []string) error {
 	s.eng.SetMusicMuted(music)
 	s.eng.SetSfxMuted(sfx)
 	return nil
+}
+
+// muteSlot sets one slot's mute; its pattern plays on in time under it
+func muteSlot(s *Session, a []string) error {
+	if len(a) != 2 {
+		return fmt.Errorf("usage: %s", commands["mute"].usage)
+	}
+	slot, err := strconv.Atoi(a[0])
+	if err != nil || slot < 0 || slot >= audio.MusicSlots {
+		return fmt.Errorf("slot %q: want 0 to %d", a[0], audio.MusicSlots-1)
+	}
+	switch a[1] {
+	case "on", "off":
+		s.eng.SetSlotMuted(slot, a[1] == "on")
+		return nil
+	}
+	return fmt.Errorf("want on|off, got %q", a[1])
 }
 
 func cmdVol(s *Session, a []string) error {
@@ -246,6 +269,9 @@ func cmdWhere(s *Session, a []string) error {
 	fmt.Fprintf(s.out, "bar %d step %d (%s)", bar, step, state)
 	for i := range audio.MusicSlots {
 		fmt.Fprintf(s.out, "  slot%d=%s", i, patName(s.eng.SlotPattern(i)))
+		if s.eng.IsSlotMuted(i) {
+			fmt.Fprint(s.out, " (muted)")
+		}
 	}
 	fmt.Fprintln(s.out)
 	return nil
