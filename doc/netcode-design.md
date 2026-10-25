@@ -142,14 +142,15 @@ round rate is its fastest peer's:
    index under that partition, and the authority returns the pages that differ,
    chunked as a body is: one round trip from the root to the repair. A repair wider
    than the keyframe it stands in for is not sent: the peer gets the keyframe, and
-   whole bodies for a few publications. A relay, which measures no keyframe, bounds
-   by the whole worlds it installed.
+   whole bodies for a few publications. A relay, which has no whole world to send
+   instead, bounds by the transfer ceiling alone.
 5. Validate every page hash, reconstruct the authority root, stage the result and
    commit it between ticks. A set is one baseline, applied whole or not at all.
 6. Refuse stale, foreign, malformed, or unverifiable repairs. One that fails its
    proof or its install asks its manifest's sender for a whole world. A relay
    cannot author one, so it answers `MsgStateUnserved`, as it does for a tick it
-   does not retain, and the receiver takes the next whole world the authority sends.
+   does not retain, and asks its own source for a whole world in its next answer,
+   which reaches the receiver through it.
 
 The environment is a declared system-state carrier. A capture therefore includes
 its base force, normalized direction, remaining duration and application phase;
@@ -558,6 +559,20 @@ heavy      main      61   5   0    0  14 (15)  134
            blobs    116   4   0    1  14 (15)  124
 ```
 
+**A relayed topology.** `TestARelayedTopologyConvergesUnderShape` runs always: a
+host, a relay and a person behind it over the default shape, 300 ticks, the storm,
+600 more, asserting that both guests answer most of their manifests hash-only, that
+the authority sends to its one link alone, that the relay forwards and refuses
+nobody it carries, and that the person's crossings reach the authority through the
+relay. Its first run found the person stuck: its first repair through the relay was
+refused as wider than the keyframe the relay had installed early, when the world was
+small, which made every later answer a whole-world request the relay cannot author,
+answered `MsgStateUnserved` 44 times of 46 while the authority, told nothing, sent
+no keyframe for a link it judged unable to drain one on schedule. A relay now bounds
+a repair by the transfer ceiling alone and asks its own source for a whole world it
+cannot author (person: hash-only 64.8% → 96.4%, repairs served through the relay
+0 → 5, keyframes 2 → 1; the relay 100% on both).
+
 Late commits and the lead hold on every shape through every step; pages and late
 copies move where the link is lossy or jittery, since the link meter reads the
 bytes it delivered and the correction cadence follows its throughput, so a
@@ -880,10 +895,9 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
 - Relay trees chosen by the authority: the star's wire at 16 players on the tower is
   108 kB/s after deflate, which a home uplink carries, and a fleet pod runs out of
   CPU first; a relayed participant's crossings and corrections take one more hop
-  and its lead rises by it. A relay stays what a person chooses (`-relay`), and the
-  relay's own open items stay in the todo
-  ([Reach a relay](todo.md#reach-a-relay-without-an-address-in-hand) and the two
-  after it): they are correctness, not topology.
+  and its lead rises by it. A relay stays what a person chooses (`-relay`), reached
+  through the chain's doors and the router's tunnel ([Multiplayer
+  §5.6](multi-player.md#56-relay-doors-and-the-router)): correctness, not topology.
 - A wire digest beside the manifest exchange: retired in phase 1's last iteration,
   3.6–4.1% of a guest's CPU for a category the repair names exactly.
 - Binary rows without columns: refuted by §3.7, 5% larger deflated than the JSON
