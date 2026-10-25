@@ -218,6 +218,11 @@ ends fades the same way before the engine stops. Muted, `MusicSystem` sends only
 what outlasts the mute (patterns, tempo): a start or a note waits for the unmute,
 and an unmute does not restart music the run stopped.
 
+A sequencer slot mutes alone (`SetSlotMuted`): its pattern plays on in time,
+silent, so it comes back on the step it has reached, and the mute outlasts a
+change of pattern. The game leaves every slot sounding; soundlab's mixer mutes
+them one by one.
+
 Disabling `audio` gates both channels; disabling `music` gates music alone.
 Mute keys still update the user's preference, but cannot open a disabled channel.
 Re-enabling restores that preference. The status bar reports effective playback,

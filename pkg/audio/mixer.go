@@ -216,6 +216,8 @@ func (m *Mixer) apply(c audioCmd) {
 		m.sequencer.SetPattern(int(c.slot), c.pattern, c.i1, c.b)
 	case cmdMask:
 		m.sequencer.SetMask(int(c.slot), uint32(c.i2))
+	case cmdSlotMute:
+		m.sequencer.SetSlotMuted(int(c.slot), c.b)
 	case cmdHarmony:
 		m.sequencer.SetHarmonyCfg(c.i1, ScaleID(c.i2), c.ints)
 	case cmdNote:

@@ -1200,7 +1200,7 @@ code does not have yet, described only by a design such as
 **music.toml** — The music bank of patterns the adaptive conductor arranges: the embedded `internal/asset/audio/music.toml`, to which a user `audio/music.toml` or `-config-music` file adds patterns or replaces them by name. See also **pattern**, **conductor**. [Audio §9](audio.md#9-authored-music-and-sound-overrides) · [Content and tools §7](content-assets-and-tools.md#7-embedded-assets) · `internal/asset/audio/music.toml`
 
 **mute** (also: `-mute`, `Ctrl-S`) — two senses.
-- *Audio*: Independent sfx and music mute bits that `Ctrl-S` cycles through silence, sfx only, music only and both; every build starts with both unless `-mute` or the player's saved settings say otherwise, and mute is a viewer preference the journal never carries. See also **mask**. [Audio §6](audio.md#6-mixer-buses-mute-and-pause) · `internal/system` `AudioSystem`
+- *Audio*: Independent sfx and music mute bits that `Ctrl-S` cycles through silence, sfx only, music only and both; every build starts with both unless `-mute` or the player's saved settings say otherwise, and mute is a viewer preference the journal never carries. A sequencer slot also mutes alone, its pattern playing on in time, as soundlab's mixer does. See also **mask**. [Audio §6](audio.md#6-mixer-buses-mute-and-pause) · `internal/system` `AudioSystem` · `pkg/audio` `SetSlotMuted`
 - *Diagnostics*: A log handle's mute silences one runtime's records, as for a replay's copies until presented; failures still pass. [Logging: Correlation stamps](logging-and-diagnostics.md#correlation-stamps) · `internal/vlog` `Log.Mute`
 
 ## N
