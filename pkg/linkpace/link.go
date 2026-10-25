@@ -20,18 +20,22 @@ type Cell struct {
 	Valid bool
 }
 
-// Sample is one completed round trip, plus what the far end reported inside it.
+// Sample is one completed round trip, plus what the far end reported inside it
+// and what this end knows of its own sending.
 //
 // Delivered and Elapsed are a pair: how many bytes the far end confirmed having
 // received, and the wall interval that confirmation covers. Backlog is what this
 // sender has put on the link and not yet seen confirmed, which is the difference
-// between "the link is fast" and "the link is idle".
+// between "the link is fast" and "the link is idle". Held says the sender's
+// frames have waited on the link longer than its echoes are stale: a sender pacing
+// to the link never shows a backlog past the bound it paces to.
 type Sample struct {
 	RTT time.Duration
 
 	Delivered int64
 	Elapsed   time.Duration
 	Backlog   int64
+	Held      bool
 
 	LagTicks  uint64
 	Magnitude int
@@ -57,8 +61,10 @@ type Metrics struct {
 	Backlog int64
 
 	// Saturated reports that the link, rather than the sender, was the limit
-	// while Throughput was measured — by a standing backlog or by a round trip
-	// inflated well past its own baseline.
+	// while Throughput was measured: a backlog stood across two echoes, or the
+	// sender's frames were held waiting while the round trip stood inflated past
+	// its baseline, by the queue they wait in. Neither half alone: jitter inflates
+	// a trip as readily, and a sender's own bound holds frames a long link carries.
 	Saturated bool
 
 	// Loss is the share of probes that went unanswered, exponentially weighted.
@@ -93,11 +99,10 @@ type LinkConfig struct {
 	// is deciding the rate.
 	BacklogBytes int64
 
-	// InflationRatio and InflationFloor are the second saturation signal: a round
-	// trip that has grown past minRTT by both this ratio and this absolute margin
-	// is queueing somewhere, which is the same statement a standing backlog makes
-	// from the sender's side. Both are required so that a fast link's ordinary
-	// microsecond wobble is not read as congestion.
+	// InflationRatio and InflationFloor say when a round trip stands inflated: grown
+	// past minRTT by both this ratio and this absolute margin, so that a fast
+	// link's ordinary microsecond wobble is not read as a queue. Inflation reads
+	// with held frames alone: the queue they wait in is what inflates the trip.
 	InflationRatio float64
 	InflationFloor time.Duration
 
@@ -203,7 +208,7 @@ func (l *Link) Observe(s Sample) {
 	// after the sender queued a burst larger than the threshold, a whole keyframe,
 	// which a fast link drains long before the next.
 	backlogged := s.Backlog >= l.cfg.BacklogBytes
-	l.saturated = (backlogged && l.backlogged) || l.inflated(s.RTT)
+	l.saturated = (backlogged && l.backlogged) || (s.Held && l.inflated(s.RTT))
 	l.backlogged = backlogged
 
 	l.loss += l.cfg.Smoothing * (0 - l.loss)
@@ -218,7 +223,7 @@ func (l *Link) Observe(s Sample) {
 // report a healthy round trip.
 func (l *Link) Miss() { l.loss += l.cfg.Smoothing * (1 - l.loss) }
 
-// inflated reports the round-trip half of the saturation signal.
+// inflated reports a round trip past its baseline by the ratio and the floor.
 func (l *Link) inflated(rtt time.Duration) bool {
 	if l.minRTT <= 0 {
 		return false

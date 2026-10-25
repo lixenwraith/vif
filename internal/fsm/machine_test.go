@@ -1,6 +1,7 @@
 package fsm_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -174,8 +175,8 @@ func TestAProposedTransitionWaitsForItsApply(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	var proposed []*event.FSMTransitionPayload
-	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar) {
-		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars})
+	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
+		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then})
 	}
 	m.Steer(false, true)
 	if err := m.Init(trace); err != nil {
@@ -244,5 +245,86 @@ func TestAFollowingMachineMovesByApplyAlone(t *testing.T) {
 	m.Update(trace, 20*time.Millisecond)
 	if m.GetRegionState("r") != "C" {
 		t.Fatalf("state %q after following ended, want C: C has no transition", m.GetRegionState("r"))
+	}
+}
+
+const foldedDoc = `
+[regions.r]
+initial = "A"
+[states.A]
+transitions = [{ trigger = "EventSpeciesCreated", target = "B" }]
+[states.B]
+on_enter = [{ action = "EmitEvent", event = "EventStrobeRequest" }]
+transitions = [{ trigger = "Tick", target = "C" }]
+[states.C]
+on_enter = [{ action = "EmitEvent", event = "EventDrainPause" }]
+transitions = [{ trigger = "Tick", target = "D" }]
+[states.D]
+on_enter = [{ action = "EmitEvent", event = "EventDrainResume" }]
+transitions = [{ trigger = "Tick", target = "E", guard = "StateTimeExceeds", guard_args = { ms = 10 } }]
+[states.E]
+`
+
+// TestAProposedTransitionFoldsTheUnguardedHopsAfterIt: the authority carries the
+// unguarded Tick hops after a transition's target in the crossing it proposes, up to
+// the first guarded one, and Apply takes the whole chain at once, each state's
+// on_enter in order, on the authority's machine and a following one alike; a hop
+// naming a guarded transition is refused.
+func TestAProposedTransitionFoldsTheUnguardedHopsAfterIt(t *testing.T) {
+	m, trace, err := loadMachine(t, foldedDoc)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	var proposed []*event.FSMTransitionPayload
+	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
+		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then})
+	}
+	m.Steer(false, true)
+	if err := m.Init(trace); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	made := event.GameEvent{Type: event.EventSpeciesCreated, Payload: &event.SpeciesCreatedPayload{Species: 4}}
+	if !m.HandleEvent(trace, made) || len(proposed) != 1 {
+		t.Fatalf("after the event: %d proposals, want one", len(proposed))
+	}
+	b, _ := m.GetStateID("B")
+	c, _ := m.GetStateID("C")
+	p := proposed[0]
+	if want := []event.FSMHop{{Owner: int(b), Index: 0}, {Owner: int(c), Index: 0}}; !slices.Equal(p.Then, want) {
+		t.Fatalf("the crossing carries hops %v, want B's and C's unguarded Ticks, %v", p.Then, want)
+	}
+	m.Update(trace, 20*time.Millisecond)
+	if m.GetRegionState("r") != "A" || len(*trace) != 0 {
+		t.Fatalf("while proposed the region moved to %q with %v", m.GetRegionState("r"), *trace)
+	}
+	if err := m.Apply(trace, p); err != nil || m.GetRegionState("r") != "D" {
+		t.Fatalf("apply: err %v, state %q, want D", err, m.GetRegionState("r"))
+	}
+	if want := []event.EventType{event.EventStrobeRequest, event.EventDrainPause, event.EventDrainResume}; !slices.Equal(*trace, want) {
+		t.Fatalf("the chain ran %v, want each state's on_enter in order %v", *trace, want)
+	}
+	m.Update(trace, 20*time.Millisecond)
+	if len(proposed) != 2 || proposed[1].Then != nil || m.GetRegionState("r") != "D" {
+		t.Fatalf("after D's guard passed: %d proposals, last hops %v, state %q; want D's guarded Tick proposed alone", len(proposed), proposed[len(proposed)-1].Then, m.GetRegionState("r"))
+	}
+
+	follower, trace2, err := loadMachine(t, foldedDoc)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if err := follower.Init(trace2); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	follower.Steer(true, false)
+	if err := follower.Apply(trace2, p); err != nil || follower.GetRegionState("r") != "D" || !slices.Equal(*trace2, *trace) {
+		t.Fatalf("a follower applying the chain: err %v, state %q, ran %v; want D by the same path", err, follower.GetRegionState("r"), *trace2)
+	}
+	d, _ := follower.GetStateID("D")
+	bad := &event.FSMTransitionPayload{Region: "r", Owner: p.Owner, Index: p.Index, Then: []event.FSMHop{{Owner: int(b), Index: 0}, {Owner: int(d), Index: 0}}}
+	fresh, trace3, _ := loadMachine(t, foldedDoc)
+	_ = fresh.Init(trace3)
+	fresh.Steer(true, false)
+	if err := fresh.Apply(trace3, bad); err == nil {
+		t.Fatal("a hop naming a guarded transition was applied")
 	}
 }

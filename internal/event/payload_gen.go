@@ -633,6 +633,11 @@ var codecFSMVar = structCodec{size: unsafe.Sizeof(FSMVar{}), fields: []field{
 	{off: unsafe.Offsetof(FSMVar{}.Value), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
+var codecFSMHop = structCodec{size: unsafe.Sizeof(FSMHop{}), fields: []field{
+	{off: unsafe.Offsetof(FSMHop{}.Owner), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FSMHop{}.Index), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
 func (p *FSMTransitionPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecFSMTransitionPayload, unsafe.Pointer(p)
 }
@@ -643,6 +648,7 @@ var codecFSMTransitionPayload = structCodec{size: unsafe.Sizeof(FSMTransitionPay
 	{off: unsafe.Offsetof(FSMTransitionPayload{}.Owner), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(FSMTransitionPayload{}.Index), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(FSMTransitionPayload{}.Trigger), kind: kindInt, size: unsafe.Sizeof(EventType(0))},
+	{off: unsafe.Offsetof(FSMTransitionPayload{}.Then), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecFSMHop}, stride: unsafe.Sizeof(FSMHop{}), make: func(p unsafe.Pointer, n int) { *(*[]FSMHop)(p) = make([]FSMHop, n) }},
 }}
 
 func (p *NuggetCollectedPayload) codec() (*structCodec, unsafe.Pointer) {

@@ -277,6 +277,13 @@ const (
 	SnapshotBulkQueue      = 100 * time.Millisecond
 	SnapshotBulkQueueBytes = 8 << 10
 
+	// SnapshotLinkCapacityTicks is how long a constrained plan stays priced on the
+	// rate its link delivered while the link held this instance's frames before that
+	// rate is doubled and the link offered more: five seconds, so the plan that fits
+	// stays instead of creeping back to nominal and queueing the link within the
+	// second, and a link that improved is read anew once it holds the frames again.
+	SnapshotLinkCapacityTicks = 300
+
 	// SnapshotKeyframeDrain is the longest a link may take to deliver a whole world
 	// sent on schedule. A slower one meets the floor with proofs and takes a whole
 	// world on request, and its operating point is reported constrained.

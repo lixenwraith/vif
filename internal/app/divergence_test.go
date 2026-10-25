@@ -179,7 +179,23 @@ func divergenceReading(host, guest *App, leadMax int64) string {
 		"guest lead " + itoa(statOf(guest, "network.barrier_delay_ticks")) + " (max " + itoa(leadMax) + ")",
 		"pace steps " + itoa(statOf(guest, "network.pace_steps")),
 		"storm spawned " + itoa(statOf(host, "storm.spawned")),
+		"cadence " + cadenceOf(host, guest),
 	}, ", ")
+}
+
+// cadenceOf is what the host's controller decided for the guest's link: the cadence
+// in ticks, whether the link read as the limit and as constrained, and the rate the
+// meter read it at.
+func cadenceOf(host, guest *App) string {
+	id := guest.membership.localParticipant()
+	for _, p := range host.corrections.Cadence().Peers {
+		if p.Participant == id {
+			return itoa(int64(p.CadenceTicks)) + " ticks (constrained " + strconv.FormatBool(p.Constrained) +
+				", priced on " + itoa(int64(p.CapacityBps)) + " B/s, link " + itoa(int64(p.ThroughputBps)) +
+				" B/s, saturated " + strconv.FormatBool(p.Saturated) + ")"
+		}
+	}
+	return "none"
 }
 
 // fightLogged reads the repairs and keyframes the guest installed, the rows each

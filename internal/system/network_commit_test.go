@@ -48,6 +48,7 @@ func (p *linkedPort) Drain([]link.Inbound) int                     { return 0 }
 func (p *linkedPort) Peers() []uint32                              { return p.peers }
 func (p *linkedPort) SetLinkReport(link.LinkReport)                {}
 func (p *linkedPort) ObserveTransfer(uint32, int64, time.Duration) {}
+func (p *linkedPort) ObserveHold(uint32, bool)                     {}
 func (p *linkedPort) LinkMetric(uint32) linkpace.Metrics {
 	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, Ready: p.rtt > 0}
 }

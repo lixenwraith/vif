@@ -218,6 +218,14 @@ func (p *MeshPort) ObserveTransfer(peer uint32, bytes int64, elapsed time.Durati
 	p.meterLocked(PeerID(peer)).link.ObserveTransfer(bytes, elapsed)
 }
 
+// ObserveHold records whether the sender's frames for peer are waiting on its link,
+// on the mesh's clock.
+func (p *MeshPort) ObserveHold(peer uint32, held bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.meterLocked(PeerID(peer)).hold(p.nowLocked(), held)
+}
+
 // Peers returns the directly linked participants in a stable order.
 func (p *MeshPort) Peers() []uint32 {
 	p.mu.Lock()

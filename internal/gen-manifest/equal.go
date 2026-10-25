@@ -23,11 +23,7 @@ type EqualFunc struct {
 // same JSON: floats by bits, slices by nil-ness and element. A field whose encoding
 // == cannot vouch for fails generation rather than comparing loosely.
 func equalFuncs(defs Definitions) []EqualFunc {
-	imp := importer.ForCompiler(token.NewFileSet(), "source", nil)
-	pkg, err := imp.(types.ImporterFrom).ImportFrom(componentPkgPath, ".", 0)
-	if err != nil {
-		panic(fmt.Sprintf("type-check %s: %v", componentPkgPath, err))
-	}
+	pkg := componentPackage()
 	names := []string{"PositionComponent"}
 	fields := []string{"Positions"}
 	for _, c := range defs.Components {
@@ -48,6 +44,21 @@ func equalFuncs(defs Definitions) []EqualFunc {
 	}
 	return out
 }
+
+// componentPackage type-checks the component package, once per generator run.
+func componentPackage() *types.Package {
+	if componentPkg == nil {
+		imp := importer.ForCompiler(token.NewFileSet(), "source", nil)
+		pkg, err := imp.(types.ImporterFrom).ImportFrom(componentPkgPath, ".", 0)
+		if err != nil {
+			panic(fmt.Sprintf("type-check %s: %v", componentPkgPath, err))
+		}
+		componentPkg = pkg
+	}
+	return componentPkg
+}
+
+var componentPkg *types.Package
 
 type equalGen struct{ depth int }
 

@@ -211,17 +211,90 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 
 // take moves a region by the transition its guard passed: in place, or through
 // Propose, which hands it to the authority's barrier and parks the region until
-// Apply brings it back at the committed tick. An internal one changes no state,
-// so it parks nothing: every event it counts is proposed, in order.
+// Apply brings it back at the committed tick, with the unguarded Tick hops after
+// its target folded in (fold). An internal one changes no state, so it parks
+// nothing: every event it counts is proposed, in order.
 func (m *Machine[T]) take(ctx T, region *RegionState, owner StateID, index int, trigger event.EventType, payload any) {
 	trans := &m.nodes[owner].Transitions[index]
 	vars := payloadVars(payload, trans.CaptureVars)
 	if m.proposing && m.Propose != nil {
-		region.proposed, region.target = !trans.Internal, trans.TargetID
-		m.Propose(region.Name, owner, index, trigger, vars)
+		then, end := m.fold(trans)
+		region.proposed, region.target = !trans.Internal, end
+		m.Propose(region.Name, owner, index, trigger, vars, then)
 		return
 	}
 	m.commit(ctx, region, trans, trigger, vars)
+}
+
+// foldMax bounds the hops a crossing carries, as a cycle of unguarded hops would
+// otherwise never end.
+const foldMax = 32
+
+// fold is the chain of unguarded Tick hops after trans's target and the state it
+// ends in, which the authority carries in the crossing it proposes so every
+// instance takes the chain at one tick rather than a lead a hop: from each state
+// entered, up its path, the first Tick transition met decides, an unguarded
+// external one a hop and any other the end, since a guest evaluates no guard.
+func (m *Machine[T]) fold(trans *Transition[T]) ([]event.FSMHop, StateID) {
+	at := trans.TargetID
+	if trans.Internal {
+		return nil, at
+	}
+	var then []event.FSMHop
+	seen := map[StateID]bool{at: true}
+	for len(then) < foldMax {
+		owner, index, ok := m.unguardedTick(at)
+		if !ok {
+			break
+		}
+		next := m.nodes[owner].Transitions[index].TargetID
+		if seen[next] {
+			break
+		}
+		seen[next] = true
+		then = append(then, event.FSMHop{Owner: int(owner), Index: index})
+		at = next
+	}
+	return then, at
+}
+
+// unguardedTick is the Tick transition state takes at its next update with
+// nothing to evaluate, if that is the first Tick transition on the way up its
+// path; a guarded, internal or self-targeting one first is the chain's end.
+func (m *Machine[T]) unguardedTick(state StateID) (StateID, int, bool) {
+	for id := state; id != StateNone; {
+		node, ok := m.nodes[id]
+		if !ok {
+			return 0, 0, false
+		}
+		for i := range node.Transitions {
+			if t := &node.Transitions[i]; t.Event == 0 {
+				return id, i, t.Guard == nil && !t.Internal && t.TargetID != id
+			}
+		}
+		id = node.ParentID
+	}
+	return 0, 0, false
+}
+
+// hop takes one transition of a folded chain where the chain before it left the
+// region: the state owning it still on the active path and the transition an
+// unguarded Tick; a region the chain ended takes no more.
+func (m *Machine[T]) hop(ctx T, region *RegionState, hop event.FSMHop) error {
+	if r, ok := m.regions[region.Name]; !ok || r != region {
+		return nil
+	}
+	owner := StateID(hop.Owner)
+	node, ok := m.nodes[owner]
+	if !ok || !slices.Contains(region.ActivePath, owner) || hop.Index < 0 || hop.Index >= len(node.Transitions) {
+		return fmt.Errorf("region %q in %s has no hop %d of state %d", region.Name, m.StateName(region.ActiveStateID), hop.Index, hop.Owner)
+	}
+	trans := &node.Transitions[hop.Index]
+	if trans.Event != 0 || trans.Guard != nil || trans.Internal {
+		return fmt.Errorf("region %q: hop %d of state %d is not an unguarded Tick transition", region.Name, hop.Index, hop.Owner)
+	}
+	m.commit(ctx, region, trans, event.EventNone, nil)
+	return nil
 }
 
 // parkedEventsMax bounds what a region holds for a transition that never lands.
@@ -281,6 +354,11 @@ func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
 	parked := region.parked
 	region.parked = nil
 	m.commit(ctx, region, trans, p.Trigger, p.Vars)
+	for _, h := range p.Then {
+		if err := m.hop(ctx, region, h); err != nil {
+			return err
+		}
+	}
 	// What arrived during the wait reaches the state entered, in order; a
 	// transition one takes parks the rest again.
 	for _, ev := range parked {

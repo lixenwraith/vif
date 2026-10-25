@@ -130,7 +130,8 @@ transitions = [...]                 # Transition rules
 
 A region is shared state: in a live session the authority's machine takes its
 transitions and every instance applies each at one tick, a playout lead after the
-authority took it, so a chain of states pays a lead a hop. A `[local]` event (its
+authority took it; the unguarded `Tick` hops after a transition's target ride the
+same crossing, so a chain of them costs one lead. A `[local]` event (its
 class in `internal/event/type.go`) cannot steer a region, since only the
 authority's player could move it (D-20). The loader accepts one;
 `TestFSMTriggersAreReplicated` holds the shipped scenarios to the rule.

@@ -351,11 +351,12 @@ func roster(n int) []network.RosterEntry {
 	return out
 }
 
-// captureRows is how many placements the fixture world holds. It is several
-// manifest pages' worth on purpose: a one-page repair has to be cheaper than the
-// whole world, or every repair reaches the keyframe fallback and no criterion
-// below is about what it says it is.
-const captureRows = parameter.SnapshotManifestPageRows * 8
+// captureRows is how many placements the fixture world holds. It is many manifest
+// pages' worth on purpose: a one-page repair has to be cheaper than the whole
+// world, or every repair reaches the keyframe fallback and no criterion below is
+// about what it says it is; a page's rows deflate to twenty bytes each as JSON, a
+// world's to under two in columns.
+const captureRows = parameter.SnapshotManifestPageRows * 64
 
 // capture is a shared world at one tick. spread moves one placement, which is the
 // one thing these criteria need two worlds to disagree about: a page hash covers
@@ -369,15 +370,18 @@ func capture(tick uint64, spread int) snapshot.SharedCapture {
 		},
 		World: engine.SharedWorldState{NextEntity: uint64(captureRows) + 1},
 	}
+	// Placements scattered rather than cycled: a cycle's columns deflate to less
+	// than one page of its rows, and a world cheaper than a page is sent whole.
 	for i := range captureRows {
-		x := i % 100
+		h := uint32(i+1) * 2654435761
+		x := int(h>>24) % 100
 		if i == 0 {
 			x += spread
 		}
 		cap.World.Positions = append(cap.World.Positions,
 			engine.StoreEntry[component.PositionComponent]{
 				Entity: core.Entity(i + 1),
-				Value:  component.PositionComponent{X: x, Y: i % 40},
+				Value:  component.PositionComponent{X: x, Y: int(h>>16) % 40},
 			})
 	}
 	return seal(cap)

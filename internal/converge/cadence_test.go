@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
 // TestCadenceBoundsAreTheGameParameters: pkg may not see internal, so the envelope
@@ -57,5 +58,37 @@ func TestPeersOnDifferentCadencesShareRounds(t *testing.T) {
 	}
 	if shared != 32 {
 		t.Fatalf("the slow peer shared %d of 64 rounds with the quick one, want every one of its 32", shared)
+	}
+}
+
+// TestAPlanStaysPricedOnTheRateTheLinkHeldAt: the rate a link delivered while it
+// held the frames prices the plan after the link takes them again, so the plan that
+// fits does not creep back and queue the link; a constrained plan is offered twice
+// as much once SnapshotLinkCapacityTicks pass without a hold, and a hold reads the
+// rate anew.
+func TestAPlanStaysPricedOnTheRateTheLinkHeldAt(t *testing.T) {
+	t.Parallel()
+	p := &peerPublisher{}
+	idle := linkpace.Metrics{Throughput: 20_000, Ready: true}
+	held := linkpace.Metrics{Throughput: 6_000, Saturated: true, Ready: true}
+	if got := p.priced(idle, 10); got.Saturated || p.capacity != 0 {
+		t.Fatalf("a link never read as the limit was priced: %+v", got)
+	}
+	if got := p.priced(held, 20); !got.Saturated || got.Throughput != 6_000 {
+		t.Fatalf("a held link was not priced on the rate it held at: %+v", got)
+	}
+	hold := uint64(20 + parameter.SnapshotLinkCapacityTicks)
+	if got := p.priced(idle, hold); !got.Saturated || got.Throughput != 6_000 {
+		t.Fatalf("the plan was not kept priced while the link took its frames: %+v", got)
+	}
+	if got := p.priced(idle, hold+1); got.Throughput != 6_000 {
+		t.Fatalf("an unconstrained plan was offered more: %+v", got)
+	}
+	p.plan.Constrained = true
+	if got := p.priced(idle, hold+1); !got.Saturated || got.Throughput != 12_000 {
+		t.Fatalf("a constrained plan past the hold was not offered twice the rate: %+v", got)
+	}
+	if got := p.priced(held, hold+2); got.Throughput != 6_000 || p.capacityTick != hold+2 {
+		t.Fatalf("a link held again was not read anew: %+v at %d", got, p.capacityTick)
 	}
 }

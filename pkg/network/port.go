@@ -342,6 +342,13 @@ func (p *SocketPort) ObserveTransfer(peer uint32, bytes int64, elapsed time.Dura
 	p.meterLocked(PeerID(peer)).link.ObserveTransfer(bytes, elapsed)
 }
 
+// ObserveHold records whether the sender's frames for peer are waiting on its link.
+func (p *SocketPort) ObserveHold(peer uint32, held bool) {
+	p.meterMu.Lock()
+	defer p.meterMu.Unlock()
+	p.meterLocked(PeerID(peer)).hold(time.Now(), held) // [wall] the link, not the game
+}
+
 // meterLocked returns one peer's measurement state, creating it on first use.
 // Caller MUST hold meterMu.
 func (p *SocketPort) meterLocked(id PeerID) *linkMeter {

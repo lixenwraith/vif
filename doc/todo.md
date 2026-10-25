@@ -550,35 +550,6 @@ records: both files sync every `flushIntervalMs` (50 ms). The journal's crash
 promise needs it; the log's does not. Measure a log that syncs on its own cadence,
 or only on WARN and above.
 
-### Lay keyframe sections out in columns
-
-- Priority: P2
-- Affected files: `internal/gen-manifest`, `internal/engine/snapshot_*_gen.go`,
-  `internal/snapshot/encoder.go`, `internal/snapshot/codec.go`, `tool/vif-log`
-- Guide: [Netcode design §3.7, §4](netcode-design.md#a-columnar-keyframe-codec)
-
-A td keyframe deflates to 355 kB as JSON rows and to 14 kB as the same cells in
-columns, entities as varint deltas in canonical order and a column per field, since
-a row's entropy is its entity id (netcode design §3.7); binary rows alone deflate
-5% larger than the JSON. Generate the column layout per component beside the
-stores, send a keyframe and a delta's changed rows in it, keep the manifest's shape
-over each row's canonical encoding, render a body as rows in `vif-log`; `Schema`
-and the protocol bump. The guest's 141 ms decode of 10.6 MB of JSON goes with it.
-
-### Hold retained indexes by reference
-
-- Priority: P3
-- Affected files: `internal/snapshot/encoder.go`, `internal/snapshot/manifest.go`,
-  `internal/converge/selective.go`
-- Guide: [Netcode design §3.7, §4](netcode-design.md#retention-by-reference)
-
-Retained captures are about 3 MB each at td; their indexes hold 47 MB of per-row
-arrays and cloned row JSON over four captures (`newStoreSection`, `ManifestRow`),
-beside the row encoders' 24 MB of owned cells. Let a retained index share the pages
-whose rows held with the index before it and reference the encoder's immutable cell
-bytes rather than clone them, about a fifth of a td participant's heap. The spatial
-grid is [its own item](#shrink-the-spatial-grid-on-ceiling-sized-maps).
-
 ### Read a touch client's uplink
 
 - Priority: P3
@@ -596,48 +567,6 @@ mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`
 `network.pace_late_ticks` for a client the OS throttles; if the epochs carry it,
 decide whether a drag's intermediate cells are a move each or one move to the cell
 the tick ends on.
-
-### Read the cadence against a thin command stream
-
-- Priority: P3
-- Affected files: `pkg/linkpace`, `pkg/network/probe.go`
-
-The divergence harness's heavy shape (netcode design §3.5) delivered the guest 134
-manifests in 1,200 ticks before the binary wire codec, 132 with its envelope and 97
-with its payload, late counts unchanged: the link meter reads throughput from the
-bytes it delivered, and a command stream of a fifth the bytes reads as a slower
-link, so the cadence lengthened under loss. Read what the meter and the floor
-decide on a thin stream, and whether the probe's bytes should carry the reading.
-The saturation signal's round-trip half reads inflation against the least trip
-seen, and a link queued from its join on, as the cadence test's 200-byte-per-tick
-link is, never shows its idle trip, so the flag flickers once a run settles near
-1.5× of a congested baseline; the test reads the run rather than its last sample.
-
-### Fold an unguarded chain into one crossing
-
-- Priority: P3
-- Affected files: `internal/fsm/machine.go`, `internal/engine/scheduler.go`
-- Guide: [Netcode design §4 batch 2](netcode-design.md#4-phase-2)
-
-A transition is the authority's and applies a playout lead after it was taken
-([D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions)),
-so a chain of states that each hand on by an unguarded `Tick`, the tower's setup
-of ten hops, pays a lead a hop: 30 ticks on the harness, seconds at the site.
-Taking the unguarded hop in place on every instance is safe only where nothing
-else could have moved the region first: no guarded `Tick` before it in the leaf
-and no event transition on the leaf or its ancestors, since the authority evaluates
-those and a guest does not. Decide whether such states are marked at load and
-taken in place, or whether the authority crosses the chain's end.
-
-### Make the td readings repeatable
-
-- Priority: P3
-- Affected files: `internal/app/readings_test.go`
-
-td's rows in `TestNetcodeReadingsOverSockets` vary run to run with what the storm
-does to the roster: at four players keyframes ran at none, 0.13 and 0.53 a second
-across runs on one machine, so a row compares two items only where their keyframe
-rate agrees. Seed what varies, or run the row several times and report the median.
 
 ## Session membership
 
