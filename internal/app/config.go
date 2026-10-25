@@ -123,6 +123,10 @@ type Config struct {
 	Play     paths.Play
 	Settings paths.SettingsStore
 
+	// Notice is what the run's status line opens with: what the host's start found,
+	// such as settings it dropped, or the failure of the run this one replaces.
+	Notice string
+
 	// ClaimStore keeps the claims this process comes back to its sessions with past
 	// its own life, which a page's reload needs; nil keeps them while it runs.
 	ClaimStore ClaimStore
@@ -271,9 +275,8 @@ type Config struct {
 	sessionPlayers int
 
 	// dialled is a :join its session already answered, dialled while the run it
-	// replaces played on; notice is what that run's failure tells the next one.
+	// replaces played on.
 	dialled *joinDial
-	notice  string
 
 	// joinPress says this run's join is one its player started, at launch or from a
 	// :join, whose seat waits for their press (App.joinWaits). A run dialled on its
@@ -362,7 +365,7 @@ func (c Config) joining(target string) (Config, error) {
 // clock rather than before it: the next run is not waiting for a lobby, it is
 // reopening a door its guests are already at.
 func (c Config) restarted(next *restartRequest) (Config, *Config) {
-	c.notice, c.dialled, c.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
+	c.Notice, c.dialled, c.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
 	c.Journal, c.journalCarried = next.Journal, next.Journal
 	c.joinPress, c.Resources.Provided = next.press, next.provided
 	if next.Scenario != "" {
@@ -385,7 +388,7 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 		joined, err := c.joining(next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
 			next.dialled.abandon(err)
-			solo.notice = "Join failed: " + err.Error()
+			solo.Notice = "Join failed: " + err.Error()
 			return solo, nil
 		}
 		joined.dialled = next.dialled

@@ -62,7 +62,7 @@ func Run(cfg Config) error {
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
-			cfg.notice = "Join failed: " + err.Error()
+			cfg.Notice = "Join failed: " + err.Error()
 			continue
 		}
 		if err != nil && !errors.Is(err, errSessionCanceled) {
@@ -156,8 +156,8 @@ func (a *App) Loop() (*restartRequest, error) {
 	}
 	a.reportAudioSpec()
 	a.recordMusic()
-	if a.cfg.notice != "" {
-		a.ctx.SetStatusMessage(a.cfg.notice, parameter.StatusAlert)
+	if a.cfg.Notice != "" {
+		a.ctx.SetStatusMessage(a.cfg.Notice, parameter.StatusAlert)
 	}
 	if a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()

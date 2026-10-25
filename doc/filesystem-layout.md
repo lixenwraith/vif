@@ -134,8 +134,11 @@ system roots; the first file wins whole, a key it omits keeps the embedded
 default, and the `vif.toml` inside its own `root` is not read. Every key is a default: a flag given on the command line wins, and `-d`
 still takes the embedded scenario and content. A relative path is relative to the
 file (a bare scenario name stays a name the roots resolve), `~/` is the home
-directory, and an unknown key is refused. `-check` names
-the file it read. Music and sound overrides stay out of it, because a run that
+directory. A key this build does not know is dropped: the run reads every key it
+knows, removes each line setting another and each table another heads from the
+document it writes back to, every other line and comment kept, and names them on
+its status line, so a build older than the file drops the newer keys too. `-check`
+names them and writes nothing, and names the file it read. Music and sound overrides stay out of it, because a run that
 creates no audio refuses them and a default must not break `-serve`.
 
 One rule holds on every host: a flag sets its value for its run alone, `vif.toml`
@@ -145,7 +148,8 @@ back as the player changes it, through a menu row or the command behind it, so t
 next starts the same: into the `vif.toml` it read when that is the player's own, in
 the user root or the `-config-dir` root, else into the user root's, created at the
 first change as a copy of the one it read (relative paths made absolute) that
-shadows it from then on. A checkout's or a system root's file is never written.
+shadows it from then on; dropping unknown keys creates it at once. A checkout's or
+a system root's file is never written.
 Only a value changed in the run is written, so one a flag set (`-mute`'s channels,
 `-nw`'s wait) stays out unless the player then changes it. No flag saves the
 others: a flag is what an alias, a script or a link repeats, and writing it back

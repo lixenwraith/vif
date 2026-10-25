@@ -52,7 +52,7 @@ type audioFiles struct {
 
 // resolveAudioFiles applies vif's -config-dir, -config-music and -config-sounds,
 // and vif.toml's [paths] root and [audio] buffer_ms as vif does. Those are all it
-// reads, so a key another vif build knows is skipped rather than refused.
+// reads, so a key another vif build knows is skipped, never dropped as a run does.
 func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
 	if err := paths.CheckRoot(dir); err != nil {
 		return audioFiles{}, err
