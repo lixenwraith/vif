@@ -24,6 +24,7 @@ var (
 )
 
 func main() {
+	flag.BoolVar(flagTUI, "T", false, "Full-screen TUI, as -tui")
 	flag.Parse()
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

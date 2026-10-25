@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -23,12 +24,14 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
+// focusArea is the pane the keys go to; Tab walks the panes on screen in this order
 type focusArea int
 
 const (
-	focusBrowser focusArea = iota
-	focusInspector
+	focusMain focusArea = iota // the view's own pane: the browser, the keyboard or the grid
+	focusMixer
 	focusLog
+	focusInspector // the browser's overlay: Enter opens it, Esc closes it
 )
 
 // view is what the body shows: the browser with the mixer and log, or one of the
@@ -103,6 +106,7 @@ type tuiApp struct {
 
 	view  view
 	focus focusArea
+	panes []focusArea // the panes the last frame laid out, in Tab order
 	mode  uiMode
 
 	kind     int
@@ -128,6 +132,11 @@ type tuiApp struct {
 
 	logScroll int
 
+	// The mixer's cursor and first row shown, as rows, so a slot changing what it
+	// plays leaves them on the track they were on
+	mixCur, mixTop mixRow
+	mixPageH       int
+
 	keys keysState
 	beat *beatState
 
@@ -145,6 +154,8 @@ func newTUIApp(s *Session, lb *logBuffer) *tuiApp {
 		tree:      tui.NewTreeState(10),
 		cmdField:  tui.NewTextFieldState(""),
 		editField: tui.NewTextFieldState(""),
+		mixCur:    mixRow{trk: -1},
+		mixTop:    mixRow{trk: -1},
 		keys:      newKeysState(),
 	}
 }
@@ -363,6 +374,9 @@ func (a *tuiApp) handle(ev terminal.Event) {
 	case modePrompt:
 		a.promptKey(ev)
 	default:
+		if a.globalKey(ev) {
+			return
+		}
 		switch a.view {
 		case viewKeys:
 			a.keysKey(ev)
@@ -372,6 +386,41 @@ func (a *tuiApp) handle(ev terminal.Event) {
 			a.normalKey(ev)
 		}
 	}
+}
+
+// globalKey takes the keys that mean one thing in every view and pane: Tab and
+// Shift-Tab walk the panes on screen, Esc brings the keys back from a side pane to
+// the view's own, ? shows the keys, : opens the command line and ^S saves
+func (a *tuiApp) globalKey(ev terminal.Event) bool {
+	switch {
+	case ev.Key == terminal.KeyTab || ev.Key == terminal.KeyBacktab:
+		a.cycleFocus(ev.Key == terminal.KeyTab)
+	case ev.Key == terminal.KeyEscape && (a.focus == focusMixer || a.focus == focusLog):
+		a.focus = focusMain
+	case ev.Key == terminal.KeyCtrlS:
+		a.saveModified()
+	case ev.Key == terminal.KeyRune && ev.Rune == '?':
+		a.help = true
+	case ev.Key == terminal.KeyRune && ev.Rune == ':':
+		a.openCommand()
+	default:
+		return false
+	}
+	return true
+}
+
+// cycleFocus moves the keys to the next pane on screen, or the previous; the
+// inspector counts as the browser it opened over
+func (a *tuiApp) cycleFocus(next bool) {
+	n := len(a.panes)
+	if n == 0 {
+		return
+	}
+	d := 1
+	if !next {
+		d = n - 1
+	}
+	a.focus = a.panes[(max(slices.Index(a.panes, a.focus), 0)+d)%n]
 }
 
 // tick decays the keys' highlights and redraws only when the engine moved, so an
@@ -408,9 +457,6 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 		r = ev.Rune
 	}
 	switch {
-	case r == ':':
-		a.openCommand()
-		return
 	case r == 'p':
 		a.enterKeys()
 		return
@@ -424,26 +470,14 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 			fmt.Fprintln(a.log, "the beat editor edits a pattern — h/l to the patterns tab first")
 		}
 		return
-	case ev.Key == terminal.KeyCtrlS:
-		a.saveModified()
-		return
-	case r == '?':
-		a.help = true
-		return
-	case ev.Key == terminal.KeyTab:
-		// browser and log take turns; the inspector is an overlay Enter opens
-		if a.focus == focusBrowser {
-			a.focus = focusLog
-		} else {
-			a.focus = focusBrowser
-		}
-		return
 	}
 	switch a.focus {
-	case focusBrowser:
+	case focusMain:
 		a.browserKey(ev, r)
 	case focusInspector:
 		a.inspectorKey(ev, r)
+	case focusMixer:
+		a.mixerKey(ev, r)
 	case focusLog:
 		a.logKey(ev, r)
 	}
@@ -707,7 +741,7 @@ func (a *tuiApp) inspectorKey(ev terminal.Event, r rune) {
 	case ev.Key == terminal.KeySpace || r == ' ':
 		a.auditionSel()
 	case ev.Key == terminal.KeyEscape:
-		a.focus = focusBrowser
+		a.focus = focusMain
 	}
 }
 
@@ -782,6 +816,28 @@ func (a *tuiApp) startEdit(m *nodeMeta) {
 	a.editPath = name + "." + strings.Join(m.segs, ".")
 	a.editField.SetValue(a.leafPrefill(name, m.segs))
 	a.mode = modeEdit
+}
+
+// mixerKey moves the mixer's cursor over its rows, each slot's title and tracks;
+// the rows shown follow it, and stay where it leaves them
+func (a *tuiApp) mixerKey(ev terminal.Event, r rune) {
+	rows := a.mixRows()
+	i := mixIndex(rows, a.mixCur)
+	switch {
+	case ev.Key == terminal.KeyDown || r == 'j':
+		i++
+	case ev.Key == terminal.KeyUp || r == 'k':
+		i--
+	case ev.Key == terminal.KeyPageDown:
+		i += max(a.mixPageH-1, 1)
+	case ev.Key == terminal.KeyPageUp:
+		i -= max(a.mixPageH-1, 1)
+	case r == 'g' || ev.Key == terminal.KeyHome:
+		i = 0
+	case r == 'G' || ev.Key == terminal.KeyEnd:
+		i = len(rows) - 1
+	}
+	a.mixCur = rows[min(max(i, 0), len(rows)-1)]
 }
 
 func (a *tuiApp) logKey(ev terminal.Event, r rune) {
