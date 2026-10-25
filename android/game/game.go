@@ -73,7 +73,8 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 		}
 	}
 	settings, file, err := paths.LoadSettings("")
-	if err != nil {
+	var unknown paths.UnknownKeys
+	if err != nil && !errors.As(err, &unknown) {
 		return err
 	}
 	p := settings.Paths
@@ -87,6 +88,9 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
+	if unknown != nil {
+		cfg.Notice = paths.DropUnknown(cfg.Settings, unknown)
+	}
 	if speaker != nil {
 		cfg.Host.Audio = sink{speaker}
 	}

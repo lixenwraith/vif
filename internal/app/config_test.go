@@ -193,7 +193,7 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	dialled := &joinDial{}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
 		Join: "10.0.0.2:7777/abc", dialled: dialled, Bots: []string{"roam"}, Journal: true})
-	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.notice != "n" ||
+	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||
 		!slices.Equal(next.Bots, []string{"roam"}) || !next.Journal || !next.journalCarried {
 		t.Fatalf("next run %+v; want the command line with what the restart named", next)
 	}

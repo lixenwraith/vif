@@ -126,12 +126,12 @@ func (a *App) initJournal() error {
 	switch {
 	case err != nil && a.cfg.journalCarried:
 		a.log.Warn("journal", "msg", "journal not reopened", "error", err.Error())
-		a.cfg.notice = joinNotice(a.cfg.notice, "Journal not opened in this run: "+err.Error())
+		a.cfg.Notice = joinNotice(a.cfg.Notice, "Journal not opened in this run: "+err.Error())
 		return nil
 	case err != nil:
 		return err
 	case a.cfg.journalCarried:
-		a.cfg.notice = joinNotice(a.cfg.notice, "Journaling on to "+r.Path())
+		a.cfg.Notice = joinNotice(a.cfg.Notice, "Journaling on to "+r.Path())
 	}
 	a.recorder.Store(r)
 	a.log.Info("journal", "msg", "journal opened", "path", r.Path())
