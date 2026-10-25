@@ -213,10 +213,11 @@ func (a *App) init() error {
 	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
 		a.cfg.networkConfig = a.membership.hostNetworkConfig()
 	}
-	// A guest's own port takes joins beside its peer links, which it admits once
-	// it authors the session: a successor takes players where its session reaches it.
+	// A guest's own port takes joins beside its peer links: as the host once it
+	// authors the session, a successor taking players where its session reaches it,
+	// and as its -relay door would while its player relays for others.
 	if c := a.cfg.networkConfig; c != nil && c.AcceptPeer != nil {
-		c.AcceptSession, c.OnAdmit = a.membership.sessionAcceptor(a.membership.admitHosted), a.membership.admitLateJoiner
+		c.AcceptSession, c.OnAdmit = a.membership.relayAcceptor(a.membership.admitHosted), a.membership.releaseRelayedJoiner
 	}
 	if err := a.initServices(); err != nil {
 		return err

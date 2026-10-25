@@ -133,16 +133,17 @@ func (m *membership) showJoinerPrepared(addr net.Addr) {
 }
 
 // admitHosted is a guest's port admitting a dial: it does once this run holds the
-// term, spending the budget a host's door does, and while the term moves it refuses
-// as that door would.
+// term, or while its player relays for others, when a dropped guest rejoins its host
+// through this run as at a -relay door; both spend the budget a host's door does,
+// and while the term moves it refuses as that door would.
 func (m *membership) admitHosted(addr net.Addr) error {
 	switch st := m.authority.State(); {
 	case st.Migrating:
 		return ErrSessionHandoff
-	case !st.Authoring():
-		return errNotHosting
+	case st.Authoring(), st.Term > 0 && !st.Fork && m.ctx.Relaying.Load():
+		return m.admissions.Admit(addr)
 	}
-	return m.admissions.Admit(addr)
+	return errNotHosting
 }
 
 // Serve only the immutable scenario this run holds; another scenario needs a new App.

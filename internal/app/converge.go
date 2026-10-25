@@ -510,7 +510,8 @@ func (m *membership) redial(lost link.PeerID) bool {
 // redialDoor dials the lost host, or the lost relay, at addr while this run waits on
 // it. Admitted back into its own place, the run is replaced by the one admitted; a
 // refusal no retry helps, a door nothing answers at, or a place that is not this
-// run's begins the walk. A run that stays in its session holds its claim again.
+// run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
+// A run that stays in its session holds its claim again.
 func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *claim, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
@@ -544,6 +545,9 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 			m.authority.RedialRefused(lost)
 		}
 	}
+	if !relay && m.rejoinThrough(cfg, lost, c) {
+		return
+	}
 	m.world.RunSafe(func() {
 		if m.cfg.JoinAddress != cfg.JoinAddress || !m.claims.hold(c) {
 			return
@@ -554,6 +558,52 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 			m.claims.release(c)
 		}
 	})
+}
+
+// rejoinThrough dials, while this run walks for the host it lost, the port of each
+// candidate whose turn has come, for one relaying for others that takes this run
+// back into its place as a -relay door would: the host still runs, with this run's
+// Wraith, and only this run's link to it went. Reports whether one took it, the
+// run then replaced by the one admitted; a candidate that refuses outright, or a
+// host that holds no place for this run, is not dialled again.
+func (m *membership) rejoinThrough(cfg Config, lost link.PeerID, c *claim) bool {
+	dial := cfg
+	done := make(map[link.PeerID]bool)
+	for {
+		targets, open := m.authority.Rejoins(lost)
+		if !open {
+			return false
+		}
+		for _, id := range targets {
+			addr, ok := m.authority.Chain().Lookup(id)
+			if done[id] || !ok {
+				continue
+			}
+			dial.JoinAddress = addr
+			d, err := dialJoin(dial)
+			if err == nil {
+				err = d.seat(cfg.holder != 0)
+			}
+			if err != nil {
+				if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
+					done[id] = true
+					m.log.Info("session", "msg", "a candidate refused the rejoin", "candidate", uint64(id), "error", err.Error())
+				}
+				continue
+			}
+			back := &restartRequest{Notice: "Host connection restored", dialled: d}
+			if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.replaceWith(back) {
+				m.log.Info("session", "msg", "a candidate took this run back to its host", "candidate", uint64(id), "authority", uint64(lost))
+				return true
+			}
+			d.abandon(errRedialEnded)
+			if d.claim != c {
+				m.log.Info("session", "msg", "the host holds no place for this run", "candidate", uint64(id))
+				return false
+			}
+		}
+		time.Sleep(parameter.NetworkRejoinPassInterval) // [wall] a link wait, not a game one
+	}
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

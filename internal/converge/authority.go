@@ -458,17 +458,36 @@ func (u *Authority) Redialing(lost link.PeerID) bool {
 }
 
 // RedialAdmitted reports whether the run may go back to lost through the dial that
-// authority admitted, which it may until the walk begins. On true this instance
-// takes no turn and follows no record: the run it is replaced by is in its place.
+// authority admitted, or a candidate relaying for it did: it may while the walk for
+// lost is open, having followed nobody else. On true this instance takes no turn and
+// follows no record: the run it is replaced by is in its place.
 func (u *Authority) RedialAdmitted(lost link.PeerID) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	now := time.Now() // [wall]
-	if !u.redialOpenLocked(lost, now) && !u.cutRedialOpenLocked(lost, now) {
+	if !u.walkOpenLocked(lost) && !u.cutRedialOpenLocked(lost, now) {
 		return false
 	}
 	u.contested, u.redialing, u.cutRedialing, u.fork = 0, false, false, true
 	return true
+}
+
+// Rejoins is whom a run that lost lost may rejoin its host through now: the
+// candidates whose turn has come, while its walk for that loss is open and its
+// redial of the host has ended.
+func (u *Authority) Rejoins(lost link.PeerID) ([]link.PeerID, bool) {
+	u.mu.Lock()
+	open := u.walkOpenLocked(lost) && !u.walkFrom.IsZero()
+	u.mu.Unlock()
+	if !open {
+		return nil, false
+	}
+	return u.walkTargets(time.Now()), true // [wall]
+}
+
+// walkOpenLocked is a succession for lost still open on this instance. Caller holds mu.
+func (u *Authority) walkOpenLocked(lost link.PeerID) bool {
+	return u.contested != 0 && u.lost == lost && !u.fork
 }
 
 // RedialRefused ends the wait on this instance's redial of lost: that authority

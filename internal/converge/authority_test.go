@@ -364,6 +364,41 @@ func TestTheWalkWaitsOnARedial(t *testing.T) {
 	}
 }
 
+// TestAWalkingSurvivorIsTakenBackThroughACandidate: a survivor whose redial ended
+// rejoins through the candidates whose turn has come, and is taken back while its
+// walk is open, by its host or by a candidate relaying for it; one that followed a
+// record takes no such admission.
+func TestAWalkingSurvivorIsTakenBackThroughACandidate(t *testing.T) {
+	t.Parallel()
+	r := session(t, 3, nil)[2]
+	r.world.redial = true
+	r.u.beginSuccession(1)
+	if targets, open := r.u.Rejoins(1); open || targets != nil {
+		t.Fatalf("redialling, rejoins through %v (open %t); want nobody until the walk", targets, open)
+	}
+	r.u.RedialRefused(1)
+	if targets, open := r.u.Rejoins(1); !open || !slices.Equal(targets, []link.PeerID{2}) {
+		t.Fatalf("walking, rejoins through %v (open %t); want the candidate whose turn came, 2", targets, open)
+	}
+	if r.u.RedialAdmitted(2) {
+		t.Fatal("taken back by a host it did not lose")
+	}
+	if !r.u.RedialAdmitted(1) || !r.u.State().Fork {
+		t.Fatal("walking, the run taken back was not left to the one in its place")
+	}
+	if _, open := r.u.Rejoins(1); open {
+		t.Fatal("left to the run in its place, it still rejoins")
+	}
+	followed := session(t, 3, nil)[2]
+	followed.u.beginSuccession(1)
+	if err := followed.u.adopt(record(followed.u, network.FirstTerm+2, 3, 1), 0); err != nil {
+		t.Fatal(err)
+	}
+	if followed.u.RedialAdmitted(1) {
+		t.Fatal("having taken the term, the run was taken back by the host it lost")
+	}
+}
+
 // TestTheWalkGoesDownTheList: when the first candidate went with the host, the
 // second takes the term two past the lost one's once a window has passed, the
 // survivors follow it, and at the floor it keeps the first candidate's place as a

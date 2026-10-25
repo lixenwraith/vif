@@ -1289,6 +1289,41 @@ func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 	waitForMotion(t, relay, cursorOf(t, relay, person.membership.localParticipant()), "the player's cursor on the host that admitted it")
 }
 
+// TestADroppedGuestRejoinsThroughARelayingPeer: a guest whose own link to a live
+// host dropped, and whose redial cannot reach that host, rejoins under its claim
+// through a candidate relaying for others, whose own port takes the join as a -relay
+// door does, and is admitted back into its own place behind it.
+func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	peer, _ := driveBot(t, Config{JoinAddress: addr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	peer.ctx.Relaying.Store(true)
+	waitForCursors(t, host, 3)
+	guest, _ := driveBot(t, Config{JoinAddress: addr, NoAdvertise: true}, "roam", nil)
+	for _, a := range []*App{host, peer, guest} {
+		waitForCursors(t, a, 4)
+	}
+	id, peerID := guest.membership.localParticipant(), link.PeerID(peer.membership.localParticipant())
+	hostID := link.PeerID(host.membership.localParticipant())
+	waitUntil(t, func() bool { _, ok := guest.authority.Chain().Lookup(peerID); return ok }, "the relaying peer in the guest's chain")
+	// The host's door is where nothing answers, as a host this guest alone cannot
+	// reach is; the mode is the one whose loop takes a rejoin.
+	c := guest.membership.claim.Load()
+	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "127.0.0.1:1" })
+	if c == nil || !host.instance().DropParticipant(id) {
+		t.Fatal("the guest holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back through the relaying peer")
+	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id ||
+		req.dialled.offer.Relay != peerID || req.dialled.offer.Host != hostID {
+		t.Fatalf("the guest was not taken back into its own place through the relaying peer: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
+}
+
 // waitUntil waits for a running session to reach a state, a socket deadline away.
 func waitUntil(t *testing.T, done func() bool, what string) {
 	t.Helper()

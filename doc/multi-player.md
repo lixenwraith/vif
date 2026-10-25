@@ -480,7 +480,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and, once it takes the session over, joins (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
@@ -581,6 +581,12 @@ first redials the door it joined that relay at for one window, as step 1 redials
 host, and a relay still running admits it back into its place; refused, nothing
 answering, or past the window, it walks every candidate for one that carries it and
 forks after a walk down the whole list (`Reach.cutOff`, `Authority.redialRelay`).
+A guest whose own link to a host still running dropped, and whose redial cannot
+reach that host, rejoins under its claim through the candidates it walks to
+(`membership.rejoinThrough`): the port of one relaying for others takes the join as
+its `-relay` door would and asks the host, which gives the place its Wraith keeps
+back, and the guest plays on behind that candidate; a port not relaying refuses, as
+it refuses every join while another participant hosts.
 
 A person's run that forks goes on in a session of its own, as `:leave` takes it
 (§5.5): the same identity, the next term, every other player's place kept as a
