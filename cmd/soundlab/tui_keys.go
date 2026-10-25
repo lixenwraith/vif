@@ -97,11 +97,16 @@ func (a *tuiApp) enterKeys() {
 	a.view, a.focus = viewKeys, focusMain
 }
 
+// leaveKeys goes back to the view the keys opened over: the browser, or the beat
+// view and the pattern it edits, which the keys leave as they were
 func (a *tuiApp) leaveKeys() {
 	if a.keys.rec {
 		a.finishRecording()
 	}
 	a.view, a.focus = viewBrowse, focusMain
+	if a.beat != nil {
+		a.view = viewBeat
+	}
 	// Stop only a transport the view started: patterns the user had running play on
 	if a.keys.started {
 		a.exec("music stop")
@@ -245,9 +250,10 @@ func (a *tuiApp) finishRecording() {
 		d.Track = append(d.Track, tr)
 	}
 	a.s.pats.put(d, true)
+	k.take = k.take[:0] // the keys start clean again; the pattern holds the take
 	a.kind = kindPattern
 	a.cursorTo(name)
-	fmt.Fprintf(a.log, "recorded %d note(s) into %s, %d bar(s) — space plays it, b edits it\n", len(notes), name, k.bars)
+	fmt.Fprintf(a.log, "recorded %d note(s) into %s, %d bar(s) — in the browser space plays it, b edits it\n", len(notes), name, k.bars)
 	if snapped > 0 {
 		fmt.Fprintf(a.log, "%d note(s) outside %s moved to the nearest degree\n", snapped, a.s.keyName())
 	}

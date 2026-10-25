@@ -551,6 +551,9 @@ func TestTakeLandsOnTheKeysDegrees(t *testing.T) {
 	if want := []at{{0, 0, 1}, {4, 2, 1}, {4, 4, 1}, {8, 1, 1}}; !slices.Equal(got, want) {
 		t.Fatalf("take events %v, want %v (F#3 on F)", got, want)
 	}
+	if len(a.keys.take) != 0 {
+		t.Fatalf("a committed take stays on the keys: %v", a.keys.take)
+	}
 }
 
 // TestTooSmallTakesNoKeys: on a screen too small for the views a key does nothing
@@ -726,5 +729,39 @@ func TestMixerStaysWhereItIsLeft(t *testing.T) {
 	key(terminal.KeyTab, 0)
 	if a.focus != focusLog || a.mixTop != top {
 		t.Fatalf("leaving the mixer moved it from %v to %v", top, a.mixTop)
+	}
+}
+
+// TestKeysOpenOverTheBeatView: p in the beat view opens the keys over it, bound to
+// no pattern, so playing them leaves the pattern as it was, and Esc goes back to it;
+// c sets the step's chance.
+func TestKeysOpenOverTheBeatView(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "new pattern sp")
+	a := newTUIApp(s, newLogBuffer(50))
+	a.cursorTo("sp")
+	a.enterBeat()
+	doc := func() string {
+		d, _ := s.pats.get("sp")
+		data, err := audio.MarshalPatternDefs([]*audio.PatternDef{d})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	before := doc()
+	a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'p'})
+	for _, r := range "zxcvp" {
+		a.keysKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+	a.keysKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape})
+	if a.view != viewBeat || a.beat == nil || a.beat.name != "sp" || doc() != before {
+		t.Fatalf("after the keys: view %d, pattern\n%s\nwant the beat view on sp as it was:\n%s", a.view, doc(), before)
+	}
+	a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'c'})
+	if d, _ := s.pats.get("sp"); d.Track[0].Event[0].Prob != 0.75 {
+		t.Fatalf("c on the seed's hit: chance %g, want 0.75", d.Track[0].Event[0].Prob)
 	}
 }

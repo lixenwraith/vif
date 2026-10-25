@@ -141,6 +141,9 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 	case ev.Key == terminal.KeyEnter:
 		a.beatPlay(d)
 		return
+	case r == 'p':
+		a.enterKeys()
+		return
 	case a.focus == focusMixer:
 		a.mixerKey(ev, r)
 		return
@@ -191,7 +194,7 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 		a.beatEach(d, func(audio.StepDef) (string, string) { return "vel", fmtF(v) })
 	case r == '0':
 		a.beatEach(d, func(audio.StepDef) (string, string) { return "vel", "1" })
-	case r == 'p':
+	case r == 'c':
 		a.beatEach(d, func(e audio.StepDef) (string, string) {
 			c := slices.Index(chances, cmpF(e.Prob, 1))
 			return "prob", fmtF(chances[(c+1)%len(chances)])
@@ -461,9 +464,9 @@ func (a *tuiApp) beatPlay(d *audio.PatternDef) {
 
 func (a *tuiApp) beatHint() string {
 	if a.beat != nil && a.beat.roll {
-		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  p chance  r grid  enter play  tab mixer  esc close  ? keys"
+		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  c chance  r grid  enter play  p keys  tab mixer  esc close  ? keys"
 	}
-	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  r roll  s steps  enter play  tab mixer  esc close  ? keys"
+	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  r roll  s steps  enter play  p keys  tab mixer  esc close  ? keys"
 }
 
 // gridFit is how a pattern's steps lie across a width: cw cells a step and a

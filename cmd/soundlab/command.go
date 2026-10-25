@@ -141,7 +141,7 @@ var (
 		{"space", "play a sound; put a pattern in its role's slot, or play and pause"},
 		{"0-3", "put the pattern in that slot, or take it out"},
 		{"b", "beat editor on the pattern"},
-		{"p", "keys: play the tonal voices, record a take"},
+		{"p", "keys: a scratch keyboard of the tonal voices over the music; a take is the one thing it writes"},
 		{"enter", "inspect: j k move, h l fold, H L all, enter edit, a add, x delete"},
 		{"a v r", "apply, validate, revert"},
 		{"n c w", "new, clone, write one to a file"},
@@ -159,7 +159,7 @@ var (
 		{"^R", "record; again commits the take as a pattern, rec_N"},
 		{"\\", "take of 1, 2 or 4 bars"},
 		{"⌫", "drop the take's last note"},
-		{"esc", "close, committing a take"},
+		{"esc", "back to the browser or the beat view, committing a take"},
 	}}
 	helpBeat = helpSection{"beat", []keyHelp{
 		{"h l ← →", "step; H L a beat, PgUp PgDn a bar, g G the ends"},
@@ -167,7 +167,8 @@ var (
 		{"space", "hit or note on and off"},
 		{"enter", "apply, and play it in its role's slot"},
 		{"1-9 0 + -", "velocity, .1 to 1; nudge it"},
-		{"p", "chance: 1, .75, .5, .25"},
+		{"c", "chance: 1, .75, .5, .25"},
+		{"p", "keys over the music, the pattern left as it is; esc comes back"},
 		{"[ ] , . { }", "length, degree, octave of a note"},
 		{"t T", "next voice of the family, the other family"},
 		{"f", "follow the chord"},

@@ -388,11 +388,11 @@ func (a *tuiApp) renderTooSmall(r tui.Region) {
 func (a *tuiApp) renderHeader(r tui.Region) {
 	r.Fill(a.theme.HeaderBg)
 	title := " soundlab"
-	switch a.view {
-	case viewKeys:
+	if a.beat != nil {
+		title += " › beat" // under the keys too, where Esc goes back to it
+	}
+	if a.view == viewKeys {
 		title += " › keys"
-	case viewBeat:
-		title += " › beat"
 	}
 	r.Text(0, 0, title, a.theme.HeaderFg, a.theme.HeaderBg, terminal.AttrBold)
 	tw := tui.RuneLen(title) + 1
