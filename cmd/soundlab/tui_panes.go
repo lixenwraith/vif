@@ -316,8 +316,8 @@ func (a *tuiApp) render() {
 	a.sig = a.engineSig()
 	a.draw(w, h)
 	// Keys on a pane the frame left off go back to the view's own, drawn as such
-	if a.focus != focusMain && !slices.Contains(a.panes, a.focus) && (a.focus != focusInspector || a.view != viewBrowse) {
-		a.focus = focusMain
+	if main := a.mainPane(); a.focus != main && !slices.Contains(a.panes, a.focus) && (a.focus != focusInspector || a.view != viewBrowse) {
+		a.focus = main
 		a.draw(w, h)
 	}
 	a.term.Flush(a.cells, w, h)
@@ -338,12 +338,9 @@ func (a *tuiApp) draw(w, h int) {
 	header, rest := tui.SplitVFixed(root, 1)
 	body, footer := tui.SplitVFixed(rest, rest.H-1)
 	a.renderHeader(header)
-	switch a.view {
-	case viewKeys:
-		a.renderKeysView(body)
-	case viewBeat:
-		a.renderBeatView(body)
-	default:
+	if a.view == viewEdit {
+		a.renderEditor(body)
+	} else {
 		a.renderBrowse(body)
 	}
 	a.renderFooter(footer)
@@ -387,14 +384,14 @@ func (a *tuiApp) renderTooSmall(r tui.Region) {
 // on the right, dropping the least important sections first when narrow
 func (a *tuiApp) renderHeader(r tui.Region) {
 	r.Fill(a.theme.HeaderBg)
-	title := " soundlab"
-	if a.beat != nil {
-		title += " › beat" // under the keys too, where Esc goes back to it
+	title, fg := " soundlab", a.theme.HeaderFg
+	if a.ed != nil {
+		title += " › edit " + a.ed.name
+		if a.fresh == a.ed.name {
+			title, fg = " soundlab › new "+a.ed.name, a.theme.Warning
+		}
 	}
-	if a.view == viewKeys {
-		title += " › keys"
-	}
-	r.Text(0, 0, title, a.theme.HeaderFg, a.theme.HeaderBg, terminal.AttrBold)
+	r.Text(0, 0, title, fg, a.theme.HeaderBg, terminal.AttrBold)
 	tw := tui.RuneLen(title) + 1
 
 	lab := tui.Style{Fg: a.theme.HintFg}
@@ -832,12 +829,6 @@ func (a *tuiApp) stackBelow(r tui.Region, want int) tui.Region {
 	return top
 }
 
-// viewPane frames an editor view, in the focus color while it has the keys
-func (a *tuiApp) viewPane(r tui.Region, title string) tui.Region {
-	return r.Pane(tui.PaneOpts{Title: title, Border: tui.LineRounded, BorderFg: a.paneBorder(focusMain),
-		TitleFg: a.theme.HeaderFg, Bg: a.theme.Bg})
-}
-
 func (a *tuiApp) renderFooter(r tui.Region) {
 	switch a.mode {
 	case modeCommand:
@@ -859,26 +850,26 @@ func (a *tuiApp) renderFooter(r tui.Region) {
 func (a *tuiApp) footHint() string {
 	switch {
 	case a.focus == focusMixer:
-		return "j/k track  PgUp/PgDn page  g/G ends  tab next pane  esc back  ? keys"
-	case a.view == viewKeys:
+		return "j/k track  space mute  e edit  n new  PgUp/PgDn page  g/G ends  tab next pane  esc back  ? keys"
+	case a.focus == focusKeys:
 		return a.keysHint()
-	case a.view == viewBeat:
-		return a.beatHint()
+	case a.focus == focusGrid:
+		return a.gridHint()
 	case a.focus == focusInspector:
 		return "j/k move  h/l fold  enter edit  a add  x del  space play  esc close  ? keys"
 	case a.focus == focusLog:
 		return "j/k scroll  g/G ends  tab next pane  esc back  : cmd  ? keys  ^Q quit"
 	case a.kind == kindPattern:
-		return "j/k move  space play  0-3 slot  b beat  p keys  enter inspect  h/l sounds  tab next pane  ? keys  ^Q quit"
+		return "j/k move  space play  0-3 slot  n new  e edit  enter inspect  h/l sounds  tab next pane  ? keys  ^Q quit"
 	}
-	return "j/k move  space play  p keys  enter inspect  h/l patterns  / find  tab next pane  ? keys  ^Q quit"
+	return "j/k move  space play  n new  e edit  enter inspect  h/l patterns  / find  tab next pane  ? keys  ^Q quit"
 }
 
 // renderHelp lays the view's key reference, then the global keys, over
 // everything: keys in a column, what they do wrapped beside them
 func (a *tuiApp) renderHelp(root tui.Region) {
 	th := &a.theme
-	secs := []helpSection{helpFor(a.view), helpMixer, helpGlobal}
+	secs := append(a.helpFor(), helpMixer, helpGlobal)
 	keyW := 0
 	for _, sec := range secs {
 		for _, l := range sec.lines {
@@ -923,9 +914,13 @@ func (a *tuiApp) renderHelp(root tui.Region) {
 // renderInspector lays the selection's tree over the panes until Esc
 func (a *tuiApp) renderInspector(root tui.Region) {
 	name := a.selName()
-	title := name
-	if title == "" {
-		title = "inspector"
+	title := "inspector"
+	if name != "" {
+		state := "edit"
+		if a.fresh == name {
+			state = "new"
+		}
+		title = state + " " + kindWord(a.kind) + " " + name
 	}
 	opts := tui.DefaultOverlayOpts(title + " — esc closes")
 	opts.Bg, opts.Fg, opts.TitleBg, opts.TitleFg = a.theme.Bg, a.theme.Selected, a.theme.HeaderBg, a.theme.HeaderFg

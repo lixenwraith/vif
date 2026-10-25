@@ -28,20 +28,21 @@ import (
 type focusArea int
 
 const (
-	focusMain focusArea = iota // the view's own pane: the browser, the keyboard or the grid
+	focusMain focusArea = iota // the browser
+	focusKeys                  // the editor's keys tab
+	focusGrid                  // the editor's grid tab
 	focusMixer
 	focusLog
 	focusInspector // the browser's overlay: Enter opens it, Esc closes it
 )
 
-// view is what the body shows: the browser with the mixer and log, or one of the
-// two editors that take the body over
+// view is what the body shows: the browser with the mixer and log, or the
+// pattern editor with the mixer
 type view int
 
 const (
 	viewBrowse view = iota
-	viewKeys
-	viewBeat
+	viewEdit
 )
 
 // uiMode is where typed keys go: the view, or a line being typed in the footer
@@ -58,7 +59,7 @@ const (
 	kindPattern = 0
 	kindSound   = 1
 	tickEvery   = 100 * time.Millisecond
-	// minW and minH fit the keys view's drawn keyboard and the beat grid's bar
+	// minW and minH fit the keys tab's drawn keyboard and the grid's bar
 	minW, minH = 60, 16
 )
 
@@ -139,7 +140,10 @@ type tuiApp struct {
 	mixPageH       int
 
 	keys keysState
-	beat *beatState
+	ed   *editState
+	// fresh is the entry n made, new to the editor or inspector that has it until
+	// that closes
+	fresh string
 
 	quitArmed  bool   // one warning issued for unsaved-on-quit
 	delArmed   string // browser 'd' pressed once for this name; second press deletes
@@ -212,7 +216,7 @@ func runTUI(s *Session, lb *logBuffer) error {
 	a := newTUIApp(s, lb)
 	a.term = term
 	a.w, a.h = term.Size()
-	fmt.Fprintln(lb, "soundlab — p keys, b beat editor, : commands, ? keys, ^S save, ^Q quit")
+	fmt.Fprintln(lb, "soundlab — n new pattern, e edit, : commands, ? keys, ^S save, ^Q quit")
 	// An empty session has nothing to browse; the TUI seeds builtins per
 	// empty document. REPL and scripts stay unseeded — they own their state.
 	if len(s.pats.order) == 0 {
@@ -361,7 +365,7 @@ func (a *tuiApp) handle(ev terminal.Event) {
 	}
 
 	// Any other real key withdraws pending destructive confirms; 'd' must
-	// survive this to be its own second press (the beat view keeps its own 'x').
+	// survive this to be its own second press (the grid keeps its own 'x').
 	a.quitArmed = false
 	if ev.Key != terminal.KeyRune || ev.Rune != 'd' {
 		a.delArmed = ""
@@ -378,14 +382,11 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		if a.globalKey(ev) {
 			return
 		}
-		switch a.view {
-		case viewKeys:
-			a.keysKey(ev)
-		case viewBeat:
-			a.beatKey(ev)
-		default:
-			a.normalKey(ev)
+		if a.view == viewEdit {
+			a.editorKey(ev)
+			return
 		}
+		a.normalKey(ev)
 	}
 }
 
@@ -398,7 +399,7 @@ func (a *tuiApp) globalKey(ev terminal.Event) bool {
 	case ev.Key == terminal.KeyTab || ev.Key == terminal.KeyBacktab:
 		a.cycleFocus(ev.Key == terminal.KeyTab)
 	case ev.Key == terminal.KeyEscape && (a.focus == focusMixer || a.focus == focusLog):
-		a.focus = focusMain
+		a.focus = a.mainPane()
 	case ev.Key == terminal.KeyCtrlS:
 		a.saveModified()
 	case ev.Key == terminal.KeyRune && ev.Rune == '?':
@@ -415,6 +416,14 @@ func (a *tuiApp) globalKey(ev terminal.Event) bool {
 		return false
 	}
 	return true
+}
+
+// mainPane is the view's own pane: the browser, or the editor's tab shown
+func (a *tuiApp) mainPane() focusArea {
+	if a.view == viewEdit && a.ed != nil {
+		return a.ed.tab
+	}
+	return focusMain
 }
 
 // cycleFocus moves the keys to the next pane on screen, or the previous; the
@@ -463,18 +472,6 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 	r := rune(0)
 	if ev.Key == terminal.KeyRune {
 		r = ev.Rune
-	}
-	switch {
-	case r == 'p':
-		a.enterKeys()
-		return
-	case r == 'b':
-		if a.kind == kindPattern {
-			a.enterBeat()
-		} else {
-			fmt.Fprintln(a.log, "the beat editor edits a pattern — h/l to the patterns tab first")
-		}
-		return
 	}
 	switch a.focus {
 	case focusMain:
@@ -531,7 +528,9 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 	case r == '/':
 		a.promptSearch()
 	case r == 'n':
-		a.promptNew()
+		a.promptNew(-1)
+	case r == 'e':
+		a.editSel()
 	case r == 'c':
 		a.promptClone()
 	case r == 'w':
@@ -748,7 +747,7 @@ func (a *tuiApp) inspectorKey(ev terminal.Event, r rune) {
 	case ev.Key == terminal.KeySpace || r == ' ':
 		a.auditionSel()
 	case ev.Key == terminal.KeyEscape:
-		a.focus = focusMain
+		a.focus, a.fresh = focusMain, ""
 	}
 }
 
@@ -843,6 +842,10 @@ func (a *tuiApp) mixerKey(ev terminal.Event, r rune) {
 		i = 0
 	case r == 'G' || ev.Key == terminal.KeyEnd:
 		i = len(rows) - 1
+	case r == 'e':
+		a.editSlot(a.mixCur.slot)
+	case r == 'n':
+		a.promptNew(a.mixCur.slot)
 	case ev.Key == terminal.KeySpace || r == ' ' || r == 'm':
 		slot, mute := a.mixCur.slot, "on"
 		if a.s.eng.IsSlotMuted(slot) {
@@ -968,14 +971,63 @@ func (a *tuiApp) promptSearch() {
 	})
 }
 
-// promptNew: 'n' in the browser. Kind is captured at open so a later tab
-// switch cannot retarget the command.
-func (a *tuiApp) promptNew() {
+// promptNew: n in the browser, of the tab's kind when pressed, or on the mixer, a
+// pattern for the cursor's slot. A pattern opens in the editor's keys, new and
+// empty, playing along in slot, its home slot for -1; a sound opens in the
+// inspector. Either says it is new until it closes.
+func (a *tuiApp) promptNew(slot int) {
 	kind := kindWord(a.kind)
-	a.openPrompt("new "+kind+" name: ", "", func(name string) {
-		a.exec("new " + kind + " " + name)
-		a.cursorTo(name) // no-op when new failed: the entry does not exist
+	if slot >= 0 {
+		kind = "pattern"
+	}
+	name := "new_1"
+	for i := 2; a.s.pats.has(name) || a.s.sounds.has(name); i++ {
+		name = fmt.Sprintf("new_%d", i)
+	}
+	a.openPrompt("new "+kind+" name: ", name, func(name string) {
+		if a.exec("new "+kind+" "+name) != nil {
+			return
+		}
+		a.cursorTo(name)
+		if kind == "sound" {
+			a.focus, a.fresh = focusInspector, name
+			return
+		}
+		a.exec(fmt.Sprintf("del %s.track.0", name)) // its seed hit; a new pattern starts empty
+		a.openEditor(name, focusKeys)
+		a.fresh = name
+		if slot < 0 {
+			slot = a.homeSlot(name)
+		}
+		a.placeInSlot(slot, name)
+		fmt.Fprintf(a.log, "%s is new and empty, in slot %d beside what plays — ^R records into it, ^D ^D deletes it\n", name, slot)
 	})
+}
+
+// editSel: e in the browser. A pattern opens in the editor's grid, a sound in the
+// inspector, either to edit what is there.
+func (a *tuiApp) editSel() {
+	n, ok := a.addressableSel()
+	switch {
+	case !ok:
+	case a.kind == kindSound:
+		a.focus = focusInspector
+	default:
+		a.openEditor(n, focusGrid)
+	}
+}
+
+// editSlot: e on the mixer. The editor opens on what the slot plays.
+func (a *tuiApp) editSlot(slot int) {
+	id := a.s.eng.SlotPattern(slot)
+	switch n := patName(id); {
+	case id == audio.PatternSilence:
+		fmt.Fprintf(a.log, "slot %d is silent — n in the browser makes a pattern\n", slot)
+	case !a.s.pats.has(n):
+		fmt.Fprintf(a.log, "%q is not in the document — :builtin pattern brings the built-ins in\n", n)
+	default:
+		a.openEditor(n, focusGrid)
+	}
 }
 
 // promptClone: 'c' in the browser, prefilled with the source name — the

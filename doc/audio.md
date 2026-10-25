@@ -381,9 +381,9 @@ same engine. It offers:
 
 - a command REPL;
 - a full-screen TUI: a browser of patterns and sounds beside a mixer that draws
-  every slot on one timeline, a structural inspector, the keys view (a drawn
-  keyboard that plays the tonal voices and records a take onto the key's
-  degrees) and the beat view (a step grid, and a piano roll for a tonal track);
+  every slot on one timeline and mutes a slot, a structural inspector, and the
+  pattern editor, new or on an existing pattern: a drawn keyboard that records
+  takes onto the key's degrees, and a step grid with a piano roll;
 - headless `.slab` script execution;
 - validation, live registry apply/revert, audition, sequencer slot assignment,
   TOML save, and WAV export.

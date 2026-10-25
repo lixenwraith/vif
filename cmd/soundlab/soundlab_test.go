@@ -314,63 +314,45 @@ show rs.duration
 	}
 }
 
-// TestTUIPromptAndBeat drives the new browser keys with no terminal: prompt
-// commits, cursor landing, clone→inspector focus, and B straight after n on
-// the new-seeded pattern (item 6). Every mutation still flows through
-// Execute, so this also re-asserts script parity for the key macros.
-func TestTUIPromptAndBeat(t *testing.T) {
+// TestEditOpensWhatIsSelected: e opens a pattern in the editor's grid and a sound
+// in the inspector, neither as new; space in the grid takes a hit off and puts one
+// on, and a clone lands in the inspector with its tracks open.
+func TestEditOpensWhatIsSelected(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-
+	runOrFatal(t, s, &out, "new pattern bp1\nnew sound bs1")
 	a := newTUIApp(s, newLogBuffer(100))
-	enter := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter}
-	space := terminal.Event{Type: terminal.EventKey, Key: terminal.KeySpace}
-	right := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'l'}
-	esc := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape}
+	key := func(k terminal.Key, r rune) { a.editorKey(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r}) }
 
-	a.promptNew()
-	if a.mode != modePrompt {
-		t.Fatal("n must arm the prompt")
+	a.kind = kindSound
+	a.cursorTo("bs1")
+	a.editSel()
+	if a.focus != focusInspector || a.fresh != "" {
+		t.Fatalf("e on a sound: focus %d, fresh %q; want the inspector, editing", a.focus, a.fresh)
 	}
-	a.editField.SetValue("bp1")
-	a.promptKey(enter)
-	if !s.pats.has("bp1") {
-		t.Fatalf("prompt commit did not create the pattern:\n%s", out.String())
+	a.focus, a.kind = focusMain, kindPattern
+	a.cursorTo("bp1")
+	a.editSel()
+	if a.view != viewEdit || a.focus != focusGrid || a.ed.name != "bp1" || a.fresh != "" {
+		t.Fatalf("e on a pattern: view %d, focus %d; want its grid, editing", a.view, a.focus)
 	}
-	if a.selName() != "bp1" {
-		t.Fatalf("cursor must land on the new entry, at %q", a.selName())
-	}
-
-	a.enterBeat() // item 6: fresh `new` seed opens cleanly
-	if a.view != viewBeat || a.beat == nil {
-		t.Fatal("B on a new-seeded pattern must enter beat mode")
-	}
-	a.beatKey(space) // seed has an event at pos 0: toggle deletes it
+	key(terminal.KeySpace, 0) // the seed's hit at step 0
 	if d, _ := s.pats.get("bp1"); eventAt(d, 0, 0) != -1 {
-		t.Fatal("toggle on an occupied cell must delete the event")
+		t.Fatal("space on a hit must take it off")
 	}
-	a.beatKey(right)
-	a.beatKey(space) // empty cell: add pos=1 at the default velocity
-	d, _ := s.pats.get("bp1")
-	ei := eventAt(d, 0, 1)
-	if ei < 0 || d.Track[0].Event[ei].Vel != beatDefaultVel {
-		t.Fatalf("toggle on an empty cell must add pos=1 vel=%g, got %+v",
-			beatDefaultVel, d.Track[0].Event)
+	key(terminal.KeyRune, 'l')
+	key(terminal.KeySpace, 0)
+	if d, _ := s.pats.get("bp1"); eventAt(d, 0, 1) < 0 || d.Track[0].Event[eventAt(d, 0, 1)].Vel != gridDefaultVel {
+		t.Fatalf("space on an empty step must put a hit there at %g", gridDefaultVel)
 	}
-	a.beatKey(esc)
+	key(terminal.KeyEscape, 0)
 
 	a.promptClone()
 	a.editField.SetValue("bp2")
-	a.promptKey(enter)
-	if !s.pats.has("bp2") || a.selName() != "bp2" {
-		t.Fatalf("clone commit failed, cursor at %q", a.selName())
-	}
-	if a.focus != focusInspector || !a.exp.IsExpanded("bp2.track") {
-		t.Fatal("clone must focus the inspector with the track list pre-expanded")
-	}
-	if !s.pats.modified {
-		t.Fatal("new/cp/grid edits must latch modified")
+	a.promptKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter})
+	if !s.pats.has("bp2") || a.selName() != "bp2" || a.focus != focusInspector || !a.exp.IsExpanded("bp2.track") {
+		t.Fatalf("a clone must land in the inspector, its tracks open: at %q, focus %d", a.selName(), a.focus)
 	}
 }
 
@@ -526,22 +508,18 @@ func TestDeleteKey(t *testing.T) {
 	}
 }
 
-// TestTakeLandsOnTheKeysDegrees: a take's notes become the degrees of the key
-// that sound the pitches played, a chord's notes kept apart on their step, and a
-// note outside the key moves to the nearest degree, the lower on a tie.
+// TestTakeLandsOnTheKeysDegrees: take writes the notes played onto the degrees of
+// the key that sound them, a chord's notes kept apart on their step, and a note
+// outside the key moves to the nearest degree, the lower on a tie.
 func TestTakeLandsOnTheKeysDegrees(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	runOrFatal(t, s, &out, "key 40 phrygian") // E2: E F G A B C D
-	a := newTUIApp(s, newLogBuffer(50))
-	for _, n := range []struct{ pos, midi int }{{0, 52}, {4, 55}, {4, 59}, {8, 54}} { // E3, G3+B3, F#3
-		a.keys.take = append(a.keys.take, takeNote{pos: n.pos, midi: n.midi, vel: 0.8, dur: 2, instr: audio.InstrPiano})
-	}
-	a.finishRecording()
-	d, ok := s.pats.get("rec_1")
-	if !ok || len(d.Track) != 1 {
-		t.Fatalf("want rec_1 with one track:\n%s", strings.Join(a.log.lines, "\n"))
+	// E2 phrygian is E F G A B C D; the notes are E3, G3 and B3 together, F#3
+	runOrFatal(t, s, &out, "key 40 phrygian\nnew pattern tk\ndel tk.track.0\ntake tk piano 0:52 4:55 4:59 8:54")
+	d, _ := s.pats.get("tk")
+	if len(d.Track) != 1 || d.Track[0].Instr != "piano" {
+		t.Fatalf("want one piano track:\n%s", out.String())
 	}
 	type at struct{ pos, deg, oct int }
 	var got []at
@@ -550,9 +528,6 @@ func TestTakeLandsOnTheKeysDegrees(t *testing.T) {
 	}
 	if want := []at{{0, 0, 1}, {4, 2, 1}, {4, 4, 1}, {8, 1, 1}}; !slices.Equal(got, want) {
 		t.Fatalf("take events %v, want %v (F#3 on F)", got, want)
-	}
-	if len(a.keys.take) != 0 {
-		t.Fatalf("a committed take stays on the keys: %v", a.keys.take)
 	}
 }
 
@@ -565,7 +540,7 @@ func TestTooSmallTakesNoKeys(t *testing.T) {
 	a := newTUIApp(s, newLogBuffer(50))
 	a.w, a.h, a.dirty = minW-1, minH, false
 	lines := len(a.log.lines)
-	for _, r := range "pb: m" {
+	for _, r := range "ne: m" {
 		a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
 	}
 	a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyNone})
@@ -586,9 +561,8 @@ func TestRollPlacesANoteOnItsPitch(t *testing.T) {
 	defer teardown(t, s)
 	runOrFatal(t, s, &out, "new pattern rl\nset rl.track.0.instr lead\ndel rl.track.0.event.0")
 	a := newTUIApp(s, newLogBuffer(100))
-	a.cursorTo("rl")
-	a.enterBeat()
-	key := func(r rune) { a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}) }
+	a.openEditor("rl", focusGrid)
+	key := func(r rune) { a.editorKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}) }
 	key('r') // an empty track opens on the second octave's root
 	for range 6 {
 		key('k')
@@ -670,8 +644,8 @@ type frameTerm struct{ terminal.Terminal }
 func (frameTerm) Flush([]terminal.Cell, int, int) {}
 
 // TestTabWalksThePanesOnScreen: Tab moves the keys through the panes on screen in
-// every view and Esc brings them back from a side pane; a pane takes only its own
-// keys, so a piano key typed on the mixer plays nothing.
+// every view, the editor's tabs among them, and Esc brings them back from a side
+// pane; a pane takes only its own keys, so a piano key on the mixer plays nothing.
 func TestTabWalksThePanesOnScreen(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
@@ -691,16 +665,25 @@ func TestTabWalksThePanesOnScreen(t *testing.T) {
 	if want := []focusArea{focusMixer, focusLog, focusMain}; !slices.Equal(walk, want) {
 		t.Fatalf("browse walked %v, want %v", walk, want)
 	}
-	key(terminal.KeyRune, 'p')
+	key(terminal.KeyRune, 'n')
+	key(terminal.KeyEnter, 0)
+	walk = walk[:0]
+	for _, k := range []terminal.Key{terminal.KeyTab, terminal.KeyTab, terminal.KeyTab} {
+		key(k, 0)
+		walk = append(walk, a.focus)
+	}
+	if want := []focusArea{focusGrid, focusMixer, focusKeys}; a.view != viewEdit || !slices.Equal(walk, want) {
+		t.Fatalf("the editor walked %v, want %v", walk, want)
+	}
 	key(terminal.KeyBacktab, 0)
 	key(terminal.KeyRune, 'z')
-	if a.view != viewKeys || a.focus != focusMixer || len(a.keys.lit) != 0 {
-		t.Fatalf("keys view: focus %d, %d key(s) lit; want the mixer and none", a.focus, len(a.keys.lit))
+	if a.focus != focusMixer || len(a.keys.lit) != 0 {
+		t.Fatalf("on the mixer: focus %d, %d key(s) lit; want none", a.focus, len(a.keys.lit))
 	}
 	key(terminal.KeyEscape, 0)
 	key(terminal.KeyRune, 'z')
-	if a.view != viewKeys || a.focus != focusMain || len(a.keys.lit) != 1 {
-		t.Fatalf("after Esc: view %d focus %d, %d key(s) lit; want the keyboard playing", a.view, a.focus, len(a.keys.lit))
+	if a.view != viewEdit || a.focus != focusKeys || len(a.keys.lit) != 1 {
+		t.Fatalf("after Esc: view %d, focus %d, %d key(s) lit; want the keys playing", a.view, a.focus, len(a.keys.lit))
 	}
 }
 
@@ -732,38 +715,43 @@ func TestMixerStaysWhereItIsLeft(t *testing.T) {
 	}
 }
 
-// TestKeysOpenOverTheBeatView: p in the beat view opens the keys over it, bound to
-// no pattern, so playing them leaves the pattern as it was, and Esc goes back to it;
-// c sets the step's chance.
-func TestKeysOpenOverTheBeatView(t *testing.T) {
+// TestNewPatternPlaysAlongAndGoes: n makes an empty pattern, new to the editor and
+// playing in a silent slot beside what plays; a take goes into it as a track and is
+// applied, and ^D twice deletes it and takes it out of its slot.
+func TestNewPatternPlaysAlongAndGoes(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	runOrFatal(t, s, &out, "new pattern sp")
-	a := newTUIApp(s, newLogBuffer(50))
-	a.cursorTo("sp")
-	a.enterBeat()
-	doc := func() string {
-		d, _ := s.pats.get("sp")
-		data, err := audio.MarshalPatternDefs([]*audio.PatternDef{d})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(data)
+	runOrFatal(t, s, &out, "bpm 999\nnew pattern bg\nslot 0 bg\nmusic start")
+	bg := audio.PatternIDByName("bg")
+	waitFor(t, func() bool { return s.eng.SlotPattern(0) == bg }, "bg must play in slot 0")
+	a := newTUIApp(s, newLogBuffer(100))
+	a.promptNew(-1)
+	a.promptKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter})
+	d, ok := s.pats.get("new_1")
+	if !ok || len(d.Track) != 0 || a.view != viewEdit || a.focus != focusKeys || a.fresh != "new_1" {
+		t.Fatalf("n: want new_1 empty and new in the editor's keys:\n%s", strings.Join(a.log.lines, "\n"))
 	}
-	before := doc()
-	a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'p'})
-	for _, r := range "zxcvp" {
-		a.keysKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	id := audio.PatternIDByName("new_1")
+	waitFor(t, func() bool { return s.eng.SlotPattern(1) == id && s.eng.SlotPattern(0) == bg }, "new_1 must play in slot 1, beside bg")
+
+	a.keys.rec = true
+	for _, n := range []takeNote{{pos: 0, midi: 52}, {pos: 4, midi: 55}, {pos: 8, midi: 59}} {
+		n.vel, n.dur, n.instr = 0.8, 2, audio.InstrPiano
+		a.keys.take = append(a.keys.take, n)
 	}
-	a.keysKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape})
-	if a.view != viewBeat || a.beat == nil || a.beat.name != "sp" || doc() != before {
-		t.Fatalf("after the keys: view %d, pattern\n%s\nwant the beat view on sp as it was:\n%s", a.view, doc(), before)
+	a.editorKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlR})
+	if d, _ := s.pats.get("new_1"); len(d.Track) != 1 || len(d.Track[0].Event) != 3 || s.pats.isDirty("new_1") || len(a.keys.take) != 0 {
+		t.Fatalf("^R: want the take in new_1 as one applied track, the keys clean:\n%s", strings.Join(a.log.lines, "\n"))
 	}
-	a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'c'})
-	if d, _ := s.pats.get("sp"); d.Track[0].Event[0].Prob != 0.75 {
-		t.Fatalf("c on the seed's hit: chance %g, want 0.75", d.Track[0].Event[0].Prob)
+
+	for range 2 {
+		a.editorKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlD})
 	}
+	if s.pats.has("new_1") || a.view != viewBrowse {
+		t.Fatal("^D twice must delete new_1 and close the editor")
+	}
+	waitFor(t, func() bool { return s.eng.SlotPattern(1) == audio.PatternSilence }, "slot 1 must fall silent")
 }
 
 // TestMixerMutesTheCursorsSlot: space and m on the mixer mute the slot under its
