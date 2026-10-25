@@ -1039,17 +1039,6 @@ Two in-repository imports remain: `pkg/vmath` for three hash and stream
 constants, which inline, and `pkg/tomlmacro` for the macros both document
 loaders expand, which moves with it or into `lixenwraith/toml`.
 
-### Draw soundlab's view titles through `Pane` again
-
-- Priority: P3
-- Affected files: `go.mod`, `cmd/soundlab/tui_panes.go`
-
-The tui widgets up to terminal v0.5.1 place a title's or label's runes at their
-byte offsets, so soundlab's `viewPane` draws its titles (`·`, `●`) itself.
-terminal v0.5.2 (lixenwraith/terminal#14) draws them a column a rune: once vif
-requires it, `viewPane` passes its title to `Pane`, and the configuration
-overlay's form labels draw whole beyond ASCII too.
-
 ## Genetic library
 
 ### Spin off `pkg/genetic` as its own module

@@ -52,7 +52,7 @@ func (a *tuiApp) enterBeat() {
 		return
 	}
 	a.beat = &beatState{name: n, oct: 2, dur: 2}
-	a.view = viewBeat
+	a.view, a.focus = viewBeat, focusMain
 }
 
 // beatPat re-reads the document every access: grid edits go through Execute,
@@ -138,17 +138,14 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 	case ev.Key == terminal.KeyEscape:
 		a.view, a.beat = viewBrowse, nil
 		return
-	case ev.Key == terminal.KeyCtrlS:
-		a.saveModified()
-		return
 	case ev.Key == terminal.KeyEnter:
 		a.beatPlay(d)
 		return
-	case r == '?':
-		a.help = true
+	case r == 'p':
+		a.enterKeys()
 		return
-	case r == ':':
-		a.openCommand()
+	case a.focus == focusMixer:
+		a.mixerKey(ev, r)
 		return
 	case ev.Key == terminal.KeyLeft || r == 'h':
 		b.step--
@@ -197,7 +194,7 @@ func (a *tuiApp) beatKey(ev terminal.Event) {
 		a.beatEach(d, func(audio.StepDef) (string, string) { return "vel", fmtF(v) })
 	case r == '0':
 		a.beatEach(d, func(audio.StepDef) (string, string) { return "vel", "1" })
-	case r == 'p':
+	case r == 'c':
 		a.beatEach(d, func(e audio.StepDef) (string, string) {
 			c := slices.Index(chances, cmpF(e.Prob, 1))
 			return "prob", fmtF(chances[(c+1)%len(chances)])
@@ -467,9 +464,9 @@ func (a *tuiApp) beatPlay(d *audio.PatternDef) {
 
 func (a *tuiApp) beatHint() string {
 	if a.beat != nil && a.beat.roll {
-		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  p chance  r grid  enter play  esc close  ? keys"
+		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  c chance  r grid  enter play  p keys  tab mixer  esc close  ? keys"
 	}
-	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  r roll  s steps  enter play  esc close  ? keys"
+	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  r roll  s steps  enter play  p keys  tab mixer  esc close  ? keys"
 }
 
 // gridFit is how a pattern's steps lie across a width: cw cells a step and a

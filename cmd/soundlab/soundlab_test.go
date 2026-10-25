@@ -551,6 +551,9 @@ func TestTakeLandsOnTheKeysDegrees(t *testing.T) {
 	if want := []at{{0, 0, 1}, {4, 2, 1}, {4, 4, 1}, {8, 1, 1}}; !slices.Equal(got, want) {
 		t.Fatalf("take events %v, want %v (F#3 on F)", got, want)
 	}
+	if len(a.keys.take) != 0 {
+		t.Fatalf("a committed take stays on the keys: %v", a.keys.take)
+	}
 }
 
 // TestTooSmallTakesNoKeys: on a screen too small for the views a key does nothing
@@ -658,5 +661,107 @@ func TestAudioFilesFollowVif(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(vif.MusicPath); !strings.Contains(string(data), "installed") {
 		t.Errorf("the saved override lost the installed pattern:\n%s", data)
+	}
+}
+
+// frameTerm takes the frames a test lays out and shows them nowhere
+type frameTerm struct{ terminal.Terminal }
+
+func (frameTerm) Flush([]terminal.Cell, int, int) {}
+
+// TestTabWalksThePanesOnScreen: Tab moves the keys through the panes on screen in
+// every view and Esc brings them back from a side pane; a pane takes only its own
+// keys, so a piano key typed on the mixer plays nothing.
+func TestTabWalksThePanesOnScreen(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	a := newTUIApp(s, newLogBuffer(50))
+	a.term, a.w, a.h = frameTerm{}, 100, 40
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	a.render()
+	var walk []focusArea
+	for range 3 {
+		key(terminal.KeyTab, 0)
+		walk = append(walk, a.focus)
+	}
+	if want := []focusArea{focusMixer, focusLog, focusMain}; !slices.Equal(walk, want) {
+		t.Fatalf("browse walked %v, want %v", walk, want)
+	}
+	key(terminal.KeyRune, 'p')
+	key(terminal.KeyBacktab, 0)
+	key(terminal.KeyRune, 'z')
+	if a.view != viewKeys || a.focus != focusMixer || len(a.keys.lit) != 0 {
+		t.Fatalf("keys view: focus %d, %d key(s) lit; want the mixer and none", a.focus, len(a.keys.lit))
+	}
+	key(terminal.KeyEscape, 0)
+	key(terminal.KeyRune, 'z')
+	if a.view != viewKeys || a.focus != focusMain || len(a.keys.lit) != 1 {
+		t.Fatalf("after Esc: view %d focus %d, %d key(s) lit; want the keyboard playing", a.view, a.focus, len(a.keys.lit))
+	}
+}
+
+// TestMixerStaysWhereItIsLeft: rows the mixer cannot show scroll under its cursor,
+// and stay as they are once the keys move to another pane.
+func TestMixerStaysWhereItIsLeft(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "new pattern one\nnew pattern big\n"+strings.Repeat("mix one big\n", 11)+"apply big\nslot 0 big")
+	id := audio.PatternIDByName("big")
+	waitFor(t, func() bool { return s.eng.SlotPattern(0) == id }, "big must reach slot 0")
+	a := newTUIApp(s, newLogBuffer(50))
+	a.term, a.w, a.h = frameTerm{}, 100, 24
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	a.render()
+	key(terminal.KeyTab, 0)
+	key(terminal.KeyRune, 'G')
+	top := a.mixTop
+	if a.mixCur != (mixRow{3, -1}) || top == (mixRow{0, -1}) {
+		t.Fatalf("G on the mixer: cursor %v, first row %v; want the last slot, scrolled", a.mixCur, top)
+	}
+	key(terminal.KeyTab, 0)
+	if a.focus != focusLog || a.mixTop != top {
+		t.Fatalf("leaving the mixer moved it from %v to %v", top, a.mixTop)
+	}
+}
+
+// TestKeysOpenOverTheBeatView: p in the beat view opens the keys over it, bound to
+// no pattern, so playing them leaves the pattern as it was, and Esc goes back to it;
+// c sets the step's chance.
+func TestKeysOpenOverTheBeatView(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "new pattern sp")
+	a := newTUIApp(s, newLogBuffer(50))
+	a.cursorTo("sp")
+	a.enterBeat()
+	doc := func() string {
+		d, _ := s.pats.get("sp")
+		data, err := audio.MarshalPatternDefs([]*audio.PatternDef{d})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	before := doc()
+	a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'p'})
+	for _, r := range "zxcvp" {
+		a.keysKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+	a.keysKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape})
+	if a.view != viewBeat || a.beat == nil || a.beat.name != "sp" || doc() != before {
+		t.Fatalf("after the keys: view %d, pattern\n%s\nwant the beat view on sp as it was:\n%s", a.view, doc(), before)
+	}
+	a.beatKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'c'})
+	if d, _ := s.pats.get("sp"); d.Track[0].Event[0].Prob != 0.75 {
+		t.Fatalf("c on the seed's hit: chance %g, want 0.75", d.Track[0].Event[0].Prob)
 	}
 }
