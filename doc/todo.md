@@ -454,21 +454,19 @@ staging world sharing the live grid's shape without its cells, takes it.
 
 ## Multiplayer
 
-### Reach a relay without an address in hand
+### Publish a player's session at the router
 
 - Priority: P3
-- Affected files: `internal/app/relay.go`, `internal/converge/reach.go`, `internal/network`
+- Affected files: `tool/vif-router`, `internal/app/host.go`, `internal/network`
+- Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
-A person who cannot reach the host joins at a guest's `-relay` address and plays
-through it; the session is a tree, raw artifacts go up and the authority's down,
-and a relayed person whose relay leaves walks the chain to another participant
-relaying for others (multi-player.md §5). What is left is finding that address: a relay's address is
-handed out of band like the host's, nothing publishes which participants relay,
-and a NAT between a person and every relay is not crossed. A browser relays only
-its own bots. Relay trees the authority chooses are dropped
-([netcode design §4, Dropped](netcode-design.md#dropped)): a relay stays what a
-person chooses. Verify a relayed topology under `LinkShape`s, asserting hash-only
-convergence and the authority's per-link fan-out.
+A run publishes its `-relay` door through the router's reverse tunnel and is
+reached at the site; a host's door published the same way is a player's own session
+reached there, the router neither allocating nor authoring. The tunnel carries it
+already; what it needs is the session's row in `/vif/api/sessions` (its `/health`
+read through the tunnel, or a state the run reports on the control connection),
+its lifetime, the create budget charged to the publisher's address, and `-host
+vif://<site>:7777` opening the door through the router rather than binding one.
 
 ### Pace the dial of the successor
 

@@ -482,7 +482,7 @@ answers:
 |---|---|
 | Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
-| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
+| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); there is still no discovery. A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
 A successor is usually on another machine and cannot bind its predecessor's
 address, so a successor that authors must already be reachable at an address of its
@@ -695,6 +695,7 @@ handoff.
 | Redial wait | A guest redials its own host for a whole window before it walks, however many others lost the host too: a host that went silent costs that window, and one that quit or crashed refuses at once. |
 | Relaying | Opt-in and off by default (`:relay`, the Multiplayer page). A run carries only those that joined through it unless its player offers more, so nobody's traffic lands on a run that did not offer to carry it. |
 | Joins after a handoff | The successor's own port takes them, the one its survivors already dial, rather than a second door; a join and a peer link each open with a frame of their own. `:host` opens one at the address it names, or names that port, and the successor hosts as the first host did, under the `migrate` policy its players hold. The `-players` ceiling travels in the offer, so it holds whoever hosts. |
+| Relay reach | Two halves that compose (§5.6): the chain carries each participant's door beside its port, so a door is learned in-band as an address is, and `vif-router` routes a door published through a reverse tunnel by name as it routes a pod, so a door behind a NAT is reached at the site. Relay trees the authority chooses stay dropped; a relay is what a person chooses. |
 
 ### 5.4 Wraiths
 
@@ -826,6 +827,52 @@ name and the `-players` a joined session carried are cleared, so a restart neith
 dials back into it nor listens on its address, and `:session` reads `Session
 hosting` with no address. A run already being replaced is not left: what replaces
 it decides where it goes.
+
+### 5.6 Relay doors and the router
+
+A `-relay` door admits people who cannot reach the host, and until here its address
+was handed out of band like the host's: nothing published which participants
+relayed, and a NAT between a person and every relay was not crossed. Two decisions
+close that, and they compose.
+
+**The chain names doors.** A chain entry carries, beside the port a participant
+declared, its **door**: the address it admits people at, as the world reaches it
+(`ChainEntry.Door`). A run tells the authority its door once it has one, on its own
+link (`MsgRelayJoin`, step `RelayDoor`); the authority completes a bare `:port` from
+the run's join connection as it completes a declared port, and the chain goes out
+as it always has, on `MsgPeerList`, in the offer and in the handoff record, so every
+participant holds every door, `:session` names them, and a run with no path to its
+authority rejoins at one (`membership.rejoinThrough` dials a candidate's door before
+its port). A door is an attribute of an entry and not a candidacy: a participant with
+a door and no port is still a leaf. A relayed person tells nobody, since it has no
+link to the authority to tell; a relay has one.
+
+**The router routes doors.** `vif-router` places a dial by the name in its first
+frame on the pod that answers to it; a **tunnel** is a door it places the same way. A
+run publishes its door through the router (`-relay vif://<site>:7777`, the router's
+address and no name) by holding a control connection open to the front door: the
+router names the door, from the pods' identifier space, and answers with the link
+(`vif://<site>:7777/<id>`) and a token the run resumes the same name with after a
+blip; the run declares that link as its door. For each dial the front door places on
+it, after the route frame, the budget and the ceiling it applies to a pod, the
+router asks the run on the control connection to open a connection back, matches
+the two by a ticket and splices them, re-encoding to the door the name the run
+answers to; a run that does not open within the route timeout refuses the dial as a
+pod out of reach does. So a door behind a NAT is reached at the site's address, with
+the budget, the ceiling and the refusals the pods have, the router never dialling an
+address a caller named, and the run never binding a port the world can reach. A
+browser relays nothing and publishes nothing, as before.
+
+**What was not chosen.** Hole punching needs a rendezvous and UDP or WebRTC, which
+the networks that need a relay most block first (services §7.3); a rendezvous in
+every host would be a second front door where one already places by name; relay
+trees the authority chooses stay dropped (netcode design §4). **Later**: a host's
+door published the same way is a player's own session reached through the site, the
+router neither allocating nor authoring, which needs its listing and lifetime in
+`/vif/api/sessions` and the create budget (todo, Publish a player's session at the
+router). A relayed topology is verified under `LinkShape`s by
+`TestARelayedTopologyConvergesUnderShape`, asserting hash-only convergence and the
+authority's per-link fan-out.
 
 ## 6. Current operating point
 

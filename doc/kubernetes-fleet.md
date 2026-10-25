@@ -272,6 +272,11 @@ What a cluster has not yet been put through is
 - **A thin router, not a second scheduler.** It exposes only the fixed session
   transaction on `/vif/api/`; K3s still schedules, admits, limits, terminates and
   garbage-collects every workload.
+- **The router routes doors as it routes pods.** A run's `-relay` door published
+  through a reverse tunnel is placed by name with the front door's checks, so a
+  door behind a NAT is reached at the site and the router dials nothing a caller
+  named. Allocation stays Kubernetes'; a player's own session published the same
+  way is later work (Multiplayer §5.6).
 - **No public delete endpoint.** The API is anonymous behind the site, so one player
   must not be able to end another's match.
 - **Docker builds; K3s runs.** Docker and its system containerd stay disabled except
@@ -311,12 +316,22 @@ on all of them, so no route can seat a player in a match their link did not name
 | Front door | `vif://<site>:7777/<id>` | host forward, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max` |
 | Direct | `vif://<site>:<nodeport>/<id>` | host forward, the session's NodePort, the pod's 7777 | the pod itself, on the name, its roster and its per-address budget |
 | Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the router, the pod's 7777 | the router: another origin before the upgrade, the rest as the front door does (below) |
+| Tunnel | `vif://<site>:7777/<id>`, a door's | host forward, the router on the node, the control connection the door's run holds open to it, the run's door | the router: as the front door, then a run that opens no connection back within the route timeout |
 
 Any of these links joins from either client. A browser cannot dial a `vif://` link,
 and a link can be typed onto another route's port, so a client that no route answers
 looks the name up in the site's `GET /vif/api/sessions` and dials the routes listed
 for it; a route's own refusal stands
 ([Services §6](services-and-networking.md#6-operator-session-surface)).
+
+**A tunnel** is a door a run publishes through the router rather than a pod: the
+run holds a control connection open to the front door, is named from the pods'
+identifier space and handed the link, and for each dial placed on that name the
+router asks it to open a connection back, matched by a ticket and spliced as a pod's
+is ([Multiplayer §5.6](multi-player.md#56-relay-doors-and-the-router)). The front
+door's checks run first, so a tunnel costs what a pod costs; what it adds is the open
+the run owes within the route timeout. Tunnels are not listed and are not sessions:
+a door's run joined a session the fleet or a player hosts.
 
 **The front door.** `vif-router` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly
