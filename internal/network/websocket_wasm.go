@@ -22,9 +22,10 @@ const wsQueueMessages = 1024
 
 var errWSOverrun = errors.New("websocket: inbound queue overrun")
 
-// writeLinger is zero here: a browser timer is clamped to 4 ms or coarser, and each
-// Write is already one message the browser sends, so a linger only delays it.
-const writeLinger = 0
+// writeLinger is zero here, whatever the configuration says: a browser timer is
+// clamped to 4 ms or coarser, and each Write is already one message the browser
+// sends, so a linger only delays it.
+func writeLinger(time.Duration) time.Duration { return 0 }
 
 // wsConn is a byte stream over one browser WebSocket. Message boundaries are not
 // protocol boundaries: Decode consumes the concatenation exactly as it does from a

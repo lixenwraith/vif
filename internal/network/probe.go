@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
@@ -128,11 +127,18 @@ func decodeEcho(b []byte) (seq uint32, sent time.Time, inBytes uint64, answered 
 type linkMeter struct {
 	link *linkpace.Link
 
+	// window is the shortest span a delivery rate is measured over, half the probe
+	// interval: reads the far end's scheduler bunched together would otherwise
+	// divide by microseconds. lostAfter is how many probes may go out after the last
+	// one answered before each further one is charged as lost; zero charges none.
+	window    time.Duration
+	lostAfter uint32
+
 	seq    uint32 // last probe sent
 	echoed uint32 // last probe answered
 
 	// lastDelivered is the newest count, which the backlog reads; the rate is
-	// measured from rateDelivered at rateAt, at least rateWindow earlier.
+	// measured from rateDelivered at rateAt, at least window earlier.
 	lastDelivered uint64
 	rateDelivered uint64
 	rateAt        time.Duration
@@ -148,26 +154,24 @@ type linkMeter struct {
 	haveBase      bool
 }
 
-func newLinkMeter() *linkMeter {
-	return &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{})}
+// newLinkMeter meters a link probed every probe, a probe unanswered for lost
+// counting as lost; a zero interval probes nothing and measures transfers alone.
+func newLinkMeter(probe, lost time.Duration) *linkMeter {
+	m := &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{}), window: probe / 2}
+	if probe > 0 {
+		m.lostAfter = uint32(lost / probe)
+	}
+	return m
 }
 
 // rebase discards the origin, so the next echo sets it again.
 func (m *linkMeter) rebase() { m.haveBase, m.haveDelivered = false, false }
 
-// rateWindow is the shortest span a delivery rate is measured over: reads the far
-// end's scheduler bunched together would otherwise divide by microseconds.
-const rateWindow = parameter.NetworkProbeInterval / 2
-
-// probeLostAfter is how many probes may go out after the last one answered before
-// each further one is charged as lost.
-const probeLostAfter = uint32(parameter.NetworkProbeLostAfter / parameter.NetworkProbeInterval)
-
 // nextProbe advances the sequence, charging a miss while no echo has come back for
-// NetworkProbeLostAfter. A probe is the only loss signal this protocol has, and a
-// stream delivers every one: an echo slower than the probe interval is a slow link.
+// lostAfter probes. A probe is the only loss signal this protocol has, and a stream
+// delivers every one: an echo slower than the probe interval is a slow link.
 func (m *linkMeter) nextProbe() uint32 {
-	if m.seq-m.echoed >= probeLostAfter {
+	if m.lostAfter > 0 && m.seq-m.echoed >= m.lostAfter {
 		m.link.Miss()
 	}
 	m.seq++
@@ -200,7 +204,7 @@ func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered, sentByte
 		if offered, arrived := sentBytes-m.baseSent, delivered-m.baseDelivered; offered > arrived {
 			sample.Backlog = int64(offered - arrived)
 		}
-		if elapsed := at - m.rateAt; m.haveDelivered && elapsed >= rateWindow {
+		if elapsed := at - m.rateAt; m.haveDelivered && elapsed >= m.window {
 			sample.Delivered, sample.Elapsed = int64(delivered-m.rateDelivered), elapsed
 			m.rateDelivered, m.rateAt = delivered, at
 		}

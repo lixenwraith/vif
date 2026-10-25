@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
@@ -82,12 +81,14 @@ func NewSocketPort(cfg *Config) *SocketPort {
 }
 
 // Start begins the configured listener or client connection, and the link
-// measurement that runs beside it.
+// measurement that runs beside it where the configuration probes.
 func (p *SocketPort) Start() error {
 	if err := p.transport.Start(); err != nil {
 		return err
 	}
-	p.probeOnce.Do(func() { go p.probeLoop() })
+	if p.config.ProbeInterval > 0 {
+		p.probeOnce.Do(func() { go p.probeLoop() })
+	}
 	return nil
 }
 
@@ -349,7 +350,7 @@ func (p *SocketPort) ObserveTransfer(peer uint32, bytes int64, elapsed time.Dura
 func (p *SocketPort) meterLocked(id PeerID) *linkMeter {
 	m, ok := p.meters[id]
 	if !ok {
-		m = newLinkMeter()
+		m = newLinkMeter(p.config.ProbeInterval, p.config.ProbeLostAfter)
 		p.meters[id] = m
 	}
 	return m
@@ -358,7 +359,7 @@ func (p *SocketPort) meterLocked(id PeerID) *linkMeter {
 // Probe off the simulation clock so a stalled game still notices a lost link.
 func (p *SocketPort) probeLoop() {
 	defer close(p.probeDone)
-	ticker := time.NewTicker(parameter.NetworkProbeInterval) // [wall] the link, not the game
+	ticker := time.NewTicker(p.config.ProbeInterval) // [wall] the link, not the game
 	defer ticker.Stop()
 	for {
 		select {

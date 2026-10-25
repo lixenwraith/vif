@@ -392,6 +392,12 @@ func (a wsAddr) String() string  { return string(a) }
 // build joins it by. players and scenario choose from what the site advertises,
 // zero for its defaults; a refusal, an unauthorised one included, is its message.
 func RequestSession(site string, players int, scenario string) (string, error) {
+	return requestSession(site, players, scenario, parameter.NetworkSessionRequestTimeout)
+}
+
+// requestSession is RequestSession within timeout, which covers the site readying
+// the session's pod.
+func requestSession(site string, players int, scenario string, timeout time.Duration) (string, error) {
 	body, err := json.Marshal(struct {
 		Players  int    `json:"players,omitempty"`
 		Scenario string `json:"scenario,omitempty"`
@@ -399,7 +405,7 @@ func RequestSession(site string, players int, scenario string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := &http.Client{Timeout: parameter.NetworkSessionRequestTimeout}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Post(site+"/vif/api/sessions", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err

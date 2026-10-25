@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
-// writeLinger is how long a link's writer gathers a burst before one flush.
-const writeLinger = parameter.NetworkWriteLinger
+// writeLinger is how long a link's writer gathers a burst before one flush: here,
+// what the configuration says.
+func writeLinger(configured time.Duration) time.Duration { return configured }
 
 // dialWebSocket opens a session route natively, for a network that blocks the TCP
 // port. A refusal before the upgrade carries the allocator's JSON error, and its

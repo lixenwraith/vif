@@ -78,7 +78,8 @@ func streamPair(t *testing.T) (w, r *flateStream, rec *bytes.Buffer) {
 	a, b := net.Pipe()
 	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
 	rec = &bytes.Buffer{}
-	return openFlateStream(a, 0, 0), openFlateStream(teeConn{b, rec}, 0, 0), rec
+	level := DefaultConfig().StreamLevel
+	return openFlateStream(a, 0, 0, level), openFlateStream(teeConn{b, rec}, 0, 0, level), rec
 }
 
 // readFrames reads n frames off r, in order.

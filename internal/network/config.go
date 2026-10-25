@@ -81,6 +81,17 @@ type Config struct {
 	ReadTimeout    time.Duration
 	WriteTimeout   time.Duration
 
+	// ProbeInterval is how often a port probes each link, off the game clock, and
+	// ProbeLostAfter how long one may go unanswered before each further probe is
+	// charged as lost; zero probes nothing, or charges none. WriteLinger gathers a
+	// burst before one flush; StreamLevel is a link stream's deflate level, zero
+	// storing its frames; TickInterval is the game tick the mesh's clock counts in.
+	ProbeInterval  time.Duration
+	ProbeLostAfter time.Duration
+	WriteLinger    time.Duration
+	StreamLevel    int
+	TickInterval   time.Duration
+
 	// Buffer sizes
 	ReadBufferSize  int
 	WriteBufferSize int
@@ -137,6 +148,11 @@ func DefaultConfig() *Config {
 		WriteBufferSize: 64 * 1024,
 		SendQueueSize:   256,
 		RecvQueueSize:   256,
+		ProbeInterval:   parameter.NetworkProbeInterval,
+		ProbeLostAfter:  parameter.NetworkProbeLostAfter,
+		WriteLinger:     parameter.NetworkWriteLinger,
+		StreamLevel:     parameter.NetworkStreamLevel,
+		TickInterval:    parameter.GameUpdateInterval,
 	}
 }
 

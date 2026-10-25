@@ -400,7 +400,9 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			return 0, err
 		}
 		// The joiner reads everything after its reply off the compressed stream.
-		refuse := func(cause error) { RefuseJoin(openFlateStream(conn, 0, 0), cause, timeout) }
+		refuse := func(cause error) {
+			RefuseJoin(openFlateStream(conn, 0, 0, parameter.NetworkStreamLevel), cause, timeout)
+		}
 		// Verify before Report so an incompatible joiner cannot affect session state.
 		// It is told in its own terms: to it, its build is the one here.
 		if err = o.Identity.Verify(reply.Identity); err != nil {
@@ -1147,7 +1149,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	}
 	// Everything after the reply travels on the link's compressed stream, the
 	// coordinator's side of which opens as it reads this reply.
-	openFlateStream(p.conn, p.base.ReadBufferSize, p.base.WriteBufferSize)
+	openFlateStream(p.conn, p.base.ReadBufferSize, p.base.WriteBufferSize, p.base.StreamLevel)
 	return err
 }
 

@@ -53,7 +53,7 @@ func TestEchoCarriesTheProbeBackUntouched(t *testing.T) {
 // is a slow link, not a lost probe; a link that answers nothing for
 // NetworkProbeLostAfter is.
 func TestOnlyAProbeThatStopsComingBackIsLost(t *testing.T) {
-	m := newLinkMeter()
+	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
 	now := time.Unix(0, 0)
 	late := 3 * parameter.NetworkProbeInterval / 2
 	for i := range 20 {
@@ -67,7 +67,7 @@ func TestOnlyAProbeThatStopsComingBackIsLost(t *testing.T) {
 		t.Fatalf("echoes %v late counted as %.3f loss", late, got)
 	}
 
-	for range probeLostAfter + 1 {
+	for range m.lostAfter + 1 {
 		m.nextProbe()
 	}
 	if got := m.link.Metrics().Loss; got == 0 {
@@ -76,7 +76,7 @@ func TestOnlyAProbeThatStopsComingBackIsLost(t *testing.T) {
 }
 
 func TestTheMeterTurnsTwoEchoesIntoADeliveryRate(t *testing.T) {
-	m := newLinkMeter()
+	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
 	at := time.Unix(0, 0)
 	step := func(delivered, sent uint64) {
 		seq := m.nextProbe()
@@ -100,7 +100,7 @@ func TestTheMeterTurnsTwoEchoesIntoADeliveryRate(t *testing.T) {
 // hands back together were answered a probe interval apart, so the rate they
 // report is the one the link carried, not one divided by microseconds.
 func TestTheDeliveryRateIsTimedWhereTheBytesArrived(t *testing.T) {
-	m := newLinkMeter()
+	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
 	at, answered, delivered := time.Unix(0, 0), time.Duration(0), uint64(0)
 	echo := func(gap time.Duration) {
 		at, answered, delivered = at.Add(gap), answered+parameter.NetworkProbeInterval, delivered+5_000
@@ -123,7 +123,7 @@ func TestTheDeliveryRateIsTimedWhereTheBytesArrived(t *testing.T) {
 // capture, and the port that takes over after it counts from zero, so without the
 // origin the ready sets the capture would stand as backlog for the whole session.
 func TestAJoinersReadyRestartsTheBacklogOrigin(t *testing.T) {
-	m := newLinkMeter()
+	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
 	at := time.Unix(0, 0)
 	echo := func(delivered, sent uint64) {
 		seq := m.nextProbe()
@@ -274,10 +274,11 @@ func TestTheReportReachesTheProbingPeer(t *testing.T) {
 }
 
 func TestMeshProbeIntervalMatchesTheParameter(t *testing.T) {
-	if meshProbeDrains == 0 {
+	drains := NewMesh().probeDrains
+	if drains == 0 {
 		t.Fatal("the mesh would never probe")
 	}
-	if want := uint64(parameter.NetworkProbeInterval / parameter.GameUpdateInterval); meshProbeDrains != want {
-		t.Fatalf("mesh probes every %d drains, the interval is %d ticks", meshProbeDrains, want)
+	if want := uint64(parameter.NetworkProbeInterval / parameter.GameUpdateInterval); drains != want {
+		t.Fatalf("mesh probes every %d drains, the interval is %d ticks", drains, want)
 	}
 }

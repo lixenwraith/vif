@@ -16,8 +16,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // PeerID uniquely identifies a connected peer
@@ -71,6 +69,7 @@ type Peer struct {
 
 	readTimeout  time.Duration
 	writeTimeout time.Duration
+	linger       time.Duration
 
 	// Lifecycle
 	closeCh   chan struct{}
@@ -86,12 +85,13 @@ func newPeer(id PeerID, conn net.Conn, cfg *Config) *Peer {
 		ID:           id,
 		Addr:         conn.RemoteAddr().String(),
 		conn:         conn,
-		stream:       openFlateStream(conn, cfg.ReadBufferSize, cfg.WriteBufferSize),
+		stream:       openFlateStream(conn, cfg.ReadBufferSize, cfg.WriteBufferSize, cfg.StreamLevel),
 		sendCh:       make(chan *Message, cfg.SendQueueSize),
 		closeCh:      make(chan struct{}),
 		done:         make(chan struct{}),
 		readTimeout:  cfg.ReadTimeout,
 		writeTimeout: cfg.WriteTimeout,
+		linger:       writeLinger(cfg.WriteLinger),
 	}
 	p.State.Store(uint32(StateConnected))
 	p.LastSeen.Store(time.Now().UnixNano())
@@ -222,7 +222,7 @@ func (p *Peer) writeLoop() {
 		}
 		// One flush per burst: a tick queues its epoch, syncs and digests together,
 		// and the linger lets the rest of them join the first in one write.
-		linger.Reset(writeLinger)
+		linger.Reset(p.linger)
 	batch:
 		for {
 			msg.Seq = p.OutSeq.Add(1)
@@ -296,15 +296,15 @@ const (
 )
 
 // openFlateStream opens conn's stream in place, so every holder of a join's stream
-// reads through the one decoder that has seen its bytes.
-func openFlateStream(conn net.Conn, readBuf, writeBuf int) *flateStream {
+// reads through the one decoder that has seen its bytes; level is its runs' deflate.
+func openFlateStream(conn net.Conn, readBuf, writeBuf, level int) *flateStream {
 	s, ok := conn.(*flateStream)
 	if !ok {
 		s = &flateStream{Conn: conn}
 	}
 	if s.w == nil {
 		s.bw = bufio.NewWriterSize(wireCounter{s.Conn, &s.out}, max(writeBuf, 4096))
-		s.w, _ = flate.NewWriter(&s.seg, parameter.NetworkStreamLevel) // a valid level cannot fail
+		s.w, _ = flate.NewWriter(&s.seg, level) // a level in deflate's range cannot fail
 		s.src.br = bufio.NewReaderSize(wireCounter{s.Conn, &s.in}, max(readBuf, 4096))
 		s.r = flate.NewReader(&s.src)
 	}
