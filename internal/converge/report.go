@@ -11,6 +11,10 @@ import (
 )
 
 // PeerCadence is one link's operating point and the measurements it came from.
+// ThroughputBps and Saturated are the link's latest sample: its delivery rate, and
+// whether the link rather than the sender was the limit while that rate was read.
+// CapacityBps is what the plan is priced on, the rate read while the link was the
+// limit and raised as the link is offered more; zero while it has never been.
 type PeerCadence struct {
 	Participant      uint32
 	CadenceTicks     uint64
@@ -21,6 +25,7 @@ type PeerCadence struct {
 	Jitter           time.Duration
 	ThroughputBps    float64
 	Saturated        bool
+	CapacityBps      float64
 
 	// Drift is the rise in this participant's own correction magnitude, in
 	// percent; Relevance how far its share of the last correction stood above the
@@ -75,6 +80,7 @@ func (c *Corrections) Cadence() CadenceReport {
 			Jitter:           p.metrics.Jitter,
 			ThroughputBps:    p.metrics.Throughput,
 			Saturated:        p.metrics.Saturated,
+			CapacityBps:      p.capacity,
 			Drift:            p.demand.Drift,
 			Relevance:        p.demand.Relevance,
 			Near:             p.near,

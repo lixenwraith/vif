@@ -268,6 +268,15 @@ type FSMTransitionPayload struct {
 	Owner   int       `toml:"owner"`
 	Index   int       `toml:"index"`
 	Trigger EventType `toml:"trigger,omitempty"`
+	// Then is the chain of unguarded Tick hops the authority folded into this
+	// crossing, each taken after the one before it at the committed tick.
+	Then []FSMHop `toml:"then,omitempty"`
+}
+
+// FSMHop is one transition of a folded chain: the state owning it and its index.
+type FSMHop struct {
+	Owner int `toml:"owner"`
+	Index int `toml:"index"`
 }
 
 // FSMVar is one FSM variable a transition sets.

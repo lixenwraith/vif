@@ -270,3 +270,35 @@ func TestTheReportReachesTheProbingPeer(t *testing.T) {
 		t.Fatalf("the host read interest %+v", m.Interest)
 	}
 }
+
+// TestFramesHeldPastTwoProbesReadTheLinkAsTheLimit: a sender pacing to its link
+// keeps the backlog under the meter's threshold, so the frames it holds waiting are
+// the reading, once they have waited past what a stale backlog reading and a lost
+// probe explain.
+func TestFramesHeldPastTwoProbesReadTheLinkAsTheLimit(t *testing.T) {
+	m := newLinkMeter(testConfig().ProbeInterval, testConfig().ProbeLostAfter)
+	at := time.Unix(0, 0)
+	echo := func(trip time.Duration) {
+		seq := m.nextProbe()
+		at = at.Add(testConfig().ProbeInterval)
+		delivered := 5_000 * uint64(seq)
+		m.observe(at, at.Add(-trip), seq, delivered, delivered+8<<10, 0, LinkReport{})
+	}
+	for range 3 {
+		echo(30 * time.Millisecond)
+	}
+	m.hold(at, true)
+	echo(150 * time.Millisecond)
+	if m.link.Metrics().Saturated {
+		t.Fatal("frames held for one probe interval, a backlog reading's staleness, read as the link's limit")
+	}
+	echo(150 * time.Millisecond)
+	if !m.link.Metrics().Saturated {
+		t.Fatal("frames held for two probe intervals behind an inflated trip were not read as the link's limit")
+	}
+	m.hold(at, false)
+	echo(150 * time.Millisecond)
+	if m.link.Metrics().Saturated {
+		t.Fatal("a link that took its frames again was still read as the limit")
+	}
+}

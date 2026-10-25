@@ -72,7 +72,8 @@ func TestLinkJitterRisesWithVariationAndFallsWithout(t *testing.T) {
 // TestLinkReportsSaturationOnlyWhenTheLinkWasTheLimit is the estimator's central
 // claim. A delivery rate measured while the sender had nothing queued is a lower
 // bound on capacity and not a measurement of it; a controller that throttled on
-// one would narrow a link that was merely idle.
+// one would narrow a link that was merely idle, and one that throttled on an
+// inflated round trip alone would narrow a thin stream on a jittery link.
 func TestLinkReportsSaturationOnlyWhenTheLinkWasTheLimit(t *testing.T) {
 	cfg := LinkConfig{BacklogBytes: 32 << 10, InflationRatio: 1.5, InflationFloor: 20 * time.Millisecond}
 
@@ -101,13 +102,40 @@ func TestLinkReportsSaturationOnlyWhenTheLinkWasTheLimit(t *testing.T) {
 		t.Fatal("one echo behind a 64 KiB burst was read as the link's limit")
 	}
 
-	inflated := NewLink(cfg)
-	for range 10 {
-		inflated.Observe(Sample{RTT: 20 * time.Millisecond, Delivered: 4096, Elapsed: time.Second})
+	// A thin stream over a jittery link: its few hundred bytes in flight are the
+	// whole backlog, and a trip ten times the baseline is the link's, not a queue
+	// of this sender's making. Read as the limit, the 4 KB/s would price the plan.
+	thin := NewLink(cfg)
+	for i := range 10 {
+		rtt := 20 * time.Millisecond
+		if i%3 == 2 {
+			rtt = 200 * time.Millisecond
+		}
+		thin.Observe(Sample{RTT: rtt, Delivered: 4096, Elapsed: time.Second, Backlog: 600})
+		if m := thin.Metrics(); m.Saturated {
+			t.Fatalf("sample %d: a thin stream's inflated round trip was read as the link's limit", i)
+		}
 	}
-	inflated.Observe(Sample{RTT: 200 * time.Millisecond, Delivered: 4096, Elapsed: time.Second})
-	if m := inflated.Metrics(); !m.Saturated {
-		t.Fatal("a round trip ten times its own baseline was not read as queueing")
+
+	// A sender pacing to the link keeps its backlog under the threshold; the frames
+	// it holds waiting are the evidence while the trip stands inflated by the queue
+	// they wait in. Held at the baseline trip, the sender's own bound held them on a
+	// long link that carried them, which is not the link's limit.
+	held := NewLink(cfg)
+	for range 3 {
+		held.Observe(Sample{RTT: 20 * time.Millisecond, Delivered: 4096, Elapsed: time.Second, Backlog: 8 << 10})
+	}
+	held.Observe(Sample{RTT: 22 * time.Millisecond, Delivered: 4096, Elapsed: time.Second, Backlog: 8 << 10, Held: true})
+	if m := held.Metrics(); m.Saturated {
+		t.Fatal("frames held at the baseline round trip were read as the link's limit")
+	}
+	held.Observe(Sample{RTT: 200 * time.Millisecond, Delivered: 4096, Elapsed: time.Second, Backlog: 8 << 10, Held: true})
+	if m := held.Metrics(); !m.Saturated {
+		t.Fatal("frames held behind an inflated round trip were not read as the link's limit")
+	}
+	held.Observe(Sample{RTT: 200 * time.Millisecond, Delivered: 4096, Elapsed: time.Second, Backlog: 8 << 10})
+	if m := held.Metrics(); m.Saturated {
+		t.Fatal("a link that took every frame was still read as the limit")
 	}
 }
 

@@ -31,8 +31,9 @@ Four streams carry what a receiver cannot re-derive:
   which the codec's mask names. The epoch's envelope. Every `NetworkSyncTicks` (6)
   per cursor, committed and relayed as an epoch is.
 - **Correction**: a manifest root with its partition, then the receiver's page
-  hashes and the shards that differ; or a keyframe. JSON, with keyframes and shard
-  sets deflated by the snapshot codec at level 6. Per peer every 2–60 ticks; a whole
+  hashes and the shards that differ; or a keyframe. The manifest and the shards
+  JSON, a keyframe's or a delta's stores in columns (§4), keyframes and shard sets
+  deflated by the snapshot codec at level 6. Per peer every 2–60 ticks; a whole
   world or a hash-only proof within each 60-tick floor.
 - **Control**: link probe and echo at 5 Hz, the state digest every 6 ticks, roster
   and succession records. Small, per link.
@@ -326,7 +327,9 @@ One matrix judges every approach, on harnesses that exist:
   `network.LinkShape`, `TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`.
 - **Path**: in-process mesh; TCP with deflate; WebSocket to a browser.
   `TestNetcodeReadingsOverSockets` (§3.1's shape over sockets,
-  `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`),
+  `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`;
+  a td row is taken three times and the run at the median keyframe rate reported,
+  every run's rate beside it, `VIF_NETCODE_READINGS_RUNS` setting the count),
   `TestNetcodeReadingsForBatch3` (§3.7, `VIF_NETCODE_BATCH3=1`); a browser joiner.
 - **Host**: native at `GOMAXPROCS=1`; a fleet pod at 500m CPU; a WASM guest.
   `BenchmarkHeadlessTicks`; [Measure a full roster](todo.md#measure-a-full-roster).
@@ -382,8 +385,9 @@ manifest reaches them after the tick it names and the promised tick is captured
 as before; the paced guest of §3.5, a lead behind, answers 248 of 261 manifests
 in place. td's bodies and CPU move run to run with what its storm does to the
 roster (a keyframe every eight seconds on both td rows here, none to half a
-second of them on other readings), so its rows compare only where the keyframe
-rate agrees, and the tower's wire has a run-to-run spread of about 2%. The framed
+second of them on other readings), so each td row is taken three times and the run
+at the median keyframe rate is the one reported, with every run's rate beside it;
+the tower's wire has a run-to-run spread of about 2%. The framed
 figures agree with §3.1's in-process ones. The same day before the codec, the
 tower's epochs framed 4.8, 41.0 and 825 kB/s and its syncs 1.6, 15.2 and 382, its
 wire 1.70, 7.94 and 101 kB/s at 0.17, 0.12 and 0.08 of the framed bytes, the
@@ -528,8 +532,10 @@ Phase 2's iterations over the same four shapes: on the main each started from
 (the staleness change had moved the lossy shapes' pages from the table above),
 with the envelope, with the payload codec, with the authority's FSM transitions
 (`fsm`), with the index read in place under the word hash and the events a
-parked region replays (`place`), and with keyframes from cached sections
-(`blobs`), 1,200 ticks each:
+parked region replays (`place`), with keyframes from cached sections (`blobs`),
+with the unguarded chains folded into one crossing (`fold`, on a later main),
+with the cadence reading the link's limit from held frames (`cadence`, read
+below) and with the stores in columns (`columns`), 1,200 ticks each:
 
 ```
 shape      stage     pg  kf  lc  lcp  lead     manifests
@@ -539,25 +545,78 @@ fieldlike  main      31   3   1    0  8 (9)    284
            fsm       23   5   1    0  8 (9)    175
            place     56   5   1    0  8 (9)    170
            blobs     34   5   1    0  8 (9)    179
+           fold      19   4   1    0  8 (9)    221
+           cadence   31   2   1    0  8 (9)    288
+           columns   17   4   1    0  8 (9)    278
 rare       main       3   3   0    6  11 (13)  273
            envelope   8   2   0   11  11 (13)  267
            payload    3   2   0    6  11 (13)  261
            fsm       29   2   0    4  11 (13)  261
            place     24   2   0    4  11 (13)  261
            blobs     24   2   0    4  11 (13)  261
+           fold       1   1   0    6  11 (13)  265
+           cadence    5   3   0    5  11 (13)  282
+           columns    0   4   0    5  11 (13)  279
 sparse     main       1   1   3    4  9 (10)   292
            envelope   1   1   3    4  9 (10)   287
            payload    1   1   3    4  9 (10)   284
            fsm        6   2   3   10  9 (10)   281
            place      5   2   3    6  9 (10)   279
            blobs      5   2   3    6  9 (10)   279
+           fold      11   1   3    6  9 (10)   283
+           cadence    7   1   3    6  9 (10)   299
+           columns    7   1   3    6  9 (10)   299
 heavy      main      61   5   0    0  14 (15)  134
            envelope  84   7   0    3  13 (15)  132
            payload   99   5   0    0  14 (15)   97
            fsm      119   4   0    1  14 (15)  124
            place    116   4   0    1  14 (15)  124
            blobs    116   4   0    1  14 (15)  124
+           fold      15   6   0    1  14 (15)  127
+           cadence   50  10   0    1  14 (15)  133
+           columns   30  15   0    1  13 (15)  115
 ```
+
+The `columns` step moves pages to keyframes: a repair is worth sending while it
+costs less than the keyframe it stands in for (§4), and the harness's small world
+now travels whole for a few kilobytes, so the heavy shape's 50 pages become 30 and
+its keyframes 15, the field-like shape's 31 pages 17; the late counts and the lead
+hold, which is the measure.
+
+**The cadence against a thin stream.** The harness now prints the guest's cadence
+with what priced it. Before, the meter read a link as the limit on a round trip
+inflated past its least trip alone, and the controller priced the plan on the rate
+it had delivered, which on a link with no byte budget is the stream itself: the
+plan then slowed to fit three quarters of its own bytes, the stream thinned, the
+next reading was lower, and the cadence ran out to 32 ticks on the field-like
+shape and 60 on heavy, whose jitter inflates every few trips. Inflation now reads
+only with the frames the corrector holds (`ObserveHold`, two probe intervals), the
+queue those frames wait in; held frames at the baseline trip are the sender's own
+bound on a long link, which the heavy shape's keyframes showed, 4.2 s paced over a
+400 ms link that would have carried them in one trip. A plan priced on a link's
+rate keeps it after the link takes its frames again, doubling it every 5 s a
+constrained plan goes without a hold (`SnapshotLinkCapacityTicks`), so the fit
+holds instead of creeping back and queueing the link each second; a long trip's
+index spacing past the quiet cadence reports as the constraint it is. The same
+1,200 ticks, cadence after the storm with the link's reading, late commits and
+copies, pages and keyframes, manifests received:
+
+```
+shape      before                                      after
+fieldlike  32 ticks, inflated, 221   lc 1  lcp 0  pg 19 kf 4    4 ticks, unpriced, 288  lc 1  lcp 0  pg 31 kf 2
+rare        4 ticks, constrained, 265 lc 0 lcp 6  pg 1  kf 1    4 ticks, unpriced, 282  lc 0  lcp 5  pg 5  kf 3
+sparse      4 ticks, constrained, 283 lc 3 lcp 6  pg 11 kf 1    4 ticks, unpriced, 299  lc 3  lcp 6  pg 7  kf 1
+heavy      60 ticks, inflated, 127   lc 0  lcp 1  pg 15 kf 6    8 ticks, unpriced, 133  lc 0  lcp 1  pg 50 kf 10
+```
+
+The late counts hold; the manifests rise with the cadence, 30% on the field-like
+shape; pages and keyframes move with the fight as they always have, the heavy
+shape's with the storm's repairs now reaching a guest served eight times as often.
+The probe's bytes do not carry the reading: a probe padded to measure a link
+spends what the cadence saves, and a rate measured on padding is still a floor
+on capacity unless the padding queues, which is the backlog's reading already.
+The in-process cadence tests read the plan's priced rate (`CapacityBps`) and the
+constraint, not whether the latest sample happened to read the link as the limit.
 
 **A relayed topology.** `TestARelayedTopologyConvergesUnderShape` runs always: a
 host, a relay and a person behind it over the default shape, 300 ticks, the storm,
@@ -577,10 +636,9 @@ Late commits and the lead hold on every shape through every step; pages and late
 copies move where the link is lossy or jittery, since the link meter reads the
 bytes it delivered and the correction cadence follows its throughput, so a
 command stream of a fraction of the bytes is a different fight from the first
-repair on. The manifests the guest received fall with the bytes on every shape,
-to 97 from 134 on heavy loss: a thinner stream reads as a slower link to the
-meter, which is the cadence's to answer
-([todo](todo.md#read-the-cadence-against-a-thin-command-stream)). The `fsm` step
+repair on. The manifests the guest received fell with the bytes on every shape,
+to 97 from 134 on heavy loss: a thinner stream read as a slower link to the
+meter, read against the shapes below. The `fsm` step
 is a different fight again from the storm region's entry on: the region's own
 storm now spawns when the raised one dies instead of the region adopting the
 raised one by liveness, so the rows after it are not the codec's to compare;
@@ -670,6 +728,38 @@ three worlds), the retained indexes' per-row arrays and cloned row JSON 47 MB
 (`newStoreSection` 33, `ManifestRow` 14), the row encoders' owned cell JSON 24 MB,
 the ECS stores 15 MB, navigation 15 MB, and the retained captures themselves about
 3 MB each.
+
+The same reading with the stores in columns (§4), 2026-10-25, the keyframe at tick 7
+of a run on the same inputs:
+
+```
+Store            Rows  JSON plain  deflated    Columns  deflated
+positions      50,132   1,661,243   186,822    231,648     5,887
+wall           50,130   8,443,381   152,247    907,397     5,250
+combat              2         969       225         99        41
+10 others          20       1,713       878        360       423
+all stores             10,107,307   340,172  1,139,504    11,601
+```
+
+The keyframe body is 17,063 bytes against 343,973, the 11.6 kB of columns and the
+`rest` object's 5 kB of header, carriers, status and machine, and the guest decodes
+it in 5.4 ms against 154 and installs it in 50 ms against 62; the host's peak encode
+fell from 131 to 10 ms. The heap after a collection is 216 MiB against 222: the
+retained indexes and the row encoders hold the JSON rows as before, which is the
+next item's. `BenchmarkKeyframeEncodeTD` runs 6.8 ms against 23.4 (362 to 22 kB),
+cold 80 against 159, moving 6.9 against 13.8, and the storm high water 3.4 against
+9.1 ms (12.9 to 4.1 kB).
+
+With the retained indexes standing over the row encoders' rows (§4, retention by
+reference), the same run's heap profile after a collection holds 168 MB against
+202: the spatial grids 92 MB as before, the row encoders' cell JSON 13 MB and owned
+copies 19 MB, the `[]StoreRow` slices the four retained indexes stand over 3.9 MB,
+and `newStoreSection` 1.0 MB against 23.4, the per-page indices of the positions
+store's four indexes; the heap in use read 190 MiB against 218. The positions
+store's index was built afresh each publication before, 6 MB of rows, pages and
+per-row arrays a time, since its entities change every tick; it is 200 kB of
+indices now, and a page whose cells and bytes held keeps its hash unhashed.
+
 
 ## 4. Phase 2
 
@@ -772,9 +862,18 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   construction (D-20). The `fsm` section stays as the proof, `StormSetup`'s
   liveness transition is gone, and §3.5's harness reads the storm region's
   transitions at one tick on both ends over every shape.
-- Left: a chain of states that each hand on by an unguarded `Tick` pays a lead a
-  hop, the tower's setup ten of them
-  ([todo](todo.md#fold-an-unguarded-chain-into-one-crossing)).
+- In, later (protocol 27, journal schema 39): the authority folds the unguarded
+  `Tick` hops after a transition's target into the crossing it proposes
+  (`FSMTransitionPayload.Then`, `Machine.fold`): from each state entered, up its
+  path, the first `Tick` transition met decides, an unguarded external one a hop
+  and a guarded, internal or self-targeting one the end, since a guest evaluates
+  no guard; `Apply` takes the chain at the committed tick, each state's exit,
+  actions and on_enter in order, so the tower's setup crosses once per pylon
+  rather than twice and its attach states last no tick in a session. A solo run
+  takes one hop an update, as before. `TestTheTowersSetupChainCrossesOnce` reads
+  both instances reaching `TowerActive` at one tick with no attach state standing
+  at a tick boundary.
+- Left: nothing.
 - Needs: nothing further; the site's storm-spawn keyframes (§3.4) are the reading
   that judges it.
 
@@ -856,20 +955,36 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
 
 - Costs: − − − ·; complexity high.
 - Projected: rows 3–10× smaller before deflate.
-- Measured (§3.7): binary rows are 7.8× smaller plain and 5% larger deflated than
-  the JSON rows, a row's entropy being its entity id; the same cells in columns
-  deflate to 14 kB against 355, and the guest's 141 ms decode of 10.6 MB of JSON
-  goes with them.
-- Decided: the codec is columnar, not row-wise. A keyframe lays each section out by
-  column, entities as varint deltas in canonical order and then each field of the
-  component in declaration order, integers as varints, float64 as its bits, strings
-  behind a length, generated per component in `internal/gen-manifest` beside the
-  stores; a delta correction carries its changed rows the same way, and `vif-log`
-  renders a body as rows. The manifest's partition and the seal keep their shape
-  over each row's canonical encoding; `Schema` and the protocol bump, the manifest
-  version with the cell encoding if it changes. Carriers, status and the FSM stay
-  JSON, being few rows:
-  [Lay keyframe sections out in columns](todo.md#lay-keyframe-sections-out-in-columns).
+- Measured before (§3.7): binary rows are 7.8× smaller plain and 5% larger
+  deflated than the JSON rows, a row's entropy being its entity id; the same cells
+  in columns deflate to 14 kB against 355, and the guest's 141 ms decode of 10.6 MB
+  of JSON goes with them.
+- Measured after (§3.7): the td-2 keyframe body 344.0 to 17.1 kB, the guest's
+  decode of it 154 to 5.4 ms and its install 62 to 50, the host's peak encode 131
+  to 10 ms; `BenchmarkKeyframeEncodeTD` 23.4 to 6.8 ms (362 to 22 kB), cold 159 to
+  80, moving 13.8 to 6.9, the storm high water 9.1 to 3.4 ms (12.9 to 4.1 kB); heap
+  222 to 216 MiB.
+- In (protocol 28, capture schema 25): the codec is columnar, not row-wise. A
+  keyframe lays each store out by column (`SharedWorldEncodeStoreColumns`): a row
+  count, the entities as zigzag deltas in capture order, then each leaf field of the
+  component in declaration order over every row, integers as varints, floats as
+  their bits, strings and times (RFC 3339, as JSON prints them) behind a length, a
+  slice behind its length plus one so nil travels as nil, an array inline;
+  generated per component in `internal/gen-manifest` from the component package's
+  types, so a field with no column layout fails generation. The stores of
+  `SnapshotSectionBlobBytes` or more are parts of their own, kept deflated while
+  their rows hold; the smaller travel together in one part; a delta correction is
+  one part, its JSON behind a length and then the world delta in the same columns,
+  each store's changed rows, removed entities and order. A receiver bounds every
+  count by the bytes left, each row and element costing a byte at least. The
+  manifest's rows, the shards and the journals stay JSON, so the manifest version
+  and the journal schema hold; the integrity hash stays over the rows' hashes in
+  capture order, which a receiver's row encoder reuses for every cell that held.
+  `vif-log` reads journals, which no wire body reaches, so it renders nothing new.
+  A repair is worth sending while it costs less than the keyframe it stands in for
+  (`repairIsWorthSending`), so with the world a twentieth of its bytes a repair
+  past about two percent of a td world's rows is answered whole; the converge
+  fixture's world scatters its placements and holds many pages for that reason.
 - Needs: the cursor's `Control` normalisation and the owner-authored exclusions
   move with every store; retention by reference below builds on it.
 
@@ -881,12 +996,17 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   holds is its indexes, 47 MB of per-row arrays and cloned row JSON over four
   captures, beside the row encoders' own 24 MB of cells, and the largest owner is
   the spatial grid, 30 MB a world over three worlds.
-- Decided: a retained index shares the pages whose rows held with the index before
-  it and references the encoder's immutable cell bytes rather than cloning them,
-  about a fifth of a td participant's heap; the grid is
-  [its own item](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps):
-  [Hold retained indexes by reference](todo.md#hold-retained-indexes-by-reference).
-- Needs: the columnar codec first where the cell bytes change with it.
+- In: a store's section stands over the row encoder's own rows, the slice it
+  returned for that capture, and holds per page the rows' indices in canonical
+  order and the page hash, nothing per row beside a four-byte index; the manifest
+  rows a repair or an audit reads are materialised from them on request. A page
+  whose cells and bytes are the last section's keeps its hash unhashed
+  (`samePage`), which is what reuse used to buy by copying every row. The grid is
+  [its own item](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps).
+- Measured after (§3.7): `newStoreSection` holds 1.0 MB in use against 23.4 over
+  the same td-2 run, the heap after a collection 190 MiB against 218; what the
+  retained indexes still hold is the row encoders' `[]StoreRow` slices they stand
+  over, 3.9 MB, beside the encoders' own owned copies and cell JSON, 32 MB.
 
 ### Dropped
 
@@ -922,9 +1042,10 @@ re-running §3.1's matrix and §3.5's four shapes, measured in §3.6.
 4. Converged answers without a capture and the faster hash (batch 2): manifest
    version 4 and capture schema 24 (§3.3, §4).
 5. Keyframes from cached sections (batch 3): protocol 26 (§3.1, §3.6, §4).
+6. The columnar keyframe codec (batch 3): protocol 28 and capture schema 25
+   (§3.7, §4), after batch 2's fold of unguarded chains (protocol 27).
+7. Retained indexes by reference (batch 3): no version moves (§3.7, §4).
 
-What follows is decided on §3.7 and waits in the todo, in this order: the
-[columnar keyframe codec](todo.md#lay-keyframe-sections-out-in-columns), the
-[install that compares in place](todo.md#project-a-correction-outside-the-live-lock)
-and [retained indexes by reference](todo.md#hold-retained-indexes-by-reference).
-Each lands alone, with its measurement before and after in §3.
+What follows is decided on §3.7 and waits in the todo: the
+[install that compares in place](todo.md#project-a-correction-outside-the-live-lock),
+alone, with its measurement before and after in §3.

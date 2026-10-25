@@ -2,17 +2,16 @@ package app
 
 import (
 	"bytes"
+	"cmp"
 	"compress/flate"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"maps"
-	"math"
 	"os"
 	"reflect"
 	"runtime"
 	"runtime/pprof"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -36,6 +35,12 @@ import (
 // beside them, in multi-player §6's shape paced at the tick. It prints what it
 // measured and runs only when asked, VIF_NETCODE_READINGS=1: it is minutes of whole
 // worlds, and an approach is judged by it, not a build.
+// readingRepeats is how many times a td row is taken: its rows vary run to run with
+// what the storm does to the roster over real sockets, so the run at the median
+// keyframe rate is reported, every run's rate beside it. VIF_NETCODE_READINGS_RUNS
+// sets the count for every row.
+const readingRepeats = 3
+
 func TestNetcodeReadingsOverSockets(t *testing.T) {
 	if os.Getenv("VIF_NETCODE_READINGS") == "" {
 		t.Skip("set VIF_NETCODE_READINGS=1 to take the readings")
@@ -46,23 +51,59 @@ func TestNetcodeReadingsOverSockets(t *testing.T) {
 		cfg     Config
 		players int
 		region  string
+		runs    int
 	}{
-		{"tower", towerScenario(t, 0x70E4), 2, "tower"},
-		{"tower", towerScenario(t, 0x70E4), 4, "tower"},
-		{"tower", towerScenario(t, 0x70E4), 16, "tower"},
-		{"td", td, 2, ""},
-		{"td", td, 4, ""},
+		{"tower", towerScenario(t, 0x70E4), 2, "tower", 1},
+		{"tower", towerScenario(t, 0x70E4), 4, "tower", 1},
+		{"tower", towerScenario(t, 0x70E4), 16, "tower", 1},
+		{"td", td, 2, "", readingRepeats},
+		{"td", td, 4, "", readingRepeats},
 	} {
 		t.Run(fmt.Sprintf("%s-%d", row.name, row.players), func(t *testing.T) {
-			takeReadings(t, row.name, row.cfg, row.players, row.region)
+			runs := row.runs
+			if n, err := strconv.Atoi(os.Getenv("VIF_NETCODE_READINGS_RUNS")); err == nil && n > 0 {
+				runs = n
+			}
+			readings := make([]reading, 0, runs)
+			for i := range runs {
+				// Each run in a test of its own, so its session is closed before the next.
+				t.Run(fmt.Sprintf("run-%d", i+1), func(t *testing.T) {
+					readings = append(readings, takeReading(t, row.name, row.cfg, row.players, row.region, i))
+				})
+			}
+			if len(readings) == 0 {
+				return
+			}
+			slices.SortStableFunc(readings, func(a, b reading) int { return cmp.Compare(a.keyframes, b.keyframes) })
+			for _, line := range readings[len(readings)/2].lines {
+				t.Log(line)
+			}
+			if len(readings) > 1 {
+				rates := make([]string, len(readings))
+				for i, r := range readings {
+					rates[i] = fmt.Sprintf("%.2f/s at %.1f%%", r.keyframes, r.hashOnly)
+				}
+				t.Logf("  %d runs, keyframes and hash-only share each, sorted: %s; the run at the median keyframe rate is the one above",
+					len(readings), strings.Join(rates, ", "))
+			}
 		})
 	}
 }
 
-// takeReadings runs §6's profile over sockets: a star, every participant moving one
-// tick in three and firing one in six, 300 ticks after 120 of warm-up.
-func takeReadings(t *testing.T, name string, cfg Config, players int, region string) {
+// reading is one run of a row: its lines, and what picks the run to report.
+type reading struct {
+	lines     []string
+	keyframes float64 // the host's keyframes a second
+	hashOnly  float64 // the guests' hash-only share, in percent
+}
+
+// takeReading runs §6's profile over sockets: a star, every participant moving one
+// tick in three and firing one in six, 300 ticks after 120 of warm-up. attempt
+// numbers a repeated row's runs, for the profile each writes.
+func takeReading(t *testing.T, name string, cfg Config, players int, region string, attempt int) reading {
 	t.Helper()
+	var r reading
+	say := func(format string, args ...any) { r.lines = append(r.lines, fmt.Sprintf(format, args...)) }
 	apps, hostPort := socketSession(t, cfg, players)
 	host, guests := apps[0], apps[1:]
 	for _, a := range apps {
@@ -123,7 +164,11 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 	// VIF_NETCODE_PROFILE names a directory a CPU profile of each measured window is
 	// written to, one per row, for the stage shares §2 asks for.
 	if dir := os.Getenv("VIF_NETCODE_PROFILE"); dir != "" {
-		f, err := os.Create(fmt.Sprintf("%s/%s-%d.prof", dir, name, players))
+		suffix := ""
+		if attempt > 0 {
+			suffix = fmt.Sprintf("-run%d", attempt+1)
+		}
+		f, err := os.Create(fmt.Sprintf("%s/%s-%d%s.prof", dir, name, players, suffix))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,10 +196,10 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 	}
 	wire := perSecond(before.WireOut, after.WireOut)
 	delta := func(key string) float64 { return float64(hostAfter[key]-hostBefore[key]) / seconds }
-	t.Logf("%s, %d players, %d peers, %.0f s simulated: host egress framed %.0f B/s (%s), wire %.0f B/s (%.2f of framed), ingress wire %.0f B/s",
+	say("%s, %d players, %d peers, %.0f s simulated: host egress framed %.0f B/s (%s), wire %.0f B/s (%.2f of framed), ingress wire %.0f B/s",
 		name, players, hostPort.PeerCount(), seconds, framed, strings.Join(kinds, ", "),
 		wire, wire/framed, perSecond(before.WireIn, after.WireIn))
-	t.Logf("  host: manifests %.1f/s, corrections %.1f/s, keyframes %.2f/s (fallbacks %.2f/s), shards %.1f/s; "+
+	say("  host: manifests %.1f/s, corrections %.1f/s, keyframes %.2f/s (fallbacks %.2f/s), shards %.1f/s; "+
 		"bodies %.0f B/s, repairs %.0f B/s, manifests %.0f B/s; ticks %.1f ms each; chain %d",
 		delta("snapshot.manifests_sent"), delta("snapshot.corrections_sent"), delta("snapshot.keyframes"),
 		delta("snapshot.keyframe_fallbacks"), delta("snapshot.shards_sent"), delta("snapshot.correction_bytes_sent"),
@@ -175,11 +220,13 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 	if manifests > 0 {
 		share = 100 * float64(hashOnly) / float64(manifests)
 	}
-	t.Logf("  guests: manifests %d, hash-only %.1f%% (%d in place), corrections applied %d, pages repaired %d, projected ticks at most %d, lag at most %d; "+
+	say("  guests: manifests %d, hash-only %.1f%% (%d in place), corrections applied %d, pages repaired %d, projected ticks at most %d, lag at most %d; "+
 		"guest ticks %.1f ms each over all guests", manifests, share, inPlace, applied, repaired, projected, lag,
 		float64(guestTime.Microseconds())/1000/measured)
-	t.Logf("  process: %.2f CPU-s per simulated second over %d instances, heap in use %d MiB",
+	say("  process: %.2f CPU-s per simulated second over %d instances, heap in use %d MiB",
 		(cpuAfter-cpuBefore)/seconds, players, mem.HeapInuse>>20)
+	r.keyframes, r.hashOnly = delta("snapshot.keyframes"), share
+	return r
 }
 
 // socketSession is a host and players-1 guests joined over real sockets, each link
@@ -285,10 +332,10 @@ func cpuSeconds() float64 {
 }
 
 // TestNetcodeReadingsForBatch3 takes the readings netcode design §4 batch 3 is
-// decided on, over a td session of two on sockets: a keyframe's bytes a section at a
-// time, plain and deflated, as the JSON rows the wire carries and as fixed binary
-// rows and columns; what a guest pays to decode and install one; and the heap by
-// owner once the session has run. VIF_NETCODE_BATCH3=1 runs it, and
+// decided and measured on, over a td session of two on sockets: a keyframe's bytes a
+// section at a time, plain and deflated, as the JSON rows the manifest hashes and as
+// the columns the wire carries; what a guest pays to decode and install one; and the
+// heap by owner once the session has run. VIF_NETCODE_BATCH3=1 runs it, and
 // VIF_NETCODE_PROFILE names a directory its heap profile is written to.
 func TestNetcodeReadingsForBatch3(t *testing.T) {
 	if os.Getenv("VIF_NETCODE_BATCH3") == "" {
@@ -331,9 +378,9 @@ func TestNetcodeReadingsForBatch3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("td keyframe at tick %d, a section at a time: rows, JSON plain, JSON deflated, binary rows plain, binary rows deflated, binary columns plain, binary columns deflated", cap.Header.Tick)
+	t.Logf("td keyframe at tick %d, a section at a time: rows, JSON plain, JSON deflated, columns plain, columns deflated", cap.Header.Tick)
 	world := reflect.ValueOf(cap.World)
-	var total [6]int
+	var total [4]int
 	for i, name := range engine.SharedWorldStoreNames {
 		rows := world.Field(i + 3) // after NextEntity, Created, Destroyed
 		if rows.Len() == 0 {
@@ -343,27 +390,14 @@ func TestNetcodeReadingsForBatch3(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var binRows []byte
-		columns := map[string][]byte{}
-		var prev uint64
-		for k := range rows.Len() {
-			e := rows.Index(k).Field(0).Uint()
-			binRows = binary.AppendUvarint(binRows, e)
-			columns["e"] = binary.AppendUvarint(columns["e"], e-prev)
-			prev = e
-			binRows = appendBinary(binRows, rows.Index(k).Field(1), "v", columns)
-		}
-		var binCols []byte
-		for _, k := range slices.Sorted(maps.Keys(columns)) {
-			binCols = append(binCols, columns[k]...)
-		}
-		line := [6]int{len(plain), len(deflated(plain)), len(binRows), len(deflated(binRows)), len(binCols), len(deflated(binCols))}
+		columns := engine.SharedWorldEncodeStoreColumns(nil, &cap.World, i)
+		line := [4]int{len(plain), len(deflated(plain)), len(columns), len(deflated(columns))}
 		for j := range line {
 			total[j] += line[j]
 		}
-		t.Logf("  %-12s %6d %9d %9d %9d %9d %9d %9d", name, rows.Len(), line[0], line[1], line[2], line[3], line[4], line[5])
+		t.Logf("  %-12s %6d %9d %9d %9d %9d", name, rows.Len(), line[0], line[1], line[2], line[3])
 	}
-	t.Logf("  %-12s %6s %9d %9d %9d %9d %9d %9d", "all stores", "", total[0], total[1], total[2], total[3], total[4], total[5])
+	t.Logf("  %-12s %6s %9d %9d %9d %9d", "all stores", "", total[0], total[1], total[2], total[3])
 
 	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
@@ -407,63 +441,6 @@ func TestNetcodeReadingsForBatch3(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-}
-
-// appendBinary renders one value as a fixed binary row would, field order fixed,
-// integers as varints, floats as their bits, and lays the same bytes into columns
-// by field path, as the column layout §4 projects would.
-func appendBinary(dst []byte, v reflect.Value, path string, columns map[string][]byte) []byte {
-	var cell []byte
-	switch v.Kind() {
-	case reflect.Bool:
-		cell = []byte{0}
-		if v.Bool() {
-			cell[0] = 1
-		}
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		cell = binary.AppendVarint(nil, v.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		cell = binary.AppendUvarint(nil, v.Uint())
-	case reflect.Float32:
-		cell = binary.LittleEndian.AppendUint32(nil, math.Float32bits(float32(v.Float())))
-	case reflect.Float64:
-		cell = binary.LittleEndian.AppendUint64(nil, math.Float64bits(v.Float()))
-	case reflect.String:
-		cell = append(binary.AppendUvarint(nil, uint64(v.Len())), v.String()...)
-	case reflect.Struct:
-		if v.Type() == reflect.TypeFor[time.Time]() {
-			cell = binary.AppendVarint(nil, v.Interface().(time.Time).UnixNano())
-			break
-		}
-		for i := range v.NumField() {
-			if v.Type().Field(i).IsExported() {
-				dst = appendBinary(dst, v.Field(i), path+"."+v.Type().Field(i).Name, columns)
-			}
-		}
-		return dst
-	case reflect.Array:
-		for i := range v.Len() {
-			dst = appendBinary(dst, v.Index(i), path+"[]", columns)
-		}
-		return dst
-	case reflect.Slice:
-		dst = binary.AppendUvarint(dst, uint64(v.Len()))
-		columns[path+"#"] = binary.AppendUvarint(columns[path+"#"], uint64(v.Len()))
-		for i := range v.Len() {
-			dst = appendBinary(dst, v.Index(i), path+"[]", columns)
-		}
-		return dst
-	case reflect.Pointer, reflect.Interface:
-		if v.IsNil() {
-			cell = []byte{0}
-			break
-		}
-		return appendBinary(append(dst, 1), v.Elem(), path, columns)
-	default:
-		return dst
-	}
-	columns[path] = append(columns[path], cell...)
-	return append(dst, cell...)
 }
 
 // deflated is plain at the level the wire deflates a body at.

@@ -1,7 +1,10 @@
 package snapshot
 
 import (
+	"cmp"
+	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -31,33 +34,30 @@ type Encoder struct {
 }
 
 // A capture's parts on the wire: partRest is one JSON object holding the header
-// under partHeader, the manifest's whole sections and every store under
-// parameter.SnapshotSectionBlobBytes, each keyed by its section name; the stores
-// from that size up are parts of their own, named as their sections are.
+// under partHeader and the manifest's whole sections by section name; partStores
+// holds the stores whose columns come under parameter.SnapshotSectionBlobBytes,
+// each behind its index and length; the stores from that size up are parts of their
+// own, named as their sections. A delta is one part, its JSON behind a length.
 const (
 	partRest   = "rest"
 	partHeader = "header"
+	partStores = "stores"
+	partDelta  = "delta"
 )
 
-// storeBlob is one store's deflated rows and the rows they were rendered from.
+// storeBlob is one store's deflated columns and the rows they were laid out from.
 type storeBlob struct {
 	built []engine.StoreRow
 	plain int
 	blob  []byte
 }
 
-// storeSection is one store's last indexed section and what it was built from: the
-// encoding, the owner-authored cells left out, and for each canonical row its
-// capture position, page and hash.
+// storeSection is one store's last indexed section and what it was built from:
+// the encoding and the owner-authored cells left out.
 type storeSection struct {
 	sec      *section
 	built    []engine.StoreRow
 	excluded []core.Entity
-	order    []int32   // capture position of each canonical row
-	canon    []int32   // canonical row of each capture position, -1 when left out
-	page     []uint32  // page of each canonical row
-	members  [][]int32 // canonical rows of each page
-	hashes   []uint64  // row hash of each canonical row
 }
 
 // storeRowHash is a store row's manifest hash; store rows carry no name.
@@ -120,8 +120,9 @@ func integrityOf(cap SharedCapture, stores [][]engine.StoreRow) (uint64, error) 
 }
 
 // EncodeCapture renders a capture as sections: the small parts deflated together,
-// each large store on its own and, while its rows are the slice the row encoder
-// returned before, sent from the bytes made then.
+// each large store in columns on its own and, while its rows are the slice the row
+// encoder returned before, sent from the bytes made then; the small stores'
+// columns travel together.
 func (e *Encoder) EncodeCapture(cap SharedCapture) ([]byte, error) {
 	stores, err := e.rows.Encode(&cap.World, storeRowHash)
 	if err != nil {
@@ -142,13 +143,16 @@ func (e *Encoder) EncodeCapture(cap SharedCapture) ([]byte, error) {
 		}
 		rest = appendMember(rest, part.name, plain)
 	}
+	rest = append(rest, '}')
 
 	e.blobMu.Lock()
 	defer e.blobMu.Unlock()
 	if e.blobs == nil {
 		e.blobs = make([]storeBlob, len(stores))
 	}
-	parts := make([]sectionPart, 1, len(stores)+1)
+	parts := make([]sectionPart, 1, len(stores)+2)
+	var small []byte
+	grouped := 0
 	for i, rows := range stores {
 		if len(rows) == 0 {
 			continue
@@ -158,9 +162,12 @@ func (e *Encoder) EncodeCapture(cap SharedCapture) ([]byte, error) {
 			parts = append(parts, sectionPart{name: name, plain: b.plain, blob: b.blob})
 			continue
 		}
-		plain := appendStore(nil, rows)
+		plain := engine.SharedWorldEncodeStoreColumns(nil, &cap.World, i)
 		if len(plain) < parameter.SnapshotSectionBlobBytes {
-			rest = appendMember(rest, name, plain)
+			small = binary.AppendUvarint(small, uint64(i))
+			small = binary.AppendUvarint(small, uint64(len(plain)))
+			small = append(small, plain...)
+			grouped++
 			continue
 		}
 		blob, err := deflateBytes(plain)
@@ -170,12 +177,18 @@ func (e *Encoder) EncodeCapture(cap SharedCapture) ([]byte, error) {
 		*b = storeBlob{built: rows, plain: len(plain), blob: blob}
 		parts = append(parts, sectionPart{name: name, plain: len(plain), blob: blob})
 	}
-	rest = append(rest, '}')
 	blob, err := deflateBytes(rest)
 	if err != nil {
 		return nil, err
 	}
 	parts[0] = sectionPart{name: partRest, plain: len(rest), blob: blob}
+	if grouped > 0 {
+		plain := append(binary.AppendUvarint(nil, uint64(grouped)), small...)
+		if blob, err = deflateBytes(plain); err != nil {
+			return nil, err
+		}
+		parts = append(parts, sectionPart{name: partStores, plain: len(plain), blob: blob})
+	}
 	return encodeSections(parts)
 }
 
@@ -187,20 +200,6 @@ func appendMember(dst []byte, name string, plain []byte) []byte {
 	return append(append(strconv.AppendQuote(dst, name), ':'), plain...)
 }
 
-// appendStore renders one store's rows as json.Marshal renders its entries, each
-// cell from its encoding.
-func appendStore(dst []byte, rows []engine.StoreRow) []byte {
-	dst = append(dst, '[')
-	for j, r := range rows {
-		if j > 0 {
-			dst = append(dst, ',')
-		}
-		dst = strconv.AppendUint(append(dst, `{"e":`...), uint64(r.Entity), 10)
-		dst = append(append(append(dst, `,"v":`...), r.Value...), '}')
-	}
-	return append(dst, ']')
-}
-
 // DecodeCapture parses what EncodeCapture produced, part by part. It validates
 // nothing about the world: the caller passes the result to VerifyCapture or
 // InstallShared.
@@ -209,11 +208,31 @@ func DecodeCapture(b []byte) (SharedCapture, error) {
 	if err != nil {
 		return SharedCapture{}, fmt.Errorf("capture decode: %w", err)
 	}
+	return captureFromParts(parts)
+}
+
+// captureFromParts fills a capture from its parts: the rest's members, the grouped
+// small stores and each large store's columns, a store taken once.
+func captureFromParts(parts []sectionPart) (SharedCapture, error) {
 	var cap SharedCapture
+	seen := make([]bool, engine.SharedWorldStoreCount)
+	store := func(i int, data []byte) error {
+		if i < 0 || i >= len(seen) {
+			return fmt.Errorf("no store %d", i)
+		}
+		if seen[i] {
+			return fmt.Errorf("store %q twice", engine.SharedWorldStoreNames[i])
+		}
+		seen[i] = true
+		if err := engine.SharedWorldDecodeStoreColumns(&cap.World, i, data); err != nil {
+			return fmt.Errorf("%s: %w", engine.SharedWorldStoreNames[i], err)
+		}
+		return nil
+	}
+	var err error
 	for _, p := range parts {
-		if p.name != partRest {
-			err = decodePart(&cap, p.name, p.blob)
-		} else {
+		switch {
+		case p.name == partRest:
 			var members map[string]json.RawMessage
 			err = json.Unmarshal(p.blob, &members)
 			for name, data := range members { // each member fills its own field
@@ -222,12 +241,55 @@ func DecodeCapture(b []byte) (SharedCapture, error) {
 				}
 				err = decodePart(&cap, name, data)
 			}
+		case p.name == partStores:
+			err = decodeStoreGroup(p.blob, store)
+		case strings.HasPrefix(p.name, StoreSectionPrefix):
+			err = store(slices.Index(engine.SharedWorldStoreNames, p.name[len(StoreSectionPrefix):]), p.blob)
+		default:
+			err = fmt.Errorf("unknown part %q", p.name)
 		}
 		if err != nil {
 			return SharedCapture{}, fmt.Errorf("capture decode: %w", err)
 		}
 	}
 	return cap, nil
+}
+
+// decodeStoreGroup walks the grouped stores, each behind its index and length.
+func decodeStoreGroup(data []byte, store func(int, []byte) error) error {
+	next := func(what string, bound uint64) (int, error) {
+		v, n := binary.Uvarint(data)
+		if n <= 0 || v > bound {
+			return 0, fmt.Errorf("the grouped stores' %s is cut short", what)
+		}
+		data = data[n:]
+		return int(v), nil
+	}
+	count, err := next("count", uint64(len(data)))
+	if err != nil {
+		return err
+	}
+	for range count {
+		i, err := next("index", uint64(engine.SharedWorldStoreCount))
+		if err != nil {
+			return err
+		}
+		size, err := next("length", uint64(len(data)))
+		if err != nil {
+			return err
+		}
+		if size > len(data) {
+			return errors.New("a grouped store is cut short")
+		}
+		if err := store(i, data[:size]); err != nil {
+			return err
+		}
+		data = data[size:]
+	}
+	if len(data) != 0 {
+		return fmt.Errorf("%d bytes past the grouped stores", len(data))
+	}
+	return nil
 }
 
 // decodePart parses one named part into its place in cap.
@@ -248,12 +310,6 @@ func decodePart(cap *SharedCapture, name string, data []byte) error {
 		err = json.Unmarshal(data, &cap.Status)
 	case name == SectionFSM:
 		err = json.Unmarshal(data, &cap.FSM)
-	case strings.HasPrefix(name, StoreSectionPrefix):
-		i := slices.Index(engine.SharedWorldStoreNames, name[len(StoreSectionPrefix):])
-		if i < 0 {
-			return fmt.Errorf("no store %q", name)
-		}
-		err = engine.SharedWorldDecodeStore(&cap.World, i, data)
 	default:
 		return fmt.Errorf("unknown part %q", name)
 	}
@@ -389,17 +445,14 @@ func (e *Encoder) storeSectionLocked(i int, rows []engine.StoreRow, cursors map[
 		}
 		slices.Sort(excluded)
 	}
-	prev := e.sections[i]
-	if prev != nil && slices.Equal(prev.excluded, excluded) {
+	var last *section
+	if prev := e.sections[i]; prev != nil && slices.Equal(prev.excluded, excluded) {
 		if sameRows(prev.built, rows) {
 			return prev.sec, nil
 		}
-		if next, ok := prev.update(id, rows); ok {
-			e.sections[i] = next
-			return next.sec, nil
-		}
+		last = prev.sec
 	}
-	next := newStoreSection(id, rows, excluded)
+	next := &storeSection{built: rows, excluded: excluded, sec: newStoreSection(id, rows, excluded, last)}
 	e.sections[i] = next
 	return next.sec, nil
 }
@@ -409,89 +462,55 @@ func sameRows(a, b []engine.StoreRow) bool {
 	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
 }
 
-// newStoreSection indexes rows afresh, leaving out the excluded cells.
-func newStoreSection(id string, rows []engine.StoreRow, excluded []core.Entity) *storeSection {
-	s := &storeSection{built: rows, excluded: excluded, canon: make([]int32, len(rows))}
-	s.order = make([]int32, 0, len(rows))
-	for j, r := range rows {
-		s.canon[j] = -1
-		if _, out := slices.BinarySearch(excluded, r.Entity); !out {
-			s.order = append(s.order, int32(j))
-		}
+// newStoreSection indexes a store's rows over the encoder's slice itself, leaving
+// out the excluded cells: each page's rows in canonical order as indices, and its
+// hash, taken from last where the page holds the same cells with the same bytes.
+func newStoreSection(id string, rows []engine.StoreRow, excluded []core.Entity, last *section) *section {
+	indexed := len(rows) - len(excluded)
+	pages := pageCount(indexed)
+	if len(rows) == 0 {
+		rows = nil // an emptied store and one never filled index alike
 	}
-	slices.SortFunc(s.order, func(a, b int32) int {
-		switch ea, eb := rows[a].Entity, rows[b].Entity; {
-		case ea < eb:
-			return -1
-		case ea > eb:
-			return 1
-		}
-		return 0
-	})
-	pages := pageCount(len(s.order))
 	sec := &section{
-		SectionSummary: SectionSummary{ID: id, Pages: uint32(pages), Rows: uint32(len(s.order))},
-		rows:           make([]ManifestRow, len(s.order)),
+		SectionSummary: SectionSummary{ID: id, Pages: uint32(pages), Rows: uint32(indexed)},
+		rows:           storeRows(rows),
+		pages:          make([][]int32, pages),
 		pageHash:       make([]uint64, pages),
-		pageRows:       make([][]ManifestRow, pages),
 	}
-	s.page, s.hashes, s.members = make([]uint32, len(s.order)), make([]uint64, len(s.order)), make([][]int32, pages)
-	for c, j := range s.order {
-		r := rows[j]
-		s.canon[j] = int32(c)
-		sec.rows[c] = ManifestRow{Entity: r.Entity, Value: r.Value}
-		p := rowPage(sec.rows[c], uint32(pages))
-		s.page[c], s.hashes[c] = p, r.Hash
-		s.members[p] = append(s.members[p], int32(c))
-		sec.pageRows[p] = append(sec.pageRows[p], sec.rows[c])
+	for j, r := range rows {
+		if _, out := slices.BinarySearch(excluded, r.Entity); out {
+			continue
+		}
+		p := rowPage(ManifestRow{Entity: r.Entity}, uint32(pages))
+		sec.pages[p] = append(sec.pages[p], int32(j))
 	}
-	for p := range pages {
-		sec.pageHash[p] = pageHashOf(id, uint32(p), s.members[p], s.hashes)
+	var held storeRows
+	if last != nil && len(last.pages) == pages {
+		held, _ = last.rows.(storeRows)
+	}
+	for p, page := range sec.pages {
+		slices.SortFunc(page, func(a, b int32) int { return cmp.Compare(rows[a].Entity, rows[b].Entity) })
+		if held != nil && samePage(held, last.pages[p], rows, page) {
+			sec.pageHash[p] = last.pageHash[p]
+			continue
+		}
+		sec.pageHash[p] = pageHashOf(id, uint32(p), rows, page)
 	}
 	sec.Hash = sectionHash(id, sec.pageHash)
-	s.sec = sec
-	return s
+	return sec
 }
 
-// update is s over rows holding the same entities in the same capture order, with
-// only the pages whose rows changed rehashed. ok is false for any other sequence.
-func (s *storeSection) update(id string, rows []engine.StoreRow) (*storeSection, bool) {
-	if len(rows) != len(s.built) {
-		return nil, false
+// samePage reports whether two pages hold the same cells with the same bytes: a row
+// whose value shares its predecessor's backing array is one the encoder kept.
+func samePage(held storeRows, was []int32, rows []engine.StoreRow, page []int32) bool {
+	if len(was) != len(page) {
+		return false
 	}
-	var changed []int
-	dirty := make(map[uint32]bool)
-	for j := range rows {
-		if rows[j].Entity != s.built[j].Entity {
-			return nil, false
-		}
-		if c := s.canon[j]; c >= 0 && &rows[j].Value[0] != &s.built[j].Value[0] {
-			changed = append(changed, j)
-			dirty[s.page[c]] = true
+	for k, i := range page {
+		h, r := &held[was[k]], &rows[i]
+		if h.Entity != r.Entity || len(h.Value) == 0 || len(r.Value) == 0 || &h.Value[0] != &r.Value[0] {
+			return false
 		}
 	}
-	prev := s.sec
-	sec := &section{
-		SectionSummary: prev.SectionSummary,
-		rows:           slices.Clone(prev.rows),
-		pageHash:       slices.Clone(prev.pageHash),
-		pageRows:       slices.Clone(prev.pageRows),
-	}
-	next := *s
-	next.built, next.sec, next.hashes = rows, sec, slices.Clone(s.hashes)
-	for _, j := range changed {
-		c := s.canon[j]
-		sec.rows[c].Value, next.hashes[c] = rows[j].Value, rows[j].Hash
-	}
-	for p := range dirty {
-		members := s.members[p]
-		page := make([]ManifestRow, len(members))
-		for k, c := range members {
-			page[k] = sec.rows[c]
-		}
-		sec.pageRows[p] = page
-		sec.pageHash[p] = pageHashOf(id, p, members, next.hashes)
-	}
-	sec.Hash = sectionHash(id, sec.pageHash)
-	return &next, true
+	return true
 }

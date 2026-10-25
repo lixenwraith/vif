@@ -258,7 +258,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.wire_bytes_out`, `network.wire_bytes_in` (int) | Bytes the socket links wrote and read, after deflate and before inflate: what the wire carried, against `sent_*_bytes` for the stream's ratio |
 | `network.link_rtt_ms` (int) | The slowest measured link's smoothed round trip. A measured one is at least 1, so zero means no link is measured. Every `link_*` cell clears when the last link goes |
 | `network.link_jitter_ms`, `network.link_bps`, `network.link_peer` (int) | That link's smoothed variation, its measured delivery rate in bytes per second, and the participant at its far end |
-| `network.link_saturated` (bool) | The link, not the sender, was the limit while `link_bps` was measured. Without it, `link_bps` is a lower bound on capacity |
+| `network.link_saturated` (bool) | The link, not the sender, was the limit while `link_bps` was measured: a backlog stood across two echoes, or this instance's frames waited on the link longer than two probe intervals while its round trip stood inflated. Without it, `link_bps` is a lower bound on capacity |
 | `network.link_loss_pct` (int) | The highest probe-loss share over all links, which need not be the slowest link's. The badge shows `loss n%` at `StatusNetLossWarnPct` or more. `:session` prints it in the link line, which appears only while a link is measured |
 | `network.pace_late_ticks` (int) | The latest arrival in the last full pacing window of authority epochs: the largest of this guest's tick minus an epoch's produced tick. Negative is early |
 | `network.pace_trim_permille`, `network.pace_steps` (int) | The trim pacing applies to the tick interval (positive runs slower), and whole-tick steps taken for an error too large to trim |
@@ -320,7 +320,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `snapshot.cadence_keyframe_age_ticks` (int) | How long this instance has actually gone without a whole authoritative world |
 | `snapshot.cadence_uplink_bps`, `snapshot.cadence_floor_bps` (int) | What the schedule costs, and what the convergence floor costs, summed over the planned links |
 | `snapshot.cadence_links`, `snapshot.cadence_constrained_links` (int) | Links the schedule plans for, and how many of them are worse than nominal |
-| `snapshot.cadence_budget_bps` (int) | What the tightest link allows after the utilisation share. Zero means no link has been measured while saturated |
+| `snapshot.cadence_budget_bps` (int) | What the tightest link allows after the utilisation share, priced on the rate it delivered while it was the limit (a join's capture, or frames held behind a backlog) and doubled every `SnapshotLinkCapacityTicks` a constrained plan goes without the link holding them again. Zero means no link has been read as the limit |
 | `snapshot.cadence_constrained` (bool) | A link moved the operating point worse than nominal. While a cadence is in force and no worse qualifier applies, the status bar shows `slow` |
 | `snapshot.cadence_floor_breached` (bool) | No schedule delivers a whole world inside the guaranteed window, or none arrived. The status bar shows `slow!` while a cadence is in force, and `:session` prints `BELOW THE CONVERGENCE FLOOR` |
 

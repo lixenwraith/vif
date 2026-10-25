@@ -555,7 +555,16 @@ difference between a fast link and an idle sender — and `Answered` is the far 
 own clock when it read the probe, which times that rate where the bytes arrived; a
 45-byte echo without it is still read. A backlog is saturation only
 once it stands across two echoes: one can land just behind a keyframe larger than
-the threshold, which a fast link has drained by the next. The `LinkReport`
+the threshold, which a fast link has drained by the next. A sender pacing to the
+link never shows one past the bound it paces to, so the frames it holds waiting are
+the other reading (`ObserveHold`): held longer than two probe intervals, one backlog
+reading's staleness and a lost probe's, while the round trip stands inflated past
+its baseline by the queue they wait in, the link rather than the sender has been
+deciding the rate. Neither half reads alone: jitter and another stream's queue
+inflate a trip as readily, and a cadence priced on that read its own thin stream as
+a slow link and thinned it further
+([netcode §3.5](netcode-design.md#35-the-divergence-harness)); a sender's own
+bound holds frames on a long link that carries them. The `LinkReport`
 is the only game state that travels here, it is opaque to the transport, and every
 field in it is a scheduling hint: a host may publish to that participant sooner
 because of one, and a wrong or stale one costs a correction sent early and nothing
@@ -578,7 +587,12 @@ enters a 10-byte bounded compression envelope:
 capture, as a keyframe or a join's, travels in it as sections, a count and then
 each part's name, plain and deflated lengths and its own deflate, so a store that
 held since the encoder's last capture is sent from the bytes made then and a
-receiver bounds each part by the plain size it declares. The reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
+receiver bounds each part by the plain size it declares. A store's rows travel in
+columns, the entities as deltas and then each field over every row, generated per
+component ([netcode §4](netcode-design.md#a-columnar-keyframe-codec)); a delta
+correction is one part, its JSON behind a length and its world delta in the same
+columns; the manifest's rows and the shards that repair them stay JSON. The
+reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
 at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
 ratio is large and world-dependent: the storm high water compresses from about
 299 KiB to 16.1 KiB, and the largest map the grid holds — 500x250 walled, which

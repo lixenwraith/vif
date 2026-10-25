@@ -101,7 +101,7 @@ func TestACaptureExpandingPastTheWireCeilingTravels(t *testing.T) {
 
 // TestACaptureTravelsAsSectionsFromCachedBlobs: a capture round-trips through the
 // sections codec, a store from the blob size up travels as its own deflate and goes
-// as the bytes made before while its rows hold, a store below it rides the rest
+// as the bytes made before while its rows hold, a store below it rides the grouped
 // part, a store that moved is deflated again alone, and a damaged body is refused.
 func TestACaptureTravelsAsSectionsFromCachedBlobs(t *testing.T) {
 	r := rand.New(rand.NewPCG(3, 4))
@@ -115,7 +115,7 @@ func TestACaptureTravelsAsSectionsFromCachedBlobs(t *testing.T) {
 		}
 		n := 2
 		if name := world.Type().Field(i).Name; name == "Positions" || name == "Wall" {
-			n = parameter.SnapshotSectionBlobBytes / 16 // no row renders under 16 bytes
+			n = parameter.SnapshotSectionBlobBytes // a row's columns are three bytes at least
 		}
 		f.Set(reflect.MakeSlice(f.Type(), n, n))
 		for k := range n {

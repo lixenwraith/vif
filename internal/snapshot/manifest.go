@@ -112,13 +112,55 @@ type CorrectionManifest struct {
 	Next uint64 `json:"next,omitempty"`
 }
 
-// section is one section as the sender holds it: the summary the wire
-// carries, plus the rows and page hashes the descent needs.
+// section is one section as the sender holds it: the summary the wire carries,
+// the rows it stands over and, per page, their indices in canonical order and the
+// page hash. A store section stands over the row encoder's rows, which a retained
+// index shares with the encoder and the indexes beside it rather than copying.
 type section struct {
 	SectionSummary
-	rows     []ManifestRow
+	rows     rowSource
+	pages    [][]int32
 	pageHash []uint64
-	pageRows [][]ManifestRow
+}
+
+// rowSource is where a section's rows stand: a store's encoded rows in capture
+// order, or a carrier's named rows in canonical order.
+type rowSource interface {
+	row(i int32) ManifestRow
+}
+
+type storeRows []engine.StoreRow
+
+func (r storeRows) row(i int32) ManifestRow {
+	return ManifestRow{Entity: r[i].Entity, Value: r[i].Value}
+}
+
+type namedRows []ManifestRow
+
+func (r namedRows) row(i int32) ManifestRow { return r[i] }
+
+// rowsOf materialises the rows a page indexes.
+func (s *section) rowsOf(page []int32) []ManifestRow {
+	out := make([]ManifestRow, len(page))
+	for k, i := range page {
+		out[k] = s.rows.row(i)
+	}
+	return out
+}
+
+// indexed is every row the section indexes, page by page.
+func (s *section) indexed() []ManifestRow {
+	n := 0
+	for _, page := range s.pages {
+		n += len(page)
+	}
+	out := make([]ManifestRow, 0, n)
+	for _, page := range s.pages {
+		for _, i := range page {
+			out = append(out, s.rows.row(i))
+		}
+	}
+	return out
 }
 
 // Manifest is the whole index over one capture, held by whichever side
@@ -173,16 +215,16 @@ func newSection(id string, rows []ManifestRow) *section {
 	pages := pageCount(len(rows))
 	sec := &section{
 		SectionSummary: SectionSummary{ID: id, Pages: uint32(pages), Rows: uint32(len(rows))},
-		rows:           rows,
+		rows:           namedRows(rows),
+		pages:          make([][]int32, pages),
 		pageHash:       make([]uint64, pages),
-		pageRows:       make([][]ManifestRow, pages),
 	}
-	for _, row := range rows {
+	for i, row := range rows {
 		p := rowPage(row, uint32(pages))
-		sec.pageRows[p] = append(sec.pageRows[p], row)
+		sec.pages[p] = append(sec.pages[p], int32(i))
 	}
 	for p := range pages {
-		sec.pageHash[p] = pageHash(id, uint32(p), sec.pageRows[p])
+		sec.pageHash[p] = pageHash(id, uint32(p), sec.rowsOf(sec.pages[p]))
 	}
 	sec.Hash = sectionHash(id, sec.pageHash)
 	return sec
@@ -235,11 +277,11 @@ func pageHash(section string, page uint32, rows []ManifestRow) uint64 {
 	return h.sum()
 }
 
-// pageHashOf is pageHash over rows already hashed: members index hashes.
-func pageHashOf(section string, page uint32, members []int32, hashes []uint64) uint64 {
-	h := pageHasher(section, page, len(members))
-	for _, c := range members {
-		h = h.u64(hashes[c])
+// pageHashOf is pageHash over a store's rows, hashed already: page indexes rows.
+func pageHashOf(section string, p uint32, rows []engine.StoreRow, page []int32) uint64 {
+	h := pageHasher(section, p, len(page))
+	for _, i := range page {
+		h = h.u64(rows[i].Hash)
 	}
 	return h.sum()
 }
@@ -345,13 +387,15 @@ func (m *Manifest) Sections() []string {
 func (m *Manifest) Summaries() []SectionSummary { return m.list }
 
 // SectionRows returns one section's canonical rows, for callers auditing what the
-// index commits to. The rows are the manifest's own; treat them as read-only.
+// index commits to, materialised from the rows it stands over.
 func (m *Manifest) SectionRows(id string) ([]ManifestRow, bool) {
 	s, ok := m.sections[id]
 	if !ok {
 		return nil, false
 	}
-	return s.rows, true
+	rows := s.indexed()
+	slices.SortFunc(rows, compareManifestRows)
+	return rows, true
 }
 
 // Use the sender's partition when row counts differ, so descent identifies
@@ -368,12 +412,13 @@ func (m *Manifest) repartition(id string, pages uint32) ([]uint64, bool) {
 		return sec.pageHash, true
 	}
 	buckets := make([][]ManifestRow, pages)
-	for _, row := range sec.rows {
+	for _, row := range sec.indexed() {
 		p := rowPage(row, pages)
 		buckets[p] = append(buckets[p], row)
 	}
 	out := make([]uint64, pages)
 	for p := range pages {
+		slices.SortFunc(buckets[p], compareManifestRows)
 		out[p] = pageHash(id, p, buckets[p])
 	}
 	return out, true
@@ -385,15 +430,16 @@ func (m *Manifest) pageContent(id string, page, pages uint32) ([]ManifestRow, bo
 	if !ok || pages == 0 || page >= pages {
 		return nil, false
 	}
-	if uint32(len(sec.pageRows)) == pages {
-		return sec.pageRows[page], true
+	if uint32(len(sec.pages)) == pages {
+		return sec.rowsOf(sec.pages[page]), true
 	}
-	out := make([]ManifestRow, 0, len(sec.rows)/int(pages)+1)
-	for _, row := range sec.rows {
+	var out []ManifestRow
+	for _, row := range sec.indexed() {
 		if rowPage(row, pages) == page {
 			out = append(out, row)
 		}
 	}
+	slices.SortFunc(out, compareManifestRows)
 	return out, true
 }
 

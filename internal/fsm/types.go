@@ -99,7 +99,7 @@ type Machine[T any] struct {
 	// Propose takes a transition whose guard passed while the machine proposes
 	// instead of taking it: the authority of a session crosses it, and Apply takes
 	// it at the tick every instance agreed on.
-	Propose func(region string, owner StateID, index int, trigger event.EventType, vars []event.FSMVar)
+	Propose func(region string, owner StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop)
 
 	// following keeps the machine from evaluating any transition: it moves by
 	// Apply alone, on what the authority committed (D-20); proposing hands each
