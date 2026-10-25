@@ -77,6 +77,9 @@ type Instance interface {
 	// from the last authoritative state, with the roster it held.
 	AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID)
 	CrossDepartures(away []network.RosterEntry)
+	// CrossReturns gives back the places of participants the floor sent away whose
+	// membership reports reached the host late, each as a claim's return is crossed.
+	CrossReturns(back []network.RosterEntry)
 	Forked(roster []network.RosterEntry, local link.PeerID)
 
 	// Redial starts this run's redial of the authority it lost, at the door it came

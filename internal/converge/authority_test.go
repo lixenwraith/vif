@@ -447,6 +447,64 @@ func TestTheWalkGoesDownTheList(t *testing.T) {
 	}
 }
 
+// TestALateSurvivorIsTakenBack: a survivor whose membership report reaches the host
+// after the floor, a hop or a wait too late for it, is given its place back as a
+// claim's return gives one; the same report again, or one from a participant the
+// floor kept, changes nothing.
+func TestALateSurvivorIsTakenBack(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Link(1, 4)
+	mesh.Peer(2, 3)
+	runs := make([]*run, 4)
+	for i := range runs {
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(4))
+		runs[i].open(1, chainOf(2, 3), false)
+	}
+	if err := runs[0].c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	_ = mesh.Node(1).Close()
+	host, near := runs[1], runs[2]
+	group := []*run{host, near} // the far survivor reaches nobody until its report does
+	for _, r := range group {
+		r.c.QueuePeerLost(1)
+	}
+	deliver(group, 3)
+	if got := host.u.State(); got.Authority != 2 || got.Term != network.FirstTerm+1 {
+		t.Fatalf("the first candidate holds %+v; want its own term", got)
+	}
+	host.world.advance(parameter.NetworkSuccessionTicks)
+	deliver(group, 1)
+	if len(host.world.departed) != 1 || len(host.world.departed[0]) != 1 || host.world.departed[0][0].ID != 4 {
+		t.Fatalf("at the floor the host kept %v as Wraiths; want the far survivor alone", host.world.departed)
+	}
+
+	late, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 4, Lost: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.u.onReport(3, late)
+	if len(host.world.returned) != 1 || len(host.world.returned[0]) != 1 || host.world.returned[0][0].ID != 4 {
+		t.Fatalf("the late report gave back %v; want the far survivor's place", host.world.returned)
+	}
+	if i := slices.IndexFunc(host.world.WorldRoster(), func(p network.RosterEntry) bool { return p.ID == 4 }); i < 0 || host.world.WorldRoster()[i].Away {
+		t.Fatal("given back, the far survivor is still away")
+	}
+	host.u.onReport(3, late)
+	kept, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.u.onReport(3, kept)
+	if len(host.world.returned) != 1 {
+		t.Fatalf("reports that give nothing back gave back %v", host.world.returned[1:])
+	}
+}
+
 // TestASurvivorRepeatsItsNoticeWhileItWalks: a survivor whose notice was lost on
 // the wire, and that missed its host's record the same way, is answered on the
 // notice it sends again each pass of its walk, rather than walking on to a fork

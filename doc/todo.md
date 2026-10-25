@@ -468,18 +468,6 @@ read through the tunnel, or a state the run reports on the control connection),
 its lifetime, the create budget charged to the publisher's address, and `-host
 vif://<site>:7777` opening the door through the router rather than binding one.
 
-### Keep a late survivor in its host's group
-
-- Priority: P3
-- Affected files: `internal/converge/authority.go`, `internal/app/session.go`
-
-A host sends away every independent participant that reported no membership at its
-term a convergence floor after it resumes, so a survivor whose report arrives later
-finds its own cursor a Wraith, which only a return under its claim gives back
-([Multi-player](multi-player.md#8-remaining-gaps) §8). What would close it: a
-membership report after the floor taking the place back as a claim does, over the
-link it already holds.
-
 ### Project a correction outside the live lock
 
 - Priority: P2

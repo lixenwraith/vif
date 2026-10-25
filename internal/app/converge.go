@@ -218,6 +218,15 @@ func (m *membership) CrossDepartures(away []network.RosterEntry) {
 	}
 }
 
+// CrossReturns gives back the places the floor took from survivors whose membership
+// reports came late, each crossed as a claim's return is: the arrival puts the
+// participant back in its slot, and its next sync brings its cursor with it.
+func (m *membership) CrossReturns(back []network.RosterEntry) {
+	for _, p := range back {
+		m.crossParticipantArrival(p.ID, p.Slot)
+	}
+}
+
 func (m *membership) Redial(lost link.PeerID) bool { return m.redial(lost) }
 
 func (m *membership) Forked(roster []network.RosterEntry, local link.PeerID) {

@@ -37,6 +37,7 @@ type stub struct {
 	adopted   []snapshot.CaptureHeader
 	handoffs  []adopted
 	departed  [][]network.RosterEntry
+	returned  [][]network.RosterEntry
 	forked    int
 	forkedAs  []network.RosterEntry
 	thawed    int
@@ -205,6 +206,23 @@ func (s *stub) CrossDepartures(away []network.RosterEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.departed = append(s.departed, away)
+	s.markAwayLocked(away, true)
+}
+
+func (s *stub) CrossReturns(back []network.RosterEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.returned = append(s.returned, back)
+	s.markAwayLocked(back, false)
+}
+
+// markAwayLocked marks each place as a departure, or a return, leaves it on the run.
+func (s *stub) markAwayLocked(who []network.RosterEntry, away bool) {
+	for i := range s.roster {
+		if slices.ContainsFunc(who, func(p network.RosterEntry) bool { return p.ID == s.roster[i].ID }) {
+			s.roster[i].Away = away
+		}
+	}
 }
 
 func (s *stub) Forked(roster []network.RosterEntry, _ link.PeerID) {

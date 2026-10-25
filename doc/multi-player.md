@@ -607,7 +607,10 @@ waits as a Wraith (§5.4). A convergence floor (`NetworkSuccessionTicks`) after 
 group resumes, every independent participant that reported no membership at its
 term departs the same way, its bots with it: a survivor that followed another host,
 or forked. The floor comes after play resumes rather than at once, so a survivor
-still arriving through a relay hop is not sent away.
+still arriving through a relay hop is not sent away. One whose report reaches the
+host after the floor is given its place back, with its bots', as a claim's return
+gives one (`Authority.takeBack`, `Instance.CrossReturns`): the floor is the deadline
+for the report, not for the survivor.
 
 A fork with no loop to take it into a session of its own (§5.1), left with **no link
 at all**, drops every cursor it does not simulate. Having no link is what makes the
@@ -1030,14 +1033,7 @@ could make the netcode cheaper in [Netcode design](netcode-design.md).
    no path to stays a cursor nothing moves. A host has no such gap: those its group
    lost wait as Wraiths.
 
-6. **A survivor that reaches its host after the floor waits as a Wraith.** The
-   floor (§5.2) sends away every independent participant that reported no
-   membership at the host's term, so a survivor whose report arrives later finds its
-   own cursor a Wraith, which only a return under its claim gives back. *To see the
-   remainder:* a survivor whose dial to the first candidate outlasts the window and
-   a floor.
-
-7. **A browser guest once kept the previous region's glyphs.** Entering the tower
+6. **A browser guest once kept the previous region's glyphs.** Entering the tower
    region, it kept the region before's glyphs, or kept the glyph system running
    although the tower disables it. It was seen once, on 2026-09-24, and has not
    recurred. *To see the remainder:* a second sighting should record whether that

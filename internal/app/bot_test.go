@@ -877,6 +877,46 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	}
 }
 
+// TestALateSurvivorsPlaceIsGivenBackWithItsBots: the places the floor took from a
+// survivor and its bot, Wraiths on the host, are given back when its report reaches
+// the host late, as a claim's return gives them back; the survivor kept its own
+// cursor throughout, and everyone holds the places it had.
+func TestALateSurvivorsPlaceIsGivenBackWithItsBots(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	t.Cleanup(func() { stopTicks(); host.Close() })
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitForCursors(t, guest, 3)
+	before := places(host, everyone)
+	local := link.PeerID(host.membership.localParticipant())
+	var survivor, back []network.RosterEntry
+	for _, p := range host.instance().WorldRoster() {
+		if p.ID == local {
+			continue
+		}
+		back = append(back, p)
+		if p.Holder == 0 {
+			survivor = append(survivor, p)
+		}
+	}
+	// As the floor sends away a survivor that reported nothing, its bot with it.
+	host.membership.CrossDepartures(survivor)
+	waitForWraiths(t, host, 2)
+	waitForCursors(t, guest, 3)
+	// As its late report gives the places back.
+	host.membership.CrossReturns(back)
+	waitForWraiths(t, host, 0)
+	waitForWraiths(t, guest, 0)
+	if got := places(host, everyone); !maps.Equal(got, before) {
+		t.Fatalf("given back, the session holds %v (entity, participant by slot), want the places it had, %v", got, before)
+	}
+}
+
 func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
