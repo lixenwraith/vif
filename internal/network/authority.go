@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	link "github.com/lixenwraith/vif/pkg/network"
+
 	"github.com/lixenwraith/vif/internal/event"
 )
 
@@ -23,9 +25,9 @@ const FirstTerm AuthorityTerm = 1
 // roster, not reports, name the candidates.
 type AuthorityReport struct {
 	Term AuthorityTerm `json:"term"`
-	From PeerID        `json:"from"`
-	Lost PeerID        `json:"lost"`
-	Via  PeerID        `json:"via,omitempty"`
+	From link.PeerID   `json:"from"`
+	Lost link.PeerID   `json:"lost"`
+	Via  link.PeerID   `json:"via,omitempty"`
 }
 
 // HandoffRecord is the evidence a receiver needs before it will adopt a term it
@@ -34,8 +36,8 @@ type AuthorityReport struct {
 // negotiation.
 type HandoffRecord struct {
 	Term        AuthorityTerm `json:"term"`
-	Authority   PeerID        `json:"authority"`
-	Predecessor PeerID        `json:"predecessor"`
+	Authority   link.PeerID   `json:"authority"`
+	Predecessor link.PeerID   `json:"predecessor"`
 
 	// The membership, moved whole. Roster and slot assignments are the closed
 	// roster (D-11); apart from the lost predecessor and the bots it holds they
@@ -112,8 +114,8 @@ func SameRoster(a, b []RosterEntry) bool {
 // the lost one's, so two hosts' records never tie. One away is no survivor, and a
 // participant with no port is no candidate, since nobody could dial it. Local reach
 // is never an input.
-func SuccessionCandidates(roster []RosterEntry, lost PeerID, chain SuccessionChain) []PeerID {
-	var out []PeerID
+func SuccessionCandidates(roster []RosterEntry, lost link.PeerID, chain SuccessionChain) []link.PeerID {
+	var out []link.PeerID
 	for _, e := range chain {
 		if e.ID != 0 && e.ID != lost &&
 			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == e.ID && p.Holder == 0 && !p.Away }) {

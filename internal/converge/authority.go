@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Authority is this instance's view of who authors and under which generation,
@@ -29,9 +30,9 @@ type Authority struct {
 	// it carries and metered its window; see driveIngress. Touched only by the
 	// correction loop.
 	slow      SlowPolicy
-	watch     map[network.PeerID]slowWatch
+	watch     map[link.PeerID]slowWatch
 	ingress   float64
-	metered   map[network.PeerID]slowWatch
+	metered   map[link.PeerID]slowWatch
 	statEvict *atomic.Int64
 
 	// corrections is what authorship produces, and reach the links it needs to
@@ -42,8 +43,8 @@ type Authority struct {
 
 	mu     sync.Mutex
 	term   network.AuthorityTerm
-	holder network.PeerID
-	local  network.PeerID
+	holder link.PeerID
+	local  link.PeerID
 	roster []network.RosterEntry
 	anchor event.JoinAnchor
 
@@ -83,7 +84,7 @@ type Authority struct {
 	// instance saw it go. walkFrom is when the walk down the candidates began, zero
 	// while it waits on this instance's redial of the lost authority (redialing).
 	contested network.AuthorityTerm
-	lost      network.PeerID
+	lost      link.PeerID
 	opened    time.Time // [wall] the session stands frozen, so no tick counts it
 	walkFrom  time.Time // [wall]
 	redialing bool
@@ -131,9 +132,9 @@ func newAuthority(inst Instance, tel snapshot.Telemetry, reg *status.Registry) *
 		statFork:       reg.Bools.Get("network.fork"),
 		statMigrating:  reg.Bools.Get("network.migrating"),
 		statHostLost:   reg.Bools.Get("network.host_lost"),
-		watch:          make(map[network.PeerID]slowWatch),
+		watch:          make(map[link.PeerID]slowWatch),
 		ingress:        parameter.NetworkIngressBytesPerSecond,
-		metered:        make(map[network.PeerID]slowWatch),
+		metered:        make(map[link.PeerID]slowWatch),
 		statEvict:      reg.Ints.Get("network.evicted"),
 		slow: SlowPolicy{
 			Window:         parameter.NetworkSlowWindow,
@@ -177,9 +178,9 @@ func (u *Authority) driveEviction(now time.Time) {
 		clear(u.watch)
 		return
 	}
-	link, _ := u.inst.Transport().(engine.LinkMeasuringPort)
+	meter, _ := u.inst.Transport().(engine.LinkMeasuringPort)
 	local := u.inst.LocalParticipant()
-	seen := make(map[network.PeerID]bool, len(u.watch))
+	seen := make(map[link.PeerID]bool, len(u.watch))
 	for _, e := range u.currentRoster() {
 		if uint32(e.ID) == local {
 			continue
@@ -198,8 +199,8 @@ func (u *Authority) driveEviction(now time.Time) {
 		u.watch[e.ID] = slowWatch{since: now, from: late}
 		rate := float64(late-w.from) / elapsed.Seconds()
 		var bps float64
-		if link != nil {
-			bps = link.LinkMetric(uint32(e.ID)).Throughput
+		if meter != nil {
+			bps = meter.LinkMetric(uint32(e.ID)).Throughput
 		}
 		if w.grace || rate < u.slow.LatePerSecond || bps < u.slow.BytesPerSecond {
 			continue
@@ -223,12 +224,12 @@ func (u *Authority) driveEviction(now time.Time) {
 // nobody else. A held bot is judged through its holder's link; a person on none of
 // this authority's links may reach it through any, so every link carries them too.
 func (u *Authority) driveIngress(now time.Time) {
-	link, ok := u.inst.Transport().(engine.LinkMeasuringPort)
+	meter, ok := u.inst.Transport().(engine.LinkMeasuringPort)
 	if u.slow.Window <= 0 || u.ingress <= 0 || !u.isAuthority() || !ok {
 		clear(u.metered)
 		return
 	}
-	roster, local, peers := u.currentRoster(), network.PeerID(u.inst.LocalParticipant()), link.Peers()
+	roster, local, peers := u.currentRoster(), link.PeerID(u.inst.LocalParticipant()), meter.Peers()
 	unlinked := func(e network.RosterEntry) bool {
 		return e.ID != local && e.Holder == 0 && !slices.Contains(peers, uint32(e.ID))
 	}
@@ -238,7 +239,7 @@ func (u *Authority) driveIngress(now time.Time) {
 			behind++
 		}
 	}
-	seen := make(map[network.PeerID]bool, len(roster))
+	seen := make(map[link.PeerID]bool, len(roster))
 	for _, e := range roster {
 		if e.ID == local || e.Holder != 0 || unlinked(e) {
 			continue
@@ -280,7 +281,7 @@ func (u *Authority) driveIngress(now time.Time) {
 // that opens a solo run, and a run reopening its world after `:leave` — because
 // they differ in how the offer was obtained and not in what it says. Whatever a
 // session left here, its succession included, ends with it.
-func (u *Authority) Open(o network.SessionOffer, local network.PeerID) {
+func (u *Authority) Open(o network.SessionOffer, local link.PeerID) {
 	u.mu.Lock()
 	u.term = max(o.Term, network.FirstTerm)
 	u.holder = o.Host
@@ -319,14 +320,14 @@ func (u *Authority) Term() network.AuthorityTerm {
 }
 
 // Holder is the participant currently authoring.
-func (u *Authority) Holder() network.PeerID {
+func (u *Authority) Holder() link.PeerID {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.holder
 }
 
 // Local is this instance's own identity in the session.
-func (u *Authority) Local() network.PeerID {
+func (u *Authority) Local() link.PeerID {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.local
@@ -386,7 +387,7 @@ func (u *Authority) refuse(from uint32, term network.AuthorityTerm, why string) 
 
 // reportKey is one report: who sent it, and the term it names.
 type reportKey struct {
-	from network.PeerID
+	from link.PeerID
 	term network.AuthorityTerm
 }
 
@@ -395,19 +396,19 @@ type reportKey struct {
 // is the authority's to cross.
 func (u *Authority) peerLost(id uint32) {
 	u.mu.Lock()
-	start := u.term > 0 && network.PeerID(id) == u.holder && u.local != u.holder && u.contested == 0
+	start := u.term > 0 && link.PeerID(id) == u.holder && u.local != u.holder && u.contested == 0
 	u.mu.Unlock()
 	if !start {
 		return
 	}
-	u.beginSuccession(network.PeerID(id))
+	u.beginSuccession(link.PeerID(id))
 }
 
 // beginSuccession opens the walk down the candidates for the authority that went and
 // floods this survivor's notice. One with a link of its own to that authority
 // redials it first, and its walk begins when the redial ends; any other walks at
 // once.
-func (u *Authority) beginSuccession(lost network.PeerID) {
+func (u *Authority) beginSuccession(lost link.PeerID) {
 	u.mu.Lock()
 	if u.contested != 0 || u.term == 0 || u.fork {
 		u.mu.Unlock()
@@ -444,7 +445,7 @@ func (u *Authority) beginSuccession(lost network.PeerID) {
 
 // Redialing reports that this instance still waits on its redial of lost: nothing
 // ended the wait and its window has not run out.
-func (u *Authority) Redialing(lost network.PeerID) bool {
+func (u *Authority) Redialing(lost link.PeerID) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.redialOpenLocked(lost, time.Now()) // [wall]
@@ -453,7 +454,7 @@ func (u *Authority) Redialing(lost network.PeerID) bool {
 // RedialAdmitted reports whether the run may go back to lost through the dial that
 // authority admitted, which it may until the walk begins. On true this instance
 // takes no turn and follows no record: the run it is replaced by is in its place.
-func (u *Authority) RedialAdmitted(lost network.PeerID) bool {
+func (u *Authority) RedialAdmitted(lost link.PeerID) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if !u.redialOpenLocked(lost, time.Now()) { // [wall]
@@ -466,7 +467,7 @@ func (u *Authority) RedialAdmitted(lost network.PeerID) bool {
 // RedialRefused ends the wait on this instance's redial of lost: that authority
 // refused it, nothing answered at its door, or it holds no place for this instance.
 // The walk begins.
-func (u *Authority) RedialRefused(lost network.PeerID) {
+func (u *Authority) RedialRefused(lost link.PeerID) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if now := time.Now(); u.redialOpenLocked(lost, now) { // [wall]
@@ -475,7 +476,7 @@ func (u *Authority) RedialRefused(lost network.PeerID) {
 }
 
 // redialOpenLocked is Redialing at now. Caller holds mu.
-func (u *Authority) redialOpenLocked(lost network.PeerID, now time.Time) bool {
+func (u *Authority) redialOpenLocked(lost link.PeerID, now time.Time) bool {
 	return u.contested != 0 && u.lost == lost && u.redialing && u.walkFrom.IsZero() &&
 		now.Sub(u.opened) < parameter.NetworkSuccessionWindow
 }
@@ -520,7 +521,7 @@ func (u *Authority) currentRoster() []network.RosterEntry {
 
 // seat reports whether this instance is a bot some participant holds.
 func (u *Authority) seat() bool {
-	local, roster := network.PeerID(u.inst.LocalParticipant()), u.currentRoster()
+	local, roster := link.PeerID(u.inst.LocalParticipant()), u.currentRoster()
 	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.ID == local })
 	return i >= 0 && roster[i].Holder != 0
 }
@@ -546,7 +547,7 @@ func (u *Authority) recordReport(rep network.AuthorityReport) bool {
 }
 
 // reportedLocked reports a membership id sent at term. Caller holds mu.
-func (u *Authority) reportedLocked(id network.PeerID, term network.AuthorityTerm) bool {
+func (u *Authority) reportedLocked(id link.PeerID, term network.AuthorityTerm) bool {
 	_, ok := u.reports[reportKey{from: id, term: term}]
 	return ok
 }
@@ -834,9 +835,9 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	u.mu.Unlock()
 
 	// A record from a link other than its host's is followed through that link.
-	var via network.PeerID
+	var via link.PeerID
 	if !direct {
-		via = network.PeerID(from)
+		via = link.PeerID(from)
 	}
 	if learned && !mine {
 		u.inst.Freeze()
@@ -879,7 +880,7 @@ func (u *Authority) Chain() network.SuccessionChain {
 
 // successor is the first candidate this instance would walk to if the authority
 // went now, exposed so a survivor holds a link to it before it needs one.
-func (u *Authority) successor() (network.PeerID, bool) {
+func (u *Authority) successor() (link.PeerID, bool) {
 	roster := u.currentRoster()
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -893,7 +894,7 @@ func (u *Authority) successor() (network.PeerID, bool) {
 // walkTargets is whom this instance dials: during a walk each candidate whose turn
 // has begun, the first while it redials; cut off, every candidate, for one that
 // carries it. Never itself.
-func (u *Authority) walkTargets(now time.Time) []network.PeerID {
+func (u *Authority) walkTargets(now time.Time) []link.PeerID {
 	roster := u.currentRoster()
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -905,14 +906,14 @@ func (u *Authority) walkTargets(now time.Time) []network.PeerID {
 		}
 		list = list[:min(turns, len(list))]
 	}
-	return slices.DeleteFunc(list, func(id network.PeerID) bool { return id == u.local })
+	return slices.DeleteFunc(list, func(id link.PeerID) bool { return id == u.local })
 }
 
 // appendChain adds one participant that declared a port, which only the
 // coordinator does, and leaves the chain to drive to publish. A joiner is noted
 // under the session lock, or the world lock when it came through a relay, and a
 // flood reads the transport under the world lock.
-func (u *Authority) appendChain(id network.PeerID, addr string) {
+func (u *Authority) appendChain(id link.PeerID, addr string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if next := u.chain.Append(id, addr); !slices.Equal(u.chain, next) {
@@ -945,7 +946,7 @@ func (u *Authority) PublishChain() {
 // ForgetReachable drops a departed participant. Local only: the departure crossing
 // reaches every instance, so each drops the same entry without a broadcast — and
 // this runs under the world lock, which flooding would deadlock on.
-func (u *Authority) ForgetReachable(id network.PeerID) {
+func (u *Authority) ForgetReachable(id link.PeerID) {
 	u.mu.Lock()
 	u.chain = u.chain.Without(id)
 	u.mu.Unlock()
@@ -981,7 +982,7 @@ func (u *Authority) onPeerList(from uint32, body []byte) {
 // Receive takes one succession frame. It runs between two ticks, from the
 // correction loop's drain, so it may decode and decide.
 func (u *Authority) Receive(kind uint8, from uint32, body []byte) {
-	switch network.MessageType(kind) {
+	switch link.MessageType(kind) {
 	case network.MsgAuthorityReport:
 		u.onReport(from, body)
 	case network.MsgAuthorityHandoff:
@@ -1069,7 +1070,7 @@ func (u *Authority) onHandoff(from uint32, body []byte) {
 
 // forward passes one succession frame on to the links this instance carries but the
 // one it arrived on.
-func (u *Authority) forward(kind network.MessageType, exclude uint32, body []byte) {
+func (u *Authority) forward(kind link.MessageType, exclude uint32, body []byte) {
 	port := u.inst.Transport()
 	p, ok := port.(interface{ Peers() []uint32 })
 	if !ok || !port.IsRunning() {
@@ -1083,7 +1084,7 @@ func (u *Authority) forward(kind network.MessageType, exclude uint32, body []byt
 }
 
 // linked reports a direct link to id.
-func (u *Authority) linked(id network.PeerID) bool {
+func (u *Authority) linked(id link.PeerID) bool {
 	p, ok := u.inst.Transport().(interface{ Peers() []uint32 })
 	return ok && id != 0 && slices.Contains(p.Peers(), uint32(id))
 }
@@ -1091,7 +1092,7 @@ func (u *Authority) linked(id network.PeerID) bool {
 // flood forwards one succession frame to every direct neighbour but the link it
 // arrived on. Deduplication is by term and participant rather than by a hop count:
 // a report says one thing once, and a handoff is adopted once.
-func (u *Authority) flood(kind network.MessageType, exclude uint32, body []byte) {
+func (u *Authority) flood(kind link.MessageType, exclude uint32, body []byte) {
 	port := u.inst.Transport()
 	if port == nil || !port.IsRunning() || port.PeerCount() == 0 {
 		return

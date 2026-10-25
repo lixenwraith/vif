@@ -36,7 +36,7 @@ func TestAReplayRestoredFromACheckpointContinuesAsItsSource(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 			}
 		}
 		var ck *checkpoint
-		src.world.RunSafe(func() { ck, err = src.checkpointLocked(d, reuse) })
+		src.world.RunSafe(func() { ck, err = src.scribe.checkpointLocked(d, reuse) })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +127,7 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := copied.restore(ck, cd); err != nil {
+		if err := copied.scribe.restore(ck, cd); err != nil {
 			t.Fatal(err)
 		}
 		reuse = ck.world

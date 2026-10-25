@@ -13,7 +13,7 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 ### Open fleet sessions to bots
 
 - Priority: P2
-- Affected files: the Hugo site's `vif-lobby.js`, `internal/network/endpoint.go`,
+- Affected files: the Hugo site's `vif-lobby.js`, `pkg/network/endpoint.go`,
   `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
   `deploy/k3s/10-quota.yaml`
 - Guide: [Session fleet](kubernetes-fleet.md) §6
@@ -682,7 +682,7 @@ the tick ends on.
 ### Read the cadence against a thin command stream
 
 - Priority: P3
-- Affected files: `pkg/linkpace`, `internal/network/probe.go`
+- Affected files: `pkg/linkpace`, `pkg/network/probe.go`
 
 The divergence harness's heavy shape (netcode design §3.5) delivered the guest 134
 manifests in 1,200 ticks before the binary wire codec, 132 with its envelope and 97
@@ -1108,62 +1108,16 @@ the last frame flushed.
 
 ## Structure
 
-### Lift the link layer into `pkg/network`
+### Move the three run types to packages
 
-- Priority: P2
-- Affected files: `internal/network` (`protocol.go`, `transport.go`,
-  `connection.go`, `port.go`, `endpoint.go`, `probe.go`, `mesh.go`,
-  `snapshot.go`, `websocket_*.go`, `inbound.go`, `errno_*.go`, `reach.go`,
-  `fence.go`), `internal/parameter`, every importer of `internal/network`
-  (`internal/app`, `internal/converge`, `internal/system`, `internal/snapshot`,
-  `internal/engine`, `internal/service`)
-
-`internal/network` holds two layers in one package. The link layer is generic:
-framed messages over TCP or WebSocket with a per-link deflate stream, the accept
-and dial transport with its handshake budget, the port's tick-drained inbound
-queue and bundled sends, the probe a port answers itself, the chunked body
-assembly, the in-process mesh with its shaped links, and the reach and fence
-bookkeeping. The session layer is this game's: the join and peer-link handshakes,
-offers, rosters and claims (`session.go`), the authority term and succession
-chain (`authority.go`), the build identity (`identity.go`) and `Config`. The link
-layer would move to `pkg/network` beside `pkg/linkpace` and `pkg/websocket`, which
-`pkg/` imports nothing of `internal/`, so two dependencies invert first: the
-eight `parameter` constants the link files read (`NetworkProbeInterval`,
-`NetworkProbeLostAfter`, `NetworkStreamLevel`, `NetworkWriteLinger`,
-`NetworkSessionRequestTimeout`, `GameUpdateInterval` for the mesh's tick,
-`NetworkAdmitBurst` and `NetworkAdmitWindow` for the limiter) become fields of a
-link configuration the session layer fills from `parameter`; and the message
-kinds `protocol.go` enumerates (`MsgEvent`, `MsgStateSync`, the correction
-kinds) become the session layer's table over an opaque kind byte and `ByteKind`
-the link layer counts by. The session layer keeps its name and imports the
-link layer; importers of the link types alone (`LinkShape`, `MeshPort`,
-`SnapshotAssembly`, `Inbound`) repoint. Land it as mechanical moves with no
-behaviour change, the protocol tests moving with their files, in one PR per
-layer boundary rather than one for everything.
-
-### Split the composition root
-
-- Priority: P2
+- Priority: P3
 - Affected files: `internal/app`
 
-`internal/app` is 33,000 lines, 11,500 of them production code, and `App` is
-the receiver of nearly every method: session hosting and joining (`session.go`,
-`host.go`, `join.go`, `relay.go`, `seat.go`, `claim.go`), replay and its
-checkpoints (`play.go`, `clone.go`, `replay.go`, `replay_suffix.go`,
-`journal.go`), the correction glue (`converge.go`, `capture.go`,
-`snapshot_stage.go`), the loops (`loop.go`, `script.go`), presentation and
-configuration (`app.go`, `config.go`, `presentation*.go`, `audio*.go`) and the
-dedicated host (`serve.go`, `probe.go`). The boundary that already exists is the
-one to extend: `converge.Instance` is the whole of what the authority protocol
-asks of a run, so the correction glue is a type implementing it over a world and
-an encoder, not methods on `App`. Next the membership: hosting, joining, seats,
-claims and the relay desk read and write the roster, the offer and the transport
-and could be one `session` type with the run as its narrow interface, as
-`converge` has, with `host_test.go` and `join_test.go` moving with it. Replay
-and checkpoints (`play.go`, `clone.go`) depend on the journal package and the
-world and not on a session, so they split along the same line. What stays in
-`internal/app` is the composition root the package map names: construct the
-world, wire the services, run the loop. Each split lands alone, moving its
-tests, with `App` keeping thin forwarding methods until the last one goes; the
-seam each one needs is an interface the moved code reads the run through, and a
-split that needs more than one is cut in the wrong place.
+`corrector`, `membership` and `scribe` each read the run through one interface
+(`correctionRun`, `membershipRun`, `scribeRun`), and `App` is the composition
+root the package map names, but all three stay in `internal/app`, which is
+still 33,000 lines. Each builds runs (the staging world, the journal twin, a
+dial's run, a seat's bot), so a package for one needs the run's constructor as a
+second seam, and the tests drive whole Apps through `NewHeadless`, so none could
+move its tests with it. A package per type waits on a constructor seam the tests
+can be written against.

@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // links is the transport and the participants behind this instance, read together
@@ -21,7 +22,7 @@ func (c *Corrections) links() (engine.NetworkPort, []uint32) {
 // is what keeps the claim honest — saying otherwise upstream would leave the
 // participants behind it holding an index nobody can act on.
 func (c *Corrections) canRelay(behind []uint32) bool {
-	if network.SessionRole(c.authority.isAuthority(), len(behind)) != network.RoleRelay {
+	if network.SessionRole(c.authority.isAuthority(), len(behind)) != link.RoleRelay {
 		return false
 	}
 	c.publishMu.Lock()
@@ -166,7 +167,7 @@ func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 	body, err := snapshot.EncodeShardSet(set)
 	var chunks [][]byte
 	if err == nil && c.repairIsWorthSending(len(body)) {
-		chunks, err = network.EncodeSnapshotChunksOf(set.Header.Run, req.Tick, body, parameter.SnapshotCorrectionChunkBytes)
+		chunks, err = link.EncodeSnapshotChunksOf(set.Header.Run, req.Tick, body, parameter.SnapshotCorrectionChunkBytes)
 	}
 	if err != nil || chunks == nil {
 		c.sendUnserved(port, pending.from, req, "the repair is wider than a relayed answer may carry")

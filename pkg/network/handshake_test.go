@@ -161,10 +161,10 @@ func TestStopDoesNotWaitOutAHandshakeDeadline(t *testing.T) {
 func TestAStartGateConfirmationBelongsToOneLink(t *testing.T) {
 	t.Parallel()
 
-	port := NewSocketPort(DebugConfig(RoleHost, "127.0.0.1:0"))
+	port := NewSocketPort(testConfigFor(RoleHost, "127.0.0.1:0"))
 	defer func() { _ = port.Close() }()
 
-	port.Inject(2, uint8(MsgReady), nil)
+	port.Inject(2, uint8(testReady), nil)
 	if !port.Confirmed(2) {
 		t.Fatal("the peer that confirmed is not recorded")
 	}
@@ -176,5 +176,24 @@ func TestAStartGateConfirmationBelongsToOneLink(t *testing.T) {
 	port.onDisconnect(2)
 	if port.Confirmed(2) {
 		t.Fatal("a departed peer's confirmation outlived its link")
+	}
+}
+
+// TestBindPeerFallsBackWhenThePortIsTaken is the collision two guests on one
+// machine hit.
+func TestBindPeerFallsBackWhenThePortIsTaken(t *testing.T) {
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer held.Close()
+
+	ln, err := BindPeer(held.Addr().String())
+	if err != nil {
+		t.Fatalf("bind fell over instead of falling back: %v", err)
+	}
+	defer ln.Close()
+	if ln.Addr().String() == held.Addr().String() {
+		t.Fatal("two listeners bound the same address")
 	}
 }

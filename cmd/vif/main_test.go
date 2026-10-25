@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 func TestLogFlags(t *testing.T) {
@@ -242,19 +243,19 @@ func TestSessionFlags(t *testing.T) {
 func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {
 	for _, tc := range []struct {
 		target string
-		scheme network.Scheme
+		scheme link.Scheme
 		addr   string
 		name   string
 	}{
-		{"host.example:7777", network.SchemeTCP, "host.example:7777", ""},
-		{"tcp://host.example:7777", network.SchemeTCP, "host.example:7777", ""},
-		{"vif://host.example:7777/7f3c1a", network.SchemeTCP, "host.example:7777", "7f3c1a"},
-		{"host.example:7777/7f3c1a", network.SchemeTCP, "host.example:7777", "7f3c1a"},
-		{"wss://site.example/vif/ws/7f3c1a", network.SchemeWebSocket, "wss://site.example/vif/ws/7f3c1a", "7f3c1a"},
-		{"ws://127.0.0.1:7779/", network.SchemeWebSocket, "ws://127.0.0.1:7779/", ""},
-		{"https://site.example/vif", network.SchemeSite, "https://site.example", ""},
+		{"host.example:7777", link.SchemeTCP, "host.example:7777", ""},
+		{"tcp://host.example:7777", link.SchemeTCP, "host.example:7777", ""},
+		{"vif://host.example:7777/7f3c1a", link.SchemeTCP, "host.example:7777", "7f3c1a"},
+		{"host.example:7777/7f3c1a", link.SchemeTCP, "host.example:7777", "7f3c1a"},
+		{"wss://site.example/vif/ws/7f3c1a", link.SchemeWebSocket, "wss://site.example/vif/ws/7f3c1a", "7f3c1a"},
+		{"ws://127.0.0.1:7779/", link.SchemeWebSocket, "ws://127.0.0.1:7779/", ""},
+		{"https://site.example/vif", link.SchemeSite, "https://site.example", ""},
 	} {
-		e, err := network.ParseEndpoint(tc.target)
+		e, err := link.ParseEndpoint(tc.target)
 		if err != nil || e.Scheme != tc.scheme || e.Addr != tc.addr || e.Name != tc.name {
 			t.Errorf("ParseEndpoint(%q) = %+v, %v; want %s %q %q", tc.target, e, err, tc.scheme, tc.addr, tc.name)
 		}

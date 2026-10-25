@@ -4,9 +4,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/lixenwraith/vif/pkg/vmath"
 	"net"
 	"time"
+
+	"github.com/lixenwraith/vif/pkg/vmath"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/converge"
@@ -18,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Terminal-equivalent dimensions applied when a caller-driven run leaves them unset
@@ -97,7 +99,7 @@ func (m Mode) Audio() bool {
 // Built from CLI flags by cmd/vif, or programmatically by embedders
 // (map editor, wasm entry, headless harness) that have no flag set
 type Config struct {
-	holder network.PeerID
+	holder link.PeerID
 	relay  func() (net.Conn, error) // a guest's bot's stream to its holder; see relayLink
 	// Mode selects the runtime shape; the zero value is the interactive game
 	Mode Mode
@@ -268,7 +270,7 @@ type Config struct {
 
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
 	// transport detail private leaves Config's public session surface role-neutral.
-	networkConfig *network.Config
+	networkConfig *link.Config
 
 	// sessionPlayers is the -players of the session this run joined, which it holds
 	// to should it take that session over; Participants is a host's own.
@@ -351,7 +353,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 // would have built it. -players and -authority go: they set a session this run no
 // longer hosts, and the one it joins has its own, which its offer carries.
 func (c Config) joining(target string) (Config, error) {
-	e, err := network.ParseEndpoint(target)
+	e, err := link.ParseEndpoint(target)
 	if err != nil {
 		return c, err
 	}
@@ -402,21 +404,21 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 }
 
 // hostNetwork is the transport the doors this run opens at addr are served with.
-func (c Config) hostNetwork(addr string) *network.Config {
-	cfg := network.DebugConfig(network.RoleHost, addr)
+func (c Config) hostNetwork(addr string) *link.Config {
+	cfg := network.DebugConfig(link.RoleHost, addr)
 	cfg.TLS = c.TLS
-	return cfg
+	return &cfg.Config
 }
 
 // bindDoors binds every door addr names, none when one cannot be had.
 func (c Config) bindDoors(addr string) ([]net.Listener, error) {
-	doors, err := network.Doors(addr)
+	doors, err := link.Doors(addr)
 	if err != nil {
 		return nil, err
 	}
 	var lns []net.Listener
 	for _, d := range doors {
-		ln, err := network.Listen(d.Addr, c.hostNetwork(d.Addr))
+		ln, err := link.Listen(d.Addr, c.hostNetwork(d.Addr))
 		if err != nil {
 			closeDoors(lns)
 			return nil, err
@@ -466,20 +468,20 @@ func (c Config) Validate() error {
 	// socket to dial a host:port with, so a link naming a session there is looked up
 	// on its site, and no listener to host or serve from. Its bots dial nothing,
 	// joining it in-process.
-	var join network.Endpoint
+	var join link.Endpoint
 	if c.JoinAddress != "" {
 		var err error
-		if join, err = network.ParseEndpoint(c.JoinAddress); err != nil {
+		if join, err = link.ParseEndpoint(c.JoinAddress); err != nil {
 			return err
 		}
 	}
 	if c.HostAddress != "" {
-		if _, err := network.Doors(c.HostAddress); err != nil {
+		if _, err := link.Doors(c.HostAddress); err != nil {
 			return err
 		}
 	}
 	if c.RelayAddress != "" {
-		relay, err := network.ParseEndpoint(c.RelayAddress)
+		relay, err := link.ParseEndpoint(c.RelayAddress)
 		if err == nil {
 			err = relay.Listenable()
 		}
@@ -496,7 +498,7 @@ func (c Config) Validate() error {
 			return errors.New("a browser can join a session but not host one")
 		case c.RelayAddress != "":
 			return errors.New("a browser relays only its own bots")
-		case c.JoinAddress != "" && c.relay == nil && join.Scheme != network.SchemeWebSocket && c.SessionName == "":
+		case c.JoinAddress != "" && c.relay == nil && join.Scheme != link.SchemeWebSocket && c.SessionName == "":
 			return errors.New("a browser cannot dial host:port; join with a session's link")
 		}
 	}

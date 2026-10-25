@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Capture and journal schemas are separate so compatibility errors identify
@@ -109,7 +110,7 @@ type CaptureHeader struct {
 
 	// Crossings fences applied ordinary artifacts per participant, including late
 	// arrivals. Barrier-bound artifacts use the capture tick instead.
-	Crossings network.CrossingFences `json:"crossings,omitempty"`
+	Crossings link.CrossingFences `json:"crossings,omitempty"`
 
 	// Integrity hashes the capture body with this field zeroed. "Did this arrive
 	// intact" and "does this describe my build" are separate questions and an

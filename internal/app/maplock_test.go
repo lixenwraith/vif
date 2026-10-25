@@ -399,7 +399,7 @@ func TestAJoinerTakesASlotOnAMapWithoutCursors(t *testing.T) {
 	alignTicks(t, host, guest)
 	assertControl(t, host, 1, component.ControlRemote)
 	assertControl(t, guest, 1, component.ControlLocal)
-	if got := guest.localSlot(); got != 1 {
+	if got := guest.membership.localSlot(); got != 1 {
 		t.Fatalf("guest follows slot %d, want its own slot 1", got)
 	}
 	for _, a := range []*App{host, guest} {

@@ -19,7 +19,7 @@ import (
 // which hands it back to the run rather than closing it, because every later
 // correction resolves into the same one.
 type StagedInstall struct {
-	live    *App
+	live    *corrector
 	staging *App
 	capture snapshot.SharedCapture
 
@@ -40,23 +40,23 @@ type StagedInstall struct {
 // this participant is in the sender's session at all — and everything after that
 // asks whether this build can load the capture, which is what the second world is
 // for.
-func (a *App) StageShared(cap snapshot.SharedCapture) (*StagedInstall, error) {
-	if err := a.VerifyCapture(cap); err != nil {
+func (c *corrector) StageShared(cap snapshot.SharedCapture) (*StagedInstall, error) {
+	if err := c.VerifyCapture(cap); err != nil {
 		return nil, err
 	}
-	return a.stageProved(cap)
+	return c.stageProved(cap)
 }
 
 // stageProved is StageShared for a capture the correction protocol has proved: a
 // body's integrity is checked as it is resolved and a repair reproduces the
 // authority's root, so hashing it again would prove nothing new.
-func (a *App) stageProved(cap snapshot.SharedCapture) (*StagedInstall, error) {
+func (c *corrector) stageProved(cap snapshot.SharedCapture) (*StagedInstall, error) {
 	started := time.Now() // [wall] telemetry only; the install carries no instant
-	if err := a.verifyCaptureIdentity(cap.Header); err != nil {
+	if err := c.VerifyCaptureIdentity(cap.Header); err != nil {
 		return nil, err
 	}
 
-	staging, fresh, err := a.stagingWorld(cap)
+	staging, fresh, err := c.stagingWorld(cap)
 	if err != nil {
 		return nil, fmt.Errorf("stage: %w", err)
 	}
@@ -67,13 +67,13 @@ func (a *App) stageProved(cap snapshot.SharedCapture) (*StagedInstall, error) {
 		// one has settled it already and never ticked since.
 		staging.Settle()
 	}
-	if err := staging.installSharedResolved(cap); err != nil {
-		a.discardStagingWorld()
+	if err := staging.glue.installSharedResolved(cap); err != nil {
+		c.discardStagingWorld()
 		return nil, fmt.Errorf("stage: %w", err)
 	}
 
-	st := &StagedInstall{live: a, staging: staging, capture: cap, stageDur: time.Since(started)}
-	a.log.Info("converge", "msg", "capture staged",
+	st := &StagedInstall{live: c, staging: staging, capture: cap, stageDur: time.Since(started)}
+	c.log.Info("converge", "msg", "capture staged",
 		"tick", cap.Header.Tick, "streams", len(cap.Streams), "systems", len(cap.Systems),
 		"stage_us", st.stageDur.Microseconds())
 	return st, nil
@@ -120,16 +120,16 @@ func (s *StagedInstall) Commit() error {
 		// Placed before the settlement below: its confirmations dispatch after the write.
 		// The journal too, which an opening may have attached while this waited
 		journal = live.world.Resources.Event.Queue.Journal()
-		place, mark, participant = live.Position(), journal.Mark(), live.world.LocalParticipant()
+		place, mark, participant = live.run.Position(), journal.Mark(), live.world.LocalParticipant()
 
 		// The ledger is settled against the authority's world as installed, before
 		// the projection re-derives this instance's own predictions over it.
-		live.confirmPredictionsLocked(header.Tick, staging)
+		live.confirmPredictionsLocked(header.Tick, staging.world)
 
 		// A capture ahead of the clock is adopted at its own tick: the buffer holds
 		// one within NetworkHoldTicks, so reaching here ahead is a join or a jump. One
 		// behind is projected to the present.
-		at, tick := live.Position().Tick, header.Tick
+		at, tick := live.run.Position().Tick, header.Tick
 		if at > tick {
 			behind, tick = at-tick, at
 		}
@@ -139,11 +139,11 @@ func (s *StagedInstall) Commit() error {
 		staging.Tick(int(behind))
 		// What the live world settled after its last completed tick — a copy the
 		// queue published at once, a record the authority received late — is due now.
-		staging.receiveDue(tick + 1)
+		staging.glue.receiveDue(tick + 1)
 
 		// Unsealed: the header is replaced below and nothing verifies the body, so
 		// an integrity hash here would only lengthen the live lock.
-		staging.world.RunSafe(func() { projected, err = staging.captureSharedLocked() })
+		staging.world.RunSafe(func() { projected, err = staging.glue.captureSharedLocked() })
 		writing := time.Now() // [wall] telemetry only
 		projectDur = writing.Sub(projecting)
 		if err == nil {
@@ -157,7 +157,7 @@ func (s *StagedInstall) Commit() error {
 		}
 		if err == nil {
 			s.difference, err = live.writeSharedLocked(projected, &before, true, false)
-			barrier = live.barrierLocked()
+			barrier = live.run.barrierLocked()
 		}
 		writeDur = time.Since(writing)
 		if err == nil {
@@ -179,7 +179,7 @@ func (s *StagedInstall) Commit() error {
 	}
 	if journal != nil {
 		if err := live.journalWritten(journal, place, mark, participant, barrier, before, projected); err != nil {
-			live.world.RunSafe(func() { live.journalLostLocked(journal, err) })
+			live.world.RunSafe(func() { live.run.journalLostLocked(journal, err) })
 		}
 	}
 	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
@@ -198,8 +198,8 @@ func (s *StagedInstall) Commit() error {
 // replay holding the same world writes it at the same place as the same
 // participant, with the barrier it left. A join writes before its transport
 // attaches, so the identity then is the one the offer assigned.
-func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, barrier bool, before, cap snapshot.SharedCapture) error {
-	d, err := a.encoder.DiffWritten(before, cap)
+func (c *corrector) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, barrier bool, before, cap snapshot.SharedCapture) error {
+	d, err := c.encoder.DiffWritten(before, cap)
 	var body []byte
 	if err == nil {
 		body, err = snapshot.EncodeJSON(d)
@@ -211,9 +211,7 @@ func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, part
 		return err
 	}
 	if participant == 0 {
-		a.sessionMu.Lock()
-		participant = uint32(a.sessionOffer.Assigned)
-		a.sessionMu.Unlock()
+		participant = c.run.assignedParticipant()
 	}
 	j.Capture(event.JournalCapture{
 		JSeq: mark, Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
@@ -227,13 +225,13 @@ func (a *App) journalWritten(j *event.Journal, at event.Stamp, mark uint64, part
 // instance's owner-authored values, which the shared species it predicts react to;
 // and its barrier stamps by this instance's own lead under the session's authority.
 // Caller MUST hold the live world's updateMutex.
-func (a *App) prepareProjectionLocked(staging *App) {
+func (c *corrector) prepareProjectionLocked(staging *App) {
 	var (
 		lead      uint64
 		authority uint32
 	)
-	ctl := a.world.CaptureCursorControl()
-	if r := a.world.Resources.Network; r != nil {
+	ctl := c.world.CaptureCursorControl()
+	if r := c.world.Resources.Network; r != nil {
 		lead, authority = r.BarrierDelayTicks, r.Authority.Load()
 	}
 	staging.world.RunSafe(func() {
@@ -248,9 +246,9 @@ func (a *App) prepareProjectionLocked(staging *App) {
 
 // receiveDue applies what the barrier holds due at tick without running one, and
 // settles what that dispatched.
-func (a *App) receiveDue(tick uint64) {
-	a.world.RunSafe(func() { a.world.Resources.Event.Queue.ReceiveWire(tick) })
-	a.scheduler.Settle()
+func (c *corrector) receiveDue(tick uint64) {
+	c.world.RunSafe(func() { c.world.Resources.Event.Queue.ReceiveWire(tick) })
+	c.scheduler.Settle()
 }
 
 // Difference is how far the live world had drifted from the capture at the moment
@@ -278,23 +276,23 @@ type stagingKey struct {
 // time and re-using it after; the second return says whether its FSM boot queue
 // still needs settling. A world that kept anything from the previous install would
 // resolve the next capture against a world the sender never had.
-func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
-	a.stageMu.Lock()
-	defer a.stageMu.Unlock()
+func (c *corrector) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
+	c.stageMu.Lock()
+	defer c.stageMu.Unlock()
 
 	key := stagingKey{cap.Header.MapWidth, cap.Header.MapHeight, cap.Header.Session}
-	if a.staging != nil {
-		if a.stagedFor == key {
-			return a.staging, false, nil
+	if c.staging != nil {
+		if c.stagedFor == key {
+			return c.staging, false, nil
 		}
-		a.staging.Close()
-		a.staging = nil
+		c.staging.Close()
+		c.staging = nil
 	}
-	staging, err := a.newStagingApp(cap)
+	staging, err := c.run.newStagingApp(cap)
 	if err != nil {
 		return nil, false, err
 	}
-	a.staging, a.stagedFor = staging, key
+	c.staging, c.stagedFor = staging, key
 	return staging, true, nil
 }
 
@@ -303,11 +301,11 @@ func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
 // A failed load may have written part of itself, so the world is no longer a
 // faithful stand-in for this instance and the next correction must not be resolved
 // against it. This is the one path that closes one before the run ends.
-func (a *App) discardStagingWorld() {
-	a.stageMu.Lock()
-	staging := a.staging
-	a.staging, a.stagedFor = nil, stagingKey{}
-	a.stageMu.Unlock()
+func (c *corrector) discardStagingWorld() {
+	c.stageMu.Lock()
+	staging := c.staging
+	c.staging, c.stagedFor = nil, stagingKey{}
+	c.stageMu.Unlock()
 	if staging != nil {
 		staging.Close()
 	}
@@ -371,9 +369,9 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 // installSharedResolved is InstallShared without the identity check: StageShared has
 // already asked the live instance, and a staging world built from the same
 // configuration would re-derive the same verdict.
-func (a *App) installSharedResolved(cap snapshot.SharedCapture) error {
+func (c *corrector) installSharedResolved(cap snapshot.SharedCapture) error {
 	// The staging world proves that the position resolves; it does not present or
 	// simulate this participant's local effects. Reconciliation belongs only to
 	// the live commit, where its emitted lifecycle events can reach those systems.
-	return a.installShared(cap, false)
+	return c.installShared(cap, false)
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // PeerCadence is one link's operating point and the measurements it came from.
@@ -142,8 +143,8 @@ func (c *Corrections) Selective() SelectiveReport {
 // unless its surviving roster matches this instance's.
 type AuthorityReport struct {
 	Term       network.AuthorityTerm
-	Authority  network.PeerID
-	Local      network.PeerID
+	Authority  link.PeerID
+	Local      link.PeerID
 	Migrations int64
 	Migrating  bool
 	Fork       bool

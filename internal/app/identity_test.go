@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestTheHostRefusesAPeerThatSkippedItsOwnCheck is the whole point of moving the
@@ -23,11 +24,11 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatalf("begin hosting: %v", err)
 	}
-	addr := host.midRunPort.Addr().String()
+	addr := host.membership.midRunPort.Addr().String()
 
 	// A guest that reports a different simulation, having done its own checks and
 	// passed them: the anchor it was sent is the anchor it holds.
-	pending, offered, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
+	pending, offered, err := network.DialSession(addr, network.DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -40,7 +41,7 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	_ = pending.Complete(nil, report)
 
 	select {
-	case err := <-host.midRunPort.Errors():
+	case err := <-host.membership.midRunPort.Errors():
 		if !errors.Is(err, &network.Refusal{Code: network.RefusalIdentity}) {
 			t.Fatalf("the host refused for %v, want an identity refusal", err)
 		}
@@ -51,9 +52,9 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 		t.Fatal("the host never refused a peer running a different simulation")
 	}
 
-	if host.guestCount() != 0 || host.midRunPort.PeerCount() != 0 {
+	if host.membership.guestCount() != 0 || host.membership.midRunPort.PeerCount() != 0 {
 		t.Fatalf("the refused peer is still in the session: roster %d peers %d",
-			host.guestCount(), host.midRunPort.PeerCount())
+			host.membership.guestCount(), host.membership.midRunPort.PeerCount())
 	}
 }
 
@@ -66,7 +67,7 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 	defer a.Close()
 	tickUntilCursor(t, a)
 
-	offer, err := a.assignParticipant(nil)
+	offer, err := a.membership.assignParticipant(nil)
 	if err != nil {
 		t.Fatalf("assign: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 	}
 	// The offer's identity and this instance's own describe the same session,
 	// because one is derived from the anchor the other was read from.
-	if err := offer.Identity.Verify(a.sessionIdentity()); err != nil {
+	if err := offer.Identity.Verify(a.membership.sessionIdentity()); err != nil {
 		t.Fatalf("a host would refuse itself: %v", err)
 	}
 }
@@ -101,15 +102,15 @@ func TestADifferentCorpusStillJoins(t *testing.T) {
 	defer a.Close()
 	tickUntilCursor(t, a)
 
-	offer, err := a.assignParticipant(nil)
+	offer, err := a.membership.assignParticipant(nil)
 	if err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	if err := offer.Identity.Verify(a.sessionIdentity()); err != nil {
+	if err := offer.Identity.Verify(a.membership.sessionIdentity()); err != nil {
 		t.Fatalf("a peer with the same session was refused: %v", err)
 	}
 
-	elsewhere := a.sessionIdentity()
+	elsewhere := a.membership.sessionIdentity()
 	elsewhere.ScenarioDigest = "sha256:0000000000000000"
 	err = offer.Identity.Verify(elsewhere)
 	if err == nil {
@@ -140,7 +141,7 @@ func TestAJoinIgnoresTheCorpusAReplayRequires(t *testing.T) {
 	if err := firstAnchorMismatch("join", a.sessionAnchorFields(an)); err != nil {
 		t.Fatalf("a peer reading its own corpus was refused: %v", err)
 	}
-	err := firstAnchorMismatch("replay", a.anchorIdentity(an))
+	err := firstAnchorMismatch("replay", a.scribe.anchorIdentity(an))
 	if err == nil || !strings.Contains(err.Error(), "content_id") {
 		t.Fatalf("a replay accepted a corpus it did not record: %v", err)
 	}

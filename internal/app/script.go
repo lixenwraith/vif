@@ -101,7 +101,7 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 		played *App
 	)
 	quit, err := runDriven(cfg, "bot", name, func(a *App) (pacedSource, error) {
-		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
 		driver, played = d, a
 		return botSource{d}, err
 	})
@@ -183,11 +183,11 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		}
 		// A headless bot left with no session plays for nobody; a watched one plays
 		// on, as a person does, and a seat ends as its holder says (seatEnds).
-		if a.dismissed.Load() || kind == "bot" && a.cfg.holder == 0 && forkCell(a).Load() {
+		if a.membership.dismissed.Load() || kind == "bot" && a.cfg.holder == 0 && forkCell(a.world).Load() {
 			return false, nil
 		}
 		// Between two steps, as a presenting run's loop serves it between two waits
-		a.serveJournal()
+		a.scribe.serveJournal()
 		// A held run stands still as its holder's pause does, but still drains its
 		// link: the host's resume is the next epoch it sends.
 		if held := a.ctx.TimeCtl.Held(); held || hold != nil && hold() {
@@ -208,7 +208,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		if !more {
 			return true, nil
 		}
-		if !paced && autoPace && a.sessionTransport() != nil {
+		if !paced && autoPace && a.membership.sessionTransport() != nil {
 			paced, nextTick = true, time.Now() // [wall]
 			a.log.Info("app", "msg", kind+" pacing engaged",
 				"address", a.HostAddr(), "tick", a.Position().Tick)
@@ -260,11 +260,11 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 		a.Close()
 		return nil, err
 	}
-	if a.pendingJoin != nil {
+	if a.membership.pendingJoin != nil {
 		if err := a.pollTerminalEarly(); err != nil {
 			return fail(err)
 		}
-		if err := a.startJoinSession(signals); err != nil {
+		if err := a.membership.startJoinSession(signals); err != nil {
 			return fail(err)
 		}
 	}
@@ -273,16 +273,16 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 	}
 	if a.cfg.HostAddress != "" {
 		// Before the lobby, which the host's own bots may be all of.
-		if err := a.seatBots(); err != nil {
+		if err := a.membership.seatBots(); err != nil {
 			return fail(err)
 		}
-		if err := a.startHostSession(signals); err != nil {
+		if err := a.membership.startHostSession(signals); err != nil {
 			return fail(err)
 		}
 	}
 	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
-		a.activateNetworkSession()
-		if err := a.resumeJoinedSession(); err != nil {
+		a.membership.activateNetworkSession()
+		if err := a.membership.resumeJoinedSession(); err != nil {
 			return fail(err)
 		}
 		a.ctx.TimeCtl.SetPaused(false)
@@ -293,9 +293,9 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 	// clock its capture waits on is the script's own, advanced by the caller that is
 	// about to start stepping. On a run that hosts nothing this is inert until a
 	// later :host opens a session.
-	a.openMidRunJoins()
+	a.membership.openMidRunJoins()
 	if a.cfg.HostAddress == "" {
-		if err := a.seatBots(); err != nil {
+		if err := a.membership.seatBots(); err != nil {
 			return fail(err)
 		}
 	}

@@ -169,9 +169,9 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 	backend := &fakeSessionAllocator{created: session{ID: "abc", JoinTarget: "vif://site.example:7777/abc"}}
 	site := httptest.NewServer(testServer(backend))
 	defer site.Close()
-	link, err := network.RequestSession(site.URL, 2, "main")
-	if err != nil || link != backend.created.JoinTarget {
-		t.Fatalf("RequestSession = %q, %v; want %q", link, err, backend.created.JoinTarget)
+	got, err := network.RequestSession(site.URL, 2, "main")
+	if err != nil || got != backend.created.JoinTarget {
+		t.Fatalf("RequestSession = %q, %v; want %q", got, err, backend.created.JoinTarget)
 	}
 	if backend.requested != (sessionRequest{Players: 2, Scenario: "main"}) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)

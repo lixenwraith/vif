@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // cursorlessOffer is the roster a dedicated host closes on: itself with no slot,
@@ -27,7 +28,7 @@ func cursorlessOffer(an event.JoinAnchor, guests int) network.SessionOffer {
 	}
 	for i := range guests {
 		o.Roster = append(o.Roster,
-			network.RosterEntry{ID: network.PeerID(i + 2), Slot: uint8(i)})
+			network.RosterEntry{ID: link.PeerID(i + 2), Slot: uint8(i)})
 	}
 	return o
 }
@@ -48,7 +49,7 @@ func TestADedicatedHostDrivesNoCursor(t *testing.T) {
 		t.Fatalf("host a cursorless session: %v", err)
 	}
 
-	if got := host.localSlot(); got != parameter.NoPlayerSlot {
+	if got := host.membership.localSlot(); got != parameter.NoPlayerSlot {
 		t.Fatalf("the coordinator took slot %d, want none", got)
 	}
 	if host.localPlayers() != 0 {
@@ -129,7 +130,7 @@ func TestAGuestOfADedicatedHostDrivesItsOwn(t *testing.T) {
 	if err := guest.JoinSession(offer); err != nil {
 		t.Fatalf("join a cursorless host's session: %v", err)
 	}
-	if got := guest.localSlot(); got != 1 {
+	if got := guest.membership.localSlot(); got != 1 {
 		t.Fatalf("the guest drives slot %d, want its own slot 1", got)
 	}
 	if guest.localPlayers() != 1 {
@@ -197,7 +198,7 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 	}
 	for i := 1; i < len(apps); i++ {
 		local := offer
-		local.Assigned = network.PeerID(i + 1)
+		local.Assigned = link.PeerID(i + 1)
 		if err := apps[i].JoinSession(local); err != nil {
 			t.Fatalf("participant %d join: %v", i+1, err)
 		}
@@ -207,10 +208,10 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 	mesh.Link(1, 2)
 	mesh.Link(1, 3)
 	for i, a := range apps {
-		a.AttachTransport(mesh.Node(network.PeerID(i + 1)))
+		a.AttachTransport(mesh.Node(link.PeerID(i + 1)))
 	}
 	for _, a := range apps {
-		a.activateNetworkSession()
+		a.membership.activateNetworkSession()
 	}
 
 	// Each guest drives its own cursor, so the correction has something to close.
@@ -285,25 +286,25 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 			// Before the lobby closes the gate is startHostSessionOn's, and a second
 			// one would race it. An unarmed dial is therefore a no-op rather than a
 			// refusal.
-			a.admitLateJoiner(2)
-			if a.lateJoins.Load() {
+			a.membership.admitLateJoiner(2)
+			if a.membership.lateJoins.Load() {
 				t.Fatal("the mid-run gate armed itself")
 			}
 			// The window in between: the lobby's offers are already out and the
 			// mid-run gate waits on a capture a stopped clock never reaches.
-			a.lobbyClosing.Store(true)
-			if _, err := a.assignParticipant(nil); !errors.Is(err, ErrSessionStarting) {
+			a.membership.lobbyClosing.Store(true)
+			if _, err := a.membership.assignParticipant(nil); !errors.Is(err, ErrSessionStarting) {
 				t.Fatalf("a dial during the closing window returned %v, want ErrSessionStarting", err)
 			}
-			a.openMidRunJoins()
-			if _, err := a.assignParticipant(nil); err != nil {
+			a.membership.openMidRunJoins()
+			if _, err := a.membership.assignParticipant(nil); err != nil {
 				t.Fatalf("a dial after the gate opened was refused: %v", err)
 			}
 
 			if err := a.hub.StartAll(); err != nil {
 				t.Fatalf("start services: %v", err)
 			}
-			port, err := a.socketPort()
+			port, err := a.membership.socketPort()
 			if err != nil || port == nil {
 				t.Fatalf("this host has no endpoint to admit onto: %v", err)
 			}
@@ -339,10 +340,10 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 			}
 			defer a.Close()
 
-			if got := a.sessionCapacity(); got != tt.wantCapacity {
+			if got := a.membership.sessionCapacity(); got != tt.wantCapacity {
 				t.Fatalf("capacity = %d, want %d", got, tt.wantCapacity)
 			}
-			if got := a.lobbyQuorum(); got != 1 {
+			if got := a.membership.lobbyQuorum(); got != 1 {
 				t.Fatalf("quorum = %d, want 1: a server starts on its first guest", got)
 			}
 			if got := a.cfg.networkConfig.MaxPeers; got != tt.wantCapacity {
@@ -407,16 +408,16 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 			if tt.high != 0 {
 				a.scenario.MaxPlayers = tt.high
 			}
-			if err := a.playersFit(a.scenario); (err != nil) != tt.refused {
+			if err := a.membership.playersFit(a.scenario); (err != nil) != tt.refused {
 				t.Fatalf("fit = %v, want refused %t", err, tt.refused)
 			}
-			if got := a.sessionCapacity(); got != tt.capacity {
+			if got := a.membership.sessionCapacity(); got != tt.capacity {
 				t.Fatalf("guest capacity = %d, want %d", got, tt.capacity)
 			}
-			if got := a.playerCapacity(); got != tt.players {
+			if got := a.membership.playerCapacity(); got != tt.players {
 				t.Fatalf("cursor capacity = %d, want %d", got, tt.players)
 			}
-			if got := a.lobbyQuorum(); got != tt.quorum {
+			if got := a.membership.lobbyQuorum(); got != tt.quorum {
 				t.Fatalf("quorum = %d, want %d", got, tt.quorum)
 			}
 		})

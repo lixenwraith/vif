@@ -148,7 +148,7 @@ Without it the server takes that geometry from its **first person**. Otherwise a
 with no `-size` would fall back to `app.DefaultWidth` x `DefaultHeight` (80x24), a
 79x21 map — and because the joiner adopts the host's latch, every participant would
 then play on it however large its own terminal is. The joiner's acceptance therefore
-carries its own geometry (`network.JoinerReport`), and `App.adoptLobbyGeometry` applies the
+carries its own geometry (`network.JoinerReport`), and `membership.adoptLobbyGeometry` applies the
 first person's before the roster closes, so the bounds it produces are the ones the
 offer names and the tick-zero capture contains. A seat's report names its holder and
 sizes nothing. A server that seats bots of its own starts on them at once, on a bot's
@@ -309,7 +309,7 @@ preview of its offer and `JournalAnchor`, adopts its seed, configuration identit
 and map latch, takes the scenario's bytes from the coordinator when no root here
 holds them, and only then calls `New`. The preview holds no place: the seat that
 names the run's participant follows the built and checked world, at once or at its
-player's press (`App.takeSeat`), and binds that identity into the port and world
+player's press (`membership.takeSeat`), and binds that identity into the port and world
 `New` made without it. Until the start gate installs the session's world, a
 presenting joiner draws its status line alone: the world it composed stands in on
 the map its dial was offered, which a server sizing its session from its first
@@ -642,7 +642,7 @@ holder's seats stand still while it is paused; a driven holder's step on. A hold
 stops seats at its tick, as it stops every participant. A
 headless bot ends once its instance forks, and a seat once it or its holder does,
 unless its holder is a person's run: its loop takes the fork into a session of its
-own and seats its bots again there, so only the run ends its seats (`App.seatEnds`).
+own and seats its bots again there, so only the run ends its seats (`membership.seatEnds`).
 
 ## 5. Simulation tick steps
 

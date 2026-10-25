@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	link "github.com/lixenwraith/vif/pkg/network"
+
 	"github.com/lixenwraith/vif/internal/event"
 )
 
@@ -88,15 +90,15 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 	// The joiner skipped its own check, as one configured with no identity does.
 	offer := testOffer()
 	offer.Identity = ours
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
-	pending, _, err := DialSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	pending, _, err := DialSession(host.Addr().String(), DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +115,7 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 		t.Fatal("the host never refused the joiner")
 	}
 
-	accept := PeerAcceptor(PeerGate{Local: func() PeerID { return 2 }, Identity: ours}, time.Second)
+	accept := PeerAcceptor(PeerGate{Local: func() link.PeerID { return 2 }, Identity: ours}, time.Second)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -128,9 +130,12 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 		}
 		accepted <- err
 	}()
-	cfg := DebugConfig(RolePeer, "")
-	cfg.ConnectTimeout, cfg.Identity = time.Second, theirs
-	_, _, err = DialPeerLink(ln.Addr().String(), cfg, 3)
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_, err = PeerDialer(theirs, time.Second)(conn, 3)
 	check("dialler", err, readsTheirs)
 	check("acceptor", <-accepted, readsOurs)
 }

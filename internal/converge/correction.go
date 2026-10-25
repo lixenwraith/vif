@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/linkpace"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Corrections is one instance's half of the correction protocol. A run is a host or
@@ -195,7 +196,7 @@ type peerPublisher struct {
 // frame. tick orders it against what else is owed, and whole marks a world a
 // partial one may need as its baseline.
 type owedSend struct {
-	typ    network.MessageType
+	typ    link.MessageType
 	frames [][]byte
 	tick   uint64
 	whole  bool
@@ -336,9 +337,9 @@ func (c *Corrections) publishRound(force bool) error {
 	defer c.publishMu.Unlock()
 	tick := c.followRunLocked().Tick
 
-	link, _ := port.(engine.LinkMeasuringPort)
-	ids := c.peerIDs(link)
-	if link == nil {
+	meter, _ := port.(engine.LinkMeasuringPort)
+	ids := c.peerIDs(meter)
+	if meter == nil {
 		// A transport that cannot name its links cannot be scheduled per peer, so
 		// the session keeps the nominal operating point and broadcasts. Adaptation
 		// improves a measured link; it is not a requirement for a working one.
@@ -348,7 +349,7 @@ func (c *Corrections) publishRound(force bool) error {
 		c.retirePlanLocked()
 		return nil
 	}
-	c.decideLocked(ids, link)
+	c.decideLocked(ids, meter)
 	c.releaseLocked(port)
 
 	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
@@ -410,7 +411,7 @@ func (c *Corrections) publishRound(force bool) error {
 	}
 	var chunks [][]byte
 	if len(body) > 0 {
-		if chunks, err = network.EncodeSnapshotChunksOf(cap.Header.Run, cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes); err != nil {
+		if chunks, err = link.EncodeSnapshotChunksOf(cap.Header.Run, cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes); err != nil {
 			return fmt.Errorf("correction chunk: %w", err)
 		}
 	}
@@ -418,7 +419,7 @@ func (c *Corrections) publishRound(force bool) error {
 	// Relevance is measured against what this correction actually moves, so it
 	// steers the *next* decision rather than this one. A one-cycle loop is the
 	// honest shape: the alternative is scoring a delta before computing it.
-	near := c.relevanceLocked(cap, keyframe, link, ids)
+	near := c.relevanceLocked(cap, keyframe, meter, ids)
 
 	c.scoreRelevanceLocked(ids, near)
 
@@ -468,7 +469,7 @@ func (c *Corrections) publishBroadcast(port engine.NetworkPort, tick uint64, for
 	if err != nil {
 		return err
 	}
-	chunks, err := network.EncodeSnapshotChunks(cap.Header.Run, cap.Header.Tick, body)
+	chunks, err := link.EncodeSnapshotChunks(cap.Header.Run, cap.Header.Tick, body)
 	if err != nil {
 		return fmt.Errorf("correction chunk: %w", err)
 	}
@@ -531,11 +532,11 @@ func (c *Corrections) recordPublicationLocked(
 // within SnapshotBulkQueue past its round trip, floored by SnapshotBulkQueueBytes.
 // Bulk queued behind them delays every epoch after it.
 func bulkHeld(port engine.NetworkPort, id uint32) bool {
-	link, ok := port.(engine.LinkMeasuringPort)
+	meter, ok := port.(engine.LinkMeasuringPort)
 	if !ok {
 		return false
 	}
-	m := link.LinkMetric(id)
+	m := meter.LinkMetric(id)
 	limit := float64(parameter.SnapshotBulkQueueBytes)
 	if m.Ready {
 		window := m.MinRTT + parameter.NetworkProbeInterval + parameter.SnapshotBulkQueue
@@ -601,11 +602,11 @@ func (c *Corrections) releaseLocked(port engine.NetworkPort) {
 
 // peerIDs is the participants this instance sends corrections to directly, and
 // retires the publishers of the ones that have gone.
-func (c *Corrections) peerIDs(link engine.LinkMeasuringPort) []uint32 {
-	if link == nil {
+func (c *Corrections) peerIDs(meter engine.LinkMeasuringPort) []uint32 {
+	if meter == nil {
 		return nil
 	}
-	ids := link.Peers()
+	ids := meter.Peers()
 	if len(ids) == 0 {
 		return nil
 	}
@@ -619,7 +620,7 @@ func (c *Corrections) peerIDs(link engine.LinkMeasuringPort) []uint32 {
 
 // decideLocked takes one decision per peer and composes them into the session's
 // timeline. Caller MUST hold publishMu.
-func (c *Corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) {
+func (c *Corrections) decideLocked(ids []uint32, meter engine.LinkMeasuringPort) {
 	sizes := c.sizesLocked()
 	base, keyPeriod, breached := uint64(0), uint64(0), false
 
@@ -629,8 +630,8 @@ func (c *Corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 			return
 		}
 		var m linkpace.Metrics
-		if link != nil {
-			m = link.LinkMetric(id)
+		if meter != nil {
+			m = meter.LinkMetric(id)
 		}
 		p.metrics = m
 		if m.Saturated && m.Throughput > 0 {
@@ -1513,7 +1514,7 @@ func (c *Corrections) currentSizes() linkpace.Sizes {
 // the join's own transfer, the one rate available before a probe has completed a
 // round trip. It includes the joiner's install, so it understates the link — which
 // errs toward refusing a marginal one.
-func (c *Corrections) AdmitLink(port *network.SocketPort, id network.PeerID, bytes int, elapsed time.Duration) error {
+func (c *Corrections) AdmitLink(port *link.SocketPort, id link.PeerID, bytes int, elapsed time.Duration) error {
 	if bytes <= 0 || elapsed <= 0 {
 		return nil
 	}
@@ -1535,7 +1536,7 @@ func (c *Corrections) AdmitLink(port *network.SocketPort, id network.PeerID, byt
 // AdmitMeasuredLink is the same refusal against a link the probes have already
 // measured, which is what a tick-zero lobby has: its port has been up for the
 // whole wait, so several round trips have completed before the gate closes.
-func (c *Corrections) AdmitMeasuredLink(port *network.SocketPort, id network.PeerID) error {
+func (c *Corrections) AdmitMeasuredLink(port *link.SocketPort, id link.PeerID) error {
 	sizes := c.currentSizes()
 	if sizes.Keyframe == 0 {
 		return nil

@@ -62,7 +62,7 @@ jobs:
       run: |
         wasm_exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"
         env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" ./pkg/browser 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
-        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" -run Browser ./internal/network 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
+        env -i PATH="$PATH" HOME="$HOME" GOOS=js GOARCH=wasm go test -exec="$wasm_exec" -run Browser ./pkg/network 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
     - name: Vet and test the Android host module
       working-directory: android

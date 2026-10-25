@@ -42,7 +42,7 @@ Each link is one TCP or WebSocket stream per direction, deflated at level 7
 link and compresses 7–12× against that history. The stream is segmented: a deflate
 run of frames, opened by a kind byte, its wire length and its frame count, or one
 raw frame whose body the snapshot codec deflated already
-(`MessageType.Precompressed`), since a body compressed once at the level the wire
+(`Traits.Precompressed`), since a body compressed once at the level the wire
 gets costs the host one pass and the link none. A run that would end on the
 inflater's window keeps the raw frame due next, whose last frame is delivered
 before the flush marker is read.

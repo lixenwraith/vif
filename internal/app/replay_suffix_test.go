@@ -10,13 +10,13 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // guestParticipant is the identity every fixture in this file gives its guest: the
 // coordinator takes 1 and the first joiner takes 2.
-const guestParticipant network.PeerID = 2
+const guestParticipant link.PeerID = 2
 
 // The seam between two claims that pull opposite ways: a correction makes a guest
 // hold the authority's world, and its own accepted actions must not disappear when
@@ -364,7 +364,7 @@ func cursorCell(t *testing.T, a *App, slot uint8) component.PositionComponent {
 // replaySourceOf reaches the barrier that retains the suffix.
 func replaySourceOf(t *testing.T, a *App) replaySource {
 	t.Helper()
-	src, _ := a.replaySource()
+	src, _ := a.glue.replaySource()
 	if src == nil {
 		t.Fatal("this run has no barrier to retain a suffix")
 	}
@@ -386,7 +386,7 @@ func replaySuffixOf(t *testing.T, a *App, fence uint64) ([]event.ScheduledWireFr
 // hostFence is what the authority's world currently holds of one participant's
 // ordinary crossings: the boundary a correction taken now would carry, which is
 // what the guest measures its own suffix against.
-func hostFence(t *testing.T, host *App, participant network.PeerID) uint64 {
+func hostFence(t *testing.T, host *App, participant link.PeerID) uint64 {
 	t.Helper()
 	cap, err := host.CaptureShared()
 	if err != nil {
@@ -416,7 +416,7 @@ func TestADepartedParticipantLeavesNoCrossingFenceBehind(t *testing.T) {
 
 	// The departure the coordinator produces when the link goes, applied at the tick
 	// it names on every instance.
-	host.crossDeparture(guestParticipant, 1)
+	host.membership.crossDeparture(guestParticipant, 1)
 	for range parameter.NetworkBarrierDelayTicks + 2 {
 		host.Tick(1)
 	}
@@ -562,9 +562,9 @@ func lagHostReceive(t *testing.T, a *App, ticks uint64) {
 			port = r.Port
 		}
 	})
-	mesh, ok := port.(*network.MeshPort)
+	mesh, ok := port.(*link.MeshPort)
 	if !ok {
 		t.Fatalf("this fixture no longer runs on a mesh port: %T", port)
 	}
-	mesh.SetShape(network.LinkShape{LatencyTicks: ticks})
+	mesh.SetShape(link.LinkShape{LatencyTicks: ticks})
 }

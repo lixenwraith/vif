@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	link "github.com/lixenwraith/vif/pkg/network"
+
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
@@ -25,18 +27,18 @@ import (
 // left and has a Wraith waiting in its slot: both stay taken, and nothing waits on it.
 // Claim is the digest of the token its participant comes back with (ClaimDigest).
 type RosterEntry struct {
-	ID     PeerID `json:"id"`
-	Slot   uint8  `json:"slot"`
-	Holder PeerID `json:"holder,omitempty"`
-	Away   bool   `json:"away,omitempty"`
-	Claim  string `json:"claim,omitempty"`
+	ID     link.PeerID `json:"id"`
+	Slot   uint8       `json:"slot"`
+	Holder link.PeerID `json:"holder,omitempty"`
+	Away   bool        `json:"away,omitempty"`
+	Claim  string      `json:"claim,omitempty"`
 }
 
 // SessionOffer carries the replay identity and the coordinator-owned roster.
 type SessionOffer struct {
 	Anchor   event.JoinAnchor `json:"anchor"`
-	Host     PeerID           `json:"host"`
-	Assigned PeerID           `json:"assigned"`
+	Host     link.PeerID      `json:"host"`
+	Assigned link.PeerID      `json:"assigned"`
 
 	// Term is the authority generation this offer was written under, and Host the
 	// participant authoring it. A joiner adopts both: an admission is an
@@ -65,7 +67,7 @@ type SessionOffer struct {
 
 	// Relay is the participant on the far end of the joiner's stream when that is not
 	// the host: the holder a bot joined through. Zero on a dial to the coordinator.
-	Relay PeerID `json:"relay,omitempty"`
+	Relay link.PeerID `json:"relay,omitempty"`
 
 	// SnapshotTick names the tick of the capture that follows the start gate, and
 	// SnapshotBytes its encoded length. A joiner reads them before the transfer so a
@@ -110,8 +112,8 @@ type sessionReply struct {
 
 	// Listen is the address this participant bound, empty for a leaf. Declared, not
 	// confirmed: the coordinator dials it once before publishing it.
-	Listen string `json:"listen,omitempty"`
-	Holder PeerID `json:"holder,omitempty"`
+	Listen string      `json:"listen,omitempty"`
+	Holder link.PeerID `json:"holder,omitempty"`
 
 	Claim  string              `json:"claim,omitempty"`
 	Record *event.CursorRecord `json:"record,omitempty"`
@@ -120,7 +122,7 @@ type sessionReply struct {
 // JoinerReport declares simulation identity, bot holder, and advisory geometry.
 // The coordinator validates it before accepting the participant.
 type JoinerReport struct {
-	Holder PeerID
+	Holder link.PeerID
 	Width  int
 	Height int
 
@@ -165,7 +167,7 @@ const (
 type RelayJoin struct {
 	Step   RelayStep    `json:"step"`
 	Nonce  uint32       `json:"nonce"`
-	Leaf   PeerID       `json:"leaf,omitempty"`
+	Leaf   link.PeerID  `json:"leaf,omitempty"`
 	Claims []string     `json:"claims,omitempty"`
 	Report JoinerReport `json:"report,omitzero"`
 }
@@ -185,9 +187,9 @@ func (o SessionOffer) Validate() error {
 	if o.Term < FirstTerm {
 		return errors.New("join offer carries no authority term")
 	}
-	ids := make(map[PeerID]bool, len(o.Roster))
+	ids := make(map[link.PeerID]bool, len(o.Roster))
 	slots := make(map[uint8]bool, len(o.Roster))
-	cursorless := PeerID(0)
+	cursorless := link.PeerID(0)
 	for _, p := range o.Roster {
 		if p.ID == 0 || ids[p.ID] {
 			return errors.New("join offer carries duplicate participant assignment")
@@ -245,7 +247,7 @@ func (o SessionOffer) ValidatePreview() error {
 }
 
 // Entry returns the coordinator assignment for id.
-func (o SessionOffer) Entry(id PeerID) (RosterEntry, bool) {
+func (o SessionOffer) Entry(id link.PeerID) (RosterEntry, bool) {
 	i := slices.IndexFunc(o.Roster, func(p RosterEntry) bool { return p.ID == id })
 	if i < 0 {
 		return RosterEntry{}, false
@@ -274,7 +276,7 @@ func (o SessionOffer) ParticipantCount() int {
 // seat, never before: a dialer prepares on a preview, which holds nothing.
 type Coordinator struct {
 	Assign  func(claims []string) (SessionOffer, error)
-	Release func(PeerID)
+	Release func(link.PeerID)
 
 	// Preview is the session as a dialer naming claims would be offered it, with no
 	// identity assigned: the offer Assign would make, or the refusal it would give,
@@ -293,7 +295,7 @@ type Coordinator struct {
 	// Report carries what a joiner said about itself once its acceptance arrives.
 	// It runs after Assign and only for a handshake that completed, so what it
 	// describes is a participant the session actually holds.
-	Report func(PeerID, JoinerReport) error
+	Report func(link.PeerID, JoinerReport) error
 
 	// Admit spends the dial budget before expensive world capture and construction.
 	// A nil hook admits the dial.
@@ -322,8 +324,8 @@ const MaxSessionName = 64
 // rather than being fixed at two, and gets it only at its seat: a dialer that
 // prepares, and whose player does not press within the ready period, leaves having
 // held nothing.
-func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, error) {
-	return func(conn net.Conn) (id PeerID, err error) {
+func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (link.PeerID, error) {
+	return func(conn net.Conn) (id link.PeerID, err error) {
 		// Before Admit, because a link that named another session costs the budget
 		// Admit holds for the players of this one.
 		if err = readSessionName(conn, c.Name, timeout); err != nil {
@@ -370,10 +372,10 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		if err != nil {
 			return 0, err
 		}
-		if err = NewMessage(MsgJoinOffer, body).Encode(conn); err != nil {
+		if err = link.NewMessage(MsgJoinOffer, body).Encode(conn); err != nil {
 			return 0, err
 		}
-		msg, err := Decode(conn)
+		msg, err := link.Decode(conn)
 		if err != nil {
 			return 0, err
 		}
@@ -385,7 +387,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			if err = serveScenario(conn, c, string(msg.Payload), timeout); err != nil {
 				return 0, err
 			}
-			if msg, err = Decode(conn); err != nil {
+			if msg, err = link.Decode(conn); err != nil {
 				return 0, err
 			}
 		}
@@ -400,7 +402,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			return 0, err
 		}
 		// The joiner reads everything after its reply off the compressed stream.
-		refuse := func(cause error) { RefuseJoin(openFlateStream(conn, 0, 0), cause, timeout) }
+		refuse := func(cause error) { RefuseJoin(link.OpenStream(conn, &DefaultConfig().Config), cause, timeout) }
 		// Verify before Report so an incompatible joiner cannot affect session state.
 		// It is told in its own terms: to it, its build is the one here.
 		if err = o.Identity.Verify(reply.Identity); err != nil {
@@ -450,7 +452,7 @@ func (h *hostHandshake) awaitSeat(claims []string) error {
 	if h.timeout > 0 {
 		_ = h.conn.SetDeadline(time.Now().Add(h.timeout))
 	}
-	if err := NewMessage(MsgJoinPreview, body).Encode(h.conn); err != nil {
+	if err := link.NewMessage(MsgJoinPreview, body).Encode(h.conn); err != nil {
 		return err
 	}
 	window, prepared := h.timeout, false
@@ -458,7 +460,7 @@ func (h *hostHandshake) awaitSeat(claims []string) error {
 		if window > 0 {
 			_ = h.conn.SetDeadline(time.Now().Add(window))
 		}
-		msg, err := Decode(h.conn)
+		msg, err := link.Decode(h.conn)
 		if ne := net.Error(nil); prepared && errors.As(err, &ne) && ne.Timeout() {
 			err = &Refusal{Code: RefusalUnpressed, Reason: fmt.Sprintf("no press came within %s", window)}
 			RefuseJoin(h.conn, err, h.timeout)
@@ -499,7 +501,7 @@ func (h *hostHandshake) awaitSeat(claims []string) error {
 
 // refusalFrom reads the reason out of a rejection frame, so a refused dialer says
 // what it was told rather than that it was told something.
-func refusalFrom(msg *Message) error {
+func refusalFrom(msg *link.Message) error {
 	var reply sessionReply
 	if err := json.Unmarshal(msg.Payload, &reply); err != nil || reply.Error == "" {
 		return errors.New("refused by the host with no reason given")
@@ -521,7 +523,7 @@ func serveScenario(conn net.Conn, c Coordinator, digest string, timeout time.Dur
 		RefuseJoin(conn, err, timeout)
 		return err
 	}
-	chunks, err := EncodeSnapshotChunks(0, 0, body)
+	chunks, err := link.EncodeSnapshotChunks(0, 0, body)
 	if err != nil {
 		return err
 	}
@@ -529,7 +531,7 @@ func serveScenario(conn net.Conn, c Coordinator, digest string, timeout time.Dur
 		if timeout > 0 {
 			_ = conn.SetDeadline(time.Now().Add(timeout))
 		}
-		if err := NewMessage(MsgScenarioBody, chunk).Encode(conn); err != nil {
+		if err := link.NewMessage(MsgScenarioBody, chunk).Encode(conn); err != nil {
 			return fmt.Errorf("scenario chunk %d/%d: %w", i+1, len(chunks), err)
 		}
 	}
@@ -557,8 +559,7 @@ func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
 // ReadSessionRoute reads the frame a dialer sends before it reads and returns the
 // name it carries. A named host checks it; a front door places the connection on it.
 func ReadSessionRoute(r io.Reader) (string, error) {
-	var header [HeaderSize]byte
-	msg, err := decode(r, MaxSessionName, header[:])
+	msg, err := link.DecodeWithin(r, MaxSessionName)
 	if err != nil {
 		return "", err
 	}
@@ -606,11 +607,10 @@ func askClaims(conn net.Conn, timeout time.Duration) ([]string, error) {
 		_ = conn.SetDeadline(time.Now().Add(timeout))
 		defer conn.SetDeadline(time.Time{})
 	}
-	if err := NewMessage(MsgJoinClaims, nil).Encode(conn); err != nil {
+	if err := link.NewMessage(MsgJoinClaims, nil).Encode(conn); err != nil {
 		return nil, err
 	}
-	var header [HeaderSize]byte
-	msg, err := decode(conn, maxClaimsFrame, header[:])
+	msg, err := link.DecodeWithin(conn, maxClaimsFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -746,8 +746,8 @@ func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 		_ = conn.SetWriteDeadline(time.Now().Add(timeout))
 		defer conn.SetWriteDeadline(time.Time{})
 	}
-	if err = NewMessage(MsgJoinReply, body).Encode(conn); err == nil {
-		if stream, ok := conn.(*flateStream); ok {
+	if err = link.NewMessage(MsgJoinReply, body).Encode(conn); err == nil {
+		if stream, ok := conn.(*link.Stream); ok {
 			_ = stream.Flush()
 		}
 	}
@@ -755,7 +755,7 @@ func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 
 // PendingJoin owns a dialled stream until the startup gate transfers it to a port.
 type PendingJoin struct {
-	conn        *flateStream
+	conn        *link.Stream
 	base        Config
 	offer       SessionOffer
 	replied     bool
@@ -763,7 +763,7 @@ type PendingJoin struct {
 	transferred bool
 
 	// Keep session traffic received before world installation for the first poll.
-	deferred []*Message
+	deferred []*link.Message
 
 	// gateBytes is what this stream has decoded during the handshake. It answers a
 	// probe that arrives mid-gate, so a host measuring this link sees a running
@@ -795,7 +795,7 @@ func (p *PendingJoin) RequestScenario(digest string) ([]byte, error) {
 	if p.base.WriteTimeout > 0 {
 		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
 	}
-	err := NewMessage(MsgScenarioRequest, []byte(digest)).Encode(p.conn)
+	err := link.NewMessage(MsgScenarioRequest, []byte(digest)).Encode(p.conn)
 	_ = p.conn.SetWriteDeadline(time.Time{})
 	if err != nil {
 		return nil, err
@@ -810,25 +810,25 @@ func (p *PendingJoin) RequestScenario(digest string) ([]byte, error) {
 // Deferred returns the session traffic read off the stream during the gate, oldest
 // first. Every frame came from Peer, the only one this stream has. Valid after
 // Ready; the slice is not reused.
-func (p *PendingJoin) Deferred() []*Message { return p.deferred }
+func (p *PendingJoin) Deferred() []*link.Message { return p.deferred }
 
 // Peer names the participant on the other end of this stream: the coordinator, or
 // the relay the offer came through.
-func (p *PendingJoin) Peer() PeerID { return cmp.Or(p.offer.Relay, p.offer.Host) }
+func (p *PendingJoin) Peer() link.PeerID { return cmp.Or(p.offer.Relay, p.offer.Host) }
 
 // hold buffers one session frame that arrived out of the handshake's turn, and
 // reports whether it was one. Anything the handshake itself expects is left to the
 // caller, and an unrecognised type is a protocol error rather than something to
 // stash.
-func (p *PendingJoin) hold(msg *Message) bool {
-	p.gateBytes += uint64(HeaderSize + len(msg.Payload))
+func (p *PendingJoin) hold(msg *link.Message) bool {
+	p.gateBytes += uint64(link.HeaderSize + len(msg.Payload))
 	switch msg.Type {
-	case MsgLinkProbe:
+	case link.MsgLinkProbe:
 		// Answer probes during admission so snapshot transfer is not measured as loss.
 		// An empty pre-world report allows the host to rebase its counters.
 		p.answerProbe(msg)
 		return true
-	case MsgLinkEcho:
+	case link.MsgLinkEcho:
 		// This end sends no probes during the gate, so an echo here is a stray from
 		// a previous connection. Nothing to fold it into.
 		return true
@@ -846,7 +846,7 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		}
 		p.deferred = append(p.deferred, msg)
 		return true
-	case MsgEvent, MsgStateSync, MsgBundle, MsgDisconnect:
+	case MsgEvent, MsgStateSync, link.MsgBundle, MsgDisconnect:
 		// Bound peer-controlled admission buffering; retain the newest traffic.
 		if len(p.deferred) >= maxDeferredJoinFrames {
 			p.deferred = append(p.deferred[:0], p.deferred[1:]...)
@@ -859,14 +859,14 @@ func (p *PendingJoin) hold(msg *Message) bool {
 
 // next reads the stream's next frame within ReadTimeout. Past the offer the host
 // streams or probes it, so a stream silent that long has lost its host.
-func (p *PendingJoin) next() (*Message, error) {
+func (p *PendingJoin) next() (*link.Message, error) {
 	if p.base.ReadTimeout > 0 {
 		_ = p.conn.SetReadDeadline(time.Now().Add(p.base.ReadTimeout))
 	}
-	var header [HeaderSize]byte
-	msg, err := p.conn.readFrame(MaxPayloadSize, header[:])
+	var header [link.HeaderSize]byte
+	msg, err := p.conn.ReadFrame(link.MaxPayloadSize, header[:])
 	if ne := net.Error(nil); errors.As(err, &ne) && ne.Timeout() {
-		return nil, plainError{"the host stopped answering", err}
+		return nil, link.PlainError{Text: "the host stopped answering", Cause: err}
 	}
 	return msg, err
 }
@@ -874,8 +874,8 @@ func (p *PendingJoin) next() (*Message, error) {
 // answerProbe replies to one link probe read off the handshake stream. A failed
 // write is not the join's problem: the probe is a measurement and losing one
 // costs an estimate, where raising it here would fail a join over telemetry.
-func (p *PendingJoin) answerProbe(msg *Message) {
-	echo := encodeEcho(msg.Payload, p.gateBytes, LinkReport{}, time.Since(probeEpoch))
+func (p *PendingJoin) answerProbe(msg *link.Message) {
+	echo := link.AnswerProbe(msg.Payload, p.gateBytes)
 	if echo == nil {
 		return
 	}
@@ -883,12 +883,12 @@ func (p *PendingJoin) answerProbe(msg *Message) {
 		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
 		defer p.conn.SetWriteDeadline(time.Time{})
 	}
-	_ = p.send(NewMessage(MsgLinkEcho, echo))
+	_ = p.send(link.NewMessage(link.MsgLinkEcho, echo))
 }
 
 // send writes one frame, flushing it through the stream once the join has opened
 // one.
-func (p *PendingJoin) send(msg *Message) error {
+func (p *PendingJoin) send(msg *link.Message) error {
 	if err := msg.Encode(p.conn); err != nil {
 		return err
 	}
@@ -897,6 +897,55 @@ func (p *PendingJoin) send(msg *Message) error {
 
 // maxDeferredJoinFrames bounds what one join may buffer off its stream.
 const maxDeferredJoinFrames = 512
+
+// readSnapshot reads a whole capture from a raw handshake stream, holding the
+// session traffic that arrives alongside it.
+//
+// The interleaving is by design rather than by accident. A mid-run host admits a
+// participant before it reads the world for it, so the epochs it produces during
+// the transfer reach that participant instead of falling into the gap; they arrive
+// on this stream, between chunks, and hold keeps them for the barrier to receive
+// once the world they apply to exists. A probe is answered the same way. Anything
+// else is a protocol error, because the next message on this stream decides what
+// the joiner does with the world it just received.
+func readSnapshot(p *PendingJoin) (uint64, []byte, error) {
+	return readChunked(p, MsgStateSnapshot)
+}
+
+// readChunked reassembles one chunked transfer off the handshake stream, holding
+// the session traffic that arrives beside it. want names the kind: a capture and a
+// scenario are the two messages whose size is a function of their content, and
+// they share the framing because they are the same problem.
+func readChunked(p *PendingJoin, want link.MessageType) (uint64, []byte, error) {
+	defer p.conn.SetReadDeadline(time.Time{})
+	var asm link.SnapshotAssembly
+	for {
+		msg, err := p.next()
+		if err != nil {
+			return 0, nil, err
+		}
+		if p.hold(msg) {
+			continue
+		}
+		if msg.Type == MsgJoinReply {
+			// The coordinator refused mid-transfer. Its reason is worth more than
+			// the surprise at the message kind, and it is the only thing the
+			// dialer can act on.
+			return 0, nil, refusalFrom(msg)
+		}
+		if msg.Type != want {
+			return 0, nil, fmt.Errorf("join transfer: got message %#x, want %#x", msg.Type, want)
+		}
+		done, err := asm.Add(msg.Payload)
+		if err != nil {
+			return 0, nil, err
+		}
+		if done {
+			tick, body := asm.Result()
+			return tick, body, nil
+		}
+	}
+}
 
 // PreviewSession dials addr and reads the session it would join, which holds
 // nothing for this dial yet: its identity, slot and claim are assigned at Seat. The
@@ -945,9 +994,9 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 		copy := *cfg
 		base = &copy
 	}
-	base.Role, base.Address = RolePeer, addr
-	conn, err := dial(addr, base)
-	if err != nil && base.Dial == nil && base.SessionName != "" && !routeAnswered(err) {
+	base.Role, base.Address = link.RolePeer, addr
+	conn, err := link.Dial(addr, &base.Config)
+	if err != nil && base.Dial == nil && base.SessionName != "" && !link.RouteAnswered(err) {
 		conn, err = dialListed(base, err)
 	}
 	if err != nil {
@@ -959,18 +1008,18 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 	// Before the preview is read, because the coordinator reads this before it writes
 	// one and a front door has to place the connection before either happens; sent
 	// unnamed too, so a port that also takes peer links tells this is a join.
-	if err = NewMessage(MsgSessionRoute, []byte(base.SessionName)).Encode(conn); err != nil {
+	if err = link.NewMessage(MsgSessionRoute, []byte(base.SessionName)).Encode(conn); err != nil {
 		_ = conn.Close()
 		return nil, err
 	}
-	msg, err := Decode(conn)
+	msg, err := link.Decode(conn)
 	if err == nil && msg.Type == MsgJoinClaims {
 		msg, err = answerClaims(conn, base.Claims)
 	}
 	_ = conn.SetDeadline(time.Time{})
 	if err != nil {
 		_ = conn.Close()
-		return nil, plainError{"connected, but no vif session answered there", err}
+		return nil, link.PlainError{Text: "connected, but no vif session answered there", Cause: err}
 	}
 	if msg.Type == MsgJoinReply {
 		// Refused before anything was held for it. The coordinator says why, and the
@@ -987,7 +1036,7 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 		_ = conn.Close()
 		return nil, fmt.Errorf("join handshake preview: %w", err)
 	}
-	return &PendingJoin{conn: &flateStream{Conn: conn}, base: *base, offer: preview}, nil
+	return &PendingJoin{conn: link.NewStream(conn), base: *base, offer: preview}, nil
 }
 
 // Prepared tells the coordinator this dialer has built its world on the preview and
@@ -1003,7 +1052,7 @@ func (p *PendingJoin) Prepared() error {
 		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
 		defer p.conn.SetWriteDeadline(time.Time{})
 	}
-	if err := NewMessage(MsgJoinPrepared, nil).Encode(p.conn); err != nil {
+	if err := link.NewMessage(MsgJoinPrepared, nil).Encode(p.conn); err != nil {
 		return err
 	}
 	p.prepared = time.Now() // [wall] a person's wait, measured as the coordinator measures it
@@ -1029,13 +1078,13 @@ func (p *PendingJoin) Seat() (SessionOffer, error) {
 		_ = p.conn.SetDeadline(time.Now().Add(p.base.ConnectTimeout))
 		defer p.conn.SetDeadline(time.Time{})
 	}
-	if err := NewMessage(MsgJoinSeat, nil).Encode(p.conn); err != nil {
-		return SessionOffer{}, plainError{"the host dropped the join before its seat", err}
+	if err := link.NewMessage(MsgJoinSeat, nil).Encode(p.conn); err != nil {
+		return SessionOffer{}, link.PlainError{Text: "the host dropped the join before its seat", Cause: err}
 	}
-	msg, err := Decode(p.conn)
+	msg, err := link.Decode(p.conn)
 	switch {
 	case err != nil:
-		return SessionOffer{}, plainError{"the host dropped the join before its seat", err}
+		return SessionOffer{}, link.PlainError{Text: "the host dropped the join before its seat", Cause: err}
 	case msg.Type == MsgJoinReply:
 		return SessionOffer{}, refusalFrom(msg)
 	case msg.Type != MsgJoinOffer:
@@ -1064,52 +1113,62 @@ func (p *PendingJoin) Seat() (SessionOffer, error) {
 
 // answerClaims names the tokens this dial comes back with and reads the frame the
 // coordinator answers them with.
-func answerClaims(conn net.Conn, tokens []string) (*Message, error) {
+func answerClaims(conn net.Conn, tokens []string) (*link.Message, error) {
 	body, err := json.Marshal(tokens)
 	if err != nil {
 		return nil, err
 	}
-	if err := NewMessage(MsgJoinClaims, body).Encode(conn); err != nil {
+	if err := link.NewMessage(MsgJoinClaims, body).Encode(conn); err != nil {
 		return nil, err
 	}
-	return Decode(conn)
+	return link.Decode(conn)
 }
 
 // dialListed dials base's session by another link its site lists, once nothing
 // answered at its own address: a player may hold the link another kind of client
 // joins by. With no site answering, the failure of the address it was given stands.
 func dialListed(base *Config, failed error) (net.Conn, error) {
-	links, err := listedLinks(base.Address, base.SessionName, base.ConnectTimeout)
+	links, err := link.ListedLinks(base.Address, base.SessionName, base.ConnectTimeout)
 	if err != nil {
 		return nil, err
 	}
-	for _, link := range links {
-		e, err := ParseEndpoint(link)
+	for _, route := range links {
+		e, err := link.ParseEndpoint(route)
 		if err != nil || e.Addr == base.Address {
 			continue
 		}
-		conn, err := dial(e.Addr, base)
+		conn, err := link.Dial(e.Addr, &base.Config)
 		if err == nil {
 			base.Address = e.Addr
 			return conn, nil
 		}
-		failed = fmt.Errorf("%s: %w", link, err)
+		failed = fmt.Errorf("%s: %w", route, err)
 	}
 	return nil, failed
 }
 
 // TransportConfig returns a client config that adopts the negotiated identity and
 // the join's stream. Before the seat there is no identity, and the stream stays this
-// join's until the port takes it (SocketPort.TakeJoin).
-func (p *PendingJoin) TransportConfig() *Config {
-	cfg := p.base
-	cfg.Role = RolePeer
+// join's until a port takes it (Hand).
+func (p *PendingJoin) TransportConfig() *link.Config {
+	cfg := p.base.Config
+	cfg.Role = link.RolePeer
 	cfg.Dial = nil // the join's own stream; a later peer link dials its address
 	if p.offer.Assigned != 0 {
 		cfg.ParticipantID = p.offer.Assigned
-		cfg.preconnected, cfg.preconnectedPeer = p.conn, p.Peer()
+		cfg.Preconnected, cfg.PreconnectedPeer = p.conn, p.Peer()
 	}
 	return &cfg
+}
+
+// Hand hands a port built before this join was seated its stream and the identity
+// the seat assigned: a joiner builds its world, and that port with it, before its
+// player's press.
+func (p *PendingJoin) Hand(port *link.SocketPort) error {
+	if p.offer.Assigned == 0 {
+		return errors.New("a join hands its stream over once seated")
+	}
+	return port.Preconnect(p.conn, p.offer.Assigned, p.Peer())
 }
 
 // Complete returns a rejection unchanged or admits the stream for the start gate.
@@ -1139,7 +1198,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 			_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
 			defer p.conn.SetWriteDeadline(time.Time{})
 		}
-		err = NewMessage(MsgJoinReply, body).Encode(p.conn)
+		err = link.NewMessage(MsgJoinReply, body).Encode(p.conn)
 	}
 	if joinErr != nil {
 		_ = p.conn.Close()
@@ -1147,7 +1206,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	}
 	// Everything after the reply travels on the link's compressed stream, the
 	// coordinator's side of which opens as it reads this reply.
-	openFlateStream(p.conn, p.base.ReadBufferSize, p.base.WriteBufferSize)
+	link.OpenStream(p.conn, &p.base.Config)
 	return err
 }
 
@@ -1162,7 +1221,7 @@ func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 		return SessionOffer{}, errors.New("join start gate already received")
 	}
 	defer p.conn.SetReadDeadline(time.Time{})
-	var msg *Message
+	var msg *link.Message
 	for {
 		var err error
 		if msg, err = p.next(); err != nil {
@@ -1230,7 +1289,7 @@ func (p *PendingJoin) Ready() error {
 		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
 		defer p.conn.SetWriteDeadline(time.Time{})
 	}
-	if err := p.send(NewMessage(MsgReady, nil)); err != nil {
+	if err := p.send(link.NewMessage(MsgReady, nil)); err != nil {
 		return err
 	}
 	p.transferred = true
@@ -1346,7 +1405,7 @@ func (l *AdmissionLimiter) sweepLocked(now time.Time) {
 // and an IPv6 address's low half are what a dialer changes for free, so counting
 // either would count nothing.
 func admissionKey(addr net.Addr) string {
-	if _, piped := addr.(inProcess); addr == nil || piped {
+	if addr == nil || link.InProcess(addr) {
 		return ""
 	}
 	host := addr.String()

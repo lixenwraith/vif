@@ -20,5 +20,6 @@ func (a *App) initNetworkService() error {
 		return nil
 	}
 	a.networkSvc = service.NewNetworkService(a.cfg.networkConfig)
+	a.membership.networkSvc = a.networkSvc
 	return a.hub.Register(a.networkSvc)
 }
