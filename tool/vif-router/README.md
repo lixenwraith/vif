@@ -97,7 +97,9 @@ refusal of another build names it, so a page can be told before it dials one.
 `limits` names what this deployment will accept — `players_max`, `bots_max`, the
 allowed `log_levels`, most verbose first, and the installed `scenarios`, default
 first — and what an omitted choice gets, so a caller offers only choices that would
-be granted, and can name the defaults, rather than discovering either by refusal:
+be granted, and can name the defaults, rather than discovering either by refusal;
+and the room the site has: `sessions_max`, the fleet's size, and `doors` and
+`doors_max`, the doors runs publish through the router and the most it carries:
 
 ```json
 {
@@ -107,6 +109,9 @@ be granted, and can name the defaults, rather than discovering either by refusal
   "log_levels": ["debug", "info", "warn", "error"],
   "log_level_default": "info",
   "size_default": "first",
+  "sessions_max": 10,
+  "doors": 0,
+  "doors_max": 16,
   "scenarios": ["main", "blank", "simon", "td"],
   "scenario_descriptions": {
     "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
@@ -193,7 +198,9 @@ open with a route frame is closed unanswered. Every other refusal precedes the d
 in a join reply the dialer prints: an identifier that is not 16 hex, a dialling
 address past `-client-joins` (the game's own budget of six joins a minute, shared
 with the browser route), a session unknown, unready or full, and one holding
-`-route-max` connections over both routes. Logs name the session, never the dialler.
+`-route-max` connections over both routes. Logs name the session, never the dialler;
+each connection placed, on a pod or a door, is accounted for as it closes
+(`session route closed`: the session, whether a door, the bytes each way, the seconds).
 
 ## Doors
 
@@ -210,8 +217,11 @@ open a connection back (`MsgTunnelOpen`), which the run does naming its ticket
 re-encoded to it as a pod is sent its own. A run that opens nothing within the open
 timeout refuses the dial for a retry, as a pod out of reach does. Both ends keep the
 control connection alive (`MsgTunnelKeep`); a silent run is dropped. A publication
-costs the publisher's address a join, and `-tunnels` bounds the doors carried at
-once; doors are not listed and are not sessions. The design is
+costs the publisher's address a join; `-tunnels` bounds the doors carried at once
+and `-doors-per-address` those one address holds; a name is resumed only by the run
+it was issued to, live or within ten minutes of losing its control connection, so
+no run takes a pod's name or another's. Doors are not listed and are not sessions,
+though the listing's `limits` count them (`doors`, `doors_max`). The design is
 [Multiplayer §5.6](../../doc/multi-player.md#56-relay-doors-and-the-router).
 
 ## Settings
@@ -237,6 +247,7 @@ their defaults; `vif-router -h` lists every flag.
 | `-first-join`, `-empty`, `-drain` | `90s`, `90s`, `20s` | the session's lifetime bounds, passed to its pod |
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |
 | `-tunnels` | `16` | doors runs may publish through this router at once (0–64); 0 publishes none |
+| `-doors-per-address` | `4` | doors one address may publish at once (0–64); 0 leaves it to `-tunnels` |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
 | `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
 | `-port-first`, `-port-last` | `31700`, `31709` | the NodePort pool, and so the fleet's size |

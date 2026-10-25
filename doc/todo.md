@@ -462,11 +462,30 @@ staging world sharing the live grid's shape without its cells, takes it.
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a player's own session
-reached there, the router neither allocating nor authoring. The tunnel carries it
-already; what it needs is the session's row in `/vif/api/sessions` (its `/health`
-read through the tunnel, or a state the run reports on the control connection),
-its lifetime, the create budget charged to the publisher's address, and `-host
-vif://<site>:7777` opening the door through the router rather than binding one.
+reached there, the router neither allocating nor authoring. The deployment this
+leads to serves as many pods as the node has resources for (`-port-first`/`-port-last`,
+ten today) and routes every session beyond them, with accounting and
+authentication added later. The tunnel carries a door already, and the foundation
+stands: a name is resumed only by the run it was issued to, within
+`NetworkTunnelResumeWindow`, so no published name shadows a pod's; one address
+holds at most `-doors-per-address` doors; every connection placed is accounted for
+as it closes (`session route closed`: session, door or pod, bytes each way,
+seconds); and the listing's `limits` carry `sessions_max`, `doors` and `doors_max`,
+so the site can say when the fleet is full and offer a hosted session instead.
+
+What the feature itself needs, best shaped by deploying it step by step:
+- `-host vif://<site>:7777` opening the door through the router rather than binding
+  one, and the host's run reporting its state on the control connection (players,
+  ceiling, scenario, whether it admits) so the router lists it without a `/health`
+  read through the tunnel.
+- The session's row in `/vif/api/sessions`, with a `kind` beside the pods', its
+  lifetime (the control connection's, plus the resume window), and the create
+  budget charged to the publisher's address as a pod's is.
+- A credential in the publish frame (`PublishRequest` is JSON, so a field is added
+  without a protocol change) once authentication exists, and accounting keyed by
+  that identity rather than the address, over the per-connection lines above.
+- The front door's `-tunnels` ceiling split between relay doors and hosted
+  sessions, or one budget for both, decided from how the first deployments fill.
 
 ### Project a correction outside the live lock
 

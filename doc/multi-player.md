@@ -876,7 +876,9 @@ run publishes its door through the router (`-relay vif://<site>:7777`, the route
 address and no name) by holding a control connection open to the front door: the
 router names the door, from the pods' identifier space, and answers with the link
 (`vif://<site>:7777/<id>`) and a token the run resumes the same name with after a
-blip; the run declares that link as its door. For each dial the front door places on
+blip, within `NetworkTunnelResumeWindow` of losing its control connection, a name
+the router never issued being nobody's to take; the run declares that link as its
+door. For each dial the front door places on
 it, after the route frame, the budget and the ceiling it applies to a pod, the
 router asks the run on the control connection to open a connection back, matches
 the two by a ticket and splices them, re-encoding to the door the name the run

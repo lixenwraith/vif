@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net"
 	"sync"
 	"time"
@@ -55,12 +56,28 @@ var ErrDoorTaken = &Refusal{Code: RefusalIdentity, Reason: "this door is publish
 // ErrNoDoor is a name no door is published under.
 var ErrNoDoor = errors.New("no door is published under this name")
 
+// ErrNoDoorToResume refuses a run resuming a name this router never issued, or one
+// it issued longer ago than NetworkTunnelResumeWindow: a pod's name, or anyone's.
+var ErrNoDoorToResume = &Refusal{Code: RefusalIdentity, Reason: "no door of this name was published here to resume"}
+
+// ErrDoorsPerAddress refuses a publication from an address holding as many doors as
+// one may.
+var ErrDoorsPerAddress = &Refusal{Code: RefusalFull, Reason: "this address publishes as many doors as it may"}
+
 // PublishedDoor is one door a router carries: its name, the name its run answers
-// to, its token and the control connection the run holds.
+// to, its token, the address it was published from and the control connection the
+// run holds.
 type PublishedDoor struct {
-	id, session, resume string
-	control             net.Conn
-	writeMu             sync.Mutex
+	id, session, resume, from string
+	control                   net.Conn
+	writeMu                   sync.Mutex
+}
+
+// lostDoor is a door whose control connection went: its token, for the run that held
+// it to resume the name by until a deadline.
+type lostDoor struct {
+	resume string
+	until  time.Time
 }
 
 // ID is the door's name, from the pods' identifier space.
@@ -78,27 +95,38 @@ func (d *PublishedDoor) send(kind link.MessageType, payload []byte) error {
 
 // TunnelHub is a router's registry of the doors published through it.
 type TunnelHub struct {
-	link func(id string) string
-	max  int
+	link         func(id string) string
+	max          int
+	perAddress   int // doors one address may hold at once; 0 for no bound
+	resumeWindow time.Duration
 
 	mu      sync.Mutex
 	doors   map[string]*PublishedDoor
 	waiting map[string]chan net.Conn
+	// lost keeps the name and token of each door whose control connection went, for
+	// the run that held it to resume within the window; a name never issued here, a
+	// pod's or anyone's, is nobody's to take.
+	lost map[string]lostDoor
 }
 
-// NewTunnelHub carries at most max doors, each reached at link(id).
-func NewTunnelHub(link func(id string) string, max int) *TunnelHub {
-	return &TunnelHub{link: link, max: max,
-		doors: make(map[string]*PublishedDoor), waiting: make(map[string]chan net.Conn)}
+// NewTunnelHub carries at most max doors, perAddress of them from one address, each
+// reached at link(id).
+func NewTunnelHub(link func(id string) string, max, perAddress int) *TunnelHub {
+	return &TunnelHub{link: link, max: max, perAddress: perAddress, resumeWindow: parameter.NetworkTunnelResumeWindow,
+		doors: make(map[string]*PublishedDoor), waiting: make(map[string]chan net.Conn), lost: make(map[string]lostDoor)}
 }
+
+// Max is how many doors the hub carries at most.
+func (h *TunnelHub) Max() int { return h.max }
 
 // Publish takes a run's publication on control, which the hub holds as the door's
 // control connection from here, and answers it on the same stream: the door's name,
 // link and token, or the refusal returned, the stream closed. A run resuming its
-// name with its token keeps it, the connection it lost closed; a name nobody holds
-// live is granted as asked, so a door outlives the router that named it.
-func (h *TunnelHub) Publish(control net.Conn, req PublishRequest) (*PublishedDoor, error) {
-	d, err := h.admit(control, req)
+// name with its token keeps it, the connection it lost closed, within the resume
+// window of the loss; from is the address it publishes from, which the per-address
+// bound counts.
+func (h *TunnelHub) Publish(control net.Conn, from string, req PublishRequest) (*PublishedDoor, error) {
+	d, err := h.admit(control, from, req)
 	var ans Published
 	if err != nil {
 		ans.Refuse(err)
@@ -120,30 +148,39 @@ func (h *TunnelHub) Publish(control net.Conn, req PublishRequest) (*PublishedDoo
 	return d, nil
 }
 
-// admit names the door, or says why not.
-func (h *TunnelHub) admit(control net.Conn, req PublishRequest) (*PublishedDoor, error) {
+// admit names the door, or says why not: a name is resumed only by the run that was
+// issued it, while it holds it live or within the window of losing it.
+func (h *TunnelHub) admit(control net.Conn, from string, req PublishRequest) (*PublishedDoor, error) {
 	if len(req.Session) > MaxSessionName {
 		return nil, &Refusal{Code: RefusalIdentity, Reason: "the door's session name is too long"}
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	now := time.Now()
+	maps.DeleteFunc(h.lost, func(_ string, l lostDoor) bool { return now.After(l.until) })
 	id, resume := req.ID, req.Resume
-	if id != "" && resume != "" {
+	if id != "" || resume != "" {
 		if !validTunnelID(id) {
 			return nil, &Refusal{Code: RefusalIdentity, Reason: "a door's name is 16 hex characters"}
 		}
-		if old := h.doors[id]; old != nil {
-			if old.resume != resume {
-				return nil, ErrDoorTaken
-			}
+		switch old, live := h.doors[id]; {
+		case live && old.resume == resume:
 			_ = old.control.Close()
 			delete(h.doors, id)
+		case live:
+			return nil, ErrDoorTaken
+		default:
+			if l, ok := h.lost[id]; !ok || l.resume != resume {
+				return nil, ErrNoDoorToResume
+			}
+			delete(h.lost, id)
 		}
-	} else {
-		id, resume = "", ""
 	}
 	if len(h.doors) >= h.max {
 		return nil, &Refusal{Code: RefusalFull, Reason: "this router carries as many doors as it accepts"}
+	}
+	if h.perAddress > 0 && from != "" && h.heldByLocked(from) >= h.perAddress {
+		return nil, ErrDoorsPerAddress
 	}
 	var err error
 	for id == "" || h.doors[id] != nil {
@@ -156,9 +193,20 @@ func (h *TunnelHub) admit(control net.Conn, req PublishRequest) (*PublishedDoor,
 			return nil, err
 		}
 	}
-	d := &PublishedDoor{id: id, session: req.Session, resume: resume, control: control}
+	d := &PublishedDoor{id: id, session: req.Session, resume: resume, from: from, control: control}
 	h.doors[id] = d
 	return d, nil
+}
+
+// heldByLocked counts the doors published from one address. Caller holds mu.
+func (h *TunnelHub) heldByLocked(from string) int {
+	n := 0
+	for _, d := range h.doors {
+		if d.from == from {
+			n++
+		}
+	}
+	return n
 }
 
 // Serve reads the door's control connection until it ends: keeps are answered, and
@@ -178,12 +226,14 @@ func (h *TunnelHub) Serve(d *PublishedDoor) {
 	_ = d.control.Close()
 }
 
-// remove forgets d, unless its name was resumed by another connection since.
+// remove forgets d, unless its name was resumed by another connection since, keeping
+// its name and token for the run to resume within the window.
 func (h *TunnelHub) remove(d *PublishedDoor) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.doors[d.id] == d {
 		delete(h.doors, d.id)
+		h.lost[d.id] = lostDoor{resume: d.resume, until: time.Now().Add(h.resumeWindow)}
 	}
 }
 
