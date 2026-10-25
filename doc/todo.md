@@ -444,9 +444,10 @@ the volume already carries whatever the installer puts there.
 - Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
 
 The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250)
-reserves about 30.5 MiB per world, and a guest's staging world a second. Deferred
-until density matters: on `td` the grid is a minority of what a session was
-measured to cost.
+reserves about 30.5 MiB per world, and a guest's staging world a second: 92 MB of
+the 240 MiB a td host, guest and staging world held after a collection, the largest
+owner (netcode design §3.7). A sparse or tiled grid for a map this empty, or one
+staging world sharing the live grid's shape without its cells, takes it.
 
 ## Multiplayer
 
@@ -553,9 +554,13 @@ link it already holds.
 - Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
 An answer no longer captures under the lock (netcode design §4, converged
-answers); an install still holds it 40–70 ms at td for the capture pair, the
-comparison and the write, and each projected tick adds up to a simulation tick, so
-a repair 16 ticks behind holds it past 100 ms. Reduce the O(E) part first.
+answers); an install still holds it: the deepest td install of netcode design §3.7
+held 48 ms with no tick projected, 11 the staging world's capture and 36 the live
+capture, the comparison and the write, and each projected tick adds a simulation
+tick, so a repair 16 ticks behind holds it past 90 ms. First, compare the staging
+world's stores against the live ones in place, as the in-place index reads the live
+world, and write the cells that differ, with no capture of either; then move the
+projection out.
 Any out-of-lock or incremental design must keep [Multi-player](multi-player.md) §3.3:
 fence membership, pending barrier crossings not fed, the ledger settled before
 projection, the journal's place and mark, and no live tick between the final
@@ -626,6 +631,53 @@ and about 6,000 block writes a second (`proc.io_write_s`) for some 80 kB/s of
 records: both files sync every `flushIntervalMs` (50 ms). The journal's crash
 promise needs it; the log's does not. Measure a log that syncs on its own cadence,
 or only on WARN and above.
+
+### Lay keyframe sections out in columns
+
+- Priority: P2
+- Affected files: `internal/gen-manifest`, `internal/engine/snapshot_*_gen.go`,
+  `internal/snapshot/encoder.go`, `internal/snapshot/codec.go`, `tool/vif-log`
+- Guide: [Netcode design §3.7, §4](netcode-design.md#a-columnar-keyframe-codec)
+
+A td keyframe deflates to 355 kB as JSON rows and to 14 kB as the same cells in
+columns, entities as varint deltas in canonical order and a column per field, since
+a row's entropy is its entity id (netcode design §3.7); binary rows alone deflate
+5% larger than the JSON. Generate the column layout per component beside the
+stores, send a keyframe and a delta's changed rows in it, keep the manifest's shape
+over each row's canonical encoding, render a body as rows in `vif-log`; `Schema`
+and the protocol bump. The guest's 141 ms decode of 10.6 MB of JSON goes with it.
+
+### Hold retained indexes by reference
+
+- Priority: P3
+- Affected files: `internal/snapshot/encoder.go`, `internal/snapshot/manifest.go`,
+  `internal/converge/selective.go`
+- Guide: [Netcode design §3.7, §4](netcode-design.md#retention-by-reference)
+
+Retained captures are about 3 MB each at td; their indexes hold 47 MB of per-row
+arrays and cloned row JSON over four captures (`newStoreSection`, `ManifestRow`),
+beside the row encoders' 24 MB of owned cells. Let a retained index share the pages
+whose rows held with the index before it and reference the encoder's immutable cell
+bytes rather than clone them, about a fifth of a td participant's heap. The spatial
+grid is [its own item](#shrink-the-spatial-grid-on-ceiling-sized-maps).
+
+### Read a touch client's uplink
+
+- Priority: P3
+- Affected files: `internal/mode/router.go`, `android/game/view.go`,
+  `internal/system/network.go`
+
+`network.link_bps` is the rate the far end reports receiving this instance's bytes
+at, so a client reading two to seven times another's on the same link, as the
+Android client did against a terminal at the pod, is sending that much more unless
+`network.link_saturated` says the link was the limit. The candidate is input shape:
+a drag moves the cursor to every cell the finger crosses (`Router.moveMouseCursor`,
+`PushPointerMove`), a crossing each, where a key moves one cell a press, and god
+mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`,
+`network.sent_sync_bytes` and `network.crossings_sent` over one window, and
+`network.pace_late_ticks` for a client the OS throttles; if the epochs carry it,
+decide whether a drag's intermediate cells are a move each or one move to the cell
+the tick ends on.
 
 ### Read the cadence against a thin command stream
 
