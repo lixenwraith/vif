@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -62,7 +63,16 @@ func run(args []string, logger *slog.Logger) error {
 	}
 	held := newHolds(cfg.Allocator.RouteMax)
 	joins := network.NewAdmissionLimiterOf(parameter.NetworkAdmitWindow, cfg.Allocator.ClientJoins)
+	// Doors runs publish through this router are reached at the front door's own
+	// address, by the name the router gives them, as a pod is.
+	var tunnels *network.TunnelHub
+	if cfg.Allocator.Tunnels > 0 {
+		tunnels = network.NewTunnelHub(func(id string) string {
+			return "vif://" + net.JoinHostPort(cfg.Allocator.JoinHost, strconv.Itoa(cfg.Allocator.RoutePort)) + "/" + id
+		}, cfg.Allocator.Tunnels)
+	}
 	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held, joins)
+	handler.routeDoors(tunnels)
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,
@@ -99,7 +109,9 @@ func run(args []string, logger *slog.Logger) error {
 			"image", cfg.Allocator.Workload.Image)
 		errCh <- server.Serve(listener)
 	}()
-	go newTCPRouter(controller, held, joins, logger).serve(routeListener)
+	frontDoor := newTCPRouter(controller, held, joins, logger)
+	frontDoor.tunnels = tunnels
+	go frontDoor.serve(routeListener)
 	notifyReady(logger)
 
 	select {

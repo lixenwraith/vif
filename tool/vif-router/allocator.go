@@ -51,6 +51,7 @@ type allocatorConfig struct {
 	// what turns that route on; see doc/kubernetes-fleet.md §9.
 	WebOrigin string
 	// RouteMax bounds one session's connections through the front door and the
+	Tunnels int // doors runs may publish through the router at once; 0 publishes none
 	// browser route together; see holds.
 	RouteMax int
 	// ClientAddressHeader is the header the site's edge overwrites with the player's

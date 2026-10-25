@@ -503,7 +503,13 @@ travels alone. A guest admitting its own bot asks the coordinator
 on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
 retire a failed join, and, once its `-relay` door is open, to name that door in the
 chain (`RelayDoor`); the first two are answered on that link with
-`MsgRelayAdmit` (0x2F). An epoch or a sync is the binary envelope: a flag byte
+`MsgRelayAdmit` (0x2F). A run publishes its door through the router with
+`MsgSessionPublish` (0x32) on the front door, answered with `MsgSessionPublished`
+(0x33) on the stream it then holds as its control connection; the router asks it to
+open a connection back for a dial with `MsgTunnelOpen` (0x34), which the run opens
+naming its ticket with `MsgTunnelAccept` (0x35), and either end keeps the control
+connection alive with `MsgTunnelKeep` (0x36) ([Multiplayer
+§5.6](multi-player.md#56-relay-doors-and-the-router)). An epoch or a sync is the binary envelope: a flag byte
 (committed, leaf), then source, run, produced tick, hops, age and frame count, and
 per frame its event as the registry's index, a flag byte holding the producer's
 domain, its sequence as a delta from the frame before, its apply tick as a delta

@@ -119,6 +119,16 @@ const (
 	// Reserved, unused: authentication.
 	MsgAuthRequest  link.MessageType = 0x30
 	MsgAuthResponse link.MessageType = 0x31
+
+	// A door published through the router (tunnel.go): a run publishes on the front
+	// door and holds the stream as its control connection; the router names the door
+	// and asks for a connection back for each dial it places on that name, which the
+	// run opens naming the ticket; either end keeps the control connection alive.
+	MsgSessionPublish   link.MessageType = 0x32 // Live: a run publishing its door
+	MsgSessionPublished link.MessageType = 0x33 // Live: the router's answer, on the same stream
+	MsgTunnelOpen       link.MessageType = 0x34 // Live: the router asking the run to open a connection back
+	MsgTunnelAccept     link.MessageType = 0x35 // Live: the run's connection back, naming its ticket
+	MsgTunnelKeep       link.MessageType = 0x36 // Live: either end keeping the control connection alive
 )
 
 // kinds is what a link knows of the session's kinds: the family each counts under,

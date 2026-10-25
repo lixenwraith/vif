@@ -330,8 +330,9 @@ identifier space and handed the link, and for each dial placed on that name the
 router asks it to open a connection back, matched by a ticket and spliced as a pod's
 is ([Multiplayer §5.6](multi-player.md#56-relay-doors-and-the-router)). The front
 door's checks run first, so a tunnel costs what a pod costs; what it adds is the open
-the run owes within the route timeout. Tunnels are not listed and are not sessions:
-a door's run joined a session the fleet or a player hosts.
+the run owes within the route timeout, and a publication costs its address a join.
+`-tunnels` bounds the doors carried at once. Tunnels are not listed and are not
+sessions: a door's run joined a session the fleet or a player hosts.
 
 **The front door.** `vif-router` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly

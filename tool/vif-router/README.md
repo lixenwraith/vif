@@ -196,6 +196,25 @@ address past `-client-joins` (the game's own budget of six joins a minute, share
 with the browser route), a session unknown, unready or full, and one holding
 `-route-max` connections over both routes. Logs name the session, never the dialler.
 
+## Doors
+
+A run that joined a session and relays for people who cannot reach the host can
+publish its `-relay` door through the router instead of binding one (`vif -join …
+-relay vif://<site>:7777`): it sends `MsgSessionPublish` on the front door and
+holds the stream as its control connection, and the router names the door from the
+pods' identifier space and answers with the link (`vif://<site>:7777/<id>`) and a
+token the run resumes the same name with after a lost connection. A dial on that
+name is placed as a dial on a pod is — the route frame, the join budget, the
+session's ceiling — and then the router asks the run on the control connection to
+open a connection back (`MsgTunnelOpen`), which the run does naming its ticket
+(`MsgTunnelAccept`); the two are spliced, the name the run's door answers to
+re-encoded to it as a pod is sent its own. A run that opens nothing within the open
+timeout refuses the dial for a retry, as a pod out of reach does. Both ends keep the
+control connection alive (`MsgTunnelKeep`); a silent run is dropped. A publication
+costs the publisher's address a join, and `-tunnels` bounds the doors carried at
+once; doors are not listed and are not sessions. The design is
+[Multiplayer §5.6](../../doc/multi-player.md#56-relay-doors-and-the-router).
+
 ## Settings
 
 The production unit sets the flags it names from the installed copy of
@@ -218,6 +237,7 @@ their defaults; `vif-router -h` lists every flag.
 | `-size` | `first` | the default session screen, the host's `-size`: `WxH`, or `first` for the first person's terminal, which a session seating bots plays at 120x40 instead; a scenario may or may not make it its map |
 | `-first-join`, `-empty`, `-drain` | `90s`, `90s`, `20s` | the session's lifetime bounds, passed to its pod |
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |
+| `-tunnels` | `16` | doors runs may publish through this router at once (0–64); 0 publishes none |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
 | `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
 | `-port-first`, `-port-last` | `31700`, `31709` | the NodePort pool, and so the fleet's size |

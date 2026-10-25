@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,6 +42,10 @@ func (m *membership) serveRelay() {
 	if err != nil {
 		return
 	}
+	if router, ok := m.cfg.relayRouter(); ok {
+		m.publishDoor(port, router)
+		return
+	}
 	bound, err := port.ServeSession(m.cfg.RelayAddress, m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner)
 	if err != nil {
 		m.log.Warn("session", "msg", "relay address not bound", "address", m.cfg.RelayAddress, "error", err.Error())
@@ -51,6 +56,43 @@ func (m *membership) serveRelay() {
 	m.ctx.SetStatusMessage("Relaying joins at "+bound, parameter.StatusNotice)
 	// The chain names the door, so a run with no path to its authority finds it.
 	m.tellAuthority(network.RelayJoin{Step: network.RelayDoor, Door: bound})
+}
+
+// publishDoor publishes this run's door through a router (network.DoorTunnel): each
+// connection the router opens back runs the door's handshake as a stream the relay
+// listener took would, and the link the router names is the door the chain carries.
+func (m *membership) publishDoor(port *link.SocketPort, router string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.tunnelMu.Lock()
+	if m.tunnelStop != nil {
+		m.tunnelStop()
+	}
+	m.tunnelStop = cancel
+	m.tunnelMu.Unlock()
+	t := &network.DoorTunnel{Router: router, Session: m.cfg.SessionName}
+	core.Go(func() {
+		t.Run(ctx, func(door string) {
+			m.log.Info("session", "msg", "relaying joins through a router", "router", router, "door", door)
+			m.ctx.SetStatusMessage("Relaying joins at "+door, parameter.StatusNotice)
+			m.tellAuthority(network.RelayJoin{Step: network.RelayDoor, Door: door})
+		}, func(conn net.Conn) {
+			if err := port.ServeConn(conn, m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner); err != nil {
+				_ = conn.Close()
+			}
+		}, func(err error) {
+			m.log.Warn("session", "msg", "router door lost", "router", router, "error", err.Error())
+		})
+	})
+}
+
+// closeDoor ends the door this run publishes through a router, if any.
+func (m *membership) closeDoor() {
+	m.tunnelMu.Lock()
+	defer m.tunnelMu.Unlock()
+	if m.tunnelStop != nil {
+		m.tunnelStop()
+		m.tunnelStop = nil
+	}
 }
 
 // relayAcceptor is the join handshake this run serves for its bots and for the

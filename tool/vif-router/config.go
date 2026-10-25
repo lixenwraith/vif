@@ -108,6 +108,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&cfg.Allocator.JoinHost, "join-host", "", "public raw-TCP host returned to players (required)")
 	set.StringVar(&cfg.Allocator.WebOrigin, "web-origin", "",
 		"site origin allowed to open a browser session, e.g. https://example.com; empty publishes no WebSocket route")
+	set.IntVar(&cfg.Allocator.Tunnels, "tunnels", 16,
+		"doors runs may publish through this router at once, reached by name as a pod is; 0 publishes none (at most 64)")
 	set.IntVar(&cfg.Allocator.RouteMax, "route-max", 8,
 		"concurrent connections one session may hold through the front door and the browser route together")
 	set.StringVar(&cfg.Allocator.ClientAddressHeader, "client-address-header", "",
@@ -174,6 +176,9 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if port := cfg.Allocator.RoutePort; port < 1 || port > 65535 {
 		return fmt.Errorf("-route-listen %q must name a port, e.g. :7777", cfg.RouteListen)
+	}
+	if cfg.Allocator.Tunnels < 0 || cfg.Allocator.Tunnels > 64 {
+		return fmt.Errorf("-tunnels %d must be 0 to 64", cfg.Allocator.Tunnels)
 	}
 	if cfg.Allocator.RouteMax < 1 || cfg.Allocator.RouteMax > 16 {
 		return fmt.Errorf("-route-max must be between 1 and 16")

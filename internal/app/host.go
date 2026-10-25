@@ -723,6 +723,7 @@ func (m *membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 		}
 	}
 	m.reach.Close()
+	m.closeDoor()
 	// Every link the drops were for closes unread with the port.
 	m.seatsMu.Lock()
 	m.dropped = nil

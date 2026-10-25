@@ -171,6 +171,14 @@ const (
 	// once the session's pod is ready rather than when the request arrives. Wall time.
 	NetworkSessionRequestTimeout = 2 * time.Minute
 
+	// NetworkTunnelKeepInterval is how often each end of a door's control connection
+	// through the router says it is there, NetworkTunnelKeepLost how long a silent one
+	// is kept, and NetworkTunnelOpenTimeout how long a dial placed on a door waits for
+	// its run to open a connection back, the route timeout a pod gets.
+	NetworkTunnelKeepInterval = 20 * time.Second
+	NetworkTunnelKeepLost     = 3 * NetworkTunnelKeepInterval
+	NetworkTunnelOpenTimeout  = 5 * time.Second
+
 	// NetworkJoinConnectTimeout bounds a join's connect. A browser opens its socket
 	// through TLS, an HTTP upgrade and the site's proxy, round trips a loaded link
 	// stretches past the ConnectTimeout a session's own redials keep.

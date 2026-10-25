@@ -109,6 +109,14 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 	return server
 }
 
+// routeDoors lets the browser route place a stream on a door a run published, as
+// the front door does; nil places on pods alone.
+func (s *apiServer) routeDoors(tunnels *network.TunnelHub) {
+	if s.ws != nil {
+		s.ws.route.tunnels = tunnels
+	}
+}
+
 func (s *apiServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")

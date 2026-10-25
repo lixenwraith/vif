@@ -71,8 +71,10 @@ or a bind that fails, or an `-authority host` session — leaves the participant
 leaf that plays normally and is never a candidate. `-relay <addr>` makes a joined
 participant a door for people who cannot reach the host: they `-join` that address,
 take independent slots, and play through it; a person admitted that way is a leaf
-unless it passes `-listen`, and keeps its slot when its relay leaves. See
-[Multiplayer](multi-player.md) §5.
+unless it passes `-listen`, and keeps its slot when its relay leaves. `-relay
+vif://<site>:7777` publishes the door through the site's `vif-router` instead of
+binding one, and the link the router names is where people join; the chain carries
+every door. See [Multiplayer](multi-player.md) §5 and §5.6.
 
 Everything else about the session is one implementation. `-players` is a ceiling
 on every host and unset means the whole roster; the mid-run gate is
