@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"cmp"
 	"compress/flate"
 	"encoding/binary"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -36,6 +38,12 @@ import (
 // beside them, in multi-player §6's shape paced at the tick. It prints what it
 // measured and runs only when asked, VIF_NETCODE_READINGS=1: it is minutes of whole
 // worlds, and an approach is judged by it, not a build.
+// readingRepeats is how many times a td row is taken: its rows vary run to run with
+// what the storm does to the roster over real sockets, so the run at the median
+// keyframe rate is reported, every run's rate beside it. VIF_NETCODE_READINGS_RUNS
+// sets the count for every row.
+const readingRepeats = 3
+
 func TestNetcodeReadingsOverSockets(t *testing.T) {
 	if os.Getenv("VIF_NETCODE_READINGS") == "" {
 		t.Skip("set VIF_NETCODE_READINGS=1 to take the readings")
@@ -46,23 +54,59 @@ func TestNetcodeReadingsOverSockets(t *testing.T) {
 		cfg     Config
 		players int
 		region  string
+		runs    int
 	}{
-		{"tower", towerScenario(t, 0x70E4), 2, "tower"},
-		{"tower", towerScenario(t, 0x70E4), 4, "tower"},
-		{"tower", towerScenario(t, 0x70E4), 16, "tower"},
-		{"td", td, 2, ""},
-		{"td", td, 4, ""},
+		{"tower", towerScenario(t, 0x70E4), 2, "tower", 1},
+		{"tower", towerScenario(t, 0x70E4), 4, "tower", 1},
+		{"tower", towerScenario(t, 0x70E4), 16, "tower", 1},
+		{"td", td, 2, "", readingRepeats},
+		{"td", td, 4, "", readingRepeats},
 	} {
 		t.Run(fmt.Sprintf("%s-%d", row.name, row.players), func(t *testing.T) {
-			takeReadings(t, row.name, row.cfg, row.players, row.region)
+			runs := row.runs
+			if n, err := strconv.Atoi(os.Getenv("VIF_NETCODE_READINGS_RUNS")); err == nil && n > 0 {
+				runs = n
+			}
+			readings := make([]reading, 0, runs)
+			for i := range runs {
+				// Each run in a test of its own, so its session is closed before the next.
+				t.Run(fmt.Sprintf("run-%d", i+1), func(t *testing.T) {
+					readings = append(readings, takeReading(t, row.name, row.cfg, row.players, row.region, i))
+				})
+			}
+			if len(readings) == 0 {
+				return
+			}
+			slices.SortStableFunc(readings, func(a, b reading) int { return cmp.Compare(a.keyframes, b.keyframes) })
+			for _, line := range readings[len(readings)/2].lines {
+				t.Log(line)
+			}
+			if len(readings) > 1 {
+				rates := make([]string, len(readings))
+				for i, r := range readings {
+					rates[i] = fmt.Sprintf("%.2f/s at %.1f%%", r.keyframes, r.hashOnly)
+				}
+				t.Logf("  %d runs, keyframes and hash-only share each, sorted: %s; the run at the median keyframe rate is the one above",
+					len(readings), strings.Join(rates, ", "))
+			}
 		})
 	}
 }
 
-// takeReadings runs §6's profile over sockets: a star, every participant moving one
-// tick in three and firing one in six, 300 ticks after 120 of warm-up.
-func takeReadings(t *testing.T, name string, cfg Config, players int, region string) {
+// reading is one run of a row: its lines, and what picks the run to report.
+type reading struct {
+	lines     []string
+	keyframes float64 // the host's keyframes a second
+	hashOnly  float64 // the guests' hash-only share, in percent
+}
+
+// takeReading runs §6's profile over sockets: a star, every participant moving one
+// tick in three and firing one in six, 300 ticks after 120 of warm-up. attempt
+// numbers a repeated row's runs, for the profile each writes.
+func takeReading(t *testing.T, name string, cfg Config, players int, region string, attempt int) reading {
 	t.Helper()
+	var r reading
+	say := func(format string, args ...any) { r.lines = append(r.lines, fmt.Sprintf(format, args...)) }
 	apps, hostPort := socketSession(t, cfg, players)
 	host, guests := apps[0], apps[1:]
 	for _, a := range apps {
@@ -123,7 +167,11 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 	// VIF_NETCODE_PROFILE names a directory a CPU profile of each measured window is
 	// written to, one per row, for the stage shares §2 asks for.
 	if dir := os.Getenv("VIF_NETCODE_PROFILE"); dir != "" {
-		f, err := os.Create(fmt.Sprintf("%s/%s-%d.prof", dir, name, players))
+		suffix := ""
+		if attempt > 0 {
+			suffix = fmt.Sprintf("-run%d", attempt+1)
+		}
+		f, err := os.Create(fmt.Sprintf("%s/%s-%d%s.prof", dir, name, players, suffix))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,10 +199,10 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 	}
 	wire := perSecond(before.WireOut, after.WireOut)
 	delta := func(key string) float64 { return float64(hostAfter[key]-hostBefore[key]) / seconds }
-	t.Logf("%s, %d players, %d peers, %.0f s simulated: host egress framed %.0f B/s (%s), wire %.0f B/s (%.2f of framed), ingress wire %.0f B/s",
+	say("%s, %d players, %d peers, %.0f s simulated: host egress framed %.0f B/s (%s), wire %.0f B/s (%.2f of framed), ingress wire %.0f B/s",
 		name, players, hostPort.PeerCount(), seconds, framed, strings.Join(kinds, ", "),
 		wire, wire/framed, perSecond(before.WireIn, after.WireIn))
-	t.Logf("  host: manifests %.1f/s, corrections %.1f/s, keyframes %.2f/s (fallbacks %.2f/s), shards %.1f/s; "+
+	say("  host: manifests %.1f/s, corrections %.1f/s, keyframes %.2f/s (fallbacks %.2f/s), shards %.1f/s; "+
 		"bodies %.0f B/s, repairs %.0f B/s, manifests %.0f B/s; ticks %.1f ms each; chain %d",
 		delta("snapshot.manifests_sent"), delta("snapshot.corrections_sent"), delta("snapshot.keyframes"),
 		delta("snapshot.keyframe_fallbacks"), delta("snapshot.shards_sent"), delta("snapshot.correction_bytes_sent"),
@@ -175,11 +223,13 @@ func takeReadings(t *testing.T, name string, cfg Config, players int, region str
 	if manifests > 0 {
 		share = 100 * float64(hashOnly) / float64(manifests)
 	}
-	t.Logf("  guests: manifests %d, hash-only %.1f%% (%d in place), corrections applied %d, pages repaired %d, projected ticks at most %d, lag at most %d; "+
+	say("  guests: manifests %d, hash-only %.1f%% (%d in place), corrections applied %d, pages repaired %d, projected ticks at most %d, lag at most %d; "+
 		"guest ticks %.1f ms each over all guests", manifests, share, inPlace, applied, repaired, projected, lag,
 		float64(guestTime.Microseconds())/1000/measured)
-	t.Logf("  process: %.2f CPU-s per simulated second over %d instances, heap in use %d MiB",
+	say("  process: %.2f CPU-s per simulated second over %d instances, heap in use %d MiB",
 		(cpuAfter-cpuBefore)/seconds, players, mem.HeapInuse>>20)
+	r.keyframes, r.hashOnly = delta("snapshot.keyframes"), share
+	return r
 }
 
 // socketSession is a host and players-1 guests joined over real sockets, each link

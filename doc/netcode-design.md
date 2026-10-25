@@ -326,7 +326,9 @@ One matrix judges every approach, on harnesses that exist:
   `network.LinkShape`, `TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`.
 - **Path**: in-process mesh; TCP with deflate; WebSocket to a browser.
   `TestNetcodeReadingsOverSockets` (§3.1's shape over sockets,
-  `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`),
+  `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`;
+  a td row is taken three times and the run at the median keyframe rate reported,
+  every run's rate beside it, `VIF_NETCODE_READINGS_RUNS` setting the count),
   `TestNetcodeReadingsForBatch3` (§3.7, `VIF_NETCODE_BATCH3=1`); a browser joiner.
 - **Host**: native at `GOMAXPROCS=1`; a fleet pod at 500m CPU; a WASM guest.
   `BenchmarkHeadlessTicks`; [Measure a full roster](todo.md#measure-a-full-roster).
@@ -382,8 +384,9 @@ manifest reaches them after the tick it names and the promised tick is captured
 as before; the paced guest of §3.5, a lead behind, answers 248 of 261 manifests
 in place. td's bodies and CPU move run to run with what its storm does to the
 roster (a keyframe every eight seconds on both td rows here, none to half a
-second of them on other readings), so its rows compare only where the keyframe
-rate agrees, and the tower's wire has a run-to-run spread of about 2%. The framed
+second of them on other readings), so each td row is taken three times and the run
+at the median keyframe rate is the one reported, with every run's rate beside it;
+the tower's wire has a run-to-run spread of about 2%. The framed
 figures agree with §3.1's in-process ones. The same day before the codec, the
 tower's epochs framed 4.8, 41.0 and 825 kB/s and its syncs 1.6, 15.2 and 382, its
 wire 1.70, 7.94 and 101 kB/s at 0.17, 0.12 and 0.08 of the framed bytes, the

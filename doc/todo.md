@@ -629,16 +629,6 @@ and no event transition on the leaf or its ancestors, since the authority evalua
 those and a guest does not. Decide whether such states are marked at load and
 taken in place, or whether the authority crosses the chain's end.
 
-### Make the td readings repeatable
-
-- Priority: P3
-- Affected files: `internal/app/readings_test.go`
-
-td's rows in `TestNetcodeReadingsOverSockets` vary run to run with what the storm
-does to the roster: at four players keyframes ran at none, 0.13 and 0.53 a second
-across runs on one machine, so a row compares two items only where their keyframe
-rate agrees. Seed what varies, or run the row several times and report the median.
-
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
