@@ -550,20 +550,6 @@ records: both files sync every `flushIntervalMs` (50 ms). The journal's crash
 promise needs it; the log's does not. Measure a log that syncs on its own cadence,
 or only on WARN and above.
 
-### Hold retained indexes by reference
-
-- Priority: P3
-- Affected files: `internal/snapshot/encoder.go`, `internal/snapshot/manifest.go`,
-  `internal/converge/selective.go`
-- Guide: [Netcode design §3.7, §4](netcode-design.md#retention-by-reference)
-
-Retained captures are about 3 MB each at td; their indexes hold 47 MB of per-row
-arrays and cloned row JSON over four captures (`newStoreSection`, `ManifestRow`),
-beside the row encoders' 24 MB of owned cells. Let a retained index share the pages
-whose rows held with the index before it and reference the encoder's immutable cell
-bytes rather than clone them, about a fifth of a td participant's heap. The spatial
-grid is [its own item](#shrink-the-spatial-grid-on-ceiling-sized-maps).
-
 ### Read a touch client's uplink
 
 - Priority: P3

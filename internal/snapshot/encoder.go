@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"cmp"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -51,18 +52,12 @@ type storeBlob struct {
 	blob  []byte
 }
 
-// storeSection is one store's last indexed section and what it was built from: the
-// encoding, the owner-authored cells left out, and for each canonical row its
-// capture position, page and hash.
+// storeSection is one store's last indexed section and what it was built from:
+// the encoding and the owner-authored cells left out.
 type storeSection struct {
 	sec      *section
 	built    []engine.StoreRow
 	excluded []core.Entity
-	order    []int32   // capture position of each canonical row
-	canon    []int32   // canonical row of each capture position, -1 when left out
-	page     []uint32  // page of each canonical row
-	members  [][]int32 // canonical rows of each page
-	hashes   []uint64  // row hash of each canonical row
 }
 
 // storeRowHash is a store row's manifest hash; store rows carry no name.
@@ -450,17 +445,14 @@ func (e *Encoder) storeSectionLocked(i int, rows []engine.StoreRow, cursors map[
 		}
 		slices.Sort(excluded)
 	}
-	prev := e.sections[i]
-	if prev != nil && slices.Equal(prev.excluded, excluded) {
+	var last *section
+	if prev := e.sections[i]; prev != nil && slices.Equal(prev.excluded, excluded) {
 		if sameRows(prev.built, rows) {
 			return prev.sec, nil
 		}
-		if next, ok := prev.update(id, rows); ok {
-			e.sections[i] = next
-			return next.sec, nil
-		}
+		last = prev.sec
 	}
-	next := newStoreSection(id, rows, excluded)
+	next := &storeSection{built: rows, excluded: excluded, sec: newStoreSection(id, rows, excluded, last)}
 	e.sections[i] = next
 	return next.sec, nil
 }
@@ -470,89 +462,55 @@ func sameRows(a, b []engine.StoreRow) bool {
 	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
 }
 
-// newStoreSection indexes rows afresh, leaving out the excluded cells.
-func newStoreSection(id string, rows []engine.StoreRow, excluded []core.Entity) *storeSection {
-	s := &storeSection{built: rows, excluded: excluded, canon: make([]int32, len(rows))}
-	s.order = make([]int32, 0, len(rows))
-	for j, r := range rows {
-		s.canon[j] = -1
-		if _, out := slices.BinarySearch(excluded, r.Entity); !out {
-			s.order = append(s.order, int32(j))
-		}
+// newStoreSection indexes a store's rows over the encoder's slice itself, leaving
+// out the excluded cells: each page's rows in canonical order as indices, and its
+// hash, taken from last where the page holds the same cells with the same bytes.
+func newStoreSection(id string, rows []engine.StoreRow, excluded []core.Entity, last *section) *section {
+	indexed := len(rows) - len(excluded)
+	pages := pageCount(indexed)
+	if len(rows) == 0 {
+		rows = nil // an emptied store and one never filled index alike
 	}
-	slices.SortFunc(s.order, func(a, b int32) int {
-		switch ea, eb := rows[a].Entity, rows[b].Entity; {
-		case ea < eb:
-			return -1
-		case ea > eb:
-			return 1
-		}
-		return 0
-	})
-	pages := pageCount(len(s.order))
 	sec := &section{
-		SectionSummary: SectionSummary{ID: id, Pages: uint32(pages), Rows: uint32(len(s.order))},
-		rows:           make([]ManifestRow, len(s.order)),
+		SectionSummary: SectionSummary{ID: id, Pages: uint32(pages), Rows: uint32(indexed)},
+		rows:           storeRows(rows),
+		pages:          make([][]int32, pages),
 		pageHash:       make([]uint64, pages),
-		pageRows:       make([][]ManifestRow, pages),
 	}
-	s.page, s.hashes, s.members = make([]uint32, len(s.order)), make([]uint64, len(s.order)), make([][]int32, pages)
-	for c, j := range s.order {
-		r := rows[j]
-		s.canon[j] = int32(c)
-		sec.rows[c] = ManifestRow{Entity: r.Entity, Value: r.Value}
-		p := rowPage(sec.rows[c], uint32(pages))
-		s.page[c], s.hashes[c] = p, r.Hash
-		s.members[p] = append(s.members[p], int32(c))
-		sec.pageRows[p] = append(sec.pageRows[p], sec.rows[c])
+	for j, r := range rows {
+		if _, out := slices.BinarySearch(excluded, r.Entity); out {
+			continue
+		}
+		p := rowPage(ManifestRow{Entity: r.Entity}, uint32(pages))
+		sec.pages[p] = append(sec.pages[p], int32(j))
 	}
-	for p := range pages {
-		sec.pageHash[p] = pageHashOf(id, uint32(p), s.members[p], s.hashes)
+	var held storeRows
+	if last != nil && len(last.pages) == pages {
+		held, _ = last.rows.(storeRows)
+	}
+	for p, page := range sec.pages {
+		slices.SortFunc(page, func(a, b int32) int { return cmp.Compare(rows[a].Entity, rows[b].Entity) })
+		if held != nil && samePage(held, last.pages[p], rows, page) {
+			sec.pageHash[p] = last.pageHash[p]
+			continue
+		}
+		sec.pageHash[p] = pageHashOf(id, uint32(p), rows, page)
 	}
 	sec.Hash = sectionHash(id, sec.pageHash)
-	s.sec = sec
-	return s
+	return sec
 }
 
-// update is s over rows holding the same entities in the same capture order, with
-// only the pages whose rows changed rehashed. ok is false for any other sequence.
-func (s *storeSection) update(id string, rows []engine.StoreRow) (*storeSection, bool) {
-	if len(rows) != len(s.built) {
-		return nil, false
+// samePage reports whether two pages hold the same cells with the same bytes: a row
+// whose value shares its predecessor's backing array is one the encoder kept.
+func samePage(held storeRows, was []int32, rows []engine.StoreRow, page []int32) bool {
+	if len(was) != len(page) {
+		return false
 	}
-	var changed []int
-	dirty := make(map[uint32]bool)
-	for j := range rows {
-		if rows[j].Entity != s.built[j].Entity {
-			return nil, false
-		}
-		if c := s.canon[j]; c >= 0 && &rows[j].Value[0] != &s.built[j].Value[0] {
-			changed = append(changed, j)
-			dirty[s.page[c]] = true
+	for k, i := range page {
+		h, r := &held[was[k]], &rows[i]
+		if h.Entity != r.Entity || len(h.Value) == 0 || len(r.Value) == 0 || &h.Value[0] != &r.Value[0] {
+			return false
 		}
 	}
-	prev := s.sec
-	sec := &section{
-		SectionSummary: prev.SectionSummary,
-		rows:           slices.Clone(prev.rows),
-		pageHash:       slices.Clone(prev.pageHash),
-		pageRows:       slices.Clone(prev.pageRows),
-	}
-	next := *s
-	next.built, next.sec, next.hashes = rows, sec, slices.Clone(s.hashes)
-	for _, j := range changed {
-		c := s.canon[j]
-		sec.rows[c].Value, next.hashes[c] = rows[j].Value, rows[j].Hash
-	}
-	for p := range dirty {
-		members := s.members[p]
-		page := make([]ManifestRow, len(members))
-		for k, c := range members {
-			page[k] = sec.rows[c]
-		}
-		sec.pageRows[p] = page
-		sec.pageHash[p] = pageHashOf(id, p, members, next.hashes)
-	}
-	sec.Hash = sectionHash(id, sec.pageHash)
-	return &next, true
+	return true
 }

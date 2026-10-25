@@ -750,6 +750,17 @@ next item's. `BenchmarkKeyframeEncodeTD` runs 6.8 ms against 23.4 (362 to 22 kB)
 cold 80 against 159, moving 6.9 against 13.8, and the storm high water 3.4 against
 9.1 ms (12.9 to 4.1 kB).
 
+With the retained indexes standing over the row encoders' rows (§4, retention by
+reference), the same run's heap profile after a collection holds 168 MB against
+202: the spatial grids 92 MB as before, the row encoders' cell JSON 13 MB and owned
+copies 19 MB, the `[]StoreRow` slices the four retained indexes stand over 3.9 MB,
+and `newStoreSection` 1.0 MB against 23.4, the per-page indices of the positions
+store's four indexes; the heap in use read 190 MiB against 218. The positions
+store's index was built afresh each publication before, 6 MB of rows, pages and
+per-row arrays a time, since its entities change every tick; it is 200 kB of
+indices now, and a page whose cells and bytes held keeps its hash unhashed.
+
+
 ## 4. Phase 2
 
 Each approach below says what of it is in, what is left and what it needs before
@@ -985,12 +996,17 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   holds is its indexes, 47 MB of per-row arrays and cloned row JSON over four
   captures, beside the row encoders' own 24 MB of cells, and the largest owner is
   the spatial grid, 30 MB a world over three worlds.
-- Decided: a retained index shares the pages whose rows held with the index before
-  it and references the encoder's immutable cell bytes rather than cloning them,
-  about a fifth of a td participant's heap; the grid is
-  [its own item](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps):
-  [Hold retained indexes by reference](todo.md#hold-retained-indexes-by-reference).
-- Needs: the columnar codec first where the cell bytes change with it.
+- In: a store's section stands over the row encoder's own rows, the slice it
+  returned for that capture, and holds per page the rows' indices in canonical
+  order and the page hash, nothing per row beside a four-byte index; the manifest
+  rows a repair or an audit reads are materialised from them on request. A page
+  whose cells and bytes are the last section's keeps its hash unhashed
+  (`samePage`), which is what reuse used to buy by copying every row. The grid is
+  [its own item](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps).
+- Measured after (§3.7): `newStoreSection` holds 1.0 MB in use against 23.4 over
+  the same td-2 run, the heap after a collection 190 MiB against 218; what the
+  retained indexes still hold is the row encoders' `[]StoreRow` slices they stand
+  over, 3.9 MB, beside the encoders' own owned copies and cell JSON, 32 MB.
 
 ### Dropped
 
@@ -1028,8 +1044,8 @@ re-running §3.1's matrix and §3.5's four shapes, measured in §3.6.
 5. Keyframes from cached sections (batch 3): protocol 26 (§3.1, §3.6, §4).
 6. The columnar keyframe codec (batch 3): protocol 28 and capture schema 25
    (§3.7, §4), after batch 2's fold of unguarded chains (protocol 27).
+7. Retained indexes by reference (batch 3): no version moves (§3.7, §4).
 
-What follows is decided on §3.7 and waits in the todo, in this order: the
-[install that compares in place](todo.md#project-a-correction-outside-the-live-lock)
-and [retained indexes by reference](todo.md#hold-retained-indexes-by-reference).
-Each lands alone, with its measurement before and after in §3.
+What follows is decided on §3.7 and waits in the todo: the
+[install that compares in place](todo.md#project-a-correction-outside-the-live-lock),
+alone, with its measurement before and after in §3.
