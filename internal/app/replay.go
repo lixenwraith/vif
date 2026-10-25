@@ -195,7 +195,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		// The barrier stands as the run's write left it before anything still queued
 		// dispatches: a crossing raised before the next tick is the run's, by record.
 		if err == nil && c.Barrier && !a.barrierLocked() {
-			a.activateNetworkSessionLocked()
+			a.membership.activateNetworkSessionLocked()
 			if !a.barrierLocked() {
 				err = errors.New("the run's write engaged its crossing barrier, which this replay cannot")
 			}

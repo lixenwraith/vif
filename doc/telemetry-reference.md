@@ -11,7 +11,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 - **Generic.** The status snapshot, the telemetry overlay and pinned cards, the flight recorder, `vif-log`'s registry traversal, the probe's `/metrics`, and `:d break stat <key>`, which tests whatever cell an operator names. The probe exports ints, floats and bools as `vif_<key>` gauges and omits strings. "Generic only" in the tables below means nothing outside the producer reads the key by name.
 - **Named.**
   - The status bar (`NewStatusBarRenderer`).
-  - The `:session` line (`App.sessionSummaryLocked`) and the `:content` command.
+  - The `:session` line (`membership.sessionSummaryLocked`) and the `:content` command.
   - The journal anchor and capture header, which carry `content.*`.
   - Scenario FSM guards and actions (`StatusIntCompare`, `StatusBoolEquals`, `StatusToVar`).
   - Bot graph conditions (`StatusInt`, `StatusBool`), which read the bot's own registry.
@@ -246,7 +246,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.artifacts_restored` (int) | Applied barrier-bound artifacts the installed capture did not contain, returned to the schedule to apply again |
 | `network.commit_late`, `network.commit_void` (int) | On the authority: guest crossings committed at its next tick because they arrived after their own, and the subset too late to apply, which only closed their source's fence |
 | `network.commit_refused_raw` (int) | On a guest: another participant's raw epochs, passed toward the authority and not applied |
-| `network.join_lag_ticks` (int) | Ticks this participant still stood behind after its join caught up, reported by `App.finishCatchUp`. Above `NetworkJoinLagTicks`, the join is refused |
+| `network.join_lag_ticks` (int) | Ticks this participant still stood behind after its join caught up, reported by `membership.finishCatchUp`. Above `NetworkJoinLagTicks`, the join is refused |
 | `network.lag_ticks` (int) | How far behind the newest tick any peer closed this instance stands, measured every tick: on a paced guest the margin its pacing holds, not a fault. Zero on the authority |
 | `network.stale` (bool) | Pacing's verdict that this instance is out of step: its last decision stepped, or the latest authority epoch of the window landed late beyond `NetworkPaceBandTicks`. Ahead, committed crossings reach it late; behind by a step, its lead grows. The badge reads it as `desync` with `pace_late_ticks`. Always false on the authority |
 | `network.corrections_received` (int) | Authoritative corrections reassembled from the wire |
@@ -268,7 +268,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.term_refused` (int) | Artifacts naming a term nobody handed this instance: a fork, or an instance that skipped a succession |
 | `network.term_stale` (int) | Artifacts from a term the session has left. Non-zero across every handoff and not an error |
 | `network.handoff_bytes` (int) | Bytes of succession frames this instance received and drained: loss reports, handoff records and peer lists |
-| `network.fork` (bool) | A succession ended with no handoff, because no candidate answered, the run lost its path to its authority, or the session pinned its authority, and this instance continues as an explicit local fork. An adopted handoff clears it, as does a session the run opens, which a person's run does at once (`App.forked`) |
+| `network.fork` (bool) | A succession ended with no handoff, because no candidate answered, the run lost its path to its authority, or the session pinned its authority, and this instance continues as an explicit local fork. An adopted handoff clears it, as does a session the run opens, which a person's run does at once (`membership.forked`) |
 | `network.migrating` (bool) | A succession is open, or a handoff was adopted less than `NetworkMigrationBadgeTicks` ago. The status bar shows `Migrating`, with `rejoin_attempts` when non-zero, over `Host lost`. Dials are refused while the succession is open (`Authority.Migrating`), not for the tail |
 | `network.host_lost` (bool) | The authority went and this instance continues from the last authoritative state: a guest lost its link to the authority, or a succession ended as a fork. An adopted handoff clears it, as does a session the run opens. It outranks every badge but `Migrating` (`Host lost`), and `:session` names it |
 | `network.evicted` (int) | Participants this authority dropped, under the slow policy or for exceeding the ingress byte budget |

@@ -18,7 +18,6 @@ import (
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/mode"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/probe"
@@ -26,7 +25,6 @@ import (
 	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/system"
 	"github.com/lixenwraith/vif/internal/vlog"
-	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // fallbackColorMode is published when no terminal exists to detect against
@@ -79,15 +77,14 @@ type restartRequest struct {
 // may be the session closing, which ends them before this run is replaced. The
 // first request stands; a later one is refused.
 func (a *App) replaceWith(req *restartRequest) bool {
-	req.Bots = a.seatGraphs()
+	req.Bots = a.membership.seatGraphs()
 	return a.restart.CompareAndSwap(nil, req)
 }
 
 // App owns the wired runtime: services, world, input, scheduler, and the selected
 // presentation adapter.
 type App struct {
-	dismissed atomic.Bool
-	cfg       Config
+	cfg Config
 
 	hub *service.Hub
 	log *vlog.Log
@@ -102,8 +99,6 @@ type App struct {
 	// command surface or by the authority's notice on the tick goroutine, and read
 	// by Loop between two waits. Nil means this run ends when the player quits.
 	restart      atomic.Pointer[restartRequest]
-	dialling     atomic.Bool // a :join is being dialled while this run plays on
-	leaving      atomic.Bool // a :leave or a fork is waiting for Loop, or being served by it
 	inputMachine *input.Machine
 	router       *mode.Router
 
@@ -120,60 +115,6 @@ type App struct {
 	scheduler      *engine.Scheduler
 	frameReady     chan struct{}
 	gameUpdateDone <-chan struct{}
-
-	pendingJoin  *network.PendingJoin
-	sessionMu    sync.Mutex
-	sessionOffer network.SessionOffer
-	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
-	// entry per accepted connection and closes into the offer the start gate sends.
-	sessionRoster []network.RosterEntry
-	// awayOrder is who of the roster is away, in the order they left: a full session
-	// gives a newcomer the place of the first. yielding is that one while its dismissal
-	// is on its way, and dismissWraith hands it to the authority's next tick.
-	awayOrder     []link.PeerID
-	yielding      link.PeerID
-	dismissWraith atomic.Uint32
-	// returning is each place a dial took back with its claim until its arrival
-	// crosses, the entry as it waited, for a join that fails to give back, and the
-	// record its player brought; no wait runs out on its Wraith meanwhile.
-	returning map[link.PeerID]returnPlace
-
-	// claims is what this process comes back to its sessions with, and claim the one
-	// this run is in its session under: nil before it is in one, and once it has left.
-	claims *claimKeeper
-	claim  atomic.Pointer[claim]
-
-	// midRunPort is the socket a solo run opened for itself, with :host or with no
-	// listener for its bots. A run started with -host takes its endpoint from
-	// NetworkService instead, which the hub owns and closes; this one is owned here
-	// because nothing else knows it exists.
-	midRunPort *link.SocketPort
-
-	// lateJoins arms the mid-run gate on a host whose startup lobby has closed. It
-	// is a flag rather than a late assignment because the accept goroutine reads
-	// the hook: the gate exists from construction and answers nothing until the
-	// lobby's own gate is done, which is what keeps the two from racing.
-	lateJoins atomic.Bool
-
-	// lobbyClosing refuses dials for the window between the startup lobby reading
-	// its roster and lateJoins arming. Neither gate can serve a dial there — the
-	// lobby's offers are already out, and the mid-run gate waits on a capture a
-	// clock that has not started never produces — so the honest answer is a
-	// refusal the dialer can retry rather than an identity and a silent wait.
-	lobbyClosing atomic.Bool
-
-	// midRunGate serialises the mid-run admission. The handshakes that reach it run
-	// concurrently, but the gate they call reads a whole world and then waits on a
-	// session-cumulative ready count, so two of them at once cannot tell whose
-	// joiner confirmed.
-	midRunGate sync.Mutex
-
-	// firstPerson is the geometry the first person to join reported, and personJoined
-	// whether one has, both guarded by sessionMu. A dedicated host with no -size takes
-	// its map from that report, the only real terminal the session ever sees: a seat
-	// reports its holder's screen or a bot's default, and sizes nothing.
-	firstPerson  network.JoinerReport
-	personJoined bool
 
 	// probe is the supervised run's endpoint, nil when none was configured.
 	// probeTick and probeAt are its stall detector: the last tick a probe read and
@@ -197,17 +138,14 @@ type App struct {
 	parked      atomic.Bool
 	vacantReset atomic.Bool
 
-	// admissions bounds how often one dialling host may be admitted. It is built
-	// with the App rather than with the session because a run can open one later
-	// with :host, and a budget that started when hosting did would be a budget
-	// reset by whatever closed the last session.
-	admissions *network.AdmissionLimiter
-
 	// glue is the correction glue over this run's world: what the authority protocol
 	// reads and writes, and what a journal's written worlds and a join's install go
 	// through. It reads the run through correctionRun.
-	glue        corrector
-	hostResumed bool // a held guest's drain admitted the host's resume; world lock
+	glue corrector
+
+	// membership is this run's place in its session, and the protocol's view of it
+	// beside the glue. It reads the run through membershipRun.
+	membership membership
 
 	// The three halves of the authority protocol, built together because they hold
 	// references to each other: corrections is what this instance publishes and
@@ -216,20 +154,6 @@ type App struct {
 	corrections *converge.Corrections
 	authority   *converge.Authority
 	reach       *converge.Reach
-
-	// seats are the bots this run holds. seatsMu is taken under the world lock and
-	// never takes it.
-	seatsMu    sync.Mutex
-	seats      []*seat
-	dropped    []uint32 // seats told to leave, until their links close
-	seatSerial uint64
-	// seatScreen is this run's terminal as its seats follow it, published on each
-	// resize by a run whose terminal is its geometry; nil until the first.
-	seatScreen atomic.Pointer[screen]
-	relay      relayDesk
-	// joinedThrough is the relay this run joined the session through, zero on a
-	// dial to the authority; the barrier reaches the authority through it.
-	joinedThrough link.PeerID
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are
@@ -249,13 +173,12 @@ func New(cfg Config) (*App, error) {
 		}
 	}
 	a := &App{
-		cfg:        cfg,
-		log:        log,
-		hub:        service.NewHub(log),
-		admissions: network.NewAdmissionLimiter(),
-		life:       lifecycle.New(cfg.Lifetime),
-		claims:     cfg.claims,
+		cfg:  cfg,
+		log:  log,
+		hub:  service.NewHub(log),
+		life: lifecycle.New(cfg.Lifetime),
 	}
+	a.membership.open(a, &a.cfg, &a.scenario, log, &a.glue, a.life)
 	if a.cfg.JoinAddress != "" && a.cfg.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
 	}
@@ -294,12 +217,12 @@ func (a *App) init() error {
 	}
 	// After the scenario, whose max_players bounds what the transport admits.
 	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
-		a.cfg.networkConfig = a.hostNetworkConfig()
+		a.cfg.networkConfig = a.membership.hostNetworkConfig()
 	}
 	// A guest's own port takes joins beside its peer links, which it admits once
 	// it authors the session: a successor takes players where its session reaches it.
 	if c := a.cfg.networkConfig; c != nil && c.AcceptPeer != nil {
-		c.AcceptSession, c.OnAdmit = a.sessionAcceptor(a.admitHosted), a.admitLateJoiner
+		c.AcceptSession, c.OnAdmit = a.membership.sessionAcceptor(a.membership.admitHosted), a.membership.admitLateJoiner
 	}
 	if err := a.initServices(); err != nil {
 		return err
@@ -359,6 +282,7 @@ func (a *App) initServices() error {
 func (a *App) initWorld() {
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
+	a.membership.world = a.world
 	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
 	// A run reproducing a session draws that session's streams, and a session's
 	// streams are drawn one below the number it reports: construction draws them and
@@ -377,7 +301,7 @@ func (a *App) initWorld() {
 		if a.cfg.JoinAddress != "" && a.cfg.networkConfig != nil && a.cfg.networkConfig.ParticipantID == 0 {
 			r.ParticipantID = 0
 		}
-		a.bindSessionHooks(r)
+		a.membership.bindSessionHooks(r)
 		// A session endpoint exists, so this run is shared for its whole life whether
 		// or not a peer is attached at a given tick. Latching here rather than
 		// reading the port keeps the anchor, the D-14 verdict and the playout barrier
@@ -396,6 +320,7 @@ func (a *App) initWorld() {
 	} else {
 		a.ctx = engine.NewGameContext(a.world, width, height)
 	}
+	a.membership.ctx = a.ctx
 	a.ctx.BindLog(a.log)
 	a.applyPlay()
 	a.world.Resources.Config.ColorMode = colorMode
@@ -438,6 +363,7 @@ func (a *App) initWorld() {
 	// is started, which is after construction returns.
 	a.corrections, a.authority, a.reach =
 		converge.New(a.instance(), a.glue.telemetry, a.world.Resources.Status)
+	a.membership.corrections, a.membership.authority, a.membership.reach = a.corrections, a.authority, a.reach
 	if a.cfg.SlowPolicy != nil {
 		a.authority.SetSlowPolicy(*a.cfg.SlowPolicy)
 	}
@@ -589,7 +515,7 @@ func (a *App) initScheduler() error {
 		a.frameReady,
 	)
 	a.ctx.ResetChan = resetChan
-	a.glue.scheduler = a.scheduler
+	a.glue.scheduler, a.membership.scheduler = a.scheduler, a.scheduler
 	a.scheduler.SetJournalDigest(a.journalDigestLocked)
 
 	if err := a.scheduler.LoadScenarioFromFS(
@@ -622,20 +548,20 @@ func (a *App) initScheduler() error {
 func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown started")
 	begin := time.Now()
-	a.closeSeats(false)
+	a.membership.closeSeats(false)
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
-	a.leaveClaim()
-	if a.pendingJoin != nil {
-		_ = a.pendingJoin.Close()
+	a.membership.leaveClaim()
+	if a.membership.pendingJoin != nil {
+		_ = a.membership.pendingJoin.Close()
 	}
 	if a.corrections != nil {
 		a.corrections.Close()
 	}
 	a.reach.Close()
 	a.closeProbe()
-	a.closeMidRunPort()
+	a.membership.closeMidRunPort()
 	a.glue.discardStagingWorld()
 	a.hub.StopAll()
 	a.closedAtExit, a.closedAtExitAs = a.closeJournal()
@@ -679,7 +605,7 @@ func (a *App) readScenario() error {
 	if err != nil {
 		return fmt.Errorf("scenario: %w", err)
 	}
-	if err := a.playersFit(sc); err != nil {
+	if err := a.membership.playersFit(sc); err != nil {
 		return err
 	}
 	a.scenario = sc

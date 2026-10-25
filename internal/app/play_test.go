@@ -139,7 +139,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 		t.Fatalf("new game failed: %s, position %+v", a.ctx.GetStatusMessage(), a.Position())
 	}
 	command("bot add 1:patrol")
-	if a.sessionTransport() == nil {
+	if a.membership.sessionTransport() == nil {
 		t.Fatalf("bot add opened no session: %s", a.ctx.GetStatusMessage())
 	}
 	press(terminal.KeyRune, ':')
@@ -377,7 +377,7 @@ func TestAReplaySeekLandsOnTheFirstStepAtOrPastItsTick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}

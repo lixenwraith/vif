@@ -1124,27 +1124,27 @@ the last frame flushed.
 - Priority: P2
 - Affected files: `internal/app`
 
-`internal/app` is 33,000 lines, 11,500 of them production code, and `App` is
-the receiver of nearly every method: session hosting and joining (`session.go`,
-`host.go`, `join.go`, `relay.go`, `seat.go`, `claim.go`), replay and its
-checkpoints (`play.go`, `clone.go`, `replay.go`, `journal.go`), the loops
-(`loop.go`, `script.go`), presentation and configuration (`app.go`,
-`config.go`, `presentation*.go`, `audio*.go`) and the dedicated host
-(`serve.go`, `probe.go`). The boundary that already exists is the one to
-extend: `converge.Instance` is the whole of what the authority protocol asks of
-a run. The correction glue is split: `corrector` (`corrector.go`, `capture.go`,
-`snapshot_stage.go`, `replay_suffix.go`) captures, stages, projects and installs
-over the world and the capture encoder and reads the run through
-`correctionRun`; `instance` composes it with the run's membership into the
-`Instance`, and `App` forwards `CaptureShared`, `InstallShared`, `StageShared`
-and `VerifyCapture` to it. Next the membership: hosting, joining, seats,
-claims and the relay desk read and write the roster, the offer and the transport
-and could be one `session` type with the run as its narrow interface, as
-`converge` has, with `host_test.go` and `join_test.go` moving with it. Replay
-and checkpoints (`play.go`, `clone.go`) depend on the journal package and the
-world and not on a session, so they split along the same line. What stays in
-`internal/app` is the composition root the package map names: construct the
-world, wire the services, run the loop. Each split lands alone, moving its
-tests, with `App` keeping thin forwarding methods until the last one goes; the
-seam each one needs is an interface the moved code reads the run through, and a
-split that needs more than one is cut in the wrong place.
+`internal/app` is 33,000 lines, 11,500 of them production code, and `App` was
+the receiver of nearly every method. The boundary that already existed is the
+one being extended: `converge.Instance` is the whole of what the authority
+protocol asks of a run, and `instance` now composes two types that each read
+the run through one interface. The correction glue is `corrector`
+(`corrector.go`, `capture.go`, `snapshot_stage.go`, `replay_suffix.go`):
+capture, staging, projection and install over the world and the capture
+encoder, reading the run through `correctionRun`. The membership is
+`membership` (`membership.go`, `session.go`, `host.go`, `join.go`, `relay.go`,
+`seat.go`, `claim.go`, `identity.go` and the authority side of `converge.go`):
+hosting, joining, the roster and the offer, seats, claims, the relay desk and
+the authority, reading the run through `membershipRun` (position and pacing,
+the lobby surface, the journal and anchor, the vacancy and the replacing run).
+`App` forwards the exported session API and what `correctionRun` reads of the
+membership. Still on `App`: replay and checkpoints (`play.go`, `clone.go`,
+`replay.go`, `journal.go`), which depend on the journal package and the world
+and not on a session, so they split along the same line, moving their tests,
+with the forwarders going when the last split lands; the loops (`loop.go`,
+`script.go`), presentation and configuration (`app.go`, `config.go`,
+`presentation*.go`, `audio*.go`) and the dedicated host (`serve.go`,
+`probe.go`) are the composition root the package map names: construct the
+world, wire the services, run the loop. The seam each split needs is one
+interface the moved code reads the run through; a split that needs more than
+one is cut in the wrong place.

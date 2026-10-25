@@ -35,11 +35,11 @@ func geometryServer(t *testing.T, w, h int) *App {
 
 func reportGeometry(t *testing.T, a *App, report network.JoinerReport) {
 	t.Helper()
-	offer, err := a.assignParticipant(nil)
+	offer, err := a.membership.assignParticipant(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.noteJoinerReport(offer.Assigned, report); err != nil {
+	if err := a.membership.noteJoinerReport(offer.Assigned, report); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -64,7 +64,7 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstPerson(t *testing.T) {
 	}
 
 	reportGeometry(t, a, network.JoinerReport{Width: 160, Height: 45})
-	a.adoptLobbyGeometry()
+	a.membership.adoptLobbyGeometry()
 
 	w, h := mapSize(a)
 	if w <= beforeW || h <= beforeH {
@@ -118,12 +118,12 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 		t.Fatalf("server services: %v", err)
 	}
 	host.life.Start(time.Now())
-	port, err := host.socketPort()
+	port, err := host.membership.socketPort()
 	if err != nil {
 		t.Fatal(err)
 	}
 	gate := make(chan error, 1)
-	go func() { gate <- host.startHostSession(nil) }()
+	go func() { gate <- host.membership.startHostSession(nil) }()
 
 	const w, h = 160, 45
 	screen := &framePresentation{w: w, h: h}
@@ -138,7 +138,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	if mw, mh := mapSize(guest); mw >= area.Width() && mh >= area.Height() {
 		t.Fatalf("the joiner built on a %dx%d map, not the smaller one a sizing server offers", mw, mh)
 	}
-	if err := guest.startJoinSession(nil); err != nil {
+	if err := guest.membership.startJoinSession(nil); err != nil {
 		t.Fatalf("join gate: %v", err)
 	}
 	if err := <-gate; err != nil {
@@ -168,7 +168,7 @@ func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
 	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: a.assignParticipant, Release: a.releaseParticipant, Report: a.noteJoinerReport,
+		Assign: a.membership.assignParticipant, Release: a.membership.releaseParticipant, Report: a.membership.noteJoinerReport,
 	}, socketWait)
 	port := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = port.Close() })
@@ -188,7 +188,7 @@ func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
 		t.Fatal("the session is not live, so the refusal is not exercised")
 	}
 
-	a.adoptLobbyGeometry()
+	a.membership.adoptLobbyGeometry()
 
 	wantW, wantH := 160-parameter.LeftMargin, 45-parameter.TopMargin-parameter.BottomMargin
 	if w, h := mapSize(a); w != wantW || h != wantH {
@@ -209,7 +209,7 @@ func TestTheFirstPersonWins(t *testing.T) {
 
 	reportGeometry(t, a, network.JoinerReport{Width: 160, Height: 45})
 	reportGeometry(t, a, network.JoinerReport{Width: 80, Height: 24})
-	a.adoptLobbyGeometry()
+	a.membership.adoptLobbyGeometry()
 
 	if got := a.Context().Width; got != 160 {
 		t.Fatalf("geometry = %d, want the first person's 160", got)
@@ -224,7 +224,7 @@ func TestAnOperatorSizeIsNotOverridden(t *testing.T) {
 
 	beforeW, beforeH := mapSize(a)
 	reportGeometry(t, a, network.JoinerReport{Width: 200, Height: 60})
-	a.adoptLobbyGeometry()
+	a.membership.adoptLobbyGeometry()
 
 	if w, h := mapSize(a); w != beforeW || h != beforeH {
 		t.Fatalf("an explicit -size was overridden: %dx%d became %dx%d", beforeW, beforeH, w, h)
@@ -245,7 +245,7 @@ func TestAnUnreportedOrUnusableGeometryChangesNothing(t *testing.T) {
 		a := geometryServer(t, 0, 0)
 		beforeW, beforeH := mapSize(a)
 		reportGeometry(t, a, report)
-		a.adoptLobbyGeometry()
+		a.membership.adoptLobbyGeometry()
 		if w, h := mapSize(a); w != beforeW || h != beforeH {
 			t.Fatalf("report %+v moved the map from %dx%d to %dx%d", report, beforeW, beforeH, w, h)
 		}
@@ -299,7 +299,7 @@ func TestAScenarioThatSetsItsOwnMapIsServedOnIt(t *testing.T) {
 		}
 		t.Cleanup(a.Close)
 		reportGeometry(t, a, network.JoinerReport{Width: 190, Height: 44})
-		a.adoptLobbyGeometry()
+		a.membership.adoptLobbyGeometry()
 		if w, h := mapSize(a); w != 90 || h != 30 {
 			t.Fatalf("-size %dx%d: map %dx%d, want the scenario's 90x30", size[0], size[1], w, h)
 		}
@@ -339,11 +339,11 @@ func serveWithBots(t *testing.T, cfg Config) (*App, <-chan error) {
 		t.Fatalf("server services: %v", err)
 	}
 	a.life.Start(time.Now())
-	if err := a.seatBots(); err != nil {
+	if err := a.membership.seatBots(); err != nil {
 		t.Fatalf("server bots: %v", err)
 	}
 	gate := make(chan error, 1)
-	go func() { gate <- a.startHostSession(nil) }()
+	go func() { gate <- a.membership.startHostSession(nil) }()
 	return a, gate
 }
 
@@ -356,7 +356,7 @@ func TestASeatNeverSizesTheMap(t *testing.T) {
 
 	alone := geometryServer(t, 0, 0)
 	reportGeometry(t, alone, seat)
-	alone.adoptLobbyGeometry()
+	alone.membership.adoptLobbyGeometry()
 	if got := alone.Context().Width; got != BotWidth {
 		t.Fatalf("geometry = %d after a 200-wide seat alone, want a bot's %d", got, BotWidth)
 	}
@@ -364,7 +364,7 @@ func TestASeatNeverSizesTheMap(t *testing.T) {
 	joined := geometryServer(t, 0, 0)
 	reportGeometry(t, joined, seat)
 	reportGeometry(t, joined, network.JoinerReport{Width: 160, Height: 45})
-	joined.adoptLobbyGeometry()
+	joined.membership.adoptLobbyGeometry()
 	if got := joined.Context().Width; got != 160 {
 		t.Fatalf("geometry = %d, want the person's 160 over the seat's 200", got)
 	}
@@ -433,7 +433,7 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 		{"a sized headless run", sized, 90, 28},
 	} {
 		var w, h int
-		tt.a.World().RunSafe(func() { w, h = tt.a.seatScreenLocked() })
+		tt.a.World().RunSafe(func() { w, h = tt.a.membership.seatScreenLocked() })
 		if w != tt.w || h != tt.h {
 			t.Errorf("%s seats its bots on %dx%d, want %dx%d", tt.name, w, h, tt.w, tt.h)
 		}
@@ -446,11 +446,11 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.localParticipant())
+	d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.membership.localParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := &seatSource{botSource: botSource{d}, screen: &person.seatScreen,
+	src := &seatSource{botSource: botSource{d}, screen: &person.membership.seatScreen,
 		run: seated, shown: screen{160, 45}}
 	if _, err := src.Step(); err != nil {
 		t.Fatal(err)

@@ -166,7 +166,7 @@ func (a *App) journalErrorLocked() error {
 // that run opens it. Caller MUST hold updateMutex.
 func (a *App) startJournalLocked(slot int) error {
 	if slot >= 0 {
-		return a.askSeatJournal(slot, true)
+		return a.membership.askSeatJournal(slot, true)
 	}
 	if err := a.journalErrorLocked(); err != nil && !errors.Is(err, errRunReplaced) {
 		return err
@@ -184,7 +184,7 @@ func (a *App) startJournalLocked(slot int) error {
 func (a *App) stopJournalLocked(slot int) error {
 	switch {
 	case slot >= 0:
-		return a.askSeatJournal(slot, false)
+		return a.membership.askSeatJournal(slot, false)
 	case a.cancelJournalStart():
 		return nil
 	case a.recorder.Load() == nil:
@@ -641,15 +641,15 @@ func (a *App) journalSummary() string {
 	if p := a.recorder.Load().Path(); p != "" {
 		parts = append(parts, "Journaling to "+p)
 	}
-	a.seatsMu.Lock()
-	for _, s := range a.seats {
+	a.membership.seatsMu.Lock()
+	for _, s := range a.membership.seats {
 		if b := s.app.Load(); b != nil {
 			if p := b.recorder.Load().Path(); p != "" {
 				parts = append(parts, fmt.Sprintf("slot %X to %s", s.slot.Load(), p))
 			}
 		}
 	}
-	a.seatsMu.Unlock()
+	a.membership.seatsMu.Unlock()
 	if len(parts) == 0 {
 		return "No journal; :journal start [slot] records from here"
 	}

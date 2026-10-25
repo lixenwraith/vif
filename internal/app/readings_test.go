@@ -197,9 +197,9 @@ func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketP
 
 	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
-	hostCfg.MaxPeers = host.sessionCapacity()
+	hostCfg.MaxPeers = host.membership.sessionCapacity()
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: host.assignParticipant, Release: host.releaseParticipant, Scenario: host.scenarioBody,
+		Assign: host.membership.assignParticipant, Release: host.membership.releaseParticipant, Scenario: host.membership.scenarioBody,
 	}, socketWait)
 	hostPort := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = hostPort.Close() })
@@ -208,7 +208,7 @@ func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketP
 	}
 	host.AttachTransport(hostPort)
 	hostStarted := make(chan error, 1)
-	go func() { hostStarted <- host.startHostSessionOn(hostPort, nil) }()
+	go func() { hostStarted <- host.membership.startHostSessionOn(hostPort, nil) }()
 
 	guests := make([]*App, 0, players-1)
 	for i := range players - 1 {
@@ -226,19 +226,19 @@ func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketP
 			t.Fatalf("guest %d app: %v", i+1, err)
 		}
 		t.Cleanup(g.Close)
-		g.pendingJoin, g.sessionOffer = pending, offered
+		g.membership.pendingJoin, g.membership.sessionOffer = pending, offered
 		if err := g.Join(offered.Anchor); err != nil {
 			_ = pending.Complete(err, network.JoinerReport{})
 			t.Fatalf("guest %d identity: %v", i+1, err)
 		}
-		if err := pending.Complete(nil, g.joinerReport()); err != nil {
+		if err := pending.Complete(nil, g.membership.joinerReport()); err != nil {
 			t.Fatalf("guest %d reply: %v", i+1, err)
 		}
 		guests = append(guests, g)
 	}
 	gated := make(chan error, len(guests))
 	for _, g := range guests {
-		go func() { gated <- g.startJoinSession(nil) }()
+		go func() { gated <- g.membership.startJoinSession(nil) }()
 	}
 	for range guests {
 		if err := <-gated; err != nil {
@@ -249,7 +249,7 @@ func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketP
 		t.Fatalf("host startup: %v", err)
 	}
 	for i, g := range guests {
-		port := link.NewSocketPort(g.pendingJoin.TransportConfig())
+		port := link.NewSocketPort(g.membership.pendingJoin.TransportConfig())
 		t.Cleanup(func() { _ = port.Close() })
 		if err := port.Start(); err != nil {
 			t.Fatalf("guest %d transport: %v", i+1, err)
@@ -260,7 +260,7 @@ func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketP
 	waitSocket(t, hostPort, func() bool { return hostPort.PeerCount() == len(guests) }, "host peers")
 	apps := append([]*App{host}, guests...)
 	for _, a := range apps {
-		a.activateNetworkSession()
+		a.membership.activateNetworkSession()
 	}
 	return apps, hostPort
 }

@@ -743,7 +743,7 @@ func TestParticipantsKeepTheirOwnCorpus(t *testing.T) {
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	a.adoptMapLatch(an.Anchor)
+	a.membership.adoptMapLatch(an.Anchor)
 
 	content := func(x *App) (files, blocks int64, source string) {
 		x.World().RunSafe(func() {

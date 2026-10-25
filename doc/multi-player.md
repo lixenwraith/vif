@@ -432,7 +432,7 @@ any joiner does. The host keeps the handshake for a ready period of 5 s, and tel
 its player who is ready to join and waiting for their press; a press
 after it dials again and seats the world already built while the session plays the
 game it was built for, and a session that started another game meanwhile is joined
-anew, already pressed (`App.takeSeat`). A run no player is pressing for seats at
+anew, already pressed (`membership.takeSeat`). A run no player is pressing for seats at
 once: a bot seat, a redial after a lost host, a run following its session to a new
 game, a page or Android host that took its own start press, and any run with the
 wait off (`-nw`, `[play] wait = false`). Nothing stands in for the waiting player on
@@ -701,7 +701,7 @@ link (§5.2), and the authority's own two, which it crosses once
   rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
   of resets keeps one.
 - **Yield.** A dial a full session cannot otherwise admit has the participant away
-  longest dismissed for it (`App.yieldLocked`) and is refused `RefusalYielding`,
+  longest dismissed for it (`membership.yieldLocked`) and is refused `RefusalYielding`,
   which seats and first joins retry in a moment; the retry takes the freed place.
   A successor orders who is away by their Wraiths' waits.
 
@@ -734,7 +734,7 @@ at the free cell nearest the one the Wraith held, on every instance. A Wraith is
 driven by nobody, its own participant included, until that arrival.
 
 A claim whose place is still linked, which the host has not yet seen go, closes that
-link (`App.closeStaleLink`): its departure crosses as any lost link's does, and the
+link (`membership.closeStaleLink`): its departure crosses as any lost link's does, and the
 dial is refused `RefusalReturning`, which it retries in a moment into the place. A
 place held through a relay waits for the relay to see its link go, and one another
 dial is taking back is refused the same way. The roster carries digests alone and a
@@ -756,12 +756,12 @@ a guest relayed keep their slots as when any relay leaves (§5), and the guests 
 host that left run §5.1, which under `-authority host` is the fork.
 
 A person's fork leaves the same way. `converge.Instance.Forked` hands the run the
-roster it held, and its loop serves the fork as it serves `:leave` (`App.forked`,
-`App.leaveSession`), except that it keeps every place rather than its bots' alone:
+roster it held, and its loop serves the fork as it serves `:leave` (`membership.forked`,
+`membership.leaveSession`), except that it keeps every place rather than its bots' alone:
 each other player's cursor waits as a Wraith in the session it opens, for its player
 to take back once `:host` opens the door (§5.4). A hold the lost host set stands
 there for this run's own `:pause`, and a freeze ends; the status bar says which. A
-seat under such a run ends only when the run halts it (`App.seatEnds`), never on its
+seat under such a run ends only when the run halts it (`membership.seatEnds`), never on its
 own fork or the run's, so the leave finds every bot to seat again. A run with no
 loop to serve the fork stays the fork (§5.1).
 

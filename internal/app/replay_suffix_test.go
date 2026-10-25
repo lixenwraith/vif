@@ -416,7 +416,7 @@ func TestADepartedParticipantLeavesNoCrossingFenceBehind(t *testing.T) {
 
 	// The departure the coordinator produces when the link goes, applied at the tick
 	// it names on every instance.
-	host.crossDeparture(guestParticipant, 1)
+	host.membership.crossDeparture(guestParticipant, 1)
 	for range parameter.NetworkBarrierDelayTicks + 2 {
 		host.Tick(1)
 	}

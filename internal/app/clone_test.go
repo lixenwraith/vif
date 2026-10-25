@@ -36,7 +36,7 @@ func TestAReplayRestoredFromACheckpointContinuesAsItsSource(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.localParticipant())
+		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
 		if err != nil {
 			t.Fatal(err)
 		}

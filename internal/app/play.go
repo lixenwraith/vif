@@ -96,7 +96,7 @@ func replayCopies(lender *App, cfg Config, stream *journal.Stream, newApp func(C
 func runPresented(a *App, src pacedSource, kind, name string,
 	interval time.Duration, paced bool, signals <-chan os.Signal) error {
 
-	live := a.sessionTransport() != nil
+	live := a.membership.sessionTransport() != nil
 	if !paced {
 		interval = time.Millisecond // the floor perTick already clamps to
 	}
@@ -192,7 +192,7 @@ func (p *player) run() error {
 	last := time.Now()
 
 	for {
-		if p.a.dismissed.Load() {
+		if p.a.membership.dismissed.Load() {
 			return p.failure()
 		}
 		p.a.serveJournal()
@@ -264,7 +264,7 @@ func (p *player) advance(elapsed time.Duration) {
 	if p.rw != nil && p.rw.lent {
 		return // a batch holds the presented copy
 	}
-	p.live = p.driven && p.a.sessionTransport() != nil
+	p.live = p.driven && p.a.membership.sessionTransport() != nil
 	if p.live {
 		p.paused, p.scale = false, engine.ScaleNormal
 		if p.a.cfg.TimeScaleSpec == "" {
@@ -614,7 +614,7 @@ func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) 
 // routed through the keymap: these drive the viewer, not the game. Any other key is
 // offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
-	p.live = p.driven && p.a.sessionTransport() != nil
+	p.live = p.driven && p.a.membership.sessionTransport() != nil
 	if p.cmd != nil {
 		// The viewer's command line or overlay, parsed as the game parses it
 		if intent := p.a.inputMachine.Process(ev); intent != nil {

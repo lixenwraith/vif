@@ -39,7 +39,7 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 	}
 	// The host runs the same level setup its guest adopted, so the two see one
 	// event sequence; a join that only moved the guest would be the divergence.
-	a.adoptMapLatch(an.Anchor)
+	a.membership.adoptMapLatch(an.Anchor)
 
 	// The geometry is settled before the link exists. SetupLevel carries a
 	// ClassShared payload, so inside a live session only the authority may produce
@@ -338,7 +338,7 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	b := mustHeadless(t, seed, 120, 40)
 	t.Cleanup(func() { a.Close(); b.Close() })
 
-	offer, err := a.hostOffer()
+	offer, err := a.membership.hostOffer()
 	if err != nil {
 		t.Fatalf("host offer: %v", err)
 	}
@@ -351,8 +351,8 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	pa, pb := network.NewLoopbackPair(offer.Host, offer.Assigned)
 	a.AttachTransport(pa)
 	b.AttachTransport(pb)
-	a.activateNetworkSession()
-	b.activateNetworkSession()
+	a.membership.activateNetworkSession()
+	b.membership.activateNetworkSession()
 
 	var target core.Entity
 	a.World().RunSafe(func() { target = a.World().Resources.Player.Slot(0) })
@@ -403,7 +403,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: a.assignParticipant, Release: a.releaseParticipant,
+		Assign: a.membership.assignParticipant, Release: a.membership.releaseParticipant,
 	}, socketWait)
 	host := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = host.Close() })
@@ -412,7 +412,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	}
 	a.AttachTransport(host)
 	hostStarted := make(chan error, 1)
-	go func() { hostStarted <- a.startHostSessionOn(host, nil) }()
+	go func() { hostStarted <- a.membership.startHostSessionOn(host, nil) }()
 
 	pending, offered, err := network.DialSession(host.Addr().String(), network.DebugConfig(link.RolePeer, ""))
 	if err != nil {
@@ -428,16 +428,16 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 		t.Fatalf("join app: %v", err)
 	}
 	t.Cleanup(b.Close)
-	b.pendingJoin = pending
-	b.sessionOffer = offered
+	b.membership.pendingJoin = pending
+	b.membership.sessionOffer = offered
 	if err := b.Join(offered.Anchor); err != nil {
 		_ = pending.Complete(err, network.JoinerReport{})
 		t.Fatalf("join identity: %v", err)
 	}
-	if err := pending.Complete(nil, b.joinerReport()); err != nil {
+	if err := pending.Complete(nil, b.membership.joinerReport()); err != nil {
 		t.Fatalf("join reply: %v", err)
 	}
-	if err := b.startJoinSession(nil); err != nil {
+	if err := b.membership.startJoinSession(nil); err != nil {
 		t.Fatalf("join startup: %v", err)
 	}
 
@@ -451,8 +451,8 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	if err := <-hostStarted; err != nil {
 		t.Fatalf("host startup: %v", err)
 	}
-	a.activateNetworkSession()
-	b.activateNetworkSession()
+	a.membership.activateNetworkSession()
+	b.membership.activateNetworkSession()
 
 	var localA, localB core.Entity
 	a.World().RunSafe(func() { localA = a.World().Resources.Player.Slot(0) })
@@ -1188,7 +1188,7 @@ func TestSharedIdentityCrossingWaitsOnItsProducer(t *testing.T) {
 	b := mustHeadless(t, seed, 120, 40)
 	t.Cleanup(func() { a.Close(); b.Close() })
 
-	offer, err := a.hostOffer()
+	offer, err := a.membership.hostOffer()
 	if err != nil {
 		t.Fatalf("host offer: %v", err)
 	}
@@ -1201,8 +1201,8 @@ func TestSharedIdentityCrossingWaitsOnItsProducer(t *testing.T) {
 	pa, pb := network.NewLoopbackPair(offer.Host, offer.Assigned)
 	a.AttachTransport(pa)
 	b.AttachTransport(pb)
-	a.activateNetworkSession()
-	b.activateNetworkSession()
+	a.membership.activateNetworkSession()
+	b.membership.activateNetworkSession()
 
 	next := func(x *App) uint64 {
 		var n uint64

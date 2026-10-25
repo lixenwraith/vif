@@ -224,8 +224,8 @@ func TestAGuestNoCandidateReachesForks(t *testing.T) {
 	primeRetention(t, apps)
 	claims := make([]*claim, len(apps))
 	for i, a := range apps {
-		claims[i] = a.claims.issue(false)
-		a.claim.Store(claims[i])
+		claims[i] = a.membership.claims.issue(false)
+		a.membership.claim.Store(claims[i])
 	}
 
 	closeParticipant(apps[0])
@@ -258,10 +258,10 @@ func TestAGuestNoCandidateReachesForks(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("the fork holds %d cursors, want only its own", count)
 	}
-	if cutOff.claim.Load() != nil || claimHeld(cutOff, claims[2]) {
+	if cutOff.membership.claim.Load() != nil || claimHeld(cutOff, claims[2]) {
 		t.Fatal("the fork still holds the claim its player comes back under")
 	}
-	if successor.claim.Load() != claims[1] || !claimHeld(successor, claims[1]) {
+	if successor.membership.claim.Load() != claims[1] || !claimHeld(successor, claims[1]) {
 		t.Fatal("the successor gave up the claim it carries its session on under")
 	}
 }
@@ -281,7 +281,7 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	t.Cleanup(func() { stopTicks(); host.Close() })
 	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	c, id := guest.claim.Load(), guest.localParticipant()
+	c, id := guest.membership.claim.Load(), guest.membership.localParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
 	if c == nil || !host.instance().DropParticipant(id) {
 		t.Fatal("the guest holds no claim, or its link would not drop")
@@ -326,16 +326,16 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	if len(chain) != 2 {
 		t.Fatalf("the guests hold the chain %v; want both of them in it", chain)
 	}
-	if chain[0].ID == link.PeerID(guest.localParticipant()) {
+	if chain[0].ID == link.PeerID(guest.membership.localParticipant()) {
 		successor, guest = guest, successor
 	}
-	id := link.PeerID(successor.localParticipant())
+	id := link.PeerID(successor.membership.localParticipant())
 	door, _ := chain.Lookup(id)
 	if _, _, err := network.DialSession(door, network.DebugConfig(link.RolePeer, "")); !errors.Is(err, errNotHosting) ||
 		!strings.Contains(err.Error(), errNotHosting.Reason) {
 		t.Fatalf("a join at a guest's port while another participant hosts: %v; want %q", err, errNotHosting.Reason)
 	}
-	port, err := guest.socketPort()
+	port, err := guest.membership.socketPort()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,14 +348,14 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 		}
 		if a.authority.Holder() != id {
 			t.Fatalf("participant %d follows %d; want the first candidate, %d (%s; %s)",
-				a.localParticipant(), a.authority.Holder(), id, a.authority.Summary(), a.SessionSummary())
+				a.membership.localParticipant(), a.authority.Holder(), id, a.authority.Summary(), a.SessionSummary())
 		}
 	}
 	// Dialled once the session plays again, as a player meets it: a join whose gate
 	// reads the frozen world fails if the thaw lands mid-read.
 	for deadline := time.Now().Add(socketWait); successor.Context().TimeCtl.Held() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
-	if got := successor.playerCapacity(); got != 5 {
+	if got := successor.membership.playerCapacity(); got != 5 {
 		t.Fatalf("the successor holds the session to %d players; want its first host's -players, 5", got)
 	}
 	if line, want := successor.SessionSummary(), "Session hosting "+successor.reach.DeclaredAddr()+","; !strings.HasPrefix(line, want) {
@@ -371,8 +371,8 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	var fixed, opened, again error
 	var role sessionRole
 	successor.World().RunSafe(func() {
-		fixed, opened = successor.beginHostingLocked(at, AuthorityHost), successor.beginHostingLocked(at, "")
-		again, role = successor.hostErrorLocked(), successor.sessionRoleLocked()
+		fixed, opened = successor.membership.beginHostingLocked(at, AuthorityHost), successor.membership.beginHostingLocked(at, "")
+		again, role = successor.membership.hostErrorLocked(), successor.membership.sessionRoleLocked()
 	})
 	if fixed == nil || opened != nil || role != roleHost || again == nil || !strings.Contains(again.Error(), "already hosting") {
 		t.Fatalf(":host on the successor: %v under the host policy, %v under its own, then role %d and %v; "+
@@ -387,7 +387,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	}
 	waitForCursors(t, successor, 5)
 
-	c, gid := guest.claim.Load(), guest.localParticipant()
+	c, gid := guest.membership.claim.Load(), guest.membership.localParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
 	if c == nil || !successor.instance().DropParticipant(gid) {
 		t.Fatal("the guest holds no claim, or its link would not drop")
@@ -418,13 +418,13 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	t.Cleanup(stop)
 	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
 	waitForCursors(t, successor, 2)
-	id := link.PeerID(successor.localParticipant())
+	id := link.PeerID(successor.membership.localParticipant())
 	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	stop()
 	for deadline := time.Now().Add(socketWait); (successor.authority.Holder() != id || successor.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
-	port, err := successor.socketPort()
+	port, err := successor.membership.socketPort()
 	if err != nil || successor.authority.Holder() != id {
 		t.Fatalf("the guest did not take the session over on a port of its own: %v", err)
 	}
@@ -432,8 +432,8 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	var opened error
 	var role sessionRole
 	successor.World().RunSafe(func() {
-		opened = successor.beginHostingLocked(own, "")
-		role = successor.sessionRoleLocked()
+		opened = successor.membership.beginHostingLocked(own, "")
+		role = successor.membership.sessionRoleLocked()
 	})
 	if opened != nil || role != roleHost {
 		t.Fatalf(":host %s on the successor: %v, then role %d; want it hosting there", own, opened, role)
@@ -445,8 +445,8 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 
 // claimHeld reads whether a run of a's process is in its session under c.
 func claimHeld(a *App, c *claim) bool {
-	a.claims.mu.Lock()
-	defer a.claims.mu.Unlock()
+	a.membership.claims.mu.Lock()
+	defer a.membership.claims.mu.Unlock()
 	return c.held
 }
 
@@ -537,13 +537,13 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// instance's turn passes with nothing retained to author from, the walk open for
 	// its window. What is being tested is the admission gate, which reads "is a
 	// succession running" rather than "who went".
-	host.openAuthority(network.SessionOffer{
+	host.membership.openAuthority(network.SessionOffer{
 		Anchor: host.JoinAnchor(), Host: 2, Assigned: engine.CoordinatorParticipant,
 		Term:   network.FirstTerm,
 		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
 		Chain:  network.SuccessionChain{{ID: engine.CoordinatorParticipant, Addr: addr}},
 	}, engine.CoordinatorParticipant)
-	host.reportPeerLost(2)
+	host.membership.reportPeerLost(2)
 	host.ApplyPendingCorrections()
 	if !host.authority.Migrating() {
 		t.Fatal("losing the authority opened no succession")
@@ -557,7 +557,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 		t.Fatalf("the refusal is not distinguishable: %v", err)
 	}
 	// A guest's own port, which takes joins once its guest hosts, refuses the same.
-	if err := host.admitHosted(nil); !errors.Is(err, ErrSessionHandoff) {
+	if err := host.membership.admitHosted(nil); !errors.Is(err, ErrSessionHandoff) {
 		t.Fatalf("a guest's port mid-succession refuses with %v; want the handoff refusal", err)
 	}
 }
