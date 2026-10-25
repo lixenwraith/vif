@@ -6,7 +6,6 @@
 package snapshot
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
@@ -151,15 +150,5 @@ func Anchor(h CaptureHeader) event.JournalAnchor {
 // covers everything except itself. An Encoder's own method reuses its encodings.
 func Integrity(cap SharedCapture) (uint64, error) { return new(Encoder).Integrity(cap) }
 
-// EncodeCapture renders a capture in the bounded compressed wire envelope.
+// EncodeCapture renders a capture as sections, encoding afresh.
 func EncodeCapture(cap SharedCapture) ([]byte, error) { return new(Encoder).EncodeCapture(cap) }
-
-// DecodeCapture parses what EncodeCapture produced. It validates nothing: the
-// caller passes the result to VerifyCapture or InstallShared.
-func DecodeCapture(b []byte) (SharedCapture, error) {
-	var cap SharedCapture
-	if err := DecodeJSON(b, &cap); err != nil {
-		return SharedCapture{}, fmt.Errorf("capture decode: %w", err)
-	}
-	return cap, nil
-}

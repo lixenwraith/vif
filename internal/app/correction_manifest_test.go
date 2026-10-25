@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -942,4 +944,84 @@ func BenchmarkCaptureAtStormHighWater(b *testing.B) {
 		bytes = len(body)
 	}
 	b.ReportMetric(float64(bytes), "bytes/capture")
+}
+
+// BenchmarkKeyframeEncodeTD encodes td's capture as a keyframe from one encoder,
+// the shape a host's cadence has, and BenchmarkKeyframeEncodeTDCold from a fresh
+// one each time, which is what a part that moved costs.
+func BenchmarkKeyframeEncodeTD(b *testing.B) {
+	a, cap := tdCapture(b)
+	defer a.Close()
+	var enc snapshot.Encoder
+	var bytes int
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		body, err := enc.EncodeCapture(cap)
+		if err != nil {
+			b.Fatalf("encode: %v", err)
+		}
+		bytes = len(body)
+	}
+	b.ReportMetric(float64(bytes), "bytes/keyframe")
+}
+
+func BenchmarkKeyframeEncodeTDCold(b *testing.B) {
+	a, cap := tdCapture(b)
+	defer a.Close()
+	var bytes int
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		body, err := snapshot.EncodeCapture(cap)
+		if err != nil {
+			b.Fatalf("encode: %v", err)
+		}
+		bytes = len(body)
+	}
+	b.ReportMetric(float64(bytes), "bytes/keyframe")
+}
+
+// BenchmarkKeyframeEncodeTDMoving encodes td's capture a tick apart, the encoder
+// keeping the stores that held and deflating the ones that moved.
+func BenchmarkKeyframeEncodeTDMoving(b *testing.B) {
+	a, _ := tdCapture(b)
+	defer a.Close()
+	var enc snapshot.Encoder
+	var bytes int
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		b.StopTimer()
+		a.Tick(1)
+		cap, err := a.CaptureShared()
+		if err != nil {
+			b.Fatalf("capture: %v", err)
+		}
+		b.StartTimer()
+		body, err := enc.EncodeCapture(cap)
+		if err != nil {
+			b.Fatalf("encode: %v", err)
+		}
+		bytes = len(body)
+	}
+	b.ReportMetric(float64(bytes), "bytes/keyframe")
+}
+
+// tdCapture is td's shared world 300 ticks in, with its maze built and its waves out.
+func tdCapture(b *testing.B) (*App, snapshot.SharedCapture) {
+	b.Helper()
+	if _, err := os.Stat(filepath.Join(soakRoot, "scenario", "td")); err != nil {
+		b.Skip("the td scenario is not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Width: 200, Height: 60, Resources: resource.Options{Dir: soakRoot, Scenario: "td"}})
+	if err != nil {
+		b.Fatalf("headless: %v", err)
+	}
+	a.Tick(300)
+	cap, err := a.CaptureShared()
+	if err != nil {
+		b.Fatalf("capture: %v", err)
+	}
+	return a, cap
 }

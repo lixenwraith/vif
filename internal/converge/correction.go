@@ -39,12 +39,11 @@ type Corrections struct {
 	// owns the per-peer schedule, so a peer's plan and the capture it is planned
 	// against cannot be read a decision apart. Both encodings of the baseline are
 	// replaced with it; a nil one is encoded on first use.
-	publishMu     sync.Mutex
-	baseline      snapshot.SharedCapture // last keyframe published; every delta names its tick
-	keyBody       []byte                 // that keyframe as a bare capture, which is what a join sends
-	keyCorrection []byte                 // the same baseline in the correction envelope
-	haveKey       bool
-	lastKeyTick   uint64 // the tick that keyframe describes
+	publishMu   sync.Mutex
+	baseline    snapshot.SharedCapture // last keyframe published; every delta names its tick
+	keyBody     []byte                 // that keyframe encoded, which a join and a fallback send alike
+	haveKey     bool
+	lastKeyTick uint64 // the tick that keyframe describes
 
 	// sizes is the measured wire cost of each shape. At the storm high water a
 	// keyframe is ~15.4 KiB against ~7.1 KiB for a delta, far enough apart that one
@@ -494,7 +493,7 @@ func (c *Corrections) encodeBodyLocked(
 	}
 	start := time.Now() // [wall] telemetry only; outside the world lock
 	if keyframe {
-		body, err = c.inst.Encoder().EncodeCorrection(cap)
+		body, err = c.inst.Encoder().EncodeCapture(cap)
 	} else {
 		body, err = snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(c.baseline, cap))
 	}
@@ -516,8 +515,7 @@ func (c *Corrections) recordPublicationLocked(
 		c.recordSizeLocked(keyframe, len(body))
 	}
 	if keyframe {
-		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, nil, true, cap.Header.Tick
-		c.keyCorrection = body
+		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, body, true, cap.Header.Tick
 	}
 	m := c.tel
 	m.EncodeUS.Store(took.Microseconds())
@@ -872,7 +870,7 @@ func (c *Corrections) followRunLocked() event.Stamp {
 	c.log.Info("converge", "msg", "tick-keyed state dropped for a new run",
 		"from_run", c.run.Load(), "run", at.Run)
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = snapshot.SharedCapture{}, nil, false, 0
-	c.keyCorrection, c.nextBroadcast = nil, 0
+	c.nextBroadcast = 0
 	for _, p := range c.peers {
 		p.nextTick, p.manifestTick, p.answeredTick, p.provedTick = 0, 0, 0, 0
 		p.flight, p.owed = owedSend{}, nil
@@ -956,7 +954,6 @@ func (c *Corrections) takeKeyframe() ([]byte, uint64, error) {
 		return nil, 0, fmt.Errorf("capture encode: %w", err)
 	}
 	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, body, true, cap.Header.Tick
-	c.keyCorrection = nil
 	c.recordSizeLocked(true, len(body))
 	c.tel.Bytes.Store(int64(len(body)))
 	c.tel.Keyframes.Add(1)
@@ -1162,7 +1159,7 @@ func (c *Corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
 		if !c.inst.Encoder().Verify(full) {
 			return snapshot.SharedCapture{}, errors.New("correction keyframe does not match its integrity hash")
 		}
-		c.SetBaseline(full)
+		c.SetBaseline(full, len(body))
 		return full, nil
 	}
 	base, ok := c.baselineCapture()
@@ -1402,11 +1399,18 @@ func (c *Corrections) holdingThrough(tick uint64) bool {
 
 // SetBaseline records the keyframe later deltas are computed against, and the
 // tick the convergence floor is measured from.
-func (c *Corrections) SetBaseline(cap snapshot.SharedCapture) {
+func (c *Corrections) SetBaseline(cap snapshot.SharedCapture, bytes int) {
 	c.followRun()
 	c.installedMu.Lock()
 	c.installed, c.haveBase, c.keyTick = cap, true, cap.Header.Tick
 	c.installedMu.Unlock()
+	// What the whole world cost on the wire is what a relay, which measures no
+	// keyframe of its own, bounds the repairs it serves by.
+	if bytes > 0 {
+		c.publishMu.Lock()
+		c.recordSizeLocked(true, bytes)
+		c.publishMu.Unlock()
+	}
 	// A whole world is the answer to every request the selective exchange can
 	// make, so whatever this instance was waiting for it is no longer waiting.
 	c.clearKeyframeWait()

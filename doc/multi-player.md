@@ -533,16 +533,18 @@ The procedure on each survivor is:
    listening, a refusal no retry helps, or no place for this run. A survivor that
    reached its host through another participant walks at once.
 3. **Walk the list.** A survivor dials each candidate whose turn has begun, once a
-   second, and announces itself on each link it opens, so a host that took the term
-   before that link existed answers with its record. A candidate whose turn comes
-   takes the term if the session lets it move, with one self-check, retention: a
-   host with no retained authoritative record has no baseline for a delta to name
-   and would answer the first manifest with a whole world for every survivor at
-   once. A join capture counts, so a guest admitted seconds before the loss is
-   eligible. A record carries the roster with its slots and holders, the anchor, the
-   chain and the evidence tick, so adopting it is one decision. The host starts its
-   correction pump, a live script's or bot's included; only a harness publishes by
-   hand.
+   second, and announces itself on each link it opens and again on every link each
+   pass, since the notice sent as the loss was seen is dropped by a peer still
+   linked to the lost host, or by a full queue; a host that took the term before
+   that link existed, or before that notice was read, answers with its record. A
+   candidate whose turn comes takes the term if the session lets it move, with one
+   self-check, retention: a host with no retained authoritative record has no
+   baseline for a delta to name and would answer the first manifest with a whole
+   world for every survivor at once. A join capture counts, so a guest admitted
+   seconds before the loss is eligible. A record carries the roster with its slots
+   and holders, the anchor, the chain and the evidence tick, so adopting it is one
+   decision. The host starts its correction pump, a live script's or bot's included;
+   only a harness publishes by hand.
 4. **The host resumes its group.** Every survivor that adopts a record reports the
    term it joined, and the host resumes once every survivor's report is in, or a
    window after it took the term for whoever is missing; the lost authority's bots

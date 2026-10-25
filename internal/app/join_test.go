@@ -59,7 +59,7 @@ func TestSnapshotJoinCarriesTheGoldDeadline(t *testing.T) {
 	}
 	before := goldTimer(host)
 
-	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host)); err != nil {
+	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host), 0); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
 	if got := goldTimer(guest); got != before {
@@ -108,7 +108,7 @@ func TestSnapshotJoinTakesTheHostsWorldNotItsOwn(t *testing.T) {
 	}
 
 	cap := mustRoundTrip(t, host)
-	if err := guest.JoinSessionAt(offer, cap); err != nil {
+	if err := guest.JoinSessionAt(offer, cap, 0); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
 	if idx, lx, ly, differs := snapshot.FirstDiff(host.SnapshotShared(), guest.SnapshotShared()); differs {
@@ -139,7 +139,7 @@ func TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor(t *testing.T) {
 		t.Fatalf("host session: %v", err)
 	}
 	host.Tick(30)
-	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host)); err != nil {
+	if err := guest.JoinSessionAt(offer, mustRoundTrip(t, host), 0); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
 

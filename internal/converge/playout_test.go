@@ -21,7 +21,7 @@ func receiver(t *testing.T) *run {
 // chunk stream does.
 func deliverBody(t *testing.T, r *run, cap snapshot.SharedCapture) {
 	t.Helper()
-	body, err := snapshot.EncodeCorrection(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("correction encode: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestTheNextRunsKeyframeWaitsForTheReset(t *testing.T) {
 	_, guest := exchange(t)
 	cap := capture(1, 3)
 	cap.Header.Run++
-	body, err := snapshot.EncodeCorrection(seal(cap))
+	body, err := snapshot.EncodeCapture(seal(cap))
 	if err != nil {
 		t.Fatal(err)
 	}

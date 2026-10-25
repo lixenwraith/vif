@@ -283,9 +283,9 @@ func (a *App) ApplyPendingCorrections() {
 // adoptCorrectionBaseline records the capture a join installed, so the deltas that
 // follow it have the keyframe they name. It is the same object from both ends: the
 // host sent a keyframe and this is the instance that installed it.
-func (a *App) adoptCorrectionBaseline(cap snapshot.SharedCapture) {
+func (a *App) adoptCorrectionBaseline(cap snapshot.SharedCapture, bytes int) {
 	if a.corrections != nil {
-		a.corrections.SetBaseline(cap)
+		a.corrections.SetBaseline(cap, bytes)
 	}
 }
 

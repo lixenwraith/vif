@@ -87,16 +87,12 @@ const (
 	CorrectionDelta
 )
 
-// correctionEnvelope is what one correction looks like on the wire, before it is
-// chunked. Exactly one of the two bodies is present, and the receiver reads which
-// from the field that is there rather than from a flag it has to trust.
+// correctionEnvelope is a delta on the wire, before it is chunked; a keyframe
+// travels as the capture itself, in the sections codec, which the envelope's codec
+// byte tells from this.
 type correctionEnvelope struct {
-	Full  *SharedCapture      `json:"full,omitempty"`
 	Delta *SharedCaptureDelta `json:"delta,omitempty"`
 }
-
-// EncodeCorrection renders a keyframe for transport.
-func EncodeCorrection(cap SharedCapture) ([]byte, error) { return new(Encoder).EncodeCorrection(cap) }
 
 // EncodeCorrectionDelta renders a delta for transport.
 func EncodeCorrectionDelta(d SharedCaptureDelta) ([]byte, error) {
@@ -105,21 +101,18 @@ func EncodeCorrectionDelta(d SharedCaptureDelta) ([]byte, error) {
 
 // DecodeCorrection parses a correction body and reports which shape it is.
 func DecodeCorrection(b []byte) (CorrectionKind, SharedCapture, SharedCaptureDelta, error) {
+	if isSections(b) {
+		cap, err := DecodeCapture(b)
+		return CorrectionKeyframe, cap, SharedCaptureDelta{}, err
+	}
 	var env correctionEnvelope
 	if err := DecodeJSON(b, &env); err != nil {
 		return 0, SharedCapture{}, SharedCaptureDelta{}, fmt.Errorf("correction decode: %w", err)
 	}
-	switch {
-	case env.Full != nil && env.Delta != nil:
-		return 0, SharedCapture{}, SharedCaptureDelta{},
-			errors.New("correction carries both a keyframe and a delta")
-	case env.Full != nil:
-		return CorrectionKeyframe, *env.Full, SharedCaptureDelta{}, nil
-	case env.Delta != nil:
-		return CorrectionDelta, SharedCapture{}, *env.Delta, nil
-	default:
+	if env.Delta == nil {
 		return 0, SharedCapture{}, SharedCaptureDelta{}, errors.New("correction carries neither shape")
 	}
+	return CorrectionDelta, SharedCapture{}, *env.Delta, nil
 }
 
 // WrittenDelta is a capture this instance wrote, against the capture it held just

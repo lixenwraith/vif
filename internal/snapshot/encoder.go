@@ -5,24 +5,45 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // hashDomainCapture separates a capture's integrity from the manifest's hashes.
 const hashDomainCapture = "vif/capture/integrity/1\x00"
 
 // Encoder is one instance's encodings of the captures it seals, indexes and sends.
-// A store cell keeps its JSON and row hash while its value is unchanged, and a store
-// its indexed section while its rows are, so a capture costs what moved in it. Calls
-// may run concurrently; what they return is read-only.
+// A store cell keeps its JSON and row hash while its value is unchanged, and a
+// store its indexed section and its deflated rows while its rows are, so a capture
+// costs what moved in it. Calls may run concurrently; what they return is read-only.
 type Encoder struct {
 	rows engine.RowEncoder
 
 	mu       sync.Mutex
 	sections []*storeSection
+
+	blobMu sync.Mutex
+	blobs  []storeBlob
+}
+
+// A capture's parts on the wire: partRest is one JSON object holding the header
+// under partHeader, the manifest's whole sections and every store under
+// parameter.SnapshotSectionBlobBytes, each keyed by its section name; the stores
+// from that size up are parts of their own, named as their sections are.
+const (
+	partRest   = "rest"
+	partHeader = "header"
+)
+
+// storeBlob is one store's deflated rows and the rows they were rendered from.
+type storeBlob struct {
+	built []engine.StoreRow
+	plain int
+	blob  []byte
 }
 
 // storeSection is one store's last indexed section and what it was built from: the
@@ -88,70 +109,148 @@ func integrityOf(cap SharedCapture, stores [][]engine.StoreRow) (uint64, error) 
 	return h.sum(), nil
 }
 
-// EncodeCapture renders a capture in the bounded compressed wire envelope.
+// EncodeCapture renders a capture as sections: the small parts deflated together,
+// each large store on its own and, while its rows are the slice the row encoder
+// returned before, sent from the bytes made then.
 func (e *Encoder) EncodeCapture(cap SharedCapture) ([]byte, error) {
-	plain, err := e.appendCapture(nil, cap)
-	if err != nil {
-		return nil, err
-	}
-	return encodePlain(plain, snapshotCodecFlate)
-}
-
-// EncodeCorrection renders a keyframe for transport.
-func (e *Encoder) EncodeCorrection(cap SharedCapture) ([]byte, error) {
-	plain, err := e.appendCapture([]byte(`{"full":`), cap)
-	if err != nil {
-		return nil, err
-	}
-	return encodePlain(append(plain, '}'), snapshotCodecFlate)
-}
-
-// appendCapture renders cap exactly as json.Marshal does, each store cell from its
-// encoding: TestEncoderReuseMatchesAFreshEncoding holds the two together.
-func (e *Encoder) appendCapture(dst []byte, cap SharedCapture) ([]byte, error) {
 	stores, err := e.rows.Encode(&cap.World, storeRowHash)
 	if err != nil {
 		return nil, fmt.Errorf("capture encode: %w", err)
 	}
-	if dst, err = appendField(dst, `{"header":`, cap.Header); err != nil {
-		return nil, err
+	rest := []byte{'{'}
+	for _, part := range []struct {
+		name string
+		v    any
+	}{
+		{partHeader, cap.Header},
+		{SectionMeta, metaScalars{NextEntity: cap.World.NextEntity, Created: cap.World.Created, Destroyed: cap.World.Destroyed}},
+		{SectionStreams, cap.Streams}, {SectionSystems, cap.Systems}, {SectionStatus, cap.Status}, {SectionFSM, cap.FSM},
+	} {
+		plain, err := json.Marshal(part.v)
+		if err != nil {
+			return nil, fmt.Errorf("capture encode: %w", err)
+		}
+		rest = appendMember(rest, part.name, plain)
 	}
-	w := cap.World
-	dst = strconv.AppendUint(append(dst, `,"world":{"next_entity":`...), w.NextEntity, 10)
-	dst = strconv.AppendInt(append(dst, `,"created":`...), w.Created, 10)
-	dst = strconv.AppendInt(append(dst, `,"destroyed":`...), w.Destroyed, 10)
+
+	e.blobMu.Lock()
+	defer e.blobMu.Unlock()
+	if e.blobs == nil {
+		e.blobs = make([]storeBlob, len(stores))
+	}
+	parts := make([]sectionPart, 1, len(stores)+1)
 	for i, rows := range stores {
 		if len(rows) == 0 {
 			continue
 		}
-		dst = append(append(append(dst, `,"`...), engine.SharedWorldStoreNames[i]...), `":[`...)
-		for j, r := range rows {
-			if j > 0 {
-				dst = append(dst, ',')
-			}
-			dst = strconv.AppendUint(append(dst, `{"e":`...), uint64(r.Entity), 10)
-			dst = append(append(append(dst, `,"v":`...), r.Value...), '}')
+		name, b := StoreSectionPrefix+engine.SharedWorldStoreNames[i], &e.blobs[i]
+		if sameRows(b.built, rows) {
+			parts = append(parts, sectionPart{name: name, plain: b.plain, blob: b.blob})
+			continue
 		}
-		dst = append(dst, ']')
-	}
-	dst = append(dst, '}')
-	for _, f := range []struct {
-		key string
-		v   any
-	}{{`,"streams":`, cap.Streams}, {`,"systems":`, cap.Systems}, {`,"status":`, cap.Status}, {`,"fsm":`, cap.FSM}} {
-		if dst, err = appendField(dst, f.key, f.v); err != nil {
+		plain := appendStore(nil, rows)
+		if len(plain) < parameter.SnapshotSectionBlobBytes {
+			rest = appendMember(rest, name, plain)
+			continue
+		}
+		blob, err := deflateBytes(plain)
+		if err != nil {
 			return nil, err
 		}
+		*b = storeBlob{built: rows, plain: len(plain), blob: blob}
+		parts = append(parts, sectionPart{name: name, plain: len(plain), blob: blob})
 	}
-	return append(dst, '}'), nil
+	rest = append(rest, '}')
+	blob, err := deflateBytes(rest)
+	if err != nil {
+		return nil, err
+	}
+	parts[0] = sectionPart{name: partRest, plain: len(rest), blob: blob}
+	return encodeSections(parts)
 }
 
-func appendField(dst []byte, key string, v any) ([]byte, error) {
-	body, err := json.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("capture encode: %w", err)
+// appendMember appends one member of the rest object, its JSON already rendered.
+func appendMember(dst []byte, name string, plain []byte) []byte {
+	if len(dst) > 1 {
+		dst = append(dst, ',')
 	}
-	return append(append(dst, key...), body...), nil
+	return append(append(strconv.AppendQuote(dst, name), ':'), plain...)
+}
+
+// appendStore renders one store's rows as json.Marshal renders its entries, each
+// cell from its encoding.
+func appendStore(dst []byte, rows []engine.StoreRow) []byte {
+	dst = append(dst, '[')
+	for j, r := range rows {
+		if j > 0 {
+			dst = append(dst, ',')
+		}
+		dst = strconv.AppendUint(append(dst, `{"e":`...), uint64(r.Entity), 10)
+		dst = append(append(append(dst, `,"v":`...), r.Value...), '}')
+	}
+	return append(dst, ']')
+}
+
+// DecodeCapture parses what EncodeCapture produced, part by part. It validates
+// nothing about the world: the caller passes the result to VerifyCapture or
+// InstallShared.
+func DecodeCapture(b []byte) (SharedCapture, error) {
+	parts, err := decodeSections(b)
+	if err != nil {
+		return SharedCapture{}, fmt.Errorf("capture decode: %w", err)
+	}
+	var cap SharedCapture
+	for _, p := range parts {
+		if p.name != partRest {
+			err = decodePart(&cap, p.name, p.blob)
+		} else {
+			var members map[string]json.RawMessage
+			err = json.Unmarshal(p.blob, &members)
+			for name, data := range members { // each member fills its own field
+				if err != nil {
+					break
+				}
+				err = decodePart(&cap, name, data)
+			}
+		}
+		if err != nil {
+			return SharedCapture{}, fmt.Errorf("capture decode: %w", err)
+		}
+	}
+	return cap, nil
+}
+
+// decodePart parses one named part into its place in cap.
+func decodePart(cap *SharedCapture, name string, data []byte) error {
+	var err error
+	switch {
+	case name == partHeader:
+		err = json.Unmarshal(data, &cap.Header)
+	case name == SectionMeta:
+		var m metaScalars
+		err = json.Unmarshal(data, &m)
+		cap.World.NextEntity, cap.World.Created, cap.World.Destroyed = m.NextEntity, m.Created, m.Destroyed
+	case name == SectionStreams:
+		err = json.Unmarshal(data, &cap.Streams)
+	case name == SectionSystems:
+		err = json.Unmarshal(data, &cap.Systems)
+	case name == SectionStatus:
+		err = json.Unmarshal(data, &cap.Status)
+	case name == SectionFSM:
+		err = json.Unmarshal(data, &cap.FSM)
+	case strings.HasPrefix(name, StoreSectionPrefix):
+		i := slices.Index(engine.SharedWorldStoreNames, name[len(StoreSectionPrefix):])
+		if i < 0 {
+			return fmt.Errorf("no store %q", name)
+		}
+		err = engine.SharedWorldDecodeStore(&cap.World, i, data)
+	default:
+		return fmt.Errorf("unknown part %q", name)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	return nil
 }
 
 // Build indexes a detached capture outside the world lock.

@@ -59,9 +59,13 @@ func TestEncoderReuseMatchesAFreshEncoding(t *testing.T) {
 		if fresh, _ := Integrity(cap); err != nil || sum != fresh {
 			t.Fatalf("%s: the reused seal differs from a fresh one", what)
 		}
-		plain, err := enc.appendCapture(nil, cap)
-		if body, _ := json.Marshal(cap); err != nil || string(plain) != string(body) {
-			t.Fatalf("%s: the rendered capture differs from its JSON", what)
+		body, err := enc.EncodeCapture(cap)
+		if err != nil {
+			t.Fatalf("%s: encode: %v", what, err)
+		}
+		back, err := DecodeCapture(body)
+		if got, _ := json.Marshal(back); err != nil || string(got) != string(mustJSON(cap)) {
+			t.Fatalf("%s: the capture decoded from its sections differs from the one encoded (%v)", what, err)
 		}
 		held, expected = append(held, got), append(expected, want)
 	}
@@ -92,6 +96,14 @@ func TestEncoderReuseMatchesAFreshEncoding(t *testing.T) {
 			t.Fatalf("a later build changed retained index %d", i)
 		}
 	}
+}
+
+func mustJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // fillLeaves sets every exported leaf of v from r.

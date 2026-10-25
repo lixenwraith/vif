@@ -276,6 +276,12 @@ const (
 	// so an epoch behind it waits for one chunk rather than for a whole world.
 	SnapshotCorrectionChunkBytes = 4 << 10
 
+	// SnapshotSectionBlobBytes is the JSON size from which a capture's store travels
+	// as its own deflated blob, kept while its rows hold. The parts below it deflate
+	// together each time: alone, a small part's deflate starts cold and costs a
+	// quarter of its bytes; together, they cost a keyframe tens of microseconds.
+	SnapshotSectionBlobBytes = 16 << 10
+
 	// SnapshotCadenceRecoverTicks and SnapshotCadenceRecoverKeyframe bound how
 	// fast the operating point may move back toward nominal. Degradation is
 	// immediate — a link that has narrowed has already narrowed — and recovery is

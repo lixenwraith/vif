@@ -407,6 +407,58 @@ func TestTheWalkGoesDownTheList(t *testing.T) {
 	}
 }
 
+// TestASurvivorRepeatsItsNoticeWhileItWalks: a survivor whose notice was lost on
+// the wire, and that missed its host's record the same way, is answered on the
+// notice it sends again each pass of its walk, rather than walking on to a fork
+// beside a host it is linked to.
+func TestASurvivorRepeatsItsNoticeWhileItWalks(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Peer(2, 3)
+	runs := make([]*run, 3)
+	for i := range runs {
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(3))
+		runs[i].open(1, chainOf(2, 3), false)
+	}
+	if err := runs[0].c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	_ = mesh.Node(1).Close()
+	host, guest := runs[1], runs[2]
+	survivors := runs[1:]
+	// Every frame the survivors exchange as the loss lands is lost: the guest's
+	// notice and the host's record alike.
+	for _, r := range survivors {
+		r.world.port.(*network.MeshPort).SetShape(network.LinkShape{LossEvery: 1})
+		r.c.QueuePeerLost(1)
+	}
+	deliver(survivors, 3)
+	if host.u.Holder() != 2 || guest.u.Holder() != 1 {
+		t.Fatalf("after the loss the host follows %d and the guest %d; want the host authoring alone",
+			host.u.Holder(), guest.u.Holder())
+	}
+	for _, r := range survivors {
+		r.world.port.(*network.MeshPort).SetShape(network.LinkShape{})
+	}
+	guest.r.mu.Lock()
+	guest.r.nextPass = time.Now().Add(time.Hour)
+	guest.r.mu.Unlock()
+	deliver(survivors, 2)
+	if guest.u.Holder() != 1 {
+		t.Fatal("the guest followed with no pass of its walk, so something besides the notice carried the record")
+	}
+	guest.r.mu.Lock()
+	guest.r.nextPass = time.Time{}
+	guest.r.mu.Unlock()
+	deliver(survivors, 3)
+	if got := guest.u.State(); got.Authority != 2 || got.Term != network.FirstTerm+1 {
+		t.Fatalf("the guest holds %+v; want the host's term, answered on the notice sent again", got)
+	}
+}
+
 // TestASurvivorCarriesOnlyWhomItRelaysFor: one that follows the new host answers a
 // walking survivor's notice with the host's record only once it carries that
 // survivor, which then follows the host through it and is counted in.

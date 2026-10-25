@@ -346,7 +346,8 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 		for deadline := time.Now().Add(socketWait); (a.authority.Holder() != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		}
 		if a.authority.Holder() != id {
-			t.Fatalf("participant %d follows %d; want the first candidate, %d", a.localParticipant(), a.authority.Holder(), id)
+			t.Fatalf("participant %d follows %d; want the first candidate, %d (%s; %s)",
+				a.localParticipant(), a.authority.Holder(), id, a.authority.Summary(), a.SessionSummary())
 		}
 	}
 	// Dialled once the session plays again, as a player meets it: a join whose gate

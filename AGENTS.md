@@ -92,6 +92,11 @@ It is the contract, not a suggestion.
 - A gap you are deferring goes in `doc/todo.md`: extend the item it belongs to, or
   add a concise one in the file's pattern.
 - PR bodies: what changed, why, how it was verified.
+- A change made for performance reports its measurement, before and after, in the
+  PR body and in the design doc it serves: the benchmark or the reading, the
+  shape it was taken in, and the benefit in the unit the user feels (bytes, CPU,
+  lock time, latency). A projection is not a result; a change whose measured
+  benefit is nil says so.
 - One task, one branch, one PR. Divide the work into commits on that branch; do not
   split it across stacked PRs or multiple branches.
 - Work that continues after its PR merged starts again from the latest main; never
