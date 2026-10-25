@@ -28,6 +28,7 @@ type Reach struct {
 	declared string
 	dialing  map[network.PeerID]bool
 	nextPass time.Time
+	passes   int
 
 	statChain     *atomic.Int64
 	statAttempts  *atomic.Int64
@@ -180,6 +181,9 @@ func (r *Reach) drive(walking bool) {
 		r.retrySuccession()
 		return
 	}
+	r.mu.Lock()
+	r.passes = 0
+	r.mu.Unlock()
 	r.statAttempts.Store(0)
 	r.dialSuccessor()
 }
@@ -217,14 +221,11 @@ func (r *Reach) dialSuccessor() {
 }
 
 // retrySuccession dials each candidate whose turn has come and is not linked yet,
-// repeating once a second: the record of one that hosts, or a link that carries
-// this instance, arrives on it. Every participant holds the chain, so losing a
-// candidate too is survivable.
+// once a second, for the record of one that hosts or a link that carries this
+// instance. From the second pass the notice goes again on every link: the first
+// went as the loss was seen, which a peer still linked to the lost host drops
+// unread, as a full queue drops any frame; whoever hosts by now answers it.
 func (r *Reach) retrySuccession() {
-	dialer, ok := r.inst.Transport().(engine.PeerDialingPort)
-	if !ok {
-		return
-	}
 	now := time.Now()
 	r.mu.Lock()
 	if now.Before(r.nextPass) {
@@ -232,7 +233,16 @@ func (r *Reach) retrySuccession() {
 		return
 	}
 	r.nextPass = now.Add(parameter.NetworkRejoinPassInterval)
+	r.passes++
+	again := r.passes > 1
 	r.mu.Unlock()
+	if again {
+		r.authority.sendReport()
+	}
+	dialer, ok := r.inst.Transport().(engine.PeerDialingPort)
+	if !ok {
+		return
+	}
 
 	chain := r.authority.Chain()
 	for _, id := range r.authority.walkTargets(now) {

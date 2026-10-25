@@ -40,7 +40,7 @@ func TestBaselineBytesFollowTheirBaseline(t *testing.T) {
 				}
 			}
 			_, got := assembly.Result()
-			want, err := snapshot.EncodeCorrection(host.c.baseline)
+			want, err := snapshot.EncodeCapture(host.c.baseline)
 			if err != nil || !done || !bytes.Equal(got, want) {
 				t.Fatalf("fallback differs from its current baseline: complete=%t err=%v", done, err)
 			}
@@ -81,7 +81,7 @@ func TestAWholeWorldLeavesAsItsLinkDrains(t *testing.T) {
 	host, guest, runs := slowLink(t)
 	host.c.sendKeyframeTo(host.world.port, 2, host.world.Position().Tick)
 	host.c.publishMu.Lock()
-	left, total := len(host.c.peers[2].flight.frames), len(host.c.keyCorrection)
+	left, total := len(host.c.peers[2].flight.frames), len(host.c.keyBody)
 	host.c.publishMu.Unlock()
 	if total < 8*parameter.SnapshotCorrectionChunkBytes || left == 0 {
 		t.Fatalf("a %d-byte world left %d chunks behind on a slow link; want it paced", total, left)
@@ -610,5 +610,13 @@ func TestARepairTravelsInChunksAndIsBoundedByTheKeyframe(t *testing.T) {
 	}
 	if host.c.repairIsWorthSending(4 * network.MaxPayloadSize) {
 		t.Fatal("a repair wider than the keyframe was sent")
+	}
+	// A relay measures no keyframe of its own and prices against the whole world
+	// it installed, here the one the exchange opened with.
+	if guest.c.repairIsWorthSending(network.MaxSnapshotBytes / 2) {
+		t.Fatal("a relay sent a repair wider than the keyframe it installed")
+	}
+	if !guest.c.repairIsWorthSending(64) {
+		t.Fatal("a relay refused a repair narrower than the keyframe it installed")
 	}
 }

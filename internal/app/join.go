@@ -87,7 +87,8 @@ func (a *App) JoinSession(o network.SessionOffer) error {
 // because a capture's placements are relative to those bounds; the FSM boot's queued
 // spawn, which declares the cursor template; the staged install; then the roster on
 // the installed world, where all that is left is which cursors this instance drives.
-func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture) error {
+// bytes is what the capture cost on the wire, zero for one this run did not receive.
+func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, bytes int) error {
 	if err := a.validateSessionOffer(o, o.Assigned); err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture) 
 	// deltas that follow it are computed against. Adopting it here is what lets a
 	// participant start applying corrections at the next cadence rather than at the
 	// next keyframe.
-	a.adoptCorrectionBaseline(cap)
+	a.adoptCorrectionBaseline(cap, bytes)
 
 	return a.bindSessionControl(o, o.Assigned)
 }

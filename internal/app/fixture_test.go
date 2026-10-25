@@ -143,7 +143,7 @@ func mustEncode(t *testing.T, cap snapshot.SharedCapture) []byte {
 
 func mustEncodeCorrection(t *testing.T, cap snapshot.SharedCapture) []byte {
 	t.Helper()
-	body, err := snapshot.EncodeCorrection(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("correction encode: %v", err)
 	}

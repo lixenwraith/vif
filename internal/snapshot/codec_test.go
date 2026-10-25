@@ -1,12 +1,17 @@
 package snapshot
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"math/rand/v2"
+	"reflect"
 	"slices"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func TestSnapshotWireEnvelopeRoundTripsAndIsBounded(t *testing.T) {
@@ -91,5 +96,80 @@ func TestACaptureExpandingPastTheWireCeilingTravels(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatal("the decoded body is not the one encoded")
+	}
+}
+
+// TestACaptureTravelsAsSectionsFromCachedBlobs: a capture round-trips through the
+// sections codec, a store from the blob size up travels as its own deflate and goes
+// as the bytes made before while its rows hold, a store below it rides the rest
+// part, a store that moved is deflated again alone, and a damaged body is refused.
+func TestACaptureTravelsAsSectionsFromCachedBlobs(t *testing.T) {
+	r := rand.New(rand.NewPCG(3, 4))
+	var cap SharedCapture
+	cap.Header.Tick = 7
+	world := reflect.ValueOf(&cap.World).Elem()
+	for i := range world.NumField() {
+		f := world.Field(i)
+		if f.Kind() != reflect.Slice {
+			continue
+		}
+		n := 2
+		if name := world.Type().Field(i).Name; name == "Positions" || name == "Wall" {
+			n = parameter.SnapshotSectionBlobBytes / 16 // no row renders under 16 bytes
+		}
+		f.Set(reflect.MakeSlice(f.Type(), n, n))
+		for k := range n {
+			f.Index(k).Field(0).SetUint(uint64(k + 1))
+			fillLeaves(f.Index(k).Field(1), r)
+		}
+	}
+	var enc Encoder
+	first, err := enc.EncodeCapture(cap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isSections(first) {
+		t.Fatalf("a capture left in codec %d, want the sections codec", first[5])
+	}
+	back, err := DecodeCapture(first)
+	if got, want := mustJSON(back), mustJSON(cap); err != nil || string(got) != string(want) {
+		t.Fatalf("the decoded capture differs from the one encoded (%v)", err)
+	}
+	wall, glyph := slices.Index(engine.SharedWorldStoreNames, "wall"), slices.Index(engine.SharedWorldStoreNames, "glyph")
+	if enc.blobs[glyph].blob != nil {
+		t.Fatal("a store below the blob size was deflated on its own")
+	}
+	walls, positions := &enc.blobs[wall].blob[0], &enc.blobs[0].blob[0]
+	cap.Header.Tick = 8
+	cap.World.Wall[0].Value.BlockMask ^= 1
+	second, err := enc.EncodeCapture(cap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if &enc.blobs[wall].blob[0] == walls {
+		t.Fatal("a moved store was sent from its old blob")
+	}
+	if &enc.blobs[0].blob[0] != positions {
+		t.Fatal("an unchanged store was deflated again")
+	}
+	back, err = DecodeCapture(second)
+	if got, want := mustJSON(back), mustJSON(cap); err != nil || string(got) != string(want) {
+		t.Fatalf("the moved capture did not travel (%v)", err)
+	}
+	if third, _ := enc.EncodeCapture(cap); !bytes.Equal(second, third) {
+		t.Fatal("an unchanged capture encoded to other bytes")
+	}
+	for _, mutate := range []struct {
+		name string
+		fn   func([]byte) []byte
+	}{
+		{"codec", func(b []byte) []byte { b[5] = snapshotCodecFlate; return b }},
+		{"truncated", func(b []byte) []byte { return b[:len(b)-3] }},
+		{"a part's plain size", func(b []byte) []byte { b[snapshotWireHeader+1+1+len(partRest)] += 1; return b }},
+	} {
+		bad := mutate.fn(append([]byte(nil), second...))
+		if _, err := DecodeCapture(bad); err == nil {
+			t.Fatalf("%s: a damaged body decoded", mutate.name)
+		}
 	}
 }
