@@ -104,8 +104,7 @@ func (s *StagedInstall) Commit() error {
 	var (
 		err                  error
 		behind               uint64
-		projected            snapshot.SharedCapture
-		before               snapshot.SharedCapture
+		written              stagedWrite
 		place                event.Stamp
 		mark                 uint64
 		participant          uint32
@@ -140,23 +139,17 @@ func (s *StagedInstall) Commit() error {
 		// What the live world settled after its last completed tick — a copy the
 		// queue published at once, a record the authority received late — is due now.
 		staging.glue.receiveDue(tick + 1)
-
-		// Unsealed: the header is replaced below and nothing verifies the body, so
-		// an integrity hash here would only lengthen the live lock.
-		staging.world.RunSafe(func() { projected, err = staging.glue.captureSharedLocked() })
 		writing := time.Now() // [wall] telemetry only
 		projectDur = writing.Sub(projecting)
+
+		// The authority's identity and fences, at the live tick: what the barrier
+		// prunes by is what the host applied, and the projection has moved the
+		// world to where this instance stands. The two worlds are compared and
+		// written in place; a journal takes the delta that write recorded.
+		hdr := header
+		hdr.Tick = tick
+		s.difference, written, err = live.writeStagedLocked(staging, hdr, journal != nil)
 		if err == nil {
-			// The authority's identity and fences, at the live tick: what the barrier
-			// prunes by is what the host applied, and the projection has moved the
-			// world to where this instance stands.
-			projected.Header = header
-			projected.Header.Tick = tick
-			// What the write moves is measured, and journaled, against this.
-			before, err = live.captureSharedLocked()
-		}
-		if err == nil {
-			s.difference, err = live.writeSharedLocked(projected, &before, true, false)
 			barrier = live.run.barrierLocked()
 		}
 		writeDur = time.Since(writing)
@@ -168,6 +161,14 @@ func (s *StagedInstall) Commit() error {
 			m.WriteUS.Store(writeDur.Microseconds())
 		}
 	})
+	var journalErr error
+	if err == nil && journal != nil {
+		// The written rows are hashed where they stand, before the staging world's
+		// player half goes: a cursor's cells change with the entities they refer to.
+		staging.world.RunSafe(func() {
+			written.integrity, journalErr = staging.glue.encoder.IntegrityLive(staging.world, written.written)
+		})
+	}
 	staging.world.RunSafe(func() { staging.world.DestroyDomainEntities(core.DomainPlayer) })
 	s.commitDur = time.Since(started)
 	s.committed = true
@@ -178,8 +179,11 @@ func (s *StagedInstall) Commit() error {
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
 	if journal != nil {
-		if err := live.journalWritten(journal, place, mark, participant, barrier, before, projected); err != nil {
-			live.world.RunSafe(func() { live.run.journalLostLocked(journal, err) })
+		if journalErr == nil {
+			journalErr = live.journalStaged(journal, place, mark, participant, barrier, written)
+		}
+		if journalErr != nil {
+			live.world.RunSafe(func() { live.run.journalLostLocked(journal, journalErr) })
 		}
 	}
 	live.telemetry.StageUS.Store(s.stageDur.Microseconds())
@@ -200,10 +204,21 @@ func (s *StagedInstall) Commit() error {
 // attaches, so the identity then is the one the offer assigned.
 func (c *corrector) journalWritten(j *event.Journal, at event.Stamp, mark uint64, participant uint32, barrier bool, before, cap snapshot.SharedCapture) error {
 	d, err := c.encoder.DiffWritten(before, cap)
-	var body []byte
-	if err == nil {
-		body, err = snapshot.EncodeJSON(d)
+	if err != nil {
+		return err
 	}
+	return c.journalDelta(j, at, mark, participant, barrier, d)
+}
+
+// journalStaged is journalWritten for a world written in place, from the delta the
+// write recorded and the integrity its rows were hashed to where they stood.
+func (c *corrector) journalStaged(j *event.Journal, at event.Stamp, mark uint64, participant uint32, barrier bool, w stagedWrite) error {
+	return c.journalDelta(j, at, mark, participant, barrier, c.encoder.DiffWrittenLight(w.before, w.written, *w.delta, w.integrity))
+}
+
+// journalDelta records one written world as its delta.
+func (c *corrector) journalDelta(j *event.Journal, at event.Stamp, mark uint64, participant uint32, barrier bool, d snapshot.WrittenDelta) error {
+	body, err := snapshot.EncodeJSON(d)
 	if err == nil {
 		err = lineHolds(body)
 	}
@@ -215,9 +230,87 @@ func (c *corrector) journalWritten(j *event.Journal, at event.Stamp, mark uint64
 	}
 	j.Capture(event.JournalCapture{
 		JSeq: mark, Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
-		Participant: participant, Authority: cap.Header.Authority, Barrier: barrier, Body: body,
+		Participant: participant, Authority: d.Header.Authority, Barrier: barrier, Body: body,
 	})
 	return nil
+}
+
+// stagedWrite is what a write in place leaves for the journal: both worlds beside
+// their rows, the rows' delta the write recorded, nil with no journal open, and the
+// integrity of the written rows, hashed where they stand through the staging
+// world's own encoder, so the live one keeps the rows it last encoded.
+type stagedWrite struct {
+	before, written snapshot.SharedCapture
+	delta           *engine.SharedWorldDelta
+	integrity       uint64
+}
+
+// writeStagedLocked is writeSharedLocked for the world that stands in the staging
+// world: the stores are compared and written in place, with no capture of either,
+// and everything beside them is read light. header is the capture's at the live
+// tick; record asks for the delta a journal writes. Caller MUST hold updateMutex;
+// the staging world's lock is taken here.
+func (c *corrector) writeStagedLocked(staging *App, header snapshot.CaptureHeader, record bool) (diff engine.WorldDifference, w stagedWrite, err error) {
+	if w.before, err = c.captureLightLocked(); err != nil {
+		return diff, w, err
+	}
+	staging.world.RunSafe(func() { w.written, err = staging.glue.captureLightLocked() })
+	if err != nil {
+		return diff, w, err
+	}
+	w.written.Header = header
+
+	// Dry run first: a carrier that rejects its record must do so before the stores
+	// are touched. Only the live carrier can refuse because of state the live world
+	// holds, which a staging pass never has.
+	savers := sharedStateSaversLocked(c.world)
+	for _, rec := range w.written.Systems {
+		saver, ok := savers[rec.System]
+		if !ok {
+			return diff, w, fmt.Errorf("capture names system %q, which this build does not run", rec.System)
+		}
+		if checker, ok := saver.(engine.SharedStateChecker); ok {
+			if e := checker.CheckShared(rec.Data); e != nil {
+				return diff, w, fmt.Errorf("refuse %s: %w", rec.System, e)
+			}
+		}
+	}
+
+	// The roster and every cursor's control assignment are re-derived from this
+	// instance's own position after the stores are written, not adopted (D-13).
+	local := c.world.CaptureCursorControl()
+	var r *engine.WorldReconcile
+	staging.world.RunSafe(func() { r = c.world.ReconcileSharedFrom(staging.world, record) })
+	diff, w.delta = r.Difference, r.Delta
+	// A world equal to the staging one on the compared surface and in every other
+	// part takes clock and barrier alone, as a hash-only answer does.
+	if diff.Entries == 0 && snapshot.HoldsBesideWorld(w.before, w.written) {
+		c.adoptClockLocked(header)
+		c.adoptSnapshotBarrierLocked(header)
+		return diff, w, nil
+	}
+	staging.world.RunSafe(r.Finish)
+	c.world.RebindCursorRoster(local)
+	c.adoptClockLocked(header)
+
+	if unknown := c.world.Resources.Rand.LoadStreams(core.DomainShared, w.written.Streams); len(unknown) > 0 {
+		return diff, w, fmt.Errorf("capture names RNG streams this build does not issue: %v", unknown)
+	}
+	for _, rec := range w.written.Systems {
+		if e := savers[rec.System].LoadShared(rec.Data); e != nil {
+			return diff, w, fmt.Errorf("install %s: %w", rec.System, e)
+		}
+	}
+	if e := c.scheduler.ImportFSM(w.written.FSM, true); e != nil {
+		return diff, w, e
+	}
+	// The barrier is rebased with the world. Tick classifies barrier-bound
+	// artifacts; each source's fence classifies its ordinary stream.
+	c.adoptSnapshotBarrierLocked(header)
+	// Last, so a carrier that publishes on load does not overwrite the captured
+	// surface with a value derived from this instance's own history.
+	installStatusLocked(c.world, w.written.Status)
+	return diff, w, nil
 }
 
 // prepareProjectionLocked makes the staging world this instance's predictor: it

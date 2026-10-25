@@ -66,11 +66,10 @@ func (w *World) CopyOut(reuse *WorldCopy) *WorldCopy {
 	}
 	// Every held entity has a position, which bounds both without a pass to count them.
 	c.cells, c.occupants = sized(reuse.cells, 0, len(p.entities)), sized(reuse.occupants, 0, len(p.entities))
-	for i := range p.grid.Cells {
-		if cell := &p.grid.Cells[i]; cell.Count > 0 {
-			c.cells = append(c.cells, occupiedCell{index: int32(i), count: cell.Count, shared: cell.SharedCount})
-			c.occupants = append(c.occupants, cell.Entities[:cell.Count]...)
-		}
+	for _, i := range p.grid.Occupied() {
+		cell := &p.grid.Cells[i]
+		c.cells = append(c.cells, occupiedCell{index: i, count: cell.Count, shared: cell.SharedCount})
+		c.occupants = append(c.occupants, cell.Entities[:cell.Count]...)
 	}
 	for d := range c.created {
 		c.created[d], c.destroyed[d] = w.createdCount[d].Load(), w.destroyedCount[d].Load()
@@ -104,9 +103,8 @@ func (w *World) CopyIn(c *WorldCopy) {
 	p.grid.Resize(c.gridW, c.gridH)
 	at := 0
 	for _, oc := range c.cells {
-		cell := &p.grid.Cells[oc.index]
-		cell.Count, cell.SharedCount = oc.count, oc.shared
-		at += copy(cell.Entities[:oc.count], c.occupants[at:])
+		p.grid.load(oc.index, oc.count, oc.shared, c.occupants[at:at+int(oc.count)])
+		at += int(oc.count)
 	}
 	w.componentMask = maps.Clone(c.mask)
 	w.nextEntityID = c.next

@@ -1,11 +1,11 @@
 [Unit]
-Description=Regularly rotate the vif allocator token
+Description=Regularly rotate the vif router token
 
 [Timer]
 OnBootSec=2m
 OnUnitActiveSec=6h
 RandomizedDelaySec=5m
-Unit=vif-allocator-token.service
+Unit=vif-router-token.service
 
 [Install]
 WantedBy=timers.target

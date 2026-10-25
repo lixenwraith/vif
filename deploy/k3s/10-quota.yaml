@@ -1,9 +1,9 @@
 # The fleet ceiling.
 #
 # Ten concurrent sessions is the deployment's stated maximum, and it is enforced
-# here rather than in the allocator alone. An allocator holds the ceiling as a
+# here rather than in the router alone. A router holds the ceiling as a
 # number it believes; a quota holds it as a number the API server refuses to
-# exceed, which is what survives an allocator that crashed mid-loop, restarted with
+# exceed, which is what survives a router that crashed mid-loop, restarted with
 # stale state, or was asked for eleven sessions by a website nobody rate-limited.
 #
 # The compute totals are ten times one session's envelope (doc/kubernetes-fleet.md

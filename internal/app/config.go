@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -202,7 +203,9 @@ type Config struct {
 	NoAdvertise   bool
 
 	// RelayAddress is where a joined run admits participants that cannot reach the
-	// host, carrying their artifacts on its own link. Empty relays only its bots.
+	// host, carrying their artifacts on its own link: an address to bind, or, with the
+	// vif:// scheme kept, a router to publish the door through (relayRouter). Empty
+	// relays only its bots.
 	RelayAddress string
 
 	// FixedAuthority pins authorship to the participant that opens the session, so
@@ -482,7 +485,12 @@ func (c Config) Validate() error {
 	}
 	if c.RelayAddress != "" {
 		relay, err := link.ParseEndpoint(c.RelayAddress)
-		if err == nil {
+		_, router := c.relayRouter()
+		switch {
+		case err != nil:
+		case router && relay.Name != "":
+			err = errors.New("-relay vif://<router> names no session: the router names the door")
+		case !router:
 			err = relay.Listenable()
 		}
 		if err == nil && c.JoinAddress == "" {
@@ -598,4 +606,18 @@ func (c Config) validateDriven() error {
 		return fmt.Errorf("%s: %dx%d leaves no game area", c.Mode, c.Width, c.Height)
 	}
 	return nil
+}
+
+// relayRouter is the router -relay names with the vif:// scheme, to publish this
+// run's door through rather than an address to bind: a door behind a NAT, reached at
+// the router's address (doc/multi-player.md §5.6).
+func (c *Config) relayRouter() (string, bool) {
+	if !strings.HasPrefix(c.RelayAddress, "vif://") {
+		return "", false
+	}
+	e, err := link.ParseEndpoint(c.RelayAddress)
+	if err != nil || e.Addr == "" {
+		return "", false
+	}
+	return e.Addr, true
 }

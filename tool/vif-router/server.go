@@ -109,6 +109,14 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 	return server
 }
 
+// routeDoors lets the browser route place a stream on a door a run published, as
+// the front door does; nil places on pods alone.
+func (s *apiServer) routeDoors(tunnels *network.TunnelHub) {
+	if s.ws != nil {
+		s.ws.route.tunnels = tunnels
+	}
+}
+
 func (s *apiServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -292,7 +300,7 @@ func (s *apiServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Successful responses must retain LogWisp's cache and stream headers rather
-	// than the allocator's finite-API defaults.
+	// than the router's finite-API defaults.
 	w.Header().Del("Cache-Control")
 	w.Header().Del("X-Content-Type-Options")
 
@@ -308,7 +316,7 @@ func (s *apiServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 
 	// The server keeps a finite WriteTimeout for create/list/health responses.
 	// Clear it only for this long-lived SSE response; request cancellation and
-	// allocator shutdown still cancel the upstream request.
+	// router shutdown still cancel the upstream request.
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	s.logProxy.ServeHTTP(w, r)
 }

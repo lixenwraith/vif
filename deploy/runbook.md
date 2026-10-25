@@ -14,16 +14,19 @@ git pull
 ```
 
 Components are `filter` (the node's `inet vif` table), `objects` (namespace,
-quota, policy, Role), `wad`, `image`, `allocator` and `logwisp`. A current one is
+quota, policy, Role), `wad`, `image`, `router` (`allocator` until the router routed
+relays; a node still running `vif-allocator` is rewired once by
+`guest/migrate-vif-router.sh`, see [deploy §11](../doc/kube-docker-deploy.md#11-the-router))
+and `logwisp`. A current one is
 skipped. Installed lines print green and incoming ones red; a file the update
-removes prints as `deleted <path>`. `image`, `allocator` and `logwisp` need an empty
+removes prints as `deleted <path>`. `image`, `router` and `logwisp` need an empty
 fleet and refuse otherwise, naming the components that do not; `filter` and `wad`
 never interrupt a match, since established connections and running pods keep what
-they started with. `allocator` and `logwisp` keep one `.previous` set, which
+they started with. `router` and `logwisp` keep one `.previous` set, which
 [`guest/README.md`](guest/README.md) restores; every other component comes back by
 running `update.sh` for it at the earlier revision, which rebuilds the session image
-that `image` removed. Settings for the allocator are
-[`guest/vif-allocator.env`](guest/vif-allocator.env), committed here and never
+that `image` removed. Settings for the router are
+[`guest/vif-router.env`](guest/vif-router.env), committed here and never
 edited on the node.
 
 ## Where things stand
@@ -38,7 +41,7 @@ edited on the node.
 finished and is waiting out its `ttlSecondsAfterFinished`, a pod still
 terminating — then the fleet log files and the five units. `blockers` is that
 report as an assertion: `the fleet is empty` and exit 0, or the same annotated
-lines and exit 1. It is the check `update.sh` and the image and allocator helpers
+lines and exit 1. It is the check `update.sh` and the image and router helpers
 make before they replace anything, so run it by hand to learn why one refused
 without starting another. `state` prints one line of what the fleet reports about
 one session — phase, roster, clock, tick, the window it has left and its join
@@ -46,7 +49,7 @@ target — and exits non-zero once that session has left the fleet.
 
 ## Empty the fleet
 
-`image`, `allocator` and `logwisp` refuse to update while any fleet object exists.
+`image`, `router` and `logwisp` refuse to update while any fleet object exists.
 
 ```sh
 ./deploy/k3s/session.sh drain
@@ -97,11 +100,12 @@ and bounded by `-players-max`, `-log-level-min`, the installed scenarios and
 | `a fleet object remained after allocation stopped` | A session was created between the first check and the stop. | Re-run `drain`; it waits for the cascade. |
 | `the fleet did not drain` | A pod outlived the background cascade by more than 60 seconds. | `./deploy/k3s/session.sh drain --force` |
 | `the worktree differs from HEAD` | Uncommitted changes. Updates build from HEAD, so they refuse to install something the tree does not describe; `--diff` still runs. | Commit, stash, or check out the revision you mean to deploy. |
-| `empty the fleet first … or update only: …` | `image`, `allocator` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
-| `<component>: could not tell what is installed`, `… names no VIF_ALLOCATOR_IMAGE; run update-vif-image.sh first` | `update.sh` checks every selected component before it changes any, and could not read this one; the line above says why. For `allocator` it is an installed env without `VIF_ALLOCATOR_IMAGE`; for `logwisp`, upstream `main` unreachable. | `./deploy/update.sh image` first, or retry once upstream answers. |
+| `empty the fleet first … or update only: …` | `image`, `router` or `logwisp` differs while a fleet object exists. | `./deploy/k3s/session.sh drain`, or run only the components it names. |
+| `<component>: could not tell what is installed`, `… names no VIF_ROUTER_IMAGE; run update-vif-image.sh first` | `update.sh` checks every selected component before it changes any, and could not read this one; the line above says why. For `router` it is an installed env without `VIF_ROUTER_IMAGE`; for `logwisp`, upstream `main` unreachable. | `./deploy/update.sh image` first, or retry once upstream answers. |
 | `revision is not on LogWisp main` | A revision given to a LogWisp helper names a commit upstream `main` does not contain: a pull-request head a squash merge discarded, or one a rewritten `main` dropped. | Give a commit on `main`, or none for its head. |
-| `logwisp.service must be active before an update`, `vif-allocator.service must be active …` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start` the unit it names |
-| `missing installed file: …` | The allocator or LogWisp updater found nothing installed to replace: the component was never installed on this node. | Install it first, [§10](../doc/kube-docker-deploy.md#10-logwisp-the-node-log-reader) or [§11](../doc/kube-docker-deploy.md#11-the-allocator) of the procedure. |
+| `logwisp.service must be active before an update`, `vif-router.service must be active …` | The updater replaces a running service and keeps one rollback set; it will not install onto a stopped one. | `sudo systemctl start` the unit it names |
+| `vif-allocator is installed and vif-router is not: run deploy/guest/migrate-vif-router.sh once …` | The node was commissioned under the router's old name; `update.sh` and the router updater read nothing of the allocator's. | Run the migration once with the fleet empty, then `update.sh` as before. |
+| `missing installed file: …` | The router or LogWisp updater found nothing installed to replace: the component was never installed on this node. | Install it first, [§10](../doc/kube-docker-deploy.md#10-logwisp-the-node-log-reader) or [§11](../doc/kube-docker-deploy.md#11-the-router) of the procedure. |
 | `refusing to replace existing path: …` | `install-logwisp.sh` is the first install only, and LogWisp is already there. | `./deploy/update.sh logwisp` |
 | `the vif-fleet identity is missing; install the log tmpfs first` | `install-logwisp.sh` reads the session logs through the `vif-fleet` group, which the log tmpfs install creates. | Install the log tmpfs ([§7](../doc/kube-docker-deploy.md#7-the-nodes-log-tmpfs)) first. |
 | `the served stream bounds are not {...}` | The restarted LogWisp is not serving the queue, connection and timeout bounds in `deploy/logwisp/aggregator.toml`, so the install did not take. The previous build is already back. | Compare the message against `curl -fsS http://127.0.0.1:8081/status \| jq .server`. A LogWisp revision that lacks a setting is the usual cause. |
@@ -129,13 +133,13 @@ curl --no-buffer -fsS https://<site-host>/vif/api/logs
 
 ## Health
 
-`vif-allocator.service` is `Type=notify`, so `systemctl start` returns once the
-allocator answers; a probe straight after one is not a race.
+`vif-router.service` is `Type=notify`, so `systemctl start` returns once the
+router answers; a probe straight after one is not a race.
 
 ```sh
 curl -fsS http://127.0.0.1:9080/healthz
 curl -fsS http://127.0.0.1:9080/readyz
-sudo journalctl -u vif-allocator.service -n 50 --no-pager
+sudo journalctl -u vif-router.service -n 50 --no-pager
 sudo journalctl -u logwisp.service -n 50 --no-pager
 ```
 
@@ -153,7 +157,7 @@ sudo journalctl \
 The accepted socket's address is recorded on the node and dropped from the
 published stream, so this answers "where did that player come from" and the SSE
 never can. Only a direct join names the player: one through the front door or the
-browser route is recorded at the node's address, since the allocator dials the pod.
+browser route is recorded at the node's address, since the router dials the pod.
 
 ```sh
 sudo jq -c 'select(.sub == "admit")' '/var/log/vif-fleet/<session-id>.jsonl'
@@ -166,6 +170,6 @@ tmpfs or the Bound PV/PVC, and nothing here should: deleting either is a
 commissioning operation, not an operational one, and
 [`guest/README.md`](guest/README.md) is where it lives.
 
-After any change to a live workload, allocator binary, Role, mount or logging
+After any change to a live workload, router binary, Role, mount or logging
 service, finish with
 [§13 of the procedure](../doc/kube-docker-deploy.md#13-first-session).

@@ -10,7 +10,7 @@ and it ends itself when nobody is in it.
 | Commission a new node | this document, §3 to §14, once |
 
 `deploy/update.sh` brings every component to the checkout's HEAD — node filter,
-K3s objects, scenario volume, session image, allocator, LogWisp's configuration and
+K3s objects, scenario volume, session image, router, LogWisp's configuration and
 unit — and LogWisp's binary to upstream `main`, skipping what is current and showing
 each change as a diff first. [The fleet design](kubernetes-fleet.md) holds the
 design and [todo](todo.md#fleet) its open work; where each host artifact lands and
@@ -28,7 +28,7 @@ this repository; §2 and §12 state only what they must provide.
 | D2 | **Docker is a build tool, not a runtime.** K3s runs its own containerd; Docker is started for a session-image or LogWisp build and disabled afterwards, because its `iptables` rules share a table with K3s's. |
 | D3 | **Cluster commands run through `sudo kubectl`.** K3s's kubeconfig stays root-readable (mode `0640`); never copy it to a login user. |
 | D4 | **The vif JSON line is the log contract.** Records originate in `internal/vlog` and every hop preserves those bytes; nothing reads a Kubernetes pod log. |
-| D5 | **The allocator runs on the node.** It needs the K3s API and node-local access to the pod probes; port 6443 never leaves the node. |
+| D5 | **The router runs on the node.** It needs the K3s API and node-local access to the pod probes; port 6443 never leaves the node. |
 | D6 | **The session transports are unauthenticated.** Anyone who can reach a forwarded port or the browser route can join; the forwarded surface and the application limits are the controls ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
 
 ## 1. The shape
@@ -36,7 +36,7 @@ this repository; §2 and §12 state only what they must provide.
 ```mermaid
 flowchart TD
     Browser["Player's browser"] -->|"site pages, /vif/api, /vif/ws"| Site["Site nginx, TLS"]
-    Site -->|"API + WebSocket Upgrade"| Alloc["Allocator on the node"]
+    Site -->|"API + WebSocket Upgrade"| Alloc["Router on the node"]
     Alloc -->|"Job + Service"| API["K3s API"]
     API --> Pod["vif -serve pod"]
     Alloc -->|"health, and each socket's payload"| Pod
@@ -49,15 +49,15 @@ flowchart TD
 ```
 
 The native game transport is raw framed TCP, not HTTP, so it never enters nginx. A
-session is a thing that ends, so it is a Job, not a Deployment. The allocator
+session is a thing that ends, so it is a Job, not a Deployment. The router
 hands a player three opaque strings, each naming the session, and nothing may
 rebuild one from a port:
 
 | String | What it is | Who reads it |
 |---|---|---|
-| `vif://<site-host>:7777/<id>` | `join_target`: the allocator's front door, one address for every session. | `vif -join`, and `vif -join https://<site-host>`, which creates the session first. |
+| `vif://<site-host>:7777/<id>` | `join_target`: the router's front door, one address for every session. | `vif -join`, and `vif -join https://<site-host>`, which creates the session first. |
 | `vif://<site-host>:31703/<id>` | `direct_target`: the session's own forwarded NodePort. | `vif -join`. |
-| `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site to the allocator, which answers the WebSocket and splices it to the pod. | The WASM build, or `vif -join` where 7777 is blocked. |
+| `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site to the router, which answers the WebSocket and splices it to the pod. | The WASM build, or `vif -join` where 7777 is blocked. |
 
 Every route sends the name before the handshake, and the pod runs `-name <id>`, so a
 link that names another session is refused rather than seated in it
@@ -72,7 +72,7 @@ Site configuration, kept outside this repository. What it must provide:
 | Forward TCP 7777 and 31700–31709, and only those, to the node | The whole player-facing native surface: the front door and each session's direct port. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
 | Do not rewrite the source address | Services use `externalTrafficPolicy: Local`, and the front door and the session key their admission budgets on the dialling address. |
 | Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and probes it every 200 ms each way. |
-| Admit the site host to the node's 9080 | The allocator's API and browser route, reached only through the site's nginx (§12). |
+| Admit the site host to the node's 9080 | The router's API and browser route, reached only through the site's nginx (§12). |
 
 Test the public ports from a machine off the host: host-originated traffic can
 bypass the forward and return an RST that looks like a filter rejection.
@@ -224,8 +224,8 @@ that just ended rather than hours of finished ones.
 
 It builds the `vif_headless` profile once with Docker, refuses an image without the
 `headless` OCI label, runs its own `-check` as UID 65532 read-only with no network,
-imports it into K3s pinned, records it as an installed allocator's
-`VIF_ALLOCATOR_IMAGE` (§11 writes the first), removes older tags, and restores the
+imports it into K3s pinned, records it as an installed router's
+`VIF_ROUTER_IMAGE` (§11 writes the first), removes older tags, and restores the
 Docker baseline. Docker's store keeps the digest-pinned Go base and BuildKit's Go
 module and build caches, pruned least recently used first to `VIF_BUILD_CACHE_LIMIT`
 (default `3gb`), so a rebuild downloads only new modules and compiles only what
@@ -274,8 +274,8 @@ sudo kubectl -n vif delete pod vif-log-volume-check --wait=true
 sudo find /var/log/vif-fleet -maxdepth 1 -name 'volume-check*.jsonl' -delete
 ```
 
-`30-session.yaml` is a template, not an object: the allocator builds the same Job
-and Service per session (`tool/vif-allocator/manifest.go`), and `session.sh create`
+`30-session.yaml` is a template, not an object: the router builds the same Job
+and Service per session (`tool/vif-router/manifest.go`), and `session.sh create`
 renders the file itself. Scenarios live on the node volume, not in the image, so
 `./deploy/update.sh wad` changes what the fleet serves without a rebuild; a running
 match keeps the tree it mounted.
@@ -297,42 +297,54 @@ address and stay in the node's files. Beyond that, what it may lose is the
 `rate_limit` in [`aggregator.toml`](../deploy/logwisp/aggregator.toml) and nothing
 else; §16 names the symptoms of a queue below the burst.
 
-## 11. The allocator
+## 11. The router
 
-[`tool/vif-allocator`](../tool/vif-allocator/README.md) is the narrow HTTP boundary
+[`tool/vif-router`](../tool/vif-router/README.md) is the narrow HTTP boundary
 between the site and the `vif` namespace, the native front door on 7777, and the
 browser route's WebSocket end. Its settings are
-[`deploy/guest/vif-allocator.env`](../deploy/guest/vif-allocator.env): edit them
+[`deploy/guest/vif-router.env`](../deploy/guest/vif-router.env): edit them
 there, never on the node. First install, after §9 applied its Role:
 
 ```sh
-make allocator
-getent group vif-allocator >/dev/null || sudo groupadd --system vif-allocator
-id -u vif-allocator >/dev/null 2>&1 || sudo useradd --system \
-  --gid vif-allocator --home-dir / --shell /usr/bin/nologin vif-allocator
-sudo install -d -o root -g vif-allocator -m 0750 /etc/vif-allocator
-sudo install -o root -g root -m 0755 bin/vif-allocator /usr/local/bin/vif-allocator
-sudo install -o root -g vif-allocator -m 0640 \
-  /var/lib/rancher/k3s/server/tls/server-ca.crt /etc/vif-allocator/server-ca.crt
-{ cat deploy/guest/vif-allocator.env
-  echo "VIF_ALLOCATOR_IMAGE=docker.io/library/vif:$(git rev-parse --short=8 HEAD)"; } |
-  sudo install -o root -g vif-allocator -m 0640 /dev/stdin /etc/vif-allocator/allocator.env
-sudo install -D -o root -g root -m 0755 deploy/guest/vif-allocator-refresh-token.sh \
-  /usr/local/libexec/vif-allocator-refresh-token
+make router
+getent group vif-router >/dev/null || sudo groupadd --system vif-router
+id -u vif-router >/dev/null 2>&1 || sudo useradd --system \
+  --gid vif-router --home-dir / --shell /usr/bin/nologin vif-router
+sudo install -d -o root -g vif-router -m 0750 /etc/vif-router
+sudo install -o root -g root -m 0755 bin/vif-router /usr/local/bin/vif-router
+sudo install -o root -g vif-router -m 0640 \
+  /var/lib/rancher/k3s/server/tls/server-ca.crt /etc/vif-router/server-ca.crt
+{ cat deploy/guest/vif-router.env
+  echo "VIF_ROUTER_IMAGE=docker.io/library/vif:$(git rev-parse --short=8 HEAD)"; } |
+  sudo install -o root -g vif-router -m 0640 /dev/stdin /etc/vif-router/router.env
+sudo install -D -o root -g root -m 0755 deploy/guest/vif-router-refresh-token.sh \
+  /usr/local/libexec/vif-router-refresh-token
 sudo install -o root -g root -m 0644 -t /etc/systemd/system \
-  deploy/guest/vif-allocator.service \
-  deploy/guest/vif-allocator-token.service deploy/guest/vif-allocator-token.timer
+  deploy/guest/vif-router.service \
+  deploy/guest/vif-router-token.service deploy/guest/vif-router-token.timer
 sudo systemctl daemon-reload
-sudo systemctl enable --now vif-allocator-token.timer vif-allocator.service
+sudo systemctl enable --now vif-router-token.timer vif-router.service
 curl -fsS http://127.0.0.1:9080/readyz      # ok
 ```
 
 The image line names the tag §8 imported. From then on, `./deploy/update.sh
-allocator` rebuilds, installs the env file and unit, restarts behind an empty-fleet
+router` rebuilds, installs the env file and unit, restarts behind an empty-fleet
 gate, and keeps one `.previous` set to roll back to.
 
+A node commissioned when the router was `vif-allocator` is rewired once, with the
+fleet empty, by `./deploy/guest/migrate-vif-router.sh`, and `./deploy/update.sh`
+refuses such a node until then. The script applies the Role with its new
+`vif-router` ServiceAccount, creates the `vif-router` identity and `/etc/vif-router`
+with the CA copy and the settings carried over (the repository's `vif-router.env`
+plus the node's image line), mints the token, installs the units and the binary,
+stops the allocator's units and starts the router in their place; once the router
+answers it removes the allocator's units, binary, ServiceAccount, user and group,
+keeping its settings at `/etc/vif-router/vif-allocator.migrated`, and a router that
+does not answer is removed again and `vif-allocator.service` restarted as it was.
+From then on `./deploy/update.sh` runs as before.
+
 The credential is a short-lived ServiceAccount token in a file, re-read on every
-request and rotated by the root timer; never give the allocator the node's root
+request and rotated by the root timer; never give the router the node's root
 kubeconfig. Open 9080 to the site host only: the node filter admits
 `operator_ports` from `operator_addr` alone, so add it in
 `/etc/nftables.d/vif-operator.nft` (`define operator_ports = { 22, 9080 }`) and load
@@ -342,17 +354,17 @@ endpoint: an anonymous caller must not end somebody else's match.
 
 ## 12. The site's edge
 
-Site configuration, kept outside this repository. What the allocator needs from
+Site configuration, kept outside this repository. What the router needs from
 the edge in front of 9080:
 
 | Requirement | Why |
 |---|---|
-| Publish only `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>` | `/healthz`, `/readyz` and any later allocator path stay on the node. |
-| Forward `Upgrade` and `Connection` on `/vif/ws/<session>` | The allocator answers the WebSocket handshake itself and splices the socket to the pod. |
-| Leave `Origin` untouched | The allocator compares it with `VIF_ALLOCATOR_WEB_ORIGIN` and refuses any other. |
-| Limit open sockets and handshakes per player on `/vif/ws/<session>` | The allocator's join budget counts dials a minute and `VIF_ALLOCATOR_ROUTE_MAX` connections a session; neither bounds the sockets one player holds open. |
+| Publish only `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>` | `/healthz`, `/readyz` and any later router path stay on the node. |
+| Forward `Upgrade` and `Connection` on `/vif/ws/<session>` | The router answers the WebSocket handshake itself and splices the socket to the pod. |
+| Leave `Origin` untouched | The router compares it with `VIF_ROUTER_WEB_ORIGIN` and refuses any other. |
+| Limit open sockets and handshakes per player on `/vif/ws/<session>` | The router's join budget counts dials a minute and `VIF_ROUTER_ROUTE_MAX` connections a session; neither bounds the sockets one player holds open. |
 | Pass `/vif/api/logs` unbuffered, with an hour-long read timeout | It is one long-lived SSE response; a buffer or a short timeout stalls or truncates it. |
-| Overwrite the header `VIF_ALLOCATOR_CLIENT_ADDRESS_HEADER` names with the player's address | It keys the per-player join and creation budgets; with no header named, the API and browser routes charge none. |
+| Overwrite the header `VIF_ROUTER_CLIENT_ADDRESS_HEADER` names with the player's address | It keys the per-player join and creation budgets; with no header named, the API and browser routes charge none. |
 | Keep any idle-connection bound on the TLS path above a second | A browser session holds one connection for the whole match; the link probe crosses it every 200 ms each way, and the game drops a link silent for five seconds. |
 
 The page that opens the socket must permit it; `connect-src 'self'` does.
@@ -367,7 +379,7 @@ the launcher. A site that renames the files names them on the script element
 ## 13. First session
 
 The acceptance check for the node, and the one to repeat after any change to a live
-workload, the allocator, the Role, the mount or LogWisp. Have `bin/vif` ready on a
+workload, the router, the Role, the mount or LogWisp. Have `bin/vif` ready on a
 second machine: **the 90-second first-join clock starts when `allocate` returns.**
 
 ```sh
@@ -416,7 +428,7 @@ sudo kubectl -n default run np-probe --rm -i --restart=Never --image=busybox --q
 
 Expect the node line, then `7777 open` and `7778 refused`. Both open means
 NetworkPolicy is not enforced; the node line failing means node traffic is not
-exempt, and the allocator, which reads each pod's `/health` from the node (D5),
+exempt, and the router, which reads each pod's `/health` from the node (D5),
 cannot place a session.
 
 Quit the client, read the session's file before it goes, then delete:
@@ -428,8 +440,8 @@ sudo jq -s -e --arg id "$SESSION_ID" 'map(select(.sub != null)) | length > 0 and
 ./deploy/k3s/session.sh status                   # the fleet is empty, five active units
 ```
 
-If it fails, separate the allocator from the workload: `session.sh create` renders
-the same template without the allocator, and the pod answers to the name it was
+If it fails, separate the router from the workload: `session.sh create` renders
+the same template without the router, and the pod answers to the name it was
 given, on its NodePort only (`bin/vif -join 'vif://<site-host>:31700/s1'`).
 
 ```sh
@@ -479,8 +491,8 @@ EndpointSlice and walk outward with §16. Open work is in [todo](todo.md#fleet).
 ### When the boundary looks wrong
 
 The namespace, quota, policy and Role are what `./deploy/update.sh objects` applies
-from their four files, and the session pod is what the allocator builds
-(`tool/vif-allocator/manifest.go`, mirrored by `30-session.yaml`). These assertions
+from their four files, and the session pod is what the router builds
+(`tool/vif-router/manifest.go`, mirrored by `30-session.yaml`). These assertions
 name which one drifted; none of them belongs in a deployment that is going well.
 
 Restricted admission must refuse a privileged pod and a direct `hostPath`:
@@ -515,7 +527,7 @@ YAML
 sudo kubectl -n vif delete pod pstest --ignore-not-found
 ```
 
-The allocator must be able to allocate without being able to read a Secret or a pod
+The router must be able to allocate without being able to read a Secret or a pod
 log:
 
 ```sh
@@ -526,11 +538,11 @@ for check in \
 do
   verb=${check%:*}; want=${check#*:}
   got=$(sudo kubectl auth can-i $verb \
-    --as=system:serviceaccount:vif:vif-allocator -n vif)
+    --as=system:serviceaccount:vif:vif-router -n vif)
   test "$got" = "$want" || printf 'RBAC DRIFT: %s = %s, want %s\n' "$verb" "$got" "$want"
 done
 test "$(sudo kubectl auth can-i get pods --subresource=log \
-  --as=system:serviceaccount:vif:vif-allocator -n vif)" = no
+  --as=system:serviceaccount:vif:vif-router -n vif)" = no
 ```
 
 A live session's Job must carry exactly the shape the template describes — one
@@ -562,7 +574,7 @@ sudo kubectl -n vif get job "vif-session-$SESSION_ID" -o json |
 ```
 
 LogWisp must hold the tmpfs read-only through the group alone, run the files the
-repository holds, and depend on neither K3s nor the allocator:
+repository holds, and depend on neither K3s nor the router:
 
 ```sh
 LOGWISP_PID=$(systemctl show logwisp.service -p MainPID --value)
@@ -579,7 +591,7 @@ unset LOGWISP_PID
 The host `findmnt` stays `rw`; inside LogWisp's mount namespace the final entry for
 that target must contain `ro`. `RequiresMountsFor=` may add a mount requirement,
 but `Requires`, `Wants` and `After` must not name `k3s.service` or
-`vif-allocator.service`.
+`vif-router.service`.
 
 NetworkPolicy enforcement is per-pod and cannot be seen before a pod exists. K3s
 embeds the kube-router controller in the `k3s` process, so there is no
@@ -650,12 +662,12 @@ Each row below is a dead end until its meaning is known:
 | Traffic is visible on `cni0`. | It reached the pod side of routing. A moving `KUBE-POD-FW-*` counter proves the NetworkPolicy path ran. |
 | A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
 | A create answers `504 session_not_ready` and the pod never leaves `Init`. | The config check could not start. `kubectl -n vif describe pod` names the image it could not pull, usually an unpinned one the kubelet deleted at 85% disk: `./deploy/update.sh` imports it again, pinned. |
-| The handshake answers `400` with no `Upgrade` reaching the allocator. | An edge that dropped the hop-by-hop headers; the browser route needs `Upgrade` and `Connection` forwarded (§12). |
+| The handshake answers `400` with no `Upgrade` reaching the router. | An edge that dropped the hop-by-hop headers; the browser route needs `Upgrade` and `Connection` forwarded (§12). |
 | A NodePort that answered before does not now. | `FORWARD` policy is `DROP`. Docker sets it and a stop does not restore it (§4). |
 | A LogWisp or hand-run Docker build cannot resolve DNS. | A node filter older than its `docker0` rule (`./deploy/update.sh --diff filter`). The session image builds with `--network host` and never crosses `docker0`. |
 | `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log`, as the RBAC check above does. |
 | LogWisp shows no lines written before it started. | A watcher seeks to end-of-file on discovery. The source needs `from = "start"` (§10). |
 | `dropped_writes` rises on `/status` with one reader and an idle node. | Records lost from a burst larger than `client_buffer_size`, not backpressure. Keep that queue at or above the `rate_limit` burst (§10). |
 | `Watcher failed … watcher stopped` in LogWisp's journal. | Read only the invocation running the installed binary (§10); earlier entries belong to whatever it replaced. |
-| `curl` to `:9080` is refused right after `systemctl start`. | The refusal is real: `Type=notify` returns only once both listeners are bound. Read the allocator's journal. |
+| `curl` to `:9080` is refused right after `systemctl start`. | The refusal is real: `Type=notify` returns only once both listeners are bound. Read the router's journal. |
 | Testing the public address from the host returns an immediate RST. | Host-originated traffic can bypass the forward. Test from off-box, or test the node address directly (§2). |

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,8 +42,11 @@ func (m *membership) serveRelay() {
 	if err != nil {
 		return
 	}
-	local := link.PeerID(m.localParticipant())
-	bound, err := port.ServeSession(m.cfg.RelayAddress, m.relayAcceptor(local), m.releaseRelayedJoiner)
+	if router, ok := m.cfg.relayRouter(); ok {
+		m.publishDoor(port, router)
+		return
+	}
+	bound, err := port.ServeSession(m.cfg.RelayAddress, m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner)
 	if err != nil {
 		m.log.Warn("session", "msg", "relay address not bound", "address", m.cfg.RelayAddress, "error", err.Error())
 		m.ctx.SetStatusMessage("Relay: "+err.Error(), parameter.StatusAlert)
@@ -50,22 +54,93 @@ func (m *membership) serveRelay() {
 	}
 	m.log.Info("session", "msg", "relaying joins", "address", bound)
 	m.ctx.SetStatusMessage("Relaying joins at "+bound, parameter.StatusNotice)
+	// The chain names the door, so a run with no path to its authority finds it.
+	m.tellAuthority(network.RelayJoin{Step: network.RelayDoor, Door: bound})
+}
+
+// publishDoor publishes this run's door through a router (network.DoorTunnel): each
+// connection the router opens back runs the door's handshake as a stream the relay
+// listener took would, and the link the router names is the door the chain carries.
+func (m *membership) publishDoor(port *link.SocketPort, router string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.tunnelMu.Lock()
+	if m.tunnelStop != nil {
+		m.tunnelStop()
+	}
+	m.tunnelStop = cancel
+	m.tunnelMu.Unlock()
+	t := &network.DoorTunnel{Router: router, Session: m.cfg.SessionName}
+	core.Go(func() {
+		t.Run(ctx, func(door string) {
+			m.log.Info("session", "msg", "relaying joins through a router", "router", router, "door", door)
+			m.ctx.SetStatusMessage("Relaying joins at "+door, parameter.StatusNotice)
+			m.tellAuthority(network.RelayJoin{Step: network.RelayDoor, Door: door})
+		}, func(conn net.Conn) {
+			if err := port.ServeConn(conn, m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner); err != nil {
+				_ = conn.Close()
+			}
+		}, func(err error) {
+			m.log.Warn("session", "msg", "router door lost", "router", router, "error", err.Error())
+		})
+	})
+}
+
+// closeDoor ends the door this run publishes through a router, if any.
+func (m *membership) closeDoor() {
+	m.tunnelMu.Lock()
+	defer m.tunnelMu.Unlock()
+	if m.tunnelStop != nil {
+		m.tunnelStop()
+		m.tunnelStop = nil
+	}
 }
 
 // relayAcceptor is the join handshake this run serves for its bots and for the
-// people it relays, as a coordinator's with the authority asked for each answer.
-func (m *membership) relayAcceptor(local link.PeerID) func(net.Conn) (link.PeerID, error) {
+// people it relays, at its -relay door and, when its player relays for others, at
+// its own port (admitHosted): a coordinator's, with the authority asked for each
+// answer. Once this run holds the term it is that coordinator and the door admits
+// as the host's does (relayDoorHosts), read at each step since the term moves.
+func (m *membership) relayAcceptor(admit func(net.Addr) error) func(net.Conn) (link.PeerID, error) {
+	local := func() link.PeerID { return link.PeerID(m.localParticipant()) }
 	return network.HostAcceptor(network.Coordinator{
-		Preview:     func([]string) (network.SessionOffer, error) { return m.relayPreview(local) },
-		Assign:      func(claims []string) (network.SessionOffer, error) { return m.relayAssign(local, claims) },
-		Release:     m.relayRelease,
-		Admit:       m.admissions.Admit,
-		Report:      func(id link.PeerID, r network.JoinerReport) error { return m.relayReport(local, id, r) },
+		Preview: func(claims []string) (network.SessionOffer, error) {
+			if m.relayDoorHosts() {
+				return m.previewParticipant(claims)
+			}
+			return m.relayPreview(local())
+		},
+		Assign: func(claims []string) (network.SessionOffer, error) {
+			if m.relayDoorHosts() {
+				return m.assignParticipant(claims)
+			}
+			return m.relayAssign(local(), claims)
+		},
+		Release: func(id link.PeerID) {
+			if m.relayDoorHosts() {
+				m.releaseParticipant(id)
+				return
+			}
+			m.relayRelease(id)
+		},
+		Admit: admit,
+		Report: func(id link.PeerID, r network.JoinerReport) error {
+			if m.relayDoorHosts() {
+				return m.noteJoinerReport(id, r)
+			}
+			return m.relayReport(local(), id, r)
+		},
 		Prepared:    m.showJoinerPrepared,
 		Name:        m.cfg.SessionName,
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
+}
+
+// relayDoorHosts reports that the run behind the -relay door authors its session, so
+// the door is the host's: a guest that took the session over has no authority to
+// ask, and its own port already takes joins as the host's did.
+func (m *membership) relayDoorHosts() bool {
+	return m.authority != nil && m.authority.State().Authoring()
 }
 
 // relayPreview is what a dial through this run is shown while it prepares: the
@@ -130,9 +205,14 @@ func (m *membership) relayRelease(id link.PeerID) {
 	m.tellAuthority(network.RelayJoin{Step: network.RelayAbandon, Leaf: id})
 }
 
-// releaseRelayedJoiner completes the gate for a bot the relay acceptor admitted. It
-// runs on the handshake's goroutine, as the coordinator's gate does.
+// releaseRelayedJoiner completes the gate for a participant the relay acceptor
+// admitted, the host's own gate once this run hosts. It runs on the handshake's
+// goroutine, as the coordinator's gate does.
 func (m *membership) releaseRelayedJoiner(id link.PeerID) {
+	if m.relayDoorHosts() {
+		m.admitLateJoiner(id)
+		return
+	}
 	m.relay.mu.Lock()
 	offer, report := m.relay.offers[id], m.relay.reports[id]
 	delete(m.relay.offers, id)
@@ -257,9 +337,15 @@ func (m *membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 		return
 	}
 	coordinator := m.world.IsSessionCoordinator()
-	if req.Step == network.RelayAbandon {
+	switch req.Step {
+	case network.RelayAbandon:
 		if coordinator {
 			m.abandonRelayedLocked(relay, req.Leaf)
+		}
+		return
+	case network.RelayDoor:
+		if coordinator {
+			m.reach.NoteDoor(relay, req.Door)
 		}
 		return
 	}

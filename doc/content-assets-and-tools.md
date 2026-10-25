@@ -283,10 +283,10 @@ transparent is stored transparent in dual output, so it creates no wall entity. 
 | `tool/hierarchy-map` | Select Go file subsets as LLM context by annotation, local import dependency and symbol-level coupling. |
 | `tool/http-server` | Minimal static file server used by the WASM development target. |
 | `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged. See its README. |
-| `tool/vif-allocator` | Host service that turns website session requests into fixed K3s Jobs and Services, and routes the front-door TCP and browser WebSocket connections to their pods. |
+| `tool/vif-router` | Host service that turns website session requests into fixed K3s Jobs and Services, and routes the front-door TCP and browser WebSocket connections to their pods. |
 | `sandbox/*` | Standalone visual/interaction prototypes and random/render benchmarks, intentionally outside application assembly. |
 
-Commands under `cmd` are the user and developer programs, and `tool/vif-allocator`
+Commands under `cmd` are the user and developer programs, and `tool/vif-router`
 is the fleet's deployed service. The other `tool` and `sandbox` code may have
 narrower validation or experimental dependencies.
 

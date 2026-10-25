@@ -53,7 +53,7 @@ make dev       # generated code + race-enabled debug build
 | `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, and vet and test the `android` module (§5). |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
-| `allocator` | Build the website-to-K3s session allocator as `bin/vif-allocator`. |
+| `router` | Build the website-to-K3s session router as `bin/vif-router`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root, the last two only when absent; `CLEAN=1` (here and for `install`) removes the previous install first. |
 | `wad-archive` | Pack that same install as `bin/vif-wad.tar.gz` (`WAD_ARCHIVE`), unpacking as `vif/` into the directory that holds a config root; the release publishes it. |
@@ -474,7 +474,7 @@ Commands, compositions and examples are in [Bots](bots.md).
 `script/test.sh` holds the checks no Go test makes, because they need a built
 binary on a real terminal, `make` or the deploy scripts: the release wad archive
 (`bundle`), a scenario change through `app.Run`'s restart loop and a guest following
-it (`scenario`, `follow`), the session template against the allocator (`fleet`) and
+it (`scenario`, `follow`), the session template against the router (`fleet`) and
 what a node needs before a pod starts (`deploy`). `all` runs those and prints PASS
 or FAIL; `botfitness` and `load` measure and stay out of it.
 
@@ -514,7 +514,7 @@ scheduler and time control, event journaling and authored scripts,
 input/help/mode commands, FSM staging and local-lifecycle reconciliation, the
 session lifecycle and probe, parameters, profiling, audio, genetics, vectors and
 geometry, cell mapping, physics, the WebSocket and link-pace packages, the session
-allocator, `vif-log`, and selected system and renderer surfaces. Coverage is
+router, `vif-log`, and selected system and renderer surfaces. Coverage is
 selective: many gameplay systems and renderers, content parsing, the generator and
 the other `tool/*` commands have no focused test file. Programs under `sandbox/`
 are experiments, not tests.

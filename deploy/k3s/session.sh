@@ -1,12 +1,12 @@
 #!/bin/sh
-# Manual reference for the allocator's Job -> UID -> owned Service transaction.
+# Manual reference for the router's Job -> UID -> owned Service transaction.
 set -eu
 
 namespace=vif
 fleet_label=app.kubernetes.io/part-of=vif-fleet
 session_label=vif.lixenwraith.dev/session
 fleet_logs=${VIF_FLEET_LOGS:-/var/log/vif-fleet}
-allocator=${VIF_ALLOCATOR_URL:-http://127.0.0.1:9080}
+router=${VIF_ROUTER_URL:-http://127.0.0.1:9080}
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 kube() {
@@ -19,7 +19,7 @@ kube() {
 
 usage() {
 	echo "usage: $0 allocate [PLAYERS] [LOG_LEVEL] [SCENARIO] [BOTS]" >&2
-	echo "                                          ask the allocator; prints the id" >&2
+	echo "                                          ask the router; prints the id" >&2
 	echo "       $0 state SESSION_ID                 one line of what the fleet reports" >&2
 	echo "       $0 delete SESSION_ID                remove one session and its log files" >&2
 	echo "       $0 create SESSION_ID [GAME_NODEPORT] [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
@@ -120,11 +120,11 @@ case "$command" in
 		fi
 		echo '# units'
 		systemctl is-active 'var-log-vif\x2dfleet.mount' k3s.service \
-			vif-allocator.service logwisp.service \
+			vif-router.service logwisp.service \
 			vif-fleet-log-cleanup.timer || true
 		;;
 	blockers)
-		# The assertion update.sh and the image and allocator helpers make before they
+		# The assertion update.sh and the image and router helpers make before they
 		# replace anything.
 		[ "$#" -eq 1 ] || usage
 		report=$(fleet_report)
@@ -139,7 +139,7 @@ case "$command" in
 		exit 1
 		;;
 	drain)
-		# update.sh and the image and allocator helpers refuse a non-empty fleet.
+		# update.sh and the image and router helpers refuse a non-empty fleet.
 		# This is destructive: snapshot any log evidence before running it.
 		force=false
 		case $# in
@@ -195,7 +195,7 @@ case "$command" in
 		echo 'fleet drained: no objects, no log files'
 		;;
 	allocate)
-		# Through the allocator rather than through `create`, because that is the
+		# Through the router rather than through `create`, because that is the
 		# path a player takes and the only one that answers with a join target.
 		[ "$#" -le 5 ] || usage
 		request=$(jq -nc --arg players "${2:-}" --arg level "${3:-}" \
@@ -205,8 +205,8 @@ case "$command" in
 			(if $scenario == "" then {} else {scenario: $scenario} end) +
 			(if $bots == "" then {} else {bots: ($bots | tonumber)} end)')
 		answer=$(curl -fsS -X POST -H 'Content-Type: application/json' \
-			-d "$request" "$allocator/vif/api/sessions") || {
-			echo "$0: the allocator refused $request" >&2
+			-d "$request" "$router/vif/api/sessions") || {
+			echo "$0: the router refused $request" >&2
 			exit 1
 		}
 		# The identity on stdout so a caller can capture it, everything a person
@@ -218,7 +218,7 @@ case "$command" in
 		;;
 	state)
 		[ "$#" -eq 2 ] || usage
-		reported=$(curl -fsS "$allocator/vif/api/sessions" |
+		reported=$(curl -fsS "$router/vif/api/sessions" |
 			jq -r --arg id "$2" '.sessions[] | select(.id == $id) |
 				"phase=\(.state.phase) guests=\(.state.guests)/\(.state.capacity)" +
 				" bots=\(.state.bots // 0)" +

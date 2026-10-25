@@ -113,6 +113,12 @@ func (w *World) restoreOwnedCursorState(s ownedCursorState) {
 	writeOwned(c.Ping, s.entity, s.ping)
 }
 
+// ownedCursorBit reports a store whose cells a cursor's owner authors: what
+// WithoutLocalCursorState leaves out and restoreOwnedCursorState puts back.
+func ownedCursorBit(bit uint64) bool {
+	return bit&(EnergyBit|HeatBit|ShieldBit|BoostBit|WeaponBit|CombatBit|CursorViewBit|PingBit) != 0
+}
+
 // WithoutLocalCursorState returns s without what RebindCursorRoster re-derives or
 // restores: every cursor's control assignment, and the owner-authored cells of each
 // one a participant owns, whose carrier is the sync stream. A correction that

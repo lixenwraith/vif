@@ -13,7 +13,7 @@ import (
 type Telemetry struct {
 	// Capture and install cost. ProjectUS and WriteUS split CommitUS, the live lock
 	// an install holds: the ticks the staging world simulated under it, then the
-	// capture of the live world, the comparison and the write.
+	// comparison of its stores against the live ones in place and the write.
 	CaptureUS, EncodeUS, Bytes, StageUS, CommitUS, InstallTick, CatchUp *atomic.Int64
 	ProjectUS, WriteUS                                                  *atomic.Int64
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the session image, import it into K3s pinned, point vif-allocator at it and
+# Build the session image, import it into K3s pinned, point vif-router at it and
 # remove older vif tags; allocation pauses meanwhile and the fleet must be empty.
 # `./deploy/update.sh image` runs it. Run as a docker-group user, with an optional tag:
 #
@@ -41,15 +41,15 @@ image_name=${VIF_IMAGE_NAME:-vif}
 runtime_repository=${VIF_RUNTIME_REPOSITORY:-docker.io/library/vif}
 local_image=$image_name:$tag
 runtime_image=$runtime_repository:$tag
-allocator_env=${VIF_ALLOCATOR_ENV:-/etc/vif-allocator/allocator.env}
-allocator_group=${VIF_ALLOCATOR_GROUP:-vif-allocator}
+router_env=${VIF_ROUTER_ENV:-/etc/vif-router/router.env}
+router_group=${VIF_ROUTER_GROUP:-vif-router}
 build_cache_limit=${VIF_BUILD_CACHE_LIMIT:-3gb}
 
 archive=$(mktemp "${TMPDIR:-/tmp}/vif-image.XXXXXX.tar")
-env_copy=$(mktemp "${TMPDIR:-/tmp}/vif-allocator-env.XXXXXX")
-allocator_was_active=false
-if systemctl is-active --quiet vif-allocator.service 2>/dev/null; then
-	allocator_was_active=true
+env_copy=$(mktemp "${TMPDIR:-/tmp}/vif-router-env.XXXXXX")
+router_was_active=false
+if systemctl is-active --quiet vif-router.service 2>/dev/null; then
+	router_was_active=true
 fi
 # A Docker already running serves something else on this host: build with it,
 # leave it and the FORWARD policy as they were, and take only this image back out.
@@ -91,8 +91,8 @@ cleanup() {
 		restore_forward_policy || cleanup_status=$?
 	fi
 
-	if [ "$allocator_was_active" = true ]; then
-		sudo systemctl start vif-allocator.service || cleanup_status=$?
+	if [ "$router_was_active" = true ]; then
+		sudo systemctl start vif-router.service || cleanup_status=$?
 	fi
 	if [ "$status" -eq 0 ] && [ "$cleanup_status" -ne 0 ]; then
 		status=$cleanup_status
@@ -101,9 +101,9 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-if [ "$allocator_was_active" = true ]; then
+if [ "$router_was_active" = true ]; then
 	echo "pausing new allocations"
-	sudo systemctl stop vif-allocator.service
+	sudo systemctl stop vif-router.service
 fi
 
 if ! "$repo_root/deploy/k3s/session.sh" blockers; then
@@ -149,17 +149,17 @@ sudo k3s crictl inspecti "$runtime_image" >/dev/null
 # once the disk passes 85%, and between matches no pod uses this one.
 sudo k3s ctr -n k8s.io images label "$runtime_image" io.cri-containerd.pinned=pinned >/dev/null
 
-if sudo test -f "$allocator_env"; then
-	sudo cat "$allocator_env" >"$env_copy"
-	# The one setting deploy/guest/vif-allocator.env does not carry.
-	{ grep -v '^VIF_ALLOCATOR_IMAGE=' "$env_copy" || true
-	  printf 'VIF_ALLOCATOR_IMAGE=%s\n' "$runtime_image"; } >"$env_copy.next"
-	sudo install -o root -g "$allocator_group" -m 0640 "$env_copy.next" "$allocator_env"
-	echo "updated $allocator_env"
+if sudo test -f "$router_env"; then
+	sudo cat "$router_env" >"$env_copy"
+	# The one setting deploy/guest/vif-router.env does not carry.
+	{ grep -v '^VIF_ROUTER_IMAGE=' "$env_copy" || true
+	  printf 'VIF_ROUTER_IMAGE=%s\n' "$runtime_image"; } >"$env_copy.next"
+	sudo install -o root -g "$router_group" -m 0640 "$env_copy.next" "$router_env"
+	echo "updated $router_env"
 fi
 
 # Remove named runtime references, a leftover vif-ws-bridge tag among them, only
-# after the new image is imported and the allocator configuration is updated.
+# after the new image is imported and the router configuration is updated.
 # Shared content still needed by the new image remains in containerd's store.
 old_runtime_images=$(sudo k3s ctr -n k8s.io images list -q | awk -v keep="$runtime_image" '
 	/^docker[.]io\/library\/vif(-ws-bridge)?:/ && $0 != keep { print }
@@ -169,4 +169,4 @@ for old_image in $old_runtime_images; do
 	sudo k3s crictl rmi "$old_image"
 done
 
-echo "ready: VIF_ALLOCATOR_IMAGE=$runtime_image revision=$revision"
+echo "ready: VIF_ROUTER_IMAGE=$runtime_image revision=$revision"

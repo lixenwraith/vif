@@ -71,8 +71,10 @@ or a bind that fails, or an `-authority host` session — leaves the participant
 leaf that plays normally and is never a candidate. `-relay <addr>` makes a joined
 participant a door for people who cannot reach the host: they `-join` that address,
 take independent slots, and play through it; a person admitted that way is a leaf
-unless it passes `-listen`, and keeps its slot when its relay leaves. See
-[Multiplayer](multi-player.md) §5.
+unless it passes `-listen`, and keeps its slot when its relay leaves. `-relay
+vif://<site>:7777` publishes the door through the site's `vif-router` instead of
+binding one, and the link the router names is where people join; the chain carries
+every door. See [Multiplayer](multi-player.md) §5 and §5.6.
 
 Everything else about the session is one implementation. `-players` is a ceiling
 on every host and unset means the whole roster; the mid-run gate is
@@ -259,7 +261,7 @@ many dials it will ever accept.
 
 It also outlives its own authority, and that is why `-serve` defaults to
 `-authority host`. A dedicated host *is* the session: its address is what the
-allocator handed out and what every guest holds, so if the process goes, the answer
+router handed out and what every guest holds, so if the process goes, the answer
 is an orchestrator putting another one at that address and the guests dialling back
 — not a guest declaring itself the host. This is policy, not a limit:
 a migrate session's guests declare ports and its survivors walk the published chain
@@ -536,10 +538,11 @@ scheduler and queue with its pending events, every registry cell, each system's 
 toggle and its private state (`engine.LocalStateSaver`, `engine.StateCopier` for
 caches, or `SharedStateSaver` for a carrier with neither), the corpus cursor, the
 latched session (`engine.SessionState`, from the journal) and the driver's place.
-One costs about 1 ms at 146×34, and 10 ms and 6.3 MB on td's 500×250 map with 16
-players, where a restore takes about 35 ms with the copy's construction. A
-checkpoint the ring lets go, unless the ladder keeps it or a move restores from
-it, lends its storage to the next, which then allocates 1.7 MB there.
+One costs about 1 ms at 146×34, and 3.9 ms and 6.3 MB on td's 500×250 map, the
+grid's occupied cells read off the list the grid keeps rather than its 32 MB of
+cells (`BenchmarkWorldCopyAtMapLimit`); a restore takes about 35 ms with the copy's
+construction. A checkpoint the ring lets go, unless the ladder keeps it or a move
+restores from it, lends its storage to the next, which then allocates 1.6 MB there.
 
 Every move goes to the first step at or past a tick of the run shown: `,` to the
 step before, one a frame, as `.` steps on; `:r` to the tick asked; a restart to the

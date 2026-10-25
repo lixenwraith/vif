@@ -14,22 +14,22 @@ in [`script/`](../script/README.md).
 | Property | Value |
 |---|---|
 | Session unit | One `vif -serve` process, one pod, one Job, one Service. |
-| Concurrency ceiling | 10, enforced by namespace `ResourceQuota`; the allocator also refuses before attempting an eleventh. |
+| Concurrency ceiling | 10, enforced by namespace `ResourceQuota`; the router also refuses before attempting an eleventh. |
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
-| Trigger | `tool/vif-allocator`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
+| Trigger | `tool/vif-router`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
 | Image | `scratch` plus the static `vif_headless` binary (about 14 MiB), non-root, read-only root filesystem, no shell. Its one scenario is the embedded `main` fallback; the rest come off a node volume, so what else the fleet serves changes without a rebuild. |
-| Scenario | Chosen per session from the allocator's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap are the image's embedded ones, player domain that is never compared with a guest's; a guest is served the session's scenario at the join, so it needs none of the node's files. |
-| Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the allocator terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Unauthenticated (§4). |
-| Reached by | Its name, on three routes (§9): `vif://<site>:7777/<session>` through the allocator's front door, `vif://<site>:<nodeport>/<session>` straight to the session's forwarded NodePort, and `wss://<site>/vif/ws/<session>` through the site's edge and the allocator to the pod. |
-| Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, built from upstream LogWisp `main`, has a read-only view and a loopback-only listener; the allocator reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
+| Scenario | Chosen per session from the router's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap are the image's embedded ones, player domain that is never compared with a guest's; a guest is served the session's scenario at the join, so it needs none of the node's files. |
+| Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Unauthenticated (§4). |
+| Reached by | Its name, on three routes (§9): `vif://<site>:7777/<session>` through the router's front door, `vif://<site>:<nodeport>/<session>` straight to the session's forwarded NodePort, and `wss://<site>/vif/ws/<session>` through the site's edge and the router to the pod. |
+| Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, built from upstream LogWisp `main`, has a read-only view and a loopback-only listener; the router reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
 | Public API | Exactly `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the game's stay unreachable from outside. |
 
 ```mermaid
 flowchart LR
     Player["Player"] --> Site["Website"]
-    Site -->|"API + WSS"| Alloc["Allocator"]
+    Site -->|"API + WSS"| Alloc["Router"]
     Alloc -->|"create Job + Service"| API["K3s API"]
     API --> Pod["vif -serve -name id"]
     Site -->|"vif:// and wss:// links"| Player
@@ -68,7 +68,7 @@ What stands between this deployment and one a stranger can install is in
 full-roster measurement for the resource values, the failures a cluster has not
 yet been put through, and promoting verified images to the node. Until
 [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) holds, the
-deployment keeps a session's own bots closed (`VIF_ALLOCATOR_BOTS_MAX=0`). Each
+deployment keeps a session's own bots closed (`VIF_ROUTER_BOTS_MAX=0`). Each
 address creates one session per first-join window and joins six times a minute,
 loose for a player whose link drops and comes back; one NAT is one address.
 
@@ -86,7 +86,7 @@ What bounds a stranger:
   `NetworkAdmitWindow` (1 minute), tracked for at most `NetworkAdmitTracked` (1024)
   addresses, past which a new one is refused, so the defence cannot become the
   exhaustion. It is keyed on the player's own address: the pod applies it on the
-  NodePort route, which preserves that address, and the allocator before its lookup
+  NodePort route, which preserves that address, and the router before its lookup
   on both proxied routes as one budget per address (`-client-joins`), the front
   door's from the dialler and the browser route's from `-client-address-header`. At
   the pod, proxied players share the node's address and so a budget per session;
@@ -114,7 +114,7 @@ What bounds a stranger:
   walked into, not one whose link leaked;
 - the network policy: the game port reachable, the probe port only from the node and
   the `monitoring` namespace, everything else denied, no egress;
-- the allocator's published surface: exactly the create/list, log-stream and
+- the router's published surface: exactly the create/list, log-stream and
   session-socket routes and the front door, bounded by the ten-session quota, the
   90-second first-join expiry, `-client-creates` sessions per address (an IPv6
   one's /64) in that window, one reading of the fleet per 2 s however many lobby
@@ -128,7 +128,7 @@ What bounds a stranger:
   `-route-max` connections per session over the two together, each released when
   its splice ends: a write stalled ten seconds ends a direction, and the other then
   has ten seconds. The browser route adds one `Origin` and the edge's rate limits,
-  refused before the upgrade. The front door, the allocator's one Internet-facing
+  refused before the upgrade. The front door, the router's one Internet-facing
   socket, places at most 32 connections at once, reads one name-sized frame from
   each within five seconds, and refuses before it dials a pod (§9);
 - `-authority host`, which is the fleet's default and what keeps that one port the
@@ -237,11 +237,11 @@ curl -s http://127.0.0.1:7778/health          # and /metrics
 ```
 
 Against a cluster, [§13 of the procedure](kube-docker-deploy.md#13-first-session) is
-the standing check: it proves the allocator's transaction, off-box joins over the
+the standing check: it proves the router's transaction, off-box joins over the
 front door, the direct port and the browser route, the front door's and browser
 route's refusals, the enforced network policy, the self-tagged file, deletion and
 the empty steady state in one pass. Run it after every change to a live workload,
-allocator binary, Role, mount or logging service, and after
+router binary, Role, mount or logging service, and after
 [its reboot gate](kube-docker-deploy.md#14-the-reboot-gate).
 
 What a cluster has not yet been put through is
@@ -256,8 +256,8 @@ What a cluster has not yet been put through is
   the one-minute fresh-world reset is only for an unbounded hand-started server.
 - **Ninety seconds, twice.** The first-guest window and the empty grace are the same
   number and different bounds; the second doubles as the reconnect window.
-- **Ten sessions, enforced by quota as well as by the allocator.** A ceiling only the
-  allocator believes is one an allocator bug removes.
+- **Ten sessions, enforced by quota as well as by the router.** A ceiling only the
+  router believes is one a router bug removes.
 - **A Job per session.** The process is meant to exit; a Deployment would restart it
   into a session nobody is in.
 - **One address for every session, and a NodePort per session beside it.** The
@@ -265,29 +265,34 @@ What a cluster has not yet been put through is
   is refused. The ten-port pool stays each session's direct route and the fleet's
   concurrency bound; the page advertises only the front door and the browser route,
   so a deployment need not expose the direct one.
-- **The front door is the allocator's, and reads one frame.** Placing a join needs
+- **The front door is the router's, and reads one frame.** Placing a join needs
   the lookup the browser route already makes; past the route frame it copies bytes.
-- **Admission is the allocator's.** Per-player budgets and rate limits for every
+- **Admission is the router's.** Per-player budgets and rate limits for every
   proxied route live where the player's address is still known, never at the pod.
-- **A thin allocator, not a second scheduler.** It exposes only the fixed session
+- **A thin router, not a second scheduler.** It exposes only the fixed session
   transaction on `/vif/api/`; K3s still schedules, admits, limits, terminates and
   garbage-collects every workload.
+- **The router routes doors as it routes pods.** A run's `-relay` door published
+  through a reverse tunnel is placed by name with the front door's checks, so a
+  door behind a NAT is reached at the site and the router dials nothing a caller
+  named. Allocation stays Kubernetes'; a player's own session published the same
+  way is later work (Multiplayer §5.6).
 - **No public delete endpoint.** The API is anonymous behind the site, so one player
   must not be able to end another's match.
 - **Docker builds; K3s runs.** Docker and its system containerd stay disabled except
   during an on-demand build. The image is imported into K3s's embedded containerd.
 - **One health path.** The code answers "should this process still be running";
-  everything else is in the body, where the allocator reads it.
+  everything else is in the body, where the router reads it.
 - **The vif JSON line is the log contract.** The workload writes it to the
-  node-local PVC, and LogWisp and the allocator carry those same bytes without
+  node-local PVC, and LogWisp and the router carry those same bytes without
   parsing or reshaping them.
 - **The public stream is session output only.** K3s, kernel, host journal and the
   `admit` sub that names a player's address remain operator-only.
 - **The host is the authority over identity.** A joiner reports; the coordinator
   decides.
 - **No authentication, and hardening first.** See §4.
-- **WebSocket on the standard library, terminated in the allocator.** `pkg/websocket`
-  is one minimal RFC 6455 byte stream for `vif`'s native client and the allocator,
+- **WebSocket on the standard library, terminated in the router.** `pkg/websocket`
+  is one minimal RFC 6455 byte stream for `vif`'s native client and the router,
   which splices the browser route to the pod as the front door does (§9).
 - **Drain waits for the roster with a deadline.** No participant migration: there is
   nowhere to migrate a match that lives in one process's memory.
@@ -308,9 +313,10 @@ on all of them, so no route can seat a player in a match their link did not name
 
 | Route | Link | Path | Refuses a bad dial |
 |---|---|---|---|
-| Front door | `vif://<site>:7777/<id>` | host forward, the allocator on the node, the pod's 7777 | the allocator, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max` |
+| Front door | `vif://<site>:7777/<id>` | host forward, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max` |
 | Direct | `vif://<site>:<nodeport>/<id>` | host forward, the session's NodePort, the pod's 7777 | the pod itself, on the name, its roster and its per-address budget |
-| Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the allocator, the pod's 7777 | the allocator: another origin before the upgrade, the rest as the front door does (below) |
+| Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the router, the pod's 7777 | the router: another origin before the upgrade, the rest as the front door does (below) |
+| Tunnel | `vif://<site>:7777/<id>`, a door's | host forward, the router on the node, the control connection the door's run holds open to it, the run's door | the router: as the front door, then a run that opens no connection back within the route timeout |
 
 Any of these links joins from either client. A browser cannot dial a `vif://` link,
 and a link can be typed onto another route's port, so a client that no route answers
@@ -318,7 +324,17 @@ looks the name up in the site's `GET /vif/api/sessions` and dials the routes lis
 for it; a route's own refusal stands
 ([Services §6](services-and-networking.md#6-operator-session-surface)).
 
-**The front door.** `vif-allocator` listens on `-route-listen` beside its API,
+**A tunnel** is a door a run publishes through the router rather than a pod: the
+run holds a control connection open to the front door, is named from the pods'
+identifier space and handed the link, and for each dial placed on that name the
+router asks it to open a connection back, matched by a ticket and spliced as a pod's
+is ([Multiplayer §5.6](multi-player.md#56-relay-doors-and-the-router)). The front
+door's checks run first, so a tunnel costs what a pod costs; what it adds is the open
+the run owes within the route timeout, and a publication costs its address a join.
+`-tunnels` bounds the doors carried at once. Tunnels are not listed and are not
+sessions: a door's run joined a session the fleet or a player hosts.
+
+**The front door.** `vif-router` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly
 one `MsgSessionRoute` frame, under a five-second deadline and the 64-byte name
 bound; resolves the pod with the lookup the browser route uses; dials `podIP:7777`,
@@ -327,12 +343,12 @@ re-encodes the name to it and splices the two sockets with half-close, Go settin
 seconds, and the other then has ten seconds. A stream that does not open with a
 route frame is closed unanswered; every other refusal is a `MsgJoinReply` whose
 reason `vif -join` prints. The cost is the browser route's: native play through it
-depends on the allocator process, and the pod sees each such player at the node's
+depends on the router process, and the pod sees each such player at the node's
 address, so its `admit` record names the node and the per-address budget is the
-allocator's (§4).
+router's (§4).
 
 **Where the browser route's layers stop.** Nginx terminates TLS and forwards the
-`Upgrade`; it never looks at a frame. `vif-allocator` checks method, identifier
+`Upgrade`; it never looks at a frame. `vif-router` checks method, identifier
 syntax, that the request is an upgrade, `Origin` (403) and the handshake (426 for
 another version, 400 for a bad key), each a status before any 101. It then answers
 the 101 and places the stream with the front door's own placement, 32 at once: the
@@ -342,14 +358,14 @@ since a page is never shown a status. It splices with the front door's `splice`,
 `TCP_NODELAY` on every socket, and never dials an upstream a caller named. The page
 wraps its own `WebSocket` as a `net.Conn`, and `vif -join wss://…` dials with
 `pkg/websocket` and sends the URL's origin; both send the route's last path segment
-as the name inside the stream, which the allocator places and the pod checks, so
+as the name inside the stream, which the router places and the pod checks, so
 the protocol, bounds and handshake are a native client's.
 
 **What it costs.** The pod sees browsers at the node's address, as it sees
 front-door players, so its budget is one per session for every proxied player and
-the allocator keys the per-player one in its place (§4). The allocator unmasks
+the router keys the per-player one in its place (§4). The router unmasks
 and frames the bytes. Measured on loopback against a pod pushing every 50 ms and a
-client pinging every 20 ms, an echo took 78 µs through the allocator's end and 72 µs
+client pinging every 20 ms, an echo took 78 µs through the router's end and 72 µs
 through the front door, and nginx with TLS added about 0.3 ms; in the field a native
 `wss://` join matches the front door. The nginx block is in
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example), and
@@ -366,7 +382,7 @@ stands between here and there:
   `-route-max` before any dial, with a reason the player reads; both refuse a player
   past its join budget, and the API one past its creation budget;
 - session pods remain Restricted, tokenless, and free of direct `hostPath`;
-- allocator RBAC cannot read `pods/log`;
+- router RBAC cannot read `pods/log`;
 - tmpfs is hard-capped, K3s fails closed without it, and reboot clears it;
 - a full tmpfs causes bounded log loss without ending a game;
 - standalone LogWisp holds no Kubernetes credential and binds only loopback;
@@ -382,22 +398,22 @@ These constraints hold for every change until then:
 - session pods mount only the `vif-fleet-logs` claim and the read-only
   `vif-fleet-wad` claim — never a direct `hostPath`;
 - the game writes complete JSONL records, and no component tails Kubernetes pod
-  logs, splices allocator JSON, or inserts a field after serialization;
+  logs, splices router JSON, or inserts a field after serialization;
 - LogWisp stays one independent node service with no Kubernetes credential, never an
-  allocator child or a per-session container, and the allocator may proxy its bytes
+  router child or a per-session container, and the router may proxy its bytes
   but must not parse, normalize, buffer, or own the stream processor;
 - stop allocation and prove the fleet empty before changing a live workload,
-  allocator binary, Role, mount, or logging service;
+  router binary, Role, mount, or logging service;
 - build LogWisp from upstream `main`, never a pull-request head, and judge its
   journal only by the invocation running the installed binary;
 - announce restarts, simultaneous clients, and deadline-sensitive joins first;
 - put placeholders in repository commands; never commit a real machine address;
 - remove rendered files, probe pods and verification JSONL after each change, and
   preserve the mounted tmpfs and the Bound PV/PVC;
-- keep the previous allocator binary and configuration until the next live
+- keep the previous router binary and configuration until the next live
   [§13](kube-docker-deploy.md#13-first-session) passes.
 
-Rollback restores the preceding allocator or LogWisp from its updater's `.previous`
+Rollback restores the preceding router or LogWisp from its updater's `.previous`
 set; the session image, the scenario tree, the node filter and the fleet objects come
 back by running `./deploy/update.sh` for that component at the earlier revision,
 which rebuilds the session image the image update removed. It may also disable the

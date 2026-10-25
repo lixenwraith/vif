@@ -171,6 +171,14 @@ const (
 	// once the session's pod is ready rather than when the request arrives. Wall time.
 	NetworkSessionRequestTimeout = 2 * time.Minute
 
+	// NetworkTunnelKeepInterval is how often each end of a door's control connection
+	// through the router says it is there, NetworkTunnelKeepLost how long a silent one
+	// is kept, and NetworkTunnelOpenTimeout how long a dial placed on a door waits for
+	// its run to open a connection back, the route timeout a pod gets.
+	NetworkTunnelKeepInterval = 20 * time.Second
+	NetworkTunnelKeepLost     = 3 * NetworkTunnelKeepInterval
+	NetworkTunnelOpenTimeout  = 5 * time.Second
+
 	// NetworkJoinConnectTimeout bounds a join's connect. A browser opens its socket
 	// through TLS, an HTTP upgrade and the site's proxy, round trips a loaded link
 	// stretches past the ConnectTimeout a session's own redials keep.
@@ -380,6 +388,13 @@ const (
 	// once; this is the pause before the next, so a successor or a host that is
 	// merely slow is retried without the walk becoming a spin.
 	NetworkRejoinPassInterval = time.Second
+
+	// NetworkHostDialAttempts bounds a participant's dials of the authority it follows
+	// through another participant's link, for a link of its own. Each waits twice as
+	// long as the last from NetworkRejoinPassInterval, so a host the chain names at an
+	// address unreachable from here is tried for about half a minute and then
+	// followed as it was, rather than dialled for the rest of the session.
+	NetworkHostDialAttempts = 5
 
 	// NetworkMigrationBadgeTicks is how long the status bar shows MIGRATING after
 	// a handoff is adopted. The badge marks a transition rather than a state, so

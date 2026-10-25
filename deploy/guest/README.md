@@ -22,19 +22,19 @@ back one out.
 | `nftables.conf` | `/etc/nftables.conf` | root 0644 | the include below; owns one `inet vif` table, admits the front door's 7777, never flushes the ruleset; `update.sh filter` installs and loads it |
 | `vif-operator.nft.example` | `/etc/nftables.d/vif-operator.nft` | root 0644 | site values: the one address allowed to reach the node, and its ports |
 | `logwisp.sysusers` | `/etc/sysusers.d/logwisp.conf` | root 0644 | creates the locked `logwisp` identity; tmpfs read access comes from the `vif-fleet` supplementary group alone |
-| `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and allocator credential paths, no dependency on games or the allocator |
+| `logwisp.service` | `/etc/systemd/system/` | root 0644 | read-only view of the fleet tmpfs, inaccessible K3s and router credential paths, no dependency on games or the router |
 | `../logwisp/aggregator.toml` | `/etc/logwisp/vif-fleet.toml` | root 0644 | `raw = true`, `from = "start"`, bounded flow and clients, loopback-only sink |
-| `vif-allocator.env` | `/etc/vif-allocator/allocator.env` | `root:vif-allocator` 0640 | this deployment's allocator settings, installed by `update-vif-allocator.sh`; edited here, never on the node. `VIF_ALLOCATOR_IMAGE` alone is added on the node: by the first install, then by `update-vif-image.sh` |
-| `vif-allocator.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-allocator`, the CA copy and the token file; `Type=notify` |
-| `vif-allocator-token.service` / `.timer` | `/etc/systemd/system/` | root 0644 | root-only atomic rotation of the short-lived ServiceAccount token, every six hours |
-| `vif-allocator-refresh-token.sh` | `/usr/local/libexec/vif-allocator-refresh-token` | root 0755 | the rotation the oneshot runs |
+| `vif-router.env` | `/etc/vif-router/router.env` | `root:vif-router` 0640 | this deployment's router settings, installed by `update-vif-router.sh`; edited here, never on the node. `VIF_ROUTER_IMAGE` alone is added on the node: by the first install, then by `update-vif-image.sh` |
+| `vif-router.service` | `/etc/systemd/system/` | root 0644 | `/usr/local/bin/vif-router`, the CA copy and the token file; `Type=notify` |
+| `vif-router-token.service` / `.timer` | `/etc/systemd/system/` | root 0644 | root-only atomic rotation of the short-lived ServiceAccount token, every six hours |
+| `vif-router-refresh-token.sh` | `/usr/local/libexec/vif-router-refresh-token` | root 0755 | the rotation the oneshot runs |
 
-`/etc/vif-allocator` is `root:vif-allocator` 0750, so reading `allocator.env`, or
+`/etc/vif-router` is `root:vif-router` 0750, so reading `router.env`, or
 even testing that it exists, needs `sudo`.
 
 ## Helpers
 
-Each builds or validates before it replaces anything. The allocator and LogWisp
+Each builds or validates before it replaces anything. The router and LogWisp
 updaters keep one rollback set at `.previous` and restore it if verification fails;
 the wad helper keeps the tree it replaced at `/var/db/vif/wad.previous`. The image
 and LogWisp builds remove their own image and keep the bases and build cache for the
@@ -47,8 +47,9 @@ they use it in place and leave it running with `FORWARD` and its cache as they w
 |---|---|---|
 | `install-logwisp.sh [revision]` | first install of the binary, identity, configuration and unit | an existing installation; a node without the `vif-fleet` identity; a revision that is not on upstream `main`; Docker without buildx, or stopped but not disabled |
 | `update-logwisp.sh [revision]` | LogWisp's binary, configuration and unit only | a stopped `logwisp.service`; the same revision and Docker refusals |
-| `update-vif-allocator.sh [--render]` | the allocator binary, unit, and env from `vif-allocator.env`; `--render` prints that env and changes nothing | a dirty worktree; a stopped `vif-allocator.service`; an installed env without `VIF_ALLOCATOR_IMAGE`; a non-empty fleet |
-| `update-vif-image.sh [tag]` | the headless session image, imported pinned, and an installed allocator's `VIF_ALLOCATOR_IMAGE` with it, with allocation paused meanwhile; removes older `vif` tags from K3s; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet; Docker without buildx |
+| `migrate-vif-router.sh` | once: a node commissioned with `vif-allocator`, rewired to `vif-router` (Role, identity, settings, token, units, binary), the allocator's units, binary, ServiceAccount and identity removed and its settings kept at `/etc/vif-router/vif-allocator.migrated`; a router that does not answer is removed again and the allocator restarted | a node already migrated; a dirty worktree; a non-empty fleet; allocator settings without `VIF_ALLOCATOR_IMAGE` |
+| `update-vif-router.sh [--render]` | the router binary, unit, and env from `vif-router.env`; `--render` prints that env and changes nothing | a dirty worktree; a node not yet migrated from `vif-allocator`; a stopped `vif-router.service`; an installed env without `VIF_ROUTER_IMAGE`; a non-empty fleet |
+| `update-vif-image.sh [tag]` | the headless session image, imported pinned, and an installed router's `VIF_ROUTER_IMAGE` with it, with allocation paused meanwhile; removes older `vif` tags from K3s; rejects an image without the `headless` profile label | a dirty worktree; an occupied fleet; Docker without buildx |
 | `update-vif-wad.sh [dir]` | the node's scenario volume at `/var/db/vif/wad`, by atomic rename; validates every scenario first, with a binary built from the checkout and the layout a pod mounts | a tree that is not laid out like `wad/`; a scenario that does not load. **Not** an occupied fleet: a running match keeps the tree it mounted |
 
 The LogWisp helpers build upstream `main`'s head, or the revision given, through
@@ -65,22 +66,22 @@ The session image, the scenario volume, the node filter and the fleet objects co
 from the checkout: check out the revision to return to and run `./deploy/update.sh`
 naming that component.
 
-### The allocator, or LogWisp
+### The router, or LogWisp
 
 Restore the updater's retained set. `.previous` is one update back, not a fixed
 version — each run of the updater overwrites it.
 
 ```sh
-sudo systemctl stop vif-allocator.service
+sudo systemctl stop vif-router.service
 sudo install -o root -g root -m 0755 \
-  /usr/local/libexec/vif-allocator.previous /usr/local/bin/vif-allocator
-sudo install -o root -g vif-allocator -m 0640 \
-  /etc/vif-allocator/allocator.env.previous /etc/vif-allocator/allocator.env
+  /usr/local/libexec/vif-router.previous /usr/local/bin/vif-router
+sudo install -o root -g vif-router -m 0640 \
+  /etc/vif-router/router.env.previous /etc/vif-router/router.env
 sudo install -o root -g root -m 0644 \
-  /etc/systemd/system/vif-allocator.service.previous \
-  /etc/systemd/system/vif-allocator.service
+  /etc/systemd/system/vif-router.service.previous \
+  /etc/systemd/system/vif-router.service
 sudo systemctl daemon-reload
-sudo systemctl start vif-allocator.service
+sudo systemctl start vif-router.service
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/healthz
 curl --connect-timeout 2 --max-time 5 -fsS http://127.0.0.1:9080/readyz
 ```
@@ -92,7 +93,7 @@ way; `update-logwisp.sh` restores them itself when its own verification fails.
 
 If LogWisp's isolation or loopback checks fail, remove only its live listener and
 keep the installed binary, configuration and locked identity for diagnosis. Nothing
-else is touched: the allocator, K3s, the writer, the PV/PVC, the tmpfs and the
+else is touched: the router, K3s, the writer, the PV/PVC, the tmpfs and the
 Restricted namespace all stay as they are.
 
 ```sh
@@ -102,11 +103,11 @@ sudo systemctl daemon-reload
 sudo ss -ltnH 'sport = :8081'      # must print nothing
 ```
 
-### The allocator Role
+### The router Role
 
-The Role is `../k3s/40-allocator-rbac.yaml` as `./deploy/update.sh objects` applies
+The Role is `../k3s/40-router-rbac.yaml` as `./deploy/update.sh objects` applies
 it; a live Role that differs from the repository is a drift, not a fix. It never
-grants `pods/log`: no allocator call, node file, LogWisp or public stream uses the
+grants `pods/log`: no router call, node file, LogWisp or public stream uses the
 Kubernetes log API.
 
 ### The fleet-log storage
@@ -133,8 +134,8 @@ sudo chmod 000 /var/log/vif-fleet
 sudo rm /etc/systemd/system/k3s.service.d/10-vif-fleet-logs.conf
 sudo systemctl daemon-reload
 sudo systemctl restart k3s.service
-sudo systemctl restart vif-allocator-token.service
-sudo systemctl start vif-allocator.service
+sudo systemctl restart vif-router-token.service
+sudo systemctl start vif-router.service
 ```
 
 Keep the Retain PV/PVC for diagnosis, and do not schedule a PVC writer afterwards:

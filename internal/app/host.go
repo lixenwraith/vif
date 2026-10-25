@@ -100,7 +100,7 @@ func (c sessionControl) RequestSession(site string, players int, scenario string
 		return err
 	}
 	if e.Scheme != link.SchemeSite {
-		return errors.New("allocator site must be an http:// or https:// URL")
+		return errors.New("router site must be an http:// or https:// URL")
 	}
 	if players < 0 || players > parameter.MaxPlayers {
 		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)
@@ -723,6 +723,7 @@ func (m *membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 		}
 	}
 	m.reach.Close()
+	m.closeDoor()
 	// Every link the drops were for closes unread with the port.
 	m.seatsMu.Lock()
 	m.dropped = nil
@@ -807,6 +808,9 @@ func (m *membership) sessionSummaryLocked() string {
 	// its size is how many peers can be reached at all.
 	if n := reg.Ints.Get("network.chain").Load(); n > 0 {
 		line += fmt.Sprintf(", %d confirmed reachable", n)
+	}
+	if doors := m.sessionChain().Doors(); len(doors) > 0 {
+		line += ", relaying at " + strings.Join(doors, " ")
 	}
 	if reg.Bools.Get("network.listening").Load() {
 		line += ", listening"

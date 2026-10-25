@@ -1,9 +1,17 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"testing"
+	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
@@ -42,4 +50,70 @@ func BenchmarkHeadlessTicks(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestTickProfileTD16 reads a td tick with sixteen cursors on one core, the shape the
+// map-limit trims are measured in: VIF_TICK_PROFILE names a directory its CPU profile
+// is written to, and the mean tick is logged.
+func TestTickProfileTD16(t *testing.T) {
+	dir := os.Getenv("VIF_TICK_PROFILE")
+	if dir == "" {
+		t.Skip("set VIF_TICK_PROFILE=<dir> to profile a td tick with sixteen cursors")
+	}
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	a, err := NewHeadless(Config{Seed: 42, Width: 200, Height: 60, Resources: resource.Options{Dir: soakRoot, Scenario: "td"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	a.Tick(40)
+	for slot := range parameter.MaxPlayers {
+		p := &event.CursorSpawnRequestPayload{Slot: uint8(slot), X: 20 + 28*(slot%16), Y: 30 + 7*(slot%3)}
+		if slot > 0 {
+			p.Control, p.PeerID = uint8(component.ControlRemote), uint32(slot+1)
+		}
+		a.Context().PushEventOrigin(event.EventCursorSpawnRequest, p, event.OriginDebug)
+		a.Settle()
+	}
+	a.Tick(60)
+	f, err := os.Create(filepath.Join(dir, "td16-tick.pprof"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := pprof.StartCPUProfile(f); err != nil {
+		t.Fatal(err)
+	}
+	const ticks = 5000
+	start := time.Now()
+	a.Tick(ticks)
+	elapsed := time.Since(start)
+	pprof.StopCPUProfile()
+	w, h := a.World().Positions.GridDimensions()
+	t.Logf("td %dx%d, %d cursors, %d ticks on one core: %.2f ms a tick", w, h, parameter.MaxPlayers, ticks, float64(elapsed.Microseconds())/1000/ticks)
+}
+
+// BenchmarkWorldCopyAtMapLimit reads a td world, whose map is the ceiling, into a
+// checkpoint's copy, first into fresh storage and then into the last copy's.
+func BenchmarkWorldCopyAtMapLimit(b *testing.B) {
+	a, err := NewHeadless(Config{Seed: 42, Width: 200, Height: 60, Resources: resource.Options{Dir: soakRoot, Scenario: "td"}})
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer a.Close()
+	a.Tick(100)
+	w := a.World()
+	b.Run("fresh", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			w.RunSafe(func() { w.CopyOut(nil) })
+		}
+	})
+	b.Run("reused", func(b *testing.B) {
+		var c *engine.WorldCopy
+		b.ReportAllocs()
+		for b.Loop() {
+			w.RunSafe(func() { c = w.CopyOut(c) })
+		}
+	})
 }

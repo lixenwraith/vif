@@ -1534,3 +1534,95 @@ func TestAnInstallMeasuresNoLocalCursorState(t *testing.T) {
 		t.Fatalf("the correction measured %d entities, want the one cursor it moved", n)
 	}
 }
+
+// TestAWriteInPlaceMatchesACaptureWrite is what lets a commit compare the staging
+// world's stores against the live ones where they stand. The write that captures
+// both worlds and the one that captures neither must leave the same world, read the
+// same correction magnitude and record the same delta for a journal.
+func TestAWriteInPlaceMatchesACaptureWrite(t *testing.T) {
+	t.Parallel()
+	const seed = 0x5EEDBEEF
+	source := mustHeadless(t, seed, 120, 40)
+	defer source.Close()
+	tickUntilCursor(t, source)
+	source.Tick(40)
+	early, err := source.CaptureShared()
+	if err != nil {
+		t.Fatalf("early capture: %v", err)
+	}
+	source.Tick(120)
+	late, err := source.CaptureShared()
+	if err != nil {
+		t.Fatalf("late capture: %v", err)
+	}
+
+	byCapture := mustHeadless(t, seed, 120, 40)
+	defer byCapture.Close()
+	tickUntilCursor(t, byCapture)
+	if err := byCapture.InstallShared(early); err != nil {
+		t.Fatalf("install early: %v", err)
+	}
+	var before snapshot.SharedCapture
+	byCapture.world.RunSafe(func() { before, err = byCapture.glue.captureSharedLocked() })
+	if err != nil {
+		t.Fatalf("capture before: %v", err)
+	}
+	wantDiff, err := byCapture.glue.reconcileShared(late)
+	if err != nil {
+		t.Fatalf("reconcile late: %v", err)
+	}
+	wantDelta := engine.DiffSharedWorld(before.World, late.World)
+
+	inPlace := mustHeadless(t, seed, 120, 40)
+	defer inPlace.Close()
+	tickUntilCursor(t, inPlace)
+	if err := inPlace.InstallShared(early); err != nil {
+		t.Fatalf("install early: %v", err)
+	}
+	var (
+		gotDiff engine.WorldDifference
+		written stagedWrite
+	)
+	inPlace.world.RunSafe(func() { gotDiff, written, err = inPlace.glue.writeStagedLocked(source, late.Header, true) })
+	if err != nil {
+		t.Fatalf("write in place: %v", err)
+	}
+	if gotDiff != wantDiff {
+		t.Fatalf("correction magnitude in place %+v, by capture %+v", gotDiff, wantDiff)
+	}
+	if wantDiff.Entries == 0 {
+		t.Fatal("120 ticks moved nothing, so the write proved nothing")
+	}
+	if written.delta == nil || !reflect.DeepEqual(*written.delta, wantDelta) {
+		t.Fatalf("the delta recorded in place differs from DiffSharedWorld over the captures:\n%s", deltaDiff(written.delta, wantDelta))
+	}
+	want, got := byCapture.SnapshotShared(), inPlace.SnapshotShared()
+	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
+		t.Fatalf("the write in place differs from the one by capture at line %d\n  capture:  %s\n  in place: %s\n%s",
+			idx, lw, lg, strings.Join(snapshot.Diff(want, got, 8), "\n"))
+	}
+	for range 60 {
+		byCapture.Tick(1)
+		inPlace.Tick(1)
+	}
+	want, got = byCapture.SnapshotShared(), inPlace.SnapshotShared()
+	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
+		t.Fatalf("the world written in place diverged 60 ticks later at line %d\n  capture:  %s\n  in place: %s", idx, lw, lg)
+	}
+}
+
+// deltaDiff names the first store whose delta differs, as JSON.
+func deltaDiff(got *engine.SharedWorldDelta, want engine.SharedWorldDelta) string {
+	if got == nil {
+		return "no delta recorded"
+	}
+	gv, wv := reflect.ValueOf(*got), reflect.ValueOf(want)
+	for i := range gv.NumField() {
+		if !reflect.DeepEqual(gv.Field(i).Interface(), wv.Field(i).Interface()) {
+			g, _ := snapshot.EncodeJSON(gv.Field(i).Interface())
+			w, _ := snapshot.EncodeJSON(wv.Field(i).Interface())
+			return gv.Type().Field(i).Name + "\n  in place: " + string(g) + "\n  capture:  " + string(w)
+		}
+	}
+	return "no field differs"
+}

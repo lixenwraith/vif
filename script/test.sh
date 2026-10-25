@@ -108,7 +108,7 @@ Asserted (print PASS/FAIL; `all` runs them)
   bundle            the release wad archive extracts to a working config root
   scenario          :n <name> rebuilds the run on another scenario and back
   follow            a host changes scenario and its guest rebuilds with it
-  fleet             the session template and the allocator render one workload
+  fleet             the session template and the router render one workload
   deploy            the wad installer's refusal, the manifests and a mounted scenario
   all               every asserted check above
 
@@ -383,12 +383,12 @@ follow)
 	;;
 
 fleet)
-	# The template a person renders by hand and the one the allocator renders have
-	# to be the same workload, or "the allocator is broken" and "the workload is
+	# The template a person renders by hand and the one the router renders have
+	# to be the same workload, or "the router is broken" and "the workload is
 	# broken" stop being separable questions. Compares the arguments, the mounts and
 	# the claims rather than the whole document, which carries a session id.
 	command -v go >/dev/null 2>&1 || fail "go not found"
-	# Three bots, the envelope TestBuildJobUsesFixedSessionShape pins for the allocator.
+	# Three bots, the envelope TestBuildJobUsesFixedSessionShape pins for the router.
 	rendered=$(SCENARIO=td LOG_LEVEL=debug PLAYERS=4 BOTS=3 \
 		./deploy/k3s/render-session.sh fleetcheck 31700 vif:dev 4 120x40)
 	for want in \
@@ -402,8 +402,8 @@ fleet)
 	done
 	printf '%s\n' "$rendered" | grep -A1 -- '"-bot"' | grep -q '"3"' \
 		|| fail "the rendered template does not seat the bots it was given"
-	go test ./tool/vif-allocator/ >/dev/null || fail "allocator tests"
-	pass "the session template and the allocator agree on the fleet's workload"
+	go test ./tool/vif-router/ >/dev/null || fail "router tests"
+	pass "the session template and the router agree on the fleet's workload"
 	;;
 
 deploy)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -59,19 +60,27 @@ func TestADivergenceOverAShapedLinkNamesItsRows(t *testing.T) {
 // shapedFight is towerFight on the embedded scenario: two participants moving one
 // tick in three and firing one in six over a shaped link, the host publishing on
 // its pump and the guest applying what arrives, paced as its scheduler would pace
-// it: the trim and step each tick leaves are owed as fractions of a tick, and a
-// whole one owed skips or adds a guest tick. leadMax is the highest lead the guest
-// held, the input latency the link's spikes cost it.
+// it (shapedFightOf).
 func shapedFight(t *testing.T, seed uint64, shape link.LinkShape) (host, guest *App, fight func(ticks int), leadMax *int64) {
 	t.Helper()
-	leadMax = new(int64)
 	apps := meshSessionOf(t, Config{Seed: seed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}},
 		2, [][2]int{{1, 2}})
-	host, guest = apps[0], apps[1]
-	// A port shapes what it receives, so the shape on both is the link both ways.
-	transportOf(t, host).SetShape(shape)
-	transportOf(t, guest).SetShape(shape)
+	fight, leadMax = shapedFightOf(t, apps, shape)
+	return apps[0], apps[1], fight, leadMax
+}
+
+// shapedFightOf is the fight over a session already built, whatever its shape:
+// every participant moving one tick in three and firing one in six, the host
+// publishing on its pump and each guest applying what arrives, paced as its
+// scheduler would (the trim and step owed as fractions of a tick, a whole one
+// skipping or adding a guest tick). leadMax is the highest lead any guest held.
+func shapedFightOf(t *testing.T, apps []*App, shape link.LinkShape) (fight func(ticks int), leadMax *int64) {
+	t.Helper()
+	leadMax = new(int64)
+	host, guests := apps[0], apps[1:]
+	// A port shapes what it receives, so the shape on every port is each link both ways.
 	for _, a := range apps {
+		transportOf(t, a).SetShape(shape)
 		injectExCommand(t, a, "god")
 	}
 	for range 120 {
@@ -83,10 +92,12 @@ func shapedFight(t *testing.T, seed uint64, shape link.LinkShape) (host, guest *
 	}
 	rng := vmath.NewFastRand(7)
 	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
-	owed := 0.0
-	return host, guest, func(ticks int) {
+	owed := make([]float64, len(guests))
+	return func(ticks int) {
 		for range ticks {
-			*leadMax = max(*leadMax, statOf(guest, "network.barrier_delay_ticks"))
+			for _, g := range guests {
+				*leadMax = max(*leadMax, statOf(g, "network.barrier_delay_ticks"))
+			}
 			for _, a := range apps {
 				if rng.Intn(3) == 0 {
 					inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
@@ -97,19 +108,21 @@ func shapedFight(t *testing.T, seed uint64, shape link.LinkShape) (host, guest *
 			}
 			host.Tick(1)
 			_ = host.corrections.PublishDue()
-			for n := 1; n > 0 || owed <= -1; n-- {
-				if owed >= 1 {
-					owed--
-					break
+			for i, g := range guests {
+				for n := 1; n > 0 || owed[i] <= -1; n-- {
+					if owed[i] >= 1 {
+						owed[i]--
+						break
+					}
+					if n <= 0 {
+						owed[i]++
+					}
+					g.Tick(1)
+					trim, step := g.scheduler.TakePace()
+					owed[i] += float64(trim)/1000 + float64(step)
 				}
-				if n <= 0 {
-					owed++
-				}
-				guest.Tick(1)
-				trim, step := guest.scheduler.TakePace()
-				owed += float64(trim)/1000 + float64(step)
+				g.ApplyPendingCorrections()
 			}
-			guest.ApplyPendingCorrections()
 		}
 	}, leadMax
 }
@@ -119,15 +132,30 @@ func shapedFight(t *testing.T, seed uint64, shape link.LinkShape) (host, guest *
 // divergence of the harness's own, as the scenario FSM's would not be.
 func raiseStormTogether(t *testing.T, host, guest *App, fight func(ticks int)) {
 	t.Helper()
+	raiseStormTogetherOn(t, []*App{host, guest}, fight)
+}
+
+// raiseStormTogetherOn raises the storm on the host now and on each guest as its
+// clock reaches the host's tick, the fight going on meanwhile.
+func raiseStormTogetherOn(t *testing.T, apps []*App, fight func(ticks int)) {
+	t.Helper()
+	host := apps[0]
 	at := tickOf(host)
 	raiseStorm(t, host)
-	for tickOf(guest) < at {
+	pending := slices.Clone(apps[1:])
+	for len(pending) > 0 {
 		fight(1)
+		pending = slices.DeleteFunc(pending, func(guest *App) bool {
+			switch tick := tickOf(guest); {
+			case tick < at:
+				return false
+			case tick > at:
+				t.Fatalf("guest at tick %d cannot raise the storm at %d", tick, at)
+			}
+			raiseStorm(t, guest)
+			return true
+		})
 	}
-	if tickOf(guest) != at {
-		t.Fatalf("guest at tick %d cannot raise the storm at %d", tickOf(guest), at)
-	}
-	raiseStorm(t, guest)
 }
 
 func tickOf(a *App) uint64 { return a.World().Resources.Event.Queue.Stamp().Tick }
@@ -206,3 +234,38 @@ func fightLogged(t *testing.T, path string) []string {
 
 func itoa(v int64) string   { return strconv.FormatInt(v, 10) }
 func ftoa(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
+
+// TestARelayedTopologyConvergesUnderShape: a host, a relay and a person behind it
+// fight over links shaped both ways, through a storm. The person converges on
+// manifests answered hash-only as the relay does, its artifacts reaching the
+// authority through the relay and the authority's reaching it a hop later; the
+// authority sends to its one link alone, and the relay fans out to the person.
+func TestARelayedTopologyConvergesUnderShape(t *testing.T) {
+	t.Parallel()
+	shape := link.LinkShape{LatencyTicks: 3, JitterTicks: 3, JitterEvery: 97}
+	apps := meshSessionOf(t, Config{Seed: stormWorldSeed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}},
+		3, [][2]int{{1, 2}, {2, 3}})
+	host, relay, person := apps[0], apps[1], apps[2]
+	local := localCursors(t, apps)
+	fight, leadMax := shapedFightOf(t, apps, shape)
+	fight(300)
+	raiseStormTogetherOn(t, apps, fight)
+	fight(600)
+	for name, guest := range map[string]*App{"relay": relay, "person": person} {
+		reading := divergenceReading(host, guest, *leadMax)
+		t.Logf("%s: %s", name, reading)
+		manifests, hashOnly := statOf(guest, "snapshot.manifests_received"), statOf(guest, "snapshot.corrections_hash_only")
+		if manifests < 50 || hashOnly*100 < manifests*85 {
+			t.Fatalf("the %s converged on %d of %d manifests hash-only; want most of many", name, hashOnly, manifests)
+		}
+	}
+	if peers := transportOf(t, host).PeerCount(); peers != 1 {
+		t.Fatalf("the authority sends to %d links, want its one", peers)
+	}
+	if forwarded, refused := statOf(relay, "network.relay_forwarded"), statOf(relay, "network.relay_refused"); forwarded == 0 || refused != 0 {
+		t.Fatalf("the relay forwarded %d batches and refused %d, want many and none", forwarded, refused)
+	}
+	if moved := cursorPosition(host, local[2]); moved == cursorPosition(person, local[2]) && statOf(host, "network.crossings_received") == 0 {
+		t.Fatal("the person's crossings never reached the authority through the relay")
+	}
+}

@@ -41,7 +41,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Packaging](packaging.md) | Operational detail | What do nightly releases publish, what must hold for a distribution package, and what is still missing per repository? |
 | [Build profiles and platforms](multi-platform.md) | Operational/design detail | What does each build include, how does a browser join a session over WebSocket, how could external assets be added, and how do the desktop window and the Android view host the game beside the terminal? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested and diagnosed on native and WASM targets, and what does every command-line flag do? |
-| [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the allocator installed, in order? **Start here to deploy a node.** |
+| [Deploying the session fleet](kube-docker-deploy.md) | Operational detail | What must the public edge and the site's edge provide, and how are the node, Docker, K3s, the node's own filter, the log tmpfs, the image, the fleet objects, LogWisp and the router installed, in order? **Start here to deploy a node.** |
 | [The session fleet](kubernetes-fleet.md) | Operational detail | What is deployed, what did it cost when measured, and what was decided? |
 | [Node runbook](../deploy/runbook.md) | Operational detail | What do you run on a node that is already up — status, draining, the updaters, and what each refusal means? |
 | [End-to-end checks](../script/README.md) | Operational detail | Which checks need a built binary, a terminal or the deploy scripts, and what does each assert or measure? |
@@ -63,8 +63,8 @@ Focused references:
   environment.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
   conversion and viewing.
-- [vif-allocator](../tool/vif-allocator/README.md) covers the website-to-K3s
-  session allocator and its routes.
+- [vif-router](../tool/vif-router/README.md) covers the website-to-K3s
+  session router and its routes.
 - [vif-log](../tool/vif-log/README.md) covers the session log and journal viewer.
 
 ## Source-of-truth map

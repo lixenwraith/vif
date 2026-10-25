@@ -87,7 +87,7 @@ func (a *App) probeSnapshot() probe.Snapshot {
 		"build": buildName(),
 	}
 	if !life.Deadline.IsZero() {
-		// What an allocator needs and a roster count cannot say: how long this
+		// What a router needs and a roster count cannot say: how long this
 		// session has left before it ends itself.
 		detail["expires_in"] = life.Remaining.Round(time.Second).String()
 	}

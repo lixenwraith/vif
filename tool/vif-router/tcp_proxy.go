@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
@@ -33,20 +35,23 @@ var errRouteBusy = &network.Refusal{Code: network.RefusalFull,
 	Reason: "this session is carrying as many connections as it accepts"}
 
 // tcpRouter is the native front door: one port for every session, which places a
-// connection by the name its dialer sends before reading. It reads that one frame
-// and nothing after it, and the browser route places its streams with it too; see
+// connection by the name its dialer sends before reading, on a pod or on a door a
+// run published through it (tunnels). It reads that one frame and nothing after
+// it, and the browser route places its streams with it too; see
 // doc/kubernetes-fleet.md §9.
 type tcpRouter struct {
 	sessions sessionAllocator
 	holds    *holds
 	admit    *network.AdmissionLimiter
+	tunnels  *network.TunnelHub // nil publishes no doors
+	opens    time.Duration      // how long a door's run has to open a connection back
 	log      *slog.Logger
 	game     string // the pod port dialled; a test points it at a stand-in
 	placing  chan struct{}
 }
 
 func newTCPRouter(sessions sessionAllocator, held *holds, joins *network.AdmissionLimiter, logger *slog.Logger) *tcpRouter {
-	return &tcpRouter{sessions: sessions, holds: held, admit: joins,
+	return &tcpRouter{sessions: sessions, holds: held, admit: joins, opens: parameter.NetworkTunnelOpenTimeout,
 		log: logger, game: gamePort, placing: make(chan struct{}, routePlacing)}
 }
 
@@ -74,7 +79,9 @@ func (r *tcpRouter) serve(listener net.Listener) {
 
 // place answers the route frame with the session's pod, the frame replayed to it,
 // or with a refusal the dialer reads as its reason. Every refusal precedes a dial.
-// from is the dialler's address, which the join budget is charged to.
+// from is the dialler's address, which the join budget is charged to. A run's
+// publication or connection back (tunnels) is taken here too, since it opens on the
+// same port, and holds no placement past this frame.
 func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 	select {
 	case r.placing <- struct{}{}:
@@ -84,12 +91,17 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 		return nil, nil
 	}
 	_ = client.SetDeadline(time.Now().Add(routeTimeout))
-	id, err := network.ReadSessionRoute(client)
-	if err != nil {
+	first, err := link.DecodeWithin(client, network.MaxTunnelFrame)
+	if err != nil || first.Type != network.MsgSessionRoute {
 		// Not a vif dialer, or one that said nothing: no reply would be read.
+		if err == nil && r.tunnels != nil {
+			r.tunnel(client, from, first)
+			return nil, nil
+		}
 		_ = client.Close()
 		return nil, nil
 	}
+	id := string(first.Payload)
 	refuse := func(reason error) (net.Conn, func()) {
 		network.RefuseJoin(client, reason, routeTimeout)
 		_ = client.Close()
@@ -103,6 +115,9 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 	// pod a probe.
 	if err := r.admit.Admit(from); err != nil {
 		return refuse(err)
+	}
+	if r.tunnels != nil && r.tunnels.Has(id) {
+		return r.placeDoor(client, id, refuse)
 	}
 	lookup, cancel := context.WithTimeout(context.Background(), routeTimeout)
 	podIP, err := r.sessions.routeSession(lookup, id)
@@ -144,6 +159,72 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 	_ = client.SetDeadline(time.Time{})
 	r.log.Info("session route opened", "session", id)
 	return upstream, release
+}
+
+// placeDoor places a dial on a door a run published: the run opens a connection
+// back, which takes the dialer's bytes after the name the run's door answers to, as
+// a pod takes them after its own. The ceiling counts it as it counts a pod's.
+func (r *tcpRouter) placeDoor(client net.Conn, id string, refuse func(error) (net.Conn, func())) (net.Conn, func()) {
+	release, ok := r.holds.hold(id)
+	if !ok {
+		return refuse(errRouteBusy)
+	}
+	upstream, session, err := r.tunnels.Open(id, r.opens)
+	if err == nil {
+		_ = upstream.SetWriteDeadline(time.Now().Add(routeTimeout))
+		if err = link.NewMessage(network.MsgSessionRoute, []byte(session)).Encode(upstream); err != nil {
+			_ = upstream.Close()
+		}
+		_ = upstream.SetWriteDeadline(time.Time{})
+	}
+	if err != nil {
+		release()
+		r.log.Warn("door route failed", "session", id, "error", err)
+		return refuse(network.ErrDoorUnanswered)
+	}
+	_ = client.SetDeadline(time.Time{})
+	r.log.Info("door route opened", "session", id)
+	return upstream, release
+}
+
+// tunnel takes a run's frame on the front door: a publication, which the run's
+// stream then carries as its control connection, or a connection back for a dial
+// waiting on its ticket, handed to that dial. Anything else is closed unanswered.
+func (r *tcpRouter) tunnel(client net.Conn, from net.Addr, first *link.Message) {
+	switch first.Type {
+	case network.MsgSessionPublish:
+		var req network.PublishRequest
+		if json.Unmarshal(first.Payload, &req) != nil {
+			_ = client.Close()
+			return
+		}
+		// A publication costs the budget a join does, so one address cannot fill
+		// the doors the router carries.
+		if err := r.admit.Admit(from); err != nil {
+			network.RefusePublish(client, err)
+			_ = client.Close()
+			return
+		}
+		_ = client.SetDeadline(time.Time{})
+		door, err := r.tunnels.Publish(client, req)
+		if err != nil {
+			r.log.Info("door refused", "error", err)
+			return
+		}
+		r.log.Info("door published", "session", door.ID(), "doors", r.tunnels.Count())
+		go func() {
+			r.tunnels.Serve(door)
+			r.log.Info("door closed", "session", door.ID(), "doors", r.tunnels.Count())
+		}()
+	case network.MsgTunnelAccept:
+		var ticket network.TunnelTicket
+		_ = client.SetDeadline(time.Time{})
+		if json.Unmarshal(first.Payload, &ticket) != nil || !r.tunnels.Accept(client, ticket.Ticket) {
+			_ = client.Close()
+		}
+	default:
+		_ = client.Close()
+	}
 }
 
 // splice copies both ways, passing each side's end on as a half-close, and closes

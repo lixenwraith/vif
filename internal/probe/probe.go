@@ -32,7 +32,7 @@ const readHeaderTimeout = 5 * time.Second
 
 // Snapshot is what a run reports about itself. Live is the only field the HTTP
 // code carries: whether the process should still run, the one restart question.
-// Ready is whether a dial would be admitted now, which an allocator reads from the
+// Ready is whether a dial would be admitted now, which a router reads from the
 // body; a full or draining session is not broken, so a failure code would mislead.
 // Reason is for whoever reads the body.
 type Snapshot struct {
@@ -116,7 +116,7 @@ func (s *Server) Close() error {
 }
 
 // handleHealth answers the one health question. The code is the verdict a
-// supervisor acts on; the body is everything a person or an allocator wants.
+// supervisor acts on; the body is everything a person or a router wants.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	snap := s.snapshot()
 	s.writeSnapshot(w, snap, snap.Live)

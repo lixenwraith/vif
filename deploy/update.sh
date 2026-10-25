@@ -3,13 +3,13 @@
 # that differs is shown as a diff (installed -, incoming +) and then updated, in
 # dependency order; a current one is skipped. --diff shows and changes nothing, and
 # exits 1 if anything differs.
-# Usage: deploy/update.sh [--diff] [filter objects wad image allocator logwisp]
+# Usage: deploy/update.sh [--diff] [filter objects wad image router logwisp]
 set -eu
 
 deploy=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$deploy/.." && pwd)
 guest=$deploy/guest
-all="filter objects wad image allocator logwisp"
+all="filter objects wad image router logwisp"
 wad_root=${VIF_WAD_ROOT:-/var/db/vif/wad}
 
 diff_only=false
@@ -18,7 +18,7 @@ for arg in "$@"; do
 	case $arg in
 		-h|--help) sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		--diff) diff_only=true ;;
-		filter|objects|wad|image|allocator|logwisp) selected="$selected $arg" ;;
+		filter|objects|wad|image|router|logwisp) selected="$selected $arg" ;;
 		*) echo "usage: $0 [--diff] [$all]" >&2; exit 2 ;;
 	esac
 done
@@ -29,6 +29,11 @@ kube() { sudo kubectl "$@"; }
 git_() { git -C "$repo_root" "$@"; }
 if [ "$diff_only" = false ] && [ -n "$(git_ status --porcelain)" ]; then
 	die "the worktree differs from HEAD; commit or stash what you mean to deploy"
+fi
+# A node commissioned with vif-allocator, the router's name before, is rewired once
+# by its own script; until then nothing here knows what is installed.
+if sudo test -f /etc/vif-allocator/allocator.env && ! sudo test -f /etc/vif-router/router.env; then
+	die "vif-allocator is installed and vif-router is not: run deploy/guest/migrate-vif-router.sh once, then this again"
 fi
 
 # Installed lines green, incoming lines red, and only on a terminal.
@@ -71,7 +76,7 @@ check_objects() {
 		return 1
 	fi
 	status=0
-	for name in 00-namespace 10-quota 20-networkpolicy 40-allocator-rbac; do
+	for name in 00-namespace 10-quota 20-networkpolicy 40-router-rbac; do
 		rc=0
 		out=$(kube diff -f "$repo_root/deploy/k3s/$name.yaml" 2>&1) || rc=$?
 		case $rc in
@@ -111,8 +116,8 @@ check_wad() {
 }
 
 check_image() {
-	sudo_copy /etc/vif-allocator/allocator.env "$work/allocator.env"
-	installed=$(sed -n 's/^VIF_ALLOCATOR_IMAGE=//p' "$work/allocator.env" | tail -n 1)
+	sudo_copy /etc/vif-router/router.env "$work/router.env"
+	installed=$(sed -n 's/^VIF_ROUTER_IMAGE=//p' "$work/router.env" | tail -n 1)
 	tag=${installed##*:}
 	incoming=vif:$(git_ rev-parse --short=8 HEAD)
 	if [ -n "$tag" ] && git_ rev-parse -q --verify "$tag^{commit}" >/dev/null; then
@@ -131,21 +136,21 @@ check_image() {
 	return 1
 }
 
-check_allocator() {
+check_router() {
 	status=0
-	"$guest/update-vif-allocator.sh" --render >"$work/allocator.env.next" || return 2
-	sudo_copy /etc/vif-allocator/allocator.env "$work/allocator.env"
-	show allocator.env "$work/allocator.env" "$work/allocator.env.next" || status=1
-	show vif-allocator.service /etc/systemd/system/vif-allocator.service \
-		"$guest/vif-allocator.service" || status=1
-	revision=$(go version -m /usr/local/bin/vif-allocator 2>/dev/null |
+	"$guest/update-vif-router.sh" --render >"$work/router.env.next" || return 2
+	sudo_copy /etc/vif-router/router.env "$work/router.env"
+	show router.env "$work/router.env" "$work/router.env.next" || status=1
+	show vif-router.service /etc/systemd/system/vif-router.service \
+		"$guest/vif-router.service" || status=1
+	revision=$(go version -m /usr/local/bin/vif-router 2>/dev/null |
 		awk '$1 == "build" && $2 ~ /^vcs\.revision=/ { sub(/^vcs\.revision=/, "", $2); print $2 }')
 	if [ -z "$revision" ] || ! git_ rev-parse -q --verify "$revision^{commit}" >/dev/null; then
 		echo "binary: unknown revision -> $(git_ rev-parse --short=8 HEAD)"
 		status=1
-	elif ! git_ diff --quiet "$revision" HEAD -- tool/vif-allocator go.mod go.sum; then
+	elif ! git_ diff --quiet "$revision" HEAD -- tool/vif-router go.mod go.sum; then
 		echo "binary: $(printf '%.8s' "$revision") -> $(git_ rev-parse --short=8 HEAD):$(git_ diff \
-			--shortstat "$revision" HEAD -- tool/vif-allocator go.mod go.sum)"
+			--shortstat "$revision" HEAD -- tool/vif-router go.mod go.sum)"
 		status=1
 	fi
 	return "$status"
@@ -178,19 +183,19 @@ apply_filter() {
 	sudo nft -f /etc/nftables.conf
 }
 apply_objects() {
-	for name in 00-namespace 10-quota 20-networkpolicy 40-allocator-rbac; do
+	for name in 00-namespace 10-quota 20-networkpolicy 40-router-rbac; do
 		kube apply -f "$repo_root/deploy/k3s/$name.yaml"
 	done
 }
 apply_wad() { "$guest/update-vif-wad.sh"; }
 apply_image() { "$guest/update-vif-image.sh"; }
-apply_allocator() { "$guest/update-vif-allocator.sh"; }
-# LogWisp's updater leaves the allocator alone, and the allocator reads its stream.
+apply_router() { "$guest/update-vif-router.sh"; }
+# LogWisp's updater leaves the router alone, and the router reads its stream.
 apply_logwisp() {
-	sudo systemctl stop vif-allocator.service
+	sudo systemctl stop vif-router.service
 	rc=0
 	"$guest/update-logwisp.sh" "$logwisp_revision" || rc=$?
-	sudo systemctl start vif-allocator.service
+	sudo systemctl start vif-router.service
 	return "$rc"
 }
 
@@ -216,9 +221,9 @@ if [ "$diff_only" = true ]; then
 	exit 1
 fi
 
-# These restart the allocator or replace what a session runs, so no match may be live.
+# These restart the router or replace what a session runs, so no match may be live.
 case "$pending" in
-	*image*|*allocator*|*logwisp*)
+	*image*|*router*|*logwisp*)
 		"$deploy/k3s/session.sh" blockers ||
 			die "empty the fleet first (./deploy/k3s/session.sh drain), or update only:$(
 				for c in $pending; do case $c in filter|objects|wad) printf ' %s' "$c" ;; esac; done)"

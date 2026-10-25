@@ -73,7 +73,7 @@ func NewLoopbackPair(a, b link.PeerID) (*link.MeshPort, *link.MeshPort) {
 	return m.Node(a), m.Node(b)
 }
 
-// RequestSession asks site's allocator for a new session and returns the link this
+// RequestSession asks site's router for a new session and returns the link this
 // build joins it by. players and scenario choose from what the site advertises,
 // zero for its defaults; a refusal, an unauthorised one included, is its message.
 func RequestSession(site string, players int, scenario string) (string, error) {

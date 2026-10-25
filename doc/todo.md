@@ -14,11 +14,11 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 - Priority: P2
 - Affected files: the Hugo site's `vif-lobby.js`, `pkg/network/endpoint.go`,
-  `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
+  `internal/mode/config_form.go`, `tool/vif-router`, `deploy/guest/vif-router.env`,
   `deploy/k3s/10-quota.yaml`
 - Guide: [Session fleet](kubernetes-fleet.md) §6
 
-The allocator takes `bots`, but `bots_max` stays 0 until these hold:
+The router takes `bots`, but `bots_max` stays 0 until these hold:
 - The site's `vif-lobby.js` sends `bots` and reads `bots_max`; the native client
   (`network.RequestSession`, the menu's request form) sends `bots`.
 - The quota's 1000m of CPU fills at three sessions of three bots: raise it, or
@@ -40,7 +40,7 @@ The allocator takes `bots`, but `bots_max` stays 0 until these hold:
 
 - Priority: P3
 - Affected files: `internal/app/seat.go`, `cmd/vif`, `internal/mode/config_form.go`,
-  `tool/vif-allocator`
+  `tool/vif-router`
 
 `actions_per_second` is the only knob, and nothing caps it. Options: a rate suffix
 such as `-bot 2:default@6` that `BotSpecs` parses, so `-bot`, `:bot add` and the
@@ -180,7 +180,10 @@ library copies.
 
 On td with eight walking cursors and seven snake heads a storm tick peaks at 30 ms
 against 6.4 ms on average, and no wall change computes more than two fields in a
-tick. What is left, for a need rather than a measurement: a per-tick field budget
+tick. A td tick with sixteen cursors on one core reads 0.55 ms
+(`TestTickProfileTD16`), 42% of it the level resets' maze spawn and route graphs
+and 13% `applyWalls`, the search grids refilled whole when a level's walls land.
+What is left, for a need rather than a measurement: a per-tick field budget
 in canonical group order, if a browser frame still stalls, and a footprint tier
 registry deriving the grids to keep from the live navigators, so a data-driven
 species' footprint costs one row. A 2×2 coarse field is not planned: it changes
@@ -190,19 +193,19 @@ the answer, and the shared grid already took the cost it would have saved.
 
 - Priority: P3
 - Affected files: `internal/network/session.go` (`AdmissionLimiter`),
-  `tool/vif-allocator`
+  `tool/vif-router`
 
-A pod sees every player the allocator splices at the node's address, so its own
+A pod sees every player the router splices at the node's address, so its own
 budget of 6 joins a minute is one per session rather than one per player: a
 seventh join into one session within a minute is refused, whoever makes it,
-though the allocator has already budgeted each player. Close it when a session
+though the router has already budgeted each player. Close it when a session
 that busy appears, by exempting the node's address at the pod or by having the
-allocator name the player to it.
+router name the player to it.
 
 ### Add browser admission authentication
 
 - Priority: P2
-- Affected files: allocator/session adapter, website, future authentication
+- Affected files: router/session adapter, website, future authentication
   dependency
 - Prerequisite: every route carries real play without transport faults, the
   built-in WebSocket included; no auth layer goes in while that is being settled
@@ -210,8 +213,8 @@ allocator name the player to it.
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or
 logs. Creation takes one too: `network.RequestSession` is the terminal's side of
-`POST /vif/api/sessions`, and already shows a 401 or 403 as the allocator's
-message. Decide whether the expanded allocator remains the credential boundary or
+`POST /vif/api/sessions`, and already shows a 401 or 403 as the router's
+message. Decide whether the expanded router remains the credential boundary or
 is renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency. A terminal's own door takes the same handshake: a
 `-selfsign` door encrypts with no authority and a native joiner takes it as it is,
@@ -274,7 +277,7 @@ tapped elsewhere. Unchecked without an emulator or a phone, so not built yet.
 - Priority: P2
 - Affected files: the Hugo site's `vif-lobby.js`, `.github/workflows/release.yml`
 
-Each row of the allocator's session list names the build its session runs
+Each row of the router's session list names the build its session runs
 (`state.build`), as the refusal a page of another build reads does. The site's
 lobby can show it, and warn before a Play that would be refused once it knows the
 page's own build, which the release's web bundle does not name yet.
@@ -374,7 +377,7 @@ number from [Measure a full roster](#measure-a-full-roster).
 
 - Priority: P1
 - Affected files: `deploy/k3s/30-session.yaml`, `deploy/k3s/10-quota.yaml`,
-  `tool/vif-allocator/manifest.go`
+  `tool/vif-router/manifest.go`
 - Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
 
 Drive nine sessions with headless joiners for the fleet-level readings (CPU,
@@ -404,7 +407,7 @@ hour of play.
 
 - Priority: P2
 - Affected files: `deploy/guest/update-vif-image.sh`, `.github/workflows/release.yml`,
-  `deploy/k3s/30-session.yaml`, `tool/vif-allocator`
+  `deploy/k3s/30-session.yaml`, `tool/vif-router`
 - Guide: [Fleet deploy](kube-docker-deploy.md#8-the-session-image) §8
 
 Nightly CI publishes the headless image to GHCR under moving and commit-addressed
@@ -428,11 +431,11 @@ amount of log without ending a game.
 ### Provision audio to the fleet when a host needs it
 
 - Priority: P3
-- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-allocator/manifest.go`,
+- Affected files: `deploy/guest/update-vif-wad.sh`, `tool/vif-router/manifest.go`,
   `deploy/k3s/30-session.yaml`
 
 What a fleet session reads from the node volume is one list in three places —
-`categories` in the installer, `wadCategories` in the allocator, and the mounts in
+`categories` in the installer, `wadCategories` in the router, and the mounts in
 the template. `scenario` and `image` are on it. `audio` goes on it the day a
 dedicated host renders anything, and `content` never does. Nothing else changes;
 the volume already carries whatever the installer puts there.
@@ -451,89 +454,30 @@ staging world sharing the live grid's shape without its cells, takes it.
 
 ## Multiplayer
 
-### Trim what remains of a tick and a checkpoint at the map limit
-
-- Priority: P2
-- Affected files: `pkg/navigation/flowfield.go`, `internal/system/interaction.go`,
-  `internal/engine/world_copy.go`
-
-Measure a td tick with 16 players at `GOMAXPROCS=1` and trim the larger of field
-derivation and `checkCursorOverlap`'s position lookups; with eager, heap-searched
-fields on a 3-tick cooldown they were about 45% and a quarter of a 2.6 ms tick.
-Field derivation has since halved (lazy fields on one shared grid per tier, the
-snake lock by one search); what it still costs is in
-[Bound navigation's worst tick](#bound-navigations-worst-tick-on-busy-maps). A
-checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each must
-stay exact; per-store write counters stay rejected, since a cache compares values it
-owns.
-
-A td participant costs about 300 MB, of which the 32 MB spatial grid is a minority;
-whole-world captures and the staging world dominate. In a sandbox a `-serve` host
-with one seat held 672 MB resident and 1255 MB with two more, its ticks slipped from
-two seats on, and networked joiners stalled ("no authoritative world inside the
-convergence floor") or lost their links within seconds.
-
-### Reach a relay without an address in hand
+### Publish a player's session at the router
 
 - Priority: P3
-- Affected files: `internal/app/relay.go`, `internal/converge/reach.go`, `internal/network`
+- Affected files: `tool/vif-router`, `internal/app/host.go`, `internal/network`
+- Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
-A person who cannot reach the host joins at a guest's `-relay` address and plays
-through it; the session is a tree, raw artifacts go up and the authority's down,
-and a relayed person whose relay leaves walks the chain to another participant
-relaying for others (multi-player.md §5). What is left is finding that address: a relay's address is
-handed out of band like the host's, nothing publishes which participants relay,
-and a NAT between a person and every relay is not crossed. A browser relays only
-its own bots. Relay trees the authority chooses are dropped
-([netcode design §4, Dropped](netcode-design.md#dropped)): a relay stays what a
-person chooses, and this item and the two after it are its correctness. Verify a
-relayed topology under `LinkShape`s, asserting hash-only
-convergence and the authority's per-link fan-out.
+A run publishes its `-relay` door through the router's reverse tunnel and is
+reached at the site; a host's door published the same way is a player's own session
+reached there, the router neither allocating nor authoring. The tunnel carries it
+already; what it needs is the session's row in `/vif/api/sessions` (its `/health`
+read through the tunnel, or a state the run reports on the control connection),
+its lifetime, the create budget charged to the publisher's address, and `-host
+vif://<site>:7777` opening the door through the router rather than binding one.
 
-### Move a relayed survivor to its host
+### Pace the dial of the successor
 
 - Priority: P3
-- Affected files: `internal/converge/authority.go`, `internal/system/network.go`
-- Guide: [Multi-player](multi-player.md#51-succession) §5.1
+- Affected files: `internal/converge/reach.go`
 
-A survivor that reached its new host only through a candidate relaying for others
-follows that host through it for the rest of the session, its artifacts a hop
-longer than they need be and the relay's player carrying traffic it offered for a
-host loss. What would close it: the far survivor, once following, dials the host at
-its chain address and moves its up link there, the relay letting it go.
-
-### Redial a relay that left
-
-- Priority: P3
-- Affected files: `internal/app/converge.go`, `internal/converge/reach.go`
-
-A person whose relay's link dropped walks the chain for a participant that relays
-for others, and forks when none does; it does not redial the relay's `-relay`
-door, which a relay whose link only blipped would answer, as a guest redials the
-host it lost ([Multi-player](multi-player.md#51-succession) §5.1).
-
-### Carry a dropped guest back to a live host
-
-- Priority: P3
-- Affected files: `internal/app/relay.go`, `internal/converge/authority.go`
-
-A guest whose own link to a host still running dropped, and whose redial cannot
-reach that host, walks a list nobody else is walking and forks, though a peer
-relaying for others could carry it: the host keeps its place as a Wraith, and
-taking that back needs a join under its claim through the peer, which a peer's port
-takes only once that peer hosts. What would close it: the port relaying a rejoin
-before then, as the `-relay` door does, when its player relays for others.
-
-### Serve a relay address on a run that took the session over
-
-- Priority: P3
-- Affected files: `internal/app/relay.go`
-
-A guest's `-relay` door asks the authority on its own link for every join it
-relays. Once that guest takes the session over it is the authority, so the door
-turns every dial away as the session changing hands, which the dialer retries, while
-the guest's own port takes joins. What would close it: the door admitting as the
-host's does once its run hosts, as that port does.
+A participant keeps a link to the first candidate open (`Reach.dialSuccessor`) from
+every pass of the correction loop, one dial in flight at a time: a candidate whose
+chain address refuses the connect at once is dialled again on the next pass, a
+connect a tick for the rest of the session. The dial of a followed host beside it
+backs off and stops (`NetworkHostDialAttempts`); this one wants the same pacing.
 
 ### Keep a late survivor in its host's group
 
@@ -550,21 +494,23 @@ link it already holds.
 ### Project a correction outside the live lock
 
 - Priority: P2
-- Affected files: `internal/app/snapshot_stage.go`
+- Affected files: `internal/app/snapshot_stage.go`, `internal/system/network.go`
 - Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
-An answer no longer captures under the lock (netcode design §4, converged
-answers); an install still holds it: the deepest td install of netcode design §3.7
-held 48 ms with no tick projected, 11 the staging world's capture and 36 the live
-capture, the comparison and the write, and each projected tick adds a simulation
-tick, so a repair 16 ticks behind holds it past 90 ms. First, compare the staging
-world's stores against the live ones in place, as the in-place index reads the live
-world, and write the cells that differ, with no capture of either; then move the
-projection out.
-Any out-of-lock or incremental design must keep [Multi-player](multi-player.md) §3.3:
-fence membership, pending barrier crossings not fed, the ledger settled before
-projection, the journal's place and mark, and no live tick between the final
-projection and the write. WASM gains scheduling time, not parallel CPU.
+An install compares the staging world's stores against the live ones in place and
+writes the cells that differ, with no capture of either (`ReconcileSharedFrom`); the
+deepest td install of netcode design §3.7 holds the live lock 8 ms, 7.7 of them the
+write, down from 48. What the lock still holds is the projection: each projected
+tick adds a simulation tick, 2.6 ms at td, so a repair 16 ticks behind holds it
+past 45 ms. Moving it out: project to the live tick off the lock, then under it feed
+what the barrier retained since the first feed, project the ticks the live world
+advanced meanwhile, and write. Any out-of-lock or incremental design must keep
+[Multi-player](multi-player.md) §3.3: fence membership, pending barrier crossings
+not fed, the ledger settled before projection, the journal's place and mark, and no
+live tick between the final projection and the write; the second feed needs a
+retention watermark the barrier does not keep, since `RetainedAfter` selects by
+tick and would feed the first feed's records again. WASM gains scheduling time, not
+parallel CPU.
 
 ### Close the edges of a session hold
 
@@ -734,12 +680,12 @@ removing one; `:merge`/`:split` for whole sessions.
 
 - Priority: P2
 - Affected files: `internal/network`, `internal/app`, `internal/mode/commands.go`,
-  `tool/vif-allocator`
+  `tool/vif-router`
 
 `:player drop <slot>` lets a host drop a player with its bots, or one bot, and the
 dropped person starts a new local game. What remains: a reason the dropped client
 prints, playing on alone as after `:leave` instead of starting over, and an
-operator route on the allocator, since a dedicated host has no console. Keeping a
+operator route on the router, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
 
@@ -805,7 +751,7 @@ lagging — twelve participants under A become seven under A and five under B. B
 participant at first, ideally a fresh fleet pod. A hands B its current world under a
 new session identity rather than a new term, redirects the five, and the two worlds
 diverge from there. Late joiners already install a mid-run world; what is missing is
-the redirect and an authority, for a pod an allocator request, that starts from a
+the redirect and an authority, for a pod a router request, that starts from a
 transferred world instead of a scenario.
 
 ### Run a scenario with no players

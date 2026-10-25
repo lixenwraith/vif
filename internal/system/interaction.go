@@ -133,15 +133,33 @@ func strikeCursorsIn(w *engine.World, contains func(x, y int) bool, damage compo
 	}
 }
 
-// CheckCursorOverlaps queries every cursor that touches an entity or its shield.
+// CheckCursorOverlaps queries every cursor that touches an entity or its shield. The
+// entity's cells are read once and each cursor tested against them, so a composite
+// of m members costs m placement reads and not m for every roster slot.
 func CheckCursorOverlaps(w *engine.World, entity core.Entity) CursorOverlaps {
 	var result CursorOverlaps
+	var buf [64]memberCell
+	cells := buf[:0]
+	if h, ok := w.Components.Header.GetPtr(entity); ok {
+		for _, m := range h.MemberEntries {
+			if m.Entity == 0 {
+				continue
+			}
+			if pos, ok := w.Positions.GetPosition(m.Entity); ok {
+				cells = append(cells, memberCell{entity: m.Entity, pos: pos})
+			}
+		}
+	} else if pos, ok := w.Positions.GetPosition(entity); ok {
+		cells = append(cells, memberCell{entity: entity, pos: pos})
+	} else {
+		return result
+	}
 	for i := range parameter.MaxPlayers {
 		cursor := w.Resources.Player.Slot(uint8(i))
 		if cursor == 0 {
 			continue
 		}
-		overlap := checkCursorOverlap(w, cursor, entity)
+		overlap := overlapOf(w, cursor, cells)
 		if !overlap.OnCursor && len(overlap.ShieldMembers) == 0 {
 			continue
 		}
@@ -152,52 +170,29 @@ func CheckCursorOverlaps(w *engine.World, entity core.Entity) CursorOverlaps {
 	return result
 }
 
-// checkCursorOverlap evaluates one cursor against a simple or composite entity.
-func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) CursorOverlap {
-	cursorPos, ok := w.Positions.GetPosition(cursorEntity)
+// memberCell is one cell an entity stands on: a member's, or a simple entity's own.
+type memberCell struct {
+	entity core.Entity
+	pos    component.PositionComponent
+}
+
+// overlapOf evaluates one cursor against the cells an entity stands on.
+func overlapOf(w *engine.World, cursor core.Entity, cells []memberCell) CursorOverlap {
+	cursorPos, ok := w.Positions.GetPosition(cursor)
 	if !ok {
 		return CursorOverlap{}
 	}
-
-	shieldComp, shieldOK := w.Components.Shield.GetPtr(cursorEntity)
+	shieldComp, shieldOK := w.Components.Shield.GetPtr(cursor)
 	shieldActive := shieldOK && shieldComp.Active
-
 	result := CursorOverlap{ShieldActive: shieldActive}
-
-	// Composite: iterate members
-	if headerComp, ok := w.Components.Header.GetPtr(entity); ok {
-		for _, member := range headerComp.MemberEntries {
-			if member.Entity == 0 {
-				continue
-			}
-			memberPos, ok := w.Positions.GetPosition(member.Entity)
-			if !ok {
-				continue
-			}
-
-			if memberPos.X == cursorPos.X && memberPos.Y == cursorPos.Y {
-				result.OnCursor = true
-			}
-
-			if shieldActive && vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
-				result.ShieldMembers = append(result.ShieldMembers, member.Entity)
-			}
+	for _, c := range cells {
+		if c.pos == cursorPos {
+			result.OnCursor = true
 		}
-		return result
+		if shieldActive && vmath.EllipseContainsPoint(c.pos.X, c.pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+			result.ShieldMembers = append(result.ShieldMembers, c.entity)
+		}
 	}
-
-	// Simple entity: check own position
-	pos, ok := w.Positions.GetPosition(entity)
-	if !ok {
-		return CursorOverlap{}
-	}
-
-	result.OnCursor = pos.X == cursorPos.X && pos.Y == cursorPos.Y
-
-	if shieldActive && vmath.EllipseContainsPoint(pos.X, pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
-		result.ShieldMembers = append(result.ShieldMembers, entity)
-	}
-
 	return result
 }
 
