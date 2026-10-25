@@ -230,7 +230,7 @@ func TestAFailedBindOrDialSaysWhatThePlayerCanDo(t *testing.T) {
 	}
 	addr := gone.Addr().String()
 	gone.Close()
-	if _, err := dial(addr, DefaultConfig()); err == nil || !strings.Contains(err.Error(), "nothing is listening") {
+	if _, err := Dial(addr, DefaultConfig()); err == nil || !strings.Contains(err.Error(), "nothing is listening") {
 		t.Fatalf("dialling a closed port: %v", err)
 	}
 }

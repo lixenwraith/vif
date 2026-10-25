@@ -298,6 +298,13 @@ func Decode(r io.Reader) (*Message, error) {
 	return decode(r, MaxPayloadSize, header[:])
 }
 
+// DecodeWithin reads a message whose payload is at most limit bytes, refusing a
+// longer one before reading any of it: a handshake frame is bounded by its purpose.
+func DecodeWithin(r io.Reader, limit int) (*Message, error) {
+	var header [HeaderSize]byte
+	return decode(r, limit, header[:])
+}
+
 // decode refuses a payload longer than limit before reading any of it; header is
 // a HeaderSize scratch the caller owns.
 func decode(r io.Reader, limit int, header []byte) (*Message, error) {

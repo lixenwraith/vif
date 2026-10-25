@@ -710,9 +710,8 @@ func (pm *PeerManager) Close() {
 	}
 }
 
-// dial connects to a target by the transport it names, or through the
-// configuration's own Dial.
-func dial(target string, cfg *Config) (net.Conn, error) {
+// Dial connects to target by the transport it names, or through cfg's own Dial.
+func Dial(target string, cfg *Config) (net.Conn, error) {
 	if cfg.Dial != nil {
 		return cfg.Dial()
 	}
@@ -746,6 +745,9 @@ type inProcess struct{}
 
 func (inProcess) Network() string { return "pipe" }
 func (inProcess) String() string  { return "pipe" }
+
+// InProcess reports the far end of a Pipe, which spent no address on its dial.
+func InProcess(addr net.Addr) bool { _, ok := addr.(inProcess); return ok }
 
 // spooled reads its pipe end ahead into memory, as a kernel reads a socket.
 type spooled struct {

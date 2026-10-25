@@ -85,6 +85,12 @@ func (r LinkReport) interest() linkpace.Cell {
 	return linkpace.Cell{X: r.CursorX, Y: r.CursorY, Valid: r.HasCursor}
 }
 
+// AnswerProbe is the echo a handshake answers a probe with before a port owns its
+// stream: the probe's bytes, what the stream has received, no report, and the time.
+func AnswerProbe(probe []byte, inBytes uint64) []byte {
+	return encodeEcho(probe, inBytes, LinkReport{}, time.Since(probeEpoch))
+}
+
 // encodeProbe renders one probe frame.
 func encodeProbe(seq uint32, sent time.Time) []byte {
 	b := make([]byte, probePayload)

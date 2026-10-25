@@ -253,7 +253,7 @@ func (t *Transport) DialPeer(addr string, local PeerID) error {
 	case t.config.ConnectPeer == nil:
 		return errors.New("transport: no peer-link handshake to dial with")
 	}
-	conn, err := dial(addr, t.config)
+	conn, err := Dial(addr, t.config)
 	if err != nil {
 		return err
 	}
@@ -427,7 +427,7 @@ func (t *Transport) startClient() error {
 	conn, id := t.config.Preconnected, t.config.PreconnectedPeer
 	if conn == nil {
 		var err error
-		if conn, err = dial(t.config.Address, t.config); err != nil {
+		if conn, err = Dial(t.config.Address, t.config); err != nil {
 			t.running.Store(false)
 			return err
 		}

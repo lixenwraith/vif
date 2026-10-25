@@ -279,7 +279,7 @@ func dialTLS() *tls.Config {
 			if err == nil || selfSigned(leaf) {
 				return nil
 			}
-			return plainError{"the host's certificate is not one this machine trusts; -ca names what to trust it by", err}
+			return PlainError{"the host's certificate is not one this machine trusts; -ca names what to trust it by", err}
 		},
 	}
 }
@@ -306,7 +306,7 @@ func TrustTLS(spec string) (*tls.Config, error) {
 			InsecureSkipVerify: true, // the pin below is the verification; no authority is asked
 			VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
 				if len(raw) == 0 || sha256.Sum256(raw[0]) != pin {
-					return plainError{"the host's certificate is not the one -ca pins", errors.New("certificate pin mismatch")}
+					return PlainError{"the host's certificate is not the one -ca pins", errors.New("certificate pin mismatch")}
 				}
 				return nil
 			},
@@ -323,15 +323,15 @@ func TrustTLS(spec string) (*tls.Config, error) {
 	return &tls.Config{RootCAs: pool}, nil
 }
 
-// plainError is what a player is told about a network failure in place of the
+// PlainError is what a player is told about a network failure in place of the
 // system's words; the cause stays reachable to errors.Is and errors.As.
-type plainError struct {
-	text  string
-	cause error
+type PlainError struct {
+	Text  string
+	Cause error
 }
 
-func (e plainError) Error() string { return e.text }
-func (e plainError) Unwrap() error { return e.cause }
+func (e PlainError) Error() string { return e.Text }
+func (e PlainError) Unwrap() error { return e.Cause }
 
 // plainNetError names what a player can do about a bind or a dial that failed. An
 // error it does not know passes through as it is.
@@ -341,7 +341,7 @@ func plainNetError(err error) error {
 		dns    *net.DNSError
 		ne     net.Error
 		verify *tls.CertificateVerificationError
-		plain  plainError
+		plain  PlainError
 		port   = -1
 		text   string
 	)
@@ -374,7 +374,7 @@ func plainNetError(err error) error {
 	default:
 		return err
 	}
-	return plainError{text, err}
+	return PlainError{text, err}
 }
 
 // isErrno reports whether err is one of the system's codes for a failure.
@@ -448,10 +448,10 @@ type siteSession struct {
 // siteReplyBytes bounds how much of a site's answer is read.
 const siteReplyBytes = 64 << 10
 
-// listedLinks asks the site that issued addr, a link to the session named name, for
+// ListedLinks asks the site that issued addr, a link to the session named name, for
 // the links this build can take to that session. The first site that lists its
 // sessions answers for them; with none answering, there are no links and no error.
-func listedLinks(addr, name string, timeout time.Duration) ([]string, error) {
+func ListedLinks(addr, name string, timeout time.Duration) ([]string, error) {
 	client := &http.Client{Timeout: timeout}
 	for _, site := range linkSites(addr) {
 		resp, err := client.Get(site + "/vif/api/sessions")

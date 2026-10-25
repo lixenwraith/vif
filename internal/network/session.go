@@ -557,8 +557,7 @@ func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
 // ReadSessionRoute reads the frame a dialer sends before it reads and returns the
 // name it carries. A named host checks it; a front door places the connection on it.
 func ReadSessionRoute(r io.Reader) (string, error) {
-	var header [HeaderSize]byte
-	msg, err := decode(r, MaxSessionName, header[:])
+	msg, err := DecodeWithin(r, MaxSessionName)
 	if err != nil {
 		return "", err
 	}
@@ -609,8 +608,7 @@ func askClaims(conn net.Conn, timeout time.Duration) ([]string, error) {
 	if err := NewMessage(MsgJoinClaims, nil).Encode(conn); err != nil {
 		return nil, err
 	}
-	var header [HeaderSize]byte
-	msg, err := decode(conn, maxClaimsFrame, header[:])
+	msg, err := DecodeWithin(conn, maxClaimsFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -866,7 +864,7 @@ func (p *PendingJoin) next() (*Message, error) {
 	var header [HeaderSize]byte
 	msg, err := p.conn.ReadFrame(MaxPayloadSize, header[:])
 	if ne := net.Error(nil); errors.As(err, &ne) && ne.Timeout() {
-		return nil, plainError{"the host stopped answering", err}
+		return nil, PlainError{"the host stopped answering", err}
 	}
 	return msg, err
 }
@@ -875,7 +873,7 @@ func (p *PendingJoin) next() (*Message, error) {
 // write is not the join's problem: the probe is a measurement and losing one
 // costs an estimate, where raising it here would fail a join over telemetry.
 func (p *PendingJoin) answerProbe(msg *Message) {
-	echo := encodeEcho(msg.Payload, p.gateBytes, LinkReport{}, time.Since(probeEpoch))
+	echo := AnswerProbe(msg.Payload, p.gateBytes)
 	if echo == nil {
 		return
 	}
@@ -995,8 +993,8 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 		base = &copy
 	}
 	base.Role, base.Address = RolePeer, addr
-	conn, err := dial(addr, base)
-	if err != nil && base.Dial == nil && base.SessionName != "" && !routeAnswered(err) {
+	conn, err := Dial(addr, base)
+	if err != nil && base.Dial == nil && base.SessionName != "" && !RouteAnswered(err) {
 		conn, err = dialListed(base, err)
 	}
 	if err != nil {
@@ -1019,7 +1017,7 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 	_ = conn.SetDeadline(time.Time{})
 	if err != nil {
 		_ = conn.Close()
-		return nil, plainError{"connected, but no vif session answered there", err}
+		return nil, PlainError{"connected, but no vif session answered there", err}
 	}
 	if msg.Type == MsgJoinReply {
 		// Refused before anything was held for it. The coordinator says why, and the
@@ -1079,12 +1077,12 @@ func (p *PendingJoin) Seat() (SessionOffer, error) {
 		defer p.conn.SetDeadline(time.Time{})
 	}
 	if err := NewMessage(MsgJoinSeat, nil).Encode(p.conn); err != nil {
-		return SessionOffer{}, plainError{"the host dropped the join before its seat", err}
+		return SessionOffer{}, PlainError{"the host dropped the join before its seat", err}
 	}
 	msg, err := Decode(p.conn)
 	switch {
 	case err != nil:
-		return SessionOffer{}, plainError{"the host dropped the join before its seat", err}
+		return SessionOffer{}, PlainError{"the host dropped the join before its seat", err}
 	case msg.Type == MsgJoinReply:
 		return SessionOffer{}, refusalFrom(msg)
 	case msg.Type != MsgJoinOffer:
@@ -1128,7 +1126,7 @@ func answerClaims(conn net.Conn, tokens []string) (*Message, error) {
 // answered at its own address: a player may hold the link another kind of client
 // joins by. With no site answering, the failure of the address it was given stands.
 func dialListed(base *Config, failed error) (net.Conn, error) {
-	links, err := listedLinks(base.Address, base.SessionName, base.ConnectTimeout)
+	links, err := ListedLinks(base.Address, base.SessionName, base.ConnectTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -1137,7 +1135,7 @@ func dialListed(base *Config, failed error) (net.Conn, error) {
 		if err != nil || e.Addr == base.Address {
 			continue
 		}
-		conn, err := dial(e.Addr, base)
+		conn, err := Dial(e.Addr, base)
 		if err == nil {
 			base.Address = e.Addr
 			return conn, nil
@@ -1405,7 +1403,7 @@ func (l *AdmissionLimiter) sweepLocked(now time.Time) {
 // and an IPv6 address's low half are what a dialer changes for free, so counting
 // either would count nothing.
 func admissionKey(addr net.Addr) string {
-	if _, piped := addr.(inProcess); addr == nil || piped {
+	if addr == nil || InProcess(addr) {
 		return ""
 	}
 	host := addr.String()

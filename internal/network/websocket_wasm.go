@@ -57,8 +57,8 @@ type wsHandler struct {
 // has none.
 const buildDialsTCP = false
 
-// routeAnswered is false: a page is not shown whether, or why, a route refused it.
-func routeAnswered(error) bool { return false }
+// RouteAnswered is false: a page is not shown whether, or why, a route refused it.
+func RouteAnswered(error) bool { return false }
 
 // listenWebSocket is refused: a page has no port to listen on.
 func listenWebSocket(string, time.Duration, *tls.Config) (net.Listener, error) {
@@ -109,10 +109,10 @@ func dialWebSocket(target string, timeout time.Duration, _ *tls.Config) (conn ne
 		return c, nil
 	case <-c.closed:
 		_ = c.Close()
-		return nil, plainError{connectionFailed(target), c.failure()}
+		return nil, PlainError{connectionFailed(target), c.failure()}
 	case <-expiry:
 		_ = c.Close()
-		return nil, plainError{fmt.Sprintf("no answer within %s; the game may have ended, or the connection is too slow",
+		return nil, PlainError{fmt.Sprintf("no answer within %s; the game may have ended, or the connection is too slow",
 			timeout), os.ErrDeadlineExceeded}
 	}
 }
