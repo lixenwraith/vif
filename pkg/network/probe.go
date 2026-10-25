@@ -140,6 +140,13 @@ type linkMeter struct {
 	window    time.Duration
 	lostAfter uint32
 
+	// heldSince is when the sender's frames for this peer began waiting on the
+	// link, zero while it takes them; heldAfter is how long they wait before the
+	// link is read as the limit, two probe intervals: a backlog reading is stale
+	// by one, and a lost probe doubles it, so a shorter wait is the reading's.
+	heldSince time.Time
+	heldAfter time.Duration
+
 	seq    uint32 // last probe sent
 	echoed uint32 // last probe answered
 
@@ -163,7 +170,7 @@ type linkMeter struct {
 // newLinkMeter meters a link probed every probe, a probe unanswered for lost
 // counting as lost; a zero interval probes nothing and measures transfers alone.
 func newLinkMeter(probe, lost time.Duration) *linkMeter {
-	m := &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{}), window: probe / 2}
+	m := &linkMeter{link: linkpace.NewLink(linkpace.LinkConfig{}), window: probe / 2, heldAfter: 2 * probe}
 	if probe > 0 {
 		m.lostAfter = uint32(lost / probe)
 	}
@@ -172,6 +179,16 @@ func newLinkMeter(probe, lost time.Duration) *linkMeter {
 
 // rebase discards the origin, so the next echo sets it again.
 func (m *linkMeter) rebase() { m.haveBase, m.haveDelivered = false, false }
+
+// hold records whether the sender's frames for this peer are waiting on the link now.
+func (m *linkMeter) hold(now time.Time, held bool) {
+	switch {
+	case !held:
+		m.heldSince = time.Time{}
+	case m.heldSince.IsZero():
+		m.heldSince = now
+	}
+}
 
 // nextProbe advances the sequence, charging a miss while no echo has come back for
 // lostAfter probes. A probe is the only loss signal this protocol has, and a stream
@@ -194,6 +211,7 @@ func (m *linkMeter) nextProbe() uint32 {
 func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered, sentBytes uint64, answered time.Duration, report LinkReport) {
 	sample := linkpace.Sample{
 		RTT:       now.Sub(sent),
+		Held:      m.heldAfter > 0 && !m.heldSince.IsZero() && now.Sub(m.heldSince) >= m.heldAfter,
 		LagTicks:  uint64(report.LagTicks),
 		Magnitude: int(report.Magnitude),
 		Interest:  report.interest(),

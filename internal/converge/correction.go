@@ -188,8 +188,11 @@ type peerPublisher struct {
 	wide int
 
 	// capacity is the delivery rate this link showed while it was the limit, which an
-	// idle link's rate understates: what a whole body would drain at.
-	capacity float64
+	// idle link's rate understates: what a whole body would drain at, and what the
+	// plan is priced on (priced); capacityTick is the decision that last read or
+	// raised it.
+	capacity     float64
+	capacityTick uint64
 
 	// flight is the transfer going out to this peer, a frame at a time while its
 	// link drains; owed is what it is owed behind that, newest first. Nothing owed is
@@ -226,6 +229,24 @@ func (p *peerPublisher) owe(s owedSend) {
 // SnapshotKeyframeDrain, or has never been measured under a queue.
 func (p *peerPublisher) drains(size int64) bool {
 	return p.capacity <= 0 || float64(size) <= p.capacity*parameter.SnapshotKeyframeDrain.Seconds()
+}
+
+// priced is the measurement the controller prices this peer's plan on at tick: the
+// rate the link delivered while it held the frames, read anew whenever it does, and
+// doubled each SnapshotLinkCapacityTicks a constrained plan has gone without that,
+// so a plan that fits stays instead of creeping back to nominal, and a link that
+// improved is offered more until it holds the frames again. Never held: as it is.
+func (p *peerPublisher) priced(m linkpace.Metrics, tick uint64) linkpace.Metrics {
+	switch {
+	case m.Saturated && m.Throughput > 0:
+		p.capacity, p.capacityTick = m.Throughput, tick
+	case p.capacity <= 0:
+		return m
+	case p.plan.Constrained && tick-p.capacityTick > parameter.SnapshotLinkCapacityTicks:
+		p.capacity, p.capacityTick = 2*p.capacity, tick
+	}
+	m.Saturated, m.Throughput = true, p.capacity
+	return m
 }
 
 // newCorrections builds the correction half of a session. It starts nothing: a
@@ -364,7 +385,7 @@ func (c *Corrections) publishRound(force bool) error {
 		c.retirePlanLocked()
 		return nil
 	}
-	c.decideLocked(ids, meter)
+	c.decideLocked(ids, meter, tick)
 	c.releaseLocked(port)
 
 	keyframe := (!c.haveKey || tick >= c.lastKeyTick+c.keyPeriod) && !c.allProvedLocked(ids, tick)
@@ -612,6 +633,10 @@ func (c *Corrections) releaseLocked(port engine.NetworkPort) {
 			}
 			p.flight.frames = p.flight.frames[1:]
 		}
+		// What the link did not take waits on it: the meter reads how long.
+		if meter, ok := port.(engine.LinkMeasuringPort); ok {
+			meter.ObserveHold(id, len(p.flight.frames) > 0 || p.owed != nil)
+		}
 	}
 }
 
@@ -635,7 +660,7 @@ func (c *Corrections) peerIDs(meter engine.LinkMeasuringPort) []uint32 {
 
 // decideLocked takes one decision per peer and composes them into the session's
 // timeline. Caller MUST hold publishMu.
-func (c *Corrections) decideLocked(ids []uint32, meter engine.LinkMeasuringPort) {
+func (c *Corrections) decideLocked(ids []uint32, meter engine.LinkMeasuringPort, tick uint64) {
 	sizes := c.sizesLocked()
 	base, keyPeriod, breached := uint64(0), uint64(0), false
 
@@ -649,9 +674,6 @@ func (c *Corrections) decideLocked(ids []uint32, meter engine.LinkMeasuringPort)
 			m = meter.LinkMetric(id)
 		}
 		p.metrics = m
-		if m.Saturated && m.Throughput > 0 {
-			p.capacity = m.Throughput
-		}
 		// The magnitude comes back on the peer's own echo: it is how far *that*
 		// participant's prediction had drifted when the last correction reached
 		// it. What is fed to the controller is the rise rather than the level —
@@ -665,10 +687,14 @@ func (c *Corrections) decideLocked(ids []uint32, meter engine.LinkMeasuringPort)
 				Idle:      p.near == 0 && m.Magnitude == 0,
 			}
 		}
-		p.plan = p.ctrl.Update(m, sizes, p.demand)
+		p.plan = p.ctrl.Update(p.priced(m, tick), sizes, p.demand)
 		p.plan.Constrained = p.plan.Constrained || !p.drains(sizes.Keyframe)
-		// A long round trip spaces this peer's indexes, so each descent stays retained.
-		p.plan.CadenceTicks = max(p.plan.CadenceTicks, min(answerSpacing(m.RTT), c.bounds.MaxCadenceTicks))
+		// A long round trip spaces this peer's indexes, so each descent stays retained;
+		// spaced past the quiet cadence, the link made the plan worse than any demand.
+		if spaced := min(answerSpacing(m.RTT), c.bounds.MaxCadenceTicks); spaced > p.plan.CadenceTicks {
+			p.plan.CadenceTicks = spaced
+			p.plan.Constrained = p.plan.Constrained || spaced > max(c.bounds.NominalCadenceTicks, c.bounds.QuietCadence)
+		}
 		p.plan.CadenceTicks = alignedCadence(p.plan.CadenceTicks, c.bounds.MaxCadenceTicks)
 
 		if base == 0 || p.plan.CadenceTicks < base {

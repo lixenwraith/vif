@@ -1082,6 +1082,11 @@ type LinkMeasuringPort interface {
 	// the join's own capture, which is the only throughput measurement available
 	// before a probe has completed a round trip.
 	ObserveTransfer(peer uint32, bytes int64, elapsed time.Duration)
+
+	// ObserveHold records whether this instance's frames for a peer are waiting on
+	// its link now. A sender pacing to a link never shows a backlog past the bound
+	// it paces to; frames that wait are its evidence that the link is the limit.
+	ObserveHold(peer uint32, held bool)
 }
 
 // NetworkResource wraps the network endpoint for ECS access

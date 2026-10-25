@@ -555,7 +555,16 @@ difference between a fast link and an idle sender — and `Answered` is the far 
 own clock when it read the probe, which times that rate where the bytes arrived; a
 45-byte echo without it is still read. A backlog is saturation only
 once it stands across two echoes: one can land just behind a keyframe larger than
-the threshold, which a fast link has drained by the next. The `LinkReport`
+the threshold, which a fast link has drained by the next. A sender pacing to the
+link never shows one past the bound it paces to, so the frames it holds waiting are
+the other reading (`ObserveHold`): held longer than two probe intervals, one backlog
+reading's staleness and a lost probe's, while the round trip stands inflated past
+its baseline by the queue they wait in, the link rather than the sender has been
+deciding the rate. Neither half reads alone: jitter and another stream's queue
+inflate a trip as readily, and a cadence priced on that read its own thin stream as
+a slow link and thinned it further
+([netcode §3.5](netcode-design.md#35-the-divergence-harness)); a sender's own
+bound holds frames on a long link that carries them. The `LinkReport`
 is the only game state that travels here, it is opaque to the transport, and every
 field in it is a scheduling hint: a host may publish to that participant sooner
 because of one, and a wrong or stale one costs a correction sent early and nothing

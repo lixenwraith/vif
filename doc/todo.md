@@ -597,22 +597,6 @@ mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`
 decide whether a drag's intermediate cells are a move each or one move to the cell
 the tick ends on.
 
-### Read the cadence against a thin command stream
-
-- Priority: P3
-- Affected files: `pkg/linkpace`, `pkg/network/probe.go`
-
-The divergence harness's heavy shape (netcode design §3.5) delivered the guest 134
-manifests in 1,200 ticks before the binary wire codec, 132 with its envelope and 97
-with its payload, late counts unchanged: the link meter reads throughput from the
-bytes it delivered, and a command stream of a fifth the bytes reads as a slower
-link, so the cadence lengthened under loss. Read what the meter and the floor
-decide on a thin stream, and whether the probe's bytes should carry the reading.
-The saturation signal's round-trip half reads inflation against the least trip
-seen, and a link queued from its join on, as the cadence test's 200-byte-per-tick
-link is, never shows its idle trip, so the flag flickers once a run settles near
-1.5× of a congested baseline; the test reads the run rather than its last sample.
-
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

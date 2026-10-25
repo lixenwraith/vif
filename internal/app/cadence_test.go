@@ -164,7 +164,6 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	host, guest, _ := shapedPair(t, 0x5EEDBEEF, link.LinkShape{LatencyTicks: 2, BytesPerTick: 200})
 
 	var early, late int64
-	saturated := false
 	for round := range 2 {
 		runSession(host, guest, 150)
 		peak := int64(0)
@@ -175,11 +174,6 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 			guest.ApplyPendingCorrections()
 			if n := statOf(guest, "snapshot.correction_entities"); n > peak {
 				peak = n
-			}
-			// Momentary: a link read as the limit prices the plan, then its round
-			// trip settles toward the baseline the queue it stood in set.
-			if r := host.corrections.Cadence(); len(r.Peers) == 1 && r.Peers[0].Saturated {
-				saturated = true
 			}
 		}
 		if round == 0 {
@@ -193,16 +187,18 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	if len(report.Peers) != 1 {
 		t.Fatalf("the host scheduled %d links, want 1", len(report.Peers))
 	}
+	// The join's capture and the frames held behind it read the link as the limit;
+	// the plan priced on that fits it, so the latest sample need not read so again.
 	peer := report.Peers[0]
-	if !saturated {
+	if peer.CapacityBps <= 0 {
 		t.Fatalf("a 200-byte-per-tick link was never read as the limit: %+v", peer)
 	}
 	if !report.Constrained {
-		t.Fatalf("a saturated link was not reported as constrained: %+v", peer)
+		t.Fatalf("a link read as the limit was not reported as constrained: %+v", peer)
 	}
 	if report.CadenceTicks <= parameter.SnapshotCorrectionTicks &&
 		report.KeyframeInterval <= parameter.SnapshotKeyframeCorrections {
-		t.Fatalf("a saturated link moved neither the cadence nor the keyframe interval: %+v", report)
+		t.Fatalf("a link read as the limit moved neither the cadence nor the keyframe interval: %+v", report)
 	}
 	if applied := statOf(guest, "snapshot.corrections_applied"); applied == 0 {
 		t.Fatal("the guest applied no correction over a constrained link")
@@ -447,8 +443,8 @@ func TestASlowPeerDoesNotSlowAFastOne(t *testing.T) {
 	if fast.Participant != 2 || slow.Participant != 3 {
 		t.Fatalf("the report is not in participant order: %+v", report.Peers)
 	}
-	if !slow.Saturated {
-		t.Skipf("the shaped link was not saturated in this run: %+v", slow)
+	if !slow.Constrained {
+		t.Fatalf("the shaped link was not reported as constrained: %+v", slow)
 	}
 	if slow.CadenceTicks <= fast.CadenceTicks {
 		t.Fatalf("the constrained peer got cadence %d and the healthy one %d",

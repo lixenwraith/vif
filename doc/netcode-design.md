@@ -562,6 +562,41 @@ heavy      main      61   5   0    0  14 (15)  134
            blobs    116   4   0    1  14 (15)  124
 ```
 
+**The cadence against a thin stream.** The harness now prints the guest's cadence
+with what priced it. Before, the meter read a link as the limit on a round trip
+inflated past its least trip alone, and the controller priced the plan on the rate
+it had delivered, which on a link with no byte budget is the stream itself: the
+plan then slowed to fit three quarters of its own bytes, the stream thinned, the
+next reading was lower, and the cadence ran out to 32 ticks on the field-like
+shape and 60 on heavy, whose jitter inflates every few trips. Inflation now reads
+only with the frames the corrector holds (`ObserveHold`, two probe intervals), the
+queue those frames wait in; held frames at the baseline trip are the sender's own
+bound on a long link, which the heavy shape's keyframes showed, 4.2 s paced over a
+400 ms link that would have carried them in one trip. A plan priced on a link's
+rate keeps it after the link takes its frames again, doubling it every 5 s a
+constrained plan goes without a hold (`SnapshotLinkCapacityTicks`), so the fit
+holds instead of creeping back and queueing the link each second; a long trip's
+index spacing past the quiet cadence reports as the constraint it is. The same
+1,200 ticks, cadence after the storm with the link's reading, late commits and
+copies, pages and keyframes, manifests received:
+
+```
+shape      before                                      after
+fieldlike  32 ticks, inflated, 221   lc 1  lcp 0  pg 19 kf 4    4 ticks, unpriced, 288  lc 1  lcp 0  pg 31 kf 2
+rare        4 ticks, constrained, 265 lc 0 lcp 6  pg 1  kf 1    4 ticks, unpriced, 282  lc 0  lcp 5  pg 5  kf 3
+sparse      4 ticks, constrained, 283 lc 3 lcp 6  pg 11 kf 1    4 ticks, unpriced, 299  lc 3  lcp 6  pg 7  kf 1
+heavy      60 ticks, inflated, 127   lc 0  lcp 1  pg 15 kf 6    8 ticks, unpriced, 133  lc 0  lcp 1  pg 50 kf 10
+```
+
+The late counts hold; the manifests rise with the cadence, 30% on the field-like
+shape; pages and keyframes move with the fight as they always have, the heavy
+shape's with the storm's repairs now reaching a guest served eight times as often.
+The probe's bytes do not carry the reading: a probe padded to measure a link
+spends what the cadence saves, and a rate measured on padding is still a floor
+on capacity unless the padding queues, which is the backlog's reading already.
+The in-process cadence tests read the plan's priced rate (`CapacityBps`) and the
+constraint, not whether the latest sample happened to read the link as the limit.
+
 **A relayed topology.** `TestARelayedTopologyConvergesUnderShape` runs always: a
 host, a relay and a person behind it over the default shape, 300 ticks, the storm,
 600 more, asserting that both guests answer most of their manifests hash-only, that
@@ -580,10 +615,9 @@ Late commits and the lead hold on every shape through every step; pages and late
 copies move where the link is lossy or jittery, since the link meter reads the
 bytes it delivered and the correction cadence follows its throughput, so a
 command stream of a fraction of the bytes is a different fight from the first
-repair on. The manifests the guest received fall with the bytes on every shape,
-to 97 from 134 on heavy loss: a thinner stream reads as a slower link to the
-meter, which is the cadence's to answer
-([todo](todo.md#read-the-cadence-against-a-thin-command-stream)). The `fsm` step
+repair on. The manifests the guest received fell with the bytes on every shape,
+to 97 from 134 on heavy loss: a thinner stream read as a slower link to the
+meter, read against the shapes below. The `fsm` step
 is a different fight again from the storm region's entry on: the region's own
 storm now spawns when the raised one dies instead of the region adopting the
 raised one by liveness, so the rows after it are not the codec's to compare;
