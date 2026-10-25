@@ -65,6 +65,7 @@ type captureFields struct {
 	Mode        uint64 `json:"mode"`
 	Paused      bool   `json:"paused"`
 	Held        bool   `json:"held"`
+	Start       bool   `json:"start"`
 	Off         string `json:"off"` // system names, comma-separated
 	Slot        uint64 `json:"slot"`
 	Own         []byte `json:"own"`
@@ -248,7 +249,7 @@ func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
 	c := event.JournalCapture{
 		JSeq: f.JSeq, CSeq: f.CSeq, Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Participant: f.Participant, Authority: f.Authority, Barrier: f.Barrier, Body: f.Body,
-		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Held: f.Held, Slot: uint8(f.Slot), Own: f.Own,
+		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Held: f.Held, Start: f.Start, Slot: uint8(f.Slot), Own: f.Own,
 	}
 	if f.Off != "" {
 		c.Off = strings.Split(f.Off, ",")

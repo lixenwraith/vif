@@ -1294,6 +1294,47 @@ func TestTheHostsNextTickResumesItsGuests(t *testing.T) {
 	assertMeshParity(t, apps, 0)
 }
 
+// TestAPauseOffBeforeTheHoldLandsEndsItAtTheLanding: :pause off asked while the host's
+// hold still crosses ends it as it lands: the host takes the next tick and its
+// guests, held at the agreed tick, resume on the epoch that follows; a :pause asked
+// again before the landing keeps the hold.
+func TestAPauseOffBeforeTheHoldLandsEndsItAtTheLanding(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A6, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	host, guest := apps[0], apps[1]
+	say := func(cmd string) {
+		mode.ExecuteCommand(host.Context(), cmd)
+		host.Settle()
+	}
+	say("pause")
+	say("pause off")
+	for range parameter.NetworkBarrierMaxDelayTicks + 4 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if a.Context().TimeCtl.Held() {
+			t.Fatalf("participant %d holds after a :pause off asked before the landing", i+1)
+		}
+	}
+	if h, g := host.Context().GetStatusMessage(), guest.Context().GetStatusMessage(); h != "Resumed" || g != "Resumed by the host" {
+		t.Fatalf("the host was told %q and the guest %q; want the landing resumed on both", h, g)
+	}
+	assertMeshParity(t, apps, 0)
+
+	say("pause")
+	say("pause off")
+	say("pause")
+	for range parameter.NetworkBarrierMaxDelayTicks + 4 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if !a.Context().TimeCtl.Held() {
+			t.Fatalf("participant %d runs after the host asked for its pause again", i+1)
+		}
+	}
+}
+
 // TestANewGameEndsAHold: the reset crossed for :new applies at a tick a held session
 // would never reach, so the host ends its hold first, and every participant starts
 // the new game running.

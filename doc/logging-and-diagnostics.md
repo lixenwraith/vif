@@ -923,7 +923,7 @@ interval, the content source, pin and fingerprint, and geometry.
 stands, solo, hosting or joined, and the run plays on as it was. Its replay boots
 afresh from the anchor (non-zero `start_run` or `start_tick`), so the journal's
 first `capture`, flagged `opens`, carries everything that boot would otherwise
-decide: the live shared world, the operator state (`mode`, `paused`, `held`, the
+decide: the live shared world, the operator state (`mode`, `paused`, `held` and `start`, the
 toggled systems that are `off`, the `slot` input follows) and the run's own side (`own`).
 That is its player domain under the same entity IDs, the camera, APM and gesture
 tracking, timed effects, the player domain's streams, the cells its input has in
@@ -937,7 +937,9 @@ their own state. A start is refused while a new game is starting, between a
 reset's cleanup and its boot spawn. A replay writes the opening as any written
 world, binds its slot, writes the own side over what that settle derived, takes up
 the operator state and engages its crossing barrier at once, as the run's was;
-`app.loadJournal` refuses a mid-run journal whose files lack the opening.
+`app.loadJournal` refuses a mid-run journal whose files lack the opening. A `capture`
+a join into a held session writes carries `held` and `start` too, the hold the world
+it installed landed in, so a replay holds there as the run did.
 
 `:journal stop` closes the journal once the run is back in play, after its command
 and any menu that paused the run, so a replay ends in play rather than on the command

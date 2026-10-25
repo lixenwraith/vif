@@ -1348,7 +1348,10 @@ func (m *membership) startJoinSession(signals <-chan os.Signal) error {
 	}
 	m.run.showJoinStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)",
 		cap.Header.Tick, len(body)))
-	if err := m.JoinSessionAt(final, cap, len(body)); err != nil {
+	m.landingHeld, m.landingStart = final.Held, final.Start
+	err = m.JoinSessionAt(final, cap, len(body))
+	m.landingHeld, m.landingStart = false, false
+	if err != nil {
 		return fmt.Errorf("join roster: %w", err)
 	}
 	if err := m.pendingJoin.Ready(); err != nil {
@@ -1358,6 +1361,11 @@ func (m *membership) startJoinSession(signals <-chan os.Signal) error {
 		final.ParticipantCount()))
 	return nil
 }
+
+// landingHold is the hold the world a join installs lands in, a start's or a pause,
+// which the journal records with that install (corrector.journalDelta); none
+// outside one.
+func (m *membership) landingHold() (held, start bool) { return m.landingHeld, m.landingStart }
 
 // awaitStartGate reads the host's start record without freezing this instance. The
 // gate carries no deadline — it is a human-paced wait — so the read runs on a

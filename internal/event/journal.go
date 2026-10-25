@@ -117,15 +117,15 @@ type JournalCapture struct {
 
 	Body []byte // snapshot.WrittenDelta: the world written, against the one before it
 
-	// Opens marks the world a journal opened on mid-run, its first capture: a
-	// replay writes it on its own settled boot rather than ticking to it, and Body
-	// is written against that boot. Mode, Paused, Held, Off, Slot and Own are what a
-	// boot would otherwise decide: the mode, the pause, the hold, the systems switched
-	// off by name, the roster slot input follows, and the run's own side.
+	// Opens marks the world a journal opened on mid-run, its first capture, written
+	// on a replay's own settled boot; Mode, Paused, Held, Off, Slot and Own are what
+	// that boot would otherwise decide. Held and Start also mark the hold a join's
+	// install lands in, a start's or a pause, so a replay holds there as the run did.
 	Opens  bool
 	Mode   core.GameMode
 	Paused bool
 	Held   bool
+	Start  bool
 	Off    []string
 	Slot   uint8  // parameter.NoPlayerSlot for none
 	Own    []byte // app.ownState

@@ -382,7 +382,11 @@ host sends the held tick's round once, whatever its schedule said
 The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
 no epoch, so the first one its next tick produces, admitted past a guest's own
 tick (`NetworkResource.OnAuthorityAhead`), resumes that guest once the drain that
-carried it is done. `:new` ends a hold before its reset crosses, which would
+carried it is done. A `:pause off` asked while the hold still crosses ends it as it
+lands (`MetaSystem.handleHold`): the host takes the tick after, and its guests
+resume on the epoch that follows. A script's own `:pause` is refused
+(`scriptTarget.Emit`): its driven loop takes no step while the run is held, so
+nothing of its timeline could end it. `:new` ends a hold before its reset crosses, which would
 otherwise wait for a tick nobody reaches. A hold outlives a lost host: its
 successor keeps it for its own `:pause`, as a person's fork does in the session it
 goes on in (§5.5), unless a script or bot drives that run and nobody there can give
@@ -407,7 +411,9 @@ same with the world it proved at the held tick (`Corrections.ProvedWorld`), kept
 while the hold stands for a join that arrives after the proof. A hold that lands
 while a gate waits for its lead ends the wait at the held tick (`KeyframeAt`,
 `ProvedWorld`), and one that ends while the held world is read starts the gate over,
-running (`membership.gateJoiner`). A joiner admitted while
+running (`membership.gateJoiner`). A journal records the hold with the world the
+join installed (`JournalCapture.Held`, `Start`), so a replay holds there as the run
+did, and the resume the run recorded ends it there. A joiner admitted while
 its host's new game waits for the host's press is held as a start
 (`SessionOffer.Start`): it waits as every guest there does, and the host's first
 epoch starts it with nothing said.

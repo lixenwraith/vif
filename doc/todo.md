@@ -489,30 +489,6 @@ retention watermark the barrier does not keep, since `RetainedAfter` selects by
 tick and would feed the first feed's records again. WASM gains scheduling time, not
 parallel CPU.
 
-### Close the edges of a session hold
-
-- Priority: P2
-- Affected files: `internal/app/host.go`, `internal/app/relay.go`,
-  `internal/app/join.go`, `internal/system/meta.go`, `internal/app/script.go`
-
-The host's hold ([Multi-player](multi-player.md#36-holding-a-session) §3.6) leaves
-these gaps, which the start wait makes common: each new game a session's host plays
-stands held until its press.
-- A join that meets a hold mid-gate fails and is retried until the host resumes: a
-  relay's gate, and a host's whose playout-lead wait the hold cuts short, wait for
-  a capture past the held tick. Both could gate as a held host does.
-- A join whose gate reads the held world fails when the session resumes before the
-  read ends, as a successor does once its group reported. The gate could start over
-  running.
-- A joiner's landing hold is not journaled, so a guest journal recorded across a
-  join into a held session replays the install running and the host's resume
-  there announces nothing. The world a join installs could carry it, as an
-  opening carries a hold.
-- `:pause off` before the host's own hold has landed does nothing, and the hold
-  then needs another `:pause`. The end could apply at the landing instead.
-- A script that `:pause`s itself never resumes: its driven loop takes no step
-  while held, so its timeline never reaches the next action. Refuse it there.
-
 ### Split combat telemetry by domain
 
 - Priority: P3

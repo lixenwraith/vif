@@ -216,7 +216,8 @@ func (c *corrector) journalStaged(j *event.Journal, at event.Stamp, mark uint64,
 	return c.journalDelta(j, at, mark, participant, barrier, c.encoder.DiffWrittenLight(w.before, w.written, *w.delta, w.integrity))
 }
 
-// journalDelta records one written world as its delta.
+// journalDelta records one written world as its delta, with the hold a join's
+// world lands in, so a replay holds there as the run did.
 func (c *corrector) journalDelta(j *event.Journal, at event.Stamp, mark uint64, participant uint32, barrier bool, d snapshot.WrittenDelta) error {
 	body, err := snapshot.EncodeJSON(d)
 	if err == nil {
@@ -228,9 +229,11 @@ func (c *corrector) journalDelta(j *event.Journal, at event.Stamp, mark uint64, 
 	if participant == 0 {
 		participant = c.run.assignedParticipant()
 	}
+	held, start := c.run.landingHold()
 	j.Capture(event.JournalCapture{
 		JSeq: mark, Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
 		Participant: participant, Authority: d.Header.Authority, Barrier: barrier, Body: body,
+		Held: held, Start: start,
 	})
 	return nil
 }

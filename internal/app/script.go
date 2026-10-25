@@ -324,6 +324,12 @@ func (t scriptTarget) Inject(intents ...*input.Intent) bool {
 	return t.a.Inject(intents...)
 }
 func (t scriptTarget) Emit(et event.EventType, payload any, domain core.Domain) {
+	// A script's own hold would stand for good: its driven loop takes no step while
+	// the run is held, so no action of its timeline could end it.
+	if p, ok := payload.(*event.GamePausePayload); ok && et == event.EventGameHoldRequest && p.Paused {
+		t.a.log.Warn("script", "msg", "a script cannot hold its own run; the hold request was refused")
+		return
+	}
 	t.a.ctx.PushEventFull(et, payload, event.OriginDebug, domain)
 	t.a.Settle()
 }

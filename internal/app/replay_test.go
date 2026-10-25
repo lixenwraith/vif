@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
@@ -593,6 +594,92 @@ func TestAJournalOpenedOnAHoldReplaysItsEnd(t *testing.T) {
 		t.Fatalf("stop: %v", err)
 	}
 	replayMatches(t, rec, want, func(rep *App) []string { return rep.SnapshotSimulation() })
+}
+
+// TestAJoinIntoAHeldSessionReplaysHeld: a guest journal recorded across a join into
+// a held session replays held at the world it installed, as the run was, and the
+// host's resume it recorded ends the hold there, announced.
+func TestAJoinIntoAHeldSessionReplaysHeld(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	const seed = 0x3022
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(60)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	say := func(cmd string) {
+		mode.ExecuteCommand(host.Context(), cmd)
+		host.Settle()
+	}
+	say("pause")
+	for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+		host.Tick(1)
+	}
+	if !host.Context().TimeCtl.Held() {
+		t.Fatal("the host did not hold")
+	}
+	rec := journal.NewCapture()
+	stopTicking := tickInBackground(host)
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), seed, 120, 40, func(c *Config) {
+		c.Journal, c.JournalSink = true, rec
+	})
+	stopTicking()
+	if !guest.Context().TimeCtl.Held() {
+		t.Fatal("the joiner did not land held")
+	}
+	say("pause off")
+	waitForRosterPair(t, host, guest)
+	for range 40 {
+		host.Tick(1)
+		guest.Tick(1)
+	}
+	var err error
+	guest.World().RunSafe(func() { err = guest.scribe.stopJournalLocked(-1) })
+	guest.scribe.serveJournal()
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+
+	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
+	if err != nil {
+		t.Fatalf("config from anchor: %v", err)
+	}
+	rep, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("replay app: %v", err)
+	}
+	defer rep.Close()
+	d, err := newReplayDriver(rep, journal.Set{Records: rec.Records(), Captures: rec.Captures()}.Stream())
+	if err != nil {
+		t.Fatalf("replay driver: %v", err)
+	}
+	landed := false
+	for {
+		more, err := d.Step()
+		if err != nil {
+			t.Fatalf("replay: %v", err)
+		}
+		if d.Stats().Installed > 0 && !landed {
+			if !rep.Context().TimeCtl.Held() {
+				t.Fatal("the replay installed the join's world running; the run landed held")
+			}
+			landed = true
+		}
+		if !more {
+			break
+		}
+	}
+	if !landed {
+		t.Fatal("the replay installed no world")
+	}
+	if rep.Context().TimeCtl.Held() {
+		t.Fatal("the replay stayed held past the host's recorded resume")
+	}
+	if got := rep.Context().GetStatusMessage(); got != "Resumed" {
+		t.Fatalf("the replay's resume was told as %q", got)
+	}
 }
 
 // TestANewGameThatWaitsReplaysItsStart: a :n the wait holds is journaled with it, so

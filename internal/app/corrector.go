@@ -51,6 +51,7 @@ type correctionRun interface {
 	sessionAnchorFields(event.JournalAnchor) []anchorField
 	assignedParticipant() uint32
 	barrierLocked() bool
+	landingHold() (held, start bool)
 	journalLostLocked(*event.Journal, error)
 	newStagingApp(snapshot.SharedCapture) (*App, error)
 }
