@@ -11,8 +11,11 @@ import (
 // surface: a host publishes what a read cost it and a guest what an install cost
 // it, and neither is a fact about the world they share.
 type Telemetry struct {
-	// Capture and install cost.
+	// Capture and install cost. ProjectUS and WriteUS split CommitUS, the live lock
+	// an install holds: the ticks the staging world simulated under it, then the
+	// capture of the live world, the comparison and the write.
 	CaptureUS, EncodeUS, Bytes, StageUS, CommitUS, InstallTick, CatchUp *atomic.Int64
+	ProjectUS, WriteUS                                                  *atomic.Int64
 
 	// The cadence: what the host published, what the guest did with it. A refused
 	// delta is one whose keyframe this instance does not hold and a superseded one
@@ -86,7 +89,7 @@ func NewTelemetry(reg *status.Registry) Telemetry {
 		CaptureUS: i("snapshot.capture_us"), EncodeUS: i("snapshot.encode_us"),
 		Bytes: i("snapshot.bytes"), StageUS: i("snapshot.stage_us"),
 		CommitUS: i("snapshot.commit_us"), InstallTick: i("snapshot.install_tick"),
-		CatchUp: i("snapshot.catch_up_ticks"),
+		CatchUp: i("snapshot.catch_up_ticks"), ProjectUS: i("snapshot.project_us"), WriteUS: i("snapshot.write_us"),
 
 		Sent: i("snapshot.corrections_sent"), SentBytes: i("snapshot.correction_bytes_sent"),
 		Keyframes: i("snapshot.keyframes"), Applied: i("snapshot.corrections_applied"),

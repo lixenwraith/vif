@@ -1,10 +1,18 @@
 package app
 
 import (
+	"bytes"
+	"compress/flate"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"maps"
+	"math"
 	"os"
+	"reflect"
 	"runtime"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -17,6 +25,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -272,4 +281,195 @@ func cpuSeconds() float64 {
 	var ru syscall.Rusage
 	_ = syscall.Getrusage(syscall.RUSAGE_SELF, &ru)
 	return float64(ru.Utime.Sec) + float64(ru.Utime.Usec)/1e6 + float64(ru.Stime.Sec) + float64(ru.Stime.Usec)/1e6
+}
+
+// TestNetcodeReadingsForBatch3 takes the readings netcode design §4 batch 3 is
+// decided on, over a td session of two on sockets: a keyframe's bytes a section at a
+// time, plain and deflated, as the JSON rows the wire carries and as fixed binary
+// rows and columns; what a guest pays to decode and install one; and the heap by
+// owner once the session has run. VIF_NETCODE_BATCH3=1 runs it, and
+// VIF_NETCODE_PROFILE names a directory its heap profile is written to.
+func TestNetcodeReadingsForBatch3(t *testing.T) {
+	if os.Getenv("VIF_NETCODE_BATCH3") == "" {
+		t.Skip("set VIF_NETCODE_BATCH3=1 to take the batch 3 readings")
+	}
+	td := Config{Mode: ModeHeadless, Width: 200, Height: 60, Resources: resource.Options{Dir: soakRoot, Scenario: "td"}}
+	apps, _ := socketSession(t, td, 2)
+	host, guest := apps[0], apps[1]
+	for _, a := range apps {
+		injectExCommand(t, a, "god")
+	}
+	rng := vmath.NewFastRand(7)
+	motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+	peak := map[string]int64{}
+	next := time.Now()
+	for range 420 {
+		for _, a := range apps {
+			if rng.Intn(3) == 0 {
+				inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+			}
+			if rng.Intn(6) == 0 {
+				inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
+			}
+		}
+		host.Tick(1)
+		_ = host.corrections.PublishDue()
+		guest.Tick(1)
+		guest.ApplyPendingCorrections()
+		for _, key := range []string{"snapshot.stage_us", "snapshot.commit_us", "snapshot.project_us", "snapshot.write_us", "snapshot.projected_ticks"} {
+			peak[key] = max(peak[key], statOf(guest, key))
+		}
+		for _, key := range []string{"snapshot.capture_us", "snapshot.encode_us", "snapshot.hash_us"} {
+			peak[key] = max(peak[key], statOf(host, key))
+		}
+		next = next.Add(parameter.GameUpdateInterval)
+		time.Sleep(time.Until(next))
+	}
+
+	cap, err := host.CaptureShared()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("td keyframe at tick %d, a section at a time: rows, JSON plain, JSON deflated, binary rows plain, binary rows deflated, binary columns plain, binary columns deflated", cap.Header.Tick)
+	world := reflect.ValueOf(cap.World)
+	var total [6]int
+	for i, name := range engine.SharedWorldStoreNames {
+		rows := world.Field(i + 3) // after NextEntity, Created, Destroyed
+		if rows.Len() == 0 {
+			continue
+		}
+		plain, err := json.Marshal(rows.Interface())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var binRows []byte
+		columns := map[string][]byte{}
+		var prev uint64
+		for k := range rows.Len() {
+			e := rows.Index(k).Field(0).Uint()
+			binRows = binary.AppendUvarint(binRows, e)
+			columns["e"] = binary.AppendUvarint(columns["e"], e-prev)
+			prev = e
+			binRows = appendBinary(binRows, rows.Index(k).Field(1), "v", columns)
+		}
+		var binCols []byte
+		for _, k := range slices.Sorted(maps.Keys(columns)) {
+			binCols = append(binCols, columns[k]...)
+		}
+		line := [6]int{len(plain), len(deflated(plain)), len(binRows), len(deflated(binRows)), len(binCols), len(deflated(binCols))}
+		for j := range line {
+			total[j] += line[j]
+		}
+		t.Logf("  %-12s %6d %9d %9d %9d %9d %9d %9d", name, rows.Len(), line[0], line[1], line[2], line[3], line[4], line[5])
+	}
+	t.Logf("  %-12s %6s %9d %9d %9d %9d %9d %9d", "all stores", "", total[0], total[1], total[2], total[3], total[4], total[5])
+
+	body, err := snapshot.EncodeCapture(cap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decode, install time.Duration
+	for range 5 {
+		start := time.Now()
+		back, err := snapshot.DecodeCapture(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decode += time.Since(start)
+		start = time.Now()
+		staged, err := guest.StageShared(back)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := staged.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		install += time.Since(start)
+	}
+	t.Logf("  keyframe body %d bytes; a guest decodes it in %.1f ms and installs it in %.1f ms (stage and commit, no ticks projected)",
+		len(body), float64(decode.Microseconds())/5000, float64(install.Microseconds())/5000)
+	t.Logf("  over the run, the guest's deepest install: stage %d us, commit %d us (project %d us, write %d us), %d ticks projected; the host's capture %d us, encode %d us, hash %d us",
+		peak["snapshot.stage_us"], peak["snapshot.commit_us"], peak["snapshot.project_us"], peak["snapshot.write_us"],
+		peak["snapshot.projected_ticks"], peak["snapshot.capture_us"], peak["snapshot.encode_us"], peak["snapshot.hash_us"])
+
+	runtime.GC()
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	t.Logf("  heap in use %d MiB over the two instances after a collection", mem.HeapInuse>>20)
+	if dir := os.Getenv("VIF_NETCODE_PROFILE"); dir != "" {
+		f, err := os.Create(dir + "/td-heap.prof")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		if err := pprof.Lookup("heap").WriteTo(f, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// appendBinary renders one value as a fixed binary row would, field order fixed,
+// integers as varints, floats as their bits, and lays the same bytes into columns
+// by field path, as the column layout §4 projects would.
+func appendBinary(dst []byte, v reflect.Value, path string, columns map[string][]byte) []byte {
+	var cell []byte
+	switch v.Kind() {
+	case reflect.Bool:
+		cell = []byte{0}
+		if v.Bool() {
+			cell[0] = 1
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		cell = binary.AppendVarint(nil, v.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		cell = binary.AppendUvarint(nil, v.Uint())
+	case reflect.Float32:
+		cell = binary.LittleEndian.AppendUint32(nil, math.Float32bits(float32(v.Float())))
+	case reflect.Float64:
+		cell = binary.LittleEndian.AppendUint64(nil, math.Float64bits(v.Float()))
+	case reflect.String:
+		cell = append(binary.AppendUvarint(nil, uint64(v.Len())), v.String()...)
+	case reflect.Struct:
+		if v.Type() == reflect.TypeFor[time.Time]() {
+			cell = binary.AppendVarint(nil, v.Interface().(time.Time).UnixNano())
+			break
+		}
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				dst = appendBinary(dst, v.Field(i), path+"."+v.Type().Field(i).Name, columns)
+			}
+		}
+		return dst
+	case reflect.Array:
+		for i := range v.Len() {
+			dst = appendBinary(dst, v.Index(i), path+"[]", columns)
+		}
+		return dst
+	case reflect.Slice:
+		dst = binary.AppendUvarint(dst, uint64(v.Len()))
+		columns[path+"#"] = binary.AppendUvarint(columns[path+"#"], uint64(v.Len()))
+		for i := range v.Len() {
+			dst = appendBinary(dst, v.Index(i), path+"[]", columns)
+		}
+		return dst
+	case reflect.Pointer, reflect.Interface:
+		if v.IsNil() {
+			cell = []byte{0}
+			break
+		}
+		return appendBinary(append(dst, 1), v.Elem(), path, columns)
+	default:
+		return dst
+	}
+	columns[path] = append(columns[path], cell...)
+	return append(dst, cell...)
+}
+
+// deflated is plain at the level the wire deflates a body at.
+func deflated(plain []byte) []byte {
+	var out bytes.Buffer
+	w, _ := flate.NewWriter(&out, flate.DefaultCompression)
+	_, _ = w.Write(plain)
+	_ = w.Close()
+	return out.Bytes()
 }
