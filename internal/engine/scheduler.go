@@ -297,9 +297,9 @@ func (s *Scheduler) steerFSM() {
 // domain: the decision is the authority's alone, as an input is its player's, and
 // its outcome is every instance's. The origin is the machine's own, whatever
 // event's dispatch the transition fell in: a network one would not cross again.
-func (s *Scheduler) proposeTransition(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar) {
+func (s *Scheduler) proposeTransition(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
 	s.world.PushEventFull(event.EventFSMTransition, &event.FSMTransitionPayload{
-		Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars,
+		Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then,
 	}, event.OriginSystem, core.DomainPlayer)
 }
 

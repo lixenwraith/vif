@@ -448,7 +448,10 @@ alone evaluates its guards: a transition it takes is a crossing
 (`EventFSMTransition`) applied at one tick on every instance, the authority's
 included, where its actions and the target's on_enter run; a guest's machine
 evaluates nothing and follows, so a guard may read what the authority alone holds
-(`kills.*`, `TimeInState`), which is the authority's by construction. A `Local`
+(`kills.*`, `TimeInState`), which is the authority's by construction. The unguarded
+`Tick` hops after a transition's target are the authority's too, folded into the
+same crossing (`FSMTransitionPayload.Then`), so a chain of them costs one lead and
+lasts no tick in a session; alone, a run takes them one an update. A `Local`
 event still cannot steer a region: it would move it for the authority's player
 alone. Per-instance effects are emitted by the local owning system or by a
 cursor-scoped action without moving the region differently.

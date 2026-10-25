@@ -613,22 +613,6 @@ seen, and a link queued from its join on, as the cadence test's 200-byte-per-tic
 link is, never shows its idle trip, so the flag flickers once a run settles near
 1.5× of a congested baseline; the test reads the run rather than its last sample.
 
-### Fold an unguarded chain into one crossing
-
-- Priority: P3
-- Affected files: `internal/fsm/machine.go`, `internal/engine/scheduler.go`
-- Guide: [Netcode design §4 batch 2](netcode-design.md#4-phase-2)
-
-A transition is the authority's and applies a playout lead after it was taken
-([D-20](domain-design.md#d-20--shared-fsm-regions-move-on-the-authoritys-transitions)),
-so a chain of states that each hand on by an unguarded `Tick`, the tower's setup
-of ten hops, pays a lead a hop: 30 ticks on the harness, seconds at the site.
-Taking the unguarded hop in place on every instance is safe only where nothing
-else could have moved the region first: no guarded `Tick` before it in the leaf
-and no event transition on the leaf or its ancestors, since the authority evaluates
-those and a guest does not. Decide whether such states are marked at load and
-taken in place, or whether the authority crosses the chain's end.
-
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

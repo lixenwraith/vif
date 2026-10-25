@@ -775,9 +775,18 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   construction (D-20). The `fsm` section stays as the proof, `StormSetup`'s
   liveness transition is gone, and §3.5's harness reads the storm region's
   transitions at one tick on both ends over every shape.
-- Left: a chain of states that each hand on by an unguarded `Tick` pays a lead a
-  hop, the tower's setup ten of them
-  ([todo](todo.md#fold-an-unguarded-chain-into-one-crossing)).
+- In, later (protocol 27, journal schema 39): the authority folds the unguarded
+  `Tick` hops after a transition's target into the crossing it proposes
+  (`FSMTransitionPayload.Then`, `Machine.fold`): from each state entered, up its
+  path, the first `Tick` transition met decides, an unguarded external one a hop
+  and a guarded, internal or self-targeting one the end, since a guest evaluates
+  no guard; `Apply` takes the chain at the committed tick, each state's exit,
+  actions and on_enter in order, so the tower's setup crosses once per pylon
+  rather than twice and its attach states last no tick in a session. A solo run
+  takes one hop an update, as before. `TestTheTowersSetupChainCrossesOnce` reads
+  both instances reaching `TowerActive` at one tick with no attach state standing
+  at a tick boundary.
+- Left: nothing.
 - Needs: nothing further; the site's storm-spawn keyframes (§3.4) are the reading
   that judges it.
 

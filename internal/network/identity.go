@@ -7,7 +7,7 @@ import (
 )
 
 // ProtocolVersion changes when peers cannot share the session wire contract.
-const ProtocolVersion uint32 = 26
+const ProtocolVersion uint32 = 27
 
 // PeerIdentity is the simulation contract verified by both sides before admission.
 // Build identity is checked before construction; session identity after construction.
