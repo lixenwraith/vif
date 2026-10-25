@@ -121,10 +121,9 @@ func (h *TunnelHub) Max() int { return h.max }
 
 // Publish takes a run's publication on control, which the hub holds as the door's
 // control connection from here, and answers it on the same stream: the door's name,
-// link and token, or the refusal returned, the stream closed. A run resuming its
-// name with its token keeps it, the connection it lost closed, within the resume
-// window of the loss; from is the address it publishes from, which the per-address
-// bound counts.
+// link and token, or the refusal returned, the stream closed. A run resuming its name
+// with its token keeps it, the connection it lost closed, within the resume window of
+// the loss; from is the address it publishes from, which the per-address bound counts.
 func (h *TunnelHub) Publish(control net.Conn, from string, req PublishRequest) (*PublishedDoor, error) {
 	d, err := h.admit(control, from, req)
 	var ans Published

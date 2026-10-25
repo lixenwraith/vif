@@ -924,12 +924,10 @@ func (m *membership) sendMidRunGate(port *link.SocketPort, id link.PeerID) error
 }
 
 // gateJoiner releases the participant offer is addressed to into the world at a
-// playout lead past the admission — an epoch flushed just before it reaches nobody
-// and is in no capture at that tick — waits for its install, and says which world
-// and how long its transfer took. A held session reaches no lead: the world is the
-// held tick's, what is scheduled past it follows, and the joiner holds there too,
-// whether the hold stood at the gate or landed as the world was read; one that ends
-// as the world is read starts the gate over, running.
+// playout lead past the admission, where every epoch flushed before it has applied,
+// waits for its install and says which world and how long its transfer took. A held
+// session reaches no lead: the joiner is handed the held tick's world and what is
+// scheduled past it, and holds there too; the loop below reads which the hold made it.
 func (m *membership) gateJoiner(port *link.SocketPort, offer network.SessionOffer, held bool,
 	world func(minTick uint64, deadline time.Time) ([]byte, uint64, error),
 ) (tick uint64, bytes int, took time.Duration, err error) {

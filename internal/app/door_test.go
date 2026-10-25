@@ -24,7 +24,7 @@ func routerStandIn(t *testing.T) (string, *network.TunnelHub) {
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	addr := ln.Addr().String()
-	hub := network.NewTunnelHub(func(id string) string { return "vif://" + addr + "/" + id }, 4)
+	hub := network.NewTunnelHub(func(id string) string { return "vif://" + addr + "/" + id }, 4, 0)
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -41,7 +41,7 @@ func routerStandIn(t *testing.T) (string, *network.TunnelHub) {
 				case network.MsgSessionPublish:
 					var req network.PublishRequest
 					_ = json.Unmarshal(first.Payload, &req)
-					if d, err := hub.Publish(conn, req); err == nil {
+					if d, err := hub.Publish(conn, "", req); err == nil {
 						hub.Serve(d)
 					}
 				case network.MsgTunnelAccept:
