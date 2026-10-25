@@ -87,12 +87,12 @@ var DefaultPlay = sync.OnceValue(func() Play {
 // UnknownKeys names the keys a settings document holds that this build has no
 // field for, every key it does know read by the time this is returned. A run drops
 // them from the document it writes back to (DropUnknown); soundlab only names them.
-type UnknownKeys []string
+type UnknownKeys []toml.Key
 
 func (u UnknownKeys) Error() string {
 	q := make([]string, len(u))
 	for i, k := range u {
-		q[i] = strconv.Quote(k)
+		q[i] = strconv.Quote(k.String())
 	}
 	if len(q) == 1 {
 		return "unknown key " + q[0]
@@ -150,11 +150,19 @@ func dropUnknown(s SettingsStore, keys UnknownKeys) error {
 	if err != nil {
 		return err
 	}
-	out := dropKeys(data, keys)
-	if _, err := ParseSettings(out); err != nil {
+	doc, err := toml.ParseDocument(data)
+	if err != nil {
 		return err
 	}
-	return s.Store(out)
+	for _, k := range keys {
+		if _, err := doc.Delete(k); err != nil {
+			return err
+		}
+	}
+	if _, err := ParseSettings(doc.Bytes()); err != nil {
+		return err
+	}
+	return s.Store(doc.Bytes())
 }
 
 // ParseSettings reads a settings document over the embedded one, as LoadSettings
@@ -195,32 +203,31 @@ func rebase(data []byte, dir string) ([]byte, error) {
 	if err != nil && !errors.As(err, new(UnknownKeys)) {
 		return nil, err
 	}
-	was := reflect.ValueOf(s.Paths)
-	s.resolve(dir)
-	now, moved := reflect.ValueOf(s.Paths), make(map[string]string)
-	for i := range now.NumField() {
-		if w := was.Field(i).String(); w != now.Field(i).String() && !strings.HasPrefix(w, "~") {
-			moved[now.Type().Field(i).Tag.Get("toml")] = now.Field(i).String()
-		}
-	}
-	if len(moved) == 0 {
-		return data, nil
-	}
-	body, err := toml.Marshal(moved)
+	doc, err := toml.ParseDocument(data)
 	if err != nil {
 		return nil, err
 	}
-	return setKeys(data, "paths", body), nil
+	was := reflect.ValueOf(s.Paths)
+	s.resolve(dir)
+	now := reflect.ValueOf(s.Paths)
+	for i := range now.NumField() {
+		if w := was.Field(i).String(); w != now.Field(i).String() && !strings.HasPrefix(w, "~") {
+			if err := doc.Set(toml.Key{"paths", now.Type().Field(i).Tag.Get("toml")}, now.Field(i).String()); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return doc.Bytes(), nil
 }
 
 // decodeSettings reads data over s; the decoder skips keys s has no field for, which
 // are reported once everything known has been read and checked
 func decodeSettings(data []byte, s *Settings) error {
-	raw, err := toml.NewParser(data).Parse()
+	doc, err := toml.ParseDocument(data)
 	if err != nil {
 		return err
 	}
-	if err := toml.Decode(raw, s); err != nil {
+	if err := doc.Decode(s); err != nil {
 		return err
 	}
 	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
@@ -229,8 +236,8 @@ func decodeSettings(data []byte, s *Settings) error {
 	if err := s.Play.check(); err != nil {
 		return err
 	}
-	if keys := unknownKeys(raw, reflect.TypeFor[Settings](), ""); len(keys) > 0 {
-		return keys
+	if keys := doc.Unmapped(s); len(keys) > 0 {
+		return UnknownKeys(keys)
 	}
 	return nil
 }
@@ -297,9 +304,10 @@ func (f FileStore) Store(data []byte) error {
 var saving sync.Mutex
 
 // SavePlay writes what changed from was to now into the [play] table of the
-// store's document: each such key's line is replaced, or added after the table's
-// last key. Every other line stays as it stands, comments included, so a value a
-// flag set for one run and the player left alone is never written.
+// store's document: each such key's value is replaced, the rest of its line kept,
+// or the key is added after the table's last key. Every other line stays as it
+// stands, comments included, so a value a flag set for one run and the player left
+// alone is never written.
 func SavePlay(s SettingsStore, was, now Play) error {
 	changed := make(map[string]any)
 	a, b := reflect.ValueOf(was), reflect.ValueOf(now)
@@ -317,146 +325,31 @@ func SavePlay(s SettingsStore, was, now Play) error {
 // SaveCell writes the zoom a host was left at into [presentation] as SavePlay
 // writes a [play] value
 func SaveCell(s SettingsStore, cell float64) error {
-	return saveTable(s, "presentation", map[string]float64{"cell": cell})
+	return saveTable(s, "presentation", map[string]any{"cell": cell})
 }
 
-func saveTable(s SettingsStore, table string, v any) error {
-	body, err := toml.Marshal(v)
-	if err != nil {
-		return err
-	}
+// saveTable sets each of v's keys in table, every other line of the document kept;
+// a document that would not then read whole is refused, never stored broken
+func saveTable(s SettingsStore, table string, v map[string]any) error {
 	saving.Lock()
 	defer saving.Unlock()
 	data, err := s.Load()
 	if err != nil {
 		return err
 	}
-	// A document this writer could not edit in place is refused, never stored broken
-	out := setKeys(data, table, body)
-	if _, err := ParseSettings(out); err != nil {
+	doc, err := toml.ParseDocument(data)
+	if err != nil {
 		return fmt.Errorf("[%s] not written: %w", table, err)
 	}
-	return s.Store(out)
-}
-
-// setKeys writes body's key = value lines into table: the line setting a key is
-// replaced, a key the table lacks goes after its last key, or after its header,
-// and a table the document lacks is appended. Every other line stays as it is.
-func setKeys(doc []byte, table string, body []byte) []byte {
-	set := make(map[string]string)
-	var keys []string
-	for l := range strings.Lines(string(body)) {
-		if k, _, ok := strings.Cut(l, "="); ok {
-			k = strings.TrimSpace(k)
-			set[k], keys = l, append(keys, k)
+	for _, k := range slices.Sorted(maps.Keys(v)) {
+		if err := doc.Set(toml.Key{table, k}, v[k]); err != nil {
+			return fmt.Errorf("[%s] not written: %w", table, err)
 		}
 	}
-	lines := slices.Collect(strings.Lines(string(doc)))
-	if n := len(lines); n > 0 && !strings.HasSuffix(lines[n-1], "\n") {
-		lines[n-1] += "\n"
+	if _, err := ParseSettings(doc.Bytes()); err != nil {
+		return fmt.Errorf("[%s] not written: %w", table, err)
 	}
-	at, in := -1, false // the table's last key or header; whether a line is inside it
-	for i, l := range lines {
-		t := strings.TrimSpace(l)
-		if strings.HasPrefix(t, "[") {
-			header, _, _ := strings.Cut(t, "#")
-			header = strings.TrimSpace(header)
-			if in = !strings.HasPrefix(header, "[[") && strings.HasSuffix(header, "]") &&
-				unquote(header[1:len(header)-1]) == table; in {
-				at = i
-			}
-			continue
-		}
-		k, _, ok := strings.Cut(t, "=")
-		if !in || !ok || strings.HasPrefix(t, "#") {
-			continue
-		}
-		at, k = i, unquote(k)
-		if line, ok := set[k]; ok {
-			lines[i] = line
-			delete(set, k)
-		}
-	}
-	var missing []string
-	for _, k := range keys {
-		if line, ok := set[k]; ok {
-			missing = append(missing, line)
-		}
-	}
-	if at < 0 {
-		missing = slices.Insert(missing, 0, "["+table+"]\n")
-		if len(lines) > 0 {
-			missing = slices.Insert(missing, 0, "\n")
-		}
-		at = len(lines) - 1
-	}
-	return []byte(strings.Join(slices.Insert(lines, at+1, missing...), ""))
-}
-
-// dropKeys removes from doc each line setting one of keys or a key under it, and
-// each table header naming one with the keys under that header; every other line,
-// a comment or a blank, stays as it is.
-func dropKeys(doc []byte, keys UnknownKeys) []byte {
-	under := func(name string) bool {
-		return slices.ContainsFunc(keys, func(k string) bool { return name == k || strings.HasPrefix(name, k+".") })
-	}
-	var out strings.Builder
-	table, gone := "", false // the table a line is in, and whether its header was dropped
-	for l := range strings.Lines(string(doc)) {
-		t := strings.TrimSpace(l)
-		if strings.HasPrefix(t, "[") {
-			header, _, _ := strings.Cut(t, "#")
-			table = dotted(strings.Trim(strings.TrimSpace(header), "[]"))
-			if gone = under(table); gone {
-				continue
-			}
-		} else if k, _, ok := strings.Cut(t, "="); ok && !strings.HasPrefix(t, "#") {
-			if name := dotted(k); gone || under(strings.TrimPrefix(table+"."+name, ".")) {
-				continue
-			}
-		}
-		out.WriteString(l)
-	}
-	return []byte(out.String())
-}
-
-// dotted is a dotted key as its name: a."b" . c is a.b.c
-func dotted(k string) string {
-	parts := strings.Split(k, ".")
-	for i, p := range parts {
-		parts[i] = unquote(p)
-	}
-	return strings.Join(parts, ".")
-}
-
-// unquote is a bare or quoted key as its name: "play", 'play' and play are play
-func unquote(k string) string {
-	k = strings.TrimSpace(k)
-	if n := len(k); n >= 2 && (k[0] == '"' || k[0] == '\'') && k[n-1] == k[0] {
-		return k[1 : n-1]
-	}
-	return k
-}
-
-// unknownKeys names every key raw holds that t has no field for, under prefix, so a
-// misspelt setting is never left silently at its default.
-func unknownKeys(raw map[string]any, t reflect.Type, prefix string) UnknownKeys {
-	fields := make(map[string]reflect.Type, t.NumField())
-	for i := range t.NumField() {
-		fields[t.Field(i).Tag.Get("toml")] = t.Field(i).Type
-	}
-	var bad UnknownKeys
-	for _, k := range slices.Sorted(maps.Keys(raw)) {
-		ft, ok := fields[k]
-		if !ok {
-			bad = append(bad, prefix+k)
-			continue
-		}
-		if table, ok := raw[k].(map[string]any); ok && ft.Kind() == reflect.Struct {
-			bad = append(bad, unknownKeys(table, ft, prefix+k+".")...)
-		}
-	}
-	return bad
+	return s.Store(doc.Bytes())
 }
 
 // settingsPath resolves one path value: "~/" is the home directory and a relative
