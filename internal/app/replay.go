@@ -192,6 +192,14 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		if err == nil && c.Opens {
 			err = a.scribe.openedLocked(c, own)
 		}
+		// The hold the run landed in with this world, held here as it was there.
+		if err == nil && c.Held && !c.Opens {
+			if c.Start {
+				a.ctx.HoldAs(engine.HoldStart)
+			} else {
+				a.ctx.Hold(true)
+			}
+		}
 		// The barrier stands as the run's write left it before anything still queued
 		// dispatches: a crossing raised before the next tick is the run's, by record.
 		if err == nil && c.Barrier && !a.barrierLocked() {
@@ -217,7 +225,11 @@ func (sc *scribe) openedLocked(c event.JournalCapture, own ownState) error {
 	sc.ctx.SetMode(c.Mode)
 	sc.world.UpdateBoundsRadius()
 	sc.ctx.TimeCtl.SetPaused(c.Paused)
-	sc.ctx.TimeCtl.SetHeld(c.Held)
+	if c.Start {
+		sc.ctx.TimeCtl.HoldAs(engine.HoldStart)
+	} else {
+		sc.ctx.TimeCtl.SetHeld(c.Held)
+	}
 	for _, sys := range sc.world.Systems() {
 		if t, ok := sys.(engine.Toggled); ok {
 			t.SetEnabled(!slices.Contains(c.Off, sys.Name()))

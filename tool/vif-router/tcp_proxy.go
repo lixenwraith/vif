@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
@@ -33,6 +34,13 @@ const (
 
 var errRouteBusy = &network.Refusal{Code: network.RefusalFull,
 	Reason: "this session is carrying as many connections as it accepts"}
+
+// placement is what a connection was placed on: its session's pod, or a door a run
+// published under the session's name.
+type placement struct {
+	id   string
+	door bool
+}
 
 // tcpRouter is the native front door: one port for every session, which places a
 // connection by the name its dialer sends before reading, on a pod or on a door a
@@ -69,12 +77,23 @@ func (r *tcpRouter) serve(listener net.Listener) {
 			continue
 		}
 		go func() {
-			if upstream, release := r.place(conn, conn.RemoteAddr()); upstream != nil {
-				defer release()
-				splice(conn, upstream)
+			upstream, release, at := r.place(conn, conn.RemoteAddr())
+			if upstream == nil {
+				return
 			}
+			defer release()
+			started := time.Now()
+			in, out := splice(conn, upstream)
+			r.closed(at, in, out, started)
 		}()
 	}
+}
+
+// closed accounts for one placed connection as it ends: what passed through it and
+// for how long, by the session's name and never the dialler's address.
+func (r *tcpRouter) closed(at placement, in, out int64, started time.Time) {
+	r.log.Info("session route closed", "session", at.id, "door", at.door,
+		"bytes_in", in, "bytes_out", out, "seconds", int64(time.Since(started)/time.Second))
 }
 
 // place answers the route frame with the session's pod, the frame replayed to it,
@@ -82,13 +101,13 @@ func (r *tcpRouter) serve(listener net.Listener) {
 // from is the dialler's address, which the join budget is charged to. A run's
 // publication or connection back (tunnels) is taken here too, since it opens on the
 // same port, and holds no placement past this frame.
-func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
+func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), placement) {
 	select {
 	case r.placing <- struct{}{}:
 		defer func() { <-r.placing }()
 	default:
 		_ = client.Close()
-		return nil, nil
+		return nil, nil, placement{}
 	}
 	_ = client.SetDeadline(time.Now().Add(routeTimeout))
 	first, err := link.DecodeWithin(client, network.MaxTunnelFrame)
@@ -96,16 +115,16 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 		// Not a vif dialer, or one that said nothing: no reply would be read.
 		if err == nil && r.tunnels != nil {
 			r.tunnel(client, from, first)
-			return nil, nil
+			return nil, nil, placement{}
 		}
 		_ = client.Close()
-		return nil, nil
+		return nil, nil, placement{}
 	}
 	id := string(first.Payload)
-	refuse := func(reason error) (net.Conn, func()) {
+	refuse := func(reason error) (net.Conn, func(), placement) {
 		network.RefuseJoin(client, reason, routeTimeout)
 		_ = client.Close()
-		return nil, nil
+		return nil, nil, placement{}
 	}
 	if !sessionIDPattern.MatchString(id) {
 		return refuse(errSessionUnknown)
@@ -158,13 +177,13 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 	}
 	_ = client.SetDeadline(time.Time{})
 	r.log.Info("session route opened", "session", id)
-	return upstream, release
+	return upstream, release, placement{id: id}
 }
 
 // placeDoor places a dial on a door a run published: the run opens a connection
 // back, which takes the dialer's bytes after the name the run's door answers to, as
 // a pod takes them after its own. The ceiling counts it as it counts a pod's.
-func (r *tcpRouter) placeDoor(client net.Conn, id string, refuse func(error) (net.Conn, func())) (net.Conn, func()) {
+func (r *tcpRouter) placeDoor(client net.Conn, id string, refuse func(error) (net.Conn, func(), placement)) (net.Conn, func(), placement) {
 	release, ok := r.holds.hold(id)
 	if !ok {
 		return refuse(errRouteBusy)
@@ -184,7 +203,7 @@ func (r *tcpRouter) placeDoor(client net.Conn, id string, refuse func(error) (ne
 	}
 	_ = client.SetDeadline(time.Time{})
 	r.log.Info("door route opened", "session", id)
-	return upstream, release
+	return upstream, release, placement{id: id, door: true}
 }
 
 // tunnel takes a run's frame on the front door: a publication, which the run's
@@ -206,7 +225,7 @@ func (r *tcpRouter) tunnel(client net.Conn, from net.Addr, first *link.Message) 
 			return
 		}
 		_ = client.SetDeadline(time.Time{})
-		door, err := r.tunnels.Publish(client, req)
+		door, err := r.tunnels.Publish(client, addressHost(from), req)
 		if err != nil {
 			r.log.Info("door refused", "error", err)
 			return
@@ -227,19 +246,35 @@ func (r *tcpRouter) tunnel(client net.Conn, from net.Addr, first *link.Message) 
 	}
 }
 
+// addressHost is the address a publication is counted to: the dialler's host with
+// no port, or none for a dialler with no address.
+func addressHost(from net.Addr) string {
+	if from == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(from.String())
+	if err != nil {
+		return from.String()
+	}
+	return host
+}
+
 // splice copies both ways, passing each side's end on as a half-close, and closes
-// both once both directions are done.
-func splice(client, upstream net.Conn) {
+// both once both directions are done; it reports the bytes the client sent and the
+// bytes it was sent.
+func splice(client, upstream net.Conn) (in, out int64) {
+	var sent, received atomic.Int64
 	done := make(chan struct{}, 2)
-	pipe := func(dst, src net.Conn) {
-		_, _ = io.Copy(stallBounded{dst}, src)
+	pipe := func(dst, src net.Conn, n *atomic.Int64) {
+		copied, _ := io.Copy(stallBounded{dst}, src)
+		n.Store(copied)
 		if half, ok := dst.(interface{ CloseWrite() error }); ok {
 			_ = half.CloseWrite()
 		}
 		done <- struct{}{}
 	}
-	go pipe(upstream, client)
-	go pipe(client, upstream)
+	go pipe(upstream, client, &sent)
+	go pipe(client, upstream, &received)
 	<-done
 	linger := time.Now().Add(spliceLinger)
 	_ = client.SetReadDeadline(linger)
@@ -247,6 +282,7 @@ func splice(client, upstream net.Conn) {
 	<-done
 	_ = client.Close()
 	_ = upstream.Close()
+	return sent.Load(), received.Load()
 }
 
 // stallBounded renews the write deadline before each write; see spliceStall.

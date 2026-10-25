@@ -23,7 +23,7 @@ func startDoorFrontDoor(t *testing.T, pod *testPod, doors int) (string, *network
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 	addr := listener.Addr().String()
-	hub := network.NewTunnelHub(func(id string) string { return "vif://" + addr + "/" + id }, doors)
+	hub := network.NewTunnelHub(func(id string) string { return "vif://" + addr + "/" + id }, doors, 0)
 	router := newTCPRouter(&fakeSessionAllocator{routeErr: errSessionUnknown}, newHolds(1), network.NewAdmissionLimiter(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	router.tunnels = hub
 	router.opens = 500 * time.Millisecond

@@ -178,6 +178,9 @@ const (
 	NetworkTunnelKeepInterval = 20 * time.Second
 	NetworkTunnelKeepLost     = 3 * NetworkTunnelKeepInterval
 	NetworkTunnelOpenTimeout  = 5 * time.Second
+	// NetworkTunnelResumeWindow is how long a router keeps a door's name and token
+	// after its control connection went, for the run that held it to resume it.
+	NetworkTunnelResumeWindow = 10 * time.Minute
 
 	// NetworkJoinConnectTimeout bounds a join's connect. A browser opens its socket
 	// through TLS, an HTTP upgrade and the site's proxy, round trips a loaded link

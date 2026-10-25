@@ -28,6 +28,7 @@ ExecStart=/usr/local/bin/vif-router \
     -web-origin ${VIF_ROUTER_WEB_ORIGIN} \
     -route-max ${VIF_ROUTER_ROUTE_MAX} \
     -tunnels ${VIF_ROUTER_TUNNELS} \
+    -doors-per-address ${VIF_ROUTER_DOORS_PER_ADDRESS} \
     -client-address-header ${VIF_ROUTER_CLIENT_ADDRESS_HEADER} \
     -client-joins ${VIF_ROUTER_CLIENT_JOINS} \
     -client-creates ${VIF_ROUTER_CLIENT_CREATES} \

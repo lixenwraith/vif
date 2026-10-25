@@ -28,6 +28,41 @@ type scriptResult struct {
 	err   error
 }
 
+// TestAScriptCannotHoldItsOwnRun: a script's :pause would stand for good, since its
+// driven loop takes no step while the run is held, so the request is refused and
+// the timeline plays on.
+func TestAScriptCannotHoldItsOwnRun(t *testing.T) {
+	t.Parallel()
+	script, err := journal.ParseScript([]byte(`
+schema = 1
+ticks = 4
+[[action]]
+tick = 1
+event = "GameHoldRequest"
+payload = "paused = true"
+`))
+	if err != nil {
+		t.Fatalf("script: %v", err)
+	}
+	a, err := NewHeadless(Config{
+		Mode: ModeHeadless, Resources: resource.Options{Embedded: true}, Seed: 0x5C72, Width: 80, Height: 24,
+	})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	driver, err := journal.NewScriptDriver(scriptTarget{a: a}, script)
+	if err != nil {
+		t.Fatalf("driver: %v", err)
+	}
+	if err := driver.RunAll(); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if a.Context().TimeCtl.Held() {
+		t.Fatal("a script held its own run")
+	}
+}
+
 func TestAuthoredScriptUsesTheHeadlessInjectionAndJournalPath(t *testing.T) {
 	t.Parallel()
 	script, err := journal.ParseScript([]byte(`

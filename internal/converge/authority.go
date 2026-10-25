@@ -1137,8 +1137,34 @@ func (u *Authority) onReport(from uint32, body []byte) {
 	if !u.recordReport(rep) {
 		return
 	}
+	u.takeBack(rep)
 	u.flood(network.MsgAuthorityReport, from, body)
 	u.drive()
+}
+
+// takeBack gives a survivor whose membership report at this term reached the host it
+// authors after the floor its place back, with its seats', over the link it already
+// holds, as a claim's return would: the floor sent it away for a report still on its
+// way, a dial that outlasted the window or a hop more than the floor allowed.
+func (u *Authority) takeBack(rep network.AuthorityReport) {
+	u.mu.Lock()
+	hosts := u.holder == u.local && u.contested == 0 && rep.Term == u.term && u.reconcileAt == 0
+	u.mu.Unlock()
+	if !hosts {
+		return
+	}
+	var back []network.RosterEntry
+	for _, p := range u.currentRoster() {
+		if p.Away && (p.ID == rep.From && p.Holder == 0 || p.Holder == rep.From) {
+			back = append(back, p)
+		}
+	}
+	if len(back) == 0 {
+		return
+	}
+	u.log.Info("session", "msg", "late survivor taken back", "peer", uint64(rep.From),
+		"term", uint64(rep.Term), "places", len(back))
+	u.inst.CrossReturns(back)
 }
 
 // answer re-sends the record this instance follows to a survivor still walking: the

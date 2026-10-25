@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
+	"net"
 )
 
 type fakeSessionAllocator struct {
@@ -120,7 +122,8 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 	}).ServeHTTP(response, request)
 
 	want := `{"sessions":[],"limits":{"players_max":4,"players_default":4,"bots_max":0,` +
-		`"log_levels":["info"],"log_level_default":"info","size_default":"first","scenarios":["main"]}}`
+		`"log_levels":["info"],"log_level_default":"info","size_default":"first","scenarios":["main"],` +
+		`"sessions_max":0,"doors":0,"doors_max":0}}`
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -137,7 +140,7 @@ func TestGetSessionsNamesScenarioDescriptionsBesideTheList(t *testing.T) {
 			Scenarios: []string{"main", "td"}, Descriptions: map[string]string{"td": "Hold the line."}},
 	}).ServeHTTP(response, request)
 
-	want := `"scenarios":["main","td"],"scenario_descriptions":{"td":"Hold the line."}}`
+	want := `"scenarios":["main","td"],"scenario_descriptions":{"td":"Hold the line."},"sessions_max":0`
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), want) {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -306,5 +309,28 @@ func TestTheBrowserRouteRefusesEverythingButAnUpgradeFromItsOrigin(t *testing.T)
 	testServer(&fakeSessionAllocator{}).ServeHTTP(response, upgrade(http.MethodGet, live))
 	if response.Code != http.StatusNotImplemented {
 		t.Errorf("unconfigured route status = %d", response.Code)
+	}
+}
+
+// TestTheListingCountsTheDoors: the listing's limits carry the fleet's size and the
+// doors published through the router, so a page can say what the site has room for.
+func TestTheListingCountsTheDoors(t *testing.T) {
+	hub := network.NewTunnelHub(func(id string) string { return id }, 3, 0)
+	run, router := net.Pipe()
+	defer run.Close()
+	go func() { _, _ = link.DecodeWithin(run, network.MaxTunnelFrame) }()
+	if _, err := hub.Publish(router, "", network.PublishRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	server := testServer(&fakeSessionAllocator{bounds: fleetLimits{SessionsMax: 10}})
+	server.routeDoors(hub)
+	request := httptest.NewRequest(http.MethodGet, "/vif/api/sessions", nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	body := response.Body.String()
+	for _, want := range []string{`"sessions_max":10`, `"doors":1`, `"doors_max":3`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("the listing reads %s; want %s", body, want)
+		}
 	}
 }

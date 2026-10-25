@@ -69,7 +69,7 @@ func run(args []string, logger *slog.Logger) error {
 	if cfg.Allocator.Tunnels > 0 {
 		tunnels = network.NewTunnelHub(func(id string) string {
 			return "vif://" + net.JoinHostPort(cfg.Allocator.JoinHost, strconv.Itoa(cfg.Allocator.RoutePort)) + "/" + id
-		}, cfg.Allocator.Tunnels)
+		}, cfg.Allocator.Tunnels, cfg.Allocator.DoorsPerAddress)
 	}
 	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held, joins)
 	handler.routeDoors(tunnels)

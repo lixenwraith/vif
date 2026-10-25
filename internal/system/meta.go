@@ -51,6 +51,9 @@ type MetaSystem struct {
 	// holdUntil is the tick a hold this instance asked for is due by, zero when
 	// none is on its way: a second ask before then asks nothing more.
 	holdUntil uint64
+	// endsAtLanding is a :pause off asked while the hold it ends was still crossing,
+	// applied as that hold lands.
+	endsAtLanding bool
 }
 
 // NewMetaSystem creates a new meta system
@@ -709,15 +712,21 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 func (s *MetaSystem) handleHoldRequest(held, session bool) {
 	if !held {
 		start := s.ctx.TimeCtl.Holds(engine.HoldStart)
-		if s.ctx.Hold(false) && !start {
-			s.ctx.SetStatusMessage("Resumed", parameter.StatusNotice)
+		if s.ctx.Hold(false) {
+			if !start {
+				s.ctx.SetStatusMessage("Resumed", parameter.StatusNotice)
+			}
+			return
 		}
+		// An end asked while the hold it ends is still crossing applies as it lands.
+		s.endsAtLanding = s.holdUntil != 0 && !s.ctx.TimeCtl.Held()
 		return
 	}
 	if session {
 		s.ctx.HoldAs(engine.HoldFreeze)
 		return
 	}
+	s.endsAtLanding = false
 	tick := s.world.Resources.Game.State.GetGameTicks()
 	if s.ctx.TimeCtl.Held() || tick < s.holdUntil {
 		return
@@ -731,6 +740,14 @@ func (s *MetaSystem) handleHoldRequest(held, session bool) {
 func (s *MetaSystem) handleHold(byHost bool) {
 	s.holdUntil = 0
 	if !s.ctx.Hold(true) {
+		return
+	}
+	if s.endsAtLanding {
+		// Ended before it landed: the hold stands for this tick alone, as the host's
+		// next :pause would end it, and every guest resumes on the epoch that follows.
+		s.endsAtLanding = false
+		s.ctx.Hold(false)
+		s.ctx.SetStatusMessage("Resumed", parameter.StatusNotice)
 		return
 	}
 	if byHost {

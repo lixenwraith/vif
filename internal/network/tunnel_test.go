@@ -32,7 +32,7 @@ func startDoorRouter(t *testing.T, max int) *doorRouter {
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	r := &doorRouter{addr: ln.Addr().String(), open: 2 * time.Second}
-	r.hub = NewTunnelHub(func(id string) string { return "vif://" + r.addr + "/" + id }, max)
+	r.hub = NewTunnelHub(func(id string) string { return "vif://" + r.addr + "/" + id }, max, 0)
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -55,7 +55,7 @@ func (r *doorRouter) place(conn net.Conn) {
 	case MsgSessionPublish:
 		var req PublishRequest
 		_ = json.Unmarshal(first.Payload, &req)
-		if d, err := r.hub.Publish(conn, req); err == nil {
+		if d, err := r.hub.Publish(conn, "", req); err == nil {
 			r.hub.Serve(d)
 		}
 	case MsgTunnelAccept:
@@ -228,7 +228,7 @@ func TestADialOnASilentDoorIsRefusedInTime(t *testing.T) {
 		_, _ = link.DecodeWithin(control, MaxTunnelFrame)
 		_, _ = link.DecodeWithin(control, MaxTunnelFrame)
 	}()
-	d, err := r.hub.Publish(router, PublishRequest{Session: "quiet"})
+	d, err := r.hub.Publish(router, "", PublishRequest{Session: "quiet"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,5 +257,110 @@ func TestADialOnASilentDoorIsRefusedInTime(t *testing.T) {
 			t.Fatalf("a connection back on a ticket nobody waits for read %v, want it closed", err)
 		}
 		_ = conn.Close()
+	}
+}
+
+// TestADoorNameIsResumedOnlyByItsRun: a name is resumed by the run that was issued
+// it, live or within the window of losing its control connection; a name the router
+// never issued, a pod's or anyone's, is nobody's to take, and one lost longer ago
+// than the window is gone.
+func TestADoorNameIsResumedOnlyByItsRun(t *testing.T) {
+	t.Parallel()
+	r := startDoorRouter(t, 2)
+	r.hub.resumeWindow = 300 * time.Millisecond
+	publish := func(req PublishRequest) (net.Conn, Published) {
+		t.Helper()
+		conn, err := net.Dial("tcp", r.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(req)
+		_ = link.NewMessage(MsgSessionPublish, body).Encode(conn)
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		msg, err := link.DecodeWithin(conn, MaxTunnelFrame)
+		var ans Published
+		if err != nil || msg.Type != MsgSessionPublished || json.Unmarshal(msg.Payload, &ans) != nil {
+			t.Fatalf("answered %v, %v", msg, err)
+		}
+		_ = conn.SetReadDeadline(time.Time{})
+		return conn, ans
+	}
+	refused := func(ans Published, what string) {
+		t.Helper()
+		var refusal *Refusal
+		if err := ans.Refused(); !errors.As(err, &refusal) || refusal.Code != RefusalIdentity {
+			t.Fatalf("%s: answered %+v (%v), want a refusal of the name", what, ans, err)
+		}
+	}
+	gone := func(id string) {
+		t.Helper()
+		for deadline := time.Now().Add(2 * time.Second); r.hub.Has(id); time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("the lost door was not removed")
+			}
+		}
+	}
+	conn, ans := publish(PublishRequest{ID: "0123456789abcdef", Resume: "deadbeef"})
+	_ = conn.Close()
+	refused(ans, "a name never issued here")
+
+	control, first := publish(PublishRequest{Session: "mine"})
+	if err := first.Refused(); err != nil {
+		t.Fatalf("published: %v", err)
+	}
+	_ = control.Close()
+	gone(first.ID)
+	control, again := publish(PublishRequest{ID: first.ID, Resume: first.Resume})
+	if err := again.Refused(); err != nil || again.ID != first.ID {
+		t.Fatalf("resumed as %+v (%v), want %q kept", again, err, first.ID)
+	}
+	conn, ans = publish(PublishRequest{ID: first.ID, Resume: "0000"})
+	_ = conn.Close()
+	refused(ans, "the name with another token")
+
+	_ = control.Close()
+	gone(first.ID)
+	time.Sleep(400 * time.Millisecond)
+	conn, ans = publish(PublishRequest{ID: first.ID, Resume: first.Resume})
+	_ = conn.Close()
+	refused(ans, "a name lost longer ago than the window")
+}
+
+// TestAnAddressPublishesAsManyDoorsAsItMay: one address holds at most the doors the
+// router allows it, under the router's own count, and may publish again once one of
+// its doors has gone; another address is counted apart.
+func TestAnAddressPublishesAsManyDoorsAsItMay(t *testing.T) {
+	t.Parallel()
+	hub := NewTunnelHub(func(id string) string { return id }, 8, 2)
+	publish := func(from string) (*PublishedDoor, error) {
+		t.Helper()
+		run, router := net.Pipe()
+		go func() { _, _ = link.DecodeWithin(run, MaxTunnelFrame) }()
+		d, err := hub.Publish(router, from, PublishRequest{})
+		if err != nil {
+			_ = run.Close()
+		}
+		return d, err
+	}
+	var doors []*PublishedDoor
+	for i := range 2 {
+		d, err := publish("10.0.0.1")
+		if err != nil {
+			t.Fatalf("door %d: %v", i+1, err)
+		}
+		doors = append(doors, d)
+	}
+	if _, err := publish("10.0.0.1"); !errors.Is(err, ErrDoorsPerAddress) {
+		t.Fatalf("a third door from one address: %v, want the per-address refusal", err)
+	}
+	if _, err := publish("10.0.0.2"); err != nil {
+		t.Fatalf("another address: %v", err)
+	}
+	hub.remove(doors[0])
+	if _, err := publish("10.0.0.1"); err != nil {
+		t.Fatalf("after one of its doors went: %v", err)
+	}
+	if hub.Count() != 3 {
+		t.Fatalf("the hub carries %d doors, want 3", hub.Count())
 	}
 }

@@ -302,6 +302,48 @@ func TestAJoinerLandsInAHeldSessionHeld(t *testing.T) {
 	assertSharedParity(t, host, guest, 1)
 }
 
+// TestAJoinThroughARelayLandsInAHeldSessionHeld: a relay's gate meets a hold as the
+// host's does. The hold goes out as the held tick's round, the relay proves the held
+// world from it and hands it to the joiner, which lands held where the session
+// stands, and runs on with everyone when the host resumes.
+func TestAJoinThroughARelayLandsInAHeldSessionHeld(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	// A driven host takes no step while held, so its end is settled here, as a
+	// :pause off at its console would be.
+	hold := func(held bool) {
+		host.world.RunSafe(func() {
+			host.ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: held})
+		})
+		host.Settle()
+	}
+	hold(true)
+	waitUntil(t, func() bool { return host.Context().TimeCtl.Held() && relay.Context().TimeCtl.Held() }, "the session held")
+	at := host.Position().Tick
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	waitUntil(t, func() bool { return person.Context().TimeCtl.Held() }, "the joiner held")
+	if tick := person.Position().Tick; tick != at || host.Position().Tick != at {
+		t.Fatalf("the joiner holds at tick %d and the host stands at %d, want both at %d", tick, host.Position().Tick, at)
+	}
+	if got := person.Context().GetStatusMessage(); got != "Paused by the host" {
+		t.Fatalf("the joiner was told %q", got)
+	}
+	hold(false)
+	for _, a := range []*App{host, relay, person} {
+		waitForCursors(t, a, 4)
+	}
+	if tick := person.Position().Tick; tick <= at || person.Context().TimeCtl.Held() {
+		t.Fatalf("after the host resumed the joiner holds %v at tick %d, want running past %d",
+			person.Context().TimeCtl.Held(), tick, at)
+	}
+}
+
 // TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism: a dropped
 // participant leaves a Wraith in its slot, and what comes back is an ordinary dial,
 // which the full session admits once that Wraith gives up its place. The join runs
@@ -1250,6 +1292,47 @@ func TestTheHostsNextTickResumesItsGuests(t *testing.T) {
 		tickAll(apps)
 	}
 	assertMeshParity(t, apps, 0)
+}
+
+// TestAPauseOffBeforeTheHoldLandsEndsItAtTheLanding: :pause off asked while the host's
+// hold still crosses ends it as it lands: the host takes the next tick and its
+// guests, held at the agreed tick, resume on the epoch that follows; a :pause asked
+// again before the landing keeps the hold.
+func TestAPauseOffBeforeTheHoldLandsEndsItAtTheLanding(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A6, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	host, guest := apps[0], apps[1]
+	say := func(cmd string) {
+		mode.ExecuteCommand(host.Context(), cmd)
+		host.Settle()
+	}
+	say("pause")
+	say("pause off")
+	for range parameter.NetworkBarrierMaxDelayTicks + 4 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if a.Context().TimeCtl.Held() {
+			t.Fatalf("participant %d holds after a :pause off asked before the landing", i+1)
+		}
+	}
+	if h, g := host.Context().GetStatusMessage(), guest.Context().GetStatusMessage(); h != "Resumed" || g != "Resumed by the host" {
+		t.Fatalf("the host was told %q and the guest %q; want the landing resumed on both", h, g)
+	}
+	assertMeshParity(t, apps, 0)
+
+	say("pause")
+	say("pause off")
+	say("pause")
+	for range parameter.NetworkBarrierMaxDelayTicks + 4 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if !a.Context().TimeCtl.Held() {
+			t.Fatalf("participant %d runs after the host asked for its pause again", i+1)
+		}
+	}
 }
 
 // TestANewGameEndsAHold: the reset crossed for :new applies at a tick a held session

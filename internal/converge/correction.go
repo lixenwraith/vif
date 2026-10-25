@@ -70,6 +70,8 @@ type Corrections struct {
 	saidFloor     bool
 	saidUnrelayed bool
 	nextBroadcast uint64
+	heldRound     bool // a round went out for the hold standing at heldTick; see publishRound
+	heldTick      uint64
 
 	// driven marks a run whose caller paces the cadence itself. Two publishers on one
 	// cadence leave the receiver holding a world newer than the one the driver was
@@ -99,6 +101,11 @@ type Corrections struct {
 	// instance has not reached yet, kept until it has. At most one waits.
 	held     snapshot.SharedCapture
 	haveHeld bool
+
+	// lastProved is the whole world this instance proved the authority's last, kept
+	// while a hold stands for a join arriving once the held tick has been proved.
+	lastProved snapshot.SharedCapture
+	haveProved bool
 
 	// proving are the joins through this instance waiting for a world it proves
 	// the authority's at or past a tick; see ProvedWorld.
@@ -240,6 +247,9 @@ func newCorrections(inst Instance, tel snapshot.Telemetry) *Corrections {
 	}
 }
 
+// provedPoll is how often ProvedWorld looks for a hold that landed as it waited.
+const provedPoll = 10 * time.Millisecond
+
 // keyframePoll is how often KeyframeAt looks at a clock that has not yet reached
 // the tick a join asked to be described a world at.
 const keyframePoll = time.Millisecond
@@ -336,6 +346,11 @@ func (c *Corrections) publishRound(force bool) error {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 	tick := c.followRunLocked().Tick
+	// A hold's tick goes out whatever the schedule says, once per hold: a relay
+	// proves the held world from it and serves a join through it there (ProvedWorld).
+	held := c.inst.Held()
+	force = force || held && !(c.heldRound && c.heldTick == tick)
+	c.heldRound, c.heldTick = held, tick
 
 	meter, _ := port.(engine.LinkMeasuringPort)
 	ids := c.peerIDs(meter)
@@ -886,6 +901,7 @@ func (c *Corrections) followRunLocked() event.Stamp {
 	c.installedMu.Lock()
 	c.lastInstalled, c.keyTick = 0, 0
 	c.held, c.haveHeld = snapshot.SharedCapture{}, false
+	c.lastProved, c.haveProved = snapshot.SharedCapture{}, false
 	c.installedMu.Unlock()
 
 	c.selectiveMu.Lock()
@@ -910,6 +926,10 @@ func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 	for {
 		c.publishMu.Lock()
 		at := c.followRunLocked()
+		// A held session reaches no lead past its tick: its world is the held tick's.
+		if minTick > at.Tick && c.inst.Held() {
+			minTick = at.Tick
+		}
 		if c.haveKey && c.baseline.Header.Tick >= minTick {
 			var err error
 			if c.keyBody == nil {
@@ -1341,15 +1361,45 @@ type provedWait struct {
 func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	w := provedWait{tick: minTick, ch: make(chan snapshot.SharedCapture, 1)}
 	c.installedMu.Lock()
+	if cap, ok := c.lastProvedLocked(minTick); ok {
+		c.installedMu.Unlock()
+		return c.encodeProved(cap)
+	}
 	c.proving = append(c.proving, w)
 	c.installedMu.Unlock()
 	timer := time.NewTimer(time.Until(deadline)) // [wall] a link bound
 	defer timer.Stop()
-	select {
-	case cap := <-w.ch:
-		return c.encodeProved(cap)
-	case <-timer.C:
-	case <-c.stop:
+	poll := time.NewTicker(provedPoll)
+	defer poll.Stop()
+	for waiting := true; waiting; {
+		select {
+		case cap := <-w.ch:
+			return c.encodeProved(cap)
+		case <-poll.C:
+			// A hold that landed since lowers what the join waits for: the session
+			// reaches no further, and the held tick's world is what it is handed.
+			if !c.inst.Held() {
+				continue
+			}
+			at := c.inst.Position().Tick
+			c.installedMu.Lock()
+			i := slices.IndexFunc(c.proving, func(o provedWait) bool { return o.ch == w.ch })
+			if i >= 0 && at < c.proving[i].tick {
+				c.proving[i].tick = at
+			}
+			cap, ok := c.lastProvedLocked(at)
+			if ok = ok && i >= 0; ok {
+				c.proving = slices.Delete(c.proving, i, i+1)
+			}
+			c.installedMu.Unlock()
+			if ok {
+				return c.encodeProved(cap)
+			}
+		case <-timer.C:
+			waiting = false
+		case <-c.stop:
+			waiting = false
+		}
 	}
 	c.installedMu.Lock()
 	c.proving = slices.DeleteFunc(c.proving, func(o provedWait) bool { return o.ch == w.ch })
@@ -1360,6 +1410,16 @@ func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) ([]byte, u
 	default:
 	}
 	return nil, 0, fmt.Errorf("no world proved the authority's past tick %d in time", minTick)
+}
+
+// lastProvedLocked is the whole world this instance proved last, if it is at or past
+// tick: what a join is handed once a held session's tick has been proved, the proof
+// having come before the join. Caller MUST hold installedMu.
+func (c *Corrections) lastProvedLocked(tick uint64) (snapshot.SharedCapture, bool) {
+	if !c.haveProved || c.lastProved.Header.Tick < tick {
+		return snapshot.SharedCapture{}, false
+	}
+	return c.lastProved, true
 }
 
 // encodeProved reseals a proved world over this instance's cursor cells and encodes it.
@@ -1379,8 +1439,10 @@ func (c *Corrections) offerProved(cap snapshot.SharedCapture) {
 	c.installedMu.Unlock()
 }
 
-// offerProvedLocked hands a proved world to every join waiting for one this fresh.
-// Caller MUST hold installedMu.
+// offerProvedLocked hands a proved world to every join waiting for one this fresh,
+// and keeps it for one arriving while a hold stands, which no newer proof follows;
+// a running session keeps none, since its next proof is a cadence away. Caller MUST
+// hold installedMu.
 func (c *Corrections) offerProvedLocked(cap snapshot.SharedCapture) {
 	c.proving = slices.DeleteFunc(c.proving, func(w provedWait) bool {
 		if cap.Header.Tick < w.tick {
@@ -1389,6 +1451,12 @@ func (c *Corrections) offerProvedLocked(cap snapshot.SharedCapture) {
 		w.ch <- cap
 		return true
 	})
+	c.haveProved = c.inst.Held()
+	if c.haveProved {
+		c.lastProved = cap
+	} else {
+		c.lastProved = snapshot.SharedCapture{}
+	}
 }
 
 // holdingThrough reports whether a held correction has become due by tick.

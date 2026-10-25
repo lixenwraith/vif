@@ -52,6 +52,8 @@ type allocatorConfig struct {
 	WebOrigin string
 	// RouteMax bounds one session's connections through the front door and the
 	Tunnels int // doors runs may publish through the router at once; 0 publishes none
+	// DoorsPerAddress bounds the doors one address holds at once; 0 leaves it to -tunnels.
+	DoorsPerAddress int
 	// browser route together; see holds.
 	RouteMax int
 	// ClientAddressHeader is the header the site's edge overwrites with the player's
@@ -95,6 +97,12 @@ type fleetLimits struct {
 	FixedMaps       map[string]string `json:"scenario_fixed_maps,omitempty"`
 	MinPlayers      map[string]int    `json:"scenario_min_players,omitempty"`
 	MaxPlayers      map[string]int    `json:"scenario_max_players,omitempty"`
+	// SessionsMax is the fleet's size, its NodePort pool; Doors and DoorsMax the doors
+	// runs publish through the router and the most it carries, for a page to say
+	// what the site has room for.
+	SessionsMax int `json:"sessions_max"`
+	Doors       int `json:"doors"`
+	DoorsMax    int `json:"doors_max"`
 }
 
 type session struct {
@@ -145,7 +153,7 @@ func (a *allocator) limits() fleetLimits {
 	w := a.cfg.Workload
 	out := fleetLimits{PlayersMax: a.cfg.PlayersMax, PlayersDefault: w.Players, BotsMax: a.cfg.BotsMax,
 		LogLevels: a.cfg.LogLevels, LogLevelDefault: w.LogLevel, SizeDefault: w.Size,
-		Scenarios: a.scenarios()}
+		Scenarios: a.scenarios(), SessionsMax: a.cfg.PortLast - a.cfg.PortFirst + 1}
 	a.describe(&out)
 	return out
 }

@@ -42,6 +42,7 @@ type sessionAllocator interface {
 }
 
 type apiServer struct {
+	tunnels   *network.TunnelHub // the doors runs publish, counted in the listing's limits; nil publishes none
 	allocator sessionAllocator
 	log       *slog.Logger
 	logProxy  *httputil.ReverseProxy
@@ -112,6 +113,7 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 // routeDoors lets the browser route place a stream on a door a run published, as
 // the front door does; nil places on pods alone.
 func (s *apiServer) routeDoors(tunnels *network.TunnelHub) {
+	s.tunnels = tunnels
 	if s.ws != nil {
 		s.ws.route.tunnels = tunnels
 	}
@@ -236,6 +238,9 @@ func (s *apiServer) readFleet(read *fleetRead) {
 	read.sessions, read.err = s.allocator.listSessions(ctx)
 	cancel()
 	read.limits = s.allocator.limits()
+	if s.tunnels != nil {
+		read.limits.Doors, read.limits.DoorsMax = s.tunnels.Count(), s.tunnels.Max()
+	}
 	l := &s.list
 	l.mu.Lock()
 	if l.read == read {

@@ -46,9 +46,12 @@ type membership struct {
 	dialling  atomic.Bool // a :join is being dialled while this run plays on
 	leaving   atomic.Bool // a :leave or a fork is waiting for Loop, or being served by it
 
-	pendingJoin  *network.PendingJoin
-	sessionMu    sync.Mutex
-	sessionOffer network.SessionOffer
+	pendingJoin *network.PendingJoin
+	// landingHeld and landingStart are the hold the world a join installs lands in,
+	// set around that install for the journal to record with it (landingHold).
+	landingHeld, landingStart bool
+	sessionMu                 sync.Mutex
+	sessionOffer              network.SessionOffer
 
 	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
 	// entry per accepted connection and closes into the offer the start gate sends.
@@ -184,6 +187,9 @@ func (a *App) barrierLocked() bool         { return a.membership.barrierLocked()
 func (a *App) authorityStamp() (network.AuthorityTerm, uint32) {
 	return a.membership.authorityStamp()
 }
+
+// landingHold is the hold the world a join installs lands in; see membership.landingHold.
+func (a *App) landingHold() (held, start bool) { return a.membership.landingHold() }
 
 // replacing reports whether a run to replace this one is latched already.
 func (a *App) replacing() bool { return a.restart.Load() != nil }

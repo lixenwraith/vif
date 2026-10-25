@@ -27,6 +27,7 @@ type stub struct {
 	mu     sync.Mutex
 	stamp  event.Stamp
 	frozen bool
+	held   bool
 	local  uint32
 	roster []network.RosterEntry
 	port   engine.NetworkPort
@@ -37,6 +38,7 @@ type stub struct {
 	adopted   []snapshot.CaptureHeader
 	handoffs  []adopted
 	departed  [][]network.RosterEntry
+	returned  [][]network.RosterEntry
 	forked    int
 	forkedAs  []network.RosterEntry
 	thawed    int
@@ -78,6 +80,18 @@ func (s *stub) Position() event.Stamp {
 // Driven is always true: a criterion paces its own publications, and a pump beside
 // it would be a second thing deciding when a correction leaves.
 func (s *stub) Driven() bool { return true }
+
+func (s *stub) Held() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.held
+}
+
+func (s *stub) setHeld(held bool) {
+	s.mu.Lock()
+	s.held = held
+	s.mu.Unlock()
+}
 
 func (s *stub) LocalParticipant() uint32 { return s.local }
 
@@ -205,6 +219,23 @@ func (s *stub) CrossDepartures(away []network.RosterEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.departed = append(s.departed, away)
+	s.markAwayLocked(away, true)
+}
+
+func (s *stub) CrossReturns(back []network.RosterEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.returned = append(s.returned, back)
+	s.markAwayLocked(back, false)
+}
+
+// markAwayLocked marks each place as a departure, or a return, leaves it on the run.
+func (s *stub) markAwayLocked(who []network.RosterEntry, away bool) {
+	for i := range s.roster {
+		if slices.ContainsFunc(who, func(p network.RosterEntry) bool { return p.ID == s.roster[i].ID }) {
+			s.roster[i].Away = away
+		}
+	}
 }
 
 func (s *stub) Forked(roster []network.RosterEntry, _ link.PeerID) {

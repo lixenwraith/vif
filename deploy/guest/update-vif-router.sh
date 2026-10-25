@@ -24,13 +24,6 @@ backup_binary=/usr/local/libexec/vif-router.previous
 backup_env=/etc/vif-router/router.env.previous
 backup_unit=/etc/systemd/system/vif-router.service.previous
 
-# A node still running vif-allocator, the router's name before, is rewired once by
-# migrate-vif-router.sh; nothing here reads the allocator's files.
-if ! sudo test -f "$installed_env" && sudo test -f /etc/vif-allocator/allocator.env; then
-	echo "$0: vif-allocator is installed and vif-router is not: run deploy/guest/migrate-vif-router.sh once" >&2
-	exit 1
-fi
-
 # The repository's settings plus the node's VIF_ROUTER_IMAGE, which names what this
 # node last built: update-vif-image.sh writes it and this carries it over.
 render_env() {
