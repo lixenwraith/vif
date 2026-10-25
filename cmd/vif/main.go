@@ -76,10 +76,13 @@ var (
 
 	// settings is vif.toml as the roots of -config-dir resolved it, settingsFile the
 	// file it came from ("" the embedded one), and settingsStore where the run
-	// writes it back as [play] changes.
-	settings      paths.Settings
-	settingsFile  string
-	settingsStore paths.SettingsStore
+	// writes it back as [play] changes; settingsUnknown are the keys it held that
+	// this build does not know, and settingsNotice what dropping them said.
+	settings        paths.Settings
+	settingsFile    string
+	settingsStore   paths.SettingsStore
+	settingsUnknown paths.UnknownKeys
+	settingsNotice  string
 )
 
 func init() {
@@ -119,13 +122,16 @@ func main() {
 		return
 	}
 	var err error
-	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil {
+	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil && !errors.As(err, &settingsUnknown) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
 	settingsStore = paths.SettingsFor(flagConfig.dir, settingsFile)
 	if pageSettings != nil {
-		settingsStore = pageSettings(&settings)
+		settingsStore, settingsUnknown = pageSettings(&settings)
+	}
+	if settingsUnknown != nil && !*flagCheck && !*flagSchema {
+		settingsNotice = paths.DropUnknown(settingsStore, settingsUnknown)
 	}
 	// -g given either way decides, and -cli over it; unset, vif.toml's
 	// [presentation] or the build does. The window's state follows the same rule.
@@ -185,7 +191,11 @@ func main() {
 	case *flagSchema:
 		err = manifest.Schema(os.Stdout)
 	case *flagCheck:
-		fmt.Println("settings ok:", cmp.Or(settingsFile, "embedded default"))
+		if settingsUnknown != nil {
+			fmt.Printf("settings %s: %v, which a run drops\n", settingsFile, settingsUnknown)
+		} else {
+			fmt.Println("settings ok:", cmp.Or(settingsFile, "embedded default"))
+		}
 		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "" && *flagHeadless:
 		err = verifyJournal(*flagReplay)
@@ -378,7 +388,7 @@ var (
 	openWindow                        func()
 	windowByDefault                   bool
 	windowMaximized, windowFullscreen bool
-	pageSettings                      func(*paths.Settings) paths.SettingsStore
+	pageSettings                      func(*paths.Settings) (paths.SettingsStore, paths.UnknownKeys)
 	pageClaims                        app.ClaimStore
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 )
@@ -428,7 +438,7 @@ func buildConfig() app.Config {
 	}
 	cfg.Bots, _ = app.BotSpecs(flagSession.bot)
 
-	cfg.Play, cfg.Settings, cfg.ClaimStore = settings.Play, settingsStore, pageClaims
+	cfg.Play, cfg.Settings, cfg.ClaimStore, cfg.Notice = settings.Play, settingsStore, pageClaims, settingsNotice
 	// -mute either way names both channels for this run, and -nw the wait; unset,
 	// [play] stands, and a value set here is never written back
 	flag.Visit(func(f *flag.Flag) {

@@ -85,8 +85,8 @@ var DefaultPlay = sync.OnceValue(func() Play {
 })
 
 // UnknownKeys names the keys a settings document holds that this build has no
-// field for. The game refuses such a document; a tool that reads only some of it
-// may go on, as every key it does know has been read by the time this is returned.
+// field for, every key it does know read by the time this is returned. A run drops
+// them from the document it writes back to (DropUnknown); soundlab only names them.
 type UnknownKeys []string
 
 func (u UnknownKeys) Error() string {
@@ -129,6 +129,34 @@ func LoadSettings(override string) (Settings, string, error) {
 	return s, path, nil
 }
 
+// DropUnknown removes keys from the store's document, each line setting one and
+// each table one names, every other line kept, comments included. It writes only a
+// document that then reads whole, and returns the status line saying which it did.
+func DropUnknown(s SettingsStore, keys UnknownKeys) string {
+	err := errors.New("nowhere to write the settings back")
+	if s != nil {
+		err = dropUnknown(s, keys)
+	}
+	if err != nil {
+		return "Ignored " + keys.Error() + ", not dropped: " + err.Error()
+	}
+	return "Dropped " + keys.Error()
+}
+
+func dropUnknown(s SettingsStore, keys UnknownKeys) error {
+	saving.Lock()
+	defer saving.Unlock()
+	data, err := s.Load()
+	if err != nil {
+		return err
+	}
+	out := dropKeys(data, keys)
+	if _, err := ParseSettings(out); err != nil {
+		return err
+	}
+	return s.Store(out)
+}
+
 // ParseSettings reads a settings document over the embedded one, as LoadSettings
 // reads a file; a path in it stays as it is written. Unknown keys fail as
 // UnknownKeys with the settings read in full.
@@ -164,7 +192,7 @@ func (s *Settings) resolve(dir string) {
 // so a copy elsewhere names the same files; "~/" stays as written.
 func rebase(data []byte, dir string) ([]byte, error) {
 	s, err := ParseSettings(data)
-	if err != nil {
+	if err != nil && !errors.As(err, new(UnknownKeys)) {
 		return nil, err
 	}
 	was := reflect.ValueOf(s.Paths)
@@ -363,6 +391,42 @@ func setKeys(doc []byte, table string, body []byte) []byte {
 		at = len(lines) - 1
 	}
 	return []byte(strings.Join(slices.Insert(lines, at+1, missing...), ""))
+}
+
+// dropKeys removes from doc each line setting one of keys or a key under it, and
+// each table header naming one with the keys under that header; every other line,
+// a comment or a blank, stays as it is.
+func dropKeys(doc []byte, keys UnknownKeys) []byte {
+	under := func(name string) bool {
+		return slices.ContainsFunc(keys, func(k string) bool { return name == k || strings.HasPrefix(name, k+".") })
+	}
+	var out strings.Builder
+	table, gone := "", false // the table a line is in, and whether its header was dropped
+	for l := range strings.Lines(string(doc)) {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "[") {
+			header, _, _ := strings.Cut(t, "#")
+			table = dotted(strings.Trim(strings.TrimSpace(header), "[]"))
+			if gone = under(table); gone {
+				continue
+			}
+		} else if k, _, ok := strings.Cut(t, "="); ok && !strings.HasPrefix(t, "#") {
+			if name := dotted(k); gone || under(strings.TrimPrefix(table+"."+name, ".")) {
+				continue
+			}
+		}
+		out.WriteString(l)
+	}
+	return []byte(out.String())
+}
+
+// dotted is a dotted key as its name: a."b" . c is a.b.c
+func dotted(k string) string {
+	parts := strings.Split(k, ".")
+	for i, p := range parts {
+		parts[i] = unquote(p)
+	}
+	return strings.Join(parts, ".")
 }
 
 // unquote is a bare or quoted key as its name: "play", 'play' and play are play

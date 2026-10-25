@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -23,15 +24,18 @@ func init() {
 }
 
 // keptSettings reads the settings document the page kept from an earlier visit
-// over s; one this build cannot read is left out, and replaced at the first change.
-func keptSettings(s *paths.Settings) paths.SettingsStore {
+// over s, naming the keys in it this build does not know; one this build cannot
+// read at all is left out, and replaced at the first change.
+func keptSettings(s *paths.Settings) (paths.SettingsStore, paths.UnknownKeys) {
 	kept := &pageStore{doc: browser.Settings()}
-	if parsed, err := paths.ParseSettings(kept.doc); err == nil {
+	parsed, err := paths.ParseSettings(kept.doc)
+	var unknown paths.UnknownKeys
+	if err == nil || errors.As(err, &unknown) {
 		*s = parsed
 	} else {
 		kept.doc = nil
 	}
-	return kept
+	return kept, unknown
 }
 
 // pageStore is the settings document as the page keeps it, in the browser's
