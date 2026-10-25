@@ -2,6 +2,7 @@ package paths
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -97,9 +98,9 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 	}
 }
 
-// TestSettingsNameEveryUnknownKey: the game refuses a file naming keys it does not
-// know, and the error names each one while the keys it knows read in full, so
-// soundlab can go on with an older or newer vif.toml.
+// TestSettingsNameEveryUnknownKey: a file naming keys this build does not know
+// fails naming each one while the keys it knows read in full, so a run and soundlab
+// can go on with an older or newer vif.toml.
 func TestSettingsNameEveryUnknownKey(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -115,6 +116,50 @@ func TestSettingsNameEveryUnknownKey(t *testing.T) {
 	}
 	if s.Audio.BufferMs != 20 || path != filepath.Join(root, SettingsFile) {
 		t.Errorf("read %q with buffer_ms %d, want the file's 20 read alongside", path, s.Audio.BufferMs)
+	}
+}
+
+// TestDroppingUnknownKeysKeepsEveryOtherLine: the keys this build does not know go
+// from the file the run writes back to, tables they head included, and every other
+// line stays, comments too; a system root's file is left as it is and the user
+// root's copy is made without them.
+func TestDroppingUnknownKeysKeepsEveryOtherLine(t *testing.T) {
+	doc := "# mine\n[paths]\nlogs = \"x\" # misspelt\nlog = \"l\"\n\n[play]\n# kept\neffects = false\n" +
+		"mouse = false # mine\n\"volume\" = 0.25\n\n[later] # a newer build's\n# about later\nkey = 1\n" +
+		"[later.sub]\ndeep = 2\n\n[audio]\nbuffer_ms = 20\n"
+	want := "# mine\n[paths]\nlog = \"%s\"\n\n[play]\n# kept\nmouse = false # mine\n\n# about later\n\n" +
+		"[audio]\nbuffer_ms = 20\n"
+	user, system := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", user)
+	for _, c := range []struct{ name, root, wrote, log string }{
+		{"user root", filepath.Join(user, AppDirName), filepath.Join(user, AppDirName, SettingsFile), "l"},
+		{"system root", system, filepath.Join(user, AppDirName, SettingsFile), filepath.Join(system, "l")},
+	} {
+		t.Setenv(SystemRootsEnv, system)
+		os.RemoveAll(filepath.Join(user, AppDirName))
+		if err := os.MkdirAll(c.root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(c.root, SettingsFile), []byte(doc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, read, err := LoadSettings("")
+		var unknown UnknownKeys
+		if !errors.As(err, &unknown) {
+			t.Fatalf("%s: %v, want UnknownKeys", c.name, err)
+		}
+		if said := DropUnknown(SettingsFor("", read), unknown); !strings.HasPrefix(said, "Dropped unknown keys") {
+			t.Fatalf("%s: %s", c.name, said)
+		}
+		if got, _ := os.ReadFile(c.wrote); string(got) != fmt.Sprintf(want, c.log) {
+			t.Errorf("%s wrote:\n%s\nwant:\n%s", c.name, got, fmt.Sprintf(want, c.log))
+		}
+		if got, _ := os.ReadFile(filepath.Join(c.root, SettingsFile)); c.root == system && string(got) != doc {
+			t.Errorf("the system root's file was rewritten:\n%s", got)
+		}
+		if s, _, err := LoadSettings(""); err != nil || s.Play.Mouse || s.Audio.BufferMs != 20 {
+			t.Errorf("%s reads back as %+v, %v", c.name, s.Play, err)
+		}
 	}
 }
 
