@@ -71,12 +71,12 @@ type anchorField struct {
 // derives from, and the scenario's bytes, whose name is only a lookup hint.
 // Geometry is per-instance, and the corpus is player domain, read from each
 // machine's own roots and never reconciled (D-11, doc/multi-player.md).
-func (a *App) sessionAnchorFields(an event.JournalAnchor) []anchorField {
+func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []anchorField {
 	return []anchorField{
 		{"schema", an.Schema, uint64(event.JournalSchema)},
-		{"seed", an.Seed, a.world.Resources.Rand.Root()},
-		{"session", an.Session, a.world.Resources.Rand.Session()},
-		{"scenario_digest", an.ScenarioDigest, a.scenario.Digest()},
+		{"seed", an.Seed, sc.world.Resources.Rand.Root()},
+		{"session", an.Session, sc.world.Resources.Rand.Session()},
+		{"scenario_digest", an.ScenarioDigest, sc.scenario.Digest()},
 		{"tick_ns", an.TickInterval, int64(parameter.GameUpdateInterval)},
 	}
 }
@@ -85,10 +85,10 @@ func (a *App) sessionAnchorFields(an event.JournalAnchor) []anchorField {
 // A recorded run typed the blocks of one corpus, so replaying its input against
 // another yields different glyphs; a peer joining live only has to agree on the
 // world, and brings its own text into it.
-func (a *App) anchorIdentity(an event.JournalAnchor) []anchorField {
-	reg := a.world.Resources.Status
-	svc := service.MustGet[*service.ContentService](a.hub, "content")
-	return append(a.sessionAnchorFields(an),
+func (sc *scribe) anchorIdentity(an event.JournalAnchor) []anchorField {
+	reg := sc.world.Resources.Status
+	svc := service.MustGet[*service.ContentService](sc.hub, "content")
+	return append(sc.sessionAnchorFields(an),
 		anchorField{"content_id", an.ContentID, reg.Strings.Get("content.source").Load()},
 		anchorField{"content_pin", an.ContentPin, svc.Pin()},
 		anchorField{"content_files", an.ContentFiles, uint64(reg.Ints.Get("content.files").Load())},
@@ -112,10 +112,10 @@ func firstAnchorMismatch(kind string, fields []anchorField) error {
 // fingerprint is compared after construction: a discovered file or a changed corpus
 // becomes a startup error instead of an unexplained snapshot diff many ticks later.
 // Call after NewHeadless, before Replay.
-func (a *App) VerifyAnchor(an event.JournalAnchor) error {
-	fields := append(a.anchorIdentity(an),
-		anchorField{"width", an.Width, a.ctx.Width},
-		anchorField{"height", an.Height, a.ctx.Height})
+func (sc *scribe) VerifyAnchor(an event.JournalAnchor) error {
+	fields := append(sc.anchorIdentity(an),
+		anchorField{"width", an.Width, sc.ctx.Width},
+		anchorField{"height", an.Height, sc.ctx.Height})
 	return firstAnchorMismatch("anchor", fields)
 }
 
@@ -144,14 +144,14 @@ func (t replayTarget) PushRecord(rec event.JournalRecord, payload any) bool {
 }
 
 func (t replayTarget) Digest() (d event.JournalDigest) {
-	t.a.world.RunSafe(func() { d = t.a.journalDigestLocked() })
+	t.a.world.RunSafe(func() { d = t.a.scribe.journalDigestLocked() })
 	return d
 }
 
 // journalDigestLocked is the world a journal's digest carries: both domains, since
 // a replay reproduces the player's own as well. Caller MUST hold updateMutex.
-func (a *App) journalDigestLocked() event.JournalDigest {
-	return snapshot.DigestWorld(a.world, engine.ScopeBoth).Journal()
+func (sc *scribe) journalDigestLocked() event.JournalDigest {
+	return snapshot.DigestWorld(sc.world, engine.ScopeBoth).Journal()
 }
 
 // Install writes a world the recorded run wrote, rebuilt from the one this replay
@@ -190,7 +190,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		}
 		_, err = a.glue.writeSharedLocked(cap, &before, true, c.Opens)
 		if err == nil && c.Opens {
-			err = a.openedLocked(c, own)
+			err = a.scribe.openedLocked(c, own)
 		}
 		// The barrier stands as the run's write left it before anything still queued
 		// dispatches: a crossing raised before the next tick is the run's, by record.
@@ -208,17 +208,17 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 // bound to the slot the run followed, writes the run's own side over what that
 // derived, then takes up the operator state the run stood in.
 // Caller MUST hold updateMutex.
-func (a *App) openedLocked(c event.JournalCapture, own ownState) error {
-	a.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
-	a.scheduler.SettleLocked()
-	if err := a.installOwnLocked(own); err != nil {
+func (sc *scribe) openedLocked(c event.JournalCapture, own ownState) error {
+	sc.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
+	sc.scheduler.SettleLocked()
+	if err := sc.installOwnLocked(own); err != nil {
 		return err
 	}
-	a.ctx.SetMode(c.Mode)
-	a.world.UpdateBoundsRadius()
-	a.ctx.TimeCtl.SetPaused(c.Paused)
-	a.ctx.TimeCtl.SetHeld(c.Held)
-	for _, sys := range a.world.Systems() {
+	sc.ctx.SetMode(c.Mode)
+	sc.world.UpdateBoundsRadius()
+	sc.ctx.TimeCtl.SetPaused(c.Paused)
+	sc.ctx.TimeCtl.SetHeld(c.Held)
+	for _, sys := range sc.world.Systems() {
 		if t, ok := sys.(engine.Toggled); ok {
 			t.SetEnabled(!slices.Contains(c.Off, sys.Name()))
 		}

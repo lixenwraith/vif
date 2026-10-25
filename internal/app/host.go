@@ -47,11 +47,11 @@ func (c sessionControl) HostError() error            { return c.a.membership.hos
 func (c sessionControl) JoinError() error            { return c.a.membership.joinErrorLocked() }
 func (c sessionControl) Leave() error                { return c.a.membership.leaveLocked() }
 func (c sessionControl) LeaveError() error           { return c.a.membership.leaveErrorLocked() }
-func (c sessionControl) StartJournal(slot int) error { return c.a.startJournalLocked(slot) }
-func (c sessionControl) StopJournal(slot int) error  { return c.a.stopJournalLocked(slot) }
-func (c sessionControl) JournalError() error         { return c.a.journalErrorLocked() }
-func (c sessionControl) Journaling() bool            { return c.a.journaling() }
-func (c sessionControl) JournalSummary() string      { return c.a.journalSummary() }
+func (c sessionControl) StartJournal(slot int) error { return c.a.scribe.startJournalLocked(slot) }
+func (c sessionControl) StopJournal(slot int) error  { return c.a.scribe.stopJournalLocked(slot) }
+func (c sessionControl) JournalError() error         { return c.a.scribe.journalErrorLocked() }
+func (c sessionControl) Journaling() bool            { return c.a.scribe.journaling() }
+func (c sessionControl) JournalSummary() string      { return c.a.scribe.journalSummary() }
 
 func (c sessionControl) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {

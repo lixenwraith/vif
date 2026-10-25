@@ -73,6 +73,21 @@ func (s *seat) halted() bool {
 	}
 }
 
+// seatJournalSummaries names the journal each seated bot keeps, by slot.
+func (m *membership) seatJournalSummaries() []string {
+	var parts []string
+	m.seatsMu.Lock()
+	for _, s := range m.seats {
+		if b := s.app.Load(); b != nil {
+			if p := b.scribe.recorder.Load().Path(); p != "" {
+				parts = append(parts, fmt.Sprintf("slot %X to %s", s.slot.Load(), p))
+			}
+		}
+	}
+	m.seatsMu.Unlock()
+	return parts
+}
+
 // seatHalted reports whether participant id is a seat this run told to leave, so
 // its link closing is the drop that was asked for. A seat forgets itself before
 // its link closes, so the drop is remembered by identity until then.
@@ -372,15 +387,15 @@ func (m *membership) askSeatJournal(slot int, start bool) error {
 		return fmt.Errorf("the bot on slot %X is leaving; its journal closes with it", slot)
 	case b == nil:
 		return fmt.Errorf("no bot of this run's is on slot %X", slot)
-	case start && b.recorder.Load() != nil && b.journalAsk.Load() == nil:
-		return fmt.Errorf("slot %X already journals to %s", slot, b.recorder.Load().Path())
-	case !start && b.cancelJournalStart():
+	case start && b.scribe.recorder.Load() != nil && b.scribe.journalAsk.Load() == nil:
+		return fmt.Errorf("slot %X already journals to %s", slot, b.scribe.recorder.Load().Path())
+	case !start && b.scribe.cancelJournalStart():
 		return nil
-	case !start && b.recorder.Load() == nil:
+	case !start && b.scribe.recorder.Load() == nil:
 		return fmt.Errorf("slot %X keeps no journal", slot)
 	}
 	report := func(path string, err error) { m.reportSeatJournal(slot, start, path, err) }
-	if !b.queueJournalAsk(&journalAsk{start: start, report: report}) {
+	if !b.scribe.queueJournalAsk(&journalAsk{start: start, report: report}) {
 		return fmt.Errorf("slot %X is already opening or closing a journal", slot)
 	}
 	return nil
@@ -390,16 +405,16 @@ func (m *membership) askSeatJournal(slot int, start bool) error {
 // closed, which only the seat's Close saw: the journal it shut, or a start its loop
 // never served. Called on the seat's goroutine once its run has closed.
 func (m *membership) seatJournalLeft(slot int, run *App) {
-	if ask := run.journalAsk.Swap(nil).opening(); ask != nil {
+	if ask := run.scribe.journalAsk.Swap(nil).opening(); ask != nil {
 		ask.report("", errors.New("the bot left before it opened"))
 	}
 	switch {
-	case run.closedAtExitAs != nil:
-		m.log.Warn("journal", "msg", "seat journal not closed", "slot", slot, "error", run.closedAtExitAs.Error())
-		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal %s", slot, run.closedAtExitAs), parameter.StatusAlert)
-	case run.closedAtExit != "":
-		m.log.Info("journal", "msg", "seat journal closed", "slot", slot, "path", run.closedAtExit, "reason", "bot left")
-		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal closed: %s", slot, run.closedAtExit), parameter.StatusNotice)
+	case run.scribe.closedAtExitAs != nil:
+		m.log.Warn("journal", "msg", "seat journal not closed", "slot", slot, "error", run.scribe.closedAtExitAs.Error())
+		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal %s", slot, run.scribe.closedAtExitAs), parameter.StatusAlert)
+	case run.scribe.closedAtExit != "":
+		m.log.Info("journal", "msg", "seat journal closed", "slot", slot, "path", run.scribe.closedAtExit, "reason", "bot left")
+		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal closed: %s", slot, run.scribe.closedAtExit), parameter.StatusNotice)
 	}
 }
 
@@ -427,7 +442,7 @@ func (m *membership) seatJournalNotices() []string {
 	var out []string
 	for _, s := range m.seats {
 		if b := s.app.Load(); b != nil {
-			if r := b.recorder.Load(); r != nil {
+			if r := b.scribe.recorder.Load(); r != nil {
 				out = append(out, fmt.Sprintf("slot %X journal closed: %s", s.slot.Load(), r.Path()))
 			}
 		}

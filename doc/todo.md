@@ -1119,32 +1119,16 @@ the last frame flushed.
 
 ## Structure
 
-### Split the composition root
+### Move the three run types to packages
 
-- Priority: P2
+- Priority: P3
 - Affected files: `internal/app`
 
-`internal/app` is 33,000 lines, 11,500 of them production code, and `App` was
-the receiver of nearly every method. The boundary that already existed is the
-one being extended: `converge.Instance` is the whole of what the authority
-protocol asks of a run, and `instance` now composes two types that each read
-the run through one interface. The correction glue is `corrector`
-(`corrector.go`, `capture.go`, `snapshot_stage.go`, `replay_suffix.go`):
-capture, staging, projection and install over the world and the capture
-encoder, reading the run through `correctionRun`. The membership is
-`membership` (`membership.go`, `session.go`, `host.go`, `join.go`, `relay.go`,
-`seat.go`, `claim.go`, `identity.go` and the authority side of `converge.go`):
-hosting, joining, the roster and the offer, seats, claims, the relay desk and
-the authority, reading the run through `membershipRun` (position and pacing,
-the lobby surface, the journal and anchor, the vacancy and the replacing run).
-`App` forwards the exported session API and what `correctionRun` reads of the
-membership. Still on `App`: replay and checkpoints (`play.go`, `clone.go`,
-`replay.go`, `journal.go`), which depend on the journal package and the world
-and not on a session, so they split along the same line, moving their tests,
-with the forwarders going when the last split lands; the loops (`loop.go`,
-`script.go`), presentation and configuration (`app.go`, `config.go`,
-`presentation*.go`, `audio*.go`) and the dedicated host (`serve.go`,
-`probe.go`) are the composition root the package map names: construct the
-world, wire the services, run the loop. The seam each split needs is one
-interface the moved code reads the run through; a split that needs more than
-one is cut in the wrong place.
+`corrector`, `membership` and `scribe` each read the run through one interface
+(`correctionRun`, `membershipRun`, `scribeRun`), and `App` is the composition
+root the package map names, but all three stay in `internal/app`, which is
+still 33,000 lines. Each builds runs (the staging world, the journal twin, a
+dial's run, a seat's bot), so a package for one needs the run's constructor as a
+second seam, and the tests drive whole Apps through `NewHeadless`, so none could
+move its tests with it. A package per type waits on a constructor seam the tests
+can be written against.

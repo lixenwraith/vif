@@ -42,9 +42,9 @@ func (k *journalAsk) opening() *journalAsk {
 // queueJournalAsk leaves ask for this run's loop; a start asked while a stop waits
 // follows it, so a journal stopped and started before the loop came round closes and
 // another opens. It reports false when an ask already waits that ask cannot follow.
-func (a *App) queueJournalAsk(ask *journalAsk) bool {
+func (sc *scribe) queueJournalAsk(ask *journalAsk) bool {
 	for {
-		cur, next := a.journalAsk.Load(), ask
+		cur, next := sc.journalAsk.Load(), ask
 		switch {
 		case cur == nil:
 		case ask.start && cur.opening() == nil:
@@ -52,7 +52,7 @@ func (a *App) queueJournalAsk(ask *journalAsk) bool {
 		default:
 			return false
 		}
-		if a.journalAsk.CompareAndSwap(cur, next) {
+		if sc.journalAsk.CompareAndSwap(cur, next) {
 			return true
 		}
 	}
@@ -82,14 +82,14 @@ func lineHolds(payloads ...[]byte) error {
 // journalLostLocked closes j where it is still true once a world this run wrote
 // could not be recorded in it: past that write, nothing it holds would verify. A
 // journal opened since holds that world already. Caller MUST hold updateMutex.
-func (a *App) journalLostLocked(j *event.Journal, err error) {
-	if j == nil || a.world.Resources.Event.Queue.Journal() != j {
+func (sc *scribe) journalLostLocked(j *event.Journal, err error) {
+	if j == nil || sc.world.Resources.Event.Queue.Journal() != j {
 		return
 	}
-	path, _ := a.closeJournal()
-	at := a.Position().Tick
-	a.log.Error("journal", "msg", "journal closed: a written world was not recorded", "path", path, "tick", at, "error", err.Error())
-	a.ctx.SetStatusMessage(fmt.Sprintf("Journal closed at tick %d: a written world could not be recorded (%s)", at, err), parameter.StatusAlert)
+	path, _ := sc.closeJournal()
+	at := sc.run.Position().Tick
+	sc.log.Error("journal", "msg", "journal closed: a written world was not recorded", "path", path, "tick", at, "error", err.Error())
+	sc.ctx.SetStatusMessage(fmt.Sprintf("Journal closed at tick %d: a written world could not be recorded (%s)", at, err), parameter.StatusAlert)
 }
 
 // errRunReplaced refuses a journal start in a run about to be replaced, which the
@@ -117,45 +117,45 @@ func ownedStream(s engine.StreamState) bool { return slices.Contains(ownedSystem
 // initJournal opens the replay journal a run starts with and installs it on the
 // event queue: for the life of the run it records every event of a journaled origin
 // (all but system and device) and every own crossing.
-func (a *App) initJournal() error {
-	if !a.cfg.Journal {
+func (sc *scribe) initJournal() error {
+	if !sc.cfg.Journal {
 		return nil
 	}
 
-	r, err := journal.Start(a.world.Resources.Event.Queue, a.buildAnchor(), a.cfg.JournalSink, a.log)
+	r, err := journal.Start(sc.world.Resources.Event.Queue, sc.buildAnchor(), sc.cfg.JournalSink, sc.log)
 	switch {
-	case err != nil && a.cfg.journalCarried:
-		a.log.Warn("journal", "msg", "journal not reopened", "error", err.Error())
-		a.cfg.Notice = joinNotice(a.cfg.Notice, "Journal not opened in this run: "+err.Error())
+	case err != nil && sc.cfg.journalCarried:
+		sc.log.Warn("journal", "msg", "journal not reopened", "error", err.Error())
+		sc.cfg.Notice = joinNotice(sc.cfg.Notice, "Journal not opened in this run: "+err.Error())
 		return nil
 	case err != nil:
 		return err
-	case a.cfg.journalCarried:
-		a.cfg.Notice = joinNotice(a.cfg.Notice, "Journaling on to "+r.Path())
+	case sc.cfg.journalCarried:
+		sc.cfg.Notice = joinNotice(sc.cfg.Notice, "Journaling on to "+r.Path())
 	}
-	a.recorder.Store(r)
-	a.log.Info("journal", "msg", "journal opened", "path", r.Path())
+	sc.recorder.Store(r)
+	sc.log.Info("journal", "msg", "journal opened", "path", r.Path())
 	return nil
 }
 
 // journalErrorLocked says why this instance cannot start a journal now; an opening
 // takes on a world, so whatever can refuse it refuses here first.
 // Caller MUST hold updateMutex.
-func (a *App) journalErrorLocked() error {
+func (sc *scribe) journalErrorLocked() error {
 	switch {
-	case a.world.FollowsJournal():
+	case sc.world.FollowsJournal():
 		return errors.New("a replay records nothing of its own")
-	case a.journalAsk.Load().opening() != nil:
+	case sc.journalAsk.Load().opening() != nil:
 		return errors.New("a journal is already opening")
-	case a.recorder.Load() != nil && a.journalAsk.Load() == nil:
-		return errors.New("already journaling to " + a.recorder.Load().Path())
-	case a.restart.Load() != nil:
+	case sc.recorder.Load() != nil && sc.journalAsk.Load() == nil:
+		return errors.New("already journaling to " + sc.recorder.Load().Path())
+	case sc.run.replacing():
 		return errRunReplaced
-	case a.scheduler.ResetPending():
+	case sc.scheduler.ResetPending():
 		// The reset's cleanup has run and its boot spawn has not: the roster the
 		// spawn restores is in no world a twin can take on.
 		return errors.New("a new game is starting")
-	case a.cfg.JournalSink == nil:
+	case sc.cfg.JournalSink == nil:
 		return vlog.JournalUnavailable()
 	}
 	return nil
@@ -164,14 +164,14 @@ func (a *App) journalErrorLocked() error {
 // startJournalLocked asks for a journal from where the run stands: this instance's
 // with slot -1, else the one of the bot seat this run holds on slot. The loop owning
 // that run opens it. Caller MUST hold updateMutex.
-func (a *App) startJournalLocked(slot int) error {
+func (sc *scribe) startJournalLocked(slot int) error {
 	if slot >= 0 {
-		return a.membership.askSeatJournal(slot, true)
+		return sc.run.askSeatJournal(slot, true)
 	}
-	if err := a.journalErrorLocked(); err != nil && !errors.Is(err, errRunReplaced) {
+	if err := sc.journalErrorLocked(); err != nil && !errors.Is(err, errRunReplaced) {
 		return err
 	}
-	if !a.queueJournalAsk(&journalAsk{start: true, report: a.reportJournal}) {
+	if !sc.queueJournalAsk(&journalAsk{start: true, report: sc.reportJournal}) {
 		return errors.New("a journal is already opening")
 	}
 	return nil
@@ -181,15 +181,15 @@ func (a *App) startJournalLocked(slot int) error {
 // slot; a later start opens another file. The loop owning the run closes it once the
 // run is back in play, so the journal ends there rather than on the command line or
 // a menu. Caller MUST hold updateMutex.
-func (a *App) stopJournalLocked(slot int) error {
+func (sc *scribe) stopJournalLocked(slot int) error {
 	switch {
 	case slot >= 0:
-		return a.membership.askSeatJournal(slot, false)
-	case a.cancelJournalStart():
+		return sc.run.askSeatJournal(slot, false)
+	case sc.cancelJournalStart():
 		return nil
-	case a.recorder.Load() == nil:
+	case sc.recorder.Load() == nil:
 		return errors.New("no journal is open")
-	case !a.queueJournalAsk(&journalAsk{report: a.reportJournalClosed}):
+	case !sc.queueJournalAsk(&journalAsk{report: sc.reportJournalClosed}):
 		return errors.New("the journal is already closing")
 	}
 	return nil
@@ -197,16 +197,16 @@ func (a *App) stopJournalLocked(slot int) error {
 
 // journaling reports whether this instance records once its asks are served: a stop
 // not yet served wins over the journal it would close, and a start over its absence.
-func (a *App) journaling() bool {
-	ask := a.journalAsk.Load()
-	return ask.opening() != nil || ask == nil && a.recorder.Load() != nil
+func (sc *scribe) journaling() bool {
+	ask := sc.journalAsk.Load()
+	return ask.opening() != nil || ask == nil && sc.recorder.Load() != nil
 }
 
 // cancelJournalStart lets a stop win over a start not yet served and reports whether
 // there was one. A start alone is reported cancelled; one that followed a stop leaves
 // that stop, whose close is then all there is to tell.
-func (a *App) cancelJournalStart() bool {
-	ask := a.journalAsk.Load()
+func (sc *scribe) cancelJournalStart() bool {
+	ask := sc.journalAsk.Load()
 	start := ask.opening()
 	if start == nil {
 		return false
@@ -215,7 +215,7 @@ func (a *App) cancelJournalStart() bool {
 	if start != ask {
 		left = &journalAsk{report: ask.report}
 	}
-	if !a.journalAsk.CompareAndSwap(ask, left) {
+	if !sc.journalAsk.CompareAndSwap(ask, left) {
 		return false
 	}
 	if left == nil {
@@ -227,16 +227,16 @@ func (a *App) cancelJournalStart() bool {
 // closeJournal writes the end record and releases the file, returning its path, or
 // "" with none open, and why its tail may not have reached it. Call it with queue
 // producers quiescent: under updateMutex, or once the scheduler has stopped.
-func (a *App) closeJournal() (string, error) {
-	r := a.recorder.Swap(nil)
+func (sc *scribe) closeJournal() (string, error) {
+	r := sc.recorder.Swap(nil)
 	if r == nil {
 		return "", nil
 	}
 	stats, err := r.Close()
-	a.log.Info("journal", "msg", "journal closed",
+	sc.log.Info("journal", "msg", "journal closed",
 		"path", stats.Path, "records", stats.Emitted, "encode_failed", stats.EncodeFailed)
 	if err != nil {
-		a.log.Error("journal", "msg", "journal not closed", "error", err.Error())
+		sc.log.Error("journal", "msg", "journal not closed", "error", err.Error())
 		return stats.Path, fmt.Errorf("%s closed incomplete: %w", stats.Path, err)
 	}
 	return stats.Path, nil
@@ -247,9 +247,9 @@ func (a *App) closeJournal() (string, error) {
 // overlay or the command line, whose frames a replay would end on, and stays asked
 // until it has closed, so a start asked meanwhile, maybe from another goroutine,
 // follows it rather than finding the journal still open.
-func (a *App) serveJournal() {
-	ask := a.journalAsk.Load()
-	if ask == nil || !ask.start && a.pausedForInput() {
+func (sc *scribe) serveJournal() {
+	ask := sc.journalAsk.Load()
+	if ask == nil || !ask.start && sc.pausedForInput() {
 		return
 	}
 	if !ask.start {
@@ -257,84 +257,84 @@ func (a *App) serveJournal() {
 			path string
 			err  error
 		)
-		a.world.RunSafe(func() {
-			if a.recorder.Load() != nil {
-				path, err = a.closeJournal()
+		sc.world.RunSafe(func() {
+			if sc.recorder.Load() != nil {
+				path, err = sc.closeJournal()
 				return
 			}
 			err = errors.New("no journal is open")
 		})
 		ask.report(path, err)
 		// Whatever waits now is this stop, a start having joined it or left it since
-		for ask = a.journalAsk.Load(); !a.journalAsk.CompareAndSwap(ask, nil); ask = a.journalAsk.Load() {
+		for ask = sc.journalAsk.Load(); !sc.journalAsk.CompareAndSwap(ask, nil); ask = sc.journalAsk.Load() {
 		}
 		if ask = ask.then; ask == nil {
 			return
 		}
-	} else if !a.journalAsk.CompareAndSwap(ask, nil) {
+	} else if !sc.journalAsk.CompareAndSwap(ask, nil) {
 		return
 	}
-	path, err := a.openJournal()
+	path, err := sc.openJournal()
 	if errors.Is(err, errRunReplaced) {
-		a.journalAsk.CompareAndSwap(nil, ask) // left for the replacing run
+		sc.journalAsk.CompareAndSwap(nil, ask) // left for the replacing run
 		return
 	}
 	ask.report(path, err)
 }
 
 // pausedForInput reports whether the run stands paused on an overlay or the command line
-func (a *App) pausedForInput() bool {
-	m := a.ctx.GetMode()
-	return a.ctx.TimeCtl.OwnPause() && (m == core.ModeOverlay || m == core.ModeCommand)
+func (sc *scribe) pausedForInput() bool {
+	m := sc.ctx.GetMode()
+	return sc.ctx.TimeCtl.OwnPause() && (m == core.ModeOverlay || m == core.ModeCommand)
 }
 
 // reportJournalClosed tells this run's player how its own journal stop went.
-func (a *App) reportJournalClosed(path string, err error) {
+func (sc *scribe) reportJournalClosed(path string, err error) {
 	if err != nil {
-		a.ctx.SetStatusMessage("Journal: "+err.Error(), parameter.StatusAlert)
+		sc.ctx.SetStatusMessage("Journal: "+err.Error(), parameter.StatusAlert)
 		return
 	}
-	a.ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
+	sc.ctx.SetStatusMessage("Journal closed: "+path, parameter.StatusNotice)
 }
 
 // reportJournal tells this run's player how its own journal start went.
-func (a *App) reportJournal(path string, err error) {
+func (sc *scribe) reportJournal(path string, err error) {
 	if err != nil {
-		a.log.Warn("journal", "msg", "journal not opened", "error", err.Error())
-		a.ctx.SetStatusMessage("Journal not opened: "+err.Error(), parameter.StatusAlert)
+		sc.log.Warn("journal", "msg", "journal not opened", "error", err.Error())
+		sc.ctx.SetStatusMessage("Journal not opened: "+err.Error(), parameter.StatusAlert)
 		return
 	}
-	a.ctx.SetStatusMessage("Journaling to "+path+"; :journal stop closes it", parameter.StatusNotice)
+	sc.ctx.SetStatusMessage("Journaling to "+path+"; :journal stop closes it", parameter.StatusNotice)
 }
 
 // openJournal starts a journal where this run stands, without replacing the run. A
 // replay of it boots afresh and writes the opening's world and own side over that
 // boot, and the run takes on what the replay then holds, which is the run as it
 // stood. Call it outside the world lock, from the goroutine that owns the run's loop.
-func (a *App) openJournal() (string, error) {
+func (sc *scribe) openJournal() (string, error) {
 	var (
 		an  event.JournalAnchor
 		err error
 	)
-	a.world.RunSafe(func() {
-		if err = a.journalErrorLocked(); err == nil {
-			an = a.buildAnchor()
+	sc.world.RunSafe(func() {
+		if err = sc.journalErrorLocked(); err == nil {
+			an = sc.buildAnchor()
 		}
 	})
 	if err != nil {
 		return "", err
 	}
-	twin, err := a.journalTwin(an)
+	twin, err := sc.run.journalTwin(an)
 	if err != nil {
 		return "", err
 	}
 	defer twin.Close()
 	var r *journal.Recorder
-	a.world.RunSafe(func() { r, err = a.openJournalLocked(an, twin) })
+	sc.world.RunSafe(func() { r, err = sc.openJournalLocked(an, twin) })
 	if err != nil {
 		return "", err
 	}
-	a.log.Info("journal", "msg", "journal opened", "path", r.Path(), "run", an.Run, "tick", an.Tick)
+	sc.log.Info("journal", "msg", "journal opened", "path", r.Path(), "run", an.Run, "tick", an.Tick)
 	return r.Path(), nil
 }
 
@@ -370,19 +370,19 @@ func (a *App) journalTwin(an event.JournalAnchor) (*App, error) {
 // against twin's boot, which twin then writes as a replay does; the run takes on
 // what that left, and only then does the journal attach, so it records from a state
 // its replay reproduces. Caller MUST hold updateMutex.
-func (a *App) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Recorder, error) {
+func (sc *scribe) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Recorder, error) {
 	// Nothing pending: the run takes on twin's queue, so an event held here is lost.
 	// The checks read what that settle leaves, a reset it asked for included.
-	a.scheduler.SettleLocked()
-	if err := a.journalErrorLocked(); err != nil {
+	sc.scheduler.SettleLocked()
+	if err := sc.journalErrorLocked(); err != nil {
 		return nil, err
 	}
 	// The twin is the boot of the identity the anchor read; a reset, a resize, a
 	// rate change or a rebind since it was built is a world it is not the boot of.
-	if a.buildAnchor() != an {
+	if sc.buildAnchor() != an {
 		return nil, errors.New("the run changed while the journal was opening; start it again")
 	}
-	opening, err := a.openingLocked(twin)
+	opening, err := sc.openingLocked(twin)
 	if err != nil {
 		return nil, err
 	}
@@ -396,32 +396,32 @@ func (a *App) openJournalLocked(an event.JournalAnchor, twin *App) (*journal.Rec
 	if _, err := d.Step(); err != nil {
 		return nil, err
 	}
-	if err := a.adoptLocked(twin, d); err != nil {
+	if err := sc.adoptLocked(twin, d); err != nil {
 		// Past its first write the run holds part of the twin's world: a defect to find
-		a.log.Error("journal", "msg", "run may hold part of an opening it does not match", "error", err.Error())
+		sc.log.Error("journal", "msg", "run may hold part of an opening it does not match", "error", err.Error())
 		return nil, err
 	}
-	r, err := journal.Start(a.world.Resources.Event.Queue, an, a.cfg.JournalSink, a.log)
+	r, err := journal.Start(sc.world.Resources.Event.Queue, an, sc.cfg.JournalSink, sc.log)
 	if err != nil {
 		return nil, err
 	}
 	r.Capture(opening)
-	a.recorder.Store(r)
+	sc.recorder.Store(r)
 	// The session the twin wrote as is identity alone; the one this run is in is
 	// noted now, as a record, which is how its replay learns it.
-	a.world.LatchSession()
+	sc.world.LatchSession()
 	return r, nil
 }
 
 // openingLocked is the capture a journal opens with: the shared world the run stands
 // in, written against twin's settled boot, with the operator state and the run's own
 // side beside it. Caller MUST hold updateMutex.
-func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
-	cap, err := a.glue.captureSharedLocked()
+func (sc *scribe) openingLocked(twin *App) (event.JournalCapture, error) {
+	cap, err := sc.glue.captureSharedLocked()
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
-	own, err := a.ownStateLocked()
+	own, err := sc.ownStateLocked()
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
@@ -434,7 +434,7 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
-	d, err := a.glue.encoder.DiffWritten(boot, cap)
+	d, err := sc.glue.encoder.DiffWritten(boot, cap)
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
@@ -443,18 +443,18 @@ func (a *App) openingLocked(twin *App) (event.JournalCapture, error) {
 		return event.JournalCapture{}, err
 	}
 	var off []string
-	for _, sys := range a.world.Systems() {
+	for _, sys := range sc.world.Systems() {
 		if t, ok := sys.(engine.Toggled); ok && !t.Enabled() {
 			off = append(off, sys.Name())
 		}
 	}
-	at := a.Position()
+	at := sc.run.Position()
 	return event.JournalCapture{
 		Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
-		Participant: a.world.LocalParticipant(), Authority: cap.Header.Authority,
-		Barrier: a.barrierLocked(), Body: body,
-		Opens: true, Mode: a.ctx.GetMode(), Paused: a.ctx.TimeCtl.OwnPause(), Held: a.ctx.TimeCtl.Held(), Off: off,
-		Slot: a.world.Resources.Player.LocalSlot(), Own: ownBody,
+		Participant: sc.world.LocalParticipant(), Authority: cap.Header.Authority,
+		Barrier: sc.run.barrierLocked(), Body: body,
+		Opens: true, Mode: sc.ctx.GetMode(), Paused: sc.ctx.TimeCtl.OwnPause(), Held: sc.ctx.TimeCtl.Held(), Off: off,
+		Slot: sc.world.Resources.Player.LocalSlot(), Own: ownBody,
 	}, nil
 }
 
@@ -474,17 +474,17 @@ type ownState struct {
 }
 
 // ownStateLocked reads the run's own side. Caller MUST hold updateMutex.
-func (a *App) ownStateLocked() (ownState, error) {
+func (sc *scribe) ownStateLocked() (ownState, error) {
 	own := ownState{
-		World:   a.world.CapturePlayerWorld(),
-		Side:    a.world.CapturePlayerSide(),
-		Content: service.MustGet[*service.ContentService](a.hub, "content").CursorState(),
-		Events:  a.world.Resources.Event.Queue.Telemetry(),
-		Status:  statusCellsLocked(a.world, statusKeysLocked(a.world, func(k string) bool { return !ownedStatusKey(k) })),
-		Order:   a.world.CaptureOrder(),
+		World:   sc.world.CapturePlayerWorld(),
+		Side:    sc.world.CapturePlayerSide(),
+		Content: service.MustGet[*service.ContentService](sc.hub, "content").CursorState(),
+		Events:  sc.world.Resources.Event.Queue.Telemetry(),
+		Status:  statusCellsLocked(sc.world, statusKeysLocked(sc.world, func(k string) bool { return !ownedStatusKey(k) })),
+		Order:   sc.world.CaptureOrder(),
 	}
 	own.Side.Streams = slices.DeleteFunc(own.Side.Streams, ownedStream)
-	for _, sys := range a.world.Systems() {
+	for _, sys := range sc.world.Systems() {
 		s, ok := sys.(engine.LocalStateSaver)
 		if !ok || slices.Contains(ownedSystems, sys.Name()) {
 			continue
@@ -501,13 +501,13 @@ func (a *App) ownStateLocked() (ownState, error) {
 // installOwnLocked writes the run's own side over a replay's opening world, after
 // the settle that bound its input, so nothing that settle derived for the boot's
 // player stands in for it. Caller MUST hold updateMutex.
-func (a *App) installOwnLocked(own ownState) error {
-	a.world.InstallPlayerWorld(own.World)
-	if unknown := a.world.InstallPlayerSide(own.Side); len(unknown) > 0 {
+func (sc *scribe) installOwnLocked(own ownState) error {
+	sc.world.InstallPlayerWorld(own.World)
+	if unknown := sc.world.InstallPlayerSide(own.Side); len(unknown) > 0 {
 		return fmt.Errorf("RNG streams this replay does not issue: %v", unknown)
 	}
 	savers := make(map[string]engine.LocalStateSaver, len(own.Systems))
-	for _, sys := range a.world.Systems() {
+	for _, sys := range sc.world.Systems() {
 		if s, ok := sys.(engine.LocalStateSaver); ok && !slices.Contains(ownedSystems, sys.Name()) {
 			savers[sys.Name()] = s
 		}
@@ -526,13 +526,13 @@ func (a *App) installOwnLocked(own ownState) error {
 	if len(savers) > 0 {
 		return fmt.Errorf("the opening carries no state for %v", slices.Sorted(maps.Keys(savers)))
 	}
-	if err := service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(own.Content); err != nil {
+	if err := service.MustGet[*service.ContentService](sc.hub, "content").SetCursorState(own.Content); err != nil {
 		return err
 	}
-	a.world.Resources.Event.Queue.SetTelemetry(own.Events)
-	installStatusLocked(a.world, own.Status)
+	sc.world.Resources.Event.Queue.SetTelemetry(own.Events)
+	installStatusLocked(sc.world, own.Status)
 	// Last, once both domains' rows stand: the shared write and the settle placed theirs
-	if err := a.world.InstallOrder(own.Order); err != nil {
+	if err := sc.world.InstallOrder(own.Order); err != nil {
 		return fmt.Errorf("the run's order: %w", err)
 	}
 	return nil
@@ -543,30 +543,30 @@ func (a *App) installOwnLocked(own ownState) error {
 // hold twin's world. What stays is this instance's own: the terminal's colour, the
 // wall clock and pacing, the pointer placement it crosses next tick, and the
 // ownedSystems with their streams and status. Caller MUST hold updateMutex.
-func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
+func (sc *scribe) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 	var (
 		c   *checkpoint
 		err error
 	)
-	twin.world.RunSafe(func() { c, err = twin.checkpointLocked(d, nil) })
+	twin.world.RunSafe(func() { c, err = twin.scribe.checkpointLocked(d, nil) })
 	if err != nil {
 		return err
 	}
-	if err := service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(c.content); err != nil {
+	if err := service.MustGet[*service.ContentService](sc.hub, "content").SetCursorState(c.content); err != nil {
 		return err
 	}
-	cfg := a.world.Resources.Config
-	color, palette, wall := cfg.ColorMode, cfg.ConsolePalette, a.world.Resources.Time.RealTime
-	held := *a.world.Resources.Player
-	kept := slices.DeleteFunc(a.world.Resources.Rand.SaveStreams(core.DomainPlayer), func(s engine.StreamState) bool { return !ownedStream(s) })
-	a.world.CopyIn(c.world)
-	cfg.ColorMode, cfg.ConsolePalette, a.world.Resources.Time.RealTime = color, palette, wall
-	a.world.Resources.Player.KeepPointer(&held)
-	if unknown := c.world.LoadStreams(a.world.Resources.Rand); len(unknown) > 0 {
+	cfg := sc.world.Resources.Config
+	color, palette, wall := cfg.ColorMode, cfg.ConsolePalette, sc.world.Resources.Time.RealTime
+	held := *sc.world.Resources.Player
+	kept := slices.DeleteFunc(sc.world.Resources.Rand.SaveStreams(core.DomainPlayer), func(s engine.StreamState) bool { return !ownedStream(s) })
+	sc.world.CopyIn(c.world)
+	cfg.ColorMode, cfg.ConsolePalette, sc.world.Resources.Time.RealTime = color, palette, wall
+	sc.world.Resources.Player.KeepPointer(&held)
+	if unknown := c.world.LoadStreams(sc.world.Resources.Rand); len(unknown) > 0 {
 		return fmt.Errorf("RNG streams this run does not issue: %v", unknown)
 	}
-	a.world.Resources.Rand.LoadStreams(core.DomainPlayer, kept)
-	savers := sharedStateSaversLocked(a.world)
+	sc.world.Resources.Rand.LoadStreams(core.DomainPlayer, kept)
+	savers := sharedStateSaversLocked(sc.world)
 	for _, rec := range c.systems {
 		if slices.Contains(ownedSystems, rec.System) {
 			continue
@@ -575,7 +575,7 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 			return fmt.Errorf("adopt %s: %w", rec.System, err)
 		}
 	}
-	for _, sys := range a.world.Systems() {
+	for _, sys := range sc.world.Systems() {
 		if slices.Contains(ownedSystems, sys.Name()) {
 			continue
 		}
@@ -583,12 +583,12 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 			return fmt.Errorf("adopt %s: %w", sys.Name(), err)
 		}
 	}
-	if err := a.scheduler.ImportFSM(c.scheduler.FSM(), false); err != nil {
+	if err := sc.scheduler.ImportFSM(c.scheduler.FSM(), false); err != nil {
 		return err
 	}
 	// After the FSM import, whose re-derived toggles are queued and dropped here
-	a.world.Resources.Event.Queue.CopyIn(c.queue)
-	for _, sys := range a.world.Systems() {
+	sc.world.Resources.Event.Queue.CopyIn(c.queue)
+	for _, sys := range sc.world.Systems() {
 		if t, ok := sys.(engine.Toggled); ok && !slices.Contains(ownedSystems, sys.Name()) {
 			t.SetEnabled(c.toggles[sys.Name()])
 		}
@@ -599,8 +599,8 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 		Floats:  slices.DeleteFunc(c.status.Floats, func(s snapshot.FloatCell) bool { return ownedStatusKey(s.Key) }),
 		Strings: slices.DeleteFunc(c.status.Strings, func(s snapshot.StringCell) bool { return ownedStatusKey(s.Key) }),
 	}
-	installStatusLocked(a.world, c.status)
-	if at, got := a.Position(), a.journalDigestLocked(); at != c.at || got != c.digest {
+	installStatusLocked(sc.world, c.status)
+	if at, got := sc.run.Position(), sc.journalDigestLocked(); at != c.at || got != c.digest {
 		return fmt.Errorf("the run stands at %+v with digest %+v after taking on the journal's opening, which stands at %+v with %+v",
 			at, got, c.at, c.digest)
 	}
@@ -609,47 +609,39 @@ func (a *App) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 
 // buildAnchor describes what a replay must reproduce. Reads the telemetry
 // ContentService published during initWorld, so anchor and verification share a source.
-func (a *App) buildAnchor() event.JournalAnchor {
-	reg := a.world.Resources.Status
-	cfg := a.world.Resources.Config
+func (sc *scribe) buildAnchor() event.JournalAnchor {
+	reg := sc.world.Resources.Status
+	cfg := sc.world.Resources.Config
 	return event.JournalAnchor{
-		Speed:          a.ctx.TimeCtl.Scale().String(),
-		ScenarioID:     a.scenario.Name,
-		ScenarioDigest: a.scenario.Digest(),
+		Speed:          sc.ctx.TimeCtl.Scale().String(),
+		ScenarioID:     sc.scenario.Name,
+		ScenarioDigest: sc.scenario.Digest(),
 		ContentID:      reg.Strings.Get("content.source").Load(),
-		ContentPin:     service.MustGet[*service.ContentService](a.hub, "content").Pin(),
+		ContentPin:     service.MustGet[*service.ContentService](sc.hub, "content").Pin(),
 		ContentFiles:   uint64(reg.Ints.Get("content.files").Load()),
 		ContentBlocks:  uint64(reg.Ints.Get("content.blocks").Load()),
 		ContentLines:   uint64(reg.Ints.Get("content.lines").Load()),
-		Seed:           a.world.Resources.Rand.Root(),
-		Session:        a.world.Resources.Rand.Session(),
+		Seed:           sc.world.Resources.Rand.Root(),
+		Session:        sc.world.Resources.Rand.Session(),
 		TickInterval:   int64(parameter.GameUpdateInterval),
-		Width:          a.ctx.Width,
-		Height:         a.ctx.Height,
+		Width:          sc.ctx.Width,
+		Height:         sc.ctx.Height,
 		MapWidth:       cfg.MapWidth,
 		MapHeight:      cfg.MapHeight,
 		CropOnResize:   cfg.CropOnResize,
 		CellAspect:     float64(cfg.CellAspect),
-		SessionShared:  a.world.SessionShared(),
-		Slot:           uint64(a.world.Resources.Player.LocalSlot()),
+		SessionShared:  sc.world.SessionShared(),
+		Slot:           uint64(sc.world.Resources.Player.LocalSlot()),
 	}
 }
 
 // journalSummary names this instance's journal and every one its seats keep.
-func (a *App) journalSummary() string {
+func (sc *scribe) journalSummary() string {
 	var parts []string
-	if p := a.recorder.Load().Path(); p != "" {
+	if p := sc.recorder.Load().Path(); p != "" {
 		parts = append(parts, "Journaling to "+p)
 	}
-	a.membership.seatsMu.Lock()
-	for _, s := range a.membership.seats {
-		if b := s.app.Load(); b != nil {
-			if p := b.recorder.Load().Path(); p != "" {
-				parts = append(parts, fmt.Sprintf("slot %X to %s", s.slot.Load(), p))
-			}
-		}
-	}
-	a.membership.seatsMu.Unlock()
+	parts = append(parts, sc.run.seatJournalSummaries()...)
 	if len(parts) == 0 {
 		return "No journal; :journal start [slot] records from here"
 	}

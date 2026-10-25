@@ -187,7 +187,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 			return false, nil
 		}
 		// Between two steps, as a presenting run's loop serves it between two waits
-		a.serveJournal()
+		a.scribe.serveJournal()
 		// A held run stands still as its holder's pause does, but still drains its
 		// link: the host's resume is the next epoch it sends.
 		if held := a.ctx.TimeCtl.Held(); held || hold != nil && hold() {

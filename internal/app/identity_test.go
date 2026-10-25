@@ -141,7 +141,7 @@ func TestAJoinIgnoresTheCorpusAReplayRequires(t *testing.T) {
 	if err := firstAnchorMismatch("join", a.sessionAnchorFields(an)); err != nil {
 		t.Fatalf("a peer reading its own corpus was refused: %v", err)
 	}
-	err := firstAnchorMismatch("replay", a.anchorIdentity(an))
+	err := firstAnchorMismatch("replay", a.scribe.anchorIdentity(an))
 	if err == nil || !strings.Contains(err.Error(), "content_id") {
 		t.Fatalf("a replay accepted a corpus it did not record: %v", err)
 	}

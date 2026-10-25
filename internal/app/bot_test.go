@@ -482,14 +482,14 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 			t.Fatalf("round %d: %v", round, err)
 		}
 		until("both journals to open", func() bool {
-			h, r := holder.recorder.Load(), b.recorder.Load()
+			h, r := holder.scribe.recorder.Load(), b.scribe.recorder.Load()
 			return h != nil && r != nil && !slices.Contains(paths, h.Path()) && !slices.Contains(paths, r.Path())
 		})
 		if drives(holder) != holderCursor || drives(b) != seatCursor || int(b.membership.localSlot()) != slot {
 			t.Fatalf("the holder drives %d and its seat %d on slot %d after the openings, %d and %d on slot %d before",
 				drives(holder), drives(b), b.membership.localSlot(), holderCursor, seatCursor, slot)
 		}
-		paths = append(paths, holder.recorder.Load().Path(), b.recorder.Load().Path())
+		paths = append(paths, holder.scribe.recorder.Load().Path(), b.scribe.recorder.Load().Path())
 		from := b.Position().Tick
 		until("the bot to play on", func() bool { return b.Position().Tick > from+3*parameter.DigestIntervalTicks })
 	}
@@ -498,7 +498,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		t.Fatalf("stop: %v", err)
 	}
 	b := s.app.Load()
-	until("both journals to close", func() bool { return holder.recorder.Load() == nil && b.recorder.Load() == nil })
+	until("both journals to close", func() bool { return holder.scribe.recorder.Load() == nil && b.scribe.recorder.Load() == nil })
 	stop()
 	for _, p := range paths {
 		if st, err := VerifyJournal(Config{}, p); err != nil || st.Digests == 0 {
@@ -545,7 +545,7 @@ func TestASeatsOpeningLeavesItsRunAsItWas(t *testing.T) {
 		defer twin.Close()
 		b.scheduler.SettleLocked()
 		before = snapshot.Lines(b.ctx, b.world, true)
-		if _, err = b.openJournalLocked(an, twin); err == nil {
+		if _, err = b.scribe.openJournalLocked(an, twin); err == nil {
 			after = snapshot.Lines(b.ctx, b.world, true)
 		}
 	})
@@ -595,8 +595,8 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	until("the journal to open", func() bool { return b.recorder.Load() != nil })
-	path := b.recorder.Load().Path()
+	until("the journal to open", func() bool { return b.scribe.recorder.Load() != nil })
+	path := b.scribe.recorder.Load().Path()
 	holder.World().RunSafe(func() { err = ctl.DropBot(slot) })
 	if err != nil {
 		t.Fatalf("drop: %v", err)

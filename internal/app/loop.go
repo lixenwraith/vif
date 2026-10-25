@@ -95,7 +95,7 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 	next, err = a.Loop()
 	if next != nil {
 		next.Play = a.livePlay()
-		next.Journal = a.journaling()
+		next.Journal = a.scribe.journaling()
 		// A seat's journal closes with this run, which is the last its holder hears of it
 		for _, line := range a.membership.seatJournalNotices() {
 			next.Notice = joinNotice(next.Notice, line)
@@ -229,7 +229,7 @@ func (a *App) Loop() (*restartRequest, error) {
 			a.membership.leaveSession()
 			continue // a replacement latched while it ran is taken first
 		}
-		a.serveJournal()
+		a.scribe.serveJournal()
 		select {
 		case sig := <-sigChan:
 			a.log.Info("app", "msg", "signal received", "signal", sig.String())
