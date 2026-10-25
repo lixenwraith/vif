@@ -111,7 +111,7 @@ func TestSettingsNameEveryUnknownKey(t *testing.T) {
 	}
 	s, path, err := LoadSettings(root)
 	var unknown UnknownKeys
-	if !errors.As(err, &unknown) || !slices.Equal(unknown, UnknownKeys{"later", "paths.logs"}) {
+	if !errors.As(err, &unknown) || !slices.EqualFunc(unknown, UnknownKeys{{"later"}, {"paths", "logs"}}, slices.Equal) {
 		t.Fatalf("error = %v, want UnknownKeys naming later and paths.logs", err)
 	}
 	if s.Audio.BufferMs != 20 || path != filepath.Join(root, SettingsFile) {
@@ -196,8 +196,8 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
-	want := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\nsfx = false\nhud = false\n" +
-		"mouse = false\nsfx_volume = 0.25\n\n# about audio\n[audio]\nbuffer_ms = 20\n"
+	want := "# mine\n[paths]\nlog = \"logs\"\n\n[play]\n# kept\nsfx = false\nhud = false # old\n" +
+		"mouse = false\nsfx_volume = 0.25\n\n# about audio\n[audio]\nbuffer_ms = 20"
 	if got, _ := os.ReadFile(file); string(got) != want {
 		t.Fatalf("written keys:\n%s\nwant:\n%s", got, want)
 	}
