@@ -435,7 +435,7 @@ The handshake travels plain. From the join reply on, each direction of a link is
 sequence of segments, each opened by a kind byte: a **deflate run**, its wire length
 and frame count as uvarints and then frames deflated at `NetworkStreamLevel` against
 every run before it, or one **raw frame**, whose body the snapshot codec deflated
-already (`MessageType.Precompressed`: capture, correction and scenario chunks, shard
+already (`Traits.Precompressed`: capture, correction and scenario chunks, shard
 sets) and which a run would only deflate again. A coordinator that refuses the reply
 writes its refusal on that stream, where the joiner reads it. The writer takes the
 frames queued within `NetworkWriteLinger` of a burst's first and flushes the run once,

@@ -60,7 +60,7 @@ type Peer struct {
 
 	// I/O, and the frame header scratch each loop owns
 	conn   net.Conn
-	stream *flateStream
+	stream *Stream
 	rhdr   [HeaderSize]byte
 	whdr   [HeaderSize]byte
 
@@ -85,7 +85,7 @@ func newPeer(id PeerID, conn net.Conn, cfg *Config) *Peer {
 		ID:           id,
 		Addr:         conn.RemoteAddr().String(),
 		conn:         conn,
-		stream:       openFlateStream(conn, cfg.ReadBufferSize, cfg.WriteBufferSize, cfg.StreamLevel),
+		stream:       OpenStream(conn, cfg),
 		sendCh:       make(chan *Message, cfg.SendQueueSize),
 		closeCh:      make(chan struct{}),
 		done:         make(chan struct{}),
@@ -119,13 +119,14 @@ func (p *Peer) Send(msg *Message) bool {
 // countKind adds a frame's bytes to the kind it carries, a bundle's entry by entry
 // so epochs and syncs read apart whether or not they shared a frame.
 func (p *Peer) countKind(msg *Message) {
+	kinds := &p.stream.kinds
 	if msg.Type != MsgBundle {
-		p.outKind[msg.Type.Kind()].Add(uint64(HeaderSize + len(msg.Payload)))
+		p.outKind[kinds.Traits(msg.Type).Kind].Add(uint64(HeaderSize + len(msg.Payload)))
 		return
 	}
 	p.outKind[KindEpoch].Add(HeaderSize)
 	_ = Unbundle(msg.Payload, func(kind MessageType, body []byte) {
-		p.outKind[kind.Kind()].Add(uint64(3 + len(body)))
+		p.outKind[kinds.Traits(kind).Kind].Add(uint64(3 + len(body)))
 	})
 }
 
@@ -182,7 +183,7 @@ func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 		if p.readTimeout > 0 {
 			_ = p.conn.SetReadDeadline(time.Now().Add(p.readTimeout))
 		}
-		msg, err := p.stream.readFrame(MaxPayloadSize, p.rhdr[:])
+		msg, err := p.stream.ReadFrame(MaxPayloadSize, p.rhdr[:])
 		if err != nil {
 			return
 		}
@@ -263,18 +264,19 @@ func (p *Peer) flushQueued() {
 	}
 }
 
-// flateStream carries a link's frames once its handshake is done, as segments: a
-// kind byte, then for a deflate run its wire length and frame count as uvarints and
-// the frames deflated against every run before it, or one raw frame whose body the
+// Stream carries a link's frames once its handshake is done, as segments: a kind
+// byte, then for a deflate run its wire length and frame count as uvarints and the
+// frames deflated against every run before it, or one raw frame whose body the
 // snapshot codec deflated already, which a run would only deflate again. Until
 // opened it passes bytes through plain, which is how a join's handshake travels.
-type flateStream struct {
+type Stream struct {
 	net.Conn
-	src segmentSource // the deflate runs, as the inflater reads them
-	r   io.Reader     // inflates src
-	bw  *bufio.Writer
-	w   *flate.Writer // deflates frames into seg
-	seg bytes.Buffer  // the run not yet on the wire
+	src   segmentSource // the deflate runs, as the inflater reads them
+	r     io.Reader     // inflates src
+	bw    *bufio.Writer
+	w     *flate.Writer // deflates frames into seg
+	seg   bytes.Buffer  // the run not yet on the wire
+	kinds Kinds         // which bodies arrived deflated already, and travel raw
 
 	// plain counts the frame bytes deflated so far, which is the far inflater's
 	// window position; frames counts the run in progress.
@@ -295,17 +297,22 @@ const (
 	flateWindow = 1 << 15
 )
 
-// openFlateStream opens conn's stream in place, so every holder of a join's stream
-// reads through the one decoder that has seen its bytes; level is its runs' deflate.
-func openFlateStream(conn net.Conn, readBuf, writeBuf, level int) *flateStream {
-	s, ok := conn.(*flateStream)
+// NewStream wraps conn plain, as a handshake travels; OpenStream opens it.
+func NewStream(conn net.Conn) *Stream { return &Stream{Conn: conn} }
+
+// OpenStream opens conn's stream in place, so every holder of a join's stream reads
+// through the one decoder that has seen its bytes: cfg's buffers and deflate level,
+// and its Kinds, which say whose bodies arrived deflated already.
+func OpenStream(conn net.Conn, cfg *Config) *Stream {
+	s, ok := conn.(*Stream)
 	if !ok {
-		s = &flateStream{Conn: conn}
+		s = NewStream(conn)
 	}
+	s.kinds = cfg.Kinds
 	if s.w == nil {
-		s.bw = bufio.NewWriterSize(wireCounter{s.Conn, &s.out}, max(writeBuf, 4096))
-		s.w, _ = flate.NewWriter(&s.seg, level) // a level in deflate's range cannot fail
-		s.src.br = bufio.NewReaderSize(wireCounter{s.Conn, &s.in}, max(readBuf, 4096))
+		s.bw = bufio.NewWriterSize(wireCounter{s.Conn, &s.out}, max(cfg.WriteBufferSize, 4096))
+		s.w, _ = flate.NewWriter(&s.seg, cfg.StreamLevel) // a level in deflate's range cannot fail
+		s.src.br = bufio.NewReaderSize(wireCounter{s.Conn, &s.in}, max(cfg.ReadBufferSize, 4096))
 		s.r = flate.NewReader(&s.src)
 	}
 	return s
@@ -330,7 +337,7 @@ func (c wireCounter) Write(p []byte) (int, error) {
 }
 
 // Read is the plain handshake; an opened stream is read a frame at a time.
-func (s *flateStream) Read(p []byte) (int, error) {
+func (s *Stream) Read(p []byte) (int, error) {
 	if s.r != nil {
 		return 0, errors.New("an opened stream is read by frame")
 	}
@@ -338,7 +345,7 @@ func (s *flateStream) Read(p []byte) (int, error) {
 }
 
 // Write deflates p into the run in progress.
-func (s *flateStream) Write(p []byte) (int, error) {
+func (s *Stream) Write(p []byte) (int, error) {
 	if s.w == nil {
 		return s.Conn.Write(p)
 	}
@@ -349,8 +356,8 @@ func (s *flateStream) Write(p []byte) (int, error) {
 
 // writeFrame queues msg: in the run, or, with a body deflated already, raw once the
 // run before it has gone out.
-func (s *flateStream) writeFrame(msg *Message, header []byte) error {
-	if !msg.Type.Precompressed() || (s.plain%flateWindow == 0 && s.plain > 0) {
+func (s *Stream) writeFrame(msg *Message, header []byte) error {
+	if !s.kinds.Traits(msg.Type).Precompressed || (s.plain%flateWindow == 0 && s.plain > 0) {
 		s.frames++
 		return msg.encode(s, header)
 	}
@@ -364,7 +371,7 @@ func (s *flateStream) writeFrame(msg *Message, header []byte) error {
 }
 
 // flushRun puts the run in progress on the wire as one segment.
-func (s *flateStream) flushRun() error {
+func (s *Stream) flushRun() error {
 	if s.frames == 0 {
 		return nil
 	}
@@ -383,7 +390,7 @@ func (s *flateStream) flushRun() error {
 }
 
 // Flush sends everything written so far.
-func (s *flateStream) Flush() error {
+func (s *Stream) Flush() error {
 	if s.w == nil {
 		return nil
 	}
@@ -393,10 +400,11 @@ func (s *flateStream) Flush() error {
 	return s.bw.Flush()
 }
 
-// readFrame reads the next frame, whichever segment carries it; limit and header
-// are decode's. A run's frames are owed by the inflater until its count is
-// delivered, and its marker by the source until its wire length is read.
-func (s *flateStream) readFrame(limit int, header []byte) (*Message, error) {
+// ReadFrame reads the next frame, whichever segment carries it; limit bounds its
+// payload and header is a HeaderSize scratch the caller owns. A run's frames are owed
+// by the inflater until its count is delivered, and its marker by the source until
+// its wire length is read.
+func (s *Stream) ReadFrame(limit int, header []byte) (*Message, error) {
 	if s.r == nil {
 		return decode(s.Conn, limit, header)
 	}

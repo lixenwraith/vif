@@ -452,6 +452,7 @@ func joinNetConfig(cfg Config) *network.Config {
 	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
 	netCfg.Claims = cfg.claims.tokens(cfg.holder != 0)
 	netCfg.TLS = cfg.Trust
+	netCfg.ConnectPeer = network.PeerDialer(netCfg.Identity, netCfg.ConnectTimeout)
 	return netCfg
 }
 
@@ -647,7 +648,7 @@ func (a *App) preparedFor(o network.SessionOffer) bool {
 func (a *App) bindSeat(pending *network.PendingJoin, offer network.SessionOffer, c *claim) error {
 	port, err := a.socketPort()
 	if err == nil {
-		err = port.TakeJoin(pending)
+		err = pending.Hand(port)
 	}
 	if err != nil {
 		_ = pending.Complete(err, network.JoinerReport{})

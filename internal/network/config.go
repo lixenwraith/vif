@@ -113,6 +113,10 @@ type Config struct {
 	ListenAddress string
 	AcceptPeer    func(net.Conn) (PeerID, error)
 
+	// ConnectPeer is the dial side of the peer-link handshake, run on the stream
+	// DialPeer opened as local; it answers the far end's identity. Nil dials none.
+	ConnectPeer func(conn net.Conn, local PeerID) (PeerID, error)
+
 	// PreboundListener is a port the caller bound, served instead of ListenAddress or
 	// a host's Address: the bound address is declared before the transport exists.
 	PreboundListener net.Listener
@@ -130,8 +134,14 @@ type Config struct {
 	// the two share a process and a fate.
 	Dial func() (net.Conn, error)
 
-	preconnected     net.Conn
-	preconnectedPeer PeerID
+	// Preconnected is a stream already open to the far end, admitted as
+	// PreconnectedPeer in place of a dial: a join's, once seated.
+	Preconnected     net.Conn
+	PreconnectedPeer PeerID
+
+	// Kinds is the session's table over the kind byte: how each kind's frames travel
+	// and are counted, and the kinds the link acts on itself.
+	Kinds Kinds
 }
 
 // DefaultConfig returns production-safe defaults
@@ -153,6 +163,7 @@ func DefaultConfig() *Config {
 		WriteLinger:     parameter.NetworkWriteLinger,
 		StreamLevel:     parameter.NetworkStreamLevel,
 		TickInterval:    parameter.GameUpdateInterval,
+		Kinds:           kinds,
 	}
 }
 

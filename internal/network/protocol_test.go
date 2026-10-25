@@ -73,22 +73,22 @@ func (c teeConn) Read(p []byte) (int, error) {
 
 // streamPair is an opened link: frames written on w and flushed are read on r, the
 // wire bytes r saw recorded in rec.
-func streamPair(t *testing.T) (w, r *flateStream, rec *bytes.Buffer) {
+func streamPair(t *testing.T) (w, r *Stream, rec *bytes.Buffer) {
 	t.Helper()
 	a, b := net.Pipe()
 	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
 	rec = &bytes.Buffer{}
-	level := DefaultConfig().StreamLevel
-	return openFlateStream(a, 0, 0, level), openFlateStream(teeConn{b, rec}, 0, 0, level), rec
+	cfg := DefaultConfig()
+	return OpenStream(a, cfg), OpenStream(teeConn{b, rec}, cfg), rec
 }
 
 // readFrames reads n frames off r, in order.
-func readFrames(t *testing.T, r *flateStream, n int) []*Message {
+func readFrames(t *testing.T, r *Stream, n int) []*Message {
 	t.Helper()
 	var header [HeaderSize]byte
 	out := make([]*Message, 0, n)
 	for range n {
-		msg, err := r.readFrame(MaxPayloadSize, header[:])
+		msg, err := r.ReadFrame(MaxPayloadSize, header[:])
 		if err != nil {
 			t.Fatalf("frame %d: %v", len(out), err)
 		}

@@ -144,20 +144,24 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 		}
 	}()
 
-	cfg := DebugConfig(RolePeer, "")
-	cfg.ConnectTimeout = time.Second
-	cfg.Identity = PeerIdentity{Protocol: ProtocolVersion}
-
-	conn, from, err := DialPeerLink(ln.Addr().String(), cfg, 3)
+	connect := PeerDialer(PeerIdentity{Protocol: ProtocolVersion}, time.Second)
+	dial := func(local PeerID) (PeerID, error) {
+		conn, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatalf("dial: %v", err)
+		}
+		defer conn.Close()
+		return connect(conn, local)
+	}
+	from, err := dial(3)
 	if err != nil || from != 2 {
 		t.Fatalf("peer link = (%d, %v), want participant 2", from, err)
 	}
-	_ = conn.Close()
 	if err := <-results; err != nil {
 		t.Fatalf("the acceptor refused a participant it knows: %v", err)
 	}
 
-	if _, _, err = DialPeerLink(ln.Addr().String(), cfg, 4); err == nil {
+	if _, err = dial(4); err == nil {
 		t.Fatal("a participant the gate does not know opened a link")
 	}
 	<-results
@@ -201,6 +205,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 		cfg.ParticipantID = local
 		cfg.PreboundListener = ln
 		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: func() PeerID { return local }, Admit: gate}, time.Second)
+		cfg.ConnectPeer = PeerDialer(cfg.Identity, time.Second)
 		cfg.AcceptSession = HostAcceptor(Coordinator{
 			Assign: func([]string) (SessionOffer, error) { return offer, nil },
 		}, time.Second)

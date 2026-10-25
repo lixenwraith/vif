@@ -25,8 +25,8 @@ type SocketPort struct {
 	ever     atomic.Bool
 
 	// confirmed names the peers that passed a start gate, rather than counting the
-	// confirmations: one peer sending MsgReady twice would satisfy a gate waiting on
-	// two, and a released identity that dials back has to be able to confirm again.
+	// confirmations: one peer confirming twice would satisfy a gate waiting on two,
+	// and a released identity that dials back has to be able to confirm again.
 	readyMu   sync.Mutex
 	confirmed map[PeerID]bool
 
@@ -145,18 +145,15 @@ func (p *SocketPort) ServeConn(conn net.Conn, accept func(net.Conn) (PeerID, err
 // joiner's port its seat has not named yet.
 func (p *SocketPort) ParticipantID() uint32 { return uint32(p.config.ParticipantID) }
 
-// TakeJoin hands a port built before its join was seated that join's stream and the
-// identity the seat assigned: a joiner builds its world, and this port with it,
-// before its player's press. Before Start only, since a running port has its stream.
-func (p *SocketPort) TakeJoin(j *PendingJoin) error {
-	switch {
-	case p.IsRunning():
+// Preconnect hands a port built before its stream was dialled that stream and the
+// identities at its two ends, this one's and the peer's. Before Start only, since a
+// running port has its stream.
+func (p *SocketPort) Preconnect(conn net.Conn, local, peer PeerID) error {
+	if p.IsRunning() {
 		return errors.New("a running port already holds its stream")
-	case j.offer.Assigned == 0:
-		return errors.New("a join hands its stream over once seated")
 	}
-	p.config.ParticipantID = j.offer.Assigned
-	p.config.preconnected, p.config.preconnectedPeer = j.conn, j.Peer()
+	p.config.ParticipantID = local
+	p.config.Preconnected, p.config.PreconnectedPeer = conn, peer
 	return nil
 }
 
@@ -184,7 +181,7 @@ func (p *SocketPort) Send(peerID uint32, msgType uint8, payload []byte) bool {
 	id, kind := PeerID(peerID), MessageType(msgType)
 	p.pendMu.Lock()
 	defer p.pendMu.Unlock()
-	if kind.Bundles() {
+	if p.config.Kinds.Traits(kind).Bundles {
 		if !p.transport.Connected(id) {
 			return false
 		}
@@ -208,7 +205,7 @@ func (p *SocketPort) BroadcastExcept(exclude uint32, msgType uint8, payload []by
 	kind := MessageType(msgType)
 	p.pendMu.Lock()
 	defer p.pendMu.Unlock()
-	if kind.Bundles() {
+	if p.config.Kinds.Traits(kind).Bundles {
 		for _, id := range p.transport.Peers() {
 			if uint32(id) != exclude {
 				p.pend(id).Add(kind, payload)
@@ -499,7 +496,7 @@ func (p *SocketPort) onMessage(id PeerID, msg *Message) {
 		return
 	}
 	switch msg.Type {
-	case MsgReady:
+	case p.config.Kinds.Ready:
 		// The joiner's port counts delivered bytes from zero from here on, and the
 		// capture its gate read is in this end's sent count: a new origin.
 		p.meterMu.Lock()

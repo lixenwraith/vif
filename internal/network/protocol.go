@@ -7,7 +7,9 @@ import (
 	"io"
 )
 
-// MessageType identifies the semantic meaning of a message
+// MessageType is the kind byte that opens every frame. The session layer enumerates
+// the kinds and describes them to a link in a Kinds table; the link owns the three
+// it sends or packs on its own.
 type MessageType uint8
 
 // ByteKind is the family a frame's bytes are counted under, so a link's traffic is
@@ -28,39 +30,57 @@ var byteKindNames = [KindCount]string{"epoch", "sync", "correction", "repair", "
 
 func (k ByteKind) String() string { return byteKindNames[k] }
 
-// Bundles reports whether frames of kind t travel bundled: what a link is sent of a
-// tick's epochs and syncs leaves as one MsgBundle.
-func (t MessageType) Bundles() bool { return t == MsgEvent || t == MsgStateSync }
-
-// Precompressed reports whether t carries a body the snapshot codec deflated, which
-// a link passes raw past its own stream rather than deflating twice.
-func (t MessageType) Precompressed() bool {
-	switch t {
-	case MsgStateSnapshot, MsgStateCorrection, MsgStateShard, MsgScenarioBody:
-		return true
-	}
-	return false
+// Traits is what a link knows of one kind: the family its bytes count under, whether
+// its frames travel bundled, and whether its body arrived deflated already, which
+// the link passes raw past its own stream rather than deflating twice.
+type Traits struct {
+	Kind          ByteKind
+	Bundles       bool
+	Precompressed bool
 }
 
-// Kind is the family t's bytes count under.
-func (t MessageType) Kind() ByteKind {
-	switch t {
-	case MsgEvent, MsgBundle:
-		return KindEpoch
-	case MsgStateSync:
-		return KindSync
-	case MsgStateCorrection, MsgStateSnapshot:
-		return KindCorrection
-	case MsgStateManifest, MsgStateRequest, MsgStateShard, MsgStateUnserved:
-		return KindRepair
-	}
-	return KindControl
+// Kinds is the session layer's table over the kind byte, which a link reads and
+// never writes: each kind's traits, and the kinds the link acts on itself. Ready
+// confirms a start gate on the link that carries it; PeerLink and Join are what a
+// dialer opens a stream with, which tell a door which handshake runs.
+type Kinds struct {
+	traits                [256]Traits
+	Ready, PeerLink, Join MessageType
 }
 
-// Live message types are the ones a session actually exchanges. The reserved codes
-// hold their place in the numbering for capabilities the transport does not have
-// yet; nothing sends or accepts them, and NetworkSystem counts an unrecognised type
-// as a drop rather than translating it.
+// NewKinds tabulates traits; a kind not named counts as control, travels alone and
+// arrives plain.
+func NewKinds(traits map[MessageType]Traits, ready, peerLink, join MessageType) Kinds {
+	k := Kinds{Ready: ready, PeerLink: peerLink, Join: join}
+	for i := range k.traits {
+		k.traits[i].Kind = KindControl
+	}
+	for t, tr := range traits {
+		k.traits[t] = tr
+	}
+	return k
+}
+
+// Traits is what the table says of t.
+func (k *Kinds) Traits(t MessageType) Traits { return k.traits[t] }
+
+// The kinds the link owns, numbered among the session's: a tick's frames for one
+// peer packed into one (Bundle), and the probe and echo a port answers itself, the
+// only round trip the protocol times. The transport answers a probe before it
+// reaches a tick, so they measure the wire; an echo returns the probe's bytes, the
+// far end's received byte count and read time, and the LinkReport it last published.
+const (
+	MsgLinkProbe MessageType = 0x14 // a link measurement, awaiting its echo
+	MsgLinkEcho  MessageType = 0x15 // one probe answered, with the peer's report
+	MsgBundle    MessageType = 0x19 // several frames for one peer as one, each [type:1][len:2][payload]
+)
+
+// === the session's kinds ===
+
+// The kinds a session exchanges, and the table a link reads them by. The reserved
+// codes hold their place in the numbering for capabilities the transport does not
+// have yet; nothing sends or accepts them, and NetworkSystem counts an unrecognised
+// type as a drop rather than translating it.
 const (
 	// MsgSessionRoute is the one frame a dialer sends before it reads: the session
 	// name it was given, empty for none, so one address can carry several. A front
@@ -89,14 +109,6 @@ const (
 	MsgStateSync MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
 	MsgEvent     MessageType = 0x12 // Live: one closed barrier production epoch
 
-	// MsgLinkProbe and MsgLinkEcho are the only round trip the protocol times; every
-	// other measurement is one-directional. The transport answers a probe before it
-	// reaches a tick, so they measure the wire, not this instance's scheduling. An
-	// echo returns the probe's bytes, the far end's received byte count and read time,
-	// and the LinkReport its world last published: the only game state on them.
-	MsgLinkProbe MessageType = 0x14 // Live: a link measurement, awaiting its echo
-	MsgLinkEcho  MessageType = 0x15 // Live: one probe answered, with the peer's report
-
 	// MsgScenarioRequest and MsgScenarioBody carry the session's scenario to a joiner
 	// whose roots lack it: the request names the preview's digest, and the answer is
 	// the deflated canonical form, chunked like a capture. They sit before the joiner
@@ -111,11 +123,6 @@ const (
 	// a migrated authority; the offer given on redial names what is being played.
 	// Both sides restart the run, so there is no state to hand over.
 	MsgSessionRestart MessageType = 0x18 // Live: the authority is rebuilding the session
-
-	// MsgBundle is a tick's raw epochs and syncs for the authority as one frame: a
-	// guest's own and those it carries for the participants behind it. Each entry is
-	// [type:1][len:2][payload]; see Bundle.
-	MsgBundle MessageType = 0x19 // Live: several frames for the authority, packed into one
 
 	// MsgStateSnapshot carries one chunk of an authoritative shared-world capture
 	// (D-19). Its size is a function of the world rather than of the format, so it is
@@ -189,6 +196,26 @@ const (
 	MsgAuthResponse MessageType = 0x31
 )
 
+// kinds is what a link knows of the session's kinds: the family each counts under,
+// which travel bundled and which bodies the snapshot codec deflated already. A kind
+// not named counts as control, the link's probe and echo among them.
+var kinds = NewKinds(map[MessageType]Traits{
+	MsgEvent:           {Kind: KindEpoch, Bundles: true},
+	MsgStateSync:       {Kind: KindSync, Bundles: true},
+	MsgBundle:          {Kind: KindEpoch},
+	MsgStateSnapshot:   {Kind: KindCorrection, Precompressed: true},
+	MsgStateCorrection: {Kind: KindCorrection, Precompressed: true},
+	MsgStateManifest:   {Kind: KindRepair},
+	MsgStateRequest:    {Kind: KindRepair},
+	MsgStateShard:      {Kind: KindRepair, Precompressed: true},
+	MsgStateUnserved:   {Kind: KindRepair},
+	MsgScenarioBody:    {Kind: KindControl, Precompressed: true},
+}, MsgReady, MsgConnect, MsgSessionRoute)
+
+// Bundles reports whether frames of kind t travel bundled: what a link is sent of a
+// tick's epochs and syncs leaves as one MsgBundle.
+func Bundles(t MessageType) bool { return kinds.Traits(t).Bundles }
+
 // Header precedes every message on the wire
 // Fixed 12 bytes: [Type:1][Flags:1][Seq:4][Ack:4][Len:2]
 const HeaderSize = 12
@@ -216,7 +243,7 @@ type Message struct {
 // takes it as a frame of its own.
 func (m *Message) Encode(w io.Writer) error {
 	var header [HeaderSize]byte
-	if s, ok := w.(*flateStream); ok && s.w != nil {
+	if s, ok := w.(*Stream); ok && s.w != nil {
 		return s.writeFrame(m, header[:])
 	}
 	return m.encode(w, header[:])

@@ -151,48 +151,40 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, err
 	}
 }
 
-// DialPeerLink opens one stream to a chain address and completes the handshake.
-func DialPeerLink(addr string, cfg *Config, local PeerID) (net.Conn, PeerID, error) {
-	base := DefaultConfig()
-	if cfg != nil {
-		c := *cfg
-		base = &c
+// PeerDialer returns the dial side of the peer-link handshake, which a port runs on
+// each stream DialPeer opens (Config.ConnectPeer): it names this participant and its
+// build, and reads which participant answered. Only the build half of the identity
+// travels, as on the accept side.
+func PeerDialer(identity PeerIdentity, timeout time.Duration) func(net.Conn, PeerID) (PeerID, error) {
+	return func(conn net.Conn, local PeerID) (PeerID, error) {
+		if timeout > 0 {
+			_ = conn.SetDeadline(time.Now().Add(timeout))
+			defer conn.SetDeadline(time.Time{})
+		}
+		body, err := json.Marshal(peerHello{From: local, Identity: identity})
+		if err != nil {
+			return 0, err
+		}
+		if err := NewMessage(MsgConnect, body).Encode(conn); err != nil {
+			return 0, err
+		}
+		msg, err := Decode(conn)
+		if err != nil {
+			return 0, err
+		}
+		if msg.Type != MsgAck {
+			return 0, fmt.Errorf("peer link: got message %#x, want ack", msg.Type)
+		}
+		var welcome peerWelcome
+		if err := json.Unmarshal(msg.Payload, &welcome); err != nil {
+			return 0, fmt.Errorf("peer link ack: %w", err)
+		}
+		if err := welcome.Refused(); err != nil {
+			return 0, err
+		}
+		if welcome.From == 0 {
+			return 0, errors.New("peer link: the far end named no participant")
+		}
+		return welcome.From, nil
 	}
-	conn, err := dial(addr, base)
-	if err != nil {
-		return nil, 0, err
-	}
-	if base.ConnectTimeout > 0 {
-		_ = conn.SetDeadline(time.Now().Add(base.ConnectTimeout))
-	}
-	fail := func(err error) (net.Conn, PeerID, error) {
-		_ = conn.Close()
-		return nil, 0, err
-	}
-	body, err := json.Marshal(peerHello{From: local, Identity: base.Identity})
-	if err != nil {
-		return fail(err)
-	}
-	if err := NewMessage(MsgConnect, body).Encode(conn); err != nil {
-		return fail(err)
-	}
-	msg, err := Decode(conn)
-	if err != nil {
-		return fail(err)
-	}
-	if msg.Type != MsgAck {
-		return fail(fmt.Errorf("peer link: got message %#x, want ack", msg.Type))
-	}
-	var welcome peerWelcome
-	if err := json.Unmarshal(msg.Payload, &welcome); err != nil {
-		return fail(fmt.Errorf("peer link ack: %w", err))
-	}
-	if err := welcome.Refused(); err != nil {
-		return fail(err)
-	}
-	if welcome.From == 0 {
-		return fail(errors.New("peer link: the far end named no participant"))
-	}
-	_ = conn.SetDeadline(time.Time{})
-	return conn, welcome.From, nil
 }

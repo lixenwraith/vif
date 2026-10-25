@@ -427,7 +427,7 @@ it is ready, and asks on its status line: "Click or press a key to join *host*",
 "Press a key" with the mouse off, "Tap" after a touch. A key that types or moves, or
 a click, seats it; Escape, Tab, the function keys and chords do not, and Ctrl-C
 leaves (`joinPress`). The seat binds the identity the run's port and world were
-built without (`SocketPort.TakeJoin`), and the run replies and meets the gate as
+built without (`PendingJoin.Hand`), and the run replies and meets the gate as
 any joiner does. The host keeps the handshake for a ready period of 5 s, and tells
 its player who is ready to join and waiting for their press; a press
 after it dials again and seats the world already built while the session plays the

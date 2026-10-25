@@ -52,7 +52,7 @@ func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
 	received := make(chan *Message, 1)
 	go func() {
 		var header [HeaderSize]byte
-		msg, _ := openFlateStream(client, 0, 0, pm.config.StreamLevel).readFrame(MaxPayloadSize, header[:])
+		msg, _ := OpenStream(client, pm.config).ReadFrame(MaxPayloadSize, header[:])
 		received <- msg
 	}()
 	pm.Broadcast(NewMessage(MsgSessionRestart, []byte("host:7777")))
@@ -88,11 +88,11 @@ func TestALinkBundlesEpochsAndKeepsTheirOrder(t *testing.T) {
 	}
 	port.Release()
 	_ = client.SetReadDeadline(time.Now().Add(5 * time.Second))
-	stream := openFlateStream(client, 0, 0, port.config.StreamLevel)
+	stream := OpenStream(client, &port.config)
 	var got []string
 	for range 3 {
 		var header [HeaderSize]byte
-		msg, err := stream.readFrame(MaxPayloadSize, header[:])
+		msg, err := stream.ReadFrame(MaxPayloadSize, header[:])
 		if err != nil {
 			t.Fatalf("after %v: %v", got, err)
 		}

@@ -348,7 +348,7 @@ func TestAPreparingDialHoldsNothingUntilItsSeat(t *testing.T) {
 	}
 	defer pending.Close()
 	unseated := pending.TransportConfig()
-	if preview.Assigned != 0 || preview.Host != offer.Host || unseated.ParticipantID != 0 || unseated.preconnected != nil {
+	if preview.Assigned != 0 || preview.Host != offer.Host || unseated.ParticipantID != 0 || unseated.Preconnected != nil {
 		t.Fatalf("a preview assigned %d, and a port built on it holds identity %d", preview.Assigned, unseated.ParticipantID)
 	}
 	if err := pending.Prepared(); err != nil {
@@ -367,7 +367,7 @@ func TestAPreparingDialHoldsNothingUntilItsSeat(t *testing.T) {
 	}
 	guest := NewSocketPort(unseated)
 	defer guest.Close()
-	if err := guest.TakeJoin(pending); err != nil {
+	if err := pending.Hand(guest); err != nil {
 		t.Fatal(err)
 	}
 	if guest.ParticipantID() != uint32(offer.Assigned) {

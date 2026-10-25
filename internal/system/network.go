@@ -1759,7 +1759,7 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 		s.scheduleCursorState(from, msg.Payload)
 	case network.MsgBundle:
 		err := network.Unbundle(msg.Payload, func(kind network.MessageType, body []byte) {
-			if kind.Bundles() {
+			if network.Bundles(kind) {
 				s.dispatchMessage(from, &network.Message{Type: kind, Payload: body})
 			} else {
 				s.statDrop.Add(1)

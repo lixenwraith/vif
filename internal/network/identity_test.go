@@ -128,9 +128,12 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 		}
 		accepted <- err
 	}()
-	cfg := DebugConfig(RolePeer, "")
-	cfg.ConnectTimeout, cfg.Identity = time.Second, theirs
-	_, _, err = DialPeerLink(ln.Addr().String(), cfg, 3)
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_, err = PeerDialer(theirs, time.Second)(conn, 3)
 	check("dialler", err, readsTheirs)
 	check("acceptor", <-accepted, readsOurs)
 }

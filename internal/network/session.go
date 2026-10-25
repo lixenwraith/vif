@@ -400,9 +400,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 			return 0, err
 		}
 		// The joiner reads everything after its reply off the compressed stream.
-		refuse := func(cause error) {
-			RefuseJoin(openFlateStream(conn, 0, 0, parameter.NetworkStreamLevel), cause, timeout)
-		}
+		refuse := func(cause error) { RefuseJoin(OpenStream(conn, DefaultConfig()), cause, timeout) }
 		// Verify before Report so an incompatible joiner cannot affect session state.
 		// It is told in its own terms: to it, its build is the one here.
 		if err = o.Identity.Verify(reply.Identity); err != nil {
@@ -749,7 +747,7 @@ func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 		defer conn.SetWriteDeadline(time.Time{})
 	}
 	if err = NewMessage(MsgJoinReply, body).Encode(conn); err == nil {
-		if stream, ok := conn.(*flateStream); ok {
+		if stream, ok := conn.(*Stream); ok {
 			_ = stream.Flush()
 		}
 	}
@@ -757,7 +755,7 @@ func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
 
 // PendingJoin owns a dialled stream until the startup gate transfers it to a port.
 type PendingJoin struct {
-	conn        *flateStream
+	conn        *Stream
 	base        Config
 	offer       SessionOffer
 	replied     bool
@@ -866,7 +864,7 @@ func (p *PendingJoin) next() (*Message, error) {
 		_ = p.conn.SetReadDeadline(time.Now().Add(p.base.ReadTimeout))
 	}
 	var header [HeaderSize]byte
-	msg, err := p.conn.readFrame(MaxPayloadSize, header[:])
+	msg, err := p.conn.ReadFrame(MaxPayloadSize, header[:])
 	if ne := net.Error(nil); errors.As(err, &ne) && ne.Timeout() {
 		return nil, plainError{"the host stopped answering", err}
 	}
@@ -899,6 +897,55 @@ func (p *PendingJoin) send(msg *Message) error {
 
 // maxDeferredJoinFrames bounds what one join may buffer off its stream.
 const maxDeferredJoinFrames = 512
+
+// readSnapshot reads a whole capture from a raw handshake stream, holding the
+// session traffic that arrives alongside it.
+//
+// The interleaving is by design rather than by accident. A mid-run host admits a
+// participant before it reads the world for it, so the epochs it produces during
+// the transfer reach that participant instead of falling into the gap; they arrive
+// on this stream, between chunks, and hold keeps them for the barrier to receive
+// once the world they apply to exists. A probe is answered the same way. Anything
+// else is a protocol error, because the next message on this stream decides what
+// the joiner does with the world it just received.
+func readSnapshot(p *PendingJoin) (uint64, []byte, error) {
+	return readChunked(p, MsgStateSnapshot)
+}
+
+// readChunked reassembles one chunked transfer off the handshake stream, holding
+// the session traffic that arrives beside it. want names the kind: a capture and a
+// scenario are the two messages whose size is a function of their content, and
+// they share the framing because they are the same problem.
+func readChunked(p *PendingJoin, want MessageType) (uint64, []byte, error) {
+	defer p.conn.SetReadDeadline(time.Time{})
+	var asm SnapshotAssembly
+	for {
+		msg, err := p.next()
+		if err != nil {
+			return 0, nil, err
+		}
+		if p.hold(msg) {
+			continue
+		}
+		if msg.Type == MsgJoinReply {
+			// The coordinator refused mid-transfer. Its reason is worth more than
+			// the surprise at the message kind, and it is the only thing the
+			// dialer can act on.
+			return 0, nil, refusalFrom(msg)
+		}
+		if msg.Type != want {
+			return 0, nil, fmt.Errorf("join transfer: got message %#x, want %#x", msg.Type, want)
+		}
+		done, err := asm.Add(msg.Payload)
+		if err != nil {
+			return 0, nil, err
+		}
+		if done {
+			tick, body := asm.Result()
+			return tick, body, nil
+		}
+	}
+}
 
 // PreviewSession dials addr and reads the session it would join, which holds
 // nothing for this dial yet: its identity, slot and claim are assigned at Seat. The
@@ -989,7 +1036,7 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 		_ = conn.Close()
 		return nil, fmt.Errorf("join handshake preview: %w", err)
 	}
-	return &PendingJoin{conn: &flateStream{Conn: conn}, base: *base, offer: preview}, nil
+	return &PendingJoin{conn: NewStream(conn), base: *base, offer: preview}, nil
 }
 
 // Prepared tells the coordinator this dialer has built its world on the preview and
@@ -1102,16 +1149,26 @@ func dialListed(base *Config, failed error) (net.Conn, error) {
 
 // TransportConfig returns a client config that adopts the negotiated identity and
 // the join's stream. Before the seat there is no identity, and the stream stays this
-// join's until the port takes it (SocketPort.TakeJoin).
+// join's until a port takes it (Hand).
 func (p *PendingJoin) TransportConfig() *Config {
 	cfg := p.base
 	cfg.Role = RolePeer
 	cfg.Dial = nil // the join's own stream; a later peer link dials its address
 	if p.offer.Assigned != 0 {
 		cfg.ParticipantID = p.offer.Assigned
-		cfg.preconnected, cfg.preconnectedPeer = p.conn, p.Peer()
+		cfg.Preconnected, cfg.PreconnectedPeer = p.conn, p.Peer()
 	}
 	return &cfg
+}
+
+// Hand hands a port built before this join was seated its stream and the identity
+// the seat assigned: a joiner builds its world, and that port with it, before its
+// player's press.
+func (p *PendingJoin) Hand(port *SocketPort) error {
+	if p.offer.Assigned == 0 {
+		return errors.New("a join hands its stream over once seated")
+	}
+	return port.Preconnect(p.conn, p.offer.Assigned, p.Peer())
 }
 
 // Complete returns a rejection unchanged or admits the stream for the start gate.
@@ -1149,7 +1206,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	}
 	// Everything after the reply travels on the link's compressed stream, the
 	// coordinator's side of which opens as it reads this reply.
-	openFlateStream(p.conn, p.base.ReadBufferSize, p.base.WriteBufferSize, p.base.StreamLevel)
+	OpenStream(p.conn, &p.base)
 	return err
 }
 
