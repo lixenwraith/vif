@@ -242,7 +242,9 @@ are fed and the replay is reported skipped, rather than guessing at a partial
 history; the others' and the barrier-bound ones still are.
 
 The whole commit — projection and write — runs under the live world lock, so no
-live tick can land between the tick the projection reached and the write.
+live tick can land between the tick the projection reached and the write. The write
+compares the staging world's stores against the live ones where they stand and
+moves the cells that differ; neither world is captured for it.
 
 A capture ahead of the clock is a join or a jump and is adopted at its own tick;
 within `NetworkHoldTicks` it waits ([Netcode design §2.1](netcode-design.md#21-the-playout-buffer)).

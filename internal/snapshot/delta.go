@@ -157,6 +157,16 @@ func (e *Encoder) DiffWritten(before, written SharedCapture) (WrittenDelta, erro
 	return d, nil
 }
 
+// DiffWrittenLight is DiffWritten for a world written in place: before and written
+// carry everything but their rows, world is the rows' delta the write recorded and
+// integrity the written world's, read where it stands (Encoder.IntegrityLive).
+func (e *Encoder) DiffWrittenLight(before, written SharedCapture, world engine.SharedWorldDelta, integrity uint64) WrittenDelta {
+	d := diffParts(before, written)
+	d.Header, d.World = written.Header, world
+	d.Header.Integrity = integrity
+	return d
+}
+
 // HoldsBesideWorld reports whether before already holds all written carries outside
 // its component stores: the clock, the allocator, the streams, every carrier's
 // record, the FSM and the status surface.

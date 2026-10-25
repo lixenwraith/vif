@@ -550,21 +550,23 @@ link it already holds.
 ### Project a correction outside the live lock
 
 - Priority: P2
-- Affected files: `internal/app/snapshot_stage.go`
+- Affected files: `internal/app/snapshot_stage.go`, `internal/system/network.go`
 - Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
-An answer no longer captures under the lock (netcode design §4, converged
-answers); an install still holds it: the deepest td install of netcode design §3.7
-held 48 ms with no tick projected, 11 the staging world's capture and 36 the live
-capture, the comparison and the write, and each projected tick adds a simulation
-tick, so a repair 16 ticks behind holds it past 90 ms. First, compare the staging
-world's stores against the live ones in place, as the in-place index reads the live
-world, and write the cells that differ, with no capture of either; then move the
-projection out.
-Any out-of-lock or incremental design must keep [Multi-player](multi-player.md) §3.3:
-fence membership, pending barrier crossings not fed, the ledger settled before
-projection, the journal's place and mark, and no live tick between the final
-projection and the write. WASM gains scheduling time, not parallel CPU.
+An install compares the staging world's stores against the live ones in place and
+writes the cells that differ, with no capture of either (`ReconcileSharedFrom`); the
+deepest td install of netcode design §3.7 holds the live lock 8 ms, 7.7 of them the
+write, down from 48. What the lock still holds is the projection: each projected
+tick adds a simulation tick, 2.6 ms at td, so a repair 16 ticks behind holds it
+past 45 ms. Moving it out: project to the live tick off the lock, then under it feed
+what the barrier retained since the first feed, project the ticks the live world
+advanced meanwhile, and write. Any out-of-lock or incremental design must keep
+[Multi-player](multi-player.md) §3.3: fence membership, pending barrier crossings
+not fed, the ledger settled before projection, the journal's place and mark, and no
+live tick between the final projection and the write; the second feed needs a
+retention watermark the barrier does not keep, since `RetainedAfter` selects by
+tick and would feed the first feed's records again. WASM gains scheduling time, not
+parallel CPU.
 
 ### Close the edges of a session hold
 

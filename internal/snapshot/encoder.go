@@ -73,6 +73,16 @@ func (e *Encoder) Integrity(cap SharedCapture) (uint64, error) {
 	return integrityOf(cap, stores)
 }
 
+// IntegrityLive is Integrity over a world's rows read where they stand, with cap
+// carrying everything beside them. Caller MUST hold w's updateMutex.
+func (e *Encoder) IntegrityLive(w *engine.World, cap SharedCapture) (uint64, error) {
+	stores, err := e.rows.EncodeLive(w, storeRowHash)
+	if err != nil {
+		return 0, fmt.Errorf("capture encode: %w", err)
+	}
+	return integrityOf(cap, stores)
+}
+
 // Seal sets a capture's integrity hash.
 func (e *Encoder) Seal(cap *SharedCapture) error {
 	sum, err := e.Integrity(*cap)

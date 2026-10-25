@@ -822,16 +822,19 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
 
 - Costs: · − · −; complexity high.
 - Projected: a deep install's lock from past 100 ms to about a tick at td.
-- In: nothing beyond row reuse; an answer no longer captures under the lock.
-- Measured (§3.7): the deepest td install held the lock 48 ms with no tick
+- In: an answer captures nothing under the lock, and neither does an install: the
+  commit compares the staging world's stores against the live ones in place and
+  writes the cells that differ (`World.ReconcileSharedFrom`, in the order a capture
+  is written, so the two leave one world), everything beside the rows read light; a
+  journal takes the delta that comparison recorded and the written rows' integrity
+  hashed where they stand. Measured on §3.7's run: the deepest td install holds the
+  lock 8.2 ms (write 7.7, project 0.03) against 47.2 (write 34.5, project 12.0), no
+  tick projected on either; the keyframe's install, stage and commit, 52 ms against 62.
+- Measured before it (§3.7): the deepest td install held the lock 48 ms with no tick
   projected, 11 of them the staging world's capture and 36 the live capture, the
   comparison and the write; a projected tick adds a simulation tick, 2.6 ms at td.
-- Decided: the captures go first, not the projection. The install compares the
-  staging world's stores against the live ones in place, as the in-place index
-  reads the live world, and writes the cells that differ, so the lock holds the
-  comparison, the write and the ticks it projected; the projection leaves the lock
-  after that, as
-  [Project a correction outside the live lock](todo.md#project-a-correction-outside-the-live-lock)
+- Left: the projection, which the lock still holds, a simulation tick per tick behind,
+  as [Project a correction outside the live lock](todo.md#project-a-correction-outside-the-live-lock)
   sets out, under everything multi-player §3.3 requires.
 
 ### A columnar keyframe codec
