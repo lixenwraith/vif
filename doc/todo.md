@@ -929,19 +929,6 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
 
-### Initialize systems from the engine at startup too
-
-- Priority: P3
-- Affected files: `internal/app/app.go` (`initWorld`, `initScheduler`), each
-  system's constructor in `internal/system`, the system tests
-
-A reset re-initializes every system through `World.InitSystems` in dependency
-order; at startup each constructor still calls its own `Init`. Moving that call
-into the engine has to keep three things: the journal anchor reads the RNG session
-the construction-time draws advance, before the scheduler exists; `MetaSystem` is
-added once the context exists; and the system tests construct systems standalone
-and expect them usable.
-
 ### Give the composite lifecycle methods a user
 
 - Priority: P3

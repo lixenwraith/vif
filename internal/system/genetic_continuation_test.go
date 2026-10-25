@@ -19,8 +19,7 @@ func newGeneticFixture(t *testing.T) *GeneticSystem {
 	t.Helper()
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	s := NewGeneticSystem(w).(*GeneticSystem)
-	s.Init()
+	s := ready(NewGeneticSystem(w)).(*GeneticSystem)
 	s.enabled = true
 	return s
 }

@@ -18,7 +18,7 @@ import (
 func TestTimerContentIsBoundedByItsComponentBuffer(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())
-	splash := NewSplashSystem(w).(*SplashSystem)
+	splash := ready(NewSplashSystem(w)).(*SplashSystem)
 
 	splash.handleTimerSpawn(&event.SplashTimerRequestPayload{
 		Duration: time.Duration(1<<63 - 1),
@@ -46,7 +46,7 @@ func TestTimerContentIsBoundedByItsComponentBuffer(t *testing.T) {
 func TestTimerWithoutItsAnchorHoldsNoSpace(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())
-	splash := NewSplashSystem(w).(*SplashSystem)
+	splash := ready(NewSplashSystem(w)).(*SplashSystem)
 
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 60, Y: 20})
@@ -65,7 +65,7 @@ func TestTimerWithoutItsAnchorHoldsNoSpace(t *testing.T) {
 // member is a shared glyph, and it is the one the typist is about to type.
 func TestMagnifierShowsAGoldMember(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
-	splash := NewSplashSystem(w).(*SplashSystem)
+	splash := ready(NewSplashSystem(w)).(*SplashSystem)
 	member := w.CreateEntity(core.DomainShared)
 	w.Components.Glyph.SetComponent(member, component.GlyphComponent{Rune: 'G', Type: component.GlyphGold})
 	w.Positions.SetPosition(member, component.PositionComponent{X: 5, Y: 5})

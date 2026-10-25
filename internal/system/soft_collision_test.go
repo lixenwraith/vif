@@ -11,7 +11,7 @@ import (
 func TestDrainOnlyReceivesKrakenSoftCollisions(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
+	s := ready(NewSoftCollisionSystem(w)).(*SoftCollisionSystem)
 
 	for species := component.SpeciesType(1); species < component.SpeciesCount; species++ {
 		if s.matrix[component.SpeciesDrain][species] != nil {
@@ -56,7 +56,7 @@ func TestDrainFlockingObservesSharedSpeciesOneWay(t *testing.T) {
 			w.Positions.SetPosition(shared, component.PositionComponent{X: 10, Y: 10})
 			w.Positions.SetPosition(drain, component.PositionComponent{X: 11, Y: 10})
 
-			s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
+			s := ready(NewSoftCollisionSystem(w)).(*SoftCollisionSystem)
 			s.rebuildCaches()
 			s.processAllFlocking(1)
 

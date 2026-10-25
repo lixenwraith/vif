@@ -21,7 +21,7 @@ func testDrainInteractionWorld(
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
@@ -34,7 +34,7 @@ func testDrainInteractionWorld(
 	}
 	w.Resources.Event.Queue.Consume()
 
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 	drains.materializeDrainAt(drainX, drainY)
 	drainEntities := w.Components.Drain.Entities()
 	if len(drainEntities) != 1 {
@@ -43,7 +43,7 @@ func testDrainInteractionWorld(
 	drain := drainEntities[0]
 	w.Resources.Event.Queue.Consume()
 
-	return w, cursor, drain, drains, NewCombatSystem(w).(*CombatSystem)
+	return w, cursor, drain, drains, ready(NewCombatSystem(w)).(*CombatSystem)
 }
 
 func applyQueuedCombatArea(t *testing.T, w *engine.World, combat *CombatSystem) {
@@ -102,7 +102,7 @@ func assertDrainKnockbackIntegrated(
 func TestDrainIntegratesShieldKnockbackDuringKineticImmunity(t *testing.T) {
 	w, cursor, drain, drains, combat := testDrainInteractionWorld(t, 10, 10, 10, 10)
 
-	shield := NewShieldSystem(w).(*ShieldSystem)
+	shield := ready(NewShieldSystem(w)).(*ShieldSystem)
 	shield.HandleEvent(event.GameEvent{
 		Type:    event.EventShieldActivate,
 		Payload: &event.ShieldActivatePayload{Entity: cursor},
@@ -256,7 +256,7 @@ func beginDrainTick(t *testing.T, drains *DrainSystem) {
 
 func TestDrainPopulationScalesToTenWithoutOverheat(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 	for _, tc := range []struct{ heat, want int }{
 		{-1, 0}, {0, 0}, {1, 1}, {9, 1}, {10, 1}, {11, 2}, {50, 5}, {90, 9}, {91, 10}, {100, 10}, {101, 10},
 	} {
@@ -289,7 +289,7 @@ func TestDrainPopulationScalesToTenWithoutOverheat(t *testing.T) {
 
 func TestDrainReconciliationRespectsHeatChangesAndPause(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 	heat, _ := w.Components.Heat.GetPtr(cursor)
 	heat.Current = 1
 	drains.Update()
@@ -340,7 +340,7 @@ func TestDrainReconciliationRespectsHeatChangesAndPause(t *testing.T) {
 
 func TestDrainPlacementBackoffDoublesAndResets(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 	w.Components.Heat.SetComponent(cursor, component.HeatComponent{Current: 1})
 	// Without a cursor position every placement fails deterministically.
 	w.Positions.RemoveEntity(cursor)

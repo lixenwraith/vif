@@ -33,7 +33,7 @@ func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T
 	motion := component.KineticComponent{}
 	motion.PreciseX, motion.PreciseY = 40.5, 10.5
 	w.Components.Kinetic.SetComponent(head, motion)
-	s := NewNavigationSystem(w).(*NavigationSystem)
+	s := ready(NewNavigationSystem(w)).(*NavigationSystem)
 	s.Update()
 	nav, _ := w.Components.Navigation.GetPtr(head)
 	if nav.LockedTarget == 0 || nav.HasDirectPath {
@@ -69,7 +69,7 @@ func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	NewCursorSystem(w).(*CursorSystem).despawn(&event.CursorDespawnRequestPayload{Entity: other})
+	ready(NewCursorSystem(w)).(*CursorSystem).despawn(&event.CursorDespawnRequestPayload{Entity: other})
 	s.Update()
 	if nav.LockedTarget != locked {
 		t.Fatal("departed cursor remained the pursuit target")
@@ -85,12 +85,19 @@ func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T
 	}
 }
 
+// ready initialises a system constructed outside the engine, as World.InitSystems
+// does for the registered set at startup and on reset
+func ready[S engine.System](s S) S {
+	s.Init()
+	return s
+}
+
 func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 	t.Helper()
 
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
@@ -118,7 +125,7 @@ func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 func spawnRemoteCursor(t *testing.T, w *engine.World, slot uint8, x, y int, peer uint32) core.Entity {
 	t.Helper()
 
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
@@ -174,7 +181,7 @@ func TestRemoteCursorJoinsTheRosterWithoutBecomingLocal(t *testing.T) {
 func TestADepartedCursorWaitsAsAWraith(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	turn := func() []event.GameEvent {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
 			Payload: &event.CursorWraithRequestPayload{Slot: 2}})
@@ -221,7 +228,7 @@ func TestADepartedCursorWaitsAsAWraith(t *testing.T) {
 func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
 		Payload: &event.CursorWraithRequestPayload{Slot: 2}})
 	w.Resources.Event.Queue.Consume()
@@ -269,11 +276,11 @@ func TestRemoteCursorRejectsOwnerAuthoredWrites(t *testing.T) {
 		t.Fatalf("ResolveOwnedCursor(remote) = %d, want 0", got)
 	}
 
-	energy := NewEnergySystem(w).(*EnergySystem)
-	heat := NewHeatSystem(w).(*HeatSystem)
-	shield := NewShieldSystem(w).(*ShieldSystem)
-	boost := NewBoostSystem(w).(*BoostSystem)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	energy := ready(NewEnergySystem(w)).(*EnergySystem)
+	heat := ready(NewHeatSystem(w)).(*HeatSystem)
+	shield := ready(NewShieldSystem(w)).(*ShieldSystem)
+	boost := ready(NewBoostSystem(w)).(*BoostSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 
 	for _, ev := range []event.GameEvent{
 		{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{Entity: remote, Value: 42}},
@@ -326,9 +333,9 @@ func TestRemoteCursorStateDoesNotAgeLocally(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
 
-	boost := NewBoostSystem(w).(*BoostSystem)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
-	shield := NewShieldSystem(w).(*ShieldSystem)
+	boost := ready(NewBoostSystem(w)).(*BoostSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	shield := ready(NewShieldSystem(w)).(*ShieldSystem)
 
 	// A transported snapshot: both cursors arrive at the same values
 	for _, e := range []core.Entity{local, remote} {
@@ -391,7 +398,7 @@ func TestClosestCursorUsesRoster(t *testing.T) {
 
 func TestCursorOverlapIncludesEveryTouchingPlayer(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorMoveRequest,
 		Payload: &event.CursorMoveRequestPayload{
@@ -419,7 +426,7 @@ func TestCursorOverlapIncludesEveryTouchingPlayer(t *testing.T) {
 
 func TestCursorMoveRejectsZeroEntity(t *testing.T) {
 	w, first, _ := testCursorWorld(t)
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 
 	cursors.HandleEvent(event.GameEvent{
 		Type:    event.EventCursorMoveRequest,
@@ -434,7 +441,7 @@ func TestCursorMoveRejectsZeroEntity(t *testing.T) {
 
 func TestNavigationGroupZeroPublishesRoster(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	navigation := NewNavigationSystem(w).(*NavigationSystem)
+	navigation := ready(NewNavigationSystem(w)).(*NavigationSystem)
 	navigation.resolveGroupTargets()
 
 	state := w.Resources.Target.GetGroup(0)
@@ -447,7 +454,7 @@ func TestNavigationGroupZeroPublishesRoster(t *testing.T) {
 
 	empty := engine.NewWorld()
 	engine.NewGameContextWithClock(empty, 40, 24, engine.NewManualClock())
-	emptyNavigation := NewNavigationSystem(empty).(*NavigationSystem)
+	emptyNavigation := ready(NewNavigationSystem(empty)).(*NavigationSystem)
 	emptyNavigation.resolveGroupTargets()
 	if state := empty.Resources.Target.GetGroup(0); state.Valid || state.Count != 0 {
 		t.Fatalf("empty group zero = %#v, want invalid", state)
@@ -514,11 +521,11 @@ func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
 
 func TestPlayerCommandsMutateOnlyAddressedCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	energy := NewEnergySystem(w).(*EnergySystem)
-	heat := NewHeatSystem(w).(*HeatSystem)
-	shield := NewShieldSystem(w).(*ShieldSystem)
-	boost := NewBoostSystem(w).(*BoostSystem)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	energy := ready(NewEnergySystem(w)).(*EnergySystem)
+	heat := ready(NewHeatSystem(w)).(*HeatSystem)
+	shield := ready(NewShieldSystem(w)).(*ShieldSystem)
+	boost := ready(NewBoostSystem(w)).(*BoostSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 
 	// Zero is invalid rather than an alias for the local cursor.
 	energy.HandleEvent(event.GameEvent{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{Value: 99}})
@@ -566,7 +573,7 @@ func TestPlayerCommandsMutateOnlyAddressedCursor(t *testing.T) {
 
 func TestSpeciesKillBoostRewardsOnlyCreditedCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	boost := NewBoostSystem(w).(*BoostSystem)
+	boost := ready(NewBoostSystem(w)).(*BoostSystem)
 
 	boost.HandleEvent(event.GameEvent{
 		Type: event.EventSpeciesKilled,
@@ -603,7 +610,7 @@ func TestSpeciesKillBoostRewardsOnlyCreditedCursor(t *testing.T) {
 
 func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	unit := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(unit, component.PositionComponent{X: 8, Y: 5})
@@ -672,7 +679,7 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 
 func TestCombatTelemetryAttributesDamageAbsorptionAndChains(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
@@ -711,7 +718,7 @@ func TestCombatTelemetryAttributesDamageAbsorptionAndChains(t *testing.T) {
 
 func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	target := w.CreateEntity(core.DomainShared)
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
@@ -748,7 +755,7 @@ func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) 
 
 func TestATowersLossNamesNoKiller(t *testing.T) {
 	w, _, killer := testCursorWorld(t)
-	towers := NewTowerSystem(w).(*TowerSystem)
+	towers := ready(NewTowerSystem(w)).(*TowerSystem)
 
 	header := w.CreateEntity(core.DomainShared)
 	w.Components.Tower.SetComponent(header, component.TowerComponent{
@@ -778,7 +785,7 @@ func TestATowersLossNamesNoKiller(t *testing.T) {
 
 func TestNoPlayersWeaponTargetsTheTower(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	towers := NewTowerSystem(w).(*TowerSystem)
+	towers := ready(NewTowerSystem(w)).(*TowerSystem)
 	towers.HandleEvent(event.GameEvent{
 		Type:    event.EventTowerSpawnRequest,
 		Payload: &event.TowerSpawnRequestPayload{X: 25, Y: 12, RadiusX: 2, RadiusY: 2},
@@ -803,12 +810,12 @@ func TestNoPlayersWeaponTargetsTheTower(t *testing.T) {
 func TestATowersDeathIsNobodysKill(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{X: 5, Y: 5, Control: uint8(component.ControlLocal)}})
 	cursor := w.Resources.Player.Slot(0)
-	meta := NewMetaSystem(ctx).(*MetaSystem)
-	boost := NewBoostSystem(w).(*BoostSystem)
+	meta := ready(NewMetaSystem(ctx)).(*MetaSystem)
+	boost := ready(NewBoostSystem(w)).(*BoostSystem)
 
 	ev := event.GameEvent{Type: event.EventSpeciesKilled,
 		Payload: &event.SpeciesKilledPayload{Species: component.SpeciesTower, KillerEntity: cursor}}
@@ -826,8 +833,8 @@ func TestATowersDeathIsNobodysKill(t *testing.T) {
 
 func TestBoostRewardSurvivesStaleTypingDecision(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	boost := NewBoostSystem(w).(*BoostSystem)
-	typing := NewTypingSystem(w).(*TypingSystem)
+	boost := ready(NewBoostSystem(w)).(*BoostSystem)
+	typing := ready(NewTypingSystem(w)).(*TypingSystem)
 
 	// Pass one: the keystroke is dispatched ahead of the kills it shares a batch with.
 	typing.applyUniversalRewards(cursor)
@@ -857,7 +864,7 @@ func TestBoostRewardSurvivesStaleTypingDecision(t *testing.T) {
 
 func TestDirectDamageAppliesExactlyOnce(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
@@ -889,7 +896,7 @@ func TestDirectDamageAppliesExactlyOnce(t *testing.T) {
 // roster, and with the receive lead a guest's hits land inside the host's shadow.
 func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
@@ -926,7 +933,7 @@ func TestDamageImmunityBudgetIsPerAttacker(t *testing.T) {
 
 func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
 	w.Components.Kinetic.SetComponent(target, component.KineticComponent{})
@@ -989,7 +996,7 @@ func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 // so the deadline is unreachable and the drain would be silent for the session.
 func TestPassiveDrainSurvivesATransportedStamp(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
-	shield := NewShieldSystem(w).(*ShieldSystem)
+	shield := ready(NewShieldSystem(w)).(*ShieldSystem)
 
 	sh, _ := w.Components.Shield.GetPtr(local)
 	sh.Active = true
@@ -1025,8 +1032,7 @@ func TestLootDropsOnlyForLocallySimulatedCursors(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
 
-	loot := NewLootSystem(w).(*LootSystem)
-	loot.Init()
+	loot := ready(NewLootSystem(w)).(*LootSystem)
 	for range 200 {
 		loot.onSpeciesKilled(&event.SpeciesKilledPayload{
 			Species: component.SpeciesDrain, X: 10, Y: 10, KillerEntity: remote,
@@ -1053,8 +1059,8 @@ func TestLootDropsOnlyForLocallySimulatedCursors(t *testing.T) {
 // lead later cannot walk it back to where the shared store still was.
 func TestCameraAnchorsOnThePredictedCell(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
-	cursors := NewCursorSystem(w).(*CursorSystem)
-	camera := NewCameraSystem(w).(*CameraSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	camera := ready(NewCameraSystem(w)).(*CameraSystem)
 
 	config := w.Resources.Config
 	config.MapWidth, config.MapHeight = 200, 100
@@ -1132,7 +1138,7 @@ func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
 // view off the newest cell the player's input selected.
 func TestOwnPlacementsInFlightNeverWalkTheViewBack(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 
 	cell := func(i int) (int, int) { return 1 + i%30, 1 + i/30 }
 	sweep := parameter.MaxPredictedCursorCells + 20

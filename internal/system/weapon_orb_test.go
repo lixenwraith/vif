@@ -27,7 +27,7 @@ func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
 		w, cursor, _ := testCursorWorld(t)
 		w.SetupLevel(80, 40, false, false, false)
 		w.Resources.Time.DeltaTime = 50 * time.Millisecond
-		s := NewWeaponSystem(w).(*WeaponSystem)
+		s := ready(NewWeaponSystem(w)).(*WeaponSystem)
 		var orbs orbSlots
 		for weapon := range component.WeaponCount {
 			orbs[weapon] = s.spawnOrbEntity(cursor, component.WeaponType(weapon))
@@ -108,8 +108,8 @@ func settleDeaths(w *engine.World, deaths *DeathSystem) {
 // Corrections must recover existing orbs and retire duplicates or invalid owners.
 func TestOrbsAreRecoveredFromTheStoreRatherThanDuplicated(t *testing.T) {
 	w, cursor, other := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
-	deaths := NewDeathSystem(w).(*DeathSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	deaths := ready(NewDeathSystem(w)).(*DeathSystem)
 
 	armWeapon(w, weapon, cursor, component.WeaponRod)
 	armWeapon(w, weapon, cursor, component.WeaponLauncher)
@@ -163,5 +163,5 @@ func TestOrbsAreRecoveredFromTheStoreRatherThanDuplicated(t *testing.T) {
 
 // orbSlotsOf reads one cursor's orb index through the system's own accessor.
 func orbSlotsOf(w *engine.World, cursor core.Entity) orbSlots {
-	return NewWeaponSystem(w).(*WeaponSystem).orbsOf(cursor)
+	return ready(NewWeaponSystem(w)).(*WeaponSystem).orbsOf(cursor)
 }

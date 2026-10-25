@@ -27,7 +27,7 @@ func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *test
 	t.Cleanup(player.Stop)
 	w, _, _ := testCursorWorld(t)
 	w.Resources.Audio = &engine.AudioResource{Engine: player}
-	a, m := NewAudioSystem(w).(*AudioSystem), NewMusicSystem(w).(*MusicSystem)
+	a, m := ready(NewAudioSystem(w)).(*AudioSystem), ready(NewMusicSystem(w)).(*MusicSystem)
 	dispatch := func(ev event.GameEvent) {
 		a.HandleEvent(ev)
 		m.HandleEvent(ev)
@@ -131,7 +131,7 @@ func TestARebuiltCopyTakesOverTheSpeakers(t *testing.T) {
 		w := engine.NewWorld()
 		engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 		w.Resources.Audio = r
-		a, m := NewAudioSystem(w).(*AudioSystem), NewMusicSystem(w).(*MusicSystem)
+		a, m := ready(NewAudioSystem(w)).(*AudioSystem), ready(NewMusicSystem(w)).(*MusicSystem)
 		w.AddSystem(a, engine.SystemProfile{})
 		w.AddSystem(m, engine.SystemProfile{})
 		return w, m, func(ev event.GameEvent) {

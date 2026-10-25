@@ -363,11 +363,7 @@ The detailed construction order is significant:
     scenario into the HFSM, initialize its regions, enqueue their entry actions
     (including the shipped cursor spawn request), and apply global/region system
     toggles.
-15. Add `MetaSystem`, which needs the completed `GameContext` and ticks at
-    `PriorityUI`; check the declared system dependencies with
-    `World.CheckSystemDependencies` (an unknown name or a cycle is a startup
-    error; it orders nothing, since `AddSystem`'s priority sort fixes tick order);
-    register every system that implements `event.Handler`.
+15. Register every system that implements `event.Handler`.
 
 If any step fails, `App.New` calls `Close` on the partially built application.
 Services therefore must make `Stop` idempotent and able to release resources
