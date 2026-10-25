@@ -86,6 +86,8 @@ Uninstalled, `./bin/vif` plays the checkout's `wad/`. The
 
 ## Playing
 
+See it live at: [Lixen](https://lixen.com/vif)
+
 Each new game waits for a key or click to start it, and a join for one to take
 your place in the session (`-nw` skips both). `F1` (or `:help`) lists the keys,
 `Ctrl-G` or `F10` (or `:g`) opens the [configuration menu](doc/config-menu.md),
