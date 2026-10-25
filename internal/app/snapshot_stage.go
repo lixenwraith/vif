@@ -102,14 +102,15 @@ func (s *StagedInstall) Commit() error {
 		return errors.New("staged install already discarded")
 	}
 	var (
-		err         error
-		behind      uint64
-		projected   snapshot.SharedCapture
-		before      snapshot.SharedCapture
-		place       event.Stamp
-		mark        uint64
-		participant uint32
-		barrier     bool
+		err                  error
+		behind               uint64
+		projected            snapshot.SharedCapture
+		before               snapshot.SharedCapture
+		place                event.Stamp
+		mark                 uint64
+		participant          uint32
+		barrier              bool
+		projectDur, writeDur time.Duration
 	)
 	started := time.Now() // [wall] telemetry only
 	live, staging, header := s.live, s.staging, s.capture.Header
@@ -134,6 +135,7 @@ func (s *StagedInstall) Commit() error {
 		}
 		live.prepareProjectionLocked(staging)
 		live.feedProjectionLocked(staging, header)
+		projecting := time.Now() // [wall] telemetry only
 		staging.Tick(int(behind))
 		// What the live world settled after its last completed tick — a copy the
 		// queue published at once, a record the authority received late — is due now.
@@ -142,6 +144,8 @@ func (s *StagedInstall) Commit() error {
 		// Unsealed: the header is replaced below and nothing verifies the body, so
 		// an integrity hash here would only lengthen the live lock.
 		staging.world.RunSafe(func() { projected, err = staging.captureSharedLocked() })
+		writing := time.Now() // [wall] telemetry only
+		projectDur = writing.Sub(projecting)
 		if err == nil {
 			// The authority's identity and fences, at the live tick: what the barrier
 			// prunes by is what the host applied, and the projection has moved the
@@ -155,10 +159,13 @@ func (s *StagedInstall) Commit() error {
 			s.difference, err = live.writeSharedLocked(projected, &before, true, false)
 			barrier = live.barrierLocked()
 		}
+		writeDur = time.Since(writing)
 		if err == nil {
 			m := live.telemetry
 			m.InstallTick.Store(int64(header.Tick))
 			m.Projected.Store(int64(behind))
+			m.ProjectUS.Store(projectDur.Microseconds())
+			m.WriteUS.Store(writeDur.Microseconds())
 		}
 	})
 	staging.world.RunSafe(func() { staging.world.DestroyDomainEntities(core.DomainPlayer) })
@@ -180,6 +187,7 @@ func (s *StagedInstall) Commit() error {
 	s.live.log.Info("converge", "msg", "capture installed",
 		"tick", header.Tick, "projected_ticks", behind,
 		"stage_us", s.stageDur.Microseconds(), "commit_us", s.commitDur.Microseconds(),
+		"project_us", projectDur.Microseconds(), "write_us", writeDur.Microseconds(),
 		"correction_entries", s.difference.Entries,
 		"correction_entities", s.difference.Entities,
 		"correction_cells", s.difference.CellShift)

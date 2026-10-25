@@ -4,13 +4,12 @@ The netcode as built, the readings that judge it, and what is still to change. v
 is not lockstep: every instance runs the whole Shared simulation at 20 ticks a
 second, a guest predicting it and the authority correcting it (multi-player §10.3),
 and the wire carries what a receiver cannot re-derive. §1 is the wire, §2 the
-correction pipeline, §3 the readings, §4 phase 2, the approaches not yet landed in
-their batches, each with what of it is in and what it still needs, and §5 their
-order by iteration. Phase 1, four iterations in 2026-10, is what §1–§3 describe as
-built, with phase 2's five: the wire codec, the authority's FSM transitions,
-answers indexed in place under a word hash, and keyframes from cached sections;
-§3.6 is phase 2 in measurements. Bare section numbers
-are this document's; "multi-player §n" is [Multiplayer](multi-player.md), which
+correction pipeline, §3 the readings, §4 phase 2's approaches, landed or decided on
+§3's readings, and §5 what follows. Phase 1, four iterations in 2026-10, is what
+§1–§3 describe as built, with phase 2's five: the wire codec, the authority's FSM
+transitions, answers indexed in place under a word hash, and keyframes from cached
+sections; §3.6 is phase 2 in measurements. Bare section numbers are this
+document's; "multi-player §n" is [Multiplayer](multi-player.md), which
 holds the session contract, event timing, membership and succession; "services §n"
 is [Services and networking](services-and-networking.md), which holds the
 transport, its handshake and its messages; D-n is the [domain model](domain-design.md).
@@ -237,17 +236,12 @@ reconciled after the handoff as the roster is (multi-player §5.2).
 ## 3. Readings
 
 §3.1 counts bytes framed before deflate on the in-process mesh, which does not
-deflate, and times stages rather than their parts; §3.3 reads the socket path. Each
-reading still missing decides an approach of §4:
-
-- Plain bytes per section of a td keyframe: the binary row codec.
-- Lock hold by part, stores, carriers, status, comparison, write, each projected
-  tick: converged answers without a capture, less work under the live lock.
-- Repairs by cause, the sections carried and whether the authority committed one of
-  the receiver's crossings late or void since its last proof: the next divergence
-  fix.
-- Heap by owner, retention ring, staging world, encoder caches: the binary row
-  codec, retention by reference.
+deflate, and times stages rather than their parts; §3.3 reads the socket path, §3.5
+the harness, §3.7 a td keyframe's bytes by section and layout, the install's lock by
+part and the heap by owner, which decided §4's last batch. Still unread: repairs by
+cause, the sections carried and whether the authority committed one of the
+receiver's crossings late or void since its last proof, where the next divergence
+fix would start; and keyframes by reason.
 
 ### 3.1 Operating point on the in-process mesh
 
@@ -331,8 +325,8 @@ One matrix judges every approach, on harnesses that exist:
   `network.LinkShape`, `TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`.
 - **Path**: in-process mesh; TCP with deflate; WebSocket to a browser.
   `TestNetcodeReadingsOverSockets` (§3.1's shape over sockets,
-  `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`);
-  a browser joiner.
+  `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`),
+  `TestNetcodeReadingsForBatch3` (§3.7, `VIF_NETCODE_BATCH3=1`); a browser joiner.
 - **Host**: native at `GOMAXPROCS=1`; a fleet pod at 500m CPU; a WASM guest.
   `BenchmarkHeadlessTicks`; [Measure a full roster](todo.md#measure-a-full-roster).
 - **Load**: idle; a move every third tick and a shot every sixth; the storm high
@@ -449,9 +443,9 @@ What the readings decide:
   refused: the copies left a tick body later, the harness's first guests read them
   a tick late, and the tower's hash-only share fell to 99.3%.
 - **Readings not yet taken**, and the harness is where they go: keyframes by reason
-  (`keyframes` and `keyframe_fallbacks` alone are read), plain bytes per section,
-  lock hold by part, repairs by cause, heap by owner, and the WebSocket path to a
-  browser.
+  (`keyframes` and `keyframe_fallbacks` alone are read), repairs by cause, and the
+  WebSocket path to a browser. §3.7 took the keyframe's bytes by section, the
+  install's lock by part and the heap by owner.
 
 ### 3.4 At the site
 
@@ -504,36 +498,17 @@ is chaotic, so pages repaired move with any change of timing and the late counts
 are the robust measure. Pacing's dynamics were also modelled apart, by integrating
 `paceDecision` against periodic spikes.
 
-What it found on 2026-10-24, each fixed where it says:
-
-- The lead never learned a spike. A spike on a stream holds a burst of epochs that
-  return committed in one tick, and `noteOwnCommit` kept the newest epoch's age,
-  so `ownLead` read the steady age every tick. It reads the worst age since its
-  last reading now. Symmetric field-like link: late commits 309 to 1, keyframes 14
-  to 6, hash-only 52% to 92%.
-- A spike's reading fell out of a 60-tick window before a slow link's next spike
-  came, so every spike beyond a second cost a correction; a reading holds 300
-  ticks (`NetworkBarrierRenegotiateTicks`). Rare spikes: late commits 33 to 0,
-  pages repaired 32 to 3.
-- The pace window of ten epochs forgot a down-path spike before the next; it reads
-  60 (`NetworkPaceWindow`; heavy jitter: late copies 71 to 0, pages repaired 215 to
-  49). Both settings cost a jittery link one to three ticks of lead and a steady
-  link nothing.
-- The recurring eight-cell `systems` repair at the site was adaptation and genetic
-  pending every species death: a player-domain drain's death pends on one instance
-  alone. Only a tracked death pends.
-- A 22-cell `status` repair was `explosion.triggered`, a shared system counting a
-  player-domain death's burst where it happened; `explosion.*` left the compared
-  surface. `nav.recomputes` and `swarm.physics_steps` differ too, only when the
-  state they derive from does, and stay: they are the cheap detector a navigation
-  test relies on, and their page repair rides the state's.
-- A storm raised at one simulation tick on both ends never diverges, over any
-  shape. The storm-spawn divergence at the site is the FSM's transition tick:
-  `StormSetup` is entered from `QuasarEscalate` on `kills.quasar`, a per-instance
-  counter (`kills.*` is outside the compared surface and re-syncs only through a
-  `meta` repair), and a guest's FSM ticks on predicted kills too. Two instances
-  enter the state on different ticks, spawn from different draws, and a keyframe
-  follows. The fix is structural: §4's first item of batch 2.
+Its first day found and fixed, in phase 1: the lead reading the newest epoch's age
+rather than the worst since its last reading, so a spike never taught it (field-like
+link: late commits 309 to 1); a spike's reading falling out of a 60-tick window
+before a slow link's next spike, now held 300 ticks (`NetworkBarrierRenegotiateTicks`;
+rare spikes: late commits 33 to 0); a pace window of ten epochs that forgot a
+down-path spike, now 60 (`NetworkPaceWindow`; heavy jitter: late copies 71 to 0),
+both costing a jittery link one to three ticks of lead and a steady link nothing;
+two per-instance counts inside the compared surface, a player-domain death pending
+adaptation and `explosion.triggered`, moved out of it; and the storm-spawn
+divergence at the site, which was the FSM's transition tick, each end entering
+`StormSetup` on its own `kills.quasar`, closed by batch 2's first item.
 
 The four shapes before and after, 1,200 ticks each (pg pages repaired, kf
 keyframes, lc late commits, lcp late copies, lead held at the end with the highest
@@ -641,8 +616,45 @@ Over the five the tower host's wire at 16 players fell from 101 to 75 kB/s and t
 process from 0.58 to 0.47 CPU-s per simulated second, a td keyframe's encode from
 one deflate of the world to the stores that moved, and §3.5's late commits and
 lead held on every shape at every step. What did not move: td's bodies, which are
-its egress and wait on the binary row codec, and the heap, which retention by
-reference takes.
+its egress, and the heap; §3.7 reads both and §4's last batch is decided on them.
+
+### 3.7 Readings for the last batch
+
+`TestNetcodeReadingsForBatch3` (`VIF_NETCODE_BATCH3=1`, a heap profile under
+`VIF_NETCODE_PROFILE=<dir>`) on 2026-10-25: td with two players over sockets, god
+mode, 420 ticks at the tick, four cores. The keyframe at tick 85, each store as the
+JSON rows the wire carries, as the same cells in fixed binary rows, the entity a
+varint and each field in declaration order, and in columns, one per field path with
+the entities as deltas in canonical order, deflated at level 6:
+
+```
+Store            Rows  JSON plain  deflated  Binary rows  deflated    Columns  deflated
+positions      50,853   1,685,130   189,955      319,995   252,349    234,867     6,348
+wall           50,565   8,512,486   153,676      997,709   114,366    913,089     5,536
+combat            618     298,195     4,331       30,371     2,170     29,137       305
+header             11      26,544     2,648        3,124     1,849      3,104     1,298
+protection        618      16,713     1,497        2,485     1,393      1,374       121
+member            605      23,596     1,318        3,630       929      2,422        63
+13 others          44       4,582     1,550          720       723        658       650
+all stores             10,567,246   354,975    1,358,034   373,779  1,184,651    14,321
+```
+
+Binary rows do not pay: deflate had taken the field names already, and a row's
+entropy is its entity id, which deflated JSON spends about three bytes a row on and
+varints no fewer. Columns do: entities as deltas are a run of ones, a maze's x
+repeats its cycle and its y its runs, and a wall's eight fields repeat their values,
+so the keyframe is 14 kB against 355, 96% less; at td-2's 0.07 keyframes a second
+that is 25 of its 47 kB/s of wire. The guest decodes the 361 kB body in 141 ms,
+`json.Unmarshal` of 10.6 MB, and installs it in 79 ms, stage and commit with no tick
+projected; its deepest install held the live lock 48 ms (`snapshot.commit_us`), 11
+the staging world's capture (`project_us`) and 36 the live capture, the comparison
+and the write (`write_us`). The host's capture peaked at 128 ms and its encode at
+73, the session's first keyframe. The heap after a collection, both instances and
+the guest's staging world, is 240 MiB: spatial grids 92 MB (37%; 30 MB a world over
+three worlds), the retained indexes' per-row arrays and cloned row JSON 47 MB
+(`newStoreSection` 33, `ManifestRow` 14), the row encoders' owned cell JSON 24 MB,
+the ECS stores 15 MB, navigation 15 MB, and the retained captures themselves about
+3 MB each.
 
 ## 4. Phase 2
 
@@ -655,8 +667,8 @@ in `snapshot.repair_sections`. Phase 2's first four iterations landed the binary
 wire codec, its envelope (protocol 23) and its payload (protocol 24, journal
 schema 37), the authority's FSM transitions (protocol 25, journal schema 38), the
 index read in place under a word hash (manifest version 4, capture schema 24) and
-keyframes from cached sections (protocol 26). The approaches are in three batches,
-and §5 orders them by iteration.
+keyframes from cached sections (protocol 26); the last batch's three are decided on
+§3.7 and wait in the todo. The approaches are in three batches, and §5 orders them.
 
 ### Batch 1: the wire
 
@@ -810,50 +822,53 @@ and §5 orders them by iteration.
 
 - Costs: · − · −; complexity high.
 - Projected: a deep install's lock from past 100 ms to about a tick at td.
-- In: nothing beyond row reuse.
-- Left, in the order
+- In: nothing beyond row reuse; an answer no longer captures under the lock.
+- Measured (§3.7): the deepest td install held the lock 48 ms with no tick
+  projected, 11 of them the staging world's capture and 36 the live capture, the
+  comparison and the write; a projected tick adds a simulation tick, 2.6 ms at td.
+- Decided: the captures go first, not the projection. The install compares the
+  staging world's stores against the live ones in place, as the in-place index
+  reads the live world, and writes the cells that differ, so the lock holds the
+  comparison, the write and the ticks it projected; the projection leaves the lock
+  after that, as
   [Project a correction outside the live lock](todo.md#project-a-correction-outside-the-live-lock)
-  sets: first the capture becomes a copy, stores and carriers read into reusable
-  buffers under the lock and canonical order, encoding and hashing after it; then
-  the projection leaves the lock, simulating the staging world unlocked to the tick
-  the live world had reached, taking the lock, simulating the ticks it ran meanwhile
-  with the crossings it applied, comparing and writing. The locked tail is the ticks
-  that passed during the unlocked part, and the write.
-- Needs: everything multi-player §3.3 requires, fence membership, pending barrier
-  crossings not fed, the ledger settled before projection, the journal's place, no
-  live tick between the final projection and the write. A WASM guest gains
-  scheduling, not parallel CPU.
+  sets out, under everything multi-player §3.3 requires.
 
-### A binary row codec
+### A columnar keyframe codec
 
 - Costs: − − − ·; complexity high.
 - Projected: rows 3–10× smaller before deflate.
-- In: nothing. Rows are JSON: an entity id, field names, and floats in shortest
-  form; a kinetic row's six float64s take up to about 170 bytes where 48 suffice.
-- Left: a binary encoding per component generated in `internal/gen-manifest`
-  beside the stores, fixed field order, varints, float64 as its bits, which is what
-  is sealed, hashed and sent. A keyframe lays each section out by column, entities
-  as varint deltas in canonical order and each field delta-coded, which shrinks
-  static, spatially coherent sections such as walls further than deflate alone.
-- Needs: every store, the cursor's `Control` normalisation and the owner-authored
-  exclusions move to the codec; carriers, status and the FSM can stay JSON at first,
-  being few rows; a capture needs a readable rendering for diagnosis (`vif-log`).
-  Retention by reference and the column layout build on it, and the row cache of
-  the converged answer is cheaper on its rows.
+- Measured (§3.7): binary rows are 7.8× smaller plain and 5% larger deflated than
+  the JSON rows, a row's entropy being its entity id; the same cells in columns
+  deflate to 14 kB against 355, and the guest's 141 ms decode of 10.6 MB of JSON
+  goes with them.
+- Decided: the codec is columnar, not row-wise. A keyframe lays each section out by
+  column, entities as varint deltas in canonical order and then each field of the
+  component in declaration order, integers as varints, float64 as its bits, strings
+  behind a length, generated per component in `internal/gen-manifest` beside the
+  stores; a delta correction carries its changed rows the same way, and `vif-log`
+  renders a body as rows. The manifest's partition and the seal keep their shape
+  over each row's canonical encoding; `Schema` and the protocol bump, the manifest
+  version with the cell encoding if it changes. Carriers, status and the FSM stay
+  JSON, being few rows:
+  [Lay keyframe sections out in columns](todo.md#lay-keyframe-sections-out-in-columns).
+- Needs: the cursor's `Control` normalisation and the owner-authored exclusions
+  move with every store; retention by reference below builds on it.
 
 ### Retention by reference
 
-- Costs: + − · ·; complexity medium to high.
+- Costs: + − · ·; complexity medium.
 - Projected: retention from about four worlds to about one.
-- In: nothing. The authority retains `SnapshotManifestRetention` (4) captures with
-  their indexes and every guest what it proved, each a whole set of rows although
-  consecutive ones share most of them.
-- Left: hold retained rows as immutable page blocks that consecutive captures
-  share, so the ring costs one world and what changed, or hold retained pages
-  encoded and decode those a request names. A td participant is about 300 MB,
-  mostly captures and the staging world; this takes the retention share.
-- Needs: the binary row codec first, which makes the pages small; CPU rises only on
-  serving a page, which is rare.
+- Measured (§3.7): the retained captures are about 3 MB each at td; what retention
+  holds is its indexes, 47 MB of per-row arrays and cloned row JSON over four
+  captures, beside the row encoders' own 24 MB of cells, and the largest owner is
+  the spatial grid, 30 MB a world over three worlds.
+- Decided: a retained index shares the pages whose rows held with the index before
+  it and references the encoder's immutable cell bytes rather than cloning them,
+  about a fifth of a td participant's heap; the grid is
+  [its own item](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps):
+  [Hold retained indexes by reference](todo.md#hold-retained-indexes-by-reference).
+- Needs: the columnar codec first where the cell bytes change with it.
 
 ### Dropped
 
@@ -868,34 +883,31 @@ and §5 orders them by iteration.
   after it): they are correctness, not topology.
 - A wire digest beside the manifest exchange: retired in phase 1's last iteration,
   3.6–4.1% of a guest's CPU for a category the repair names exactly.
+- Binary rows without columns: refuted by §3.7, 5% larger deflated than the JSON
+  rows, whose entropy is the entity id either way.
+- `encoding/json/v2` in place of v1, which Go 1.27 already runs on the v2 engine
+  under v1 semantics: measured on the td world, unmarshal 140 to 109 ms, marshal
+  64 to 66 ms, the cells' marshal 42 to 45 ms. The one gain is the keyframe decode
+  the columnar codec removes, against 230 call sites, 225 `omitempty` tags whose
+  meaning v2 changes, durations and nil slices encoded differently and a version
+  bump for each.
 
 ## 5. Order and iterations
 
-Phase 2 is five iterations, one task, branch and PR each, in this order. Each lands
-alone, re-runs §3.1's matrix and §3.5's four shapes, and updates §3.
+Phase 2 is landed: five iterations in this order, each one task, branch and PR,
+re-running §3.1's matrix and §3.5's four shapes, measured in §3.6.
 
-1. The codec's envelope (batch 1): landed, protocol 23 (§4).
-2. The codec's payload (batch 1): landed, protocol 24 and journal schema 37, the
-   syncs' presence mask with it (§4).
-3. Shared FSM transitions committed by the authority (batch 2): landed, protocol
-   25 and journal schema 38, the harness reading the storm region's transitions
-   (§3.5, §4).
-4. Converged answers without a capture and the faster hash (batch 2): landed,
-   manifest version 4 and capture schema 24 (§3.3, §4).
-5. Keyframes from cached sections (batch 3): landed, protocol 26 (§3.1, §3.6,
-   §4). The binary row codec, retention by reference and the projection out of the
-   lock follow as iterations of their own.
+1. The codec's envelope (batch 1): protocol 23 (§4).
+2. The codec's payload (batch 1): protocol 24 and journal schema 37, the syncs'
+   presence mask with it (§4).
+3. Shared FSM transitions committed by the authority (batch 2): protocol 25 and
+   journal schema 38, the harness reading the storm region's transitions (§3.5, §4).
+4. Converged answers without a capture and the faster hash (batch 2): manifest
+   version 4 and capture schema 24 (§3.3, §4).
+5. Keyframes from cached sections (batch 3): protocol 26 (§3.1, §3.6, §4).
 
-### Brief for the next session
-
-Repository `lixenwraith/vif`, AGENTS.md is the contract. Netcode phase 2 is landed,
-five of five (§5), measured in §3.6. The next iteration is the binary row codec
-(§4 batch 3). Read [netcode design](netcode-design.md) §2, §3.1, §3.3, §3.6, §4
-batch 3 and §5, then `internal/gen-manifest` and `internal/snapshot` (`RowEncoder`,
-the section cache and the sections codec in `encoder.go` and `codec.go`). Land it
-alone: a generated binary encoding per component, fixed field order, varints,
-float64 as its bits, which is what is sealed, hashed and sent, with a readable
-rendering for `vif-log`; bump `Schema` and the protocol; one test per rule; measure
-a td keyframe's bytes and encode before and after. Re-run §3.1's matrix, §3.3's
-readings and §3.5's four shapes and update §3. Retention by reference and the
-projection out of the lock follow as iterations of their own.
+What follows is decided on §3.7 and waits in the todo, in this order: the
+[columnar keyframe codec](todo.md#lay-keyframe-sections-out-in-columns), the
+[install that compares in place](todo.md#project-a-correction-outside-the-live-lock)
+and [retained indexes by reference](todo.md#hold-retained-indexes-by-reference).
+Each lands alone, with its measurement before and after in §3.
