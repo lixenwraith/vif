@@ -471,11 +471,10 @@ func (g *SpatialGrid) reorderCells(cells []CellOrder) error {
 }
 
 // WorldReconcile is one world brought to another's shared half in place, store by
-// store, with no capture of either: the comparison first, which reads both worlds
-// and writes nothing, then Finish, which writes in the order ReconcileSharedWorld
-// writes a capture, so the two leave one world in one dense order. Difference is the
-// correction magnitude SharedWorldDifference reads over the compared surface
-// (WithoutLocalCursorState); Delta, when recorded, is DiffSharedWorld's.
+// store, with no capture of either: the comparison first, reading both and writing
+// nothing, then Finish, writing in ReconcileSharedWorld's order so the two leave one
+// dense order. Difference is the correction magnitude over the compared surface
+// (WithoutLocalCursorState, as SharedWorldDifference reads it); Delta is DiffSharedWorld's.
 type WorldReconcile struct {
 	Difference WorldDifference
 	Delta      *SharedWorldDelta

@@ -560,12 +560,11 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 	})
 }
 
-// rejoinThrough dials, while this run walks for the host it lost, the port of each
-// candidate whose turn has come, for one relaying for others that takes this run
-// back into its place as a -relay door would: the host still runs, with this run's
-// Wraith, and only this run's link to it went. Reports whether one took it, the
-// run then replaced by the one admitted; a candidate that refuses outright, or a
-// host that holds no place for this run, is not dialled again.
+// rejoinThrough dials, while this run walks for the host it lost, each candidate
+// whose turn has come, for one that takes this run back into its place as a -relay
+// door would: the host still runs, with this run's Wraith, and only this run's
+// link went. Reports whether one took it, the run then replaced by the one
+// admitted; one that refuses outright, or a host with no place, is not dialled again.
 func (m *membership) rejoinThrough(cfg Config, lost link.PeerID, c *claim) bool {
 	dial := cfg
 	done := make(map[link.PeerID]bool)

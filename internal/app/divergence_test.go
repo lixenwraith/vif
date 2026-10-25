@@ -72,9 +72,8 @@ func shapedFight(t *testing.T, seed uint64, shape link.LinkShape) (host, guest *
 // shapedFightOf is the fight over a session already built, whatever its shape:
 // every participant moving one tick in three and firing one in six, the host
 // publishing on its pump and each guest applying what arrives, paced as its
-// scheduler would pace it: the trim and step each tick leaves are owed as fractions
-// of a tick, and a whole one owed skips or adds a guest tick. leadMax is the highest
-// lead any guest held, the input latency the link's spikes cost it.
+// scheduler would (the trim and step owed as fractions of a tick, a whole one
+// skipping or adding a guest tick). leadMax is the highest lead any guest held.
 func shapedFightOf(t *testing.T, apps []*App, shape link.LinkShape) (fight func(ticks int), leadMax *int64) {
 	t.Helper()
 	leadMax = new(int64)

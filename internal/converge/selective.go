@@ -345,12 +345,11 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 			"peer", pending.from, "tick", req.Tick, "proved", proved)
 		return
 	}
-	// A request this instance did not author the answer to is a relayed one. It is
-	// served from retention if that retention holds the tick, and refused in words
-	// if it does not — never with a body from a different baseline, and never by
-	// forwarding the request onward, which would be the routing layer this protocol
-	// deliberately does not have. A whole world it cannot author it asks its own
-	// source for, as a receiver does: the one it is sent reaches the leaf through it.
+	// A request this instance did not author the answer to is a relayed one: served
+	// from retention if that holds the tick, refused in words if not — never with a
+	// body from another baseline, never forwarded, which would be the routing layer
+	// this protocol deliberately lacks. A whole world it cannot author it asks its
+	// own source for, as a receiver does; the one it is sent reaches the leaf through it.
 	if !authored {
 		if req.Keyframe {
 			c.sendUnserved(port, pending.from, req, "a relay cannot author a whole world")
