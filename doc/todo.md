@@ -550,21 +550,6 @@ records: both files sync every `flushIntervalMs` (50 ms). The journal's crash
 promise needs it; the log's does not. Measure a log that syncs on its own cadence,
 or only on WARN and above.
 
-### Lay keyframe sections out in columns
-
-- Priority: P2
-- Affected files: `internal/gen-manifest`, `internal/engine/snapshot_*_gen.go`,
-  `internal/snapshot/encoder.go`, `internal/snapshot/codec.go`, `tool/vif-log`
-- Guide: [Netcode design §3.7, §4](netcode-design.md#a-columnar-keyframe-codec)
-
-A td keyframe deflates to 355 kB as JSON rows and to 14 kB as the same cells in
-columns, entities as varint deltas in canonical order and a column per field, since
-a row's entropy is its entity id (netcode design §3.7); binary rows alone deflate
-5% larger than the JSON. Generate the column layout per component beside the
-stores, send a keyframe and a delta's changed rows in it, keep the manifest's shape
-over each row's canonical encoding, render a body as rows in `vif-log`; `Schema`
-and the protocol bump. The guest's 141 ms decode of 10.6 MB of JSON goes with it.
-
 ### Hold retained indexes by reference
 
 - Priority: P3

@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"cmp"
 	"compress/flate"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"maps"
-	"math"
 	"os"
 	"reflect"
 	"runtime"
@@ -335,10 +332,10 @@ func cpuSeconds() float64 {
 }
 
 // TestNetcodeReadingsForBatch3 takes the readings netcode design §4 batch 3 is
-// decided on, over a td session of two on sockets: a keyframe's bytes a section at a
-// time, plain and deflated, as the JSON rows the wire carries and as fixed binary
-// rows and columns; what a guest pays to decode and install one; and the heap by
-// owner once the session has run. VIF_NETCODE_BATCH3=1 runs it, and
+// decided and measured on, over a td session of two on sockets: a keyframe's bytes a
+// section at a time, plain and deflated, as the JSON rows the manifest hashes and as
+// the columns the wire carries; what a guest pays to decode and install one; and the
+// heap by owner once the session has run. VIF_NETCODE_BATCH3=1 runs it, and
 // VIF_NETCODE_PROFILE names a directory its heap profile is written to.
 func TestNetcodeReadingsForBatch3(t *testing.T) {
 	if os.Getenv("VIF_NETCODE_BATCH3") == "" {
@@ -381,9 +378,9 @@ func TestNetcodeReadingsForBatch3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("td keyframe at tick %d, a section at a time: rows, JSON plain, JSON deflated, binary rows plain, binary rows deflated, binary columns plain, binary columns deflated", cap.Header.Tick)
+	t.Logf("td keyframe at tick %d, a section at a time: rows, JSON plain, JSON deflated, columns plain, columns deflated", cap.Header.Tick)
 	world := reflect.ValueOf(cap.World)
-	var total [6]int
+	var total [4]int
 	for i, name := range engine.SharedWorldStoreNames {
 		rows := world.Field(i + 3) // after NextEntity, Created, Destroyed
 		if rows.Len() == 0 {
@@ -393,27 +390,14 @@ func TestNetcodeReadingsForBatch3(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var binRows []byte
-		columns := map[string][]byte{}
-		var prev uint64
-		for k := range rows.Len() {
-			e := rows.Index(k).Field(0).Uint()
-			binRows = binary.AppendUvarint(binRows, e)
-			columns["e"] = binary.AppendUvarint(columns["e"], e-prev)
-			prev = e
-			binRows = appendBinary(binRows, rows.Index(k).Field(1), "v", columns)
-		}
-		var binCols []byte
-		for _, k := range slices.Sorted(maps.Keys(columns)) {
-			binCols = append(binCols, columns[k]...)
-		}
-		line := [6]int{len(plain), len(deflated(plain)), len(binRows), len(deflated(binRows)), len(binCols), len(deflated(binCols))}
+		columns := engine.SharedWorldEncodeStoreColumns(nil, &cap.World, i)
+		line := [4]int{len(plain), len(deflated(plain)), len(columns), len(deflated(columns))}
 		for j := range line {
 			total[j] += line[j]
 		}
-		t.Logf("  %-12s %6d %9d %9d %9d %9d %9d %9d", name, rows.Len(), line[0], line[1], line[2], line[3], line[4], line[5])
+		t.Logf("  %-12s %6d %9d %9d %9d %9d", name, rows.Len(), line[0], line[1], line[2], line[3])
 	}
-	t.Logf("  %-12s %6s %9d %9d %9d %9d %9d %9d", "all stores", "", total[0], total[1], total[2], total[3], total[4], total[5])
+	t.Logf("  %-12s %6s %9d %9d %9d %9d", "all stores", "", total[0], total[1], total[2], total[3])
 
 	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
@@ -457,63 +441,6 @@ func TestNetcodeReadingsForBatch3(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-}
-
-// appendBinary renders one value as a fixed binary row would, field order fixed,
-// integers as varints, floats as their bits, and lays the same bytes into columns
-// by field path, as the column layout §4 projects would.
-func appendBinary(dst []byte, v reflect.Value, path string, columns map[string][]byte) []byte {
-	var cell []byte
-	switch v.Kind() {
-	case reflect.Bool:
-		cell = []byte{0}
-		if v.Bool() {
-			cell[0] = 1
-		}
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		cell = binary.AppendVarint(nil, v.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		cell = binary.AppendUvarint(nil, v.Uint())
-	case reflect.Float32:
-		cell = binary.LittleEndian.AppendUint32(nil, math.Float32bits(float32(v.Float())))
-	case reflect.Float64:
-		cell = binary.LittleEndian.AppendUint64(nil, math.Float64bits(v.Float()))
-	case reflect.String:
-		cell = append(binary.AppendUvarint(nil, uint64(v.Len())), v.String()...)
-	case reflect.Struct:
-		if v.Type() == reflect.TypeFor[time.Time]() {
-			cell = binary.AppendVarint(nil, v.Interface().(time.Time).UnixNano())
-			break
-		}
-		for i := range v.NumField() {
-			if v.Type().Field(i).IsExported() {
-				dst = appendBinary(dst, v.Field(i), path+"."+v.Type().Field(i).Name, columns)
-			}
-		}
-		return dst
-	case reflect.Array:
-		for i := range v.Len() {
-			dst = appendBinary(dst, v.Index(i), path+"[]", columns)
-		}
-		return dst
-	case reflect.Slice:
-		dst = binary.AppendUvarint(dst, uint64(v.Len()))
-		columns[path+"#"] = binary.AppendUvarint(columns[path+"#"], uint64(v.Len()))
-		for i := range v.Len() {
-			dst = appendBinary(dst, v.Index(i), path+"[]", columns)
-		}
-		return dst
-	case reflect.Pointer, reflect.Interface:
-		if v.IsNil() {
-			cell = []byte{0}
-			break
-		}
-		return appendBinary(append(dst, 1), v.Elem(), path, columns)
-	default:
-		return dst
-	}
-	columns[path] = append(columns[path], cell...)
-	return append(dst, cell...)
 }
 
 // deflated is plain at the level the wire deflates a body at.

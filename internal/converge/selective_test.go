@@ -133,15 +133,18 @@ func slowLink(t *testing.T) (host, guest *run, runs []*run) {
 	for _, r := range runs {
 		r.open(1, nil, false)
 	}
+	// Random placements in columns deflate to five bytes a row; a world that spans
+	// many chunks on the slow link takes these many of them.
+	const scattered = 16000
 	cap := capture(1, 0)
 	rng := vmath.NewFastRand(3)
-	for i := range 6000 {
+	for i := range scattered {
 		cap.World.Positions = append(cap.World.Positions, engine.StoreEntry[component.PositionComponent]{
 			Entity: core.Entity(captureRows + i + 1),
 			Value:  component.PositionComponent{X: rng.Intn(1 << 15), Y: rng.Intn(1 << 15)},
 		})
 	}
-	cap.World.NextEntity = uint64(captureRows + 6000 + 1)
+	cap.World.NextEntity = uint64(captureRows + scattered + 1)
 	runs[0].world.setWorld(seal(cap))
 	for range 8 {
 		deliver(runs, 1) // probes give the link the origin a backlog is read against

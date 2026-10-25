@@ -2,6 +2,8 @@ package snapshot
 
 import (
 	"bytes"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -87,32 +89,72 @@ const (
 	CorrectionDelta
 )
 
-// correctionEnvelope is a delta on the wire, before it is chunked; a keyframe
-// travels as the capture itself, in the sections codec, which the envelope's codec
-// byte tells from this.
-type correctionEnvelope struct {
-	Delta *SharedCaptureDelta `json:"delta,omitempty"`
+// deltaRest is a delta's parts beside its world: one JSON object, since each is a
+// few rows and starts deflate cold alone.
+type deltaRest struct {
+	Header       CaptureHeader        `json:"header"`
+	BaselineTick uint64               `json:"baseline_tick"`
+	Streams      []engine.StreamState `json:"streams"`
+	Systems      []SystemStateRecord  `json:"systems"`
+	Status       StatusState          `json:"status"`
+	FSM          fsm.MachineState     `json:"fsm"`
 }
 
-// EncodeCorrectionDelta renders a delta for transport.
+// EncodeCorrectionDelta renders a delta for transport: one part of the sections
+// codec, the rest's JSON behind its length and then the world delta in columns.
 func EncodeCorrectionDelta(d SharedCaptureDelta) ([]byte, error) {
-	return EncodeJSON(correctionEnvelope{Delta: &d})
+	rest, err := json.Marshal(deltaRest{
+		Header: d.Header, BaselineTick: d.BaselineTick,
+		Streams: d.Streams, Systems: d.Systems, Status: d.Status, FSM: d.FSM,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("correction encode: %w", err)
+	}
+	plain := append(binary.AppendUvarint(nil, uint64(len(rest))), rest...)
+	plain = engine.SharedWorldEncodeDelta(plain, &d.World)
+	blob, err := deflateBytes(plain)
+	if err != nil {
+		return nil, err
+	}
+	return encodeSections([]sectionPart{{name: partDelta, plain: len(plain), blob: blob}})
 }
 
-// DecodeCorrection parses a correction body and reports which shape it is.
+// DecodeCorrection parses a correction body and reports which shape it is: a delta
+// is the one part named so, a keyframe the capture's parts.
 func DecodeCorrection(b []byte) (CorrectionKind, SharedCapture, SharedCaptureDelta, error) {
-	if isSections(b) {
-		cap, err := DecodeCapture(b)
-		return CorrectionKeyframe, cap, SharedCaptureDelta{}, err
-	}
-	var env correctionEnvelope
-	if err := DecodeJSON(b, &env); err != nil {
+	parts, err := decodeSections(b)
+	if err != nil {
 		return 0, SharedCapture{}, SharedCaptureDelta{}, fmt.Errorf("correction decode: %w", err)
 	}
-	if env.Delta == nil {
-		return 0, SharedCapture{}, SharedCaptureDelta{}, errors.New("correction carries neither shape")
+	if len(parts) == 1 && parts[0].name == partDelta {
+		d, err := deltaFromPart(parts[0].blob)
+		if err != nil {
+			return 0, SharedCapture{}, SharedCaptureDelta{}, fmt.Errorf("correction decode: %w", err)
+		}
+		return CorrectionDelta, SharedCapture{}, d, nil
 	}
-	return CorrectionDelta, SharedCapture{}, *env.Delta, nil
+	cap, err := captureFromParts(parts)
+	return CorrectionKeyframe, cap, SharedCaptureDelta{}, err
+}
+
+// deltaFromPart parses what EncodeCorrectionDelta laid out in its part.
+func deltaFromPart(plain []byte) (SharedCaptureDelta, error) {
+	n, k := binary.Uvarint(plain)
+	if k <= 0 || n > uint64(len(plain)-k) {
+		return SharedCaptureDelta{}, errors.New("the delta's rest is cut short")
+	}
+	var rest deltaRest
+	if err := json.Unmarshal(plain[k:k+int(n)], &rest); err != nil {
+		return SharedCaptureDelta{}, err
+	}
+	world, err := engine.SharedWorldDecodeDelta(plain[k+int(n):])
+	if err != nil {
+		return SharedCaptureDelta{}, err
+	}
+	return SharedCaptureDelta{
+		Header: rest.Header, BaselineTick: rest.BaselineTick, World: world,
+		Streams: rest.Streams, Systems: rest.Systems, Status: rest.Status, FSM: rest.FSM,
+	}, nil
 }
 
 // WrittenDelta is a capture this instance wrote, against the capture it held just

@@ -587,7 +587,12 @@ enters a 10-byte bounded compression envelope:
 capture, as a keyframe or a join's, travels in it as sections, a count and then
 each part's name, plain and deflated lengths and its own deflate, so a store that
 held since the encoder's last capture is sent from the bytes made then and a
-receiver bounds each part by the plain size it declares. The reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
+receiver bounds each part by the plain size it declares. A store's rows travel in
+columns, the entities as deltas and then each field over every row, generated per
+component ([netcode §4](netcode-design.md#a-columnar-keyframe-codec)); a delta
+correction is one part, its JSON behind a length and its world delta in the same
+columns; the manifest's rows and the shards that repair them stay JSON. The
+reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain size
 at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
 ratio is large and world-dependent: the storm high water compresses from about
 299 KiB to 16.1 KiB, and the largest map the grid holds — 500x250 walled, which
