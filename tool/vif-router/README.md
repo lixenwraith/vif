@@ -1,9 +1,8 @@
 # vif-router
 
 `vif-router` is the narrow boundary between the vif website and the `vif`
-namespace, and the router on two of a session's three routes. It was
-`vif-allocator` until it routed anything but pods; its allocator half keeps that
-name in the code. Kubernetes still schedules, isolates, limits, terminates and
+namespace, and the router on two of a session's three routes. Kubernetes still
+schedules, isolates, limits, terminates and
 garbage-collects every session. The allocator only performs the fixed transaction
 that Kubernetes has no anonymous endpoint for:
 

@@ -331,18 +331,6 @@ The image line names the tag §8 imported. From then on, `./deploy/update.sh
 router` rebuilds, installs the env file and unit, restarts behind an empty-fleet
 gate, and keeps one `.previous` set to roll back to.
 
-A node commissioned when the router was `vif-allocator` is rewired once, with the
-fleet empty, by `./deploy/guest/migrate-vif-router.sh`, and `./deploy/update.sh`
-refuses such a node until then. The script applies the Role with its new
-`vif-router` ServiceAccount, creates the `vif-router` identity and `/etc/vif-router`
-with the CA copy and the settings carried over (the repository's `vif-router.env`
-plus the node's image line), mints the token, installs the units and the binary,
-stops the allocator's units and starts the router in their place; once the router
-answers it removes the allocator's units, binary, ServiceAccount, user and group,
-keeping its settings at `/etc/vif-router/vif-allocator.migrated`, and a router that
-does not answer is removed again and `vif-allocator.service` restarted as it was.
-From then on `./deploy/update.sh` runs as before.
-
 The credential is a short-lived ServiceAccount token in a file, re-read on every
 request and rotated by the root timer; never give the router the node's root
 kubeconfig. Open 9080 to the site host only: the node filter admits
