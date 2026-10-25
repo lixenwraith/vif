@@ -130,8 +130,9 @@ func LoadSettings(override string) (Settings, string, error) {
 }
 
 // DropUnknown removes keys from the store's document, each line setting one and
-// each table one names, every other line kept, comments included. It writes only a
-// document that then reads whole, and returns the status line saying which it did.
+// each table one names with the comments that are theirs (toml Document.Delete),
+// every other line kept. It writes only a document that then reads whole, and
+// returns the status line saying which it did.
 func DropUnknown(s SettingsStore, keys UnknownKeys) string {
 	err := errors.New("nowhere to write the settings back")
 	if s != nil {

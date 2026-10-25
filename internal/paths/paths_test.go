@@ -120,15 +120,14 @@ func TestSettingsNameEveryUnknownKey(t *testing.T) {
 }
 
 // TestDroppingUnknownKeysKeepsEveryOtherLine: the keys this build does not know go
-// from the file the run writes back to, tables they head included, and every other
-// line stays, comments too; a system root's file is left as it is and the user
-// root's copy is made without them.
+// from the file the run writes back to with the comments that are theirs, tables
+// they head included, and every other line stays, comments too; a system root's
+// file is left as it is and the user root's copy is made without them.
 func TestDroppingUnknownKeysKeepsEveryOtherLine(t *testing.T) {
-	doc := "# mine\n[paths]\nlogs = \"x\" # misspelt\nlog = \"l\"\n\n[play]\n# kept\neffects = false\n" +
-		"mouse = false # mine\n\"volume\" = 0.25\n\n[later] # a newer build's\n# about later\nkey = 1\n" +
-		"[later.sub]\ndeep = 2\n\n[audio]\nbuffer_ms = 20\n"
-	want := "# mine\n[paths]\nlog = \"%s\"\n\n[play]\n# kept\nmouse = false # mine\n\n# about later\n\n" +
-		"[audio]\nbuffer_ms = 20\n"
+	doc := "# mine\n[paths]\nlogs = \"x\" # misspelt\nlog = \"l\"\n\n[play]\n# kept\nmouse = false # mine\n" +
+		"# the old names\neffects = false\n\"volume\" = 0.25\n\n[later] # a newer build's\n# about later\n" +
+		"key = 1\n[later.sub]\ndeep = 2\n\n[audio]\nbuffer_ms = 20\n"
+	want := "# mine\n[paths]\nlog = \"%s\"\n\n[play]\n# kept\nmouse = false # mine\n\n[audio]\nbuffer_ms = 20\n"
 	user, system := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", user)
 	for _, c := range []struct{ name, root, wrote, log string }{

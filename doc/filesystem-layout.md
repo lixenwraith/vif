@@ -136,10 +136,12 @@ still takes the embedded scenario and content. A relative path is relative to th
 file (a bare scenario name stays a name the roots resolve), `~/` is the home
 directory. A key this build does not know is dropped: the run reads every key it
 knows, removes each line setting another and each table another heads from the
-document it writes back to, every other line and comment kept, and names them on
-its status line, so a build older than the file drops the newer keys too. `-check`
-names them and writes nothing, and names the file it read. Music and sound overrides stay out of it, because a run that
-creates no audio refuses them and a default must not break `-serve`.
+document it writes back to, with the comments that are theirs (a comment group
+belongs to the side fewer blank lines part it from, below on a tie), every other
+line and comment kept, and names them on its status line, so a build older than
+the file drops the newer keys too. `-check` names them and writes nothing, and
+names the file it read. Music and sound overrides stay out of it, because a run
+that creates no audio refuses them and a default must not break `-serve`.
 
 One rule holds on every host: a flag sets its value for its run alone, `vif.toml`
 holds the value every run starts from, and the menu writes back what the player
