@@ -10,7 +10,7 @@ require (
 require (
 	github.com/lixenwraith/color v0.1.3 // indirect
 	github.com/lixenwraith/log v0.1.13 // indirect
-	github.com/lixenwraith/toml v0.2.0 // indirect
+	github.com/lixenwraith/toml v0.3.0 // indirect
 	golang.org/x/mobile v0.0.0-20261011034528-197770444867 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
