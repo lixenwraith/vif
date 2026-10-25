@@ -276,12 +276,20 @@ func (m *membership) receiveAuthorityFrame(kind uint8, from uint32, body []byte)
 }
 
 // reportPeerLost hands a departure to the succession and says whether this run
-// asked for it by dropping the seat. Caller holds the world lock.
+// asked for it by dropping the seat. A run with no loop sees its seats end on its
+// fork, after the drop it made with them still linked, so the link that goes last
+// leaves it with none: then it drops every cursor it does not simulate, as one left
+// with none at the fork does (dropAbandonedLocked); a play run's loop takes its fork
+// into a session of its own instead (forked). Caller holds the world lock.
 func (m *membership) reportPeerLost(id uint32) bool {
 	if m.corrections != nil {
 		m.corrections.QueuePeerLost(id)
 	}
-	return m.seatHalted(id)
+	halted := m.seatHalted(id)
+	if m.cfg.Mode != ModePlay && forkCell(m.world).Load() {
+		m.dropAbandonedLocked(m.worldRosterLocked(), nil, link.PeerID(m.world.LocalParticipant()))
+	}
+	return halted
 }
 
 // ApplyPendingCorrections installs whatever authority has arrived, between two

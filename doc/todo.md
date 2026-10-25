@@ -695,18 +695,6 @@ The record is built to be replaced: one type, made in one place
 session holds, have the coordinator fill the arrival from its own world instead of
 the joiner's report, and drop the record from the keeper and the report.
 
-### Drop the cursors a linked fork cannot reach
-
-- Priority: P3
-- Affected files: `internal/app/session.go`, `internal/app/converge.go`
-
-`dropAbandonedCursors` acts only on an instance left with no link, so a script's or
-a bot's fork still linked to its own bots keeps every roster entry, and a
-participant it has no path to stays a cursor nothing moves
-([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). A host already
-keeps those its group lost as Wraiths; such a fork could cross the same departures
-for its bots to apply.
-
 ### Merge two sessions
 
 - Priority: P3

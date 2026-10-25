@@ -160,6 +160,13 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 // goroutine and paced, and returns the run once the driver is on it, with its stop.
 func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, func()) {
 	t.Helper()
+	return driveRun(t, "bot", cfg, graph, hold)
+}
+
+// driveRun is driveBot as the kind of run it names: a bot run ends with its session,
+// a script's plays its fork on.
+func driveRun(t *testing.T, kind string, cfg Config, graph string, hold func() bool) (*App, func()) {
+	t.Helper()
 	cfg.Seed, cfg.Width, cfg.Height = fixtureSeed, BotWidth, BotHeight
 	cfg.Resources = resource.Options{Embedded: true}
 	g, err := loadBotGraph(cfg.Resources, graph)
@@ -168,7 +175,7 @@ func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, f
 	}
 	stop, built, done := make(chan os.Signal), make(chan *App, 1), make(chan error, 1)
 	go func() {
-		_, err := drive(cfg, "bot", graph, stop, hold, func(a *App) (pacedSource, error) {
+		_, err := drive(cfg, kind, graph, stop, hold, func(a *App) (pacedSource, error) {
 			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.localParticipant())
 			built <- a
 			return botSource{d}, err
@@ -650,6 +657,27 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 		if more != tt.steps {
 			t.Errorf("after %s the seat steps on: %t; want %t", tt.name, more, tt.steps)
 		}
+	}
+}
+
+// TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd: a scripted run with a bot,
+// in a pinned session whose host leaves, forks; its seat ends on the fork, and with
+// its last link gone the fork drops every cursor it does not simulate, the host's
+// and its bot's, rather than keeping cursors nothing moves.
+func TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, FixedAuthority: true, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	fork, _ := driveRun(t, "script", Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	waitForCursors(t, fork, 4)
+	leave()
+	waitUntil(t, func() bool { return forkCell(fork.world).Load() }, "the guest forked")
+	waitForCursors(t, fork, 1)
+	local := link.PeerID(fork.membership.localParticipant())
+	if roster := fork.instance().WorldRoster(); len(roster) != 1 || roster[0].ID != local {
+		t.Fatalf("the fork's roster holds %+v; want its own cursor alone", roster)
 	}
 }
 

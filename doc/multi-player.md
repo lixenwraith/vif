@@ -617,7 +617,10 @@ at all**, drops every cursor it does not simulate. Having no link is what makes 
 drop exact rather than convenient: a departure is produced once at one agreed tick
 because two instances must destroy the same shared entity together, and here there is
 no second instance. A person's fork drops nobody: every place waits as a Wraith in
-the session it goes on in (§5.5). A fork still linked keeps its roster (§8).
+the session it goes on in (§5.5). A fork still linked keeps its roster while a link
+stands: a run with no loop sees its seats end on its fork (§5.5), and the last of
+them going leaves it with none, when it drops as one left with none at the fork
+does (`membership.reportPeerLost`).
 
 A departure, however it is produced, also clears what the instance had applied from
 that participant. An identity returns to the pool once its participant is dismissed
@@ -1027,13 +1030,7 @@ could make the netcode cheaper in [Netcode design](netcode-design.md).
    finishing one target inside that lateness can each be credited on their own
    instance.
 
-5. **A fork that keeps a link keeps the whole roster.** `dropAbandonedCursors`
-   acts only on an instance left with no link (§5.2), so a script's or a bot's fork
-   still linked to its own bots keeps every roster entry, and a participant it has
-   no path to stays a cursor nothing moves. A host has no such gap: those its group
-   lost wait as Wraiths.
-
-6. **A browser guest once kept the previous region's glyphs.** Entering the tower
+5. **A browser guest once kept the previous region's glyphs.** Entering the tower
    region, it kept the region before's glyphs, or kept the glyph system running
    although the tower disables it. It was seen once, on 2026-09-24, and has not
    recurred. *To see the remainder:* a second sighting should record whether that
