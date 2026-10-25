@@ -644,7 +644,11 @@ instance binds it, and authorship never leaves the machine that started the worl
    instance that will have to author already has one when it does. A **successor
    chain** rather than a full mesh: N links instead of N², and the chain is the same
    either way, so the shape is one dial policy and can be widened later without
-   changing an artifact.
+   changing an artifact. A candidate the connect does not reach is dialled as a
+   followed host is (`Reach.dialSuccessor`): each attempt after a longer wait, then
+   left (`NetworkHostDialAttempts`), since the walk dials it again should the
+   authority go; another first candidate, or a link that stood and dropped, starts
+   the attempts over.
 4. Two participants that dial each other exchange `MsgConnect`/`MsgAck` — who is
    calling, running which build — and nothing else: they already hold identities the
    coordinator assigned, so a peer link allocates nothing, offers nothing and

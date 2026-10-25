@@ -468,17 +468,6 @@ read through the tunnel, or a state the run reports on the control connection),
 its lifetime, the create budget charged to the publisher's address, and `-host
 vif://<site>:7777` opening the door through the router rather than binding one.
 
-### Pace the dial of the successor
-
-- Priority: P3
-- Affected files: `internal/converge/reach.go`
-
-A participant keeps a link to the first candidate open (`Reach.dialSuccessor`) from
-every pass of the correction loop, one dial in flight at a time: a candidate whose
-chain address refuses the connect at once is dialled again on the next pass, a
-connect a tick for the rest of the session. The dial of a followed host beside it
-backs off and stops (`NetworkHostDialAttempts`); this one wants the same pacing.
-
 ### Keep a late survivor in its host's group
 
 - Priority: P3

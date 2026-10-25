@@ -713,6 +713,85 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 	})
 }
 
+// TestTheSuccessorDialIsPaced: a participant keeps a link to the first candidate
+// warm; one its connect does not reach is dialled after a growing wait and then left,
+// as a followed host is, and another successor, or a link to it that stood and
+// dropped, starts the attempts over.
+func TestTheSuccessorDialIsPaced(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Link(1, 4)
+	node := &dialingNode{MeshPort: mesh.Node(4), mesh: mesh, down: true}
+	chain := network.SuccessionChain{{ID: 2, Addr: "2"}, {ID: 3, Addr: "3"}, {ID: 4, Addr: "4"}}
+	runs := make([]*run, 4)
+	for i := range runs {
+		var port engine.NetworkPort = mesh.Node(link.PeerID(i + 1))
+		if i == 3 {
+			port = node
+		}
+		runs[i] = newRun(t, uint32(i+1), port, roster(4))
+		runs[i].open(1, chain, false)
+	}
+	far := runs[3]
+	passWait := func() {
+		far.r.mu.Lock()
+		far.r.nextSucc = time.Time{}
+		far.r.mu.Unlock()
+	}
+	for i := 1; i <= parameter.NetworkHostDialAttempts; i++ {
+		far.u.drive()
+		far.u.drive() // paced: the second drive inside the wait dials nothing
+		waitDials(t, far, node, i)
+		far.r.mu.Lock()
+		wait := far.r.nextSucc.Sub(time.Now()).Round(parameter.NetworkRejoinPassInterval)
+		far.r.mu.Unlock()
+		if want := parameter.NetworkRejoinPassInterval << (i - 1); wait != want || node.dialed[i-1] != "2" {
+			t.Fatalf("dial %d went to %q and waits %v before the next; want the first candidate and %v",
+				i, node.dialed[i-1], wait, want)
+		}
+		passWait()
+	}
+	far.u.drive()
+	if n := node.dials(); n != parameter.NetworkHostDialAttempts {
+		t.Fatalf("%d dials of the successor, want %d and then none", n, parameter.NetworkHostDialAttempts)
+	}
+
+	far.u.mu.Lock()
+	far.u.chain = network.SuccessionChain{{ID: 3, Addr: "3"}, {ID: 2, Addr: "2"}, {ID: 4, Addr: "4"}}
+	far.u.mu.Unlock()
+	far.u.drive()
+	waitDials(t, far, node, parameter.NetworkHostDialAttempts+1)
+	if last := node.dialed[len(node.dialed)-1]; last != "3" {
+		t.Fatalf("another successor was dialled at %q, want its own address", last)
+	}
+
+	node.setDown(false)
+	passWait()
+	far.u.drive()
+	waitDials(t, far, node, parameter.NetworkHostDialAttempts+2)
+	if !node.Connected(3) {
+		t.Fatal("the successor's connect went through and left no link")
+	}
+	far.u.drive() // linked: the attempts start over on a drop
+	node.setDown(true)
+	_ = mesh.Node(3).Close()
+	for deadline := time.Now().Add(time.Second); node.Connected(3); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the successor's link did not drop with its node")
+		}
+	}
+	far.u.drive()
+	waitDials(t, far, node, parameter.NetworkHostDialAttempts+3)
+	far.r.mu.Lock()
+	tries := far.r.succTries
+	far.r.mu.Unlock()
+	if tries != 1 {
+		t.Fatalf("after the link dropped the successor is on attempt %d, want the first again", tries)
+	}
+}
+
 // TestACutOffParticipantGoesOnAlone: one with no path to its authority, through a
 // relay that left or carries it no more, plays on alone once a walk down the whole
 // list has passed with nobody carrying it.
