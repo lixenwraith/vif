@@ -11,10 +11,13 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// ChainEntry is one eligible participant and where it listens.
+// ChainEntry is one participant, where it listens for peer links and joins, and
+// its door: where it admits people who cannot reach the host, as the world reaches
+// it. One with a door and no address is a leaf that relays, never a candidate.
 type ChainEntry struct {
 	ID   link.PeerID `json:"id"`
 	Addr string      `json:"addr"`
+	Door string      `json:"door,omitempty"`
 }
 
 // SuccessionChain is the ordered candidate list every participant holds.
@@ -45,6 +48,40 @@ func (c SuccessionChain) Append(id link.PeerID, addr string) SuccessionChain {
 		return out
 	}
 	return append(out, ChainEntry{ID: id, Addr: addr})
+}
+
+// Door returns the door published for one participant.
+func (c SuccessionChain) Door(id link.PeerID) (string, bool) {
+	i := slices.IndexFunc(c, func(e ChainEntry) bool { return e.ID == id })
+	if i < 0 || c[i].Door == "" {
+		return "", false
+	}
+	return c[i].Door, true
+}
+
+// Doors lists every door the chain names, in chain order.
+func (c SuccessionChain) Doors() []string {
+	var out []string
+	for _, e := range c {
+		if e.Door != "" {
+			out = append(out, e.Door)
+		}
+	}
+	return out
+}
+
+// WithDoor records one participant's door, on its entry or on a new one with no
+// address, which lists it without making it a candidate.
+func (c SuccessionChain) WithDoor(id link.PeerID, door string) SuccessionChain {
+	if id == 0 || door == "" {
+		return c
+	}
+	out := slices.Clone(c)
+	if i := slices.IndexFunc(out, func(e ChainEntry) bool { return e.ID == id }); i >= 0 {
+		out[i].Door = door
+		return out
+	}
+	return append(out, ChainEntry{ID: id, Door: door})
 }
 
 // Without drops a departed participant, whose identity returns to the pool.

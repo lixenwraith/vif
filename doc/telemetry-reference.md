@@ -272,7 +272,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.migrating` (bool) | A succession is open, or a handoff was adopted less than `NetworkMigrationBadgeTicks` ago. The status bar shows `Migrating`, with `rejoin_attempts` when non-zero, over `Host lost`. Dials are refused while the succession is open (`Authority.Migrating`), not for the tail |
 | `network.host_lost` (bool) | The authority went and this instance continues from the last authoritative state: a guest lost its link to the authority, or a succession ended as a fork. An adopted handoff clears it, as does a session the run opens. It outranks every badge but `Migrating` (`Host lost`), and `:session` names it |
 | `network.evicted` (int) | Participants this authority dropped, under the slow policy or for exceeding the ingress byte budget |
-| `network.chain` (int) | Participants in the succession chain. `:session` reports it as "confirmed reachable". A participant that declared no port plays, and is never a candidate ([Multiplayer](multi-player.md) §5.3) |
+| `network.chain` (int) | Candidates in the succession chain, the participants with an address. `:session` reports it as "confirmed reachable" and names the doors beside it. A participant that declared no port plays, and is never a candidate, listed by its door alone if it relays ([Multiplayer](multi-player.md) §5.3, §5.6) |
 | `network.rejoin_attempts` (int) | Passes down the succession list, one a second, while this instance walks it or has no path to its authority |
 | `network.listening` (bool) | This instance bound a port peers can dial back. False on a leaf: a `-no-advertise` run, or one whose bind failed |
 

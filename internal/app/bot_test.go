@@ -1324,6 +1324,43 @@ func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 	req.dialled.abandon(errors.New("the test is over"))
 }
 
+// TestADroppedGuestRejoinsAtACandidatesDoor: a relay's door is named in the chain
+// every participant holds, completed by the host from the relay's own connection,
+// and a guest whose redial cannot reach its host rejoins at a candidate's door
+// before its port, which, its player not relaying for others, would refuse it.
+func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	door := freeAddress(t)
+	peer, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: door, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	guest, _ := driveBot(t, Config{JoinAddress: addr, NoAdvertise: true}, "roam", nil)
+	for _, a := range []*App{host, peer, guest} {
+		waitForCursors(t, a, 4)
+	}
+	id, peerID := guest.membership.localParticipant(), link.PeerID(peer.membership.localParticipant())
+	for _, a := range []*App{host, guest} {
+		waitUntil(t, func() bool { d, ok := a.authority.Chain().Door(peerID); return ok && d == door },
+			fmt.Sprintf("participant %d's chain naming the relay's door", a.membership.localParticipant()))
+	}
+	if !strings.Contains(host.SessionSummary(), "relaying at "+door) {
+		t.Fatalf(":session on the host reads %q; want the door named", host.SessionSummary())
+	}
+	c := guest.membership.claim.Load()
+	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "127.0.0.1:1" })
+	if c == nil || !host.instance().DropParticipant(id) {
+		t.Fatal("the guest holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back at the relay's door")
+	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id || req.dialled.offer.Relay != peerID {
+		t.Fatalf("the guest was not taken back into its own place at the relay's door: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
+}
+
 // waitUntil waits for a running session to reach a state, a socket deadline away.
 func waitUntil(t *testing.T, done func() bool, what string) {
 	t.Helper()

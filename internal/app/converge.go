@@ -574,8 +574,14 @@ func (m *membership) rejoinThrough(cfg Config, lost link.PeerID, c *claim) bool 
 		if !open {
 			return false
 		}
+		chain := m.authority.Chain()
 		for _, id := range targets {
-			addr, ok := m.authority.Chain().Lookup(id)
+			// Its door, where it admits anyone, before its port, which takes a join only
+			// while its player relays for others.
+			addr, ok := chain.Door(id)
+			if !ok {
+				addr, ok = chain.Lookup(id)
+			}
 			if done[id] || !ok {
 				continue
 			}

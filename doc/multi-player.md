@@ -634,8 +634,8 @@ instance binds it, and authorship never leaves the machine that started the worl
    guests on one machine — takes an OS-assigned port instead. `-no-advertise`, a
    failed bind, or `-authority host` leaves a participant a **leaf**: it plays
    normally, declares nothing and is never a candidate.
-2. The coordinator puts every declared address in the chain and publishes the whole
-   chain on `MsgPeerList` between two ticks, never under the lock it took the address
+2. The coordinator puts every declared address, and every door a relay tells it of
+   (§5.6), in the chain and publishes the whole chain on `MsgPeerList` between two ticks, never under the lock it took the address
    under, and again as the session opens so a participant admitted early is not left
    holding a prefix. It completes a declared `:7777` from the join
    connection's remote address, because a participant knows which port it bound and

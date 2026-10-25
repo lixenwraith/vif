@@ -1020,6 +1020,16 @@ func (u *Authority) appendChain(id link.PeerID, addr string) {
 	}
 }
 
+// noteDoor records one participant's door, which only the coordinator does, and
+// leaves the chain to drive to publish.
+func (u *Authority) noteDoor(id link.PeerID, door string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if next := u.chain.WithDoor(id, door); !slices.Equal(u.chain, next) {
+		u.chain, u.chainDue = next, true
+	}
+}
+
 // PublishChain floods the chain whole. The coordinator also runs it as the session
 // opens: each offer handed out during the lobby named the chain as it stood at that
 // moment, so a participant admitted early holds a prefix until it is told the rest.

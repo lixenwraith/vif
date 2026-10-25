@@ -157,6 +157,7 @@ const (
 	RelayAssign  RelayStep = iota + 1 // allocate an identity and a slot the relay holds
 	RelayReady                        // the participant installed the relay's world: cross its arrival
 	RelayAbandon                      // the join failed: retire the participant, unanswered
+	RelayDoor                         // the relay's door is open at Door: name it in the chain, unanswered
 )
 
 // RelayJoin is a relay's request. Nonce pairs it with its answer; Leaf names the
@@ -164,12 +165,15 @@ const (
 // the offer, as a coordinator checks a dial's reply, and RelayReady carries what it
 // reported: its holder, if it is a bot, and the address it declared, if any. Assign
 // carries the tokens the participant named, as a dial names them to a coordinator.
+// Door is where the relay admits people, declared as a port is and completed from
+// the relay's own connection when it names no host.
 type RelayJoin struct {
 	Step   RelayStep    `json:"step"`
 	Nonce  uint32       `json:"nonce"`
 	Leaf   link.PeerID  `json:"leaf,omitempty"`
 	Claims []string     `json:"claims,omitempty"`
 	Report JoinerReport `json:"report,omitzero"`
+	Door   string       `json:"door,omitempty"`
 }
 
 // RelayAdmit answers one RelayJoin: the offer Assign allocated, or why not.

@@ -501,7 +501,8 @@ whatever the roster. A frame of any other kind releases the link's bundle before
 it, so a link reads its frames in the order they were sent; a correction chunk
 travels alone. A guest admitting its own bot asks the coordinator
 on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
-retire a failed join; the first two are answered on that link with
+retire a failed join, and, once its `-relay` door is open, to name that door in the
+chain (`RelayDoor`); the first two are answered on that link with
 `MsgRelayAdmit` (0x2F). An epoch or a sync is the binary envelope: a flag byte
 (committed, leaf), then source, run, produced tick, hops, age and frame count, and
 per frame its event as the registry's index, a flag byte holding the producer's

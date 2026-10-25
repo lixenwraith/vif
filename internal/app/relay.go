@@ -49,6 +49,8 @@ func (m *membership) serveRelay() {
 	}
 	m.log.Info("session", "msg", "relaying joins", "address", bound)
 	m.ctx.SetStatusMessage("Relaying joins at "+bound, parameter.StatusNotice)
+	// The chain names the door, so a run with no path to its authority finds it.
+	m.tellAuthority(network.RelayJoin{Step: network.RelayDoor, Door: bound})
 }
 
 // relayAcceptor is the join handshake this run serves for its bots and for the
@@ -293,9 +295,15 @@ func (m *membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 		return
 	}
 	coordinator := m.world.IsSessionCoordinator()
-	if req.Step == network.RelayAbandon {
+	switch req.Step {
+	case network.RelayAbandon:
 		if coordinator {
 			m.abandonRelayedLocked(relay, req.Leaf)
+		}
+		return
+	case network.RelayDoor:
+		if coordinator {
+			m.reach.NoteDoor(relay, req.Door)
 		}
 		return
 	}

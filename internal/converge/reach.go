@@ -30,6 +30,7 @@ type Reach struct {
 	dialing  map[link.PeerID]bool
 	nextPass time.Time
 	passes   int
+	remotes  map[link.PeerID]string // where each joiner's stream came from, for a door it declares later
 
 	// hostFor is the authority followed through another participant's link that
 	// hostTries dials have gone to, the next no sooner than nextHost; see dialHost.
@@ -46,6 +47,7 @@ func newReach(inst Instance, reg *status.Registry) *Reach {
 	return &Reach{
 		inst:          inst,
 		dialing:       make(map[link.PeerID]bool, parameter.MaxPlayers),
+		remotes:       make(map[link.PeerID]string, parameter.MaxPlayers),
 		statChain:     reg.Ints.Get("network.chain"),
 		statAttempts:  reg.Ints.Get("network.rejoin_attempts"),
 		statListening: reg.Bools.Get("network.listening"),
@@ -120,10 +122,16 @@ func (r *Reach) DeclaredAddr() string {
 }
 
 // NoteDeclared puts one joiner in the chain, which the correction loop publishes
-// whole. Only the coordinator runs it: it is the far end of the stream the address
-// arrived on.
+// whole, and keeps where its stream came from for the door it may open later. Only
+// the coordinator runs it: it is the far end of the stream the address arrived on.
 func (r *Reach) NoteDeclared(id link.PeerID, report network.JoinerReport) {
-	if r == nil || report.Listen == "" || id == 0 {
+	if r == nil || id == 0 {
+		return
+	}
+	r.mu.Lock()
+	r.remotes[id] = report.Remote
+	r.mu.Unlock()
+	if report.Listen == "" {
 		return
 	}
 	addr, ok := resolveDeclared(report.Listen, report.Remote)
@@ -131,6 +139,27 @@ func (r *Reach) NoteDeclared(id link.PeerID, report network.JoinerReport) {
 		return
 	}
 	r.authority.appendChain(id, addr)
+}
+
+// NoteDoor puts one participant's door in the chain: a bare port completed from the
+// stream it joined on, as a declared port is, or a link reached as it is written.
+// Only the coordinator runs it, under the world lock the step arrived under.
+func (r *Reach) NoteDoor(id link.PeerID, door string) {
+	if r == nil || id == 0 || door == "" {
+		return
+	}
+	r.mu.Lock()
+	remote := r.remotes[id]
+	r.mu.Unlock()
+	addr, ok := resolveDeclared(door, remote)
+	if !ok {
+		if e, err := link.ParseEndpoint(door); err != nil || e.Addr == "" || e.Scheme == link.SchemeSite {
+			return
+		}
+		addr = door
+	}
+	r.authority.noteDoor(id, addr)
+	r.log.Info("net", "msg", "relay door noted", "peer", uint64(id), "door", addr)
 }
 
 // resolveDeclared completes a declared address from the connection it arrived on.
@@ -156,6 +185,7 @@ func (r *Reach) Forget(id link.PeerID) {
 	}
 	r.mu.Lock()
 	delete(r.dialing, id)
+	delete(r.remotes, id)
 	r.mu.Unlock()
 }
 
@@ -183,7 +213,8 @@ func (r *Reach) drive(walking bool) {
 	if r == nil || r.authority.seat() {
 		return
 	}
-	r.statChain.Store(int64(len(r.authority.Chain())))
+	chain := r.authority.Chain()
+	r.statChain.Store(int64(len(chain) - len(slices.DeleteFunc(chain, func(e network.ChainEntry) bool { return e.Addr != "" }))))
 	if walking {
 		r.retrySuccession()
 		return

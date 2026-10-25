@@ -808,6 +808,9 @@ func (m *membership) sessionSummaryLocked() string {
 	if n := reg.Ints.Get("network.chain").Load(); n > 0 {
 		line += fmt.Sprintf(", %d confirmed reachable", n)
 	}
+	if doors := m.sessionChain().Doors(); len(doors) > 0 {
+		line += ", relaying at " + strings.Join(doors, " ")
+	}
 	if reg.Bools.Get("network.listening").Load() {
 		line += ", listening"
 	}

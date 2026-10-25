@@ -239,6 +239,7 @@ greps for rather than enumerating every refusal.
 |---|---|---|---|
 | `peer link opened` / `peer link lost` / `seat link closed` | INFO / WARN / INFO | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss; a seat this run dropped closes rather than is lost, with no alert | `Reach.dial`, `NetworkSystem.reportDisconnect` |
 | `peer listener bound` / `no listening port; this participant is a leaf` | INFO / WARN | `bound`, `declared` / `address`, `error` | `Reach.AdoptListener`, `BindAdvertised` |
+| `relay door noted` | INFO | `peer`, `door` | `Reach.NoteDoor`: the coordinator put a relay's door in the chain, completed from the relay's connection (Multiplayer §5.6) |
 | `playout lead adopted` | INFO | `ticks`, `tick` | a change of this instance's own lead, at the tick its journaled event dispatched |
 | `transport loss` | WARN | `inbound_dropped`, `outbound_refused` | `NetworkSystem`, when either count moves |
 | `barrier schedule full` | WARN | `source`, `produced_tick`, `dropped`, `held`, `bytes` | the playout barrier |
