@@ -467,7 +467,7 @@ handed out of band like the host's, nothing publishes which participants relay,
 and a NAT between a person and every relay is not crossed. A browser relays only
 its own bots. Relay trees the authority chooses are dropped
 ([netcode design §4, Dropped](netcode-design.md#dropped)): a relay stays what a
-person chooses, and this item and the two after it are its correctness. Verify a
+person chooses, and this item and the one after it are its correctness. Verify a
 relayed topology under `LinkShape`s, asserting hash-only
 convergence and the authority's per-link fan-out.
 
@@ -482,17 +482,6 @@ relaying for others could carry it: the host keeps its place as a Wraith, and
 taking that back needs a join under its claim through the peer, which a peer's port
 takes only once that peer hosts. What would close it: the port relaying a rejoin
 before then, as the `-relay` door does, when its player relays for others.
-
-### Serve a relay address on a run that took the session over
-
-- Priority: P3
-- Affected files: `internal/app/relay.go`
-
-A guest's `-relay` door asks the authority on its own link for every join it
-relays. Once that guest takes the session over it is the authority, so the door
-turns every dial away as the session changing hands, which the dialer retries, while
-the guest's own port takes joins. What would close it: the door admitting as the
-host's does once its run hosts, as that port does.
 
 ### Pace the dial of the successor
 

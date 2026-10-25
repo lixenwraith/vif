@@ -1256,6 +1256,39 @@ func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 	req.dialled.abandon(errors.New("the test is over"))
 }
 
+// TestARelayDoorAdmitsAsTheHostOnceItsRunHosts: a guest's -relay door, which asks
+// the authority for every join it relays, admits as the host's door does once that
+// guest took the session over, into the term it holds, rather than turning every
+// dial away as the session changing hands.
+func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	id := link.PeerID(relay.membership.localParticipant())
+	waitUntil(t, func() bool { return len(relay.authority.Chain()) == 1 }, "the relay in the chain")
+
+	leave() // the host and its bot go
+	waitUntil(t, func() bool {
+		r := authorityOf(relay)
+		return r.Authority == id && !r.Migrating && !relay.Context().TimeCtl.Held()
+	}, "the relay taking the session over and playing on")
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	if got := authorityOf(person); got.Authority != id || got.Term != network.FirstTerm+1 {
+		t.Fatalf("a player that joined at the successor's relay door holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
+	}
+	if person.membership.joinedThrough != 0 || person.membership.sessionTransport().PeerCount() != 1 {
+		t.Fatalf("the player joined through participant %d holding %d links; want the host's own guest",
+			person.membership.joinedThrough, person.membership.sessionTransport().PeerCount())
+	}
+	waitForCursors(t, relay, 4) // the first host and its bot wait as Wraiths
+	waitForMotion(t, relay, cursorOf(t, relay, person.membership.localParticipant()), "the player's cursor on the host that admitted it")
+}
+
 // waitUntil waits for a running session to reach a state, a socket deadline away.
 func waitUntil(t *testing.T, done func() bool, what string) {
 	t.Helper()

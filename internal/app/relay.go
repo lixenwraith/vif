@@ -53,19 +53,49 @@ func (m *membership) serveRelay() {
 }
 
 // relayAcceptor is the join handshake this run serves for its bots and for the
-// people it relays, as a coordinator's with the authority asked for each answer.
+// people it relays, as a coordinator's with the authority asked for each answer;
+// once this run holds the term it is that coordinator, and the door admits as the
+// host's does (relayDoorHosts), read at each step since the term moves between them.
 func (m *membership) relayAcceptor(local link.PeerID) func(net.Conn) (link.PeerID, error) {
 	return network.HostAcceptor(network.Coordinator{
-		Preview:     func([]string) (network.SessionOffer, error) { return m.relayPreview(local) },
-		Assign:      func(claims []string) (network.SessionOffer, error) { return m.relayAssign(local, claims) },
-		Release:     m.relayRelease,
-		Admit:       m.admissions.Admit,
-		Report:      func(id link.PeerID, r network.JoinerReport) error { return m.relayReport(local, id, r) },
+		Preview: func(claims []string) (network.SessionOffer, error) {
+			if m.relayDoorHosts() {
+				return m.previewParticipant(claims)
+			}
+			return m.relayPreview(local)
+		},
+		Assign: func(claims []string) (network.SessionOffer, error) {
+			if m.relayDoorHosts() {
+				return m.assignParticipant(claims)
+			}
+			return m.relayAssign(local, claims)
+		},
+		Release: func(id link.PeerID) {
+			if m.relayDoorHosts() {
+				m.releaseParticipant(id)
+				return
+			}
+			m.relayRelease(id)
+		},
+		Admit: m.admissions.Admit,
+		Report: func(id link.PeerID, r network.JoinerReport) error {
+			if m.relayDoorHosts() {
+				return m.noteJoinerReport(id, r)
+			}
+			return m.relayReport(local, id, r)
+		},
 		Prepared:    m.showJoinerPrepared,
 		Name:        m.cfg.SessionName,
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
+}
+
+// relayDoorHosts reports that the run behind the -relay door authors its session, so
+// the door is the host's: a guest that took the session over has no authority to
+// ask, and its own port already takes joins as the host's did.
+func (m *membership) relayDoorHosts() bool {
+	return m.authority != nil && m.authority.State().Authoring()
 }
 
 // relayPreview is what a dial through this run is shown while it prepares: the
@@ -130,9 +160,14 @@ func (m *membership) relayRelease(id link.PeerID) {
 	m.tellAuthority(network.RelayJoin{Step: network.RelayAbandon, Leaf: id})
 }
 
-// releaseRelayedJoiner completes the gate for a bot the relay acceptor admitted. It
-// runs on the handshake's goroutine, as the coordinator's gate does.
+// releaseRelayedJoiner completes the gate for a participant the relay acceptor
+// admitted, the host's own gate once this run hosts. It runs on the handshake's
+// goroutine, as the coordinator's gate does.
 func (m *membership) releaseRelayedJoiner(id link.PeerID) {
+	if m.relayDoorHosts() {
+		m.admitLateJoiner(id)
+		return
+	}
 	m.relay.mu.Lock()
 	offer, report := m.relay.offers[id], m.relay.reports[id]
 	delete(m.relay.offers, id)

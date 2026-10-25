@@ -458,7 +458,8 @@ A relayed join — a guest's own bot on an in-process stream (`seatLink`), or a
 person at the guest's `-relay` address — is served by the guest as a coordinator
 would: it asks the authority on its own link to allocate the identity and, once
 the joiner installed the world the guest last proved, to cross its arrival with
-what the joiner reported (`MsgRelayJoin`). A bot declares its holder and dials no
+what the joiner reported (`MsgRelayJoin`); a guest that took the session over asks
+nobody, its door admitting as the host's does into the term it holds. A bot declares its holder and dials no
 peer links, since it shares its holder's fate; its holder's departure takes its
 bot group at the same crossing, to wait with it or to go with it. A person declares no holder: it keeps its slot when
 its relay leaves, and, having no link then, redials the relay's door for a window,
@@ -479,7 +480,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and, once it takes the session over, joins (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and, once it takes the session over, joins (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` address when the coordinator's cannot be; there is still no discovery and no rendezvous. A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
