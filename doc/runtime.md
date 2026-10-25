@@ -536,10 +536,11 @@ scheduler and queue with its pending events, every registry cell, each system's 
 toggle and its private state (`engine.LocalStateSaver`, `engine.StateCopier` for
 caches, or `SharedStateSaver` for a carrier with neither), the corpus cursor, the
 latched session (`engine.SessionState`, from the journal) and the driver's place.
-One costs about 1 ms at 146×34, and 10 ms and 6.3 MB on td's 500×250 map with 16
-players, where a restore takes about 35 ms with the copy's construction. A
-checkpoint the ring lets go, unless the ladder keeps it or a move restores from
-it, lends its storage to the next, which then allocates 1.7 MB there.
+One costs about 1 ms at 146×34, and 3.9 ms and 6.3 MB on td's 500×250 map, the
+grid's occupied cells read off the list the grid keeps rather than its 32 MB of
+cells (`BenchmarkWorldCopyAtMapLimit`); a restore takes about 35 ms with the copy's
+construction. A checkpoint the ring lets go, unless the ladder keeps it or a move
+restores from it, lends its storage to the next, which then allocates 1.6 MB there.
 
 Every move goes to the first step at or past a tick of the run shown: `,` to the
 step before, one a frame, as `.` steps on; `:r` to the tick asked; a restart to the

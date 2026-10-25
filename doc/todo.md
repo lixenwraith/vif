@@ -180,7 +180,10 @@ library copies.
 
 On td with eight walking cursors and seven snake heads a storm tick peaks at 30 ms
 against 6.4 ms on average, and no wall change computes more than two fields in a
-tick. What is left, for a need rather than a measurement: a per-tick field budget
+tick. A td tick with sixteen cursors on one core reads 0.55 ms
+(`TestTickProfileTD16`), 42% of it the level resets' maze spawn and route graphs
+and 13% `applyWalls`, the search grids refilled whole when a level's walls land.
+What is left, for a need rather than a measurement: a per-tick field budget
 in canonical group order, if a browser frame still stalls, and a footprint tier
 registry deriving the grids to keep from the live navigators, so a data-driven
 species' footprint costs one row. A 2×2 coarse field is not planned: it changes
@@ -450,28 +453,6 @@ owner (netcode design §3.7). A sparse or tiled grid for a map this empty, or on
 staging world sharing the live grid's shape without its cells, takes it.
 
 ## Multiplayer
-
-### Trim what remains of a tick and a checkpoint at the map limit
-
-- Priority: P2
-- Affected files: `pkg/navigation/flowfield.go`, `internal/system/interaction.go`,
-  `internal/engine/world_copy.go`
-
-Measure a td tick with 16 players at `GOMAXPROCS=1` and trim the larger of field
-derivation and `checkCursorOverlap`'s position lookups; with eager, heap-searched
-fields on a 3-tick cooldown they were about 45% and a quarter of a 2.6 ms tick.
-Field derivation has since halved (lazy fields on one shared grid per tier, the
-snake lock by one search); what it still costs is in
-[Bound navigation's worst tick](#bound-navigations-worst-tick-on-busy-maps). A
-checkpoint scans the whole grid for its occupied cells, most of its 10 ms. Each must
-stay exact; per-store write counters stay rejected, since a cache compares values it
-owns.
-
-A td participant costs about 300 MB, of which the 32 MB spatial grid is a minority;
-whole-world captures and the staging world dominate. In a sandbox a `-serve` host
-with one seat held 672 MB resident and 1255 MB with two more, its ticks slipped from
-two seats on, and networked joiners stalled ("no authoritative world inside the
-convergence floor") or lost their links within seconds.
 
 ### Reach a relay without an address in hand
 
