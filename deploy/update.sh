@@ -30,12 +30,6 @@ git_() { git -C "$repo_root" "$@"; }
 if [ "$diff_only" = false ] && [ -n "$(git_ status --porcelain)" ]; then
 	die "the worktree differs from HEAD; commit or stash what you mean to deploy"
 fi
-# A node commissioned with vif-allocator, the router's name before, is rewired once
-# by its own script; until then nothing here knows what is installed.
-if sudo test -f /etc/vif-allocator/allocator.env && ! sudo test -f /etc/vif-router/router.env; then
-	die "vif-allocator is installed and vif-router is not: run deploy/guest/migrate-vif-router.sh once, then this again"
-fi
-
 # Installed lines green, incoming lines red, and only on a terminal.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
 	esc=$(printf '\033')

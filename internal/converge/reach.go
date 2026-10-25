@@ -37,6 +37,12 @@ type Reach struct {
 	hostFor   link.PeerID
 	hostTries int
 	nextHost  time.Time
+	// successor is the first candidate succTries dials have gone to, the next no
+	// sooner than nextSucc, and succLinked whether a link to it stood; see dialSuccessor.
+	successor  link.PeerID
+	succTries  int
+	nextSucc   time.Time
+	succLinked bool
 
 	statChain     *atomic.Int64
 	statAttempts  *atomic.Int64
@@ -243,7 +249,10 @@ func (r *Reach) cutOff() bool {
 }
 
 // dialSuccessor keeps the chain's first link open, so the instance that will have
-// to author already has one when it does.
+// to author already has one when it does. One out of reach is dialled as a followed
+// host is, each attempt after a longer wait, then left (NetworkHostDialAttempts):
+// the walk dials it again should the authority go. Another successor, or a link to
+// this one that stood and dropped, starts the attempts over.
 func (r *Reach) dialSuccessor() {
 	u := r.authority
 	successor, ok := u.successor()
@@ -251,7 +260,23 @@ func (r *Reach) dialSuccessor() {
 		return
 	}
 	dialer, ok := r.inst.Transport().(engine.PeerDialingPort)
-	if !ok || dialer.Connected(uint32(successor)) {
+	if !ok {
+		return
+	}
+	linked := dialer.Connected(uint32(successor))
+	now := time.Now() // [wall] a dial is a link, not a tick
+	r.mu.Lock()
+	if r.successor != successor || linked || r.succLinked {
+		r.successor, r.succTries, r.nextSucc = successor, 0, time.Time{}
+	}
+	r.succLinked = linked
+	due := !linked && r.succTries < parameter.NetworkHostDialAttempts && !now.Before(r.nextSucc)
+	if due {
+		r.succTries++
+		r.nextSucc = now.Add(parameter.NetworkRejoinPassInterval << (r.succTries - 1))
+	}
+	r.mu.Unlock()
+	if !due {
 		return
 	}
 	if addr, found := u.Chain().Lookup(successor); found {

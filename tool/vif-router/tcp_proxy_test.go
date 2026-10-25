@@ -12,9 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"bytes"
 	"github.com/lixenwraith/vif/internal/network"
 	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/websocket"
+	"sync"
 )
 
 const routedID = "0123456789abcdef"
@@ -192,7 +194,7 @@ func TestAStreamPastThePlacementBoundIsClosedAtOnce(t *testing.T) {
 		}
 	}
 	past, dialler := net.Pipe()
-	if upstream, _ := router.place(past, nil); upstream != nil {
+	if upstream, _, _ := router.place(past, nil); upstream != nil {
 		t.Fatal("a stream past the bound was placed")
 	}
 	_ = dialler.SetReadDeadline(time.Now().Add(time.Second))
@@ -330,5 +332,77 @@ func TestAnAddressHasOneJoinBudgetOverBothRoutes(t *testing.T) {
 		if err := join(route, routedID); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("a browser at %s was answered %v, want a refusal naming %q", tc.player, err, tc.want)
 		}
+	}
+}
+
+// accountingLog collects the router's log lines for a test to read.
+type accountingLog struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *accountingLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *accountingLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+// TestAPlacedConnectionIsAccountedForAsItCloses: a connection the front door placed
+// is logged as it ends with the session, whether a door, the bytes each way and the
+// seconds, and never the dialler's address.
+func TestAPlacedConnectionIsAccountedForAsItCloses(t *testing.T) {
+	pod := startPod(t)
+	logs := &accountingLog{}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	router := newTCPRouter(&fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(1), network.NewAdmissionLimiter(),
+		slog.New(slog.NewTextHandler(logs, nil)))
+	_, router.game, _ = net.SplitHostPort(pod.addr)
+	go router.serve(listener)
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := link.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.(*net.TCPConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if echoed, err := io.ReadAll(conn); err != nil || string(echoed) != "ping" {
+		t.Fatalf("read back %q, %v; want ping and the pod's end", echoed, err)
+	}
+	_ = conn.Close()
+	var line string
+	for deadline := time.Now().Add(2 * time.Second); line == ""; time.Sleep(5 * time.Millisecond) {
+		for _, l := range strings.Split(logs.String(), "\n") {
+			if strings.Contains(l, "session route closed") {
+				line = l
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no accounting line in:\n%s", logs.String())
+		}
+	}
+	for _, want := range []string{"session=" + routedID, "door=false", "bytes_in=4", "bytes_out=4", "seconds="} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("the accounting line %q lacks %s", line, want)
+		}
+	}
+	if strings.Contains(line, "127.0.0.1:") {
+		t.Fatalf("the accounting line names the dialler: %q", line)
 	}
 }

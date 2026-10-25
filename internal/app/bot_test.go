@@ -160,6 +160,13 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 // goroutine and paced, and returns the run once the driver is on it, with its stop.
 func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, func()) {
 	t.Helper()
+	return driveRun(t, "bot", cfg, graph, hold)
+}
+
+// driveRun is driveBot as the kind of run it names: a bot run ends with its session,
+// a script's plays its fork on.
+func driveRun(t *testing.T, kind string, cfg Config, graph string, hold func() bool) (*App, func()) {
+	t.Helper()
 	cfg.Seed, cfg.Width, cfg.Height = fixtureSeed, BotWidth, BotHeight
 	cfg.Resources = resource.Options{Embedded: true}
 	g, err := loadBotGraph(cfg.Resources, graph)
@@ -168,7 +175,7 @@ func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, f
 	}
 	stop, built, done := make(chan os.Signal), make(chan *App, 1), make(chan error, 1)
 	go func() {
-		_, err := drive(cfg, "bot", graph, stop, hold, func(a *App) (pacedSource, error) {
+		_, err := drive(cfg, kind, graph, stop, hold, func(a *App) (pacedSource, error) {
 			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.localParticipant())
 			built <- a
 			return botSource{d}, err
@@ -653,6 +660,27 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 	}
 }
 
+// TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd: a scripted run with a bot,
+// in a pinned session whose host leaves, forks; its seat ends on the fork, and with
+// its last link gone the fork drops every cursor it does not simulate, the host's
+// and its bot's, rather than keeping cursors nothing moves.
+func TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, FixedAuthority: true, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	fork, _ := driveRun(t, "script", Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	waitForCursors(t, fork, 4)
+	leave()
+	waitUntil(t, func() bool { return forkCell(fork.world).Load() }, "the guest forked")
+	waitForCursors(t, fork, 1)
+	local := link.PeerID(fork.membership.localParticipant())
+	if roster := fork.instance().WorldRoster(); len(roster) != 1 || roster[0].ID != local {
+		t.Fatalf("the fork's roster holds %+v; want its own cursor alone", roster)
+	}
+}
+
 // TestAHeadlessBotEndsWhenItsSessionDoes: a guest bot whose pinned host leaves is
 // left with no session, and stops rather than playing its fork for nobody.
 func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
@@ -874,6 +902,46 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	waitForWraiths(t, host, 0)
 	if got := places(host, everyone); !maps.Equal(got, left) {
 		t.Fatalf("after coming back the session holds %v (entity, participant by slot), want the places it left, %v", got, left)
+	}
+}
+
+// TestALateSurvivorsPlaceIsGivenBackWithItsBots: the places the floor took from a
+// survivor and its bot, Wraiths on the host, are given back when its report reaches
+// the host late, as a claim's return gives them back; the survivor kept its own
+// cursor throughout, and everyone holds the places it had.
+func TestALateSurvivorsPlaceIsGivenBackWithItsBots(t *testing.T) {
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	t.Cleanup(func() { stopTicks(); host.Close() })
+	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitForCursors(t, guest, 3)
+	before := places(host, everyone)
+	local := link.PeerID(host.membership.localParticipant())
+	var survivor, back []network.RosterEntry
+	for _, p := range host.instance().WorldRoster() {
+		if p.ID == local {
+			continue
+		}
+		back = append(back, p)
+		if p.Holder == 0 {
+			survivor = append(survivor, p)
+		}
+	}
+	// As the floor sends away a survivor that reported nothing, its bot with it.
+	host.membership.CrossDepartures(survivor)
+	waitForWraiths(t, host, 2)
+	waitForCursors(t, guest, 3)
+	// As its late report gives the places back.
+	host.membership.CrossReturns(back)
+	waitForWraiths(t, host, 0)
+	waitForWraiths(t, guest, 0)
+	if got := places(host, everyone); !maps.Equal(got, before) {
+		t.Fatalf("given back, the session holds %v (entity, participant by slot), want the places it had, %v", got, before)
 	}
 }
 

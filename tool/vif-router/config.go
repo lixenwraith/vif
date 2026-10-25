@@ -110,6 +110,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"site origin allowed to open a browser session, e.g. https://example.com; empty publishes no WebSocket route")
 	set.IntVar(&cfg.Allocator.Tunnels, "tunnels", 16,
 		"doors runs may publish through this router at once, reached by name as a pod is; 0 publishes none (at most 64)")
+	set.IntVar(&cfg.Allocator.DoorsPerAddress, "doors-per-address", 4,
+		"doors one address may publish at once; 0 leaves it to -tunnels")
 	set.IntVar(&cfg.Allocator.RouteMax, "route-max", 8,
 		"concurrent connections one session may hold through the front door and the browser route together")
 	set.StringVar(&cfg.Allocator.ClientAddressHeader, "client-address-header", "",
@@ -179,6 +181,9 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if cfg.Allocator.Tunnels < 0 || cfg.Allocator.Tunnels > 64 {
 		return fmt.Errorf("-tunnels %d must be 0 to 64", cfg.Allocator.Tunnels)
+	}
+	if n := cfg.Allocator.DoorsPerAddress; n < 0 || n > 64 {
+		return fmt.Errorf("-doors-per-address %d must be 0 to 64", n)
 	}
 	if cfg.Allocator.RouteMax < 1 || cfg.Allocator.RouteMax > 16 {
 		return fmt.Errorf("-route-max must be between 1 and 16")

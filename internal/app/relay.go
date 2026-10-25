@@ -231,11 +231,12 @@ func (m *membership) releaseRelayedJoiner(id link.PeerID) {
 	}
 }
 
-// sendRelayedGate sends a joiner the world this run has proved the authority's, and
-// has the authority cross its arrival once it has installed it.
+// sendRelayedGate sends a joiner the world this run has proved the authority's, the
+// held tick's while the session stands held, and has the authority cross its arrival
+// once it has installed it.
 func (m *membership) sendRelayedGate(port *link.SocketPort, offer network.SessionOffer, report network.JoinerReport) error {
 	id := offer.Assigned
-	tick, bytes, _, err := m.gateJoiner(port, offer, false, m.corrections.ProvedWorld)
+	tick, bytes, _, err := m.gateJoiner(port, offer, m.ctx.TimeCtl.Held(), m.corrections.ProvedWorld)
 	if err != nil {
 		return err
 	}

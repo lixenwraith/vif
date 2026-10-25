@@ -462,34 +462,30 @@ staging world sharing the live grid's shape without its cells, takes it.
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a player's own session
-reached there, the router neither allocating nor authoring. The tunnel carries it
-already; what it needs is the session's row in `/vif/api/sessions` (its `/health`
-read through the tunnel, or a state the run reports on the control connection),
-its lifetime, the create budget charged to the publisher's address, and `-host
-vif://<site>:7777` opening the door through the router rather than binding one.
+reached there, the router neither allocating nor authoring. The deployment this
+leads to serves as many pods as the node has resources for (`-port-first`/`-port-last`,
+ten today) and routes every session beyond them, with accounting and
+authentication added later. The tunnel carries a door already, and the foundation
+stands: a name is resumed only by the run it was issued to, within
+`NetworkTunnelResumeWindow`, so no published name shadows a pod's; one address
+holds at most `-doors-per-address` doors; every connection placed is accounted for
+as it closes (`session route closed`: session, door or pod, bytes each way,
+seconds); and the listing's `limits` carry `sessions_max`, `doors` and `doors_max`,
+so the site can say when the fleet is full and offer a hosted session instead.
 
-### Pace the dial of the successor
-
-- Priority: P3
-- Affected files: `internal/converge/reach.go`
-
-A participant keeps a link to the first candidate open (`Reach.dialSuccessor`) from
-every pass of the correction loop, one dial in flight at a time: a candidate whose
-chain address refuses the connect at once is dialled again on the next pass, a
-connect a tick for the rest of the session. The dial of a followed host beside it
-backs off and stops (`NetworkHostDialAttempts`); this one wants the same pacing.
-
-### Keep a late survivor in its host's group
-
-- Priority: P3
-- Affected files: `internal/converge/authority.go`, `internal/app/session.go`
-
-A host sends away every independent participant that reported no membership at its
-term a convergence floor after it resumes, so a survivor whose report arrives later
-finds its own cursor a Wraith, which only a return under its claim gives back
-([Multi-player](multi-player.md#8-remaining-gaps) §8). What would close it: a
-membership report after the floor taking the place back as a claim does, over the
-link it already holds.
+What the feature itself needs, best shaped by deploying it step by step:
+- `-host vif://<site>:7777` opening the door through the router rather than binding
+  one, and the host's run reporting its state on the control connection (players,
+  ceiling, scenario, whether it admits) so the router lists it without a `/health`
+  read through the tunnel.
+- The session's row in `/vif/api/sessions`, with a `kind` beside the pods', its
+  lifetime (the control connection's, plus the resume window), and the create
+  budget charged to the publisher's address as a pod's is.
+- A credential in the publish frame (`PublishRequest` is JSON, so a field is added
+  without a protocol change) once authentication exists, and accounting keyed by
+  that identity rather than the address, over the per-connection lines above.
+- The front door's `-tunnels` ceiling split between relay doors and hosted
+  sessions, or one budget for both, decided from how the first deployments fill.
 
 ### Project a correction outside the live lock
 
@@ -511,30 +507,6 @@ live tick between the final projection and the write; the second feed needs a
 retention watermark the barrier does not keep, since `RetainedAfter` selects by
 tick and would feed the first feed's records again. WASM gains scheduling time, not
 parallel CPU.
-
-### Close the edges of a session hold
-
-- Priority: P2
-- Affected files: `internal/app/host.go`, `internal/app/relay.go`,
-  `internal/app/join.go`, `internal/system/meta.go`, `internal/app/script.go`
-
-The host's hold ([Multi-player](multi-player.md#36-holding-a-session) §3.6) leaves
-these gaps, which the start wait makes common: each new game a session's host plays
-stands held until its press.
-- A join that meets a hold mid-gate fails and is retried until the host resumes: a
-  relay's gate, and a host's whose playout-lead wait the hold cuts short, wait for
-  a capture past the held tick. Both could gate as a held host does.
-- A join whose gate reads the held world fails when the session resumes before the
-  read ends, as a successor does once its group reported. The gate could start over
-  running.
-- A joiner's landing hold is not journaled, so a guest journal recorded across a
-  join into a held session replays the install running and the host's resume
-  there announces nothing. The world a join installs could carry it, as an
-  opening carries a hold.
-- `:pause off` before the host's own hold has landed does nothing, and the hold
-  then needs another `:pause`. The end could apply at the landing instead.
-- A script that `:pause`s itself never resumes: its driven loop takes no step
-  while held, so its timeline never reaches the next action. Refuse it there.
 
 ### Split combat telemetry by domain
 
@@ -717,18 +689,6 @@ The record is built to be replaced: one type, made in one place
 (`ParticipantJoinedPayload.Record`). What would close it: decide which values the
 session holds, have the coordinator fill the arrival from its own world instead of
 the joiner's report, and drop the record from the keeper and the report.
-
-### Drop the cursors a linked fork cannot reach
-
-- Priority: P3
-- Affected files: `internal/app/session.go`, `internal/app/converge.go`
-
-`dropAbandonedCursors` acts only on an instance left with no link, so a script's or
-a bot's fork still linked to its own bots keeps every roster entry, and a
-participant it has no path to stays a cursor nothing moves
-([Multi-player](multi-player.md#52-the-roster-after-a-loss) §5.2). A host already
-keeps those its group lost as Wraiths; such a fork could cross the same departures
-for its bots to apply.
 
 ### Merge two sessions
 

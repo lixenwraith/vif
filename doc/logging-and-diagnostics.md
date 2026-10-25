@@ -254,6 +254,7 @@ greps for rather than enumerating every refusal.
 | `participant evicted as too slow` / `participant evicted for what its link sends` | WARN | `peer`, `late_per_s`, `bytes_per_s`, `window` / `peer`, `bytes_per_s`, `carried`, `window` | the authority's slow and ingress policies (multi-player.md §3.5) |
 | `authority handed off` / `authority lost; walking the succession list` | WARN | `term`, `authority`, `predecessor`, `roster`, `evidence_tick`, `local`, `via` / `peer`, `term`, `local`, `redial` | `Authority`; `via` is the candidate a survivor follows its host through, zero for its own link |
 | `authority reached on a link of this instance's own` | INFO | `authority`, `term` | `Authority.reachedHost`: a survivor that followed its host through a relay opened a link of its own to it, which its artifacts take from here (Multiplayer §5.1) |
+| `late survivor taken back` | INFO | `peer`, `term`, `places` | `Authority.takeBack`: a membership report that reached the host after the floor gives the survivor its place back, with its bots' (Multiplayer §5.2) |
 | `authoring under a new term` / `following a new authority` / `continuing locally` | WARN / INFO / WARN | `term`, `seeded_from_tick`, `have_baseline` / `term`, `authority` / `held_term`, `authority`, `reason` | the candidate that took the term; every survivor that follows it; a survivor left playing alone, which reached no candidate, lost its path, or is under a pinned authority |
 | `redialling the lost host` / `redialling the lost relay` / `the redial was refused` / `the redial admitted this run back` / `the redial found no place for this run` | INFO | `authority`, `dial` / `relay`, `dial` / `peer`, `error` / `peer` / `peer` | a person's run redialling the host it joined where the chain says or at its own door, or the relay it joined through at that relay's door (multi-player.md §5.1) |
 | `a candidate refused the rejoin` / `a candidate took this run back to its host` / `the host holds no place for this run` | INFO | `candidate`, `error` / `candidate`, `authority` / `candidate` | `membership.rejoinThrough`: a guest whose redial could not reach its host rejoining through the candidates it walks to, one relaying for others taking it back (multi-player.md §5.1) |
@@ -922,7 +923,7 @@ interval, the content source, pin and fingerprint, and geometry.
 stands, solo, hosting or joined, and the run plays on as it was. Its replay boots
 afresh from the anchor (non-zero `start_run` or `start_tick`), so the journal's
 first `capture`, flagged `opens`, carries everything that boot would otherwise
-decide: the live shared world, the operator state (`mode`, `paused`, `held`, the
+decide: the live shared world, the operator state (`mode`, `paused`, `held` and `start`, the
 toggled systems that are `off`, the `slot` input follows) and the run's own side (`own`).
 That is its player domain under the same entity IDs, the camera, APM and gesture
 tracking, timed effects, the player domain's streams, the cells its input has in
@@ -936,7 +937,9 @@ their own state. A start is refused while a new game is starting, between a
 reset's cleanup and its boot spawn. A replay writes the opening as any written
 world, binds its slot, writes the own side over what that settle derived, takes up
 the operator state and engages its crossing barrier at once, as the run's was;
-`app.loadJournal` refuses a mid-run journal whose files lack the opening.
+`app.loadJournal` refuses a mid-run journal whose files lack the opening. A `capture`
+a join into a held session writes carries `held` and `start` too, the hold the world
+it installed landed in, so a replay holds there as the run did.
 
 `:journal stop` closes the journal once the run is back in play, after its command
 and any menu that paused the run, so a replay ends in play rather than on the command

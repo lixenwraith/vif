@@ -447,6 +447,64 @@ func TestTheWalkGoesDownTheList(t *testing.T) {
 	}
 }
 
+// TestALateSurvivorIsTakenBack: a survivor whose membership report reaches the host
+// after the floor, a hop or a wait too late for it, is given its place back as a
+// claim's return gives one; the same report again, or one from a participant the
+// floor kept, changes nothing.
+func TestALateSurvivorIsTakenBack(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Link(1, 4)
+	mesh.Peer(2, 3)
+	runs := make([]*run, 4)
+	for i := range runs {
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(4))
+		runs[i].open(1, chainOf(2, 3), false)
+	}
+	if err := runs[0].c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	_ = mesh.Node(1).Close()
+	host, near := runs[1], runs[2]
+	group := []*run{host, near} // the far survivor reaches nobody until its report does
+	for _, r := range group {
+		r.c.QueuePeerLost(1)
+	}
+	deliver(group, 3)
+	if got := host.u.State(); got.Authority != 2 || got.Term != network.FirstTerm+1 {
+		t.Fatalf("the first candidate holds %+v; want its own term", got)
+	}
+	host.world.advance(parameter.NetworkSuccessionTicks)
+	deliver(group, 1)
+	if len(host.world.departed) != 1 || len(host.world.departed[0]) != 1 || host.world.departed[0][0].ID != 4 {
+		t.Fatalf("at the floor the host kept %v as Wraiths; want the far survivor alone", host.world.departed)
+	}
+
+	late, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 4, Lost: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.u.onReport(3, late)
+	if len(host.world.returned) != 1 || len(host.world.returned[0]) != 1 || host.world.returned[0][0].ID != 4 {
+		t.Fatalf("the late report gave back %v; want the far survivor's place", host.world.returned)
+	}
+	if i := slices.IndexFunc(host.world.WorldRoster(), func(p network.RosterEntry) bool { return p.ID == 4 }); i < 0 || host.world.WorldRoster()[i].Away {
+		t.Fatal("given back, the far survivor is still away")
+	}
+	host.u.onReport(3, late)
+	kept, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.u.onReport(3, kept)
+	if len(host.world.returned) != 1 {
+		t.Fatalf("reports that give nothing back gave back %v", host.world.returned[1:])
+	}
+}
+
 // TestASurvivorRepeatsItsNoticeWhileItWalks: a survivor whose notice was lost on
 // the wire, and that missed its host's record the same way, is answered on the
 // notice it sends again each pass of its walk, rather than walking on to a fork
@@ -711,6 +769,85 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 			t.Fatal("past the bound the survivor stopped following the host it has")
 		}
 	})
+}
+
+// TestTheSuccessorDialIsPaced: a participant keeps a link to the first candidate
+// warm; one its connect does not reach is dialled after a growing wait and then left,
+// as a followed host is, and another successor, or a link to it that stood and
+// dropped, starts the attempts over.
+func TestTheSuccessorDialIsPaced(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Link(1, 4)
+	node := &dialingNode{MeshPort: mesh.Node(4), mesh: mesh, down: true}
+	chain := network.SuccessionChain{{ID: 2, Addr: "2"}, {ID: 3, Addr: "3"}, {ID: 4, Addr: "4"}}
+	runs := make([]*run, 4)
+	for i := range runs {
+		var port engine.NetworkPort = mesh.Node(link.PeerID(i + 1))
+		if i == 3 {
+			port = node
+		}
+		runs[i] = newRun(t, uint32(i+1), port, roster(4))
+		runs[i].open(1, chain, false)
+	}
+	far := runs[3]
+	passWait := func() {
+		far.r.mu.Lock()
+		far.r.nextSucc = time.Time{}
+		far.r.mu.Unlock()
+	}
+	for i := 1; i <= parameter.NetworkHostDialAttempts; i++ {
+		far.u.drive()
+		far.u.drive() // paced: the second drive inside the wait dials nothing
+		waitDials(t, far, node, i)
+		far.r.mu.Lock()
+		wait := far.r.nextSucc.Sub(time.Now()).Round(parameter.NetworkRejoinPassInterval)
+		far.r.mu.Unlock()
+		if want := parameter.NetworkRejoinPassInterval << (i - 1); wait != want || node.dialed[i-1] != "2" {
+			t.Fatalf("dial %d went to %q and waits %v before the next; want the first candidate and %v",
+				i, node.dialed[i-1], wait, want)
+		}
+		passWait()
+	}
+	far.u.drive()
+	if n := node.dials(); n != parameter.NetworkHostDialAttempts {
+		t.Fatalf("%d dials of the successor, want %d and then none", n, parameter.NetworkHostDialAttempts)
+	}
+
+	far.u.mu.Lock()
+	far.u.chain = network.SuccessionChain{{ID: 3, Addr: "3"}, {ID: 2, Addr: "2"}, {ID: 4, Addr: "4"}}
+	far.u.mu.Unlock()
+	far.u.drive()
+	waitDials(t, far, node, parameter.NetworkHostDialAttempts+1)
+	if last := node.dialed[len(node.dialed)-1]; last != "3" {
+		t.Fatalf("another successor was dialled at %q, want its own address", last)
+	}
+
+	node.setDown(false)
+	passWait()
+	far.u.drive()
+	waitDials(t, far, node, parameter.NetworkHostDialAttempts+2)
+	if !node.Connected(3) {
+		t.Fatal("the successor's connect went through and left no link")
+	}
+	far.u.drive() // linked: the attempts start over on a drop
+	node.setDown(true)
+	_ = mesh.Node(3).Close()
+	for deadline := time.Now().Add(time.Second); node.Connected(3); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the successor's link did not drop with its node")
+		}
+	}
+	far.u.drive()
+	waitDials(t, far, node, parameter.NetworkHostDialAttempts+3)
+	far.r.mu.Lock()
+	tries := far.r.succTries
+	far.r.mu.Unlock()
+	if tries != 1 {
+		t.Fatalf("after the link dropped the successor is on attempt %d, want the first again", tries)
+	}
 }
 
 // TestACutOffParticipantGoesOnAlone: one with no path to its authority, through a

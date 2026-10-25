@@ -85,7 +85,7 @@ func (s vlogSink) Anchor(a JournalAnchor) {
 
 // Capture writes one installed world, its body base64 in a JSON string. The
 // operator state is written only beside a journal's opening world, the one
-// capture that carries it.
+// capture that carries it; the hold a world lands in, beside any that does.
 func (s vlogSink) Capture(c JournalCapture) {
 	kv := []any{
 		"jseq", c.JSeq,
@@ -98,8 +98,11 @@ func (s vlogSink) Capture(c JournalCapture) {
 		"barrier", c.Barrier,
 		"body", base64.StdEncoding.EncodeToString(c.Body),
 	}
+	if c.Held || c.Start {
+		kv = append(kv, "held", c.Held, "start", c.Start)
+	}
 	if c.Opens {
-		kv = append(kv, "opens", true, "mode", uint64(c.Mode), "paused", c.Paused, "held", c.Held, "off", strings.Join(c.Off, ","),
+		kv = append(kv, "opens", true, "mode", uint64(c.Mode), "paused", c.Paused, "off", strings.Join(c.Off, ","),
 			"slot", uint64(c.Slot), "own", base64.StdEncoding.EncodeToString(c.Own))
 	}
 	s.file.Write(s.log, SubJournalCapture, kv...)

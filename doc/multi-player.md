@@ -375,12 +375,18 @@ A session stops only as a whole, and only its host stops it. The host's `:pause`
 every participant applies it at one agreed tick, completes that tick and takes no
 other (`TimeControl.SetHeld`). A guest's `:pause` is refused, and a second one
 before the first lands asks nothing more. A held participant still drains its
-links and answers the link probe off the tick, so a hold times nobody out.
+links and answers the link probe off the tick, so a hold times nobody out, and the
+host sends the held tick's round once, whatever its schedule said
+(`Corrections.publishRound`), so every link proves the held world.
 
 The host's next `:pause` ends its own hold at once, uncrossed: a held host sends
 no epoch, so the first one its next tick produces, admitted past a guest's own
 tick (`NetworkResource.OnAuthorityAhead`), resumes that guest once the drain that
-carried it is done. `:new` ends a hold before its reset crosses, which would
+carried it is done. A `:pause off` asked while the hold still crosses ends it as it
+lands (`MetaSystem.handleHold`): the host takes the tick after, and its guests
+resume on the epoch that follows. A script's own `:pause` is refused
+(`scriptTarget.Emit`): its driven loop takes no step while the run is held, so
+nothing of its timeline could end it. `:new` ends a hold before its reset crosses, which would
 otherwise wait for a tick nobody reaches. A hold outlives a lost host: its
 successor keeps it for its own `:pause`, as a person's fork does in the session it
 goes on in (§5.5), unless a script or bot drives that run and nobody there can give
@@ -400,7 +406,14 @@ A joiner admitted to a held session lands held. Its gate captures the held tick
 itself, since a held session never reaches the playout lead past it, and sends
 after the world the crossings still scheduled past that tick
 (`NetworkSystem.PendingAfter`), which a capture there does not contain; the
-offer's `Held` holds the joiner at the world it installed. A joiner admitted while
+offer's `Held` holds the joiner at the world it installed. A relay's gate does the
+same with the world it proved at the held tick (`Corrections.ProvedWorld`), kept
+while the hold stands for a join that arrives after the proof. A hold that lands
+while a gate waits for its lead ends the wait at the held tick (`KeyframeAt`,
+`ProvedWorld`), and one that ends while the held world is read starts the gate over,
+running (`membership.gateJoiner`). A journal records the hold with the world the
+join installed (`JournalCapture.Held`, `Start`), so a replay holds there as the run
+did, and the resume the run recorded ends it there. A joiner admitted while
 its host's new game waits for the host's press is held as a start
 (`SessionOffer.Start`): it waits as every guest there does, and the host's first
 epoch starts it with nothing said.
@@ -607,14 +620,20 @@ waits as a Wraith (§5.4). A convergence floor (`NetworkSuccessionTicks`) after 
 group resumes, every independent participant that reported no membership at its
 term departs the same way, its bots with it: a survivor that followed another host,
 or forked. The floor comes after play resumes rather than at once, so a survivor
-still arriving through a relay hop is not sent away.
+still arriving through a relay hop is not sent away. One whose report reaches the
+host after the floor is given its place back, with its bots', as a claim's return
+gives one (`Authority.takeBack`, `Instance.CrossReturns`): the floor is the deadline
+for the report, not for the survivor.
 
 A fork with no loop to take it into a session of its own (§5.1), left with **no link
 at all**, drops every cursor it does not simulate. Having no link is what makes the
 drop exact rather than convenient: a departure is produced once at one agreed tick
 because two instances must destroy the same shared entity together, and here there is
 no second instance. A person's fork drops nobody: every place waits as a Wraith in
-the session it goes on in (§5.5). A fork still linked keeps its roster (§8).
+the session it goes on in (§5.5). A fork still linked keeps its roster while a link
+stands: a run with no loop sees its seats end on its fork (§5.5), and the last of
+them going leaves it with none, when it drops as one left with none at the fork
+does (`membership.reportPeerLost`).
 
 A departure, however it is produced, also clears what the instance had applied from
 that participant. An identity returns to the pool once its participant is dismissed
@@ -644,7 +663,11 @@ instance binds it, and authorship never leaves the machine that started the worl
    instance that will have to author already has one when it does. A **successor
    chain** rather than a full mesh: N links instead of N², and the chain is the same
    either way, so the shape is one dial policy and can be widened later without
-   changing an artifact.
+   changing an artifact. A candidate the connect does not reach is dialled as a
+   followed host is (`Reach.dialSuccessor`): each attempt after a longer wait, then
+   left (`NetworkHostDialAttempts`), since the walk dials it again should the
+   authority go; another first candidate, or a link that stood and dropped, starts
+   the attempts over.
 4. Two participants that dial each other exchange `MsgConnect`/`MsgAck` — who is
    calling, running which build — and nothing else: they already hold identities the
    coordinator assigned, so a peer link allocates nothing, offers nothing and
@@ -853,7 +876,9 @@ run publishes its door through the router (`-relay vif://<site>:7777`, the route
 address and no name) by holding a control connection open to the front door: the
 router names the door, from the pods' identifier space, and answers with the link
 (`vif://<site>:7777/<id>`) and a token the run resumes the same name with after a
-blip; the run declares that link as its door. For each dial the front door places on
+blip, within `NetworkTunnelResumeWindow` of losing its control connection, a name
+the router never issued being nobody's to take; the run declares that link as its
+door. For each dial the front door places on
 it, after the route frame, the budget and the ceiling it applies to a pod, the
 router asks the run on the control connection to open a connection back, matches
 the two by a ticket and splices them, re-encoding to the door the name the run
@@ -1020,20 +1045,7 @@ could make the netcode cheaper in [Netcode design](netcode-design.md).
    finishing one target inside that lateness can each be credited on their own
    instance.
 
-5. **A fork that keeps a link keeps the whole roster.** `dropAbandonedCursors`
-   acts only on an instance left with no link (§5.2), so a script's or a bot's fork
-   still linked to its own bots keeps every roster entry, and a participant it has
-   no path to stays a cursor nothing moves. A host has no such gap: those its group
-   lost wait as Wraiths.
-
-6. **A survivor that reaches its host after the floor waits as a Wraith.** The
-   floor (§5.2) sends away every independent participant that reported no
-   membership at the host's term, so a survivor whose report arrives later finds its
-   own cursor a Wraith, which only a return under its claim gives back. *To see the
-   remainder:* a survivor whose dial to the first candidate outlasts the window and
-   a floor.
-
-7. **A browser guest once kept the previous region's glyphs.** Entering the tower
+5. **A browser guest once kept the previous region's glyphs.** Entering the tower
    region, it kept the region before's glyphs, or kept the glyph system running
    although the tower disables it. It was seen once, on 2026-09-24, and has not
    recurred. *To see the remainder:* a second sighting should record whether that

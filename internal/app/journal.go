@@ -453,7 +453,7 @@ func (sc *scribe) openingLocked(twin *App) (event.JournalCapture, error) {
 		Run: at.Run, Tick: at.Tick, Boundary: at.Boundary,
 		Participant: sc.world.LocalParticipant(), Authority: cap.Header.Authority,
 		Barrier: sc.run.barrierLocked(), Body: body,
-		Opens: true, Mode: sc.ctx.GetMode(), Paused: sc.ctx.TimeCtl.OwnPause(), Held: sc.ctx.TimeCtl.Held(), Off: off,
+		Opens: true, Mode: sc.ctx.GetMode(), Paused: sc.ctx.TimeCtl.OwnPause(), Held: sc.ctx.TimeCtl.Held(), Start: sc.ctx.TimeCtl.Holds(engine.HoldStart), Off: off,
 		Slot: sc.world.Resources.Player.LocalSlot(), Own: ownBody,
 	}, nil
 }

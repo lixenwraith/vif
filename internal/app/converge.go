@@ -30,6 +30,7 @@ func (a *App) instance() instance { return instance{&a.glue, &a.membership} }
 
 func (m *membership) Position() event.Stamp { return m.run.Position() }
 func (m *membership) Driven() bool          { return m.cfg.Mode.Driven() }
+func (m *membership) Held() bool            { return m.ctx.TimeCtl.Held() }
 
 func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
 
@@ -218,6 +219,15 @@ func (m *membership) CrossDepartures(away []network.RosterEntry) {
 	}
 }
 
+// CrossReturns gives back the places the floor took from survivors whose membership
+// reports came late, each crossed as a claim's return is: the arrival puts the
+// participant back in its slot, and its next sync brings its cursor with it.
+func (m *membership) CrossReturns(back []network.RosterEntry) {
+	for _, p := range back {
+		m.crossParticipantArrival(p.ID, p.Slot)
+	}
+}
+
 func (m *membership) Redial(lost link.PeerID) bool { return m.redial(lost) }
 
 func (m *membership) Forked(roster []network.RosterEntry, local link.PeerID) {
@@ -267,12 +277,19 @@ func (m *membership) receiveAuthorityFrame(kind uint8, from uint32, body []byte)
 }
 
 // reportPeerLost hands a departure to the succession and says whether this run
-// asked for it by dropping the seat. Caller holds the world lock.
+// asked for it by dropping the seat. A run with no loop sees its seats end on its
+// fork, after the drop it made with them still linked, so the last link to go leaves
+// it with none, when it drops every cursor it does not simulate (dropAbandonedLocked);
+// a play run's loop takes its fork into its own session instead. Caller holds the world lock.
 func (m *membership) reportPeerLost(id uint32) bool {
 	if m.corrections != nil {
 		m.corrections.QueuePeerLost(id)
 	}
-	return m.seatHalted(id)
+	halted := m.seatHalted(id)
+	if m.cfg.Mode != ModePlay && forkCell(m.world).Load() {
+		m.dropAbandonedLocked(m.worldRosterLocked(), nil, link.PeerID(m.world.LocalParticipant()))
+	}
+	return halted
 }
 
 // ApplyPendingCorrections installs whatever authority has arrived, between two
