@@ -1,6 +1,6 @@
-// Package network is the session transport: framed messages over TCP or WebSocket,
-// deflated each way per link once its handshake is done, and an in-process
-// mesh for tests; the join and peer-link handshakes and per-address admission
-// budget; chunked snapshot framing; the link probe a port answers itself; and the
-// authority term, succession rule and chain. See doc/services-and-networking.md.
+// Package network is the session layer over pkg/network's links: the join and
+// peer-link handshakes with their offers, rosters and claims, the kinds a session
+// exchanges and what a link knows of each, the authority term, succession rule and
+// chain, the build identity, the per-address admission budget, and the configuration
+// a session fills from parameter. See doc/services-and-networking.md.
 package network

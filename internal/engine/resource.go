@@ -15,13 +15,13 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/pkg/genetic/registry"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 	"github.com/lixenwraith/vif/pkg/navigation"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -1019,7 +1019,7 @@ type NetworkPort interface {
 	PeerCount() int
 	IsRunning() bool
 	// Drain fills dst with pending inbound notifications, returns count
-	Drain(dst []network.Inbound) int
+	Drain(dst []link.Inbound) int
 }
 
 // OffTickDrainPort is a transport that can be polled between two ticks without the
@@ -1028,7 +1028,7 @@ type NetworkPort interface {
 // without moving them. A socket need not implement it; the caller falls back to
 // Drain, which for it is the same operation.
 type OffTickDrainPort interface {
-	DrainOffTick(dst []network.Inbound) int
+	DrainOffTick(dst []link.Inbound) int
 }
 
 // BundlingPort holds what a link is sent of the kinds that travel bundled
@@ -1071,7 +1071,7 @@ type LinkMeasuringPort interface {
 	// SetLinkReport publishes what this instance tells a probing peer about its
 	// own picture: the tick it stands on, how far behind it believes it is, how
 	// much the last correction had to move, and where its cursor is.
-	SetLinkReport(network.LinkReport)
+	SetLinkReport(link.LinkReport)
 
 	// LinkMetric returns one link's estimate. The zero value is an unmeasured
 	// link, which a controller must read as "no evidence" rather than as a slow

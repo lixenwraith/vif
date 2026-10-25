@@ -43,13 +43,13 @@ type checkpoint struct {
 
 // checkpointLocked reads a replay copy and where its driver stands, into reuse's
 // storage when one is given. Caller MUST hold updateMutex.
-func (a *App) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy) (*checkpoint, error) {
-	systems, err := a.captureSystemStatesLocked()
+func (sc *scribe) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy) (*checkpoint, error) {
+	systems, err := captureSystemStatesLocked(sc.world)
 	if err != nil {
 		return nil, err
 	}
 	local, toggles := map[string]any{}, map[string]bool{}
-	for _, sys := range a.world.Systems() {
+	for _, sys := range sc.world.Systems() {
 		switch s := sys.(type) {
 		case engine.LocalStateSaver:
 			data, err := s.SaveLocal()
@@ -70,23 +70,23 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy)
 		return copied
 	})
 	c := &checkpoint{
-		world:     a.world.CopyOut(reuse),
-		queue:     a.world.Resources.Event.Queue.CopyOut(),
-		scheduler: a.scheduler.CopyOut(),
+		world:     sc.world.CopyOut(reuse),
+		queue:     sc.world.Resources.Event.Queue.CopyOut(),
+		scheduler: sc.scheduler.CopyOut(),
 		systems:   systems,
-		status:    a.statusCellsLocked(a.statusKeysLocked(func(string) bool { return true })),
-		paused:    a.ctx.TimeCtl.IsPaused(),
-		scale:     a.ctx.TimeCtl.Scale(),
-		width:     a.ctx.Width,
-		height:    a.ctx.Height,
+		status:    statusCellsLocked(sc.world, statusKeysLocked(sc.world, func(string) bool { return true })),
+		paused:    sc.ctx.TimeCtl.IsPaused(),
+		scale:     sc.ctx.TimeCtl.Scale(),
+		width:     sc.ctx.Width,
+		height:    sc.ctx.Height,
 		local:     local,
 		toggles:   toggles,
-		content:   service.MustGet[*service.ContentService](a.hub, "content").CursorState(),
+		content:   service.MustGet[*service.ContentService](sc.hub, "content").CursorState(),
 		driver:    d.Cursor(),
-		at:        a.Position(),
-		digest:    a.journalDigestLocked(),
+		at:        sc.run.Position(),
+		digest:    sc.journalDigestLocked(),
 	}
-	if mc, ok := a.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
+	if mc, ok := sc.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
 		c.clock = mc.Elapsed()
 	}
 	return c, nil
@@ -95,13 +95,13 @@ func (a *App) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy)
 // restore settles a fresh replay copy's boot and places it where c was read. A copy
 // that does not then stand where c's did, on the digested classes of its world, is
 // refused: a checkpoint that carried the run short is caught before anything plays.
-func (a *App) restore(c *checkpoint, d *journal.ReplayDriver) (err error) {
-	a.Settle()
-	a.world.RunSafe(func() {
-		if err = a.restoreLocked(c, d); err != nil {
+func (sc *scribe) restore(c *checkpoint, d *journal.ReplayDriver) (err error) {
+	sc.run.Settle()
+	sc.world.RunSafe(func() {
+		if err = sc.restoreLocked(c, d); err != nil {
 			return
 		}
-		if at, got := a.Position(), a.journalDigestLocked(); at != c.at || got != c.digest {
+		if at, got := sc.run.Position(), sc.journalDigestLocked(); at != c.at || got != c.digest {
 			err = fmt.Errorf("restore at step %d: stands at %+v with digest %+v, the checkpoint at %+v with %+v",
 				c.steps, at, got, c.at, c.digest)
 		}
@@ -111,48 +111,48 @@ func (a *App) restore(c *checkpoint, d *journal.ReplayDriver) (err error) {
 
 // restoreLocked places a fresh replay copy, built from the same journal, where c
 // was read, and its driver with it. Caller MUST hold updateMutex.
-func (a *App) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
-	a.world.CopyIn(c.world)
-	if unknown := c.world.LoadStreams(a.world.Resources.Rand); len(unknown) > 0 {
+func (sc *scribe) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
+	sc.world.CopyIn(c.world)
+	if unknown := c.world.LoadStreams(sc.world.Resources.Rand); len(unknown) > 0 {
 		return fmt.Errorf("restore: RNG streams this copy does not issue: %v", unknown)
 	}
-	savers := a.sharedStateSaversLocked()
+	savers := sharedStateSaversLocked(sc.world)
 	for _, rec := range c.systems {
 		if err := savers[rec.System].LoadShared(rec.Data); err != nil {
 			return fmt.Errorf("restore %s: %w", rec.System, err)
 		}
 	}
-	for _, sys := range a.world.Systems() {
+	for _, sys := range sc.world.Systems() {
 		if err := loadLocalState(sys, c.local[sys.Name()]); err != nil {
 			return fmt.Errorf("restore %s: %w", sys.Name(), err)
 		}
 	}
-	if err := a.scheduler.CopyIn(c.scheduler); err != nil {
+	if err := sc.scheduler.CopyIn(c.scheduler); err != nil {
 		return err
 	}
 	if c.scheduler.ResetPending() {
 		select {
-		case a.ctx.ResetChan <- struct{}{}:
+		case sc.ctx.ResetChan <- struct{}{}:
 		default:
 		}
 	}
 	// After the FSM import, whose re-derived toggles are queued and dropped here
-	a.world.Resources.Event.Queue.CopyIn(c.queue)
-	for _, sys := range a.world.Systems() {
+	sc.world.Resources.Event.Queue.CopyIn(c.queue)
+	for _, sys := range sc.world.Systems() {
 		if t, ok := sys.(engine.Toggled); ok {
 			t.SetEnabled(c.toggles[sys.Name()])
 		}
 	}
-	if mc, ok := a.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
+	if mc, ok := sc.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
 		mc.SetElapsed(c.clock)
 	}
-	a.ctx.TimeCtl.SetPaused(c.paused)
-	a.ctx.TimeCtl.SetScale(c.scale)
-	a.ctx.Width, a.ctx.Height = c.width, c.height
-	if err := service.MustGet[*service.ContentService](a.hub, "content").SetCursorState(c.content); err != nil {
+	sc.ctx.TimeCtl.SetPaused(c.paused)
+	sc.ctx.TimeCtl.SetScale(c.scale)
+	sc.ctx.Width, sc.ctx.Height = c.width, c.height
+	if err := service.MustGet[*service.ContentService](sc.hub, "content").SetCursorState(c.content); err != nil {
 		return err
 	}
-	a.installStatusLocked(c.status)
+	installStatusLocked(sc.world, c.status)
 	d.Resume(c.driver)
 	return nil
 }
@@ -310,7 +310,7 @@ func (c *replayCopy) advance(p stepPlan) (b batch) {
 		if n := len(p.spare); n > 0 {
 			reuse, p.spare = p.spare[n-1], p.spare[:n-1]
 		}
-		c.a.world.RunSafe(func() { ck, err = c.a.checkpointLocked(c.src.d, reuse) })
+		c.a.world.RunSafe(func() { ck, err = c.a.scribe.checkpointLocked(c.src.d, reuse) })
 		if err != nil {
 			b.lost, p.every = err, 0
 			continue
@@ -522,7 +522,7 @@ func (rw *rewinder) pump() {
 				b   batch
 			)
 			if ck != nil {
-				err = c.a.restore(ck, c.src.d)
+				err = c.a.scribe.restore(ck, c.src.d)
 			}
 			if err == nil {
 				b = c.advance(p)

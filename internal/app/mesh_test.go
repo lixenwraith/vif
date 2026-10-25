@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -21,7 +22,7 @@ import (
 // reached by relay; a participant's first link is the one it joined through, any
 // other a peer link. chain is the candidate list the offer carries, every guest in
 // join order unless given, so a fixture that wants a leaf leaves it out.
-func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...network.PeerID) []*App {
+func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...link.PeerID) []*App {
 	t.Helper()
 	return meshSessionOf(t, Config{Seed: seed, Width: 120, Height: 40,
 		Resources: resource.Options{Embedded: true}}, n, links, chain...)
@@ -29,12 +30,12 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int, chain ...netw
 
 // meshSessionOf is meshSession on a configuration of the caller's, for a scenario
 // the embedded assets do not ship.
-func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...network.PeerID) []*App {
+func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...link.PeerID) []*App {
 	t.Helper()
 
 	if len(chain) == 0 {
 		for id := 2; id <= n; id++ {
-			chain = append(chain, network.PeerID(id))
+			chain = append(chain, link.PeerID(id))
 		}
 	}
 	offer := network.SessionOffer{
@@ -45,7 +46,7 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 	}
 	for i := range n {
 		offer.Roster = append(offer.Roster,
-			network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
+			network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i)})
 	}
 
 	apps := make([]*App, n)
@@ -73,9 +74,9 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 		if i > 0 {
 			// The host's own copy keeps a joiner in Assigned: an offer that assigns
 			// the coordinator to itself is not a valid handshake.
-			local.Assigned = network.PeerID(i + 1)
+			local.Assigned = link.PeerID(i + 1)
 			if relay := through[i+1]; relay != 1 {
-				local.Relay = network.PeerID(relay)
+				local.Relay = link.PeerID(relay)
 			}
 		}
 		if i == 0 {
@@ -90,10 +91,10 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 	}
 
 	for i, a := range apps {
-		a.AttachTransport(mesh.Node(network.PeerID(i + 1)))
+		a.AttachTransport(mesh.Node(link.PeerID(i + 1)))
 	}
 	for _, a := range apps {
-		a.activateNetworkSession()
+		a.membership.activateNetworkSession()
 	}
 	return apps
 }
@@ -101,10 +102,10 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...net
 // meshOf links a mesh from the host outward and reports whom each participant
 // joined through: the host's links first, then each link that first reaches a
 // participant; the rest are peer links.
-func meshOf(links [][2]int) (*network.Mesh, map[int]int) {
+func meshOf(links [][2]int) (*link.Mesh, map[int]int) {
 	mesh, through := network.NewMesh(), map[int]int{1: 0}
 	join := func(a, b int) {
-		mesh.Link(network.PeerID(a), network.PeerID(b))
+		mesh.Link(link.PeerID(a), link.PeerID(b))
 		through[b] = a
 	}
 	for _, l := range links {
@@ -122,7 +123,7 @@ func meshOf(links [][2]int) (*network.Mesh, map[int]int) {
 		case b && !a:
 			join(l[1], l[0])
 		default:
-			mesh.Peer(network.PeerID(l[0]), network.PeerID(l[1]))
+			mesh.Peer(link.PeerID(l[0]), link.PeerID(l[1]))
 		}
 	}
 	return mesh, through
@@ -358,13 +359,13 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 	t.Cleanup(host.Close)
 	host.cfg.Participants = 3
 
-	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
-	hostCfg.MaxPeers = host.sessionCapacity()
+	hostCfg.MaxPeers = host.membership.sessionCapacity()
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: host.assignParticipant, Release: host.releaseParticipant,
+		Assign: host.membership.assignParticipant, Release: host.membership.releaseParticipant,
 	}, socketWait)
-	hostPort := network.NewSocketPort(hostCfg)
+	hostPort := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = hostPort.Close() })
 	if err := hostPort.Start(); err != nil {
 		t.Fatalf("host transport: %v", err)
@@ -372,20 +373,20 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 	host.AttachTransport(hostPort)
 
 	hostStarted := make(chan error, 1)
-	go func() { hostStarted <- host.startHostSessionOn(hostPort, nil) }()
+	go func() { hostStarted <- host.membership.startHostSessionOn(hostPort, nil) }()
 
 	// Two joiners arrive one after the other, so the first sees a two-entry offer
 	// and the second a three-entry one.
 	guests := make([]*App, 0, 2)
-	ports := make([]*network.SocketPort, 0, 2)
+	ports := make([]*link.SocketPort, 0, 2)
 	for i := range 2 {
 		pending, offered, err := network.DialSession(hostPort.Addr().String(),
-			network.DebugConfig(network.RolePeer, ""))
+			network.DebugConfig(link.RolePeer, ""))
 		if err != nil {
 			t.Fatalf("guest %d dial: %v", i+1, err)
 		}
 		t.Cleanup(func() { _ = pending.Close() })
-		if want := network.PeerID(i + 2); offered.Assigned != want {
+		if want := link.PeerID(i + 2); offered.Assigned != want {
 			t.Fatalf("guest %d assigned participant %d, want %d", i+1, offered.Assigned, want)
 		}
 		if got, want := len(offered.Roster), i+2; got != want {
@@ -401,12 +402,12 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 			t.Fatalf("guest %d app: %v", i+1, err)
 		}
 		t.Cleanup(g.Close)
-		g.pendingJoin, g.sessionOffer = pending, offered
+		g.membership.pendingJoin, g.membership.sessionOffer = pending, offered
 		if err := g.Join(offered.Anchor); err != nil {
 			_ = pending.Complete(err, network.JoinerReport{})
 			t.Fatalf("guest %d identity: %v", i+1, err)
 		}
-		if err := pending.Complete(nil, g.joinerReport()); err != nil {
+		if err := pending.Complete(nil, g.membership.joinerReport()); err != nil {
 			t.Fatalf("guest %d reply: %v", i+1, err)
 		}
 		guests = append(guests, g)
@@ -415,7 +416,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 	// The gate releases only once the lobby is full, so both joiners wait here.
 	gated := make(chan error, len(guests))
 	for _, g := range guests {
-		go func() { gated <- g.startJoinSession(nil) }()
+		go func() { gated <- g.membership.startJoinSession(nil) }()
 	}
 	for range guests {
 		if err := <-gated; err != nil {
@@ -427,7 +428,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 	}
 
 	for i, g := range guests {
-		port := network.NewSocketPort(g.pendingJoin.TransportConfig())
+		port := link.NewSocketPort(g.membership.pendingJoin.TransportConfig())
 		t.Cleanup(func() { _ = port.Close() })
 		if err := port.Start(); err != nil {
 			t.Fatalf("guest %d transport: %v", i+1, err)
@@ -442,7 +443,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 
 	apps := append([]*App{host}, guests...)
 	for _, a := range apps {
-		a.activateNetworkSession()
+		a.membership.activateNetworkSession()
 	}
 
 	// One roster on every instance is the point: same slots, same shared entities,
@@ -477,7 +478,7 @@ func TestDepartureReachesTheWholeMesh(t *testing.T) {
 
 	// Participant 3 leaves. Only its neighbour has a link to lose.
 	apps[2].World().RunSafe(func() {
-		apps[2].World().Resources.Network.Port.(*network.MeshPort).Close()
+		apps[2].World().Resources.Network.Port.(*link.MeshPort).Close()
 	})
 
 	survivors := apps[:2]
@@ -631,7 +632,7 @@ func mustCaptureSession(a *App) (s uint64) {
 
 // meshChain renders identities as chain entries; an in-process mesh needs no
 // addresses because its links already exist.
-func meshChain(ids []network.PeerID) network.SuccessionChain {
+func meshChain(ids []link.PeerID) network.SuccessionChain {
 	var out network.SuccessionChain
 	for _, id := range ids {
 		out = append(out, network.ChainEntry{ID: id, Addr: "mesh"})

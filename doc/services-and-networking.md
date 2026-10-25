@@ -230,7 +230,7 @@ state, peer count and connected state.
 | Role | Behavior |
 |---|---|
 | `RoleNone` | Disabled/no-op. |
-| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer's claims and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a claim takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
+| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer's claims and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a claim takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `membership.midRunGate` serialises. |
 | `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it, and runs `AcceptSession` there for a join, which the opening frame tells from a peer link and the app admits once this participant hosts; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
@@ -435,7 +435,7 @@ The handshake travels plain. From the join reply on, each direction of a link is
 sequence of segments, each opened by a kind byte: a **deflate run**, its wire length
 and frame count as uvarints and then frames deflated at `NetworkStreamLevel` against
 every run before it, or one **raw frame**, whose body the snapshot codec deflated
-already (`MessageType.Precompressed`: capture, correction and scenario chunks, shard
+already (`Traits.Precompressed`: capture, correction and scenario chunks, shard
 sets) and which a run would only deflate again. A coordinator that refuses the reply
 writes its refusal on that stream, where the joiner reads it. The writer takes the
 frames queued within `NetworkWriteLinger` of a burst's first and flushes the run once,
@@ -1142,8 +1142,9 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 | Terminal adapter | `internal/service/adapter_terminal.go` |
 | Content/audio adapters | `internal/service/adapter_content.go`, `adapter_audio.go` |
 | Network adapter | `internal/service/adapter_network.go` |
-| Transport/protocol | `internal/network/*.go` |
-| WebSocket transport | `pkg/websocket`, `internal/network/websocket_other.go`, `websocket_wasm.go`; the allocator's route in `tool/vif-allocator/ws_proxy.go` |
+| Link layer: framing, transport, port, probe, mesh, chunking, addresses | `pkg/network` |
+| Session layer: handshakes, kinds, authority term and chain, identity, admission | `internal/network` |
+| WebSocket transport | `pkg/websocket`, `pkg/network/websocket_other.go`, `websocket_wasm.go`; the allocator's route in `tool/vif-allocator/ws_proxy.go` |
 | Tick-owned ECS wire bridge | `internal/system/network.go` |
 | Authority, succession, reach and corrections | `internal/converge` |
 | Startup session assembly | `internal/app/session.go`, `app.go`, `loop.go`, `network_socket.go`, `network_wasm.go` |

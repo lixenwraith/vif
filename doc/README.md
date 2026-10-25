@@ -75,14 +75,14 @@ changing a subsystem, update the source that actually owns its shape.
 | Concern | Authoritative source | Generated or runtime consumer |
 |---|---|---|
 | Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `build_audio_gen.go`, `build_noaudio_gen.go`, `render_gen.go`, `internal/engine/component_store_gen.go`, `component_domain_gen.go` |
-| Build capabilities | `vif_headless`, `vif_noaudio`, `vif_gui`, `vif_nogui`, `novlog` and `wasm` build constraints, on files such as `internal/app/presentation_*`, `audio*` and `network_*`, `cmd/vif/gui.go` and `gui_default.go`, `internal/system/audio*`, `internal/service/adapter_audio.go` and `adapter_terminal.go`, `internal/network/websocket_*` and `internal/vlog/stub.go` | Makefile profiles and generated capability-specific builders |
+| Build capabilities | `vif_headless`, `vif_noaudio`, `vif_gui`, `vif_nogui`, `novlog` and `wasm` build constraints, on files such as `internal/app/presentation_*`, `audio*` and `network_*`, `cmd/vif/gui.go` and `gui_default.go`, `internal/system/audio*`, `internal/service/adapter_audio.go` and `adapter_terminal.go`, `pkg/network/websocket_*` and `internal/vlog/stub.go` | Makefile profiles and generated capability-specific builders |
 | System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.CheckSystemDependencies`, `World.InitSystems`, `World.AllowSystemDisable`, `resource.checkSystems` |
 | Event names, payload association, replication class | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go`, `serve.go` | `App`, `Scheduler`, services |
 | Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go` |
 | Correction cadence, selective repair, authority term and succession | `internal/converge` | `App.corrections`/`authority`/`reach` through `converge.Instance`; its criteria run against a stub world |
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
-| Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `snapshot_pages_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
+| Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `snapshot_pages_gen.go`, `internal/app/snapshot_stage.go`, `pkg/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Main encounter progression | `internal/asset/scenario/*.toml`, embedded; a configuration root's `scenario/main/` overrides it | `internal/fsm`, `internal/engine.Scheduler` |
 | Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |

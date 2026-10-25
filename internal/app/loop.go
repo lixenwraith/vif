@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // A scenario change rebuilds the run because its FSM metrics are frozen at startup.
@@ -94,9 +95,9 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 	next, err = a.Loop()
 	if next != nil {
 		next.Play = a.livePlay()
-		next.Journal = a.journaling()
+		next.Journal = a.scribe.journaling()
 		// A seat's journal closes with this run, which is the last its holder hears of it
-		for _, line := range a.seatJournalNotices() {
+		for _, line := range a.membership.seatJournalNotices() {
 			next.Notice = joinNotice(next.Notice, line)
 		}
 	}
@@ -134,7 +135,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	sigChan, stopSignals := notifySignals()
 	defer stopSignals()
 
-	if a.pendingJoin != nil {
+	if a.membership.pendingJoin != nil {
 		// The terminal is polled before the rest of the hub, and only it: the gate
 		// owns the dialled stream until it hands it over, so the network service
 		// must not start yet — and without an event source the gate is a wait with
@@ -142,12 +143,12 @@ func (a *App) Loop() (*restartRequest, error) {
 		if err := a.pollTerminalEarly(); err != nil {
 			return nil, err
 		}
-		if !a.seated() {
+		if !a.membership.seated() {
 			if next, err := a.awaitJoinPress(sigChan); next != nil || err != nil {
 				return next, err
 			}
 		}
-		if err := a.startJoinSession(sigChan); err != nil {
+		if err := a.membership.startJoinSession(sigChan); err != nil {
 			return nil, err
 		}
 	}
@@ -160,8 +161,8 @@ func (a *App) Loop() (*restartRequest, error) {
 		a.ctx.SetStatusMessage(a.cfg.Notice, parameter.StatusAlert)
 	}
 	if a.cfg.JoinAddress != "" {
-		a.activateNetworkSession()
-		if err := a.resumeJoinedSession(); err != nil {
+		a.membership.activateNetworkSession()
+		if err := a.membership.resumeJoinedSession(); err != nil {
 			return nil, err
 		}
 		// A guest applies corrections between two ticks, and nothing on this side
@@ -188,7 +189,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	// ahead of the current tick. It also ends the lobby's closing window, which is
 	// what a run that opens a session later with :host needs even when it never had
 	// a lobby of its own.
-	a.openMidRunJoins()
+	a.membership.openMidRunJoins()
 	// After the clock: the mid-run gate reads a capture a playout lead ahead of a
 	// tick that has to be running. A door a rebuilt run cannot reopen costs the
 	// session, not the game.
@@ -200,7 +201,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	}
 	// After the door opens, for the same reason: every bot arrives through it. One
 	// that cannot be seated costs the bot, not the game.
-	if err := a.seatBots(); err != nil {
+	if err := a.membership.seatBots(); err != nil {
 		a.log.Warn("app", "msg", "bots not seated", "error", err.Error())
 		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
 	}
@@ -217,18 +218,18 @@ func (a *App) Loop() (*restartRequest, error) {
 		// Before the wait, not inside it: a latched restart is serviced on the
 		// iteration after the intent that asked for one, and every other path
 		// through the loop arrives back here too.
-		if a.dismissed.Load() {
+		if a.membership.dismissed.Load() {
 			return &restartRequest{Notice: "Removed by the host; started a local game"}, nil
 		}
 		if req := a.restart.Load(); req != nil {
 			a.frame() // the notice of what the next run waits on, drawn while it is built
 			return req, nil
 		}
-		if a.leaving.Load() {
-			a.leaveSession()
+		if a.membership.leaving.Load() {
+			a.membership.leaveSession()
 			continue // a replacement latched while it ran is taken first
 		}
-		a.serveJournal()
+		a.scribe.serveJournal()
 		select {
 		case sig := <-sigChan:
 			a.log.Info("app", "msg", "signal received", "signal", sig.String())
@@ -262,11 +263,11 @@ func (a *App) Loop() (*restartRequest, error) {
 // lost, nil for a run with none; the loop shows each, as a lobby does, since only
 // the log heard a playing host's.
 func (a *App) doorErrors() <-chan error {
-	a.sessionMu.Lock()
-	port := a.midRunPort
-	a.sessionMu.Unlock()
+	a.membership.sessionMu.Lock()
+	port := a.membership.midRunPort
+	a.membership.sessionMu.Unlock()
 	if port == nil {
-		port, _ = a.socketPort()
+		port, _ = a.membership.socketPort()
 	}
 	if port == nil {
 		return nil
@@ -335,7 +336,7 @@ func (a *App) handleResize(width, height int) {
 	a.scheduler.DispatchEventsImmediately()
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
 	if a.cfg.Mode.OwnsGeometry() {
-		a.seatScreen.Store(&screen{a.ctx.Width, a.ctx.Height})
+		a.membership.seatScreen.Store(&screen{a.ctx.Width, a.ctx.Height})
 	}
 }
 
@@ -422,11 +423,11 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 				a.showJoinStatus(a.joinPrompt()) // redrawn after a resize, and asked as a touch was
 				continue
 			}
-			a.showJoinStatus("Joining " + network.Shown(a.cfg.JoinAddress) + "...")
-			err := a.takeSeat(true, signals)
+			a.showJoinStatus("Joining " + link.Shown(a.cfg.JoinAddress) + "...")
+			err := a.membership.takeSeat(true, signals)
 			if errors.Is(err, errSessionMoved) {
 				// Pressed already, and holding the bots it was to seat once it was in.
-				a.log.Info("session", "msg", "joining the session's new game", "join", network.Shown(a.cfg.JoinAddress))
+				a.log.Info("session", "msg", "joining the session's new game", "join", link.Shown(a.cfg.JoinAddress))
 				return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided, Bots: a.cfg.Bots}, nil
 			}
 			return nil, err
@@ -454,7 +455,7 @@ func joinPress(ev terminal.Event, mouseOff bool) bool {
 // joinPrompt is the status line a join waiting for its press stands with, asking for
 // the press the player's last suggests, as startPrompt does.
 func (a *App) joinPrompt() string {
-	host := network.Shown(a.cfg.JoinAddress)
+	host := link.Shown(a.cfg.JoinAddress)
 	switch {
 	case a.touched:
 		return "Tap to join " + host

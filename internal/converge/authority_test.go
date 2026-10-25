@@ -7,11 +7,12 @@ import (
 
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // chainOf renders identities as chain entries; an in-process session needs no
 // addresses, because its links already exist.
-func chainOf(ids ...network.PeerID) network.SuccessionChain {
+func chainOf(ids ...link.PeerID) network.SuccessionChain {
 	var out network.SuccessionChain
 	for _, id := range ids {
 		out = append(out, network.ChainEntry{ID: id, Addr: "mesh"})
@@ -22,7 +23,7 @@ func chainOf(ids ...network.PeerID) network.SuccessionChain {
 // record is the handoff a criterion hands to an instance, carrying the membership
 // that instance closed on — a record whose players are not those the receiver holds
 // is refused before anything is read from it.
-func record(u *Authority, term network.AuthorityTerm, authority, predecessor network.PeerID) network.HandoffRecord {
+func record(u *Authority, term network.AuthorityTerm, authority, predecessor link.PeerID) network.HandoffRecord {
 	held := u.State()
 	return network.HandoffRecord{
 		Term: term, Authority: authority, Predecessor: predecessor,
@@ -297,25 +298,25 @@ func TestTheWalkDialsEachCandidateInTurn(t *testing.T) {
 		Host: 1, Assigned: 5, Term: network.FirstTerm, Roster: members, Chain: chainOf(3, 2, 4, 5),
 	}, 5)
 	now := time.Now()
-	if got, want := r.u.walkTargets(now), []network.PeerID{2, 4}; !slices.Equal(got, want) {
+	if got, want := r.u.walkTargets(now), []link.PeerID{2, 4}; !slices.Equal(got, want) {
 		t.Fatalf("cut off, dials %v; want every candidate %v", got, want)
 	}
 	if got, ok := r.u.successor(); !ok || got != 2 {
 		t.Fatalf("successor = %d (ok=%t), want 2, first on the chain after the away participant", got, ok)
 	}
 	r.u.beginSuccession(1)
-	if got, want := r.u.walkTargets(now.Add(time.Hour)), []network.PeerID{2}; !slices.Equal(got, want) {
+	if got, want := r.u.walkTargets(now.Add(time.Hour)), []link.PeerID{2}; !slices.Equal(got, want) {
 		t.Fatalf("redialing, dials %v; want the first candidate %v", got, want)
 	}
 	r.u.RedialRefused(1)
 	now = time.Now()
 	for _, c := range []struct {
 		at   time.Duration
-		want []network.PeerID
+		want []link.PeerID
 	}{
-		{0, []network.PeerID{2}},
-		{parameter.NetworkSuccessionWindow, []network.PeerID{2, 4}},
-		{4 * parameter.NetworkSuccessionWindow, []network.PeerID{2, 4}},
+		{0, []link.PeerID{2}},
+		{parameter.NetworkSuccessionWindow, []link.PeerID{2, 4}},
+		{4 * parameter.NetworkSuccessionWindow, []link.PeerID{2, 4}},
 	} {
 		if got := r.u.walkTargets(now.Add(c.at)); !slices.Equal(got, c.want) {
 			t.Fatalf("%v into the walk, dials %v; want %v", c.at, got, c.want)
@@ -372,7 +373,7 @@ func TestTheWalkGoesDownTheList(t *testing.T) {
 	mesh.Peer(3, 4)
 	runs := make([]*run, 4)
 	for i := range runs {
-		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(4))
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(4))
 		runs[i].open(1, chainOf(2, 3), false)
 	}
 	// Every guest holds the host's keyframe, which is what a candidate authors from.
@@ -419,7 +420,7 @@ func TestASurvivorRepeatsItsNoticeWhileItWalks(t *testing.T) {
 	mesh.Peer(2, 3)
 	runs := make([]*run, 3)
 	for i := range runs {
-		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(3))
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(3))
 		runs[i].open(1, chainOf(2, 3), false)
 	}
 	if err := runs[0].c.PublishDue(); err != nil {
@@ -432,7 +433,7 @@ func TestASurvivorRepeatsItsNoticeWhileItWalks(t *testing.T) {
 	// Every frame the survivors exchange as the loss lands is lost: the guest's
 	// notice and the host's record alike.
 	for _, r := range survivors {
-		r.world.port.(*network.MeshPort).SetShape(network.LinkShape{LossEvery: 1})
+		r.world.port.(*link.MeshPort).SetShape(link.LinkShape{LossEvery: 1})
 		r.c.QueuePeerLost(1)
 	}
 	deliver(survivors, 3)
@@ -441,7 +442,7 @@ func TestASurvivorRepeatsItsNoticeWhileItWalks(t *testing.T) {
 			host.u.Holder(), guest.u.Holder())
 	}
 	for _, r := range survivors {
-		r.world.port.(*network.MeshPort).SetShape(network.LinkShape{})
+		r.world.port.(*link.MeshPort).SetShape(link.LinkShape{})
 	}
 	guest.r.mu.Lock()
 	guest.r.nextPass = time.Now().Add(time.Hour)
@@ -472,7 +473,7 @@ func TestASurvivorCarriesOnlyWhomItRelaysFor(t *testing.T) {
 	mesh.Peer(3, 4)
 	runs := make([]*run, 4)
 	for i := range runs {
-		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(4))
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(4))
 		runs[i].open(1, chainOf(2, 3), false)
 	}
 	if err := runs[0].c.PublishDue(); err != nil {

@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 )
 
@@ -16,9 +15,6 @@ import (
 // measurable and, more to the point, makes a shaped one *reproducible*: the same
 // ticks produce the same round trip on every run and on every machine.
 var meshEpoch = time.Unix(1<<30, 0)
-
-// meshProbeDrains is the probe interval in drains, which is the mesh's tick.
-const meshProbeDrains = uint64(parameter.NetworkProbeInterval / parameter.GameUpdateInterval)
 
 // LinkShape is a deterministic bottleneck between two mesh nodes: a one-way
 // delay in ticks, a periodic drop, and a release budget in bytes per tick.
@@ -79,10 +75,22 @@ type meshFrame struct {
 type Mesh struct {
 	mu    sync.Mutex
 	nodes map[PeerID]*MeshPort
+
+	// tick is what the clock advances by per drain, probeDrains the probe interval
+	// in drains, and probe and lost the meters' timing, all from the configuration.
+	tick        time.Duration
+	probeDrains uint64
+	probe, lost time.Duration
 }
 
-// NewMesh returns an empty link graph.
-func NewMesh() *Mesh { return &Mesh{nodes: make(map[PeerID]*MeshPort)} }
+// NewMesh returns an empty link graph whose clock and probes run on cfg's timing.
+func NewMesh(cfg *Config) *Mesh {
+	m := &Mesh{nodes: make(map[PeerID]*MeshPort), tick: cfg.TickInterval, probe: cfg.ProbeInterval, lost: cfg.ProbeLostAfter}
+	if cfg.TickInterval > 0 {
+		m.probeDrains = uint64(cfg.ProbeInterval / cfg.TickInterval)
+	}
+	return m
+}
 
 // Node returns the endpoint for a participant, creating it on first use.
 func (m *Mesh) Node(id PeerID) *MeshPort {
@@ -97,6 +105,7 @@ func (m *Mesh) nodeLocked(id PeerID) *MeshPort {
 	}
 	p := &MeshPort{
 		local:    id,
+		mesh:     m,
 		links:    make(map[PeerID]*MeshPort),
 		served:   make(map[PeerID]bool),
 		up:       true,
@@ -143,18 +152,11 @@ func (m *Mesh) link(a, b PeerID, served bool) {
 	y.deliver(Inbound{Kind: InboundConnect, Peer: a})
 }
 
-// NewLoopbackPair links two participants and returns their endpoints. The
-// two-participant case is a mesh with one link.
-func NewLoopbackPair(a, b PeerID) (*MeshPort, *MeshPort) {
-	m := NewMesh()
-	m.Link(a, b)
-	return m.Node(a), m.Node(b)
-}
-
 // MeshPort is one participant's endpoint. It implements the same poll contract as
 // SocketPort: outbound by direct call, inbound drained once per game tick.
 type MeshPort struct {
 	local PeerID
+	mesh  *Mesh // the graph, for its timing
 
 	mu     sync.Mutex
 	links  map[PeerID]*MeshPort
@@ -185,7 +187,7 @@ func (p *MeshPort) SetShape(s LinkShape) {
 // now is this node's virtual clock: the tick it has drained, as an instant.
 // Caller MUST hold mu.
 func (p *MeshPort) nowLocked() time.Time {
-	return meshEpoch.Add(time.Duration(p.drains) * parameter.GameUpdateInterval)
+	return meshEpoch.Add(time.Duration(p.drains) * p.mesh.tick)
 }
 
 // SetLinkReport publishes what this node tells a probing peer about its picture.
@@ -235,7 +237,7 @@ func (p *MeshPort) Peers() []uint32 {
 func (p *MeshPort) meterLocked(id PeerID) *linkMeter {
 	m, ok := p.meters[id]
 	if !ok {
-		m = newLinkMeter()
+		m = newLinkMeter(p.mesh.probe, p.mesh.lost)
 		p.meters[id] = m
 	}
 	return m
@@ -464,7 +466,7 @@ func (p *MeshPort) DrainOffTick(dst []Inbound) int {
 // probesDueLocked advances the probe sequence when this drain is a probe
 // interval and returns the peers to measure. Caller MUST hold mu.
 func (p *MeshPort) probesDueLocked() []PeerID {
-	if !p.up || len(p.links) == 0 || meshProbeDrains == 0 || p.drains%meshProbeDrains != 0 {
+	if !p.up || len(p.links) == 0 || p.mesh.probeDrains == 0 || p.drains%p.mesh.probeDrains != 0 {
 		return nil
 	}
 	p.probeSeq++

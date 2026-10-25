@@ -44,8 +44,8 @@ func buildName() string {
 // actually built. It reads the live anchor rather than the configuration, because
 // what matters is the corpus that loaded and the seed the world is running, not the
 // ones that were asked for.
-func (a *App) sessionIdentity() network.PeerIdentity {
-	return identityFromAnchor(a.JoinAnchor())
+func (m *membership) sessionIdentity() network.PeerIdentity {
+	return identityFromAnchor(m.JoinAnchor())
 }
 
 // identityFromAnchor is the same for an anchor already in hand — the offer a
@@ -58,15 +58,15 @@ func identityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
 // accepts an offer: the geometry a dedicated host may size its map from, the
 // identity that host refuses the join on, and the claim it comes back with, with
 // what it brings back when the offer is the place that claim waits under.
-func (a *App) joinerReport() network.JoinerReport {
+func (m *membership) joinerReport() network.JoinerReport {
 	r := network.JoinerReport{
-		Holder:   a.cfg.holder,
-		Width:    a.ctx.Width,
-		Height:   a.ctx.Height,
-		Identity: a.sessionIdentity(),
-		Listen:   a.reach.DeclaredAddr(),
+		Holder:   m.cfg.holder,
+		Width:    m.ctx.Width,
+		Height:   m.ctx.Height,
+		Identity: m.sessionIdentity(),
+		Listen:   m.reach.DeclaredAddr(),
 	}
-	if c := a.claim.Load(); c != nil {
+	if c := m.claim.Load(); c != nil {
 		r.Claim, r.Record = network.ClaimDigest(c.Token), c.Record
 	}
 	return r

@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 func TestSnapshotWireEnvelopeRoundTripsAndIsBounded(t *testing.T) {
@@ -43,7 +43,7 @@ func TestSnapshotWireEnvelopeRoundTripsAndIsBounded(t *testing.T) {
 		{"version", func(b []byte) { b[4]++ }},
 		{"codec", func(b []byte) { b[5]++ }},
 		{"plain size", func(b []byte) {
-			binary.BigEndian.PutUint32(b[6:10], network.MaxSnapshotPlainBytes+1)
+			binary.BigEndian.PutUint32(b[6:10], link.MaxSnapshotPlainBytes+1)
 		}},
 	} {
 		t.Run(mutate.name, func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestACaptureExpandingPastTheWireCeilingTravels(t *testing.T) {
 		Rune   int    `json:"r"`
 	}
 	// Distinct entities, so the body is a real store rather than one value repeated.
-	want := make([]cell, network.MaxSnapshotBytes/8)
+	want := make([]cell, link.MaxSnapshotBytes/8)
 	for i := range want {
 		want[i] = cell{Entity: uint64(i + 1), Mask: 255, Rune: 9484}
 	}
@@ -78,17 +78,17 @@ func TestACaptureExpandingPastTheWireCeilingTravels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plain) <= network.MaxSnapshotBytes {
+	if len(plain) <= link.MaxSnapshotBytes {
 		t.Fatalf("body is %d plain bytes; the test needs one past the %d-byte wire ceiling",
-			len(plain), network.MaxSnapshotBytes)
+			len(plain), link.MaxSnapshotBytes)
 	}
 
 	body, err := EncodeJSON(want)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if len(body) > network.MaxSnapshotBytes {
-		t.Fatalf("wire body is %d bytes, past the %d-byte ceiling", len(body), network.MaxSnapshotBytes)
+	if len(body) > link.MaxSnapshotBytes {
+		t.Fatalf("wire body is %d bytes, past the %d-byte ceiling", len(body), link.MaxSnapshotBytes)
 	}
 	var got []cell
 	if err := DecodeJSON(body, &got); err != nil {

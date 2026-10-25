@@ -69,7 +69,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 |---|---|
 | `cmd/vif` | Flags and the one help table that also renders `doc/vif.6` and the shell completions in `deploy/package/`; `vif.toml` defaults; logging/journal/runtime-capture setup; play/serve/replay/script/bot/check/schema selection; the session request a `-join` site answers; process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, open a journal where a run stands, verify anchor/config identity, and run a dedicated host's lifetime and probe. A presenting run presents through the host's `Presentation` and speakers (`app.Host`), the terminal when the host supplies none. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, open a journal where a run stands, verify anchor/config identity, and run a dedicated host's lifetime and probe. A presenting run presents through the host's `Presentation` and speakers (`app.Host`), the terminal when the host supplies none. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements: the correction glue, `corrector`, over the world and the capture encoder, and the run's place in its session, `membership`, beside it. The journal and its replay are `scribe`'s. Each of the three reads the run through one interface, and `App` is what is left: construct the world, wire the services, run the loop. |
 | `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, slow-participant eviction, the answers a relay serves the participants behind it, and the listening port and succession chain a survivor dials down. It holds no world: `converge.Instance` is the whole of what it asks the run for, and every method on it takes the world lock itself except `CaptureSharedLocked` and `IndexSharedLocked`, which `TickClosed` calls from inside a tick — which is also what lets its own criteria drive it against a stub world instead of a composition root. |
 | `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, built-in sound and music banks, the source-archive version stamp — plus the splash bitmap font and the cell font atlas the window, page and Android view draw with. The only package with an `embed` directive. |
 | `internal/component` | Pure ECS component data, enums/masks and per-kind tables; logic over them lives in the owning system (exceptions in [ECS](ecs-and-events.md#4-component-catalog)). Position is declared here but stored specially by `engine`. |
@@ -86,7 +86,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (unstarted, waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
 | `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, the declared system dependency graph, game binding for the generic FSM, and the JSON schema `-schema` prints for authoring tools. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode and the configuration menu, undo/history. |
-| `internal/network` | Length-prefixed transport over TCP or WebSocket (the browser's own socket on `js/wasm`), session endpoints and routes, the allocator request a site `-join` makes, a TLS hook no flag sets, anchor/start/ready session protocol, chunked snapshot framing, crossing fences, the link probe, the peer-link handshake, the succession chain a handoff reads, peers, sequence/ack fields, bounded inbound notifications, and the per-address dial budget the coordinator admits against. |
+| `internal/network` | The session layer over `pkg/network`: the join and peer-link handshakes with their previews, offers, rosters, claims and refusals, the relayed join a guest serves, the kinds a session exchanges and the table a link reads them by, the authority term, succession rule and chain, the build identity, the per-address admission budget, and the configuration a session fills from `parameter`: the link's defaults, timing and kinds, the mesh it tests on and the allocator request a site `-join` makes. |
 | `internal/parameter` | Gameplay tunables, timing, priorities, effect/audio tuning, the shipped sound and music banks' parse, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and the `vif.toml` settings, the one file it reads. |
@@ -112,6 +112,7 @@ flowchart TD
     Game --> Physics["pkg/vmath and vmath/physics"]
     Game --> Genetic["pkg/genetic and subpackages"]
     Game --> Link["pkg/linkpace"]
+    Game --> Network["pkg/network"]
     Game --> Image["pkg/ascimage"]
     Game --> Glyph["pkg/glyph"]
     Game --> Window["pkg/window"]
@@ -135,21 +136,22 @@ flowchart TD
 | `pkg/genetic/tracking` | Pooled lifetime metric collectors for simple and composite subjects. | No game-specific component dependency. |
 | `pkg/genetic/registry` | Up to 256 species/populations, sampling, probes, tracking, stats, optional persistence. | Composes core genetic, fitness, tracking, and persistence. |
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
+| `pkg/network` | Framed messages over TCP or WebSocket (the browser's own socket on `js/wasm`), deflated per link once a handshake opens the stream; the accept and dial transport with its handshake budget and the hooks a session's handshakes plug into; the port's tick-drained inbound queue, bundled sends and the link probe it answers itself; an in-process mesh with shaped links; chunked bodies; crossing fences; session addresses and TLS. | Standard library, `pkg/linkpace` and `pkg/websocket`. It knows no kinds and no game: `Kinds` is the session layer's table over the kind byte, and the handshakes, the timing and the kinds come from its caller's `Config`. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
 | `pkg/tomlmacro` | Expand macros in parsed TOML documents: typed parameters, substitution, array splicing, zipped `each`, bounded nesting and output. | Standard library only: it works on the parser's generic trees, so the FSM loader and bot graphs share one expander. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Standard library only, with its own `Point` and a default seed restating `vmath.Golden64`; surfaced through wall/maze events. |
 | `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
 | `pkg/vmath/physics` | `float64` kinetic state, integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Owns `physics.Kinetic`; depends only on the standard library and `pkg/vmath`. |
 | `pkg/vmath` | `float64` scalar/vector math, LUTs, shapes, arcs, grid traversal, cell topology, seeded randomness, and the shared math constants. | Standard-library-only foundation; integer `Point`/`Area` values are grid indices, not fixed-point numbers. |
-| `pkg/websocket` | RFC 6455 as a byte stream: the version-13 upgrade as client and server, binary frames, ping, pong and close. | Standard library only. `internal/network` dials and serves sessions with it and `tool/vif-allocator` terminates the browser route with it. |
+| `pkg/websocket` | RFC 6455 as a byte stream: the version-13 upgrade as client and server, binary frames, ping, pong and close. | Standard library only. `pkg/network` dials and serves sessions with it and `tool/vif-allocator` terminates the browser route with it. |
 
 No package under `pkg` imports anything under `internal`; `make arch-check`
 enforces it. That is what lets a leaf take game data — the sound bank, wall
 callbacks, fitness policy — from its caller instead of reaching for it. The
 numeric stack is one-way: `pkg/vmath` imports only the standard library and
 `pkg/vmath/physics` imports `pkg/vmath`. `pkg/audio`, the core `pkg/genetic`
-package, `pkg/linkpace` and the numeric stack have the clearest game-independent
-boundaries.
+package, `pkg/linkpace`, `pkg/network` and the numeric stack have the clearest
+game-independent boundaries.
 
 ## 6. Generated assembly
 

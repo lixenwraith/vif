@@ -579,7 +579,7 @@ manual smoke test because unit tests do not reproduce every emulator.
 `claude/*`, and on pull requests to `main`, `master` or `develop`. Its single job,
 on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profiles
 and targets, the window and Android module tests, the browser build's tests under
-Node (`pkg/browser` and the `Browser` tests of `internal/network`, through
+Node (`pkg/browser` and the `Browser` tests of `pkg/network`, through
 `go_js_wasm_exec`), and `go test -race -v ./...` with `GORACE` halting on the first
 race and writing `race.*`, which is uploaded for seven days on failure.
 

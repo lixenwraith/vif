@@ -109,7 +109,7 @@ cursorless coordinator included.
 | `tick` | `Scheduler.processTick` | once per simulation tick, before the tick body |
 
 Installing a received world, a join's capture or a correction, moves both to its
-header's (`App.adoptClockLocked`). `tick` is stamped with the tick *about to
+header's (`corrector.adoptClockLocked`). `tick` is stamped with the tick *about to
 execute*, so records emitted inside `processTick` carry the tick they describe
 rather than the previous one. A played or served runtime adopts `vlog.Default()`,
 which also stamps the process's own records (flags, runtime capture, a crash); a
@@ -265,7 +265,7 @@ greps for rather than enumerating every refusal.
 
 | `msg` | Level | Fields | Source |
 |---|---|---|---|
-| `peer admitted` | INFO | `peer`, `holder`, `remote`, `declared` | `App.noteJoinerReport`, on the coordinator |
+| `peer admitted` | INFO | `peer`, `holder`, `remote`, `declared` | `membership.noteJoinerReport`, on the coordinator |
 
 `remote` is the accepted socket's address and `declared` what the peer said it
 listens on. They are here and nowhere else: it is the one value that proves a

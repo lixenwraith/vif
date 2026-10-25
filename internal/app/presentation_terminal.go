@@ -98,6 +98,9 @@ func (a *App) initPresentation() {
 	}
 }
 
+// lobbyEvent is what a lobby waits on beside the handshake: the terminal's events.
+type lobbyEvent = terminal.Event
+
 func (a *App) lobbyEvents() <-chan terminal.Event {
 	if a.pres == nil {
 		return nil

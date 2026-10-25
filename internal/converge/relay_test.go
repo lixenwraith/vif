@@ -9,6 +9,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies is the gate the role
@@ -55,13 +56,13 @@ func TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies(t *testing.T) {
 	if !host.c.canAnswer([]uint32{2}) {
 		t.Fatal("the authority still believes the relayed participant cannot be answered")
 	}
-	if got := relay.c.role(); got != network.RoleRelay {
+	if got := relay.c.role(); got != link.RoleRelay {
 		t.Fatalf("the middle participant holds role %d, want the relay role", got)
 	}
-	if got := host.c.role(); got != network.RoleHost {
+	if got := host.c.role(); got != link.RoleHost {
 		t.Fatalf("the authority holds role %d, want the host role", got)
 	}
-	if got := leaf.c.role(); got != network.RolePeer {
+	if got := leaf.c.role(); got != link.RolePeer {
 		t.Fatalf("the leaf holds role %d, want the peer role", got)
 	}
 }
@@ -170,7 +171,7 @@ func TestARelayedAnswerProvesTheAuthoritysRoot(t *testing.T) {
 
 // role is what this instance is doing in the protocol right now, which nothing in
 // the protocol asks and these criteria do.
-func (c *Corrections) role() network.Role {
+func (c *Corrections) role() link.Role {
 	_, peers := c.links()
 	return network.SessionRole(c.authority.isAuthority(), len(peers))
 }
@@ -215,7 +216,7 @@ func TestARelayAnswersOnlyForThoseBehindIt(t *testing.T) {
 	mesh.Link(1, 4)
 	runs := make([]*run, 4)
 	for i := range runs {
-		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(4))
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(4))
 		runs[i].open(1, nil, false)
 	}
 	host, relay, far := runs[0], runs[1], runs[3]
@@ -230,10 +231,10 @@ func TestARelayAnswersOnlyForThoseBehindIt(t *testing.T) {
 		t.Fatalf("index: %v", err)
 	}
 	deliver(runs, 3)
-	if got := relay.c.role(); got != network.RoleRelay {
+	if got := relay.c.role(); got != link.RoleRelay {
 		t.Fatalf("the participant serving a leaf holds role %d, want the relay role", got)
 	}
-	if got := far.c.role(); got != network.RolePeer {
+	if got := far.c.role(); got != link.RolePeer {
 		t.Fatalf("the participant on the peer link holds role %d, want the peer role", got)
 	}
 	leaves := relay.c.relayedParticipants()

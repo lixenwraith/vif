@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/linkpace"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // linkedPort names its links and their measurements, which is all the commit and
@@ -27,25 +28,25 @@ type linkedPort struct {
 // sentFrame is one frame a linkedPort was asked to send; to is zero for everyone.
 type sentFrame struct {
 	to   uint32
-	kind network.MessageType
+	kind link.MessageType
 	body []byte
 }
 
 func (p *linkedPort) Send(to uint32, kind uint8, b []byte) bool {
-	p.sent = append(p.sent, sentFrame{to, network.MessageType(kind), b})
+	p.sent = append(p.sent, sentFrame{to, link.MessageType(kind), b})
 	return true
 }
 func (p *linkedPort) Broadcast(kind uint8, b []byte) {
-	p.sent = append(p.sent, sentFrame{0, network.MessageType(kind), b})
+	p.sent = append(p.sent, sentFrame{0, link.MessageType(kind), b})
 }
 func (p *linkedPort) BroadcastExcept(_ uint32, _ uint8, b []byte) {
 	p.flooded = append(p.flooded, b)
 }
 func (p *linkedPort) PeerCount() int                               { return len(p.peers) }
 func (p *linkedPort) IsRunning() bool                              { return true }
-func (p *linkedPort) Drain([]network.Inbound) int                  { return 0 }
+func (p *linkedPort) Drain([]link.Inbound) int                     { return 0 }
 func (p *linkedPort) Peers() []uint32                              { return p.peers }
-func (p *linkedPort) SetLinkReport(network.LinkReport)             {}
+func (p *linkedPort) SetLinkReport(link.LinkReport)                {}
 func (p *linkedPort) ObserveTransfer(uint32, int64, time.Duration) {}
 func (p *linkedPort) LinkMetric(uint32) linkpace.Metrics {
 	return linkpace.Metrics{RTT: p.rtt, MinRTT: p.rtt, Ready: p.rtt > 0}
@@ -625,7 +626,7 @@ func TestAnInstallThatHoldsAnOwnCrossingClosesItsFence(t *testing.T) {
 			t.Fatal("the barrier did not take an own crossing")
 		}
 	}
-	guest.AdoptSnapshot(110, 1, network.CrossingFences{{Source: 2, Seq: 1}})
+	guest.AdoptSnapshot(110, 1, link.CrossingFences{{Source: 2, Seq: 1}})
 	if got := guest.AppliedCrossingFences().Seq(2); got != 1 {
 		t.Fatalf("the local fence is %d after an install holding sequence 1, want 1", got)
 	}
@@ -656,7 +657,7 @@ func TestAGuestForwardsDownOnlyToThoseBehindIt(t *testing.T) {
 	guest.scheduleCrossings(3, rawBatch(t, 3, 100, 104))
 	port.sent = nil
 	guest.scheduleCrossings(1, boundsBatch(t, 5, 100, 105, 1, 0))
-	chunks, err := network.EncodeSnapshotChunks(0, 100, []byte("world"))
+	chunks, err := link.EncodeSnapshotChunks(0, 100, []byte("world"))
 	if err != nil {
 		t.Fatal(err)
 	}

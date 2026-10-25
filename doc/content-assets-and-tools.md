@@ -61,8 +61,8 @@ different text are still in the same session. And a dedicated host serves none: 
 fleet's node volume carries `scenario/` and `image/` only, because what a pod would
 do with a corpus is nothing.
 
-A replay is the opposite and does compare it. `App.anchorIdentity` adds the corpus
-fields `App.sessionAnchorFields` leaves out, because replaying recorded input only
+A replay is the opposite and does compare it. `scribe.anchorIdentity` adds the corpus
+fields `scribe.sessionAnchorFields` leaves out, because replaying recorded input only
 reproduces the run if the blocks it typed are the same ones.
 
 ## 3. Corpus model and limits

@@ -100,7 +100,7 @@ What bounds a stranger:
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
 - fuzz targets on the two handshakes a stranger's bytes reach, the join and the peer
-  link (`internal/network`): whatever a dialler sends, malformed, oversized, replayed
+  link (`internal/network`, framed by `pkg/network`): whatever a dialler sends, malformed, oversized, replayed
   or cut short, is answered with an offer or a reason, and holds an identity or a
   link only once admitted;
 - the start gate, which waits on whoever is still on the link for one world install.

@@ -165,7 +165,7 @@ func (a *App) pushed() uint64 { return a.world.Resources.Event.Queue.Pushed() }
 // JournalStats returns the emitted record count and encode failure count;
 // zero when journaling is off
 func (a *App) JournalStats() (emitted, encodeFailed uint64) {
-	st := a.recorder.Load().Stats()
+	st := a.scribe.recorder.Load().Stats()
 	return st.Emitted, st.EncodeFailed
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
@@ -102,7 +103,7 @@ func released(t *testing.T, held *holds) {
 
 // join dials as vif -join vif://<addr>/<id> does and returns why it was refused.
 func join(addr, id string) error {
-	cfg := network.DebugConfig(network.RolePeer, "")
+	cfg := network.DebugConfig(link.RolePeer, "")
 	cfg.SessionName = id
 	pending, _, err := network.DialSession(addr, cfg)
 	if err == nil {
@@ -165,7 +166,7 @@ func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := network.NewMessage(network.MsgEvent, nil).Encode(conn); err != nil {
+	if err := link.NewMessage(network.MsgEvent, nil).Encode(conn); err != nil {
 		t.Fatal(err)
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -211,7 +212,7 @@ func TestTheFrontDoorReplaysTheNameAndSplicesBothWays(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := network.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
+	if err := link.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Write([]byte("ping")); err != nil {
@@ -239,7 +240,7 @@ func TestTheBrowserRouteSplicesTheSocketToThePod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := network.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
+	if err := link.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Write([]byte("ping")); err != nil {
@@ -270,7 +271,7 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := network.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(browser); err != nil {
+	if err := link.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(browser); err != nil {
 		t.Fatal(err)
 	}
 	<-pod.names
@@ -288,7 +289,7 @@ func TestTheSessionCeilingSpansBothRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := network.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
+	if err := link.NewMessage(network.MsgSessionRoute, []byte(routedID)).Encode(conn); err != nil {
 		t.Fatal(err)
 	}
 	select {

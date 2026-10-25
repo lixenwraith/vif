@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Reach is this instance's listening port, the addresses it has learned, and the
@@ -26,7 +27,7 @@ type Reach struct {
 	mu       sync.Mutex
 	listener net.Listener
 	declared string
-	dialing  map[network.PeerID]bool
+	dialing  map[link.PeerID]bool
 	nextPass time.Time
 	passes   int
 
@@ -38,7 +39,7 @@ type Reach struct {
 func newReach(inst Instance, reg *status.Registry) *Reach {
 	return &Reach{
 		inst:          inst,
-		dialing:       make(map[network.PeerID]bool, parameter.MaxPlayers),
+		dialing:       make(map[link.PeerID]bool, parameter.MaxPlayers),
 		statChain:     reg.Ints.Get("network.chain"),
 		statAttempts:  reg.Ints.Get("network.rejoin_attempts"),
 		statListening: reg.Bools.Get("network.listening"),
@@ -60,7 +61,7 @@ func BindAdvertised(want, hostAddr string) (net.Listener, string) {
 	if host, _, err := net.SplitHostPort(want); err == nil && unspecifiedHost(host) {
 		explicit = false
 	}
-	ln, err := network.BindPeer(want)
+	ln, err := link.BindPeer(want)
 	if err != nil {
 		// A port a participant could not take makes it a leaf, never an error.
 		vlog.Warn("net", "msg", "no listening port; this participant is a leaf",
@@ -115,7 +116,7 @@ func (r *Reach) DeclaredAddr() string {
 // NoteDeclared puts one joiner in the chain, which the correction loop publishes
 // whole. Only the coordinator runs it: it is the far end of the stream the address
 // arrived on.
-func (r *Reach) NoteDeclared(id network.PeerID, report network.JoinerReport) {
+func (r *Reach) NoteDeclared(id link.PeerID, report network.JoinerReport) {
 	if r == nil || report.Listen == "" || id == 0 {
 		return
 	}
@@ -143,7 +144,7 @@ func resolveDeclared(declared, remote string) (string, bool) {
 }
 
 // Forget drops a departed participant's in-flight dial.
-func (r *Reach) Forget(id network.PeerID) {
+func (r *Reach) Forget(id link.PeerID) {
 	if r == nil {
 		return
 	}
@@ -261,7 +262,7 @@ func (r *Reach) retrySuccession() {
 // decided on, which a :leave may have replaced since. A link opened during a
 // succession is announced: the record naming the new host was flooded before the
 // link existed, so the far end has to be asked.
-func (r *Reach) dial(dialer engine.PeerDialingPort, id network.PeerID, addr string) {
+func (r *Reach) dial(dialer engine.PeerDialingPort, id link.PeerID, addr string) {
 	r.mu.Lock()
 	if r.dialing[id] {
 		r.mu.Unlock()
@@ -297,16 +298,16 @@ func (g *PeerLinkGate) Bind(r *Reach) { g.reach.Store(r) }
 
 // Local is the identity a link opened here is answered with: zero until the run is
 // bound, and until a joiner's seat names it.
-func (g *PeerLinkGate) Local() network.PeerID {
+func (g *PeerLinkGate) Local() link.PeerID {
 	r := g.reach.Load()
 	if r == nil {
 		return 0
 	}
-	return network.PeerID(r.inst.LocalParticipant())
+	return link.PeerID(r.inst.LocalParticipant())
 }
 
 // admit is the acceptor hook: it answers nothing until the run is bound.
-func (g *PeerLinkGate) Admit(from network.PeerID) error {
+func (g *PeerLinkGate) Admit(from link.PeerID) error {
 	r := g.reach.Load()
 	if r == nil {
 		return errors.New("peer link: this participant has no session yet")
@@ -318,8 +319,8 @@ func (g *PeerLinkGate) Admit(from network.PeerID) error {
 // The world's roster, not the coordinator's lobby: only the coordinator fills that
 // one. Not the term either — a survivor still electing is exactly who needs to open
 // a link.
-func (r *Reach) admitPeerLink(from network.PeerID) error {
-	local := network.PeerID(r.inst.LocalParticipant())
+func (r *Reach) admitPeerLink(from link.PeerID) error {
+	local := link.PeerID(r.inst.LocalParticipant())
 	if from == 0 || from == local {
 		return fmt.Errorf("peer link: participant %d is not another participant", from)
 	}

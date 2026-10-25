@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	link "github.com/lixenwraith/vif/pkg/network"
+
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -39,7 +41,7 @@ func frames(msgs ...any) []byte {
 		if !ok {
 			body, _ = json.Marshal(msgs[i+1])
 		}
-		_ = NewMessage(msgs[i].(MessageType), body).Encode(&b)
+		_ = link.NewMessage(msgs[i].(link.MessageType), body).Encode(&b)
 	}
 	return b.Bytes()
 }
@@ -103,7 +105,7 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 	f.Fuzz(func(t *testing.T, script []byte, named, budget, room, reports bool) {
 		offer := testOffer()
 		offer.Identity = ours
-		var assigned, released, reported []PeerID
+		var assigned, released, reported []link.PeerID
 		previewed := false
 		c := Coordinator{
 			Preview: func([]string) (SessionOffer, error) {
@@ -122,8 +124,8 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 				assigned = append(assigned, offer.Assigned)
 				return offer, nil
 			},
-			Release: func(id PeerID) { released = append(released, id) },
-			Report: func(id PeerID, _ JoinerReport) error {
+			Release: func(id link.PeerID) { released = append(released, id) },
+			Report: func(id link.PeerID, _ JoinerReport) error {
 				if reported = append(reported, id); !reports {
 					return errors.New("participant left during admission")
 				}
@@ -148,7 +150,7 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 		conn := &scripted{in: bytes.NewReader(script)}
 		id, err := HostAcceptor(c, time.Second)(conn)
 
-		first, derr := Decode(bytes.NewReader(conn.out.Bytes()))
+		first, derr := link.Decode(bytes.NewReader(conn.out.Bytes()))
 		var answer sessionReply
 		switch {
 		case derr != nil:
@@ -187,8 +189,8 @@ func FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant(f *testing.F) {
 	f.Add([]byte{byte(MsgConnect), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff})
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, script []byte) {
-		admitted := []PeerID{3, 4}
-		gate := PeerGate{Local: func() PeerID { return 2 }, Identity: ours, Admit: func(from PeerID) error {
+		admitted := []link.PeerID{3, 4}
+		gate := PeerGate{Local: func() link.PeerID { return 2 }, Identity: ours, Admit: func(from link.PeerID) error {
 			if !slices.Contains(admitted, from) {
 				return errors.New("peer link: participant is not in this session")
 			}
@@ -206,7 +208,7 @@ func FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant(f *testing.F) {
 			return
 		}
 		out := bytes.NewReader(conn.out.Bytes())
-		ack, derr := Decode(out)
+		ack, derr := link.Decode(out)
 		var welcome peerWelcome
 		if derr != nil || ack.Type != MsgAck || json.Unmarshal(ack.Payload, &welcome) != nil || out.Len() != 0 {
 			t.Fatalf("answered with %q", conn.out.Bytes())

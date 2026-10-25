@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // supervisedServer is a dedicated host with a probe and, optionally, the lifetime
@@ -33,14 +34,14 @@ func supervisedServer(t *testing.T, players int, p lifecycle.Policy) *App {
 // seatGuests replaces the roster with the coordinator and n guests, the way an
 // accepted handshake would have.
 func seatGuests(a *App, n int) {
-	a.sessionMu.Lock()
-	defer a.sessionMu.Unlock()
-	a.sessionRoster = []network.RosterEntry{
+	a.membership.sessionMu.Lock()
+	defer a.membership.sessionMu.Unlock()
+	a.membership.sessionRoster = []network.RosterEntry{
 		{ID: engine.CoordinatorParticipant, Slot: parameter.NoPlayerSlot},
 	}
 	for i := range n {
-		a.sessionRoster = append(a.sessionRoster,
-			network.RosterEntry{ID: network.PeerID(i + 2), Slot: uint8(i)})
+		a.membership.sessionRoster = append(a.membership.sessionRoster,
+			network.RosterEntry{ID: link.PeerID(i + 2), Slot: uint8(i)})
 	}
 }
 
@@ -129,17 +130,17 @@ func TestWhatTheProbeReportsAboutAdmission(t *testing.T) {
 	if !full.Live {
 		t.Fatal("a full session reported itself dead; capacity is not a fault")
 	}
-	if _, err := a.assignParticipant(nil); errors.Is(err, ErrSessionEnding) {
+	if _, err := a.membership.assignParticipant(nil); errors.Is(err, ErrSessionEnding) {
 		t.Fatal("a full session refused as if it were ending")
 	}
 
 	// The closing window is a third refusal: neither gate can serve a dial there.
 	seatGuests(a, 1)
-	a.lobbyClosing.Store(true)
+	a.membership.lobbyClosing.Store(true)
 	if snap := a.probeSnapshot(); snap.Ready || snap.Reason != "lobby closing" {
 		t.Fatalf("the closing lobby reported ready=%v reason=%q", snap.Ready, snap.Reason)
 	}
-	a.lobbyClosing.Store(false)
+	a.membership.lobbyClosing.Store(false)
 
 	// And a session on its way out outranks all of them.
 	a.interrupt(time.Now(), "signal terminated")
@@ -198,7 +199,7 @@ func TestDrainingRefusesDialsAndReadiness(t *testing.T) {
 
 	// The refusal has to be distinguishable from the starting one: this session is
 	// leaving, so retrying against it is exactly the wrong answer.
-	_, err := a.assignParticipant(nil)
+	_, err := a.membership.assignParticipant(nil)
 	if !errors.Is(err, ErrSessionEnding) {
 		t.Fatalf("a draining session answered a dial with %v, want ErrSessionEnding", err)
 	}
@@ -216,7 +217,7 @@ func TestASignalReadsTheRosterItArrivesWith(t *testing.T) {
 	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: time.Minute, Drain: time.Minute})
 	now := time.Now()
 	a.life.Start(now)
-	a.life.Observe(a.guestCount(), now) // the loop's last tick: nobody had arrived
+	a.life.Observe(a.membership.guestCount(), now) // the loop's last tick: nobody had arrived
 
 	seatGuests(a, 1) // the guest connects between two ticks
 	st := a.interrupt(now.Add(100*time.Millisecond), "signal terminated")
@@ -237,12 +238,12 @@ func TestEachStartupGateCarriesItsOwnDeadline(t *testing.T) {
 	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 80 * time.Millisecond})
 	a.life.Start(time.Now())
 
-	port := network.NewSocketPort(network.DebugConfig(network.RoleHost, "127.0.0.1:0"))
+	port := link.NewSocketPort(&network.DebugConfig(link.RoleHost, "127.0.0.1:0").Config)
 	defer port.Close()
 
 	never := func() bool { return false }
 	expired := func(now time.Time) error { a.life.State(now); return errSessionExpired }
-	err := a.waitForStartup(port, nil, a.life.State(time.Now()).Deadline, expired, never)
+	err := a.membership.waitForStartup(port, nil, a.life.State(time.Now()).Deadline, expired, never)
 	if !errors.Is(err, errSessionExpired) {
 		t.Fatalf("the lobby wait returned %v, want errSessionExpired", err)
 	}
@@ -253,7 +254,7 @@ func TestEachStartupGateCarriesItsOwnDeadline(t *testing.T) {
 	const bound = 60 * time.Millisecond
 	settled := false
 	start := time.Now()
-	err = a.waitForStartup(port, nil, start.Add(bound),
+	err = a.membership.waitForStartup(port, nil, start.Add(bound),
 		func(time.Time) error { settled = true; return nil },
 		func() bool { return settled })
 	if err != nil {
@@ -272,13 +273,13 @@ func TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession(t *testing.T) {
 	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 30 * time.Second, Empty: time.Minute})
 	a.life.Start(time.Now())
 
-	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: a.assignParticipant, Release: a.releaseParticipant,
-		Report: a.noteJoinerReport,
+		Assign: a.membership.assignParticipant, Release: a.membership.releaseParticipant,
+		Report: a.membership.noteJoinerReport,
 	}, socketWait)
-	port := network.NewSocketPort(hostCfg)
+	port := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = port.Close() })
 	if err := port.Start(); err != nil {
 		t.Fatalf("host transport: %v", err)
@@ -286,7 +287,7 @@ func TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession(t *testing.T) {
 	a.AttachTransport(port)
 
 	started := make(chan error, 1)
-	go func() { started <- a.startHostSessionOn(port, nil) }()
+	go func() { started <- a.membership.startHostSessionOn(port, nil) }()
 
 	// A real guest up to the point of the abuse: the coordinator verifies what a
 	// joiner turned out to be, so only one that built its world gets into a roster.
@@ -300,12 +301,12 @@ func TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession(t *testing.T) {
 		t.Fatalf("join app: %v", err)
 	}
 	t.Cleanup(guest.Close)
-	guest.pendingJoin, guest.sessionOffer = pending, offered
+	guest.membership.pendingJoin, guest.membership.sessionOffer = pending, offered
 	if err := guest.JoinAt(offered.Anchor); err != nil {
 		_ = pending.Complete(err, network.JoinerReport{})
 		t.Fatalf("join identity: %v", err)
 	}
-	if err := pending.Complete(nil, guest.joinerReport()); err != nil {
+	if err := pending.Complete(nil, guest.membership.joinerReport()); err != nil {
 		t.Fatalf("join reply: %v", err)
 	}
 	// The gate is open once the start arrives; leaving without confirming is the
@@ -335,15 +336,15 @@ func TestGuestCountExcludesTheCoordinator(t *testing.T) {
 	t.Parallel()
 	a := supervisedServer(t, 4, lifecycle.Policy{Empty: time.Minute})
 
-	if got := a.guestCount(); got != 0 {
+	if got := a.membership.guestCount(); got != 0 {
 		t.Fatalf("an unopened roster holds %d guests, want 0", got)
 	}
 	seatGuests(a, 0)
-	if got := a.guestCount(); got != 0 {
+	if got := a.membership.guestCount(); got != 0 {
 		t.Fatalf("a coordinator-only roster holds %d guests, want 0", got)
 	}
 	seatGuests(a, 3)
-	if got := a.guestCount(); got != 3 {
+	if got := a.membership.guestCount(); got != 3 {
 		t.Fatalf("a roster of three guests holds %d", got)
 	}
 }
@@ -357,13 +358,13 @@ func TestVacancyGraceEndsAnEmptiedSession(t *testing.T) {
 	a.life.Start(now)
 
 	seatGuests(a, 2)
-	if st := a.life.Observe(a.guestCount(), now.Add(time.Second)); st.Phase != lifecycle.PhaseOccupied {
+	if st := a.life.Observe(a.membership.guestCount(), now.Add(time.Second)); st.Phase != lifecycle.PhaseOccupied {
 		t.Fatalf("phase = %s with two guests, want occupied", st.Phase)
 	}
 
 	left := now.Add(10 * time.Minute)
 	seatGuests(a, 0)
-	st := a.life.Observe(a.guestCount(), left)
+	st := a.life.Observe(a.membership.guestCount(), left)
 	if st.Phase != lifecycle.PhaseVacant {
 		t.Fatalf("phase = %s after the last guest left, want vacant", st.Phase)
 	}

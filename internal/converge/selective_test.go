@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -25,9 +26,9 @@ func TestBaselineBytesFollowTheirBaseline(t *testing.T) {
 		t.Helper()
 		for range 2 {
 			host.c.sendKeyframeTo(host.world.port, 2, host.world.Position().Tick)
-			var assembly network.SnapshotAssembly
-			in := make([]network.Inbound, 64)
-			n := guest.world.port.(*network.MeshPort).Drain(in)
+			var assembly link.SnapshotAssembly
+			in := make([]link.Inbound, 64)
+			n := guest.world.port.(*link.MeshPort).Drain(in)
 			done := false
 			for _, frame := range in[:n] {
 				if frame.Msg == nil || frame.Msg.Type != network.MsgStateCorrection {
@@ -127,7 +128,7 @@ func slowLink(t *testing.T) (host, guest *run, runs []*run) {
 	t.Helper()
 	mesh := network.NewMesh()
 	mesh.Link(1, 2)
-	mesh.Shape(1, 2, network.LinkShape{BytesPerTick: 2000})
+	mesh.Shape(1, 2, link.LinkShape{BytesPerTick: 2000})
 	runs = []*run{newRun(t, 1, mesh.Node(1), roster(2)), newRun(t, 2, mesh.Node(2), roster(2))}
 	for _, r := range runs {
 		r.open(1, nil, false)
@@ -288,8 +289,8 @@ func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
 
 // discard drops whatever r's port holds without handing it to the protocol.
 func discard(r *run) {
-	port := r.world.port.(*network.MeshPort)
-	buf := make([]network.Inbound, 64)
+	port := r.world.port.(*link.MeshPort)
+	buf := make([]link.Inbound, 64)
 	for port.Drain(buf) == len(buf) {
 	}
 }
@@ -584,7 +585,7 @@ func TestARepairTravelsInChunksAndIsBoundedByTheKeyframe(t *testing.T) {
 	diverge(guest, 9)
 	body, tick := outstandingRepair(t, host, guest, nil)
 
-	chunks, err := network.EncodeSnapshotChunksOf(1, tick, body, 64)
+	chunks, err := link.EncodeSnapshotChunksOf(1, tick, body, 64)
 	if err != nil || len(chunks) < 3 {
 		t.Fatalf("chunking the repair: %v (%d chunks)", err, len(chunks))
 	}
@@ -603,17 +604,17 @@ func TestARepairTravelsInChunksAndIsBoundedByTheKeyframe(t *testing.T) {
 	}
 
 	host.c.publishMu.Lock()
-	host.c.sizes.Keyframe = 3 * network.MaxPayloadSize
+	host.c.sizes.Keyframe = 3 * link.MaxPayloadSize
 	host.c.publishMu.Unlock()
-	if !host.c.repairIsWorthSending(2 * network.MaxPayloadSize) {
+	if !host.c.repairIsWorthSending(2 * link.MaxPayloadSize) {
 		t.Fatal("a repair wider than a frame but narrower than the keyframe was refused")
 	}
-	if host.c.repairIsWorthSending(4 * network.MaxPayloadSize) {
+	if host.c.repairIsWorthSending(4 * link.MaxPayloadSize) {
 		t.Fatal("a repair wider than the keyframe was sent")
 	}
 	// A relay measures no keyframe of its own and prices against the whole world
 	// it installed, here the one the exchange opened with.
-	if guest.c.repairIsWorthSending(network.MaxSnapshotBytes / 2) {
+	if guest.c.repairIsWorthSending(link.MaxSnapshotBytes / 2) {
 		t.Fatal("a relay sent a repair wider than the keyframe it installed")
 	}
 	if !guest.c.repairIsWorthSending(64) {

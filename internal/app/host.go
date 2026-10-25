@@ -18,18 +18,19 @@ import (
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/status"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // The router already holds the world lock when calling this adapter.
 type sessionControl struct{ a *App }
 
 func (c sessionControl) BeginHosting(addr, authority string) error {
-	return c.a.beginHostingLocked(addr, authority)
+	return c.a.membership.beginHostingLocked(addr, authority)
 }
-func (c sessionControl) Join(target string) error { return c.a.joinLocked(target) }
-func (c sessionControl) SessionSummary() string   { return c.a.sessionSummaryLocked() }
+func (c sessionControl) Join(target string) error { return c.a.membership.joinLocked(target) }
+func (c sessionControl) SessionSummary() string   { return c.a.membership.sessionSummaryLocked() }
 func (c sessionControl) DropBot(slot int) error {
-	if err := c.a.dropSeat(slot); err == nil {
+	if err := c.a.membership.dropSeat(slot); err == nil {
 		return nil
 	}
 	e := c.a.world.Resources.Player.Slot(uint8(slot))
@@ -37,29 +38,31 @@ func (c sessionControl) DropBot(slot int) error {
 	if !ok || cursor.Holder == 0 {
 		return fmt.Errorf("no bot on slot %X", slot)
 	}
-	return c.a.dropPlayerLocked(e)
+	return c.a.membership.dropPlayerLocked(e)
 }
-func (c sessionControl) RemoveBot(id uint64) error   { return c.a.removeSeat(id) }
-func (c sessionControl) BotSummary() string          { return c.a.seatsSummary() }
-func (c sessionControl) Bots() []engine.BotSeat      { return c.a.botSeats() }
-func (c sessionControl) HostError() error            { return c.a.hostErrorLocked() }
-func (c sessionControl) JoinError() error            { return c.a.joinErrorLocked() }
-func (c sessionControl) Leave() error                { return c.a.leaveLocked() }
-func (c sessionControl) LeaveError() error           { return c.a.leaveErrorLocked() }
-func (c sessionControl) StartJournal(slot int) error { return c.a.startJournalLocked(slot) }
-func (c sessionControl) StopJournal(slot int) error  { return c.a.stopJournalLocked(slot) }
-func (c sessionControl) JournalError() error         { return c.a.journalErrorLocked() }
-func (c sessionControl) Journaling() bool            { return c.a.journaling() }
-func (c sessionControl) JournalSummary() string      { return c.a.journalSummary() }
+func (c sessionControl) RemoveBot(id uint64) error   { return c.a.membership.removeSeat(id) }
+func (c sessionControl) BotSummary() string          { return c.a.membership.seatsSummary() }
+func (c sessionControl) Bots() []engine.BotSeat      { return c.a.membership.botSeats() }
+func (c sessionControl) HostError() error            { return c.a.membership.hostErrorLocked() }
+func (c sessionControl) JoinError() error            { return c.a.membership.joinErrorLocked() }
+func (c sessionControl) Leave() error                { return c.a.membership.leaveLocked() }
+func (c sessionControl) LeaveError() error           { return c.a.membership.leaveErrorLocked() }
+func (c sessionControl) StartJournal(slot int) error { return c.a.scribe.startJournalLocked(slot) }
+func (c sessionControl) StopJournal(slot int) error  { return c.a.scribe.stopJournalLocked(slot) }
+func (c sessionControl) JournalError() error         { return c.a.scribe.journalErrorLocked() }
+func (c sessionControl) Journaling() bool            { return c.a.scribe.journaling() }
+func (c sessionControl) JournalSummary() string      { return c.a.scribe.journalSummary() }
 
 func (c sessionControl) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {
 		return errors.New("invalid player slot")
 	}
-	return c.a.dropPlayerLocked(c.a.world.Resources.Player.Slot(uint8(slot)))
+	return c.a.membership.dropPlayerLocked(c.a.world.Resources.Player.Slot(uint8(slot)))
 }
 
-func (c sessionControl) RemovePlayer(entity core.Entity) error { return c.a.dropPlayerLocked(entity) }
+func (c sessionControl) RemovePlayer(entity core.Entity) error {
+	return c.a.membership.dropPlayerLocked(entity)
+}
 
 func (c sessionControl) Participants() []engine.SessionParticipant {
 	var out []engine.SessionParticipant
@@ -74,39 +77,39 @@ func (c sessionControl) Participants() []engine.SessionParticipant {
 }
 
 // The cursor entity prevents an open menu from dropping a replacement in its slot.
-func (a *App) dropPlayerLocked(entity core.Entity) error {
-	if !a.world.IsSessionCoordinator() {
+func (m *membership) dropPlayerLocked(entity core.Entity) error {
+	if !m.world.IsSessionCoordinator() {
 		return errors.New("only the host can drop other players or their bots")
 	}
-	p, ok := a.world.Components.Cursor.GetComponent(entity)
+	p, ok := m.world.Components.Cursor.GetComponent(entity)
 	if !ok {
 		return errors.New("that player has already left")
 	}
-	if a.world.SimulatesLocally(entity) {
+	if m.world.SimulatesLocally(entity) {
 		return errors.New("use :leave to leave the session")
 	}
-	a.world.PushEventFull(event.EventParticipantDeparted,
+	m.world.PushEventFull(event.EventParticipantDeparted,
 		&event.ParticipantDepartedPayload{Participant: p.PeerID, Slot: p.Slot, Dismissed: true},
 		event.OriginSession, core.DomainPlayer)
 	return nil
 }
 
 func (c sessionControl) RequestSession(site string, players int, scenario string) error {
-	e, err := network.ParseEndpoint(site)
+	e, err := link.ParseEndpoint(site)
 	if err != nil {
 		return err
 	}
-	if e.Scheme != network.SchemeSite {
+	if e.Scheme != link.SchemeSite {
 		return errors.New("allocator site must be an http:// or https:// URL")
 	}
 	if players < 0 || players > parameter.MaxPlayers {
 		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)
 	}
-	return c.a.joinSessionLocked(site, players, scenario)
+	return c.a.membership.joinSessionLocked(site, players, scenario)
 }
 
 func (c sessionControl) AddBot(graph string) error {
-	if c.a.dialling.Load() {
+	if c.a.membership.dialling.Load() {
 		return errors.New("a join is already being dialled")
 	}
 	specs, err := BotSpecs(cmp.Or(graph, DefaultBotGraph))
@@ -117,7 +120,7 @@ func (c sessionControl) AddBot(graph string) error {
 		return errors.New("no bots to add; name a count of 1 or more")
 	}
 	for _, spec := range specs {
-		if err := c.a.addSeatLocked(spec); err != nil {
+		if err := c.a.membership.addSeatLocked(spec); err != nil {
 			return err
 		}
 	}
@@ -125,7 +128,7 @@ func (c sessionControl) AddBot(graph string) error {
 }
 
 func (c sessionControl) ChangeScenario(name string) (bool, error) {
-	return c.a.changeScenarioLocked(name)
+	return c.a.membership.changeScenarioLocked(name)
 }
 
 // The embedded scenario answers to the main name, which is how a row restarts it.
@@ -139,18 +142,18 @@ func (c sessionControl) Scenarios() ([]string, string) {
 
 // Validate before teardown; a different scenario needs a new App and metric set.
 // Caller holds updateMutex.
-func (a *App) changeScenarioLocked(name string) (bool, error) {
+func (m *membership) changeScenarioLocked(name string) (bool, error) {
 	// The session's rule first: it holds whatever shape this runtime is, and it is
 	// the more useful of the two answers to a participant that asked.
-	port := a.sessionTransportLocked()
-	if port != nil && !a.world.IsSessionCoordinator() {
+	port := m.sessionTransportLocked()
+	if port != nil && !m.world.IsSessionCoordinator() {
 		return false, errors.New("only the host can change a live session's scenario")
 	}
-	if a.cfg.Mode != ModePlay {
-		return false, fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
+	if m.cfg.Mode != ModePlay {
+		return false, fmt.Errorf("%s mode has no restart loop", m.cfg.Mode)
 	}
 	// A scenario received from a coordinator answers its own name and no other.
-	o := a.cfg.Resources
+	o := m.cfg.Resources
 	o.Scenario, o.Embedded = name, false
 	if o.Provided != nil && o.Provided.Name != name {
 		o.Provided = nil
@@ -159,10 +162,10 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if sc.Digest() == a.scenario.Digest() {
+	if sc.Digest() == m.scenario.Digest() {
 		return false, nil // already running these bytes; the caller resets instead
 	}
-	if err := a.playersFit(sc); err != nil {
+	if err := m.playersFit(sc); err != nil {
 		return false, err
 	}
 	req := &restartRequest{Scenario: name}
@@ -172,15 +175,15 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 		// inherited the session from somebody else. A run with neither has no door
 		// to offer, and saying so is better than sending its peers to an address
 		// that stopped answering; its own bots need none, the next run reseats them.
-		req.Host = a.cfg.HostAddress
+		req.Host = m.cfg.HostAddress
 		if req.Host == "" {
-			req.Host = a.reach.DeclaredAddr()
+			req.Host = m.reach.DeclaredAddr()
 		}
-		if req.Host == "" && !a.seatsOnly() {
+		if req.Host == "" && !m.seatsOnly() {
 			return false, errors.New("this participant has no address its session can return to")
 		}
 	}
-	if !a.replaceWith(req) {
+	if !m.run.replaceWith(req) {
 		return false, errRunReplaced
 	}
 	if port != nil {
@@ -189,25 +192,25 @@ func (a *App) changeScenarioLocked(name string) (bool, error) {
 		// participant is given when it redials names what is being played.
 		port.Broadcast(uint8(network.MsgSessionRestart), []byte(req.Host))
 	}
-	a.log.Info("app", "msg", "scenario change requested",
+	m.log.Info("app", "msg", "scenario change requested",
 		"scenario", sc.Name, "digest", sc.Short(), "host", req.Host)
 	return true, nil
 }
 
 // A restart follows the authority's current address, which may have migrated.
 // Called under the world lock; the restart loop consumes the atomic request.
-func (a *App) receiveSessionRestart(from uint32, addr string) {
-	if a.cfg.Mode != ModePlay || !a.sessionRoleLocked().joined() {
+func (m *membership) receiveSessionRestart(from uint32, addr string) {
+	if m.cfg.Mode != ModePlay || !m.sessionRoleLocked().joined() {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
 	// A host's own doors are bind addresses with no host, and say the session stayed
 	// where this run joined it; a successor's address names a host, and says where.
-	if doors, err := network.Doors(addr); err == nil && doors[0].Hostless() {
+	if doors, err := link.Doors(addr); err == nil && doors[0].Hostless() {
 		addr = ""
 	}
-	if a.replaceWith(&restartRequest{Rejoin: true, Join: addr}) {
-		a.ctx.SetStatusMessage("Session restarting; rejoining "+network.Shown(cmp.Or(addr, a.cfg.JoinAddress))+"...", parameter.StatusProgress)
-		a.log.Info("session", "msg", "session restarting", "authority", from, "dial", addr)
+	if m.run.replaceWith(&restartRequest{Rejoin: true, Join: addr}) {
+		m.ctx.SetStatusMessage("Session restarting; rejoining "+link.Shown(cmp.Or(addr, m.cfg.JoinAddress))+"...", parameter.StatusProgress)
+		m.log.Info("session", "msg", "session restarting", "authority", from, "dial", addr)
 	}
 }
 
@@ -215,8 +218,8 @@ func (a *App) receiveSessionRestart(from uint32, addr string) {
 // the host has admitted it: a refusal leaves the game as it was. A run left alone
 // by its session may join another, and so may one whose session is its own bots',
 // which the next run seats in the new one. Caller MUST hold updateMutex.
-func (a *App) joinLocked(target string) error {
-	return a.joinSessionLocked(target, 0, "")
+func (m *membership) joinLocked(target string) error {
+	return m.joinSessionLocked(target, 0, "")
 }
 
 // sessionRole is what a run is to its session, read from what the session wrote
@@ -252,72 +255,72 @@ var sessionRoles = [...]struct{ join, host, leave string }{
 func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
 
 // sessionRoleLocked is the role this run holds now. Caller MUST hold updateMutex.
-func (a *App) sessionRoleLocked() sessionRole {
-	a.sessionMu.Lock()
-	opened := a.midRunPort != nil
-	a.sessionMu.Unlock()
+func (m *membership) sessionRoleLocked() sessionRole {
+	m.sessionMu.Lock()
+	opened := m.midRunPort != nil
+	m.sessionMu.Unlock()
 	switch {
-	case a.cfg.Mode.Serves():
+	case m.cfg.Mode.Serves():
 		return roleServer
-	case a.sessionTransportLocked() == nil:
+	case m.sessionTransportLocked() == nil:
 		return roleSolo
-	case a.cfg.JoinAddress != "" && a.world.IsSessionCoordinator():
+	case m.cfg.JoinAddress != "" && m.world.IsSessionCoordinator():
 		return roleSuccessor
-	case a.cfg.JoinAddress != "" && a.seatsOnly():
+	case m.cfg.JoinAddress != "" && m.seatsOnly():
 		return roleLeft
-	case a.cfg.JoinAddress != "":
+	case m.cfg.JoinAddress != "":
 		return roleGuest
-	case opened && a.cfg.HostAddress == "":
+	case opened && m.cfg.HostAddress == "":
 		return roleSeats
 	}
 	return roleHost
 }
 
-func (a *App) joinErrorLocked() error {
-	if a.cfg.Mode != ModePlay {
-		return fmt.Errorf("%s mode has no restart loop", a.cfg.Mode)
+func (m *membership) joinErrorLocked() error {
+	if m.cfg.Mode != ModePlay {
+		return fmt.Errorf("%s mode has no restart loop", m.cfg.Mode)
 	}
-	if why := sessionRoles[a.sessionRoleLocked()].join; why != "" {
+	if why := sessionRoles[m.sessionRoleLocked()].join; why != "" {
 		return errors.New(why)
 	}
-	if a.dialling.Load() {
+	if m.dialling.Load() {
 		return errors.New("a join is already being dialled")
 	}
 	return nil
 }
 
-func (a *App) joinSessionLocked(target string, players int, scenario string) error {
-	if err := a.joinErrorLocked(); err != nil {
+func (m *membership) joinSessionLocked(target string, players int, scenario string) error {
+	if err := m.joinErrorLocked(); err != nil {
 		return err
 	}
 	// A site is asked for a session off the lock, since it answers once the pod is up.
-	site, err := network.ParseEndpoint(target)
-	next := a.cfg
-	if err == nil && site.Scheme != network.SchemeSite {
-		if next, err = a.cfg.joining(target); err == nil {
+	site, err := link.ParseEndpoint(target)
+	next := *m.cfg
+	if err == nil && site.Scheme != link.SchemeSite {
+		if next, err = m.cfg.joining(target); err == nil {
 			err = next.Validate()
 		}
 	}
 	if err != nil {
 		return err
 	}
-	if !a.dialling.CompareAndSwap(false, true) {
+	if !m.dialling.CompareAndSwap(false, true) {
 		return errors.New("a join is already being dialled")
 	}
 	// Progress rather than a notice: a site answers once its session's pod is up.
-	if site.Scheme == network.SchemeSite {
-		a.ctx.SetStatusMessage("Requesting a session from "+site.Addr+"...", parameter.StatusProgress)
+	if site.Scheme == link.SchemeSite {
+		m.ctx.SetStatusMessage("Requesting a session from "+site.Addr+"...", parameter.StatusProgress)
 	} else {
-		a.ctx.SetStatusMessage("Joining "+network.Shown(target)+"...", parameter.StatusProgress)
+		m.ctx.SetStatusMessage("Joining "+link.Shown(target)+"...", parameter.StatusProgress)
 	}
-	a.log.Info("session", "msg", "join requested", "target", target)
+	m.log.Info("session", "msg", "join requested", "target", target)
 	core.Go(func() {
-		defer a.dialling.Store(false)
-		link, err := target, error(nil)
-		if site.Scheme == network.SchemeSite {
-			if link, err = network.RequestSession(site.Addr, players, scenario); err == nil {
-				a.ctx.SetStatusMessage("Joining "+network.Shown(link)+"...", parameter.StatusProgress)
-				if next, err = next.joining(link); err == nil {
+		defer m.dialling.Store(false)
+		door, err := target, error(nil)
+		if site.Scheme == link.SchemeSite {
+			if door, err = network.RequestSession(site.Addr, players, scenario); err == nil {
+				m.ctx.SetStatusMessage("Joining "+link.Shown(door)+"...", parameter.StatusProgress)
+				if next, err = next.joining(door); err == nil {
 					err = next.Validate()
 				}
 			}
@@ -328,9 +331,9 @@ func (a *App) joinSessionLocked(target string, players int, scenario string) err
 		}
 		switch {
 		case err != nil:
-			a.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
-			a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
-		case !a.replaceWith(&restartRequest{Join: link, dialled: d, press: true}):
+			m.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
+			m.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
+		case !m.run.replaceWith(&restartRequest{Join: door, dialled: d, press: true}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})
@@ -346,42 +349,42 @@ const (
 
 // BeginHosting opens a running instance to participants, for a caller that holds
 // no lock. The operator command path reaches beginHostingLocked instead.
-func (a *App) BeginHosting(addr string) error {
-	a.Settle()
+func (m *membership) BeginHosting(addr string) error {
+	m.run.Settle()
 	var err error
-	a.world.RunSafe(func() { err = a.beginHostingLocked(addr, "") })
+	m.world.RunSafe(func() { err = m.beginHostingLocked(addr, "") })
 	return err
 }
 
-func (a *App) hostErrorLocked() error {
+func (m *membership) hostErrorLocked() error {
 	if !buildHasSocketNetwork {
 		return errors.New("host: a browser can join a session but not host one")
 	}
-	if a.dialling.Load() {
+	if m.dialling.Load() {
 		return errors.New("host: a join is already being dialled")
 	}
 	// A session this run opened without a door holds only its bots: :host opens
 	// that one to others rather than a second.
-	if why := sessionRoles[a.sessionRoleLocked()].host; why != "" {
+	if why := sessionRoles[m.sessionRoleLocked()].host; why != "" {
 		return errors.New("host: " + why)
 	}
 	return nil
 }
 
 // The world lock keeps admission from reading a partly attached session.
-func (a *App) beginHostingLocked(addr, authority string) error {
-	if err := a.hostErrorLocked(); err != nil {
+func (m *membership) beginHostingLocked(addr, authority string) error {
+	if err := m.hostErrorLocked(); err != nil {
 		return err
 	}
 	if addr == "" {
 		return errors.New("host: no address")
 	}
-	doors, err := network.Doors(addr)
+	doors, err := link.Doors(addr)
 	if err != nil {
 		return fmt.Errorf("host: %w", err)
 	}
-	addr = network.DoorList(doors)
-	successor := a.sessionRoleLocked() == roleSuccessor
+	addr = link.DoorList(doors)
+	successor := m.sessionRoleLocked() == roleSuccessor
 	switch authority {
 	case "", AuthorityMigrate:
 	case AuthorityHost:
@@ -394,49 +397,49 @@ func (a *App) beginHostingLocked(addr, authority string) error {
 		return fmt.Errorf("host: authority %q is not %q or %q", authority, AuthorityHost, AuthorityMigrate)
 	}
 	if successor {
-		return a.hostTakenSessionLocked(addr)
+		return m.hostTakenSessionLocked(addr)
 	}
-	fixed := a.cfg.FixedAuthority
+	fixed := m.cfg.FixedAuthority
 	if authority != "" {
-		a.cfg.FixedAuthority = authority == AuthorityHost
+		m.cfg.FixedAuthority = authority == AuthorityHost
 	}
 
 	// Bound before anything is written, so a port this run cannot have leaves it as
 	// it was; a startup -host bound them before the terminal started.
-	lns := a.cfg.hostListeners
-	a.cfg.hostListeners = nil
+	lns := m.cfg.hostListeners
+	m.cfg.hostListeners = nil
 	if lns == nil {
-		if lns, err = a.cfg.bindDoors(addr); err != nil {
-			a.cfg.FixedAuthority = fixed
+		if lns, err = m.cfg.bindDoors(addr); err != nil {
+			m.cfg.FixedAuthority = fixed
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
 	}
-	if a.sessionTransportLocked() == nil {
-		if err := a.openSessionLocked(nil); err != nil {
+	if m.sessionTransportLocked() == nil {
+		if err := m.openSessionLocked(nil); err != nil {
 			closeDoors(lns)
-			a.cfg.FixedAuthority = fixed
+			m.cfg.FixedAuthority = fixed
 			return err
 		}
 	}
-	a.sessionMu.Lock()
-	port := a.midRunPort
-	a.sessionMu.Unlock()
+	m.sessionMu.Lock()
+	port := m.midRunPort
+	m.sessionMu.Unlock()
 
 	for _, ln := range lns {
 		if err := port.Serve(ln); err != nil {
 			closeDoors(lns)
-			a.cfg.FixedAuthority = fixed
+			m.cfg.FixedAuthority = fixed
 			return fmt.Errorf("host: %w", err)
 		}
 	}
 	// A dial already in reads these only once it has the world lock this call holds.
 	// The policy is the session's from here: only this run's bots were offered one.
-	a.cfg.HostAddress = addr
-	a.authority.Pin(a.cfg.FixedAuthority)
+	m.cfg.HostAddress = addr
+	m.authority.Pin(m.cfg.FixedAuthority)
 	bound := doorsText(port.Doors())
-	a.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
-		"certificate", network.Fingerprint(a.cfg.TLS), "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
-	a.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
+	m.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
+		"certificate", link.Fingerprint(m.cfg.TLS), "tick", m.run.Position().Tick, "capacity", m.sessionCapacity()+1)
+	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
 	return nil
 }
 
@@ -453,18 +456,18 @@ func doorsText(doors []net.Addr) string {
 // takes joins already, so addr naming that port opens nothing more and any other
 // opens a second door. From here it hosts as the run that opened the session did:
 // the address it joined at names a run that is gone, and a restart reopens addr.
-func (a *App) hostTakenSessionLocked(addr string) error {
-	port, _ := a.sessionTransportLocked().(*network.SocketPort)
+func (m *membership) hostTakenSessionLocked(addr string) error {
+	port, _ := m.sessionTransportLocked().(*link.SocketPort)
 	if port == nil {
 		return errors.New("host: this run's session has no socket port")
 	}
-	doors, _ := network.Doors(addr) // read by the caller
+	doors, _ := link.Doors(addr) // read by the caller
 	var opened []net.Listener
 	for _, d := range doors {
 		if port.ListensOn(d.Addr) {
 			continue
 		}
-		ln, err := network.Listen(d.Addr, a.cfg.hostNetwork(d.Addr))
+		ln, err := link.Listen(d.Addr, m.cfg.hostNetwork(d.Addr))
 		if err != nil {
 			closeDoors(opened)
 			return fmt.Errorf("host %s: %w", d.Addr, err)
@@ -478,10 +481,10 @@ func (a *App) hostTakenSessionLocked(addr string) error {
 		}
 	}
 	bound := doorsText(port.Doors())
-	a.cfg.HostAddress, a.cfg.JoinAddress = addr, ""
-	a.log.Info("session", "msg", "hosting opened on a session taken over",
-		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
-	a.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
+	m.cfg.HostAddress, m.cfg.JoinAddress = addr, ""
+	m.log.Info("session", "msg", "hosting opened on a session taken over",
+		"address", bound, "tick", m.run.Position().Tick, "capacity", m.sessionCapacity()+1)
+	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
 	return nil
 }
 
@@ -489,12 +492,12 @@ func (a *App) hostTakenSessionLocked(addr string) error {
 // streams it opens itself, and :host opens the door. A run that leaves its session
 // opens its next one here too, with the places it kept, each away. Caller MUST hold
 // updateMutex.
-func (a *App) openSessionLocked(kept []network.RosterEntry) error {
+func (m *membership) openSessionLocked(kept []network.RosterEntry) error {
 	// Opening a session writes the world — owners, the latch, the lead — so a
 	// journal records the write as it records a join's, and a replay makes it.
-	journal := a.world.Resources.Event.Queue.Journal()
-	place, mark := a.Position(), journal.Mark()
-	before, err := a.captureSharedLocked()
+	journal := m.world.Resources.Event.Queue.Journal()
+	place, mark := m.run.Position(), journal.Mark()
+	before, err := m.glue.captureSharedLocked()
 	if err != nil {
 		return fmt.Errorf("host: %w", err)
 	}
@@ -502,98 +505,98 @@ func (a *App) openSessionLocked(kept []network.RosterEntry) error {
 	// A run goes on under the identity it already has: what the session it left
 	// still holds here names it, and a run in none takes the session's first.
 	self := network.RosterEntry{
-		ID:   cmp.Or(network.PeerID(a.world.LocalParticipant()), engine.CoordinatorParticipant),
-		Slot: a.world.Resources.Player.LocalSlot(),
+		ID:   cmp.Or(link.PeerID(m.world.LocalParticipant()), engine.CoordinatorParticipant),
+		Slot: m.world.Resources.Player.LocalSlot(),
 	}
 
 	// The roster ceiling is the port's from here: an unset -players already means
 	// the whole roster, and a run that opens a session mid-game has no lobby for the
 	// flag's other meaning.
-	netCfg := a.hostNetworkConfig()
+	netCfg := m.hostNetworkConfig()
 	netCfg.ParticipantID = self.ID
-	port := network.NewSocketPort(netCfg)
+	port := link.NewSocketPort(netCfg)
 
 	// Armed before any stream arrives: a run that opens a session mid-game has no
 	// startup lobby, so every dial it ever sees is a mid-run join.
-	a.lateJoins.Store(true)
+	m.lateJoins.Store(true)
 
-	a.sessionMu.Lock()
-	a.midRunPort = port
-	self.Claim = a.ownClaim()
-	a.sessionRoster = append([]network.RosterEntry{self}, kept...)
-	a.sessionOffer = network.SessionOffer{}
+	m.sessionMu.Lock()
+	m.midRunPort = port
+	self.Claim = m.ownClaim()
+	m.sessionRoster = append([]network.RosterEntry{self}, kept...)
+	m.sessionOffer = network.SessionOffer{}
 	// Who is away is whom the run kept a place for. Who was on the way back to the
 	// session it left stays with that session: an identity it hands out again is
 	// somebody new.
-	a.awayOrder, a.yielding, a.returning = a.awayOrderLocked(kept), 0, nil
-	a.dismissWraith.Store(0)
-	roster := slices.Clone(a.sessionRoster)
-	a.sessionMu.Unlock()
+	m.awayOrder, m.yielding, m.returning = m.awayOrderLocked(kept), 0, nil
+	m.dismissWraith.Store(0)
+	roster := slices.Clone(m.sessionRoster)
+	m.sessionMu.Unlock()
 
 	// The session's world is written between two ticks, so the run takes up settle
 	// group 0 as every install leaves it, and as its replay's install of it does.
-	a.world.Resources.Event.Queue.RebaseStamp(place.Run, place.Tick)
+	m.world.Resources.Event.Queue.RebaseStamp(place.Run, place.Tick)
 
 	// A lobby binds this through the roster it closes on; a session opened mid-run
 	// has no lobby, and an unattributed cursor is one no successor can see leave.
-	a.bindCursorOwnersLocked(roster, self.ID)
+	m.bindCursorOwnersLocked(roster, self.ID)
 
 	// The run that opens a session authors its first term, after any it held: a
 	// handoff or report from the session it left then names a stale one. Everything
 	// downstream reads authorship from here rather than from the identity the
 	// handshake assigns, which is what lets a later handoff move it.
-	a.openAuthorityLocked(network.SessionOffer{
-		Anchor: a.joinAnchorLocked(), Host: self.ID, Assigned: self.ID,
-		Term: a.authorityTerm() + 1, Roster: roster, FixedAuthority: a.cfg.FixedAuthority,
+	m.openAuthorityLocked(network.SessionOffer{
+		Anchor: m.joinAnchorLocked(), Host: self.ID, Assigned: self.ID,
+		Term: m.authorityTerm() + 1, Roster: roster, FixedAuthority: m.cfg.FixedAuthority,
 	}, self.ID)
 
 	// Attaching latches the world as shared (D-14) and installs the departure and
 	// digest hooks; activating closes the pre-session crossing window so this
 	// instance's own artifacts start taking the session's playout lead.
-	a.attachTransportLocked(port)
-	a.activateNetworkSessionLocked()
+	m.attachTransportLocked(port)
+	m.activateNetworkSessionLocked()
 
 	_ = port.Start() // no listener, so starting only runs it
 
 	// The authority's cadence starts with the session. Nothing is published while
 	// no peer is connected — publish returns on an empty roster — so a host waiting
 	// alone pays a ticker and no world reads.
-	a.corrections.StartPump()
+	m.corrections.StartPump()
 
 	// The run takes its write as an install takes it, journal or not, so what an
 	// install derives from the world it writes (the spatial gauges, what carriers
 	// publish as they load) stands here as it does on the replay that installs it.
-	after, err := a.captureSharedLocked()
+	after, err := m.glue.captureSharedLocked()
 	if err == nil {
-		_, err = a.writeSharedLocked(after, &before, true, false)
+		_, err = m.glue.writeSharedLocked(after, &before, true, false)
 	}
 	if err == nil && journal != nil {
-		err = a.journalWritten(journal, place, mark, a.world.LocalParticipant(), a.barrierLocked(), before, after)
+		err = m.glue.journalWritten(journal, place, mark, m.world.LocalParticipant(), m.barrierLocked(), before, after)
 	}
 	if err != nil {
-		a.log.Error("session", "msg", "opened session not taken as written", "error", err.Error())
-		a.journalLostLocked(journal, err)
+		m.log.Error("session", "msg", "opened session not taken as written", "error", err.Error())
+		m.run.journalLostLocked(journal, err)
 	}
 
-	a.log.Info("session", "msg", "session opened", "tick", a.Position().Tick)
+	m.log.Info("session", "msg", "session opened", "tick", m.run.Position().Tick)
 	return nil
 }
 
 // leaveErrorLocked says why this run cannot leave its session now. Caller MUST hold
 // updateMutex.
-func (a *App) leaveErrorLocked() error {
-	if a.cfg.Mode != ModePlay {
-		return fmt.Errorf("%s mode has no loop to leave from", a.cfg.Mode)
+func (m *membership) leaveErrorLocked() error {
+	if m.cfg.Mode != ModePlay {
+		return fmt.Errorf("%s mode has no loop to leave from", m.cfg.Mode)
 	}
-	if why := sessionRoles[a.sessionRoleLocked()].leave; why != "" {
+	if why := sessionRoles[m.sessionRoleLocked()].leave; why != "" {
 		return errors.New(why)
 	}
 	switch {
-	case a.dialling.Load():
+	case m.dialling.Load():
 		return errors.New("a join is already being dialled")
-	case a.leaving.Load():
+	case m.leaving.Load():
 		return errors.New("this run is already leaving its session")
-	case a.dismissed.Load() || a.restart.Load() != nil:
+	case m.dismissed.Load() || m.run.replacing():
 		return errRunReplaced
 	}
 	return nil
@@ -602,13 +605,13 @@ func (a *App) leaveErrorLocked() error {
 // leaveLocked asks Loop to take this run out of its session, which it does off the
 // world lock: closing a port waits for its handshakes, and they take that lock.
 // Caller MUST hold updateMutex.
-func (a *App) leaveLocked() error {
-	if err := a.leaveErrorLocked(); err != nil {
+func (m *membership) leaveLocked() error {
+	if err := m.leaveErrorLocked(); err != nil {
 		return err
 	}
-	a.leaving.Store(true)
-	a.ctx.SetStatusMessage("Leaving the session...", parameter.StatusNotice)
-	a.log.Info("session", "msg", "leave requested", "tick", a.Position().Tick)
+	m.leaving.Store(true)
+	m.ctx.SetStatusMessage("Leaving the session...", parameter.StatusNotice)
+	m.log.Info("session", "msg", "leave requested", "tick", m.run.Position().Tick)
 	return nil
 }
 
@@ -617,34 +620,34 @@ func (a *App) leaveLocked() error {
 // first, as when it quits, waiting as Wraiths, and each takes its place back once the
 // door it had is shut. Runs on Loop, which holds no lock: the port it closes waits
 // for handshakes that take the world lock.
-func (a *App) leaveSession() {
-	lost := forkCell(a).Load() // read before the reopen clears it
-	bots := a.seatGraphs()
-	a.closeSeats(true)
+func (m *membership) leaveSession() {
+	lost := forkCell(m.world).Load() // read before the reopen clears it
+	bots := m.seatGraphs()
+	m.closeSeats(true)
 	var old engine.NetworkPort
-	err := a.corrections.Leave(func() error {
+	err := m.corrections.Leave(func() error {
 		var err error
-		a.world.RunSafe(func() { old, err = a.leaveSessionLocked(lost) })
+		m.world.RunSafe(func() { old, err = m.leaveSessionLocked(lost) })
 		return err
 	})
 	if port, ok := old.(interface{ Close() error }); ok {
 		_ = port.Close()
 	}
-	a.leaving.Store(false)
-	a.world.RunSafe(func() {
-		held := lost && a.thawLocked()
+	m.leaving.Store(false)
+	m.world.RunSafe(func() {
+		held := lost && m.thawLocked()
 		if err != nil {
-			a.log.Warn("session", "msg", "session not left", "host_lost", lost, "error", err.Error())
+			m.log.Warn("session", "msg", "session not left", "host_lost", lost, "error", err.Error())
 		} else {
-			a.log.Info("session", "msg", "session left", "tick", a.Position().Tick,
+			m.log.Info("session", "msg", "session left", "tick", m.run.Position().Tick,
 				"bots", len(bots), "host_lost", lost, "held", held)
 		}
-		a.ctx.SetStatusMessage(leftNotice(err, lost, held, len(bots) > 0))
+		m.ctx.SetStatusMessage(leftNotice(err, lost, held, len(bots) > 0))
 		// Into whichever session the run is in now: the one it could not leave, else its own.
 		for _, spec := range bots {
-			if err := a.addSeatLocked(spec); err != nil {
-				a.log.Warn("app", "msg", "bot not seated", "graph", spec, "error", err.Error())
-				a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
+			if err := m.addSeatLocked(spec); err != nil {
+				m.log.Warn("app", "msg", "bot not seated", "graph", spec, "error", err.Error())
+				m.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
 			}
 		}
 	})
@@ -671,13 +674,13 @@ func leftNotice(err error, lost, held, bots bool) (string, parameter.StatusKind)
 // leaveSessionLocked reopens the world in a session of this run's own and forgets
 // the one it was in, whose transport it returns for the caller to close off the
 // lock. Caller MUST hold updateMutex.
-func (a *App) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
+func (m *membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	// A run being replaced is not left: what replaces it decides where it goes.
-	if a.dismissed.Load() || a.restart.Load() != nil {
+	if m.dismissed.Load() || m.run.replacing() {
 		return nil, errRunReplaced
 	}
-	old, roster := a.sessionTransportLocked(), a.worldRosterLocked()
-	local := network.PeerID(a.world.LocalParticipant())
+	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
+	local := link.PeerID(m.world.LocalParticipant())
 	// A leave keeps its bots' places, and a run its session gave up every place, for
 	// whoever hosts next to give back. A bot of this run's goes on under a claim of
 	// its own over the record it left with, which stays the left session's.
@@ -688,7 +691,7 @@ func (a *App) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 			continue
 		}
 		if p.Holder == local {
-			if c := a.claims.carry(p.Claim); c != nil {
+			if c := m.claims.carry(p.Claim); c != nil {
 				p.Claim = network.ClaimDigest(c.Token)
 				carried = append(carried, c)
 			}
@@ -698,104 +701,104 @@ func (a *App) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	}
 	// Nothing names the session left: not the address a restart would go back to,
 	// nor the name the next one would answer to, nor the ceiling it was opened with.
-	cfg := a.cfg
-	a.cfg.JoinAddress, a.cfg.HostAddress, a.cfg.SessionName, a.cfg.sessionPlayers = "", "", "", 0
+	cfg := *m.cfg
+	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.cfg.sessionPlayers = "", "", "", 0
 	// The claim the run left under keeps its record as it stands, for a return to
 	// that session; the one it opens issues its own.
-	prior := a.claim.Swap(nil)
-	if err := a.openSessionLocked(kept); err != nil {
-		a.claim.Store(prior)
-		a.cfg = cfg
+	prior := m.claim.Swap(nil)
+	if err := m.openSessionLocked(kept); err != nil {
+		m.claim.Store(prior)
+		*m.cfg = cfg
 		for _, c := range carried {
-			a.claims.forget(c)
+			m.claims.forget(c)
 		}
 		return nil, err
 	}
 	if prior != nil {
-		a.claims.release(prior)
+		m.claims.release(prior)
 	}
-	for _, sys := range a.world.Systems() {
+	for _, sys := range m.world.Systems() {
 		if s, ok := sys.(interface{ LeaveSession() }); ok {
 			s.LeaveSession()
 		}
 	}
-	a.reach.Close()
+	m.reach.Close()
 	// Every link the drops were for closes unread with the port.
-	a.seatsMu.Lock()
-	a.dropped = nil
-	a.seatsMu.Unlock()
+	m.seatsMu.Lock()
+	m.dropped = nil
+	m.seatsMu.Unlock()
 	// Gone from this world, or waiting in it, before an identity is handed out again:
 	// one of theirs given to a bot would be the participant a departure still
 	// pending removes.
-	a.dropAbandonedLocked(roster, kept, local)
-	a.scheduler.SettleLocked()
+	m.dropAbandonedLocked(roster, kept, local)
+	m.scheduler.SettleLocked()
 	return old, nil
 }
 
 // sessionTransport returns the attached endpoint, nil when this run has none. The
 // question is whether a transport exists, not whether a peer is on it: a host
 // waiting alone is in a session and a second :host would open a second one.
-func (a *App) sessionTransport() engine.NetworkPort {
+func (m *membership) sessionTransport() engine.NetworkPort {
 	var port engine.NetworkPort
-	a.world.RunSafe(func() { port = a.sessionTransportLocked() })
+	m.world.RunSafe(func() { port = m.sessionTransportLocked() })
 	return port
 }
 
 // sessionTransportLocked is the same read for a caller that holds the world lock.
 // Caller MUST hold updateMutex.
-func (a *App) sessionTransportLocked() engine.NetworkPort {
-	if r := a.world.Resources.Network; r != nil {
+func (m *membership) sessionTransportLocked() engine.NetworkPort {
+	if r := m.world.Resources.Network; r != nil {
 		return r.Port
 	}
 	return nil
 }
 
 // SessionSummary is a one-line description of what this run is part of.
-func (a *App) SessionSummary() string {
+func (m *membership) SessionSummary() string {
 	var out string
-	a.world.RunSafe(func() { out = a.sessionSummaryLocked() })
+	m.world.RunSafe(func() { out = m.sessionSummaryLocked() })
 	return out
 }
 
 // sessionSummaryLocked is the same for the operator command path.
 // Caller MUST hold updateMutex.
-func (a *App) sessionSummaryLocked() string {
-	if a.sessionTransportLocked() == nil {
+func (m *membership) sessionSummaryLocked() string {
+	if m.sessionTransportLocked() == nil {
 		if !buildHasSocketNetwork {
 			return "Solo run; :join <link> joins a session"
 		}
 		return "Solo run; :host <addr> opens it to participants, :join <target> joins one"
 	}
-	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
-	participant := a.world.LocalParticipant()
+	peers := m.world.Resources.Status.Ints.Get("network.peers").Load()
+	participant := m.world.LocalParticipant()
 	// A guest that took the term over hosts at the address it declared, which its
 	// session dials, not the one it dialled. A harness binds no address, so the word
 	// stands alone rather than trailing a blank.
-	where, addr := "hosting", cmp.Or(a.cfg.HostAddress, a.reach.DeclaredAddr())
-	if a.sessionRoleLocked().joined() {
-		where, addr = "joined", a.cfg.JoinAddress
+	where, addr := "hosting", cmp.Or(m.cfg.HostAddress, m.reach.DeclaredAddr())
+	if m.sessionRoleLocked().joined() {
+		where, addr = "joined", m.cfg.JoinAddress
 	}
 	if addr != "" {
 		where += " " + addr
 	}
-	if fp := network.Fingerprint(a.cfg.TLS); fp != "" && !a.sessionRoleLocked().joined() {
+	if fp := link.Fingerprint(m.cfg.TLS); fp != "" && !m.sessionRoleLocked().joined() {
 		where += " (certificate " + fp + ")"
 	}
-	slot := a.world.Resources.Player.LocalSlot()
+	slot := m.world.Resources.Player.LocalSlot()
 	cursor := fmt.Sprintf("slot %d", slot)
 	if slot == parameter.NoPlayerSlot {
 		cursor = "no cursor"
 	}
-	reg := a.world.Resources.Status
+	reg := m.world.Resources.Status
 	// The D-14 latch is a fact about the run rather than a thing to watch
 	latch := "map open"
 	if reg.Bools.Get("network.map_latched").Load() {
 		latch = "map latched"
 	}
 	line := fmt.Sprintf("Session %s, peer %d (%s), %d peer link(s), tick %d, %s",
-		where, participant, cursor, peers, a.Position().Tick, latch)
-	if a.authority != nil {
-		if s := a.authority.Summary(); s != "" {
+		where, participant, cursor, peers, m.run.Position().Tick, latch)
+	if m.authority != nil {
+		if s := m.authority.Summary(); s != "" {
 			line += "; " + s
 		}
 	}
@@ -858,46 +861,46 @@ func (a *App) sessionSummaryLocked() string {
 // admitted. It runs on the accept goroutine, so it must not assume the world lock is
 // free and must not hold it longer than one capture. A tick-zero lobby releases
 // everyone together and does not come through here.
-func (a *App) releaseMidRunJoiner(id network.PeerID) {
+func (m *membership) releaseMidRunJoiner(id link.PeerID) {
 	// One at a time. The handshakes that reach here run concurrently, and this gate
 	// waits on a ready count that is cumulative over the session: two of them at
 	// once could not tell which joiner had confirmed, and the link measurement each
 	// takes would be timed against the other's transfer.
-	a.midRunGate.Lock()
-	defer a.midRunGate.Unlock()
+	m.midRunGate.Lock()
+	defer m.midRunGate.Unlock()
 
-	a.sessionMu.Lock()
-	port := a.midRunPort
-	a.sessionMu.Unlock()
+	m.sessionMu.Lock()
+	port := m.midRunPort
+	m.sessionMu.Unlock()
 	if port == nil {
 		// A dedicated host never opened a socket of its own: its endpoint is the
 		// one NetworkService contributed for -serve.
-		port, _ = a.socketPort()
+		port, _ = m.socketPort()
 	}
 	if port == nil {
 		return
 	}
-	if err := a.sendMidRunGate(port, id); err != nil {
-		a.log.Warn("session", "msg", "mid-run join failed", "peer", id, "error", err.Error())
+	if err := m.sendMidRunGate(port, id); err != nil {
+		m.log.Warn("session", "msg", "mid-run join failed", "peer", id, "error", err.Error())
 		// The stream is already a peer by the time this runs, so refusing the join
 		// means dropping it: a participant holding a handshake it could not finish
 		// would otherwise stay in the session receiving crossings for a world it
 		// never installed. Dropping it runs the ordinary departure path, which is
 		// what returns its identity to the pool.
 		port.Disconnect(uint32(id))
-		a.releaseParticipant(id)
+		m.releaseParticipant(id)
 	}
 }
 
 // sendMidRunGate sends one joiner the closed roster and the world it names, then
 // crosses its arrival. The world is the cadence's keyframe rather than a read taken
 // for this join, so two joins arriving together share one read.
-func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error {
-	offer, err := a.midRunOffer(id)
+func (m *membership) sendMidRunGate(port *link.SocketPort, id link.PeerID) error {
+	offer, err := m.midRunOffer(id)
 	if err != nil {
 		return err
 	}
-	tick, bytes, took, err := a.gateJoiner(port, offer, a.ctx.TimeCtl.Held(), a.corrections.KeyframeAt)
+	tick, bytes, took, err := m.gateJoiner(port, offer, m.ctx.TimeCtl.Held(), m.corrections.KeyframeAt)
 	if err != nil {
 		return err
 	}
@@ -905,13 +908,13 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 	// what completes the measurement. A participant refused here is dropped by the
 	// caller and its identity returned to the pool, which is the same unwind a
 	// join that could not finish its gate takes.
-	if err := a.corrections.AdmitLink(port, id, bytes, took); err != nil {
+	if err := m.corrections.AdmitLink(port, id, bytes, took); err != nil {
 		return err
 	}
 
 	assignment, _ := offer.Entry(id)
-	a.crossParticipantArrival(id, assignment.Slot)
-	a.log.Info("session", "msg", "mid-run participant admitted",
+	m.crossParticipantArrival(id, assignment.Slot)
+	m.log.Info("session", "msg", "mid-run participant admitted",
 		"peer", id, "slot", assignment.Slot, "snapshot_tick", tick, "bytes", bytes)
 	return nil
 }
@@ -921,10 +924,10 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 // and is in no capture at that tick — waits for its install, and says which world
 // and how long its transfer took. A held session reaches no lead: the world is the
 // held tick's, what is scheduled past it follows, and the joiner holds there too.
-func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer, held bool,
+func (m *membership) gateJoiner(port *link.SocketPort, offer network.SessionOffer, held bool,
 	world func(minTick uint64, deadline time.Time) ([]byte, uint64, error),
 ) (tick uint64, bytes int, took time.Duration, err error) {
-	at := a.Position()
+	at := m.run.Position()
 	minTick := at.Tick + parameter.NetworkBarrierDelayTicks
 	if held {
 		minTick = at.Tick
@@ -936,13 +939,13 @@ func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer, h
 	}
 	var pending [][]byte
 	if held {
-		if pending, err = a.pendingAt(at.Run, tick); err != nil {
+		if pending, err = m.pendingAt(at.Run, tick); err != nil {
 			return 0, 0, 0, err
 		}
 	}
 	// A hold standing for a new game's start waits for its host's press, which the
 	// joiner waits for as that, rather than as a pause.
-	offer.Held, offer.Start = held, held && a.ctx.TimeCtl.Holds(engine.HoldStart)
+	offer.Held, offer.Start = held, held && m.ctx.TimeCtl.Holds(engine.HoldStart)
 	began, err := sendGate(port, offer, tick, body, offer.Assigned)
 	for i := 0; err == nil && i < len(pending); i++ {
 		if !port.Send(uint32(offer.Assigned), uint8(network.MsgEvent), pending[i]) {
@@ -950,7 +953,7 @@ func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer, h
 		}
 	}
 	if err == nil {
-		err = a.awaitJoinerReady(port, offer.Assigned)
+		err = m.awaitJoinerReady(port, offer.Assigned)
 	}
 	return tick, len(body), time.Since(began), err
 }
@@ -958,15 +961,15 @@ func (a *App) gateJoiner(port *network.SocketPort, offer network.SessionOffer, h
 // pendingAt encodes what a held session has scheduled past tick, as the epochs it
 // went out in, which a joiner installed at that tick never heard. It is read only
 // while the session still stands there: what a tick applies is in neither.
-func (a *App) pendingAt(run, tick uint64) ([][]byte, error) {
+func (m *membership) pendingAt(run, tick uint64) ([][]byte, error) {
 	var batches []event.WireBatch
 	stood := false
-	a.world.RunSafe(func() {
-		at := a.Position()
-		if stood = at.Run == run && at.Tick == tick && a.ctx.TimeCtl.Held(); !stood {
+	m.world.RunSafe(func() {
+		at := m.run.Position()
+		if stood = at.Run == run && at.Tick == tick && m.ctx.TimeCtl.Held(); !stood {
 			return
 		}
-		for _, sys := range a.world.Systems() {
+		for _, sys := range m.world.Systems() {
 			if p, ok := sys.(interface {
 				PendingAfter(uint64) []event.WireBatch
 			}); ok {
@@ -993,9 +996,9 @@ func (a *App) pendingAt(run, tick uint64) ([][]byte, error) {
 // the last transfer started; a transfer is the measurement, timed from its first
 // chunk to the joiner's confirmation, since nothing else on a fresh link has pushed
 // enough bytes to say what it carries.
-func sendGate(port *network.SocketPort, offer network.SessionOffer, tick uint64, body []byte, to ...network.PeerID) (time.Time, error) {
+func sendGate(port *link.SocketPort, offer network.SessionOffer, tick uint64, body []byte, to ...link.PeerID) (time.Time, error) {
 	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
-	chunks, err := network.EncodeSnapshotChunks(0, tick, body)
+	chunks, err := link.EncodeSnapshotChunks(0, tick, body)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -1021,11 +1024,11 @@ func sendGate(port *network.SocketPort, offer network.SessionOffer, tick uint64,
 
 // midRunOffer allocates nothing: the acceptor already assigned this participant, so
 // the roster is closed as it stands and addressed to it.
-func (a *App) midRunOffer(id network.PeerID) (network.SessionOffer, error) {
-	anchor := a.JoinAnchor()
-	a.sessionMu.Lock()
-	defer a.sessionMu.Unlock()
-	offer := a.offerLocked(anchor, id)
+func (m *membership) midRunOffer(id link.PeerID) (network.SessionOffer, error) {
+	anchor := m.JoinAnchor()
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	offer := m.offerLocked(anchor, id)
 	return offer, offer.Validate()
 }
 
@@ -1034,7 +1037,7 @@ func (a *App) midRunOffer(id network.PeerID) (network.SessionOffer, error) {
 // The wait is bounded and the bound is the point: a participant that cannot install
 // and answer within it is one whose crossings would arrive after the ticks they
 // name, and admitting it would trade a failed join for a divergence.
-func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID) error {
+func (m *membership) awaitJoinerReady(port *link.SocketPort, id link.PeerID) error {
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound, not a game one
 	for time.Now().Before(deadline) {
 		if port.Confirmed(uint32(id)) {
@@ -1056,27 +1059,27 @@ func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID) erro
 // as a local reaction to a connect: the cursor it creates is a shared entity, so
 // every instance must create it at one agreed tick or their creation order diverges
 // (D-11). The coordinator is the only producer, as it is for a departure.
-func (a *App) crossParticipantArrival(id network.PeerID, slot uint8) {
-	a.world.RunSafe(func() { a.crossArrivalLocked(id, slot) })
+func (m *membership) crossParticipantArrival(id link.PeerID, slot uint8) {
+	m.world.RunSafe(func() { m.crossArrivalLocked(id, slot) })
 }
 
 // crossArrivalLocked is crossParticipantArrival under the world lock. A participant
 // back in a place its claim took back is no longer away from here, and brings the
 // record it left with. Caller MUST hold updateMutex.
-func (a *App) crossArrivalLocked(id network.PeerID, slot uint8) {
-	a.sessionMu.Lock()
-	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
+func (m *membership) crossArrivalLocked(id link.PeerID, slot uint8) {
+	m.sessionMu.Lock()
+	i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
 	if i < 0 {
-		a.sessionMu.Unlock()
+		m.sessionMu.Unlock()
 		return
 	}
 	p := &event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot,
-		Holder: uint32(a.sessionRoster[i].Holder), Claim: a.sessionRoster[i].Claim, Record: a.returning[id].record}
-	delete(a.returning, id)
-	a.sessionRoster[i].Away = false
-	a.awayOrder = slices.DeleteFunc(a.awayOrder, func(away network.PeerID) bool { return away == id })
-	a.sessionMu.Unlock()
-	a.world.PushEventFull(event.EventParticipantJoined, p, event.OriginSession, core.DomainPlayer)
+		Holder: uint32(m.sessionRoster[i].Holder), Claim: m.sessionRoster[i].Claim, Record: m.returning[id].record}
+	delete(m.returning, id)
+	m.sessionRoster[i].Away = false
+	m.awayOrder = slices.DeleteFunc(m.awayOrder, func(away link.PeerID) bool { return away == id })
+	m.sessionMu.Unlock()
+	m.world.PushEventFull(event.EventParticipantJoined, p, event.OriginSession, core.DomainPlayer)
 }
 
 // resumeJoinedSession hands the traffic the gate held to the port and closes the gap
@@ -1084,16 +1087,16 @@ func (a *App) crossArrivalLocked(id network.PeerID, slot uint8) {
 // The gap is the transfer and the install, so it is a function of world size and
 // link speed; left open it is permanent, and every crossing goes out k ticks late.
 // Call after the transport takes the stream and before game time is released.
-func (a *App) resumeJoinedSession() error {
-	if a.pendingJoin == nil {
+func (m *membership) resumeJoinedSession() error {
+	if m.pendingJoin == nil {
 		return nil
 	}
-	port, err := a.injectPort()
+	port, err := m.injectPort()
 	if err != nil {
 		return err
 	}
-	held := a.pendingJoin.Deferred()
-	from := uint32(a.pendingJoin.Peer())
+	held := m.pendingJoin.Deferred()
+	from := uint32(m.pendingJoin.Peer())
 	for _, msg := range held {
 		port.Inject(from, uint8(msg.Type), msg.Payload)
 	}
@@ -1102,21 +1105,21 @@ func (a *App) resumeJoinedSession() error {
 	// epoch ends that, and it may be among what the rounds below drain: then the
 	// gap is closed as any other. A new game its host has yet to start holds at its
 	// first tick, which is why this comes before the tick-zero case.
-	if a.sessionOffer.Held {
-		a.world.RunSafe(func() {
+	if m.sessionOffer.Held {
+		m.world.RunSafe(func() {
 			switch {
-			case a.sessionOffer.Start:
-				a.ctx.HoldAs(engine.HoldStart)
-			case a.ctx.Hold(true):
-				a.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
+			case m.sessionOffer.Start:
+				m.ctx.HoldAs(engine.HoldStart)
+			case m.ctx.Hold(true):
+				m.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
 			}
 		})
 	}
 	// A tick-zero lobby has no gap by construction: the host is frozen at tick zero
 	// until every participant is ready, so it has produced nothing, and a probe tick
 	// here would put this instance one tick ahead of a session that has not started.
-	if !a.sessionOffer.CarriesSnapshot() || a.sessionOffer.SnapshotTick == 0 {
-		a.reportJoinLag(0)
+	if !m.sessionOffer.CarriesSnapshot() || m.sessionOffer.SnapshotTick == 0 {
+		m.reportJoinLag(0)
 		return nil
 	}
 
@@ -1126,19 +1129,19 @@ func (a *App) resumeJoinedSession() error {
 	// newest tick known, let that draining reveal the next, stop when it stops moving.
 	caught := uint64(0)
 	for range joinCatchUpRounds {
-		local := a.Position().Tick
-		target := max(newestHeldEpoch(held), a.awaitSessionTick(local))
-		if target <= local || a.ctx.TimeCtl.Held() {
+		local := m.run.Position().Tick
+		target := max(newestHeldEpoch(held), m.awaitSessionTick(local))
+		if target <= local || m.ctx.TimeCtl.Held() {
 			break
 		}
 		step := target - local
 		if caught+step > parameter.NetworkJoinCatchUpTicks {
 			return joinBehind("it is more than %d ticks ahead of the world it sent", parameter.NetworkJoinCatchUpTicks)
 		}
-		a.scheduler.RunTicks(int(step))
+		m.scheduler.RunTicks(int(step))
 		caught += step
 	}
-	return a.finishCatchUp(held, caught)
+	return m.finishCatchUp(held, caught)
 }
 
 // awaitSessionTick drains the transport until a peer epoch newer than local shows
@@ -1146,17 +1149,17 @@ func (a *App) resumeJoinedSession() error {
 // wait is bounded by one tick interval; the ceiling is there for the session that
 // has stopped producing, where the honest answer is "no newer tick" rather than a
 // hang.
-func (a *App) awaitSessionTick(local uint64) uint64 {
+func (m *membership) awaitSessionTick(local uint64) uint64 {
 	deadline := time.Now().Add(joinEpochWait) // [wall] a link bound, not a game one
 	for {
-		a.world.RunSafe(func() {
-			for _, sys := range a.world.Systems() {
+		m.world.RunSafe(func() {
+			for _, sys := range m.world.Systems() {
 				if d, ok := sys.(interface{ DrainPeers() }); ok {
 					d.DrainPeers()
 				}
 			}
 		})
-		if observed := a.observedSessionTick(); observed > local {
+		if observed := m.observedSessionTick(); observed > local {
 			return observed
 		}
 		if time.Now().After(deadline) {
@@ -1167,12 +1170,12 @@ func (a *App) awaitSessionTick(local uint64) uint64 {
 }
 
 // finishCatchUp reports what the join cost and refuses one it could not close.
-func (a *App) finishCatchUp(held []*network.Message, caught uint64) error {
-	remaining := a.sessionLagTicks()
-	a.reportJoinLag(remaining)
-	a.log.Info("session", "msg", "join caught up", "held_frames", len(held),
-		"caught_up_ticks", caught, "tick", a.Position().Tick, "lag_ticks", remaining)
-	a.telemetry.CatchUp.Store(int64(caught))
+func (m *membership) finishCatchUp(held []*link.Message, caught uint64) error {
+	remaining := m.sessionLagTicks()
+	m.reportJoinLag(remaining)
+	m.log.Info("session", "msg", "join caught up", "held_frames", len(held),
+		"caught_up_ticks", caught, "tick", m.run.Position().Tick, "lag_ticks", remaining)
+	m.glue.telemetry.CatchUp.Store(int64(caught))
 	if remaining > parameter.NetworkJoinLagTicks {
 		return joinBehind("still %d ticks after catching up, lead is %d", remaining, parameter.NetworkJoinLagTicks)
 	}
@@ -1202,10 +1205,10 @@ const (
 
 // injectPort returns the attached endpoint as a frame injector. It is read from the
 // world rather than from the service, because a harness attaches its own.
-func (a *App) injectPort() (interface {
+func (m *membership) injectPort() (interface {
 	Inject(peer uint32, msgType uint8, payload []byte)
 }, error) {
-	injector, ok := a.sessionTransport().(interface {
+	injector, ok := m.sessionTransport().(interface {
 		Inject(peer uint32, msgType uint8, payload []byte)
 	})
 	if !ok {
@@ -1217,24 +1220,24 @@ func (a *App) injectPort() (interface {
 // HostAddr is the address this run is hosting on, empty when it listens on none it
 // opened itself. The bound form is reported, so a run opened on port zero names the
 // port it actually got.
-func (a *App) HostAddr() string {
-	a.sessionMu.Lock()
-	port := a.midRunPort
-	a.sessionMu.Unlock()
+func (m *membership) HostAddr() string {
+	m.sessionMu.Lock()
+	port := m.midRunPort
+	m.sessionMu.Unlock()
 	if port == nil {
 		return ""
 	}
 	if bound := port.Addr(); bound != nil {
 		return bound.String()
 	}
-	return a.cfg.HostAddress
+	return m.cfg.HostAddress
 }
 
 // newestHeldEpoch is the highest production epoch among the frames the gate held.
 // A frame that does not decode is skipped: the barrier will count it as a drop when
 // it drains the same bytes, and guessing a tick from a broken one is worse than
 // reading a smaller gap and measuring what is left.
-func newestHeldEpoch(held []*network.Message) uint64 {
+func newestHeldEpoch(held []*link.Message) uint64 {
 	var newest uint64
 	for _, msg := range held {
 		if msg.Type != network.MsgEvent {
@@ -1254,10 +1257,10 @@ func newestHeldEpoch(held []*network.Message) uint64 {
 // observedSessionTick is the newest production epoch any peer has been seen
 // closing. Every tick closes one, empty or not, so it is the session's tick as far
 // as this instance's barrier has observed it.
-func (a *App) observedSessionTick() uint64 {
+func (m *membership) observedSessionTick() uint64 {
 	var newest uint64
-	a.world.RunSafe(func() {
-		for _, sys := range a.world.Systems() {
+	m.world.RunSafe(func() {
+		for _, sys := range m.world.Systems() {
 			if e, ok := sys.(interface{ NewestPeerEpoch() uint64 }); ok {
 				if n := e.NewestPeerEpoch(); n > newest {
 					newest = n
@@ -1269,9 +1272,9 @@ func (a *App) observedSessionTick() uint64 {
 }
 
 // sessionLagTicks is how far behind the observed session tick this instance stands.
-func (a *App) sessionLagTicks() uint64 {
-	newest := a.observedSessionTick()
-	local := a.Position().Tick
+func (m *membership) sessionLagTicks() uint64 {
+	newest := m.observedSessionTick()
+	local := m.run.Position().Tick
 	if newest <= local {
 		return 0
 	}
@@ -1279,9 +1282,9 @@ func (a *App) sessionLagTicks() uint64 {
 }
 
 // reportJoinLag publishes the measured lag beside the other transport counters.
-func (a *App) reportJoinLag(ticks uint64) {
-	a.world.RunSafe(func() {
-		for _, sys := range a.world.Systems() {
+func (m *membership) reportJoinLag(ticks uint64) {
+	m.world.RunSafe(func() {
+		for _, sys := range m.world.Systems() {
 			if r, ok := sys.(interface{ ReportJoinLag(uint64) }); ok {
 				r.ReportJoinLag(ticks)
 			}
@@ -1290,11 +1293,11 @@ func (a *App) reportJoinLag(ticks uint64) {
 }
 
 // closeMidRunPort releases a socket this run opened for itself.
-func (a *App) closeMidRunPort() {
-	a.sessionMu.Lock()
-	port := a.midRunPort
-	a.midRunPort = nil
-	a.sessionMu.Unlock()
+func (m *membership) closeMidRunPort() {
+	m.sessionMu.Lock()
+	port := m.midRunPort
+	m.midRunPort = nil
+	m.sessionMu.Unlock()
 	if port != nil {
 		_ = port.Close()
 	}

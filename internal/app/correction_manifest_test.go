@@ -18,6 +18,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // The manifest suite works on captures rather than on sessions, deliberately: a
@@ -332,9 +333,9 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 		{"stale baseline", func(s *snapshot.CorrectionShardSet) { s.Header.Tick-- }, "tick"},
 		{"foreign session", func(s *snapshot.CorrectionShardSet) { s.Header.Session++ }, "another run"},
 		{"foreign crossing fence", func(s *snapshot.CorrectionShardSet) {
-			s.Header.Crossings = append(network.CrossingFences{}, s.Header.Crossings...)
+			s.Header.Crossings = append(link.CrossingFences{}, s.Header.Crossings...)
 			if len(s.Header.Crossings) == 0 {
-				s.Header.Crossings = network.CrossingFences{{Source: 1, Seq: 1}}
+				s.Header.Crossings = link.CrossingFences{{Source: 1, Seq: 1}}
 			} else {
 				s.Header.Crossings[0].Seq++
 			}
@@ -682,7 +683,7 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 
 	roster := make([]network.RosterEntry, 0, parameter.MaxPlayers)
 	for i := range parameter.MaxPlayers {
-		roster = append(roster, network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
+		roster = append(roster, network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i)})
 	}
 	reportBody, err := network.EncodeAuthorityReport(network.AuthorityReport{
 		Term: network.FirstTerm, From: 2, Lost: 1,

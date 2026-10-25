@@ -10,7 +10,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // A snapshot body travels in a small versioned envelope,
@@ -69,9 +69,9 @@ func encodeJSON(v any, codec byte) ([]byte, error) {
 
 // encodePlain wraps a marshalled body in the envelope.
 func encodePlain(plain []byte, codec byte) ([]byte, error) {
-	if len(plain) == 0 || len(plain) > network.MaxSnapshotPlainBytes {
+	if len(plain) == 0 || len(plain) > link.MaxSnapshotPlainBytes {
 		return nil, fmt.Errorf("snapshot encode: %d plain bytes is outside 1..%d",
-			len(plain), network.MaxSnapshotPlainBytes)
+			len(plain), link.MaxSnapshotPlainBytes)
 	}
 
 	var out bytes.Buffer
@@ -98,9 +98,9 @@ func encodePlain(plain []byte, codec byte) ([]byte, error) {
 	if closeErr != nil {
 		return nil, fmt.Errorf("snapshot compress: %w", closeErr)
 	}
-	if out.Len() > network.MaxSnapshotBytes {
+	if out.Len() > link.MaxSnapshotBytes {
 		return nil, fmt.Errorf("snapshot encode: %d wire bytes exceeds the %d-byte ceiling",
-			out.Len(), network.MaxSnapshotBytes)
+			out.Len(), link.MaxSnapshotBytes)
 	}
 	return out.Bytes(), nil
 }
@@ -151,7 +151,7 @@ func encodeSections(parts []sectionPart) ([]byte, error) {
 	for _, p := range parts {
 		total += p.plain
 	}
-	if total == 0 || total > network.MaxSnapshotPlainBytes || len(parts) > sectionPartsMax {
+	if total == 0 || total > link.MaxSnapshotPlainBytes || len(parts) > sectionPartsMax {
 		return nil, fmt.Errorf("snapshot encode: %d parts of %d plain bytes are outside the envelope", len(parts), total)
 	}
 	var out bytes.Buffer
@@ -169,9 +169,9 @@ func encodeSections(parts []sectionPart) ([]byte, error) {
 		_, _ = out.Write(binary.AppendUvarint(nil, uint64(len(p.blob))))
 		_, _ = out.Write(p.blob)
 	}
-	if out.Len() > network.MaxSnapshotBytes {
+	if out.Len() > link.MaxSnapshotBytes {
 		return nil, fmt.Errorf("snapshot encode: %d wire bytes exceeds the %d-byte ceiling",
-			out.Len(), network.MaxSnapshotBytes)
+			out.Len(), link.MaxSnapshotBytes)
 	}
 	return out.Bytes(), nil
 }
@@ -246,7 +246,7 @@ func envelopePlain(body []byte, codec byte) (uint32, error) {
 		return 0, fmt.Errorf("snapshot envelope: unsupported codec %d", body[5])
 	}
 	plainBytes := binary.BigEndian.Uint32(body[6:10])
-	if plainBytes == 0 || plainBytes > network.MaxSnapshotPlainBytes {
+	if plainBytes == 0 || plainBytes > link.MaxSnapshotPlainBytes {
 		return 0, fmt.Errorf("snapshot envelope: names %d plain bytes", plainBytes)
 	}
 	return plainBytes, nil

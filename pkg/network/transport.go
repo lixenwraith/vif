@@ -72,7 +72,7 @@ func (t *Transport) Start() error {
 		return t.startServer()
 	case RolePeer, RoleRelay:
 		// A successor can retain only its listener after losing the last upstream link.
-		dialing := t.config.preconnected != nil || t.config.Address != ""
+		dialing := t.config.Preconnected != nil || t.config.Address != ""
 		if !dialing && t.config.AcceptPeer == nil {
 			t.running.Store(false)
 			return errors.New("transport: peer has neither an address to dial nor a port to listen on")
@@ -169,24 +169,25 @@ func (t *Transport) serve(ln net.Listener, peer func(net.Conn) (PeerID, error)) 
 
 // door is what a listener serves: links from participants already in the session
 // (peer), joins (join), or both, and what runs once a join is a peer. Every dialer
-// speaks first, a peer link with MsgConnect and a join with its session's name, so
-// a door taking both reads which this is off the first byte.
+// speaks first, a peer link and a join each with the kind Kinds names for it, so a
+// door taking both reads which this is off the first byte.
 type door struct {
 	peer, join func(net.Conn) (PeerID, error)
 	admitted   func(PeerID)
 }
 
 // open picks the handshake conn runs, and the stream that handshake reads: one the
-// first byte was read from gives it back. served is a join's.
-func (d door) open(conn net.Conn, timeout time.Duration) (accept func(net.Conn) (PeerID, error), served bool, link net.Conn, err error) {
+// first byte was read from gives it back. served is a join's. cfg says within what
+// time the byte comes and which kinds open a peer link and a join.
+func (d door) open(conn net.Conn, cfg *Config) (accept func(net.Conn) (PeerID, error), served bool, link net.Conn, err error) {
 	switch {
 	case d.join == nil:
 		return d.peer, false, conn, nil
 	case d.peer == nil:
 		return d.join, true, conn, nil
 	}
-	if timeout > 0 {
-		_ = conn.SetReadDeadline(time.Now().Add(timeout))
+	if cfg.ConnectTimeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(cfg.ConnectTimeout))
 		defer conn.SetReadDeadline(time.Time{})
 	}
 	first := &firstByte{Conn: conn}
@@ -194,9 +195,9 @@ func (d door) open(conn net.Conn, timeout time.Duration) (accept func(net.Conn) 
 		return nil, false, nil, err
 	}
 	switch MessageType(first.b[0]) {
-	case MsgConnect:
+	case cfg.Kinds.PeerLink:
 		return d.peer, false, first, nil
-	case MsgSessionRoute:
+	case cfg.Kinds.Join:
 		return d.join, true, first, nil
 	}
 	return nil, false, nil, fmt.Errorf("transport: %s opened with message %#x, neither a peer link nor a join",
@@ -241,16 +242,38 @@ func Listen(addr string, cfg *Config) (net.Listener, error) {
 	return ln, plainNetError(err)
 }
 
-// DialPeer opens one outbound link to a participant that is already in this
-// session, completing handshake and admitting the stream under the identity it
-// answered with. It is the mesh half of reach.go: the coordinator is dialled by
-// its guests, and a guest is dialled by whoever the chain says to.
-func (t *Transport) DialPeer(addr string, local PeerID) error {
-	if !t.running.Load() {
-		return errors.New("transport: not running")
+// BindPeer binds the port this participant is dialled on, falling back to an
+// OS-assigned one when the requested port is taken.
+func BindPeer(addr string) (net.Listener, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err == nil {
+		return ln, nil
 	}
-	conn, id, err := DialPeerLink(addr, t.config, local)
+	host, _, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		return nil, err
+	}
+	return net.Listen("tcp", net.JoinHostPort(host, "0"))
+}
+
+// DialPeer opens one outbound link to a participant that is already in this
+// session, running ConnectPeer on it and admitting the stream under the identity
+// the far end answered with: the coordinator is dialled by its guests, and a guest
+// by whoever the chain says to.
+func (t *Transport) DialPeer(addr string, local PeerID) error {
+	switch {
+	case !t.running.Load():
+		return errors.New("transport: not running")
+	case t.config.ConnectPeer == nil:
+		return errors.New("transport: no peer-link handshake to dial with")
+	}
+	conn, err := Dial(addr, t.config)
 	if err != nil {
+		return err
+	}
+	id, err := t.config.ConnectPeer(conn, local)
+	if err != nil {
+		_ = conn.Close()
 		return err
 	}
 	_, err = t.peers.AddConnectionAs(conn, id, false)
@@ -361,7 +384,7 @@ func (t *Transport) handshake(conn net.Conn, d door) {
 	defer t.wg.Done()
 	t.holdPending(conn)
 
-	accept, served, link, err := d.open(conn, t.config.ConnectTimeout)
+	accept, served, link, err := d.open(conn, t.config)
 	var id PeerID
 	if err == nil {
 		id, err = accept(link)
@@ -415,10 +438,10 @@ func (t *Transport) closePending() {
 
 // startClient connects to server
 func (t *Transport) startClient() error {
-	conn, id := t.config.preconnected, t.config.preconnectedPeer
+	conn, id := t.config.Preconnected, t.config.PreconnectedPeer
 	if conn == nil {
 		var err error
-		if conn, err = dial(t.config.Address, t.config); err != nil {
+		if conn, err = Dial(t.config.Address, t.config); err != nil {
 			t.running.Store(false)
 			return err
 		}

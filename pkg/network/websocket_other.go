@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/websocket"
 )
 
-// writeLinger is how long a link's writer gathers a burst before one flush.
-const writeLinger = parameter.NetworkWriteLinger
+// writeLinger is how long a link's writer gathers a burst before one flush: here,
+// what the configuration says.
+func writeLinger(configured time.Duration) time.Duration { return configured }
 
 // dialWebSocket opens a session route natively, for a network that blocks the TCP
 // port. A refusal before the upgrade carries the allocator's JSON error, and its
@@ -42,15 +42,15 @@ func dialWebSocket(target string, timeout time.Duration, tlsCfg *tls.Config) (ne
 		Error struct{ Message string } `json:"error"`
 	}
 	if errors.As(err, &refused) && json.Unmarshal(refused.Body, &body) == nil && body.Error.Message != "" {
-		return nil, plainError{body.Error.Message, err}
+		return nil, PlainError{body.Error.Message, err}
 	}
 	return nil, err
 }
 
-// routeAnswered reports whether a failed dial reached a route that refused it, with
+// RouteAnswered reports whether a failed dial reached a route that refused it, with
 // a status and usually a reason: that answer stands rather than sending the link to
 // its site.
-func routeAnswered(err error) bool {
+func RouteAnswered(err error) bool {
 	var refused *websocket.HandshakeError
 	return errors.As(err, &refused)
 }

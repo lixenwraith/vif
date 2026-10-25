@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 const (
@@ -130,7 +131,7 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func()) {
 		// Re-encoded rather than copied: the pod reads the name, and nothing else a
 		// stranger put in that header reaches it.
 		_ = upstream.SetWriteDeadline(time.Now().Add(routeTimeout))
-		if err = network.NewMessage(network.MsgSessionRoute, []byte(id)).Encode(upstream); err != nil {
+		if err = link.NewMessage(network.MsgSessionRoute, []byte(id)).Encode(upstream); err != nil {
 			_ = upstream.Close()
 		}
 		_ = upstream.SetWriteDeadline(time.Time{})

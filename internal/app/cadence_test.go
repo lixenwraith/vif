@@ -10,12 +10,13 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/linkpace"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // shapedPair is a two-participant session over a link with a declared bottleneck.
 // The shape is deterministic and counted in ticks; the staged netem gate is what
 // says the same code behaves the same way over a real socket.
-func shapedPair(t *testing.T, seed uint64, shape network.LinkShape) (*App, *App, *network.Mesh) {
+func shapedPair(t *testing.T, seed uint64, shape link.LinkShape) (*App, *App, *link.Mesh) {
 	t.Helper()
 	a := mustHeadless(t, seed, 120, 40)
 	an := a.JoinAnchor()
@@ -25,11 +26,11 @@ func shapedPair(t *testing.T, seed uint64, shape network.LinkShape) (*App, *App,
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	a.adoptMapLatch(an.Anchor)
+	a.membership.adoptMapLatch(an.Anchor)
 
 	mesh := network.NewMesh()
 	mesh.Link(1, 2)
-	if shape != (network.LinkShape{}) {
+	if shape != (link.LinkShape{}) {
 		mesh.Shape(1, 2, shape)
 	}
 	// Geometry first, link second: SetupLevel is a ClassShared request, so once the
@@ -65,7 +66,7 @@ func runSession(host, guest *App, ticks int) {
 // compared surface, where it would be a value a session could diverge over.
 func TestAHealthyLinkKeepsTheNominalPointAndHidesItsTiming(t *testing.T) {
 	t.Parallel()
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, link.LinkShape{})
 	runSession(host, guest, 120)
 
 	report := host.corrections.Cadence()
@@ -111,7 +112,7 @@ func TestAHealthyLinkKeepsTheNominalPointAndHidesItsTiming(t *testing.T) {
 // participant say the link rather than the game is its problem.
 func TestTheRoundTripIsMeasuredEndToEnd(t *testing.T) {
 	t.Parallel()
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 3})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, link.LinkShape{LatencyTicks: 3})
 	runSession(host, guest, 120)
 
 	report := host.corrections.Cadence()
@@ -136,7 +137,7 @@ func TestTheRoundTripIsMeasuredEndToEnd(t *testing.T) {
 // this session's.
 func TestALinkThatIsGoneLeavesNoOperatingPoint(t *testing.T) {
 	t.Parallel()
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 3})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, link.LinkShape{LatencyTicks: 3})
 	runSession(host, guest, 120)
 	if statOf(host, "network.link_rtt_ms") == 0 || statOf(host, "snapshot.cadence_links") != 1 {
 		t.Fatal("the link was never measured and planned, so its retirement proves nothing")
@@ -160,7 +161,7 @@ func TestALinkThatIsGoneLeavesNoOperatingPoint(t *testing.T) {
 // with it stays bounded — a magnitude that climbs is divergence, not degradation.
 func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 	t.Parallel()
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 200})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, link.LinkShape{LatencyTicks: 2, BytesPerTick: 200})
 
 	var early, late int64
 	saturated := false
@@ -258,7 +259,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndPublishesIt(t *testing.T) {
 // plans folded into one session timeline.
 func TestTheFloorBoundsEveryScheduleAShapedLinkProduces(t *testing.T) {
 	t.Parallel()
-	shapes := []network.LinkShape{
+	shapes := []link.LinkShape{
 		{},
 		{LatencyTicks: 6},
 		{LossEvery: 3},
@@ -299,7 +300,7 @@ func TestTheFloorBoundsEveryScheduleAShapedLinkProduces(t *testing.T) {
 // nothing restarted.
 func TestAGuestRecoversAtTheFloorAfterTheLinkComesBack(t *testing.T) {
 	t.Parallel()
-	host, guest, mesh := shapedPair(t, 0x5EEDBEEF, network.LinkShape{})
+	host, guest, mesh := shapedPair(t, 0x5EEDBEEF, link.LinkShape{})
 	runSession(host, guest, 120)
 
 	before := statOf(guest, "snapshot.corrections_applied")
@@ -309,7 +310,7 @@ func TestAGuestRecoversAtTheFloorAfterTheLinkComesBack(t *testing.T) {
 
 	// LossEvery 1 drops every frame: the link is up and carries nothing, which is
 	// the shape a `tc qdisc` drop-all makes and the one no keyframe survives.
-	mesh.Shape(1, 2, network.LinkShape{LossEvery: 1})
+	mesh.Shape(1, 2, link.LinkShape{LossEvery: 1})
 	runSession(host, guest, 200)
 	if got := statOf(guest, "snapshot.corrections_applied"); got != before {
 		t.Fatalf("a link dropping every frame still delivered corrections (%d then %d)", before, got)
@@ -324,7 +325,7 @@ func TestAGuestRecoversAtTheFloorAfterTheLinkComesBack(t *testing.T) {
 	// The recovery bound is the keyframe period, which the floor caps. Well inside
 	// it there must be a whole world again, through the ordinary path: the protocol
 	// has no repair path here because it needs none.
-	mesh.Shape(1, 2, network.LinkShape{})
+	mesh.Shape(1, 2, link.LinkShape{})
 	recovered := false
 	for range int(parameter.SnapshotFloorKeyframeTicks) * 3 {
 		host.Tick(1)
@@ -359,7 +360,7 @@ func TestAGuestRecoversAtTheFloorAfterTheLinkComesBack(t *testing.T) {
 // follows on the host's clock, hash-only proofs included.
 func TestCorrectionsResumeAcrossASessionReset(t *testing.T) {
 	t.Parallel()
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, link.LinkShape{})
 	runSession(host, guest, 400)
 	if !host.Reset(false) {
 		t.Fatal("the host's reset was refused")
@@ -389,7 +390,7 @@ func TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor(t *testing.T) {
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	defer a.Close()
 
-	port := network.NewSocketPort(network.DebugConfig(network.RoleHost, "127.0.0.1:0"))
+	port := link.NewSocketPort(&network.DebugConfig(link.RoleHost, "127.0.0.1:0").Config)
 	defer port.Close()
 
 	// A world of this size needs a whole capture every floor window. Delivering one
@@ -426,7 +427,7 @@ func TestASlowPeerDoesNotSlowAFastOne(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}})
 	host := apps[0]
-	transportOf(t, apps[2]).SetShape(network.LinkShape{BytesPerTick: 300})
+	transportOf(t, apps[2]).SetShape(link.LinkShape{BytesPerTick: 300})
 
 	for range 140 {
 		for _, a := range apps {
@@ -461,12 +462,12 @@ func TestASlowPeerDoesNotSlowAFastOne(t *testing.T) {
 
 // transportOf reaches the mesh endpoint an App is attached to, which is the only
 // way a test can shape one link of a session it did not build the mesh for.
-func transportOf(t *testing.T, a *App) *network.MeshPort {
+func transportOf(t *testing.T, a *App) *link.MeshPort {
 	t.Helper()
-	var port *network.MeshPort
+	var port *link.MeshPort
 	a.World().RunSafe(func() {
 		if r := a.World().Resources.Network; r != nil {
-			port, _ = r.Port.(*network.MeshPort)
+			port, _ = r.Port.(*link.MeshPort)
 		}
 	})
 	if port == nil {

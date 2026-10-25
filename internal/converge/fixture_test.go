@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // stub is the Instance a criterion drives: a world that answers with the capture
@@ -45,7 +46,7 @@ type stub struct {
 	// which, whether it relays for others and whom it marked behind it, and whether
 	// it has lost every path to its authority.
 	redial   bool
-	redials  []network.PeerID
+	redials  []link.PeerID
 	relaying bool
 	carried  []uint32
 	cut      bool
@@ -65,7 +66,7 @@ type stub struct {
 type adopted struct {
 	rec  network.HandoffRecord
 	mine bool
-	via  network.PeerID
+	via  link.PeerID
 }
 
 func (s *stub) Position() event.Stamp {
@@ -91,7 +92,7 @@ func (s *stub) Transport() engine.NetworkPort { return s.port }
 // Downstream is the links this stub serves, which in a tree built from the host
 // outward is everyone behind it.
 func (s *stub) Downstream() []uint32 {
-	if port, ok := s.port.(*network.MeshPort); ok {
+	if port, ok := s.port.(*link.MeshPort); ok {
 		return port.Served()
 	}
 	return nil
@@ -120,7 +121,7 @@ func (s *stub) Carry(id uint32) {
 	s.carried = append(s.carried, id)
 }
 
-func (s *stub) Redial(lost network.PeerID) bool {
+func (s *stub) Redial(lost link.PeerID) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.redials = append(s.redials, lost)
@@ -194,7 +195,7 @@ func (s *stub) DropParticipant(id uint32) bool {
 	return first
 }
 
-func (s *stub) AuthorityChanged(rec network.HandoffRecord, mine bool, via network.PeerID) {
+func (s *stub) AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handoffs = append(s.handoffs, adopted{rec: rec, mine: mine, via: via})
@@ -206,7 +207,7 @@ func (s *stub) CrossDepartures(away []network.RosterEntry) {
 	s.departed = append(s.departed, away)
 }
 
-func (s *stub) Forked(roster []network.RosterEntry, _ network.PeerID) {
+func (s *stub) Forked(roster []network.RosterEntry, _ link.PeerID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forked++
@@ -280,7 +281,7 @@ type run struct {
 	// chunks reassembles a correction the way NetworkSystem does on a run that has
 	// one: a capture is the one message whose size is a function of the world, so
 	// it is the one that arrives in pieces.
-	chunks network.SnapshotAssembly
+	chunks link.SnapshotAssembly
 }
 
 // newRun builds one participant: a world at tick 1 holding a capture nobody has
@@ -301,11 +302,11 @@ func newRun(t *testing.T, local uint32, port engine.NetworkPort, roster []networ
 }
 
 // open puts this run in a session under the first term, with the given coordinator.
-func (r *run) open(host network.PeerID, chain network.SuccessionChain, fixed bool) {
+func (r *run) open(host link.PeerID, chain network.SuccessionChain, fixed bool) {
 	r.u.Open(network.SessionOffer{
-		Host: host, Assigned: network.PeerID(r.world.local), Term: network.FirstTerm,
+		Host: host, Assigned: link.PeerID(r.world.local), Term: network.FirstTerm,
 		Roster: r.world.WorldRoster(), Chain: chain, FixedAuthority: fixed,
-	}, network.PeerID(r.world.local))
+	}, link.PeerID(r.world.local))
 }
 
 func (r *run) stat(key string) int64 { return r.reg.Ints.Get(key).Load() }
@@ -314,7 +315,7 @@ func (r *run) stat(key string) int64 { return r.reg.Ints.Get(key).Load() }
 func roster(n int) []network.RosterEntry {
 	out := make([]network.RosterEntry, 0, n)
 	for i := range n {
-		out = append(out, network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
+		out = append(out, network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i)})
 	}
 	return out
 }
@@ -370,15 +371,15 @@ func session(t *testing.T, n int, links [][2]int) []*run {
 	t.Helper()
 	mesh := network.NewMesh()
 	for _, l := range links {
-		mesh.Link(network.PeerID(l[0]), network.PeerID(l[1]))
+		mesh.Link(link.PeerID(l[0]), link.PeerID(l[1]))
 	}
 	var chain network.SuccessionChain
 	for id := 2; id <= n; id++ {
-		chain = append(chain, network.ChainEntry{ID: network.PeerID(id), Addr: "mesh"})
+		chain = append(chain, network.ChainEntry{ID: link.PeerID(id), Addr: "mesh"})
 	}
 	runs := make([]*run, n)
 	for i := range runs {
-		runs[i] = newRun(t, uint32(i+1), mesh.Node(network.PeerID(i+1)), roster(n))
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(n))
 		runs[i].open(1, chain, false)
 	}
 	return runs
@@ -389,17 +390,17 @@ func session(t *testing.T, n int, links [][2]int) []*run {
 // a criterion lets an exchange complete: a manifest out, a request back, a repair
 // out again is three rounds.
 func deliver(runs []*run, rounds int) {
-	buf := make([]network.Inbound, 64)
+	buf := make([]link.Inbound, 64)
 	for range rounds {
 		for _, r := range runs {
-			port, ok := r.world.port.(*network.MeshPort)
+			port, ok := r.world.port.(*link.MeshPort)
 			if !ok {
 				continue
 			}
 			for {
 				n := port.Drain(buf)
 				for _, in := range buf[:n] {
-					if in.Kind != network.InboundMessage || in.Msg == nil {
+					if in.Kind != link.InboundMessage || in.Msg == nil {
 						continue
 					}
 					route(r, in)
@@ -417,12 +418,12 @@ func deliver(runs []*run, rounds int) {
 
 // route is the seam NetworkResource binds: every frame the protocol owns, taken as
 // bytes and decided on between two ticks.
-func route(r *run, in network.Inbound) {
+func route(r *run, in link.Inbound) {
 	switch in.Msg.Type {
 	case network.MsgStateCorrection:
 		if done, err := r.chunks.Add(in.Msg.Payload); err == nil && done {
 			_, body := r.chunks.Result()
-			r.chunks = network.SnapshotAssembly{}
+			r.chunks = link.SnapshotAssembly{}
 			r.c.Receive(body)
 		}
 	case network.MsgStateManifest, network.MsgStateRequest,

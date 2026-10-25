@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	link "github.com/lixenwraith/vif/pkg/network"
+
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
@@ -39,9 +41,9 @@ func testOffer() SessionOffer {
 func TestSilentPeerBecomesDisconnectNotification(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ReadTimeout = 20 * time.Millisecond
-	pm := NewPeerManager(cfg)
-	disconnected := make(chan PeerID, 1)
-	pm.SetHandlers(nil, func(id PeerID) { disconnected <- id }, nil)
+	pm := link.NewPeerManager(&cfg.Config)
+	disconnected := make(chan link.PeerID, 1)
+	pm.SetHandlers(nil, func(id link.PeerID) { disconnected <- id }, nil)
 	local, remote := net.Pipe()
 	defer remote.Close()
 	defer pm.Close()
@@ -63,16 +65,16 @@ func TestSilentPeerBecomesDisconnectNotification(t *testing.T) {
 func TestProbesKeepAQuietLinkAlive(t *testing.T) {
 	quiet := 5 * parameter.NetworkProbeInterval
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.ReadTimeout = quiet
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
-	joinCfg := DebugConfig(RolePeer, "")
+	joinCfg := DebugConfig(link.RolePeer, "")
 	joinCfg.ReadTimeout = quiet
 	pending, _, err := DialSession(host.Addr().String(), joinCfg)
 	if err != nil {
@@ -96,7 +98,7 @@ func TestProbesKeepAQuietLinkAlive(t *testing.T) {
 	if err := pending.Ready(); err != nil {
 		t.Fatal(err)
 	}
-	guest := NewSocketPort(guestCfg)
+	guest := link.NewSocketPort(guestCfg)
 	defer guest.Close()
 	if err := guest.Start(); err != nil {
 		t.Fatal(err)
@@ -120,16 +122,16 @@ func TestTheCoordinatorAssignsWithTheClaimsADialNames(t *testing.T) {
 		assigned <- claims
 		return offer, nil
 	}}, time.Second)
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = accept
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
 	for _, kept := range [][]string{nil, {NewClaimToken(), NewClaimToken()}} {
-		cfg := DebugConfig(RolePeer, "")
+		cfg := DebugConfig(link.RolePeer, "")
 		cfg.Claims = kept
 		pending, _, err := DialSession(host.Addr().String(), cfg)
 		if err != nil {
@@ -149,15 +151,15 @@ func TestTheCoordinatorAssignsWithTheClaimsADialNames(t *testing.T) {
 
 func TestSessionRejectionReturnsTheJoinErrorUnchanged(t *testing.T) {
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
-	pending, _, err := DialSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	pending, _, err := DialSession(host.Addr().String(), DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,13 +214,13 @@ func TestAFailedBindOrDialSaysWhatThePlayerCanDo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer busy.Close()
-	host := NewSocketPort(DebugConfig(RoleHost, busy.Addr().String()))
+	host := link.NewSocketPort(&DebugConfig(link.RoleHost, busy.Addr().String()).Config)
 	defer host.Close()
 	if err := host.Start(); err == nil || !strings.Contains(err.Error(), "choose another") || !errors.Is(err, syscall.EADDRINUSE) {
 		t.Fatalf("binding a port in use: %v", err)
 	}
 	// Allowed where the system lets this user bind it; then there is nothing to say
-	low := NewSocketPort(DebugConfig(RoleHost, "127.0.0.1:1"))
+	low := link.NewSocketPort(&DebugConfig(link.RoleHost, "127.0.0.1:1").Config)
 	defer low.Close()
 	if err := low.Start(); err != nil && !strings.Contains(err.Error(), "below 1024") {
 		t.Fatalf("binding a privileged port: %v", err)
@@ -230,23 +232,23 @@ func TestAFailedBindOrDialSaysWhatThePlayerCanDo(t *testing.T) {
 	}
 	addr := gone.Addr().String()
 	gone.Close()
-	if _, err := dial(addr, DefaultConfig()); err == nil || !strings.Contains(err.Error(), "nothing is listening") {
+	if _, err := link.Dial(addr, &DefaultConfig().Config); err == nil || !strings.Contains(err.Error(), "nothing is listening") {
 		t.Fatalf("dialling a closed port: %v", err)
 	}
 }
 
 func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatalf("host start: %v", err)
 	}
 
-	pending, gotOffer, err := DialSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	pending, gotOffer, err := DialSession(host.Addr().String(), DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -276,7 +278,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	}
 	waitFor(t, func() bool { return host.Confirmed(2) }, host.Changes(), "guest ready")
 
-	guest := NewSocketPort(guestCfg)
+	guest := link.NewSocketPort(guestCfg)
 	if err := guest.Start(); err != nil {
 		t.Fatalf("guest start: %v", err)
 	}
@@ -287,16 +289,16 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	if !host.Send(2, uint8(MsgStateUnserved), final) {
 		t.Fatal("host send failed")
 	}
-	waitInbound(t, guest, func(in Inbound) bool {
-		return in.Kind == InboundMessage && in.Peer == 1 && in.Msg != nil && string(in.Msg.Payload) == string(final)
+	waitInbound(t, guest, func(in link.Inbound) bool {
+		return in.Kind == link.InboundMessage && in.Peer == 1 && in.Msg != nil && string(in.Msg.Payload) == string(final)
 	})
 
 	body := []byte("framed payload")
 	if !guest.Send(1, uint8(MsgStateUnserved), body) {
 		t.Fatal("guest send failed")
 	}
-	waitInbound(t, host, func(in Inbound) bool {
-		return in.Kind == InboundMessage && in.Peer == 2 && in.Msg != nil && string(in.Msg.Payload) == string(body)
+	waitInbound(t, host, func(in link.Inbound) bool {
+		return in.Kind == link.InboundMessage && in.Peer == 2 && in.Msg != nil && string(in.Msg.Payload) == string(body)
 	})
 
 	if err := guest.Close(); err != nil {
@@ -306,17 +308,17 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	if !host.IsRunning() {
 		t.Fatal("peer disconnect stopped the host listener")
 	}
-	waitInbound(t, host, func(in Inbound) bool { return in.Kind == InboundDisconnect && in.Peer == 2 })
+	waitInbound(t, host, func(in link.Inbound) bool { return in.Kind == link.InboundDisconnect && in.Peer == 2 })
 }
 
 // pressHost serves offer through a coordinator that previews it, counting the
 // places it assigns and gives back, with window as its ready period.
-func pressHost(t *testing.T, offer SessionOffer, window time.Duration) (host *SocketPort, assigned, released *atomic.Int32) {
+func pressHost(t *testing.T, offer SessionOffer, window time.Duration) (host *link.SocketPort, assigned, released *atomic.Int32) {
 	t.Helper()
 	preview := offer
 	preview.Assigned = 0
 	assigned, released = new(atomic.Int32), new(atomic.Int32)
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Preview: func([]string) (SessionOffer, error) { return preview, nil },
@@ -324,10 +326,10 @@ func pressHost(t *testing.T, offer SessionOffer, window time.Duration) (host *So
 			assigned.Add(1)
 			return offer, nil
 		},
-		Release:     func(PeerID) { released.Add(1) },
+		Release:     func(link.PeerID) { released.Add(1) },
 		PressWindow: window,
 	}, time.Second)
-	host = NewSocketPort(hostCfg)
+	host = link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = host.Close() })
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
@@ -342,13 +344,13 @@ func pressHost(t *testing.T, offer SessionOffer, window time.Duration) (host *So
 func TestAPreparingDialHoldsNothingUntilItsSeat(t *testing.T) {
 	offer := testOffer()
 	host, assigned, _ := pressHost(t, offer, 0)
-	pending, preview, err := PreviewSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	pending, preview, err := PreviewSession(host.Addr().String(), DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer pending.Close()
 	unseated := pending.TransportConfig()
-	if preview.Assigned != 0 || preview.Host != offer.Host || unseated.ParticipantID != 0 || unseated.preconnected != nil {
+	if preview.Assigned != 0 || preview.Host != offer.Host || unseated.ParticipantID != 0 || unseated.Preconnected != nil {
 		t.Fatalf("a preview assigned %d, and a port built on it holds identity %d", preview.Assigned, unseated.ParticipantID)
 	}
 	if err := pending.Prepared(); err != nil {
@@ -365,9 +367,9 @@ func TestAPreparingDialHoldsNothingUntilItsSeat(t *testing.T) {
 	if seated.Assigned != offer.Assigned || assigned.Load() != 1 {
 		t.Fatalf("seated as %d with %d assignment(s)", seated.Assigned, assigned.Load())
 	}
-	guest := NewSocketPort(unseated)
+	guest := link.NewSocketPort(unseated)
 	defer guest.Close()
-	if err := guest.TakeJoin(pending); err != nil {
+	if err := pending.Hand(guest); err != nil {
 		t.Fatal(err)
 	}
 	if guest.ParticipantID() != uint32(offer.Assigned) {
@@ -402,7 +404,7 @@ func TestAPreparingDialHoldsNothingUntilItsSeat(t *testing.T) {
 // try the stream at all.
 func TestAPressAfterTheReadyPeriodLeavesNothingHeld(t *testing.T) {
 	host, assigned, released := pressHost(t, testOffer(), 50*time.Millisecond)
-	pending, _, err := PreviewSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	pending, _, err := PreviewSession(host.Addr().String(), DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +428,7 @@ func TestAPressAfterTheReadyPeriodLeavesNothingHeld(t *testing.T) {
 		t.Fatalf("a press after the ready period: %v", err)
 	}
 
-	late, _, err := PreviewSession(host.Addr().String(), DebugConfig(RolePeer, ""))
+	late, _, err := PreviewSession(host.Addr().String(), DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +450,7 @@ func TestAPreviewRefusesAnotherBuildBeforeAnySeat(t *testing.T) {
 	offer.Identity = sampleIdentity()
 	offer.Identity.Protocol++
 	host, assigned, _ := pressHost(t, offer, 0)
-	cfg := DebugConfig(RolePeer, "")
+	cfg := DebugConfig(link.RolePeer, "")
 	cfg.Identity = sampleIdentity()
 	if _, _, err := PreviewSession(host.Addr().String(), cfg); !errors.Is(err, &Refusal{Code: RefusalIdentity}) {
 		t.Fatalf("another build previewed the session: %v", err)
@@ -472,10 +474,10 @@ func waitFor(t *testing.T, ready func() bool, changes <-chan struct{}, what stri
 	}
 }
 
-func waitInbound(t *testing.T, p *SocketPort, match func(Inbound) bool) {
+func waitInbound(t *testing.T, p *link.SocketPort, match func(link.Inbound) bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
-	var buf [16]Inbound
+	var buf [16]link.Inbound
 	for time.Now().Before(deadline) {
 		for _, in := range buf[:p.Drain(buf[:])] {
 			if match(in) {
@@ -495,24 +497,24 @@ func waitInbound(t *testing.T, p *SocketPort, match func(Inbound) bool) {
 // and the host answers on any path before it.
 func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "ws://127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "ws://127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Assign: func([]string) (SessionOffer, error) { return offer, nil },
 		Name:   "7f3c1a",
 	}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
 	join := func(name string) (*PendingJoin, SessionOffer, error) {
 		route := host.Addr().String() + "/vif/ws/" + name
-		e, err := ParseEndpoint(route)
+		e, err := link.ParseEndpoint(route)
 		if err != nil {
 			t.Fatal(err)
 		}
-		cfg := DebugConfig(RolePeer, "")
+		cfg := DebugConfig(link.RolePeer, "")
 		cfg.SessionName = e.Name
 		return DialSession(route, cfg)
 	}
@@ -535,13 +537,13 @@ func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
 // is the word on whether that session exists.
 func TestALinkAClientCannotTakeJoinsByTheRouteItsSiteLists(t *testing.T) {
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Assign: func([]string) (SessionOffer, error) { return offer, nil },
 		Name:   "7f3c1a",
 	}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
@@ -557,7 +559,7 @@ func TestALinkAClientCannotTakeJoinsByTheRouteItsSiteLists(t *testing.T) {
 	}))
 	defer site.Close()
 	join := func(name string) (*PendingJoin, SessionOffer, error) {
-		cfg := DebugConfig(RolePeer, "")
+		cfg := DebugConfig(link.RolePeer, "")
 		cfg.SessionName = name
 		return DialSession("ws"+strings.TrimPrefix(site.URL, "http")+"/vif/ws/"+name, cfg)
 	}
@@ -572,22 +574,6 @@ func TestALinkAClientCannotTakeJoinsByTheRouteItsSiteLists(t *testing.T) {
 	}
 	if _, _, err := join("1a3c7f"); err == nil || !strings.Contains(err.Error(), "lists no session 1a3c7f") {
 		t.Fatalf("joining a session the site does not list: %v", err)
-	}
-}
-
-// TestALinkIsLookedUpWhereItsSiteAnswers: a front door's site is its host's https
-// origin, and a WebSocket route's is its own, then that host's.
-func TestALinkIsLookedUpWhereItsSiteAnswers(t *testing.T) {
-	for addr, want := range map[string][]string{
-		"lixen.com:7777":            {"https://lixen.com"},
-		"[::1]:7777":                {"https://[::1]"},
-		"wss://lixen.com/vif/ws/a1": {"https://lixen.com"},
-		"wss://lixen.com:7777/a1":   {"https://lixen.com:7777", "https://lixen.com"},
-		"ws://127.0.0.1:8080/a1":    {"http://127.0.0.1:8080", "https://127.0.0.1"},
-	} {
-		if got := linkSites(addr); !slices.Equal(got, want) {
-			t.Errorf("linkSites(%q) = %q, want %q", addr, got, want)
-		}
 	}
 }
 
@@ -638,7 +624,7 @@ func TestAdmissionIgnoresWhatADialerChangesFreely(t *testing.T) {
 func TestAnInProcessStreamSpendsNoBudget(t *testing.T) {
 	t.Parallel()
 	l := NewAdmissionLimiter()
-	near, far := Pipe()
+	near, far := link.Pipe()
 	defer near.Close()
 	defer far.Close()
 	for i := range parameter.NetworkAdmitBurst + 1 {
@@ -719,22 +705,22 @@ func TestAWssHostIsJoinedByADialerThatTrustsItsCertificate(t *testing.T) {
 	dir := t.TempDir()
 	certFile, caFile := filepath.Join(dir, "host.pem"), filepath.Join(dir, "ca.pem")
 	writeIssued(t, certFile, caFile)
-	serverTLS, err := LoadTLS(certFile, "")
+	serverTLS, err := link.LoadTLS(certFile, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Listen("wss://127.0.0.1:0", DebugConfig(RoleHost, "")); err == nil {
+	if _, err := link.Listen("wss://127.0.0.1:0", &DebugConfig(link.RoleHost, "").Config); err == nil {
 		t.Fatal("a wss door opened with no certificate to serve")
 	}
 
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "wss://127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "wss://127.0.0.1:0")
 	hostCfg.TLS = serverTLS
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Assign: func([]string) (SessionOffer, error) { return offer, nil },
 	}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
@@ -744,13 +730,13 @@ func TestAWssHostIsJoinedByADialerThatTrustsItsCertificate(t *testing.T) {
 		t.Fatalf("the door is %s, want a wss:// address", route)
 	}
 
-	if _, _, err := DialSession(route, DebugConfig(RolePeer, "")); err == nil {
+	if _, _, err := DialSession(route, DebugConfig(link.RolePeer, "")); err == nil {
 		t.Fatal("a dial trusting none of the host's authority was admitted")
 	} else if err.Error() != "the host's certificate is not one this machine trusts; -ca names what to trust it by" {
 		t.Fatalf("an untrusted certificate read %q", err)
 	}
-	trusting := DebugConfig(RolePeer, "")
-	if trusting.TLS, err = TrustTLS(caFile); err != nil {
+	trusting := DebugConfig(link.RolePeer, "")
+	if trusting.TLS, err = link.TrustTLS(caFile); err != nil {
 		t.Fatal(err)
 	}
 	pending, got, err := DialSession(route, trusting)
@@ -820,12 +806,12 @@ func writeIssued(t *testing.T, certFile, caFile string) {
 // session, and a dialer at either is offered its place.
 func TestAHostServesEveryDoorItNames(t *testing.T) {
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0,ws://127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0,ws://127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Assign: func([]string) (SessionOffer, error) { return offer, nil },
 	}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
@@ -836,7 +822,7 @@ func TestAHostServesEveryDoorItNames(t *testing.T) {
 	}
 	_, wsPort, _ := net.SplitHostPort(strings.TrimPrefix(doors[1].String(), "ws://"))
 	for _, door := range []string{doors[0].String(), doors[1].String() + "/", "ws://:" + wsPort + "/"} {
-		pending, got, err := DialSession(door, DebugConfig(RolePeer, ""))
+		pending, got, err := DialSession(door, DebugConfig(link.RolePeer, ""))
 		if err != nil {
 			t.Fatalf("a dial at %s was refused: %v", door, err)
 		}
@@ -846,13 +832,13 @@ func TestAHostServesEveryDoorItNames(t *testing.T) {
 		}
 	}
 	for _, list := range []string{":7777/name", "wss://:7777/vif/ws", "127.0.0.1:0,", "https://site.example"} {
-		if _, err := Doors(list); err == nil {
+		if _, err := link.Doors(list); err == nil {
 			t.Errorf("Doors(%q) was accepted", list)
 		}
 	}
 	for addr, hostless := range map[string]bool{":7777": true, "0.0.0.0:7777": true, "ws://:7778": true, "wss://[::]:7778": true,
 		"127.0.0.1:7777": false, "host.example:7777": false, "ws://host.example:7778": false} {
-		e, err := ParseEndpoint(addr)
+		e, err := link.ParseEndpoint(addr)
 		if err != nil || e.Hostless() != hostless {
 			t.Errorf("%s hostless: %v, %v; want %v", addr, e.Hostless(), err, hostless)
 		}
@@ -864,42 +850,42 @@ func TestAHostServesEveryDoorItNames(t *testing.T) {
 // unauthenticated; one pinning its fingerprint is admitted too, and one pinning
 // another is told the certificate is not the one it names.
 func TestASelfSignedDoorIsJoinedAsItIs(t *testing.T) {
-	serverTLS, err := SelfSignedTLS([]string{"host.example"})
+	serverTLS, err := link.SelfSignedTLS([]string{"host.example"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	offer := testOffer()
-	hostCfg := DebugConfig(RoleHost, "wss://127.0.0.1:0")
+	hostCfg := DebugConfig(link.RoleHost, "wss://127.0.0.1:0")
 	hostCfg.TLS = serverTLS
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Assign: func([]string) (SessionOffer, error) { return offer, nil },
 	}, time.Second)
-	host := NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
 		t.Fatal(err)
 	}
 	route := host.Addr().String() + "/"
 
-	pin := Fingerprint(serverTLS)
+	pin := link.Fingerprint(serverTLS)
 	if !strings.HasPrefix(pin, "sha256:") || len(pin) != len("sha256:")+64 {
 		t.Fatalf("fingerprint %q", pin)
 	}
-	plain, _, err := DialSession(route, DebugConfig(RolePeer, ""))
+	plain, _, err := DialSession(route, DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatalf("a dial with no -ca was refused by a self-signed door: %v", err)
 	}
 	plain.Close()
-	wrong := DebugConfig(RolePeer, "")
-	if wrong.TLS, err = TrustTLS("sha256:" + strings.Repeat("00", 32)); err != nil {
+	wrong := DebugConfig(link.RolePeer, "")
+	if wrong.TLS, err = link.TrustTLS("sha256:" + strings.Repeat("00", 32)); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := DialSession(route, wrong); err == nil || err.Error() != "the host's certificate is not the one -ca pins" {
 		t.Fatalf("a dial pinning another certificate: %v", err)
 	}
-	pinned := DebugConfig(RolePeer, "")
-	if pinned.TLS, err = TrustTLS(pin); err != nil {
+	pinned := DebugConfig(link.RolePeer, "")
+	if pinned.TLS, err = link.TrustTLS(pin); err != nil {
 		t.Fatal(err)
 	}
 	pending, got, err := DialSession(route, pinned)
@@ -910,7 +896,7 @@ func TestASelfSignedDoorIsJoinedAsItIs(t *testing.T) {
 	if got.Assigned != offer.Assigned {
 		t.Fatalf("offer assigned %d, want %d", got.Assigned, offer.Assigned)
 	}
-	if _, err := TrustTLS("sha256:abc"); err == nil {
+	if _, err := link.TrustTLS("sha256:abc"); err == nil {
 		t.Fatal("a short fingerprint was accepted")
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net"
-	"time"
 )
 
 // SnapshotChunkHeader precedes each frame of a capture in transit:
@@ -200,71 +198,3 @@ func (s *SnapshotAssembly) Result() (uint64, []byte) { return s.tick, s.body }
 
 // Tick names the transfer in progress, zero before the first chunk.
 func (s *SnapshotAssembly) Tick() uint64 { return s.tick }
-
-// writeSnapshot sends a whole capture down a raw handshake stream.
-func writeSnapshot(conn net.Conn, timeout time.Duration, tick uint64, body []byte) error {
-	chunks, err := EncodeSnapshotChunks(0, tick, body)
-	if err != nil {
-		return err
-	}
-	for _, c := range chunks {
-		if timeout > 0 {
-			_ = conn.SetWriteDeadline(time.Now().Add(timeout))
-		}
-		if err := NewMessage(MsgStateSnapshot, c).Encode(conn); err != nil {
-			_ = conn.SetWriteDeadline(time.Time{})
-			return err
-		}
-	}
-	_ = conn.SetWriteDeadline(time.Time{})
-	return nil
-}
-
-// readSnapshot reads a whole capture from a raw handshake stream, holding the
-// session traffic that arrives alongside it.
-//
-// The interleaving is by design rather than by accident. A mid-run host admits a
-// participant before it reads the world for it, so the epochs it produces during
-// the transfer reach that participant instead of falling into the gap; they arrive
-// on this stream, between chunks, and hold keeps them for the barrier to receive
-// once the world they apply to exists. A probe is answered the same way. Anything
-// else is a protocol error, because the next message on this stream decides what
-// the joiner does with the world it just received.
-func readSnapshot(p *PendingJoin) (uint64, []byte, error) {
-	return readChunked(p, MsgStateSnapshot)
-}
-
-// readChunked reassembles one chunked transfer off the handshake stream, holding
-// the session traffic that arrives beside it. want names the kind: a capture and a
-// scenario are the two messages whose size is a function of their content, and
-// they share the framing because they are the same problem.
-func readChunked(p *PendingJoin, want MessageType) (uint64, []byte, error) {
-	defer p.conn.SetReadDeadline(time.Time{})
-	var asm SnapshotAssembly
-	for {
-		msg, err := p.next()
-		if err != nil {
-			return 0, nil, err
-		}
-		if p.hold(msg) {
-			continue
-		}
-		if msg.Type == MsgJoinReply {
-			// The coordinator refused mid-transfer. Its reason is worth more than
-			// the surprise at the message kind, and it is the only thing the
-			// dialer can act on.
-			return 0, nil, refusalFrom(msg)
-		}
-		if msg.Type != want {
-			return 0, nil, fmt.Errorf("join transfer: got message %#x, want %#x", msg.Type, want)
-		}
-		done, err := asm.Add(msg.Payload)
-		if err != nil {
-			return 0, nil, err
-		}
-		if done {
-			tick, body := asm.Result()
-			return tick, body, nil
-		}
-	}
-}

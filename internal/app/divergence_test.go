@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -25,7 +25,7 @@ func TestADivergenceOverAShapedLinkNamesItsRows(t *testing.T) {
 	if os.Getenv("VIF_DIVERGENCE") == "" {
 		t.Skip("set VIF_DIVERGENCE=1 to run the divergence harness")
 	}
-	shape := network.LinkShape{LatencyTicks: 3, JitterTicks: 3, JitterEvery: 97}
+	shape := link.LinkShape{LatencyTicks: 3, JitterTicks: 3, JitterEvery: 97}
 	if spec := os.Getenv("VIF_DIVERGENCE_SHAPE"); spec != "" {
 		var loss int
 		if _, err := fmt.Sscanf(spec, "%d,%d,%d,%d", &shape.LatencyTicks, &shape.JitterTicks, &shape.JitterEvery, &loss); err != nil {
@@ -62,7 +62,7 @@ func TestADivergenceOverAShapedLinkNamesItsRows(t *testing.T) {
 // it: the trim and step each tick leaves are owed as fractions of a tick, and a
 // whole one owed skips or adds a guest tick. leadMax is the highest lead the guest
 // held, the input latency the link's spikes cost it.
-func shapedFight(t *testing.T, seed uint64, shape network.LinkShape) (host, guest *App, fight func(ticks int), leadMax *int64) {
+func shapedFight(t *testing.T, seed uint64, shape link.LinkShape) (host, guest *App, fight func(ticks int), leadMax *int64) {
 	t.Helper()
 	leadMax = new(int64)
 	apps := meshSessionOf(t, Config{Seed: seed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}},

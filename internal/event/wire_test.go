@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
-	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestWireEncodingBudget records the representative per-tick stream cost.
@@ -43,7 +43,7 @@ func TestWireEncodingBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("empty epoch: %d bytes", len(empty)+network.HeaderSize)
+	t.Logf("empty epoch: %d bytes", len(empty)+link.HeaderSize)
 	state, encErr := event.NewWireFrame(event.GameEvent{
 		Type: event.EventCursorStateSync, Domain: core.DomainShared,
 		Payload: &event.CursorStatePayload{
@@ -63,10 +63,10 @@ func TestWireEncodingBudget(t *testing.T) {
 	}
 	// A sync carries the cells that are set: this one, with its energy, heat, hit
 	// points, shield and two charged weapons, is a third of the 27-cell frame.
-	if n := len(stateBody) + network.HeaderSize; n > 120 {
+	if n := len(stateBody) + link.HeaderSize; n > 120 {
 		t.Fatalf("one owner-state sync: %d bytes exceeds the 120-byte budget", n)
 	}
-	t.Logf("one owner-state sync: %d bytes", len(stateBody)+network.HeaderSize)
+	t.Logf("one owner-state sync: %d bytes", len(stateBody)+link.HeaderSize)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			frames := make([]event.ScheduledWireFrame, 0, tc.count)
@@ -83,7 +83,7 @@ func TestWireEncodingBudget(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			bytes := len(body) + network.HeaderSize
+			bytes := len(body) + link.HeaderSize
 			t.Logf("%s: %d bytes", tc.name, bytes)
 			if bytes > tc.budget {
 				t.Fatalf("wire size %d exceeds %d-byte budget", bytes, tc.budget)
