@@ -393,7 +393,7 @@ func deliver(runs []*run, rounds int) {
 	buf := make([]link.Inbound, 64)
 	for range rounds {
 		for _, r := range runs {
-			port, ok := r.world.port.(*link.MeshPort)
+			port, ok := r.world.port.(interface{ Drain([]link.Inbound) int })
 			if !ok {
 				continue
 			}

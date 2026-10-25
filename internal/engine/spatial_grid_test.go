@@ -289,3 +289,66 @@ func TestTopGlyphIsSharedThenNearestThenLowest(t *testing.T) {
 		t.Fatalf("top glyph = %v, want shared %v over any player level", top, gold)
 	}
 }
+
+// TestGridOccupiedListIsTheCellsHoldingEntities holds the index a copy and the gauges
+// read in place of the map: every listed cell holds something, every cell holding
+// something is listed once at its slot, and the stats read off the list are the
+// full scan's.
+func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
+	g := NewSpatialGrid(7, 5)
+	rng := rand.New(rand.NewPCG(3, 9))
+	type placed struct {
+		e    core.Entity
+		x, y int
+	}
+	var held []placed
+	check := func() {
+		t.Helper()
+		seen := map[int32]bool{}
+		for slot, idx := range g.Occupied() {
+			c := &g.Cells[idx]
+			if c.Count == 0 || int(c.slot) != slot || seen[idx] {
+				t.Fatalf("occupied[%d] = cell %d: count %d, slot %d, seen %v", slot, idx, c.Count, c.slot, seen[idx])
+			}
+			seen[idx] = true
+		}
+		var want GridStats
+		for i := range g.Cells {
+			if n := int(g.Cells[i].Count); n > 0 {
+				if !seen[int32(i)] {
+					t.Fatalf("cell %d holds %d and is not listed", i, n)
+				}
+				want.CellsOccupied++
+				want.EntitiesTotal += n
+				want.EntitiesShared += int(g.Cells[i].SharedCount)
+				want.MaxOccupancy = max(want.MaxOccupancy, n)
+			}
+		}
+		if got := g.ComputeStats(); got != want {
+			t.Fatalf("stats off the list %+v, off the cells %+v", got, want)
+		}
+	}
+	for step := range 2000 {
+		switch {
+		case len(held) > 0 && rng.IntN(3) == 0:
+			i := rng.IntN(len(held))
+			g.RemoveEntityAt(held[i].e, held[i].x, held[i].y)
+			held[i] = held[len(held)-1]
+			held = held[:len(held)-1]
+		case step%97 == 96:
+			g.Clear()
+			held = nil
+		default:
+			d := core.DomainShared
+			if rng.IntN(4) == 0 {
+				d = core.DomainPlayer
+			}
+			e := core.MakeEntity(d, uint64(step+1))
+			x, y := rng.IntN(7), rng.IntN(5)
+			if g.Set(e, x, y) {
+				held = append(held, placed{e, x, y})
+			}
+		}
+		check()
+	}
+}

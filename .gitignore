@@ -19,6 +19,6 @@ tmp/**/*.jsonl
 journal/**/*.jsonl
 /dist/
 /stage/
-tool/vif-allocator/vif-allocator
+tool/vif-router/vif-router
 *.exe
 /soundlab

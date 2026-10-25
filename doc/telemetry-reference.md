@@ -272,7 +272,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.migrating` (bool) | A succession is open, or a handoff was adopted less than `NetworkMigrationBadgeTicks` ago. The status bar shows `Migrating`, with `rejoin_attempts` when non-zero, over `Host lost`. Dials are refused while the succession is open (`Authority.Migrating`), not for the tail |
 | `network.host_lost` (bool) | The authority went and this instance continues from the last authoritative state: a guest lost its link to the authority, or a succession ended as a fork. An adopted handoff clears it, as does a session the run opens. It outranks every badge but `Migrating` (`Host lost`), and `:session` names it |
 | `network.evicted` (int) | Participants this authority dropped, under the slow policy or for exceeding the ingress byte budget |
-| `network.chain` (int) | Participants in the succession chain. `:session` reports it as "confirmed reachable". A participant that declared no port plays, and is never a candidate ([Multiplayer](multi-player.md) §5.3) |
+| `network.chain` (int) | Candidates in the succession chain, the participants with an address. `:session` reports it as "confirmed reachable" and names the doors beside it. A participant that declared no port plays, and is never a candidate, listed by its door alone if it relays ([Multiplayer](multi-player.md) §5.3, §5.6) |
 | `network.rejoin_attempts` (int) | Passes down the succession list, one a second, while this instance walks it or has no path to its authority |
 | `network.listening` (bool) | This instance bound a port peers can dial back. False on a leaf: a `-no-advertise` run, or one whose bind failed |
 
@@ -282,7 +282,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 |---|---|
 | `snapshot.bytes`, `snapshot.capture_us`, `snapshot.encode_us` (int) | The last shared-world capture this instance read: its encoded length, its cost under the world lock (the one stall a join is allowed), and its encoding cost outside the lock |
 | `snapshot.pages_repaired`, `snapshot.cells_repaired`, `snapshot.entities_repaired` (int), `snapshot.repair_sections` (string) | Repairs this instance applied: pages and rows written, entities touched, and the sections the last one moved, which the debug record `repair rows` names row by row |
-| `snapshot.stage_us`, `snapshot.commit_us`, `snapshot.project_us`, `snapshot.write_us`, `snapshot.install_tick`, `snapshot.catch_up_ticks` (int) | The last install: staging cost, commit cost and its two parts under the live lock (the ticks the staging world simulated, then the capture, comparison and write), the tick it described, and the ticks simulated afterwards to close the gap |
+| `snapshot.stage_us`, `snapshot.commit_us`, `snapshot.project_us`, `snapshot.write_us`, `snapshot.install_tick`, `snapshot.catch_up_ticks` (int) | The last install: staging cost, commit cost and its two parts under the live lock (the ticks the staging world simulated, then the comparison of its stores against the live ones in place and the write), the tick it described, and the ticks simulated afterwards to close the gap |
 | `snapshot.keyframes` (int) | Whole captures this host published, as a join gate or a cadence keyframe |
 | `snapshot.corrections_sent`, `snapshot.correction_bytes_sent` (int) | Corrections broadcast, keyframes and deltas together, and their total size |
 | `snapshot.corrections_applied` (int) | Corrections this instance installed |

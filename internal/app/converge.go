@@ -477,37 +477,48 @@ var errRedialEnded = errors.New("the run went on without this host")
 // redials. The claim is let go for the dial to name, its record as the drop left it.
 func (m *membership) redial(lost link.PeerID) bool {
 	var cfg Config
-	door := false
+	door, relay := false, false
 	m.world.RunSafe(func() {
 		cfg = *m.cfg
 		door = cfg.Mode == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" &&
 			!m.leaving.Load() && !m.run.replacing()
+		relay = lost == m.joinedThrough
 	})
-	if !door {
+	if !door || !relay && lost != m.authority.Holder() {
 		return false
 	}
-	addr, ok := m.authority.Chain().Lookup(lost)
-	if !ok {
-		addr = cfg.JoinAddress
+	// The relay this run joined through answers at the door it joined at; a host
+	// where the chain says, else at the door this run joined at.
+	addr := cfg.JoinAddress
+	if a, ok := m.authority.Chain().Lookup(lost); ok && !relay {
+		addr = a
 	}
 	c := m.claim.Swap(nil)
 	if c == nil {
 		return false
 	}
 	m.claims.release(c)
-	m.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost),
-		"dial", link.Shown(addr))
-	core.Go(func() { m.redialDoor(cfg, addr, lost, c) })
+	if relay {
+		m.log.Info("session", "msg", "redialling the lost relay", "relay", uint64(lost), "dial", link.Shown(addr))
+	} else {
+		m.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost), "dial", link.Shown(addr))
+	}
+	core.Go(func() { m.redialDoor(cfg, addr, lost, c, relay) })
 	return true
 }
 
-// redialDoor dials the lost host at addr while this run waits on it. Admitted back
-// into its own place, the run is replaced by the one admitted; a refusal no retry
-// helps, a door nothing answers at, or a place that is not this run's begins the
-// walk. A run that stays in its session holds its claim again.
-func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *claim) {
+// redialDoor dials the lost host, or the lost relay, at addr while this run waits on
+// it. Admitted back into its own place, the run is replaced by the one admitted; a
+// refusal no retry helps, a door nothing answers at, or a place that is not this
+// run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
+// A run that stays in its session holds its claim again.
+func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *claim, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
+	notice := "Host connection restored"
+	if relay {
+		notice = "Relay connection restored"
+	}
 	for m.authority.Redialing(lost) {
 		d, err := dialJoin(dial)
 		if err == nil {
@@ -516,23 +527,26 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 		}
 		if err != nil {
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
-				m.log.Info("session", "msg", "lost host refused the redial", "error", err.Error())
+				m.log.Info("session", "msg", "the redial was refused", "peer", uint64(lost), "error", err.Error())
 				m.authority.RedialRefused(lost)
 			} else {
 				time.Sleep(parameter.NetworkRejoinPassInterval) // [wall] a link wait, not a game one
 			}
 			continue
 		}
-		back := &restartRequest{Notice: "Host connection restored", dialled: d}
+		back := &restartRequest{Notice: notice, dialled: d}
 		if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.replaceWith(back) {
-			m.log.Info("session", "msg", "lost host admitted this run back", "authority", uint64(lost))
+			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return
 		}
 		d.abandon(errRedialEnded)
 		if d.claim != c {
-			m.log.Info("session", "msg", "lost host holds no place for this run")
+			m.log.Info("session", "msg", "the redial found no place for this run", "peer", uint64(lost))
 			m.authority.RedialRefused(lost)
 		}
+	}
+	if !relay && m.rejoinThrough(cfg, lost, c) {
+		return
 	}
 	m.world.RunSafe(func() {
 		if m.cfg.JoinAddress != cfg.JoinAddress || !m.claims.hold(c) {
@@ -544,6 +558,57 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 			m.claims.release(c)
 		}
 	})
+}
+
+// rejoinThrough dials, while this run walks for the host it lost, each candidate
+// whose turn has come, for one that takes this run back into its place as a -relay
+// door would: the host still runs, with this run's Wraith, and only this run's
+// link went. Reports whether one took it, the run then replaced by the one
+// admitted; one that refuses outright, or a host with no place, is not dialled again.
+func (m *membership) rejoinThrough(cfg Config, lost link.PeerID, c *claim) bool {
+	dial := cfg
+	done := make(map[link.PeerID]bool)
+	for {
+		targets, open := m.authority.Rejoins(lost)
+		if !open {
+			return false
+		}
+		chain := m.authority.Chain()
+		for _, id := range targets {
+			// Its door, where it admits anyone, before its port, which takes a join only
+			// while its player relays for others.
+			addr, ok := chain.Door(id)
+			if !ok {
+				addr, ok = chain.Lookup(id)
+			}
+			if done[id] || !ok {
+				continue
+			}
+			dial.JoinAddress = addr
+			d, err := dialJoin(dial)
+			if err == nil {
+				err = d.seat(cfg.holder != 0)
+			}
+			if err != nil {
+				if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
+					done[id] = true
+					m.log.Info("session", "msg", "a candidate refused the rejoin", "candidate", uint64(id), "error", err.Error())
+				}
+				continue
+			}
+			back := &restartRequest{Notice: "Host connection restored", dialled: d}
+			if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.replaceWith(back) {
+				m.log.Info("session", "msg", "a candidate took this run back to its host", "candidate", uint64(id), "authority", uint64(lost))
+				return true
+			}
+			d.abandon(errRedialEnded)
+			if d.claim != c {
+				m.log.Info("session", "msg", "the host holds no place for this run", "candidate", uint64(id))
+				return false
+			}
+		}
+		time.Sleep(parameter.NetworkRejoinPassInterval) // [wall] a link wait, not a game one
+	}
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

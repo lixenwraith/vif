@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Sessions: sockets to a host, an allocator site or a WebSocket route. -->
+    <!-- Sessions: sockets to a host, a router site or a WebSocket route. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Back reaches the game through the dispatcher on every release since 13;

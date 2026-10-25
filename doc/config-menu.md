@@ -23,7 +23,7 @@ never rewritten.
 | Anywhere | Escape | Cancel a form, return to categories, then close. `q` also goes back in menus. A press outside the window does the same. |
 | Anywhere | Ctrl-G or F10 | Close the menu and discard an unsubmitted form. |
 
-Submitting a session action closes the menu and resumes play. Joining, allocator
+Submitting a session action closes the menu and resumes play. Joining, router
 requests and bot admission complete asynchronously; the status bar reports
 progress or failure. Cancelling a form before submission starts no action.
 
@@ -108,11 +108,11 @@ not host one.
 Joining replaces the current solo run only after admission succeeds. An active
 session, a pending join, or a driven run without a restart loop disables joining.
 
-**Request a session** exposes the existing vif-allocator request API:
+**Request a session** exposes the existing vif-router request API:
 
 | Field | Meaning |
 |---|---|
-| Site | Allocator HTTP(S) origin; defaults to `https://lixen.com`. |
+| Site | Router HTTP(S) origin; defaults to `https://lixen.com`. |
 | Players | Total player slots including you; `0` uses the server default. |
 | Scenario | Server-side scenario name; blank uses its default. Local files are not uploaded. |
 

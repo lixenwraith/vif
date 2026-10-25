@@ -24,7 +24,7 @@ import (
 func writeLinger(configured time.Duration) time.Duration { return configured }
 
 // dialWebSocket opens a session route natively, for a network that blocks the TCP
-// port. A refusal before the upgrade carries the allocator's JSON error, and its
+// port. A refusal before the upgrade carries the router's JSON error, and its
 // message is reported as a join reply's reason is.
 func dialWebSocket(target string, timeout time.Duration, tlsCfg *tls.Config) (net.Conn, error) {
 	ctx := context.Background()

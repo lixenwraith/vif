@@ -1167,6 +1167,222 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	}
 }
 
+// TestAPersonBehindARelayReachesTheHostThatTookOver: a relayed person follows the
+// guest that took the session over through its relay when its walk's dial of that
+// guest did not go through, then dials it at its chain address and plays on a link
+// of its own, the relay letting it go.
+func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	next, _ := driveBot(t, Config{JoinAddress: addr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 4)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	for _, a := range []*App{host, next, relay, person} {
+		waitForCursors(t, a, 5)
+	}
+	id, nextID := person.membership.localParticipant(), link.PeerID(next.membership.localParticipant())
+	waitUntil(t, func() bool { _, ok := person.authority.Chain().Lookup(nextID); return ok }, "the next host in the person's chain")
+
+	// The person's chain names the next host where nothing answers, which is what a
+	// walk whose dial does not go through holds; the record it follows brings the
+	// address. From its relay, so the person floods the list to nobody.
+	chain := person.authority.Chain()
+	for i := range chain {
+		if chain[i].ID == nextID {
+			chain[i].Addr = "127.0.0.1:1"
+		}
+	}
+	held := authorityOf(person)
+	body, err := network.EncodePeerList(network.PeerListRecord{Term: held.Term, Authority: held.Authority, Chain: chain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	person.authority.Receive(uint8(network.MsgPeerList), relay.membership.localParticipant(), body)
+	if got, _ := person.authority.Chain().Lookup(nextID); got != "127.0.0.1:1" {
+		t.Fatalf("the person's chain names the next host at %q, want the address nothing answers at", got)
+	}
+
+	leave() // the host and its bot go
+	for _, a := range []*App{next, relay, person} {
+		waitForWraiths(t, a, 2)
+	}
+	waitUntil(t, func() bool {
+		r := authorityOf(person)
+		return r.Authority == nextID && !r.Migrating
+	}, "the person following the guest that took over")
+	waitUntil(t, func() bool { return person.membership.sessionTransport().PeerCount() == 2 }, "the person's own link to its host")
+	waitUntil(t, func() bool { return !slices.Contains(downstreamOf(relay), id) }, "the relay letting the person go")
+	waitForMotion(t, next, cursorOf(t, next, id), "the person's cursor on the host it reached")
+	if p := person.membership.sessionTransport().PeerCount(); p != 2 {
+		t.Fatalf("the person holds %d links, want its relay and its host", p)
+	}
+}
+
+// TestAPersonRedialsItsRelayWhenTheLinkDrops: a relayed person whose link to its
+// relay drops, the relay still running, redials the relay's door before it walks the
+// chain, as a guest redials the host it lost, and is admitted back into its own
+// place through it.
+func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	for _, a := range []*App{host, relay, person} {
+		waitForCursors(t, a, 4)
+	}
+	id, relayID := person.membership.localParticipant(), link.PeerID(relay.membership.localParticipant())
+	c := person.membership.claim.Load()
+	person.World().RunSafe(func() { person.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
+	if c == nil || !relay.instance().DropParticipant(id) {
+		t.Fatal("the person holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	waitUntil(t, func() bool { req = person.restart.Load(); return req != nil }, "the person admitted back through its relay")
+	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id ||
+		req.dialled.offer.Relay != relayID || req.Notice != "Relay connection restored" {
+		t.Fatalf("the person was not admitted back into its own place through its relay: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
+}
+
+// TestARelayDoorAdmitsAsTheHostOnceItsRunHosts: a guest's -relay door, which asks
+// the authority for every join it relays, admits as the host's door does once that
+// guest took the session over, into the term it holds, rather than turning every
+// dial away as the session changing hands.
+func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	id := link.PeerID(relay.membership.localParticipant())
+	waitUntil(t, func() bool { return len(relay.authority.Chain()) == 1 }, "the relay in the chain")
+
+	leave() // the host and its bot go
+	waitUntil(t, func() bool {
+		r := authorityOf(relay)
+		return r.Authority == id && !r.Migrating && !relay.Context().TimeCtl.Held()
+	}, "the relay taking the session over and playing on")
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	if got := authorityOf(person); got.Authority != id || got.Term != network.FirstTerm+1 {
+		t.Fatalf("a player that joined at the successor's relay door holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
+	}
+	if person.membership.joinedThrough != 0 || person.membership.sessionTransport().PeerCount() != 1 {
+		t.Fatalf("the player joined through participant %d holding %d links; want the host's own guest",
+			person.membership.joinedThrough, person.membership.sessionTransport().PeerCount())
+	}
+	waitForCursors(t, relay, 4) // the first host and its bot wait as Wraiths
+	waitForMotion(t, relay, cursorOf(t, relay, person.membership.localParticipant()), "the player's cursor on the host that admitted it")
+}
+
+// TestADroppedGuestRejoinsThroughARelayingPeer: a guest whose own link to a live
+// host dropped, and whose redial cannot reach that host, rejoins under its claim
+// through a candidate relaying for others, whose own port takes the join as a -relay
+// door does, and is admitted back into its own place behind it.
+func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	peer, _ := driveBot(t, Config{JoinAddress: addr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	peer.ctx.Relaying.Store(true)
+	waitForCursors(t, host, 3)
+	guest, _ := driveBot(t, Config{JoinAddress: addr, NoAdvertise: true}, "roam", nil)
+	for _, a := range []*App{host, peer, guest} {
+		waitForCursors(t, a, 4)
+	}
+	id, peerID := guest.membership.localParticipant(), link.PeerID(peer.membership.localParticipant())
+	hostID := link.PeerID(host.membership.localParticipant())
+	waitUntil(t, func() bool { _, ok := guest.authority.Chain().Lookup(peerID); return ok }, "the relaying peer in the guest's chain")
+	// The host's door is where nothing answers, as a host this guest alone cannot
+	// reach is; the mode is the one whose loop takes a rejoin.
+	c := guest.membership.claim.Load()
+	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "127.0.0.1:1" })
+	if c == nil || !host.instance().DropParticipant(id) {
+		t.Fatal("the guest holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back through the relaying peer")
+	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id ||
+		req.dialled.offer.Relay != peerID || req.dialled.offer.Host != hostID {
+		t.Fatalf("the guest was not taken back into its own place through the relaying peer: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
+}
+
+// TestADroppedGuestRejoinsAtACandidatesDoor: a relay's door is named in the chain
+// every participant holds, completed by the host from the relay's own connection,
+// and a guest whose redial cannot reach its host rejoins at a candidate's door
+// before its port, which, its player not relaying for others, would refuse it.
+func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	door := freeAddress(t)
+	peer, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: door, ListenAddress: freeAddress(t)}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	guest, _ := driveBot(t, Config{JoinAddress: addr, NoAdvertise: true}, "roam", nil)
+	for _, a := range []*App{host, peer, guest} {
+		waitForCursors(t, a, 4)
+	}
+	id, peerID := guest.membership.localParticipant(), link.PeerID(peer.membership.localParticipant())
+	for _, a := range []*App{host, guest} {
+		waitUntil(t, func() bool { d, ok := a.authority.Chain().Door(peerID); return ok && d == door },
+			fmt.Sprintf("participant %d's chain naming the relay's door", a.membership.localParticipant()))
+	}
+	if !strings.Contains(host.SessionSummary(), "relaying at "+door) {
+		t.Fatalf(":session on the host reads %q; want the door named", host.SessionSummary())
+	}
+	c := guest.membership.claim.Load()
+	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "127.0.0.1:1" })
+	if c == nil || !host.instance().DropParticipant(id) {
+		t.Fatal("the guest holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back at the relay's door")
+	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id || req.dialled.offer.Relay != peerID {
+		t.Fatalf("the guest was not taken back into its own place at the relay's door: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
+}
+
+// waitUntil waits for a running session to reach a state, a socket deadline away.
+func waitUntil(t *testing.T, done func() bool, what string) {
+	t.Helper()
+	for deadline := time.Now().Add(socketWait); !done(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: not within %s", what, socketWait)
+		}
+	}
+}
+
+// downstreamOf is the participants an instance passes the authority's artifacts to.
+func downstreamOf(a *App) (out []uint32) {
+	a.World().RunSafe(func() {
+		for _, sys := range a.World().Systems() {
+			if d, ok := sys.(interface{ Downstream() []uint32 }); ok {
+				out = d.Downstream()
+			}
+		}
+	})
+	return out
+}
+
 // TestARelayedPersonsOwnAddressReachesTheSession: a person that joins through a
 // relay and names its own -listen address is admitted, and the chain that carries
 // that address reaches the relay. The host notes the address under the world lock,

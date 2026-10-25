@@ -222,7 +222,7 @@ reloads as a hidden one does.
 ### Where WebSocket is spoken
 
 In `pkg/websocket`: one minimal RFC 6455 implementation on the standard library,
-shared by `vif`'s native client and `vif-allocator`, which terminates the browser
+shared by `vif`'s native client and `vif-router`, which terminates the browser
 route and splices raw TCP to the pod's game port as its front door does. The pod
 keeps its framed TCP listener, so ordered delivery, frame bounds, queue bounds,
 closure and backpressure are unchanged. It speaks the version-13 upgrade, binary
@@ -231,9 +231,9 @@ is enforced by role, and `TCP_NODELAY` is set on every socket it owns.
 
 | Option | Decision |
 |---|---|
-| **Chosen — hand-written, terminated in `vif-allocator`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The allocator already carries every proxied player's bytes; for a browser it also unmasks and frames them, which costs microseconds (fleet §9). |
+| **Chosen — hand-written, terminated in `vif-router`.** | The objection was new parsing surface on the public route; the answer is a small reader whose memory is bounded whatever a length claims, fuzzed at the frame reader and both handshake parsers. The router already carries every proxied player's bytes; for a browser it also unmasks and frames them, which costs microseconds (fleet §9). |
 | A bridge process in the session pod. | An image, a container and a hop per session, and a socket whose latency this repository does not control: one without `TCP_NODELAY` holds each frame toward the player until the last is acknowledged, tens of milliseconds a frame. |
-| A WebSocket listener in `vif -serve`, behind the allocator's proxy. | Keeps the allocator's hop and moves the `Origin` check into every pod. The listener exists for one binary on a LAN, a terminal that hosts for pages, or a test (below); the fleet does not use it. |
+| A WebSocket listener in `vif -serve`, behind the router's proxy. | Keeps the router's hop and moves the `Origin` check into every pod. The listener exists for one binary on a LAN, a terminal that hosts for pages, or a test (below); the fleet does not use it. |
 | A third-party package. | `net/http` has no WebSocket handler, `golang.org/x/net/websocket` is deprecated, and a maintained package is a network-facing dependency on the path every player takes. |
 | The API server's `pods/portforward`. | A shell-equivalent grant, and it needs the same client. |
 | An ingress controller. | None translates WebSocket to a raw TCP backend. |
@@ -264,7 +264,7 @@ authentication now.
 
 `network.AdmissionLimiter` is per address, and the pod sees browsers at the node's
 address, as it sees front-door players, so per-player admission is the
-allocator's: one budget per address over both routes, keyed on the front door's
+router's: one budget per address over both routes, keyed on the front door's
 socket address and on the address the edge writes into `-client-address-header`
 ([fleet §4](kubernetes-fleet.md#4-security-posture)).
 
@@ -273,13 +273,13 @@ socket address and on the address the edge writes into `-client-address-header`
 ```mermaid
 flowchart LR
     Browser["Browser WASM"] -->|"wss://"| Nginx["Site nginx, TLS"]
-    Nginx -->|"Upgrade"| Allocator["vif-allocator"]
-    Allocator -->|"payload, TCP 7777"| Pod["vif -serve"]
+    Nginx -->|"Upgrade"| Router["vif-router"]
+    Router -->|"payload, TCP 7777"| Pod["vif -serve"]
 ```
 
 `wss://<site>/vif/ws/<session>`. The session identifier is a routing key, not a
 secret. The site's nginx terminates TLS and forwards `Upgrade` without interpreting
-a frame. The allocator checks the method, the identifier's syntax, that the request
+a frame. The router checks the method, the identifier's syntax, that the request
 is an upgrade and the `Origin` before it answers the upgrade. The address's join
 budget, the session's liveness and readiness in reconciled Kubernetes state and its
 own per-session ceiling follow in the stream, as the front door's do, so a page reads
@@ -292,10 +292,10 @@ origin, which that policy must name (`connect-src 'self' wss:`) before the page 
 join it. Ordinary CORS headers are not a substitute for the `Origin` check. Browser admission credentials, short-lived and
 session-scoped, are [open work](todo.md#add-browser-admission-authentication).
 
-Native clients use raw TCP, through the allocator's front door or the session's
+Native clients use raw TCP, through the router's front door or the session's
 own NodePort ([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this
 route where a network blocks those; a native client's `Origin` is the URL's own.
-The allocator owns routing and admission as well as allocation; keep those duties
+The router owns routing and admission as well as allocation; keep those duties
 behind explicit interfaces so the process can be renamed or split without moving
 Kubernetes lifecycle code into the game.
 
@@ -603,6 +603,6 @@ certified on the release path; its known issues are in §4.
 
 Two policy decisions stay separate from transport, and both are open in todo:
 [browser admission](todo.md#add-browser-admission-authentication), with whether the
-allocator stays its credential boundary, and the publisher trust, allowed origins
+router stays its credential boundary, and the publisher trust, allowed origins
 and cache policy of [a fetched container](todo.md#fetch-a-content-addressed-bundle-over-http)
 (§7).

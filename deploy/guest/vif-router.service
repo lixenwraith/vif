@@ -1,0 +1,62 @@
+[Unit]
+Description=vif Kubernetes session router
+After=network-online.target k3s.service vif-router-token.service logwisp.service
+Requires=k3s.service
+Wants=network-online.target vif-router-token.service logwisp.service
+ConditionPathExists=/etc/vif-router/router.env
+ConditionPathExists=/etc/vif-router/server-ca.crt
+
+[Service]
+# The router answers READY=1 once both its listeners are bound, so `systemctl
+# start` returns when it answers. Every caller that restarts it and then probes it
+# (the updaters, an operator at a prompt) would otherwise race the bind.
+Type=notify
+TimeoutStartSec=30s
+User=vif-router
+Group=vif-router
+EnvironmentFile=/etc/vif-router/router.env
+ExecStart=/usr/local/bin/vif-router \
+    -listen ${VIF_ROUTER_LISTEN} \
+    -route-listen ${VIF_ROUTER_ROUTE_LISTEN} \
+    -image ${VIF_ROUTER_IMAGE} \
+    -join-host ${VIF_ROUTER_JOIN_HOST} \
+    -players-max ${VIF_ROUTER_PLAYERS_MAX} \
+    -bots-max ${VIF_ROUTER_BOTS_MAX} \
+    -log-level-min ${VIF_ROUTER_LOG_LEVEL_MIN} \
+    -scenario ${VIF_ROUTER_SCENARIO} \
+    -wad ${VIF_ROUTER_WAD} \
+    -web-origin ${VIF_ROUTER_WEB_ORIGIN} \
+    -route-max ${VIF_ROUTER_ROUTE_MAX} \
+    -tunnels ${VIF_ROUTER_TUNNELS} \
+    -client-address-header ${VIF_ROUTER_CLIENT_ADDRESS_HEADER} \
+    -client-joins ${VIF_ROUTER_CLIENT_JOINS} \
+    -client-creates ${VIF_ROUTER_CLIENT_CREATES} \
+    -log-stream-url ${VIF_ROUTER_LOG_STREAM_URL}
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=20s
+UMask=0077
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

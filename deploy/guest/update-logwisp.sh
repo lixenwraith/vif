@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build and deploy vif's standalone LogWisp, at REVISION or upstream main's head,
-# without controlling K3s or the allocator. The fleet procedure separately enforces
+# without controlling K3s or the router. The fleet procedure separately enforces
 # its empty-fleet maintenance gate. Retains one known-good binary/config/unit.
 #
 #   ./deploy/guest/update-logwisp.sh [REVISION]

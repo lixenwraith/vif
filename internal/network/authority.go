@@ -117,7 +117,7 @@ func SameRoster(a, b []RosterEntry) bool {
 func SuccessionCandidates(roster []RosterEntry, lost link.PeerID, chain SuccessionChain) []link.PeerID {
 	var out []link.PeerID
 	for _, e := range chain {
-		if e.ID != 0 && e.ID != lost &&
+		if e.ID != 0 && e.ID != lost && e.Addr != "" &&
 			slices.ContainsFunc(roster, func(p RosterEntry) bool { return p.ID == e.ID && p.Holder == 0 && !p.Away }) {
 			out = append(out, e.ID)
 		}

@@ -44,6 +44,7 @@ var allowedMapRanges = map[string]string{
 	"Machine.Export:variables":                  "collects variable names, sorted before export",
 	"World.clearSharedEntities:componentMask":   "collects shared entities, sorted before removal",
 	"World.ReconcileSharedWorld:componentMask":  "collects shared entities the correction drops, sorted before removal",
+	"WorldReconcile.Finish:componentMask":       "collects shared entities the staging world no longer holds, sorted before removal",
 	"MacroManager.StartAllPlayback:buffers":     "collects labels, sorted before playback start",
 	"LootSystem.SaveLocal:pity":                 "collects pity streaks, sorted before export",
 

@@ -1,10 +1,10 @@
-# Reference edge for the allocator API. Copy the two parts into their own
+# Reference edge for the router API. Copy the two parts into their own
 # contexts; this file is not includable as a unit. Replace <node-address> with
 # the K3s node's address on the operator network, which must already admit that
 # source on 9080. Nothing here terminates or inspects a game connection.
 
 # --- http context ---
-upstream vif_allocator {
+upstream vif_router {
     server <node-address>:9080;
     keepalive 8;
 }
@@ -33,10 +33,10 @@ limit_req_zone  $proxy_protocol_addr zone=vif_ws_req:10m rate=12r/m;
 # --- server context, inside the site's TLS server block ---
 
 # Create and list. Finite requests, so ordinary proxy timeouts apply. X-Real-IP is
-# overwritten with the player's address, which the allocator's -client-address-header
+# overwritten with the player's address, which the router's -client-address-header
 # names and keys its per-address creation budget on; a client's own is discarded.
 location = /vif/api/sessions {
-    proxy_pass http://vif_allocator;
+    proxy_pass http://vif_router;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_set_header X-Real-IP $proxy_protocol_addr;
@@ -49,7 +49,7 @@ location = /vif/api/sessions {
 # One long-lived SSE response. Buffering, caching or a finite read timeout here
 # turns a live stream into a stalled or truncated one.
 location = /vif/api/logs {
-    proxy_pass http://vif_allocator;
+    proxy_pass http://vif_router;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
 
@@ -64,21 +64,21 @@ location = /vif/api/logs {
 }
 
 # The browser session route. Nginx terminates TLS and forwards the Upgrade; it
-# does not translate WebSocket frames. The allocator validates the session, the
+# does not translate WebSocket frames. The router validates the session, the
 # Origin and the fleet's ceilings, then speaks WebSocket itself and splices each
 # socket to its session's game port.
 #
 # Origin is forwarded unchanged, because it is the whole of same-origin here and
-# the allocator compares it against its -web-origin. Do not set it.
+# the router compares it against its -web-origin. Do not set it.
 #
 # A proxy_set_header in a location replaces every one inherited from the server,
-# so the three below are all this route sets. That is correct here: the allocator
+# so the three below are all this route sets. That is correct here: the router
 # reads Origin, which travels as an ordinary request header, and the player's
 # address, which keys the join budget it shares with the front door. `http2 on` is
 # also fine — nginx offers no RFC 8441, so a browser opens its socket on a
 # separate HTTP/1.1 connection; an empty Upgrade is where to look if it does not.
 location ~ "^/vif/ws/[0-9a-f]{16}$" {
-    proxy_pass http://vif_allocator;
+    proxy_pass http://vif_router;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $vif_connection_upgrade;
@@ -90,7 +90,7 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
 
-    # Open sockets and handshake rate per player, which the allocator's join budget
+    # Open sockets and handshake rate per player, which the router's join budget
     # (dials a minute) does not bound. Four is a household behind one address —
     # raise it behind carrier NAT.
     limit_conn vif_ws_conn 4;
@@ -103,5 +103,5 @@ location ~ "^/vif/ws/[0-9a-f]{16}$" {
 # timeout is not reached by a live session; anything under that interval ends
 # matches for a reason no log on this host will name.
 
-# Exact locations, because /healthz, /readyz and every other allocator path stay
+# Exact locations, because /healthz, /readyz and every other router path stay
 # on the node: a /vif/ prefix would publish whatever is added there later.

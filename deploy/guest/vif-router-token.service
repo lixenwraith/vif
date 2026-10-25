@@ -1,11 +1,11 @@
 [Unit]
-Description=Rotate the vif allocator ServiceAccount token
+Description=Rotate the vif router ServiceAccount token
 After=k3s.service
 Requires=k3s.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/libexec/vif-allocator-refresh-token
+ExecStart=/usr/local/libexec/vif-router-refresh-token
 TimeoutStartSec=70s
 User=root
 Group=root
@@ -16,5 +16,5 @@ PrivateDevices=yes
 PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/etc/vif-allocator
+ReadWritePaths=/etc/vif-router
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

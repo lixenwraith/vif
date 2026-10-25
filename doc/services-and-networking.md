@@ -90,7 +90,7 @@ constructs it only for a host or join address, which only a script or bot run an
 for a `-join` naming the same-origin route `wss://<site>/vif/ws/<session>`, or a
 session's `vif://` link, which it joins by the route its site lists, and is refused
 `-host`, `-serve` and a bare `host:port`, none of which it could bind or dial. The
-allocator terminates the route and splices it to the session's game port; a native
+router terminates the route and splices it to the session's game port; a native
 client may dial it too, and otherwise keeps raw TCP. Replay input controls playback
 rather than the mode router, and its terminal resize affects presentation rather
 than recorded geometry.
@@ -449,7 +449,7 @@ Control messages carry join offer/reply, start/ready gates and disconnect notice
 `MsgSessionRoute` (0x05) is the exception to the coordinator speaking first: every
 join sends it as one frame before it reads, with the session name it was given or
 none. A front door places the connection on it where one address serves several
-sessions, the fleet's allocator among them ([fleet
+sessions, the fleet's router among them ([fleet
 §9](kubernetes-fleet.md#9-the-session-routes)); the session it reaches refuses a name
 that is not its own; and a port that takes peer links too tells a join from one by
 it, a peer link opening with `MsgConnect`. Once the dialer is admitted, the
@@ -501,8 +501,15 @@ whatever the roster. A frame of any other kind releases the link's bundle before
 it, so a link reads its frames in the order they were sent; a correction chunk
 travels alone. A guest admitting its own bot asks the coordinator
 on its own link, with `MsgRelayJoin` (0x21), to allocate it, cross its arrival or
-retire a failed join; the first two are answered on that link with
-`MsgRelayAdmit` (0x2F). An epoch or a sync is the binary envelope: a flag byte
+retire a failed join, and, once its `-relay` door is open, to name that door in the
+chain (`RelayDoor`); the first two are answered on that link with
+`MsgRelayAdmit` (0x2F). A run publishes its door through the router with
+`MsgSessionPublish` (0x32) on the front door, answered with `MsgSessionPublished`
+(0x33) on the stream it then holds as its control connection; the router asks it to
+open a connection back for a dial with `MsgTunnelOpen` (0x34), which the run opens
+naming its ticket with `MsgTunnelAccept` (0x35), and either end keeps the control
+connection alive with `MsgTunnelKeep` (0x36) ([Multiplayer
+§5.6](multi-player.md#56-relay-doors-and-the-router)). An epoch or a sync is the binary envelope: a flag byte
 (committed, leaf), then source, run, produced tick, hops, age and frame count, and
 per frame its event as the registry's index, a flag byte holding the producer's
 domain, its sequence as a delta from the frame before, its apply tick as a delta
@@ -1088,8 +1095,8 @@ inside a process nothing can reach.
 | `/metrics` | always 200 | the status registry in the Prometheus text format |
 
 There is one health path rather than a liveness one and a readiness one. An
-allocated session is one pod behind one endpoint the allocator hands out directly,
-so routing is the allocator's decision, and admission is the application's own — a
+allocated session is one pod behind one endpoint the router hands out directly,
+so routing is the router's decision, and admission is the application's own — a
 dial to a session that cannot take it is refused by the handshake, not by a load
 balancer. So the code answers one question, "should this process still be
 running", and readiness is a body field. It is a different question with a
@@ -1144,7 +1151,7 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 | Network adapter | `internal/service/adapter_network.go` |
 | Link layer: framing, transport, port, probe, mesh, chunking, addresses | `pkg/network` |
 | Session layer: handshakes, kinds, authority term and chain, identity, admission | `internal/network` |
-| WebSocket transport | `pkg/websocket`, `pkg/network/websocket_other.go`, `websocket_wasm.go`; the allocator's route in `tool/vif-allocator/ws_proxy.go` |
+| WebSocket transport | `pkg/websocket`, `pkg/network/websocket_other.go`, `websocket_wasm.go`; the router's route in `tool/vif-router/ws_proxy.go` |
 | Tick-owned ECS wire bridge | `internal/system/network.go` |
 | Authority, succession, reach and corrections | `internal/converge` |
 | Startup session assembly | `internal/app/session.go`, `app.go`, `loop.go`, `network_socket.go`, `network_wasm.go` |

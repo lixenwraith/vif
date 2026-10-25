@@ -418,7 +418,7 @@ func buildConfig() app.Config {
 		cfg.JoinAddress, cfg.SessionName = join.Addr, cmp.Or(join.Name, cfg.SessionName)
 	}
 	cfg.HostAddress, cfg.ListenAddress = doorList(flagSession.host), endpoint(flagSession.listen).Addr
-	cfg.RelayAddress, cfg.TLS, cfg.Trust = endpoint(flagSession.relay).Addr, sessionTLS, sessionTrust
+	cfg.RelayAddress, cfg.TLS, cfg.Trust = relayTarget(flagSession.relay), sessionTLS, sessionTrust
 
 	if flagSession.serve != "" {
 		cfg.HostAddress = doorList(flagSession.serve)
@@ -682,12 +682,16 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 			continue
 		}
 		e, err := link.ParseEndpoint(a.target)
+		// -relay vif://<router> publishes the door through the router rather than
+		// binding one, so it is a dial's shape, named by the router.
+		router := a.flag == "-relay" && strings.HasPrefix(a.target, "vif://")
 		switch {
 		case err != nil:
 		case a.binds && e.Name != "":
 			err = errors.New("a bound address names no session; a host answers to -name")
 		case a.binds && e.Scheme == link.SchemeWebSocket:
 			err = errors.New("participants link to each other over tcp")
+		case router:
 		case a.binds:
 			err = e.Listenable()
 		case e.Name != "":
@@ -727,6 +731,15 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 func endpoint(target string) link.Endpoint {
 	e, _ := link.ParseEndpoint(target)
 	return e
+}
+
+// relayTarget keeps -relay's vif:// form, which names a router to publish the door
+// through rather than an address to bind (doc/multi-player.md §5.6).
+func relayTarget(target string) string {
+	if strings.HasPrefix(target, "vif://") {
+		return target
+	}
+	return endpoint(target).Addr
 }
 
 // doorList is a host's doors as validateInvocation read them; "" binds none.

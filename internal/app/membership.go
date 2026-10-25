@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -121,6 +122,9 @@ type membership struct {
 	// resize by a run whose terminal is its geometry; nil until the first.
 	seatScreen atomic.Pointer[screen]
 	relay      relayDesk
+	// tunnelStop ends the door this run publishes through a router (publishDoor).
+	tunnelMu   sync.Mutex
+	tunnelStop context.CancelFunc
 
 	// joinedThrough is the relay this run joined the session through, zero on a
 	// dial to the authority; the barrier reaches the authority through it.

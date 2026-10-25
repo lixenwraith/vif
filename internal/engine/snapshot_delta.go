@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // StoreDelta is one component store's exact difference against a baseline: Changed
@@ -467,4 +468,269 @@ func (g *SpatialGrid) reorderCells(cells []CellOrder) error {
 		return errOrderMismatch
 	}
 	return nil
+}
+
+// WorldReconcile is one world brought to another's shared half in place, store by
+// store, with no capture of either: the comparison first, reading both and writing
+// nothing, then Finish, writing in ReconcileSharedWorld's order so the two leave one
+// dense order. Difference is the correction magnitude over the compared surface
+// (WithoutLocalCursorState, as SharedWorldDifference reads it); Delta is DiffSharedWorld's.
+type WorldReconcile struct {
+	Difference WorldDifference
+	Delta      *SharedWorldDelta
+
+	dst, src                 *World
+	record                   bool
+	touched                  map[core.Entity]struct{}
+	dstAuthored, srcAuthored map[core.Entity]bool
+	writes                   []func() // one store each, in store order
+}
+
+func newWorldReconcile(dst, src *World, record bool) *WorldReconcile {
+	r := &WorldReconcile{dst: dst, src: src, record: record, touched: make(map[core.Entity]struct{}, 64)}
+	r.dstAuthored, r.srcAuthored = authoredCursors(dst), authoredCursors(src)
+	return r
+}
+
+// authoredCursors are the cursors a participant owns, whose owner-authored cells
+// the compared surface leaves out.
+func authoredCursors(w *World) map[core.Entity]bool {
+	authored := make(map[core.Entity]bool, parameter.MaxPlayers)
+	w.Components.Cursor.Each(func(e core.Entity, c *component.CursorComponent) bool {
+		if c.PeerID != 0 {
+			authored[e] = true
+		}
+		return true
+	})
+	return authored
+}
+
+func (r *WorldReconcile) count(e core.Entity) {
+	r.Difference.Entries++
+	r.touched[e] = struct{}{}
+}
+
+// compared closes the comparison: the entities behind the count and, when recorded,
+// the delta with the scalars DiffSharedWorld carries whole.
+func (r *WorldReconcile) compared(d SharedWorldDelta) *WorldReconcile {
+	r.Difference.Entities = len(r.touched)
+	if r.record {
+		d.NextEntity = r.src.nextEntityID[core.DomainShared]
+		d.Created, d.Destroyed = r.src.createdCount[core.DomainShared].Load(), r.src.destroyedCount[core.DomainShared].Load()
+		r.Delta = &d
+	}
+	return r
+}
+
+// Finish writes what the comparison found, as ReconcileSharedWorld writes a capture:
+// the entities src no longer holds leave whole first, then each store removes its
+// stale cells and writes the differing ones in src's order, then the allocator is
+// src's. Caller MUST hold both worlds' updateMutex.
+func (r *WorldReconcile) Finish() {
+	gone := make([]core.Entity, 0, 8)
+	for e := range r.dst.componentMask {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		if mask, ok := r.src.componentMask[e]; !ok || mask == 0 {
+			gone = append(gone, e)
+		}
+	}
+	slices.Sort(gone)
+	for _, e := range gone {
+		r.dst.removeEntity(e)
+	}
+	for _, write := range r.writes {
+		write()
+	}
+	r.writes = nil
+	if n := r.src.nextEntityID[core.DomainShared]; n > 0 {
+		r.dst.nextEntityID[core.DomainShared] = n
+	}
+	r.dst.createdCount[core.DomainShared].Store(r.src.createdCount[core.DomainShared].Load())
+	r.dst.destroyedCount[core.DomainShared].Store(r.src.destroyedCount[core.DomainShared].Load())
+	r.dst.Positions.PublishTelemetry()
+}
+
+// compareStoreFrom compares one store's shared half against src's: a cell dst lacks
+// or holds differently is noted for the write, and counted when the compared
+// surface holds it on both sides or one, a cursor's control and an authored
+// cursor's owned cells being off it. The delta is diffStore's over the two stores.
+func compareStoreFrom[T any](r *WorldReconcile, dst, src *Store[T], equal func(a, b *T) bool) StoreDelta[T] {
+	owned, cursor := ownedCursorBit(dst.bit), dst.bit == CursorBit
+	var d StoreDelta[T]
+	var changed []int32
+	for i, e := range src.entities {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		v := &src.dense[i]
+		p, ok := dst.GetPtr(e)
+		onSrc := !owned || !r.srcAuthored[e]
+		onDst := ok && (!owned || !r.dstAuthored[e])
+		same := ok && equal(p, v)
+		if !same {
+			changed = append(changed, int32(i))
+			if r.record {
+				d.Changed = append(d.Changed, StoreEntry[T]{Entity: e, Value: DetachSnapshotValue(*v)})
+			}
+		}
+		switch {
+		case same:
+			if onSrc != onDst {
+				r.count(e)
+			}
+		case !ok:
+			if onSrc {
+				r.count(e)
+			}
+		case onSrc && onDst:
+			if !cursor || controlFreeDiffers(p, v) {
+				r.count(e)
+			}
+		case onSrc != onDst:
+			r.count(e)
+		}
+	}
+	for _, e := range dst.entities {
+		if e.Domain() != core.DomainShared || src.HasEntity(e) {
+			continue
+		}
+		if r.record {
+			d.Removed = append(d.Removed, e)
+		}
+		if !owned || !r.dstAuthored[e] {
+			r.count(e)
+		}
+	}
+	if r.record {
+		d.Order = orderDelta(sharedOrder(dst.entities), sharedOrder(src.entities))
+	}
+	r.writes = append(r.writes, func() { writeStoreFrom(dst, src, changed) })
+	return d
+}
+
+// writeStoreFrom is reconcileStore over src's store: the stale cells leave, then the
+// differing cells are written in src's order.
+func writeStoreFrom[T any](dst, src *Store[T], changed []int32) {
+	var stale []core.Entity
+	for _, e := range dst.entities {
+		if e.Domain() == core.DomainShared && !src.HasEntity(e) {
+			stale = append(stale, e)
+		}
+	}
+	for _, e := range stale {
+		dst.RemoveEntity(e)
+	}
+	for _, i := range changed {
+		dst.SetComponent(src.entities[i], DetachSnapshotValue(src.dense[i]))
+	}
+	if dst.bit == WallBit { // an overwrite can rewrite a BlockMask
+		dst.world.Positions.WallsChanged()
+	}
+}
+
+// controlFreeDiffers compares two cursor cells as the surface does, control aside.
+func controlFreeDiffers[T any](a, b *T) bool {
+	ca, cb := *any(a).(*component.CursorComponent), *any(b).(*component.CursorComponent)
+	ca.Control, cb.Control = 0, 0
+	return !equalCursor(&ca, &cb)
+}
+
+// comparePositionsFrom is compareStoreFrom for the placement store, which also
+// measures the largest shift a placement makes; its write is reconcilePositions',
+// every placement set so a cell held out of the grid retries its insertion.
+func comparePositionsFrom(r *WorldReconcile) StoreDelta[component.PositionComponent] {
+	dst, src := r.dst.Positions, r.src.Positions
+	var d StoreDelta[component.PositionComponent]
+	for i, e := range src.entities {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		v := src.dense[i]
+		p, ok := dst.GetPosition(e)
+		if ok && p == v {
+			continue
+		}
+		if r.record {
+			d.Changed = append(d.Changed, StoreEntry[component.PositionComponent]{Entity: e, Value: v})
+		}
+		if ok {
+			r.Difference.CellShift = max(r.Difference.CellShift, abs(p.X-v.X), abs(p.Y-v.Y))
+		}
+		r.count(e)
+	}
+	for _, e := range dst.entities {
+		if _, held := src.GetPosition(e); e.Domain() != core.DomainShared || held {
+			continue
+		}
+		if r.record {
+			d.Removed = append(d.Removed, e)
+		}
+		r.count(e)
+	}
+	if r.record {
+		d.Order = orderDelta(sharedOrder(dst.entities), sharedOrder(src.entities))
+	}
+	r.writes = append(r.writes, func() {
+		var stale []core.Entity
+		for _, e := range dst.entities {
+			if _, held := src.GetPosition(e); e.Domain() == core.DomainShared && !held {
+				stale = append(stale, e)
+			}
+		}
+		for _, e := range stale {
+			dst.RemoveEntity(e)
+		}
+		for i, e := range src.entities {
+			if e.Domain() == core.DomainShared {
+				dst.SetPosition(e, src.dense[i])
+			}
+		}
+	})
+	return d
+}
+
+// sharedOrder is a store's shared entities in its dense order.
+func sharedOrder(entities []core.Entity) []core.Entity {
+	out := make([]core.Entity, 0, len(entities))
+	for _, e := range entities {
+		if e.Domain() == core.DomainShared {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// orderDelta is the Order diffStore records between two readings of one store: the
+// whole of next when applying the delta to base would not reproduce next's order.
+func orderDelta(base, next []core.Entity) []core.Entity {
+	k := 0
+	for ; k < len(base) && k < len(next) && base[k] == next[k]; k++ {
+	}
+	restBase, restNext := base[k:], next[k:]
+	if len(restBase) == 0 && len(restNext) == 0 {
+		return nil
+	}
+	inNext := make(map[core.Entity]struct{}, len(restNext))
+	for _, e := range restNext {
+		inNext[e] = struct{}{}
+	}
+	derived := make([]core.Entity, 0, len(restNext))
+	seen := make(map[core.Entity]struct{}, len(restBase))
+	for _, e := range restBase {
+		if _, ok := inNext[e]; ok {
+			derived = append(derived, e)
+			seen[e] = struct{}{}
+		}
+	}
+	for _, e := range restNext {
+		if _, ok := seen[e]; !ok {
+			derived = append(derived, e)
+		}
+	}
+	if slices.Equal(derived, restNext) {
+		return nil
+	}
+	return slices.Clone(next)
 }

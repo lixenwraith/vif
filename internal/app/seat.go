@@ -173,7 +173,7 @@ func (m *membership) seatLink() (net.Conn, error) {
 		if m.world.IsSessionCoordinator() {
 			accept, admitted = m.sessionAcceptor(m.admissions.Admit), m.admitLateJoiner
 		} else {
-			accept, admitted = m.relayAcceptor(link.PeerID(m.world.LocalParticipant())), m.releaseRelayedJoiner
+			accept, admitted = m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner
 		}
 	})
 	if port == nil {

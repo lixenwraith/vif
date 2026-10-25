@@ -1,6 +1,6 @@
 #!/bin/sh
-# Render one session manifest from the template, as the allocator builds it, so a
-# person can create the same objects by hand and tell an allocator fault from a
+# Render one session manifest from the template, as the router builds it, so a
+# person can create the same objects by hand and tell a router fault from a
 # workload one. Without JOB_UID the Service has no owner reference, as the Job does
 # not exist yet; deploy/k3s/session.sh performs the two-stage create and cleanup.
 set -eu
@@ -47,7 +47,7 @@ esac
 case "$PLAYERS" in
 	'' | *[!0-9]* ) echo "$0: PLAYERS must be a number" >&2; exit 2 ;;
 esac
-# The allocator's bound: a bot is a roster guest, and six fill the LimitRange
+# The router's bound: a bot is a roster guest, and six fill the LimitRange
 most=$((PLAYERS - 1))
 [ "$most" -le 6 ] || most=6
 if [ "$BOTS" -gt "$most" ]; then
@@ -58,7 +58,7 @@ if [ "$GAME_NODEPORT" -lt 31700 ] || [ "$GAME_NODEPORT" -gt 31709 ]; then
 	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the fleet range 31700-31709" >&2
 	exit 2
 fi
-# The allocator's envelope: each bot adds a seat's cost (tool/vif-allocator/manifest.go).
+# The router's envelope: each bot adds a seat's cost (tool/vif-router/manifest.go).
 CPU_REQUEST=$((100 + 64 * BOTS))m
 MEMORY_REQUEST=$((96 + 32 * BOTS))Mi
 MEMORY_LIMIT=$((480 + 32 * BOTS))Mi

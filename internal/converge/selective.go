@@ -345,14 +345,15 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 			"peer", pending.from, "tick", req.Tick, "proved", proved)
 		return
 	}
-	// A request this instance did not author the answer to is a relayed one. It is
-	// served from retention if that retention holds the tick, and refused in words
-	// if it does not — never with a body from a different baseline, and never by
-	// forwarding the request onward, which would be the routing layer this protocol
-	// deliberately does not have.
+	// A request this instance did not author the answer to is a relayed one: served
+	// from retention if that holds the tick, refused in words if not — never with a
+	// body from another baseline, never forwarded, which would be the routing layer
+	// this protocol deliberately lacks. A whole world it cannot author it asks its
+	// own source for, as a receiver does; the one it is sent reaches the leaf through it.
 	if !authored {
 		if req.Keyframe {
 			c.sendUnserved(port, pending.from, req, "a relay cannot author a whole world")
+			c.wantWholeWorld()
 			return
 		}
 		if c.serveRelayed(port, pending, req) {
@@ -421,9 +422,19 @@ func (c *Corrections) widen(id uint32) {
 	c.publishMu.Unlock()
 }
 
+// wantWholeWorld makes this instance's next answer to its source ask for a whole
+// world: a relay asked for one it cannot author passes the need up this way, since
+// the keyframe it is sent goes down to the participants behind it.
+func (c *Corrections) wantWholeWorld() {
+	c.selectiveMu.Lock()
+	c.selective.wantKeyframe = true
+	c.selectiveMu.Unlock()
+}
+
 // repairIsWorthSending reports whether a repair of this size is still cheaper than
 // the whole world it stands in for: the keyframe this instance has measured, or the
-// transfer ceiling where it has none, as a relay serving from retention has not.
+// transfer ceiling where it has none. A relay serving from retention bounds by the
+// ceiling alone (serveRelayed): it has no whole world to send instead.
 func (c *Corrections) repairIsWorthSending(bytes int) bool {
 	c.publishMu.Lock()
 	keyframe := c.sizes.Keyframe

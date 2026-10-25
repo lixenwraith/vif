@@ -45,7 +45,7 @@ var ErrSessionStarting = &network.Refusal{Code: network.RefusalStarting, Reason:
 
 // ErrSessionEnding is the kind of refusal a draining or expired session gives a
 // dial. It is the opposite of ErrSessionStarting: this run is leaving, so retrying
-// against it is exactly the wrong answer, and an allocator reading it should place
+// against it is exactly the wrong answer, and a router reading it should place
 // the participant somewhere else.
 var ErrSessionEnding = &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending"}
 
@@ -133,16 +133,17 @@ func (m *membership) showJoinerPrepared(addr net.Addr) {
 }
 
 // admitHosted is a guest's port admitting a dial: it does once this run holds the
-// term, spending the budget a host's door does, and while the term moves it refuses
-// as that door would.
+// term, or while its player relays for others, when a dropped guest rejoins its host
+// through this run as at a -relay door; both spend the budget a host's door does,
+// and while the term moves it refuses as that door would.
 func (m *membership) admitHosted(addr net.Addr) error {
 	switch st := m.authority.State(); {
 	case st.Migrating:
 		return ErrSessionHandoff
-	case !st.Authoring():
-		return errNotHosting
+	case st.Authoring(), st.Term > 0 && !st.Fork && m.ctx.Relaying.Load():
+		return m.admissions.Admit(addr)
 	}
-	return m.admissions.Admit(addr)
+	return errNotHosting
 }
 
 // Serve only the immutable scenario this run holds; another scenario needs a new App.
@@ -1142,7 +1143,7 @@ func (m *membership) hostOffer() (network.SessionOffer, error) {
 	defer m.sessionMu.Unlock()
 	if len(m.sessionRoster) == 0 {
 		// No joiner ever arrived; describe the two-participant lobby this host opened.
-		// Through the allocator rather than beside it: a dedicated host holds no slot,
+		// Through the router rather than beside it: a dedicated host holds no slot,
 		// so its guest takes slot zero and a second rule here would disagree.
 		m.openRosterLocked()
 		m.sessionRoster = append(m.sessionRoster, m.nextParticipantLocked())

@@ -1329,6 +1329,19 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	w.Positions.PublishTelemetry()
 }
 
+// ReconcileSharedFrom compares this world's shared half against src's in place, with
+// no capture of either, and reports what ReconcileSharedWorld would write; the
+// result's Finish writes it. Caller MUST hold both worlds' updateMutex.
+func (w *World) ReconcileSharedFrom(src *World, record bool) *WorldReconcile {
+	r := newWorldReconcile(w, src, record)
+	var d SharedWorldDelta
+	d.Positions = comparePositionsFrom(r)
+{{- range .Components }}
+	d.{{ .Field }} = compareStoreFrom(r, w.Components.{{ .Field }}, src.Components.{{ .Field }}, equal{{ .Field }})
+{{- end }}
+	return r.compared(d)
+}
+
 // clearSharedEntities removes every shared entity from every store, so an install
 // replaces the shared world rather than merging into it. Merging would leave
 // entities this instance had derived on its own beside the capture's, which is

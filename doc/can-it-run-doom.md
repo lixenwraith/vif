@@ -137,7 +137,7 @@ Music, the pixel path and Android touch controls follow, about 2,000 more.
   replay it.
 - Doom has its own lockstep netgame of tic commands. Running it under vif's
   convergence is two mechanisms for one problem. A multiplayer `vif-doom` would send
-  Doom's packets over vif's transport (`pkg/websocket`, the allocator's route), not
+  Doom's packets over vif's transport (`pkg/websocket`, the router's route), not
   through vif's simulation.
 
 ## 7. Doom maps as vif walls

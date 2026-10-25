@@ -26,10 +26,12 @@ func (s DomainScope) Selects(e core.Entity) bool {
 
 // Cell represents a single grid cell containing a fixed number of entities.
 // Invariant: shared occupy Entities[:SharedCount], player occupy Entities[SharedCount:Count].
+// slot is the cell's place in the grid's occupied list while it holds anything.
 type Cell struct {
 	Count       uint8
 	SharedCount uint8
-	_           [6]byte // Explicit padding to ensure 8-byte alignment for Entities
+	_           [2]byte
+	slot        int32
 	Entities    [parameter.MaxEntitiesPerCell]core.Entity
 }
 
@@ -80,6 +82,11 @@ type SpatialGrid struct {
 	Width  int
 	Height int
 
+	// occupied lists the cells holding an entity, in the order they filled, so a
+	// copy, a clear and the gauges read what the map holds rather than the map: the
+	// ceiling is 125,000 cells, 32 MB, which a scan touches whole.
+	occupied []int32
+
 	// generation moves on a clear and a resize, which change membership with no
 	// position changing.
 	generation uint64
@@ -103,7 +110,8 @@ func (g *SpatialGrid) Set(e core.Entity, x, y int) bool {
 		return false
 	}
 
-	cell := &g.Cells[y*g.Width+x]
+	idx := int32(y*g.Width + x)
+	cell := &g.Cells[idx]
 	if cell.Count >= parameter.MaxEntitiesPerCell {
 		return false
 	}
@@ -113,18 +121,47 @@ func (g *SpatialGrid) Set(e core.Entity, x, y int) bool {
 		if cell.Count-cell.SharedCount >= parameter.ReservedPlayerPerCell {
 			return false
 		}
+		g.fill(idx, cell)
 		cell.Entities[cell.Count] = e
 		cell.Count++
 		return true
 	}
 
 	// Shared insertion splits the run: the first player entity moves to the tail
+	g.fill(idx, cell)
 	cell.Entities[cell.Count] = cell.Entities[cell.SharedCount]
 	cell.Entities[cell.SharedCount] = e
 	cell.SharedCount++
 	cell.Count++
 	return true
 }
+
+// fill notes a cell about to take its first entity.
+func (g *SpatialGrid) fill(idx int32, cell *Cell) {
+	if cell.Count == 0 {
+		cell.slot = int32(len(g.occupied))
+		g.occupied = append(g.occupied, idx)
+	}
+}
+
+// vacate takes a cell that emptied off the occupied list, the last one into its place.
+func (g *SpatialGrid) vacate(cell *Cell) {
+	last := g.occupied[len(g.occupied)-1]
+	g.occupied[cell.slot] = last
+	g.Cells[last].slot = cell.slot
+	g.occupied = g.occupied[:len(g.occupied)-1]
+}
+
+// load fills a cell from a copy: its counts and its occupants in the copy's order.
+func (g *SpatialGrid) load(idx int32, count, shared uint8, occupants []core.Entity) {
+	cell := &g.Cells[idx]
+	g.fill(idx, cell)
+	cell.Count, cell.SharedCount = count, shared
+	copy(cell.Entities[:count], occupants)
+}
+
+// Occupied is every cell holding an entity, in the order they filled. Read-only.
+func (g *SpatialGrid) Occupied() []int32 { return g.occupied }
 
 // RemoveEntityAt deletes an entity from the grid at (x, y).
 // O(k) where k <= 31. Swap-removes within the domain partition, refilling the shared tail from the player run.
@@ -156,6 +193,9 @@ func (g *SpatialGrid) RemoveEntityAt(e core.Entity, x, y int) {
 		}
 
 		cell.Entities[cell.Count] = 0
+		if cell.Count == 0 {
+			g.vacate(cell)
+		}
 		return
 	}
 }
@@ -223,10 +263,11 @@ func (g *SpatialGrid) HasAnyEntityInArea(x, y, width, height int, scope DomainSc
 // Clear removes all entities from all cells
 func (g *SpatialGrid) Clear() {
 	g.generation++
-	for i := range g.Cells {
+	for _, i := range g.occupied {
 		g.Cells[i].Count = 0
 		g.Cells[i].SharedCount = 0
 	}
+	g.occupied = g.occupied[:0]
 }
 
 // Resize reconfigures logical grid dimensions. Backing storage is grow-only:
@@ -243,6 +284,7 @@ func (g *SpatialGrid) Resize(newWidth, newHeight int) {
 	// every enumeration from two different maps.
 	newWidth, newHeight = max(newWidth, 0), max(newHeight, 0)
 	g.generation++
+	g.occupied = g.occupied[:0]
 	need := newWidth * newHeight
 	if need <= cap(g.Cells) {
 		g.Cells = g.Cells[:need]
@@ -267,19 +309,16 @@ type GridStats struct {
 	MaxOccupancy   int
 }
 
-// ComputeStats calculates grid statistics in a single pass
-// O(n) where n = Width * Height
+// ComputeStats calculates grid statistics over the occupied cells
 func (g *SpatialGrid) ComputeStats() GridStats {
 	var stats GridStats
-	for i := range g.Cells {
+	for _, i := range g.occupied {
 		count := int(g.Cells[i].Count)
-		if count > 0 {
-			stats.CellsOccupied++
-			stats.EntitiesTotal += count
-			stats.EntitiesShared += int(g.Cells[i].SharedCount)
-			if count > stats.MaxOccupancy {
-				stats.MaxOccupancy = count
-			}
+		stats.CellsOccupied++
+		stats.EntitiesTotal += count
+		stats.EntitiesShared += int(g.Cells[i].SharedCount)
+		if count > stats.MaxOccupancy {
+			stats.MaxOccupancy = count
 		}
 	}
 	return stats

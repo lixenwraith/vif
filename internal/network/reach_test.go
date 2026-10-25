@@ -110,6 +110,25 @@ func TestChainAppendKeepsPosition(t *testing.T) {
 	}
 }
 
+// TestADoorListsWithoutMakingACandidate: a door rides a participant's entry, or an
+// entry of its own with no address, which the chain lists and the succession skips.
+func TestADoorListsWithoutMakingACandidate(t *testing.T) {
+	c := SuccessionChain(nil).Append(3, "c").WithDoor(3, "c:7778").WithDoor(4, "d:7778")
+	if door, ok := c.Door(3); !ok || door != "c:7778" || c[0].Addr != "c" {
+		t.Fatalf("chain = %+v, want participant 3's door beside its address", c)
+	}
+	if _, ok := c.Lookup(4); ok || len(c) != 2 || !slices.Equal(c.Doors(), []string{"c:7778", "d:7778"}) {
+		t.Fatalf("chain = %+v, want participant 4 listed by its door alone", c)
+	}
+	roster := []RosterEntry{{ID: 1}, {ID: 3, Slot: 1}, {ID: 4, Slot: 2}}
+	if got := SuccessionCandidates(roster, 1, c); !slices.Equal(got, []link.PeerID{3}) {
+		t.Fatalf("candidates = %v, want the participant with an address alone", got)
+	}
+	if c = c.Append(4, "d"); len(c) != 2 || c[1].Addr != "d" || c[1].Door != "d:7778" {
+		t.Fatalf("chain = %+v, want participant 4's address on the entry its door made", c)
+	}
+}
+
 // TestPeerLinkAdmitsOnlyAParticipant covers the handshake two participants use on
 // each other: it names the far end and refuses anyone the gate does not know.
 func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {

@@ -166,7 +166,10 @@ func (c *Corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 	set.Served = c.inst.LocalParticipant()
 	body, err := snapshot.EncodeShardSet(set)
 	var chunks [][]byte
-	if err == nil && c.repairIsWorthSending(len(body)) {
+	// Bounded by the transfer ceiling, not by a keyframe this instance installed
+	// long ago: it cannot send a whole world instead, so a repair that fits the
+	// link is the only answer that ends the leaf's wait.
+	if err == nil && len(body) <= link.MaxSnapshotBytes {
 		chunks, err = link.EncodeSnapshotChunksOf(set.Header.Run, req.Tick, body, parameter.SnapshotCorrectionChunkBytes)
 	}
 	if err != nil || chunks == nil {

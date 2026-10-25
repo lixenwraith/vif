@@ -3,7 +3,7 @@
 # It is a boundary rather than a label: the quota that caps the fleet at ten
 # sessions, the default-deny network policy, and the Pod Security admission level
 # are all namespace-scoped, so a session created outside this namespace inherits
-# none of them. An allocator that can create objects anywhere else is an allocator
+# none of them. A router that can create objects anywhere else is a router
 # that can create an unbounded, unrestricted fleet.
 apiVersion: v1
 kind: Namespace

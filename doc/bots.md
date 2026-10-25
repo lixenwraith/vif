@@ -118,7 +118,7 @@ identify cursors for this session only, and a dropped player's slot may be reuse
   until a termination signal, which sends them away at once; in the fleet, also
   until the session Job's one-hour deadline. A guest's bots count only while the
   guest is in the session.
-- The fleet allocator takes a `bots` count, closed by default (`bots_max` 0); see
+- The fleet router takes a `bots` count, closed by default (`bots_max` 0); see
   [The session fleet](kubernetes-fleet.md). Neither `-join <site>` nor the menu's
   request form asks for bots yet.
 

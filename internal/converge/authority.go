@@ -77,7 +77,10 @@ type Authority struct {
 
 	// direct marks a link of this instance's own to its authority rather than a path
 	// through a relay: a survivor that had one saw the loss itself, and redials it.
+	// relay is that path's first hop otherwise: the participant it joined through or
+	// follows its host through, zero with a link of its own.
 	direct bool
+	relay  link.PeerID
 
 	// The succession in progress, if any. contested is the term the lost authority
 	// held, zero when no walk is open; lost is that authority, and opened when this
@@ -99,8 +102,10 @@ type Authority struct {
 	resumeBy   time.Time // [wall]
 
 	// cutSince is when this instance lost every path to its authority, zero while it
-	// has one; see driveCutOff.
-	cutSince time.Time // [wall]
+	// has one, and cutRedialing that it redials the relay it lost that path at,
+	// its walk waiting; see driveCutOff.
+	cutSince     time.Time // [wall]
+	cutRedialing bool
 
 	// reconcileAt is the tick at which a successor that took the term reconciles
 	// its roster with what it can actually reach. Zero when nothing is pending.
@@ -290,12 +295,12 @@ func (u *Authority) Open(o network.SessionOffer, local link.PeerID) {
 	u.anchor = o.Anchor
 	u.chain = slices.Clone(o.Chain)
 	u.fixed = o.FixedAuthority
-	u.direct = o.Relay == 0 && o.Host != local
+	u.direct, u.relay = o.Relay == 0 && o.Host != local, o.Relay
 	u.fork = false
 	u.record = network.HandoffRecord{}
 	clear(u.accepted)
 	u.contested, u.lost, u.opened, u.walkFrom = 0, 0, time.Time{}, time.Time{}
-	u.redialing, u.published, u.cutSince = false, false, time.Time{}
+	u.redialing, u.published, u.cutSince, u.cutRedialing = false, false, time.Time{}, false
 	u.reports, u.reportsFor, u.resumeBy = nil, u.term, time.Time{}
 	u.reconcileAt, u.badgeUntil = 0, 0
 	u.mu.Unlock()
@@ -448,20 +453,41 @@ func (u *Authority) beginSuccession(lost link.PeerID) {
 func (u *Authority) Redialing(lost link.PeerID) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.redialOpenLocked(lost, time.Now()) // [wall]
+	now := time.Now() // [wall]
+	return u.redialOpenLocked(lost, now) || u.cutRedialOpenLocked(lost, now)
 }
 
 // RedialAdmitted reports whether the run may go back to lost through the dial that
-// authority admitted, which it may until the walk begins. On true this instance
-// takes no turn and follows no record: the run it is replaced by is in its place.
+// authority admitted, or a candidate relaying for it did: it may while the walk for
+// lost is open, having followed nobody else. On true this instance takes no turn and
+// follows no record: the run it is replaced by is in its place.
 func (u *Authority) RedialAdmitted(lost link.PeerID) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if !u.redialOpenLocked(lost, time.Now()) { // [wall]
+	now := time.Now() // [wall]
+	if !u.walkOpenLocked(lost) && !u.cutRedialOpenLocked(lost, now) {
 		return false
 	}
-	u.contested, u.redialing, u.fork = 0, false, true
+	u.contested, u.redialing, u.cutRedialing, u.fork = 0, false, false, true
 	return true
+}
+
+// Rejoins is whom a run that lost lost may rejoin its host through now: the
+// candidates whose turn has come, while its walk for that loss is open and its
+// redial of the host has ended.
+func (u *Authority) Rejoins(lost link.PeerID) ([]link.PeerID, bool) {
+	u.mu.Lock()
+	open := u.walkOpenLocked(lost) && !u.walkFrom.IsZero()
+	u.mu.Unlock()
+	if !open {
+		return nil, false
+	}
+	return u.walkTargets(time.Now()), true // [wall]
+}
+
+// walkOpenLocked is a succession for lost still open on this instance. Caller holds mu.
+func (u *Authority) walkOpenLocked(lost link.PeerID) bool {
+	return u.contested != 0 && u.lost == lost && !u.fork
 }
 
 // RedialRefused ends the wait on this instance's redial of lost: that authority
@@ -470,8 +496,12 @@ func (u *Authority) RedialAdmitted(lost link.PeerID) bool {
 func (u *Authority) RedialRefused(lost link.PeerID) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if now := time.Now(); u.redialOpenLocked(lost, now) { // [wall]
+	now := time.Now() // [wall]
+	if u.redialOpenLocked(lost, now) {
 		u.walkFrom = now
+	}
+	if u.cutRedialOpenLocked(lost, now) {
+		u.cutRedialing = false
 	}
 }
 
@@ -579,15 +609,16 @@ func (u *Authority) drive() {
 	}
 	now := time.Now() // [wall] the walk and the policies below run over links, not the game
 	cut := contested == 0 && u.reach.cutOff()
-	// The reachability work runs on the same loop and for the same reason: it is
-	// between two ticks, on every instance, whichever half of the protocol it is.
+	// Before the walk, which a cut-off redial holds for a window. The reachability
+	// work runs on the same loop and for the same reason: it is between two ticks,
+	// on every instance, whichever half of the protocol it is.
+	u.driveCutOff(cut, now)
 	u.reach.drive(contested != 0 || cut)
 	u.driveEviction(now)
 	u.driveIngress(now)
 	if contested != 0 {
 		u.driveWalk(now)
 	}
-	u.driveCutOff(cut, now)
 	u.driveResume()
 }
 
@@ -626,19 +657,50 @@ func (u *Authority) driveWalk(now time.Time) {
 func (u *Authority) driveCutOff(cut bool, now time.Time) {
 	u.mu.Lock()
 	if !cut {
-		u.cutSince = time.Time{}
+		u.cutSince, u.cutRedialing = time.Time{}, false
 		u.mu.Unlock()
 		return
 	}
-	if u.cutSince.IsZero() {
+	opened := u.cutSince.IsZero()
+	if opened {
 		u.cutSince = now
 	}
-	since, holder, chain := u.cutSince, u.holder, slices.Clone(u.chain)
+	since, holder, chain, relay := u.cutSince, u.holder, slices.Clone(u.chain), u.relay
 	u.mu.Unlock()
+	if opened {
+		u.redialRelay(relay)
+	}
 	turns := len(network.SuccessionCandidates(u.currentRoster(), holder, chain)) + 1
 	if now.Sub(since) >= time.Duration(turns)*parameter.NetworkSuccessionWindow {
 		u.giveUp("no participant carries this instance to its authority")
 	}
+}
+
+// redialRelay opens the cut-off redial: the run dials the relay it lost its path
+// at, at the door it joined through, for one window before the walk, as a survivor
+// redials the host it lost. The flag is raised first, since the run's loop reads it
+// at once, and lowered again for a run that will not redial.
+func (u *Authority) redialRelay(relay link.PeerID) {
+	if relay == 0 || u.linked(relay) {
+		return
+	}
+	u.mu.Lock()
+	u.cutRedialing = true
+	u.mu.Unlock()
+	redial := u.inst.Redial(relay)
+	if !redial {
+		u.mu.Lock()
+		u.cutRedialing = false
+		u.mu.Unlock()
+	}
+	u.log.Warn("session", "msg", "path to the authority lost", "relay", uint64(relay), "redial", redial)
+}
+
+// cutRedialOpenLocked is the cut-off redial of lost at now, which its window ends.
+// Caller holds mu.
+func (u *Authority) cutRedialOpenLocked(lost link.PeerID, now time.Time) bool {
+	return u.contested == 0 && u.cutRedialing && u.relay == lost && !u.cutSince.IsZero() &&
+		now.Sub(u.cutSince) < parameter.NetworkSuccessionWindow
 }
 
 // driveResume ends the host's window: its group resumes once every survivor's
@@ -769,7 +831,7 @@ func (u *Authority) giveUp(why string) {
 		return
 	}
 	held, holder, local := u.term, u.holder, u.local
-	u.contested, u.published, u.redialing = 0, false, false
+	u.contested, u.published, u.redialing, u.cutRedialing = 0, false, false, false
 	u.walkFrom, u.cutSince = time.Time{}, time.Time{}
 	u.fork = true
 	u.mu.Unlock()
@@ -829,7 +891,10 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 		maps.DeleteFunc(u.reports, func(k reportKey, _ struct{}) bool { return k.term < held })
 	}
 	u.contested, u.published, u.redialing = 0, false, false
-	u.walkFrom, u.direct = time.Time{}, direct
+	u.walkFrom, u.direct, u.relay = time.Time{}, direct, 0
+	if !direct {
+		u.relay = link.PeerID(from)
+	}
 	u.badgeUntil = u.inst.Position().Tick + parameter.NetworkMigrationBadgeTicks
 	local, mine := u.local, u.local == rec.Authority
 	u.mu.Unlock()
@@ -878,6 +943,36 @@ func (u *Authority) Chain() network.SuccessionChain {
 	return slices.Clone(u.chain)
 }
 
+// followed is the authority this instance follows through another participant's
+// link rather than one of its own: a record that came through a relay, or a join
+// at one. Reach dials it for a link of its own.
+func (u *Authority) followed() (link.PeerID, bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.term == 0 || u.fork || u.contested != 0 || u.direct || u.holder == u.local {
+		return 0, false
+	}
+	return u.holder, true
+}
+
+// reachedHost notes a link of this instance's own to the authority it followed
+// through another participant: its artifacts go there now (NetworkSystem.up), the
+// relay lets it go as its window closes, and it redials that authority on a loss
+// as one that had a link does.
+func (u *Authority) reachedHost(host link.PeerID) {
+	u.mu.Lock()
+	reached := !u.direct && u.contested == 0 && u.holder == host && host != u.local
+	if reached {
+		u.direct, u.relay = true, 0
+	}
+	term := u.term
+	u.mu.Unlock()
+	if reached {
+		u.log.Info("session", "msg", "authority reached on a link of this instance's own",
+			"authority", uint64(host), "term", uint64(term))
+	}
+}
+
 // successor is the first candidate this instance would walk to if the authority
 // went now, exposed so a survivor holds a link to it before it needs one.
 func (u *Authority) successor() (link.PeerID, bool) {
@@ -893,11 +988,15 @@ func (u *Authority) successor() (link.PeerID, bool) {
 
 // walkTargets is whom this instance dials: during a walk each candidate whose turn
 // has begun, the first while it redials; cut off, every candidate, for one that
-// carries it. Never itself.
+// carries it, once its redial of the relay it lost ends. Never itself, and nobody
+// once it goes on alone.
 func (u *Authority) walkTargets(now time.Time) []link.PeerID {
 	roster := u.currentRoster()
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	if u.fork || u.contested == 0 && u.cutRedialOpenLocked(u.relay, now) {
+		return nil
+	}
 	list := network.SuccessionCandidates(roster, u.holder, u.chain)
 	if u.contested != 0 {
 		turns := 1
@@ -917,6 +1016,16 @@ func (u *Authority) appendChain(id link.PeerID, addr string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if next := u.chain.Append(id, addr); !slices.Equal(u.chain, next) {
+		u.chain, u.chainDue = next, true
+	}
+}
+
+// noteDoor records one participant's door, which only the coordinator does, and
+// leaves the chain to drive to publish.
+func (u *Authority) noteDoor(id link.PeerID, door string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if next := u.chain.WithDoor(id, door); !slices.Equal(u.chain, next) {
 		u.chain, u.chainDue = next, true
 	}
 }

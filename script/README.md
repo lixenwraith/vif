@@ -21,7 +21,7 @@ Overrides: `BIN` (default `./bin/vif`), `HOST` (`127.0.0.1`), `PORT` (`7777`),
 | `bundle` | the release wad archive extracts to a config root that resolves and carries a corpus |
 | `scenario` | `:n td` then `:n main` each rebuild the run: three scenario records, the last matching the first. Needs a `script(1)` that can give it a pty, and skips rather than fails without one |
 | `follow` | a host with a guest types `:n blank`: the guest is told, rebuilds, redials, receives the new scenario off the wire and installs the session world again. Two terminals, so it needs a pty like `scenario` |
-| `fleet` | the hand-rendered session template and the allocator's own render carry the same arguments, mounts and claims |
+| `fleet` | the hand-rendered session template and the router's own render carry the same arguments, mounts and claims |
 | `deploy` | what a node needs before a pod can start, none of which a normal build reaches: the image's `vif_headless` tag compiles, no manifest leaves an image placeholder unquoted, the wad installer refuses a scenario that does not load, naming it, before staging anything, and `td` resolves through the pod's `scenario/`+`image/` mount, reads no corpus off it, and names itself in the log the commissioning check reads |
 
 `scenario` and `follow` are the only runs of the restart loop `app.Run` owns: a Go

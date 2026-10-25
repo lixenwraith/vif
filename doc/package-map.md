@@ -86,7 +86,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (unstarted, waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
 | `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, the declared system dependency graph, game binding for the generic FSM, and the JSON schema `-schema` prints for authoring tools. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode and the configuration menu, undo/history. |
-| `internal/network` | The session layer over `pkg/network`: the join and peer-link handshakes with their previews, offers, rosters, claims and refusals, the relayed join a guest serves, the kinds a session exchanges and the table a link reads them by, the authority term, succession rule and chain, the build identity, the per-address admission budget, and the configuration a session fills from `parameter`: the link's defaults, timing and kinds, the mesh it tests on and the allocator request a site `-join` makes. |
+| `internal/network` | The session layer over `pkg/network`: the join and peer-link handshakes with their previews, offers, rosters, claims and refusals, the relayed join a guest serves, the kinds a session exchanges and the table a link reads them by, the authority term, succession rule and chain, the build identity, the per-address admission budget, and the configuration a session fills from `parameter`: the link's defaults, timing and kinds, the mesh it tests on and the router request a site `-join` makes. |
 | `internal/parameter` | Gameplay tunables, timing, priorities, effect/audio tuning, the shipped sound and music banks' parse, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and the `vif.toml` settings, the one file it reads. |
@@ -143,7 +143,7 @@ flowchart TD
 | `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
 | `pkg/vmath/physics` | `float64` kinetic state, integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Owns `physics.Kinetic`; depends only on the standard library and `pkg/vmath`. |
 | `pkg/vmath` | `float64` scalar/vector math, LUTs, shapes, arcs, grid traversal, cell topology, seeded randomness, and the shared math constants. | Standard-library-only foundation; integer `Point`/`Area` values are grid indices, not fixed-point numbers. |
-| `pkg/websocket` | RFC 6455 as a byte stream: the version-13 upgrade as client and server, binary frames, ping, pong and close. | Standard library only. `pkg/network` dials and serves sessions with it and `tool/vif-allocator` terminates the browser route with it. |
+| `pkg/websocket` | RFC 6455 as a byte stream: the version-13 upgrade as client and server, binary frames, ping, pong and close. | Standard library only. `pkg/network` dials and serves sessions with it and `tool/vif-router` terminates the browser route with it. |
 
 No package under `pkg` imports anything under `internal`; `make arch-check`
 enforces it. That is what lets a leaf take game data — the sound bank, wall
@@ -209,7 +209,7 @@ The practical dependency rules are:
 | External module | Used by | What remains in vif |
 |---|---|---|
 | `lixenwraith/terminal` | app, service, input, mode (`tui` forms), render and renderers, ascimage, cmds and tools; core's crash reset and a few attribute and color-mode types in component, engine, pattern and system | Game-specific input semantics, compositor, renderers, and layout. |
-| `lixenwraith/toml` | content, FSM and std, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the allocator | Schemas, validation policy, semantic models, and application resolution. |
+| `lixenwraith/toml` | content, FSM and std, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the router | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
@@ -230,7 +230,7 @@ duplicating version strings that would become stale.
 | `tool/font-editor` | Edit the bitmap splash font. |
 | `tool/hierarchy-map` | Terminal UI that selects Go source subsets as LLM context, indexed by `@lixen:` annotations, local imports and symbol-level coupling. |
 | `tool/http-server` | Minimal static server used by `make serve` for the WASM bundle. |
-| `tool/vif-allocator` | Website-to-K3s session allocator; a host service, not part of the game binary. |
+| `tool/vif-router` | Website-to-K3s session router; a host service, not part of the game binary. |
 | `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged; its packages are internal to the tool. |
 | `wad/` | The external payload, laid out as it installs into a `vif/` configuration root: alternate scenarios, a plain-text corpus and a wall image ([filesystem layout](filesystem-layout.md)). |
 | `web/` | The page and worker the WASM build runs in: a WebGL canvas drawn from the host's cell frames, a hidden text field for keys, the key strip for touch screens. |

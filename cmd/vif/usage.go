@@ -57,7 +57,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"no-advertise"},
 				hint: "Keep this participant's address out of the session; -join only, never a succession candidate"},
 			{names: []string{"relay"}, arg: "<addr>",
-				hint: "Admit participants that cannot reach the host here and carry their traffic; -join only"},
+				hint: "Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router>; -join only"},
 			{names: []string{"size"}, arg: "<WxH>", hint: "Terminal-equivalent size for a run that has no terminal"},
 			{names: []string{"probe"}, arg: "<addr>", hint: "Health and metrics endpoint; -serve only"},
 			{names: []string{"first-join"}, arg: "<dur>", hint: "Exit if no guest connects within this; -serve only, 0 waits forever"},
@@ -288,7 +288,7 @@ Host before adding bots to solo play if remote players should join; otherwise
 bots open a session only they can join.
 .PP
 Multiplayer hosts this run, joins an address/link, or requests a session from
-an HTTP(S) vif-allocator site with a player count and scenario. Player count 0
+an HTTP(S) vif-router site with a player count and scenario. Player count 0
 and a blank scenario use server defaults. The request asks for no bots of the
 session's own; the Bots page adds bots held by this run once it has joined.
 Hosts can remove individual bots or players with all their bots
