@@ -660,3 +660,71 @@ func TestAudioFilesFollowVif(t *testing.T) {
 		t.Errorf("the saved override lost the installed pattern:\n%s", data)
 	}
 }
+
+// frameTerm takes the frames a test lays out and shows them nowhere
+type frameTerm struct{ terminal.Terminal }
+
+func (frameTerm) Flush([]terminal.Cell, int, int) {}
+
+// TestTabWalksThePanesOnScreen: Tab moves the keys through the panes on screen in
+// every view and Esc brings them back from a side pane; a pane takes only its own
+// keys, so a piano key typed on the mixer plays nothing.
+func TestTabWalksThePanesOnScreen(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	a := newTUIApp(s, newLogBuffer(50))
+	a.term, a.w, a.h = frameTerm{}, 100, 40
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	a.render()
+	var walk []focusArea
+	for range 3 {
+		key(terminal.KeyTab, 0)
+		walk = append(walk, a.focus)
+	}
+	if want := []focusArea{focusMixer, focusLog, focusMain}; !slices.Equal(walk, want) {
+		t.Fatalf("browse walked %v, want %v", walk, want)
+	}
+	key(terminal.KeyRune, 'p')
+	key(terminal.KeyBacktab, 0)
+	key(terminal.KeyRune, 'z')
+	if a.view != viewKeys || a.focus != focusMixer || len(a.keys.lit) != 0 {
+		t.Fatalf("keys view: focus %d, %d key(s) lit; want the mixer and none", a.focus, len(a.keys.lit))
+	}
+	key(terminal.KeyEscape, 0)
+	key(terminal.KeyRune, 'z')
+	if a.view != viewKeys || a.focus != focusMain || len(a.keys.lit) != 1 {
+		t.Fatalf("after Esc: view %d focus %d, %d key(s) lit; want the keyboard playing", a.view, a.focus, len(a.keys.lit))
+	}
+}
+
+// TestMixerStaysWhereItIsLeft: rows the mixer cannot show scroll under its cursor,
+// and stay as they are once the keys move to another pane.
+func TestMixerStaysWhereItIsLeft(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "new pattern one\nnew pattern big\n"+strings.Repeat("mix one big\n", 11)+"apply big\nslot 0 big")
+	id := audio.PatternIDByName("big")
+	waitFor(t, func() bool { return s.eng.SlotPattern(0) == id }, "big must reach slot 0")
+	a := newTUIApp(s, newLogBuffer(50))
+	a.term, a.w, a.h = frameTerm{}, 100, 24
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	a.render()
+	key(terminal.KeyTab, 0)
+	key(terminal.KeyRune, 'G')
+	top := a.mixTop
+	if a.mixCur != (mixRow{3, -1}) || top == (mixRow{0, -1}) {
+		t.Fatalf("G on the mixer: cursor %v, first row %v; want the last slot, scrolled", a.mixCur, top)
+	}
+	key(terminal.KeyTab, 0)
+	if a.focus != focusLog || a.mixTop != top {
+		t.Fatalf("leaving the mixer moved it from %v to %v", top, a.mixTop)
+	}
+}

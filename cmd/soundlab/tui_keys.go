@@ -94,14 +94,14 @@ func (a *tuiApp) enterKeys() {
 		a.exec("music start")
 		a.keys.started = true
 	}
-	a.view = viewKeys
+	a.view, a.focus = viewKeys, focusMain
 }
 
 func (a *tuiApp) leaveKeys() {
 	if a.keys.rec {
 		a.finishRecording()
 	}
-	a.view = viewBrowse
+	a.view, a.focus = viewBrowse, focusMain
 	// Stop only a transport the view started: patterns the user had running play on
 	if a.keys.started {
 		a.exec("music stop")
@@ -111,24 +111,27 @@ func (a *tuiApp) leaveKeys() {
 
 func (a *tuiApp) keysKey(ev terminal.Event) {
 	k := &a.keys
-	switch ev.Key {
-	case terminal.KeyEscape:
+	switch {
+	case ev.Key == terminal.KeyEscape:
 		a.leaveKeys()
-	case terminal.KeyCtrlS:
+		return
+	case ev.Key == terminal.KeyCtrlR:
 		if k.rec {
 			a.finishRecording()
 			return
 		}
 		k.rec, k.take = true, k.take[:0]
-		fmt.Fprintf(a.log, "recording a %d-bar take — notes land on the sixteenth; ^S commits\n", k.bars)
-	case terminal.KeyTab:
-		k.instr = nextVoice(k.instr, 1)
-	case terminal.KeyBacktab:
-		k.instr = nextVoice(k.instr, -1)
+		fmt.Fprintf(a.log, "recording a %d-bar take — notes land on the sixteenth; ^R commits\n", k.bars)
+		return
+	case a.focus == focusMixer:
+		a.mixerKey(ev, ev.Rune)
+		return
+	}
+	switch ev.Key {
 	case terminal.KeyUp:
-		k.vel = min(k.vel+0.05, 1.0)
+		k.instr = nextVoice(k.instr, -1)
 	case terminal.KeyDown:
-		k.vel = max(k.vel-0.05, 0.05)
+		k.instr = nextVoice(k.instr, 1)
 	case terminal.KeyLeft:
 		k.oct = max(k.oct-1, 0)
 	case terminal.KeyRight:
@@ -142,23 +145,25 @@ func (a *tuiApp) keysKey(ev terminal.Event) {
 	}
 }
 
+// keysRune plays a note, or sets what the next one takes with the keys the beat
+// view edits a note's with: - = velocity, [ ] length, { } octave
 func (a *tuiApp) keysRune(r rune) {
 	k := &a.keys
 	switch r {
-	case '[':
+	case '{':
 		k.oct = max(k.oct-1, 0)
-	case ']':
+	case '}':
 		k.oct = min(k.oct+1, 7) // the keyboard's top E stays under MIDI 127
 	case '-':
-		k.dur = keyLengths[max(slices.Index(keyLengths, k.dur)-1, 0)]
+		k.vel = max(k.vel-0.05, 0.05)
 	case '=', '+':
+		k.vel = min(k.vel+0.05, 1.0)
+	case '[':
+		k.dur = keyLengths[max(slices.Index(keyLengths, k.dur)-1, 0)]
+	case ']':
 		k.dur = keyLengths[min(slices.Index(keyLengths, k.dur)+1, len(keyLengths)-1)]
 	case '\\':
 		k.bars = takeBars[(slices.Index(takeBars, k.bars)+1)%len(takeBars)]
-	case '?':
-		a.help = true
-	case ':':
-		a.openCommand()
 	default:
 		semi, ok := keySemis[r]
 		if !ok {
@@ -259,7 +264,7 @@ func cmpInts(pairs ...int) int {
 }
 
 func (a *tuiApp) keysHint() string {
-	return "z…p play  tab voice  [ ] octave  ↑↓ velocity  - = length  ^S record  \\ take  ⌫ undo  esc close  ? keys"
+	return "z…p play  ↑↓ voice  ←→ octave  - = velocity  [ ] length  ^R record  \\ take  ⌫ undo  tab mixer  esc close  ? keys"
 }
 
 // whiteKeys counts the keyboard's white keys

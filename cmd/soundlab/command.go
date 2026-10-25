@@ -146,17 +146,17 @@ var (
 		{"a v r", "apply, validate, revert"},
 		{"n c w", "new, clone, write one to a file"},
 		{"+ / d d", "mix into another / delete"},
-		{"tab", "browser ⇄ log; m resets the music"},
+		{"m", "the music back to its first bar"},
 	}}
 	helpKeys = helpSection{"keys", []keyHelp{
 		{"z s x … m", "play the first octave from C, q 2 w … u the second"},
 		{"i 9 o 0 p", "the third's C to E; , l . ; / the second's again"},
 		{"• ●", "a note of the key, its root"},
-		{"tab ⇧tab", "next, previous voice"},
-		{"[ ] ← →", "octave"},
-		{"↑ ↓", "velocity"},
-		{"- =", "note length"},
-		{"^S", "record; again commits the take as a pattern, rec_N"},
+		{"↑ ↓", "previous, next voice"},
+		{"← → { }", "octave"},
+		{"- =", "velocity"},
+		{"[ ]", "note length"},
+		{"^R", "record; again commits the take as a pattern, rec_N"},
 		{"\\", "take of 1, 2 or 4 bars"},
 		{"⌫", "drop the take's last note"},
 		{"esc", "close, committing a take"},
@@ -176,7 +176,13 @@ var (
 		{"r", "piano roll of a tonal track, and back"},
 		{"esc", "close"},
 	}}
+	helpMixer = helpSection{"mixer", []keyHelp{
+		{"j k ↑ ↓", "the slots' titles and tracks; PgUp PgDn a page, g G the ends"},
+		{"", "the rows stay where the cursor leaves them"},
+	}}
 	helpGlobal = helpSection{"everywhere", []keyHelp{
+		{"tab ⇧tab", "next, previous pane: the browser, mixer and log, or an editor and the mixer"},
+		{"esc", "from the mixer or the log back to the view's own pane"},
 		{":", "command line; help lists the commands"},
 		{"? / ^S / ^Q", "these keys / save / quit"},
 	}}
@@ -194,7 +200,7 @@ func helpFor(v view) helpSection {
 
 func cmdHelp(s *Session, a []string) error {
 	if len(a) == 1 && a[0] == "keys" {
-		for _, sec := range []helpSection{helpBrowse, helpKeys, helpBeat, helpGlobal} {
+		for _, sec := range []helpSection{helpBrowse, helpKeys, helpBeat, helpMixer, helpGlobal} {
 			fmt.Fprintln(s.out, sec.title)
 			for _, l := range sec.lines {
 				fmt.Fprintf(s.out, "  %-14s %s\n", l.keys, l.what)
