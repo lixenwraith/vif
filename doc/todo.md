@@ -467,19 +467,9 @@ handed out of band like the host's, nothing publishes which participants relay,
 and a NAT between a person and every relay is not crossed. A browser relays only
 its own bots. Relay trees the authority chooses are dropped
 ([netcode design §4, Dropped](netcode-design.md#dropped)): a relay stays what a
-person chooses, and this item and the three after it are its correctness. Verify a
+person chooses, and this item and the two after it are its correctness. Verify a
 relayed topology under `LinkShape`s, asserting hash-only
 convergence and the authority's per-link fan-out.
-
-### Redial a relay that left
-
-- Priority: P3
-- Affected files: `internal/app/converge.go`, `internal/converge/reach.go`
-
-A person whose relay's link dropped walks the chain for a participant that relays
-for others, and forks when none does; it does not redial the relay's `-relay`
-door, which a relay whose link only blipped would answer, as a guest redials the
-host it lost ([Multi-player](multi-player.md#51-succession) §5.1).
 
 ### Carry a dropped guest back to a live host
 

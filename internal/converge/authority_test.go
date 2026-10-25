@@ -696,6 +696,55 @@ func TestACutOffParticipantGoesOnAlone(t *testing.T) {
 	}
 }
 
+// TestACutOffPersonRedialsItsRelayFirst: a participant that lost its path at the
+// relay it joined through redials that relay for one window before it walks, as a
+// survivor redials its lost host; refused, or past the window, it walks every
+// candidate, and admitted back it takes no turn, the run admitted being in its place.
+func TestACutOffPersonRedialsItsRelayFirst(t *testing.T) {
+	t.Parallel()
+	cut := func() *run {
+		r := session(t, 3, nil)[2]
+		r.u.Open(network.SessionOffer{
+			Host: 1, Assigned: 3, Term: network.FirstTerm, Roster: r.world.WorldRoster(), Chain: chainOf(2, 3), Relay: 2,
+		}, 3)
+		r.world.cut, r.world.redial = true, true
+		r.u.drive()
+		if targets := r.u.walkTargets(time.Now()); !slices.Equal(r.world.redials, []link.PeerID{2}) || targets != nil {
+			t.Fatalf("cut off, redials %v and dials %v; want the relay redialled and the walk waiting", r.world.redials, targets)
+		}
+		return r
+	}
+	refused := cut()
+	refused.u.RedialRefused(2)
+	timed := cut()
+	rewind(timed, parameter.NetworkSuccessionWindow)
+	timed.u.drive()
+	admitted := cut()
+	if !admitted.u.RedialAdmitted(2) || !admitted.u.State().Fork {
+		t.Fatal("admitted back, the run was not left to the one in its place")
+	}
+	now := time.Now()
+	for name, r := range map[string]*run{"refused": refused, "timed out": timed} {
+		if got, want := r.u.walkTargets(now), []link.PeerID{2}; !slices.Equal(got, want) {
+			t.Fatalf("%s, dials %v; want every candidate %v", name, got, want)
+		}
+		if r.u.State().Fork || len(r.world.redials) != 1 {
+			t.Fatalf("%s: fork %v, redials %v; want the walk, after the one redial", name, r.u.State().Fork, r.world.redials)
+		}
+	}
+	rewind(timed, time.Duration(len(timed.u.Chain()))*parameter.NetworkSuccessionWindow)
+	timed.u.drive()
+	if !timed.u.State().Fork || timed.world.forked != 1 {
+		t.Fatalf("past the redial and a whole walk: fork %v, told %d times", timed.u.State().Fork, timed.world.forked)
+	}
+	kept := session(t, 3, nil)[2]
+	kept.world.cut, kept.world.redial = true, true
+	kept.u.drive()
+	if len(kept.world.redials) != 0 || kept.u.walkTargets(now) == nil {
+		t.Fatalf("one that joined at the host redials %v and dials %v when cut off; want no redial and the walk", kept.world.redials, kept.u.walkTargets(now))
+	}
+}
+
 // TestAGuestAdmitsAPeerLink is the failure a live session hit: admission read the
 // coordinator's roster, which a guest never fills, so a survivor's link to the
 // successor was refused and both forked. Admission is roster membership, and

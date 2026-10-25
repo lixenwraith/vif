@@ -477,37 +477,47 @@ var errRedialEnded = errors.New("the run went on without this host")
 // redials. The claim is let go for the dial to name, its record as the drop left it.
 func (m *membership) redial(lost link.PeerID) bool {
 	var cfg Config
-	door := false
+	door, relay := false, false
 	m.world.RunSafe(func() {
 		cfg = *m.cfg
 		door = cfg.Mode == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" &&
 			!m.leaving.Load() && !m.run.replacing()
+		relay = lost == m.joinedThrough
 	})
-	if !door {
+	if !door || !relay && lost != m.authority.Holder() {
 		return false
 	}
-	addr, ok := m.authority.Chain().Lookup(lost)
-	if !ok {
-		addr = cfg.JoinAddress
+	// The relay this run joined through answers at the door it joined at; a host
+	// where the chain says, else at the door this run joined at.
+	addr := cfg.JoinAddress
+	if a, ok := m.authority.Chain().Lookup(lost); ok && !relay {
+		addr = a
 	}
 	c := m.claim.Swap(nil)
 	if c == nil {
 		return false
 	}
 	m.claims.release(c)
-	m.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost),
-		"dial", link.Shown(addr))
-	core.Go(func() { m.redialDoor(cfg, addr, lost, c) })
+	if relay {
+		m.log.Info("session", "msg", "redialling the lost relay", "relay", uint64(lost), "dial", link.Shown(addr))
+	} else {
+		m.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost), "dial", link.Shown(addr))
+	}
+	core.Go(func() { m.redialDoor(cfg, addr, lost, c, relay) })
 	return true
 }
 
-// redialDoor dials the lost host at addr while this run waits on it. Admitted back
-// into its own place, the run is replaced by the one admitted; a refusal no retry
-// helps, a door nothing answers at, or a place that is not this run's begins the
-// walk. A run that stays in its session holds its claim again.
-func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *claim) {
+// redialDoor dials the lost host, or the lost relay, at addr while this run waits on
+// it. Admitted back into its own place, the run is replaced by the one admitted; a
+// refusal no retry helps, a door nothing answers at, or a place that is not this
+// run's begins the walk. A run that stays in its session holds its claim again.
+func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *claim, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
+	notice := "Host connection restored"
+	if relay {
+		notice = "Relay connection restored"
+	}
 	for m.authority.Redialing(lost) {
 		d, err := dialJoin(dial)
 		if err == nil {
@@ -516,21 +526,21 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 		}
 		if err != nil {
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
-				m.log.Info("session", "msg", "lost host refused the redial", "error", err.Error())
+				m.log.Info("session", "msg", "the redial was refused", "peer", uint64(lost), "error", err.Error())
 				m.authority.RedialRefused(lost)
 			} else {
 				time.Sleep(parameter.NetworkRejoinPassInterval) // [wall] a link wait, not a game one
 			}
 			continue
 		}
-		back := &restartRequest{Notice: "Host connection restored", dialled: d}
+		back := &restartRequest{Notice: notice, dialled: d}
 		if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.replaceWith(back) {
-			m.log.Info("session", "msg", "lost host admitted this run back", "authority", uint64(lost))
+			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return
 		}
 		d.abandon(errRedialEnded)
 		if d.claim != c {
-			m.log.Info("session", "msg", "lost host holds no place for this run")
+			m.log.Info("session", "msg", "the redial found no place for this run", "peer", uint64(lost))
 			m.authority.RedialRefused(lost)
 		}
 	}

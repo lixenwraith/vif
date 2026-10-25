@@ -1224,6 +1224,38 @@ func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
 	}
 }
 
+// TestAPersonRedialsItsRelayWhenTheLinkDrops: a relayed person whose link to its
+// relay drops, the relay still running, redials the relay's door before it walks the
+// chain, as a guest redials the host it lost, and is admitted back into its own
+// place through it.
+func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relayAddr := freeAddress(t)
+	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	for _, a := range []*App{host, relay, person} {
+		waitForCursors(t, a, 4)
+	}
+	id, relayID := person.membership.localParticipant(), link.PeerID(relay.membership.localParticipant())
+	c := person.membership.claim.Load()
+	person.World().RunSafe(func() { person.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
+	if c == nil || !relay.instance().DropParticipant(id) {
+		t.Fatal("the person holds no claim, or its link would not drop")
+	}
+	var req *restartRequest
+	waitUntil(t, func() bool { req = person.restart.Load(); return req != nil }, "the person admitted back through its relay")
+	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id ||
+		req.dialled.offer.Relay != relayID || req.Notice != "Relay connection restored" {
+		t.Fatalf("the person was not admitted back into its own place through its relay: %+v", req)
+	}
+	req.dialled.abandon(errors.New("the test is over"))
+}
+
 // waitUntil waits for a running session to reach a state, a socket deadline away.
 func waitUntil(t *testing.T, done func() bool, what string) {
 	t.Helper()

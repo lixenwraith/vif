@@ -461,9 +461,10 @@ the joiner installed the world the guest last proved, to cross its arrival with
 what the joiner reported (`MsgRelayJoin`). A bot declares its holder and dials no
 peer links, since it shares its holder's fate; its holder's departure takes its
 bot group at the same crossing, to wait with it or to go with it. A person declares no holder: it keeps its slot when
-its relay leaves, and, having no link then, walks the chain like a survivor does
-and plays on through whichever participant relays for others (§5.1), forking when
-none does (`Reach.cutOff`, `NetworkSystem.sendUp`). It is a leaf unless `-listen`
+its relay leaves, and, having no link then, redials the relay's door for a window,
+walks the chain like a survivor does and plays on through whichever participant
+relays for others (§5.1), forking when none does (`Reach.cutOff`,
+`NetworkSystem.sendUp`). It is a leaf unless `-listen`
 names an address, since it could not reach the host itself. The holder identity is retained in the roster and
 Shared cursor across captures, resets and succession. Hosts may remove any remote
 slot with `:player drop`; removing a bot alone leaves its holder and siblings.
@@ -574,9 +575,11 @@ closes, and it redials that host on a loss as one that had a link does. A host
 unreachable from it is tried `NetworkHostDialAttempts` times, each after a longer
 wait, then followed through the relay for good, as is the coordinator a relayed
 person joined behind, which has no chain address.
-A participant with no path to its authority, a person whose relay left, walks every
-candidate for one that carries it and forks after a walk down the whole list
-(`Reach.cutOff`).
+A participant with no path to its authority, a person whose relay's link went,
+first redials the door it joined that relay at for one window, as step 1 redials a
+host, and a relay still running admits it back into its place; refused, nothing
+answering, or past the window, it walks every candidate for one that carries it and
+forks after a walk down the whole list (`Reach.cutOff`, `Authority.redialRelay`).
 
 A person's run that forks goes on in a session of its own, as `:leave` takes it
 (§5.5): the same identity, the next term, every other player's place kept as a
