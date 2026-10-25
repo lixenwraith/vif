@@ -111,8 +111,8 @@ It is the contract, not a suggestion.
 ## Agents
 
 - Spin off few agents, one at a time rather than a fan-out, and only for work one
-  context cannot hold. The account's quota is the maximum there is and it still
-  runs out mid-investigation, which stops every agent in flight at once.
+  context cannot hold. The account quota may run out and, which stops every agent
+  in flight at once.
 - An agent writes what it finds to a file as it goes, one section per step, under
   the scratchpad or `doc/`, so an interrupt costs a step and not the task; the
   parent reads those files rather than waiting for a final report, and resumes
