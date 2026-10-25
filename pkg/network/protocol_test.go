@@ -6,7 +6,40 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 )
+
+// The kinds the tests send, as a session names them to a link, and a configuration
+// carrying them with the timing a session would fill.
+const (
+	testSync       MessageType = 0x11
+	testEpoch      MessageType = 0x12
+	testControl    MessageType = 0x18
+	testReady      MessageType = 0x25
+	testCorrection MessageType = 0x27
+	testShard      MessageType = 0x2A
+)
+
+func testConfig() *Config {
+	cfg := DefaultConfig()
+	cfg.ReadTimeout, cfg.ProbeInterval, cfg.ProbeLostAfter = 5*time.Second, 200*time.Millisecond, time.Second
+	cfg.WriteLinger, cfg.StreamLevel, cfg.TickInterval = 2*time.Millisecond, 7, 50*time.Millisecond
+	cfg.Kinds = NewKinds(map[MessageType]Traits{
+		testEpoch:      {Kind: KindEpoch, Bundles: true},
+		testSync:       {Kind: KindSync, Bundles: true},
+		MsgBundle:      {Kind: KindEpoch},
+		testCorrection: {Kind: KindCorrection, Precompressed: true},
+		testShard:      {Kind: KindRepair, Precompressed: true},
+	}, testReady, 0x02, 0x05)
+	return cfg
+}
+
+// testConfigFor is testConfig for one role at one address.
+func testConfigFor(role Role, addr string) *Config {
+	cfg := testConfig()
+	cfg.Role, cfg.Address = role, addr
+	return cfg
+}
 
 type shortWriter struct {
 	bytes.Buffer
@@ -34,7 +67,7 @@ func (r shortReader) Read(p []byte) (int, error) {
 
 func TestFrameRoundTripSurvivesShortStreamIO(t *testing.T) {
 	w := &shortWriter{limit: 2}
-	want := &Message{Type: MsgEvent, Flags: FlagNeedAck, Seq: 41, Ack: 17, Payload: []byte("one complete frame")}
+	want := &Message{Type: testEpoch, Flags: FlagNeedAck, Seq: 41, Ack: 17, Payload: []byte("one complete frame")}
 	if err := want.Encode(w); err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -49,7 +82,7 @@ func TestFrameRoundTripSurvivesShortStreamIO(t *testing.T) {
 
 func TestDecodeRejectsPartialPayload(t *testing.T) {
 	var frame bytes.Buffer
-	if err := (&Message{Type: MsgEvent, Payload: []byte("whole")}).Encode(&frame); err != nil {
+	if err := (&Message{Type: testEpoch, Payload: []byte("whole")}).Encode(&frame); err != nil {
 		t.Fatal(err)
 	}
 	b := frame.Bytes()
@@ -78,7 +111,7 @@ func streamPair(t *testing.T) (w, r *Stream, rec *bytes.Buffer) {
 	a, b := net.Pipe()
 	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
 	rec = &bytes.Buffer{}
-	cfg := DefaultConfig()
+	cfg := testConfig()
 	return OpenStream(a, cfg), OpenStream(teeConn{b, rec}, cfg), rec
 }
 
@@ -105,16 +138,16 @@ func TestADeflatedBodyPassesTheStreamRaw(t *testing.T) {
 	body := bytes.Repeat([]byte("VIFS a body the codec already deflated "), 100)
 	bursts := [][]*Message{
 		{
-			{Type: MsgEvent, Payload: []byte("an epoch")},
-			{Type: MsgStateSync, Payload: []byte("a sync behind it")},
-			{Type: MsgDisconnect, Payload: []byte("a departure behind that")},
+			{Type: testEpoch, Payload: []byte("an epoch")},
+			{Type: testSync, Payload: []byte("a sync behind it")},
+			{Type: testControl, Payload: []byte("a departure behind that")},
 		},
 		{
-			{Type: MsgEvent, Payload: []byte("the next epoch")},
-			{Type: MsgStateSync, Payload: []byte("its sync")},
-			{Type: MsgStateCorrection, Payload: body},
-			{Type: MsgStateShard, Payload: body[:50]},
-			{Type: MsgEvent, Payload: []byte("the epoch after the body")},
+			{Type: testEpoch, Payload: []byte("the next epoch")},
+			{Type: testSync, Payload: []byte("its sync")},
+			{Type: testCorrection, Payload: body},
+			{Type: testShard, Payload: body[:50]},
+			{Type: testEpoch, Payload: []byte("the epoch after the body")},
 		},
 	}
 	read := make(chan struct{})
@@ -154,9 +187,9 @@ func TestADeflatedBodyPassesTheStreamRaw(t *testing.T) {
 func TestARawFrameDueOnTheWindowBoundaryStaysInTheRun(t *testing.T) {
 	w, r, _ := streamPair(t)
 	frames := []*Message{
-		{Type: MsgEvent, Payload: bytes.Repeat([]byte("v"), flateWindow-HeaderSize)},
-		{Type: MsgStateCorrection, Payload: []byte("a body due exactly on the boundary")},
-		{Type: MsgEvent, Payload: []byte("the epoch after")},
+		{Type: testEpoch, Payload: bytes.Repeat([]byte("v"), flateWindow-HeaderSize)},
+		{Type: testCorrection, Payload: []byte("a body due exactly on the boundary")},
+		{Type: testEpoch, Payload: []byte("the epoch after")},
 	}
 	go func() {
 		var header [HeaderSize]byte

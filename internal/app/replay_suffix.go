@@ -2,8 +2,8 @@ package app
 
 import (
 	"github.com/lixenwraith/vif/internal/event"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // replaySource is the seam the barrier offers the correction path. An interface
@@ -13,7 +13,7 @@ import (
 type replaySource interface {
 	LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFrame, []event.Origin, bool)
 	ReplaySuffixSize() (int, int64)
-	RetainedAfter(tick uint64, fences network.CrossingFences) ([]event.ScheduledWireFrame, []uint32, []event.Origin)
+	RetainedAfter(tick uint64, fences link.CrossingFences) ([]event.ScheduledWireFrame, []uint32, []event.Origin)
 }
 
 // replaySink is the projection world's half of the same seam.
@@ -44,7 +44,7 @@ func (a *App) feedProjectionLocked(staging *App, header snapshot.CaptureHeader) 
 	// stream, so the whole retained suffix is fed — the conservative direction,
 	// because a duplicate is repaired by the next correction and a discarded
 	// action is not.
-	fence := header.Crossings.Seq(network.PeerID(local))
+	fence := header.Crossings.Seq(link.PeerID(local))
 	frames, origins, available := src.LocalReplaySuffix(fence)
 	retained, dropped := src.ReplaySuffixSize()
 

@@ -23,8 +23,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Scheme is how a session's bytes travel. TCP carries native play at both ends; a
@@ -388,16 +386,11 @@ type wsAddr string
 func (a wsAddr) Network() string { return "websocket" }
 func (a wsAddr) String() string  { return string(a) }
 
-// RequestSession asks site's allocator for a new session and returns the link this
-// build joins it by. players and scenario choose from what the site advertises,
-// zero for its defaults; a refusal, an unauthorised one included, is its message.
-func RequestSession(site string, players int, scenario string) (string, error) {
-	return requestSession(site, players, scenario, parameter.NetworkSessionRequestTimeout)
-}
-
-// requestSession is RequestSession within timeout, which covers the site readying
-// the session's pod.
-func requestSession(site string, players int, scenario string, timeout time.Duration) (string, error) {
+// RequestSession asks site's allocator for a new session, within timeout, and
+// returns the link this build joins it by. players and scenario choose from what the
+// site advertises, zero for its defaults; a refusal, an unauthorised one included, is
+// its message.
+func RequestSession(site string, players int, scenario string, timeout time.Duration) (string, error) {
 	body, err := json.Marshal(struct {
 		Players  int    `json:"players,omitempty"`
 		Scenario string `json:"scenario,omitempty"`

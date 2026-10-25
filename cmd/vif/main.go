@@ -25,6 +25,7 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Exit codes
@@ -171,16 +172,16 @@ func main() {
 		sessionErr = errors.New("-headless requires -bot or -replay and cannot combine with -watch or -serve")
 	}
 	if sessionErr == nil && flagSession.cert != "" {
-		sessionTLS, sessionErr = network.LoadTLS(flagSession.cert, flagSession.key)
+		sessionTLS, sessionErr = link.LoadTLS(flagSession.cert, flagSession.key)
 	}
 	if sessionErr == nil && flagSession.selfsign {
-		if sessionTLS, sessionErr = network.SelfSignedTLS(flagSession.doorHosts()); sessionErr == nil {
+		if sessionTLS, sessionErr = link.SelfSignedTLS(flagSession.doorHosts()); sessionErr == nil {
 			fmt.Printf("-selfsign: a wss:// door encrypts with a certificate made for this run, %s; a terminal joins it as it is, or pins it with -ca\n",
-				network.Fingerprint(sessionTLS))
+				link.Fingerprint(sessionTLS))
 		}
 	}
 	if sessionErr == nil && flagSession.ca != "" {
-		sessionTrust, sessionErr = network.TrustTLS(flagSession.ca)
+		sessionTrust, sessionErr = link.TrustTLS(flagSession.ca)
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
@@ -271,17 +272,17 @@ func botNotice(cfg app.Config, spec string) {
 // requestSiteSession replaces a -join naming a site with the link of a session that
 // site creates for this player, before anything is built from the flags.
 func requestSiteSession(scenario string) error {
-	site, err := network.ParseEndpoint(flagSession.join)
-	if err != nil || site.Scheme != network.SchemeSite {
+	site, err := link.ParseEndpoint(flagSession.join)
+	if err != nil || site.Scheme != link.SchemeSite {
 		return nil
 	}
 	fmt.Printf("requesting a session from %s\n", site.Addr)
-	link, err := network.RequestSession(site.Addr, flagSession.players, scenario)
+	target, err := network.RequestSession(site.Addr, flagSession.players, scenario)
 	if err != nil {
 		return fmt.Errorf("-join %s: %w", site.Addr, err)
 	}
-	fmt.Printf("joining %s, the link others join by\n", link)
-	flagSession.join, flagSession.players = link, 0
+	fmt.Printf("joining %s, the link others join by\n", target)
+	flagSession.join, flagSession.players = target, 0
 	return nil
 }
 
@@ -656,14 +657,14 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if _, err := app.BotSpecs(f.bot); err != nil {
 		return err
 	}
-	if e, err := network.ParseEndpoint(f.join); f.players != 0 && f.join != "" && err == nil && e.Scheme != network.SchemeSite {
+	if e, err := link.ParseEndpoint(f.join); f.players != 0 && f.join != "" && err == nil && e.Scheme != link.SchemeSite {
 		return fmt.Errorf("-players configures a host, or the session a -join site creates")
 	}
 	if f.name != "" && (f.join != "" || (f.host == "" && f.serve == "")) {
 		return fmt.Errorf("-name is what a host answers to; a joiner names the session in its -join target")
 	}
 	for _, a := range []struct{ flag, target string }{{"-host", f.host}, {"-serve", f.serve}} {
-		doors, err := network.Doors(a.target)
+		doors, err := link.Doors(a.target)
 		for _, d := range doors {
 			if d.Secure() && f.cert == "" && !f.selfsign {
 				err = errors.New("a wss:// door serves a certificate; give one with -cert or make one with -selfsign")
@@ -680,12 +681,12 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		if a.target == "" {
 			continue
 		}
-		e, err := network.ParseEndpoint(a.target)
+		e, err := link.ParseEndpoint(a.target)
 		switch {
 		case err != nil:
 		case a.binds && e.Name != "":
 			err = errors.New("a bound address names no session; a host answers to -name")
-		case a.binds && e.Scheme == network.SchemeWebSocket:
+		case a.binds && e.Scheme == link.SchemeWebSocket:
 			err = errors.New("participants link to each other over tcp")
 		case a.binds:
 			err = e.Listenable()
@@ -723,8 +724,8 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 }
 
 // endpoint is a target validateInvocation has already parsed; "" is the zero value.
-func endpoint(target string) network.Endpoint {
-	e, _ := network.ParseEndpoint(target)
+func endpoint(target string) link.Endpoint {
+	e, _ := link.ParseEndpoint(target)
 	return e
 }
 
@@ -733,8 +734,8 @@ func doorList(target string) string {
 	if target == "" {
 		return ""
 	}
-	doors, _ := network.Doors(target)
-	return network.DoorList(doors)
+	doors, _ := link.Doors(target)
+	return link.DoorList(doors)
 }
 
 // doorHosts are the hosts the wss:// doors of -host and -serve name, which a
@@ -742,7 +743,7 @@ func doorList(target string) string {
 func (f sessionFlags) doorHosts() []string {
 	var hosts []string
 	for _, target := range []string{f.host, f.serve} {
-		doors, _ := network.Doors(target)
+		doors, _ := link.Doors(target)
 		for _, d := range doors {
 			if u, err := url.Parse(d.Addr); err == nil && d.Secure() && u.Hostname() != "" {
 				hosts = append(hosts, u.Hostname())

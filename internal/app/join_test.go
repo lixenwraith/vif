@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // sessionOfferFor builds the closed roster a coordinator would hand out, for a test
@@ -28,7 +29,7 @@ func sessionOfferFor(an event.JoinAnchor, n int) network.SessionOffer {
 	}
 	for i := range n {
 		o.Roster = append(o.Roster,
-			network.RosterEntry{ID: network.PeerID(i + 1), Slot: uint8(i)})
+			network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i)})
 	}
 	return o
 }

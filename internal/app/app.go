@@ -27,6 +27,7 @@ import (
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/system"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // fallbackColorMode is published when no terminal exists to detect against
@@ -130,13 +131,13 @@ type App struct {
 	// awayOrder is who of the roster is away, in the order they left: a full session
 	// gives a newcomer the place of the first. yielding is that one while its dismissal
 	// is on its way, and dismissWraith hands it to the authority's next tick.
-	awayOrder     []network.PeerID
-	yielding      network.PeerID
+	awayOrder     []link.PeerID
+	yielding      link.PeerID
 	dismissWraith atomic.Uint32
 	// returning is each place a dial took back with its claim until its arrival
 	// crosses, the entry as it waited, for a join that fails to give back, and the
 	// record its player brought; no wait runs out on its Wraith meanwhile.
-	returning map[network.PeerID]returnPlace
+	returning map[link.PeerID]returnPlace
 
 	// claims is what this process comes back to its sessions with, and claim the one
 	// this run is in its session under: nil before it is in one, and once it has left.
@@ -147,7 +148,7 @@ type App struct {
 	// listener for its bots. A run started with -host takes its endpoint from
 	// NetworkService instead, which the hub owns and closes; this one is owned here
 	// because nothing else knows it exists.
-	midRunPort *network.SocketPort
+	midRunPort *link.SocketPort
 
 	// lateJoins arms the mid-run gate on a host whose startup lobby has closed. It
 	// is a flag rather than a late assignment because the accept goroutine reads
@@ -239,7 +240,7 @@ type App struct {
 	relay      relayDesk
 	// joinedThrough is the relay this run joined the session through, zero on a
 	// dial to the authority; the barrier reaches the authority through it.
-	joinedThrough network.PeerID
+	joinedThrough link.PeerID
 }
 
 // New wires the runtime, releasing anything already started on failure. Errors are

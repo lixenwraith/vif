@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // DefaultBotGraph is the graph a bot seat plays when none is named.
@@ -140,7 +141,7 @@ func (a *App) seatConfigLocked() (Config, error) {
 	width, height := a.seatScreenLocked()
 	return Config{Mode: ModeHeadless, Resources: a.cfg.Resources, Width: width, Height: height,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1, JoinAddress: seatJoin, SessionName: a.cfg.SessionName,
-		holder: network.PeerID(a.world.LocalParticipant()), relay: a.seatLink, claims: a.claims}, nil
+		holder: link.PeerID(a.world.LocalParticipant()), relay: a.seatLink, claims: a.claims}, nil
 }
 
 // seatLink opens a stream to this run for one of its bots and serves the join
@@ -148,22 +149,22 @@ func (a *App) seatConfigLocked() (Config, error) {
 // authority on its own link for each answer.
 func (a *App) seatLink() (net.Conn, error) {
 	var (
-		port     *network.SocketPort
-		accept   func(net.Conn) (network.PeerID, error)
-		admitted func(network.PeerID)
+		port     *link.SocketPort
+		accept   func(net.Conn) (link.PeerID, error)
+		admitted func(link.PeerID)
 	)
 	a.world.RunSafe(func() {
-		port, _ = a.sessionTransportLocked().(*network.SocketPort)
+		port, _ = a.sessionTransportLocked().(*link.SocketPort)
 		if a.world.IsSessionCoordinator() {
 			accept, admitted = a.sessionAcceptor(a.admissions.Admit), a.admitLateJoiner
 		} else {
-			accept, admitted = a.relayAcceptor(network.PeerID(a.world.LocalParticipant())), a.releaseRelayedJoiner
+			accept, admitted = a.relayAcceptor(link.PeerID(a.world.LocalParticipant())), a.releaseRelayedJoiner
 		}
 	})
 	if port == nil {
 		return nil, errors.New("the holder is in no session")
 	}
-	near, far := network.Pipe()
+	near, far := link.Pipe()
 	if err := port.ServeConn(near, accept, admitted); err != nil {
 		_ = far.Close()
 		return nil, err

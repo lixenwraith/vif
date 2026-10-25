@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // retainedCapture is one published capture and its index, kept so the host can
@@ -77,7 +78,7 @@ type selectiveState struct {
 	// those that have arrived, and the cannot-serve answers a relaying neighbour
 	// returned instead of one.
 	manifests [][]byte
-	shards    network.SnapshotAssembly
+	shards    link.SnapshotAssembly
 	shardSets [][]byte
 	unserved  [][]byte
 	awaiting  []*awaitingRepair
@@ -152,7 +153,7 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		if err != nil {
 			return nil, fmt.Errorf("correction manifest encode: %w", err)
 		}
-		if len(b) > network.MaxPayloadSize {
+		if len(b) > link.MaxPayloadSize {
 			// A header and partition outgrowing a frame would mean a section vector
 			// no descent could be cheap over; fall back rather than chunk it.
 			return nil, fmt.Errorf("correction manifest is %d bytes, past one frame", len(b))
@@ -387,7 +388,7 @@ func (c *Corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	body, err := snapshot.EncodeShardSet(set)
 	var chunks [][]byte
 	if err == nil && c.repairIsWorthSending(len(body)) {
-		chunks, err = network.EncodeSnapshotChunksOf(set.Header.Run, req.Tick, body, parameter.SnapshotCorrectionChunkBytes)
+		chunks, err = link.EncodeSnapshotChunksOf(set.Header.Run, req.Tick, body, parameter.SnapshotCorrectionChunkBytes)
 	}
 	if err != nil || chunks == nil {
 		// A repair wider than the world it stands in for is not repairing anything.
@@ -428,7 +429,7 @@ func (c *Corrections) repairIsWorthSending(bytes int) bool {
 	keyframe := c.sizes.Keyframe
 	c.publishMu.Unlock()
 	if keyframe == 0 {
-		return bytes <= network.MaxSnapshotBytes
+		return bytes <= link.MaxSnapshotBytes
 	}
 	return int64(bytes) < keyframe
 }
@@ -483,7 +484,7 @@ func (c *Corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	}
 	// The peer is being served a whole world, so its standing in the selective
 	// exchange starts again from the state it is about to hold.
-	chunks, err := network.EncodeSnapshotChunksOf(cap.Header.Run, cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes)
+	chunks, err := link.EncodeSnapshotChunksOf(cap.Header.Run, cap.Header.Tick, body, parameter.SnapshotCorrectionChunkBytes)
 	if p := c.peerLocked(id); p != nil && err == nil {
 		p.silence = 0
 		p.owe(owedSend{typ: network.MsgStateCorrection, frames: chunks, tick: cap.Header.Tick, whole: true})
@@ -938,7 +939,7 @@ func (c *Corrections) sendRequest(from uint32, req snapshot.CorrectionRequest) {
 		c.log.Warn("converge", "msg", "correction request not encoded", "error", err.Error())
 		return
 	}
-	if len(body) > network.MaxPayloadSize && !req.Keyframe {
+	if len(body) > link.MaxPayloadSize && !req.Keyframe {
 		// A page vector this wide means the disagreement is not page-shaped. Ask
 		// for the whole world instead of describing the difference; without the
 		// vector the same request is a header, so this recurses once.
@@ -966,11 +967,11 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 	// A request is this instance's own half to serve; the other three are a
 	// receiver's, and while this instance authors they are its own index and the
 	// repairs answering it, come back round a mesh flood with cycles.
-	if network.MessageType(kind) != network.MsgStateRequest && c.authority.isAuthority() {
+	if link.MessageType(kind) != network.MsgStateRequest && c.authority.isAuthority() {
 		return
 	}
 	c.selectiveMu.Lock()
-	switch network.MessageType(kind) {
+	switch link.MessageType(kind) {
 	case network.MsgStateManifest:
 		c.selective.source = from
 		c.selective.manifests = keepNewest(
@@ -990,11 +991,11 @@ func (c *Corrections) ReceiveSelective(kind uint8, from uint32, body []byte) {
 		admitted, done, err := c.selective.shards.AddChunk(body)
 		switch {
 		case err != nil:
-			c.selective.shards = network.SnapshotAssembly{}
+			c.selective.shards = link.SnapshotAssembly{}
 			c.tel.ShardsRefused.Add(1)
 		case admitted && done:
 			_, set := c.selective.shards.Result()
-			c.selective.shards = network.SnapshotAssembly{}
+			c.selective.shards = link.SnapshotAssembly{}
 			c.selective.shardSets = keepNewest(
 				append(c.selective.shardSets, set), parameter.SnapshotCorrectionQueue)
 		}

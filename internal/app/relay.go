@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // relayDesk is a guest's half of admitting participants through its own link: its
@@ -26,8 +27,8 @@ type relayDesk struct {
 	mu      sync.Mutex
 	nonce   uint32
 	answer  chan network.RelayAdmit // the round trip in flight, nil when none
-	offers  map[network.PeerID]network.SessionOffer
-	reports map[network.PeerID]network.JoinerReport
+	offers  map[link.PeerID]network.SessionOffer
+	reports map[link.PeerID]network.JoinerReport
 }
 
 // serveRelay opens the address -relay named, once this run is in a session: a
@@ -40,7 +41,7 @@ func (a *App) serveRelay() {
 	if err != nil {
 		return
 	}
-	local := network.PeerID(a.localParticipant())
+	local := link.PeerID(a.localParticipant())
 	bound, err := port.ServeSession(a.cfg.RelayAddress, a.relayAcceptor(local), a.releaseRelayedJoiner)
 	if err != nil {
 		a.log.Warn("session", "msg", "relay address not bound", "address", a.cfg.RelayAddress, "error", err.Error())
@@ -53,13 +54,13 @@ func (a *App) serveRelay() {
 
 // relayAcceptor is the join handshake this run serves for its bots and for the
 // people it relays, as a coordinator's with the authority asked for each answer.
-func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID, error) {
+func (a *App) relayAcceptor(local link.PeerID) func(net.Conn) (link.PeerID, error) {
 	return network.HostAcceptor(network.Coordinator{
 		Preview:     func([]string) (network.SessionOffer, error) { return a.relayPreview(local) },
 		Assign:      func(claims []string) (network.SessionOffer, error) { return a.relayAssign(local, claims) },
 		Release:     a.relayRelease,
 		Admit:       a.admissions.Admit,
-		Report:      func(id network.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
+		Report:      func(id link.PeerID, r network.JoinerReport) error { return a.relayReport(local, id, r) },
 		Prepared:    a.showJoinerPrepared,
 		Name:        a.cfg.SessionName,
 		Scenario:    a.scenarioBody,
@@ -70,7 +71,7 @@ func (a *App) relayAcceptor(local network.PeerID) func(net.Conn) (network.PeerID
 // relayPreview is what a dial through this run is shown while it prepares: the
 // session as this run follows it, naming nobody, with this run as the far end. The
 // authority is asked nothing until the seat, which is where it allocates and refuses.
-func (a *App) relayPreview(local network.PeerID) (network.SessionOffer, error) {
+func (a *App) relayPreview(local link.PeerID) (network.SessionOffer, error) {
 	if a.authority != nil && a.authority.Migrating() {
 		return network.SessionOffer{}, ErrSessionHandoff
 	}
@@ -87,7 +88,7 @@ func (a *App) relayPreview(local network.PeerID) (network.SessionOffer, error) {
 
 // relayAssign asks the authority for an identity this run holds, or the place one of
 // the joiner's claims takes back, and names this run as the far end of its stream.
-func (a *App) relayAssign(local network.PeerID, claims []string) (network.SessionOffer, error) {
+func (a *App) relayAssign(local link.PeerID, claims []string) (network.SessionOffer, error) {
 	ans, err := a.askAuthority(network.RelayJoin{Step: network.RelayAssign, Claims: claims})
 	if err != nil {
 		return network.SessionOffer{}, err
@@ -97,7 +98,7 @@ func (a *App) relayAssign(local network.PeerID, claims []string) (network.Sessio
 	d := &a.relay
 	d.mu.Lock()
 	if d.offers == nil {
-		d.offers = make(map[network.PeerID]network.SessionOffer)
+		d.offers = make(map[link.PeerID]network.SessionOffer)
 	}
 	d.offers[offer.Assigned] = offer
 	d.mu.Unlock()
@@ -106,14 +107,14 @@ func (a *App) relayAssign(local network.PeerID, claims []string) (network.Sessio
 
 // relayReport takes what a joiner said of itself: this run's own bot, advertising
 // nothing, or a person, kept for the authority to admit it on.
-func (a *App) relayReport(local, id network.PeerID, r network.JoinerReport) error {
+func (a *App) relayReport(local, id link.PeerID, r network.JoinerReport) error {
 	if r.Holder != 0 && (r.Holder != local || r.Listen != "") {
 		return errors.New("a bot joins through its own holder, and advertises no listener")
 	}
 	d := &a.relay
 	d.mu.Lock()
 	if d.reports == nil {
-		d.reports = make(map[network.PeerID]network.JoinerReport)
+		d.reports = make(map[link.PeerID]network.JoinerReport)
 	}
 	d.reports[id] = r
 	d.mu.Unlock()
@@ -121,7 +122,7 @@ func (a *App) relayReport(local, id network.PeerID, r network.JoinerReport) erro
 }
 
 // relayRelease returns an identity whose handshake failed.
-func (a *App) relayRelease(id network.PeerID) {
+func (a *App) relayRelease(id link.PeerID) {
 	a.relay.mu.Lock()
 	delete(a.relay.offers, id)
 	delete(a.relay.reports, id)
@@ -131,7 +132,7 @@ func (a *App) relayRelease(id network.PeerID) {
 
 // releaseRelayedJoiner completes the gate for a bot the relay acceptor admitted. It
 // runs on the handshake's goroutine, as the coordinator's gate does.
-func (a *App) releaseRelayedJoiner(id network.PeerID) {
+func (a *App) releaseRelayedJoiner(id link.PeerID) {
 	a.relay.mu.Lock()
 	offer, report := a.relay.offers[id], a.relay.reports[id]
 	delete(a.relay.offers, id)
@@ -152,7 +153,7 @@ func (a *App) releaseRelayedJoiner(id network.PeerID) {
 
 // sendRelayedGate sends a joiner the world this run has proved the authority's, and
 // has the authority cross its arrival once it has installed it.
-func (a *App) sendRelayedGate(port *network.SocketPort, offer network.SessionOffer, report network.JoinerReport) error {
+func (a *App) sendRelayedGate(port *link.SocketPort, offer network.SessionOffer, report network.JoinerReport) error {
 	id := offer.Assigned
 	tick, bytes, _, err := a.gateJoiner(port, offer, false, a.corrections.ProvedWorld)
 	if err != nil {
@@ -219,17 +220,17 @@ func (a *App) tellAuthority(req network.RelayJoin) bool {
 // when this run is the coordinator, the coordinator's answer when it holds bots.
 // Caller MUST hold updateMutex.
 func (a *App) onRelayJoin(kind uint8, from uint32, body []byte) {
-	switch network.MessageType(kind) {
+	switch link.MessageType(kind) {
 	case network.MsgRelayAdmit:
-		a.receiveRelayAdmit(network.PeerID(from), body)
+		a.receiveRelayAdmit(link.PeerID(from), body)
 	case network.MsgRelayJoin:
-		a.decideRelayJoinLocked(network.PeerID(from), body)
+		a.decideRelayJoinLocked(link.PeerID(from), body)
 	}
 }
 
 // receiveRelayAdmit wakes the round trip an answer belongs to. An identity assigned
 // to a join that stopped waiting goes back to the authority.
-func (a *App) receiveRelayAdmit(from network.PeerID, body []byte) {
+func (a *App) receiveRelayAdmit(from link.PeerID, body []byte) {
 	var ans network.RelayAdmit
 	if json.Unmarshal(body, &ans) != nil || from != a.authorityID() {
 		return
@@ -249,7 +250,7 @@ func (a *App) receiveRelayAdmit(from network.PeerID, body []byte) {
 
 // decideRelayJoinLocked answers one step a holder asks on its own link. Caller MUST
 // hold updateMutex.
-func (a *App) decideRelayJoinLocked(relay network.PeerID, body []byte) {
+func (a *App) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 	var req network.RelayJoin
 	if err := json.Unmarshal(body, &req); err != nil {
 		a.log.Warn("session", "msg", "relayed join step unreadable", "relay", relay, "error", err.Error())
@@ -287,7 +288,7 @@ func (a *App) decideRelayJoinLocked(relay network.PeerID, body []byte) {
 }
 
 // relayedSlot is the slot of a participant joining through relay, if it is one.
-func (a *App) relayedSlot(relay, leaf network.PeerID) (uint8, bool) {
+func (a *App) relayedSlot(relay, leaf link.PeerID) (uint8, bool) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == leaf })
@@ -301,7 +302,7 @@ func (a *App) relayedSlot(relay, leaf network.PeerID) (uint8, bool) {
 // world. Its report settles what the assignment only guessed: a bot keeps the
 // relay as its holder, a person holds nothing and may declare an address.
 // Caller MUST hold updateMutex.
-func (a *App) admitRelayedLocked(relay, leaf network.PeerID, report network.JoinerReport) error {
+func (a *App) admitRelayedLocked(relay, leaf link.PeerID, report network.JoinerReport) error {
 	slot, ok := a.relayedSlot(relay, leaf)
 	if !ok {
 		return fmt.Errorf("participant %d is not joining through participant %d", leaf, relay)
@@ -318,7 +319,7 @@ func (a *App) admitRelayedLocked(relay, leaf network.PeerID, report network.Join
 // crossed is the holder's guess, so it is dismissed as any participant can be: a
 // departure for a cursor never made removes nothing. A place taken back whose
 // arrival has not crossed goes back to its Wraith. Caller MUST hold updateMutex.
-func (a *App) abandonRelayedLocked(relay, leaf network.PeerID) {
+func (a *App) abandonRelayedLocked(relay, leaf link.PeerID) {
 	if slot, ok := a.relayedSlot(relay, leaf); ok && !a.giveBack(leaf) {
 		a.pushDepartureLocked(event.ParticipantDepartedPayload{Participant: uint32(leaf), Slot: slot, Dismissed: true},
 			core.DomainPlayer)

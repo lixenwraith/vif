@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // pressPresentation is a screen with a keyboard: what a test sends on events is what
@@ -111,7 +112,7 @@ func TestALatePressDialsAgainIntoTheSameGame(t *testing.T) {
 	if !guest.seated() || guest.World() != world {
 		t.Fatal("a late press did not seat the run it came to, on the world it built")
 	}
-	id := network.PeerID(guest.localParticipant())
+	id := link.PeerID(guest.localParticipant())
 	if id == 0 || id != guest.sessionOffer.Assigned {
 		t.Fatalf("the seated run is participant %d, its offer names %d", id, guest.sessionOffer.Assigned)
 	}

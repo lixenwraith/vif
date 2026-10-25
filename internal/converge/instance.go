@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/status"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Instance is the run this protocol authors or follows. Every method takes the world
@@ -74,15 +75,15 @@ type Instance interface {
 	// for its own; CrossDepartures keeps the places of participants a new host's
 	// group lost as Wraiths; Forked says no handoff came, so the run goes on alone
 	// from the last authoritative state, with the roster it held.
-	AuthorityChanged(rec network.HandoffRecord, mine bool, via network.PeerID)
+	AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID)
 	CrossDepartures(away []network.RosterEntry)
-	Forked(roster []network.RosterEntry, local network.PeerID)
+	Forked(roster []network.RosterEntry, local link.PeerID)
 
 	// Redial starts this run's redial of the authority it lost, at the door it came
 	// in by with the claim its place waits under, and reports whether one started.
 	// It dials while Authority.Redialing, replaces the run once RedialAdmitted, and
 	// reports a door that turned it away through RedialRefused.
-	Redial(lost network.PeerID) bool
+	Redial(lost link.PeerID) bool
 
 	// Freeze stops the run while its authority moves; Thaw is the successor's end of
 	// that window, which leaves standing a hold the lost host set.

@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestTheHostRefusesAPeerThatSkippedItsOwnCheck is the whole point of moving the
@@ -27,7 +28,7 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 
 	// A guest that reports a different simulation, having done its own checks and
 	// passed them: the anchor it was sent is the anchor it holds.
-	pending, offered, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
+	pending, offered, err := network.DialSession(addr, network.DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

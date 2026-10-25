@@ -13,7 +13,7 @@ import (
 // lockstep divergence — so the count has to leave the transport rather than be
 // swallowed by a discarded return value.
 func TestBroadcastReportsRefusedFrames(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := testConfig()
 	cfg.SendQueueSize = 1
 
 	pm := NewPeerManager(cfg)
@@ -26,16 +26,16 @@ func TestBroadcastReportsRefusedFrames(t *testing.T) {
 	defer peer.Close()
 	pm.peers[peer.ID] = peer
 
-	if refused := pm.Broadcast(NewMessage(MsgEvent, nil)); refused != 0 {
+	if refused := pm.Broadcast(NewMessage(testEpoch, nil)); refused != 0 {
 		t.Fatalf("first broadcast refused %d frames, want 0", refused)
 	}
-	if refused := pm.Broadcast(NewMessage(MsgEvent, nil)); refused != 1 {
+	if refused := pm.Broadcast(NewMessage(testEpoch, nil)); refused != 1 {
 		t.Fatalf("broadcast into a full queue refused %d frames, want 1", refused)
 	}
 
 	// A closed peer refuses rather than blocking, so a lost link is also counted.
 	peer.Close()
-	if refused := pm.Broadcast(NewMessage(MsgEvent, nil)); refused != 1 {
+	if refused := pm.Broadcast(NewMessage(testEpoch, nil)); refused != 1 {
 		t.Fatalf("broadcast to a closed peer refused %d frames, want 1", refused)
 	}
 }
@@ -43,7 +43,7 @@ func TestBroadcastReportsRefusedFrames(t *testing.T) {
 // TestAFrameQueuedBeforeCloseStillArrives: closing a link flushes what was queued on
 // it, so a notice broadcast just before a shutdown reaches the peers it was meant for.
 func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
-	pm := NewPeerManager(DefaultConfig())
+	pm := NewPeerManager(testConfig())
 	client, server := net.Pipe()
 	defer client.Close()
 	if _, err := pm.AddConnectionAs(server, 1, false); err != nil {
@@ -55,13 +55,13 @@ func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
 		msg, _ := OpenStream(client, pm.config).ReadFrame(MaxPayloadSize, header[:])
 		received <- msg
 	}()
-	pm.Broadcast(NewMessage(MsgSessionRestart, []byte("host:7777")))
+	pm.Broadcast(NewMessage(testControl, []byte("host:7777")))
 	start := time.Now()
 	pm.Close()
 	if elapsed := time.Since(start); elapsed > closeFlush {
 		t.Errorf("Close took %s, past its %s flush bound", elapsed, closeFlush)
 	}
-	if msg := <-received; msg == nil || msg.Type != MsgSessionRestart {
+	if msg := <-received; msg == nil || msg.Type != testControl {
 		t.Fatalf("the peer read %+v, want the queued restart notice", msg)
 	}
 }
@@ -71,7 +71,7 @@ func TestAFrameQueuedBeforeCloseStillArrives(t *testing.T) {
 // releases what the link is owed before it, so a link reads its frames in the order
 // they were sent.
 func TestALinkBundlesEpochsAndKeepsTheirOrder(t *testing.T) {
-	port := NewSocketPort(DebugConfig(RoleHost, "127.0.0.1:0"))
+	port := NewSocketPort(testConfigFor(RoleHost, "127.0.0.1:0"))
 	defer port.transport.peers.Close()
 	client, server := net.Pipe()
 	defer client.Close()
@@ -81,7 +81,7 @@ func TestALinkBundlesEpochsAndKeepsTheirOrder(t *testing.T) {
 	for _, f := range []struct {
 		kind MessageType
 		body string
-	}{{MsgEvent, "a"}, {MsgStateSync, "b"}, {MsgDisconnect, "c"}, {MsgEvent, "d"}} {
+	}{{testEpoch, "a"}, {testSync, "b"}, {testControl, "c"}, {testEpoch, "d"}} {
 		if !port.Send(2, uint8(f.kind), []byte(f.body)) {
 			t.Fatalf("the link refused %#x", f.kind)
 		}
@@ -104,9 +104,9 @@ func TestALinkBundlesEpochsAndKeepsTheirOrder(t *testing.T) {
 		got = append(got, frame)
 	}
 	want := []string{
-		fmt.Sprintf("bundle: %#x:a %#x:b", MsgEvent, MsgStateSync),
-		fmt.Sprintf("%#x:c", MsgDisconnect),
-		fmt.Sprintf("bundle: %#x:d", MsgEvent),
+		fmt.Sprintf("bundle: %#x:a %#x:b", testEpoch, testSync),
+		fmt.Sprintf("%#x:c", testControl),
+		fmt.Sprintf("bundle: %#x:d", testEpoch),
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("the link read %v, want %v", got, want)

@@ -28,6 +28,7 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // playBot runs one embedded graph solo for n ticks on a fresh headless instance,
@@ -404,7 +405,7 @@ func TestAGuestsBotsWaitWithIt(t *testing.T) {
 	waitForCursors(t, host, 2)
 	guest, leave := driveBot(t, Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
 	waitForCursors(t, host, 4)
-	id := network.PeerID(guest.localParticipant())
+	id := link.PeerID(guest.localParticipant())
 	leave()
 	waitForWraiths(t, host, 2)
 	roster := (instance{host}).WorldRoster()
@@ -701,7 +702,7 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 	if h, g := host.sessionTransport().PeerCount(), guest.sessionTransport().PeerCount(); h != 2 || g != 2 {
 		t.Fatalf("the host holds %d links and the guest %d, want 2 each", h, g)
 	}
-	local := network.PeerID(guest.localParticipant())
+	local := link.PeerID(guest.localParticipant())
 	roster := (instance{host}).WorldRoster()
 	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.Holder == local })
 	if i < 0 {
@@ -1180,7 +1181,7 @@ func TestARelayedPersonsOwnAddressReachesTheSession(t *testing.T) {
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
 	person, _ := driveBot(t, Config{JoinAddress: relayAddr, ListenAddress: freeAddress(t)}, "roam", nil)
-	id, want := network.PeerID(person.localParticipant()), person.reach.DeclaredAddr()
+	id, want := link.PeerID(person.localParticipant()), person.reach.DeclaredAddr()
 	if want == "" {
 		t.Fatal("the relayed person declared no address")
 	}

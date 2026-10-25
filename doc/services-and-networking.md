@@ -1142,8 +1142,9 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 | Terminal adapter | `internal/service/adapter_terminal.go` |
 | Content/audio adapters | `internal/service/adapter_content.go`, `adapter_audio.go` |
 | Network adapter | `internal/service/adapter_network.go` |
-| Transport/protocol | `internal/network/*.go` |
-| WebSocket transport | `pkg/websocket`, `internal/network/websocket_other.go`, `websocket_wasm.go`; the allocator's route in `tool/vif-allocator/ws_proxy.go` |
+| Link layer: framing, transport, port, probe, mesh, chunking, addresses | `pkg/network` |
+| Session layer: handshakes, kinds, authority term and chain, identity, admission | `internal/network` |
+| WebSocket transport | `pkg/websocket`, `pkg/network/websocket_other.go`, `websocket_wasm.go`; the allocator's route in `tool/vif-allocator/ws_proxy.go` |
 | Tick-owned ECS wire bridge | `internal/system/network.go` |
 | Authority, succession, reach and corrections | `internal/converge` |
 | Startup session assembly | `internal/app/session.go`, `app.go`, `loop.go`, `network_socket.go`, `network_wasm.go` |

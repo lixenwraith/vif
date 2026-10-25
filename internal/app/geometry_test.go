@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -164,12 +165,12 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	a := geometryServer(t, 0, 0)
-	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: a.assignParticipant, Release: a.releaseParticipant, Report: a.noteJoinerReport,
 	}, socketWait)
-	port := network.NewSocketPort(hostCfg)
+	port := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = port.Close() })
 	if err := port.Start(); err != nil {
 		t.Fatalf("host transport: %v", err)

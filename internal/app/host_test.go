@@ -25,6 +25,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
@@ -403,7 +404,7 @@ func dialSession(t *testing.T, addr string) (*network.PendingJoin, network.Sessi
 	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
 	var last error
 	for time.Now().Before(deadline) {
-		pending, offered, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
+		pending, offered, err := network.DialSession(addr, network.DebugConfig(link.RolePeer, ""))
 		if err == nil {
 			return pending, offered
 		}
@@ -947,7 +948,7 @@ func TestHostCarriesItsAuthorityPolicy(t *testing.T) {
 // identity, the start gate, the capture, the install and the catch-up. It is the
 // production sequence, assembled here because Loop owns it in a run with a
 // terminal and this harness owns its own ticks. configure edits the join config.
-func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configure ...func(*Config)) (*App, *network.SocketPort) {
+func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configure ...func(*Config)) (*App, *link.SocketPort) {
 	t.Helper()
 	pending, offered := dialSession(t, addr)
 	t.Cleanup(func() { _ = pending.Close() })
@@ -979,7 +980,7 @@ func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configur
 
 	// The transport takes the stream only after the gate has read the world off it,
 	// which is what startJoinSession does; the port then replays what the gate held.
-	port := network.NewSocketPort(pending.TransportConfig())
+	port := link.NewSocketPort(pending.TransportConfig())
 	t.Cleanup(func() { _ = port.Close() })
 	if err := guest.startJoinSession(joinDeadline(socketWait)); err != nil {
 		t.Fatalf("join startup: %v", err)
@@ -1488,7 +1489,7 @@ func TestAResetKeepsAWraithWaiting(t *testing.T) {
 	apps := meshSession(t, 0xA3A5, 3, [][2]int{{1, 2}, {1, 3}})
 	localCursors(t, apps)
 	apps[2].World().RunSafe(func() {
-		apps[2].World().Resources.Network.Port.(*network.MeshPort).Close()
+		apps[2].World().Resources.Network.Port.(*link.MeshPort).Close()
 	})
 	survivors := apps[:2]
 	for range parameter.NetworkBarrierDelayTicks + 40 {
@@ -1604,7 +1605,7 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 	guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
 	waitForCursors(t, host, 2)
 	stop()
-	lost := network.PeerID(guest.World().LocalParticipant())
+	lost := link.PeerID(guest.World().LocalParticipant())
 	_ = port.Close()
 	for deadline := time.Now().Add(socketWait); host.sessionTransport().PeerCount() > 0; time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
@@ -1903,8 +1904,8 @@ func TestASessionARunOpensHasNobodyAwayFromIt(t *testing.T) {
 	defer a.Close()
 	tickUntilCursor(t, a)
 	a.sessionMu.Lock()
-	a.awayOrder, a.yielding = []network.PeerID{2}, 2
-	a.returning = map[network.PeerID]returnPlace{2: {entry: network.RosterEntry{ID: 2, Slot: 1, Away: true}}}
+	a.awayOrder, a.yielding = []link.PeerID{2}, 2
+	a.returning = map[link.PeerID]returnPlace{2: {entry: network.RosterEntry{ID: 2, Slot: 1, Away: true}}}
 	a.sessionMu.Unlock()
 	a.dismissWraith.Store(2)
 	var err error
@@ -2179,7 +2180,7 @@ func TestAWraithWaitsUnderTheClaimItsRosterNames(t *testing.T) {
 func TestAReturnThatDoesNotCompleteLeavesItsWraithWaiting(t *testing.T) {
 	host, guest, token := awayGuest(t)
 	anchor := host.JoinAnchor()
-	took := func(holder network.PeerID) network.PeerID {
+	took := func(holder link.PeerID) link.PeerID {
 		t.Helper()
 		back, err := host.assignFor(anchor, holder, []string{token})
 		if err != nil || back.Assigned != guest.Assigned {
@@ -2258,10 +2259,10 @@ func TestASuccessorOrdersWhoIsAwayByTheirWaits(t *testing.T) {
 		host.Tick(4)
 	}
 	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	var order []network.PeerID
+	var order []link.PeerID
 	roster := (instance{host}).WorldRoster()
 	host.world.RunSafe(func() { order = host.awayOrderLocked(roster) })
-	if want := []network.PeerID{guests[1].Assigned, guests[0].Assigned}; !slices.Equal(order, want) {
+	if want := []link.PeerID{guests[1].Assigned, guests[0].Assigned}; !slices.Equal(order, want) {
 		t.Fatalf("away longest first reads %v, want %v", order, want)
 	}
 }

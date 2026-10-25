@@ -11,9 +11,9 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -1329,11 +1329,11 @@ func TestACorrectionDoesNotStallTheOwnerStateSync(t *testing.T) {
 
 // towerFight puts a host and a guest in the tower region over one link, shaped as
 // shape into the guest; fight drives both through ticks of random motion and fire.
-func towerFight(t *testing.T, cfg Config, shape network.LinkShape) (host, guest *App, fight func(ticks int)) {
+func towerFight(t *testing.T, cfg Config, shape link.LinkShape) (host, guest *App, fight func(ticks int)) {
 	t.Helper()
 	apps := meshSessionOf(t, cfg, 2, [][2]int{{1, 2}})
 	host, guest = apps[0], apps[1]
-	transportOf(t, host).SetShape(network.LinkShape{LatencyTicks: shape.LatencyTicks})
+	transportOf(t, host).SetShape(link.LinkShape{LatencyTicks: shape.LatencyTicks})
 	transportOf(t, guest).SetShape(shape)
 	for _, a := range apps {
 		injectExCommand(t, a, "god")
@@ -1389,7 +1389,7 @@ func TestAGuestFollowsTheAuthoritysTransitions(t *testing.T) {
 	apps := meshSessionOf(t, towerScenario(t, 0x70E4), 2, [][2]int{{1, 2}})
 	host, guest := apps[0], apps[1]
 	for _, a := range apps {
-		transportOf(t, a).SetShape(network.LinkShape{LatencyTicks: 3})
+		transportOf(t, a).SetShape(link.LinkShape{LatencyTicks: 3})
 		injectExCommand(t, a, "god")
 	}
 	type move struct {
@@ -1434,7 +1434,7 @@ func TestAGuestFollowsTheAuthoritysTransitions(t *testing.T) {
 // The first snake comes out near tick 550; 750 leave it about fifty manifests.
 func TestATowerGuestAnswersHashOnly(t *testing.T) {
 	t.Parallel()
-	_, guest, fight := towerFight(t, towerScenario(t, 0x70E4), network.LinkShape{LatencyTicks: 2})
+	_, guest, fight := towerFight(t, towerScenario(t, 0x70E4), link.LinkShape{LatencyTicks: 2})
 	fight(750)
 	manifests := statOf(guest, "snapshot.manifests_received")
 	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
@@ -1452,7 +1452,7 @@ func TestASlowLinkCarriesTheTowerWithoutAStandingQueue(t *testing.T) {
 	// A wide terminal's map, whose tower world is about 40 KB whole.
 	cfg := towerScenario(t, 0x70E4)
 	cfg.Width, cfg.Height, cfg.MapWidth, cfg.MapHeight = 239, 66, 239, 64
-	host, guest, fight := towerFight(t, cfg, network.LinkShape{LatencyTicks: 3, BytesPerTick: 1000})
+	host, guest, fight := towerFight(t, cfg, link.LinkShape{LatencyTicks: 3, BytesPerTick: 1000})
 	fight(150)
 	manifests := statOf(guest, "snapshot.manifests_received")
 	hashOnly := statOf(guest, "snapshot.corrections_hash_only")

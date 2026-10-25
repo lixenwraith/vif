@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 var errSessionCanceled = errors.New("network session canceled")
@@ -93,7 +94,7 @@ func newHostingApp(cfg Config) (*App, error) {
 }
 
 // hostNetworkConfig captures the App before the service starts its accept loop.
-func (a *App) hostNetworkConfig() *network.Config {
+func (a *App) hostNetworkConfig() *link.Config {
 	netCfg := a.cfg.hostNetwork(a.cfg.HostAddress)
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = a.sessionCapacity()
@@ -110,7 +111,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 // sessionAcceptor is the join handshake this run serves as its session's coordinator,
 // on its listener and on its bots' in-process streams, which spend no join budget.
 // admit takes or refuses a dial before anything is allocated for it.
-func (a *App) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) (network.PeerID, error) {
+func (a *App) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) (link.PeerID, error) {
 	return network.HostAcceptor(network.Coordinator{
 		Preview:     a.previewParticipant,
 		Assign:      a.assignParticipant,
@@ -171,7 +172,7 @@ func shortDigest(d string) string {
 }
 
 // admitLateJoiner gates a dial that arrives after the startup lobby closed.
-func (a *App) admitLateJoiner(id network.PeerID) {
+func (a *App) admitLateJoiner(id link.PeerID) {
 	if !a.lateJoins.Load() {
 		return
 	}
@@ -290,7 +291,7 @@ func (a *App) playersFit(sc resource.Scenario) error {
 
 // Admission records ownership before a bot can enter the lobby or running roster,
 // and the claim its participant comes back under.
-func (a *App) noteJoinerReport(id network.PeerID, report network.JoinerReport) error {
+func (a *App) noteJoinerReport(id link.PeerID, report network.JoinerReport) error {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	if report.Holder != 0 {
@@ -428,7 +429,7 @@ func dialJoin(cfg Config) (*joinDial, error) {
 		if cfg.relay != nil {
 			return nil, fmt.Errorf("join through the holder: %w", err)
 		}
-		return nil, fmt.Errorf("join %s: %w", network.Shown(cfg.JoinAddress), err)
+		return nil, fmt.Errorf("join %s: %w", link.Shown(cfg.JoinAddress), err)
 	}
 	d := &joinDial{pending: pending, offer: preview, claims: cfg.claims}
 	if cfg, err = ConfigForJoin(cfg, preview); err == nil {
@@ -444,7 +445,7 @@ func dialJoin(cfg Config) (*joinDial, error) {
 
 // joinNetConfig is the transport a dial of cfg's session runs on.
 func joinNetConfig(cfg Config) *network.Config {
-	netCfg := network.DebugConfig(network.RolePeer, cfg.JoinAddress)
+	netCfg := network.DebugConfig(link.RolePeer, cfg.JoinAddress)
 	netCfg.OnError = logSessionError
 	netCfg.Identity = buildIdentity()
 	netCfg.SessionName = cfg.SessionName
@@ -584,7 +585,7 @@ func (a *App) takeSeat(pressed bool, signals <-chan os.Signal) error {
 	redial := pressed && err != nil && (!errors.As(err, &refusal) || network.RetryOf(err) == network.RetrySoon)
 	for deadline := time.Now().Add(parameter.SessionRejoinWindow); redial && time.Now().Before(deadline); { // [wall] a link bound
 		a.log.Info("session", "msg", "seat dialled again", "error", err.Error())
-		a.showJoinStatus("Joining " + network.Shown(a.cfg.JoinAddress) + "... (" + err.Error() + ")")
+		a.showJoinStatus("Joining " + link.Shown(a.cfg.JoinAddress) + "... (" + err.Error() + ")")
 		pending, offer, err = a.redialSeat()
 		if redial = err != nil && network.RetryOf(err) == network.RetrySoon && !errors.Is(err, errSessionMoved); redial {
 			select {
@@ -743,7 +744,7 @@ type returnPlace struct {
 // staleLink refuses a dial whose claim names a place still linked: whoever names the
 // token is its player, and the link one it left that the host has not yet seen go.
 type staleLink struct {
-	id network.PeerID
+	id link.PeerID
 	*network.Refusal
 }
 
@@ -763,7 +764,7 @@ func (a *App) closeStaleLink(err error, port engine.NetworkPort) {
 // recorded now because the bot never reports to this instance. A claim among the
 // tokens named takes back the place its Wraith keeps, a full session's too. Caller
 // must not hold sessionMu.
-func (a *App) assignFor(anchor event.JoinAnchor, holder network.PeerID, claims []string) (network.SessionOffer, error) {
+func (a *App) assignFor(anchor event.JoinAnchor, holder link.PeerID, claims []string) (network.SessionOffer, error) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	if err := a.refusedLocked(); err != nil {
@@ -853,7 +854,7 @@ func (a *App) namesPlaceLocked(tokens []string) bool {
 // entry its Wraith keeps, held for the dial until its arrival crosses. A bot comes
 // back through its own holder. A claimed place still linked, or coming back on
 // another dial, refuses this one for a retry. Caller holds sessionMu.
-func (a *App) claimedLocked(tokens []string, holder network.PeerID) (network.RosterEntry, error) {
+func (a *App) claimedLocked(tokens []string, holder link.PeerID) (network.RosterEntry, error) {
 	var refused error
 	for _, t := range tokens {
 		digest := network.ClaimDigest(t)
@@ -873,7 +874,7 @@ func (a *App) claimedLocked(tokens []string, holder network.PeerID) (network.Ros
 				Reason: "this player's place is still linked to the run it left"}}
 		default:
 			if a.returning == nil {
-				a.returning = make(map[network.PeerID]returnPlace)
+				a.returning = make(map[link.PeerID]returnPlace)
 			}
 			a.returning[p.ID] = returnPlace{entry: p}
 			if holder != 0 {
@@ -887,7 +888,7 @@ func (a *App) claimedLocked(tokens []string, holder network.PeerID) (network.Ros
 
 // giveBack returns a place a dial took back to its Wraith, for a join that did not
 // complete, and reports whether id was one.
-func (a *App) giveBack(id network.PeerID) bool {
+func (a *App) giveBack(id link.PeerID) bool {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	r, ok := a.returning[id]
@@ -935,7 +936,7 @@ func (a *App) nextParticipantLocked() network.RosterEntry {
 	var out network.RosterEntry
 	for id := 1; id <= parameter.MaxPlayers+1; id++ {
 		if !taken(func(p network.RosterEntry) int { return int(p.ID) }, id) {
-			out.ID = network.PeerID(id)
+			out.ID = link.PeerID(id)
 			break
 		}
 	}
@@ -950,11 +951,11 @@ func (a *App) nextParticipantLocked() network.RosterEntry {
 
 // participantDeparted is the departure hook the network resource calls when a
 // participant leaves.
-func (a *App) participantDeparted(id uint32, final bool) { a.leaveRoster(network.PeerID(id), final) }
+func (a *App) participantDeparted(id uint32, final bool) { a.leaveRoster(link.PeerID(id), final) }
 
 // releaseParticipant returns an identity whose handshake did not complete, or whose
 // participant has left for good; a place taken back goes back to its Wraith.
-func (a *App) releaseParticipant(id network.PeerID) {
+func (a *App) releaseParticipant(id link.PeerID) {
 	if !a.giveBack(id) {
 		a.leaveRoster(id, true)
 	}
@@ -963,7 +964,7 @@ func (a *App) releaseParticipant(id network.PeerID) {
 // leaveRoster forgets the links a departed participant held. A final departure
 // returns its identity and slot to the pool, with its bots'; any other keeps both
 // for the Wraith that waits in the slot, and marks the entry away.
-func (a *App) leaveRoster(id network.PeerID, final bool) {
+func (a *App) leaveRoster(id link.PeerID, final bool) {
 	if id == 0 || id == a.authorityID() {
 		return
 	}
@@ -977,7 +978,7 @@ func (a *App) leaveRoster(id network.PeerID, final bool) {
 		gone := func(p network.RosterEntry) bool { return p.ID == id || p.Holder == id }
 		for _, p := range a.sessionRoster {
 			if gone(p) {
-				a.awayOrder = slices.DeleteFunc(a.awayOrder, func(away network.PeerID) bool { return away == p.ID })
+				a.awayOrder = slices.DeleteFunc(a.awayOrder, func(away link.PeerID) bool { return away == p.ID })
 				delete(a.returning, p.ID)
 				if a.yielding == p.ID {
 					a.yielding = 0
@@ -1023,7 +1024,7 @@ func (a *App) mayYieldLocked() bool {
 // yieldableLocked is the participant away longest whose place a full session may ask
 // for: not one coming back, nor a bot whose holder is away too. Zero when nobody's
 // is. Caller holds sessionMu.
-func (a *App) yieldableLocked() network.PeerID {
+func (a *App) yieldableLocked() link.PeerID {
 	for _, id := range a.awayOrder {
 		p, ok := a.awayLocked(id)
 		if _, holderAway := a.awayLocked(p.Holder); ok && (p.Holder == 0 || !holderAway) {
@@ -1035,7 +1036,7 @@ func (a *App) yieldableLocked() network.PeerID {
 
 // awayLocked is id's roster entry while it is away and not coming back. Caller holds
 // sessionMu.
-func (a *App) awayLocked(id network.PeerID) (network.RosterEntry, bool) {
+func (a *App) awayLocked(id link.PeerID) (network.RosterEntry, bool) {
 	i := slices.IndexFunc(a.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
 	if _, back := a.returning[id]; i < 0 || !a.sessionRoster[i].Away || back {
 		return network.RosterEntry{}, false
@@ -1066,14 +1067,14 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 // move again. Having no link is what makes the removal local rather than a crossing
 // — a departure is produced once at one agreed tick because two instances must
 // destroy a shared entity together, and here there is no second instance.
-func (a *App) dropAbandonedCursors(roster []network.RosterEntry, local network.PeerID) {
+func (a *App) dropAbandonedCursors(roster []network.RosterEntry, local link.PeerID) {
 	a.world.RunSafe(func() { a.dropAbandonedLocked(roster, nil, local) })
 }
 
 // dropAbandonedLocked is dropAbandonedCursors under the world lock, which a run
 // leaving its session holds. A place it kept is not removed but waits as a Wraith,
 // as it would for any departure. Caller MUST hold updateMutex.
-func (a *App) dropAbandonedLocked(roster, kept []network.RosterEntry, local network.PeerID) {
+func (a *App) dropAbandonedLocked(roster, kept []network.RosterEntry, local link.PeerID) {
 	if p := a.sessionTransportLocked(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
 		return
 	}
@@ -1088,7 +1089,7 @@ func (a *App) dropAbandonedLocked(roster, kept []network.RosterEntry, local netw
 }
 
 // crossDeparture produces one participant's departure as the D-11 crossing it is.
-func (a *App) crossDeparture(id network.PeerID, slot uint8) {
+func (a *App) crossDeparture(id link.PeerID, slot uint8) {
 	a.pushDeparture(event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot}, core.DomainPlayer)
 }
 
@@ -1110,7 +1111,7 @@ func (a *App) pushDepartureLocked(p event.ParticipantDepartedPayload, domain cor
 // offerLocked builds the offer addressed to one participant. Caller holds sessionMu,
 // which is why the anchor is passed in rather than read here: JoinAnchor takes the
 // world lock, and a departure released from under that lock takes sessionMu.
-func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) network.SessionOffer {
+func (a *App) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) network.SessionOffer {
 	term := a.authorityTerm()
 	if term == 0 {
 		term = network.FirstTerm
@@ -1174,7 +1175,7 @@ func (a *App) startHostSession(signals <-chan os.Signal) error {
 // whoever is in the roster at that moment, because that is what every instance
 // builds its cursors from. From the roster read until the caller opens the mid-run
 // gate, dials are refused: no gate can serve one in that window.
-func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Signal) error {
+func (a *App) startHostSessionOn(port *link.SocketPort, signals <-chan os.Signal) error {
 	quorum, capacity := a.lobbyQuorum(), a.sessionCapacity()
 	addr := a.cfg.HostAddress
 	if bound := port.Addr(); bound != nil {
@@ -1236,7 +1237,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	}
 	// Every guest receives the same roster and the same capture, which is what makes
 	// shared creation order identical.
-	guests := make([]network.PeerID, 0, admitted)
+	guests := make([]link.PeerID, 0, admitted)
 	for _, participant := range offer.Roster {
 		if participant.ID != offer.Host {
 			guests = append(guests, participant.ID)
@@ -1246,7 +1247,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		return err
 	}
 	// Bound the install separately from first arrival; closed links count as abandoned.
-	abandoned := make(map[network.PeerID]bool, admitted)
+	abandoned := make(map[link.PeerID]bool, admitted)
 	confirmedGuests := func() int {
 		n := 0
 		for _, id := range guests {
@@ -1313,7 +1314,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 // dial is rostered when it is assigned, before its handshake ends, and the gate sends
 // to every roster entry; a handshake that fails releases its entry, so this ends
 // within one handshake's bound.
-func (a *App) settleLobbyHandshakes(port *network.SocketPort) {
+func (a *App) settleLobbyHandshakes(port *link.SocketPort) {
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
 	for a.guestCount() > port.PeerCount() && time.Now().Before(deadline) {
 		select {
@@ -1399,7 +1400,7 @@ func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, er
 }
 
 // Rejected handshakes are recoverable until the caller's lobby or install deadline.
-func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
+func (a *App) waitForStartup(port *link.SocketPort, signals <-chan os.Signal,
 	deadline time.Time, expire func(time.Time) error, ready func() bool) error {
 	// A pod nobody dialled is precisely the case the first-guest window exists for,
 	// and it is also the case this gate would otherwise wait in forever. A run with
@@ -1433,7 +1434,7 @@ func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 }
 
 // socketPort returns the concrete startup endpoint contributed by NetworkService.
-func (a *App) socketPort() (*network.SocketPort, error) {
+func (a *App) socketPort() (*link.SocketPort, error) {
 	if a.networkSvc == nil || a.networkSvc.Port() == nil {
 		return nil, errors.New("network session has no socket port")
 	}

@@ -7,12 +7,14 @@ import (
 	"net"
 	"slices"
 	"time"
+
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // ChainEntry is one eligible participant and where it listens.
 type ChainEntry struct {
-	ID   PeerID `json:"id"`
-	Addr string `json:"addr"`
+	ID   link.PeerID `json:"id"`
+	Addr string      `json:"addr"`
 }
 
 // SuccessionChain is the ordered candidate list every participant holds.
@@ -23,7 +25,7 @@ type ChainEntry struct {
 type SuccessionChain []ChainEntry
 
 // Lookup returns the address published for one participant.
-func (c SuccessionChain) Lookup(id PeerID) (string, bool) {
+func (c SuccessionChain) Lookup(id link.PeerID) (string, bool) {
 	i := slices.IndexFunc(c, func(e ChainEntry) bool { return e.ID == id })
 	if i < 0 || c[i].Addr == "" {
 		return "", false
@@ -33,7 +35,7 @@ func (c SuccessionChain) Lookup(id PeerID) (string, bool) {
 
 // Append adds or updates one participant, keeping its position when it already
 // has one so the order stays a prefix of what peers hold.
-func (c SuccessionChain) Append(id PeerID, addr string) SuccessionChain {
+func (c SuccessionChain) Append(id link.PeerID, addr string) SuccessionChain {
 	if id == 0 || addr == "" {
 		return c
 	}
@@ -46,7 +48,7 @@ func (c SuccessionChain) Append(id PeerID, addr string) SuccessionChain {
 }
 
 // Without drops a departed participant, whose identity returns to the pool.
-func (c SuccessionChain) Without(id PeerID) SuccessionChain {
+func (c SuccessionChain) Without(id link.PeerID) SuccessionChain {
 	return slices.DeleteFunc(slices.Clone(c), func(e ChainEntry) bool { return e.ID == id })
 }
 
@@ -54,7 +56,7 @@ func (c SuccessionChain) Without(id PeerID) SuccessionChain {
 // refused below the term the receiver holds.
 type PeerListRecord struct {
 	Term      AuthorityTerm   `json:"term"`
-	Authority PeerID          `json:"authority"`
+	Authority link.PeerID     `json:"authority"`
 	Chain     SuccessionChain `json:"chain"`
 }
 
@@ -66,30 +68,16 @@ func DecodePeerList(b []byte) (PeerListRecord, error) {
 	return r, err
 }
 
-// BindPeer binds the port this participant is dialled on, falling back to an
-// OS-assigned one when the requested port is taken.
-func BindPeer(addr string) (net.Listener, error) {
-	ln, err := net.Listen("tcp", addr)
-	if err == nil {
-		return ln, nil
-	}
-	host, _, splitErr := net.SplitHostPort(addr)
-	if splitErr != nil {
-		return nil, err
-	}
-	return net.Listen("tcp", net.JoinHostPort(host, "0"))
-}
-
 // peerHello is the MsgConnect body. Two participants already hold identities the
 // coordinator assigned, so a peer link admits rather than joins: nothing is
 // allocated, offered or captured.
 type peerHello struct {
-	From     PeerID       `json:"from"`
+	From     link.PeerID  `json:"from"`
 	Identity PeerIdentity `json:"identity"`
 }
 
 type peerWelcome struct {
-	From PeerID `json:"from"`
+	From link.PeerID `json:"from"`
 	refusalField
 	Identity PeerIdentity `json:"identity"`
 }
@@ -98,22 +86,22 @@ type peerWelcome struct {
 // allocates nothing. Local names this participant as each link opens: a joiner's
 // listener is bound before its seat names it.
 type PeerGate struct {
-	Local    func() PeerID
+	Local    func() link.PeerID
 	Identity PeerIdentity
-	Admit    func(from PeerID) error
+	Admit    func(from link.PeerID) error
 }
 
 // PeerAcceptor returns the accept handshake for links from participants rather
 // than joiners, which a guest's port runs beside HostAcceptor's. Only the build half
 // of the identity is verified, as on the join path: the session half is settled by
 // the roster the gate admits against.
-func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, error) {
-	return func(conn net.Conn) (PeerID, error) {
+func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (link.PeerID, error) {
+	return func(conn net.Conn) (link.PeerID, error) {
 		if timeout > 0 {
 			_ = conn.SetDeadline(time.Now().Add(timeout))
 			defer conn.SetDeadline(time.Time{})
 		}
-		msg, err := Decode(conn)
+		msg, err := link.Decode(conn)
 		if err != nil {
 			return 0, err
 		}
@@ -141,7 +129,7 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, err
 		if err != nil {
 			return 0, err
 		}
-		if err := NewMessage(MsgAck, body).Encode(conn); err != nil {
+		if err := link.NewMessage(MsgAck, body).Encode(conn); err != nil {
 			return 0, err
 		}
 		if refused != nil {
@@ -155,8 +143,8 @@ func PeerAcceptor(g PeerGate, timeout time.Duration) func(net.Conn) (PeerID, err
 // each stream DialPeer opens (Config.ConnectPeer): it names this participant and its
 // build, and reads which participant answered. Only the build half of the identity
 // travels, as on the accept side.
-func PeerDialer(identity PeerIdentity, timeout time.Duration) func(net.Conn, PeerID) (PeerID, error) {
-	return func(conn net.Conn, local PeerID) (PeerID, error) {
+func PeerDialer(identity PeerIdentity, timeout time.Duration) func(net.Conn, link.PeerID) (link.PeerID, error) {
+	return func(conn net.Conn, local link.PeerID) (link.PeerID, error) {
 		if timeout > 0 {
 			_ = conn.SetDeadline(time.Now().Add(timeout))
 			defer conn.SetDeadline(time.Time{})
@@ -165,10 +153,10 @@ func PeerDialer(identity PeerIdentity, timeout time.Duration) func(net.Conn, Pee
 		if err != nil {
 			return 0, err
 		}
-		if err := NewMessage(MsgConnect, body).Encode(conn); err != nil {
+		if err := link.NewMessage(MsgConnect, body).Encode(conn); err != nil {
 			return 0, err
 		}
-		msg, err := Decode(conn)
+		msg, err := link.Decode(conn)
 		if err != nil {
 			return 0, err
 		}

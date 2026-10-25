@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // supervisedServer is a dedicated host with a probe and, optionally, the lifetime
@@ -40,7 +41,7 @@ func seatGuests(a *App, n int) {
 	}
 	for i := range n {
 		a.sessionRoster = append(a.sessionRoster,
-			network.RosterEntry{ID: network.PeerID(i + 2), Slot: uint8(i)})
+			network.RosterEntry{ID: link.PeerID(i + 2), Slot: uint8(i)})
 	}
 }
 
@@ -237,7 +238,7 @@ func TestEachStartupGateCarriesItsOwnDeadline(t *testing.T) {
 	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 80 * time.Millisecond})
 	a.life.Start(time.Now())
 
-	port := network.NewSocketPort(network.DebugConfig(network.RoleHost, "127.0.0.1:0"))
+	port := link.NewSocketPort(&network.DebugConfig(link.RoleHost, "127.0.0.1:0").Config)
 	defer port.Close()
 
 	never := func() bool { return false }
@@ -272,13 +273,13 @@ func TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession(t *testing.T) {
 	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 30 * time.Second, Empty: time.Minute})
 	a.life.Start(time.Now())
 
-	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: a.assignParticipant, Release: a.releaseParticipant,
 		Report: a.noteJoinerReport,
 	}, socketWait)
-	port := network.NewSocketPort(hostCfg)
+	port := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = port.Close() })
 	if err := port.Start(); err != nil {
 		t.Fatalf("host transport: %v", err)

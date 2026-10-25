@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // ErrJoinMidRun is returned by Join, the admission that re-derives the world, when
@@ -130,7 +131,7 @@ func (a *App) HostSession(o network.SessionOffer) error {
 	return a.configureSessionRoster(o, o.Host)
 }
 
-func (a *App) validateSessionOffer(o network.SessionOffer, local network.PeerID) error {
+func (a *App) validateSessionOffer(o network.SessionOffer, local link.PeerID) error {
 	if err := o.Validate(); err != nil {
 		return err
 	}
@@ -165,7 +166,7 @@ func cursorParticipants(participants []network.RosterEntry) int {
 }
 
 // configureSessionRoster creates slots in coordinator order, then applies local control.
-func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerID) error {
+func (a *App) configureSessionRoster(o network.SessionOffer, local link.PeerID) error {
 	participants := make([]network.RosterEntry, 0, len(o.Roster))
 	for _, p := range o.Roster {
 		if p.Slot != parameter.NoPlayerSlot {
@@ -218,7 +219,7 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 // the cursor this participant takes arrives as the EventParticipantJoined crossing at
 // one agreed tick, the only way a shared entity may be created after tick zero
 // (D-11), so a slot the offer names and the world does not hold is normal here.
-func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) error {
+func (a *App) bindSessionControl(o network.SessionOffer, local link.PeerID) error {
 	a.world.RunSafe(func() { a.bindCursorOwnersLocked(o.Roster, local) })
 	localAssignment, ok := o.Entry(local)
 	if !ok {
@@ -256,7 +257,7 @@ func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) e
 // a succession cannot see leave. A Wraith keeps the owner it left with, driven by
 // nobody, under the claim the roster names, which a session a run opens names
 // afresh for its bots. Caller MUST hold updateMutex.
-func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local network.PeerID) {
+func (a *App) bindCursorOwnersLocked(participants []network.RosterEntry, local link.PeerID) {
 	roster := a.world.Resources.Player
 	for _, p := range participants {
 		if p.Slot == parameter.NoPlayerSlot {
@@ -394,7 +395,7 @@ func (a *App) releaseHold(said string) {
 // wraithKept reports whether a participant's Wraith is on its way back: a dial took
 // its place back, or its arrival crossed and has yet to apply.
 func (a *App) wraithKept(participant uint32) bool {
-	id := network.PeerID(participant)
+	id := link.PeerID(participant)
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 	if _, back := a.returning[id]; back {

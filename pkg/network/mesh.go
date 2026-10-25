@@ -83,11 +83,8 @@ type Mesh struct {
 	probe, lost time.Duration
 }
 
-// NewMesh returns an empty link graph on the session's timing.
-func NewMesh() *Mesh { return newMesh(DefaultConfig()) }
-
-// newMesh returns an empty link graph whose clock and probes run on cfg's timing.
-func newMesh(cfg *Config) *Mesh {
+// NewMesh returns an empty link graph whose clock and probes run on cfg's timing.
+func NewMesh(cfg *Config) *Mesh {
 	m := &Mesh{nodes: make(map[PeerID]*MeshPort), tick: cfg.TickInterval, probe: cfg.ProbeInterval, lost: cfg.ProbeLostAfter}
 	if cfg.TickInterval > 0 {
 		m.probeDrains = uint64(cfg.ProbeInterval / cfg.TickInterval)
@@ -153,14 +150,6 @@ func (m *Mesh) link(a, b PeerID, served bool) {
 	y.addLink(x, false)
 	x.deliver(Inbound{Kind: InboundConnect, Peer: b, Served: served})
 	y.deliver(Inbound{Kind: InboundConnect, Peer: a})
-}
-
-// NewLoopbackPair links two participants and returns their endpoints. The
-// two-participant case is a mesh with one link.
-func NewLoopbackPair(a, b PeerID) (*MeshPort, *MeshPort) {
-	m := NewMesh()
-	m.Link(a, b)
-	return m.Node(a), m.Node(b)
 }
 
 // MeshPort is one participant's endpoint. It implements the same poll contract as

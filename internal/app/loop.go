@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/vlog"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // A scenario change rebuilds the run because its FSM metrics are frozen at startup.
@@ -422,11 +423,11 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 				a.showJoinStatus(a.joinPrompt()) // redrawn after a resize, and asked as a touch was
 				continue
 			}
-			a.showJoinStatus("Joining " + network.Shown(a.cfg.JoinAddress) + "...")
+			a.showJoinStatus("Joining " + link.Shown(a.cfg.JoinAddress) + "...")
 			err := a.takeSeat(true, signals)
 			if errors.Is(err, errSessionMoved) {
 				// Pressed already, and holding the bots it was to seat once it was in.
-				a.log.Info("session", "msg", "joining the session's new game", "join", network.Shown(a.cfg.JoinAddress))
+				a.log.Info("session", "msg", "joining the session's new game", "join", link.Shown(a.cfg.JoinAddress))
 				return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided, Bots: a.cfg.Bots}, nil
 			}
 			return nil, err
@@ -454,7 +455,7 @@ func joinPress(ev terminal.Event, mouseOff bool) bool {
 // joinPrompt is the status line a join waiting for its press stands with, asking for
 // the press the player's last suggests, as startPrompt does.
 func (a *App) joinPrompt() string {
-	host := network.Shown(a.cfg.JoinAddress)
+	host := link.Shown(a.cfg.JoinAddress)
 	switch {
 	case a.touched:
 		return "Tap to join " + host

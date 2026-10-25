@@ -13,7 +13,7 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 ### Open fleet sessions to bots
 
 - Priority: P2
-- Affected files: the Hugo site's `vif-lobby.js`, `internal/network/endpoint.go`,
+- Affected files: the Hugo site's `vif-lobby.js`, `pkg/network/endpoint.go`,
   `internal/mode/config_form.go`, `tool/vif-allocator`, `deploy/guest/vif-allocator.env`,
   `deploy/k3s/10-quota.yaml`
 - Guide: [Session fleet](kubernetes-fleet.md) §6
@@ -682,7 +682,7 @@ the tick ends on.
 ### Read the cadence against a thin command stream
 
 - Priority: P3
-- Affected files: `pkg/linkpace`, `internal/network/probe.go`
+- Affected files: `pkg/linkpace`, `pkg/network/probe.go`
 
 The divergence harness's heavy shape (netcode design §3.5) delivered the guest 134
 manifests in 1,200 ticks before the binary wire codec, 132 with its envelope and 97
@@ -1118,39 +1118,6 @@ or event comes, and the render thread stop its vsync callback once it has painte
 the last frame flushed.
 
 ## Structure
-
-### Lift the link layer into `pkg/network`
-
-- Priority: P2
-- Affected files: `internal/network` (`protocol.go`, `transport.go`,
-  `connection.go`, `port.go`, `endpoint.go`, `probe.go`, `mesh.go`,
-  `snapshot.go`, `websocket_*.go`, `inbound.go`, `errno_*.go`, `reach.go`,
-  `fence.go`), `internal/parameter`, every importer of `internal/network`
-  (`internal/app`, `internal/converge`, `internal/system`, `internal/snapshot`,
-  `internal/engine`, `internal/service`)
-
-`internal/network` holds two layers in one package. The link layer is generic:
-framed messages over TCP or WebSocket with a per-link deflate stream, the accept
-and dial transport with its handshake budget, the port's tick-drained inbound
-queue and bundled sends, the probe a port answers itself, the chunked body
-assembly, the in-process mesh with its shaped links, and the reach and fence
-bookkeeping. The session layer is this game's: the join and peer-link handshakes,
-offers, rosters and claims (`session.go`), the authority term and succession
-chain (`authority.go`), the build identity (`identity.go`) and `Config`. The link
-layer would move to `pkg/network` beside `pkg/linkpace` and `pkg/websocket`, which
-`pkg/` imports nothing of `internal/`, so two dependencies invert first: the
-eight `parameter` constants the link files read (`NetworkProbeInterval`,
-`NetworkProbeLostAfter`, `NetworkStreamLevel`, `NetworkWriteLinger`,
-`NetworkSessionRequestTimeout`, `GameUpdateInterval` for the mesh's tick,
-`NetworkAdmitBurst` and `NetworkAdmitWindow` for the limiter) become fields of a
-link configuration the session layer fills from `parameter`; and the message
-kinds `protocol.go` enumerates (`MsgEvent`, `MsgStateSync`, the correction
-kinds) become the session layer's table over an opaque kind byte and `ByteKind`
-the link layer counts by. The session layer keeps its name and imports the
-link layer; importers of the link types alone (`LinkShape`, `MeshPort`,
-`SnapshotAssembly`, `Inbound`) repoint. Land it as mechanical moves with no
-behaviour change, the protocol tests moving with their files, in one PR per
-layer boundary rather than one for everything.
 
 ### Split the composition root
 

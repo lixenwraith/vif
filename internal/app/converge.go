@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // instance is the App as the authority protocol sees it: the world a correction is
@@ -49,7 +50,7 @@ func (a *App) worldRosterLocked() []network.RosterEntry {
 			continue
 		}
 		out = append(out, network.RosterEntry{
-			ID: network.PeerID(c.PeerID), Slot: uint8(slot), Holder: network.PeerID(c.Holder),
+			ID: link.PeerID(c.PeerID), Slot: uint8(slot), Holder: link.PeerID(c.Holder),
 			Away: w.Components.Wraith.HasEntity(e), Claim: c.Claim,
 		})
 	}
@@ -201,7 +202,7 @@ func (i instance) Ingress(id uint32) (n uint64) {
 	return n
 }
 
-func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool, via network.PeerID) {
+func (i instance) AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID) {
 	i.a.applyAuthorityChange(rec, mine, via)
 }
 
@@ -213,9 +214,9 @@ func (i instance) CrossDepartures(away []network.RosterEntry) {
 	}
 }
 
-func (i instance) Redial(lost network.PeerID) bool { return i.a.redial(lost) }
+func (i instance) Redial(lost link.PeerID) bool { return i.a.redial(lost) }
 
-func (i instance) Forked(roster []network.RosterEntry, local network.PeerID) {
+func (i instance) Forked(roster []network.RosterEntry, local link.PeerID) {
 	i.a.forked(roster, local)
 }
 
@@ -312,7 +313,7 @@ func (a *App) authorityTerm() network.AuthorityTerm {
 // authorityID is the participant currently authoring, which every admission
 // artifact names. It falls back to the session's first identity so a run that has
 // not opened a session yet still offers a valid one.
-func (a *App) authorityID() network.PeerID {
+func (a *App) authorityID() link.PeerID {
 	if a.authority == nil {
 		return engine.CoordinatorParticipant
 	}
@@ -324,7 +325,7 @@ func (a *App) authorityID() network.PeerID {
 
 // openAuthority records the term and membership this run enters a session under,
 // and the relay it joined through, which is its path to the authority.
-func (a *App) openAuthority(o network.SessionOffer, local network.PeerID) {
+func (a *App) openAuthority(o network.SessionOffer, local link.PeerID) {
 	if a.authority == nil {
 		return
 	}
@@ -336,7 +337,7 @@ func (a *App) openAuthority(o network.SessionOffer, local network.PeerID) {
 // openAuthorityLocked is openAuthority for a caller that already holds the world
 // lock, which the operator `:host` path does.
 // Caller MUST hold updateMutex.
-func (a *App) openAuthorityLocked(o network.SessionOffer, local network.PeerID) {
+func (a *App) openAuthorityLocked(o network.SessionOffer, local link.PeerID) {
 	if a.authority == nil {
 		return
 	}
@@ -350,8 +351,8 @@ func (a *App) openAuthorityLocked(o network.SessionOffer, local network.PeerID) 
 // instance's role. Who is away is ordered by their Wraiths' waits, and a place a
 // dial was taking back is the predecessor's to have finished. via is the link this
 // run follows the new host through, zero for a link of its own.
-func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool, via network.PeerID) {
-	var away []network.PeerID
+func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool, via link.PeerID) {
+	var away []link.PeerID
 	a.world.RunSafe(func() { away = a.awayOrderLocked(rec.Roster) })
 	a.sessionMu.Lock()
 	a.sessionRoster = slices.Clone(rec.Roster)
@@ -394,9 +395,9 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool, via net
 
 // awayOrderLocked is who of roster is away, longest first, as their Wraiths wait.
 // Caller MUST hold updateMutex.
-func (a *App) awayOrderLocked(roster []network.RosterEntry) []network.PeerID {
-	since := make(map[network.PeerID]time.Time)
-	var out []network.PeerID
+func (a *App) awayOrderLocked(roster []network.RosterEntry) []link.PeerID {
+	since := make(map[link.PeerID]time.Time)
+	var out []link.PeerID
 	for _, p := range roster {
 		if !p.Away || p.Slot == parameter.NoPlayerSlot {
 			continue
@@ -406,7 +407,7 @@ func (a *App) awayOrderLocked(roster []network.RosterEntry) []network.PeerID {
 			out = append(out, p.ID)
 		}
 	}
-	slices.SortStableFunc(out, func(x, y network.PeerID) int { return since[x].Compare(since[y]) })
+	slices.SortStableFunc(out, func(x, y link.PeerID) int { return since[x].Compare(since[y]) })
 	return out
 }
 
@@ -449,7 +450,7 @@ func (a *App) thawLocked() (held bool) {
 // plays is not what its player brings back. A play run's loop takes it into a
 // session of its own (leaveSession), keeping every other player's place for
 // whoever hosts next; a run with no loop drops them and plays on as the fork.
-func (a *App) forked(roster []network.RosterEntry, local network.PeerID) {
+func (a *App) forked(roster []network.RosterEntry, local link.PeerID) {
 	if a.cfg.Mode == ModePlay {
 		// Leaving before the claim goes, as a redial holds its claim again before it
 		// reads leaving: whichever of the two runs second lets the claim go.
@@ -470,7 +471,7 @@ var errRedialEnded = errors.New("the run went on without this host")
 // back, under the claim the run joined with. The chain names where each host but the
 // first is dialled; the first is at the door this run came in by. Only a person's run
 // redials. The claim is let go for the dial to name, its record as the drop left it.
-func (a *App) redial(lost network.PeerID) bool {
+func (a *App) redial(lost link.PeerID) bool {
 	var cfg Config
 	door := false
 	a.world.RunSafe(func() {
@@ -491,7 +492,7 @@ func (a *App) redial(lost network.PeerID) bool {
 	}
 	a.claims.release(c)
 	a.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost),
-		"dial", network.Shown(addr))
+		"dial", link.Shown(addr))
 	core.Go(func() { a.redialDoor(cfg, addr, lost, c) })
 	return true
 }
@@ -500,7 +501,7 @@ func (a *App) redial(lost network.PeerID) bool {
 // into its own place, the run is replaced by the one admitted; a refusal no retry
 // helps, a door nothing answers at, or a place that is not this run's begins the
 // walk. A run that stays in its session holds its claim again.
-func (a *App) redialDoor(cfg Config, addr string, lost network.PeerID, c *claim) {
+func (a *App) redialDoor(cfg Config, addr string, lost link.PeerID, c *claim) {
 	dial := cfg
 	dial.JoinAddress = addr
 	for a.authority.Redialing(lost) {

@@ -17,6 +17,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -399,12 +400,12 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	t.Cleanup(a.Close)
 	// The lobby is not closed here: hostOffer closes it, and the coordinator has to
 	// allocate this run's guest identity from an open one.
-	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: a.assignParticipant, Release: a.releaseParticipant,
 	}, socketWait)
-	host := network.NewSocketPort(hostCfg)
+	host := link.NewSocketPort(&hostCfg.Config)
 	t.Cleanup(func() { _ = host.Close() })
 	if err := host.Start(); err != nil {
 		t.Fatalf("host transport: %v", err)
@@ -413,7 +414,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	hostStarted := make(chan error, 1)
 	go func() { hostStarted <- a.startHostSessionOn(host, nil) }()
 
-	pending, offered, err := network.DialSession(host.Addr().String(), network.DebugConfig(network.RolePeer, ""))
+	pending, offered, err := network.DialSession(host.Addr().String(), network.DebugConfig(link.RolePeer, ""))
 	if err != nil {
 		t.Fatalf("dial session: %v", err)
 	}
@@ -440,7 +441,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 		t.Fatalf("join startup: %v", err)
 	}
 
-	guest := network.NewSocketPort(pending.TransportConfig())
+	guest := link.NewSocketPort(pending.TransportConfig())
 	t.Cleanup(func() { _ = guest.Close() })
 	if err := guest.Start(); err != nil {
 		t.Fatalf("guest transport: %v", err)
@@ -552,7 +553,7 @@ func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA jour
 // into the next. A direction silent across socketStallTicks has stopped.
 type socketStep struct {
 	t           *testing.T
-	host, guest *network.SocketPort
+	host, guest *link.SocketPort
 	hostStall   int
 	guestStall  int
 }
@@ -576,7 +577,7 @@ func (s *socketStep) run(a, b *App) {
 	s.guestStall = s.settle(s.guest, recvB, s.guestStall, "guest")
 }
 
-func (s *socketStep) settle(port *network.SocketPort, was uint64, stalled int, what string) int {
+func (s *socketStep) settle(port *link.SocketPort, was uint64, stalled int, what string) int {
 	s.t.Helper()
 	deadline := time.Now().Add(socketStepGrace) // [wall] a link bound, not a game one
 	for port.Received() <= was && time.Now().Before(deadline) {
@@ -596,7 +597,7 @@ func (s *socketStep) settle(port *network.SocketPort, was uint64, stalled int, w
 // trip competes with the race detector rather than with the network.
 const socketWait = 15 * time.Second
 
-func waitSocket(t *testing.T, port *network.SocketPort, ready func() bool, what string) {
+func waitSocket(t *testing.T, port *link.SocketPort, ready func() bool, what string) {
 	t.Helper()
 	deadline := time.NewTimer(socketWait)
 	defer deadline.Stop()

@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // cursorlessOffer is the roster a dedicated host closes on: itself with no slot,
@@ -27,7 +28,7 @@ func cursorlessOffer(an event.JoinAnchor, guests int) network.SessionOffer {
 	}
 	for i := range guests {
 		o.Roster = append(o.Roster,
-			network.RosterEntry{ID: network.PeerID(i + 2), Slot: uint8(i)})
+			network.RosterEntry{ID: link.PeerID(i + 2), Slot: uint8(i)})
 	}
 	return o
 }
@@ -197,7 +198,7 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 	}
 	for i := 1; i < len(apps); i++ {
 		local := offer
-		local.Assigned = network.PeerID(i + 1)
+		local.Assigned = link.PeerID(i + 1)
 		if err := apps[i].JoinSession(local); err != nil {
 			t.Fatalf("participant %d join: %v", i+1, err)
 		}
@@ -207,7 +208,7 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 	mesh.Link(1, 2)
 	mesh.Link(1, 3)
 	for i, a := range apps {
-		a.AttachTransport(mesh.Node(network.PeerID(i + 1)))
+		a.AttachTransport(mesh.Node(link.PeerID(i + 1)))
 	}
 	for _, a := range apps {
 		a.activateNetworkSession()

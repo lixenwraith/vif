@@ -242,6 +242,20 @@ func Listen(addr string, cfg *Config) (net.Listener, error) {
 	return ln, plainNetError(err)
 }
 
+// BindPeer binds the port this participant is dialled on, falling back to an
+// OS-assigned one when the requested port is taken.
+func BindPeer(addr string) (net.Listener, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err == nil {
+		return ln, nil
+	}
+	host, _, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		return nil, err
+	}
+	return net.Listen("tcp", net.JoinHostPort(host, "0"))
+}
+
 // DialPeer opens one outbound link to a participant that is already in this
 // session, running ConnectPeer on it and admitting the stream under the identity
 // the far end answered with: the coordinator is dialled by its guests, and a guest

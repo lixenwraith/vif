@@ -3,8 +3,6 @@ package network
 import (
 	"testing"
 	"time"
-
-	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func TestLinkReportRoundTripsThroughItsFrame(t *testing.T) {
@@ -53,15 +51,15 @@ func TestEchoCarriesTheProbeBackUntouched(t *testing.T) {
 // is a slow link, not a lost probe; a link that answers nothing for
 // NetworkProbeLostAfter is.
 func TestOnlyAProbeThatStopsComingBackIsLost(t *testing.T) {
-	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
+	m := newLinkMeter(testConfig().ProbeInterval, testConfig().ProbeLostAfter)
 	now := time.Unix(0, 0)
-	late := 3 * parameter.NetworkProbeInterval / 2
+	late := 3 * testConfig().ProbeInterval / 2
 	for i := range 20 {
 		m.nextProbe()
 		if i > 1 {
 			m.observe(now, now.Add(-late), uint32(i-1), 0, 0, 0, LinkReport{})
 		}
-		now = now.Add(parameter.NetworkProbeInterval)
+		now = now.Add(testConfig().ProbeInterval)
 	}
 	if got := m.link.Metrics().Loss; got != 0 {
 		t.Fatalf("echoes %v late counted as %.3f loss", late, got)
@@ -76,7 +74,7 @@ func TestOnlyAProbeThatStopsComingBackIsLost(t *testing.T) {
 }
 
 func TestTheMeterTurnsTwoEchoesIntoADeliveryRate(t *testing.T) {
-	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
+	m := newLinkMeter(testConfig().ProbeInterval, testConfig().ProbeLostAfter)
 	at := time.Unix(0, 0)
 	step := func(delivered, sent uint64) {
 		seq := m.nextProbe()
@@ -100,20 +98,20 @@ func TestTheMeterTurnsTwoEchoesIntoADeliveryRate(t *testing.T) {
 // hands back together were answered a probe interval apart, so the rate they
 // report is the one the link carried, not one divided by microseconds.
 func TestTheDeliveryRateIsTimedWhereTheBytesArrived(t *testing.T) {
-	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
+	m := newLinkMeter(testConfig().ProbeInterval, testConfig().ProbeLostAfter)
 	at, answered, delivered := time.Unix(0, 0), time.Duration(0), uint64(0)
 	echo := func(gap time.Duration) {
-		at, answered, delivered = at.Add(gap), answered+parameter.NetworkProbeInterval, delivered+5_000
+		at, answered, delivered = at.Add(gap), answered+testConfig().ProbeInterval, delivered+5_000
 		m.observe(at, at.Add(-30*time.Millisecond), m.nextProbe(), delivered, delivered, answered, LinkReport{})
 	}
 	for range 10 {
-		echo(parameter.NetworkProbeInterval)
+		echo(testConfig().ProbeInterval)
 	}
 	echo(time.Second)
 	for range 4 {
 		echo(time.Microsecond)
 	}
-	echo(parameter.NetworkProbeInterval)
+	echo(testConfig().ProbeInterval)
 	if got := m.link.Metrics().Throughput; got < 20_000 || got > 30_000 {
 		t.Fatalf("25 KB per second answered a probe interval apart measured %.0f B/s", got)
 	}
@@ -123,11 +121,11 @@ func TestTheDeliveryRateIsTimedWhereTheBytesArrived(t *testing.T) {
 // capture, and the port that takes over after it counts from zero, so without the
 // origin the ready sets the capture would stand as backlog for the whole session.
 func TestAJoinersReadyRestartsTheBacklogOrigin(t *testing.T) {
-	m := newLinkMeter(parameter.NetworkProbeInterval, parameter.NetworkProbeLostAfter)
+	m := newLinkMeter(testConfig().ProbeInterval, testConfig().ProbeLostAfter)
 	at := time.Unix(0, 0)
 	echo := func(delivered, sent uint64) {
 		seq := m.nextProbe()
-		at = at.Add(parameter.NetworkProbeInterval)
+		at = at.Add(testConfig().ProbeInterval)
 		m.observe(at, at.Add(-5*time.Millisecond), seq, delivered, sent, 0, LinkReport{})
 	}
 	echo(24, 68)
@@ -147,7 +145,7 @@ func TestAJoinersReadyRestartsTheBacklogOrigin(t *testing.T) {
 // the same ticks give the same answer on every machine.
 func TestTheMeshMeasuresARoundTripOnItsOwnClock(t *testing.T) {
 	measure := func(shape LinkShape) time.Duration {
-		mesh := NewMesh()
+		mesh := NewMesh(testConfig())
 		mesh.Link(1, 2)
 		if shape != (LinkShape{}) {
 			mesh.Shape(1, 2, shape)
@@ -179,7 +177,7 @@ func TestTheMeshMeasuresARoundTripOnItsOwnClock(t *testing.T) {
 }
 
 func TestTheMeshLinkShapeHoldsBackAndDropsFrames(t *testing.T) {
-	mesh := NewMesh()
+	mesh := NewMesh(testConfig())
 	mesh.Link(1, 2)
 	host, guest := mesh.Node(1), mesh.Node(2)
 	guest.SetShape(LinkShape{BytesPerTick: 64})
@@ -204,7 +202,7 @@ func TestTheMeshLinkShapeHoldsBackAndDropsFrames(t *testing.T) {
 		t.Fatalf("forty ticks of a 64-byte budget released %d of 8 frames", released)
 	}
 
-	dropper := NewMesh()
+	dropper := NewMesh(testConfig())
 	dropper.Link(1, 2)
 	sender, receiver := dropper.Node(1), dropper.Node(2)
 	receiver.SetShape(LinkShape{LossEvery: 2})
@@ -232,7 +230,7 @@ func countMessages(in []Inbound) int {
 // inside: a probe and its echo are answered in the transport, so a tick never
 // sees one and network timing cannot enter the simulation through them.
 func TestTheMeshProbeNeverReachesTheGame(t *testing.T) {
-	mesh := NewMesh()
+	mesh := NewMesh(testConfig())
 	mesh.Link(1, 2)
 	host, guest := mesh.Node(1), mesh.Node(2)
 	buf := make([]Inbound, 64)
@@ -254,7 +252,7 @@ func TestTheMeshProbeNeverReachesTheGame(t *testing.T) {
 }
 
 func TestTheReportReachesTheProbingPeer(t *testing.T) {
-	mesh := NewMesh()
+	mesh := NewMesh(testConfig())
 	mesh.Link(1, 2)
 	host, guest := mesh.Node(1), mesh.Node(2)
 	guest.SetLinkReport(LinkReport{LagTicks: 5, Magnitude: 12, CursorX: 30, CursorY: 9, HasCursor: true})
@@ -270,15 +268,5 @@ func TestTheReportReachesTheProbingPeer(t *testing.T) {
 	}
 	if !m.Interest.Valid || m.Interest.X != 30 || m.Interest.Y != 9 {
 		t.Fatalf("the host read interest %+v", m.Interest)
-	}
-}
-
-func TestMeshProbeIntervalMatchesTheParameter(t *testing.T) {
-	drains := NewMesh().probeDrains
-	if drains == 0 {
-		t.Fatal("the mesh would never probe")
-	}
-	if want := uint64(parameter.NetworkProbeInterval / parameter.GameUpdateInterval); drains != want {
-		t.Fatalf("mesh probes every %d drains, the interval is %d ticks", drains, want)
 	}
 }

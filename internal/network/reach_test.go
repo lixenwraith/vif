@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestSuccessionReadsTheChain covers the list survivors walk and the property that
@@ -17,14 +19,14 @@ func TestSuccessionReadsTheChain(t *testing.T) {
 	chain := SuccessionChain{{ID: 3, Addr: "a"}, {ID: 4, Addr: "d"}, {ID: 5, Addr: "e"}, {ID: 2, Addr: "b"}, {ID: 9, Addr: "x"}}
 
 	for _, c := range []struct {
-		lost  PeerID
+		lost  link.PeerID
 		chain SuccessionChain
-		want  []PeerID
+		want  []link.PeerID
 	}{
-		{1, chain, []PeerID{3, 2}},  // confirmation order, not identity order
-		{1, chain[:1], []PeerID{3}}, // a prefix agrees with its extension
-		{3, chain, []PeerID{2}},     // losing a candidate with the authority leaves the rest
-		{1, nil, nil},               // no port, no candidate
+		{1, chain, []link.PeerID{3, 2}},  // confirmation order, not identity order
+		{1, chain[:1], []link.PeerID{3}}, // a prefix agrees with its extension
+		{3, chain, []link.PeerID{2}},     // losing a candidate with the authority leaves the rest
+		{1, nil, nil},                    // no port, no candidate
 	} {
 		if got := SuccessionCandidates(roster, c.lost, c.chain); !slices.Equal(got, c.want) {
 			t.Fatalf("candidates after %d's loss with chain %v = %v, want %v", c.lost, c.chain, got, c.want)
@@ -38,7 +40,7 @@ func TestSuccessionReadsTheChain(t *testing.T) {
 func TestEachCandidateTakesItsOwnTerm(t *testing.T) {
 	roster := []RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
 	chain := SuccessionChain{{ID: 3, Addr: "a"}, {ID: 2, Addr: "b"}}
-	rec := func(term AuthorityTerm, authority PeerID) HandoffRecord {
+	rec := func(term AuthorityTerm, authority link.PeerID) HandoffRecord {
 		return HandoffRecord{Term: term, Authority: authority, Predecessor: 1, Roster: roster}
 	}
 	for _, ok := range []HandoffRecord{rec(FirstTerm+1, 3), rec(FirstTerm+2, 2)} {
@@ -115,9 +117,9 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 	// which is what a live session does: verifying more than the build refused
 	// every peer link there was.
 	accept := PeerAcceptor(PeerGate{
-		Local:    func() PeerID { return 2 },
+		Local:    func() link.PeerID { return 2 },
 		Identity: PeerIdentity{Protocol: ProtocolVersion, Seed: 42, Session: 7},
-		Admit: func(from PeerID) error {
+		Admit: func(from link.PeerID) error {
 			if from != 3 {
 				return errors.New("not in this session")
 			}
@@ -145,7 +147,7 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 	}()
 
 	connect := PeerDialer(PeerIdentity{Protocol: ProtocolVersion}, time.Second)
-	dial := func(local PeerID) (PeerID, error) {
+	dial := func(local link.PeerID) (link.PeerID, error) {
 		conn, err := net.Dial("tcp", ln.Addr().String())
 		if err != nil {
 			t.Fatalf("dial: %v", err)
@@ -167,25 +169,6 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 	<-results
 }
 
-// TestBindPeerFallsBackWhenThePortIsTaken is the collision two guests on one
-// machine hit.
-func TestBindPeerFallsBackWhenThePortIsTaken(t *testing.T) {
-	held, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer held.Close()
-
-	ln, err := BindPeer(held.Addr().String())
-	if err != nil {
-		t.Fatalf("bind fell over instead of falling back: %v", err)
-	}
-	defer ln.Close()
-	if ln.Addr().String() == held.Addr().String() {
-		t.Fatal("two listeners bound the same address")
-	}
-}
-
 // TestAParticipantsPortTakesPeerLinksAndJoins: a participant that bound a port of
 // its own is dialled by another and the stream becomes an ordinary peer, and a join
 // at that port runs the session's handshake, each told by the frame it opens with.
@@ -195,29 +178,29 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 	offer := testOffer()
 	offer.Host, offer.Assigned = 2, 4
 	offer.Roster = []RosterEntry{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}, {ID: 4, Slot: 2}}
-	admitted := make(chan PeerID, 4)
-	port := func(bind string, local PeerID, gate func(PeerID) error) *SocketPort {
-		ln, err := BindPeer(bind)
+	admitted := make(chan link.PeerID, 4)
+	port := func(bind string, local link.PeerID, gate func(link.PeerID) error) *link.SocketPort {
+		ln, err := link.BindPeer(bind)
 		if err != nil {
 			t.Fatalf("bind: %v", err)
 		}
-		cfg := DebugConfig(RolePeer, "")
+		cfg := DebugConfig(link.RolePeer, "")
 		cfg.ParticipantID = local
 		cfg.PreboundListener = ln
-		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: func() PeerID { return local }, Admit: gate}, time.Second)
+		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: func() link.PeerID { return local }, Admit: gate}, time.Second)
 		cfg.ConnectPeer = PeerDialer(cfg.Identity, time.Second)
 		cfg.AcceptSession = HostAcceptor(Coordinator{
 			Assign: func([]string) (SessionOffer, error) { return offer, nil },
 		}, time.Second)
-		cfg.OnAdmit = func(id PeerID) { admitted <- id }
-		p := NewSocketPort(cfg)
+		cfg.OnAdmit = func(id link.PeerID) { admitted <- id }
+		p := link.NewSocketPort(&cfg.Config)
 		if err := p.Start(); err != nil {
 			t.Fatalf("start: %v", err)
 		}
 		t.Cleanup(func() { _ = p.Close() })
 		return p
 	}
-	listener := port("127.0.0.1:0", 2, func(from PeerID) error {
+	listener := port("127.0.0.1:0", 2, func(from link.PeerID) error {
 		if from != 3 {
 			return errors.New("not in this session")
 		}
@@ -237,7 +220,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 		t.Fatal("the new link refused a frame")
 	}
 
-	pending, got, err := DialSession(listener.ListenAddr(), DebugConfig(RolePeer, ""))
+	pending, got, err := DialSession(listener.ListenAddr(), DebugConfig(link.RolePeer, ""))
 	if err != nil || got.Assigned != 4 {
 		t.Fatalf("a join at the port = (%+v, %v), want the offer to participant 4", got, err)
 	}
@@ -253,10 +236,10 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("the join never reached the join gate")
 	}
-	in := make([]Inbound, 8)
-	served := map[PeerID]bool{}
+	in := make([]link.Inbound, 8)
+	served := map[link.PeerID]bool{}
 	for _, e := range in[:listener.Drain(in)] {
-		if e.Kind == InboundConnect {
+		if e.Kind == link.InboundConnect {
 			served[e.Peer] = e.Served
 		}
 	}
@@ -267,7 +250,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 		t.Fatal("the join did not connect as served")
 	}
 
-	named := DebugConfig(RolePeer, "")
+	named := DebugConfig(link.RolePeer, "")
 	named.SessionName = "7f3c1a"
 	if _, _, err := DialSession(listener.ListenAddr(), named); !errors.Is(err, &Refusal{Code: RefusalUnknown}) {
 		t.Fatalf("a join naming a session this port does not serve: %v", err)
@@ -282,7 +265,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 	wild := port(":0", 5, nil)
 	_, every, _ := net.SplitHostPort(wild.ListenAddr())
 	for _, c := range []struct {
-		port *SocketPort
+		port *link.SocketPort
 		addr string
 		want bool
 	}{

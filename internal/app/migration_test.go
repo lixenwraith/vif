@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // settleAuthority runs the succession to a conclusion. The election is driven from
@@ -43,7 +44,7 @@ func settleAuthority(t *testing.T, apps []*App, done func() bool) bool {
 // observes as the departure that opens a succession.
 func closeParticipant(a *App) {
 	a.World().RunSafe(func() {
-		if p, ok := a.World().Resources.Network.Port.(*network.MeshPort); ok {
+		if p, ok := a.World().Resources.Network.Port.(*link.MeshPort); ok {
 			_ = p.Close()
 		}
 	})
@@ -325,12 +326,12 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	if len(chain) != 2 {
 		t.Fatalf("the guests hold the chain %v; want both of them in it", chain)
 	}
-	if chain[0].ID == network.PeerID(guest.localParticipant()) {
+	if chain[0].ID == link.PeerID(guest.localParticipant()) {
 		successor, guest = guest, successor
 	}
-	id := network.PeerID(successor.localParticipant())
+	id := link.PeerID(successor.localParticipant())
 	door, _ := chain.Lookup(id)
-	if _, _, err := network.DialSession(door, network.DebugConfig(network.RolePeer, "")); !errors.Is(err, errNotHosting) ||
+	if _, _, err := network.DialSession(door, network.DebugConfig(link.RolePeer, "")); !errors.Is(err, errNotHosting) ||
 		!strings.Contains(err.Error(), errNotHosting.Reason) {
 		t.Fatalf("a join at a guest's port while another participant hosts: %v; want %q", err, errNotHosting.Reason)
 	}
@@ -417,7 +418,7 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	t.Cleanup(stop)
 	successor, _ := driveBot(t, Config{JoinAddress: host.HostAddr()}, "patrol", nil)
 	waitForCursors(t, successor, 2)
-	id := network.PeerID(successor.localParticipant())
+	id := link.PeerID(successor.localParticipant())
 	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	stop()
@@ -548,7 +549,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 		t.Fatal("losing the authority opened no succession")
 	}
 
-	_, _, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
+	_, _, err := network.DialSession(addr, network.DebugConfig(link.RolePeer, ""))
 	if err == nil {
 		t.Fatal("a dial that landed mid-succession was admitted")
 	}
@@ -761,7 +762,7 @@ func TestMeshParityAcrossAHandoff(t *testing.T) {
 
 func TestGuestContinuesLocallyAfterHostLoss(t *testing.T) {
 	t.Parallel()
-	host, guest, _ := shapedPair(t, 0x10571057, network.LinkShape{})
+	host, guest, _ := shapedPair(t, 0x10571057, link.LinkShape{})
 	mirrorCursors(t, host, guest)
 	runSession(host, guest, 80)
 

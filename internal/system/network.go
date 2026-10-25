@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/pkg/linkpace"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // NetworkSystem is this instance's only crossing to its peers: the event queue's
@@ -73,9 +74,9 @@ type NetworkSystem struct {
 	// sequence because the authority may have applied them late.
 	snapshotFloor     uint64
 	snapshotAuthority uint32
-	snapshotFences    network.CrossingFences
+	snapshotFences    link.CrossingFences
 
-	buf [parameter.NetworkDrainWindow]network.Inbound // per-tick drain window
+	buf [parameter.NetworkDrainWindow]link.Inbound // per-tick drain window
 
 	syncSeq  uint64
 	lastSync [parameter.MaxPlayers]uint64 // last applied sync per slot, for reordering
@@ -109,7 +110,7 @@ type NetworkSystem struct {
 	statHostLost      *atomic.Bool
 	statLostIn        *atomic.Int64
 	statLostOut       *atomic.Int64
-	statSentKind      [network.KindCount]*atomic.Int64
+	statSentKind      [link.KindCount]*atomic.Int64
 	statWireOut       *atomic.Int64
 	statWireIn        *atomic.Int64
 	statRelayed       *atomic.Int64
@@ -163,7 +164,7 @@ type NetworkSystem struct {
 	// pieces. One per node rather than one per peer: the flood terminates because a
 	// node relays only chunks it admitted, and an assembly per peer admits the same
 	// chunk once per path instead, which is a cycle the mesh closes.
-	snapshot network.SnapshotAssembly
+	snapshot link.SnapshotAssembly
 
 	// suffix retains ordinary crossings for projection; barrier-bound artifacts
 	// are retained in applied instead. lostSeq marks the newest evicted sequence:
@@ -412,7 +413,7 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statLostIn = s.intStat(reg, "network.transport_lost_in")
 	s.statLostOut = s.intStat(reg, "network.transport_lost_out")
 	for k := range s.statSentKind {
-		s.statSentKind[k] = s.intStat(reg, "network.sent_"+network.ByteKind(k).String()+"_bytes")
+		s.statSentKind[k] = s.intStat(reg, "network.sent_"+link.ByteKind(k).String()+"_bytes")
 	}
 	s.statWireOut = s.intStat(reg, "network.wire_bytes_out")
 	s.statWireIn = s.intStat(reg, "network.wire_bytes_in")
@@ -474,7 +475,7 @@ func (s *NetworkSystem) Init() {
 	s.pathAge, s.pathEpoch = 0, 0
 	s.downAt = [participantSlots]uint64{}
 	s.leadCount, s.leadPushed = 0, 0
-	s.snapshot = network.SnapshotAssembly{}
+	s.snapshot = link.SnapshotAssembly{}
 
 	// Held derivations go for the reason the replay suffix below does: a reward the
 	// authority never proved belongs to the run that predicted it, and that run has
@@ -745,7 +746,7 @@ func (s *NetworkSystem) forgetLocked(gone func(uint32) bool, drop func(barrierAr
 			s.appliedPeerSeq[id], s.downAt[id], s.seqs[id] = 0, 0, window{}
 		}
 	}
-	kept := make(network.CrossingFences, 0, len(s.snapshotFences)) // shared with the capture header
+	kept := make(link.CrossingFences, 0, len(s.snapshotFences)) // shared with the capture header
 	for _, f := range s.snapshotFences {
 		if !gone(uint32(f.Source)) {
 			kept = append(kept, f)
@@ -828,7 +829,7 @@ func (s *NetworkSystem) ResendUncommitted() {
 		if rec.produced >= s.productionEpoch || s.ownCommitted.has(rec.produced, parameter.NetworkSequenceWindow) {
 			continue
 		}
-		if bytes += rec.bytes; bytes > network.MaxPayloadSize/2 {
+		if bytes += rec.bytes; bytes > link.MaxPayloadSize/2 {
 			dropped++ // more than one frame carries; the next correction takes the rest back
 			continue
 		}
@@ -899,18 +900,18 @@ func (s *NetworkSystem) noteAppliedFrom(source uint32, seq uint64) {
 
 // AppliedCrossingFences reads the local contiguous prefix and remote maxima
 // under the world lock, so world changes and their containment evidence agree.
-func (s *NetworkSystem) AppliedCrossingFences() network.CrossingFences {
+func (s *NetworkSystem) AppliedCrossingFences() link.CrossingFences {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make(network.CrossingFences, 0, len(s.appliedPeerSeq))
+	out := make(link.CrossingFences, 0, len(s.appliedPeerSeq))
 	for source, seq := range s.appliedPeerSeq {
 		if seq != 0 {
-			out = append(out, network.CrossingFence{Source: network.PeerID(source), Seq: seq})
+			out = append(out, link.CrossingFence{Source: link.PeerID(source), Seq: seq})
 		}
 	}
 	if s.localSource != 0 && s.appliedCrossSeq != 0 {
-		out = append(out, network.CrossingFence{
-			Source: network.PeerID(s.localSource), Seq: s.appliedCrossSeq,
+		out = append(out, link.CrossingFence{
+			Source: link.PeerID(s.localSource), Seq: s.appliedCrossSeq,
 		})
 	}
 	return out.Normalize()
@@ -999,7 +1000,7 @@ func (s *NetworkSystem) retainApplied(batch []barrierArtifact) {
 // RetainedAfter returns the applied artifacts a capture at tick with these fences
 // lacks, in session order: barrier-bound ones due after its tick, and peer frames
 // past their source's fence. A projection re-applies each at its own tick.
-func (s *NetworkSystem) RetainedAfter(tick uint64, fences network.CrossingFences) (frames []event.ScheduledWireFrame, sources []uint32, origins []event.Origin) {
+func (s *NetworkSystem) RetainedAfter(tick uint64, fences link.CrossingFences) (frames []event.ScheduledWireFrame, sources []uint32, origins []event.Origin) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, a := range s.applied {
@@ -1040,9 +1041,9 @@ func (s *NetworkSystem) PendingAfter(tick uint64) []event.WireBatch {
 
 // retainedContainedLocked is snapshotContainsLocked against a capture being
 // projected rather than the one last installed. Caller MUST hold mu.
-func (s *NetworkSystem) retainedContainedLocked(a barrierArtifact, tick uint64, fences network.CrossingFences) bool {
+func (s *NetworkSystem) retainedContainedLocked(a barrierArtifact, tick uint64, fences link.CrossingFences) bool {
 	if !barrierBound(a.frame.Event) {
-		fence := fences.Seq(network.PeerID(a.source))
+		fence := fences.Seq(link.PeerID(a.source))
 		return fence != 0 && a.frame.Seq <= fence
 	}
 	return a.applyTick <= tick
@@ -1140,13 +1141,13 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 // new crossings for its next unsent epoch. Barrier-bound artifacts use the tick
 // floor and ordinary ones source fences, for late arrivals too. Caller holds
 // updateMutex.
-func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences network.CrossingFences) {
+func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link.CrossingFences) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshotFloor = tick
 	s.snapshotAuthority = authority
 	s.snapshotFences = fences
-	localFence := fences.Seq(network.PeerID(s.localSource))
+	localFence := fences.Seq(link.PeerID(s.localSource))
 	// A local crossing may have been accepted between the last tick close and this
 	// install. One the captured world does not contain is still outstanding, and
 	// dropping it would leave only a local replay for a later correction to erase
@@ -1257,7 +1258,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences netw
 // discarded action is not. bySequence reports a fence decided. Caller holds mu.
 func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, bySequence bool) {
 	if !barrierBound(a.frame.Event) {
-		if fence := s.snapshotFences.Seq(network.PeerID(a.source)); fence != 0 {
+		if fence := s.snapshotFences.Seq(link.PeerID(a.source)); fence != 0 {
 			contained = a.frame.Seq <= fence
 			return contained, contained
 		}
@@ -1441,11 +1442,11 @@ func (s *NetworkSystem) away(participant uint32) bool {
 // timing and the simulation, and it only copies: timing may pace a transport but
 // never enter shared state, an RNG stream, a replay or a game decision.
 func (s *NetworkSystem) publishLinkMeasurement(p engine.NetworkPort, completedTick uint64) {
-	link, ok := p.(engine.LinkMeasuringPort)
+	meter, ok := p.(engine.LinkMeasuringPort)
 	if !ok || !s.enabled || !p.IsRunning() {
 		return
 	}
-	link.SetLinkReport(s.linkReport(completedTick))
+	meter.SetLinkReport(s.linkReport(completedTick))
 
 	// The worst link decides what a player is told: a session is as constrained as
 	// its most constrained edge, and an average would hide the peer that needs
@@ -1454,8 +1455,8 @@ func (s *NetworkSystem) publishLinkMeasurement(p engine.NetworkPort, completedTi
 	var worst linkpace.Metrics
 	var worstPeer uint32
 	loss := 0.0
-	for _, peer := range link.Peers() {
-		m := link.LinkMetric(peer)
+	for _, peer := range meter.Peers() {
+		m := meter.LinkMetric(peer)
 		if m.Samples == 0 {
 			continue
 		}
@@ -1474,8 +1475,8 @@ func (s *NetworkSystem) publishLinkMeasurement(p engine.NetworkPort, completedTi
 
 // linkReport describes this instance's picture for the peers measuring it.
 // Caller MUST hold updateMutex: it reads the cursor store.
-func (s *NetworkSystem) linkReport(completedTick uint64) network.LinkReport {
-	r := network.LinkReport{
+func (s *NetworkSystem) linkReport(completedTick uint64) link.LinkReport {
+	r := link.LinkReport{
 		Tick:      completedTick,
 		LagTicks:  uint32(min(s.statLag.Load(), math.MaxUint32)),
 		Magnitude: uint32(min(max(s.statMagnitude.Load(), 0), math.MaxUint32)),
@@ -1521,7 +1522,7 @@ func (s *NetworkSystem) DrainOffTick() {
 }
 
 // drainWith is one poll of the endpoint, whichever door it came through.
-func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbound) int) {
+func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound) int) {
 	n := poll(s.buf[:])
 	for i := range n {
 		if !s.enabled {
@@ -1529,14 +1530,14 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 		}
 		in := &s.buf[i]
 		switch in.Kind {
-		case network.InboundConnect:
+		case link.InboundConnect:
 			if in.Served && int(in.Peer) < len(s.served) {
 				s.served[in.Peer] = true
 				s.noteDown(uint32(in.Peer))
 			}
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
 			s.world.LatchSession()
-		case network.InboundDisconnect:
+		case link.InboundDisconnect:
 			if int(in.Peer) < len(s.served) {
 				s.served[in.Peer] = false
 			}
@@ -1544,9 +1545,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
 			dropped := s.reportDisconnect(uint32(in.Peer), p.PeerCount())
 			s.noticeDeparture(uint32(in.Peer), dropped)
-		case network.InboundMessage:
+		case link.InboundMessage:
 			if r := s.world.Resources.Network; r != nil && in.Msg != nil && int(in.Peer) < len(r.Ingress) {
-				r.Ingress[in.Peer].Add(uint64(network.HeaderSize + len(in.Msg.Payload)))
+				r.Ingress[in.Peer].Add(uint64(link.HeaderSize + len(in.Msg.Payload)))
 			}
 			s.dispatchMessage(uint32(in.Peer), in.Msg)
 		}
@@ -1714,11 +1715,11 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 		}
 	} else if p != nil {
 		peers = p.PeerCount()
-		if statePort, ok := p.(interface{ ConnectionState() network.ConnState }); ok {
+		if statePort, ok := p.(interface{ ConnectionState() link.ConnState }); ok {
 			switch statePort.ConnectionState() {
-			case network.StateConnected:
+			case link.StateConnected:
 				state = "connected"
-			case network.StateConnecting:
+			case link.StateConnecting:
 				state = "waiting"
 			default:
 				state = "down"
@@ -1748,7 +1749,7 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 // Raw participant input is not one of them — a peer sends the resolved artifact,
 // never the keystroke that produced it — so an unrecognised type is counted and
 // discarded rather than translated.
-func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
+func (s *NetworkSystem) dispatchMessage(from uint32, msg *link.Message) {
 	if msg == nil {
 		return
 	}
@@ -1757,10 +1758,10 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) {
 		s.scheduleCrossings(from, msg.Payload)
 	case network.MsgStateSync:
 		s.scheduleCursorState(from, msg.Payload)
-	case network.MsgBundle:
-		err := network.Unbundle(msg.Payload, func(kind network.MessageType, body []byte) {
+	case link.MsgBundle:
+		err := link.Unbundle(msg.Payload, func(kind link.MessageType, body []byte) {
 			if network.Bundles(kind) {
-				s.dispatchMessage(from, &network.Message{Type: kind, Payload: body})
+				s.dispatchMessage(from, &link.Message{Type: kind, Payload: body})
 			} else {
 				s.statDrop.Add(1)
 			}
@@ -1804,7 +1805,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	asm := &s.snapshot
 	admitted, done, err := asm.AddChunk(body)
 	if err != nil {
-		*asm = network.SnapshotAssembly{}
+		*asm = link.SnapshotAssembly{}
 		s.statDrop.Add(1)
 		s.world.Log().Warn("converge", "msg", "correction chunk refused", "peer", from, "error", err.Error())
 		return
@@ -1835,7 +1836,7 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 // layer, outside the world lock. None is flooded: a repair reaching a peer that did
 // not ask names pages it retains nothing for, so forwarding a manifest is a
 // retention decision the session layer makes (Corrections.forwardManifest).
-func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, body []byte) {
+func (s *NetworkSystem) receiveSelective(kind link.MessageType, from uint32, body []byte) {
 	if from == 0 {
 		s.statDrop.Add(1)
 		return
@@ -1848,7 +1849,7 @@ func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, 
 // receiveAuthority queues a succession frame for the session layer, which dedupes
 // by term and participant and decides what to relay. These flood: a survivor two
 // links from the lost authority learns of the loss only from reports crossing it.
-func (s *NetworkSystem) receiveAuthority(kind network.MessageType, from uint32, body []byte) {
+func (s *NetworkSystem) receiveAuthority(kind link.MessageType, from uint32, body []byte) {
 	if from == 0 || int(from) >= len(s.departed) || s.departed[from] {
 		s.statDrop.Add(1)
 		return
@@ -1908,7 +1909,7 @@ func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 // deflate and on the wire after it: the reading the netcode is planned by, which
 // an in-process mesh, which deflates nothing, has no figures for.
 func (s *NetworkSystem) publishLinkBytes(p engine.NetworkPort) {
-	totals, ok := p.(interface{ LinkTotals() network.LinkTotals })
+	totals, ok := p.(interface{ LinkTotals() link.LinkTotals })
 	if !ok {
 		return
 	}
@@ -2043,7 +2044,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	s.mu.Lock()
 	admitted := s.epochs[batch.Source].admit(batch.ProducedTick, parameter.NetworkEpochWindow)
 	installed, superseded, refused, overflowed, late, void, repeated := 0, 0, 0, 0, 0, 0, 0
-	sourceFence := s.snapshotFences.Seq(network.PeerID(batch.Source))
+	sourceFence := s.snapshotFences.Seq(link.PeerID(batch.Source))
 	held := 0
 	for _, a := range s.scheduled {
 		if a.source == batch.Source {
@@ -2156,7 +2157,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 // relayCommitted passes a committed copy down. The authority that commits one is
 // its origin: the hop count restarts and every link takes it, the producer's
 // included, which is how a producer learns what was committed.
-func (s *NetworkSystem) relayCommitted(from uint32, committing bool, kind network.MessageType, batch event.WireBatch) {
+func (s *NetworkSystem) relayCommitted(from uint32, committing bool, kind link.MessageType, batch event.WireBatch) {
 	batch.Committed = true
 	if committing {
 		from, batch.Hops = 0, 0
@@ -2237,11 +2238,11 @@ func (s *NetworkSystem) adoptRelay(from uint32) {
 // Downstream lists the linked participants behind this instance: every link at
 // the authority, else the ones it serves or that send it raw artifacts.
 func (s *NetworkSystem) Downstream() []uint32 {
-	link, ok := s.port().(engine.LinkMeasuringPort)
+	meter, ok := s.port().(engine.LinkMeasuringPort)
 	if !ok {
 		return nil
 	}
-	peers := link.Peers()
+	peers := meter.Peers()
 	if s.isCoordinator() {
 		return peers
 	}
@@ -2250,7 +2251,7 @@ func (s *NetworkSystem) Downstream() []uint32 {
 }
 
 // relayRaw passes a raw artifact on toward the authority, one hop further.
-func (s *NetworkSystem) relayRaw(kind network.MessageType, batch event.WireBatch) {
+func (s *NetworkSystem) relayRaw(kind link.MessageType, batch event.WireBatch) {
 	batch.Hops++
 	if batch.Hops >= parameter.NetworkRelayHopLimit {
 		s.statDrop.Add(1)
@@ -2271,7 +2272,7 @@ func (s *NetworkSystem) relayRaw(kind network.MessageType, batch event.WireBatch
 // offers the artifact on every link not behind it, and adoptRelay takes whichever
 // returns its epochs. With the authority lost it holds its own for the handoff to
 // resend.
-func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
+func (s *NetworkSystem) sendUp(kind link.MessageType, body []byte) {
 	p := s.port()
 	if to := s.up(); to != 0 {
 		if p == nil || !p.Send(to, uint8(kind), body) {
@@ -2279,13 +2280,13 @@ func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
 		}
 		return
 	}
-	link, ok := p.(engine.LinkMeasuringPort)
+	meter, ok := p.(engine.LinkMeasuringPort)
 	if !ok || s.statHostLost.Load() {
 		s.statDrop.Add(1)
 		return
 	}
 	tick := s.localTick()
-	for _, id := range link.Peers() {
+	for _, id := range meter.Peers() {
 		if !s.behind(id, tick) {
 			p.Send(id, uint8(kind), body)
 		}
@@ -2296,18 +2297,18 @@ func (s *NetworkSystem) sendUp(kind network.MessageType, body []byte) {
 // link it arrived on, every link at the authority; the link of source, when one is
 // named, takes own in its place, or nothing when own is nil. Reports whether any
 // took it. The port bundles epochs and syncs a link until a release (BundlingPort).
-func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body []byte, source uint32, own []byte) bool {
+func (s *NetworkSystem) sendDown(except uint32, kind link.MessageType, body []byte, source uint32, own []byte) bool {
 	p := s.port()
 	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return false
 	}
-	link, ok := p.(engine.LinkMeasuringPort)
+	meter, ok := p.(engine.LinkMeasuringPort)
 	if !ok {
 		p.BroadcastExcept(except, uint8(kind), body)
 		return true
 	}
 	tick, sent := s.localTick(), false
-	for _, id := range link.Peers() {
+	for _, id := range meter.Peers() {
 		if id == except || !(s.isCoordinator() || s.behind(id, tick)) {
 			continue
 		}
@@ -2324,7 +2325,7 @@ func (s *NetworkSystem) sendDown(except uint32, kind network.MessageType, body [
 
 // sendOwn sends one of this instance's own artifacts: the authority's are committed
 // as sent and go down every link, a guest's go up raw.
-func (s *NetworkSystem) sendOwn(p engine.NetworkPort, kind network.MessageType, body []byte) {
+func (s *NetworkSystem) sendOwn(p engine.NetworkPort, kind link.MessageType, body []byte) {
 	if s.isCoordinator() {
 		p.Broadcast(uint8(kind), body)
 		return
@@ -2495,7 +2496,7 @@ func (s *NetworkSystem) leadOf(target uint64) uint64 {
 // count: Source, ProducedTick and each frame's ApplyTick and sequence make the
 // artifact identical everywhere, so a relay never restamps them. A leaf's own copy
 // returns to it as its age alone, and its own sync not at all.
-func (s *NetworkSystem) forwardDown(from uint32, kind network.MessageType, batch event.WireBatch) {
+func (s *NetworkSystem) forwardDown(from uint32, kind link.MessageType, batch event.WireBatch) {
 	if batch.Hops >= parameter.NetworkRelayHopLimit {
 		s.statDrop.Add(1)
 		s.world.Log().Warn("net", "msg", "relay hop limit reached",
@@ -2983,7 +2984,7 @@ type networkState struct {
 	encodeErr, suffixDropped                   int64
 	barrierActive                              bool
 	appliedPeerSeq, downAt                     [participantSlots]uint64
-	snapshotFences                             network.CrossingFences
+	snapshotFences                             link.CrossingFences
 	syncSeq, ticks, lostSeq                    uint64
 	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
 	states                                     []pendingState

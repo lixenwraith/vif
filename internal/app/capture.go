@@ -9,10 +9,10 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/manifest"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // captureStatusLocked reads every shared-surface registry cell through
@@ -155,7 +155,7 @@ func (a *App) captureLightLocked() (snapshot.SharedCapture, error) {
 	}
 	for _, sys := range a.world.Systems() {
 		if fences, ok := sys.(interface {
-			AppliedCrossingFences() network.CrossingFences
+			AppliedCrossingFences() link.CrossingFences
 		}); ok {
 			cap.Header.Crossings = fences.AppliedCrossingFences()
 			break
@@ -394,7 +394,7 @@ func (a *App) adoptClockLocked(h snapshot.CaptureHeader) {
 func (a *App) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
 	for _, sys := range a.world.Systems() {
 		if b, ok := sys.(interface {
-			AdoptSnapshot(uint64, uint32, network.CrossingFences)
+			AdoptSnapshot(uint64, uint32, link.CrossingFences)
 		}); ok {
 			b.AdoptSnapshot(header.Tick, header.Authority, header.Crossings)
 		}
