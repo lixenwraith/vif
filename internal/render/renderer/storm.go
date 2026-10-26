@@ -565,10 +565,12 @@ func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.R
 	}
 }
 
-// renderRedMuzzleFlash draws the short directional effect at the circle edge.
+// renderRedMuzzleFlash draws the short directional effect at the circle edge while
+// the turret fires: a burst held by a stun or by no cursor has its mount disarmed
+// and shows none.
 func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
 	mount, ok := r.gameCtx.World.Components.Mount.GetPtr(circle.entity)
-	if !ok || !mount.HasAim {
+	if !ok || !mount.Armed || !mount.HasAim {
 		return
 	}
 	targetX, targetY := mount.AimX, mount.AimY
