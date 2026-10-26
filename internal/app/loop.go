@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
@@ -55,11 +57,13 @@ func Run(cfg Config) error {
 	// A join the player started at launch is seated at their press, unless the host
 	// they launched from already took it.
 	cfg.joinPress = cfg.JoinAddress != "" && !cfg.Host.Pressed
+	cfg.startScreen = !cfg.Host.StartScreen
 	rejoin := false
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
-		cfg.hostListeners, cfg.Host.Pressed = nil, false // the press the host took was the first game's
+		// The press the host took and the start screen were the first game's
+		cfg.hostListeners, cfg.Host.Pressed, cfg.startScreen = nil, false, false
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
@@ -288,9 +292,15 @@ func (a *App) showDoorError(err error) {
 // intent → router. The key cell shows what the machine holds, pending or completed,
 // whatever the router does. False means the player quit.
 func (a *App) takeEvent(ev terminal.Event) bool {
+	if ev.Type == terminal.EventPaste {
+		return pasteKeys(ev.Text, a.takeTap)
+	}
 	intent := a.inputMachine.Process(ev)
 	if ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress {
 		a.touched = ev.Touch
+	}
+	if a.startHelp(ev) {
+		intent = &input.Intent{Type: input.IntentHelp}
 	}
 	if a.takeStart(ev, intent) {
 		intent = nil // the press that starts a waiting game is nothing else
@@ -314,6 +324,38 @@ func (a *App) takeEvent(ev terminal.Event) bool {
 	}
 	if ev.Type == terminal.EventKeyReport {
 		a.keyReported(ev.Report == terminal.KeyReportReleases)
+	}
+	return true
+}
+
+// takeTap takes a key with no release of its own to come, a paste's: with releases
+// reported it lets go as it presses, lost, as a host's tapped key does
+func (a *App) takeTap(ev terminal.Event) bool {
+	if !a.takeEvent(ev) {
+		return false
+	}
+	if !a.releases {
+		return true
+	}
+	ev.Action, ev.Lost = terminal.KeyRelease, true
+	return a.takeEvent(ev)
+}
+
+// pasteKeys types a paste a key at a time, as a keyboard would: a line break is
+// Enter, and another control character types nothing. A host posts a paste as one
+// event, so a long one fits its queue whole. False when take quit.
+func pasteKeys(text string, take func(terminal.Event) bool) bool {
+	for _, r := range strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(text) {
+		ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
+		switch {
+		case r == '\n':
+			ev.Key, ev.Rune = terminal.KeyEnter, 0
+		case unicode.IsControl(r):
+			continue
+		}
+		if !take(ev) {
+			return false
+		}
 	}
 	return true
 }
@@ -366,6 +408,7 @@ func (a *App) setAway(away bool) {
 // press. One away before the clock starts, behind Android's start screen, is unseen
 // until they come, and their return is that press. Otherwise the setting decides,
 // unless the run joined a host, whose game it lands in, or its host took the press.
+// The launch waits behind the start screen where its host has none of its own.
 func (a *App) holdFirstGame(reports <-chan bool) {
 	for drained := false; !drained; {
 		select {
@@ -380,6 +423,7 @@ func (a *App) holdFirstGame(reports <-chan bool) {
 	a.scheduler.Prepare() // the hold settles before the clock starts
 	a.world.RunSafe(func() { a.ctx.HoldAs(engine.HoldStart) })
 	a.scheduler.DispatchEventsImmediately()
+	a.startScreen = a.cfg.startScreen
 }
 
 // takeStart starts a waiting game at its player's press: a key going down that Ctrl
@@ -407,7 +451,7 @@ func (a *App) takeStart(ev terminal.Event, intent *input.Intent) bool {
 // dials again (takeSeat); a session that started another game meanwhile is joined
 // anew by the next run, which the press already seats.
 func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) {
-	a.showJoinStatus(a.joinPrompt())
+	a.showJoinAsk()
 	for {
 		select {
 		case <-signals:
@@ -420,7 +464,7 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 				a.touched = ev.Touch
 			}
 			if !joinPress(ev, a.ctx.MouseDisabled.Load()) {
-				a.showJoinStatus(a.joinPrompt()) // redrawn after a resize, and asked as a touch was
+				a.showJoinAsk() // redrawn after a resize, and asked as a touch was
 				continue
 			}
 			a.showJoinStatus("Joining " + link.Shown(a.cfg.JoinAddress) + "...")
@@ -503,7 +547,13 @@ func (a *App) renderContext() render.RenderContext {
 		}
 		out = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
 		out.Prompt = a.startPrompt()
+		// The start screen lifts with the launch's hold, whatever ended it
+		a.startScreen = a.startScreen && a.ctx.TimeCtl.Holds(engine.HoldStart)
 	})
+	out.StartScreen = a.startScreen
+	if a.startScreen {
+		out.StartHelp = a.startHelpLabel()
+	}
 	if p, ok := a.pres.(coveredPresentation); ok {
 		out.StatusCovered = p.Covered()
 	}
@@ -612,8 +662,9 @@ func (a *App) keyReportApplier() mode.KeyReportApplier {
 }
 
 // keyReported hands the presentation's answer to the router, which crosses it while
-// keys are captured
+// keys are captured, and keeps it for the keys a paste taps
 func (a *App) keyReported(releases bool) {
+	a.releases = releases
 	before := a.pushed()
 	a.world.RunSafe(func() { a.router.KeyReported(releases) })
 	if a.pushed() != before {

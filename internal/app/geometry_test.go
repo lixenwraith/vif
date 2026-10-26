@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/bot"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
@@ -588,5 +590,61 @@ func TestAFirstGameWaitsForItsPlayersPress(t *testing.T) {
 			t.Fatalf("%s: paused %v, asking %q, cursor at %v from %v after the press; want the game started as it stood",
 				name, a.ctx.TimeCtl.IsPaused(), rc.Prompt, cursor(), at)
 		}
+	}
+}
+
+// TestTheLaunchWaitsBehindTheStartScreen: the launch on a host without a start screen
+// of its own shows its first game's wait as the game's start screen, asking as the
+// status line would; a click on its help button opens help over the waiting game, and
+// the press that starts the game lifts the screen.
+func TestTheLaunchWaitsBehindTheStartScreen(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	const w, h = 120, 40
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
+		Host: Host{Presentation: &framePresentation{w: w, h: h}}, startScreen: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	a.holdFirstGame(nil)
+	rc := a.renderContext()
+	if !rc.StartScreen || rc.StartHelp != "F1 help" || rc.Prompt != "Click or press a key to start" {
+		t.Fatalf("at launch the start screen is up %v with help %q, asking %q", rc.StartScreen, rc.StartHelp, rc.Prompt)
+	}
+
+	help := render.StartHelpRect(w, rc.StartHelp)
+	a.takeEvent(terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
+		MouseAction: terminal.MouseActionPress, MouseX: help.X0 + 1, MouseY: help.Y0 + 1})
+	if !a.ctx.TimeCtl.Holds(engine.HoldStart) || a.ctx.GetOverlayTitle() != core.OverlayHelpTitle {
+		t.Fatalf("after a click on help: waiting %v, overlay %q; want help over the waiting game",
+			a.ctx.TimeCtl.Holds(engine.HoldStart), a.ctx.GetOverlayTitle())
+	}
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape})
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'j'})
+	if rc := a.renderContext(); a.ctx.TimeCtl.Holds(engine.HoldStart) || rc.StartScreen || rc.StartHelp != "" {
+		t.Fatalf("after the start: waiting %v, start screen up %v", a.ctx.TimeCtl.Holds(engine.HoldStart), rc.StartScreen)
+	}
+}
+
+// TestAPasteTypesWhole: a host's paste, one event, types a key at a time into the
+// command line, all of it however much longer than a presentation's queue, with
+// each key let go as it presses where releases are reported; a control character
+// types nothing.
+func TestAPasteTypesWhole(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
+		Host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	a.takeEvent(terminal.Event{Type: terminal.EventKeyReport, Report: terminal.KeyReportReleases, Source: terminal.KeySourceHost})
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: ':'})
+	link := "join https://lixen.com/vif/play/?arg=-join%3Dwss%3A%2F%2Flixen.com%2Fvif%2Fs%2F" + strings.Repeat("0123456789abcdef", 20)
+	if !a.takeEvent(terminal.Event{Type: terminal.EventPaste, Text: "join\a https://lixen.com" + link[len("join https://lixen.com"):]}) {
+		t.Fatal("the paste quit")
+	}
+	if got := a.ctx.GetCommandText(); !a.ctx.IsCommandMode() || got != link {
+		t.Fatalf("the command line holds %q, want the paste whole, %d characters", got, len(link))
 	}
 }

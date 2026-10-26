@@ -288,6 +288,10 @@ type Config struct {
 	// own, or whose player already pressed, takes its seat once its world is built.
 	joinPress bool
 
+	// startScreen says this run is the launch on a host without a start screen of its
+	// own, which waits behind the game's (App.startScreen)
+	startScreen bool
+
 	// claims is the process's claim keeper, which every run Run builds and every seat
 	// they hold shares; Normalize gives a run built another way one of its own.
 	claims *claimKeeper

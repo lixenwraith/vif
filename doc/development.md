@@ -793,7 +793,7 @@ across instances is the invariant the domain model rests on.
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml`, `release.yml` |
 | End-to-end checks | `script/test.sh`, `script/*.toml` |
-| Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css` |
+| Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css`, `web/fonts/` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
 | Journal, replay, fuzz, and authored scripts | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go`, `script.go` |

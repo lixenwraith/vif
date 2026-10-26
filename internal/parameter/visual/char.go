@@ -24,6 +24,13 @@ var QuadrantChars = [16]rune{
 	'█', // 1111 - full block
 }
 
+// ButtonCapTop and ButtonCapBottom are a button's rows above and below its label, left
+// end, middle, right end: half blocks whose quadrant ends round its corners
+var (
+	ButtonCapTop    = [3]rune{'▗', '▄', '▖'}
+	ButtonCapBottom = [3]rune{'▝', '▀', '▘'}
+)
+
 // DensityChars are shade glyphs ordered from lowest to highest density
 var DensityChars = [4]rune{'░', '▒', '▓', '█'}
 

@@ -510,10 +510,11 @@ void main() {
     }
 
     // begin is the start screen's tap, click or key: the program runs from it, now
-    // or once compiled
+    // or once compiled. The loading line turns the button it asks with from then.
     function begin() {
         if (tapped) return;
         tapped = true;
+        document.getElementById('loading').classList.add('ask');
         focus();   // keys follow, in a frame that had no focus too
         if (!audio) openAudio();
         if (ready) run();
@@ -656,7 +657,10 @@ void main() {
             case 'ready':   // compiled and held for the start screen's tap
                 ready = true;
                 if (tapped) run();
-                else loading.textContent = PROMPT;
+                else {
+                    loading.textContent = PROMPT;
+                    loading.classList.add('ask');
+                }
                 break;
             case 'frame':
                 loading.classList.add('hidden');   // compiled and drawing
@@ -1221,7 +1225,7 @@ void main() {
     function showMessage(msg, isError) {
         const el = document.getElementById('loading');
         el.textContent = msg;
-        el.classList.remove('hidden');
+        el.classList.remove('hidden', 'ask');
         el.classList.toggle('error', isError);
         start.hidden = true;
         away = false;

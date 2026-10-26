@@ -83,6 +83,20 @@ func Version() (version, revision string) {
 	return version, revision
 }
 
+// Build is how the player and a refusal name this build: the commit it was built from,
+// after its release when it is one. A pseudo-version only repeats the commit.
+func Build() string {
+	version, revision := Version()
+	if revision == "" {
+		return version
+	}
+	short := revision[:min(len(revision), 8)]
+	if version == "(devel)" || strings.Contains(version, revision[:min(len(revision), 12)]) {
+		return short
+	}
+	return version + " (" + short + ")"
+}
+
 func read(name string) []byte {
 	data, err := assetFS.ReadFile(name)
 	if err != nil {

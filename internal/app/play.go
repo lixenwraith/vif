@@ -255,6 +255,9 @@ func (p *player) event(ev terminal.Event) bool {
 		return false
 	case terminal.EventKey:
 		return p.key(ev)
+	case terminal.EventPaste:
+		// Typed into the viewer's command line; a key a paste carries controls no replay
+		return pasteKeys(ev.Text, func(k terminal.Event) bool { return p.cmd == nil || p.key(k) })
 	}
 	return true
 }

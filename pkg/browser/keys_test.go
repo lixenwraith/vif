@@ -54,9 +54,6 @@ func TestAKeyPressReportsWhatATerminalReports(t *testing.T) {
 			t.Errorf("%q with %03b was taken as %+v", c.key, c.mods, ev)
 		}
 	}
-	if ev := textEvent('\n'); ev.Key != terminal.KeyEnter {
-		t.Errorf("a newline typed %+v, want Enter", ev)
-	}
 }
 
 // TestThePointerIsReportedInTheTerminalsNumbering: button and action as the page

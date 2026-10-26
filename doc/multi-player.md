@@ -439,7 +439,8 @@ A join its player started (`-join` at launch, `:join`, the Multiplayer page) hol
 nothing in the session until their press. Its handshake previews the session
 ([Services §8](services-and-networking.md#8-wire-frame-and-session-messages)); the
 run fetches the scenario it lacks, builds and checks its world on the preview, says
-it is ready, and asks on its status line: "Click or press a key to join *host*",
+it is ready, and asks on its status line, or at a terminal's or desktop window's
+launch on the start screen's button: "Click or press a key to join *host*",
 "Press a key" with the mouse off, "Tap" after a touch. A key that types or moves, or
 a click, seats it; Escape, Tab, the function keys and chords do not, and Ctrl-C
 leaves (`joinPress`). The seat binds the identity the run's port and world were

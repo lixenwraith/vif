@@ -66,14 +66,16 @@ browser once that browser may install apps.
 adb shell am start -n com.lixen.vif/.MainActivity
 ```
 
-The app opens on its start screen: the logo at the centre, "Tap to start" under
-it, and a `?` in the corner that opens the touch controls in a window nearly the
-screen's size, which its ×, Back or a tap outside closes. The run starts behind
+The app opens on its start screen, in lixen.com's dark theme: the logo at the
+centre, "Tap to start" under it on the site's blue button, and a `?` in the corner
+that opens the touch controls in a window nearly the screen's size, which its ×,
+Back or a tap outside closes. The run starts behind
 it, paused at its first tick and silent, and a tap anywhere else lifts the screen
 off the game; a screen turned first starts that game over at its new size. Back
 there is the system's, and no key reaches the game until the tap.
 A browser shows the same screen in the same words and waits for its tap too; a
-desktop's asks for a click or a key instead.
+desktop's asks for a click or a key instead, and a terminal or the desktop window
+draws its own over the waiting game.
 
 A cell is 12 dp tall (`cellDP`) until a pinch zooms it, and the grid the view
 holds is stretched over the view edge to edge. Add `--ez raster true` to paint with
@@ -85,6 +87,8 @@ Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
 configuration menu, whose rows a tap selects and a second tap acts on; keys, a
 hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
+the keyboard's paste button, the Paste key, Ctrl-Shift-V and Shift-Insert type the
+clipboard's text, a `:join` link copied from the lobby for one, however long;
 two fingers tapped together, twice within half a second, raise or drop the system
 keyboard (a finger joining one held or dragging is play, not the gesture, and so is
 a single pair tap); a pinch zooms the cell from 4 to 40 dp, the browser's range

@@ -85,14 +85,6 @@ func modifiers(meta int32) terminal.Modifier {
 	return m
 }
 
-// textEvent is one character the system keyboard committed
-func textEvent(r rune) terminal.Event {
-	if r == '\n' {
-		return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter}
-	}
-	return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
-}
-
 // touch is the left button pressed or released by a finger on the cell drawn under
 // pixel x, y, the nearest edge cell for one past the view's edge. With the pointer
 // off the status bar, the last rows, still takes a press: the hold that opens the

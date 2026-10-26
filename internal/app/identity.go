@@ -1,8 +1,6 @@
 package app
 
 import (
-	"strings"
-
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/manifest"
@@ -22,22 +20,8 @@ func buildIdentity() network.PeerIdentity {
 		CaptureSchema:  snapshot.Schema,
 		JournalSchema:  event.JournalSchema,
 		TickIntervalNS: int64(parameter.GameUpdateInterval),
-		Build:          buildName(),
+		Build:          asset.Build(),
 	}
-}
-
-// buildName is how a refusal names this build: the commit it was built from, after
-// its release when it is one. A pseudo-version only repeats the commit.
-func buildName() string {
-	version, revision := asset.Version()
-	if revision == "" {
-		return version
-	}
-	short := revision[:min(len(revision), 8)]
-	if version == "(devel)" || strings.Contains(version, revision[:min(len(revision), 12)]) {
-		return short
-	}
-	return version + " (" + short + ")"
 }
 
 // sessionIdentity is the whole of it: this build, and the session this instance has

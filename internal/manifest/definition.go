@@ -291,6 +291,7 @@ var Renderers = []RendererDef{
 	{"statusbar", "NewStatusBarRenderer", "PriorityStatusBar"},
 	{"peer_cursor", "NewPeerCursorRenderer", "PriorityPeerCursor"},
 	{"cursor", "NewCursorRenderer", "PriorityCursor"},
+	{"start_screen", "NewStartScreenRenderer", "PriorityStartScreen"},
 
 	// --- Debug ---
 	{"flowfield", "NewFlowFieldDebugRenderer", "PriorityFlowField"},
