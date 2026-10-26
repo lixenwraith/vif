@@ -92,7 +92,7 @@ const (
 	StormBlueInitialCooldown     = 5 * time.Second
 	StormBlueRepeatCooldown      = 5 * time.Second
 	StormBlueEffectDuration      = 2500 * time.Millisecond // 2s glow + 0.5s overlap with materialize
-	StormBlueMaterializePermille = 800                     // The beam opens at 800 ‰ of the attack, its 2 s mark
+	StormBlueMaterializePermille = 800                     // Per mille of the attack at which the beam opens: its 2 s mark
 	StormBlueGlowRotationPeriod  = 400 * time.Millisecond  // ms per full rotation (5 rotations in 2s)
 	StormBlueSpawnDistance       = 10.0
 )
