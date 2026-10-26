@@ -693,6 +693,17 @@ own — ends the tick there, as one between ticks does: the rest of the body, th
 epoch flush and the tail are skipped on every participant alike, and the
 scheduler resets the FSM before the new run's tick 1.
 
+Every relative clock (a timer slot, a carried age, a species countdown, a
+machine's elapsed time) advances in its owner's `Update`: step 8, or step 6 for the
+FSM's own. Nothing renders inside a tick, so a clock started earlier in the tick
+that advances it shows one tick (50 ms) less than its span; one started between
+ticks or in step 9 shows all of it. Steps 5 and 7 also follow step 3, so a clock
+they start reads a tick ahead of game time, while one started in step 2 agrees with
+it. A solo run's scenario actions settle in step 7; in a session a transition and
+its actions land in step 2, and delayed and `on_update` actions settle in step 7.
+The reorder that gives every clock its whole span is a
+[todo](todo.md#run-every-clock-for-the-span-it-is-set-to) item.
+
 Step 10 is inside the critical section deliberately: `Position` has no internal
 lock, so counting entities after unlocking would race removals on the
 event-loop and main goroutines.
