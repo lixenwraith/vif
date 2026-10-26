@@ -4,16 +4,15 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
 )
 
 // A store's rows travel in columns (SharedWorldEncodeStoreColumns): the row count,
 // the entities as zigzag deltas in capture order, then each leaf field over every
-// row: varints, float bits, strings and times (RFC 3339) behind a length, a slice
-// behind its length plus one so nil travels as nil. A row's entropy is its entity,
-// so a column repeats where a row would not (netcode design §3.7).
+// row: varints, float bits, strings behind a length, a slice behind its length plus
+// one so nil travels as nil. A row's entropy is its entity, so a column repeats where
+// a row would not (netcode design §3.7).
 
 func appendBool[T ~bool](dst []byte, v T) []byte {
 	if v {
@@ -41,12 +40,6 @@ func appendF64[T ~float64](dst []byte, v T) []byte {
 func appendString[T ~string](dst []byte, v T) []byte {
 	dst = binary.AppendUvarint(dst, uint64(len(v)))
 	return append(dst, v...)
-}
-
-// appendTime writes the form JSON gives a time, so a time read back prints as the
-// sender's did and hashes as its row did.
-func appendTime(dst []byte, t time.Time) []byte {
-	return appendString(dst, t.Format(time.RFC3339Nano))
 }
 
 func appendLen[T any](dst []byte, s []T) []byte {
@@ -206,20 +199,6 @@ func readString[T ~string](p *T, r *columnReader) {
 	if b := r.bytes(int(n)); r.err == nil {
 		*p = T(b)
 	}
-}
-
-func readTime(p *time.Time, r *columnReader) {
-	var s string
-	readString(&s, r)
-	if r.err != nil {
-		return
-	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		r.fail("%v", err)
-		return
-	}
-	*p = t
 }
 
 func readSlice[T any](p *[]T, r *columnReader) {

@@ -1504,7 +1504,7 @@ func equalHeat(a, b *component.HeatComponent) bool {
 }
 
 func equalShield(a, b *component.ShieldComponent) bool {
-	return a.LastDrainTime == b.LastDrainTime && math.Float64bits(float64(a.RadiusX)) == math.Float64bits(float64(b.RadiusX)) && math.Float64bits(float64(a.RadiusY)) == math.Float64bits(float64(b.RadiusY)) && math.Float64bits(float64(a.InvRxSq)) == math.Float64bits(float64(b.InvRxSq)) && math.Float64bits(float64(a.InvRySq)) == math.Float64bits(float64(b.InvRySq)) && a.Type == b.Type && a.Active == b.Active
+	return a.DrainElapsed == b.DrainElapsed && math.Float64bits(float64(a.RadiusX)) == math.Float64bits(float64(b.RadiusX)) && math.Float64bits(float64(a.RadiusY)) == math.Float64bits(float64(b.RadiusY)) && math.Float64bits(float64(a.InvRxSq)) == math.Float64bits(float64(b.InvRxSq)) && math.Float64bits(float64(a.InvRySq)) == math.Float64bits(float64(b.InvRySq)) && a.Type == b.Type && a.Active == b.Active
 }
 
 func equalBoost(a, b *component.BoostComponent) bool {

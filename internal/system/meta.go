@@ -420,7 +420,7 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
 			entry := engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID, Holder: c.Holder, Claim: c.Claim}
 			if w, away := s.world.Components.Wraith.GetComponent(e); away {
-				entry.Wraith, entry.Waited = true, s.world.Resources.Time.GameTime.Sub(w.Since)
+				entry.Wraith, entry.Waited = true, w.Waited
 			}
 			roster = append(roster, entry)
 		}

@@ -61,10 +61,6 @@ func (g *columnGen) column(loops []string, enc, dec string) {
 // its fields in order, an array its elements under one more loop, a slice its
 // lengths' column and then its elements'.
 func (g *columnGen) walk(t types.Type, loops []string, expr, where string) {
-	if isTime(t) {
-		g.column(loops, "dst = appendTime(dst, "+expr+")", "readTime(&"+expr+", r)")
-		return
-	}
 	if n, ok := t.(*types.Named); ok && marshals(n) {
 		panic(fmt.Sprintf("%s: %s marshals itself and has no column layout", where, n))
 	}
@@ -128,9 +124,6 @@ func basicColumn(u *types.Basic, where string) string {
 
 // leaves counts the columns t lays out to.
 func leaves(t types.Type) int {
-	if isTime(t) {
-		return 1
-	}
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
 		return 1

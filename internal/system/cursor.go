@@ -56,8 +56,15 @@ func (s *CursorSystem) Name() string { return "cursor" }
 // Priority returns the system's priority
 func (s *CursorSystem) Priority() int { return parameter.PriorityCursor }
 
-// Update is empty: cursor lifecycle and placement are entirely event-driven
-func (s *CursorSystem) Update() {}
+// Update ages every Wraith's wait on every instance; cursor lifecycle and placement
+// are event-driven
+func (s *CursorSystem) Update() {
+	dt := s.world.Resources.Time.DeltaTime
+	s.world.Components.Wraith.Each(func(_ core.Entity, w *component.WraithComponent) bool {
+		w.Waited += dt
+		return true
+	})
+}
 
 // EventTypes returns the event types CursorSystem handles.
 // EventMetaSystemCommandRequest is absent deliberately: a disabled cursor system
@@ -85,7 +92,7 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 		}
 	case event.EventCursorWraithRequest:
 		if p, ok := ev.Payload.(*event.CursorWraithRequestPayload); ok {
-			s.wraith(p.Slot, s.world.Resources.Time.GameTime)
+			s.wraith(p.Slot, 0)
 		}
 	case event.EventCursorMoveRequest:
 		if p, ok := ev.Payload.(*event.CursorMoveRequestPayload); ok {
@@ -152,7 +159,7 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 			q.PeerID, q.Holder, q.Claim = entry.PeerID, entry.Holder, entry.Claim
 			s.spawnOne(&q)
 			if entry.Wraith {
-				s.wraith(entry.Slot, s.world.Resources.Time.GameTime.Add(-entry.Waited))
+				s.wraith(entry.Slot, entry.Waited)
 			}
 		}
 		return
@@ -259,11 +266,11 @@ func (s *CursorSystem) destroy(slot uint8) {
 	s.world.PushEvent(event.EventCursorDespawned, &event.CursorDespawnedPayload{Entity: e, Slot: slot})
 }
 
-// wraith turns one rostered cursor Wraith, waiting since the given game time: it
+// wraith turns one rostered cursor Wraith, having waited the given game time: it
 // keeps its entity, slot and owner, and gives up everything the world reaches it
 // through, the cell it stood on included, which it remembers to be drawn at and to
 // come back to.
-func (s *CursorSystem) wraith(slot uint8, since time.Time) {
+func (s *CursorSystem) wraith(slot uint8, waited time.Duration) {
 	w := s.world
 	e := w.Resources.Player.Slot(slot)
 	if e == 0 || w.Components.Wraith.HasEntity(e) {
@@ -274,7 +281,7 @@ func (s *CursorSystem) wraith(slot uint8, since time.Time) {
 		x, y = pos.X, pos.Y
 	}
 	s.strip(e)
-	w.Components.Wraith.SetComponent(e, component.WraithComponent{Since: since, X: x, Y: y})
+	w.Components.Wraith.SetComponent(e, component.WraithComponent{Waited: waited, X: x, Y: y})
 	s.publishRoster()
 
 	w.Log().Info("app", "msg", "cursor turned wraith", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
@@ -363,9 +370,8 @@ func (s *CursorSystem) equip(e core.Entity, x, y, heat, energy int) {
 	w.Components.Heat.SetComponent(e, component.HeatComponent{Current: heat})
 	w.Components.Energy.SetComponent(e, component.EnergyComponent{Current: int64(energy)})
 	w.Components.Shield.SetComponent(e, component.ShieldComponent{
-		RadiusX:       parameter.PlayerShieldRadiusX,
-		RadiusY:       w.Resources.Config.CellAspect.Y(parameter.PlayerShieldRadiusY),
-		LastDrainTime: w.Resources.Time.GameTime,
+		RadiusX: parameter.PlayerShieldRadiusX,
+		RadiusY: w.Resources.Config.CellAspect.Y(parameter.PlayerShieldRadiusY),
 	})
 	w.Components.Boost.SetComponent(e, component.BoostComponent{})
 	// A fresh cursor holds one charge of every innate kind

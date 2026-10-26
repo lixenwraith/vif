@@ -63,12 +63,8 @@ var componentPkg *types.Package
 type equalGen struct{ depth int }
 
 // exactType reports whether == on t implies equal JSON: no float, pointer, slice,
-// map or interface anywhere in it. time.Time is the one admitted exception: its
-// location pointer is shared and immutable, so equal values print alike.
+// map or interface anywhere in it.
 func exactType(t types.Type) bool {
-	if isTime(t) {
-		return true
-	}
 	switch u := t.Underlying().(type) {
 	case *types.Basic:
 		return u.Info()&(types.IsBoolean|types.IsInteger|types.IsString) != 0
@@ -83,11 +79,6 @@ func exactType(t types.Type) bool {
 		return true
 	}
 	return false
-}
-
-func isTime(t types.Type) bool {
-	n, ok := t.(*types.Named)
-	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == "time" && n.Obj().Name() == "Time"
 }
 
 // expr renders the comparison of a and b, two addressable expressions of type t.

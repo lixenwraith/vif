@@ -145,10 +145,10 @@ func (s *ShieldSystem) setActive(cursor core.Entity, active bool) {
 		shield.RadiusY = cfg.RadiusY
 		shield.InvRxSq = cfg.InvRxSq
 		shield.InvRySq = cfg.InvRySq
-		// The drain interval starts when the shield does. Inheriting whatever stamp
-		// the component was carrying makes the first period of every activation
-		// either instant or arbitrary.
-		shield.LastDrainTime = s.world.Resources.Time.GameTime
+		// The drain interval starts when the shield does. Inheriting whatever age the
+		// component was carrying makes the first period of every activation either
+		// instant or arbitrary.
+		shield.DrainElapsed = 0
 	}
 	shield.Active = active
 	s.world.UpdateBoundsRadius()
@@ -173,7 +173,7 @@ func (s *ShieldSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime
+	dt := s.world.Resources.Time.DeltaTime
 	s.publishSlots()
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
@@ -187,25 +187,15 @@ func (s *ShieldSystem) Update() {
 			return true
 		}
 
-		// A stamp ahead of this instance's clock cannot be waited out. Game time is
-		// a pure function of the tick (engine.SimTime), so a shield installed from
-		// an authority further along — a join capture materialising a cursor this
-		// instance had never held, a handoff — carries that tick, and the deadline
-		// below would never be met again. Restart the interval instead: the drain
-		// costs one period, where the alternative is silence for the session.
-		if shieldComp.LastDrainTime.After(now) {
-			shieldComp.LastDrainTime = now
-			return true
-		}
-
-		if now.Sub(shieldComp.LastDrainTime) >= parameter.ShieldPassiveDrainInterval {
+		shieldComp.DrainElapsed += dt
+		if shieldComp.DrainElapsed >= parameter.ShieldPassiveDrainInterval {
 			s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Entity:     e,
 				Delta:      parameter.ShieldPassiveEnergyPercentDrain,
 				Percentage: true,
 				Type:       component.EnergyDeltaPassive,
 			})
-			shieldComp.LastDrainTime = now
+			shieldComp.DrainElapsed = 0
 		}
 		return true
 	})

@@ -1583,7 +1583,7 @@ func TestAResetKeepsAWraithWaiting(t *testing.T) {
 			w := a.World()
 			var wraith component.WraithComponent
 			wraith, away = w.Components.Wraith.GetComponent(w.Resources.Player.Slot(2))
-			d = w.Resources.Time.GameTime.Sub(wraith.Since)
+			d = wraith.Waited
 		})
 		return d, away
 	}

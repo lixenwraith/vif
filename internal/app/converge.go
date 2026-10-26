@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"syscall"
@@ -417,18 +418,18 @@ func (m *membership) applyAuthorityChange(rec network.HandoffRecord, mine bool, 
 // awayOrderLocked is who of roster is away, longest first, as their Wraiths wait.
 // Caller MUST hold updateMutex.
 func (m *membership) awayOrderLocked(roster []network.RosterEntry) []link.PeerID {
-	since := make(map[link.PeerID]time.Time)
+	waited := make(map[link.PeerID]time.Duration)
 	var out []link.PeerID
 	for _, p := range roster {
 		if !p.Away || p.Slot == parameter.NoPlayerSlot {
 			continue
 		}
 		if w, ok := m.world.Components.Wraith.GetComponent(m.world.Resources.Player.Slot(p.Slot)); ok {
-			since[p.ID] = w.Since
+			waited[p.ID] = w.Waited
 			out = append(out, p.ID)
 		}
 	}
-	slices.SortStableFunc(out, func(x, y link.PeerID) int { return since[x].Compare(since[y]) })
+	slices.SortStableFunc(out, func(x, y link.PeerID) int { return cmp.Compare(waited[y], waited[x]) })
 	return out
 }
 
