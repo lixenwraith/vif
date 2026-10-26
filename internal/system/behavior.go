@@ -323,6 +323,11 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 		EvalID:      evalID,
 	})
 	s.programs[i].lifecycle.spawned.Add(1)
+	// Counted now, not at the next step: a beam lands its instance after this
+	// tick's step, and a region reading the count meanwhile must not see none
+	s.programs[i].count.Add(1)
+	s.statCount.Add(1)
+	s.statActive.Store(true)
 }
 
 // clearFootprint empties a footprint in both domains (D-12), each victim leaving

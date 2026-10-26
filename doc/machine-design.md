@@ -680,9 +680,13 @@ minority of the work.
   like the swarm's) and `EventBehaviorCancelRequest{program}` (shared, as every
   species' cancel; an empty program cancels every data species) are what a
   scenario emits; a program no entry defines is counted
-  (`behavior.unknown_program_rejects`) and dropped. A spawn is immediate, so a
-  beam-in is the scenario's sequence: `EventMaterializeAreaRequest`, then the
-  spawn with `delay_ms`. Genetics stays `EventGeneticRegisterSpecies` with the
+  (`behavior.unknown_program_rejects`) and dropped. A spawn is immediate, as the
+  swarm's and quasar's are, and `EventFuseBehaviorRequest{program, x, y}`
+  (shared) beams one in: the fuse starts a swarm beam over the place the
+  footprint fits, the beam's `Species` naming the data species, and sends the
+  spawn when the beam completes. The pending spawn is that Shared entity, which a
+  capture carries with the stores; a cancel ends its program's beams in flight.
+  Genetics stays `EventGeneticRegisterSpecies` with the
   data species' ID; the genes land in the `Genotype` component as every species'
   do, sampled once the spawn has its place, and `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and
@@ -740,7 +744,8 @@ VIF_DIVERGENCE=1 VIF_DIVERGENCE_SHAPE=4,3,41,50 go test ./internal/app -run Test
 Version moves, one per phase that changes a store's layout or adds one:
 `snapshot.Schema` 25 → 26 (Phase 2), 27 (the cursor clocks between Phases 2 and 3),
 28 (Phase 4), 29 (Phase 5), 30 (Phase 6);
-`event.JournalSchema` 39 → 40 (Phase 6, the fuse queue's `SaveLocal` form);
+`event.JournalSchema` 39 → 40 (Phase 4, the beam's `Species` in the materialize
+payloads), 41 (Phase 6, the fuse queue's `SaveLocal` form);
 `manifest.SchemaVersion` 1 → 2 (Phase 3), 3 (Phase 4). `manifest.Fingerprint`
 moves on its own in Phase 4. Each phase updates `doc/term-index.md` entries it
 turns from "Future design" into code and the documents it names.
@@ -981,12 +986,19 @@ and the compiler (`program.go`, `vocab.go`, `compile.go`),
 `internal/fsm/file_loader.go` the include, `internal/system/behavior.go` the game
 vocabulary and the generic system, `internal/render/renderer/behavior.go` the
 renderer and `wad/scenario/warden` the sample. `snapshot.Schema` is 28 (the
-`Behavior` store, the kill array at `SpeciesMax`) and `manifest.SchemaVersion` 3
-(`vocabularies.behavior`). Against the steps planned:
+`Behavior` store, the kill array at `SpeciesMax`), `manifest.SchemaVersion` 3
+(`vocabularies.behavior`) and `event.JournalSchema` 40 (the beam's `Species`).
+Against the steps planned:
 
-- The prototype has no `spawn` key: a spawn queued behind its beam would be state
-  outside any store, a `Snapshot: "state"` carrier, so the scenario sequences the
-  beam (§8.5, Events).
+- The prototype has no `spawn` key. A spawn queued behind its beam would be state
+  outside any store, a `Snapshot: "state"` carrier, so the fuse beams a data
+  species in instead, as it plays a fusion before the direct request: the beam
+  is a Shared entity naming the species, its completion sends the spawn, and
+  nothing outside the stores waits (§8.5, Events). The fuse's profile becomes
+  `dual`, its fusions player-domain and the entrance shared.
+- A spawn counts in `behavior.<program>.count` at once rather than at the next
+  step, since a beam lands its instance after the step and a region reads the
+  count.
 - It gains `mass` and `drops`, which soft collision and loot read where §8.1 had
   no key for them.
 - No `Params` slice: `Param` reads the `Genotype` component genetics already
@@ -1010,10 +1022,10 @@ renderer and `wad/scenario/warden` the sample. `snapshot.Schema` is 28 (the
   `component.CombatEntityNames` and the homing profiles are named in
   `profile.Homing`, where the compiler reads them. The context system's optional
   dependencies add `quasar`, for `SpawnSpecies`.
-- The sample spawns its warden at (10, 5), past its reach of the centred cursor,
-  so it opens with a wind-up, and brings another after a kill (3 s, "Warden
-  down") or a lifetime (1 s) rather than ending; its cursor keeps blank's heat 10,
-  since heat 100 raised ten drains.
+- The sample beams its warden in at (10, 5), past its reach of the centred
+  cursor, so it opens with a wind-up, and beams another in after a kill (3 s,
+  "Warden down") or a lifetime (1 s) rather than ending; its cursor keeps blank's
+  heat 10, since heat 100 raised ten drains.
 
 Mechanical edits, counted with `grep -P` over `internal/` before and after:
 `[component.SpeciesCount]` tables 10 → 1 (`SpeciesNames`, the code species
@@ -1036,7 +1048,11 @@ warden back to Roam and ends its telegraph; a cancel ends it through its
 composite; a request naming no program is counted and dropped; at zero hit points
 it dies as species 10 and `kills.warden` counts it; combat refuses to stun a
 shielded data species; the drops its prototype names; soft-collision rows only
-with mass, every code pair unchanged. The renderer draws the frame shown in the
+with mass, every code pair unchanged; a spawn counts its instance at once; a
+fused data species lands when its beam ends, on the beam's footprint; a cancel
+ends its program's beams in flight; only a shared beam lands one. The store
+round trip in `internal/snapshot` covers the beam's `Species` column. The
+renderer draws the frame shown in the
 state's colour, and the health bar spans the prototype.
 `TestSnapshotDeclarationsMatchImplementations` holds the context systems to their
 declarations, and `internal/app`'s soak and domain tests run the warden.
@@ -1047,29 +1063,32 @@ leads, pace steps and the storm's spawns; only bytes moved:
 
 ```
 shape       pg        cells       kf  lc  lcp  lead     link B/s
-3,3,97,0     0          0          4   0    5  11 (13)   5908 → 5907
-2,2,3,100   38 → 30   556 → 374    4   1    0  8 (9)    10703 → 10755
+3,3,97,0     0          0          4   0    5  11 (13)   5908 → 5908
+2,2,3,100   38 → 30   556 → 374    4   1    0  8 (9)    10703 → 10757
 3,3,251,0    7         39 → 41     1   3    6  9 (10)    5390 → 5391
-4,3,41,50   30        295 → 301   15   0    1  13 (15)  12247 → 12328
+4,3,41,50   30        295 → 301   15   0    1  13 (15)  12247 → 12329
 ```
 
 Seven `behavior.*` keys join the compared status (`protected_player_rejects` is
 excluded by its suffix), so a repaired status page holds one to three more cells;
 the capture grows (the `Behavior` section, the kill array from 10 to 18), which
 moves 2,2,3,100's every-100th-frame drop onto another frame, as the cursor clocks
-did on that shape.
+did on that shape. The fuse entrance moved only the link rates, by a byte or two
+a second, the storm's shared beams carrying the `Species` column.
 
 Manual check, in tmux (`bin/vif`, `:n warden`, from the campaign too, and
-`:energy 1000000000` to outlast it): the warden winds up enraged and still under
-the cyan countdown, the beam marks the cursor's cell at 0.8 s, it charges that
-cell and takes its own colour on arriving; a disruptor stun
+`:energy 1000000000` to outlast it): a beam converges on the top-left corner for
+a second and the warden appears on its footprint as it ends; it winds up enraged
+and still under the cyan countdown, the beam marks the cursor's cell at 0.8 s, it
+charges that cell and takes its own colour on arriving; a disruptor stun
 (`:emit EventWeaponAddRequest { entity = 1, weapon = 2 }`) drops it to Roam and
 holds it in place until it dies; `:emit EventBehaviorCancelRequest { program =
-"warden" }` removes it, and another comes a second later
+"warden" }` removes it, and another beams in a second later
 (`behavior.warden.despawned` 1); under `:god` it dies fast, "Warden down" shows
-and another comes three seconds later. An idle cursor dies at the first strike,
-its shield's energy drained, then its heat. A headless run spawns the warden at
-tick 20, loses it to its lifetime at 720 and spawns another at 740.
+and another beams in three seconds later. An idle cursor dies at the first
+strike, its shield's energy drained, then its heat. A headless run beams the
+warden in at tick 19 and lands it at 38, loses it to its lifetime at 738 and
+lands another at 778.
 `-check -s wad/scenario/warden` prints `behaviors ok: 1 (warden)`; copies
 misspelling a sustained verb, a flag, a state and a key fail naming each
 (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
@@ -1146,7 +1165,7 @@ Steps:
    on Active (the muzzle flash's `<= 0` skip becomes a state test).
 5. `storm_attack_test.go`: the red fixture sets `Machine` to Cooldown about to
    expire; `TestStormDrawsBeforeItReadsLivePositions` keeps passing.
-6. `snapshot.Schema` 30; `event.JournalSchema` 40; `make generate`.
+6. `snapshot.Schema` 30; `event.JournalSchema` 41; `make generate`.
 
 Tests: a stunned Active circle keeps its remaining attack time and `Armed`
 reads false (S5, S4); a circle with no cursor keeps `IsInvulnerable` current

@@ -121,6 +121,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventDrainDefeated:                   func() any { return new(DrainDefeatedPayload) },
 	EventFuseQuasarRequest:               func() any { return new(FuseQuasarRequestPayload) },
 	EventFuseSwarmRequest:                func() any { return new(FuseSwarmRequestPayload) },
+	EventFuseBehaviorRequest:             func() any { return new(FuseBehaviorRequestPayload) },
 	EventDrainPause:                      func() any { return new(CursorScopePayload) },
 	EventDrainResume:                     func() any { return new(CursorScopePayload) },
 	EventQuasarSpawnRequest:              func() any { return new(QuasarSpawnRequestPayload) },
@@ -285,6 +286,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventDrainDefeated:                   &codecDrainDefeatedPayload,
 	EventFuseQuasarRequest:               &codecFuseQuasarRequestPayload,
 	EventFuseSwarmRequest:                &codecFuseSwarmRequestPayload,
+	EventFuseBehaviorRequest:             &codecFuseBehaviorRequestPayload,
 	EventDrainPause:                      &codecCursorScopePayload,
 	EventDrainResume:                     &codecCursorScopePayload,
 	EventQuasarSpawnRequest:              &codecQuasarSpawnRequestPayload,
@@ -1016,6 +1018,7 @@ var codecMaterializeCompletedPayload = structCodec{size: unsafe.Sizeof(Materiali
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
 }}
 
 func (p *MaterializeAreaRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1028,6 +1031,7 @@ var codecMaterializeAreaRequestPayload = structCodec{size: unsafe.Sizeof(Materia
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
 }}
 
 func (p *FlashRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1341,6 +1345,16 @@ var codecFuseSwarmRequestPayload = structCodec{size: unsafe.Sizeof(FuseSwarmRequ
 	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.DrainA), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.DrainB), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.Effect), kind: kindInt, size: unsafe.Sizeof(FuseEffect(0))},
+}}
+
+func (p *FuseBehaviorRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFuseBehaviorRequestPayload, unsafe.Pointer(p)
+}
+
+var codecFuseBehaviorRequestPayload = structCodec{size: unsafe.Sizeof(FuseBehaviorRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FuseBehaviorRequestPayload{}.Program), kind: kindString},
+	{off: unsafe.Offsetof(FuseBehaviorRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FuseBehaviorRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *CursorScopePayload) codec() (*structCodec, unsafe.Pointer) {

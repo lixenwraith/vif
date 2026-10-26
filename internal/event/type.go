@@ -358,6 +358,8 @@ const (
 	EventFuseQuasarRequest
 	// EventFuseSwarmRequest (FuseSwarmRequestPayload) [local] signals two enraged drains should fuse into swarm
 	EventFuseSwarmRequest
+	// EventFuseBehaviorRequest (FuseBehaviorRequestPayload) [shared] beams a program's species in, its spawn sent as the beam ends
+	EventFuseBehaviorRequest
 
 	// --- Drain ---
 

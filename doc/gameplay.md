@@ -471,13 +471,14 @@ the one due, while the due note lights and sounds; the next game starts as the
 decay falls away. The level stops rising at 100 and the energy cell reads it.
 Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 
-`warden` raises its warden in the top-left corner: an orange four-by-two body that
-homes on the cursor. Past twelve cells it stops, turns red under a cyan countdown
-while a beam marks the cursor's cell, then charges the cell the cursor holds as the
-countdown ends; a wall ends the charge, and a stun drops it back to homing. A kill
-shows "Warden down" and brings another three seconds later; one that outlives its
-35 seconds is replaced a second later. Its program, `behavior/warden.toml`, is the
-template for a species of one's own ([FSM reference](fsm-reference.md#behavior-programs)).
+`warden` beams its warden into the top-left corner over a second: an orange
+four-by-two body that homes on the cursor. Past twelve cells it stops, turns red
+under a cyan countdown while a beam marks the cursor's cell, then charges the
+cell the cursor holds as the countdown ends; a wall ends the charge, and a stun
+drops it back to homing. A kill shows "Warden down" and beams another in three
+seconds later; one that outlives its 35 seconds is replaced a second later. Its
+program, `behavior/warden.toml`, is the template for a species of one's own
+([FSM reference](fsm-reference.md#behavior-programs)).
 
 ## 11. System inventory
 

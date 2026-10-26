@@ -5,8 +5,8 @@ max_players = 16
 # The sample of a data species: blank's arena, and a warden from
 # behavior/warden.toml that comes back after each kill or lifetime.
 
-# The warden spawns in a corner past its twelve-cell reach of the centred cursor,
-# so it opens with a wind-up
+# The warden beams in at a corner past its twelve-cell reach of the centred
+# cursor, so it opens with a wind-up
 [map]
 min_width = 80
 min_height = 30
@@ -30,15 +30,17 @@ transitions = [
     { trigger = "Tick", target = "WardenSpawn", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
 ]
 
-# A spawn that finds no room for the footprint creates nothing, so it retries
+# The fuse beams the warden in and lands it as the one-second beam ends; a request
+# that finds no room for the footprint beams nothing, so it retries once a beam
+# would have landed
 [states.WardenSpawn]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { program = "warden", x = 10, y = 5 } },
+    { action = "EmitEvent", event = "EventFuseBehaviorRequest", payload = { program = "warden", x = 10, y = 5 } },
 ]
 transitions = [
     { trigger = "EventSpeciesCreated", target = "WardenLive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 10 } },
-    { trigger = "Tick", target = "WardenWait", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
+    { trigger = "Tick", target = "WardenWait", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
 ]
 
 # A kill also empties the count, so whichever arrives first, the kill ends in WardenDown

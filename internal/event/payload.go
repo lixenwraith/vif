@@ -587,18 +587,20 @@ type MaterializeRequestPayload struct {
 
 // MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
 type MaterializeAreaRequestPayload struct {
-	X          int                 `toml:"x"`          // Top-left X
-	Y          int                 `toml:"y"`          // Top-left Y
-	AreaWidth  int                 `toml:"area_width"` // 0 or 1 = single cell
-	AreaHeight int                 `toml:"area_height"`
-	Type       component.SpawnType `toml:"type"`
+	X          int                   `toml:"x"`          // Top-left X
+	Y          int                   `toml:"y"`          // Top-left Y
+	AreaWidth  int                   `toml:"area_width"` // 0 or 1 = single cell
+	AreaHeight int                   `toml:"area_height"`
+	Type       component.SpawnType   `toml:"type"`
+	Species    component.SpeciesType `toml:"species"` // the data species its completion lands; SpeciesNone lands nothing
 }
 
 // MaterializeCompletedPayload carries details about a completed materialization
 type MaterializeCompletedPayload struct {
-	X    int                 `toml:"x"`
-	Y    int                 `toml:"y"`
-	Type component.SpawnType `toml:"type"`
+	X       int                   `toml:"x"`
+	Y       int                   `toml:"y"`
+	Type    component.SpawnType   `toml:"type"`
+	Species component.SpeciesType `toml:"species"`
 }
 
 // --- Flash ---
@@ -892,6 +894,14 @@ type FuseSwarmRequestPayload struct {
 	DrainA core.Entity `toml:"drain_a"`
 	DrainB core.Entity `toml:"drain_b"`
 	Effect FuseEffect  `toml:"effect"` // Defaults to FuseEffectSpirit (0)
+}
+
+// FuseBehaviorRequestPayload names the program beamed in and the cell its
+// header asks for
+type FuseBehaviorRequestPayload struct {
+	Program string `toml:"program"`
+	X       int    `toml:"x"`
+	Y       int    `toml:"y"`
 }
 
 // --- Quasar ---

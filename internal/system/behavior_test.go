@@ -227,6 +227,16 @@ func TestACancelRequestEndsTheWardenThroughItsComposite(t *testing.T) {
 	}
 }
 
+// TestASpawnCountsItsInstanceAtOnce: a spawn landing after the step, as a beam's
+// does, shows in its program's count before the next step, so a region reading the
+// count never takes a landed instance for gone
+func TestASpawnCountsItsInstanceAtOnce(t *testing.T) {
+	ctx, _, _ := newWardenWorld(t, wardenX+4, wardenY)
+	if n := ctx.World.Resources.Status.Ints.Get("behavior.warden.count").Load(); n != 1 {
+		t.Fatalf("behavior.warden.count = %d before the next step, want the landed warden", n)
+	}
+}
+
 // TestARequestNamingNoProgramIsCountedAndDropped: no program is guessed at, and
 // nothing spawns or ends
 func TestARequestNamingNoProgramIsCountedAndDropped(t *testing.T) {

@@ -810,10 +810,14 @@ IDs 10 to 17 in sorted-name order, the `species` a payload guard on
 `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`
 ([Telemetry](telemetry-reference.md)).
 
-A scenario raises an instance with `EventBehaviorSpawnRequest { program, x, y }`,
-its header at that cell or the nearest place its footprint fits, and removes
-instances with `EventBehaviorCancelRequest { program }`, every program's when it
-names none; `wad/scenario/warden` is the worked example. `-check` compiles every
+A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
+x, y }`, its header at that cell or the nearest place its footprint fits, or
+beams one in with `EventFuseBehaviorRequest { program, x, y }`: the fuse plays a
+one-second swarm beam over that place and spawns the instance as it ends, and a
+request naming no program or finding no room beams nothing
+(`fuse.spawn_failures`). `EventBehaviorCancelRequest { program }` removes
+instances and the beams still bringing them, every program's when it names none;
+`wad/scenario/warden` is the worked example. `-check` compiles every
 program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
 and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
 'Freez'`).

@@ -2404,6 +2404,9 @@ func encodeColumnsMaterialize(dst []byte, rows []StoreEntry[component.Materializ
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.Type)
 	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Species)
+	}
 	return dst
 }
 
@@ -2431,6 +2434,9 @@ func decodeColumnsMaterialize(r *columnReader) []StoreEntry[component.Materializ
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Type, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Species, r)
 	}
 	return rows
 }

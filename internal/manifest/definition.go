@@ -151,9 +151,9 @@ var Systems = []SystemDef{
 
 	// --- Spawning / Materialize ---
 	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester (D-7); every spawn passes this gate, timed by its beam deadline
-	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "player", Requires: []string{"drain", "materialize", "spirit"},
-		Optional: []string{"quasar", "swarm"}}, // player stream crosses through the spawn request (D-3)
-	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the player-domain fuse (D-7)
+	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "dual", Requires: []string{"drain", "materialize", "spirit"},
+		Optional: []string{"quasar", "swarm"}}, // a fusion's player stream crosses through the spawn request (D-3); a data species' entrance is shared, its beam holding the spawn
+	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the fuse's player-domain fusions (D-7)
 
 	// --- Projectiles ---
 	{Name: "lightning", Constructor: "NewLightningSystem", Domain: "player", Requires: []string{"timer"}, Optional: []string{"combat"}}, // player stream and request-created entities; combat is optional (D-8)
