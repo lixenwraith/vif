@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -120,7 +121,7 @@ func TestAStunHoldsAnAttackAndItsTurret(t *testing.T) {
 
 // TestACircleWithNoCursorKeepsItsOutputsCurrent: with no cursor to attack the
 // machine holds, its cooldown frozen, while IsInvulnerable follows the circle's
-// depth on every step (S4)
+// depth and its attack on every step (S4)
 func TestACircleWithNoCursorKeepsItsOutputsCurrent(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -134,6 +135,33 @@ func TestACircleWithNoCursorKeepsItsOutputsCurrent(t *testing.T) {
 		if circleComp.IsInvulnerable != (z >= parameter.StormZMid) || circleComp.Machine != held {
 			t.Fatalf("z %.1f: invulnerable = %v machine = %+v, want the depth's answer and %+v", z, circleComp.IsInvulnerable, circleComp.Machine, held)
 		}
+	}
+
+	// An attack leaves the circle open to hits whatever its depth
+	circleComp.Machine = machine.Instance[component.StormCircleState]{State: component.StormCircleActive, Duration: parameter.StormGreenRepeatInterval}
+	storm.updateCircleAttacks(stormComp, parameter.GameUpdateInterval)
+	if circleComp.IsInvulnerable {
+		t.Fatal("a concave circle mid-attack reads invulnerable")
+	}
+}
+
+// TestAnExpiredCooldownWaitsForTheConvex: a circle attacks only from the convex, so
+// a cooldown that runs out while it is concave holds until it turns
+func TestAnExpiredCooldownWaitsForTheConvex(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	storm := ready(NewStormSystem(w)).(*StormSystem)
+	stormComp, circleComp := openingCircle(storm, component.StormCircleGreen, parameter.StormZMid+1)
+
+	for range 3 {
+		storm.updateCircleAttacks(stormComp, parameter.GameUpdateInterval)
+		if circleComp.Machine.State != component.StormCircleCooldown || !circleComp.IsInvulnerable {
+			t.Fatalf("concave: machine %+v invulnerable %v, want the cooldown held", circleComp.Machine, circleComp.IsInvulnerable)
+		}
+	}
+	circleComp.Pos3D.Z = parameter.StormZMid - 1
+	storm.updateCircleAttacks(stormComp, parameter.GameUpdateInterval)
+	if circleComp.Machine.State != component.StormCircleActive {
+		t.Fatalf("convex: machine %+v, want the attack open", circleComp.Machine)
 	}
 }
 
