@@ -89,8 +89,8 @@ system are one file, `internal/system/behavior.go`, so the domain audit
    entity) through `vmath.MixChain`, as mount spread and soft collision do. A
    `Chance` predicate draws that way, so guard short-circuiting cannot move any
    stream.
-5. **Relative timers.** D-19 states that absolute instants are sound. The
-   instance uses a relative `Elapsed` anyway: suspension has to freeze a timer.
+5. **Relative timers.** D-19 admits no absolute instant in a component, and the
+   instance's relative `Elapsed` is what lets suspension freeze a timer.
 6. **Moore outputs stay materialized.** Combat reads
    `QuasarComponent.IsShielded` and `StormCircleComponent.IsInvulnerable` for
    stun immunity (`applyStunEffect`). The host writes the flag-derived fields on
@@ -683,7 +683,8 @@ VIF_DIVERGENCE=1 VIF_DIVERGENCE_SHAPE=4,3,41,50 go test ./internal/app -run Test
 ```
 
 Version moves, one per phase that changes a store's layout or adds one:
-`snapshot.Schema` 25 → 26 (Phase 2), 27 (Phase 4), 28 (Phase 5), 29 (Phase 6);
+`snapshot.Schema` 25 → 26 (Phase 2), 27 (the cursor clocks between Phases 2 and 3),
+28 (Phase 4), 29 (Phase 5), 30 (Phase 6);
 `event.JournalSchema` 39 → 40 (Phase 6, the fuse queue's `SaveLocal` form);
 `manifest.SchemaVersion` 1 → 2 (Phase 3), 3 (Phase 4). `manifest.Fingerprint`
 moves on its own in Phase 4. Each phase updates `doc/term-index.md` entries it
@@ -756,8 +757,8 @@ timer system has removed the splash earlier in the tick and the cancel finds
 nothing; the observer is `newQuasarGraph`'s argument, nil in the game. With the
 speed counted in movement time no shared store carries an absolute instant, so
 `TestSimulationEpochIsSessionIdentity`, whose one carrier was the quasar's speed
-instant, is retired with its child role; taking the cursor clocks off the epoch is
-in [todo](todo.md).
+instant, is retired with its child role; it returns inverted once the cursor clocks
+come off the epoch (below).
 
 Tests (`internal/system/quasar_test.go`): a charge whose zap cannot aim goes home
 in the step it expires and cancels its splash once (S7); a stun during a zap
@@ -837,6 +838,38 @@ Manual check: `bin/vif -seed 1`, `:god`,
 cursor is inside its circle; leaving it starts the cyan splash, three seconds
 later the lightning and the shield; coming back drops both; a pulse stun during
 the splash cancels it.
+
+### Between Phases 2 and 3: the cursor clocks as ages (landed)
+
+`ShieldComponent.DrainElapsed`, `HeatComponent.EmberElapsed` and
+`WraithComponent.Waited` stand where `LastDrainTime`, `EmberDecayTime` and `Since`
+did: each a carried age its owner advances by dt in its `Update` (the shield and
+heat systems where the cursor is simulated, `CursorSystem` for every Wraith on every
+instance) and resets where the stamp was written; the shield's restart of a stamp
+ahead of its clock went with the stamps. No component holds a `time.Time`, so the
+column codec's RFC 3339 form and the generator's exception for it are gone, and a
+component that declares one fails generation; `snapshot.Schema` is 27. The marker
+pulse, the one shared reader of the instant itself, takes its phase from
+`TimeResource.GameElapsed`.
+
+`TestSimulationEpochIsNotSessionIdentity` (`internal/app/script_test.go`) is the
+retired control inverted. The cross-process gate's origin starts all three clocks
+before its capture, the surface adds each cursor's clocks to the compared lines, and
+a receiver whose `SimEpoch` is shifted 37 h 17 ms reproduces the origin's 500-tick
+continuation exactly; on the stamps it diverged in the FSM's timeline, the drain's
+phase and the Wraith's wait. The gate world's capture is 3,137 bytes against 3,165.
+
+One timing moved. A stamp read its tick's own instant, so a reset settled in the
+tick's pre or post settle started at that tick; an age also counts the tick its owner
+then runs, so that reset's first period ends a tick early: an ember a scenario's arm
+lights decays first after four ticks, then every five. Shield activations (pushed
+from `EnergySystem.Update`), Wraith turns (wire crossings), input and system events
+settle after their owner ticks and fire on the ticks they did, which a scripted arm
+read on both builds. Three of the harness's four shapes read alike before and after
+in every count, and all four in their late counts; on 2,2,3,100 a correction that
+shrank below one `SnapshotCorrectionChunkBytes` chunk travels in one frame instead
+of two at tick 766, which moves the shape's every-100th-frame drop, and its repairs
+after the storm differ from there (38 pages and 556 cells against 17 and 218).
 
 ### Phase 3: the dialect kernel
 
@@ -949,7 +982,7 @@ Four batches, one PR, in this order.
    sets `Resources.Behaviors` before the systems and adds the system beside
    `MetaSystem`. `internal/system/meta.go`: kill keys for the prototypes.
 8. `internal/render/renderer/behavior.go`: `BehaviorRenderer`.
-9. `snapshot.Schema` 27; `manifest.SchemaVersion` 3 with a `behavior` catalog
+9. `snapshot.Schema` 28; `manifest.SchemaVersion` 3 with a `behavior` catalog
    section in `-schema`.
 10. Tests: `domain_test.go` passes with the new file (shared: no player stream,
     no owner-authored writes); `snapshot_declaration_test.go` passes with the
@@ -996,7 +1029,7 @@ Steps:
 4. `swarm_stall_test.go`: the fixtures set `Machine` to an about-to-expire
    state (`Elapsed = Duration - time.Nanosecond`) in place of the nanosecond
    countdowns; the four rules keep passing unchanged.
-5. `snapshot.Schema` 28; `make generate`.
+5. `snapshot.Schema` 29; `make generate`.
 
 Tests: the existing four plus one for the stun edge re-arming the full interval
 from every attack state (S14) and one for the wall hit landing in Decel on the
@@ -1042,7 +1075,7 @@ Steps:
    on Active (the muzzle flash's `<= 0` skip becomes a state test).
 5. `storm_attack_test.go`: the red fixture sets `Machine` to Cooldown about to
    expire; `TestStormDrawsBeforeItReadsLivePositions` keeps passing.
-6. `snapshot.Schema` 29; `event.JournalSchema` 40; `make generate`.
+6. `snapshot.Schema` 30; `event.JournalSchema` 40; `make generate`.
 
 Tests: a stunned Active circle keeps its remaining attack time and `Armed`
 reads false (S5, S4); a circle with no cursor keeps `IsInvulnerable` current

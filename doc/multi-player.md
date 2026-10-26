@@ -725,12 +725,13 @@ handoff.
 A departure leaves the participant's cursor a **Wraith** rather than removing it.
 It keeps its entity, slot, owner and holder, and `CursorSystem.wraith` strips
 everything the world reaches a cursor through, keeping `Cursor`, `Protection` and a
-`Wraith` component that holds the cell it stood on and the game time it turned.
-Nothing hits, aims at, collides with or drains it, it touches nothing, and the peer
-renderer draws its slot label alone at that cell. Its roster entry reads `Away`,
-which succession (`SuccessionCandidates`) and the corrections owed
-(`owedLocked`) pass over: nothing reaches a participant that is not there. A
-holder's bots wait with it, and its identity and slot stay taken.
+`Wraith` component that holds the cell it stood on and how long it has waited, which
+`CursorSystem.Update` ages on every instance. Nothing hits, aims at, collides with or
+drains it, it touches nothing, and the peer renderer draws its slot label alone at
+that cell. Its roster entry reads `Away`, which succession (`SuccessionCandidates`)
+and the corrections owed (`owedLocked`) pass over: nothing reaches a participant
+that is not there. A holder's bots wait with it, and its identity and slot stay
+taken.
 
 A **dismissal** (`ParticipantDepartedPayload.Dismissed`) removes the cursor and its
 bots for good and returns the identity and slot to the pool: the host's `:player
