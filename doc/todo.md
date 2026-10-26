@@ -539,6 +539,22 @@ returns to.
 
 ## Netcode
 
+### Forgive a one-tick defeat in a session as solo play does
+
+- Priority: P2
+- Affected files: `internal/system/energy.go`, `internal/system/heat.go`,
+  `internal/system/combat.go`, `internal/system/meta.go`
+
+A cursor's defeat (`pushDefeatTransition`) and the gun hits that pay energy back
+(`applyEnergyDrain`, 100 a hit) each cross the barrier. Solo, a cursor standing on a
+pylon reached zero heat and energy on a tick whose four hits paid 400 back, so the
+defeat and its undoing landed in that tick and the monitor never saw it. Hosted,
+both land a lead later, and the recovery the hits' energy produces crosses only
+then, so `session.any_defeated` reads true for a lead (3 ticks) and td's monitor
+ended the run every time. Options: a monitor that confirms a defeat lasting longer
+than a lead, or the hit's reward paid as the owner's own energy when it fires, so a
+defeat and its undoing cross in one batch.
+
 ### Price the log's and journal's 50 ms sync
 
 - Priority: P3
@@ -567,6 +583,18 @@ mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`
 `network.pace_late_ticks` for a client the OS throttles; if the epochs carry it,
 decide whether a drag's intermediate cells are a move each or one move to the cell
 the tick ends on.
+
+### Give a lone host the authority's one-tick lead
+
+- Priority: P3
+- Affected files: `internal/system/network.go`
+
+`driveOwnLead` returns while `PeerCount()` is 0, so a host with no guests keeps the
+3-tick default (`NetworkBarrierDelayTicks`) where `ownLead` gives an authority 1,
+and a guest's arrival lowers it only after the 300-tick renegotiation window. Each
+crossing a host playing alone makes lands two ticks later than it needs to. Push
+the authority's lead when hosting starts, or let `driveOwnLead` run for an
+authority with no peers.
 
 ## Session membership
 
@@ -618,6 +646,20 @@ The record is built to be replaced: one type, made in one place
 (`ParticipantJoinedPayload.Record`). What would close it: decide which values the
 session holds, have the coordinator fill the arrival from its own world instead of
 the joiner's report, and drop the record from the keeper and the report.
+
+### Place an arrival where its scenario places a cursor
+
+- Priority: P2
+- Affected files: `internal/system/network.go`, `internal/app/join.go`,
+  `internal/engine/resource.go`
+
+A participant's cursor lands on the map centre whatever the scenario's boot request
+asked: `addParticipant` and a joiner's roster both push `Center: true` with the
+template's heat and energy, so a simon guest starts at the centre and not below the
+buttons where the boot cursor stands. Anything hostile a scenario puts at the centre
+strikes each arrival on its first ticks. Keep the boot request's placement beside
+the heat and energy template (`PlayerResource.SetInitialResources`) and spawn
+arrivals from it, or let a scenario name spawn cells by slot.
 
 ### Merge two sessions
 
