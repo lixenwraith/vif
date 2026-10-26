@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -15,13 +16,12 @@ type StormComponent struct {
 	CirclesAlive [StormCircleCount]bool
 }
 
-// StormCircleAttackState represents attack phase for a storm circle
-type StormCircleAttackState uint8
+// StormCircleState is a storm circle's place in its attack machine
+type StormCircleState uint8
 
 const (
-	StormCircleAttackIdle StormCircleAttackState = iota
-	StormCircleAttackCooldown
-	StormCircleAttackActive
+	StormCircleCooldown StormCircleState = iota // waits out its cooldown, then for the convex
+	StormCircleActive                           // runs its colour's attack, held in the convex
 )
 
 // StormCircleType derives circle behavior from index
@@ -30,7 +30,7 @@ type StormCircleType uint8
 const (
 	StormCircleGreen StormCircleType = iota // Index 0: area pulse
 	StormCircleRed                          // Index 1: turret mount armed for each burst
-	StormCircleBlue                         // Index 2: TBD/no-op
+	StormCircleBlue                         // Index 2: beams a swarm in
 )
 
 // StormCircleComponent holds per-circle 3D physics state, attached to each circle header entity
@@ -39,20 +39,15 @@ type StormCircleComponent struct {
 	Vel3D vmath.Vec3
 	Index int // 0, 1, or 2 - position in parent storm
 
-	IsInvulnerable bool
+	Machine machine.Instance[StormCircleState]
+
+	IsInvulnerable bool // Written from the machine's flags each step: concave and not attacking
 	// Anti-deadlock: continuous invulnerability duration, cleared when vulnerable
 	InvulnerableElapsed time.Duration
 
-	// Attack state machine
-	AttackState       StormCircleAttackState
-	CooldownRemaining time.Duration
-	AttackRemaining   time.Duration
-
-	// Blue's fixed spawn target; red aims through its turret mount instead.
-	// The JSON names preserve the wire schema.
+	// Blue's landing, found as its attack opens; red aims through its turret mount
+	// instead. The JSON names preserve the wire schema.
 	AttackTargetX int `json:"LockedTargetX"`
 	AttackTargetY int `json:"LockedTargetY"`
-
-	// Visual data for renderer (0.0-1.0 progress)
-	AttackProgress float64
+	LandingFound  bool
 }

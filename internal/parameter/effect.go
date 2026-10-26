@@ -42,9 +42,6 @@ const (
 const (
 	// SpiritAnimationDuration is the time for spirits to converge to target
 	SpiritAnimationDuration = 500 * time.Millisecond
-
-	// SpiritSafetyBuffer is additional time before safety despawn to allow final frame render
-	SpiritSafetyBuffer = 100 * time.Millisecond
 )
 
 // Explosion Field
