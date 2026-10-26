@@ -1289,7 +1289,7 @@ func (s *StormSystem) terminateStorm() {
 		Effect:       0,
 	})
 
-	// A beam in flight would land its swarm after the storm (S1)
+	// A beam in flight would land its swarm after the storm
 	var beams []core.Entity
 	for _, e := range s.world.Components.Materialize.Entities() {
 		if m, ok := s.world.Components.Materialize.GetPtr(e); ok && e.Domain() == core.DomainShared && m.Species == component.SpeciesSwarm {

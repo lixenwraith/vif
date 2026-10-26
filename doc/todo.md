@@ -158,7 +158,7 @@ time knows an editor made it.
   so a load error such as an unknown target lands on the block that produced it.
 - **Vocabulary.** Action, guard and event pickers read `-schema`, which lists each
   vocabulary's actions and guards with their arguments and every event's payload
-  fields ([Behavior machines](machine-design.md) §7).
+  fields ([Behavior machines §5](machine-design.md#5-dialect-kernel)).
 - **Map layer.** Geometry is generated at run time (`EventLevelSetup`, maze rooms,
   `.vifimg` walls). A painted map needs a static form the digest covers, and
   `.vifimg` assets come from the `image/` category, which it does not and a joiner
@@ -543,6 +543,19 @@ returns to.
 
 ## Netcode
 
+### Stop an internal transition proposing itself again in a session
+
+- Priority: P2
+- Affected files: `internal/fsm/machine.go` (`take`, `updateRegion`)
+
+In a session an internal `Tick` transition crosses once per tick of the lead
+rather than once: `take` sets `region.proposed = !trans.Internal`, so an internal
+one leaves its region unparked, and `updateRegion` passes the same guard on every
+tick until the first crossing's actions land. Simon's `Listen` plays three notes at
+level 1 in a session and one solo. An internal transition in flight has to stop its
+own re-proposal without parking the region's events (D-20); a test plays simon on a
+mesh pair (`shapedPair`) and counts `EventFSMTransition` by owner and index.
+
 ### Forgive a one-tick defeat in a session as solo play does
 
 - Priority: P2
@@ -742,7 +755,31 @@ Arc reward (an arc pays the lightning's full energy reward; halve it if the cap 
 
 Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
 
-## Data species
+## Species
+
+### Pace fusions as their own timers did
+
+- Priority: P3
+- Affected files: `internal/component/materialize.go` (`MaterializeStyles`),
+  `internal/parameter/effect.go`, `internal/system/fuse.go` (`fuseInto`)
+
+A fusion's swarm or quasar lands as its beam ends, a whole spawn beam, where the
+timers the beams replaced landed a drain pair's swarm at half of it and a quasar a
+little after. Over a session sweep the longer wait cost quasar kills, the one gap
+beyond the noise. A fusion row in `MaterializeStyles` with a shorter fill, hold and
+recede would give the old pacing back, spawn and visual still ending on one tick;
+the session sweep decides it.
+
+### Show a species' machine state in a debug overlay
+
+- Priority: P3
+- Affected files: `pkg/machine/machine.go` (`Graph.States`, `Graph.Flags`),
+  `internal/render/renderer`
+
+`Graph.States` lists a graph's states and `Graph.Flags` a state's flags, for an
+overlay that labels each instance of a species with its state and progress, as
+`:graph` draws a route graph. Nothing reads either, and only tests read
+`Graph.Name`: build the overlay, or delete the two reads until one is wanted.
 
 ### Push a data species with the wind
 
@@ -786,7 +823,7 @@ check of that name belongs with the payload names under Authoring.
 
 A prototype names a combat row (`swarm` or `quasar`), a beam style (`swarm` or
 `nugget`) and a code species' drop tiers, so a new attack profile, beam or drop
-table is a Go change ([Behavior machines §8.5](machine-design.md#85-beyond-the-machine)).
+table is a Go change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)).
 Rows of its own would grow those tables per scenario from the prototype, as soft
 collision builds a data species' rows from its `mass`.
 
