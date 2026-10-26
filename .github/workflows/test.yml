@@ -71,13 +71,5 @@ jobs:
     - name: Run tests with race detector
       run: go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
       env:
-        # Halt immediately on race condition and output logs to files prefixed with "race"
-        GORACE: "halt_on_error=1 log_path=race"
-
-    - name: Upload race detector logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v6
-      with:
-        name: race-detector-logs
-        path: race.*
-        retention-days: 7
+        # Halt on the first race; its report prints beside the failing package.
+        GORACE: "halt_on_error=1"
