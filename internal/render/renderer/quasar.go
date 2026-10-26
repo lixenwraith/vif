@@ -87,7 +87,7 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 // renderZapRange renders zap range ellipse boundary
 func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int, quasar *component.QuasarComponent) {
 	// Same state colour as the quasar itself
-	armed := quasar.IsCharging || quasar.IsZapping
+	armed := quasar.Machine.State != component.QuasarHoming
 
 	// Adaptive threshold calculation for consistent visual border width, target visual width in cells
 	borderHalfWidth := float64(parameter.QuasarZapBorderWidthCells) / 2.0
