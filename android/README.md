@@ -85,6 +85,8 @@ Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
 configuration menu, whose rows a tap selects and a second tap acts on; keys, a
 hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
+the keyboard's paste button, the Paste key, Ctrl-Shift-V and Shift-Insert type the
+clipboard's text, a `:join` link copied from the lobby for one, however long;
 two fingers tapped together, twice within half a second, raise or drop the system
 keyboard (a finger joining one held or dragging is play, not the gesture, and so is
 a single pair tap); a pinch zooms the cell from 4 to 40 dp, the browser's range

@@ -221,8 +221,9 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 	case "blur":
 		h.keys.Lost()
 	case "text":
-		for _, r := range msg.Get("text").String() {
-			h.keys.Tap(textEvent(r))
+		// One event, which the run types a character at a time, so a long paste fits the queue
+		if text := msg.Get("text").String(); text != "" {
+			h.post(terminal.Event{Type: terminal.EventPaste, Text: text})
 		}
 	case "mouse":
 		if ev, ok := mouseEvent(msg.Get("x").Int(), msg.Get("y").Int(), msg.Get("button").Int(),

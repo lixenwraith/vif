@@ -473,7 +473,7 @@ reports its size before its run takes a resize, and a dedicated host sizes a
 shared map from the first person's report. Without WebGL (a Chromium build on a
 blocklisted GPU) it paints each changed cell on a 2D canvas from the same mask,
 slower on a large grid, and says so once. It reports keys, a soft keyboard's text
-and pastes, the pointer at its cell (a touch is the left button marked as a
+and pastes (each one paste event the run types), the pointer at its cell (a touch is the left button marked as a
 finger's, as on Android) and its size as the terminal events the host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
 hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
 hidden tab ends every hold, a pointer's press and a finger's too, whose ends would
@@ -521,8 +521,10 @@ system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside i
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. A tap is a left press and release on its cell and a
 finger moving while down a left drag, both marked as a finger's (`Event.Touch`), posted once per cell as a terminal reports
-motion, so the cursor follows it and a held one repeats fire; keys and the system
-keyboard's text are terminal key events, Back is Escape. A hardware key's
+motion, so the cursor follows it and a held one repeats fire; keys are terminal key
+events and the system keyboard's text a paste (see **paste** in the term index),
+whether committed, composed or the keyboard's paste button, which reads the
+clipboard as the Paste key, Ctrl-Shift-V and Shift-Insert do; Back is Escape. A hardware key's
 `onKeyUp` ends the hold its `onKeyDown` began and `getRepeatCount` marks its
 repeats; the system keyboard's text, its delete and Back tap; the window losing
 focus ends every hold. Two fingers tapped together twice raise or drop the system

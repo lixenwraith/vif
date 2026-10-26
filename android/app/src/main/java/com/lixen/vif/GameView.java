@@ -1,5 +1,7 @@
 package com.lixen.vif;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.graphics.Canvas;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -283,15 +285,50 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
             activity.back();
             return true;
         }
+        if (pasteKey(code, e)) {
+            if (e.getRepeatCount() == 0) {
+                paste();
+            }
+            return true;
+        }
         return Game.keyDown(code, typed(e), e.getMetaState(), e.getRepeatCount() > 0) || super.onKeyDown(code, e);
     }
 
     @Override
     public boolean onKeyUp(int code, KeyEvent e) {
-        if (code == KeyEvent.KEYCODE_BACK && android.os.Build.VERSION.SDK_INT < 33) {
+        if (code == KeyEvent.KEYCODE_BACK && android.os.Build.VERSION.SDK_INT < 33 || pasteKey(code, e)) {
             return true;
         }
         return Game.keyUp(code, typed(e), e.getMetaState()) || super.onKeyUp(code, e);
+    }
+
+    /** Text the window delivers as one event, a keyboard's that composed it. */
+    @Override
+    public boolean onKeyMultiple(int code, int count, KeyEvent e) {
+        if (code == KeyEvent.KEYCODE_UNKNOWN && e.getCharacters() != null) {
+            Game.text(e.getCharacters());
+            return true;
+        }
+        return super.onKeyMultiple(code, count, e);
+    }
+
+    /** The keys that paste, as a page's do: Paste, Ctrl-Shift-V and Shift-Insert. */
+    private static boolean pasteKey(int code, KeyEvent e) {
+        return code == KeyEvent.KEYCODE_PASTE
+                || code == KeyEvent.KEYCODE_V && e.isCtrlPressed() && e.isShiftPressed()
+                || code == KeyEvent.KEYCODE_INSERT && e.isShiftPressed() && !e.isCtrlPressed();
+    }
+
+    /** Types the clipboard's text, as a paste key or a keyboard's paste asks; false with none there. */
+    private boolean paste() {
+        ClipboardManager board = getContext().getSystemService(ClipboardManager.class);
+        ClipData clip = board == null ? null : board.getPrimaryClip();
+        CharSequence text = clip == null || clip.getItemCount() == 0 ? null : clip.getItemAt(0).coerceToText(getContext());
+        if (text == null || text.length() == 0) {
+            return false;
+        }
+        Game.text(text.toString());
+        return true;
     }
 
     /** The character a key types without Ctrl or Alt, 0 for none or a dead key. */
@@ -320,11 +357,24 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
         out.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN
                 | EditorInfo.IME_ACTION_NONE;
+        // The game is the editor, so text reaches it as it is committed. What a keyboard
+        // composes waits in the base class's buffer, sent when it finishes as one event
+        // (onKeyMultiple) unless a commit replaces it. A keyboard's paste button asks
+        // the editor to paste, which this one does from the clipboard.
         return new BaseInputConnection(this, false) {
             @Override
             public boolean commitText(CharSequence text, int cursor) {
+                getEditable().clear();
                 Game.text(text.toString());
                 return true;
+            }
+
+            @Override
+            public boolean performContextMenuAction(int id) {
+                if (id == android.R.id.paste || id == android.R.id.pasteAsPlainText) {
+                    return paste();
+                }
+                return super.performContextMenuAction(id);
             }
 
             @Override

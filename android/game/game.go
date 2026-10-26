@@ -184,12 +184,11 @@ func Key(code, typed, meta int32) bool {
 	return ok
 }
 
-// Text is what the system keyboard committed, typed a character at a time
+// Text is what the system keyboard committed or a paste brought, which the run types
+// a character at a time: one event carries it, so a long paste fits the queue whole
 func Text(s string) {
-	if v := current(); v != nil {
-		for _, r := range s {
-			v.keys.Tap(textEvent(r))
-		}
+	if v := current(); v != nil && s != "" {
+		v.post(terminal.Event{Type: terminal.EventPaste, Text: s})
 	}
 }
 

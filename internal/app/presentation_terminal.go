@@ -28,6 +28,8 @@ type presentationState struct {
 	unseen bool
 	// touched says the last pointer press was a finger's, which a waiting game asks for
 	touched bool
+	// releases says the presentation reports key releases, as its last answer did
+	releases bool
 	// startScreen says the launch's first game waits behind the start screen, which
 	// lifts with its hold
 	startScreen bool

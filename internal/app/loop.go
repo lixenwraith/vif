@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
@@ -290,6 +292,9 @@ func (a *App) showDoorError(err error) {
 // intent → router. The key cell shows what the machine holds, pending or completed,
 // whatever the router does. False means the player quit.
 func (a *App) takeEvent(ev terminal.Event) bool {
+	if ev.Type == terminal.EventPaste {
+		return pasteKeys(ev.Text, a.takeTap)
+	}
 	intent := a.inputMachine.Process(ev)
 	if ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress {
 		a.touched = ev.Touch
@@ -319,6 +324,38 @@ func (a *App) takeEvent(ev terminal.Event) bool {
 	}
 	if ev.Type == terminal.EventKeyReport {
 		a.keyReported(ev.Report == terminal.KeyReportReleases)
+	}
+	return true
+}
+
+// takeTap takes a key with no release of its own to come, a paste's: with releases
+// reported it lets go as it presses, lost, as a host's tapped key does
+func (a *App) takeTap(ev terminal.Event) bool {
+	if !a.takeEvent(ev) {
+		return false
+	}
+	if !a.releases {
+		return true
+	}
+	ev.Action, ev.Lost = terminal.KeyRelease, true
+	return a.takeEvent(ev)
+}
+
+// pasteKeys types a paste a key at a time, as a keyboard would: a line break is
+// Enter, and another control character types nothing. A host posts a paste as one
+// event, so a long one fits its queue whole. False when take quit.
+func pasteKeys(text string, take func(terminal.Event) bool) bool {
+	for _, r := range strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(text) {
+		ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
+		switch {
+		case r == '\n':
+			ev.Key, ev.Rune = terminal.KeyEnter, 0
+		case unicode.IsControl(r):
+			continue
+		}
+		if !take(ev) {
+			return false
+		}
 	}
 	return true
 }
@@ -625,8 +662,9 @@ func (a *App) keyReportApplier() mode.KeyReportApplier {
 }
 
 // keyReported hands the presentation's answer to the router, which crosses it while
-// keys are captured
+// keys are captured, and keeps it for the keys a paste taps
 func (a *App) keyReported(releases bool) {
+	a.releases = releases
 	before := a.pushed()
 	a.world.RunSafe(func() { a.router.KeyReported(releases) })
 	if a.pushed() != before {

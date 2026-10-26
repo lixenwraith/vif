@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -622,5 +623,28 @@ func TestTheLaunchWaitsBehindTheStartScreen(t *testing.T) {
 	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'j'})
 	if rc := a.renderContext(); a.ctx.TimeCtl.Holds(engine.HoldStart) || rc.StartScreen || rc.StartHelp != "" {
 		t.Fatalf("after the start: waiting %v, start screen up %v", a.ctx.TimeCtl.Holds(engine.HoldStart), rc.StartScreen)
+	}
+}
+
+// TestAPasteTypesWhole: a host's paste, one event, types a key at a time into the
+// command line, all of it however much longer than a presentation's queue, with
+// each key let go as it presses where releases are reported; a control character
+// types nothing.
+func TestAPasteTypesWhole(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
+		Host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	a.takeEvent(terminal.Event{Type: terminal.EventKeyReport, Report: terminal.KeyReportReleases, Source: terminal.KeySourceHost})
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: ':'})
+	link := "join https://lixen.com/vif/play/?arg=-join%3Dwss%3A%2F%2Flixen.com%2Fvif%2Fs%2F" + strings.Repeat("0123456789abcdef", 20)
+	if !a.takeEvent(terminal.Event{Type: terminal.EventPaste, Text: "join\a https://lixen.com" + link[len("join https://lixen.com"):]}) {
+		t.Fatal("the paste quit")
+	}
+	if got := a.ctx.GetCommandText(); !a.ctx.IsCommandMode() || got != link {
+		t.Fatalf("the command line holds %q, want the paste whole, %d characters", got, len(link))
 	}
 }
