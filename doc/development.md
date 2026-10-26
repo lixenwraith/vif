@@ -580,8 +580,8 @@ manual smoke test because unit tests do not reproduce every emulator.
 on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profiles
 and targets, the window and Android module tests, the browser build's tests under
 Node (`pkg/browser` and the `Browser` tests of `pkg/network`, through
-`go_js_wasm_exec`), and `go test -race -v ./...` with `GORACE` halting on the first
-race and writing `race.*`, which is uploaded for seven days on failure.
+`go_js_wasm_exec`), and `go test -race ./...` with `GORACE` halting on the first
+race. The test steps print failures alone, a race's report beside its package.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
 regenerates the registries and, on a tag, fails if that changed the tree, vets
