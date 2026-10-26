@@ -302,8 +302,12 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         return Game.keyUp(code, typed(e), e.getMetaState()) || super.onKeyUp(code, e);
     }
 
-    /** Text the window delivers as one event, a keyboard's that composed it. */
+    /**
+     * Text the window delivers as one event, a keyboard's that composed it: the
+     * input connection still sends it so, though the event's text is deprecated.
+     */
     @Override
+    @SuppressWarnings("deprecation")
     public boolean onKeyMultiple(int code, int count, KeyEvent e) {
         if (code == KeyEvent.KEYCODE_UNKNOWN && e.getCharacters() != null) {
             Game.text(e.getCharacters());

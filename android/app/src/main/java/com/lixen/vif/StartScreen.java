@@ -35,10 +35,11 @@ final class StartScreen extends FrameLayout {
             {"Back", "Escape; twice quickly, leave with the game paused"},
     };
     private static final String KEYBOARD = "With a keyboard, F1 or :help lists every key and command, and :q quits.";
-    // The site's page, hairline, muted text, the primary button's blue and the
-    // periwinkle a ring of that blue is labelled in, as web/terminal.css names them
-    private static final int BG = 0xFF11111B, LINE = 0x26FFFFFF, MUTED = 0xFF94A3B8,
-            BUTTON = 0xFF2563EB, ACCENT = 0xFF8EA2FF;
+    // The site's page, which the window wears under the system bars too, then its
+    // hairline, muted text, the primary button's blue and the periwinkle a ring of
+    // that blue is labelled in, as web/terminal.css names them
+    static final int BG = 0xFF11111B;
+    private static final int LINE = 0x26FFFFFF, MUTED = 0xFF94A3B8, BUTTON = 0xFF2563EB, ACCENT = 0xFF8EA2FF;
     private static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
 
     private final ImageView logo;

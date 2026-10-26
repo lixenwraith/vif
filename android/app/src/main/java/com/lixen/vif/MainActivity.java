@@ -3,6 +3,7 @@ package com.lixen.vif;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Insets;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -42,6 +43,9 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setDecorFitsSystemWindows(false);
+        // The system bars are drawn over the window, so it wears the start screen's
+        // page: the screen reaches every edge, and the game's strips stay dark
+        getWindow().setBackgroundDrawable(new ColorDrawable(StartScreen.BG));
         try {
             speaker = new Speaker();
             speaker.pause(); // silent until the start screen's tap
