@@ -31,7 +31,7 @@ type SoftCollisionRule struct {
 
 // SoftCollisionMatrix maps [Source][Target] → Rule
 // Source pushes Target away; nil entry = no interaction
-type SoftCollisionMatrix [component.SpeciesCount][component.SpeciesCount]*SoftCollisionRule
+type SoftCollisionMatrix [component.SpeciesMax][component.SpeciesMax]*SoftCollisionRule
 
 // FlockingRule defines a single flocking separation interaction
 type FlockingRule struct {
@@ -44,7 +44,7 @@ type FlockingRule struct {
 
 // FlockingMatrix maps → Rule
 // Source repels Target. nil entry = no flocking interaction
-type FlockingMatrix [component.SpeciesCount][component.SpeciesCount]*FlockingRule
+type FlockingMatrix [component.SpeciesMax][component.SpeciesMax]*FlockingRule
 
 // SoftCollisionSystem centralizes inter-species soft collision and flocking separation.
 // Dual-domain (D-7): it observes both domains and may write kinetic in either, so its
@@ -58,7 +58,7 @@ type SoftCollisionSystem struct {
 	rngArtifact vmath.FastRand
 	rngPlayer   *vmath.FastRand
 
-	caches [component.SpeciesCount][]collisionEntry
+	caches [component.SpeciesMax][]collisionEntry
 
 	// Collision and flocking matrices
 	matrix            SoftCollisionMatrix
@@ -151,6 +151,38 @@ func (s *SoftCollisionSystem) initMatrix() {
 			Profile: &profile.SoftKraken[species], MemberFootprint: true,
 		}
 	}
+
+	// A data species with mass pushes and is pushed as the swarm and quasar are,
+	// across a footprint-sized ellipse; storm, pylon and kraken push it one way
+	type body struct {
+		species      component.SpeciesType
+		mass         profile.Mass
+		invRx, invRy float64
+	}
+	var data []body
+	for _, p := range s.world.Resources.Behaviors {
+		if p.Mass > 0 {
+			invRx, invRy := vmath.EllipseInvRadiiSq(float64(p.Width)/2, float64(p.Height)/2)
+			data = append(data, body{p.Species, p.Mass, invRx, invRy})
+		}
+	}
+	bodies := append([]body{
+		{component.SpeciesSwarm, profile.MassSwarm, parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq},
+		{component.SpeciesQuasar, profile.MassQuasar, parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq},
+	}, data...)
+	rule := func(mass profile.Mass, invRx, invRy float64, target profile.Mass, footprint bool) *SoftCollisionRule {
+		soft := profile.Soft(mass, target)
+		return &SoftCollisionRule{Profile: &soft, SourceInvRx: invRx, SourceInvRy: invRy, MemberFootprint: footprint}
+	}
+	for _, d := range data {
+		for _, b := range bodies {
+			s.matrix[d.species][b.species] = rule(d.mass, d.invRx, d.invRy, b.mass, false)
+			s.matrix[b.species][d.species] = rule(b.mass, b.invRx, b.invRy, d.mass, false)
+		}
+		s.matrix[component.SpeciesStorm][d.species] = rule(profile.MassStorm, stormInvRx, stormInvRy, d.mass, false)
+		s.matrix[component.SpeciesPylon][d.species] = rule(profile.MassPylon, pylonInvRx, pylonInvRy, d.mass, false)
+		s.matrix[component.SpeciesKraken][d.species] = rule(profile.MassKraken, 0, 0, d.mass, true)
+	}
 }
 
 // initFlockingMatrix populates the flocking separation rules
@@ -162,6 +194,11 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 	sharedSpecies := []component.SpeciesType{
 		component.SpeciesSwarm,
 		component.SpeciesQuasar,
+	}
+	for _, p := range s.world.Resources.Behaviors {
+		if p.Mass > 0 {
+			sharedSpecies = append(sharedSpecies, p.Species)
+		}
 	}
 
 	flockInvRx, flockInvRy := vmath.EllipseInvRadiiSq(parameter.FlockingSeparationRadiusX,
@@ -299,6 +336,14 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 			}
 		}
 	}
+	for _, entity := range s.world.Components.Behavior.Entities() {
+		b, ok := s.world.Components.Behavior.GetComponent(entity)
+		pos, placed := s.world.Positions.GetPosition(entity)
+		if ok && placed && int(b.Program) < len(s.world.Resources.Behaviors) {
+			species := s.world.Resources.Behaviors[b.Program].Species
+			s.caches[species] = append(s.caches[species], collisionEntry{entity: entity, x: pos.X, y: pos.Y})
+		}
+	}
 	s.buffers.Observe(0, len(s.caches[component.SpeciesDrain]))
 	s.buffers.Observe(1, len(s.caches[component.SpeciesSwarm]))
 	s.buffers.Observe(2, len(s.caches[component.SpeciesQuasar]))
@@ -308,8 +353,8 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 
 // processAllCollisions iterates the matrix and applies collisions
 func (s *SoftCollisionSystem) processAllCollisions() {
-	for sourceType := component.SpeciesType(1); sourceType < component.SpeciesCount; sourceType++ {
-		for targetType := component.SpeciesType(1); targetType < component.SpeciesCount; targetType++ {
+	for sourceType := component.SpeciesType(1); sourceType < component.SpeciesMax; sourceType++ {
+		for targetType := component.SpeciesType(1); targetType < component.SpeciesMax; targetType++ {
 			rule := s.matrix[sourceType][targetType]
 			if rule == nil {
 				continue
@@ -446,7 +491,7 @@ func (s *SoftCollisionSystem) footprintsOverlap(source, target core.Entity, pos 
 // processAllFlocking calculates and integrates continuous separation acceleration
 func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 	// Loop over targets first to accumulate acceleration and minimize ECS writes
-	for targetType := component.SpeciesType(1); targetType < component.SpeciesCount; targetType++ {
+	for targetType := component.SpeciesType(1); targetType < component.SpeciesMax; targetType++ {
 		targets := s.caches[targetType]
 		if len(targets) == 0 {
 			continue
@@ -470,7 +515,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 			hasFlocking := false
 
 			// Accumulate repulsion from all active sources
-			for sourceType := component.SpeciesType(1); sourceType < component.SpeciesCount; sourceType++ {
+			for sourceType := component.SpeciesType(1); sourceType < component.SpeciesMax; sourceType++ {
 				rule := s.flockMatrix[sourceType][targetType]
 				if rule == nil {
 					continue

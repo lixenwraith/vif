@@ -79,21 +79,6 @@ var combatAttackNames = [component.CombatAttackTypeCount]string{
 	component.CombatAttackBurn:         "burn",
 }
 
-var combatEntityNames = [component.CombatEntityCount]string{
-	"cursor",
-	"drain",
-	"quasar",
-	"swarm",
-	"storm",
-	"pylon",
-	"snake_head",
-	"snake_body",
-	"eye",
-	"tower",
-	"kraken",
-}
-
-// NewCombatSystem creates a new quasar system
 func NewCombatSystem(world *engine.World) engine.System {
 	s := &CombatSystem{
 		world: world,
@@ -128,7 +113,7 @@ func NewCombatSystem(world *engine.World) engine.System {
 	for i, name := range combatAttackNames {
 		s.statDamageFamily[i] = reg.Ints.Get("combat.damage_family_" + name)
 	}
-	for i, name := range combatEntityNames {
+	for i, name := range component.CombatEntityNames {
 		s.statLive[i] = reg.Ints.Get("combat.live_" + name)
 		s.statDamageAttacker[i] = reg.Ints.Get("combat.damage_attacker_" + name)
 		s.statDamageDefender[i] = reg.Ints.Get("combat.damage_defender_" + name)
@@ -1019,6 +1004,11 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 		if quasarComp.IsShielded {
 			return false
 		}
+	}
+
+	// Data species immunity: a state flagged Shielded
+	if b, ok := s.world.Components.Behavior.GetComponent(targetEntity); ok && b.Shielded {
+		return false
 	}
 
 	// Storm circle immunity: concave (invulnerable) state

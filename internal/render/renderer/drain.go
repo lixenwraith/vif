@@ -1,14 +1,11 @@
 package renderer
 
 import (
-	"time"
-
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
@@ -54,7 +51,7 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		var c color.RGB
 		switch {
 		case combatComp.RemainingHitFlash > 0:
-			c = r.calculateFlashColor(combatComp.RemainingHitFlash)
+			c = hitFlashColor(combatComp.RemainingHitFlash)
 		case combatComp.IsEnraged:
 			c = visual.RgbCombatEnraged
 		default:
@@ -64,20 +61,4 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		buf.SetFgOnly(screenX, screenY, visual.DrainChar, c, terminal.AttrNone)
 		return true
 	})
-}
-
-// calculateFlashColor returns yellow with pulse effect
-func (r *DrainRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
-	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
-
-	var intensity float64
-	if progress > 0.67 {
-		intensity = 0.6
-	} else if progress > 0.33 {
-		intensity = 1.0
-	} else {
-		intensity = 0.6
-	}
-
-	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }

@@ -207,7 +207,9 @@ the radial and opens a kinetic-immunity window (`SoftCollisionImmunityDuration`)
 that steering and flocking read as displacement; an immune or enraged target is
 skipped. A second matrix adds continuous flocking separation: swarms and quasars
 repel each other and drains, and drains repel only drains, so shared motion
-never reads drain positions. A shared target's impulse draws from a stream
+never reads drain positions. A data species with mass takes the swarm's and
+quasar's part in both, across an ellipse half its footprint; one without takes
+neither. A shared target's impulse draws from a stream
 reseeded from the tick and the pair (D-8); a player-domain target's from this
 instance's player stream.
 

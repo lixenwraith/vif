@@ -11,10 +11,14 @@ import (
 // construct every system and read its declarations
 func scratchWorld(t *testing.T) *engine.World {
 	t.Helper()
+	return scratchContext(t).World
+}
+
+// scratchContext is scratchWorld's context, which the context systems take
+func scratchContext(t *testing.T) *engine.GameContext {
+	t.Helper()
 	event.EnsureRegistry()
-	w := engine.NewWorld()
-	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
-	return w
+	return engine.NewGameContextWithClock(engine.NewWorld(), 80, 24, engine.NewManualClock())
 }
 
 // TestActiveSystemsMatchRuntimeNames asserts the manifest key equals the name

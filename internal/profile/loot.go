@@ -17,8 +17,9 @@ type DropTier struct {
 	Unique  bool
 }
 
-// Drops holds each species' tiers in roll order; a species without a row drops nothing
-var Drops = [component.SpeciesCount][]DropTier{
+// Drops holds each species' tiers in roll order; a species without a row drops
+// nothing, and a data species rolls the row its prototype names
+var Drops = [component.SpeciesMax][]DropTier{
 	component.SpeciesDrain: {
 		{Entries: []DropEntry{{component.LootHeat, 0.05, 1, 0}}},
 	},

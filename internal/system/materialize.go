@@ -66,7 +66,7 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventMaterializeRequest:
 		if payload, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
-			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, 1, 1, 1, payload.Type)
+			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, 1, 1, 1, payload.Type, component.SpeciesNone)
 		}
 
 	case event.EventMaterializeAreaRequest:
@@ -79,7 +79,7 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 			if height < 1 {
 				height = 1
 			}
-			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, width, height, 1, payload.Type)
+			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, width, height, 1, payload.Type, payload.Species)
 		}
 	}
 }
@@ -107,9 +107,10 @@ func (s *MaterializeSystem) Update() {
 			// The completion carries the domain of the entity it completes, so a
 			// gated shared spawn and a drain materialize stay distinguishable (D-7).
 			s.world.PushEventDomain(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
-				X:    matComp.TargetX,
-				Y:    matComp.TargetY,
-				Type: matComp.Type,
+				X:       matComp.TargetX,
+				Y:       matComp.TargetY,
+				Type:    matComp.Type,
+				Species: matComp.Species,
 				// Note: MaterializeCompletedPayload may need AreaWidth/Height if consumers need it
 			}, matEntity.Domain())
 			toDestroy = append(toDestroy, matEntity)
@@ -121,7 +122,7 @@ func (s *MaterializeSystem) Update() {
 }
 
 // spawnMaterializeEffect creates one materialize entity in the request's domain
-func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType) {
+func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType, species component.SpeciesType) {
 	if spawnType < 0 || spawnType >= component.SpawnTypeCount {
 		return
 	}
@@ -150,6 +151,7 @@ func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, 
 		AreaHeight: areaHeight,
 		BeamWidth:  beamWidth,
 		Type:       spawnType,
+		Species:    species,
 	})
 	armTimer(s.world, entity, component.TimerDeadline, component.MaterializeStyles[spawnType].Duration())
 }

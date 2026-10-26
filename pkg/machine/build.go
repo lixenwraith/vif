@@ -91,7 +91,7 @@ func (b *Builder[S, C]) Build() (*Graph[S, C], error) {
 		fail("suspend declared %d times", b.suspends)
 	}
 
-	var declared [CausePostTick + 1][64]int
+	var declared [CausePostTick + 1][StatesMax]int
 	globals := 0
 	for _, d := range b.edges {
 		e := d.e
@@ -155,8 +155,8 @@ func Must[S ~uint8, C any](g *Graph[S, C], err error) *Graph[S, C] {
 // define validates one state and stores it, cues in time order
 func (g *Graph[S, C]) define(id S, st State[C], fail func(string, ...any)) {
 	switch {
-	case id >= 64:
-		fail("state %d: outside the 64 states a graph holds", id)
+	case id >= StatesMax:
+		fail("state %d: outside the %d states a graph holds", id, StatesMax)
 		return
 	case g.has(id):
 		fail("state %q: defined twice", st.Name)

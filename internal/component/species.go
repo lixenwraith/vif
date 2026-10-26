@@ -1,5 +1,7 @@
 package component
 
+import "github.com/lixenwraith/vif/internal/parameter"
+
 // SpeciesType identifies a gameplay species across lifecycle, navigation,
 // genetics, loot, and telemetry systems.
 type SpeciesType uint8
@@ -16,6 +18,13 @@ const (
 	SpeciesTower
 	SpeciesKraken
 	SpeciesCount
+)
+
+// The data species: programs a scenario declares take SpeciesDataFirst onward in
+// sorted-name order, so every table indexed by SpeciesType holds SpeciesMax rows
+const (
+	SpeciesDataFirst = SpeciesCount
+	SpeciesMax       = SpeciesCount + parameter.BehaviorProgramsMax
 )
 
 // SpeciesNames indexes SpeciesType for telemetry keys and display.

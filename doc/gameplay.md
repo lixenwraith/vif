@@ -365,12 +365,14 @@ a blocked tracer drains to its stop point.
 | Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. |
 | Gateway | Timed anchored spawner. It emits eye or snake spawn requests with route/adaptation metadata and disappears when its anchor is gone. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
+| Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
 
 The component `SpeciesType` catalog includes drain, swarm, quasar, storm,
-pylon, snake, eye, tower, and kraken. Gateway and bullet are mechanics/entities
-but not species. Species systems own formation-specific movement and spawning;
-common damage is delegated to `CombatSystem`, common movement math to
-`pkg/vmath/physics`, and path selection to `pkg/navigation`.
+pylon, snake, eye, tower, and kraken, then eight IDs for data species. Gateway
+and bullet are mechanics/entities but not species. Species systems own
+formation-specific movement and spawning; common damage is delegated to
+`CombatSystem`, common movement math to `pkg/vmath/physics`, and path selection
+to `pkg/navigation`.
 
 ## 9. Walls, maps, navigation, and environment
 
@@ -450,7 +452,8 @@ it spawns and arms the cursor before opening `main`.
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, and `simon` is a memory game. Each entry has a short `description` for
+scaffold, `simon` is a memory game, and `warden` is blank's arena with a species
+its own behavior program defines. Each entry has a short `description` for
 scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
@@ -467,6 +470,15 @@ field grays and turns to decay circling the button at fault, the one pressed or
 the one due, while the due note lights and sounds; the next game starts as the
 decay falls away. The level stops rising at 100 and the energy cell reads it.
 Glyphs drift behind the buttons as a moving backdrop, and music stays off.
+
+`warden` beams its warden into the top-left corner over a second: an orange
+four-by-two body that homes on the cursor. Past twelve cells it stops, turns red
+under a cyan countdown while a beam marks the cursor's cell, then charges the
+cell the cursor holds as the countdown ends; a wall ends the charge, and a stun
+drops it back to homing. A kill shows "Warden down" and beams another in three
+seconds later; one that outlives its 35 seconds is replaced a second later. Its
+program, `behavior/warden.toml`, is the template for a species of one's own
+([FSM reference](fsm-reference.md#behavior-programs)).
 
 ## 11. System inventory
 
@@ -489,9 +501,10 @@ declares for itself:
 The table uses runtime `Name()` values, which match the manifest keys;
 `TestActiveSystemsMatchRuntimeNames` keeps the two together, so configuration
 validation, the `:system` command and the manifest all name a system the same
-way. `meta` needs the `GameContext`, so the app adds it directly and it declares
-its profile in `manifest.ContextSystems`; it ticks with the rest, publishing map,
-camera and cursor-position telemetry.
+way. `meta` needs the `GameContext` and `behavior` the scenario's compiled
+programs, so the app adds both directly and they declare their profiles in
+`manifest.ContextSystems`; `meta` ticks with the rest, publishing map, camera and
+cursor-position telemetry, and `behavior` runs the data species.
 
 Each entry declares a domain profile and its dependencies in
 `internal/manifest/definition.go`; see [the domain model](domain-design.md).

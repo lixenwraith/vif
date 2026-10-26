@@ -63,6 +63,32 @@ func TestDropTableYieldsCappedWeaponsThenFallsBack(t *testing.T) {
 	}
 }
 
+// A data species rolls the tiers of the code species its prototype names; one that
+// names none, or a species past the scenario's programs, drops nothing
+func TestADataSpeciesRollsTheDropsItsPrototypeNames(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	w.Resources.Behaviors = []component.BehaviorPrototype{
+		{Name: "warden", Species: component.SpeciesDataFirst, Drops: component.SpeciesKraken},
+		{Name: "wisp", Species: component.SpeciesDataFirst + 1},
+	}
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	roll := func(species component.SpeciesType) map[component.LootType]int {
+		got := map[component.LootType]int{}
+		for _, r := range loot.rollDropTable(species, cursor, 0) {
+			got[r.Loot] += r.Count
+		}
+		return got
+	}
+	if got := roll(component.SpeciesDataFirst); len(got) != 3 || got[component.LootEmitter] != 1 || got[component.LootEnergy] != 2 || got[component.LootHeat] != 2 {
+		t.Fatalf("a data species dropping as the kraken dropped %v", got)
+	}
+	for _, species := range []component.SpeciesType{component.SpeciesDataFirst + 1, component.SpeciesDataFirst + 2} {
+		if got := roll(species); len(got) != 0 {
+			t.Fatalf("species %d dropped %v, want nothing", species, got)
+		}
+	}
+}
+
 // spawnWall drops one blocking cell into a test world.
 func spawnWall(w *engine.World, x, y int) {
 	e := w.CreateEntity(core.DomainShared)

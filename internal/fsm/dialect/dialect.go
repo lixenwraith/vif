@@ -178,10 +178,14 @@ func typeName(t reflect.Type) string {
 	return "any"
 }
 
-// The kinds of a vocabulary entry
+// The kinds of a vocabulary entry. A behavior program's vocabulary adds probes,
+// which a state's entry tries, sustained verbs, which its update runs, and flags.
 const (
-	KindGuard  = "guard"
-	KindAction = "action"
+	KindGuard     = "guard"
+	KindAction    = "action"
+	KindProbe     = "probe"
+	KindSustained = "sustained"
+	KindFlag      = "flag"
 )
 
 // Entry is a name of a vocabulary. A guard's Args are its guard_args; an action

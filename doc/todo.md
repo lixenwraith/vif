@@ -98,7 +98,7 @@ what is modelled and whether players see it; nothing is persisted.
 
 - Priority: P2
 - Affected files: `internal/fsm/loader.go`, `internal/fsm/std/payload.go`,
-  `internal/fsm/std/args.go`, `internal/bot/mind.go`
+  `internal/fsm/std/args.go`, `internal/bot/mind.go`, `internal/resource/check.go`
 
 A payload guard's `field` (bot's `Own` too), a transition's `capture_vars` and an
 `EmitEvent`'s `payload_vars` name payload fields looked up only when an event
@@ -110,6 +110,10 @@ fix resolves each name with `fsm.FieldByTag` at load: against the trigger's payl
 prototype where `compileTransitions` resolves the trigger, which the payload guard
 builders then take, and against the decoded payload in `compileEmitEvent`; a payload
 guard on a `Tick` transition or as an action guard, which see no payload, fails too.
+A behavior spawn or cancel request naming no program of the scenario is the same
+gap one level down: the behavior system drops it and counts
+`behavior.unknown_program_rejects`. `ValidateScenario`, which holds the machine and
+the compiled programs, can resolve each request's `program` against `[behaviors]`.
 
 ### Author the tonal instruments as data
 
@@ -737,6 +741,53 @@ Arc reward (an arc pays the lightning's full energy reward; halve it if the cap 
 - Affected files: `internal/system/storm.go`
 
 Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
+
+## Data species
+
+### Push a data species with the wind
+
+- Priority: P3
+- Affected files: `internal/system/environment.go` (`applyPlanarWind`)
+
+`applyPlanarWind` accelerates each mobile species by its profile mass, and a data
+species is none of them, so a wind leaves a warden where it stands though its
+prototype has a `mass`. The smallest fix ranges the `Behavior` store in the Shared
+pass with each prototype's mass from `Resources.Behaviors`, skipping a massless one.
+
+### Count a data species' stalled transitions
+
+- Priority: P3
+- Affected files: `internal/behavior/compile.go`, `internal/system/behavior.go`
+
+A program's transition whose candidates all fail retries or holds without a trace,
+where the swarm counts its in `swarm.transition_stalls`: a graph's observer has no
+context, so it cannot reach a program's counter. The swarm's move onto the machine
+(machine-design Phase 5) settles how its observer counts; a per-program
+`behavior.<program>.transition_stalls`, bound in `NewBehaviorSystem` with the
+lifecycle rows, can follow it.
+
+### Let a program spawn another program
+
+- Priority: P3
+- Affected files: `internal/system/behavior.go` (`SpawnSpecies`)
+
+`SpawnSpecies` raises a swarm or a quasar by their spawn requests; a program cannot
+raise another program, or more of itself, because the vocabulary is built before
+any program compiles. Its build could take any program name and push
+`EventBehaviorSpawnRequest`, which drops and counts an unknown one; the load-time
+check of that name belongs with the payload names under Authoring.
+
+### Give data species attack, beam and drop rows of their own
+
+- Priority: P3
+- Affected files: `internal/profile/combat.go`, `internal/profile/loot.go`,
+  `internal/component/materialize.go`
+
+A prototype names a combat row (`swarm` or `quasar`), a beam style (`swarm` or
+`nugget`) and a code species' drop tiers, so a new attack profile, beam or drop
+table is a Go change ([Behavior machines §8.5](machine-design.md#85-beyond-the-machine)).
+Rows of its own would grow those tables per scenario from the prototype, as soft
+collision builds a data species' rows from its `mass`.
 
 ## Environment
 

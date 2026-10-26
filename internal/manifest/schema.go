@@ -12,10 +12,11 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 // SchemaVersion is the FSM schema contract version -schema prints.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // Schema writes the machine schema as JSON for -schema and authoring tools. It
 // needs no terminal, services or World instance.
@@ -35,7 +36,8 @@ func Schema(w io.Writer) error {
 		Fields []field `json:"fields,omitempty"`
 	}
 	// Each vocabulary lists its guards and actions with their args: a scenario's,
-	// and a bot graph's, which refuses the actions that write the world
+	// a bot graph's, which refuses the actions that write the world, and a behavior
+	// program's, with its probes, sustained verbs and flags
 	schema := struct {
 		SchemaVersion    int                        `json:"schema_version"`
 		Events           []eventSchema              `json:"events"`
@@ -45,7 +47,7 @@ func Schema(w io.Writer) error {
 		ConfigBoolFields []string                   `json:"config_bool_fields"`
 	}{
 		SchemaVersion:    SchemaVersion,
-		Vocabularies:     map[string][]dialect.Entry{"scenario": m.Vocabulary(), "bot": bot.Vocabulary()},
+		Vocabularies:     map[string][]dialect.Entry{"scenario": m.Vocabulary(), "bot": bot.Vocabulary(), "behavior": system.BehaviorVocabulary().Entries()},
 		Ops:              dialect.Ops(),
 		ConfigIntFields:  engine.ConfigIntFields(),
 		ConfigBoolFields: engine.ConfigBoolFields(),

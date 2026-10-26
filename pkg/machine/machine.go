@@ -32,8 +32,11 @@ func (in Instance[S]) Expired() bool {
 	return in.Duration > 0 && in.Elapsed >= in.Duration
 }
 
-// Mask holds one bit per state, which is why a graph has at most 64
+// Mask holds one bit per state, which is why a graph has at most StatesMax
 type Mask uint64
+
+// StatesMax is how many states a graph holds, one bit of Mask each
+const StatesMax = 64
 
 func MaskOf[S ~uint8](states ...S) Mask {
 	var m Mask

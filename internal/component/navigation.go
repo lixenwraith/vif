@@ -1,9 +1,6 @@
 package component
 
-import (
-	"github.com/lixenwraith/vif/internal/core"
-	"github.com/lixenwraith/vif/internal/parameter"
-)
+import "github.com/lixenwraith/vif/internal/core"
 
 // NavigationComponent provides pathfinding state for kinetic entities
 type NavigationComponent struct {
@@ -38,23 +35,4 @@ type NavigationComponent struct {
 
 	// RouteID selects which route's flow field to follow within the graph (-1 = unassigned, use shared field)
 	RouteID int
-}
-
-// SpeciesDimensions holds bounding box for collision detection
-type SpeciesDimensions struct {
-	Width, Height int
-}
-
-// speciesDimensionsLUT indexed by SpeciesType for O(1) lookup
-var SpeciesDimensionsLUT = [SpeciesCount]SpeciesDimensions{
-	{1, 1}, // 0: SpeciesNone (unused)
-	{1, 1}, // 1: SpeciesDrain
-	{parameter.SwarmWidth, parameter.SwarmHeight},                                  // 2: SpeciesSwarm
-	{parameter.QuasarWidth, parameter.QuasarHeight},                                // 3: SpeciesQuasar
-	{int(parameter.StormCircleRadiusX * 2), int(parameter.StormCircleRadiusY * 2)}, // 4: SpeciesStorm
-	{1, 1}, // 5: SpeciesPylon
-	{parameter.SnakeHeadWidth, parameter.SnakeHeadHeight}, // 6: SpeciesSnake
-	{parameter.EyeWidth, parameter.EyeHeight},             // 7: SpeciesEye
-	{1, 1}, // 8: SpeciesTower (stationary, dimensions from spawn params)
-	{int(parameter.KrakenBodyRadius*4) + 1, int(parameter.KrakenBodyRadius*2) + 1}, // 9: SpeciesKraken
 }

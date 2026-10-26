@@ -316,7 +316,7 @@ also the visual stacking order; exact integer priorities are in
 | Environment/guidance | `wall`, `chargeline` |
 | Base entities | `sigil`, `glyph`, `gold` |
 | Particles | `flash`, `fadeout`, `explosion`, `spirit`: what a species left, under the species that leaves it |
-| Species/structures | `pylon`, `tower`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, then `healthbar` over them |
+| Species/structures | `pylon`, `tower`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, `behavior` (every data species), then `healthbar` over them |
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Overlay effects | `button`, `splash`, `marker` |

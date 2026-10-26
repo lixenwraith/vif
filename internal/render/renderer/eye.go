@@ -1,8 +1,6 @@
 package renderer
 
 import (
-	"time"
-
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
@@ -156,7 +154,7 @@ func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 		var flashColor color.RGB
 		hasFlash := combatComp.RemainingHitFlash > 0
 		if hasFlash {
-			flashColor = calculateEyeFlashColor(combatComp.RemainingHitFlash)
+			flashColor = hitFlashColor(combatComp.RemainingHitFlash)
 		}
 
 		for _, member := range headerComp.MemberEntries {
@@ -229,20 +227,4 @@ func (r *EyeRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, ce
 		}
 		buf.SetFgOnly(screenX, screenY, cell.Ch, color.RGB{R: tr.Fg256}, attr)
 	}
-}
-
-// calculateEyeFlashColor returns pulsed yellow flash color matching combat convention
-func calculateEyeFlashColor(remaining time.Duration) color.RGB {
-	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
-
-	var intensity float64
-	if progress > 0.67 {
-		intensity = 0.6
-	} else if progress > 0.33 {
-		intensity = 1.0
-	} else {
-		intensity = 0.6
-	}
-
-	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }

@@ -34,8 +34,8 @@ func accumulate(impactor, target Mass, angleVar, offset float64) physics.Collisi
 	return kinetic(impactor, target, physics.ImpulseAdditive, angleVar, offset)
 }
 
-// soft builds an inter-species repulsion profile (scatter, not combat)
-func soft(impactor, target Mass) physics.CollisionProfile {
+// Soft builds an inter-species repulsion profile (scatter, not combat)
+func Soft(impactor, target Mass) physics.CollisionProfile {
 	return physics.CollisionProfile{
 		MassRatio:       softRatio(impactor, target),
 		ImpulseMin:      parameter.SoftCollisionImpulseMin,
@@ -86,22 +86,23 @@ var (
 
 // --- Soft collision (inter-species scatter) ---
 var (
-	SoftSwarmToSwarm   = soft(MassSwarm, MassSwarm)
-	SoftSwarmToQuasar  = soft(MassSwarm, MassQuasar)
-	SoftQuasarToSwarm  = soft(MassQuasar, MassSwarm)
-	SoftQuasarToQuasar = soft(MassQuasar, MassQuasar)
-	SoftStormToSwarm   = soft(MassStorm, MassSwarm)
-	SoftStormToQuasar  = soft(MassStorm, MassQuasar)
-	SoftPylonToSwarm   = soft(MassPylon, MassSwarm)
-	SoftPylonToQuasar  = soft(MassPylon, MassQuasar)
+	SoftSwarmToSwarm   = Soft(MassSwarm, MassSwarm)
+	SoftSwarmToQuasar  = Soft(MassSwarm, MassQuasar)
+	SoftQuasarToSwarm  = Soft(MassQuasar, MassSwarm)
+	SoftQuasarToQuasar = Soft(MassQuasar, MassQuasar)
+	SoftStormToSwarm   = Soft(MassStorm, MassSwarm)
+	SoftStormToQuasar  = Soft(MassStorm, MassQuasar)
+	SoftPylonToSwarm   = Soft(MassPylon, MassSwarm)
+	SoftPylonToQuasar  = Soft(MassPylon, MassQuasar)
 )
 
-// Kraken pushes movable species but never receives a reciprocal impulse.
-var SoftKraken = [component.SpeciesCount]physics.CollisionProfile{
-	component.SpeciesDrain:  soft(MassKraken, MassDrain),
-	component.SpeciesSwarm:  soft(MassKraken, MassSwarm),
-	component.SpeciesQuasar: soft(MassKraken, MassQuasar),
-	component.SpeciesStorm:  soft(MassKraken, MassStorm),
-	component.SpeciesSnake:  soft(MassKraken, MassSnakeHead),
-	component.SpeciesEye:    soft(MassKraken, MassEye),
+// Kraken pushes movable species but never receives a reciprocal impulse; a data
+// species' push is built from its prototype's mass
+var SoftKraken = [component.SpeciesMax]physics.CollisionProfile{
+	component.SpeciesDrain:  Soft(MassKraken, MassDrain),
+	component.SpeciesSwarm:  Soft(MassKraken, MassSwarm),
+	component.SpeciesQuasar: Soft(MassKraken, MassQuasar),
+	component.SpeciesStorm:  Soft(MassKraken, MassStorm),
+	component.SpeciesSnake:  Soft(MassKraken, MassSnakeHead),
+	component.SpeciesEye:    Soft(MassKraken, MassEye),
 }

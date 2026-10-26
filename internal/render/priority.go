@@ -40,6 +40,7 @@ const (
 	PriorityDrain
 	PriorityQuasar
 	PrioritySwarm
+	PriorityBehavior
 	PriorityHealthBar // Body-centered bars must compose over species geometry.
 
 	// === Tracer ===

@@ -85,6 +85,11 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			return true
 		}
 		spec := healthBarSpecs[combatComp.CombatEntityType]
+		// A data species fights as a code row, but its body and hit points are its own
+		if b, ok := r.gameCtx.World.Components.Behavior.GetComponent(entity); ok && int(b.Program) < len(r.gameCtx.World.Resources.Behaviors) {
+			p := &r.gameCtx.World.Resources.Behaviors[b.Program]
+			spec.width, spec.height, spec.maxHP, spec.offsetX, spec.offsetY = p.Width, p.Height, p.HitPoints, p.HeaderX, p.HeaderY
+		}
 		if spec.maxHP == 0 {
 			return true
 		}

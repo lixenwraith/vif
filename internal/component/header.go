@@ -16,7 +16,7 @@ const (
 	BehaviorEye
 	BehaviorTower
 	BehaviorKraken
-	BehaviorBoss // Future
+	BehaviorData // a species a scenario's behavior program defines
 )
 
 // CompositeType defines how the composite handles damage and lifecycle

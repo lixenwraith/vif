@@ -93,6 +93,9 @@ type App struct {
 	world    *engine.World
 	ctx      *engine.GameContext
 	scenario resource.Scenario
+	// behaviors is the scenario's programs compiled once, which every world this
+	// run builds steps and draws its data species by
+	behaviors *system.BehaviorSet
 
 	// restart is what this run is to be replaced by, latched either by the operator
 	// command surface or by the authority's notice on the tick goroutine, and read
@@ -379,13 +382,17 @@ func (a *App) initWorld() error {
 	}
 
 	// Systems; AddSystem sorts by Priority(), manifest order breaks ties.
-	// MetaSystem takes the context rather than the world, so the generator
-	// cannot construct it; its profile stays in manifest.ContextSystems.
+	// MetaSystem takes the context and BehaviorSystem the compiled programs, so
+	// the generator constructs neither; their profiles stay in
+	// manifest.ContextSystems. The prototypes go in first: loot, soft collision
+	// and meta size their data rows by them.
+	a.world.Resources.Behaviors = a.behaviors.Prototypes()
 	for _, sys := range manifest.BuildSystems(a.world) {
 		a.world.AddSystem(sys, manifest.ProfileFor(sys.Name()))
 	}
-	meta := system.NewMetaSystem(a.ctx)
-	a.world.AddSystem(meta, manifest.ProfileFor(meta.Name()))
+	for _, sys := range []engine.System{system.NewMetaSystem(a.ctx), system.NewBehaviorSystem(a.world, a.behaviors)} {
+		a.world.AddSystem(sys, manifest.ProfileFor(sys.Name()))
+	}
 	// One ordered pass initialises the complete set, as a reset does; an unknown
 	// dependency or a cycle is a startup error. Before the session advances, so
 	// the streams drawn here are this game's and the journal anchor reads the
@@ -604,6 +611,13 @@ func (a *App) readScenario() error {
 	}
 	if err := a.membership.playersFit(sc); err != nil {
 		return err
+	}
+	programs, err := sc.Behaviors()
+	if err != nil {
+		return fmt.Errorf("scenario: %w", err)
+	}
+	if a.behaviors, err = system.CompileBehaviors(programs); err != nil {
+		return fmt.Errorf("scenario %s: %w", sc.Name, err)
 	}
 	a.scenario = sc
 	a.log.Info("app", "msg", "scenario loaded", "name", sc.Name, "digest", sc.Short(), "files", sc.Files())

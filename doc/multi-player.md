@@ -131,6 +131,7 @@ A correction must not be repairing entity allocation or run numbering.
 | `EventGameResetRequest` | replaces the run |
 | `EventGameHold` | stops every participant's clock after the same tick (§3.6) |
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
+| `EventBehaviorSpawnRequest` | allocates a data species; only a script crosses one, a bus event defaulting to the player domain there |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
 | `EventCursorDefeatState` | folds into `session.any_defeated`, which `MonitorGlobalReset` answers with a new game |
 

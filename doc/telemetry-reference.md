@@ -1,6 +1,6 @@
 # Telemetry reference
 
-This reference covers the status-registry telemetry of every system `manifest.BuildSystems` constructs, `MetaSystem` (`manifest.ContextSystems`), the session layer (`internal/snapshot`, `internal/converge` and the content service), and the telemetry `internal/engine` and `internal/event` own. For each owner it records the keys, where they are registered, written and reset, and what reads them by name.
+This reference covers the status-registry telemetry of every system `manifest.BuildSystems` constructs, `MetaSystem` and `BehaviorSystem` (`manifest.ContextSystems`), the session layer (`internal/snapshot`, `internal/converge` and the content service), and the telemetry `internal/engine` and `internal/event` own. For each owner it records the keys, where they are registered, written and reset, and what reads them by name.
 
 ## The registry
 
@@ -35,6 +35,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 
 - **Freeze timing.** Every key registers before the freeze:
   - Schema-derived `fsm.<region>.*` keys bind in `Scheduler.initLoadedScenario`, because region names exist only once a scenario loads. That is still before `Prepare`.
+  - Behavior program keys (`behavior.<program>.*`, `kills.<program>`) bind in `NewBehaviorSystem` and `NewMetaSystem` from the programs `App.readScenario` compiled before the world was built.
   - The position store binds right after `newGameContext` creates the registry, because `World` builds the store before the registry exists.
   - `NewRegistry` reserves `stat.late` and the recorder's `rec.*`, so a recorder enabled after the freeze is still visible.
   - `Freeze` reserves `stat.groups` and `stat.metrics`.
@@ -54,7 +55,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 
 ## System telemetry
 
-Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from the constructor and again from the engine on a game reset, in dependency order.
+Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem`. `Init` runs from the constructor and again from the engine on a game reset, in dependency order.
 
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|
@@ -79,7 +80,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from t
 | Particle | `{dust,decay,blossom}.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`; `dust.{created,destroyed,centers_dropped,buf_{centers,flash,impulses,transform}_hwm}`; `particle.{cursor_rejects,disabled_rejects}` | `NewParticleSystem` | Behavior-selected spawn, apply, update and detonation paths | `Init` | Generic only |
 | Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers and update | `Init` | Generic only |
 | Materialize | None | — | — | — | — |
-| Fuse | `fuse.{spawn_failures,disabled_rejects,buf_pending_hwm}` | `NewFuseSystem` | Fuse request and update failure paths; buffer observation | `Init` | Generic only |
+| Fuse | `fuse.{spawn_failures,disabled_rejects,buf_pending_hwm}` | `NewFuseSystem` | Fuse request and update failure paths, a data species' entrance naming no program or finding no room included; buffer observation | `Init` | Generic only |
 | Spirit | None | — | — | — | — |
 | Lightning | None | — | — | — | — |
 | Missile | `missile.{count,spawned,impacts,expired,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewMissileSystem` | Resolved spawn, impact and expiry; swept update | `Init` | Generic only |
@@ -110,7 +111,8 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem`. `Init` runs from t
 | Genetic | `eye.ga.{generation,best,avg,pending,outcomes,tracked}`; string `eye.ga.typefit`; `eye.buf_ga_{pending_deaths,track_keys,tracking,typefit}_hwm` | `NewGeneticSystem` | GA processing; `typefit` every `StatSnapshotTicks` | `Init` | Generic only |
 | Audio | `audio.{backend,silent,played,dropped,mask,sfx_muted,music_muted}`, `audio.rej_{bad_id,muted,not_running,paused,queue_full,silent}` | `NewAudioSystem` | `Update`, from backend totals; `publishAudioMask` (audio and music systems) for the mask keys | `Init` takes backend baselines; counters publish deltas from them | The status bar and config menu read `audio.mask`; the config menu also reads `audio.silent` |
 | Music | Strings `music.{group,tier,rhythm,melody,fill,bass}`; `music.bpm` | `NewMusicSystem` | Update, stop and mute, from the sequencer readout | `Init` clears them | Generic only |
-| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{drain,eye,kraken,pylon,quasar,snake,storm,swarm,tower,total,uncredited}`, `session.{any_defeated,all_defeated}`, `energy.damage_multiplier` | `NewMetaSystem` | `Update` (map, camera, placement), kill and defeat handlers, the cycle damage-multiplier events, and `LoadShared` | `Init`; kill tallies, the defeat latches and the multiplier are carried by its D-19 record | `session.any_defeated` and `kills.{drain,quasar,storm,kraken}` are shipped FSM guards, and those kill keys are also `StatusToVar` sources; the status bar reads `energy.damage_multiplier` |
+| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{drain,eye,kraken,pylon,quasar,snake,storm,swarm,tower,total,uncredited}`, `kills.<program>` for each behavior program, `session.{any_defeated,all_defeated}`, `energy.damage_multiplier` | `NewMetaSystem` | `Update` (map, camera, placement), kill and defeat handlers, the cycle damage-multiplier events, and `LoadShared` | `Init`; kill tallies, the defeat latches and the multiplier are carried by its D-19 record | `session.any_defeated` and `kills.{drain,quasar,storm,kraken}` are shipped FSM guards, and those kill keys are also `StatusToVar` sources; the status bar reads `energy.damage_multiplier` |
+| Behavior | `behavior.{active,count,unknown_program_rejects,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}`; per program `behavior.<program>.{count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewBehaviorSystem`, from the scenario's compiled programs | Spawn, cancel, lifecycle and bounce paths; the counts every `Update`, and a spawn's at once | `Init` | `behavior.warden.count` is a shipped FSM guard (`wad/scenario/warden`) |
 
 Audio-free builds (`vif_headless`, `vif_noaudio`) use `audio_none.go`. There, Audio registers only `audio.mask`, held at -1, and Music registers nothing.
 
@@ -158,13 +160,13 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 
 | Pattern | Producer | Meaning |
 |---|---|---|
-| `<d>.{spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `newLifecycleTelemetry`: drain, eye, pylon, quasar, snake, storm, swarm, tower | Instances created, removed by cancellation or integrity cleanup, and killed. A kill counts as `killed_by_player` when its killer resolves to a roster cursor (`ResolveCursor`), otherwise as `killed_by_lifecycle`. `spawn_failures` counts requests that produced no entity |
-| `<d>.{wall_collisions,boundary_reflections,physics_steps}` | `newBounceTelemetry`: eye, loot, quasar, snake, storm, swarm | Resolved wall contacts, reflections at the simulation bounds, and physics integration substeps |
+| `<d>.{spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `newLifecycleTelemetry`: drain, eye, pylon, quasar, snake, storm, swarm, tower, and `behavior.<program>` | Instances created, removed by cancellation or integrity cleanup, and killed. A kill counts as `killed_by_player` when its killer resolves to a roster cursor (`ResolveCursor`), otherwise as `killed_by_lifecycle`. `spawn_failures` counts requests that produced no entity |
+| `<d>.{wall_collisions,boundary_reflections,physics_steps}` | `newBounceTelemetry`: behavior, eye, loot, quasar, snake, storm, swarm | Resolved wall contacts, reflections at the simulation bounds, and physics integration substeps |
 | `<d>.{wall_collisions,boundary_hits,grid_steps}` | Swept movers: blossom, bullet, decay, dust, missile (drain uses `boundary_reflections`) | Wall contacts, swept paths ended at the bounds, and grid-traversal steps |
 | `<d>.cursor_rejects`, `<d>.disabled_rejects` | `newRejectionTelemetry` and per-system cells | Requests dropped because no roster cursor resolved, or because the system was disabled. `combat.cursor_rejects` is the exception: see [key notes](#key-notes) |
-| `<d>.protected_rejects`, `<d>.protected_player_rejects` | Death, drain, the particle behaviors, and the shared species (eye, quasar, snake, storm, swarm) | Interactions refused by a protection mask. The shared sweep systems count player-domain victims in `protected_player_rejects` so that `protected_rejects` stays comparable |
+| `<d>.protected_rejects`, `<d>.protected_player_rejects` | Death, drain, the particle behaviors, and the shared species (behavior, eye, quasar, snake, storm, swarm) | Interactions refused by a protection mask. The shared sweep systems count player-domain victims in `protected_player_rejects` so that `protected_rejects` stays comparable |
 | `<d>.buf_<name>_hwm` | `newBufferTelemetry` | High-water live length of one reusable buffer or state collection. Outside the shared surface |
-| `combat.{damage,absorbed}_{attacker,defender}_<type>` | Combat | Damage points dealt, or rejected by immunity, by attacker or defender type. Types are `combatEntityNames`: cursor, drain, quasar, swarm, storm, pylon, snake_head, snake_body, eye, tower, kraken |
+| `combat.{damage,absorbed}_{attacker,defender}_<type>` | Combat | Damage points dealt, or rejected by immunity, by attacker or defender type. Types are `component.CombatEntityNames`: cursor, drain, quasar, swarm, storm, pylon, snake_head, snake_body, eye, tower, kraken |
 | `combat.damage_family_<family>` | Combat | Damage points per attack family (`combatAttackNames`): tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn |
 | `combat.live_<type>` | Combat | Live Combat-store population per type. It decomposes `combat.count`, so a type still counted while its species reports inactive is a lifecycle leak |
 | `weapon.<kind>`, `weapon.<kind>_fired`, `player.<slot>.weapon.<kind>` | Weapon | Whether a cursor holds the kind, and discharges per kind. `weapon.main_fired` counts main-fire actions past the cooldown, each of which fires the loadout |
@@ -205,6 +207,8 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `combat.chain_{followups,depth_max,depth_total}` (int) | Follow-up attacks emitted by chain profiles, the deepest chain, and the sum of emitted depths |
 | `swarm.killed_by_lifecycle` (int) | Also counts swarms retired after `SwarmMaxCharges` charges or at their lifetime deadline, which emit no kill event |
 | `swarm.transition_stalls` (int) | Charge transitions that found no lock target and re-armed, or failed to enter the charge state and fell back to deceleration |
+| `behavior.unknown_program_rejects` (int) | Spawn and cancel requests naming no program of the scenario, dropped |
+| `behavior.<program>.count` (int) | Live instances of the program; `behavior.count` sums the programs |
 | `drain.count` (int) | Live drains not already queued for death |
 | `drain.paused` (bool) | A spawning hold applies to this instance's own cursor: a session-wide hold, or a quasar fused from that cursor |
 | `nav.recomputes` (int) | Flow fields rebuilt on the last tick (a gauge) |

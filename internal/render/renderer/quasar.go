@@ -2,7 +2,6 @@ package renderer
 
 import (
 	"math"
-	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -178,7 +177,7 @@ func (r *QuasarRenderer) zapRow(ctx render.RenderContext, buf *render.RenderBuff
 func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, combatComp *component.CombatComponent) {
 	var c color.RGB
 	if combatComp.RemainingHitFlash > 0 {
-		c = r.calculateFlashColor(combatComp.RemainingHitFlash)
+		c = hitFlashColor(combatComp.RemainingHitFlash)
 	} else if combatComp.IsEnraged {
 		c = visual.RgbCombatEnraged
 	} else {
@@ -206,20 +205,4 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 
 		buf.SetFgOnly(screenX, screenY, ch, c, terminal.AttrNone)
 	}
-}
-
-// calculateFlashColor returns yellow with pulse effect
-func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
-	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
-
-	var intensity float64
-	if progress > 0.67 {
-		intensity = 0.6
-	} else if progress > 0.33 {
-		intensity = 1.0
-	} else {
-		intensity = 0.6
-	}
-
-	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }

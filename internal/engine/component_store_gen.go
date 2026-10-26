@@ -55,6 +55,7 @@ const (
 	EyeBit
 	TowerBit
 	KrakenBit
+	BehaviorBit
 	HeaderBit
 	MemberBit
 	FlashBit
@@ -115,6 +116,7 @@ type Component struct {
 	Eye          *Store[component.EyeComponent]
 	Tower        *Store[component.TowerComponent]
 	Kraken       *Store[component.KrakenComponent]
+	Behavior     *Store[component.BehaviorComponent]
 	Header       *Store[component.HeaderComponent]
 	Member       *Store[component.MemberComponent]
 	Flash        *Store[component.FlashComponent]
@@ -174,6 +176,7 @@ func initComponents(w *World) {
 	w.Components.Eye = NewStore[component.EyeComponent](w, EyeBit)
 	w.Components.Tower = NewStore[component.TowerComponent](w, TowerBit)
 	w.Components.Kraken = NewStore[component.KrakenComponent](w, KrakenBit)
+	w.Components.Behavior = NewStore[component.BehaviorComponent](w, BehaviorBit)
 	w.Components.Header = NewStore[component.HeaderComponent](w, HeaderBit)
 	w.Components.Member = NewStore[component.MemberComponent](w, MemberBit)
 	w.Components.Flash = NewStore[component.FlashComponent](w, FlashBit)
@@ -337,6 +340,9 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&KrakenBit != 0 {
 		w.Components.Kraken.RemoveEntity(e, true)
+	}
+	if mask&BehaviorBit != 0 {
+		w.Components.Behavior.RemoveEntity(e, true)
 	}
 	if mask&HeaderBit != 0 {
 		w.Components.Header.RemoveEntity(e, true)
@@ -522,6 +528,9 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&KrakenBit != 0 {
 		w.Components.Kraken.RemoveBatch(entities, true)
 	}
+	if union&BehaviorBit != 0 {
+		w.Components.Behavior.RemoveBatch(entities, true)
+	}
 	if union&HeaderBit != 0 {
 		w.Components.Header.RemoveBatch(entities, true)
 	}
@@ -606,6 +615,7 @@ func (w *World) wipeAll() {
 	w.Components.Eye.ClearAllComponents()
 	w.Components.Tower.ClearAllComponents()
 	w.Components.Kraken.ClearAllComponents()
+	w.Components.Behavior.ClearAllComponents()
 	w.Components.Header.ClearAllComponents()
 	w.Components.Member.ClearAllComponents()
 	w.Components.Flash.ClearAllComponents()
@@ -668,6 +678,7 @@ type componentCopies struct {
 	Eye          storeCopy[component.EyeComponent]
 	Tower        storeCopy[component.TowerComponent]
 	Kraken       storeCopy[component.KrakenComponent]
+	Behavior     storeCopy[component.BehaviorComponent]
 	Header       storeCopy[component.HeaderComponent]
 	Member       storeCopy[component.MemberComponent]
 	Flash        storeCopy[component.FlashComponent]
@@ -727,6 +738,7 @@ func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 	c.Eye = w.Components.Eye.copyOut(reuse.Eye)
 	c.Tower = w.Components.Tower.copyOut(reuse.Tower)
 	c.Kraken = w.Components.Kraken.copyOut(reuse.Kraken)
+	c.Behavior = w.Components.Behavior.copyOut(reuse.Behavior)
 	c.Header = w.Components.Header.copyOut(reuse.Header)
 	c.Member = w.Components.Member.copyOut(reuse.Member)
 	c.Flash = w.Components.Flash.copyOut(reuse.Flash)
@@ -787,6 +799,7 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Eye.copyIn(c.Eye)
 	w.Components.Tower.copyIn(c.Tower)
 	w.Components.Kraken.copyIn(c.Kraken)
+	w.Components.Behavior.copyIn(c.Behavior)
 	w.Components.Header.copyIn(c.Header)
 	w.Components.Member.copyIn(c.Member)
 	w.Components.Flash.copyIn(c.Flash)

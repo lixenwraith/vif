@@ -4,10 +4,10 @@ The design and the phased plan for per-entity state machines in species systems
 and for the data-driven species they prepare. §1 to §8 are the design, verified
 against the code at the plan's date; §9 is the plan, one phase per task, branch and
 PR, each with the files it touches, the tests it adds and the state a person can
-check by hand. Phases 0 to 3 have landed: §6 describes `pkg/machine` as built,
-§5 the quasar's graph as it runs and §7 the dialect kernel as built. As phases
-land, this document becomes the subsystem's reference and §9 shrinks to what each
-phase moved.
+check by hand. Phases 0 to 4 have landed: §6 describes `pkg/machine` as built,
+§5 the quasar's graph as it runs, §7 the dialect kernel and §8 the data path as
+built. As phases land, this document becomes the subsystem's reference and §9
+shrinks to what each phase moved.
 
 ## 1. Decision
 
@@ -93,9 +93,10 @@ system are one file, `internal/system/behavior.go`, so the domain audit
 5. **Relative timers.** D-19 admits no absolute instant in a component, and the
    instance's relative `Elapsed` is what lets suspension freeze a timer.
 6. **Moore outputs stay materialized.** Combat reads
-   `QuasarComponent.IsShielded` and `StormCircleComponent.IsInvulnerable` for
-   stun immunity (`applyStunEffect`). The host writes the flag-derived fields on
-   every step, and the components keep them.
+   `QuasarComponent.IsShielded`, `StormCircleComponent.IsInvulnerable` and, since
+   Phase 4, `BehaviorComponent.Shielded` for stun immunity (`applyStunEffect`).
+   The host writes the flag-derived fields on every step, and the components
+   keep them.
 7. **Renderers.** `renderer/chargeline.go` and `teleportline.go` recompute
    elapsed time as `parameter.X - Remaining`; `renderer/storm.go` reads
    `AttackState` and `AttackProgress`; `renderer/quasar.go` read
@@ -104,7 +105,7 @@ system are one file, `internal/system/behavior.go`, so the domain audit
 8. **Capture schema, not fingerprint.** Replacing component fields changes the
    columnar capture (`snapshot.Schema`, 25 at the plan's date), so each phase
    that changes a store bumps it. The fingerprint moves only when
-   `definition.go` changes, which Phase 4 does by adding a component and a
+   `definition.go` changes, which Phase 4 did by adding a component and a
    system. `gen-manifest` lays a component out field by field through
    `go/types`, so a nested `machine.Instance[S]` becomes three columns with no
    generator change; a component type must not implement a marshaler.
@@ -495,12 +496,13 @@ The runtimes are not shared (O9).
 ### 8.1 Program shape
 
 The program uses the fsm dialect's own keys, with the machine's additions
-(`duration_ms`, `flags`, `cues`, `suspend`, `[[global]]`, a candidate list as
-`target`, `fallback`, the `Timeout` and `AfterTick` triggers) and a `[prototype]`
-table:
+(`duration_ms`, `flags`, `probe`, `cues`, `suspend`, `[[global]]`, a candidate
+list as `target`, `fallback`, the `Timeout` and `AfterTick` triggers) and a
+`[prototype]` table. The sample as shipped; the
+[FSM reference](fsm-reference.md#behavior-programs) lists every key and verb:
 
 ```toml
-# behavior/warden.toml, listed by the scenario entry
+# wad/scenario/warden/behavior/warden.toml, listed by the scenario entry
 initial = "Roam"
 suspend = { guard = "Stunned" }
 
@@ -509,9 +511,10 @@ width = 4
 height = 2
 header = { x = 1, y = 0 }           # phantom head offset from the top-left
 hp = 40
-combat = "swarm"                    # CombatEntityType row the attack matrix already holds
-spawn = "swarm"                     # materialize style
-homing = "swarm"                    # physics.HomingProfile
+combat = "swarm"                    # the attack-matrix row it fights as
+homing = "swarm"                    # profile.Homing, by name
+mass = 2.0                          # soft collision and flocking, as the swarm's
+drops = "swarm"                     # rolls the swarm's drop tiers
 contact = { energy = 1000, heat = 10 }
 lifetime_ms = 35000
 glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]   # frames of height rows
@@ -526,6 +529,7 @@ transitions = [{ trigger = "Tick", guard = "TargetDistance", guard_args = { op =
 duration_ms = 1500
 flags = ["Enraged"]
 on_enter = [{ action = "Telegraph", payload = { color = "cyan" } }]
+on_update = [{ action = "Freeze" }]
 on_exit = [{ action = "CancelTelegraph" }]
 cues = [{ at = 800, action = "Materialize", payload = { spawn = "swarm" } }]
 transitions = [{ trigger = "Timeout", target = ["Strike", "Roam"] }]
@@ -546,33 +550,58 @@ target = "Roam"
 
 How the keys map onto the runtime:
 
-- `trigger` is `Timeout`, `Tick` (pre-tick) or `AfterTick` (post-tick).
+- `trigger` is `Timeout`, `Tick` (pre-tick) or `AfterTick` (post-tick). A
+  `Timeout` takes no guard, as the machine takes timeouts unguarded; its
+  candidates carry the guards.
 - `target` is a name or a candidate list; a candidate may be
   `{ state = "Strike", guard = "LineOfSight", duration_ms = 600 }`. `fallback`
   is `{ retry_ms = n }` or `"hold"`.
 - `flags` resolve against the vocabulary's flag table (`Enraged`, `Shielded`).
 - State IDs follow sorted names, because map-decoded tables carry no order.
   Edge order is array order.
+- A state's tick is its sustained verbs, then the host's `Integrate`; every
+  entry ends with the host's `Entered`, which drops the cell the probe resolved,
+  so a probe serves the entry it guarded and no later one.
+- A verb out of place (an effect in `on_update`, a sustained verb on an enter,
+  exit, cue or edge) or an unknown name fails the compile naming program, place
+  and key, every fault joined; the builder's own checks (§6.4) then apply.
 
 ### 8.2 Vocabulary (`internal/behavior`)
 
-The registry is generic (`behavior.Vocabulary[C]`); the game's verbs bind to the
-generic system's context in `internal/system/behavior.go`.
+The registry is generic (`behavior.Vocabulary[C]`). Its generic methods register a
+name with the struct its args decode into, strictly and once at load:
+`Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, numbering
+the program's guards and probes in load order), `Probe[A]`, `Effect[A]`,
+`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`) and
+`Flag(name, bit)`, with the host's `Integrate` and `Entered` hooks. `Entries`
+lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
+`internal/system/behavior.go` to `behaviorCtx`, refilled per instance; the target
+is `resolveBaseTarget`'s, the nearest cursor.
 
-- Predicates (read-only): `TargetDistance{op, cells}`, `LineOfSight`,
-  `HPFraction{op, value}`, `Stunned`, `HasTarget`, `HitWall`,
-  `Chance{percent}` (seeded from tick, entity and site), `Param{index, op, value}`.
+- Predicates (read-only): `TargetDistance{op, cells}` (rows scaled by the cell
+  aspect), `LineOfSight`, `HPFraction{op, value}`, `Stunned`, `HasTarget`,
+  `HitWall` (this step's move met a wall or the map edge), `Chance{percent}`
+  (mixed from tick, entity and site), `Param{index, op, value}` (the `Genotype`
+  genes).
 - Probes (read-only, results land in `C`): `ResolveTarget`
   (`resolveBaseTarget`), `FindLanding` (`FindFreeAreaSpiral` over the footprint).
-- Effects (enter, exit, cue, edge): `StoreTarget`, `ZeroVelocity`, `Teleport`,
-  `Telegraph{color}`/`CancelTelegraph` (the splash request pair), `Lightning`,
-  `Materialize{spawn}`, `SpawnSpecies{species, x, y}`, `EmitEvent{event, payload}`.
+- Effects (enter, exit, cue, edge): `StoreTarget`, `ZeroVelocity`, `Teleport`
+  (clearing its landing with the destruction flash), `Telegraph{color}` and
+  `CancelTelegraph` (the splash request pair), `Lightning{color}` (the cursor's
+  owner takes the contact damage), `Materialize{spawn}` (`swarm` or `nugget`
+  beams, which spawn nothing; a drain beam's completion spawns a drain),
+  `SpawnSpecies{species, x, y}` (swarm or quasar), `EmitEvent{event, payload}`.
   Each verb fixes its push (presentation local, shared requests shared, cursor
   damage local behind `SimulatesLocally`); `EmitEvent` takes only Shared or
   Local classes.
-- Sustained (tick): `Home`, `ChargeToStored`, `Drag{factor}`, `Freeze`, each
+- Sustained (tick): `Home`, `ChargeToStored`, `Drag{rate}` (linear drag per
+  second, so it holds at any tick rate), `Freeze` (no move this tick), each
   wrapping the in-place helpers of `pkg/vmath/physics` the species use
   ([generic kinetic §8](generic-kinetic.md#8-feasible-pseudo-system-design)).
+- Integrate (the tick's tail unless `Freeze` ran): `IntegrateWithBounceStats`
+  over the footprint with `parameter.BehaviorRestitution` (0.5, the swarm's),
+  recording `HitWall` and the bounce rows; the members follow, and moving sweeps
+  nothing, as the swarm's does not.
 
 Contact interactions (`strikeContacts` with the prototype's damage), lifecycle
 and spawning stay in the generic system's scaffold, not in the vocabulary.
@@ -580,27 +609,29 @@ and spawning stay in the generic system's scaffold, not in the vocabulary.
 ### 8.3 Delivery and identity
 
 - **Programs are scenario files.** The entry lists them
-  (`[behaviors] warden = { file = "behavior/warden.toml" }`).
-  `fsm.loadAndResolve` follows that table as it follows `regions.*.file` and
-  `macro_files`: it reads the file, expands it against the entry's macros,
-  records it in `visited` and replaces the table with the expanded document.
-  `ScenarioFiles` therefore lists programs, so `resource.ReadScenario`
-  (`internal/resource/scenario.go`) carries them, digests them and transfers
-  them with no new mechanism; `validScenarioName` admits the subdirectory.
-  `Machine.LoadScenarioFromMap` deletes `behaviors` before decoding
-  `ScenarioDoc`; `fsm.ResolveScenario` keeps it, which is how a reader reaches
-  it: `Scenario.Behaviors()` resolves the entry and returns the programs by
-  name.
-- **Compiled once per run.** `App.readScenario` compiles the programs against
-  `system.BehaviorVocabulary()` right after `resource.LoadScenario`, so a bad
-  program fails like a bad scenario, before any service starts. The prototypes
-  go into `world.Resources.Behaviors` in `initWorld` before the systems are
-  built, which lets `NewMetaSystem` name its kill counters and the renderer
-  read glyphs; the compiled graphs go to `system.NewBehaviorSystem(world, set)`,
-  which the app adds beside `MetaSystem` (`manifest.ContextSystems`), because
-  the generator's constructors take only a world.
+  (`[behaviors] warden = { file = "behavior/warden.toml" }`) or holds one inline.
+  The include reads, parses and expands each file against the entry's macros
+  through the helper `loadAndResolve` uses for region files, records it in
+  `visited` and replaces the `{ file }` table; anything else under `behaviors`
+  fails naming it. `ScenarioFiles` therefore lists programs, so
+  `resource.ReadScenario` (`internal/resource/scenario.go`) carries them, digests
+  them and transfers them with no new mechanism; `validScenarioName` admits the
+  subdirectory. `Machine.LoadScenarioFromMap` is unchanged, a top-level key being
+  its embedder's, and `resource.entryKeys` admits `behaviors`.
+  `Scenario.Behaviors()` resolves the entry and returns the programs by name.
+- **Compiled once per run.** `App.readScenario` compiles the programs
+  (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
+  `resource.LoadScenario`, so a bad program fails like a bad scenario, before any
+  service starts. The prototypes go into `world.Resources.Behaviors` in
+  `initWorld` before the systems are built, which lets loot, soft collision and
+  `NewMetaSystem` size their data rows and the renderers read glyphs; the
+  compiled graphs go to `system.NewBehaviorSystem(world, set)`, which the app
+  adds beside `MetaSystem` (`manifest.ContextSystems`), because the generator's
+  constructors take only a world.
 - **`-check` compiles every program:** `resource.ValidateScenario` runs the same
-  compile, so an unknown name or bad argument fails validation, not play.
+  compile, so an unknown name or bad argument fails validation, not play, and a
+  mid-run scenario change refuses a bad program before anything is torn down.
+  `-check` prints `behaviors ok: <n> (<names>)`.
 
 ### 8.4 Determinism
 
@@ -614,46 +645,68 @@ are assigned, and the digest covers the names.
 A data species needs a prototype before behavior matters. The machine is a
 minority of the work.
 
-- **Prototype.** Footprint and header offset, hit points, the combat entity row
-  it fights as, materialize style, homing profile, contact damage, lifetime,
-  glyph frames and colour, pattern period. It names existing rows of the
-  per-kind tables that are code (`CombatEntityType`, `SpawnType`,
-  `physics.HomingProfile`); a new attack profile or materialize style stays a
-  code change.
-- **Species IDs** (decided). `component.SpeciesType` keeps its code enum ending
-  at `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
-  `SpeciesMax = SpeciesCount + 8` bound the data range. Programs take
-  `SpeciesDataFirst + i` in sorted-name order; a scenario with more than eight
-  fails to compile. The six tables indexed by `SpeciesType` grow to
-  `[SpeciesMax]` so a data ID never indexes out of range: `profile.Contact`,
-  `profile.SoftKraken`, `profile.Drops`, `component.SpeciesDimensionsLUT`
-  (unread today), the soft-collision matrices and caches, and `MetaSystem`'s
-  kill counters and snapshot. The package-level profile rows for data species
-  stay zero; a data species' values come from its prototype at the reader: the
-  generic system passes the prototype's contact damage, loot reads
-  `Resources.Behaviors` for a data species' drops, and soft collision builds the
-  data rows of its matrix in `Init` from the prototype's mass. The range checks
-  `>= SpeciesCount` in `meta.go`, `genetic.go` and `loot.go` become
+- **Prototype** (`component.BehaviorPrototype`, plain data in
+  `Resources.Behaviors`). Footprint (at most 8×8) and header offset, hit points,
+  the combat row it fights as (`swarm` or `quasar`, the unit composites whose
+  damage lands on their header), homing profile (`profile.Homing`, by name),
+  soft-collision mass, the code species whose drop tiers it rolls, contact
+  damage, lifetime, glyph frames and colour, pattern period. It names existing
+  rows of the per-kind tables that are code; a new attack profile, materialize
+  style or drop table stays a code change.
+- **Species IDs.** `component.SpeciesType` keeps its code enum ending at
+  `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
+  `SpeciesMax = SpeciesCount + parameter.BehaviorProgramsMax` (8) bound the data
+  range. Programs take `SpeciesDataFirst + i` in sorted-name order; a scenario
+  with more than eight fails to compile. A name is `[a-z][a-z0-9_]*` of at most
+  24 bytes, neither a code species' name nor `total` or `uncredited`, because it
+  keys `kills.<name>` and `behavior.<name>.*`.
+- **Species tables.** Every table indexed by `SpeciesType` is `[SpeciesMax]`, so
+  a data ID never indexes out of range: `profile.Contact`, `profile.SoftKraken`,
+  `profile.Drops`, the soft-collision matrices and caches, and `MetaSystem`'s
+  kill counters and capture; the unread `SpeciesDimensionsLUT` is gone. The
+  package-level rows for data species stay zero, and a data species' values come
+  from its prototype at the reader: the behavior system passes the contact
+  damage, loot rolls the named species' tiers under a pity of its own, the
+  health bar measures the prototype, and soft collision builds data rows in
+  `Init` for a prototype with mass (to and from swarm, quasar and every other
+  data species; storm, pylon and kraken push it one way), so every code pair
+  keeps its rule. The range checks in `meta.go`, `genetic.go` and `loot.go` read
   `>= SpeciesMax`.
-- **Composite routing.** `component.Behavior` gains `BehaviorData`; the generic
-  system handles `EventCompositeIntegrityBreach` for it. `handleEmptyComposite`
-  needs no case: its default destroys the head.
-- **Events.** `EventBehaviorSpawnRequest{program, x, y}` and
-  `EventBehaviorCancelRequest{program}` (bus class, like the swarm's) are what a
-  scenario emits; genetics stays `EventGeneticRegisterSpecies` with the data
-  species' ID, and `SpeciesCreatedPayload.Genes` lands in the component's
-  `Params`.
-- **Telemetry.** `newLifecycleTelemetry(reg, program)` keys `<program>.*` bind
-  in `NewBehaviorSystem`, `kills.<program>` in `NewMetaSystem`, both before
-  `Freeze`.
-- **Renderer.** One `BehaviorRenderer` (`renderer/behavior.go`,
+- **Composite routing.** `component.Behavior` holds `BehaviorData` where the
+  unused `BehaviorBoss` stood; the behavior system handles
+  `EventCompositeIntegrityBreach` for it. `handleEmptyComposite` needs no case:
+  its default destroys the head.
+- **Events.** `EventBehaviorSpawnRequest{program, x, y}` (bus and barrier-bound,
+  like the swarm's) and `EventBehaviorCancelRequest{program}` (shared, as every
+  species' cancel; an empty program cancels every data species) are what a
+  scenario emits; a program no entry defines is counted
+  (`behavior.unknown_program_rejects`) and dropped. A spawn is immediate, as the
+  swarm's and quasar's are, and `EventFuseBehaviorRequest{program, x, y}`
+  (shared) beams one in: the fuse starts a swarm beam over the place the
+  footprint fits, the beam's `Species` naming the data species, and sends the
+  spawn when the beam completes. The pending spawn is that Shared entity, which a
+  capture carries with the stores; a cancel ends its program's beams in flight.
+  Genetics stays `EventGeneticRegisterSpecies` with the
+  data species' ID; the genes land in the `Genotype` component as every species'
+  do, sampled once the spawn has its place, and `Param` reads them.
+- **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and
+  the lifecycle rows (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`,
+  `kills.<program>` in `NewMetaSystem`, all before `Freeze`
+  ([telemetry](telemetry-reference.md)).
+- **Renderer.** `BehaviorRenderer` (`renderer/behavior.go`,
   `render.PriorityBehavior` after `PrioritySwarm`) draws each `Behavior`
-  header's members from the prototype's glyph frames, with the swarm renderer's
-  enraged and hit-flash colouring.
+  header's members from the prototype's frame at `PatternIndex`: hit flash, then
+  enraged, then the prototype's colour. The hit-flash pulse is one function,
+  `hitFlashColor`, where five renderers held copies.
 - **Generic species system.** `internal/system/behavior.go` runs every data
-  species: lifecycle checks, `Step`, flag mapping, contacts, sweep; it owns one
-  manifest component, `Behavior` {program index, instance, pattern
-  accumulator, locked target, `Params`}. That is the one fingerprint change.
+  species: hit points, lifetime, the pattern cycle (held by a stun), `Step`, the
+  flags written back (`Enraged` to `Combat.IsEnraged`; `Shielded` to a refreshed
+  ward and `Behavior.Shielded`, which `applyStunEffect` reads as it reads the
+  quasar's shield), then, unless suspended, gold breaking and contacts.
+  `terminate` runs the state's exit (`Stop`) before the composite goes, so a
+  telegraph never outlives its instance. It owns one manifest component,
+  `Behavior` {program index, instance, pattern frame and accumulator, stored
+  target, `Shielded`}; with the context system it is the fingerprint's change.
 - **Engine split.** This is also how the engine takes species it was not built
   with: a data species adds a program and a prototype, not a component.
 
@@ -691,7 +744,8 @@ VIF_DIVERGENCE=1 VIF_DIVERGENCE_SHAPE=4,3,41,50 go test ./internal/app -run Test
 Version moves, one per phase that changes a store's layout or adds one:
 `snapshot.Schema` 25 → 26 (Phase 2), 27 (the cursor clocks between Phases 2 and 3),
 28 (Phase 4), 29 (Phase 5), 30 (Phase 6);
-`event.JournalSchema` 39 → 40 (Phase 6, the fuse queue's `SaveLocal` form);
+`event.JournalSchema` 39 → 40 (Phase 4, the beam's `Species` in the materialize
+payloads), 41 (Phase 6, the fuse queue's `SaveLocal` form);
 `manifest.SchemaVersion` 1 → 2 (Phase 3), 3 (Phase 4). `manifest.Fingerprint`
 moves on its own in Phase 4. Each phase updates `doc/term-index.md` entries it
 turns from "Future design" into code and the documents it names.
@@ -897,8 +951,8 @@ both `decodePayload`s, bot's guard and payload key lists and the unread
 its own table it does not read, an `EmitEvent` payload on an event that carries
 none fails, and a bot graph's refused actions leave its vocabulary. The strict walk
 is `toml.Unmapped` and `toml.UnknownKeys` (toml v0.4.0), which `paths.UnknownKeys`
-now aliases. `resource.entryKeys` holds the nine keys an entry reads today, so
-Phase 4 adds `behaviors`. `-schema` replaces `guards` and `actions` with
+now aliases. `resource.entryKeys` holds the keys an entry reads, nine until
+Phase 4 added `behaviors`. `-schema` replaces `guards` and `actions` with
 `vocabularies.scenario` and `vocabularies.bot`, and no longer prints the runtime
 capture's banner ahead of its JSON in a race build or under `-dev`. Not yet checked
 at load: the payload fields a `Payload*` guard, `capture_vars` or `payload_vars`
@@ -924,98 +978,122 @@ prints the same bytes on every run; the scenario vocabulary holds 20 guards
 (`And`, `Or` and `Not` among them) and 19 actions, the bot's 26 and 19, none of
 the four that write the world.
 
-### Phase 4: programs, the `Behavior` component and the generic system
+### Phase 4: programs, the `Behavior` component and the generic system (landed)
 
-Goal: a species defined by files plays in a scenario; `-check` validates it.
-Four batches, one PR, in this order.
+A species defined by files plays in a scenario and `-check` validates it, as §8
+describes as built: `internal/behavior` holds the program document, the registry
+and the compiler (`program.go`, `vocab.go`, `compile.go`),
+`internal/fsm/file_loader.go` the include, `internal/system/behavior.go` the game
+vocabulary and the generic system, `internal/render/renderer/behavior.go` the
+renderer and `wad/scenario/warden` the sample. `snapshot.Schema` is 28 (the
+`Behavior` store, the kill array at `SpeciesMax`), `manifest.SchemaVersion` 3
+(`vocabularies.behavior`) and `event.JournalSchema` 40 (the beam's `Species`).
+Against the steps planned:
 
-**4a. The compiler and the vocabulary registry** (`internal/behavior`).
+- The prototype has no `spawn` key. A spawn queued behind its beam would be state
+  outside any store, a `Snapshot: "state"` carrier, so the fuse beams a data
+  species in instead, as it plays a fusion before the direct request: the beam
+  is a Shared entity naming the species, its completion sends the spawn, and
+  nothing outside the stores waits (§8.5, Events). The fuse's profile becomes
+  `dual`, its fusions player-domain and the entrance shared.
+- A spawn counts in `behavior.<program>.count` at once rather than at the next
+  step, since a beam lands its instance after the step and a region reads the
+  count.
+- It gains `mass` and `drops`, which soft collision and loot read where §8.1 had
+  no key for them.
+- No `Params` slice: `Param` reads the `Genotype` component genetics already
+  writes.
+- Status keys are `behavior.<program>.*`, since a bare `<program>.*` shares every
+  system's prefix namespace; the name rules keep them and `kills.<program>` apart
+  from the code species' keys.
+- `LoadScenarioFromMap` is unchanged, and the include is the program's own:
+  `loadAndResolve` adds `states` and merges region files, which a program must
+  not get, so the two share only the factored read, parse and expand.
+- Cancel is shared, as every species' cancel; spawn is bus, as the swarm's, and so
+  barrier-bound, since a crossed one allocates shared identity.
+- `Shielded` refreshes the ward and refuses a stun, as the quasar's shield does.
+- `Drag{rate}` is per second where `Drag{factor}` was per tick.
+- A tick is the sustained verbs, then one integration; `Freeze` skips the move,
+  and the sample's Wind freezes as the swarm's lock stands still. The
+  `Vocabulary.Entered` hook ends every entry, so a probe's cell serves only the
+  entry it guarded.
+- `SpeciesDimensionsLUT` went rather than grew, nothing reading it;
+  `BehaviorBoss` became `BehaviorData`. `combatEntityNames` moved to
+  `component.CombatEntityNames` and the homing profiles are named in
+  `profile.Homing`, where the compiler reads them. The context system's optional
+  dependencies add `quasar`, for `SpawnSpecies`.
+- The sample beams its warden in at (10, 5), past its reach of the centred
+  cursor, so it opens with a wind-up, and beams another in after a kill (3 s,
+  "Warden down") or a lifetime (1 s) rather than ending; its cursor keeps blank's
+  heat 10, since heat 100 raised ten drains.
 
-1. `program.go`: `ProgramDoc` (initial, suspend, prototype, states, global) and
-   `PrototypeDoc` (§8.1), decoded through `dialect.Decode`; `Prototype` as
-   plain data (`component.BehaviorPrototype`, in `internal/component/behavior.go`
-   beside the component, so engine and renderer read it without importing
-   this package).
-2. `vocab.go`: `Vocabulary[C]` with `Predicate[A]`, `Probe[A]`, `Effect[A]`,
-   `Sustained[A]` registrations (generic methods, each listed as a
-   `dialect.Entry` with its `Fields[A]`) and `Flag(name, bit)`.
-3. `compile.go`: `Compile[C](v *Vocabulary[C], programs map[string]map[string]any)
-   (*Set[C], error)`: sorted names, IDs from `SpeciesDataFirst`, each program to
-   a `machine.Graph[component.BehaviorState, C]` through the builder, errors
-   naming program, state and key. More than eight programs is an error.
-4. Tests: the §8.1 program compiles against a test vocabulary; an unknown
-   verb, flag, state or key fails naming it; IDs follow sorted names.
+Mechanical edits, counted with `grep -P` over `internal/` before and after:
+`[component.SpeciesCount]` tables 10 → 1 (`SpeciesNames`, the code species
+alone) and `[component.SpeciesMax]` 0 → 8; `>= SpeciesCount` checks 3 → 0 and
+`>= SpeciesMax` 0 → 3; `< SpeciesCount` loops 9 → 2 (meta's code kill keys, the
+kraken's code rows) and `< SpeciesMax` 0 → 4; hit-flash copies 5 → 1.
 
-**4b. Scenario include and `-check`.**
+Tests, one per rule. `internal/behavior`: IDs follow sorted names; a compiled
+program steps as its states say (the Wind cue once at 800 ‰, the timeout's
+candidates by the probe, `AfterTick` on `HitWall`, the global stun edge and
+suspend); a compile error names program, place and key (unknown verbs, flags,
+states, keys, rows, profiles and drops, glyph shapes, a header outside the
+footprint, nine programs, each misplaced verb); the name rules; the vocabulary's
+entries. `internal/resource`: a program is a scenario file (listed, digested,
+expanded against the entry's macros, its entry loading into a machine); a
+`behaviors` table names a file or is the program; a program that does not compile
+fails the scenario; `-check` reports the programs. `internal/system`: a warden
+winds up past its range, then charges the cell it stored; a stun sends a winding
+warden back to Roam and ends its telegraph; a cancel ends it through its
+composite; a request naming no program is counted and dropped; at zero hit points
+it dies as species 10 and `kills.warden` counts it; combat refuses to stun a
+shielded data species; the drops its prototype names; soft-collision rows only
+with mass, every code pair unchanged; a spawn counts its instance at once; a
+fused data species lands when its beam ends, on the beam's footprint; a cancel
+ends its program's beams in flight; only a shared beam lands one. The store
+round trip in `internal/snapshot` covers the beam's `Species` column. The
+renderer draws the frame shown in the
+state's colour, and the health bar spans the prototype.
+`TestSnapshotDeclarationsMatchImplementations` holds the context systems to their
+declarations, and `internal/app`'s soak and domain tests run the warden.
 
-1. `internal/fsm/file_loader.go`: `loadAndResolve` follows
-   `behaviors.<name>.file` as §8.3 says; `Machine.LoadScenarioFromMap` deletes
-   `behaviors` before decoding.
-2. `internal/resource/scenario.go`: `Scenario.Behaviors()`, and `behaviors` in
-   `entryKeys`.
-3. `internal/resource/check.go`: `ValidateScenario` compiles the programs
-   against `system.BehaviorVocabulary()`; `checkScenario` prints
-   `behaviors ok: <n>`.
-4. Tests: a scenario listing a program has it in `ScenarioFiles` and its digest
-   moves when the program changes; a program with an unknown verb fails
-   `ValidateScenario`.
+The harness (no program in the scenario), main against the branch, read alike in
+every FSM transition line and in manifests, keyframes, late commits, late copies,
+leads, pace steps and the storm's spawns; only bytes moved:
 
-**4c. The component, the system, the renderer and the species range.**
+```
+shape       pg        cells       kf  lc  lcp  lead     link B/s
+3,3,97,0     0          0          4   0    5  11 (13)   5908 → 5908
+2,2,3,100   38 → 30   556 → 374    4   1    0  8 (9)    10703 → 10757
+3,3,251,0    7         39 → 41     1   3    6  9 (10)    5390 → 5391
+4,3,41,50   30        295 → 301   15   0    1  13 (15)  12247 → 12329
+```
 
-1. `internal/component/behavior.go`: `BehaviorState uint8`;
-   `BehaviorComponent{Program uint8; Machine machine.Instance[BehaviorState];
-   PatternIndex int; PatternElapsed time.Duration; TargetX, TargetY int;
-   Params []float64}`; `BehaviorPrototype`. `internal/component/species.go`:
-   `SpeciesDataFirst`, `SpeciesMax`. `internal/component/header.go`:
-   `BehaviorData`.
-2. The six tables to `[SpeciesMax]` and the two range checks to `SpeciesMax`
-   (§8.5); `profile.Contact` is not read for a data species, loot reads
-   `Resources.Behaviors` for drops, soft collision adds the data rows in `Init`.
-3. `internal/engine/resource.go`: `Resource.Behaviors []component.BehaviorPrototype`.
-4. `internal/manifest/definition.go`: `{"Behavior", "BehaviorComponent",
-   "shared"}` in `Components`; `{Name: "behavior", Constructor:
-   "NewBehaviorSystem", Domain: "shared", Requires: composite, timer; Optional:
-   navigation, combat, lightning, materialize, splash, swarm}` in
-   `ContextSystems`; `{"behavior", "NewBehaviorRenderer", "PriorityBehavior"}`
-   in `Renderers`. `parameter.PriorityBehavior` after `PriorityKraken`;
-   `render.PriorityBehavior` after `PrioritySwarm`. `make generate`.
-5. `internal/event/type.go`, `payload.go`: `EventBehaviorSpawnRequest`
-   (`BehaviorSpawnRequestPayload{Program string; X, Y int}`) and
-   `EventBehaviorCancelRequest` (`{Program string}`), bus class;
-   `make generate`.
-6. `internal/system/behavior.go`: `BehaviorVocabulary()` (the §8.2 verbs over
-   `*behaviorCtx`), `NewBehaviorSystem(world, set)`, `Init` (per-program
-   telemetry reset, the RNG stream for `Chance` sites is not drawn: `Chance`
-   mixes tick, entity and site), `HandleEvent` (spawn, cancel, breach,
-   `SpeciesKilled`, system command), `Update` (lifecycle, `Step`, flags,
-   contacts, sweep), spawn building the composite from the prototype as
-   `createSwarmComposite` does, `terminate` calling `Stop`.
-7. `internal/app/app.go`: `readScenario` compiles (`a.behaviors`), `initWorld`
-   sets `Resources.Behaviors` before the systems and adds the system beside
-   `MetaSystem`. `internal/system/meta.go`: kill keys for the prototypes.
-8. `internal/render/renderer/behavior.go`: `BehaviorRenderer`.
-9. `snapshot.Schema` 28; `manifest.SchemaVersion` 3 with a `behavior` vocabulary
-   in `-schema`'s `vocabularies`.
-10. Tests: `domain_test.go` passes with the new file (shared: no player stream,
-    no owner-authored writes); `snapshot_declaration_test.go` passes with the
-    new system (no private state); a spawned data species steps its graph and
-    writes `IsEnraged` from its flags; a cancel request despawns through the
-    composite; `-check` of a scenario naming nine programs fails.
+Seven `behavior.*` keys join the compared status (`protected_player_rejects` is
+excluded by its suffix), so a repaired status page holds one to three more cells;
+the capture grows (the `Behavior` section, the kill array from 10 to 18), which
+moves 2,2,3,100's every-100th-frame drop onto another frame, as the cursor clocks
+did on that shape. The fuse entrance moved only the link rates, by a byte or two
+a second, the storm's shared beams carrying the `Species` column.
 
-**4d. The sample.** `wad/scenario/warden/scenario.toml` with a region that
-spawns one warden on entry (`EmitEvent EventBehaviorSpawnRequest { program =
-"warden", x = 40, y = 15 }`) and ends on its `EventSpeciesKilled` (species
-`10`), and `wad/scenario/warden/behavior/warden.toml` as §8.1. `doc/fsm-reference.md`
-gains the program keys; `doc/telemetry-reference.md` the `<program>.*` and
-`kills.<program>` rows; `doc/filesystem-layout.md` the `behavior/` directory.
-
-Gates: `go test ./internal/behavior ./internal/system ./internal/manifest
-./internal/resource ./internal/fsm/... ./internal/render/... ./internal/app`;
-`make generate` is clean; `bin/vif -check -s wad/scenario/warden`. Manually
-testable state: `bin/vif`, `:n warden`: the warden roams toward the cursor,
-telegraphs with the cyan splash past twelve cells, strikes, and a pulse stun
-returns it to roaming; `:emit EventBehaviorCancelRequest { program = "warden" }`
-removes it; `-schema` lists the behavior vocabulary with its fields.
+Manual check, in tmux (`bin/vif`, `:n warden`, from the campaign too, and
+`:energy 1000000000` to outlast it): a beam converges on the top-left corner for
+a second and the warden appears on its footprint as it ends; it winds up enraged
+and still under the cyan countdown, the beam marks the cursor's cell at 0.8 s, it
+charges that cell and takes its own colour on arriving; a disruptor stun
+(`:emit EventWeaponAddRequest { entity = 1, weapon = 2 }`) drops it to Roam and
+holds it in place until it dies; `:emit EventBehaviorCancelRequest { program =
+"warden" }` removes it, and another beams in a second later
+(`behavior.warden.despawned` 1); under `:god` it dies fast, "Warden down" shows
+and another beams in three seconds later. An idle cursor dies at the first
+strike, its shield's energy drained, then its heat. A headless run beams the
+warden in at tick 19 and lands it at 38, loses it to its lifetime at 738 and
+lands another at 778.
+`-check -s wad/scenario/warden` prints `behaviors ok: 1 (warden)`; copies
+misspelling a sustained verb, a flag, a state and a key fail naming each
+(`program 'warden': state 'Wind': on_update[0]: unknown sustained action
+'Freez'`), and nine programs fail on the count where eight pass. `-schema` prints
+the same bytes on every run, `vocabularies.behavior` holding 28 entries.
 
 ### Phase 5: swarm on the machine
 
@@ -1087,7 +1165,7 @@ Steps:
    on Active (the muzzle flash's `<= 0` skip becomes a state test).
 5. `storm_attack_test.go`: the red fixture sets `Machine` to Cooldown about to
    expire; `TestStormDrawsBeforeItReadsLivePositions` keeps passing.
-6. `snapshot.Schema` 30; `event.JournalSchema` 40; `make generate`.
+6. `snapshot.Schema` 30; `event.JournalSchema` 41; `make generate`.
 
 Tests: a stunned Active circle keeps its remaining attack time and `Armed`
 reads false (S5, S4); a circle with no cursor keeps `IsInvulnerable` current

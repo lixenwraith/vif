@@ -434,9 +434,16 @@ func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 }
 
 // rollDropTable rolls a species' tiers for one cursor with pity and fallback
-// accumulation. Returns slice of drop results (may be empty)
+// accumulation; a data species rolls its prototype's tiers under a pity of its own
 func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor core.Entity, slot uint8) []DropResult {
-	if speciesType >= component.SpeciesCount || len(profile.Drops[speciesType]) == 0 {
+	if speciesType >= component.SpeciesMax {
+		return nil
+	}
+	tiers := profile.Drops[speciesType]
+	if i := int(speciesType) - int(component.SpeciesDataFirst); i >= 0 && i < len(s.world.Resources.Behaviors) {
+		tiers = profile.Drops[s.world.Resources.Behaviors[i].Drops]
+	}
+	if len(tiers) == 0 {
 		return nil
 	}
 
@@ -467,7 +474,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 	var results []DropResult
 	fallbackBonus := 0
 
-	for _, tier := range profile.Drops[speciesType] {
+	for _, tier := range tiers {
 		if tier.Unique {
 			allOwned := true
 			for _, entry := range tier.Entries {
