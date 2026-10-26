@@ -24,7 +24,6 @@ func NewTimerSystem(world *engine.World) engine.System {
 	s := &TimerSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

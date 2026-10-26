@@ -100,7 +100,6 @@ func NewGeneticSystem(world *engine.World) engine.System {
 	s.statTypeFit = world.Resources.Status.Strings.Get("eye.ga.typefit")
 	s.buffers = newBufferTelemetry(world.Resources.Status, "eye", "ga_track_keys", "ga_pending_deaths", "ga_typefit", "ga_tracking")
 
-	s.Init()
 	return s
 }
 

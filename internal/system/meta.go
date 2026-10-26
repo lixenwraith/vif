@@ -77,7 +77,6 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	s.statAllDefeated = reg.Bools.Get("session.all_defeated")
 	s.statAnyDefeated = reg.Bools.Get("session.any_defeated")
 	s.statDamageMultiplier = reg.Ints.Get("energy.damage_multiplier")
-	s.Init()
 	return s
 }
 

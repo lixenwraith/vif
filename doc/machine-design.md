@@ -247,6 +247,11 @@ Each item gives the finding, the proposal and the decision taken for the plan.
   exit hook writes it.
 - The host strikes the cursors the quasar touches after the step, unless the
   step suspended: a stunned quasar strikes nothing.
+- A header move sweeps the new footprint (`processCollisionsAtNewPositions`)
+  and leaves a destruction flash per glyph, drawn under the body; the glyph
+  itself dies in the tick's closing settle. A glyph can stand under a member
+  only through the one-tick lag between the header's move and the composite
+  sync, which the next move's sweep covers.
 - The component is read through `GetPtr`: the detached copy existed only to
   order commits that the step now makes unconditional.
 - The context holds the entity, the component, the sensed `stunned` and
@@ -689,6 +694,27 @@ A manual check runs the built binary: `make dev`, then `bin/vif` (the checkout's
 `:emit <EventName> { payload }` to raise an event, `:god` to survive,
 `:log stat <ticks>` to print the status registry to the log. A headless script
 is `bin/vif -script <file.toml> -seed <n>`; add `-watch` to see it.
+
+Rules the first phases taught, binding on the rest:
+
+- The implementing agent runs the phase's manual check itself before the PR is
+  marked ready, in the terminal where it can and as a headless probe where it
+  cannot, and the PR body says what was seen. Phase 2's tests, benchmarks and
+  harness all passed while the plough-through flash a player sees was found at
+  the keyboard.
+- A mechanical edit across many files is proven by a count, before and after,
+  taken with a search that reads the pattern as the file holds it (`grep -P`
+  for `\t`); Phase 0's constructor rewrite shipped with none of its 55 edits
+  because its pattern matched no file and its check used the same pattern.
+- A test that builds systems outside the app initialises them through the
+  engine's pass (`World.InitSystems` on the set, `ready()` on one), never by
+  calling a constructor and using the result.
+- A species host that clears its footprint names the effect it leaves:
+  `sweep.emit(w, EventFlashSpawnOneRequest)` draws each dead glyph's rune for
+  `DestructionFlashDuration` (500 ms); the particle layer sits under the species
+  since Phase 2's review, so the body covers it. Swarm and storm move without
+  sweeping and leave nothing; a program's `Teleport` or `ChargeToStored` verb
+  that clears cells says which.
 
 ### Phase 0: the engine initialises every system (landed)
 

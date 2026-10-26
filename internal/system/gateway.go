@@ -36,7 +36,6 @@ func NewGatewaySystem(world *engine.World) engine.System {
 	s.statActive = world.Resources.Status.Bools.Get("gateway.active")
 	s.statCount = world.Resources.Status.Ints.Get("gateway.count")
 
-	s.Init()
 	return s
 }
 

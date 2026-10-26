@@ -36,7 +36,6 @@ func NewShieldSystem(world *engine.World) engine.System {
 	s.statShieldHit = reg.Ints.Get("shield.shield_hit")
 	s.rejects = newRejectionTelemetry(reg, "shield")
 
-	s.Init()
 	return s
 }
 

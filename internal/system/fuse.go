@@ -52,7 +52,6 @@ func NewFuseSystem(world *engine.World) engine.System {
 	s.statSpawnFailures = world.Resources.Status.Ints.Get("fuse.spawn_failures")
 	s.statDisabled = world.Resources.Status.Ints.Get("fuse.disabled_rejects")
 	s.buffers = newBufferTelemetry(world.Resources.Status, "fuse", "pending")
-	s.Init()
 	return s
 }
 

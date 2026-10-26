@@ -110,7 +110,6 @@ func NewDrainSystem(world *engine.World) engine.System {
 	s.statPaused = s.world.Resources.Status.Bools.Get("drain.paused")
 	s.buffers = newBufferTelemetry(s.world.Resources.Status, "drain", "pending_spawns", "drain_cache")
 
-	s.Init()
 	return s
 }
 

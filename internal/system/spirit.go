@@ -23,7 +23,6 @@ func NewSpiritSystem(world *engine.World) engine.System {
 	s := &SpiritSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

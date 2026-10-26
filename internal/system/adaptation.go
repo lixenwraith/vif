@@ -79,7 +79,6 @@ func NewAdaptationSystem(world *engine.World) engine.System {
 	}
 	s.buffers = newBufferTelemetry(world.Resources.Status, "adapt", "pending_deaths", "graph_keys", "sub_keys", "track_keys", "sum_fitness", "counts", "cdf", "weight_scratch", "outcome_graphs", "tracking", "outcome_samples")
 
-	s.Init()
 	return s
 }
 

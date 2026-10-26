@@ -33,7 +33,6 @@ func NewHeatSystem(world *engine.World) engine.System {
 	s.statEmber = status.NewPlayerBool(reg, parameter.MaxPlayers, "heat.ember", "heat.ember")
 	s.rejects = newRejectionTelemetry(reg, "heat")
 
-	s.Init()
 	return s
 }
 

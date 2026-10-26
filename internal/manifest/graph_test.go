@@ -7,12 +7,17 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 )
 
-// buildWorld returns a world carrying every manifest system
+// buildWorld returns a world carrying every manifest system, initialised by the
+// engine's pass as the app does; a dependency on an unregistered system or a cycle
+// fails here
 func buildWorld(t *testing.T) *engine.World {
 	t.Helper()
 	w := scratchWorld(t)
 	for _, sys := range BuildSystems(w) {
 		w.AddSystem(sys, ProfileFor(sys.Name()))
+	}
+	if err := w.InitSystems(); err != nil {
+		t.Fatalf("system graph: %v", err)
 	}
 	return w
 }
@@ -20,9 +25,7 @@ func buildWorld(t *testing.T) *engine.World {
 // TestSystemGraphResolves asserts every declared dependency names a registered
 // system and the graph is acyclic, so the startup pass initialises every system
 func TestSystemGraphResolves(t *testing.T) {
-	if err := buildWorld(t).InitSystems(); err != nil {
-		t.Fatalf("system graph: %v", err)
-	}
+	buildWorld(t)
 }
 
 // TestSystemsRequiringIsSorted asserts the dependent lookup is deterministic,

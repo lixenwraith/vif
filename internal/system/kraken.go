@@ -39,7 +39,6 @@ type KrakenSystem struct {
 
 func NewKrakenSystem(world *engine.World) engine.System {
 	s := &KrakenSystem{world: world}
-	s.Init()
 	return s
 }
 

@@ -136,7 +136,6 @@ func NewCombatSystem(world *engine.World) engine.System {
 		s.statAbsorbDefender[i] = reg.Ints.Get("combat.absorbed_defender_" + name)
 	}
 
-	s.Init()
 	return s
 }
 

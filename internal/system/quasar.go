@@ -50,7 +50,6 @@ func NewQuasarSystem(world *engine.World) engine.System {
 	s.motion = newBounceTelemetry(world.Resources.Status, "quasar")
 	s.graph = newQuasarGraph(s, nil)
 
-	s.Init()
 	return s
 }
 

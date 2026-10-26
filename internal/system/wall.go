@@ -55,7 +55,6 @@ func NewWallSystem(world *engine.World) engine.System {
 	s.statPushEvents = world.Resources.Status.Ints.Get("wall.push_events")
 	s.buffers = newBufferTelemetry(world.Resources.Status, "wall", "pending_push_checks")
 
-	s.Init()
 	return s
 }
 

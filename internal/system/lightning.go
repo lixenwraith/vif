@@ -25,7 +25,6 @@ func NewLightningSystem(world *engine.World) engine.System {
 	s := &LightningSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

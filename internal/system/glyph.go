@@ -106,7 +106,6 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
 	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
 
-	s.Init()
 	return s
 }
 

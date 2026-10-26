@@ -55,7 +55,6 @@ func NewEnergySystem(world *engine.World) engine.System {
 	s.statMissingEnergy = reg.Ints.Get("energy.missing_energy_rejects")
 	s.statDisabled = reg.Ints.Get("energy.disabled_rejects")
 
-	s.Init()
 	return s
 }
 

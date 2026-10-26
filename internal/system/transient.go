@@ -40,7 +40,6 @@ func NewTransientSystem(world *engine.World) engine.System {
 	s.statExplosionMerge = world.Resources.Status.Ints.Get("transient.explosion_merged")
 	s.statExplosionEvict = world.Resources.Status.Ints.Get("transient.explosion_evicted")
 
-	s.Init()
 	return s
 }
 

@@ -41,7 +41,6 @@ func NewEyeSystem(world *engine.World) engine.System {
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "eye")
 	s.motion = newBounceTelemetry(world.Resources.Status, "eye")
 
-	s.Init()
 	return s
 }
 

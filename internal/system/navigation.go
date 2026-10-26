@@ -83,7 +83,6 @@ func NewNavigationSystem(world *engine.World) engine.System {
 	s.statROICells = world.Resources.Status.Ints.Get("nav.roi_cells")
 	s.buffers = newBufferTelemetry(world.Resources.Status, "nav", "groups")
 
-	s.Init()
 	return s
 }
 

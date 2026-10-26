@@ -16,7 +16,6 @@ func NewCameraSystem(world *engine.World) engine.System {
 	s := &CameraSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

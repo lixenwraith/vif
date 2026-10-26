@@ -85,7 +85,6 @@ func NewStormSystem(world *engine.World) engine.System {
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "storm")
 	s.motion = newBounceTelemetry(world.Resources.Status, "storm")
 
-	s.Init()
 	return s
 }
 

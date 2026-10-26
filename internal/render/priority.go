@@ -19,6 +19,14 @@ const (
 	PriorityGold
 	PriorityNugget
 
+	// === Particles ===
+	// What a species left behind: the flash of a glyph it ploughed through, a
+	// wall's fadeout, an explosion, a spirit. The species draws over them all.
+	PriorityFlash
+	PriorityFadeout
+	PriorityExplosion
+	PrioritySpirit
+
 	// === Species (back to front) ===
 
 	// Background species, rendered first,
@@ -50,12 +58,6 @@ const (
 	PriorityPulse
 	PriorityRay
 	PriorityBullet
-
-	// === Particles ===
-	PriorityFlash
-	PriorityFadeout
-	PriorityExplosion
-	PrioritySpirit
 
 	// === Overlays ===
 	PriorityButton // Opaque, so every map layer under it passes behind

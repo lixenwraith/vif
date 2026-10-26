@@ -39,7 +39,6 @@ func NewCursorSystem(world *engine.World) engine.System {
 		s.statSlotControl[i] = reg.Ints.Get(status.PlayerKey(i, "control"))
 	}
 
-	s.Init()
 	return s
 }
 

@@ -57,7 +57,6 @@ func NewGoldSystem(world *engine.World) engine.System {
 	s.statSpawnFailures = s.world.Resources.Status.Ints.Get("gold.spawn_failures")
 	s.rejects = newRejectionTelemetry(s.world.Resources.Status, "gold")
 
-	s.Init()
 	return s
 }
 

@@ -40,7 +40,6 @@ func NewBulletSystem(world *engine.World) engine.System {
 	s.statGridSteps = reg.Ints.Get("bullet.grid_steps")
 	s.statDisabled = reg.Ints.Get("bullet.disabled_rejects")
 
-	s.Init()
 	return s
 }
 
