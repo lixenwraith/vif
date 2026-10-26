@@ -760,11 +760,12 @@ pass with each prototype's mass from `Resources.Behaviors`, skipping a massless 
 - Affected files: `internal/behavior/compile.go`, `internal/system/behavior.go`
 
 A program's transition whose candidates all fail retries or holds without a trace,
-where the swarm counts its in `swarm.transition_stalls`: a graph's observer has no
-context, so it cannot reach a program's counter. The swarm's move onto the machine
-(machine-design Phase 5) settles how its observer counts; a per-program
-`behavior.<program>.transition_stalls`, bound in `NewBehaviorSystem` with the
-lifecycle rows, can follow it.
+where the swarm counts its in `swarm.transition_stalls`. The swarm's observer is a
+method value bound in `NewSwarmSystem`, reaching its counter through the system:
+one graph, one counter. A program's graph is compiled before the generic system
+exists, with no observer, so a per-program `behavior.<program>.transition_stalls`
+needs an observer that reaches a counter bound later, in `NewBehaviorSystem` with
+the lifecycle rows.
 
 ### Let a program spawn another program
 
