@@ -4,8 +4,9 @@ The design and the phased plan for per-entity state machines in species systems
 and for the data-driven species they prepare. §1 to §8 are the design, verified
 against the code at the plan's date; §9 is the plan, one phase per task, branch and
 PR, each with the files it touches, the tests it adds and the state a person can
-check by hand. Phase 0 has landed. As phases land, this document becomes the
-subsystem's reference and §9 shrinks to what each phase moved.
+check by hand. Phases 0 and 1 have landed, and §6 describes `pkg/machine` as
+built. As phases land, this document becomes the subsystem's reference and §9
+shrinks to what each phase moved.
 
 ## 1. Decision
 
@@ -272,13 +273,14 @@ type Instance[S ~uint8] struct {
 	Elapsed  time.Duration `json:"elapsed"`
 	Duration time.Duration `json:"duration"` // 0 = untimed
 }
-func (in *Instance[S]) Progress() float64 // Elapsed/Duration clamped to [0,1]; 0 when untimed
-func (in *Instance[S]) Expired() bool     // timed and Elapsed >= Duration
+func (in Instance[S]) Progress() float64 // Elapsed/Duration clamped to [0,1]; 0 when untimed
+func (in Instance[S]) Expired() bool     // timed and Elapsed >= Duration
 ```
 
 `Duration` is stored because entries override it (storm initial or repeat,
 `Retry`). There is no entry counter: cues make one-shots structural, and RNG
-seeds from (tick, entity).
+seeds from (tick, entity). The reads take a value, so a renderer calls them on a
+component copy.
 
 ### 6.2 Graph
 
@@ -307,17 +309,18 @@ type Edge[S ~uint8, C any] struct {
 
 The builder, `machine.New[S, C](observe)`, takes `State(id, st)`, one
 `Timeout(from, edge)` per state, ordered `PreTick(from, edge)` and
-`PostTick(from, edge)` lists, ordered `Global(edge)` and one `Suspend(pred)`.
-`Build` validates and returns an immutable `*Graph[S, C]`; `Must` wraps it for
-code graphs, which panic in their constructor as a broken manifest would, while a
-data graph's failure is a load error. Graphs are limited to 64 states because
-`Mask` is a `uint64`. A nil observer is allowed.
+`PostTick(from, edge)` lists, ordered `Global(edge)` and one `Suspend(pred)`,
+each returning the builder so a graph declares as one chain. `Build` validates
+and returns an immutable `*Graph[S, C]`, with `Flags`, `Name` and `States` as its
+reads; `Must` wraps it for code graphs, which panic in their constructor as a
+broken manifest would, while a data graph's failure is a load error. Graphs are
+limited to 64 states because `Mask` is a `uint64`. A nil observer is allowed.
 
 ### 6.3 Step
 
 ```go
 func (g *Graph[S, C]) Step(in *Instance[S], c C, dt time.Duration) (flags uint64, suspended bool)
-func (g *Graph[S, C]) Start(in *Instance[S], c C, s S, d time.Duration) // spawn: enter without exit
+func (g *Graph[S, C]) Start(in *Instance[S], c C, s S, d time.Duration) // spawn: enter without exit or probe
 func (g *Graph[S, C]) Stop(in *Instance[S], c C)                         // death: exit without enter
 ```
 
@@ -340,15 +343,21 @@ freeze the result. Each phase takes at most one transition, so a step makes at
 most four.
 
 A transition tries its candidates in order, guard then probe. On the first
-success it runs `Exit(current)`, then `Do`, then `Enter(target)`, commits
-`{State, Elapsed: 0, Duration}` and reports `(from, to, cause)`. Exit runs only
-when a transition commits, and probes keep fallible work out of hooks that cannot
-fail. If no candidate commits: `Retry(d)` re-arms the current state in place
-(no exit or enter) and reports `CauseRetry` with `from == to`; `Hold` leaves the
-state expired, so the edge is evaluated again next step.
+success it runs `Exit(current)`, then `Do`, commits `{State, Elapsed: 0,
+Duration}`, runs `Enter(target)` and reports `(from, to, cause)`: exit and the edge
+action read the entry being left, enter the one it starts, its duration included.
+Exit runs only when a transition commits, and probes keep fallible work out of
+hooks that cannot fail. If no candidate commits: `Retry(d)` re-arms the current
+state in place (no exit or enter) and reports `CauseRetry` with `from == to`, and
+the new period runs the state's cues again; `Hold` changes nothing, so an expired
+state tries its timeout again next step. In a phase, the first edge whose source
+holds the state and whose guard passes owns the phase: when its chain fails, its
+fallback applies and later edges wait for the next step.
 
 The resulting state's tick runs in the step that entered it (S10, S12 accepted).
-A tick that must skip its entry step tests `Elapsed == 0`.
+A global edge acts at the start of the step, so the state it enters advances by
+dt in that step; the later phases act at its end, so a state they enter ticks at
+`Elapsed == 0`, which a tick that must skip its entry step tests.
 
 ### 6.4 Validation
 
@@ -356,9 +365,13 @@ A tick that must skip its entry step tests `Elapsed == 0`.
 chain can fail entirely (every candidate has a guard or probe) and declares no
 fallback; a `Retry` duration is zero or less; a cue or timeout sits on an untimed
 state; a cue point lies outside (0, 1000]; a global edge has an empty `From`; a
-state declares two timeout edges. The validator turns the swarm comments ("every
-failed entry must land in a state that moves") into structure: a wedge needs a
-skipped tick, and the step never skips one.
+state declares two timeout edges. It also rejects a state outside 0..63 or
+defined twice, a `From` on a non-global edge, a negative duration and a second
+suspend predicate, and reports every fault at once, each naming its state or edge
+(`timeout edge 1 from state "Chase": every candidate can fail and no fallback is
+declared`). The validator turns the swarm comments ("every failed entry must land
+in a state that moves") into structure: a wedge needs a skipped tick, and the
+step never skips one.
 
 ### 6.5 Host contract
 
@@ -391,15 +404,17 @@ skipped tick, and the step never skips one.
 
   ```go
   type Item[T any] struct { Remaining time.Duration `json:"remaining"`; Value T `json:"value"` }
-  type Queue[T any] struct { Items []Item[T] `json:"items"` }
+  type Queue[T any] struct { Items []Item[T] `json:"items,omitempty"` }
   func (q *Queue[T]) Push(after time.Duration, v T)
-  func (q *Queue[T]) Tick(dt time.Duration, fire func(T)) // expired items fire in push order, then compact
+  func (q *Queue[T]) Tick(dt time.Duration, fire func(T)) // expired items fire in push order; one fire pushes waits a tick
   func (q *Queue[T]) Len() int
   func (q *Queue[T]) Clear()
   func (q *Queue[T]) Any(match func(T) bool) bool
   ```
 
-  Any system may hold one; storm and fuse adopt it in Phase 6.
+  An emptied queue encodes as one never filled, so a captured queue digests
+  alike on every instance. Any system may hold one; storm and fuse adopt it in
+  Phase 6.
 - **Carried accumulator.** A `time.Duration` field advanced by dt and reduced
   by its period, carrying the remainder: the swarm pattern (Phase 5) and the
   quasar speed (Phase 2). Two fields, no type.
@@ -662,42 +677,19 @@ tests wrap a construction in `ready()`. This gives the generic system's `Init`
 and the soft-collision matrix a per-run rebuild that is the same pass at
 startup and on reset.
 
-### Phase 1: `pkg/machine`
+### Phase 1: `pkg/machine` (landed)
 
-Goal: the kernel of §6, standard library only, proven by tests before any
-species touches it.
-
-Steps:
-
-1. `pkg/machine/machine.go`: `Instance`, `Mask`, `MaskOf`, `Cause`,
-   `Observer`, `State`, `Cue`, `Target`, `Edge`, `Fallback` (`Retry`, `Hold`),
-   `Graph` with `Step`, `Start`, `Stop`, `Flags`, `Name`, `States`. Package doc
-   of five lines.
-2. `pkg/machine/build.go`: `Builder`, `New`, `State`, `Timeout`, `PreTick`,
-   `PostTick`, `Global`, `Suspend`, `Build`, `Must`, and the validation errors
-   of §6.4, each naming the state or edge.
-3. `pkg/machine/queue.go`: `Queue[T]`, `Item[T]` (§6.6).
-4. `doc/package-map.md` §5: a `pkg/machine` row (standard library only, the
-   per-entity machine kernel and the deferred queue).
-
-Tests (`machine_test.go`, `queue_test.go`, `fuzz_test.go`), one per rule:
-
-- `Build` rejects each §6.4 condition, naming it.
-- A step makes at most four transitions; exit and enter are paired; the flags
-  returned are the current state's; `Retry` re-arms without exit or enter and
-  reports `CauseRetry`; `Hold` re-evaluates next step; each cue fires once per
-  entry, including a cue whose point falls exactly on a tick boundary; global
-  edges run before suspension; a suspended step neither advances nor ticks;
-  `Start` enters without exit and `Stop` exits without enter.
-- `FuzzStep` drives a four-state graph with guard outcomes and dt from a seeded
-  `math/rand/v2` PCG over 1,000 steps and asserts the invariants above; a few
-  seeds go in the corpus so `go test` runs them.
-- `Queue`: items fire in push order whatever their push times, an item fires
-  on the first `Tick` that spends its remaining time and never before, `Any` and
-  `Clear`, and a JSON round trip.
-
-Gates: `go test ./pkg/machine`, `make arch-check`. Manually testable state: the
-tests and `go test -fuzz=FuzzStep -fuzztime=30s ./pkg/machine`; no game change.
+`pkg/machine` holds §6 as built: `machine.go` (the instance, the graph and its
+step), `build.go` (the builder and its validation) and `queue.go`, listed in
+[package map](package-map.md) §5. Tests pin each validation fault by its
+message, one step making all four transitions in phase order, a cue landing on a
+tick boundary, and the queue's order, timing and encoding. `FuzzStep` checks the
+step's invariants from inside its hooks over 1,000 steps a seed, guards, probe,
+suspension, dt and respawns drawn from a PCG; sixty seconds of it (520,000 seeds)
+found nothing, and nineteen mutants of the kernel each fail a test. §6 records
+what the kernel settled or changed: enter runs after the commit rather than
+before it, a retry's period runs cues again, an edge owns its phase, the
+structural faults, and the queue's one empty encoding. No game code changed.
 
 ### Phase 2: quasar on the machine
 

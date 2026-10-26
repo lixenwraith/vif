@@ -123,7 +123,7 @@ code does not have yet, described only by a design such as
 - *Input*: the class of a key-table entry, such as motion, operator, char-wait, action or system. [Input §3](input-and-modes.md#3-normal-mode-grammar) · `internal/input` `KeyBehavior`
 - *Species*: Future design: data-driven species behavior programs compiled against an `internal/behavior` vocabulary. [Behavior machines §8](machine-design.md#8-data-driven-behavior-o4)
 
-**behavior machine** (also: pkg/machine, machine.Graph) — Future design: one standard-library-only per-entity state-machine runtime with a typed Go front-end and a TOML data front-end compiled into the same graph type. [Behavior machines §1](machine-design.md#1-decision) · [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only)
+**behavior machine** (also: pkg/machine, machine.Graph) — The standard-library-only per-entity state-machine runtime: a `machine.Instance` for a component to carry, stepped by an immutable `machine.Graph` built from typed Go. Species adopting it, and a TOML data front-end compiled into the same graph type, are future design. [Behavior machines §1](machine-design.md#1-decision) · [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only) · `pkg/machine` `Graph`, `Instance`
 
 **behavior program** (also: [behaviors], behavior/<name>.toml) — Future design: a species machine written in the scenario's FSM dialect, listed by the scenario and compiled once per run against a game vocabulary. [Behavior machines §8.1](machine-design.md#81-program-shape)
 
@@ -196,7 +196,7 @@ code does not have yet, described only by a design such as
 
 **carried accumulator** — Future design: a `time.Duration` field advanced by dt and reduced by its period, carrying the remainder, for the swarm pattern and the quasar speed; two fields, no type. [Behavior machines §6.6](machine-design.md#66-generics-and-sibling-primitives)
 
-**deferred queue** (also: machine.Queue) — Future design: a `pkg/machine` queue of values each behind a relative timer, firing in push order however many it holds and JSON-encodable, which storm's blue spawns and fuse's fusions adopt. [Behavior machines §6.6](machine-design.md#66-generics-and-sibling-primitives) · [§9 Phase 6](machine-design.md#phase-6-storm-circles-and-the-deferred-queue)
+**deferred queue** (also: machine.Queue) — A `pkg/machine` queue of values each behind a relative timer, firing in push order however many it holds, and JSON-encodable with one form for every empty queue. Its adoption by storm's blue spawns and fuse's fusions is future design. [Behavior machines §6.6](machine-design.md#66-generics-and-sibling-primitives) · [§9 Phase 6](machine-design.md#phase-6-storm-circles-and-the-deferred-queue) · `pkg/machine` `Queue`
 
 **carrier** (also: snapshot carrier, declared system state) — A system's private Shared state that no component holds, saved and restored through `engine.SharedStateSaver` and declared by `SystemDef.Snapshot = "state"`; a capture carries one record per carrier, and a status cell the compared surface excludes but a Shared FSM reads must live in one (D-19). See also **SharedStateSaver**. [D-19](domain-design.md#d-19--every-future-affecting-shared-value-is-restorable) · `internal/engine` `SharedStateSaver`; `internal/manifest` `SystemDef.Snapshot`; `internal/snapshot` `SystemStateRecord`
 
@@ -219,7 +219,7 @@ code does not have yet, described only by a design such as
 - *Combat*: an attack chain is a follow-up attack an attack profile derives from a hit, such as the tracer's lightning or the charged pulse's burn; it is derived on every instance and never transported. [Combat §5](combat.md#5-resolution-statuses-and-what-crosses) · `internal/profile` `AttackProfile.Chain`
 - *Audio*: a sound's processor chain of filters, envelopes, shaping and gain between a source and its bus. [Audio §5](audio.md#5-sounds-and-sound-effects) · `pkg/audio`
 - *Seeds*: `MixChain` folds several values into one seed, one SplitMix64 round per value, so the result moves with every input and its order. [AI and physics §6](ai-physics-and-evolution.md#6-numeric-model-and-determinism) · `pkg/vmath` `MixChain`
-- *Behavior machines*: Future design: an edge's candidate chain, the target states it tries in order, with a fallback when every candidate can fail. [Behavior machines §6.2](machine-design.md#62-graph)
+- *Behavior machines*: an edge's candidate chain, the target states it tries in order, each by its guard and then its state's probe, with a fallback required when every candidate can fail. [Behavior machines §6.2](machine-design.md#62-graph) · `pkg/machine` `Edge`, `Target`
 
 **charge** (also: charge cap, cap effect, `MaxCharges`) — two senses.
 - *Weapons*: a weapon kind's charge count: zero means not owned, it only rises, and it scales the kind up to `MaxCharges`, where the kind keeps a cap effect until the loadout is lost. [Combat §4](combat.md#4-at-the-charge-cap) · [Gameplay §7](gameplay.md#7-weapons-and-attacks) · `internal/component` `WeaponComponent.Charges`, `WeaponSpec.MaxCharges`
@@ -324,7 +324,7 @@ code does not have yet, described only by a design such as
 
 **crossover** (also: combiner) — The genetic operator that recombines parent genotypes, uniformly or at N points. [AI and physics §3](ai-physics-and-evolution.md#3-genetic-library) · [Genetic README: Operators](../pkg/genetic/README.md#operators) · `pkg/genetic` `UniformCombiner`, `NPointCombiner`
 
-**cue** (also: AtPermille) — Future design: a timed machine state's one-shot hook at a permille of its duration, fired once per entry. [Behavior machines §6.2](machine-design.md#62-graph)
+**cue** (also: AtPermille) — A timed machine state's hook at a permille of its entry's duration, run once per entry in the step that reaches that point; a retry's new period runs it again. [Behavior machines §6.2](machine-design.md#62-graph) · [§6.3](machine-design.md#63-step) · `pkg/machine` `Cue`
 
 **cursor** — five senses. See also **control kind**, **cursor prediction**, **roster**.
 - *Gameplay*: a player's entity on the map: text position, collision point, weapon origin and camera subject. It is Shared and carries roster slot, control kind, peer and holder, with owner-authored energy, heat, shield, boost and weapon state beside it; an **off-map cursor** carries the slot, control, peer and holder alone. [Gameplay §2](gameplay.md#2-cursor-and-player-state) · `internal/component` `CursorComponent`; `internal/system` `CursorSystem`
@@ -585,7 +585,7 @@ code does not have yet, described only by a design such as
 - *Deployment*: the site configuration in front of the node: the public edge forwards only the game's TCP ports, without rewriting source addresses, and the site's edge (nginx in the reference) terminates TLS and publishes only the router's API, log and browser routes. [Deploy §2](kube-docker-deploy.md#2-the-public-edge) · [Deploy §12](kube-docker-deploy.md#12-the-sites-edge) · `deploy/website/vif.nginx.example`
 - *Mesh*: the arrival edge, the link an epoch came in on; a relay passes each newly admitted committed epoch down to the participants behind it but that link, and a raw one up. [Domain design §4.2](domain-design.md#42-mesh-relay) · `internal/system` `NetworkSystem.forwardDown`
 - *Prediction*: an edge-triggered derivation (only `EventSpeciesKilled`) is a Shared event a predicting guest can raise more than once for one fact, because a correction can restore what it announced; the guest holds it in a ledger until an install proves it, so its Player-domain reward is paid once. Level-triggered holds are re-derived from the imported state instead. [Multi-player §3.4](multi-player.md#34-predicted-derivations) · [Domain design D-19](domain-design.md#d-19--every-future-affecting-shared-value-is-restorable) · `internal/event` `Derivation`
-- *Future design*: a `pkg/machine` transition with a guard, an edge action between exit and enter, and ordered candidate targets; global edges carry a `From` mask and run before suspension, so stun can cancel an attack. [Behavior machines §6.2](machine-design.md#62-graph) · [§6.3](machine-design.md#63-step)
+- *Behavior machines*: a `pkg/machine` transition with a guard that selects it, an edge action between exit and enter, and ordered candidate targets; the first edge of a phase whose guard passes owns the phase. Global edges carry a `From` mask and run before suspension, so stun can cancel an attack. [Behavior machines §6.2](machine-design.md#62-graph) · [§6.3](machine-design.md#63-step) · `pkg/machine` `Edge`
 
 **embedded assets** (also: -d, -config-embedded) — Everything a build needs to play without a filesystem (fallback scenario, tutorial corpus, keymap, settings, bot graphs, sound and music banks, version stamp), embedded by `internal/asset`, the only package with an `embed` directive for shipped data; `-d` forces the embedded scenario and content. [Content §7](content-assets-and-tools.md#7-embedded-assets) · [Filesystem layout §6](filesystem-layout.md#6-package-ownership-and-wasm) · `internal/asset`
 
@@ -666,7 +666,7 @@ code does not have yet, described only by a design such as
 - *Correction*: the keyframe fallback: when a selective repair would be wider than the keyframe it stands in for, or cannot be served, the authority sends a whole compressed keyframe instead, counted in `snapshot.keyframe_fallbacks`. [Netcode design §2](netcode-design.md#2-the-correction-pipeline) · `internal/converge` `Corrections.sendKeyframeTo`
 - *Content*: the embedded scenario, corpus and settings a run uses when no configuration root supplies its own. See **embedded assets**. [Filesystem layout §3](filesystem-layout.md#3-resolution-policy) · [Content §7](content-assets-and-tools.md#7-embedded-assets) · `internal/asset`
 - *Loot*: a unique drop tier that drops nothing adds the fallback counts of the entries it rolled, or of every entry if it skipped them all, to each later non-unique tier's drop. [Gameplay §6](gameplay.md#species-loot) · `internal/profile` `DropEntry.FallbackCount`
-- *Future design*: what a `pkg/machine` edge applies when no candidate commits: `Retry(d)` re-arms the state and reports a stall, and `Hold` leaves it expired for the next step. [Behavior machines §6.3](machine-design.md#63-step)
+- *Behavior machines*: what a `pkg/machine` edge applies when no candidate commits: `Retry(d)` re-arms the state in place and reports `CauseRetry`, and `Hold` leaves it as it is, so an expired state tries its timeout again next step. [Behavior machines §6.3](machine-design.md#63-step) · `pkg/machine` `Fallback`, `Retry`, `Hold`
 
 **FastRand** (also: DeriveSeed, NewSeededRand) — The deterministic xorshift64 generator in `pkg/vmath`, seeded through the SplitMix64 finalizer and resumable from its `State`. `DeriveSeed` makes a labelled stream seed from a root seed, and `RandResource.Stream` gives each system a domain-separated stream that a capture restores by position (D-8). [AI §6](ai-physics-and-evolution.md#6-numeric-model-and-determinism) · [Domain design D-8](domain-design.md#d-8--rng-streams-are-domain-separated-and-restorable) · `pkg/vmath` `FastRand`, `DeriveSeed` · `internal/engine` `RandResource.Stream`
 
@@ -738,7 +738,7 @@ code does not have yet, described only by a design such as
 - *Input*: `input.Machine`, the key parser that turns terminal events into `Intent` values and keeps only parsing context. [Input §1](input-and-modes.md#1-input-pipeline) · `internal/input` `Machine`
 - *Species*: the per-entity behavior state of swarm, quasar and storm, hand-written in each species system. [Behavior machines §3](machine-design.md#3-current-machines) · `internal/system`
 - *Session lifetime*: `internal/lifecycle`, a pure state machine over an injected clock that turns roster observations into a phase (waiting, occupied, vacant, draining, expired). [Runtime: The allocated session](runtime.md#the-allocated-session) · `internal/lifecycle` `Controller`
-- *Future design*: `pkg/machine`, a stdlib-only kernel for timed per-entity behavior machines with edges, cues and a suspend predicate, which species systems and a data-driven behavior dialect would share. [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only)
+- *Behavior machines*: `pkg/machine`, the standard-library-only kernel of timed per-entity machines with edges, cues and a suspend predicate; species systems and a data-driven behavior dialect sharing it are future design. [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only) · `pkg/machine`
 
 **FSM bridge** (also: fsm_bridge, RegisterFSMComponents) — `internal/manifest/fsm_bridge.go`, which binds the FSM standard library to the ECS world by filling `std.Host[*engine.World]` (events, systems, status, config); `RegisterFSMComponents` installs it on a machine. See also **host**. [FSM §1](fsm-and-configuration.md#1-boundary-and-data-flow) · `internal/manifest` `RegisterFSMComponents`
 
@@ -810,7 +810,7 @@ code does not have yet, described only by a design such as
 - *Navigation*: a route graph, several distinct near-optimal corridors from a gateway to its target, built by repeated penalised Dijkstra, among which route adaptation chooses; `:graph [group]` draws it. [Navigation §8](navigation-design.md#8-route-graphs) · `pkg/navigation` `RouteGraph`, `RouteSolver`
 - *FSM*: the validated, immutable state hierarchy and transitions a loaded scenario compiles to, which the machine steps. [FSM §1](fsm-and-configuration.md#1-boundary-and-data-flow) · [FSM §4](fsm-and-configuration.md#4-states-and-hierarchy) · `internal/fsm`
 - *Architecture*: the dependency graph of services, which `core.TopoSort` orders, and of systems (`Requires`, `Optional`), which the same sort checks for missing names and cycles. [Services §2](services-and-networking.md#2-dependency-ordering-and-rollback) · `internal/core` `TopoSort`
-- *Future design*: `machine.Graph`, an immutable per-species state graph built and validated once. [Behavior machines §6.2](machine-design.md#62-graph)
+- *Behavior machines*: `machine.Graph`, an immutable per-species state graph that `machine.New` declares and `Build` validates once. [Behavior machines §6.2](machine-design.md#62-graph) · `pkg/machine` `Graph`, `Builder`
 
 **grayout** (also: EventGrayoutStart) — A post-process that desaturates glyph layers while held, sparing guidance, fields, transients, composites, health bars and UI. `EventGrayoutStart` and `EventGrayoutEnd` raise and lift it, scoped to one cursor's instance when the payload names one, as the quasar encounter does for the cursor it fused from. [Rendering §5](rendering.md#5-semantic-masks-and-post-processing) · [FSM: Installing a captured machine](fsm-and-configuration.md#installing-a-captured-machine) · `internal/render/renderer` `GrayoutRenderer`
 
@@ -889,7 +889,7 @@ code does not have yet, described only by a design such as
 - *Combat*: the ray hold: at the charge cap every main-fire request renews `RayHold` on the emitter's ray, so it stays lit while main fire is held. [Combat §4](combat.md#4-at-the-charge-cap) · `internal/parameter` `RayHold`
 - *Diagnostics*: a world-lock hold; while hold sampling is on (the `lock` scope at debug, or a running flight recorder), one longer than `LockHoldWarn` (20 ms of wall time, 200 ms in a race build) is logged as `long hold` under `sub="lock"` with the holder's trace and triggers a flight-recorder flush (`lock.hold`). [Logging: sub="lock"](logging-and-diagnostics.md#sublock) · `internal/engine` `LockHoldWarn`
 - *Fleet*: the router's per-session count of connections it carries over the front door and the browser route together, bounded by `-route-max`. [Fleet §9](kubernetes-fleet.md#9-the-session-routes) · `tool/vif-router` `holds`
-- *Future design*: `Hold`, a `pkg/machine` fallback that leaves the state expired so the edge is tried again on the next step. See **fallback**. [Behavior machines §6.3](machine-design.md#63-step)
+- *Behavior machines*: `Hold`, a `pkg/machine` fallback that leaves the state as it is, so an expired one tries its timeout again on the next step. See **fallback**. [Behavior machines §6.3](machine-design.md#63-step) · `pkg/machine` `Hold`
 
 **holder** — two senses.
 - *Bots*: the participant whose process holds a bot (`RosterEntry.Holder`, `CursorComponent.Holder`; zero for an independent player): the bot's raw artifacts reach the authority over its holder's link, it is never a succession candidate, and it leaves with its holder. [Bots: Ownership and leaving](bots.md#ownership-and-leaving) · [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity) · `internal/network` `RosterEntry` · `internal/component` `CursorComponent`
@@ -957,7 +957,7 @@ code does not have yet, described only by a design such as
 - *Multiplayer*: One running copy of the simulation, an `app.App` with its own world, under one participant identity. A process can hold several: each bot seat is its own headless instance, and a received capture resolves in a staging-world `App`. [Runtime: Bot seats](runtime.md#bot-seats) · [Multiplayer §1](multi-player.md#1-vocabulary-and-boundaries) · `internal/app` `App`
 - *Diagnostics*: `fields.instance` names the runtime a log record came from when a process runs more than one: `seat N` for a bot seat, `staging` for the staging world. [Logging §2](logging-and-diagnostics.md#2-record-shape) · `internal/vlog` `Log`
 - *Code*: `converge.Instance` is the run the convergence protocol authors or follows; `bot.Instance` is the participant surface a bot driver plays. `internal/converge` `Instance` · `internal/bot` `Instance`
-- *Behavior machines*: Future design: `machine.Instance[S]`, a state byte plus relative `Elapsed` and per-entry `Duration` stored inside a species component. See also **kernel**. [Behavior machines §6.1](machine-design.md#61-instance)
+- *Behavior machines*: `machine.Instance[S]`, a state byte plus relative `Elapsed` and per-entry `Duration`, plain integers that capture, compare and install like any component field. See also **kernel**. [Behavior machines §6.1](machine-design.md#61-instance) · `pkg/machine` `Instance`
 
 **integer units** (also: `IntUnit`, `FormatInt`) — The convention that an integer status metric's key suffix carries its unit: `.timer`, `.duration`, `.elapsed`, `.remaining` and `_ns` are nanoseconds, `_us` microseconds, `_ms` milliseconds, anything else a count. Displays resolve values through `FormatInt`; the log stores the raw integer. [Logging: Integer units](logging-and-diagnostics.md#integer-units) · `internal/status` `IntUnit`, `FormatInt`
 
@@ -999,7 +999,7 @@ code does not have yet, described only by a design such as
 **K3s** — The single-node Kubernetes distribution the session fleet runs on; the router creates each session's Job and Service through its API, and `deploy/k3s` holds the static objects. See also **Job**, **vif-router**. [Fleet deploy §5](kube-docker-deploy.md#5-k3s) · [Fleet design §1](kubernetes-fleet.md#1-what-is-deployed) · `deploy/k3s`
 
 **kernel** (also: O1) — two senses. See also **behavior machine**, **O0–O10**.
-- *Behavior machines*: Future design: the behavior-machine kernel, `machine.Instance[S]`, a state byte with relative elapsed time and per-entry duration stored in the species component; the accepted option O1. [Behavior machines §1](machine-design.md#1-decision) · [Behavior machines §6.1](machine-design.md#61-instance)
+- *Behavior machines*: the behavior-machine kernel, `machine.Instance[S]`, a state byte with relative elapsed time and per-entry duration for a species component to carry; the accepted option O1. [Behavior machines §1](machine-design.md#1-decision) · [Behavior machines §6.1](machine-design.md#61-instance) · `pkg/machine` `Instance`
 - *Configuration dialect*: Future design: the shared dialect kernel, one implementation of argument decoding, operator parsing and guard trees for `fsm/std`, `bot` and the behavior compiler. [Behavior machines §7](machine-design.md#7-shared-dialect-kernel-fsm-bot-behavior)
 
 **key** — four senses. See also **keymap**, **capture**.
@@ -1116,7 +1116,7 @@ code does not have yet, described only by a design such as
 **machine** — three senses. See also **FSM**, **behavior machine**, **MachineState**.
 - *FSM*: `fsm.Machine` is the hierarchical state machine with parallel regions, guards, actions, delayed actions and variables that runs a scenario as the world-level director. [FSM §4](fsm-and-configuration.md#4-states-and-hierarchy) · `internal/fsm` `Machine`, `NewMachine`
 - *Input*: `input.Machine` is the key parser: it holds only grammar state (count, character, operator and register waits, the `g` prefix, marker color) and emits `Intent` values. See also **intent**. [Input §3](input-and-modes.md#3-normal-mode-grammar) · `internal/input` `Machine`
-- *Behavior machines*: Future design: a behavior machine is a per-entity runtime for species state, a kernel instance plus a graph built from Go or from data. [Behavior machines §1](machine-design.md#1-decision)
+- *Behavior machines*: a behavior machine is a per-entity runtime for species state, a kernel instance plus a graph built from Go; a graph built from data is future design. [Behavior machines §1](machine-design.md#1-decision) · `pkg/machine` `Graph`
 
 **MachineState** (also: `ExportFSM`, `ImportFSM`) — The FSM's capture form: each region's active state by name, time in state and pause flag, the variables, and pending delayed actions by compiled action ID. States travel by name, so a name the build lacks refuses the import. See also **install**. [FSM: Installing a captured machine](fsm-and-configuration.md#installing-a-captured-machine) · `internal/fsm` `MachineState`, `Machine.Export` · `internal/engine` `Scheduler.ExportFSM`, `Scheduler.ImportFSM`
 
@@ -1243,7 +1243,7 @@ code does not have yet, described only by a design such as
 
 **O0–O10** (also: O1, O2, O4) — Future design: the option labels in the behavior-machine decision. O1 (kernel), O2 (code graph) and O4 (data front-end) are accepted; O0, O3 and O5–O10 are rejected with reasons. See also **behavior machine**, **kernel**. [Behavior machines §1](machine-design.md#1-decision) · [Behavior machines §10](machine-design.md#10-rejected-approaches)
 
-**observer** — Future design: a `func(from, to, cause)` bound when a behavior-machine graph is built, feeding status counters, the debug overlay and journal annotations without the machine package importing `status`. [Behavior machines §6.5](machine-design.md#65-host-contract)
+**observer** — A `func(from, to, cause)` bound when a behavior-machine graph is built, which hears every commit, retry, start and stop, so a host feeds status counters without the machine package importing `status`. [Behavior machines §6.5](machine-design.md#65-host-contract) · `pkg/machine` `Observer`
 
 **off-map cursor** (also: `[map] cursors = false`, `CursorsOffMap`) — A rostered cursor with no cell and nothing a cell carries, only its slot, control kind, peer and holder, which every spawn and arrival makes in a scenario whose map places no cursor. Captures, corrections, handoffs and departures carry it as any cursor; nothing draws, moves, targets or drains it, and its player plays through the keys the scenario captures, each press from its slot. See also **cursor**, **input hook**, **roster**. [FSM reference: Cursor Lifecycle](fsm-reference.md#cursor-lifecycle) · `internal/system` `CursorSystem.rosterOffMap` · `internal/engine` `ConfigResource.CursorsOffMap`
 
@@ -1336,7 +1336,7 @@ code does not have yet, described only by a design such as
 - *Peer link*: In a migrate session, a direct link two already-admitted participants open with `MsgConnect`/`MsgAck`, each dialling the first candidate, and a survivor each candidate whose turn has come; it allocates and captures nothing and serves succession. [Multi-player §5.3](multi-player.md#53-reachability-under--authority-migrate) · `internal/network` `PeerDialer`, `PeerGate`
 - *Peer cursor*: A cursor another instance simulates, drawn in one color per roster slot just under the local cursor; its shield and ember fields compose at `PeerFieldBlend` (30%) in truecolor. [Rendering: Local and peer cursors](rendering.md#local-and-peer-cursors) · `internal/render/renderer` `PeerCursorRenderer`
 
-**phase** — nine senses.
+**phase** — ten senses.
 - *Allocated session*: `lifecycle.Phase` is a dedicated host's life stage: unstarted, waiting, occupied, vacant, draining or expired. [Runtime: The allocated session](runtime.md#the-allocated-session) · `internal/lifecycle` `Phase`
 - *Event*: `EventPhase` marks a record derived from Shared state as settled or as this instance's prediction (`PhasePredicted`), which a correction may make it derive again. [Multi-player §3.4](multi-player.md#34-predicted-derivations) · `internal/event` `EventPhase`
 - *Throttle*: A cached Shared derivation's recompute age and last inputs, carried in the capture so every instance recomputes on the same tick (D-17). [Domain design D-17](domain-design.md#d-17--throttle-phase-is-state) · `internal/system` `NavigationSystem`, `navGroupPhase`
@@ -1345,7 +1345,8 @@ code does not have yet, described only by a design such as
 - *Heat*: The ember phase follows an overheat burst, decaying heat periodically and blocking ordinary energy penalties. [Gameplay: Heat and ember](gameplay.md#heat-and-ember) · `internal/system` `HeatSystem`
 - *Ray*: `RayPhase` is a ray's warning or firing step; a ray mount cycles through both, a cursor's ray only fires. [Combat §3](combat.md#3-drivers) · `internal/component` `RayPhase`
 - *Status bar*: the FSM phase item shows the first unpaused foreground region's active state with the time left before its `StateTimeExceeds` timeout, or its time in state when it declares none (`fsm.state`, `fsm.elapsed`, `fsm.max_duration`); a background region never shows. [Rendering §9](rendering.md#9-ui-and-debug-projections) · `internal/fsm` `Machine.GetActiveRegionTelemetry` · `internal/render/renderer` (status_bar.go)
-- *Future design*: The generic-kinetic migration phases 0–6, and the ordered phases of one behavior-machine step. [Generic kinetic §10](generic-kinetic.md#10-migration-plan) · [Machine design §6.3](machine-design.md#63-step)
+- *Behavior machines*: the ordered phases of one `Graph.Step`: global edges, suspension, advance and cues, timeout, pre-tick edges, tick and post-tick edges. [Machine design §6.3](machine-design.md#63-step) · `pkg/machine` `Graph.Step`
+- *Future design*: The generic-kinetic migration phases 0–6. [Generic kinetic §10](generic-kinetic.md#10-migration-plan)
 
 **PhysicalBodyComponent** (also: body profile) — Future design: explicit body metadata, or a profile resolver, carrying mass and motion kind so actors opt into physics deliberately instead of acquiring it from a bare Kinetic. [Generic kinetic §8](generic-kinetic.md#8-feasible-pseudo-system-design)
 
@@ -1421,7 +1422,7 @@ code does not have yet, described only by a design such as
 - *Supervised endpoint*: `-probe <addr>` (`-serve` only) serves `/health`, whose code says only whether to restart and whose body carries readiness, and the status registry as Prometheus text at `/metrics` (`vif_` prefix); the router and the session pod's startup and liveness probes read `/health`. [Services §12](services-and-networking.md#12-the-supervised-runs-endpoint) · `internal/probe` `Server`, `Snapshot`
 - *Link*: A link probe (`MsgLinkProbe`, answered by `MsgLinkEcho` carrying the far end's `LinkReport`) measures a link's round trip and delivery inside the transport and never reaches the game. See also **link**. [Services §8](services-and-networking.md#8-wire-frame-and-session-messages) · `pkg/network` `MsgLinkProbe`, `LinkReport`
 - *Genetic*: Probe bins stratify a species' first gene across its scout samples (seven for the eye type, one per type), so every type stays under evaluation. [AI and physics §4](ai-physics-and-evolution.md#4-game-genetic-adapter) · `pkg/genetic/registry` `SpeciesConfig.ProbeBins`, `TrackedSpecies.SampleScout`
-- *Future design*: A behavior-machine state's fallible entry check, which may stash results in the context. [Machine design §6.2](machine-design.md#62-graph)
+- *Behavior machines*: A machine state's fallible entry check, asked after a candidate's guard on every entry but a spawn, which may stash results in the context. [Machine design §6.2](machine-design.md#62-graph) · `pkg/machine` `State.Probe`
 
 **processTick** — `Scheduler.processTick`, one simulation tick under the world lock: it settles a pending pointer placement and the due wire artifacts, stamps the tick, settles pre-existing events (`pre`), advances the FSM and settles its events (`post`), runs the systems and settles theirs (`close`), then closes the tick's production epoch. [Runtime §5](runtime.md#5-simulation-tick-steps) · `internal/engine` `Scheduler.processTick`
 
@@ -1825,7 +1826,7 @@ code does not have yet, described only by a design such as
 **step** (also: `:step`, `:st`) — three senses.
 - *Time control*: `:step` pauses and grants whole ticks, or runs until the next matching FSM transition or named event; `:step off` disarms it. See also **time control**. [Runtime §9](runtime.md#9-time-control) · `internal/engine` `TimeControl` `StepMode`
 - *Drivers*: a caller-driven driver's `Step` advances its run by one unit: a script driver applies the actions due and ticks once, a replay driver ticks once and applies that tick's settle groups, a fuzz driver applies one drawn action, and a bot's driver earns allowance, updates its graph under the world lock, releases intents and ticks. [Runtime: Bot seats](runtime.md#bot-seats) · `internal/journal` `ScriptDriver.Step` `ReplayDriver.Step` `FuzzDriver.Step` · `internal/bot` `Driver.Step`
-- *Behavior machines*: Future design: `Graph.Step`, one machine update run in fixed phases (global edges, suspend, advance and cues, timeout, pre-tick edges, tick, post-tick edges). [Machine design §6.3](machine-design.md#63-step)
+- *Behavior machines*: `Graph.Step`, one machine update run in fixed phases (global edges, suspend, advance and cues, timeout, pre-tick edges, tick, post-tick edges), each taking at most one transition. [Machine design §6.3](machine-design.md#63-step) · `pkg/machine` `Graph.Step`
 
 **store** (also: Store[T], sparse set, typed store) — two senses.
 - *ECS*: `engine.Store[T]` holds one component type as a sparse set: an entity-to-slot index paged by entity ID, a dense entity slice and a dense value slice, with swap removal; `engine.Position` is the exception, mirroring it while keeping the spatial index. [ECS §2](ecs-and-events.md#2-entities-and-typed-stores) · `internal/engine` `Store`
@@ -1864,7 +1865,7 @@ code does not have yet, described only by a design such as
 
 **survivor** — A participant still in the session after its authority is lost: every survivor freezes its clock, floods a loss notice, **redial**s its host when its own link dropped, then walks the succession list, taking the term in its turn if the session lets it move, follows the first record for the host it followed, and forks past the last turn (once its redial ends under `-authority host`). See also **freeze**, **succession**. [Multiplayer §5.1](multi-player.md#51-succession) · `internal/converge` `Authority.beginSuccession`
 
-**suspend predicate** (also: suspend) — Future design: a behavior graph's condition (for example stunned, or no cursor) under which a step neither advances, fires cues nor ticks, while flags are still written. [Machine design §6.3](machine-design.md#63-step)
+**suspend predicate** (also: suspend) — A behavior graph's condition (for example stunned, or no cursor) under which a step stops after its global edges: no advance, cue, timeout or tick, while it still returns the flags the host writes. [Machine design §6.3](machine-design.md#63-step) · `pkg/machine` `Builder.Suspend`
 
 **swarm** (also: SwarmSystem, SwarmComponent, SwarmState) — A fast 4x2 Shared composite created from enraged drains that cycles chase, lock, charge, teleport and decelerate, may teleport around blocked line of sight, absorbs drains, and has bounded charges and lifetime. [Gameplay §8](gameplay.md#8-hostile-and-structural-actors) · `internal/system` `SwarmSystem` · `internal/component` `SwarmComponent` `SwarmState`
 

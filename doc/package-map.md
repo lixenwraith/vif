@@ -112,6 +112,7 @@ flowchart TD
     Game --> Physics["pkg/vmath and vmath/physics"]
     Game --> Genetic["pkg/genetic and subpackages"]
     Game --> Link["pkg/linkpace"]
+    Game --> Machine["pkg/machine"]
     Game --> Network["pkg/network"]
     Game --> Image["pkg/ascimage"]
     Game --> Glyph["pkg/glyph"]
@@ -138,6 +139,7 @@ flowchart TD
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
 | `pkg/network` | Framed messages over TCP or WebSocket (the browser's own socket on `js/wasm`), deflated per link once a handshake opens the stream; the accept and dial transport with its handshake budget and the hooks a session's handshakes plug into; the port's tick-drained inbound queue, bundled sends and the link probe it answers itself; an in-process mesh with shaped links; chunked bodies; crossing fences; session addresses and TLS. | Standard library, `pkg/linkpace` and `pkg/websocket`. It knows no kinds and no game: `Kinds` is the session layer's table over the kind byte, and the handshakes, the timing and the kinds come from its caller's `Config`. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
+| `pkg/machine` | Per-entity state machines: an `Instance` a component carries (a state, its elapsed time, its entry's duration), an immutable `Graph` built and validated once from typed hooks and stepped in fixed phases, and `Queue`, values each behind a relative timer. | Standard library only: hooks reach the world through the context the host passes, and the host writes the state's flags to its components ([Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only)). |
 | `pkg/tomlmacro` | Expand macros in parsed TOML documents: typed parameters, substitution, array splicing, zipped `each`, bounded nesting and output. | Standard library only: it works on the parser's generic trees, so the FSM loader and bot graphs share one expander. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Standard library only, with its own `Point` and a default seed restating `vmath.Golden64`; surfaced through wall/maze events. |
 | `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
@@ -150,8 +152,8 @@ enforces it. That is what lets a leaf take game data — the sound bank, wall
 callbacks, fitness policy — from its caller instead of reaching for it. The
 numeric stack is one-way: `pkg/vmath` imports only the standard library and
 `pkg/vmath/physics` imports `pkg/vmath`. `pkg/audio`, the core `pkg/genetic`
-package, `pkg/linkpace`, `pkg/network` and the numeric stack have the clearest
-game-independent boundaries.
+package, `pkg/linkpace`, `pkg/machine`, `pkg/network` and the numeric stack have
+the clearest game-independent boundaries.
 
 ## 6. Generated assembly
 
