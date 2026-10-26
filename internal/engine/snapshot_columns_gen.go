@@ -2576,28 +2576,25 @@ func decodeColumnsQuasar(r *columnReader) []StoreEntry[component.QuasarComponent
 func encodeColumnsSwarm(dst []byte, rows []StoreEntry[component.SwarmComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.State)
+		dst = appendUint(dst, rows[i].Value.Machine.State)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Machine.Elapsed)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Machine.Duration)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.PatternIndex)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.PatternRemaining)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.ChargeIntervalRemaining)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.LockRemaining)
+		dst = appendInt(dst, rows[i].Value.PatternElapsed)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.LockedTargetX)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.LockedTargetY)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.ChargeRemaining)
 	}
 	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.ChargeStartX)
@@ -2610,12 +2607,6 @@ func encodeColumnsSwarm(dst []byte, rows []StoreEntry[component.SwarmComponent])
 	}
 	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.ChargeTargetY)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.DecelRemaining)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.TeleportRemaining)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.TeleportStartX)
@@ -2643,28 +2634,25 @@ func decodeColumnsSwarm(r *columnReader) []StoreEntry[component.SwarmComponent] 
 	rows := make([]StoreEntry[component.SwarmComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readUint(&rows[i].Value.State, r)
+		readUint(&rows[i].Value.Machine.State, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Machine.Elapsed, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Machine.Duration, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.PatternIndex, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.PatternRemaining, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.ChargeIntervalRemaining, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.LockRemaining, r)
+		readInt(&rows[i].Value.PatternElapsed, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.LockedTargetX, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.LockedTargetY, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.ChargeRemaining, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.ChargeStartX, r)
@@ -2677,12 +2665,6 @@ func decodeColumnsSwarm(r *columnReader) []StoreEntry[component.SwarmComponent] 
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.ChargeTargetY, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.DecelRemaining, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.TeleportRemaining, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.TeleportStartX, r)

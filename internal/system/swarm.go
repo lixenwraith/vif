@@ -2,7 +2,6 @@ package system
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -10,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -20,6 +20,9 @@ import (
 // Does not pause drain spawn; drain collisions heal it through the combat event boundary
 type SwarmSystem struct {
 	world *engine.World
+
+	graph *machine.Graph[component.SwarmState, *swarmCtx]
+	ctx   swarmCtx // the swarm being stepped, refilled per entity
 
 	// Telemetry
 	statActive          *atomic.Bool
@@ -47,7 +50,104 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "swarm")
 	s.motion = newBounceTelemetry(world.Resources.Status, "swarm")
 
+	// A timed chase, then a lock that ends in a charge along a clear line, a
+	// teleport around a blocked one or a brake at once, and the brake back into the
+	// chase. A stun sends an attack back to the chase with the full interval and
+	// freezes the swarm.
+	type edge = machine.Edge[component.SwarmState, *swarmCtx]
+	type target = machine.Target[component.SwarmState, *swarmCtx]
+	chase := []target{{State: component.SwarmStateChase, Duration: parameter.SwarmChargeInterval}}
+	decelerate := []target{{State: component.SwarmStateDecelerate}}
+	attacking := machine.MaskOf(component.SwarmStateLock, component.SwarmStateCharge,
+		component.SwarmStateTeleport, component.SwarmStateDecelerate)
+
+	s.graph = machine.Must(machine.New[component.SwarmState, *swarmCtx](s.observe).
+		State(component.SwarmStateChase, machine.State[*swarmCtx]{
+			Name:     "chase",
+			Duration: parameter.SwarmChargeInterval,
+			Tick:     s.chase,
+		}).
+		State(component.SwarmStateLock, machine.State[*swarmCtx]{
+			Name:     "lock",
+			Duration: parameter.SwarmLockDuration,
+			Flags:    swarmEnraged,
+			Probe:    s.probeTarget,
+			Enter:    s.enterLock,
+		}).
+		State(component.SwarmStateCharge, machine.State[*swarmCtx]{
+			Name:     "charge",
+			Duration: parameter.SwarmChargeDuration,
+			Flags:    swarmEnraged,
+			Probe:    s.probeKinetic,
+			Enter:    s.enterCharge,
+			Tick:     s.charge,
+		}).
+		State(component.SwarmStateTeleport, machine.State[*swarmCtx]{
+			Name:     "teleport",
+			Duration: parameter.SwarmTeleportDuration,
+			Flags:    swarmEnraged,
+			Probe:    s.probeLanding,
+			Enter:    s.enterTeleport,
+		}).
+		State(component.SwarmStateDecelerate, machine.State[*swarmCtx]{
+			Name:     "decelerate",
+			Duration: parameter.SwarmDecelerationDuration,
+			Flags:    swarmEnraged,
+			Enter:    s.enterDecelerate,
+			Tick:     s.brake,
+		}).
+		Global(edge{From: attacking, Guard: swarmStunned, To: chase}).
+		Suspend(swarmStunned).
+		// No target to lock delays the lock, and the chase keeps moving meanwhile
+		Timeout(component.SwarmStateChase, edge{
+			To:       []target{{State: component.SwarmStateLock}},
+			Fallback: machine.Retry(parameter.SwarmTransitionRetryInterval),
+		}).
+		Timeout(component.SwarmStateLock, edge{To: []target{
+			{State: component.SwarmStateCharge, Guard: s.hasLineOfSight},
+			{State: component.SwarmStateTeleport},
+			{State: component.SwarmStateDecelerate},
+		}}).
+		Timeout(component.SwarmStateCharge, edge{To: decelerate}).
+		// A wall ends the charge in the step that meets it, so the bounce stands
+		PostTick(component.SwarmStateCharge, edge{Guard: swarmHitWall, To: decelerate}).
+		// The landing is the edge's, so a stun that ends a teleport moves nothing
+		Timeout(component.SwarmStateTeleport, edge{Do: s.relocate, To: decelerate}).
+		Timeout(component.SwarmStateDecelerate, edge{To: chase}).
+		Build())
+
 	return s
+}
+
+// Swarm flags, which Update writes to the components after every step
+const (
+	swarmEnraged uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
+)
+
+// swarmCtx is what one swarm's step reads and its hooks write through
+type swarmCtx struct {
+	entity  core.Entity
+	swarm   *component.SwarmComponent
+	combat  *component.CombatComponent
+	kinetic *component.KineticComponent // nil without one, which refuses a charge
+	stunned bool
+	dtSec   float64 // dt capped against tunneling
+
+	targetX, targetY   int  // the lock probe's target cell
+	fromX, fromY       int  // the teleport probe's header cell
+	landingX, landingY int  // and the header cell it lands on
+	hitWall            bool // the charge's movement met a wall or the map edge
+}
+
+func swarmStunned(c *swarmCtx) bool { return c.stunned }
+func swarmHitWall(c *swarmCtx) bool { return c.hitWall }
+
+// observe counts the transitions a refused entry stalls: a lock with no target,
+// which retries, and a lock that can neither charge nor teleport, which brakes
+func (s *SwarmSystem) observe(from, to component.SwarmState, cause machine.Cause) {
+	if cause == machine.CauseRetry || (from == component.SwarmStateLock && to == component.SwarmStateDecelerate) {
+		s.statStalls.Add(1)
+	}
 }
 
 func (s *SwarmSystem) Init() {
@@ -152,9 +252,8 @@ func (s *SwarmSystem) Update() {
 		if !ok {
 			continue
 		}
-		// HP check → player kill, despawn. Ahead of the stun check, as every other
-		// species orders it: a stunned swarm that skips this never dies however
-		// much damage it takes.
+		// Hit points ahead of the step, as every species orders it: a stunned swarm
+		// still dies
 		if combatComp.HitPoints <= 0 {
 			killX, killY := -1, -1
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
@@ -187,37 +286,35 @@ func (s *SwarmSystem) Update() {
 			continue
 		}
 
-		// Stun check: skip movement, reset state machine
-		if combatComp.Status[component.StatusStun].Remaining > 0 {
-			// Reset state machine on first stunned tick
-			if swarmComp.State != component.SwarmStateChase {
-				s.resetSwarmState(swarmComp)
+		kineticComp, _ := s.world.Components.Kinetic.GetPtr(headerEntity)
+		s.ctx = swarmCtx{
+			entity:  headerEntity,
+			swarm:   swarmComp,
+			combat:  combatComp,
+			kinetic: kineticComp,
+			stunned: combatComp.Status[component.StatusStun].Remaining > 0,
+			dtSec:   dtSec,
+		}
+
+		// A stun freezes the animation as it freezes the step
+		if !s.ctx.stunned {
+			swarmComp.PatternElapsed += dt
+			for swarmComp.PatternElapsed >= parameter.SwarmPatternDuration {
+				swarmComp.PatternElapsed -= parameter.SwarmPatternDuration
+				swarmComp.PatternIndex = (swarmComp.PatternIndex + 1) % parameter.SwarmPatternCount
 			}
-			// Animation frozen during stun - no pattern cycle update via updatePatternCycle
-			activeCount++
-			continue
 		}
 
-		// Pattern cycling (all states)
-		s.updatePatternCycle(swarmComp, dt)
+		flags, suspended := s.graph.Step(&swarmComp.Machine, &s.ctx, dt)
 
-		// State machine
-		switch swarmComp.State {
-		case component.SwarmStateChase:
-			s.updateChaseState(headerEntity, swarmComp, combatComp, dtSec, dt)
-		case component.SwarmStateLock:
-			s.updateLockState(headerEntity, swarmComp, combatComp, dt)
-		case component.SwarmStateCharge:
-			s.updateChargeState(headerEntity, swarmComp, combatComp, dtSec, dt)
-		case component.SwarmStateTeleport:
-			s.updateTeleportState(headerEntity, swarmComp, combatComp, dt)
-		case component.SwarmStateDecelerate:
-			s.updateDecelerateState(headerEntity, swarmComp, combatComp, dtSec, dt)
+		// The state's output, written on every step
+		combatComp.IsEnraged = flags&swarmEnraged != 0
+
+		// A stunned swarm breaks and strikes nothing, and still counts
+		if !suspended {
+			breakGoldUnder(s.world, &s.sweep, headerEntity)
+			strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesSwarm], true)
 		}
-
-		breakGoldUnder(s.world, &s.sweep, headerEntity)
-		strikeContacts(s.world, headerEntity, profile.Contact[component.SpeciesSwarm], true)
-
 		activeCount++
 	}
 
@@ -293,14 +390,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
-	// Initialize swarm component
-	s.world.Components.Swarm.SetComponent(headerEntity, component.SwarmComponent{
-		State:                   component.SwarmStateChase,
-		PatternIndex:            0,
-		PatternRemaining:        parameter.SwarmPatternDuration,
-		ChargeIntervalRemaining: parameter.SwarmChargeInterval,
-		ChargesCompleted:        0,
-	})
+	s.world.Components.Swarm.SetComponent(headerEntity, component.SwarmComponent{})
 
 	// Initialize kinetic with cell-centered position
 	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
@@ -362,6 +452,11 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		MemberEntries: members,
 	})
 
+	// The machine starts chasing once every component a hook may read is in place
+	swarmComp, _ := s.world.Components.Swarm.GetPtr(headerEntity)
+	s.ctx = swarmCtx{entity: headerEntity, swarm: swarmComp}
+	s.graph.Start(&swarmComp.Machine, &s.ctx, component.SwarmStateChase, parameter.SwarmChargeInterval)
+
 	// Announce the fully initialized species instance.
 	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
 		Entity:      headerEntity,
@@ -374,297 +469,119 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	return headerEntity
 }
 
-// updatePatternCycle advances pattern animation
-func (s *SwarmSystem) updatePatternCycle(swarmComp *component.SwarmComponent, dt time.Duration) {
-	swarmComp.PatternRemaining -= dt
-	if swarmComp.PatternRemaining <= 0 {
-		swarmComp.PatternRemaining = parameter.SwarmPatternDuration
-		swarmComp.PatternIndex = (swarmComp.PatternIndex + 1) % parameter.SwarmPatternCount
+// chase homes on the target and moves: the chase tick, which a retried lock runs
+// too
+func (s *SwarmSystem) chase(c *swarmCtx) {
+	// A knocked-back swarm flies before it steers again
+	if c.combat.RemainingKineticImmunity <= 0 {
+		s.applyHomingMovement(c.entity, c.dtSec)
+	}
+	s.integrateAndSync(c.entity, c.dtSec)
+}
+
+// probeTarget admits a lock only on a target the swarm's group resolves
+func (s *SwarmSystem) probeTarget(c *swarmCtx) bool {
+	var ok bool
+	c.targetX, c.targetY, ok = resolveBaseTarget(s.world, c.entity)
+	return ok
+}
+
+// enterLock stores the cell the attack goes to and stops the swarm on its own
+func (s *SwarmSystem) enterLock(c *swarmCtx) {
+	c.swarm.LockedTargetX, c.swarm.LockedTargetY = c.targetX, c.targetY
+	if c.kinetic != nil {
+		c.kinetic.VelX, c.kinetic.VelY = 0, 0
 	}
 }
 
-// updateChaseState handles homing movement and charge interval countdown
-func (s *SwarmSystem) updateChaseState(
-	headerEntity core.Entity,
-	swarmComp *component.SwarmComponent,
-	combatComp *component.CombatComponent,
-	dtSec float64,
-	dt time.Duration,
-) {
-	// Not enraged during chase
-	combatComp.IsEnraged = false
-
-	// Charge interval countdown
-	swarmComp.ChargeIntervalRemaining -= dt
-	if swarmComp.ChargeIntervalRemaining <= 0 {
-		if s.enterLockState(headerEntity, swarmComp) {
-			return
-		}
-		// No lock target this tick. Re-arm and fall through: an expired interval
-		// would retake this branch every tick, and the early return above skips
-		// integration, so a knocked-back swarm would sit inside a shield that
-		// strikes it every tick and never ejects it.
-		swarmComp.ChargeIntervalRemaining = parameter.SwarmTransitionRetryInterval
-		s.statStalls.Add(1)
-	}
-
-	// Homing movement (only if not in kinetic immunity)
-	if combatComp.RemainingKineticImmunity <= 0 {
-		s.applyHomingMovement(headerEntity, dtSec)
-	}
-
-	// Integrate and sync positions
-	s.integrateAndSync(headerEntity, dtSec)
+// hasLineOfSight admits a charge only along a clear line from the header to the
+// stored cell
+func (s *SwarmSystem) hasLineOfSight(c *swarmCtx) bool {
+	pos, ok := s.world.Positions.GetPosition(c.entity)
+	return ok && s.world.Positions.HasLineOfSight(pos.X, pos.Y,
+		c.swarm.LockedTargetX, c.swarm.LockedTargetY, component.WallBlockKinetic)
 }
 
-// updateLockState handles freeze and timer countdown
-func (s *SwarmSystem) updateLockState(
-	headerEntity core.Entity,
-	swarmComp *component.SwarmComponent,
-	combatComp *component.CombatComponent,
-	dt time.Duration,
-) {
-	// Enraged during lock (immune to kinetic)
-	combatComp.IsEnraged = true
+// probeKinetic admits a charge only with a body to fly
+func (s *SwarmSystem) probeKinetic(c *swarmCtx) bool { return c.kinetic != nil }
 
-	// Timer countdown
-	swarmComp.LockRemaining -= dt
-	if swarmComp.LockRemaining <= 0 {
-		if !s.enterChargeState(headerEntity, swarmComp) {
-			// Lock freezes the swarm in place and holds it enraged, which is what
-			// makes it immune to the shield's ejection. Retrying a charge entry
-			// that keeps failing would hold it there permanently. Deceleration
-			// always succeeds and leads back to chase, which is a state that moves
-			// and can be knocked back.
-			s.enterDecelerateState(swarmComp)
-			s.statStalls.Add(1)
-		}
-	}
-	// No movement during lock - freeze in place
+// enterCharge aims at the stored cell's centre, to arrive as the entry ends
+func (s *SwarmSystem) enterCharge(c *swarmCtx) {
+	sw, k := c.swarm, c.kinetic
+	sw.ChargeStartX, sw.ChargeStartY = k.PreciseX, k.PreciseY
+	sw.ChargeTargetX, sw.ChargeTargetY = vmath.Point{X: sw.LockedTargetX, Y: sw.LockedTargetY}.Center()
+	sec := sw.Machine.Duration.Seconds()
+	k.VelX = (sw.ChargeTargetX - sw.ChargeStartX) / sec
+	k.VelY = (sw.ChargeTargetY - sw.ChargeStartY) / sec
 }
 
-// updateChargeState handles linear movement toward locked target
-func (s *SwarmSystem) updateChargeState(
-	headerEntity core.Entity,
-	swarmComp *component.SwarmComponent,
-	combatComp *component.CombatComponent,
-	dtSec float64,
-	dt time.Duration,
-) {
-	// Enraged during charge (immune to kinetic)
-	combatComp.IsEnraged = true
-
-	// Timer countdown
-	swarmComp.ChargeRemaining -= dt
-	if swarmComp.ChargeRemaining <= 0 {
-		// Transition to Decelerate
-		s.enterDecelerateState(swarmComp)
+// charge steers onto the stored cell over what is left of the entry and moves,
+// noting a wall it meets
+func (s *SwarmSystem) charge(c *swarmCtx) {
+	sw, k := c.swarm, c.kinetic
+	if k == nil {
 		return
 	}
-
-	// Linear interpolation toward target
-	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Calculate required velocity to reach target in remaining time
-	remainingSec := swarmComp.ChargeRemaining.Seconds()
-	if remainingSec <= 0 {
-		remainingSec = 0.001 // Prevent division by zero
-	}
-
-	dx := swarmComp.ChargeTargetX - kineticComp.PreciseX
-	dy := swarmComp.ChargeTargetY - kineticComp.PreciseY
-
-	kineticComp.VelX = dx / remainingSec
-	kineticComp.VelY = dy / remainingSec
-
-	// Integrate and sync - Check for wall impact
-	hitWall := s.integrateAndSync(headerEntity, dtSec)
-
-	if hitWall {
-		// Impact detected!
-		// The physics integration has already reflected the velocity.
-		// We immediately transition to decelerate to preserve this bounce
-		// and prevent the charge logic from overriding it next frame.
-		s.enterDecelerateState(swarmComp)
-	}
+	// Positive: an expired charge leaves on its timeout before this tick
+	remaining := (sw.Machine.Duration - sw.Machine.Elapsed).Seconds()
+	k.VelX = (sw.ChargeTargetX - k.PreciseX) / remaining
+	k.VelY = (sw.ChargeTargetY - k.PreciseY) / remaining
+	c.hitWall = s.integrateAndSync(c.entity, c.dtSec)
 }
 
-// updateDecelerateState handles rapid stop after charge
-func (s *SwarmSystem) updateDecelerateState(
-	headerEntity core.Entity,
-	swarmComp *component.SwarmComponent,
-	combatComp *component.CombatComponent,
-	dtSec float64,
-	dt time.Duration,
-) {
-	// Remain enraged during deceleration
-	combatComp.IsEnraged = true
-
-	// Timer countdown
-	swarmComp.DecelRemaining -= dt
-	if swarmComp.DecelRemaining <= 0 {
-		// Transition back to Chase
-		swarmComp.State = component.SwarmStateChase
-		swarmComp.ChargeIntervalRemaining = parameter.SwarmChargeInterval
-		return
-	}
-
-	// Apply heavy drag
-	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Reduce velocity by 90% per 100ms
-	physics.ScaleVelocity(&kineticComp.Kinetic, parameter.SwarmDecelDrag)
-
-	// Integrate and sync (minimal movement due to drag)
-	s.integrateAndSync(headerEntity, dtSec)
-}
-
-// enterLockState transitions to lock phase, locking current target position for
-// charge. It reports whether the transition took: a caller that assumed it always
-// did would leave the swarm in a state whose timer has already expired, which is
-// a wedge rather than a delay.
-func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
-	// Resolve base target for this swarm's group (cursor or tower etc)
-	baseX, baseY, ok := resolveBaseTarget(s.world, headerEntity)
+// probeLanding admits a teleport with a header to beam from and room to land by
+// the stored cell
+func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
+	pos, ok := s.world.Positions.GetPosition(c.entity)
 	if !ok {
 		return false
 	}
-
-	swarmComp.State = component.SwarmStateLock
-	swarmComp.LockRemaining = parameter.SwarmLockDuration
-	swarmComp.LockedTargetX = baseX
-	swarmComp.LockedTargetY = baseY
-
-	// Zero velocity during lock
-	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity); ok {
-		kineticComp.VelX = 0
-		kineticComp.VelY = 0
-	}
-	return true
-}
-
-// enterChargeState transitions to charge phase, or teleport if LOS blocked.
-// Reports whether the swarm left the lock; see enterLockState.
-func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
-	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
-	if !ok {
-		return false
-	}
-
-	// Check LOS to locked target
-	hasLOS := s.world.Positions.HasLineOfSight(
-		headerPos.X, headerPos.Y,
-		swarmComp.LockedTargetX, swarmComp.LockedTargetY,
-		component.WallBlockKinetic,
-	)
-
-	if !hasLOS {
-		// Teleport entry is total: it either takes, or falls back to deceleration.
-		s.enterTeleportState(headerEntity, swarmComp, headerPos.X, headerPos.Y)
-		return true
-	}
-
-	// Normal charge
-	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
-	if !ok {
-		return false
-	}
-
-	swarmComp.State = component.SwarmStateCharge
-	swarmComp.ChargeRemaining = parameter.SwarmChargeDuration
-
-	// Store charge start and target positions
-	swarmComp.ChargeStartX = kineticComp.PreciseX
-	swarmComp.ChargeStartY = kineticComp.PreciseY
-	swarmComp.ChargeTargetX, swarmComp.ChargeTargetY =
-		vmath.Point{X: swarmComp.LockedTargetX, Y: swarmComp.LockedTargetY}.Center()
-
-	// Calculate initial charge velocity
-	dx := swarmComp.ChargeTargetX - swarmComp.ChargeStartX
-	dy := swarmComp.ChargeTargetY - swarmComp.ChargeStartY
-	chargeSec := parameter.SwarmChargeDuration.Seconds()
-
-	kineticComp.VelX = dx / chargeSec
-	kineticComp.VelY = dy / chargeSec
-	return true
-}
-
-// enterTeleportState initiates teleport to locked target
-func (s *SwarmSystem) enterTeleportState(headerEntity core.Entity, swarmComp *component.SwarmComponent, fromX, fromY int) {
-	// Find valid landing near locked target
-	targetX, targetY, found := s.world.Positions.FindFreeAreaSpiral(
-		swarmComp.LockedTargetX, swarmComp.LockedTargetY,
+	left, top, found := s.world.Positions.FindFreeAreaSpiral(
+		c.swarm.LockedTargetX, c.swarm.LockedTargetY,
 		parameter.SwarmWidth, parameter.SwarmHeight,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 		component.WallBlockSpawn,
 		0,
 	)
-	if !found {
-		// Fallback: skip to decelerate, counts as failed charge
-		s.enterDecelerateState(swarmComp)
-		return
-	}
+	c.fromX, c.fromY = pos.X, pos.Y
+	c.landingX, c.landingY = left+parameter.SwarmHeaderOffsetX, top+parameter.SwarmHeaderOffsetY
+	return found
+}
 
-	headerTargetX := targetX + parameter.SwarmHeaderOffsetX
-	headerTargetY := targetY + parameter.SwarmHeaderOffsetY
-
-	swarmComp.State = component.SwarmStateTeleport
-	swarmComp.TeleportRemaining = parameter.SwarmTeleportDuration
-	swarmComp.TeleportStartX = fromX
-	swarmComp.TeleportStartY = fromY
-	swarmComp.TeleportTargetX = headerTargetX
-	swarmComp.TeleportTargetY = headerTargetY
-
-	// Zero velocity
-	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity); ok {
-		kineticComp.VelX = 0
-		kineticComp.VelY = 0
+// enterTeleport marks the beam's two ends and stops the swarm
+func (s *SwarmSystem) enterTeleport(c *swarmCtx) {
+	sw := c.swarm
+	sw.TeleportStartX, sw.TeleportStartY = c.fromX, c.fromY
+	sw.TeleportTargetX, sw.TeleportTargetY = c.landingX, c.landingY
+	if c.kinetic != nil {
+		c.kinetic.VelX, c.kinetic.VelY = 0, 0
 	}
 }
 
-// updateTeleportState handles teleport visual duration then instant reposition
-func (s *SwarmSystem) updateTeleportState(
-	headerEntity core.Entity,
-	swarmComp *component.SwarmComponent,
-	combatComp *component.CombatComponent,
-	dt time.Duration,
-) {
-	combatComp.IsEnraged = true
-
-	swarmComp.TeleportRemaining -= dt
-	if swarmComp.TeleportRemaining > 0 {
-		return
+// relocate lands a teleport that ran its course: the landing's footprint empties
+// in both domains, leaving nothing, and the composite stands on it at rest
+func (s *SwarmSystem) relocate(c *swarmCtx) {
+	x, y := c.swarm.TeleportTargetX, c.swarm.TeleportTargetY
+	s.clearSwarmSpawnArea(x, y)
+	if c.kinetic != nil {
+		c.kinetic.PreciseX, c.kinetic.PreciseY = vmath.Point{X: x, Y: y}.Center()
+		c.kinetic.VelX, c.kinetic.VelY = 0, 0
 	}
-
-	// Teleport complete
-	newX := swarmComp.TeleportTargetX
-	newY := swarmComp.TeleportTargetY
-
-	s.clearSwarmSpawnArea(newX, newY)
-
-	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity); ok {
-		kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: newX, Y: newY}.Center()
-		kineticComp.VelX = 0
-		kineticComp.VelY = 0
-	}
-
-	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: newX, Y: newY})
-	s.syncMemberPositions(headerEntity, newX, newY)
-
-	s.enterDecelerateState(swarmComp)
+	s.world.Positions.SetPosition(c.entity, component.PositionComponent{X: x, Y: y})
+	s.syncMemberPositions(c.entity, x, y)
 }
 
-// enterDecelerateState transitions to deceleration phase
-func (s *SwarmSystem) enterDecelerateState(swarmComp *component.SwarmComponent) {
-	swarmComp.State = component.SwarmStateDecelerate
-	swarmComp.DecelRemaining = parameter.SwarmDecelerationDuration
-	swarmComp.ChargesCompleted++
+// enterDecelerate counts the charge however the lock ended
+func (s *SwarmSystem) enterDecelerate(c *swarmCtx) { c.swarm.ChargesCompleted++ }
+
+// brake sheds the attack's speed and moves on what is left
+func (s *SwarmSystem) brake(c *swarmCtx) {
+	if c.kinetic == nil {
+		return
+	}
+	// A scale per tick, not a rate: the tick is fixed and the stop is tuned to it
+	physics.ScaleVelocity(&c.kinetic.Kinetic, parameter.SwarmDecelDrag)
+	s.integrateAndSync(c.entity, c.dtSec)
 }
 
 // applyHomingMovement applies homing physics toward cursor
@@ -759,19 +676,15 @@ func (s *SwarmSystem) syncMemberPositions(headerEntity core.Entity, headerX, hea
 	}
 }
 
-// despawnSwarm delegates destruction to CompositeSystem.
+// despawnSwarm ends a swarm: its state's exit, then the composite, which
+// CompositeSystem destroys
 func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity) {
+	if swarmComp, ok := s.world.Components.Swarm.GetPtr(headerEntity); ok {
+		s.ctx = swarmCtx{entity: headerEntity, swarm: swarmComp}
+		s.graph.Stop(&swarmComp.Machine, &s.ctx)
+	}
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
 		Effect:       0,
 	})
-}
-
-// resetSwarmState resets swarm to Chase state (called on stun detection)
-func (s *SwarmSystem) resetSwarmState(swarmComp *component.SwarmComponent) {
-	swarmComp.State = component.SwarmStateChase
-	swarmComp.ChargeIntervalRemaining = parameter.SwarmChargeInterval
-	swarmComp.LockRemaining = 0
-	swarmComp.ChargeRemaining = 0
-	swarmComp.DecelRemaining = 0
 }

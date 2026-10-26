@@ -4,10 +4,10 @@ The design and the phased plan for per-entity state machines in species systems
 and for the data-driven species they prepare. §1 to §8 are the design, verified
 against the code at the plan's date; §9 is the plan, one phase per task, branch and
 PR, each with the files it touches, the tests it adds and the state a person can
-check by hand. Phases 0 to 4 have landed: §6 describes `pkg/machine` as built,
-§5 the quasar's graph as it runs, §7 the dialect kernel and §8 the data path as
-built. As phases land, this document becomes the subsystem's reference and §9
-shrinks to what each phase moved.
+check by hand. Phases 0 to 5 have landed: §6 describes `pkg/machine` as built,
+§5 the swarm's and the quasar's graphs as they run, §7 the dialect kernel and §8
+the data path as built. As phases land, this document becomes the subsystem's
+reference and §9 shrinks to what each phase moved.
 
 ## 1. Decision
 
@@ -43,11 +43,11 @@ system are one file, `internal/system/behavior.go`, so the domain audit
 
 **Confirmed.**
 
-- Swarm (`internal/system/swarm.go`) has a five-state enum with five countdown
-  fields, one live per state. Stun resets it to Chase on the first stunned tick
-  (`resetSwarmState`) and then freezes it. The two wedge fixes (a failed lock
+- Swarm (`swarm.go`, before Phase 5) had a five-state enum with five countdown
+  fields, one live per state. Stun reset it to Chase on the first stunned tick
+  (`resetSwarmState`) and then froze it. The two wedge fixes (a failed lock
   re-arms `SwarmTransitionRetryInterval`, a failed charge falls to Decel) are
-  pinned by `swarm_stall_test.go`.
+  pinned by `swarm_stall_test.go`, which Phase 5 kept.
 - Quasar (`quasar.go`, before Phase 2) encoded three legal states in three
   bools. A failing `startZapping` returned before its commit, and that was
   unreachable only because `isCursorInZapRange` returns true on the same
@@ -97,11 +97,12 @@ system are one file, `internal/system/behavior.go`, so the domain audit
    Phase 4, `BehaviorComponent.Shielded` for stun immunity (`applyStunEffect`).
    The host writes the flag-derived fields on every step, and the components
    keep them.
-7. **Renderers.** `renderer/chargeline.go` and `teleportline.go` recompute
-   elapsed time as `parameter.X - Remaining`; `renderer/storm.go` reads
-   `AttackState` and `AttackProgress`; `renderer/quasar.go` read
-   `IsCharging || IsZapping` and reads `Machine.State` since Phase 2.
-   `Instance.Elapsed`, `Duration` and `Progress()` serve all three.
+7. **Renderers.** `renderer/chargeline.go` and `teleportline.go` recomputed
+   elapsed time as `parameter.X - Remaining` and read `Machine.Elapsed` and
+   `Progress()` since Phase 5; `renderer/storm.go` reads `AttackState` and
+   `AttackProgress`; `renderer/quasar.go` read `IsCharging || IsZapping` and
+   reads `Machine.State` since Phase 2. `Instance.Elapsed`, `Duration` and
+   `Progress()` serve all three.
 8. **Capture schema, not fingerprint.** Replacing component fields changes the
    columnar capture (`snapshot.Schema`, 25 at the plan's date), so each phase
    that changes a store bumps it. The fingerprint moves only when
@@ -127,9 +128,9 @@ system are one file, `internal/system/behavior.go`, so the domain audit
 | Storm circle | enum ×3 | cooldown/attack countdowns; `InvulnerableElapsed` | none; no cursor skips the step | none (Active waits for convex) | `IsInvulnerable`, `Mount.Armed`, `AttackProgress`, Z clamp | `GetPtr` |
 | Storm root | liveness aggregation | `pendingBlueSpawns` | — | — | — | detached |
 
-The quasar's row is its code before Phase 2, which put it on the machine of
-§5. Snake, drain, eye, gateway, fuse, pylon, tower, kraken and materialize have
-no behavioral machine (§5).
+The swarm's and the quasar's rows are their code before Phases 5 and 2, which put
+them on the machines of §5. Snake, drain, eye, gateway, fuse, pylon, tower, kraken
+and materialize have no behavioral machine (§5).
 
 ## 4. Timer and state inconsistencies
 
@@ -184,14 +185,18 @@ Each item gives the finding, the proposal and the decision taken for the plan.
   Decel timeout → Chase and Chase → Lock all return without integrating, while
   the wall-hit path integrates first. Decided: timeouts fire before the tick, so
   the resulting state's tick runs in the same step and Decel's first drag tick
-  lands one tick earlier; accepted. The wall hit stays a post-tick edge.
+  lands one tick earlier; accepted. The wall hit stays a post-tick edge. Landed
+  in Phase 5, where the charge's first steer and the chase's first homing tick
+  move a tick earlier too.
 - **S13. Swarm: five timers with one live.** `resetSwarmState` zeroes three of
   the four attack timers but not `TeleportRemaining`, harmless only because every
-  entry re-arms its own timer. One instance timer removes the class.
+  entry re-arms its own timer. One instance timer removes the class. Landed in
+  Phase 5.
 - **S14. Swarm: stun asymmetry by state is intended.** Stun in Chase freezes
   the interval; stun anywhere else cancels the attack and restarts the full
   interval. This becomes a global edge from {Lock, Charge, Teleport, Decel} to
-  Chase carrying `SwarmChargeInterval`, followed by suspension.
+  Chase carrying `SwarmChargeInterval`, followed by suspension. Landed in
+  Phase 5.
 - **S15. Timer idioms diverge across species.** Countdown `Remaining` (swarm,
   quasar, storm, eye frames, the fuse and storm queues); lifetimes and one-shot
   deadlines on `TimerComponent` slots (the swarm's lifetime included); count-up
@@ -199,7 +204,8 @@ Each item gives the finding, the proposal and the decision taken for the plan.
   absolute instants (quasar speed); absolute ticks (drain spawn schedule).
   Decided: phases move to `Instance`; the swarm pattern and the quasar speed
   move to a carried accumulator in their phases; eye frames, gateway and drain
-  stay as they are. The quasar's phases and speed landed in Phase 2.
+  stay as they are. The quasar's phases and speed landed in Phase 2, the swarm's
+  phases and pattern in Phase 5.
 - **S16. Three hand-rolled spawn queues.** Fuse (`fusions`, a `LocalStateSaver`
   carried by a journal's opening), storm (`pendingBlueSpawns`, a
   `SharedStateSaver`) and drain (`pendingSpawns`) each defer a spawn behind a
@@ -213,25 +219,41 @@ Each item gives the finding, the proposal and the decision taken for the plan.
 
 ## 5. Target graphs
 
-**Swarm** (`C = *swarmCtx`):
+**Swarm** (`C = *swarmCtx`), as built in `internal/system/swarm.go`:
 
-| State | Duration | Flags | Probe / enter | Tick | Edges |
-|---|---|---|---|---|---|
-| Chase | 5 s interval | — | — | home, integrate | timeout → [Lock], else `Retry(200 ms)` |
-| Lock | 2 s | Enraged | probe: base target; enter: store target, zero velocity | — | timeout → [Charge (guard: LOS, probe: kinetic) \| Teleport (probe: landing) \| Decel] |
-| Charge | 0.8 s | Enraged | enter: start, target, velocity | steer, integrate; records wall hit | timeout → Decel; post-tick wall hit → Decel |
-| Teleport | 0.4 s | Enraged | enter: from/to, zero velocity | — | timeout → Decel, edge action: clear area, relocate |
-| Decel | 0.1 s | Enraged | enter: `ChargesCompleted++` | drag, integrate | timeout → Chase (5 s) |
-
+- States, every one but Chase flagged Enraged:
+  - Chase, 5 s: tick homes and integrates; timeout → [Lock], else
+    `Retry(200 ms)`, the chase moving meanwhile.
+  - Lock, 2 s: probe a base target; enter stores it and zeroes the velocity;
+    timeout → [Charge (guard: line of sight, probe: a kinetic) | Teleport
+    (probe: a position and a landing) | Decel].
+  - Charge, 0.8 s: enter stores start and target and aims to arrive as the
+    entry's `Duration` ends; tick steers over what is left of it, integrates and
+    notes a wall hit; timeout → Decel; post-tick wall hit → Decel.
+  - Teleport, 0.4 s: enter marks the beam's two ends and zeroes the velocity;
+    timeout → Decel, the edge's action clearing the landing and relocating.
+  - Decel, 0.1 s: enter counts `ChargesCompleted`; tick scales the velocity by
+    `SwarmDecelDrag`, a per-tick factor, and integrates; timeout → Chase (5 s).
 - Global edge: stunned, from {Lock, Charge, Teleport, Decel} → Chase with the
   full interval. Suspend: stunned.
-- The pattern accumulator advances only when the step was not suspended.
-- HP, the charge limit, cancel and breach stay as lifecycle checks ahead of the
-  step and call `Stop`.
-- `swarm.transition_stalls` counts `CauseRetry` and a Lock → Decel commit
-  through the observer, which keeps today's meaning of the key.
+- The pattern accumulator advances ahead of the step unless the swarm is
+  stunned, the suspend's own condition.
+- Hit points, the charge limit and the lifetime are checked ahead of the step;
+  they, a cancel and a breach end the swarm through `despawnSwarm`, which calls
+  `Stop`.
+- After the step the host writes `Combat.IsEnraged` from the flags and, unless
+  the step suspended, breaks the gold under the swarm and strikes what it
+  touches; a stunned swarm still counts in `swarm.count`.
+- The observer, a method value bound in `NewSwarmSystem`, counts `CauseRetry`
+  and a Lock → Decel commit in `swarm.transition_stalls`: a lock with no target,
+  and one that can neither charge nor teleport.
 - Relocation is an edge action rather than an exit hook, because a stun during
   Teleport must not move the swarm.
+- The context holds the entity, the component, combat and kinetic pointers, the
+  sensed `stunned`, the capped dt in seconds, the lock probe's target cell, the
+  teleport probe's two header cells and the charge's wall hit; the hooks are
+  `SwarmSystem` methods. `Start` runs once the composite is built, before
+  `EventSpeciesCreated`.
 
 **Quasar** (`C = *quasarCtx`), as built in `internal/system/quasar.go`:
 
@@ -407,8 +429,8 @@ step never skips one.
   refilled per entity: the entity, component pointers, observations sensed once
   before the step (stunned, in range, has cursor), probe results and tick
   outcomes, and the world unless the hooks are the system's own methods (the
-  quasar's are, so its context holds no world). Passing a pointer to a field of
-  the long-lived system allocates nothing per call.
+  quasar's and the swarm's are, so their contexts hold no world). Passing a
+  pointer to a field of the long-lived system allocates nothing per call.
 - **Mutation.** The runtime mutates only the `Instance`; hooks reach the world
   through `C` or their system, and no store is touched by the machine. Hosts
   hold the instance through `GetPtr`.
@@ -445,9 +467,10 @@ step never skips one.
   alike on every instance. Any system may hold one; storm and fuse adopt it in
   Phase 6.
 - **Carried accumulator.** A `time.Duration` field advanced by dt and reduced
-  by its period, carrying the remainder: the swarm pattern (Phase 5) and the
-  quasar speed (`QuasarComponent.SpeedElapsed`, advanced by movement ticks).
-  Two fields, no type.
+  by its period, carrying the remainder: the swarm pattern
+  (`SwarmComponent.PatternElapsed`, advanced while not stunned) and the quasar
+  speed (`QuasarComponent.SpeedElapsed`, advanced by movement ticks). Two
+  fields, no type.
 
 ## 7. Shared dialect kernel (fsm, bot, behavior)
 
@@ -1095,44 +1118,89 @@ misspelling a sustained verb, a flag, a state and a key fail naming each
 'Freez'`), and nine programs fail on the count where eight pass. `-schema` prints
 the same bytes on every run, `vocabularies.behavior` holding 28 entries.
 
-### Phase 5: swarm on the machine
+### Phase 5: swarm on the machine (landed)
 
-Goal: S12 to S14 close; five timers become one instance; stalls count through
-the observer.
+`SwarmComponent` holds `Machine machine.Instance[SwarmState]` and `PatternElapsed`
+where `State`, `PatternRemaining` and the five phase countdowns stood.
+`SwarmSystem` builds §5's graph once in `NewSwarmSystem` (`machine.Must`), steps
+each swarm through `GetPtr` after its lifecycle checks and writes
+`Combat.IsEnraged` from the flags, so S12 to S14 close as §4 decided, and S15 for
+the swarm; the charge line reads `Machine.Elapsed`, the teleport line
+`Machine.Progress()`, and `snapshot.Schema` is 29. Against the steps planned:
 
-Steps:
+- The context carries no dt: no hook reads it, the pattern accumulator advancing
+  in `Update` ahead of the step.
+- The teleport line takes `Progress()`, the clamped fraction it computed by hand.
+- Every Lock → Decel commit counts in `swarm.transition_stalls`, so a lock whose
+  teleport finds no landing now counts; the old code braked there uncounted.
+- A lock with line of sight but no kinetic would try the teleport before braking,
+  where the old entry braked; every swarm has its kinetic from spawn, so neither
+  runs.
+- The swarm's states have no exit hook, so `Stop` only reports to the observer.
+- `stepSwarm` replaces the stall tests' three inline copies of the fixed tick.
 
-1. `internal/component/swarm.go`: `SwarmComponent{Machine
-   machine.Instance[SwarmState]; PatternIndex int; PatternElapsed time.Duration;
-   LockedTargetX, LockedTargetY int; ChargeStartX, ChargeStartY, ChargeTargetX,
-   ChargeTargetY float64; TeleportStartX, TeleportStartY, TeleportTargetX,
-   TeleportTargetY int; ChargesCompleted int}`; the six countdowns go.
-2. `internal/system/swarm.go`: `swarmCtx`, the graph of §5 built in
-   `NewSwarmSystem`, the observer counting `CauseRetry` and a Lock → Decel
-   commit into `statStalls`; `Update` keeps the lifecycle order (HP, charges,
-   lifetime, then the step), advances the pattern accumulator when the step was
-   not suspended, and runs `breakGoldUnder` and `strikeContacts` after it. The
-   `update*State`, `enter*State` and `resetSwarmState` functions become hooks
-   and probes; `createSwarmComposite` calls `Start` with `SwarmChargeInterval`.
-3. `internal/render/renderer/chargeline.go`, `teleportline.go`: elapsed is
-   `swarmComp.Machine.Elapsed`.
-4. `swarm_stall_test.go`: the fixtures set `Machine` to an about-to-expire
-   state (`Elapsed = Duration - time.Nanosecond`) in place of the nanosecond
-   countdowns; the four rules keep passing unchanged.
-5. `snapshot.Schema` 29; `make generate`.
+Mechanical edits, counted with `grep -P` over `internal/` before and after:
+`SwarmComponent` countdown fields 6 → 0; reads and writes of a swarm countdown
+26 → 0; a swarm component's `.State` 13 → 0 and `.Machine.State` 0 → 5; the
+renderers' `parameter.Swarm…Duration - …Remaining` 2 → 0; the stall tests'
+nanosecond fixtures 2 → 0, `aboutToExpire` fixtures 0 → 2, and inline
+`Time.Update` calls 3 → 1, the one in `stepSwarm`.
 
-Tests: the existing four plus one for the stun edge re-arming the full interval
-from every attack state (S14) and one for the wall hit landing in Decel on the
-step it happened (S12).
+Tests (`internal/system/swarm_stall_test.go`): the five rules pass on
+about-to-expire fixtures (`Elapsed = Duration - 1 ns`); a stun in any attack state
+sends the swarm back to the chase with the whole interval, one in the chase
+freezes what is left of it, and nothing moves while it holds, a teleport included
+(S14); a charge that meets a wall, here the map's edge, decelerates in the step it
+hits and keeps the bounce (S12). Seven mutants each fail one: no post-tick wall
+edge, the relocation as Teleport's exit, the stun edge without Teleport or with
+Chase, the chase timeout holding instead of retrying, the observer ignoring
+retries, and the lock's timeout without its Decel candidate.
 
-Gates: `go test ./internal/system ./internal/render/...`; the four shapes
-before and after (blue circles spawn swarms, so the fight exercises this).
-Manually testable state: `bin/vif -seed 1`, `:god`,
-`:emit EventSwarmSpawnRequest { x = 40, y = 15 }`: chase for five seconds, the
-charge line pulses twice over two seconds, the charge or a teleport beam, the
-brief stop, chase again; a stun during the lock sends it back to chase at once;
-`:log stat 50` shows `swarm.transition_stalls` only when the lock finds no
-target.
+Per-tick traces of one swarm over 800 ticks (a scratch test: in the open,
+chasing a cursor moved every 45 ticks, and behind a wall that forces a teleport)
+change state on the same ticks in both builds, and `ChargesCompleted` agrees on
+every tick. What moved is S12's and the flags': the branch integrates in the step
+that enters Charge (its first steer, over the entry's whole duration), Decel and
+Chase, where the old code returned, so a charge flies 16 ticks against 15 and
+lands on the stored cell's centre in both, Decel brakes twice against once, and
+the chase homes a tick earlier; `IsEnraged` turns on in the Lock's entry step and
+off in the Chase's, a tick earlier at both ends. The chase's path drifts from
+there, up to 9 cells, and meets again where each attack ends.
+
+The harness's four shapes read alike before and after in every count; only the
+link rates moved, by up to 9 B/s with the component's columns. A swarm's rows
+show in one repair, at tick 1018 on 3,3,251,0, alike in both builds but for those
+columns:
+
+```
+shape       pg   cells  kf  lc  lcp  lead     manifests  link B/s
+3,3,97,0     0      0    4   0    5  11 (13)  279         5908 → 5907
+2,2,3,100   30    374    4   1    0  8 (9)    277        10757 → 10766
+3,3,251,0    7     41    1   3    6  9 (10)   299         5391 → 5392
+4,3,41,50   30    301   15   0    1  13 (15)  115        12329 → 12329
+```
+
+Headless, `bin/vif -script <file> -seed 1 -log-stdout -log-stat 50` on both builds
+with `god` at tick 1 and the swarm at (40, 15) at tick 100 over 900 ticks of a
+120×40 map, the `swarm.*` counters agree but `physics_steps`, 729 → 774; with a
+wall down x = 40 and the swarm at (20, 18), 703 → 696. That counter sums
+sub-steps, which follow the speed, so S12's earlier steps move it both ways;
+stalls, wall collisions and boundary reflections stay 0.
+
+Manual check, in tmux (`bin/vif -seed 1`, `:god`, `a` to stop the auto-fire,
+`:log on`, `:log stat 50`, `:emit EventSwarmSpawnRequest { x = 40, y = 15 }`),
+read from pane captures every 50 ms: the swarm chases for 5 s and stops; the
+charge line pulses twice, the first from 0.5 s into the lock and the brighter
+second 0.75 s later; 2 s after stopping it charges about 30 cells in 0.8 s onto
+the cursor's cell, stops, and the cursor's shield knocks it clear once it chases;
+the next lock comes 5 s later. Behind a column of walls at x = 60 the lock ends
+in the teleport beam through the wall for 0.4 s, and the swarm stands at the
+landing by the cursor. With the loadout cut to one disruptor charge (`:god` arms
+every weapon), one main fire as the first pulse left the swarm stunned it: the
+line was gone in the next frame, the swarm stood for the stun's 2 s, made no
+charge when its lock would have ended, chased from rest and locked again 5 s
+after the stun ended. `swarm.transition_stalls` stayed 0 over five swarms, every
+lock finding the cursor; the no-target path is the first stall test's.
 
 ### Phase 6: storm circles and the deferred queue
 
@@ -1166,6 +1234,11 @@ Steps:
 5. `storm_attack_test.go`: the red fixture sets `Machine` to Cooldown about to
    expire; `TestStormDrawsBeforeItReadsLivePositions` keeps passing.
 6. `snapshot.Schema` 30; `event.JournalSchema` 41; `make generate`.
+
+Open, for when this phase is planned: since Phase 4 the fuse has a
+beam-completion path for data species, so its `fusions` list could complete on
+`EventMaterializeComplete`, as drain's queue does, instead of adopting
+`machine.Queue`.
 
 Tests: a stunned Active circle keeps its remaining attack time and `Armed`
 reads false (S5, S4); a circle with no cursor keeps `IsInvulnerable` current

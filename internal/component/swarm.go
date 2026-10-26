@@ -2,51 +2,35 @@ package component
 
 import (
 	"time"
+
+	"github.com/lixenwraith/vif/pkg/machine"
 )
 
-// SwarmState represents the swarm state machine phase
+// SwarmState is a swarm's place in its behavior machine
 type SwarmState uint8
 
 const (
-	SwarmStateChase SwarmState = iota
-	SwarmStateLock
-	SwarmStateCharge
-	SwarmStateTeleport
-	SwarmStateDecelerate
+	SwarmStateChase      SwarmState = iota // homes on its target until the interval runs out
+	SwarmStateLock                         // frozen on the cell it stored, the charge line counting down
+	SwarmStateCharge                       // flies at the stored cell, arriving as the entry ends
+	SwarmStateTeleport                     // beams to a landing by the stored cell, out of line of sight
+	SwarmStateDecelerate                   // brakes after the attack, counted as a charge
 )
 
-// SwarmComponent holds swarm-specific runtime state
+// SwarmComponent holds swarm-specific runtime state, composite structure managed via HeaderComponent
 type SwarmComponent struct {
-	// State machine
-	State SwarmState
+	Machine machine.Instance[SwarmState]
 
-	// Pattern cycling
-	PatternIndex     int
-	PatternRemaining time.Duration
+	PatternIndex   int           // glyph pattern shown
+	PatternElapsed time.Duration // time the pattern has shown
 
-	// Charge cycle timer (counts down to next lock phase)
-	ChargeIntervalRemaining time.Duration
+	LockedTargetX, LockedTargetY int // the cell the lock stored, which the attack goes to
 
-	// Lock phase
-	LockRemaining time.Duration
-	LockedTargetX int
-	LockedTargetY int
+	ChargeStartX, ChargeStartY   float64 // sub-cell position the charge left from
+	ChargeTargetX, ChargeTargetY float64 // the stored cell's centre
 
-	// Charge phase (for linear interpolation)
-	ChargeRemaining              time.Duration
-	ChargeStartX, ChargeStartY   float64 // Sub-cell position at charge start
-	ChargeTargetX, ChargeTargetY float64 // Locked target position in cells
+	TeleportStartX, TeleportStartY   int // header cell the beam leaves
+	TeleportTargetX, TeleportTargetY int // header cell it lands on
 
-	// Deceleration phase
-	DecelRemaining time.Duration
-
-	// Teleport phase
-	TeleportRemaining time.Duration
-	TeleportStartX    int
-	TeleportStartY    int
-	TeleportTargetX   int
-	TeleportTargetY   int
-
-	// Lifecycle
-	ChargesCompleted int
+	ChargesCompleted int // Decelerate entries: charges, teleports and locks that could do neither
 }
