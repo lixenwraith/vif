@@ -118,8 +118,7 @@ Every approach keeps these; one that needs another is out of scope here.
 - **Same-build determinism** over float64 (multi-player §8 item 3).
 - **Reliable ordered streams**
   ([services §7.3](services-and-networking.md#73-why-a-byte-stream-and-not-udp-or-icmp)).
-- **Caches compare values they own;** per-store write counters stay rejected
-  ([todo](todo.md#trim-what-remains-of-a-tick-and-a-checkpoint-at-the-map-limit)).
+- **Caches compare values they own;** per-store write counters stay rejected.
 - **No compatibility kept:** an approach bumps `Schema`, `ManifestVersion`, the
   journal schema or the protocol.
 
