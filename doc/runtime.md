@@ -389,6 +389,26 @@ bounded timeout while waiting, so a missed render token does not block forever.
 This limits the simulation to one outstanding update and prevents rendering a
 world that is being advanced concurrently.
 
+A tick holds the world lock a frame renders under, so one longer than a frame draws
+that frame late: the world before it stays up longer and its own for less. Later
+ticks keep their deadlines unless the long tick and the frame it waits for outlast
+the interval, from about 40 ms on one thread as in a browser; then the next starts
+late and the one after comes early. A region's entry is the heaviest ordinary tick.
+The wall system finds an area's walls through the spatial grid and reads the
+cursors once per push check, so the Kraken breaking the walls under its footprint
+one cell at a time reads one cell a request, not every wall. A kraken entry at 200×50,
+the settle that builds the maze and the tick that spawns the Kraken, before and
+after (four cores native and the browser build under Node; cold, then the median of
+later entries):
+
+```
+              settle (ms)     tick after (ms)
+native cold   2.35 -> 2.24    4.78 -> 2.58
+native warm   1.11 -> 0.94    3.20 -> 0.84
+wasm cold     11.7 -> 9.7     24.7 -> 13.3
+wasm warm     3.57 -> 2.89    9.84 -> 3.00
+```
+
 Driven modes (headless, replay, script) replace `PausableClock` with
 `ManualClock`. They do not call `Scheduler.Start`, so there is no scheduler loop,
 event loop, or frame gate racing the world lock. `App.Tick(n)` applies corrections

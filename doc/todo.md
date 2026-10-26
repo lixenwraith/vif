@@ -974,30 +974,6 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
 
-### Keep a region's entry under a frame
-
-- Priority: P2
-- Affected files: `internal/system/wall.go` (`runFullPushCheck`,
-  `pushEntitiesAtPosition`, `handleDespawn`), `internal/engine/scheduler.go`
-  (`schedulerLoop`, `awaitFrame`), `doc/rendering.md`
-
-A frame renders under the world lock, so a tick that holds it longer than a
-frame (16.7 ms at 60 FPS) draws that frame late; `awaitFrame` then starts the
-next tick late, and since the deadline is not re-anchored the tick after comes
-early and is drawn for two frames instead of three. That is the one-frame
-hiccup a region change shows. Headless on a four-core VM, 200×50: a kraken
-entry (`KrakenSetup`: walls despawned, level set up, maze spawned, push check,
-disc built) costs 3.7 ms in its settle and 12.8 ms in the tick after it cold,
-1.7 and 5.1 ms warm over forty entries; a tower entry 3.3 and 2.3 ms; a storm
-entry 0.6 and 0.14 ms; a dust-all of 1,321 glyphs 1.0 and 0.4 ms; an ordinary
-tick is under 0.3 ms. The kraken profile is the wall despawn of the previous
-maze, the push check (`pushEntitiesAtPosition` reads every roster slot's
-position for each of 2,903 wall cells, a third of the samples in
-`sparseIndex.get`), the disc and the navigation fill. Two remedies, both to be
-measured: read the cursors once per push check instead of once per wall cell,
-and let the frame handshake re-anchor the deadline when a frame delayed the
-tick, which is a pacing decision a guest's trim and step also read.
-
 ### Give the composite lifecycle methods a user
 
 - Priority: P3
@@ -1008,6 +984,20 @@ tick, which is a pacing decision a guest's trim and step also read.
 down composites at run time, but no system or scenario uses them. A species or
 scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
+
+### Start the next tick where a late frame let the last one start
+
+- Priority: P3
+- Affected files: `internal/engine/scheduler.go` (`schedulerLoop`, `awaitFrame`)
+
+A tick that, with the frame it waits for, outlasts the 50 ms interval (from about
+40 ms on one thread, as in a browser) starts the next tick late, and since the
+deadline is not re-anchored the tick after comes early: drawn for two frames, then
+four. Re-anchoring the deadline when `awaitFrame` waited evens the ticks after at
+the cost of the run trailing wall time by the wait, which a guest's trim and step
+read, so the divergence harness decides it. It cannot help the frame a long tick
+delays itself, and no region entry comes near: the heaviest, a cold kraken entry,
+ticks in 13 ms in the browser build ([Runtime §3](runtime.md#3-runtime-clocks-and-cadence)).
 
 ### Let a paused run sleep
 
