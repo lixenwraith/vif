@@ -141,10 +141,12 @@ One self-contained TOML file in the [FSM dialect](fsm-reference.md):
 | `[states.<name>]` | States as in a scenario: hooks, transitions, `parent`. |
 | `[macros]` | Inline macros, expanded at load. |
 
-Anything else is refused at load: `description`, `[systems]`, `macro_files`, and a
+Anything else is refused at load: `description`, `[systems]`, `macro_files`, a
 region's `file`, `enabled_systems`, `disabled_systems`, `only_systems` or
-`background`. Queued intents wait in a queue of 256; an intent that finds it full
-is dropped and counted. Allowance left idle builds up to one second's worth.
+`background`, and, as in a scenario ([FSM reference](fsm-reference.md#notes)), a
+key no table, action or guard reads or a value of the wrong type. Queued intents
+wait in a queue of 256; an intent that finds it full is dropped and counted.
+Allowance left idle builds up to one second's worth.
 
 ### Actions
 
@@ -189,8 +191,6 @@ or no cell gains ground.
 | `Idle` | none | the intent queue is empty |
 | `Own` | `field` | that event payload field names the bot's own cursor |
 
-A guard refuses an argument it does not read.
-
 ### Targets
 
 | Target | Is |
@@ -233,7 +233,8 @@ variables, `StateTimeExceeds`, `And`, `Or`, `Not`, payload guards, region contro
 over the bot's own machine, status guards over the bot's own registry (bare keys
 such as `heat.current` are its own slot, `player.<n>.*` any slot), and config
 guards over its own view. Actions that write the world are refused at load:
-`EmitEvent`, `EnableSystem`, `DisableSystem`, `ReconcileSystems`.
+`EmitEvent`, `EnableSystem`, `DisableSystem`, `ReconcileSystems`. `vif -schema`
+lists the bot's vocabulary, these left out, beside the scenario's.
 
 ### Timing and randomness
 

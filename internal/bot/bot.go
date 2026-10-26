@@ -5,7 +5,6 @@
 package bot
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -17,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm/dialect"
 	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -72,20 +72,11 @@ func (g *Graph) validate() error {
 	if key := unknownKey(g.doc, "bot", "regions", "states"); key != "" {
 		return fmt.Errorf("unknown table %q", key)
 	}
-	if raw, ok := g.doc["bot"]; ok {
-		table, ok := raw.(map[string]any)
-		if !ok {
-			return errors.New("[bot] must be a table")
-		}
-		if key := unknownKey(table, "actions_per_second"); key != "" {
-			return fmt.Errorf("unknown [bot] setting %q", key)
-		}
-		if err := toml.Decode(table, &g.Settings); err != nil {
-			return fmt.Errorf("[bot]: %w", err)
-		}
-		if g.Settings.ActionsPerSecond <= 0 {
-			return fmt.Errorf("actions_per_second must be positive, got %d", g.Settings.ActionsPerSecond)
-		}
+	if err := dialect.DecodeInto(g.doc["bot"], &g.Settings); err != nil {
+		return fmt.Errorf("[bot]: %w", err)
+	}
+	if g.Settings.ActionsPerSecond <= 0 {
+		return fmt.Errorf("actions_per_second must be positive, got %d", g.Settings.ActionsPerSecond)
 	}
 	regions, _ := g.doc["regions"].(map[string]any)
 	for name, raw := range regions {
@@ -110,6 +101,13 @@ func (g *Graph) machine() (*fsm.Machine[*mind], error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// Vocabulary lists the actions and guards a graph resolves, for -schema
+func Vocabulary() []dialect.Entry {
+	m := fsm.NewMachine[*mind]()
+	register(m)
+	return m.Vocabulary()
 }
 
 // unknownKey returns the first key, in sorted order, that allowed does not name.

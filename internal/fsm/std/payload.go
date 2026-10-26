@@ -1,7 +1,7 @@
 package std
 
 import (
-	"fmt"
+	"errors"
 	"reflect"
 	"strconv"
 	"strings"
@@ -118,86 +118,54 @@ func setPayloadVar(field reflect.Value, value int64) {
 	}
 }
 
-// === Payload Guard Factories ===
+// === Payload Guards ===
 
 func registerPayloadGuards[T any](m *fsm.Machine[T]) {
-	m.RegisterGuardFactory("PayloadIntCompare", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
-		field, _ := args["field"].(string)
-		if field == "" {
-			return nil, fmt.Errorf("PayloadIntCompare requires 'field'")
+	m.RegisterGuard("PayloadIntCompare", func(a *fieldCompareArgs) (fsm.GuardFunc[T], error) {
+		if a.Field == "" {
+			return nil, errors.New("requires 'field'")
 		}
-		op, _ := args["op"].(string)
-		value := ParseIntArg(args, "value")
-
-		return func(ctx T, region *fsm.RegionState, payload any) bool {
-			fieldVal, ok := ExtractIntField(payload, field)
-			if !ok {
-				return false
-			}
-			return CompareInt(fieldVal, op, value)
+		return func(_ T, _ *fsm.RegionState, payload any) bool {
+			v, ok := ExtractIntField(payload, a.Field)
+			return ok && a.Op.Holds(v, a.Value)
 		}, nil
 	})
 
 	// PayloadIntCompareVar compares a payload field with an FSM variable, as an input's
 	// tick with the marks a window took
-	m.RegisterGuardFactory("PayloadIntCompareVar", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
-		field, _ := args["field"].(string)
-		varName, _ := args["var"].(string)
-		if field == "" || varName == "" {
-			return nil, fmt.Errorf("PayloadIntCompareVar requires 'field' and 'var'")
+	m.RegisterGuard("PayloadIntCompareVar", func(a *fieldCompareVarArgs) (fsm.GuardFunc[T], error) {
+		if a.Field == "" || a.Var == "" {
+			return nil, errors.New("requires 'field' and 'var'")
 		}
-		op, _ := args["op"].(string)
-
-		return func(ctx T, region *fsm.RegionState, payload any) bool {
-			fieldVal, ok := ExtractIntField(payload, field)
-			if !ok {
-				return false
-			}
-			return CompareInt(fieldVal, op, machine.GetVar(varName))
+		return func(_ T, _ *fsm.RegionState, payload any) bool {
+			v, ok := ExtractIntField(payload, a.Field)
+			return ok && a.Op.Holds(v, m.GetVar(a.Var))
 		}, nil
 	})
 
-	m.RegisterGuardFactory("PayloadBoolEquals", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
-		field, _ := args["field"].(string)
-		if field == "" {
-			return nil, fmt.Errorf("PayloadBoolEquals requires 'field'")
+	m.RegisterGuard("PayloadBoolEquals", func(a *fieldBoolArgs) (fsm.GuardFunc[T], error) {
+		if a.Field == "" {
+			return nil, errors.New("requires 'field'")
 		}
-		expected := true
-		if v, ok := args["value"].(bool); ok {
-			expected = v
-		}
-
-		return func(ctx T, region *fsm.RegionState, payload any) bool {
-			fieldVal, ok := ExtractBoolField(payload, field)
-			if !ok {
-				return false
-			}
-			return fieldVal == expected
+		expected := a.Value == nil || *a.Value
+		return func(_ T, _ *fsm.RegionState, payload any) bool {
+			v, ok := ExtractBoolField(payload, a.Field)
+			return ok && v == expected
 		}, nil
 	})
 
-	m.RegisterGuardFactory("PayloadStringEquals", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
-		field, _ := args["field"].(string)
-		if field == "" {
-			return nil, fmt.Errorf("PayloadStringEquals requires 'field'")
+	m.RegisterGuard("PayloadStringEquals", func(a *fieldStringArgs) (fsm.GuardFunc[T], error) {
+		if a.Field == "" {
+			return nil, errors.New("requires 'field'")
 		}
-		expected, _ := args["value"].(string)
-
-		return func(ctx T, region *fsm.RegionState, payload any) bool {
-			fieldVal, ok := ExtractStringField(payload, field)
-			if !ok {
-				return false
-			}
-			return fieldVal == expected
+		return func(_ T, _ *fsm.RegionState, payload any) bool {
+			v, ok := ExtractStringField(payload, a.Field)
+			return ok && v == a.Value
 		}, nil
 	})
 
 	// PayloadExists reports whether the event carried a payload (useful inside Or)
-	m.RegisterGuardFactory("PayloadExists", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
-		return func(ctx T, region *fsm.RegionState, payload any) bool {
-			return payload != nil
-		}, nil
-	})
+	static(m, "PayloadExists", func(_ T, _ *fsm.RegionState, payload any) bool { return payload != nil })
 }
 
 // === Payload Field Extraction ===

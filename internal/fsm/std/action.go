@@ -1,8 +1,6 @@
 package std
 
 import (
-	"errors"
-
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -10,125 +8,105 @@ import (
 // === Variable Actions ===
 
 func registerVariableActions[T any](m *fsm.Machine[T], h Host[T]) {
-	for _, name := range []string{
-		"SetVar", "IncrementVar", "DecrementVar", "MultiplyVar",
-		"DivideVar", "ModuloVar", "ClampVar", "CopyVar",
-	} {
-		m.RegisterActionArgs(name, decodePayload[T, VariableArgs])
-	}
-
-	m.RegisterAction("SetVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" {
+	m.RegisterAction("SetVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" {
 			return
 		}
-		value := resolveVarValue(m, varArgs.Value, varArgs.SourceVar)
-		value = clampValue(value, varArgs.Min, varArgs.Max)
-		m.SetVar(varArgs.Name, value)
+		value := resolveVarValue(m, a.Value, a.SourceVar)
+		value = clampValue(value, a.Min, a.Max)
+		m.SetVar(a.Name, value)
 	})
 
-	m.RegisterAction("IncrementVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" {
+	m.RegisterAction("IncrementVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" {
 			return
 		}
-		delta := varArgs.Delta
-		if delta == 0 && varArgs.SourceVar == "" {
+		delta := a.Delta
+		if delta == 0 && a.SourceVar == "" {
 			delta = 1
 		}
-		delta = resolveVarValue(m, delta, varArgs.SourceVar)
-		result := m.IncrementVar(varArgs.Name, delta)
-		if varArgs.Min != nil || varArgs.Max != nil {
-			m.SetVar(varArgs.Name, clampValue(result, varArgs.Min, varArgs.Max))
+		delta = resolveVarValue(m, delta, a.SourceVar)
+		result := m.IncrementVar(a.Name, delta)
+		if a.Min != nil || a.Max != nil {
+			m.SetVar(a.Name, clampValue(result, a.Min, a.Max))
 		}
 	})
 
-	m.RegisterAction("DecrementVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" {
+	m.RegisterAction("DecrementVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" {
 			return
 		}
-		delta := varArgs.Delta
-		if delta == 0 && varArgs.SourceVar == "" {
+		delta := a.Delta
+		if delta == 0 && a.SourceVar == "" {
 			delta = 1
 		}
-		delta = resolveVarValue(m, delta, varArgs.SourceVar)
-		result := m.IncrementVar(varArgs.Name, -delta)
-		if varArgs.Min != nil || varArgs.Max != nil {
-			m.SetVar(varArgs.Name, clampValue(result, varArgs.Min, varArgs.Max))
+		delta = resolveVarValue(m, delta, a.SourceVar)
+		result := m.IncrementVar(a.Name, -delta)
+		if a.Min != nil || a.Max != nil {
+			m.SetVar(a.Name, clampValue(result, a.Min, a.Max))
 		}
 	})
 
-	m.RegisterAction("MultiplyVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" {
+	m.RegisterAction("MultiplyVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" {
 			return
 		}
-		multiplier := varArgs.Delta
-		if multiplier == 0 && varArgs.SourceVar == "" {
+		multiplier := a.Delta
+		if multiplier == 0 && a.SourceVar == "" {
 			multiplier = 1
 		}
-		multiplier = resolveVarValue(m, multiplier, varArgs.SourceVar)
-		result := m.GetVar(varArgs.Name) * multiplier
-		result = clampValue(result, varArgs.Min, varArgs.Max)
-		m.SetVar(varArgs.Name, result)
+		multiplier = resolveVarValue(m, multiplier, a.SourceVar)
+		result := m.GetVar(a.Name) * multiplier
+		result = clampValue(result, a.Min, a.Max)
+		m.SetVar(a.Name, result)
 	})
 
-	m.RegisterAction("DivideVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" {
+	m.RegisterAction("DivideVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" {
 			return
 		}
-		divisor := varArgs.Delta
-		if divisor == 0 && varArgs.SourceVar == "" {
+		divisor := a.Delta
+		if divisor == 0 && a.SourceVar == "" {
 			divisor = 1
 		}
-		divisor = resolveVarValue(m, divisor, varArgs.SourceVar)
+		divisor = resolveVarValue(m, divisor, a.SourceVar)
 		if divisor == 0 {
 			return // No-op on division by zero
 		}
-		result := m.GetVar(varArgs.Name) / divisor
-		result = clampValue(result, varArgs.Min, varArgs.Max)
-		m.SetVar(varArgs.Name, result)
+		result := m.GetVar(a.Name) / divisor
+		result = clampValue(result, a.Min, a.Max)
+		m.SetVar(a.Name, result)
 	})
 
-	m.RegisterAction("ModuloVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" {
+	m.RegisterAction("ModuloVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" {
 			return
 		}
-		divisor := resolveVarValue(m, varArgs.Delta, varArgs.SourceVar)
+		divisor := resolveVarValue(m, a.Delta, a.SourceVar)
 		if divisor == 0 {
 			return // No-op on modulo by zero
 		}
-		result := m.GetVar(varArgs.Name) % divisor
-		result = clampValue(result, varArgs.Min, varArgs.Max)
-		m.SetVar(varArgs.Name, result)
+		result := m.GetVar(a.Name) % divisor
+		result = clampValue(result, a.Min, a.Max)
+		m.SetVar(a.Name, result)
 	})
 
-	m.RegisterAction("ClampVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" {
+	m.RegisterAction("ClampVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" {
 			return
 		}
-		m.SetVar(varArgs.Name, clampValue(m.GetVar(varArgs.Name), varArgs.Min, varArgs.Max))
+		m.SetVar(a.Name, clampValue(m.GetVar(a.Name), a.Min, a.Max))
 	})
 
-	m.RegisterAction("CopyVar", func(ctx T, args any) {
-		varArgs, ok := args.(*VariableArgs)
-		if !ok || varArgs.Name == "" || varArgs.SourceVar == "" {
+	m.RegisterAction("CopyVar", fsm.Payload[VariableArgs], func(ctx T, a *VariableArgs) {
+		if a.Name == "" || a.SourceVar == "" {
 			return
 		}
-		value := clampValue(m.GetVar(varArgs.SourceVar), varArgs.Min, varArgs.Max)
-		m.SetVar(varArgs.Name, value)
+		value := clampValue(m.GetVar(a.SourceVar), a.Min, a.Max)
+		m.SetVar(a.Name, value)
 	})
 
-	m.RegisterActionArgs("RandomVar", compileRandomVar[T])
-	m.RegisterAction("RandomVar", func(ctx T, args any) {
-		ra, ok := args.(*RandomVarArgs)
-		if !ok {
-			return
-		}
+	m.RegisterAction("RandomVar", compileRandomVar, func(ctx T, ra *RandomVarArgs) {
 		var root uint64
 		if h.Seed != nil {
 			root = h.Seed(ctx)
@@ -174,46 +152,28 @@ func clampValue(value int64, minVal, maxVal *int64) int64 {
 // === Region Control Actions ===
 
 func registerRegionActions[T any](m *fsm.Machine[T], h Host[T]) {
-	for _, name := range []string{"SpawnRegion", "TerminateRegion", "PauseRegion", "ResumeRegion"} {
-		m.RegisterActionArgs(name, compileRegionControl[T])
-	}
+	compile := compileRegionControl(m)
 
-	m.RegisterAction("SpawnRegion", func(ctx T, args any) {
-		rcArgs, ok := args.(*RegionControlArgs)
-		if !ok {
-			return
-		}
-		if err := m.SpawnRegion(ctx, rcArgs.RegionName, rcArgs.InitialID); err != nil {
+	m.RegisterKeyedAction("SpawnRegion", spawnKeys, compile, func(ctx T, a *RegionControlArgs) {
+		if err := m.SpawnRegion(ctx, a.RegionName, a.InitialID); err != nil {
 			return
 		}
 		reconcileSystems(ctx, m, h)
 	})
 
-	m.RegisterAction("TerminateRegion", func(ctx T, args any) {
-		rcArgs, ok := args.(*RegionControlArgs)
-		if !ok {
-			return
-		}
-		if m.TerminateRegion(ctx, rcArgs.RegionName) == nil {
+	m.RegisterKeyedAction("TerminateRegion", regionKeys, compile, func(ctx T, a *RegionControlArgs) {
+		if m.TerminateRegion(ctx, a.RegionName) == nil {
 			reconcileSystems(ctx, m, h)
 		}
 	})
 
-	m.RegisterAction("PauseRegion", func(ctx T, args any) {
-		rcArgs, ok := args.(*RegionControlArgs)
-		if !ok {
-			return
-		}
-		m.PauseRegion(rcArgs.RegionName)
+	m.RegisterKeyedAction("PauseRegion", regionKeys, compile, func(ctx T, a *RegionControlArgs) {
+		m.PauseRegion(a.RegionName)
 		reconcileSystems(ctx, m, h)
 	})
 
-	m.RegisterAction("ResumeRegion", func(ctx T, args any) {
-		rcArgs, ok := args.(*RegionControlArgs)
-		if !ok {
-			return
-		}
-		m.ResumeRegion(rcArgs.RegionName)
+	m.RegisterKeyedAction("ResumeRegion", regionKeys, compile, func(ctx T, a *RegionControlArgs) {
+		m.ResumeRegion(a.RegionName)
 		reconcileSystems(ctx, m, h)
 	})
 }
@@ -228,85 +188,75 @@ func reconcileSystems[T any](ctx T, m *fsm.Machine[T], h Host[T]) {
 // === System Control Actions ===
 
 func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
-	unhooked := h.SetSystem == nil
-	hooked(m, h, unhooked, "EnableSystem", decodePayload[T, SystemControlArgs])
-	hooked(m, h, unhooked, "DisableSystem", decodePayload[T, SystemControlArgs])
-	hooked(m, h, h.ApplySystems == nil, "ReconcileSystems", nil)
+	if !refused(m, h, h.SetSystem == nil, "EnableSystem") {
+		m.RegisterAction("EnableSystem", fsm.Payload[SystemControlArgs], func(ctx T, a *SystemControlArgs) {
+			if a.SystemName != "" && h.SetSystem != nil {
+				h.SetSystem(ctx, a.SystemName, true)
+			}
+		})
+	}
 
-	m.RegisterAction("EnableSystem", func(ctx T, args any) {
-		sysArgs, ok := args.(*SystemControlArgs)
-		if !ok || sysArgs.SystemName == "" || h.SetSystem == nil {
-			return
-		}
-		h.SetSystem(ctx, sysArgs.SystemName, true)
-	})
-
-	m.RegisterAction("DisableSystem", func(ctx T, args any) {
-		sysArgs, ok := args.(*SystemControlArgs)
-		if !ok || sysArgs.SystemName == "" || h.SetSystem == nil {
-			return
-		}
-		h.SetSystem(ctx, sysArgs.SystemName, false)
-	})
+	if !refused(m, h, h.SetSystem == nil, "DisableSystem") {
+		m.RegisterAction("DisableSystem", fsm.Payload[SystemControlArgs], func(ctx T, a *SystemControlArgs) {
+			if a.SystemName != "" && h.SetSystem != nil {
+				h.SetSystem(ctx, a.SystemName, false)
+			}
+		})
+	}
 
 	// Invoked by name after init, reset and capture import, and after each
 	// :region op, none of which passes through a region action
-	m.RegisterAction("ReconcileSystems", func(ctx T, args any) {
-		reconcileSystems(ctx, m, h)
-	})
+	if !refused(m, h, h.ApplySystems == nil, "ReconcileSystems") {
+		m.RegisterAction("ReconcileSystems", fsm.Payload[struct{}], func(ctx T, _ *struct{}) {
+			reconcileSystems(ctx, m, h)
+		})
+	}
 }
 
 // === Core Actions ===
 
-// hooked registers name's compiler, or one refusing the load when the action's hook
-// is missing and the host refuses inert actions
-func hooked[T any](m *fsm.Machine[T], h Host[T], unhooked bool, name string, compile fsm.ArgCompiler[T]) {
+// refused registers name as refused, reporting so, when its hook is missing and
+// the host refuses inert actions
+func refused[T any](m *fsm.Machine[T], h Host[T], unhooked bool, name string) bool {
 	if unhooked && h.Refuse != "" {
-		compile = func(*fsm.Machine[T], fsm.ActionConfig, fsm.StateResolver) (any, error) {
-			return nil, errors.New(h.Refuse)
-		}
+		m.RefuseAction(name, h.Refuse)
+		return true
 	}
-	if compile != nil {
-		m.RegisterActionArgs(name, compile)
-	}
+	return false
 }
 
 func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
-	hooked(m, h, h.Emit == nil, "EmitEvent", compileEmitEvent[T])
-	m.RegisterAction("EmitEvent", func(ctx T, args any) {
-		emitArgs, ok := args.(*EmitEventArgs)
-		if !ok || h.Emit == nil {
+	if refused(m, h, h.Emit == nil, "EmitEvent") {
+		return
+	}
+	m.RegisterKeyedAction("EmitEvent", emitKeys, compileEmitEvent, func(ctx T, a *EmitEventArgs) {
+		if h.Emit == nil {
 			return
 		}
-		payload := emitArgs.Payload
-		if len(emitArgs.PayloadVars) > 0 && payload != nil {
-			payload = ApplyPayloadVars(m, payload, emitArgs.PayloadVars)
+		payload := a.Payload
+		if len(a.PayloadVars) > 0 && payload != nil {
+			payload = ApplyPayloadVars(m, payload, a.PayloadVars)
 		}
-		h.Emit(ctx, emitArgs.Type, payload)
+		h.Emit(ctx, a.Type, payload)
 	})
 }
 
 // === Status Actions ===
 
 func registerStatusActions[T any](m *fsm.Machine[T], h Host[T]) {
-	m.RegisterActionArgs("StatusToVar", decodePayload[T, StatusToVarArgs])
-	m.RegisterActionArgs("ConfigToVar", compileConfigToVar(h))
-
-	m.RegisterAction("StatusToVar", func(ctx T, args any) {
-		sa, ok := args.(*StatusToVarArgs)
-		if !ok || sa.Key == "" || sa.Name == "" || h.StatusInt == nil {
+	m.RegisterAction("StatusToVar", fsm.Payload[StatusToVarArgs], func(ctx T, a *StatusToVarArgs) {
+		if a.Key == "" || a.Name == "" || h.StatusInt == nil {
 			return
 		}
-		if v, ok := h.StatusInt(ctx, sa.Key); ok {
-			m.SetVar(sa.Name, v)
+		if v, ok := h.StatusInt(ctx, a.Key); ok {
+			m.SetVar(a.Name, v)
 		}
 	})
 
-	m.RegisterAction("ConfigToVar", func(ctx T, args any) {
-		ca, ok := args.(*ConfigToVarArgs[T])
-		if !ok || ca.Name == "" || ca.Accessor == nil {
+	m.RegisterAction("ConfigToVar", compileConfigToVar(h), func(ctx T, a *ConfigToVarArgs[T]) {
+		if a.Name == "" || a.Accessor == nil {
 			return
 		}
-		m.SetVar(ca.Name, ca.Accessor(ctx))
+		m.SetVar(a.Name, a.Accessor(ctx))
 	})
 }

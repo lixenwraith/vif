@@ -6,7 +6,6 @@ import (
 	"slices"
 	"unicode/utf8"
 
-	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -118,8 +117,7 @@ func scanSpecies(m *mind, visit func(core.Entity)) {
 }
 
 // parseTarget resolves a graph's target name, refusing those its user can't take
-func parseTarget(raw any, refused ...target) (target, error) {
-	name, _ := raw.(string)
+func parseTarget(name string, refused ...target) (target, error) {
 	for t := range targetCount {
 		if targets[t].name == name && !slices.Contains(refused, t) {
 			return t, nil
@@ -129,17 +127,16 @@ func parseTarget(raw any, refused ...target) (target, error) {
 }
 
 // buttonKey reads the key that picks one button; only the button target takes it
-func buttonKey(t target, raw any) (rune, error) {
-	if raw == nil || raw == "" {
+func buttonKey(t target, text string) (rune, error) {
+	if text == "" {
 		return 0, nil
 	}
 	if t != targetButton {
 		return 0, errors.New("key applies only to the button target")
 	}
-	text, _ := raw.(string)
 	key, size := utf8.DecodeRuneInString(text)
-	if size == 0 || size != len(text) {
-		return 0, fmt.Errorf("key must be one character, got %v", raw)
+	if size != len(text) {
+		return 0, fmt.Errorf("key must be one character, got %q", text)
 	}
 	return key, nil
 }
@@ -367,6 +364,44 @@ type pointArgs struct {
 	fire, away bool
 }
 
+// The payloads and guard args of the bot's own names
+type (
+	pointPayload struct {
+		Target string `toml:"target"`
+		Key    string `toml:"key"`
+		Fire   bool   `toml:"fire"`
+		Away   bool   `toml:"away"`
+	}
+	// intentPayload's name, count and hold each take more than one type
+	intentPayload struct {
+		Name  any    `toml:"name"`
+		Count any    `toml:"count"`
+		Char  string `toml:"char"`
+		Hold  any    `toml:"hold"`
+	}
+	textPayload struct {
+		Text string `toml:"text"`
+	}
+	hasTargetArgs struct {
+		Target string `toml:"target"`
+		Key    string `toml:"key"`
+		Within int    `toml:"within"`
+	}
+	onTargetArgs struct {
+		Target string `toml:"target"`
+		Key    string `toml:"key"`
+	}
+	modeArgs struct {
+		Mode string `toml:"mode"`
+	}
+	chanceArgs struct {
+		Percent int `toml:"percent"`
+	}
+	ownArgs struct {
+		Field string `toml:"field"`
+	}
+)
+
 // register installs std's generic vocabulary, its status guards reading the bot's
 // own registry, whose bare keys mirror its own slot, its config guards reading the
 // bot's own view, and the bot's actions and guards.
@@ -403,24 +438,11 @@ func register(m *fsm.Machine[*mind]) {
 		},
 	})
 
-	queueAll := func(m *mind, args any) { m.push(args.([]input.Intent)...) }
-	m.RegisterAction("Intent", func(m *mind, args any) {
-		c := args.(intentChoice)
+	m.RegisterAction("Intent", compileIntent, func(m *mind, c intentChoice) {
 		m.pushHeld(c.draw(m.rng), c.hold)
 	})
-	m.RegisterActionArgs("Intent", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
-		return compileIntent(cfg.Payload)
-	})
-	m.RegisterAction("Text", queueAll)
-	m.RegisterActionArgs("Text", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
-		text, err := textPayload(cfg.Payload)
-		out := make([]input.Intent, 0, len(text))
-		for _, char := range text {
-			out = append(out, input.Intent{Type: input.IntentTextChar, Char: char, Count: 1})
-		}
-		return out, err
-	})
-	m.RegisterAction("TypeGlyph", func(m *mind, _ any) {
+	m.RegisterAction("Text", compileText, func(m *mind, intents []input.Intent) { m.push(intents...) })
+	m.RegisterAction("TypeGlyph", fsm.Payload[struct{}], func(m *mind, _ *struct{}) {
 		char, ok := m.glyphUnder()
 		insert := m.ctx.IsInsertMode()
 		if !ok || !insert && m.room < 2 || m.room < 1 {
@@ -431,96 +453,77 @@ func register(m *fsm.Machine[*mind]) {
 		}
 		m.push(input.Intent{Type: input.IntentTextChar, Char: char, Count: 1})
 	})
-	m.RegisterAction("PointAt", func(m *mind, args any) { m.pointAt(args.(pointArgs)) })
-	m.RegisterActionArgs("PointAt", func(_ *fsm.Machine[*mind], cfg fsm.ActionConfig, _ fsm.StateResolver) (any, error) {
-		var p struct {
-			Target string `toml:"target"`
-			Key    string `toml:"key"`
-			Fire   bool   `toml:"fire"`
-			Away   bool   `toml:"away"`
-		}
-		if err := decodePayload(cfg.Payload, &p, "target", "key", "fire", "away"); err != nil {
-			return nil, err
-		}
-		if p.Fire && p.Away {
-			return nil, errors.New("fire and away do not combine")
-		}
-		var refused []target
-		if p.Away {
-			refused = []target{targetButton, targetRandom}
-		}
-		t, err := parseTarget(p.Target, refused...)
-		if err != nil {
-			return nil, err
-		}
-		key, err := buttonKey(t, p.Key)
-		return pointArgs{target: t, key: key, fire: p.Fire, away: p.Away}, err
-	})
+	m.RegisterAction("PointAt", compilePointAt, (*mind).pointAt)
 
-	guard := func(name string, args []string, build func(map[string]any) (fsm.GuardFunc[*mind], error)) {
-		m.RegisterGuardFactory(name, func(_ *fsm.Machine[*mind], given map[string]any) (fsm.GuardFunc[*mind], error) {
-			if key := unknownKey(given, args...); key != "" {
-				return nil, fmt.Errorf("unknown guard arg %q", key)
-			}
-			return build(given)
-		})
-	}
-	guard("HasTarget", []string{"target", "key", "within"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
-		t, key, err := guardTarget(args)
-		within := std.ParseIntArg(args, "within")
+	m.RegisterGuard("HasTarget", func(a *hasTargetArgs) (fsm.GuardFunc[*mind], error) {
+		t, key, err := guardTarget(a.Target, a.Key)
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			s := m.sight(t, key)
-			return s.found && (within <= 0 || s.dist2 >= 0 && s.dist2 <= int(within*within))
+			return s.found && (a.Within <= 0 || s.dist2 >= 0 && s.dist2 <= a.Within*a.Within)
 		}, err
 	})
-	guard("OnTarget", []string{"target", "key"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
-		t, key, err := guardTarget(args)
+	m.RegisterGuard("OnTarget", func(a *onTargetArgs) (fsm.GuardFunc[*mind], error) {
+		t, key, err := guardTarget(a.Target, a.Key)
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			s := m.sight(t, key)
 			return s.found && s.dist2 == 0
 		}, err
 	})
-	guard("InMode", []string{"mode"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
-		name, _ := args["mode"].(string)
-		mode := slices.Index(core.ModeNames[:], name)
+	m.RegisterGuard("InMode", func(a *modeArgs) (fsm.GuardFunc[*mind], error) {
+		mode := slices.Index(core.ModeNames[:], a.Mode)
 		if mode < 0 {
-			return nil, fmt.Errorf("InMode: unknown mode %q", name)
+			return nil, fmt.Errorf("unknown mode %q", a.Mode)
 		}
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
 			return m.ctx.GetMode() == core.GameMode(mode)
 		}, nil
 	})
-	guard("Chance", []string{"percent"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
-		percent := int(std.ParseIntArg(args, "percent"))
-		if percent < 1 || percent > 100 {
-			return nil, fmt.Errorf("Chance: percent must be 1..100, got %d", percent)
+	m.RegisterGuard("Chance", func(a *chanceArgs) (fsm.GuardFunc[*mind], error) {
+		if a.Percent < 1 || a.Percent > 100 {
+			return nil, fmt.Errorf("percent must be 1..100, got %d", a.Percent)
 		}
 		return func(m *mind, _ *fsm.RegionState, _ any) bool {
-			return m.rng.Intn(100) < percent
+			return m.rng.Intn(100) < a.Percent
 		}, nil
 	})
 	// Idle lets a graph wait for what it queued instead of overflowing the queue
-	guard("Idle", nil, func(map[string]any) (fsm.GuardFunc[*mind], error) {
+	m.RegisterGuard("Idle", func(*struct{}) (fsm.GuardFunc[*mind], error) {
 		return func(m *mind, _ *fsm.RegionState, _ any) bool { return m.queue.n == 0 }, nil
 	})
-	guard("Own", []string{"field"}, func(args map[string]any) (fsm.GuardFunc[*mind], error) {
-		field, _ := args["field"].(string)
-		if field == "" {
-			return nil, errors.New("Own: field must name a payload field")
+	m.RegisterGuard("Own", func(a *ownArgs) (fsm.GuardFunc[*mind], error) {
+		if a.Field == "" {
+			return nil, errors.New("field must name a payload field")
 		}
-		return func(m *mind, _ *fsm.RegionState, payload any) bool { return m.owns(payload, field) }, nil
+		return func(m *mind, _ *fsm.RegionState, payload any) bool { return m.owns(payload, a.Field) }, nil
 	})
 }
 
 // guardTarget reads the target a guard measures from the cursor, which a random
 // cell is not, and the key of a button
-func guardTarget(args map[string]any) (target, rune, error) {
-	t, err := parseTarget(args["target"], targetRandom)
+func guardTarget(name, keyText string) (target, rune, error) {
+	t, err := parseTarget(name, targetRandom)
 	if err != nil {
 		return 0, 0, err
 	}
-	key, err := buttonKey(t, args["key"])
+	key, err := buttonKey(t, keyText)
 	return t, key, err
+}
+
+// compilePointAt reads a PointAt payload; away refuses a target with no mirror
+func compilePointAt(p *pointPayload) (pointArgs, error) {
+	if p.Fire && p.Away {
+		return pointArgs{}, errors.New("fire and away do not combine")
+	}
+	var refused []target
+	if p.Away {
+		refused = []target{targetButton, targetRandom}
+	}
+	t, err := parseTarget(p.Target, refused...)
+	if err != nil {
+		return pointArgs{}, err
+	}
+	key, err := buttonKey(t, p.Key)
+	return pointArgs{target: t, key: key, fire: p.Fire, away: p.Away}, err
 }
 
 // owns reports whether an event payload's field names the bot's own cursor. Until a
@@ -556,13 +559,9 @@ func (c intentChoice) draw(rng *vmath.FastRand) input.Intent {
 // count one number or a [min, max] range, char the rune a char-wait action, press
 // or release targets, and hold how many ticks a press keeps its key down, or true
 // until a release.
-func compileIntent(payload any) (intentChoice, error) {
-	table, _ := payload.(map[string]any)
-	if key := unknownKey(table, "name", "count", "char", "hold"); key != "" {
-		return intentChoice{}, fmt.Errorf("unknown payload field %q", key)
-	}
+func compileIntent(p *intentPayload) (intentChoice, error) {
 	var names []string
-	switch v := table["name"].(type) {
+	switch v := p.Name.(type) {
 	case string:
 		names = []string{v}
 	case []any:
@@ -578,7 +577,7 @@ func compileIntent(payload any) (intentChoice, error) {
 		return intentChoice{}, fmt.Errorf("name must be an action or a list of them")
 	}
 	var c intentChoice
-	switch v := table["count"].(type) {
+	switch v := p.Count.(type) {
 	case nil:
 	case []any:
 		var lo, hi int
@@ -600,7 +599,7 @@ func compileIntent(payload any) (intentChoice, error) {
 		}
 		c.min = n
 	}
-	switch v := table["hold"].(type) {
+	switch v := p.Hold.(type) {
 	case nil:
 	case bool:
 		if !v {
@@ -614,12 +613,11 @@ func compileIntent(payload any) (intentChoice, error) {
 		}
 		c.hold = n
 	}
-	char, _ := table["char"].(string)
 	for _, name := range names {
 		if c.hold != 0 && name != input.PressAction {
 			return intentChoice{}, fmt.Errorf("hold applies only to %s", input.PressAction)
 		}
-		intent, err := intentFor(name, c.min, char)
+		intent, err := intentFor(name, c.min, p.Char)
 		if err != nil {
 			return intentChoice{}, err
 		}
@@ -664,28 +662,14 @@ func intValue(v any) (int, bool) {
 	return 0, false
 }
 
-// decodePayload decodes an action payload, refusing a key the action does not read
-func decodePayload(payload any, into any, allowed ...string) error {
-	table, _ := payload.(map[string]any)
-	if key := unknownKey(table, allowed...); key != "" {
-		return fmt.Errorf("unknown payload field %q", key)
-	}
-	if table == nil {
-		return nil
-	}
-	return toml.Decode(table, into)
-}
-
-// textPayload reads Text's one non-empty text field
-func textPayload(payload any) (string, error) {
-	var p struct {
-		Text string `toml:"text"`
-	}
-	if err := decodePayload(payload, &p, "text"); err != nil {
-		return "", err
-	}
+// compileText queues Text's one non-empty text, a character per rune
+func compileText(p *textPayload) ([]input.Intent, error) {
 	if p.Text == "" {
-		return "", fmt.Errorf("text must not be empty")
+		return nil, fmt.Errorf("text must not be empty")
 	}
-	return p.Text, nil
+	out := make([]input.Intent, 0, len(p.Text))
+	for _, char := range p.Text {
+		out = append(out, input.Intent{Type: input.IntentTextChar, Char: char, Count: 1})
+	}
+	return out, nil
 }

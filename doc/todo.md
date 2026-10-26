@@ -94,20 +94,22 @@ what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
 
-### Refuse unknown keys and `op` values at load
+### Check payload field names against their event at load
 
-- Priority: P1
-- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/guard.go`,
-  `internal/fsm/std/payload.go`, `internal/resource/check.go`, `doc/fsm-reference.md`
+- Priority: P2
+- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/payload.go`,
+  `internal/fsm/std/args.go`, `internal/bot/mind.go`
 
-The scenario and bot-graph decode drops keys outside `ScenarioDoc`'s tags, so a
-misspelt `on_entr` loads as absent and `-check` is silent, and `CompareInt` reads
-an omitted or unknown `op` as `eq` (`guard.go`), unchecked by the guard factories,
-so `op = "ge"` tests equality (verified by reading; `:d break stat` spells `ne`,
-`ge`, `le`). The fix is the strict `Op` and `Decode` of
-[Behavior machines](machine-design.md) §7's dialect kernel, which the editor also
-needs and which its plan's Phase 3 lands.
-Shipped scenarios and the default bot graph use only known keys and ops.
+A payload guard's `field` (bot's `Own` too), a transition's `capture_vars` and an
+`EmitEvent`'s `payload_vars` name payload fields looked up only when an event
+arrives, so a misspelt one fails its guard or is skipped while `-check` prints
+`scenario ok` (verified on a td copy with `field = "specie"` and
+`capture_vars = { xx = "dead_x" }`). Shipped scenarios and the default bot graph
+name only fields their events carry (a scratch scan of all 174 names). The smallest
+fix resolves each name with `fsm.FieldByTag` at load: against the trigger's payload
+prototype where `compileTransitions` resolves the trigger, which the payload guard
+builders then take, and against the decoded payload in `compileEmitEvent`; a payload
+guard on a `Tick` transition or as an action guard, which see no payload, fails too.
 
 ### Author the tonal instruments as data
 
@@ -128,8 +130,6 @@ scratch repository, and would be a `soundlab` or `vif-log` verb.
 - Priority: P2
 - Affected files: `pkg/tomlmacro`, `internal/fsm`, `internal/manifest/schema.go`,
   `internal/mode`, `internal/render/renderer`, `internal/resource`
-- Prerequisite: the argument catalog of the dialect kernel
-  ([Behavior machines](machine-design.md) §7)
 - Design: [TOML macros](toml-macros.md)
 
 The editor writes ordinary scenarios: a directory under the user root's `scenario/`
@@ -152,8 +152,9 @@ time knows an editor made it.
   parameter order and per-parameter docs, since a TOML table has no order; root
   `[[expand]]` for blocks spanning several states or a whole region; and provenance,
   so a load error such as an unknown target lands on the block that produced it.
-- **Vocabulary.** Action, guard and event pickers read `-schema`, which lists actions
-  and guards by name only, without arguments, until the argument catalog lands.
+- **Vocabulary.** Action, guard and event pickers read `-schema`, which lists each
+  vocabulary's actions and guards with their arguments and every event's payload
+  fields ([Behavior machines](machine-design.md) §7).
 - **Map layer.** Geometry is generated at run time (`EventLevelSetup`, maze rooms,
   `.vifimg` walls). A painted map needs a static form the digest covers, and
   `.vifimg` assets come from the `image/` category, which it does not and a joiner
@@ -164,10 +165,9 @@ time knows an editor made it.
   validates with `resource.ValidateScenario` and restarts on it as `:n` does, since
   a run plays one scenario. Editing inside a multiplayer session is out of scope.
 
-In order: the argument catalog; reference kinds, order and provenance; a read-only
-graph of a scenario's regions, states and blocks; placing and editing blocks into
-editor-owned files; the map layer and point markers; root `[[expand]]` blocks and
-library copies.
+In order: reference kinds, order and provenance; a read-only graph of a scenario's
+regions, states and blocks; placing and editing blocks into editor-owned files; the
+map layer and point markers; root `[[expand]]` blocks and library copies.
 
 ## Browser sessions
 

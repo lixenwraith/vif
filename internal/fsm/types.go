@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
 // StateID is a unique identifier for a node
@@ -66,11 +67,9 @@ type Machine[T any] struct {
 	// System Configuration
 	systemsConfig *SystemsConfig
 
-	// Dependency Injection
-	guardReg        map[string]GuardFunc[T]
-	guardFactoryReg map[string]GuardFactoryFunc[T]
-	actionReg       map[string]ActionFunc[T]
-	argCompilerReg  map[string]ArgCompiler[T]
+	// The vocabulary a load resolves names against
+	guardReg        map[string]guardEntry[T]
+	actionReg       map[string]actionEntry[T]
 	compiledActions map[uint32]Action[T]
 	nextActionID    uint32
 
@@ -162,18 +161,27 @@ type GuardFunc[T any] func(ctx T, region *RegionState, payload any) bool
 // ActionFunc executes a side effect
 type ActionFunc[T any] func(ctx T, args any)
 
-// GuardFactoryFunc creates a parameterized guard from its config args
-// Used for configurable guards like StateTimeExceeds with duration parameter
-// Return errors (invalid args surface at load, not panic)
-type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) (GuardFunc[T], error)
-
-// ArgCompiler builds the pre-compiled Args value for an action from its config
-// Runs once at load; returning an error fails the load with a precise diagnostic
-type ArgCompiler[T any] func(m *Machine[T], cfg ActionConfig, resolve StateResolver) (any, error)
-
 // StateResolver maps a state name to its ID during load
 // Valid only for the duration of the compile call
 type StateResolver func(name string) (StateID, bool)
+
+// guardEntry is a registered guard: its args for -schema, and build, which
+// decodes its guard_args and makes the guard once at load
+type guardEntry[T any] struct {
+	args  []dialect.Field
+	build func(args map[string]any) (GuardFunc[T], error)
+}
+
+// actionEntry is a registered action: the keys of its table it reads and its
+// payload's fields for -schema, compile, which makes its Args once at load, and
+// run; refuse, when set, is why a load naming it fails
+type actionEntry[T any] struct {
+	keys    []string
+	args    []dialect.Field
+	compile func(cfg ActionConfig, resolve StateResolver) (any, error)
+	run     ActionFunc[T]
+	refuse  string
+}
 
 // triggerMask is the set of event types a node, region, or machine reacts to.
 // EventNone is never recorded: tick transitions are evaluated by Update, not

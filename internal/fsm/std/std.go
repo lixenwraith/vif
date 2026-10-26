@@ -55,16 +55,11 @@ func Register[T any](m *fsm.Machine[T], h Host[T]) {
 	registerStatusActions(m, h)
 
 	registerCoreGuards(m)
-	registerCompoundGuards(m)
 	registerPayloadGuards(m)
 	registerStatusGuards(m, h)
 	registerConfigGuards(m, h)
 	registerStaticGuards(m)
 }
-
-// Ops returns the comparison operators accepted by the comparison guards
-// Consumed by the schema exporter
-func Ops() []string { return []string{"eq", "neq", "gt", "gte", "lt", "lte"} }
 
 // alwaysFalse is the guard returned when the host lacks the needed capability
 func alwaysFalse[T any]() fsm.GuardFunc[T] {

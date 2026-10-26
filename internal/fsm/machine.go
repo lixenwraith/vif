@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
 // NewMachine creates a new FSM instance
@@ -21,10 +22,8 @@ func NewMachine[T any]() *Machine[T] {
 		variables:      make(map[string]int64),
 		delayedActions: make(map[string][]DelayedAction[T]),
 
-		guardReg:        make(map[string]GuardFunc[T]),
-		guardFactoryReg: make(map[string]GuardFactoryFunc[T]),
-		actionReg:       make(map[string]ActionFunc[T]),
-		argCompilerReg:  make(map[string]ArgCompiler[T]),
+		guardReg:        make(map[string]guardEntry[T]),
+		actionReg:       make(map[string]actionEntry[T]),
 		compiledActions: make(map[uint32]Action[T]),
 
 		StateDurations: make(map[StateID]time.Duration),
@@ -34,61 +33,78 @@ func NewMachine[T any]() *Machine[T] {
 	return m
 }
 
-// RegisteredGuards returns sorted names of static guards and guard factories
-func (m *Machine[T]) RegisteredGuards() []string {
-	names := make([]string, 0, len(m.guardReg)+len(m.guardFactoryReg))
-	for n := range m.guardReg {
-		names = append(names, n)
+// RegisterGuard registers name as a guard whose guard_args decode strictly into A,
+// which build makes the guard of once at load; an A of no fields takes none
+func (m *Machine[T]) RegisterGuard[A any](name string, build func(*A) (GuardFunc[T], error)) {
+	m.guardReg[name] = guardEntry[T]{
+		args: dialect.Fields[A](),
+		build: func(args map[string]any) (GuardFunc[T], error) {
+			a, err := dialect.Decode[A](args)
+			if err != nil {
+				return nil, err
+			}
+			return build(a)
+		},
 	}
-	for n := range m.guardFactoryReg {
-		names = append(names, n)
+}
+
+// RegisterAction registers name to run with what compile makes of its payload,
+// decoded strictly into A once at load; an A of no fields takes no payload
+func (m *Machine[T]) RegisterAction[A, R any](name string, compile func(*A) (R, error), run func(T, R)) {
+	var keys []string
+	args := dialect.Fields[A]()
+	if args != nil {
+		keys = []string{"payload"}
 	}
-	sort.Strings(names)
-	return names
-}
-
-// RegisteredActions returns sorted names of registered actions
-func (m *Machine[T]) RegisteredActions() []string {
-	names := make([]string, 0, len(m.actionReg))
-	for n := range m.actionReg {
-		names = append(names, n)
+	m.actionReg[name] = actionEntry[T]{
+		keys: keys,
+		args: args,
+		compile: func(cfg ActionConfig, _ StateResolver) (any, error) {
+			a, err := dialect.Decode[A](cfg.Payload)
+			if err != nil {
+				return nil, fmt.Errorf("payload: %w", err)
+			}
+			return compile(a)
+		},
+		run: func(ctx T, args any) { r, _ := args.(R); run(ctx, r) },
 	}
-	sort.Strings(names)
-	return names
 }
 
-// RegisterGuard adds a predicate function to the registry
-func (m *Machine[T]) RegisterGuard(name string, fn GuardFunc[T]) {
-	m.guardReg[name] = fn
+// RegisterKeyedAction registers name to run with what compile makes of the keys of
+// its own table it reads, keys, as the region actions and EmitEvent do
+func (m *Machine[T]) RegisterKeyedAction[R any](name string, keys []string, compile func(ActionConfig, StateResolver) (R, error), run func(T, R)) {
+	m.actionReg[name] = actionEntry[T]{
+		keys: keys,
+		compile: func(cfg ActionConfig, resolve StateResolver) (any, error) {
+			return compile(cfg, resolve)
+		},
+		run: func(ctx T, args any) { r, _ := args.(R); run(ctx, r) },
+	}
 }
 
-// RegisterGuardFactory adds a parameterized guard factory to the registry
-func (m *Machine[T]) RegisterGuardFactory(name string, factory GuardFactoryFunc[T]) {
-	m.guardFactoryReg[name] = factory
+// RefuseAction makes a load naming name fail with reason, for an embedder whose
+// scripts must not use it; the vocabulary leaves it out
+func (m *Machine[T]) RefuseAction(name, reason string) {
+	m.actionReg[name] = actionEntry[T]{refuse: reason}
 }
 
-// GetGuardFactory returns a registered guard factory by name
-func (m *Machine[T]) GetGuardFactory(name string) (GuardFactoryFunc[T], bool) {
-	fn, ok := m.guardFactoryReg[name]
-	return fn, ok
-}
+// Payload is the compile of an action that runs with its payload as decoded
+func Payload[A any](a *A) (*A, error) { return a, nil }
 
-// GetGuard returns a registered static guard by name
-func (m *Machine[T]) GetGuard(name string) (GuardFunc[T], bool) {
-	fn, ok := m.guardReg[name]
-	return fn, ok
-}
-
-// RegisterAction adds a side-effect function to the registry
-func (m *Machine[T]) RegisterAction(name string, fn ActionFunc[T]) {
-	m.actionReg[name] = fn
-}
-
-// RegisterActionArgs associates an argument compiler with an action name
-// actions supply their own arg construction; fsm core does not needs to
-// know which arg struct belongs to which action name
-func (m *Machine[T]) RegisterActionArgs(name string, compile ArgCompiler[T]) {
-	m.argCompilerReg[name] = compile
+// Vocabulary lists the guards and actions a load resolves, And, Or and Not
+// included and refused actions left out, in the order -schema prints them
+func (m *Machine[T]) Vocabulary() []dialect.Entry {
+	out := dialect.TreeEntries()
+	for name, g := range m.guardReg {
+		out = append(out, dialect.Entry{Name: name, Kind: dialect.KindGuard, Args: g.args})
+	}
+	for name, a := range m.actionReg {
+		if a.refuse == "" {
+			out = append(out, dialect.Entry{Name: name, Kind: dialect.KindAction, Keys: a.keys, Args: a.args})
+		}
+	}
+	dialect.Sort(out)
+	return out
 }
 
 // Init initializes all configured regions
@@ -385,11 +401,11 @@ func (m *Machine[T]) Steer(following, proposing bool) {
 // ExecuteAction runs a registered action by name, for embedder hooks such as
 // ReconcileSystems
 func (m *Machine[T]) ExecuteAction(ctx T, actionName string, args any) bool {
-	fn, ok := m.actionReg[actionName]
-	if !ok {
+	a, ok := m.actionReg[actionName]
+	if !ok || a.run == nil {
 		return false
 	}
-	fn(ctx, args)
+	a.run(ctx, args)
 	return true
 }
 

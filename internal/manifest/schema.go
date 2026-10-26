@@ -7,14 +7,15 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
-	"github.com/lixenwraith/vif/internal/fsm/std"
+	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
 // SchemaVersion is the FSM schema contract version -schema prints.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Schema writes the machine schema as JSON for -schema and authoring tools. It
 // needs no terminal, services or World instance.
@@ -33,19 +34,19 @@ func Schema(w io.Writer) error {
 		Name   string  `json:"name"`
 		Fields []field `json:"fields,omitempty"`
 	}
+	// Each vocabulary lists its guards and actions with their args: a scenario's,
+	// and a bot graph's, which refuses the actions that write the world
 	schema := struct {
-		SchemaVersion    int           `json:"schema_version"`
-		Events           []eventSchema `json:"events"`
-		Guards           []string      `json:"guards"`
-		Actions          []string      `json:"actions"`
-		Ops              []string      `json:"ops"`
-		ConfigIntFields  []string      `json:"config_int_fields"`
-		ConfigBoolFields []string      `json:"config_bool_fields"`
+		SchemaVersion    int                        `json:"schema_version"`
+		Events           []eventSchema              `json:"events"`
+		Vocabularies     map[string][]dialect.Entry `json:"vocabularies"`
+		Ops              []string                   `json:"ops"`
+		ConfigIntFields  []string                   `json:"config_int_fields"`
+		ConfigBoolFields []string                   `json:"config_bool_fields"`
 	}{
 		SchemaVersion:    SchemaVersion,
-		Guards:           m.RegisteredGuards(),
-		Actions:          m.RegisteredActions(),
-		Ops:              std.Ops(),
+		Vocabularies:     map[string][]dialect.Entry{"scenario": m.Vocabulary(), "bot": bot.Vocabulary()},
+		Ops:              dialect.Ops(),
 		ConfigIntFields:  engine.ConfigIntFields(),
 		ConfigBoolFields: engine.ConfigBoolFields(),
 	}

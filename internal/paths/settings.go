@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -87,18 +86,7 @@ var DefaultPlay = sync.OnceValue(func() Play {
 // UnknownKeys names the keys a settings document holds that this build has no
 // field for, every key it does know read by the time this is returned. A run drops
 // them from the document it writes back to (DropUnknown); soundlab only names them.
-type UnknownKeys []toml.Key
-
-func (u UnknownKeys) Error() string {
-	q := make([]string, len(u))
-	for i, k := range u {
-		q[i] = strconv.Quote(k.String())
-	}
-	if len(q) == 1 {
-		return "unknown key " + q[0]
-	}
-	return "unknown keys " + strings.Join(q, ", ")
-}
+type UnknownKeys = toml.UnknownKeys
 
 // LoadSettings reads the first vif.toml the roots of override hold, over the
 // embedded one, and names the file it read: "" when the embedded one stands alone.
