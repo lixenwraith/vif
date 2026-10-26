@@ -329,8 +329,10 @@ because the pass follows that dispatch; one armed in an owner's `Update`, or by
 a handler the closing settle runs, starts counting on the next tick. Systems
 whose entities end or act on a slot declare `Requires: timer`.
 Cursor countdowns stay in their owner-authored stores (D-13), and species phase
-timers stay in the species component beside the phase they time;
-[Machine design](machine-design.md) is the future design for those.
+timers stay in the species component beside the phase they time: the quasar's as
+its behavior machine's elapsed time and entry duration (`QuasarComponent.Machine`),
+the swarm's and storm's as countdowns, for which
+[Machine design](machine-design.md) is the future design.
 
 ## 8. Event transport
 
