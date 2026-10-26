@@ -236,6 +236,7 @@ var Renderers = []RendererDef{
 	{"sigil", "NewSigilRenderer", "PrioritySigil"},
 	{"gold", "NewGoldRenderer", "PriorityGold"},
 	{"healthbar", "NewHealthBarRenderer", "PriorityHealthBar"},
+	{"flash", "NewFlashRenderer", "PriorityFlash"}, // under the species that leave them
 
 	// --- Species (back to front) ---
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},
@@ -266,7 +267,6 @@ var Renderers = []RendererDef{
 	{"bullet", "NewBulletRenderer", "PriorityBullet"},
 
 	// --- Particles ---
-	{"flash", "NewFlashRenderer", "PriorityFlash"},
 	{"fadeout", "NewFadeoutRenderer", "PriorityFadeout"},
 	{"explosion", "NewExplosionRenderer", "PriorityExplosion"},
 	{"spirit", "NewSpiritRenderer", "PrioritySpirit"},

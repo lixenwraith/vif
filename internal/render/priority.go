@@ -18,6 +18,9 @@ const (
 	PriorityGlyph
 	PriorityGold
 	PriorityNugget
+	// A destruction flash is the glyph a species ploughed through; the species
+	// draws over it
+	PriorityFlash
 
 	// === Species (back to front) ===
 
@@ -52,7 +55,6 @@ const (
 	PriorityBullet
 
 	// === Particles ===
-	PriorityFlash
 	PriorityFadeout
 	PriorityExplosion
 	PrioritySpirit
