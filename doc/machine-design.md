@@ -344,15 +344,22 @@ most four.
 
 A transition tries its candidates in order, guard then probe. On the first
 success it runs `Exit(current)`, then `Do`, commits `{State, Elapsed: 0,
-Duration}`, runs `Enter(target)` and reports `(from, to, cause)`: exit and the edge
-action read the entry being left, enter the one it starts, its duration included.
-Exit runs only when a transition commits, and probes keep fallible work out of
-hooks that cannot fail. If no candidate commits: `Retry(d)` re-arms the current
-state in place (no exit or enter) and reports `CauseRetry` with `from == to`, and
-the new period runs the state's cues again; `Hold` changes nothing, so an expired
-state tries its timeout again next step. In a phase, the first edge whose source
-holds the state and whose guard passes owns the phase: when its chain fails, its
-fallback applies and later edges wait for the next step.
+Duration}`, runs `Enter(target)` and reports `(from, to, cause)`.
+
+Each hook sees its own entry: `Exit` and `Do` read the entry being left, and
+`Enter` reads the entry being started, its `Duration` included, so an enter hook
+sees a candidate's override. Quasar's Charging enter sizes the splash telegraph
+from it and swarm's Charge enter derives its velocity from the charge time.
+`Start` commits before `Enter` the same way. Probes run before `Exit`, so `Enter`
+cannot fail and nothing is half-committed: exit runs only when a transition
+commits, and fallible work stays out of the hooks that cannot fail.
+
+If no candidate commits: `Retry(d)` re-arms the current state in place (no exit
+or enter) and reports `CauseRetry` with `from == to`, and the new period runs the
+state's cues again; `Hold` changes nothing, so an expired state tries its timeout
+again next step. In a phase, the first edge whose source holds the state and
+whose guard passes owns the phase: when its chain fails, its fallback applies and
+later edges wait for the next step.
 
 The resulting state's tick runs in the step that entered it (S10, S12 accepted).
 A global edge acts at the start of the step, so the state it enters advances by
@@ -711,6 +718,8 @@ Steps:
    `Step`, then writes `combat.IsEnraged`, `IsShielded`, `Shield.Active` and
    the ward from the flags and runs `strikeContacts`. `startCharging`,
    `startZapping`, `stopZapping` and the detached commits become the hooks.
+   Charging's enter takes the splash duration from `Machine.Duration`, not
+   `QuasarChargeDuration`, so the telegraph lasts as long as the entry (§6.3).
    `updateKineticMovement` advances `SpeedElapsed` by dt and lifts the
    multiplier each `QuasarSpeedIncreaseTicks * GameUpdateInterval`, carrying
    the remainder. The observer is nil.
