@@ -228,8 +228,6 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 
 	s.killDrains([]core.Entity{drainA, drainB})
 
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, drainA, drainB)
-
 	sources := []vmath.Point{{X: posA.X, Y: posA.Y}, {X: posB.X, Y: posB.Y}}
 	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.SwarmWidth, Height: parameter.SwarmHeight}
 	s.fuseInto(component.SpeciesSwarm, effect, sources, area)
