@@ -314,11 +314,11 @@ also the visual stacking order; exact integer priorities are in
 |---|---|
 | Background/guidance | `ping` |
 | Environment/guidance | `wall`, `chargeline` |
-| Base entities | `sigil`, `glyph`, `gold`, then `flash`, the glyph a species ploughed through, under the species |
+| Base entities | `sigil`, `glyph`, `gold` |
+| Particles | `flash`, `fadeout`, `explosion`, `spirit`: what a species left, under the species that leaves it |
 | Species/structures | `pylon`, `tower`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, then `healthbar` over them |
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
-| Particles | `fadeout`, `explosion`, `spirit` |
 | Overlay effects | `button`, `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor` |

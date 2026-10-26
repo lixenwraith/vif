@@ -18,9 +18,14 @@ const (
 	PriorityGlyph
 	PriorityGold
 	PriorityNugget
-	// A destruction flash is the glyph a species ploughed through; the species
-	// draws over it
+
+	// === Particles ===
+	// What a species left behind: the flash of a glyph it ploughed through, a
+	// wall's fadeout, an explosion, a spirit. The species draws over them all.
 	PriorityFlash
+	PriorityFadeout
+	PriorityExplosion
+	PrioritySpirit
 
 	// === Species (back to front) ===
 
@@ -53,11 +58,6 @@ const (
 	PriorityPulse
 	PriorityRay
 	PriorityBullet
-
-	// === Particles ===
-	PriorityFadeout
-	PriorityExplosion
-	PrioritySpirit
 
 	// === Overlays ===
 	PriorityButton // Opaque, so every map layer under it passes behind

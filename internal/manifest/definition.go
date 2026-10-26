@@ -236,7 +236,12 @@ var Renderers = []RendererDef{
 	{"sigil", "NewSigilRenderer", "PrioritySigil"},
 	{"gold", "NewGoldRenderer", "PriorityGold"},
 	{"healthbar", "NewHealthBarRenderer", "PriorityHealthBar"},
-	{"flash", "NewFlashRenderer", "PriorityFlash"}, // under the species that leave them
+
+	// --- Particles: under the species that leave them ---
+	{"flash", "NewFlashRenderer", "PriorityFlash"},
+	{"fadeout", "NewFadeoutRenderer", "PriorityFadeout"},
+	{"explosion", "NewExplosionRenderer", "PriorityExplosion"},
+	{"spirit", "NewSpiritRenderer", "PrioritySpirit"},
 
 	// --- Species (back to front) ---
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},
@@ -265,11 +270,6 @@ var Renderers = []RendererDef{
 	{"pulse", "NewPulseRenderer", "PriorityPulse"},
 	{"ray", "NewRayRenderer", "PriorityRay"},
 	{"bullet", "NewBulletRenderer", "PriorityBullet"},
-
-	// --- Particles ---
-	{"fadeout", "NewFadeoutRenderer", "PriorityFadeout"},
-	{"explosion", "NewExplosionRenderer", "PriorityExplosion"},
-	{"spirit", "NewSpiritRenderer", "PrioritySpirit"},
 
 	// --- Overlays ---
 	{"button", "NewButtonRenderer", "PriorityButton"},

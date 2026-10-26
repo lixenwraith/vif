@@ -711,7 +711,7 @@ Rules the first phases taught, binding on the rest:
   calling a constructor and using the result.
 - A species host that clears its footprint names the effect it leaves:
   `sweep.emit(w, EventFlashSpawnOneRequest)` draws each dead glyph's rune for
-  `DestructionFlashDuration` (500 ms); the flash layer sits under the species
+  `DestructionFlashDuration` (500 ms); the particle layer sits under the species
   since Phase 2's review, so the body covers it. Swarm and storm move without
   sweeping and leave nothing; a program's `Teleport` or `ChargeToStored` verb
   that clears cells says which.
