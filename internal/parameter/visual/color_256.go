@@ -88,6 +88,16 @@ const (
 	Effect256Threshold = 0.25
 )
 
+// The start screen on a console: its page, the prompt's button and label, and the help
+// button's frame and label, bright since a blue line does not read on black
+const (
+	Start256Bg         = ConBlack
+	Start256Button     = ConBlue
+	Start256ButtonText = ConBrightWhite
+	Start256Ghost      = ConBrightBlue
+	Start256GhostText  = ConBrightBlue
+)
+
 // Storm256Bodies is each storm sphere's flat body, by StormCircleType
 var Storm256Bodies = [3]uint8{ConGreen, ConRed, ConBlue}
 

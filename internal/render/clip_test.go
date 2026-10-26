@@ -227,7 +227,7 @@ func TestEveryLayerDeclaresItsClip(t *testing.T) {
 	t.Parallel()
 	screenSpace := map[RenderPriority]bool{
 		PriorityGrayout: true, PriorityStrobe: true, PriorityDim: true,
-		PriorityHeat: true, PriorityIndicator: true, PriorityStatusBar: true,
+		PriorityHeat: true, PriorityIndicator: true, PriorityStatusBar: true, PriorityStartScreen: true,
 		PriorityFlowField: true, PriorityPinnedState: true,
 		PriorityOverlay: true, PriorityDebug: true,
 	}

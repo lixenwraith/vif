@@ -97,6 +97,28 @@ const (
 	StatusNetLossWarnPct = 2
 )
 
+// Start Screen: the terminal's and the desktop window's, laid out as Android's and the
+// page's are, with the prompt as lixen.com's button and help in the top right corner
+const (
+	// StartLogoShare is the mark's side as a share of the screen's shorter side
+	StartLogoShare = 0.4
+
+	// StartLogoMinRows is the smallest mark worth drawing; less room shows the prompt alone
+	StartLogoMinRows = 4
+
+	// StartPromptGap is the rows between the mark and the prompt's button
+	StartPromptGap = 1
+
+	// StartButtonPadX is the columns either side of the prompt inside its button
+	StartButtonPadX = 3
+
+	// StartHelpWord follows the key help is bound to on the help button, "F1 help";
+	// StartHelpMarginX/Y keep the button off the corner
+	StartHelpWord    = "help"
+	StartHelpMarginX = 2
+	StartHelpMarginY = 1
+)
+
 // Overlay Window
 const (
 	// OverlayWidthPercent is the fraction of screen width the overlay covers

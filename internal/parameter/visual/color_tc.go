@@ -200,6 +200,14 @@ var (
 	RgbOverlayScrollThumb = color.Cyan
 	RgbOverlayScrollTrack = color.IronGray
 
+	// The start screen in lixen.com's dark theme: its page, the primary button the prompt
+	// is drawn as, and the ghost button for help, framed in the primary's blue
+	RgbStartBg         = color.RGB{R: 17, G: 17, B: 27}
+	RgbStartButton     = color.RGB{R: 37, G: 99, B: 235}
+	RgbStartButtonText = color.White
+	RgbStartGhost      = RgbStartButton
+	RgbStartGhostText  = color.RGB{R: 142, G: 162, B: 255}
+
 	// Pinned stats HUD
 	RgbHudBg     = color.Obsidian
 	RgbHudHeader = color.Gold

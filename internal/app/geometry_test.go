@@ -9,6 +9,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/bot"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
@@ -588,5 +589,38 @@ func TestAFirstGameWaitsForItsPlayersPress(t *testing.T) {
 			t.Fatalf("%s: paused %v, asking %q, cursor at %v from %v after the press; want the game started as it stood",
 				name, a.ctx.TimeCtl.IsPaused(), rc.Prompt, cursor(), at)
 		}
+	}
+}
+
+// TestTheLaunchWaitsBehindTheStartScreen: the launch on a host without a start screen
+// of its own shows its first game's wait as the game's start screen, asking as the
+// status line would; a click on its help button opens help over the waiting game, and
+// the press that starts the game lifts the screen.
+func TestTheLaunchWaitsBehindTheStartScreen(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	const w, h = 120, 40
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
+		Host: Host{Presentation: &framePresentation{w: w, h: h}}, startScreen: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	a.holdFirstGame(nil)
+	rc := a.renderContext()
+	if !rc.StartScreen || rc.StartHelp != "F1 help" || rc.Prompt != "Click or press a key to start" {
+		t.Fatalf("at launch the start screen is up %v with help %q, asking %q", rc.StartScreen, rc.StartHelp, rc.Prompt)
+	}
+
+	help := render.StartHelpRect(w, rc.StartHelp)
+	a.takeEvent(terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
+		MouseAction: terminal.MouseActionPress, MouseX: help.X0 + 1, MouseY: help.Y0 + 1})
+	if !a.ctx.TimeCtl.Holds(engine.HoldStart) || a.ctx.GetOverlayTitle() != core.OverlayHelpTitle {
+		t.Fatalf("after a click on help: waiting %v, overlay %q; want help over the waiting game",
+			a.ctx.TimeCtl.Holds(engine.HoldStart), a.ctx.GetOverlayTitle())
+	}
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape})
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'j'})
+	if rc := a.renderContext(); a.ctx.TimeCtl.Holds(engine.HoldStart) || rc.StartScreen || rc.StartHelp != "" {
+		t.Fatalf("after the start: waiting %v, start screen up %v", a.ctx.TimeCtl.Holds(engine.HoldStart), rc.StartScreen)
 	}
 }

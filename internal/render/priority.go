@@ -78,6 +78,9 @@ const (
 	// the player is steering.
 	PriorityPeerCursor
 	PriorityCursor
+	// Over the whole game while the launch waits for its press, under the overlays
+	// its held game still opens
+	PriorityStartScreen
 
 	// === Debug/Overlay ===
 	PriorityFlowField
@@ -88,11 +91,11 @@ const (
 
 // ClipsToPlayfield confines simulation layers and the cursors to the map, including
 // when it is smaller than the viewport. Post-processing, heat, indicators, the status
-// bar and debug overlays address the whole screen.
+// bar, the start screen and debug overlays address the whole screen.
 func (p RenderPriority) ClipsToPlayfield() bool {
 	switch p {
 	case PriorityGrayout, PriorityStrobe, PriorityDim,
-		PriorityHeat, PriorityIndicator, PriorityStatusBar,
+		PriorityHeat, PriorityIndicator, PriorityStatusBar, PriorityStartScreen,
 		PriorityFlowField, PriorityPinnedState, PriorityOverlay, PriorityDebug:
 		return false
 	default:

@@ -85,7 +85,7 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	if away {
 		v.setAway(true) // before the run reads its reports, so it never starts going
 	}
-	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, Settings: paths.SettingsFor("", file),
+	cfg := app.Config{Host: app.Host{Presentation: v, StartScreen: true}, Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
 	if unknown != nil {

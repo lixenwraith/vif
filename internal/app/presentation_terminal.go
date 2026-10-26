@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/render"
@@ -27,6 +28,9 @@ type presentationState struct {
 	unseen bool
 	// touched says the last pointer press was a finger's, which a waiting game asks for
 	touched bool
+	// startScreen says the launch's first game waits behind the start screen, which
+	// lifts with its hold
+	startScreen bool
 	// cell is the zoom the presentation opened at or the run last wrote back
 	cell float64
 }
@@ -132,6 +136,41 @@ func (a *App) showStartupStatus(message string) {
 	if a.orchestrator != nil {
 		a.frame()
 	}
+}
+
+// showJoinAsk asks for the press that seats a waiting join: on the start screen's
+// button at the launch, where the host has no start screen of its own, else on the
+// status line. The wait has no help to open, its world not running yet.
+func (a *App) showJoinAsk() {
+	if !a.cfg.startScreen {
+		a.showJoinStatus(a.joinPrompt())
+		return
+	}
+	if a.orchestrator != nil && !pageHidden() && a.terminalTaking() {
+		ctx := a.renderContext()
+		ctx.StartScreen, ctx.StartHelp, ctx.Prompt = true, "", a.joinPrompt()
+		a.orchestrator.RenderStatus(ctx, a.world)
+	}
+}
+
+// startHelp says ev is a click on the start screen's help button, which opens help
+// rather than the game
+func (a *App) startHelp(ev terminal.Event) bool {
+	if !a.startScreen || ev.Type != terminal.EventMouse || ev.MouseAction != terminal.MouseActionPress ||
+		ev.MouseBtn != terminal.MouseBtnLeft || a.ctx.MouseDisabled.Load() || a.orchestrator == nil {
+		return false
+	}
+	width, _ := a.orchestrator.Size()
+	return render.StartHelpRect(width, a.startHelpLabel()).Contains(ev.MouseX, ev.MouseY)
+}
+
+// startHelpLabel is the start screen's help button, named by the first key help is
+// bound to, so a keymap that moves help moves the label; a click opens it either way
+func (a *App) startHelpLabel() string {
+	if keys := a.ctx.KeyTable.Bindings(input.SectionNormal, "help"); len(keys) > 0 {
+		return keys[0] + " " + parameter.StartHelpWord
+	}
+	return parameter.StartHelpWord
 }
 
 // showJoinStatus is showStartupStatus before the gate hands a joiner its session's

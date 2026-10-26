@@ -427,6 +427,16 @@ name. Adding a graphical host is therefore composition, not a simulation fork:
    builder, and leave components, systems, events, scheduler and the manifest
    fingerprint common.
 
+A host without a start screen of its own, the terminal or the desktop window,
+gets the run's (`Host.StartScreen` unset): while the launch's first game stands in
+its start hold, or a `-join` launch waits for its press, every row above the
+status bar is a page in the site's colors with the logo at the centre and the
+prompt under it on a button, as Android's and the page's are. The held game adds
+"F1 help" at the top right, named by the key help is bound to, which a click opens
+as that key does, and help, the configuration menu and `:` open over the page as
+over the game; the status bar keeps its line. The press that starts the game or seats the join lifts it; a
+later new game asks on the status line, and `[play] wait` off opens none.
+
 The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
 build but `vif_nogui`, sets `Host.Presentation` to a `pkg/window` window when `-g`
 asks for it, as a `vif_gui` build or `vif.toml`'s `[presentation] window` does by
