@@ -599,6 +599,25 @@ crossing a host playing alone makes lands two ticks later than it needs to. Push
 the authority's lead when hosting starts, or let `driveOwnLead` run for an
 authority with no peers.
 
+### Carry the cursor clocks as ages so the epoch leaves session identity
+
+- Priority: P3
+- Affected files: `internal/component/shield.go`, `internal/component/heat.go`,
+  `internal/component/cursor.go`, `internal/system/shield.go`,
+  `internal/system/heat.go`, `internal/system/cursor.go`,
+  `internal/system/network.go`, `internal/system/meta.go`
+
+A capture's last absolute instants are three cursor clocks: `Shield.LastDrainTime`,
+`Heat.EmberDecayTime` and `Wraith.Since`. Each is sound only because `SimEpoch` is
+session identity (D-21), and the shield already restarts a drain interval stamped
+ahead of its own clock, which a join or a handoff can install. No shared species
+carries an instant (the quasar counts its speed in movement time), so no test can
+show a receiver on a shifted epoch diverging in the compared surface. Make each
+clock a carried age (a `time.Duration` advanced by dt and reset where the stamp is
+written), drop the shield's ahead-of-clock restart, and prove the epoch out of
+session identity: a receiver on a shifted epoch reproduces the sender's
+continuation exactly.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -1000,6 +1019,20 @@ a phone its battery. While a solo run is away, the event loop could wait on a pu
 instead of its ticker, the app loop drop its input and frame tickers until a report
 or event comes, and the render thread stop its vsync callback once it has painted
 the last frame flushed.
+
+### Lay out countdown splashes once a tick
+
+- Priority: P2
+- Affected files: `internal/system/splash.go` (`Update`, `getTimerBBoxes`)
+
+Each live countdown splash places itself by rebuilding every other countdown's
+padded box into a fresh slice (`getTimerBBoxes(self)`), so a tick's scan and its
+bytes grow with the square of the countdowns alive. A charging quasar's telegraph
+is one: with 256 quasars on a 200×60 map (`BenchmarkQuasars`) the call is 89 % of
+the bytes a tick allocates, about 670 KiB, and `sys splash` reads 650 to 710 µs a
+tick, against 45 to 53 µs at 64 quasars. Keep one box buffer on the system, filled
+once a tick and updated in place as each countdown moves, so every placement
+still sees the ones before it.
 
 ## Structure
 

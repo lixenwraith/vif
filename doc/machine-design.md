@@ -4,9 +4,9 @@ The design and the phased plan for per-entity state machines in species systems
 and for the data-driven species they prepare. §1 to §8 are the design, verified
 against the code at the plan's date; §9 is the plan, one phase per task, branch and
 PR, each with the files it touches, the tests it adds and the state a person can
-check by hand. Phases 0 and 1 have landed, and §6 describes `pkg/machine` as
-built. As phases land, this document becomes the subsystem's reference and §9
-shrinks to what each phase moved.
+check by hand. Phases 0 to 2 have landed: §6 describes `pkg/machine` as built
+and §5 the quasar's graph as it runs. As phases land, this document becomes the
+subsystem's reference and §9 shrinks to what each phase moved.
 
 ## 1. Decision
 
@@ -47,18 +47,19 @@ system are one file, `internal/system/behavior.go`, so the domain audit
   (`resetSwarmState`) and then freezes it. The two wedge fixes (a failed lock
   re-arms `SwarmTransitionRetryInterval`, a failed charge falls to Decel) are
   pinned by `swarm_stall_test.go`.
-- Quasar (`quasar.go`) encodes three legal states in three bools. A failing
-  `startZapping` returns before its commit, and that is unreachable only because
-  `isCursorInZapRange` returns true on the same failures. `SplashTimerCancel`
-  and the lightning despawn are each emitted from two sites.
+- Quasar (`quasar.go`, before Phase 2) encoded three legal states in three
+  bools. A failing `startZapping` returned before its commit, and that was
+  unreachable only because `isCursorInZapRange` returns true on the same
+  failures. `SplashTimerCancel` and the lightning despawn were each emitted from
+  two sites.
 - Storm circles (`storm.go`) run Idle/Cooldown/Active through three
   `switch circleType` tables. A missing cursor skips the attack step, physics
   honours stun (`updateCirclePhysics` reads the header's `StatusStun`) while
   attacks do not, the root's `pendingBlueSpawns` is a D-19 carrier
   (`stormSnapshot`, `SaveShared`) with relative timers, and the blue landing
   draw precedes validation (D-8, pinned by `storm_attack_test.go`).
-- Commit styles differ: swarm and storm circles use `GetPtr`; quasar and the
-  storm root use a detached `GetComponent` plus `SetComponent`.
+- Commit styles differ: swarm, storm circles and, since Phase 2, the quasar use
+  `GetPtr`; the storm root uses a detached `GetComponent` plus `SetComponent`.
 - Telemetry binds in constructors, and the status registry closes at
   `Scheduler.Prepare` (`Status.Freeze`); a key first asked for after that is a
   detached cell. The tick is 50 ms (`parameter.GameUpdateInterval`) and
@@ -96,9 +97,9 @@ system are one file, `internal/system/behavior.go`, so the domain audit
    every step, and the components keep them.
 7. **Renderers.** `renderer/chargeline.go` and `teleportline.go` recompute
    elapsed time as `parameter.X - Remaining`; `renderer/storm.go` reads
-   `AttackState` and `AttackProgress`; `renderer/quasar.go` reads
-   `IsCharging || IsZapping`. `Instance.Elapsed`, `Duration` and `Progress()`
-   serve all three.
+   `AttackState` and `AttackProgress`; `renderer/quasar.go` read
+   `IsCharging || IsZapping` and reads `Machine.State` since Phase 2.
+   `Instance.Elapsed`, `Duration` and `Progress()` serve all three.
 8. **Capture schema, not fingerprint.** Replacing component fields changes the
    columnar capture (`snapshot.Schema`, 25 at the plan's date), so each phase
    that changes a store bumps it. The fingerprint moves only when
@@ -124,8 +125,9 @@ system are one file, `internal/system/behavior.go`, so the domain audit
 | Storm circle | enum ×3 | cooldown/attack countdowns; `InvulnerableElapsed` | none; no cursor skips the step | none (Active waits for convex) | `IsInvulnerable`, `Mount.Armed`, `AttackProgress`, Z clamp | `GetPtr` |
 | Storm root | liveness aggregation | `pendingBlueSpawns` | — | — | — | detached |
 
-Snake, drain, eye, gateway, fuse, pylon, tower, kraken and materialize have no
-behavioral machine (§5).
+The quasar's row is its code before Phase 2, which put it on the machine of
+§5. Snake, drain, eye, gateway, fuse, pylon, tower, kraken and materialize have
+no behavioral machine (§5).
 
 ## 4. Timer and state inconsistencies
 
@@ -157,24 +159,25 @@ Each item gives the finding, the proposal and the decision taken for the plan.
   duration, and Active's timeout re-enters it with the repeat duration.
 - **S7. Quasar: Charging → Zapping totality is non-local** (§2). Decided:
   Charging timeout → [Zapping (probe: position and cursor) | Homing], with an
-  unconditional commit.
+  unconditional commit. Landed in Phase 2.
 - **S8. Quasar: exit effects are duplicated.** Decided: Charging's exit hook
   cancels the splash; Zapping's exit hook despawns the lightning and drops the
-  shield; termination calls `Graph.Stop`.
+  shield; termination calls `Graph.Stop`. Landed in Phase 2, the shield dropping
+  with the Shielded flag rather than in the exit (§5).
 - **S9. Quasar: the stun branch ignores Zapping.** It relies on combat refusing
   to stun a shielded quasar. Decided: a global stun edge from {Charging,
   Zapping} to Homing; its Zapping half never fires today, but correctness no
-  longer depends on combat.
+  longer depends on combat. Landed in Phase 2.
 - **S10. Quasar: entry ticks are inconsistent.** Entering Charging skips homing
   for that tick, and entering Zapping deals no damage until the next tick, while
   leaving Zapping homes on the same tick. Decided: run-to-completion runs the
   resulting state's tick uniformly, adding one homing tick and one zap damage
-  tick per cycle; accepted.
+  tick per cycle; accepted. Landed in Phase 2.
 - **S11. Quasar: speed scaling starts at once.** `LastSpeedIncreaseAt` starts
   at the zero instant, so the first movement tick lifts `SpeedMultiplier` from
   1.0 to 1.1. Decided: a carried accumulator (`SpeedElapsed`) counting movement
   time from spawn, so the first increase lands after `QuasarSpeedIncreaseTicks`
-  (20 ticks, 1 s) as the parameter name says.
+  (20 ticks, 1 s) as the parameter name says. Landed in Phase 2.
 - **S12. Swarm: transition ticks skip integration.** Charge timeout → Decel,
   Decel timeout → Chase and Chase → Lock all return without integrating, while
   the wall-hit path integrates first. Decided: timeouts fire before the tick, so
@@ -194,7 +197,7 @@ Each item gives the finding, the proposal and the decision taken for the plan.
   absolute instants (quasar speed); absolute ticks (drain spawn schedule).
   Decided: phases move to `Instance`; the swarm pattern and the quasar speed
   move to a carried accumulator in their phases; eye frames, gateway and drain
-  stay as they are.
+  stay as they are. The quasar's phases and speed landed in Phase 2.
 - **S16. Three hand-rolled spawn queues.** Fuse (`fusions`, a `LocalStateSaver`
   carried by a journal's opening), storm (`pendingBlueSpawns`, a
   `SharedStateSaver`) and drain (`pendingSpawns`) each defer a spawn behind a
@@ -228,20 +231,31 @@ Each item gives the finding, the proposal and the decision taken for the plan.
 - Relocation is an edge action rather than an exit hook, because a stun during
   Teleport must not move the swarm.
 
-**Quasar** (`C = *quasarCtx`):
+**Quasar** (`C = *quasarCtx`), as built in `internal/system/quasar.go`:
 
 | State | Duration | Flags | Probe / enter / exit | Tick | Edges |
 |---|---|---|---|---|---|
 | Homing | — | — | — | home (speed accumulator inside) | pre-tick: not in range → Charging |
-| Charging | 3 s | Enraged | enter: splash request; exit: splash cancel | home | timeout → [Zapping \| Homing] |
-| Zapping | — | Enraged, Shielded | probe: position, cursor; enter: lightning; exit: despawn, shield off | retarget, zap damage | — |
+| Charging | 3 s | Enraged | enter: splash request for the entry's `Duration`; exit: splash cancel | home | timeout → [Zapping \| Homing] |
+| Zapping | — | Enraged, Shielded | probe: position, cursor; enter: lightning; exit: lightning despawn | retarget, zap damage | — |
 
 - Global edges, in priority order: stunned, from {Charging, Zapping} → Homing;
   in range, from {Charging, Zapping} → Homing. Suspend: stunned.
 - From the flags, the host writes `Combat.IsEnraged`, `IsShielded` and
-  `Shield.Active`, and refreshes the ward status while shielded.
-- The component moves to `GetPtr`: the detached copy existed only to order
-  commits that the step now makes unconditional.
+  `Shield.Active`, and refreshes the ward status while shielded. The shield is
+  a flag, so it drops with the state in the step that leaves Zapping and no
+  exit hook writes it.
+- The host strikes the cursors the quasar touches after the step, unless the
+  step suspended: a stunned quasar strikes nothing.
+- The component is read through `GetPtr`: the detached copy existed only to
+  order commits that the step now makes unconditional.
+- The context holds the entity, the component, the sensed `stunned` and
+  `inRange` (true with no cursor, so a missing cursor never charges), dt and
+  its capped seconds, and the probe's origin and target; the hooks are
+  `QuasarSystem` methods, which reach the world through the system.
+- `Start` runs at spawn once the composite is built, and `terminateQuasar` calls
+  `Stop`, so a death ends the splash or the lightning through the same exit a
+  transition does.
 
 **Storm circle** (`C = *circleCtx`, one graph per variant row):
 
@@ -383,13 +397,14 @@ step never skips one.
 ### 6.5 Host contract
 
 - **Context.** Each species has one context struct, held as a system field and
-  refilled per entity: world, entity, component pointers, observations sensed
-  once before the step (stunned, in range, has cursor), probe results and tick
-  outcomes. Passing a pointer to a field of the long-lived system allocates
-  nothing per call.
+  refilled per entity: the entity, component pointers, observations sensed once
+  before the step (stunned, in range, has cursor), probe results and tick
+  outcomes, and the world unless the hooks are the system's own methods (the
+  quasar's are, so its context holds no world). Passing a pointer to a field of
+  the long-lived system allocates nothing per call.
 - **Mutation.** The runtime mutates only the `Instance`; hooks reach the world
-  through `C`, and no store is touched by the machine. Hosts hold the instance
-  through `GetPtr`.
+  through `C` or their system, and no store is touched by the machine. Hosts
+  hold the instance through `GetPtr`.
 - **Lifecycle.** HP, limits, cancel and breach stay ahead of the step and call
   `Stop`, so death paths run exit effects such as the lightning despawn.
 - **Flags.** Flags map to component fields on every step, suspended or not (S4).
@@ -424,7 +439,8 @@ step never skips one.
   Phase 6.
 - **Carried accumulator.** A `time.Duration` field advanced by dt and reduced
   by its period, carrying the remainder: the swarm pattern (Phase 5) and the
-  quasar speed (Phase 2). Two fields, no type.
+  quasar speed (`QuasarComponent.SpeedElapsed`, advanced by movement ticks).
+  Two fields, no type.
 
 ## 7. Shared dialect kernel (fsm, bot, behavior)
 
@@ -698,58 +714,103 @@ what the kernel settled or changed: enter runs after the commit rather than
 before it, a retry's period runs cues again, an edge owns its phase, the
 structural faults, and the queue's one empty encoding. No game code changed.
 
-### Phase 2: quasar on the machine
+### Phase 2: quasar on the machine (landed)
 
-Goal: the smallest live species proves the kernel; S7 to S11 close; the
-component moves to `GetPtr`.
+`QuasarComponent` holds `Machine machine.Instance[QuasarState]` (`QuasarHoming`,
+`QuasarCharging`, `QuasarZapping`) and `SpeedElapsed` where `IsCharging`,
+`IsZapping`, `ChargeRemaining` and `LastSpeedIncreaseAt` stood. `QuasarSystem`
+builds §5's graph once (`newQuasarGraph`, `machine.Must`), steps each quasar
+through `GetPtr` and writes the flags after the step, so S7 to S11 close as §4
+decided; the renderer reads `Machine.State`, and `snapshot.Schema` is 26. Against
+the steps planned: the context carries no world or combat pointer, the hooks being
+`QuasarSystem` methods; the shield follows the Shielded flag, so no exit writes
+it; a suspended step strikes nothing, as a stunned quasar struck nothing before;
+Charging's exit cancels the splash on every path, a timeout's included, where the
+timer system has removed the splash earlier in the tick and the cancel finds
+nothing; the observer is `newQuasarGraph`'s argument, nil in the game. With the
+speed counted in movement time no shared store carries an absolute instant, so
+`TestSimulationEpochIsSessionIdentity`, whose one carrier was the quasar's speed
+instant, is retired with its child role; taking the cursor clocks off the epoch is
+in [todo](todo.md).
 
-Steps:
+Tests (`internal/system/quasar_test.go`): a charge whose zap cannot aim goes home
+in the step it expires and cancels its splash once (S7); a stun during a zap
+despawns the lightning and drops the shield and the enrage (S9); the first speed
+lift lands on the twentieth movement tick, and a stun pauses the count (S11); a
+returning cursor cancels the splash once (S8). Four mutants (Charging without its
+exit, the stun edge without Zapping, the accumulator fed twice its dt, the timeout
+without its Homing candidate) each fail one. `BenchmarkQuasarUpdate` times
+`QuasarSystem.Update` alone and `BenchmarkQuasars` (`internal/app`) the whole
+tick, each with 1 to 256 quasars on a 200×60 map and a cursor crossing between
+corners every 100 ticks, so the far quasars charge, zap and come home.
 
-1. `internal/component/quasar.go`: `QuasarState` (`QuasarHoming`,
-   `QuasarCharging`, `QuasarZapping`); `QuasarComponent` becomes
-   `{Machine machine.Instance[QuasarState]; SpeedMultiplier float64;
-   SpeedElapsed time.Duration; IsShielded bool; ZapRadius float64}`.
-   `LastSpeedIncreaseAt`, `IsZapping`, `IsCharging` and `ChargeRemaining` go.
-2. `internal/system/quasar.go`: a `quasarCtx` field (world, entity, component
-   and combat pointers, `stunned`, `inRange`, `dtSec`, the probe's cursor and
-   target); the graph of §5 built in `NewQuasarSystem` with `machine.Must`;
-   `Update` reads the component through `GetPtr`, runs the lifecycle check
-   (`HitPoints <= 0` → `Stop`, `terminateQuasar`), fills the context, calls
-   `Step`, then writes `combat.IsEnraged`, `IsShielded`, `Shield.Active` and
-   the ward from the flags and runs `strikeContacts`. `startCharging`,
-   `startZapping`, `stopZapping` and the detached commits become the hooks.
-   Charging's enter takes the splash duration from `Machine.Duration`, not
-   `QuasarChargeDuration`, so the telegraph lasts as long as the entry (§6.3).
-   `updateKineticMovement` advances `SpeedElapsed` by dt and lifts the
-   multiplier each `QuasarSpeedIncreaseTicks * GameUpdateInterval`, carrying
-   the remainder. The observer is nil.
-3. `internal/render/renderer/quasar.go`: `armed` reads
-   `quasar.Machine.State != component.QuasarHoming`.
-4. `snapshot.Schema` 26; `make generate`.
+Readings before (Phase 1's main) and after on a four-core VM, benchstat over
+alternating rounds (whole tick 6 × 2,000 ticks, `Update` 8 × 20,000). No time
+moved beyond the noise (±6 to 47 %, every p ≥ 0.46):
 
-Tests (`internal/system/quasar_test.go`, fixture in the style of
-`newStalledSwarm`):
+```
+benchmark                    before    after     B/op     allocs/op
+HeadlessTicks/main-160x50    61.3 µs   56.4 µs   -1.2 %   14 = 14
+HeadlessTicks/td-200x60      392 µs    391 µs    ~        19 = 19
+Quasars n=1                  31.2 µs   29.0 µs   ~        15 = 15
+Quasars n=16                 229 µs    228 µs    -0.5 %   69 = 69
+Quasars n=64                 1.21 ms   1.22 ms   -0.3 %   262 → 261
+Quasars n=256                11.2 ms   11.0 ms   -0.1 %   1124 → 1116
+QuasarUpdate n=1             917 ns    878 ns    =        0 = 0
+QuasarUpdate n=16            12.9 µs   13.0 µs   +0.5 %   19 = 19
+QuasarUpdate n=64            49.9 µs   50.8 µs   +0.6 %   77 → 78
+QuasarUpdate n=256           195 µs    196 µs    +1.1 %   209 → 212
+```
 
-- a charge whose zap probe cannot resolve returns to Homing on the same step
-  (S7);
-- a stun while zapping despawns the lightning and drops the shield (S9);
-- the first speed increase lands after twenty movement ticks (S11);
-- a cursor re-entering range cancels the splash exactly once (S8).
+In a CPU profile of `Update` alone at 256 quasars the kernel's own frames (`Step`,
+`first`, `run`, `take`) hold 4.7 % of the samples, about 37 ns a quasar step; in
+the whole tick the quasar system holds 12 to 18 % of the samples in both builds,
+movement most of it. `Update`'s added allocations are the zap tick S10 adds (a
+lightning update and a shield drain a zap) and the timeout's splash cancel, an
+8-byte payload. The in-game profiler (`sys quasar`, three rounds of 2,000 ticks a
+build) reads 183 to 217 µs a tick at 64 quasars and 1.62 to 1.76 ms at 256 in
+both; the capture is 7,680 B against 7,690 at 64 quasars and 21,776 against 21,840
+at 256, and `QuasarComponent` stays 56 bytes. Over those 2,000 ticks at 64
+quasars the events agree but for the accepted shifts and the paths they move:
+lightning updates 63,689 → 64,104 (one more per zap), splash cancels 10 → 425
+(one per timed-out charge), shield drains 74,173 → 74,245 and area crossings
+10,484 → 10,141. A heap profile of the whole tick at 256 quasars shows a cost
+neither build changes: `SplashSystem.getTimerBBoxes` allocates 89 % of the bytes,
+about 670 KiB a tick (see [todo](todo.md)).
 
-Gates: `go test ./internal/system ./internal/render/... ./internal/snapshot`;
-the four shapes before and after (the fight raises a storm, so the quasar's
-shift shows only in a run that spawns one; record the readings in §3 of
-[netcode](netcode-design.md) style under this phase).
+The harness's fight spawns three of the scenario's own quasars before the storm
+is raised and more after, so its four shapes read the quasar too, and they read
+alike before and after (pg pages and cells repaired, kf keyframes, lc late
+commits, lcp late copies, the lead at the end with the highest in brackets):
 
-Manually testable state: `bin/vif -seed 1`, `:god`,
+```
+shape       pg   cells  kf  lc  lcp  lead     manifests
+3,3,97,0     0      0    4   0    5  11 (13)  279
+2,2,3,100   17    218    4   1    0  8 (9)    278
+3,3,251,0    7     39    1   3    6  9 (10)   299
+4,3,41,50   30    295   15   0    1  13 (15)  115
+```
+
+A scratch variant raising one more quasar on both ends at one tick in place of
+the storm read alike in every late count as well; on the first shape its fight
+drifted by one scenario quasar, seven spawned against six.
+
+Headless, `bin/vif -script <file> -seed 1 -log-stdout -log-stat 50` on both
+builds: with `god` at tick 50 and the quasar at (40, 15) at tick 100 over 600
+ticks, the quasar spawns inside its circle and never charges, its `quasar.*`
+counters agree, and its contact strikes move with the later speed lift (shield
+drains 323 → 303); there are no `lightning.*` counters. With the cursor sent to a
+corner of a 120×40 map at tick 150, one charge and then a zap to the end, the
+quasar's counts move by S10 and the timeout's cancel alone: physics steps
+109 → 110, lightning updates 989 → 990, shield drains 1,045 → 1,046 and splash
+cancels 0 → 1; the decay and dust counts, which meet its footprint, drift with
+where it stops.
+
+Manual check: `bin/vif -seed 1`, `:god`,
 `:emit EventQuasarSpawnRequest { x = 40, y = 15 }`; the quasar homes while the
 cursor is inside its circle; leaving it starts the cyan splash, three seconds
 later the lightning and the shield; coming back drops both; a pulse stun during
-the splash cancels it. A script (`-script`) with that event at tick 100 and 600
-ticks runs headless on the old and the new build with one seed and
-`-log-stdout -log-stat 50`; the `quasar.*` and `lightning.*` counters of the
-last status snapshot agree, and the ticks they move on differ by the accepted
-one-tick shifts.
+the splash cancels it.
 
 ### Phase 3: the dialect kernel
 

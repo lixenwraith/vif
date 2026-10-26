@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/core"
-	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -312,15 +311,13 @@ const (
 	// crossProcessContinueTicks is the gate itself.
 	crossProcessContinueTicks = 500
 
-	// crossProcessWidth keeps the 117-column viewport the epoch control was measured
-	// on: at another width the seed's world need not reach an epoch-relative instant
-	// inside the continuation, and the control would have nothing to bite on.
+	// crossProcessWidth is the 117-column viewport the gate has always measured, which
+	// fixes the world the one seed builds.
 	crossProcessWidth = 117 + parameter.LeftMargin
 
 	captureFile   = "capture.json"
 	originSurface = "origin.surface"
 	joinerSurface = "joiner.surface"
-	epochSurface  = "epoch.surface"
 )
 
 // TestCaptureContinuesInAnotherProcess is the gate.
@@ -357,29 +354,6 @@ func TestCaptureContinuesInAnotherProcess(t *testing.T) {
 		info.Size(), crossProcessContinueTicks)
 }
 
-// TestSimulationEpochIsSessionIdentity is the negative control for the part of the
-// shared-identity hazard D-21 relocated rather than removed. A capture carries
-// absolute instants as they stand, which is sound only because SimEpoch is a build
-// constant. A receiver whose epoch differs installs the same bytes and diverges, every
-// now.Sub(stored) wrong by the offset — so the epoch is session identity like the seed.
-func TestSimulationEpochIsSessionIdentity(t *testing.T) {
-	// Not parallel: this drives a real socket against wall-clock deadlines.
-	if os.Getenv(crossProcessRoleEnv) != "" {
-		t.Skip("child process")
-	}
-	dir := t.TempDir()
-	runCrossProcessChild(t, "origin", dir)
-	runCrossProcessChild(t, "epoch", dir)
-
-	origin := readSurface(t, filepath.Join(dir, originSurface))
-	shifted := readSurface(t, filepath.Join(dir, epochSurface))
-	if _, _, _, differs := snapshot.FirstDiff(origin, shifted); !differs {
-		t.Fatal("a receiver on a different simulation epoch reproduced the sender's " +
-			"continuation exactly; the absolute instants a capture carries are then " +
-			"not epoch-relative and this control proves nothing")
-	}
-}
-
 // TestCrossProcessChild is the child. It does nothing unless the parent asks.
 func TestCrossProcessChild(t *testing.T) {
 	role := os.Getenv(crossProcessRoleEnv)
@@ -397,13 +371,6 @@ func TestCrossProcessChild(t *testing.T) {
 		crossProcessOrigin(t, dir, seed)
 	case "joiner":
 		crossProcessReceiver(t, dir, seed, joinerSurface)
-	case "epoch":
-		// The offset is deliberately not a whole number of ticks: a receiver that
-		// happened to be shifted by an exact multiple would land every deadline on
-		// a tick again and hide what this control is for.
-		engine.SimEpoch = engine.SimEpoch.Add(37*time.Hour + 17*time.Millisecond)
-		engine.ManualEpoch = engine.SimEpoch
-		crossProcessReceiver(t, dir, seed, epochSurface)
 	default:
 		t.Fatalf("unknown child role %q", role)
 	}
@@ -444,8 +411,7 @@ func crossProcessOrigin(t *testing.T, dir string, seed uint64) {
 	})
 	if swarms == 0 || quasars == 0 {
 		t.Fatalf("captured world holds %d swarms and %d quasars; the continuation would "+
-			"draw no shared streams and the epoch control would have nothing to bite on",
-			swarms, quasars)
+			"not carry the shared species this gate puts in it", swarms, quasars)
 	}
 	t.Logf("captured at tick %d with %d swarms and %d quasars, %d bytes",
 		cap.Header.Tick, swarms, quasars, len(body))
@@ -495,11 +461,9 @@ func crossProcessReceiver(t *testing.T, dir string, seed uint64, out string) {
 	writeSurface(t, filepath.Join(dir, out), a.SnapshotShared())
 }
 
-// spawnCrossProcessQuasar puts the one species whose future depends on an absolute
-// instant into the captured world. QuasarSystem steps SpeedMultiplier when
-// now.Sub(LastSpeedIncreaseAt) passes an interval, and that instant travels inside the
-// shared component as it stands — so without one in the world a receiver on a
-// different simulation epoch has nothing to get wrong.
+// spawnCrossProcessQuasar puts a quasar into the captured world beside the cursor, so
+// a species that moves, strikes and steps a behavior machine is part of the
+// continuation.
 func spawnCrossProcessQuasar(t *testing.T, a *App) {
 	t.Helper()
 	a.World().RunSafe(func() {
@@ -511,7 +475,7 @@ func spawnCrossProcessQuasar(t *testing.T, a *App) {
 	var n int
 	a.World().RunSafe(func() { n = a.World().Components.Quasar.CountEntities() })
 	if n == 0 {
-		t.Fatal("no quasar was created; the epoch control has nothing to bite on")
+		t.Fatal("no quasar was created")
 	}
 }
 

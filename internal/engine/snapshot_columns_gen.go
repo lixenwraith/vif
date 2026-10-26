@@ -2503,22 +2503,22 @@ func decodeColumnsDrain(r *columnReader) []StoreEntry[component.DrainComponent] 
 func encodeColumnsQuasar(dst []byte, rows []StoreEntry[component.QuasarComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendTime(dst, rows[i].Value.LastSpeedIncreaseAt)
+		dst = appendUint(dst, rows[i].Value.Machine.State)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Machine.Elapsed)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Machine.Duration)
 	}
 	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.SpeedMultiplier)
 	}
 	for i := range rows {
-		dst = appendBool(dst, rows[i].Value.IsZapping)
-	}
-	for i := range rows {
-		dst = appendBool(dst, rows[i].Value.IsCharging)
+		dst = appendInt(dst, rows[i].Value.SpeedElapsed)
 	}
 	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.IsShielded)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.ChargeRemaining)
 	}
 	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.ZapRadius)
@@ -2534,22 +2534,22 @@ func decodeColumnsQuasar(r *columnReader) []StoreEntry[component.QuasarComponent
 	rows := make([]StoreEntry[component.QuasarComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readTime(&rows[i].Value.LastSpeedIncreaseAt, r)
+		readUint(&rows[i].Value.Machine.State, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Machine.Elapsed, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Machine.Duration, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.SpeedMultiplier, r)
 	}
 	for i := range rows {
-		readBool(&rows[i].Value.IsZapping, r)
-	}
-	for i := range rows {
-		readBool(&rows[i].Value.IsCharging, r)
+		readInt(&rows[i].Value.SpeedElapsed, r)
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.IsShielded, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.ChargeRemaining, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.ZapRadius, r)

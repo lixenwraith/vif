@@ -123,7 +123,7 @@ code does not have yet, described only by a design such as
 - *Input*: the class of a key-table entry, such as motion, operator, char-wait, action or system. [Input §3](input-and-modes.md#3-normal-mode-grammar) · `internal/input` `KeyBehavior`
 - *Species*: Future design: data-driven species behavior programs compiled against an `internal/behavior` vocabulary. [Behavior machines §8](machine-design.md#8-data-driven-behavior-o4)
 
-**behavior machine** (also: pkg/machine, machine.Graph) — The standard-library-only per-entity state-machine runtime: a `machine.Instance` for a component to carry, stepped by an immutable `machine.Graph` built from typed Go. Species adopting it, and a TOML data front-end compiled into the same graph type, are future design. [Behavior machines §1](machine-design.md#1-decision) · [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only) · `pkg/machine` `Graph`, `Instance`
+**behavior machine** (also: pkg/machine, machine.Graph) — The standard-library-only per-entity state-machine runtime: a `machine.Instance` for a component to carry, stepped by an immutable `machine.Graph` built from typed Go. The quasar runs on one (`QuasarComponent.Machine`: homing, charging, zapping); the other species adopting it, and a TOML data front-end compiled into the same graph type, are future design. [Behavior machines §1](machine-design.md#1-decision) · [Behavior machines §5](machine-design.md#5-target-graphs) · [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only) · `pkg/machine` `Graph`, `Instance`; `internal/system` `QuasarSystem`
 
 **behavior program** (also: [behaviors], behavior/<name>.toml) — Future design: a species machine written in the scenario's FSM dialect, listed by the scenario and compiled once per run against a game vocabulary. [Behavior machines §8.1](machine-design.md#81-program-shape)
 
@@ -194,7 +194,7 @@ code does not have yet, described only by a design such as
 
 **card** (also: telemetry card, OverlayCard) — One status group in the telemetry overlay or HUD, holding at most `OverlayCardMaxEntries` (15) metrics; `/` filters cards and Space pins one. See also **pin**, **telemetry**. [Telemetry reference: The registry](telemetry-reference.md#the-registry) · [Logging §6: the telemetry overlay](logging-and-diagnostics.md#integer-units) · `internal/core` `OverlayCard`; `internal/status` `SplitKey`
 
-**carried accumulator** — Future design: a `time.Duration` field advanced by dt and reduced by its period, carrying the remainder, for the swarm pattern and the quasar speed; two fields, no type. [Behavior machines §6.6](machine-design.md#66-generics-and-sibling-primitives)
+**carried accumulator** — A `time.Duration` field advanced by dt and reduced by its period, carrying the remainder; two fields, no type. The quasar's speed steps on one (`QuasarComponent.SpeedElapsed`, movement time only); the swarm pattern's is future design. [Behavior machines §6.6](machine-design.md#66-generics-and-sibling-primitives) · `internal/component` `QuasarComponent.SpeedElapsed`
 
 **deferred queue** (also: machine.Queue) — A `pkg/machine` queue of values each behind a relative timer, firing in push order however many it holds, and JSON-encodable with one form for every empty queue. Its adoption by storm's blue spawns and fuse's fusions is future design. [Behavior machines §6.6](machine-design.md#66-generics-and-sibling-primitives) · [§9 Phase 6](machine-design.md#phase-6-storm-circles-and-the-deferred-queue) · `pkg/machine` `Queue`
 
@@ -223,7 +223,7 @@ code does not have yet, described only by a design such as
 
 **charge** (also: charge cap, cap effect, `MaxCharges`) — two senses.
 - *Weapons*: a weapon kind's charge count: zero means not owned, it only rises, and it scales the kind up to `MaxCharges`, where the kind keeps a cap effect until the loadout is lost. [Combat §4](combat.md#4-at-the-charge-cap) · [Gameplay §7](gameplay.md#7-weapons-and-attacks) · `internal/component` `WeaponComponent.Charges`, `WeaponSpec.MaxCharges`
-- *Species*: a species' attack run or wind-up: the swarm's charge at a locked target, the Kraken's charge at the farthest cursor, and the quasar's charge before it zaps a cursor out of range. [Gameplay §8](gameplay.md#8-hostile-and-structural-actors) · `internal/component` `SwarmStateCharge`, `QuasarComponent.IsCharging`; `internal/system` `SwarmSystem`, `KrakenSystem`
+- *Species*: a species' attack run or wind-up: the swarm's charge at a locked target, the Kraken's charge at the farthest cursor, and the quasar's charge before it zaps a cursor out of range. [Gameplay §8](gameplay.md#8-hostile-and-structural-actors) · `internal/component` `SwarmStateCharge`, `QuasarCharging`; `internal/system` `SwarmSystem`, `KrakenSystem`
 
 **-check** — Resolves and validates `vif.toml`, the scenario, keymap, audio overrides, content and every bot graph, prints the result and exits without starting a game. [Development §4 Run](development.md#run) · [FSM §12](fsm-and-configuration.md#12-validation-rules-and-diagnostics) · `internal/resource` `Check`
 
@@ -736,9 +736,9 @@ code does not have yet, described only by a design such as
 **FSM** (also: HFSM, state machine) — five senses.
 - *Scenario*: the generic hierarchical state machine, `fsm.Machine[T]`, with parallel regions, machine-global variables and delayed actions, that runs a scenario's encounters from TOML, and every scenario region is Shared state (D-20); bot graphs run the same machine over a bot's mind. [FSM §1](fsm-and-configuration.md#1-boundary-and-data-flow) · [FSM reference](fsm-reference.md#fsm-configuration-reference) · `internal/fsm` `Machine`
 - *Input*: `input.Machine`, the key parser that turns terminal events into `Intent` values and keeps only parsing context. [Input §1](input-and-modes.md#1-input-pipeline) · `internal/input` `Machine`
-- *Species*: the per-entity behavior state of swarm, quasar and storm, hand-written in each species system. [Behavior machines §3](machine-design.md#3-current-machines) · `internal/system`
+- *Species*: the per-entity behavior state of swarm and storm, hand-written in each species system, and of the quasar, a behavior machine. See also **behavior machine**. [Behavior machines §3](machine-design.md#3-current-machines) · `internal/system`
 - *Session lifetime*: `internal/lifecycle`, a pure state machine over an injected clock that turns roster observations into a phase (waiting, occupied, vacant, draining, expired). [Runtime: The allocated session](runtime.md#the-allocated-session) · `internal/lifecycle` `Controller`
-- *Behavior machines*: `pkg/machine`, the standard-library-only kernel of timed per-entity machines with edges, cues and a suspend predicate; species systems and a data-driven behavior dialect sharing it are future design. [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only) · `pkg/machine`
+- *Behavior machines*: `pkg/machine`, the standard-library-only kernel of timed per-entity machines with edges, cues and a suspend predicate; the quasar runs on it, and the other species and a data-driven behavior dialect sharing it are future design. [Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only) · `pkg/machine`
 
 **FSM bridge** (also: fsm_bridge, RegisterFSMComponents) — `internal/manifest/fsm_bridge.go`, which binds the FSM standard library to the ECS world by filling `std.Host[*engine.World]` (events, systems, status, config); `RegisterFSMComponents` installs it on a machine. See also **host**. [FSM §1](fsm-and-configuration.md#1-boundary-and-data-flow) · `internal/manifest` `RegisterFSMComponents`
 
@@ -906,7 +906,7 @@ code does not have yet, described only by a design such as
 - *Combat*: a mount's host, the Shared entity (a species, a structure or an emitter) that carries a mounted weapon, such as storm's red circle. [Combat §3](combat.md#3-drivers) · `internal/component` `MountComponent`
 - *Browser*: the WASM host, the launcher page in `web/` that runs the browser build in a Worker and draws its cell frames on a canvas (`pkg/browser`). [Development: WASM host](development.md#wasm-host) · `web/terminal.js`
 - *Deployment*: the machine the production node runs on as a guest, which owns routing and packet filtering; it and the site's nginx are site configuration kept outside this repository. See **edge**. [Deploying the session fleet](kube-docker-deploy.md#deploying-the-session-fleet) · [Deploy §2](kube-docker-deploy.md#2-the-public-edge)
-- *Future design*: the species system that runs a `pkg/machine` graph, filling its context and mapping state flags to components. [Behavior machines §6.5](machine-design.md#65-host-contract)
+- *Behavior machines*: the species system that runs a `pkg/machine` graph, filling its context and mapping state flags to components; `QuasarSystem` is the first. [Behavior machines §6.5](machine-design.md#65-host-contract) · `internal/system` `QuasarSystem`
 
 **HTTP resource provider** (also: content-addressed bundle) — Future design: a provider that fetches the canonical scenario container by digest over HTTPS, holds it to the bounds and digest check a transferred scenario meets, and exposes it the same way, for a client with no config root and no peer. [Multi-platform §7](multi-platform.md#7-external-maps-and-assets)
 
@@ -1191,7 +1191,7 @@ code does not have yet, described only by a design such as
 
 **monitor** (also: monitor region, `MonitorGlobalReset`) — The campaign's background FSM region and the only one started at boot: it spawns and arms the cursor, opens `main`, pays every gold completion, and answers `session.any_defeated` with a new game through its `MonitorGlobalReset` state. See also **region**, **defeat**. [Gameplay §10](gameplay.md#10-embedded-campaign-progression) · [FSM §11](fsm-and-configuration.md#11-authoring-pattern) · `internal/asset/scenario/monitor.toml`
 
-**Moore outputs** — Future design: in a behavior machine, the component fields derived from the current state's flags (`IsEnraged`, `IsShielded`, `IsInvulnerable`, `Mount.Armed`), which the host writes on every step; the fields already exist and each species system writes them itself. See also **enraged**. [Behavior machines §2](machine-design.md#2-verification-of-the-prior-review) · [Behavior machines §3](machine-design.md#3-current-machines)
+**Moore outputs** — In a behavior machine, the component fields derived from the current state's flags, which the host writes on every step, suspended or not: the quasar's `Combat.IsEnraged`, `IsShielded`, `Shield.Active` and its ward. Swarm and storm (`IsEnraged`, `IsInvulnerable`, `Mount.Armed`) still write theirs inside their own state code; moving them is future design. See also **enraged**. [Behavior machines §2](machine-design.md#2-verification-against-the-code) · [Behavior machines §6.5](machine-design.md#65-host-contract) · `internal/system` `QuasarSystem.Update`
 
 **motif** (also: ladder, Pattern.Motif) — The idea a melody pattern is one weight of: patterns of one group sharing a `motif` form a ladder from calm to peak, and a tier change draws the playing motif's member at the new tier while a phrase variation draws another motif's, after the melody rests through the fill bar. Every shipped ladder covers all five tiers, so a tier change never leaves its idea. [Audio §7](audio.md#7-music-sequencer) · `pkg/audio` `Pattern.Motif`, `Sequencer.draw`, `Sequencer.planPhrase`
 
@@ -1463,7 +1463,7 @@ code does not have yet, described only by a design such as
 
 **quadrant mode** (also: background mode) — One of the two `pkg/ascimage` conversion modes: a Unicode quadrant glyph represents a 2-by-2 pixel group, where background mode uses one background cell per sampled pixel. [Content §8](content-assets-and-tools.md#8-image-and-pattern-pipeline) · `pkg/ascimage` `ModeQuadrant`, `ModeBackgroundOnly`
 
-**quasar** (also: `QuasarComponent`, `QuasarSystem`) — A 5×3 Shared composite species fused from drains that tracks the cursor, charges and zaps it with lightning when it leaves range, shields while zapping, and absorbs drains. [Gameplay §8](gameplay.md#8-hostile-and-structural-actors) · `internal/component` `QuasarComponent`; `internal/system` `QuasarSystem`
+**quasar** (also: `QuasarComponent`, `QuasarSystem`) — A 5×3 Shared composite species fused from drains that tracks the cursor, charges and zaps it with lightning when it leaves range, shields while zapping, and absorbs drains; its homing, charging and zapping are a behavior machine, and a stun returns it home and freezes it. [Gameplay §8](gameplay.md#8-hostile-and-structural-actors) · [Behavior machines §5](machine-design.md#5-target-graphs) · `internal/component` `QuasarComponent`; `internal/system` `QuasarSystem`
 
 ## R
 
@@ -2133,5 +2133,5 @@ code does not have yet, described only by a design such as
 ## Z
 
 **zap** — two senses. See also **lightning**, **quasar**.
-- *Quasar*: the quasar's ranged attack: when the cursor leaves its effective range it charges and then strikes the cursor with lightning (`QuasarComponent.IsCharging`, `IsZapping`, `ZapRadius`). [Gameplay §8](gameplay.md#8-hostile-and-structural-actors) · `internal/component` `QuasarComponent`
+- *Quasar*: the quasar's ranged attack: when the cursor leaves its effective range it charges for three seconds and then strikes the cursor with lightning until the cursor returns (`QuasarCharging`, `QuasarZapping` in `QuasarComponent.Machine`, `ZapRadius`). [Gameplay §8](gameplay.md#8-hostile-and-structural-actors) · [Behavior machines §5](machine-design.md#5-target-graphs) · `internal/component` `QuasarComponent`
 - *Lightning*: a zap is the lightning bolt an attack draws: a rod hit's leaves its orb, a tracer impact's leaves the cursor, a mounted rod zaps the cursor it aims at, and at the rod's charge cap the zap arcs on from target to target. [Combat §5](combat.md#5-resolution-statuses-and-what-crosses) · [Combat §4](combat.md#4-at-the-charge-cap) · [Combat §2](combat.md#2-layers) · `internal/component` `LightningComponent` · `internal/system` `LightningSystem`

@@ -1598,7 +1598,7 @@ func equalDrain(a, b *component.DrainComponent) bool {
 }
 
 func equalQuasar(a, b *component.QuasarComponent) bool {
-	return a.LastSpeedIncreaseAt == b.LastSpeedIncreaseAt && math.Float64bits(float64(a.SpeedMultiplier)) == math.Float64bits(float64(b.SpeedMultiplier)) && a.IsZapping == b.IsZapping && a.IsCharging == b.IsCharging && a.IsShielded == b.IsShielded && a.ChargeRemaining == b.ChargeRemaining && math.Float64bits(float64(a.ZapRadius)) == math.Float64bits(float64(b.ZapRadius))
+	return a.Machine == b.Machine && math.Float64bits(float64(a.SpeedMultiplier)) == math.Float64bits(float64(b.SpeedMultiplier)) && a.SpeedElapsed == b.SpeedElapsed && a.IsShielded == b.IsShielded && math.Float64bits(float64(a.ZapRadius)) == math.Float64bits(float64(b.ZapRadius))
 }
 
 func equalSwarm(a, b *component.SwarmComponent) bool {
