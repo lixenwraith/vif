@@ -55,7 +55,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 
 ## System telemetry
 
-Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem`. `Init` runs from the constructor and again from the engine on a game reset, in dependency order.
+Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem`. `Init` runs from the engine's pass (`World.InitSystems`) once the set is built, and again on a game reset, in dependency order.
 
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|

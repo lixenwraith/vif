@@ -335,7 +335,7 @@ timers stay in the species component beside the phase they time: the swarm's,
 the quasar's and a storm circle's as their behavior machines' elapsed time and
 entry duration (`SwarmComponent.Machine`, `QuasarComponent.Machine`,
 `StormCircleComponent.Machine`), and a data species' as its program's
-(`BehaviorComponent.Machine`) ([Machine design](machine-design.md)).
+(`BehaviorComponent.Machine`) ([Behavior machines §3](machine-design.md#3-hosting-a-machine)).
 
 ## 8. Event transport
 

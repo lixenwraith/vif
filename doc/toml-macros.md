@@ -1,9 +1,9 @@
 # TOML Macros
 
 Decision record and authoring reference for macros in vif's TOML documents.
-`pkg/tomlmacro` is the one expander; scenarios, bot graphs and the audio banks
-(`sounds.toml`, `music.toml`) use it today, and behavior programs and the map
-editor are meant to.
+`pkg/tomlmacro` is the one expander; scenarios with their behavior programs, bot
+graphs and the audio banks (`sounds.toml`, `music.toml`) use it today, and the map
+editor is meant to.
 
 ## 1. Decision
 
@@ -12,9 +12,9 @@ this change `wad/scenario/td` spent 716 region lines on about a dozen shapes: a
 spawn request awaited with a capture and a timeout fallback (fifteen states), a
 gateway attach (nine), guarded retargets on a tower's loss (fourteen actions), and
 flank escalation mirrored per side. Copies drift, and a reviewer cannot tell a deliberate
-difference from a stale one. The same need is coming from data-driven behavior
-programs ([Behavior machines](machine-design.md) §8) and from the map editor,
-whose placeable blocks are the same idea.
+difference from a stale one. Behavior programs
+([Behavior machines §6](machine-design.md#6-data-species)) share the need, and so
+will the map editor, whose placeable blocks are the same idea.
 
 **Decision.** Macros are data in the document, expanded on the parsed tree
 between parsing and `toml.Decode`:
@@ -113,12 +113,13 @@ Those bounds exist because a scenario can arrive from a peer.
 
 ## 5. Where macros live
 
-| Document | Defines | Invokes |
-|---|---|---|
-| Scenario entry | its own `[macros]`, plus every file named by `macro_files = ["x.toml"]` | yes |
-| Macro file | only `[macros]` | — |
-| Region file | nothing: `[macros]` there is an error | yes |
-| One-document scenario (`Machine.LoadScenario`), bot graph | its own `[macros]` | yes |
+- Scenario entry: defines its own `[macros]`, plus every file named by
+  `macro_files = ["x.toml"]`, and invokes.
+- Macro file: only `[macros]`.
+- Region file, behavior program file: define nothing, `[macros]` there being an
+  error, and invoke.
+- One-document scenario (`Machine.LoadScenario`), bot graph: define their own
+  `[macros]` and invoke.
 
 Every file of a scenario expands against the entry's one set, so a name defined
 twice is an error rather than a shadow. Macro file paths resolve like region files,
@@ -158,10 +159,8 @@ left-the-map exit. `wad/scenario/simon` is one document that defines its own.
   can move there once another module wants it; the bounds and the reserved keys
   are vif's choices until then.
 
-## 8. Next consumers
+## 8. Next consumer
 
-- **Behavior programs.** Program files listed by a scenario expand against the
-  scenario's set, like region files ([Behavior machines](machine-design.md) §8.3).
 - **Map and scenario editor.** Blocks are macros and placed blocks are
   invocations; the parameter metadata the editor still needs is in
   [TODO](todo.md#build-the-map-and-scenario-editor).
