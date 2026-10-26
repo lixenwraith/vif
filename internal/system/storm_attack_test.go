@@ -89,7 +89,7 @@ func TestStormRedTurretTracksTheNearestCursor(t *testing.T) {
 
 // TestAStunHoldsAnAttackAndItsTurret: a stun suspends the circle's machine, so a
 // burst keeps the time it has left and its turret, disarmed, fires nothing until
-// the stun ends (S5, S4)
+// the stun ends
 func TestAStunHoldsAnAttackAndItsTurret(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	storm := ready(NewStormSystem(w)).(*StormSystem)
@@ -121,7 +121,7 @@ func TestAStunHoldsAnAttackAndItsTurret(t *testing.T) {
 
 // TestACircleWithNoCursorKeepsItsOutputsCurrent: with no cursor to attack the
 // machine holds, its cooldown frozen, while IsInvulnerable follows the circle's
-// depth and its attack on every step (S4)
+// depth and its attack on every step
 func TestACircleWithNoCursorKeepsItsOutputsCurrent(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -167,7 +167,7 @@ func TestAnExpiredCooldownWaitsForTheConvex(t *testing.T) {
 
 // TestTheBlueCueBeamsOnceAnAttack: the blue finds its landing as its attack opens and
 // beams a swarm onto it at 800 ‰ of the attack, once an attack however many ticks
-// follow (S2); an attack that found no landing beams nothing
+// follow; an attack that found no landing beams nothing
 func TestTheBlueCueBeamsOnceAnAttack(t *testing.T) {
 	beams := func(walled bool) []int {
 		w, _, _ := testCursorWorld(t)
@@ -267,7 +267,7 @@ func TestTheBlueSwarmLandsAsItsBeamEnds(t *testing.T) {
 }
 
 // TestAStormsEndEndsItsBeams: a beam in flight is a swarm the storm has yet to
-// land, so the storm's end ends it and nothing lands after (S1). A fusion's
+// land, so the storm's end ends it and nothing lands after. A fusion's
 // player-domain beam and a Shared one naming no species are not the storm's: both
 // fly on, and neither lands a swarm.
 func TestAStormsEndEndsItsBeams(t *testing.T) {

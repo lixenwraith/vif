@@ -248,6 +248,13 @@ restored by a deterministic compiled-action identity rather than a queue index.
 The embedded scenario runs foreground gameplay regions alongside a background
 monitor. Alternate scenarios live under `wad/scenario/`.
 
+Species conduct is the level below. The swarm, the quasar and the storm circles
+step a per-entity state machine (`pkg/machine`) their component carries as plain
+integers, and a scenario brings species of its own as behavior programs: TOML in
+the same dialect, compiled at load against the game's verbs into the same machine,
+so a species the engine was not built with adds a program and a prototype, not a
+component ([Behavior machines](machine-design.md)).
+
 See [HFSM and configuration](fsm-and-configuration.md) and the detailed
 [authoring reference](fsm-reference.md).
 

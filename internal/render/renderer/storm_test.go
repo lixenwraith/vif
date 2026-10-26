@@ -34,7 +34,7 @@ func TestStormEffectBoundsClipToVisibleMap(t *testing.T) {
 }
 
 // TestAHeldTurretShowsNoMuzzleFlash: the red's muzzle flash shows its turret
-// firing, so a burst a stun holds, its mount disarmed, draws none (S5)
+// firing, so a burst a stun holds, its mount disarmed, draws none
 func TestAHeldTurretShowsNoMuzzleFlash(t *testing.T) {
 	w := engine.NewWorld()
 	r := NewStormRenderer(engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock()))

@@ -591,7 +591,7 @@ press and driven by taps, and a menu Android draws itself is a later item
 cell aspect the presentation reports is one parameter of the simulation
 ([Rendering §2.2](rendering.md#22-the-cell-aspect)). Host adapters plug through
 `Host`; simulation modules plug through the manifest and the generator
-([Behavior machines](machine-design.md) §8), never through a second registry.
+([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)), never through a second registry.
 
 Build tags should remain orthogonal capabilities. Avoid an accumulating
 `linux`/`windows`/`android` switch in gameplay code: use a platform tag only where

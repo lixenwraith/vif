@@ -875,7 +875,7 @@ target = "Roam"
 A step runs the global edges, the suspend check, the clock and its cues, the
 timeout, the `Tick` edges, the state's `on_update` and its move, then the
 `AfterTick` edges, each phase taking at most one transition
-([Behavior machines §6.3](machine-design.md#63-step)). The vocabulary, which
+([Behavior machines §2.3](machine-design.md#23-step)). The vocabulary, which
 `-schema` lists as `vocabularies.behavior`:
 
 - Guards: `TargetDistance { op, cells }` (header to target, rows scaled by the
