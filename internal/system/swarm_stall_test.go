@@ -50,8 +50,8 @@ func newStalledSwarm(t *testing.T) (*engine.World, *SwarmSystem, core.Entity) {
 }
 
 // aboutToExpire is an entry of state s whose duration d runs out on the next step
-func aboutToExpire(s component.SwarmState, d time.Duration) machine.Instance[component.SwarmState] {
-	return machine.Instance[component.SwarmState]{State: s, Elapsed: d - time.Nanosecond, Duration: d}
+func aboutToExpire[S ~uint8](s S, d time.Duration) machine.Instance[S] {
+	return machine.Instance[S]{State: s, Elapsed: d - time.Nanosecond, Duration: d}
 }
 
 func stepSwarm(w *engine.World, s *SwarmSystem) {
