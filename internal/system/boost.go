@@ -34,7 +34,6 @@ func NewBoostSystem(world *engine.World) engine.System {
 	s.statTruncated = reg.Ints.Get("boost.truncated")
 	s.rejects = newRejectionTelemetry(reg, "boost")
 
-	s.Init()
 	return s
 }
 

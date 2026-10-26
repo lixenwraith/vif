@@ -29,7 +29,6 @@ func NewSplashSystem(world *engine.World) engine.System {
 	s := &SplashSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

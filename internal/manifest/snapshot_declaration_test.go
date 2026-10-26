@@ -56,9 +56,9 @@ func TestSnapshotDeclarationsMatchImplementations(t *testing.T) {
 // that returns an error, or produces something it cannot read back, is a hole in
 // the capture that only shows up when a join installs it.
 func TestSnapshotStateSystemsRoundTrip(t *testing.T) {
-	w := scratchWorld(t)
+	w := buildWorld(t)
 	carriers := 0
-	for _, sys := range BuildSystems(w) {
+	for _, sys := range w.Systems() {
 		saver, ok := sys.(engine.SharedStateSaver)
 		if !ok {
 			continue

@@ -60,7 +60,6 @@ func NewMusicSystem(world *engine.World) engine.System {
 		s.statSlot[slot] = reg.Strings.Get(key)
 	}
 	s.statBPM = reg.Ints.Get("music.bpm")
-	s.Init()
 	// The first update starts audible runs after scenario disable events settle.
 	s.startPending = true
 	return s

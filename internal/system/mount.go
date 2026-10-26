@@ -42,7 +42,6 @@ func NewMountSystem(world *engine.World) engine.System {
 	s.statRejects = reg.Ints.Get("mount.host_rejects")
 	s.statDisabled = reg.Ints.Get("mount.disabled_rejects")
 
-	s.Init()
 	return s
 }
 

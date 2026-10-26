@@ -20,7 +20,6 @@ func NewFadeoutSystem(world *engine.World) engine.System {
 	s := &FadeoutSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

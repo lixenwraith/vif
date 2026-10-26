@@ -22,7 +22,6 @@ func NewCompositeSystem(world *engine.World) engine.System {
 	s := &CompositeSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

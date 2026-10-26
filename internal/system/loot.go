@@ -85,7 +85,6 @@ func NewLootSystem(world *engine.World) engine.System {
 	s.buffers = newBufferTelemetry(world.Resources.Status, "loot", "pity")
 	s.motion = newBounceTelemetry(world.Resources.Status, "loot")
 
-	s.Init()
 	return s
 }
 

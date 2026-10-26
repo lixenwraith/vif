@@ -79,7 +79,6 @@ func NewSoftCollisionSystem(world *engine.World) engine.System {
 
 	s.initMatrix()
 	s.initFlockingMatrix()
-	s.Init()
 	return s
 }
 

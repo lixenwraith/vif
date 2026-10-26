@@ -45,7 +45,6 @@ func NewMissileSystem(world *engine.World) engine.System {
 	s.statGridSteps = world.Resources.Status.Ints.Get("missile.grid_steps")
 	s.statDisabled = world.Resources.Status.Ints.Get("missile.disabled_rejects")
 
-	s.Init()
 	return s
 }
 

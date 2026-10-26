@@ -17,7 +17,6 @@ type MarkerSystem struct {
 
 func NewMarkerSystem(world *engine.World) engine.System {
 	s := &MarkerSystem{world: world}
-	s.Init()
 	return s
 }
 

@@ -19,7 +19,6 @@ func NewFlashSystem(world *engine.World) engine.System {
 	s := &FlashSystem{
 		world: world,
 	}
-	s.Init()
 	return s
 }
 

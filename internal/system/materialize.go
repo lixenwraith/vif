@@ -21,7 +21,6 @@ func NewMaterializeSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.Init()
 	return s
 }
 

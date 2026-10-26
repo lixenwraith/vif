@@ -47,7 +47,6 @@ func NewSnakeSystem(world *engine.World) engine.System {
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "snake")
 	s.motion = newBounceTelemetry(world.Resources.Status, "snake")
 
-	s.Init()
 	return s
 }
 

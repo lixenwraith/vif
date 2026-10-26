@@ -242,7 +242,6 @@ func NewParticleSystem(world *engine.World) engine.System {
 	s.rejects = newRejectionTelemetry(reg, "particle")
 	s.dustBuffers = newBufferTelemetry(reg, "dust", "transform", "flash", "impulses", "centers")
 
-	s.Init()
 	return s
 }
 

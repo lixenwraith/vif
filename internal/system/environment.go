@@ -70,7 +70,6 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 	s.statWindActive = world.Resources.Status.Bools.Get("environment.wind_active")
 	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
 	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
-	s.Init()
 	return s
 }
 

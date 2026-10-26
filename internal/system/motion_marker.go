@@ -38,7 +38,6 @@ func NewMotionMarkerSystem(world *engine.World) engine.System {
 		coloredMarkers: make([]core.Entity, 0, 12),
 	}
 	s.buffers = newBufferTelemetry(world.Resources.Status, "motion_marker", "base_markers", "base_positions", "colored_markers")
-	s.Init()
 	return s
 }
 

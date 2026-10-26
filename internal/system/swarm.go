@@ -47,7 +47,6 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "swarm")
 	s.motion = newBounceTelemetry(world.Resources.Status, "swarm")
 
-	s.Init()
 	return s
 }
 

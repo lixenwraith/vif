@@ -446,7 +446,6 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statPaceTrim = s.intStat(reg, "network.pace_trim_permille")
 	s.statPaceSteps = s.intStat(reg, "network.pace_steps")
 
-	s.Init()
 	return s
 }
 
