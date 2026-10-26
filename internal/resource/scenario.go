@@ -115,6 +115,21 @@ func (s Scenario) Short() string {
 	return s.digest[:12]
 }
 
+// Behaviors resolves the entry and returns its behavior programs by name, each
+// file a program names read in place of its table
+func (s Scenario) Behaviors() (map[string]map[string]any, error) {
+	doc, err := fsm.ResolveScenario(s.FS(), s.entry)
+	if err != nil {
+		return nil, err
+	}
+	programs, _ := doc["behaviors"].(map[string]any) // the resolve holds it to a table of tables
+	out := make(map[string]map[string]any, len(programs))
+	for name, program := range programs {
+		out[name] = program.(map[string]any)
+	}
+	return out, nil
+}
+
 // Loaded reports whether this is a scenario rather than the zero value.
 func (s Scenario) Loaded() bool { return s.digest != "" }
 
@@ -224,8 +239,8 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 }
 
 // entryKeys are the top-level keys a scenario entry may hold
-var entryKeys = []string{"description", "macro_files", "macros", "map", "max_players", "min_players",
-	"regions", "states", "systems"}
+var entryKeys = []string{"behaviors", "description", "macro_files", "macros", "map", "max_players",
+	"min_players", "regions", "states", "systems"}
 
 // validate holds every form of a scenario to one rule set: bounded, sorted,
 // .toml-only, naming nothing outside itself, its entry holding only entryKeys.

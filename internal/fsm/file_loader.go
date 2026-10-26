@@ -51,9 +51,9 @@ func ResolveScenario(fsys fs.FS, entry string) (map[string]any, error) {
 }
 
 // ScenarioFiles names every file a scenario is made of — its entry, its macro
-// files and the region files it includes — sorted and deduplicated. A portable
-// copy is read through this, so it carries exactly the files the loader would
-// have read and nothing that happens to sit beside them.
+// files, the region files and behavior programs it includes — sorted and
+// deduplicated. A portable copy is read through this, so it carries exactly the
+// files the loader would have read and nothing that happens to sit beside them.
 func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
 	var visited []string
 	if _, err := loadAndResolve(fsys, entry, make(map[string]bool), &visited, nil); err != nil {
@@ -64,9 +64,9 @@ func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
 }
 
 // loadAndResolve loads a TOML file, expands its macros and resolves region file
-// includes. stack holds the ancestors being resolved, popped on return; visited,
-// when non-nil, collects every file read. macros is nil for the entry, which
-// defines the set every file of the scenario expands against.
+// includes, and an entry's behavior programs. stack holds the ancestors being
+// resolved, popped on return; visited, when non-nil, collects every file read.
+// macros is nil for the entry, which defines the set every file expands against.
 func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]string, macros *tomlmacro.Set) (map[string]any, error) {
 	cleanName := path.Clean(name)
 	if stack[cleanName] {
@@ -74,30 +74,17 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 	}
 	stack[cleanName] = true
 	defer delete(stack, cleanName) // pop on return; siblings may re-include
-	if visited != nil {
-		*visited = append(*visited, cleanName)
-	}
 
-	data, err := fs.ReadFile(fsys, cleanName)
+	entry := macros == nil
+	parsed, macros, err := readExpanded(fsys, cleanName, visited, macros)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", cleanName, err)
+		return nil, err
 	}
-
-	p := toml.NewParser(data)
-	parsed, err := p.Parse()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", cleanName, err)
-	}
-
 	baseDir := path.Dir(cleanName)
-	if macros == nil {
-		macros = tomlmacro.NewSet()
-		if err := defineMacros(fsys, parsed, baseDir, macros, visited); err != nil {
+	if entry {
+		if err := includeBehaviors(fsys, parsed, baseDir, visited, macros); err != nil {
 			return nil, fmt.Errorf("%s: %w", cleanName, err)
 		}
-	}
-	if parsed, err = macros.Expand(parsed); err != nil {
-		return nil, fmt.Errorf("%s: %w", cleanName, err)
 	}
 
 	if parsed["states"] == nil {
@@ -148,6 +135,68 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 	}
 
 	return parsed, nil
+}
+
+// readExpanded reads and parses one file of a scenario and expands it against
+// macros; nil macros makes it the entry, whose macros every file expands against
+func readExpanded(fsys fs.FS, name string, visited *[]string, macros *tomlmacro.Set) (map[string]any, *tomlmacro.Set, error) {
+	if visited != nil {
+		*visited = append(*visited, name)
+	}
+	data, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read %s: %w", name, err)
+	}
+	parsed, err := toml.NewParser(data).Parse()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse %s: %w", name, err)
+	}
+	if macros == nil {
+		macros = tomlmacro.NewSet()
+		if err := defineMacros(fsys, parsed, path.Dir(name), macros, visited); err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	if parsed, err = macros.Expand(parsed); err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", name, err)
+	}
+	return parsed, macros, nil
+}
+
+// includeBehaviors replaces each behaviors.<name> table naming a file with that
+// file, read as the entry's other files are; a table without file is the program
+func includeBehaviors(fsys fs.FS, entry map[string]any, baseDir string, visited *[]string, macros *tomlmacro.Set) error {
+	raw, ok := entry["behaviors"]
+	if !ok {
+		return nil
+	}
+	programs, ok := raw.(map[string]any)
+	if !ok {
+		return errors.New("behaviors must be a table of programs")
+	}
+	for _, name := range slices.Sorted(maps.Keys(programs)) {
+		program, ok := programs[name].(map[string]any)
+		if !ok {
+			return fmt.Errorf("behavior '%s' must be a table", name)
+		}
+		ref, hasFile := program["file"]
+		if !hasFile {
+			continue
+		}
+		file, ok := ref.(string)
+		switch {
+		case !ok:
+			return fmt.Errorf("behavior '%s': file must be a string", name)
+		case len(program) > 1:
+			return fmt.Errorf("behavior '%s': file must be the table's only key", name)
+		}
+		doc, _, err := readExpanded(fsys, path.Join(baseDir, file), visited, macros)
+		if err != nil {
+			return fmt.Errorf("behavior '%s': %w", name, err)
+		}
+		programs[name] = doc
+	}
+	return nil
 }
 
 // defineMacros reads the entry's macro_files, then its own [macros], into set.

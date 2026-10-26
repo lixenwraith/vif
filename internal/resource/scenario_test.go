@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -118,6 +119,63 @@ func TestMacroFilesAreScenarioFiles(t *testing.T) {
 	write("macros.toml", strings.Replace(library, "Tick", "EventGameResetRequest", 1))
 	if read(t, dir).Digest() == before.Digest() {
 		t.Error("an edited macro file kept the scenario's digest")
+	}
+}
+
+// TestABehaviorProgramIsAScenarioFile: a program file is carried and digested as a
+// region file is, expands against the entry's macros, and reads as the same
+// program written inline; the machine leaves the table to its embedder
+func TestABehaviorProgramIsAScenarioFile(t *testing.T) {
+	dir := writeScenario(t, filepath.Join(t.TempDir(), "scenario", "arena"), scenarioRegion)
+	write := func(name, body string) {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	program := "initial = \"Idle\"\n[states]\nIdle = { macro = \"Still\" }\n"
+	write("behavior/warden.toml", program)
+	write("scenario.toml", "[macros.Still]\nbody = { on_update = [{ action = \"Freeze\" }] }\n"+
+		"[regions.main]\nfile = \"main.toml\"\n"+
+		"[behaviors]\nwarden = { file = \"behavior/warden.toml\" }\n"+
+		"[behaviors.inline]\n"+strings.Replace(program, "[states]", "[behaviors.inline.states]", 1))
+
+	before := read(t, dir)
+	if before.Files() != 3 {
+		t.Fatalf("scenario holds %d files, want the entry, the region and the program", before.Files())
+	}
+	programs, err := before.Behaviors()
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, _ := programs["warden"]["states"].(map[string]any)
+	if _, expanded := states["Idle"].(map[string]any)["on_update"]; !expanded || !reflect.DeepEqual(programs["warden"], programs["inline"]) {
+		t.Fatalf("programs %v", programs)
+	}
+	if err := fsm.LoadScenarioFromFS(fsm.NewMachine[int](), before.FS(), before.Entry()); err != nil {
+		t.Fatalf("machine load: %v", err)
+	}
+
+	write("behavior/warden.toml", strings.Replace(program, "Idle", "Rest", 2))
+	if read(t, dir).Digest() == before.Digest() {
+		t.Error("an edited program kept the scenario's digest")
+	}
+}
+
+// TestABehaviorTableNamesAFileOrIsTheProgram: a table naming a file holds nothing
+// else, so no key beside file is silently dropped
+func TestABehaviorTableNamesAFileOrIsTheProgram(t *testing.T) {
+	for program, want := range map[string]string{
+		`{ file = 3 }`:                          "behavior 'warden': file must be a string",
+		`{ file = "w.toml", initial = "Roam" }`: "behavior 'warden': file must be the table's only key",
+	} {
+		entry := "[regions.main]\nfile = \"main.toml\"\n[behaviors]\nwarden = " + program + "\n"
+		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
+		if _, err := ReadScenario("arena", fsys, "scenario.toml"); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: error %v, want %q", program, err, want)
+		}
 	}
 }
 
