@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"io"
 	"io/fs"
+	"maps"
 	"math"
 	"os"
 	"path"
@@ -222,8 +223,12 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 	return s, nil
 }
 
+// entryKeys are the top-level keys a scenario entry may hold
+var entryKeys = []string{"description", "macro_files", "macros", "map", "max_players", "min_players",
+	"regions", "states", "systems"}
+
 // validate holds every form of a scenario to one rule set: bounded, sorted,
-// .toml-only, and naming nothing outside itself.
+// .toml-only, naming nothing outside itself, its entry holding only entryKeys.
 func (s *Scenario) validate() error {
 	switch {
 	case len(s.files) == 0:
@@ -255,6 +260,15 @@ func (s *Scenario) validate() error {
 	doc, err := toml.NewParser(data).Parse()
 	if err != nil {
 		return fmt.Errorf("entry %q: %w", s.entry, err)
+	}
+	var unknown toml.UnknownKeys
+	for _, key := range slices.Sorted(maps.Keys(doc)) {
+		if !slices.Contains(entryKeys, key) {
+			unknown = append(unknown, toml.Key{key})
+		}
+	}
+	if unknown != nil {
+		return fmt.Errorf("entry %q: %w", s.entry, unknown)
 	}
 	if description, exists := doc["description"]; exists {
 		var ok bool

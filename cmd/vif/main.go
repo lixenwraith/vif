@@ -330,7 +330,8 @@ func setupDiagnostics() {
 			path, vlog.LevelName(), vlog.ScopeString(vlog.Scopes()))
 	}
 
-	if flagDev.valueOr(core.RaceEnabled) {
+	// -schema runs nothing to capture, and a tool reads its stdout as JSON
+	if flagDev.valueOr(core.RaceEnabled) && !*flagSchema {
 		path, err := core.CaptureStderr(logDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "runtime capture disabled: %v\n", err)
