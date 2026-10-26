@@ -50,12 +50,11 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 	pulseWindow := parameter.SwarmChargeLinePulseCount * pulseDur
 
 	swarms.Each(func(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
-		if swarmComp.State != component.SwarmStateLock {
+		if swarmComp.Machine.State != component.SwarmStateLock {
 			return true
 		}
 
-		lockElapsed := parameter.SwarmLockDuration - swarmComp.LockRemaining
-		pulseElapsed := lockElapsed - showDelay
+		pulseElapsed := swarmComp.Machine.Elapsed - showDelay
 		if pulseElapsed < 0 || pulseElapsed >= pulseWindow {
 			return true
 		}

@@ -47,17 +47,8 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 	buf.SetWriteMask(visual.MaskTransient)
 
 	swarms.Each(func(_ core.Entity, swarmComp *component.SwarmComponent) bool {
-		if swarmComp.State != component.SwarmStateTeleport {
+		if swarmComp.Machine.State != component.SwarmStateTeleport {
 			return true
-		}
-
-		elapsed := parameter.SwarmTeleportDuration - swarmComp.TeleportRemaining
-		progress := float64(elapsed) / float64(parameter.SwarmTeleportDuration)
-		if progress < 0 {
-			progress = 0
-		}
-		if progress > 1 {
-			progress = 1
 		}
 
 		r.renderBeam(ctx, buf,
@@ -65,7 +56,7 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			swarmComp.TeleportTargetX, swarmComp.TeleportTargetY,
 			parameter.SwarmWidth, parameter.SwarmHeight,
 			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-			progress)
+			swarmComp.Machine.Progress())
 		return true
 	})
 }

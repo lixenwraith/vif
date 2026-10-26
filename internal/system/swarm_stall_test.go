@@ -9,13 +9,13 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 // newStalledSwarm builds one chasing swarm in a world with no resolvable target,
-// which is the condition enterLockState refuses on. The swarm's charge interval
-// is set to expire on the next tick, so the very first update takes the branch
-// that used to wedge it.
+// which the lock's probe refuses. Its chase is about to expire, so the first
+// update tries the lock.
 func newStalledSwarm(t *testing.T) (*engine.World, *SwarmSystem, core.Entity) {
 	t.Helper()
 	w := engine.NewWorld()
@@ -33,8 +33,7 @@ func newStalledSwarm(t *testing.T) (*engine.World, *SwarmSystem, core.Entity) {
 		CombatEntityType: component.CombatEntitySwarm,
 	})
 	w.Components.Swarm.SetComponent(header, component.SwarmComponent{
-		State:                   component.SwarmStateChase,
-		ChargeIntervalRemaining: time.Nanosecond,
+		Machine: aboutToExpire(component.SwarmStateChase, parameter.SwarmChargeInterval),
 	})
 	w.Components.Header.SetComponent(header, component.HeaderComponent{
 		Behavior: component.BehaviorSwarm,
@@ -42,12 +41,17 @@ func newStalledSwarm(t *testing.T) (*engine.World, *SwarmSystem, core.Entity) {
 	})
 
 	// Target group 0 is left empty on purpose: resolveBaseTarget answers false,
-	// which is exactly what enterLockState cannot complete on.
+	// which is exactly what the lock's probe refuses.
 	if w.Resources.Target == nil {
 		w.Resources.Target = &engine.TargetResource{}
 	}
 	w.Resources.Target.SetGroup(0, engine.TargetGroupState{})
 	return w, s, header
+}
+
+// aboutToExpire is an entry of state s whose duration d runs out on the next step
+func aboutToExpire(s component.SwarmState, d time.Duration) machine.Instance[component.SwarmState] {
+	return machine.Instance[component.SwarmState]{State: s, Elapsed: d - time.Nanosecond, Duration: d}
 }
 
 // TestSwarmKeepsIntegratingWhenLockCannotResolve: when no lock target resolves,
@@ -83,8 +87,8 @@ func TestSwarmKeepsIntegratingWhenLockCannotResolve(t *testing.T) {
 	}
 }
 
-// TestAStunnedSwarmStillDies: the hit-point check runs ahead of the stun check and
-// a stunned swarm still counts as active, so a swarm held in stun can neither
+// TestAStunnedSwarmStillDies: the hit-point check runs ahead of the step and a
+// stunned swarm still counts as active, so a swarm held in stun can neither
 // outlive zero hit points nor drop out of swarm.count.
 func TestAStunnedSwarmStillDies(t *testing.T) {
 	w, s, header := newStalledSwarm(t)
@@ -152,11 +156,10 @@ func TestAStunIsNotRefreshedWhileItRuns(t *testing.T) {
 func TestSwarmLeavesLockWhenChargeCannotResolve(t *testing.T) {
 	w, s, header := newStalledSwarm(t)
 
-	// Lock with an expired timer and no position, which is what enterChargeState
-	// refuses on.
+	// A lock about to expire with no position, which refuses both the charge and
+	// the teleport
 	w.Components.Swarm.SetComponent(header, component.SwarmComponent{
-		State:         component.SwarmStateLock,
-		LockRemaining: time.Nanosecond,
+		Machine: aboutToExpire(component.SwarmStateLock, parameter.SwarmLockDuration),
 	})
 	w.Positions.RemoveEntity(header, false)
 
@@ -170,13 +173,13 @@ func TestSwarmLeavesLockWhenChargeCannotResolve(t *testing.T) {
 	if !ok {
 		t.Fatal("swarm component vanished")
 	}
-	if sw.State == component.SwarmStateLock {
+	if sw.Machine.State == component.SwarmStateLock {
 		t.Fatal("swarm held in lock with an expired timer: frozen, enraged, and " +
 			"immune to the shield that is supposed to eject it")
 	}
 
 	combat, _ := w.Components.Combat.GetComponent(header)
-	if combat.IsEnraged && sw.State == component.SwarmStateLock {
+	if combat.IsEnraged && sw.Machine.State == component.SwarmStateLock {
 		t.Fatal("swarm latched enraged in a state it cannot leave")
 	}
 }
