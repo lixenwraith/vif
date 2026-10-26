@@ -314,6 +314,11 @@ Makefile writes, from one Go. A deployment that
 edits any of them has forked the launcher, and the fork is only visible the next
 time one side changes.
 
+The page's text is Roboto, as lixen.com's is: the stylesheet takes it from
+`/fonts/`, where the site serves it, and then from `fonts/` beside the page, which
+`web/fonts/` holds with its licence, so no deployment fetches a font from
+elsewhere, and one that serves neither shows the system's sans-serif.
+
 A deployment that publishes the files under other names, as content-hashed ones
 for long caching, names them on the `terminal.js` script element instead of
 editing a script: `data-wasm` for `vif.wasm`, `data-worker` for `worker.js`,
@@ -495,8 +500,9 @@ keyboard would, to cycle the channels.
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
-`app.Run`. The app opens on a start screen (`StartScreen`) over the view: the logo,
-"Tap to start" under it and a `?` that opens the touch controls. The run starts
+`app.Run`. The app opens on a start screen (`StartScreen`) over the view, in
+lixen.com's dark theme as every host's is: the logo, "Tap to start" under it on the
+site's blue button and a `?` in a ring of that blue that opens the touch controls. The run starts
 behind it with its player away (`game.Start`'s `away`): its first game waits in its
 start hold, drawn undimmed and silent, and the tap, the press that starts it, lifts
 the screen off a game already built and painted; its keys reach it only from then.
@@ -543,7 +549,9 @@ bottom row drawn again above it, and the hold. Every page opens on the same star
 screen in the same words, the key strip listed beside Back; a
 desktop's asks for a click or a key, and its `?` lists the mouse and the first keys.
 The Worker holds the compiled program until that press, made at any point of the
-download or compile, which opens the sound too; a key starts it as it comes up,
+download or compile, which opens the sound too; the loading line under the logo is
+a ring of the button's blue while it counts the download, and the button once it
+asks for the press or the press came; a key starts it as it comes up,
 unseen by the game, and Escape, Tab, the F keys and chords start nothing. The press
 is the first game's (`Host.Pressed`), so that game does not wait again; a later new
 game waits in the game as a terminal's does, unless `[play] wait` is off, and the

@@ -17,10 +17,11 @@ import android.widget.TextView;
 
 /**
  * The screen the app opens on, over the game: the logo at the centre, "Tap to start"
- * under it and a ? in the corner that opens the touch controls. The run starts behind
- * it and waits, paused; a tap anywhere else lifts the screen and the game goes on at
- * once. A browser on a touch screen shows the same screen (web/index.html) in the
- * same words while it loads, and needs no tap.
+ * under it on a button and a ? in the corner that opens the touch controls. The run
+ * starts behind it and waits, paused; a tap anywhere else lifts the screen and the
+ * game goes on at once. A browser on a touch screen shows the same screen
+ * (web/index.html) in the same words while it loads, and needs no tap. Both wear
+ * lixen.com's dark theme in its font, Roboto, the system's sans-serif here.
  */
 final class StartScreen extends FrameLayout {
     // The touch controls as web/index.html words them; Back is each platform's own
@@ -34,7 +35,11 @@ final class StartScreen extends FrameLayout {
             {"Back", "Escape; twice quickly, leave with the game paused"},
     };
     private static final String KEYBOARD = "With a keyboard, F1 or :help lists every key and command, and :q quits.";
-    private static final int GREY = 0xFFBBBBBB, BORDER = 0xFF555555;
+    // The site's page, hairline, muted text, the primary button's blue and the
+    // periwinkle a ring of that blue is labelled in, as web/terminal.css names them
+    private static final int BG = 0xFF11111B, LINE = 0x26FFFFFF, MUTED = 0xFF94A3B8,
+            BUTTON = 0xFF2563EB, ACCENT = 0xFF8EA2FF;
+    private static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
 
     private final ImageView logo;
     private final TextView prompt;
@@ -42,21 +47,28 @@ final class StartScreen extends FrameLayout {
 
     StartScreen(Context context, Runnable start) {
         super(context);
-        setBackgroundColor(Color.BLACK);
+        setBackgroundColor(BG);
         setOnClickListener(v -> start.run());
         logo = new ImageView(context);
         logo.setImageResource(R.drawable.logo);
         logo.setContentDescription("lixen");
         addView(logo, new LayoutParams(0, 0, Gravity.CENTER));
-        prompt = text("Tap to start", 18, GREY);
+        prompt = text("Tap to start", 18, Color.WHITE);
+        prompt.setTypeface(MEDIUM);
+        prompt.setPadding(dp(28), dp(12), dp(28), dp(12));
+        GradientDrawable fill = new GradientDrawable();
+        fill.setColor(BUTTON);
+        fill.setCornerRadius(dp(8));
+        prompt.setBackground(fill);
         addView(prompt, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.CENTER_HORIZONTAL));
-        help = text("?", 24, Color.WHITE);
+        help = text("?", 24, ACCENT);
+        help.setTypeface(MEDIUM);
         help.setGravity(Gravity.CENTER);
         help.setContentDescription("Touch controls");
         GradientDrawable ring = new GradientDrawable();
         ring.setShape(GradientDrawable.OVAL);
-        ring.setStroke(dp(2), GREY);
+        ring.setStroke(dp(2), BUTTON);
         help.setBackground(ring);
         help.setOnClickListener(v -> showControls());
         LayoutParams corner = new LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.END);
@@ -85,8 +97,9 @@ final class StartScreen extends FrameLayout {
         window.setOrientation(LinearLayout.VERTICAL);
         window.setClickable(true); // a tap inside is not one outside
         GradientDrawable frame = new GradientDrawable();
-        frame.setColor(Color.BLACK);
-        frame.setStroke(dp(1), BORDER);
+        frame.setColor(BG);
+        frame.setStroke(dp(1), LINE);
+        frame.setCornerRadius(dp(8));
         window.setBackground(frame);
         LayoutParams margin = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
         margin.setMargins(dp(16), dp(16), dp(16), dp(16));
@@ -94,7 +107,7 @@ final class StartScreen extends FrameLayout {
 
         FrameLayout head = new FrameLayout(c);
         TextView title = text("Touch controls", 18, Color.WHITE);
-        title.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        title.setTypeface(MEDIUM);
         title.setPadding(dp(16), 0, dp(56), 0);
         head.addView(title, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER_VERTICAL | Gravity.START));
@@ -110,13 +123,13 @@ final class StartScreen extends FrameLayout {
         rows.setPadding(dp(16), dp(4), dp(16), dp(16));
         for (String[] control : CONTROLS) {
             TextView gesture = text(control[0], 15, Color.WHITE);
-            gesture.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+            gesture.setTypeface(MEDIUM);
             rows.addView(gesture);
-            TextView does = text(control[1], 15, GREY);
+            TextView does = text(control[1], 15, MUTED);
             does.setPadding(dp(16), dp(2), 0, dp(14));
             rows.addView(does);
         }
-        TextView keyboard = text(KEYBOARD, 15, GREY);
+        TextView keyboard = text(KEYBOARD, 15, MUTED);
         keyboard.setPadding(0, dp(8), 0, 0);
         rows.addView(keyboard);
         ScrollView scroll = new ScrollView(c);
@@ -137,7 +150,7 @@ final class StartScreen extends FrameLayout {
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         t.setTextColor(color);
-        t.setTypeface(Typeface.MONOSPACE);
+        t.setTypeface(Typeface.SANS_SERIF);
         return t;
     }
 

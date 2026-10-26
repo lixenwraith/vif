@@ -4,9 +4,42 @@
     box-sizing: border-box;
 }
 
+/* lixen.com's dark theme, which every host's start screen wears: its page, its
+   cards, hairlines, muted text, links and the two buttons, a blue fill and a blue
+   ring around a periwinkle label. Its font is Roboto, kept beside this file and
+   never fetched from elsewhere; the site serves the same files at /fonts/. */
+:root {
+    --bg: #11111b;
+    --surface: #1a1b26;
+    --line: rgba(255, 255, 255, 0.15);
+    --text: #fff;
+    --muted: #94a3b8;
+    --accent: #8ea2ff;
+    --button: #2563eb;
+    --button-hover: #5f57f5;
+    --danger: #f87171;
+    --ui: Roboto, sans-serif;
+}
+
+@font-face {
+    font-family: Roboto;
+    font-weight: 400;
+    font-display: swap;
+    src: local('Roboto'), local('Roboto-Regular'),
+         url('/fonts/roboto-400.woff2') format('woff2'), url('fonts/roboto-400.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: Roboto;
+    font-weight: 500;
+    font-display: swap;
+    src: local('Roboto Medium'), local('Roboto-Medium'),
+         url('/fonts/roboto-500.woff2') format('woff2'), url('fonts/roboto-500.woff2') format('woff2');
+}
+
 html, body {
     height: 100%;
-    background: #000;
+    background: var(--bg);
     overflow: hidden;
     overscroll-behavior: none;   /* no pull-to-refresh mid-run */
     color-scheme: dark;
@@ -58,9 +91,9 @@ html, body {
     max-height: calc(100dvh - 32px);
     overflow-y: auto;
     padding: 0.5em 1em;
-    background: #000;                     /* readable over the frame a crash leaves */
-    color: #888;
-    font-family: monospace;
+    background: var(--bg);                /* readable over the frame a crash leaves */
+    color: var(--muted);
+    font-family: var(--ui);
     font-size: clamp(12px, 3.6vw, 16px);
     line-height: 1.5;
     text-align: center;
@@ -69,26 +102,39 @@ html, body {
     z-index: 3;                           /* over the start screen */
 }
 
-#nojs a { color: #8ea2ff; }
+#nojs a { color: var(--accent); }
 
 #loading.hidden { display: none; }
-#loading.error  { color: #f44; }
+#loading.error  { color: var(--danger); }
 
+/* The site's buttons: a ring around a periwinkle label, filled once pointed at; the
+   first of a message ending the run, its Reload, the blue fill itself. */
 .actions button {
     min-width: 8em;
     min-height: 44px;
-    padding: 0 1em;
-    border: 1px solid #555;
-    border-radius: 6px;
-    background: #111;
-    color: #ddd;
-    font: inherit;
+    padding: 0 1.25em;
+    border: 0;
+    border-radius: 0.5rem;
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--button);
+    color: var(--accent);
+    font: 500 16px var(--ui);
 }
 
+.actions button:hover,
+.actions button:focus-visible,
+#loading .actions button:first-child {
+    background: var(--button);
+    color: var(--text);
+}
+
+#loading .actions button:first-child:hover,
+#loading .actions button:first-child:focus-visible { background: var(--button-hover); }
+
 /* Every page opens on Android's start screen: the logo two fifths of the shorter side
-   at the centre, the loading line under it, ? in the corner. The line and the notice
-   stay above it. Back from a game the logo moves up for a line and the actions under
-   it, and a shared game's link takes the other corner. */
+   at the centre, the loading line under it as a button, ? in the corner. The line and
+   the notice stay above it. Back from a game the logo moves up for a line and the
+   actions under it, and a shared game's link takes the other corner. */
 :root { --logo: 40vmin; }
 
 #start {
@@ -100,7 +146,7 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 24px;
-    background: #000;
+    background: var(--bg);
 }
 
 #start[hidden] { display: none; }
@@ -119,8 +165,8 @@ html, body {
     align-items: center;
     gap: 16px;
     max-width: 90vw;
-    color: #bbb;
-    font: 18px monospace;
+    color: var(--muted);
+    font: 18px var(--ui);
     text-align: center;
 }
 
@@ -135,12 +181,26 @@ html, body {
 
 #loading .actions { margin-top: 0.75em; }
 
+/* Under the logo the loading line is a ring while the program loads, and the blue
+   button once it asks for the start, or once the start was asked for during the
+   load: Android's "Tap to start". */
 #start:not([hidden]) ~ #loading {
     top: calc(50% + var(--logo) / 2 + 24px);
     transform: translateX(-50%);
-    color: #bbb;              /* Android's "Tap to start" */
+    padding: 0.75em 1.75em;
+    border-radius: 0.5rem;
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--button);
+    color: var(--accent);
     font-size: 18px;
+    font-weight: 500;
     pointer-events: none;     /* a tap on the words is the screen's */
+}
+
+#start:not([hidden]) ~ #loading.ask {
+    background: var(--button);
+    box-shadow: none;
+    color: var(--text);
 }
 
 #controls,
@@ -150,11 +210,19 @@ html, body {
     right: 12px;
     width: 48px;
     height: 48px;
-    border: 2px solid #bbb;
+    border: 2px solid var(--button);
     border-radius: 50%;
     background: none;
-    color: #fff;
-    font: 24px/1 monospace;
+    color: var(--accent);
+    font: 500 24px/1 var(--ui);
+}
+
+#controls:hover,
+#controls:focus-visible,
+#share:hover,
+#share:focus-visible {
+    background: var(--button);
+    color: var(--text);
 }
 
 #share {
@@ -171,8 +239,8 @@ html, body {
     position: absolute;
     top: 24px;
     left: 72px;
-    color: #bbb;
-    font: 15px monospace;
+    color: var(--muted);
+    font: 15px var(--ui);
 }
 
 #share-done[hidden] { display: none; }
@@ -187,10 +255,11 @@ html, body {
     max-width: none;
     max-height: none;
     margin: 0;
-    border: 1px solid #555;
-    background: #000;
-    color: #bbb;
-    font: 15px/1.4 monospace;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--bg);
+    color: var(--muted);
+    font: 15px/1.5 var(--ui);
 }
 
 #help[open] {
@@ -222,8 +291,8 @@ html, body {
 }
 
 #help-head h2 {
-    color: #fff;
-    font: bold 18px monospace;
+    color: var(--text);
+    font: 500 18px var(--ui);
 }
 
 #help-close {
@@ -231,8 +300,8 @@ html, body {
     height: 48px;
     border: 0;
     background: none;
-    color: #fff;
-    font: 28px/1 monospace;
+    color: var(--text);
+    font: 28px/1 var(--ui);
 }
 
 #help-body {
@@ -244,8 +313,8 @@ html, body {
 #help-body:focus { outline: none; }   /* focused as it opens, for the keys that scroll it */
 
 #help dt {
-    color: #fff;
-    font-weight: bold;
+    color: var(--text);
+    font-weight: 500;
 }
 
 #help dd { padding: 2px 0 14px 16px; }
@@ -259,9 +328,9 @@ html, body {
     z-index: 3;
     max-width: 90vw;
     padding: 2px 6px;
-    background: rgba(0, 0, 0, 0.7);
-    color: #888;
-    font: 12px/1.4 monospace;
+    background: rgba(17, 17, 27, 0.8);
+    color: var(--muted);
+    font: 12px/1.4 var(--ui);
 }
 
 #notice[hidden] { display: none; }
@@ -276,8 +345,8 @@ html, body {
     z-index: 1;                    /* above a grid shifted up over the keyboard */
     display: flex;
     height: var(--strip-h);
-    background: #111;
-    border-bottom: 1px solid #262626;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
 }
 
 #strip[hidden],
@@ -293,15 +362,15 @@ html, body {
     padding: 0 10px 1px;   /* the glyphs' descender space sits below; a pixel evens it */
     border: 0;
     background: none;
-    color: #bbb;
+    color: var(--muted);
     font: 14px/1 monospace;
 }
 
 /* Inline, an icon would sit on the text baseline, below the middle. */
 #strip svg { display: block; }
 
-#strip button:active        { background: #262626; }
-#strip button[aria-pressed="true"] { background: #1d2a55; color: #fff; }
+#strip button:active        { background: var(--line); }
+#strip button[aria-pressed="true"] { background: var(--button); color: var(--text); }
 #full { margin-left: auto; }
 
 /* Any touch screen: taps never zoom, select or call out. */
