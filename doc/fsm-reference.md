@@ -23,12 +23,12 @@ graph is written in this dialect with its own actions and guards
 The embedded main campaign is the only shipped source of `main`; `-s main`
 falls back to it. A `scenario/main/` directory is an optional user override.
 
-Region `file` and `macro_files` references resolve relative to the entry config's
-directory and cannot climb out of it. A region file holds only `[states]`, and a
-state defined twice across files fails the load. A scenario is at most 64 `.toml`
-files, 256 KiB each and 1 MiB in all. A joiner plays the coordinator's exact bytes:
-its own copy when the digests match, else the coordinator's, sent under the same
-bounds and held in memory. Installed layout:
+Region `file`, `macro_files` and behavior program `file` references resolve
+relative to the entry config's directory and cannot climb out of it. A region file
+holds only `[states]`, and a state defined twice across files fails the load. A
+scenario is at most 64 `.toml` files, 256 KiB each and 1 MiB in all. A joiner
+plays the coordinator's exact bytes: its own copy when the digests match, else the
+coordinator's, sent under the same bounds and held in memory. Installed layout:
 
 ```text
 ~/.config/vif/
@@ -36,20 +36,24 @@ bounds and held in memory. Installed layout:
 │   ├── main/              # optional override: a copy of internal/asset/scenario/
 │   ├── blank/scenario.toml
 │   ├── simon/scenario.toml
-│   └── td/
+│   ├── td/
+│   │   ├── scenario.toml
+│   │   ├── td_macros.toml # macro library
+│   │   └── td_*.toml      # region files
+│   └── warden/
 │       ├── scenario.toml
-│       ├── td_macros.toml # macro library
-│       └── td_*.toml      # region files
+│       └── behavior/warden.toml  # a behavior program
 └── input/
     └── keymap.toml
 ```
 
 `vif -check [-s <name-or-path>]` validates the resolved settings, scenario (FSM, the
-system names it toggles and the required dependencies a disable strands), keymap,
-audio overrides, content and every bot graph, then exits; all state-level FSM
-errors are reported in one pass. `vif -schema` prints the machine schema (events
-with payload fields, the guards and actions of a scenario and of a bot graph with
-their arguments, operators and config fields) as JSON.
+system names it toggles, the required dependencies a disable strands and its
+behavior programs), keymap, audio overrides, content and every bot graph, then
+exits; all state-level FSM errors are reported in one pass. `vif -schema` prints
+the machine schema (events with payload fields; the guards and actions of a
+scenario, a bot graph and a behavior program with their arguments; operators and
+config fields) as JSON.
 
 ---
 
@@ -68,6 +72,9 @@ min_width = 50                      # Floor under the map's size (optional)
 min_height = 20
 fixed = "500x250"                   # Size the map holds throughout, for front-ends (optional)
 cursors = false                     # Players hold slots, no cursor on the map (optional)
+
+[behaviors]
+warden = { file = "behavior/warden.toml" }  # A species of the scenario's own (Behavior Programs)
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
@@ -787,3 +794,108 @@ between instances; the first read of one in a shared session logs a D-14 warning
   the guard or is skipped. `-check` catches unknown event, action, guard, state and
   config field names, undeclared regions in region actions, and unknown systems in
   `[systems]` and region lists
+
+---
+
+## Behavior Programs
+
+A behavior program defines a species the scenario brings: its body in
+`[prototype]` and its conduct as a state machine over the game's verbs. The entry's
+`[behaviors]` table lists at most eight, each in its own file, which is read,
+expanded against the entry's macros and carried, digested and sent to a joiner as
+the entry's other files are, or inline as the table itself. Programs take species
+IDs 10 to 17 in sorted-name order, the `species` a payload guard on
+`EventSpeciesCreated` or `EventSpeciesKilled` compares. A name is
+`[a-z][a-z0-9_]*` of at most 24 bytes, neither a code species' name nor `total` or
+`uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`
+([Telemetry](telemetry-reference.md)).
+
+A scenario raises an instance with `EventBehaviorSpawnRequest { program, x, y }`,
+its header at that cell or the nearest place its footprint fits, and removes
+instances with `EventBehaviorCancelRequest { program }`, every program's when it
+names none; `wad/scenario/warden` is the worked example. `-check` compiles every
+program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
+and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
+'Freez'`).
+
+```toml
+initial = "Roam"                    # State a spawn starts in
+suspend = { guard = "Stunned" }     # While it holds: no clock, tick, move or strike (optional)
+
+[prototype]
+width = 4                           # Footprint, 1..8 cells each way
+height = 2
+header = { x = 1, y = 0 }           # Header cell inside the footprint
+hp = 40
+combat = "swarm"                    # Attack-matrix row it fights as: swarm or quasar
+homing = "swarm"                    # Profile Home steers by: drain, quasar, snake or swarm
+mass = 2.0                          # Soft collision and flocking; 0 takes neither (optional)
+drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
+contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
+lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
+glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]  # Frames, each height rows of width cells
+pattern_ms = 500                    # Frame period; required with two frames or more
+color = { r = 200, g = 120, b = 40 }
+
+[states.Strike]
+duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
+flags = ["Enraged"]                 # Held while the state runs
+probe = "ResolveTarget"             # Must pass for an entry to commit; probe_args its args
+on_enter = [{ action = "StoreTarget" }]      # Effects
+on_update = [{ action = "ChargeToStored" }]  # Sustained verbs, every tick the state holds
+on_exit = [...]                     # Effects, also when the instance dies or is cancelled
+cues = [{ at = 400, action = "...", payload = { ... } }]  # An effect at 400‰ of the entry
+transitions = [
+    { trigger = "Timeout", target = "Roam" },
+    { trigger = "AfterTick", guard = "HitWall", target = "Roam" },
+]
+
+[[global]]                          # Tried first in every step of the states from names
+from = ["Wind", "Strike"]
+guard = "Stunned"
+target = "Roam"
+```
+
+- `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
+  candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
+  `HitWall` reads this step's move). A global edge has none.
+- `target`: a state, or candidates tried in order, each a name or
+  `{ state, guard, guard_args, duration_ms }`, the duration overriding the state's.
+- `actions`: effects run between the exit and the entry.
+- `fallback`, required when every candidate can fail: `"hold"` keeps the state,
+  and `{ retry_ms = n }` restarts its entry for n ms without exit or entry.
+- An action table holds `action` and `payload` (`EmitEvent` adds `event`). An
+  effect runs on entry, exit, a cue or an edge; a sustained verb only in
+  `on_update`.
+
+A step runs the global edges, the suspend check, the clock and its cues, the
+timeout, the `Tick` edges, the state's `on_update` and its move, then the
+`AfterTick` edges, each phase taking at most one transition
+([Behavior machines §6.3](machine-design.md#63-step)). The vocabulary, which
+`-schema` lists as `vocabularies.behavior`:
+
+- Guards: `TargetDistance { op, cells }` (header to target, rows scaled by the
+  cell aspect), `LineOfSight`, `HasTarget`, `Stunned`, `HPFraction { op, value }`,
+  `HitWall` (this step's move met a wall or the map edge), `Chance { percent }`
+  (mixed from tick, entity and site, so no random stream moves),
+  `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.
+- Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
+  `FindLanding` (the nearest place the footprint fits around the target).
+- Effects: `StoreTarget` (the probe's cell, else the target's), `ZeroVelocity`,
+  `Teleport` (to the stored cell, clearing the landing with a flash),
+  `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
+  and `CancelTelegraph`, `Lightning { color }` (a `cyan`, `red`, `gold`, `green` or
+  `purple` bolt to the nearest cursor, which takes the contact damage),
+  `Materialize { spawn }` (a `swarm` or `nugget` beam over the footprint at the
+  target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
+  swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local
+  events).
+- Sustained: `Home` (steer to the target by the homing profile), `ChargeToStored`
+  (the velocity that reaches the stored cell as the timed entry ends),
+  `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
+- Flags: `Enraged` (combat's enrage: no knockback, the enraged colour) and
+  `Shielded` (no damage, no stun).
+
+The target is the nearest cursor. Hit points, lifetime, contact strikes, gold
+breaking and the composite's integrity work as for every composite species; a
+program does not script them.

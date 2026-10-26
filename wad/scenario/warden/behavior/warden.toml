@@ -1,0 +1,46 @@
+# The warden: homes on its target, and past twelve cells stops, winds up under a
+# telegraph and charges the cell it saw. A pulse stun drops it back to Roam from
+# either phase. doc/fsm-reference.md lists every key and verb.
+initial = "Roam"
+suspend = { guard = "Stunned" }
+
+[prototype]
+width = 4
+height = 2
+header = { x = 1, y = 0 }           # phantom head offset from the top-left
+hp = 40
+combat = "swarm"                    # the attack-matrix row it fights as
+homing = "swarm"                    # the homing profile Home steers by
+mass = 2.0                          # soft collision and flocking, as the swarm's
+drops = "swarm"                     # rolls the swarm's drop tiers
+contact = { energy = 1000, heat = 10 }
+lifetime_ms = 35000
+glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]   # frames of height rows
+pattern_ms = 500
+color = { r = 200, g = 120, b = 40 }
+
+[states.Roam]
+on_update = [{ action = "Home" }]
+transitions = [{ trigger = "Tick", guard = "TargetDistance", guard_args = { op = "gt", cells = 12 }, target = "Wind" }]
+
+[states.Wind]
+duration_ms = 1500
+flags = ["Enraged"]
+on_enter = [{ action = "Telegraph", payload = { color = "cyan" } }]
+on_update = [{ action = "Freeze" }]
+on_exit = [{ action = "CancelTelegraph" }]
+cues = [{ at = 800, action = "Materialize", payload = { spawn = "swarm" } }]
+transitions = [{ trigger = "Timeout", target = ["Strike", "Roam"] }]
+
+[states.Strike]
+duration_ms = 800
+flags = ["Enraged"]
+probe = "ResolveTarget"
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [{ trigger = "Timeout", target = "Roam" }, { trigger = "AfterTick", guard = "HitWall", target = "Roam" }]
+
+[[global]]
+from = ["Wind", "Strike"]
+guard = "Stunned"
+target = "Roam"

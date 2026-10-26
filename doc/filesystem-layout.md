@@ -52,7 +52,8 @@ Unix-like targets `internal/paths` lists, not on macOS or Windows.
 vif/
 ├── vif.toml     settings: flag defaults (§3)
 ├── scenario/    named scenarios, each rooted at scenario.toml
-│   └── main/    optional default override
+│   ├── main/    optional default override
+│   └── warden/behavior/  behavior programs its scenario.toml lists
 ├── input/       keymap.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
@@ -61,7 +62,10 @@ vif/
 ```
 
 An optional `scenario/main/` override is the automatically discovered scenario. The other directories
-under `scenario/` are selected by name (`-s td`) or explicit path.
+under `scenario/` are selected by name (`-s td`) or explicit path. A scenario's
+region, macro and behavior program files sit beside its `scenario.toml` or below
+it; `behavior/` is where the shipped `warden` keeps its program
+([FSM reference](fsm-reference.md#behavior-programs)).
 `audio/` is empty until a user or `soundlab` writes an override. `image/` is the
 discovery category for `.vifimg` assets named by a `WallPatternSpawnRequest`.
 

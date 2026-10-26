@@ -100,7 +100,7 @@ change when the run read none of yours); the rest last the run.
 `vif -h` prints every flag, to stdout; `man vif` is the same list after an
 install. The ones most runs want:
 
-- `-s <name|path>` picks a scenario (`td`, `simon`, `blank`), and `-d`
+- `-s <name|path>` picks a scenario (`td`, `simon`, `blank`, `warden`), and `-d`
   plays the embedded one.
 - `-bot [N[:graph]]` seats bots beside you; `-watch` lets one play in your place
   ([Bots](doc/bots.md)).

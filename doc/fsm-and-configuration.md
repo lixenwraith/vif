@@ -88,13 +88,16 @@ declarations or other top-level keys are rejected. The entry's `macro_files` res
 the same way and are scenario files too, so the digest covers them; every file
 expands against the entry's macros before regions merge ([TOML macros](toml-macros.md)).
 Circular includes and duplicate state names are errors, and a path outside the
-entry's directory is rejected.
+entry's directory is rejected. The entry's `[behaviors]` files are scenario files
+in the same way, each a behavior program compiled once per run
+([FSM reference](fsm-reference.md#behavior-programs)).
 
 Use `vif -check [-s <name-or-path>]` to resolve, load and validate the scenario
-plus keymap, audio overrides, content and every bot graph without starting the
-terminal game. `vif -schema` prints generated JSON describing known events and
-their payload fields, the actions and guards of a scenario and of a bot graph with
-their arguments, comparison operators and script-visible config fields.
+plus its behavior programs, keymap, audio overrides, content and every bot graph
+without starting the terminal game. `vif -schema` prints generated JSON describing
+known events and their payload fields, the vocabularies of a scenario, a bot graph
+and a behavior program with their arguments, comparison operators and
+script-visible config fields.
 
 ## 3. Root schema
 

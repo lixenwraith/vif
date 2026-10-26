@@ -550,7 +550,7 @@ is the Shared placement gate.
 
 | Domain | Entities |
 |---|---|
-| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, tower, gateway, wall, gold, marker, button, FSM, time |
+| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, data species, tower, gateway, wall, gold, marker, button, FSM, time |
 | **Player** | glyph, nugget, drain, particle (dust/decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
 | **Stamped** | materialise, spirit; domain is resolved per request |
 
