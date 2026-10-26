@@ -50,6 +50,9 @@ final class StartScreen extends FrameLayout {
         super(context);
         setBackgroundColor(BG);
         setOnClickListener(v -> start.run());
+        // The whole screen is the button, so a keyboard's focus would wash all of it
+        // lighter than the bars around it; the ? keeps its own highlight
+        setDefaultFocusHighlightEnabled(false);
         logo = new ImageView(context);
         logo.setImageResource(R.drawable.logo);
         logo.setContentDescription("lixen");
