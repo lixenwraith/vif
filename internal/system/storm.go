@@ -17,13 +17,6 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
-// pendingBlueSpawn tracks storm-initiated swarm spawns waiting for visual completion
-type pendingBlueSpawn struct {
-	TargetX int
-	TargetY int
-	Timer   time.Duration
-}
-
 // StormSystem manages the storm boss entity lifecycle
 // Storm is a 3-part composite boss with 3D orbital physics
 // Each circle is an independent sub-header that can be destroyed individually
@@ -42,9 +35,6 @@ type StormSystem struct {
 
 	// Reusable map
 	memberExcludeSet map[core.Entity]struct{}
-
-	// Pending blue attack spawns (waiting for materialize completion)
-	pendingBlueSpawns []pendingBlueSpawn
 
 	graphs [component.StormCircleCount]*machine.Graph[component.StormCircleState, *circleCtx] // by circle type
 	ctx    circleCtx                                                                          // the circle being stepped, refilled per circle
@@ -72,8 +62,7 @@ func NewStormSystem(world *engine.World) engine.System {
 	}
 
 	s.memberExcludeSet = make(map[core.Entity]struct{}, 256)
-	s.pendingBlueSpawns = make([]pendingBlueSpawn, 0, 4)
-	s.buffers = newBufferTelemetry(world.Resources.Status, "storm", "ellipse_offsets", "member_excludes", "pending_blue_spawns")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "storm", "ellipse_offsets", "member_excludes")
 
 	// Precompute ellipse cell offsets for wall collision checks
 	s.buildEllipseOffsets()
@@ -182,7 +171,6 @@ func (s *StormSystem) Init() {
 	s.rootEntity = 0
 	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	clear(s.memberExcludeSet)
-	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)
 	s.statGreenActiveFrame.Store(0)
@@ -211,6 +199,7 @@ func (s *StormSystem) EventTypes() []event.EventType {
 		event.EventStormSpawnRequest,
 		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventMaterializeComplete,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -259,6 +248,17 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 				s.handleCircleBreach(payload.HeaderEntity)
 			}
 		}
+
+	case event.EventMaterializeComplete:
+		// A blue attack's beam is the only Shared one naming the swarm, and the swarm
+		// it carries lands as it ends, on its footprint
+		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok &&
+			ev.Domain == core.DomainShared && payload.Species == component.SpeciesSwarm {
+			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
+				X: payload.X + parameter.SwarmHeaderOffsetX,
+				Y: payload.Y + parameter.SwarmHeaderOffsetY,
+			})
+		}
 	}
 }
 
@@ -266,9 +266,6 @@ func (s *StormSystem) Update() {
 	if !s.enabled || s.rootEntity == 0 {
 		return
 	}
-
-	// Process pending blue spawns regardless of root entity state (unless dead already)
-	s.processPendingBlueSpawns()
 
 	// When termination is requested, liveness edits intentionally are not
 	// committed; retain the detached root value across that early return.
@@ -307,19 +304,18 @@ func (s *StormSystem) Update() {
 	s.statCircleCount.Store(int64(aliveCount))
 }
 
-// stormSnapshot is this system's D-19 record. The live storm's root and the swarm
-// spawns waiting on a blue attack decide future shared outcomes and live outside
-// any store: a receiver whose FSM was moved past StormSetup by an install never ran
-// the spawn, so without these it holds the storm's entities and simulates none of
-// them. Timers are relative already.
+// stormSnapshot is this system's D-19 record. The live storm's root decides future
+// shared outcomes and lives outside any store: a receiver whose FSM was moved past
+// StormSetup by an install never ran the spawn, so without it it holds the storm's
+// entities and simulates none of them. A blue attack's swarm waits in its beam,
+// which the stores carry.
 type stormSnapshot struct {
-	RootEntity core.Entity        `json:"root_entity"`
-	Pending    []pendingBlueSpawn `json:"pending_blue_spawns"`
+	RootEntity core.Entity `json:"root_entity"`
 }
 
 // SaveShared carries the storm's private state (D-19).
 func (s *StormSystem) SaveShared() ([]byte, error) {
-	return json.Marshal(stormSnapshot{RootEntity: s.rootEntity, Pending: s.pendingBlueSpawns})
+	return json.Marshal(stormSnapshot{RootEntity: s.rootEntity})
 }
 
 // LoadShared adopts a captured storm and republishes what derives from it.
@@ -329,7 +325,6 @@ func (s *StormSystem) LoadShared(data []byte) error {
 		return fmt.Errorf("storm: %w", err)
 	}
 	s.rootEntity = snap.RootEntity
-	s.pendingBlueSpawns = append(s.pendingBlueSpawns[:0], snap.Pending...)
 
 	alive := 0
 	if stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity); ok {
@@ -1252,7 +1247,8 @@ func (s *StormSystem) findLanding(c *circleCtx) {
 	c.circle.AttackTargetY = topLeftY + parameter.SwarmHeaderOffsetY
 }
 
-// beamIn beams a swarm onto the landing its attack found: a cue, so once an attack
+// beamIn beams a swarm onto the landing its attack found: a cue, so once an
+// attack. The beam names the species, so the swarm lands as it ends.
 func (s *StormSystem) beamIn(c *circleCtx) {
 	if !c.circle.LandingFound {
 		return
@@ -1263,40 +1259,8 @@ func (s *StormSystem) beamIn(c *circleCtx) {
 		AreaWidth:  parameter.SwarmWidth,
 		AreaHeight: parameter.SwarmHeight,
 		Type:       component.SpawnTypeSwarm,
+		Species:    component.SpeciesSwarm,
 	})
-
-	s.pendingBlueSpawns = append(s.pendingBlueSpawns, pendingBlueSpawn{
-		TargetX: c.circle.AttackTargetX,
-		TargetY: c.circle.AttackTargetY,
-		Timer:   component.MaterializeStyles[component.SpawnTypeSwarm].Duration(),
-	})
-	s.buffers.Observe(2, len(s.pendingBlueSpawns))
-}
-
-// processPendingBlueSpawns handles swarm spawns after materialize animation completes
-func (s *StormSystem) processPendingBlueSpawns() {
-	if len(s.pendingBlueSpawns) == 0 {
-		return
-	}
-
-	dt := s.world.Resources.Time.DeltaTime
-
-	for i := len(s.pendingBlueSpawns) - 1; i >= 0; i-- {
-		s.pendingBlueSpawns[i].Timer -= dt
-
-		if s.pendingBlueSpawns[i].Timer <= 0 {
-			spawn := s.pendingBlueSpawns[i]
-
-			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-				X: spawn.TargetX,
-				Y: spawn.TargetY,
-			})
-
-			// Remove completed spawn (swap-remove)
-			s.pendingBlueSpawns[i] = s.pendingBlueSpawns[len(s.pendingBlueSpawns)-1]
-			s.pendingBlueSpawns = s.pendingBlueSpawns[:len(s.pendingBlueSpawns)-1]
-		}
-	}
 }
 
 // terminateStorm destroys the entire storm entity
@@ -1325,8 +1289,15 @@ func (s *StormSystem) terminateStorm() {
 		Effect:       0,
 	})
 
-	// Update skips the queue once the root is gone; a kept entry would fire into the next storm
-	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
+	// A beam in flight would land its swarm after the storm (S1)
+	var beams []core.Entity
+	for _, e := range s.world.Components.Materialize.Entities() {
+		if m, ok := s.world.Components.Materialize.GetPtr(e); ok && e.Domain() == core.DomainShared && m.Species == component.SpeciesSwarm {
+			beams = append(beams, e)
+		}
+	}
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, beams...)
+
 	s.rootEntity = 0
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)
