@@ -156,7 +156,7 @@ func convertQuadrant(img image.Image, cells []terminal.Cell, outW, outH int, col
 				pixels[i] = colorToRGB(img.At(sx, sy))
 			}
 
-			char, fg, bg := findBestQuadrant(pixels)
+			char, fg, bg := FitQuadrant(pixels)
 
 			idx := y*outW + x
 			cells[idx].Rune = char
@@ -175,7 +175,9 @@ func convertQuadrant(img image.Image, cells []terminal.Cell, outW, outH int, col
 	}
 }
 
-func findBestQuadrant(pixels [4]lcolor.RGB) (rune, lcolor.RGB, lcolor.RGB) {
+// FitQuadrant returns the quadrant glyph and its two colors that show a cell's four
+// quadrants, UL UR LL LR, with the least squared error
+func FitQuadrant(pixels [4]lcolor.RGB) (rune, lcolor.RGB, lcolor.RGB) {
 	bestError := int(^uint(0) >> 1)
 	bestPattern := 0
 	var bestFg, bestBg lcolor.RGB

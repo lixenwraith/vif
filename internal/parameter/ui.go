@@ -164,6 +164,23 @@ const (
 	OverlayPinMarker256 = '•'
 )
 
+// Overlay About
+const (
+	// AboutLogoRows is the mark's height in the about window; its width follows the cell aspect
+	AboutLogoRows = 13
+
+	// AboutLogoGap is the columns between the mark and the text beside it
+	AboutLogoGap = 3
+
+	// AboutStackWidth is the content width below which the text goes under the mark
+	AboutStackWidth = 50
+
+	// AboutMinWidth/AboutMinHeight is the content below which the window shows the name
+	// and description alone
+	AboutMinWidth  = 30
+	AboutMinHeight = 10
+)
+
 // Overlay Document (help)
 const (
 	// HelpMaxWidth caps the document width so wide terminals keep readable lines

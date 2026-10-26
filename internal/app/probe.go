@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/probe"
 )
@@ -84,7 +85,7 @@ func (a *App) probeSnapshot() probe.Snapshot {
 		"phase":    life.Phase.String(),
 		// As a refusal names it, so a session list can say which page it admits
 		// before that page dials and is refused.
-		"build": buildName(),
+		"build": asset.Build(),
 	}
 	if !life.Deadline.IsZero() {
 		// What a router needs and a roster count cannot say: how long this

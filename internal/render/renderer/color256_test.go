@@ -96,6 +96,12 @@ func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
 	for _, text := range parameter.AudioText {
 		glyphs = append(glyphs, []rune(text)...)
 	}
+	var logo logoCells
+	for _, c := range logo.layout(parameter.AboutLogoRows*2, parameter.AboutLogoRows, vmath.RefAspect, visual.RgbOverlayBg, render.ConsoleFor(render.VGAPalette)) {
+		if c.Rune != 0 {
+			glyphs = append(glyphs, c.Rune)
+		}
+	}
 	for _, quadrant := range "▘▝▖▗▀▄▌▐▚▞▛▜▙▟▓" {
 		shade, _ := wallShade256(quadrant)
 		glyphs = append(glyphs, shade)

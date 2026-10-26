@@ -151,7 +151,7 @@ func convertQuadrantDual(img image.Image, cells []DualCell, outW, outH int) {
 				continue
 			}
 
-			char, fg, bg := findBestQuadrant(pixels)
+			char, fg, bg := FitQuadrant(pixels)
 
 			cells[idx].Rune = char
 			cells[idx].TrueFg = fg

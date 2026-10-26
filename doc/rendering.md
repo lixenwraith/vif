@@ -434,7 +434,10 @@ The relative row and column gutters number only the rows and columns the
 playfield covers and mark the rest with the void color, so the chrome agrees
 with the margin it borders rather than numbering cells no motion can reach.
 
-The overlay renderer adapts help/about/telemetry content into buffer cells. Flow
+The overlay renderer adapts help/about/telemetry content into buffer cells. The
+about window draws the lixen mark from its shape (`logoCells`): in truecolor as
+quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), on a
+console as whole blocks in the entry each cell mostly shows. Flow
 debug can show a target group's flow field or route graph and is controlled via
 `:flow [group]` and `:graph [group]`. Debug layers are part of the normal
 pipeline but are visibility-gated.
