@@ -51,13 +51,13 @@ func TestTimerWithoutItsAnchorHoldsNoSpace(t *testing.T) {
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 60, Y: 20})
 	splash.handleTimerSpawn(&event.SplashTimerRequestPayload{AnchorEntity: header, Duration: 10 * time.Second})
-	if boxes := splash.getTimerBBoxes(0); len(boxes) != 1 {
-		t.Fatalf("anchored countdown boxes = %d, want 1", len(boxes))
+	if splash.fillTimerBoxes(); len(splash.boxes) != 1 {
+		t.Fatalf("anchored countdown boxes = %d, want 1", len(splash.boxes))
 	}
 
 	w.DestroyEntity(header)
-	if boxes := splash.getTimerBBoxes(0); len(boxes) != 0 {
-		t.Fatalf("countdown without its anchor holds %v", boxes)
+	if splash.fillTimerBoxes(); len(splash.boxes) != 0 {
+		t.Fatalf("countdown without its anchor holds %v", splash.boxes)
 	}
 }
 

@@ -21,7 +21,17 @@ type BBox struct {
 type SplashSystem struct {
 	world *engine.World
 
+	// boxes is every countdown's padded box, filled once a layout pass and moved
+	// with each countdown placed, so a placement sees the ones placed before it
+	boxes []timerBox
+
 	toggle
+}
+
+// timerBox is a countdown's padded box and the countdown it belongs to
+type timerBox struct {
+	entity core.Entity
+	BBox
 }
 
 // NewSplashSystem creates a new splash system
@@ -105,9 +115,8 @@ func (s *SplashSystem) Update() {
 		return
 	}
 
-	// Cache timer bboxes for magnifier collision checks to avoid alloc inside loop if not needed
-	var cachedTimerBBoxes []BBox
-	timersCached := false
+	s.fillTimerBoxes()
+	next := 0 // the next countdown's own box; boxes follow the store's order
 
 	splashes := s.world.Components.Splash
 	splashEntities := splashes.Entities()
@@ -121,6 +130,13 @@ func (s *SplashSystem) Update() {
 
 		switch splashComp.Slot {
 		case component.SlotTimer:
+			// Its own box, which its placement skips and then moves with it
+			self := -1
+			if next < len(s.boxes) && s.boxes[next].entity == splashEntity {
+				self = next
+				next++
+			}
+
 			// An expired countdown is already leaving through the timer's death batch
 			timer, ok := s.world.Components.Timer.GetPtr(splashEntity)
 			if !ok || timer.Expired(component.TimerLifetime) {
@@ -136,9 +152,10 @@ func (s *SplashSystem) Update() {
 
 			setTimerContent(&splashComp, timer.Slots[component.TimerLifetime].Remaining)
 
-			// Recalculate offset with inter-timer collision (exclude self)
-			timerBBoxes := s.getTimerBBoxes(splashEntity)
-			s.calculateTimerOffset(&splashComp, timerBBoxes)
+			s.calculateTimerOffset(&splashComp, self)
+			if self >= 0 {
+				s.boxes[self].BBox, _ = s.paddedBox(&splashComp)
+			}
 			splashes.SetComponent(splashEntity, splashComp)
 
 		case component.SlotMagnifier:
@@ -147,28 +164,13 @@ func (s *SplashSystem) Update() {
 				continue // Entity was destroyed
 			}
 
-			// Validate Positions against Timers (Continuous Validation)
-			if !timersCached {
-				cachedTimerBBoxes = s.getTimerBBoxes(0)
-				timersCached = true
-			}
-
 			// Construct current BBox for magnifier
 			magW := splashComp.Length * parameter.SplashCharWidth
 			magH := parameter.SplashCharHeight
 			magBBox := BBox{X: splashComp.AnchorX, Y: splashComp.AnchorY, W: magW, H: magH}
 
-			// Check against inflated timer boxes
-			collision := false
-			for _, timerBBox := range cachedTimerBBoxes {
-				if s.checkBBoxCollision(magBBox, timerBBox) {
-					collision = true
-					break
-				}
-			}
-
-			// If collision detected, attempt to find a new valid position
-			if collision {
+			// A countdown placed over the magnifier moves the magnifier
+			if s.collidesTimer(magBBox, -1) {
 				if pos, ok := s.world.LocalCursor(); ok {
 					newX, newY := s.calculateProximityAnchor(pos.X, pos.Y, splashComp.Length)
 					if newX != splashComp.AnchorX || newY != splashComp.AnchorY {
@@ -229,9 +231,9 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	}
 	setTimerContent(&splashComp, payload.Duration)
 
-	// Get existing timer bboxes (new timer not yet created, no exclusion needed)
-	timerBBoxes := s.getTimerBBoxes(0)
-	s.calculateTimerOffset(&splashComp, timerBBoxes)
+	// The new countdown is not in the store yet, so no box is its own
+	s.fillTimerBoxes()
+	s.calculateTimerOffset(&splashComp, -1)
 
 	splashEntity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Components.Splash.SetComponent(splashEntity, splashComp)
@@ -301,7 +303,7 @@ func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 	}
 }
 
-// cleanupSplashesBySlot removes all splashes of a specific slot for a composite anchor
+// cleanupSplashesBySlotAndAnchor removes all splashes of a specific slot for a composite anchor
 func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot, anchor core.Entity) {
 	splashEntities := s.world.Components.Splash.Entities()
 	for _, splashEntity := range splashEntities {
@@ -336,7 +338,8 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	// Resolve color from glyph type
 	color := visual.GlyphColorLUT[glyphComp.Type][component.GlyphNormal]
 
-	// Calculate proximity anchor (between cursor and center, min 15 chars away)
+	// Calculate proximity anchor, at least SplashMinDistance from the cursor
+	s.fillTimerBoxes()
 	anchorX, anchorY := s.calculateProximityAnchor(cursorX, cursorY, 1)
 
 	// Check for existing magnifier to update in place
@@ -372,7 +375,8 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 
 // calculateProximityAnchor uses spiral search to find valid magnifier position
 // Works in virtual circular space, converts back to game elliptical space
-// Searches diagonals first to avoid overlapping with ping crosshair lines
+// Searches diagonals first to avoid overlapping with ping crosshair lines, clear of
+// the countdown boxes its caller filled
 func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int) (int, int) {
 	config := s.world.Resources.Config
 
@@ -383,11 +387,8 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
-	timerBBoxes := s.getTimerBBoxes(0)
-
 	checkTimers := func(absX, absY, w, h int) bool {
-		candidate := BBox{X: absX, Y: absY, W: w, H: h}
-		return !s.checkBBoxCollisionAny(candidate, timerBBoxes)
+		return !s.collidesTimer(BBox{X: absX, Y: absY, W: w, H: h}, -1)
 	}
 
 	absX, absY, found := s.world.Positions.FindFreeFromPattern(
@@ -410,19 +411,20 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 	return anchorX, anchorY
 }
 
-// checkBBoxCollisionAny returns true if candidate collides with any bbox in slice
-func (s *SplashSystem) checkBBoxCollisionAny(candidate BBox, boxes []BBox) bool {
-	for _, box := range boxes {
-		if s.checkBBoxCollision(candidate, box) {
+// collidesTimer reports whether candidate overlaps any countdown's box but the one at skip
+func (s *SplashSystem) collidesTimer(candidate BBox, skip int) bool {
+	for i := range s.boxes {
+		if i != skip && s.checkBBoxCollision(candidate, s.boxes[i].BBox) {
 			return true
 		}
 	}
 	return false
 }
 
-// calculateTimerOffset finds valid offset for timer relative to anchor entity
+// calculateTimerOffset finds valid offset for timer relative to anchor entity, clear
+// of every countdown's box but its own at self
 // Uses 8-direction search: cardinals first, then diagonals
-func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponent, timerBBoxes []BBox) {
+func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponent, self int) {
 	timerWidth := splashComp.Length * parameter.SplashCharWidth
 	timerHeight := parameter.SplashCharHeight
 
@@ -438,8 +440,7 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 	}
 
 	checkTimers := func(absX, absY, w, h int) bool {
-		candidate := BBox{X: absX, Y: absY, W: w, H: h}
-		return !s.checkBBoxCollisionAny(candidate, timerBBoxes)
+		return !s.collidesTimer(BBox{X: absX, Y: absY, W: w, H: h}, self)
 	}
 
 	exclusion := engine.Exclusion{
@@ -464,47 +465,40 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 	splashComp.OffsetY = offsetY
 }
 
-// getTimerBBoxes returns bounding boxes for all SlotTimer splashes
-func (s *SplashSystem) getTimerBBoxes(excludeEntity core.Entity) []BBox {
-	var boxes []BBox
-
-	splashEntities := s.world.Components.Splash.Entities()
-	for _, splashEntity := range splashEntities {
-		if splashEntity == excludeEntity {
-			continue
-		}
-
+// fillTimerBoxes rebuilds the box of every countdown that holds space, in store order
+func (s *SplashSystem) fillTimerBoxes() {
+	s.boxes = s.boxes[:0]
+	for _, splashEntity := range s.world.Components.Splash.Entities() {
 		splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity)
 		if !ok || splashComp.Slot != component.SlotTimer {
 			continue
 		}
-
-		// Resolve position; a timer whose anchor is gone is leaving and holds no space
-		x, y := splashComp.AnchorX, splashComp.AnchorY
-		if splashComp.AnchorEntity != 0 {
-			pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity)
-			if !ok {
-				continue
-			}
-			x = pos.X + splashComp.OffsetX
-			y = pos.Y + splashComp.OffsetY
+		if box, ok := s.paddedBox(splashComp); ok {
+			s.boxes = append(s.boxes, timerBox{entity: splashEntity, BBox: box})
 		}
+	}
+}
 
-		// Dynamic width for timer
-		w := splashComp.Length * parameter.SplashCharWidth
-		h := parameter.SplashCharHeight
-
-		// Apply padding for inter-splash collision (Inflated Bounding Box)
-		pad := parameter.SplashCollisionPadding
-		boxes = append(boxes, BBox{
-			X: x - pad,
-			Y: y - pad,
-			W: w + (pad * 2),
-			H: h + (pad * 2),
-		})
+// paddedBox is the space a countdown holds against the other splashes; a countdown
+// whose anchor is gone is leaving and holds none
+func (s *SplashSystem) paddedBox(splashComp *component.SplashComponent) (BBox, bool) {
+	x, y := splashComp.AnchorX, splashComp.AnchorY
+	if splashComp.AnchorEntity != 0 {
+		pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity)
+		if !ok {
+			return BBox{}, false
+		}
+		x = pos.X + splashComp.OffsetX
+		y = pos.Y + splashComp.OffsetY
 	}
 
-	return boxes
+	pad := parameter.SplashCollisionPadding
+	return BBox{
+		X: x - pad,
+		Y: y - pad,
+		W: splashComp.Length*parameter.SplashCharWidth + pad*2,
+		H: parameter.SplashCharHeight + pad*2,
+	}, true
 }
 
 // checkBBoxCollision returns true if two bounding boxes overlap
