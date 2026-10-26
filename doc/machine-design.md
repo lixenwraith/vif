@@ -571,12 +571,12 @@ How the keys map onto the runtime:
 The registry is generic (`behavior.Vocabulary[C]`). Its generic methods register a
 name with the struct its args decode into, strictly and once at load:
 `Predicate[A]`, `Seeded[A]` (a guard whose build also takes its site, numbering
-the program's guards and probes in load order), `Probe[A]`, `Effect[A]`, `Sustained[A]`, `Emit` (an effect
-reading `event` beside `payload`) and `Flag(name, bit)`, with the host's
-`Integrate` and `Entered` hooks. `Entries` lists them for `-schema`'s
-`vocabularies.behavior`. The game's verbs bind in `internal/system/behavior.go`
-to `behaviorCtx`, refilled per instance; the target is `resolveBaseTarget`'s, the
-nearest cursor.
+the program's guards and probes in load order), `Probe[A]`, `Effect[A]`,
+`Sustained[A]`, `Emit` (an effect reading `event` beside `payload`) and
+`Flag(name, bit)`, with the host's `Integrate` and `Entered` hooks. `Entries`
+lists them for `-schema`'s `vocabularies.behavior`. The game's verbs bind in
+`internal/system/behavior.go` to `behaviorCtx`, refilled per instance; the target
+is `resolveBaseTarget`'s, the nearest cursor.
 
 - Predicates (read-only): `TargetDistance{op, cells}` (rows scaled by the cell
   aspect), `LineOfSight`, `HPFraction{op, value}`, `Stunned`, `HasTarget`,
@@ -676,15 +676,15 @@ minority of the work.
   unused `BehaviorBoss` stood; the behavior system handles
   `EventCompositeIntegrityBreach` for it. `handleEmptyComposite` needs no case:
   its default destroys the head.
-- **Events.** `EventBehaviorSpawnRequest{program, x, y}` (bus, like the swarm's)
-  and `EventBehaviorCancelRequest{program}` (shared, as every species' cancel;
-  an empty program cancels every data species) are what a scenario emits; a
-  program no entry defines is counted (`behavior.unknown_program_rejects`) and
-  dropped. A spawn is immediate, so a beam-in is the scenario's sequence:
-  `EventMaterializeAreaRequest`, then the spawn with `delay_ms`. Genetics stays
-  `EventGeneticRegisterSpecies` with the data species' ID; the genes land in the
-  `Genotype` component as every species' do, sampled once the spawn has its
-  place, and `Param` reads them.
+- **Events.** `EventBehaviorSpawnRequest{program, x, y}` (bus and barrier-bound,
+  like the swarm's) and `EventBehaviorCancelRequest{program}` (shared, as every
+  species' cancel; an empty program cancels every data species) are what a
+  scenario emits; a program no entry defines is counted
+  (`behavior.unknown_program_rejects`) and dropped. A spawn is immediate, so a
+  beam-in is the scenario's sequence: `EventMaterializeAreaRequest`, then the
+  spawn with `delay_ms`. Genetics stays `EventGeneticRegisterSpecies` with the
+  data species' ID; the genes land in the `Genotype` component as every species'
+  do, sampled once the spawn has its place, and `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and
   the lifecycle rows (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`,
   `kills.<program>` in `NewMetaSystem`, all before `Freeze`
@@ -997,7 +997,8 @@ renderer and `wad/scenario/warden` the sample. `snapshot.Schema` is 28 (the
 - `LoadScenarioFromMap` is unchanged, and the include is the program's own:
   `loadAndResolve` adds `states` and merges region files, which a program must
   not get, so the two share only the factored read, parse and expand.
-- Cancel is shared, as every species' cancel; spawn is bus, as the swarm's.
+- Cancel is shared, as every species' cancel; spawn is bus, as the swarm's, and so
+  barrier-bound, since a crossed one allocates shared identity.
 - `Shielded` refreshes the ward and refuses a stun, as the quasar's shield does.
 - `Drag{rate}` is per second where `Drag{factor}` was per tick.
 - A tick is the sustained verbs, then one integration; `Freeze` skips the move,

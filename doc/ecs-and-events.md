@@ -52,13 +52,13 @@ it needs, graded required or optional; the grades gate disabling a system
 future-affecting state. The system type carries none of these: `World.AddSystem`
 takes the domain and dependencies from `manifest.ProfileFor`, also for
 `MetaSystem` and `BehaviorSystem`, which `manifest.ContextSystems` declares and
-the app adds beside them. A constructor binds telemetry and allocates; it does not initialize. Once
-the set is complete the app runs `World.InitSystems`, which orders the graph
-(`core.TopoSort`), so an unknown name or a cycle fails startup, and calls each
-system's `Init` with a required system before those naming it; a game reset runs
-the same pass in place of each system answering `EventGameResetRequest`. A test
-constructing a system standalone calls `Init` itself. The tick order comes from
-`Priority()`.
+the app adds beside them. A constructor binds telemetry and allocates; it does
+not initialize. Once the set is complete the app runs `World.InitSystems`, which
+orders the graph (`core.TopoSort`), so an unknown name or a cycle fails startup,
+and calls each system's `Init` with a required system before those naming it; a
+game reset runs the same pass in place of each system answering
+`EventGameResetRequest`. A test constructing a system standalone calls `Init`
+itself. The tick order comes from `Priority()`.
 
 ## 2. Entities and typed stores
 

@@ -121,9 +121,9 @@ attacker, so the knockback an instance applies first holds it and the next
 correction repairs a difference.
 
 `barrierBound` names the set: arrival, departure and full reset, which create or
-destroy shared identity; the swarm and quasar spawn requests, which allocate it; and
-a drain's defeat and a cursor's defeat state, which advance the progression a
-region gates its spawns on or rebuild the level.
+destroy shared identity; the swarm, quasar and behavior spawn requests, which
+allocate it; and a drain's defeat and a cursor's defeat state, which advance the
+progression a region gates its spawns on or rebuild the level.
 
 ### D-4 — Wire payloads name Shared entities only
 

@@ -129,13 +129,13 @@ and weapons; a knockback stronger than the one that opened the kinetic window
 resets it and lands. Species-authored invulnerability is the ward status and blocks every
 weapon's damage.
 
-A status is one slot per kind on `CombatComponent`, no stacking: remaining time,
-a period and its timer, a magnitude, the crediting cursor and the family it
-records under. Combat ages every slot each tick. The ward is the one slot a hit
-never writes: quasar shields, storm phase, the shielded snake head and a data
-species' `Shielded` state refresh it from their own systems, and combat refuses
-every hit's damage and every tick while it runs; each of the four also refuses a
-stun while it holds. Stun suppresses movement and is never refreshed while it runs, so a target
+A status is one slot per kind on `CombatComponent`, no stacking: remaining time, a
+period and its timer, a magnitude, the crediting cursor and the family it records
+under. Combat ages every slot each tick. The ward is the one slot a hit never
+writes: quasar shields, storm phase, the shielded snake head and a data species'
+`Shielded` state refresh it from their own systems, and combat refuses every hit's
+damage and every tick while it runs; each of the four also refuses a stun while it
+holds. Stun suppresses movement and is never refreshed while it runs, so a target
 under fire from two players still leaves it. Burn is the charged pulse's chained
 over-time attack, `CombatAttackBurn`: `BurnDamage` every `BurnPeriod` for
 `BurnDuration`, the last refresher credited, each tick recorded under the burn

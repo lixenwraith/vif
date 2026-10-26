@@ -924,8 +924,8 @@ func (s *NetworkSystem) AppliedCrossingFences() link.CrossingFences {
 func barrierBound(et event.EventType) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
-		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventDrainDefeated,
-		event.EventCursorDefeatState, event.EventGameHold:
+		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventBehaviorSpawnRequest,
+		event.EventDrainDefeated, event.EventCursorDefeatState, event.EventGameHold:
 		return true
 	default:
 		return false
