@@ -136,12 +136,14 @@ func TestASurvivorStandsFrozenThroughTheWalk(t *testing.T) {
 	run := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
 	turns := time.Duration(len(run.u.Chain())) * parameter.NetworkSuccessionWindow
 	run.u.beginSuccession(1)
-	rewind(run, turns-time.Millisecond)
+	// Half a window either side of the end: the wall clock runs on between a rewind
+	// and the drive that reads it.
+	rewind(run, turns-parameter.NetworkSuccessionWindow/2)
 	run.u.drive()
 	if !run.world.frozen || run.u.State().Fork {
 		t.Fatalf("inside the walk: frozen %v, fork %v", run.world.frozen, run.u.State().Fork)
 	}
-	rewind(run, 2*time.Millisecond)
+	rewind(run, parameter.NetworkSuccessionWindow)
 	run.u.drive()
 	if !run.u.State().Fork || run.world.forked != 1 || run.world.frozen {
 		t.Fatalf("past the last turn: fork %v, told %d times, frozen %v",
@@ -668,6 +670,12 @@ func waitDials(t *testing.T, r *run, d *dialingNode, n int) []string {
 	}
 }
 
+// dueAfter reports a next dial due want after one decided between from and to: the
+// drives bound the decision, where a wait read from now shrinks by any stall since.
+func dueAfter(next, from, to time.Time, want time.Duration) bool {
+	return !next.Before(from.Add(want)) && !next.After(to.Add(want))
+}
+
 // followThroughRelay builds the four-participant session of
 // TestASurvivorCarriesOnlyWhomItRelaysFor with a far survivor that can dial but
 // whose walk's dial of the first candidate does not go through, and runs the
@@ -751,15 +759,17 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 		far, node := followThroughRelay(t)
 		base := len(node.dials())
 		for i := 1; i <= parameter.NetworkHostDialAttempts; i++ {
+			from := time.Now()
 			far.u.drive()
 			far.u.drive() // paced: the second drive inside the wait dials nothing
+			to := time.Now()
 			waitDials(t, far, node, base+i)
 			far.r.mu.Lock()
-			wait := far.r.nextHost.Sub(time.Now()).Round(parameter.NetworkRejoinPassInterval)
+			next := far.r.nextHost
 			far.r.nextHost = time.Time{} // as the wait passing
 			far.r.mu.Unlock()
-			if want := parameter.NetworkRejoinPassInterval << (i - 1); wait != want {
-				t.Fatalf("dial %d waits %v before the next, want %v", i, wait, want)
+			if want := parameter.NetworkRejoinPassInterval << (i - 1); !dueAfter(next, from, to, want) {
+				t.Fatalf("dial %d waits %v to %v before the next, want %v", i, next.Sub(to), next.Sub(from), want)
 			}
 		}
 		far.u.drive()
@@ -800,15 +810,17 @@ func TestTheSuccessorDialIsPaced(t *testing.T) {
 		far.r.mu.Unlock()
 	}
 	for i := 1; i <= parameter.NetworkHostDialAttempts; i++ {
+		from := time.Now()
 		far.u.drive()
 		far.u.drive() // paced: the second drive inside the wait dials nothing
+		to := time.Now()
 		dialed := waitDials(t, far, node, i)
 		far.r.mu.Lock()
-		wait := far.r.nextSucc.Sub(time.Now()).Round(parameter.NetworkRejoinPassInterval)
+		next := far.r.nextSucc
 		far.r.mu.Unlock()
-		if want := parameter.NetworkRejoinPassInterval << (i - 1); wait != want || dialed[i-1] != "2" {
-			t.Fatalf("dial %d went to %q and waits %v before the next; want the first candidate and %v",
-				i, dialed[i-1], wait, want)
+		if want := parameter.NetworkRejoinPassInterval << (i - 1); !dueAfter(next, from, to, want) || dialed[i-1] != "2" {
+			t.Fatalf("dial %d went to %q and waits %v to %v before the next; want the first candidate and %v",
+				i, dialed[i-1], next.Sub(to), next.Sub(from), want)
 		}
 		passWait()
 	}
