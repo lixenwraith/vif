@@ -968,10 +968,10 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   keyframe lays each store out by column (`SharedWorldEncodeStoreColumns`): a row
   count, the entities as zigzag deltas in capture order, then each leaf field of the
   component in declaration order over every row, integers as varints, floats as
-  their bits, strings and times (RFC 3339, as JSON prints them) behind a length, a
-  slice behind its length plus one so nil travels as nil, an array inline;
-  generated per component in `internal/gen-manifest` from the component package's
-  types, so a field with no column layout fails generation. The stores of
+  their bits, strings behind a length, a slice behind its length plus one so nil
+  travels as nil, an array inline; generated per component in `internal/gen-manifest`
+  from the component package's types, so a field with no column layout (a
+  `time.Time`, which marshals itself, among them) fails generation. The stores of
   `SnapshotSectionBlobBytes` or more are parts of their own, kept deflated while
   their rows hold; the smaller travel together in one part; a delta correction is
   one part, its JSON behind a length and then the world delta in the same columns,

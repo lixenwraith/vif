@@ -418,12 +418,14 @@ both steer shared FSM regions. `meta` carries them.
 A capture also carries every Shared RNG stream position (D-8), FSM runtime state,
 Shared component stores, allocator counters, the compared status surface, and one
 applied crossing fence per participant (`CaptureHeader.Crossings`). Durations are
-relative to capture tick. Absolute component instants are sound because
-`engine.SimEpoch` and tick interval are session identity. Delayed FSM work names
-its deterministic compiled action identity, so transition-delayed actions restore
-independently of their queue position. An install preserves receiver-owned
-cursor values, rebuilds roster/control binding, derives spatial/navigation caches,
-and restores status only after carriers have loaded.
+relative to capture tick, and no component carries an instant: a clock is an age its
+owner advances by dt and resets when its period starts (a cursor's shield drain,
+ember decay and Wraith wait), so the tick interval is session identity and
+`engine.SimEpoch` is not. Delayed FSM work names its deterministic compiled action
+identity, so transition-delayed actions restore independently of their queue
+position. An install preserves receiver-owned cursor values, rebuilds roster/control
+binding, derives spatial/navigation caches, and restores status only after carriers
+have loaded.
 
 Persistent Player-domain effects controlled by Shared FSM state are re-derived by
 the install itself. Only immediate, unguarded `ClassLocal` lifecycle events marked
@@ -462,6 +464,11 @@ cursor-scoped action without moving the region differently.
 simulation instant. Wall time paces ticks and presentation but cannot select a
 Shared transition or kinetics threshold. `DeltaTime` and
 `time.game_elapsed_ms` are functions of tick interval and completed tick.
+
+The epoch's value selects nothing either: a capture carries ages, not instants
+(D-19), and a shared reader that needs a phase takes it from game time since the
+epoch (`TimeResource.GameElapsed`), so a receiver on another epoch continues a
+capture exactly (`TestSimulationEpochIsNotSessionIdentity`).
 
 ### D-22 — Admit before capturing
 

@@ -4,9 +4,9 @@ import "time"
 
 // SimEpoch is the origin every instance measures simulation time from: a constant,
 // not a per-process time.Now, so participants and a replay read one instant per tick.
-// Shared readers difference against stored instants (quasar speed step, adaptation
-// drain ages); against a wall-paced clock those cross their thresholds on
-// different ticks per instance and never re-converge.
+// Its value is not session identity: a capture carries ages, never an instant (the
+// adaptation resource saves its drain stamps as ages), and a shared reader that
+// needs a phase takes it from TimeResource.GameElapsed.
 var SimEpoch = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // SimTime is the simulation instant of one tick: a pure function of the tick

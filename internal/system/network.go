@@ -1409,13 +1409,12 @@ func (s *NetworkSystem) expireWraiths() {
 			kept = r.WraithKept
 		}
 	}
-	now := s.world.Resources.Time.GameTime
 	cursors := s.world.Components.Cursor
 	var due []event.ParticipantDepartedPayload
 	s.world.Components.Wraith.Each(func(e core.Entity, w *component.WraithComponent) bool {
 		c, ok := cursors.GetComponent(e)
 		if !ok || c.PeerID == 0 || int(c.PeerID) >= len(s.expiring) || s.expiring[c.PeerID] ||
-			now.Sub(w.Since) < parameter.WraithTimeout && c.PeerID != yield || c.Holder != 0 && s.away(c.Holder) ||
+			w.Waited < parameter.WraithTimeout && c.PeerID != yield || c.Holder != 0 && s.away(c.Holder) ||
 			kept(c.PeerID) {
 			return true
 		}

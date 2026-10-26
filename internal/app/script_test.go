@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -315,9 +317,14 @@ const (
 	// fixes the world the one seed builds.
 	crossProcessWidth = 117 + parameter.LeftMargin
 
+	// crossProcessEpochShift moves one receiver's simulation epoch by a span that is no
+	// whole number of ticks, so neither an instant nor its phase could read alike.
+	crossProcessEpochShift = 37*time.Hour + 17*time.Millisecond
+
 	captureFile   = "capture.json"
 	originSurface = "origin.surface"
 	joinerSurface = "joiner.surface"
+	epochSurface  = "epoch.surface"
 )
 
 // TestCaptureContinuesInAnotherProcess is the gate.
@@ -354,6 +361,32 @@ func TestCaptureContinuesInAnotherProcess(t *testing.T) {
 		info.Size(), crossProcessContinueTicks)
 }
 
+// TestSimulationEpochIsNotSessionIdentity: a receiver whose simulation epoch is
+// shifted installs the gate's capture and reproduces the sender's continuation
+// exactly. No shared state stores an instant: the cursor clocks a capture carries
+// are ages, and the origin's world runs all three across the install.
+func TestSimulationEpochIsNotSessionIdentity(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
+	if os.Getenv(crossProcessRoleEnv) != "" {
+		t.Skip("child process")
+	}
+	dir := t.TempDir()
+	runCrossProcessChild(t, "origin", dir)
+	runCrossProcessChild(t, "epoch", dir)
+
+	origin := readSurface(t, filepath.Join(dir, originSurface))
+	shifted := readSurface(t, filepath.Join(dir, epochSurface))
+	if idx, lx, ly, differs := snapshot.FirstDiff(origin, shifted); differs {
+		t.Fatalf("a receiver on an epoch shifted %v diverged %d ticks after the install, at line %d\n"+
+			"  origin:  %s\n  shifted: %s\n%s\n"+
+			"the shield's drain, the ember's decay and the Wraith's wait travel as ages "+
+			"(Shield.DrainElapsed, Heat.EmberElapsed, Wraith.Waited), so another reader of "+
+			"the epoch has entered the shared world",
+			crossProcessEpochShift, crossProcessContinueTicks, idx, lx, ly,
+			strings.Join(snapshot.Diff(origin, shifted, 8), "\n"))
+	}
+}
+
 // TestCrossProcessChild is the child. It does nothing unless the parent asks.
 func TestCrossProcessChild(t *testing.T) {
 	role := os.Getenv(crossProcessRoleEnv)
@@ -371,6 +404,10 @@ func TestCrossProcessChild(t *testing.T) {
 		crossProcessOrigin(t, dir, seed)
 	case "joiner":
 		crossProcessReceiver(t, dir, seed, joinerSurface)
+	case "epoch":
+		engine.SimEpoch = engine.SimEpoch.Add(crossProcessEpochShift)
+		engine.ManualEpoch = engine.SimEpoch
+		crossProcessReceiver(t, dir, seed, epochSurface)
 	default:
 		t.Fatalf("unknown child role %q", role)
 	}
@@ -391,6 +428,7 @@ func crossProcessOrigin(t *testing.T, dir string, seed uint64) {
 	quiescePlayerDomain(t, a)
 	spawnSharedSpecies(t, a)
 	spawnCrossProcessQuasar(t, a)
+	armCrossProcessClocks(t, a)
 
 	cap, err := a.CaptureShared()
 	if err != nil {
@@ -417,7 +455,7 @@ func crossProcessOrigin(t *testing.T, dir string, seed uint64) {
 		cap.Header.Tick, swarms, quasars, len(body))
 
 	a.Tick(crossProcessContinueTicks)
-	writeSurface(t, filepath.Join(dir, originSurface), a.SnapshotShared())
+	writeSurface(t, filepath.Join(dir, originSurface), crossProcessSurface(a))
 }
 
 // crossProcessReceiver builds its own world, drives it to a different tick, then
@@ -458,7 +496,38 @@ func crossProcessReceiver(t *testing.T, dir string, seed uint64, out string) {
 		a.Tick(burst)
 		time.Sleep(2 * time.Millisecond) // [wall] deliberate pacing noise
 	}
-	writeSurface(t, filepath.Join(dir, out), a.SnapshotShared())
+	writeSurface(t, filepath.Join(dir, out), crossProcessSurface(a))
+}
+
+// crossProcessSurface is the shared surface and each cursor's clocks. Outside a
+// session one owner holds a cursor on both sides of the install, so the clocks the
+// shared surface leaves to their owners compare as well.
+func crossProcessSurface(a *App) []string {
+	lines := a.SnapshotShared()
+	a.World().RunSafe(func() {
+		w := a.World()
+		for slot := range parameter.MaxPlayers {
+			e := w.Resources.Player.Slot(uint8(slot))
+			if e == 0 {
+				continue
+			}
+			args := []any{"slot", slot}
+			if en, ok := w.Components.Energy.GetComponent(e); ok {
+				args = append(args, "energy", en.Current)
+			}
+			if sh, ok := w.Components.Shield.GetComponent(e); ok {
+				args = append(args, "shield", sh.Active, "drain", sh.DrainElapsed)
+			}
+			if h, ok := w.Components.Heat.GetComponent(e); ok {
+				args = append(args, "heat", h.Current, "ember", h.EmberActive, "decay", h.EmberElapsed)
+			}
+			if wr, ok := w.Components.Wraith.GetComponent(e); ok {
+				args = append(args, "waited", wr.Waited)
+			}
+			lines = append(lines, snapshot.Line("cursor", "clock", args))
+		}
+	})
+	return lines
 }
 
 // spawnCrossProcessQuasar puts a quasar into the captured world beside the cursor, so
@@ -476,6 +545,35 @@ func spawnCrossProcessQuasar(t *testing.T, a *App) {
 	a.World().RunSafe(func() { n = a.World().Components.Quasar.CountEntities() })
 	if n == 0 {
 		t.Fatal("no quasar was created")
+	}
+}
+
+// armCrossProcessClocks starts each clock a capture carries: the cursor's shield
+// draining its energy, its ember burning its heat, and a departed participant's
+// cursor waiting as a Wraith. The capture comes ticks later, with each partway
+// through its period, so the continuation reads them on from where they stood.
+func armCrossProcessClocks(t *testing.T, a *App) {
+	t.Helper()
+	a.World().RunSafe(func() {
+		w := a.World()
+		w.PushLocal(event.EventCursorArmRequest, &event.CursorArmRequestPayload{Heat: 60, Energy: 1000, Ember: true})
+		w.PushEventDomain(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
+			Slot: 1, Control: uint8(component.ControlRemote), PeerID: 2, X: 10, Y: 10}, core.DomainShared)
+		w.PushEventDomain(event.EventCursorWraithRequest, &event.CursorWraithRequestPayload{Slot: 1}, core.DomainShared)
+	})
+	a.Settle()
+	a.Tick(7)
+	var shield, ember, wraith bool
+	a.World().RunSafe(func() {
+		w := a.World()
+		e := w.Resources.Player.Slot(0)
+		sh, _ := w.Components.Shield.GetComponent(e)
+		h, _ := w.Components.Heat.GetComponent(e)
+		shield, ember = sh.Active, h.EmberActive
+		wraith = w.Components.Wraith.HasEntity(w.Resources.Player.Slot(1))
+	})
+	if !shield || !ember || !wraith {
+		t.Fatalf("the captured world runs a shield %t, an ember %t and a Wraith %t; want all three", shield, ember, wraith)
 	}
 }
 
