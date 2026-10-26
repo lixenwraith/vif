@@ -79,8 +79,8 @@ func (s *MarkerSystem) Update() {
 		// Pulse update
 		if markerComp.PulseRate > 0 {
 			// PulseRate is cycles per second; Sin accepts radians.
-			gameTime := s.world.Resources.Time.GameTimeNano()
-			pulseAngle := float64(gameTime) / 1e9 * markerComp.PulseRate * vmath.TwoPi
+			elapsed := s.world.Resources.Time.GameElapsed()
+			pulseAngle := elapsed.Seconds() * markerComp.PulseRate * vmath.TwoPi
 			pulseMod := vmath.Sin(pulseAngle)
 			// Preserve the fixed-path range: [-1,1] maps to [0.25,0.75].
 			markerComp.Intensity = 0.5 + pulseMod*0.25

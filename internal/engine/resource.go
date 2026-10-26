@@ -100,9 +100,9 @@ func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Dura
 	tr.DeltaTime = deltaTime
 }
 
-// GameTimeNano returns game time as Unix nanoseconds for integer comparison paths.
-// Not a seed source: tick granularity makes concurrent draws identical.
-func (tr *TimeResource) GameTimeNano() int64 { return tr.GameTime.UnixNano() }
+// GameElapsed is game time since SimEpoch, a function of the tick alone. A shared
+// reader takes a phase from it rather than from the instant, which carries the epoch.
+func (tr *TimeResource) GameElapsed() time.Duration { return tr.GameTime.Sub(SimEpoch) }
 
 // DeltaTimeNano returns the tick delta in nanoseconds
 func (tr *TimeResource) DeltaTimeNano() int64 { return int64(tr.DeltaTime) }
