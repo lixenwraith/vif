@@ -765,7 +765,7 @@ func decodeColumnsCursor(r *columnReader) []StoreEntry[component.CursorComponent
 func encodeColumnsWraith(dst []byte, rows []StoreEntry[component.WraithComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendTime(dst, rows[i].Value.Since)
+		dst = appendInt(dst, rows[i].Value.Waited)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.X)
@@ -784,7 +784,7 @@ func decodeColumnsWraith(r *columnReader) []StoreEntry[component.WraithComponent
 	rows := make([]StoreEntry[component.WraithComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readTime(&rows[i].Value.Since, r)
+		readInt(&rows[i].Value.Waited, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.X, r)
@@ -1131,7 +1131,7 @@ func encodeColumnsHeat(dst []byte, rows []StoreEntry[component.HeatComponent]) [
 		dst = appendBool(dst, rows[i].Value.EmberActive)
 	}
 	for i := range rows {
-		dst = appendTime(dst, rows[i].Value.EmberDecayTime)
+		dst = appendInt(dst, rows[i].Value.EmberElapsed)
 	}
 	return dst
 }
@@ -1153,7 +1153,7 @@ func decodeColumnsHeat(r *columnReader) []StoreEntry[component.HeatComponent] {
 		readBool(&rows[i].Value.EmberActive, r)
 	}
 	for i := range rows {
-		readTime(&rows[i].Value.EmberDecayTime, r)
+		readInt(&rows[i].Value.EmberElapsed, r)
 	}
 	return rows
 }
@@ -1161,7 +1161,7 @@ func decodeColumnsHeat(r *columnReader) []StoreEntry[component.HeatComponent] {
 func encodeColumnsShield(dst []byte, rows []StoreEntry[component.ShieldComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendTime(dst, rows[i].Value.LastDrainTime)
+		dst = appendInt(dst, rows[i].Value.DrainElapsed)
 	}
 	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.RadiusX)
@@ -1192,7 +1192,7 @@ func decodeColumnsShield(r *columnReader) []StoreEntry[component.ShieldComponent
 	rows := make([]StoreEntry[component.ShieldComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readTime(&rows[i].Value.LastDrainTime, r)
+		readInt(&rows[i].Value.DrainElapsed, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.RadiusX, r)

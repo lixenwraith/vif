@@ -17,8 +17,8 @@ const (
 // ShieldComponent holds runtime state for game mechanics
 // Visual parameters come from visual.ShieldConfigFor(Type, aspect)
 type ShieldComponent struct {
-	// Player-specific runtime state
-	LastDrainTime time.Time
+	// DrainElapsed is how long a player's shield has been up since it rose or last drained
+	DrainElapsed time.Duration
 
 	RadiusX float64
 	RadiusY float64

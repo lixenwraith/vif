@@ -188,7 +188,6 @@ func TestADepartedCursorWaitsAsAWraith(t *testing.T) {
 		return w.Resources.Event.Queue.Consume()
 	}
 
-	since := w.Resources.Time.GameTime
 	events := turn()
 	if got := w.Resources.Player.Slot(2); got != remote {
 		t.Fatalf("slot 2 holds %d after its cursor turned Wraith, want the same entity %d", got, remote)
@@ -197,8 +196,8 @@ func TestADepartedCursorWaitsAsAWraith(t *testing.T) {
 		t.Fatalf("the Wraith's cursor = %+v, want peer 7 driving it remotely", c)
 	}
 	wraith, ok := w.Components.Wraith.GetComponent(remote)
-	if !ok || wraith.X != 25 || wraith.Y != 5 || !wraith.Since.Equal(since) {
-		t.Fatalf("Wraith = %+v (held %t), want cell 25,5 since %v", wraith, ok, since)
+	if !ok || wraith.X != 25 || wraith.Y != 5 || wraith.Waited != 0 {
+		t.Fatalf("Wraith = %+v (held %t), want cell 25,5 and nothing waited yet", wraith, ok)
 	}
 	if mask, _ := w.GetComponentMask(remote); mask != engine.CursorBit|engine.ProtectionBit|engine.WraithBit {
 		t.Fatalf("the Wraith holds components %b, want its cursor, protection and Wraith alone", mask)
@@ -213,12 +212,13 @@ func TestADepartedCursorWaitsAsAWraith(t *testing.T) {
 		t.Fatalf("the announcement names %+v, want entity %d in slot 2", events[0].Payload, remote)
 	}
 
-	w.Resources.Time.GameTime = since.Add(time.Minute)
+	w.Resources.Time.DeltaTime = time.Minute
+	cursors.Update()
 	if events := turn(); len(events) != 0 {
 		t.Fatalf("a second request announced %v, want nothing", events)
 	}
-	if wraith, _ := w.Components.Wraith.GetComponent(remote); !wraith.Since.Equal(since) {
-		t.Fatalf("a second request restarted the wait at %v, want %v", wraith.Since, since)
+	if wraith, _ := w.Components.Wraith.GetComponent(remote); wraith.Waited != time.Minute {
+		t.Fatalf("a second request left the wait at %v, want the %v it had waited", wraith.Waited, time.Minute)
 	}
 }
 
@@ -345,7 +345,7 @@ func TestRemoteCursorStateDoesNotAgeLocally(t *testing.T) {
 		wp.MainFireCooldown = time.Second
 		sh, _ := w.Components.Shield.GetPtr(e)
 		sh.Active = true
-		sh.LastDrainTime = w.Resources.Time.GameTime.Add(-time.Hour)
+		sh.DrainElapsed = time.Hour
 	}
 
 	w.Resources.Time.DeltaTime = 100 * time.Millisecond
@@ -986,40 +986,6 @@ func TestKnockbackAndStunImmunityCoverAllPlayersAndWeapons(t *testing.T) {
 	got, _ := w.Components.Kinetic.GetComponent(target)
 	if got == motion || state.RemainingKineticImmunity == 0 {
 		t.Fatal("knockback immunity did not reopen after expiry")
-	}
-}
-
-// TestPassiveDrainSurvivesATransportedStamp covers the other way a per-cursor
-// shield can stop draining: LastDrainTime is an absolute simulation instant and
-// the component is captured, so a cursor materialised from an authority further
-// along carries that authority's tick. Game time is a pure function of the tick,
-// so the deadline is unreachable and the drain would be silent for the session.
-func TestPassiveDrainSurvivesATransportedStamp(t *testing.T) {
-	w, local, _ := testCursorWorld(t)
-	shield := ready(NewShieldSystem(w)).(*ShieldSystem)
-
-	sh, _ := w.Components.Shield.GetPtr(local)
-	sh.Active = true
-	sh.LastDrainTime = w.Resources.Time.GameTime.Add(time.Hour)
-
-	drains := func() int {
-		n := 0
-		for _, ev := range w.Resources.Event.Queue.Consume() {
-			if ev.Type == event.EventEnergyAddRequest {
-				n++
-			}
-		}
-		return n
-	}
-
-	shield.Update()
-	if n := drains(); n != 0 {
-		t.Fatalf("drains on the tick that adopted the stamp = %d, want 0", n)
-	}
-	w.Resources.Time.GameTime = w.Resources.Time.GameTime.Add(parameter.ShieldPassiveDrainInterval)
-	shield.Update()
-	if n := drains(); n != 1 {
-		t.Fatalf("drains one interval later = %d, want 1", n)
 	}
 }
 

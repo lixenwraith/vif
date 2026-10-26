@@ -61,7 +61,6 @@ func (s *HeatSystem) Update() {
 	s.publishSlots()
 
 	dt := s.world.Resources.Time.DeltaTime
-	now := s.world.Resources.Time.GameTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
 		// D-2: a remote cursor's heat and burst flash are transported, not aged here
@@ -75,15 +74,15 @@ func (s *HeatSystem) Update() {
 		}
 
 		heatComp, ok := s.world.Components.Heat.GetPtr(e)
-		if !ok {
+		if !ok || !heatComp.EmberActive {
 			return true
 		}
 
-		// Handle ember decay
-		if heatComp.EmberActive && now.Sub(heatComp.EmberDecayTime) >= parameter.EmberDecayInterval {
+		heatComp.EmberElapsed += dt
+		if heatComp.EmberElapsed >= parameter.EmberDecayInterval {
 			wasDefeated := cursorDefeated(s.world, e)
 			heatComp.Current -= parameter.EmberDecayAmount
-			heatComp.EmberDecayTime = now
+			heatComp.EmberElapsed = 0
 
 			// Crossed, so a scenario timing a turn by the ember ends it on every instance
 			if heatComp.Current <= 0 {
@@ -173,7 +172,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 			if cursor := s.world.Resources.Player.Entity; cursor != 0 {
 				// An ember already lit keeps its decay phase
 				if heat, ok := s.world.Components.Heat.GetPtr(cursor); ok && heat.EmberActive != p.Ember {
-					heat.EmberActive, heat.EmberDecayTime = p.Ember, s.world.Resources.Time.GameTime
+					heat.EmberActive, heat.EmberElapsed = p.Ember, 0
 				}
 				s.setHeat(cursor, p.Heat)
 			}
@@ -210,7 +209,7 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 			view.BurstFlashRemaining = parameter.HeatBurstFlashDuration
 		}
 		heatComp.EmberActive = true
-		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
+		heatComp.EmberElapsed = 0
 		s.world.PushLocal(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
 	}
 

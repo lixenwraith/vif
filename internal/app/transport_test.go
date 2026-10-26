@@ -130,15 +130,15 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 	a, b := pair(t, 0x5EEDBEEF, 0)
 	_, remoteOnA := mirrorCursors(t, a, b)
 
-	// Give b's own cursor a value only b can produce. The ember decay clock is
-	// pushed out so the owner holds the value still while a drains it: this asserts
+	// Give b's own cursor a value only b can produce. The ember's next decay is an
+	// hour out, so the owner holds the value still while a drains it: this asserts
 	// the transport, not the sync interval.
 	var ownedOnB core.Entity
 	b.World().RunSafe(func() {
 		ownedOnB = b.World().Resources.Player.Slot(1)
 		h, _ := b.World().Components.Heat.GetPtr(ownedOnB)
 		h.Current, h.EmberActive = 55, true
-		h.EmberDecayTime = b.World().Resources.Time.GameTime.Add(time.Hour)
+		h.EmberElapsed = -time.Hour
 		sh, _ := b.World().Components.Shield.GetPtr(ownedOnB)
 		sh.Active, sh.InvRxSq, sh.InvRySq = true, 0.25, 1.0
 	})

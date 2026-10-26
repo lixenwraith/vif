@@ -33,6 +33,6 @@ type CursorComponent struct {
 // drawn at its cell, and it holds no other component, so nothing in the world reaches
 // it and it reaches nothing until its participant takes it back.
 type WraithComponent struct {
-	Since time.Time // game time it turned at; the authority drops it WraithTimeout later
-	X, Y  int       // the cell it holds, -1 for a cursor off the map
+	Waited time.Duration // game time since it turned; the authority drops it at WraithTimeout
+	X, Y   int           // the cell it holds, -1 for a cursor off the map
 }

@@ -244,27 +244,30 @@ func TestALinkLossTurnsAHoldersGroupWraithAndADismissalDespawnsIt(t *testing.T) 
 	}
 }
 
-// wraithWorld is holderWorld with both cursors turned Wraith at its current game
-// time, which it returns.
-func wraithWorld(t *testing.T) (*engine.World, *NetworkSystem, time.Time) {
+// wraithWorld is holderWorld with both cursors turned Wraith, and wait, which ages
+// every Wraith through one cursor tick of the given length.
+func wraithWorld(t *testing.T) (w *engine.World, net *NetworkSystem, wait func(time.Duration)) {
 	t.Helper()
-	w, net, _ := holderWorld(t)
+	w, net, _ = holderWorld(t)
 	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	for _, slot := range []uint8{2, 3} {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
 			Payload: &event.CursorWraithRequestPayload{Slot: slot}})
 	}
 	w.Resources.Event.Queue.Consume()
-	return w, net, w.Resources.Time.GameTime
+	return w, net, func(d time.Duration) {
+		w.Resources.Time.DeltaTime = d
+		cursors.Update()
+	}
 }
 
 // TestAWraithIsDroppedOnceItHasWaitedItsTime: the authority dismisses a Wraith
 // WraithTimeout of game time after it turned, once, and a bot whose holder waits
 // too goes in its holder's dismissal rather than one of its own.
 func TestAWraithIsDroppedOnceItHasWaitedItsTime(t *testing.T) {
-	w, net, turned := wraithWorld(t)
-	expire := func(after time.Duration) []event.ParticipantDepartedPayload {
-		w.Resources.Time.GameTime = turned.Add(after)
+	w, net, wait := wraithWorld(t)
+	expire := func(more time.Duration) []event.ParticipantDepartedPayload {
+		wait(more)
 		net.expireWraiths()
 		return departures(w)
 	}
@@ -272,10 +275,10 @@ func TestAWraithIsDroppedOnceItHasWaitedItsTime(t *testing.T) {
 		t.Fatalf("Wraiths short of their time were dismissed: %+v", got)
 	}
 	want := event.ParticipantDepartedPayload{Participant: 7, Slot: 2, Dismissed: true}
-	if got := expire(parameter.WraithTimeout); len(got) != 1 || got[0] != want {
+	if got := expire(time.Millisecond); len(got) != 1 || got[0] != want {
 		t.Fatalf("at their time the authority dismissed %+v, want %+v alone", got, want)
 	}
-	if got := expire(2 * parameter.WraithTimeout); len(got) != 0 {
+	if got := expire(parameter.WraithTimeout); len(got) != 0 {
 		t.Fatalf("a dismissal already crossed was crossed again: %+v", got)
 	}
 }
@@ -283,10 +286,10 @@ func TestAWraithIsDroppedOnceItHasWaitedItsTime(t *testing.T) {
 // TestAWraithOnItsWayBackIsNotDropped: a Wraith the session layer is giving back to
 // its participant outlives its time until the arrival takes it back.
 func TestAWraithOnItsWayBackIsNotDropped(t *testing.T) {
-	w, net, turned := wraithWorld(t)
+	w, net, wait := wraithWorld(t)
 	back := true
 	w.Resources.Network.WraithKept = func(participant uint32) bool { return back && participant == 7 }
-	w.Resources.Time.GameTime = turned.Add(parameter.WraithTimeout)
+	wait(parameter.WraithTimeout)
 	if net.expireWraiths(); len(departures(w)) != 0 {
 		t.Fatal("a Wraith on its way back was dismissed")
 	}
