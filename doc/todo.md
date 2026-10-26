@@ -554,6 +554,9 @@ then, so `session.any_defeated` reads true for a lead (3 ticks) and td's monitor
 ended the run every time. Options: a monitor that confirms a defeat lasting longer
 than a lead, or the hit's reward paid as the owner's own energy when it fires, so a
 defeat and its undoing cross in one batch.
+Proper approach is a few second immunity period. Consider having cursor as Wraith till
+world is settled, and then allow play. Visual representation of Wraith state for the local
+and remote cursors to be added.
 
 ### Price the log's and journal's 50 ms sync
 
