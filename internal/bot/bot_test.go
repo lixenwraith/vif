@@ -16,23 +16,33 @@ import (
 )
 
 // TestABrokenGraphFailsAtLoadNamingTheFault: a bot graph is resolved by name with no
-// author watching, so every reference is checked when it is parsed.
+// author watching, so every reference, key and value is checked when it is parsed.
 func TestABrokenGraphFailsAtLoadNamingTheFault(t *testing.T) {
 	const region = "\n[regions.play]\ninitial = \"A\"\n"
 	for _, tt := range []struct{ doc, want string }{
 		{"[systems]\ndisabled_systems = []" + region + "[states.A]", `unknown table "systems"`},
-		{"[bot]\nactions_per_minute = 1" + region + "[states.A]", `unknown [bot] setting "actions_per_minute"`},
+		{"[bot]\nactions_per_minute = 1" + region + "[states.A]", `[bot]: unknown key "actions_per_minute"`},
 		{"[bot]\nactions_per_second = 0" + region + "[states.A]", "actions_per_second must be positive"},
 		{region + "file = \"more.toml\"\n[states.A]", "names a file"},
 		{region + "enabled_systems = [\"gold\"]\n[states.A]", `"enabled_systems" does nothing in a bot graph`},
 		{region + `[states.A]
 on_enter = [{ action = "EmitEvent", event = "EventGoldCancel" }]`, "a bot acts only through intents"},
 		{region + `[states.A]
-transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", whithin = 5 } }]`, `unknown guard arg "whithin"`},
+transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", whithin = 5 } }]`, `guard 'HasTarget': unknown key "whithin"`},
+		{region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "HasTarget", guard_args = { target = "glyph", within = "5" } }]`, "within: cannot convert string to int"},
+		{region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "ge", value = 5 } }]`, `op: "ge" is not one of eq, neq, gt, gte, lt, lte`},
+		{region + `[states.A]
+on_entr = [{ action = "TypeGlyph" }]`, `state 'A': unknown key "on_entr"`},
+		{region + `[states.A]
+transitions = [{ trigger = "Tick", target = "A", gaurd = "Idle" }]`, `state 'A': unknown key "transitions.gaurd"`},
+		{region + `[states.A]
+on_enter = [{ action = "Text", payload = { text = "a" }, payload_vars = { text = "n" } }]`, "action 'Text' takes no payload_vars"},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_nowhere" } }]`, `unknown intent action "motion_nowhere"`},
 		{region + `[states.A]
-on_enter = [{ action = "Intent", payload = { name = "motion_left", cnt = 2 } }]`, `unknown payload field "cnt"`},
+on_enter = [{ action = "Intent", payload = { name = "motion_left", cnt = 2 } }]`, `action 'Intent': payload: unknown key "cnt"`},
 		{region + `[states.A]
 on_update = [{ action = "PointAt", payload = { target = "treasure" } }]`, `unknown target "treasure"`},
 		{region + `[states.A]
@@ -54,7 +64,7 @@ on_enter = [{ action = "Intent", payload = { name = "motion_left", count = [9, 2
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = ["motion_left", 3] } }]`, "not an action name"},
 		{region + `[states.A]
-transitions = [{ trigger = "Tick", target = "A", guard = "Not", guard_args = {} }]`, "Not: 'guard' is not a table"},
+transitions = [{ trigger = "Tick", target = "A", guard = "Not", guard_args = {} }]`, "guard 'Not': requires 'guard'"},
 		{region + `[states.A]
 on_enter = [{ action = "Intent", payload = { name = "motion_left", hold = 2 } }]`, "hold applies only to press"},
 		{region + `[states.A]

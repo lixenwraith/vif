@@ -10,6 +10,7 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm/dialect"
 	"github.com/lixenwraith/vif/pkg/tomlmacro"
 )
 
@@ -31,6 +32,9 @@ func (m *Machine[T]) LoadScenario(data []byte) error {
 // Used by file loader after merging external includes
 func (m *Machine[T]) LoadScenarioFromMap(doc map[string]any) error {
 	// 1. Decode the document into the intermediate config structs
+	if err := unknownKeys(doc); err != nil {
+		return err
+	}
 	var config ScenarioDoc
 	if err := toml.Decode(doc, &config); err != nil {
 		return fmt.Errorf("failed to decode scenario: %w", err)
@@ -271,32 +275,25 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 			}
 		}
 
-		fn, ok := m.actionReg[cfg.Action]
+		entry, ok := m.actionReg[cfg.Action]
 		if !ok {
 			return nil, fmt.Errorf("unknown action function '%s'", cfg.Action)
 		}
-
-		// Each action registers its own compiler
-		var args any
-		if compile, ok := m.argCompilerReg[cfg.Action]; ok {
-			var err error
-			if args, err = compile(m, cfg, resolve); err != nil {
-				return nil, fmt.Errorf("action '%s': %w", cfg.Action, err)
-			}
+		if entry.refuse != "" {
+			return nil, fmt.Errorf("action '%s': %s", cfg.Action, entry.refuse)
+		}
+		if key := unreadKey(cfg, entry.keys); key != "" {
+			return nil, fmt.Errorf("action '%s' takes no %s", cfg.Action, key)
+		}
+		args, err := entry.compile(cfg, resolve)
+		if err != nil {
+			return nil, fmt.Errorf("action '%s': %w", cfg.Action, err)
 		}
 
-		// Compile action guard
 		var guard GuardFunc[T]
 		if cfg.Guard != "" {
-			if factory, ok := m.guardFactoryReg[cfg.Guard]; ok {
-				var err error
-				if guard, err = factory(m, cfg.GuardArgs); err != nil {
-					return nil, fmt.Errorf("action guard '%s': %w", cfg.Guard, err)
-				}
-			} else if g, ok := m.guardReg[cfg.Guard]; ok {
-				guard = g
-			} else {
-				return nil, fmt.Errorf("unknown guard '%s' for action", cfg.Guard)
+			if guard, err = m.guard(cfg.Guard, cfg.GuardArgs); err != nil {
+				return nil, fmt.Errorf("action '%s': %w", cfg.Action, err)
 			}
 		}
 
@@ -321,7 +318,7 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 		m.nextActionID++
 		action := Action[T]{
 			ID:            m.nextActionID,
-			Func:          fn,
+			Func:          entry.run,
 			Args:          args,
 			Guard:         guard,
 			DelayMs:       cfg.DelayMs,
@@ -362,15 +359,8 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 		var guard GuardFunc[T]
 		if cfg.Guard != "" {
 			var err error
-			// Factory errors propagate
-			if factory, ok := m.guardFactoryReg[cfg.Guard]; ok {
-				if guard, err = factory(m, cfg.GuardArgs); err != nil {
-					return fmt.Errorf("guard '%s': %w", cfg.Guard, err)
-				}
-			} else if g, ok := m.guardReg[cfg.Guard]; ok {
-				guard = g
-			} else {
-				return fmt.Errorf("unknown guard '%s'", cfg.Guard)
+			if guard, err = m.guard(cfg.Guard, cfg.GuardArgs); err != nil {
+				return err
 			}
 		}
 
@@ -390,4 +380,85 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 		})
 	}
 	return nil
+}
+
+// guard makes the guard name and args spell from the registered guards and the
+// dialect tree's And, Or and Not over them
+func (m *Machine[T]) guard(name string, args map[string]any) (GuardFunc[T], error) {
+	return dialect.Tree[GuardFunc[T]]{
+		Leaf: func(name string) (func(map[string]any) (GuardFunc[T], error), bool) {
+			g, ok := m.guardReg[name]
+			return g.build, ok
+		},
+		All: allOf[T],
+		Any: anyOf[T],
+		Not: negate[T],
+	}.Build(name, args)
+}
+
+// allOf, anyOf and negate are And, Or and Not over guards; And and Or of no guards
+// both pass
+func allOf[T any](gs []GuardFunc[T]) GuardFunc[T] {
+	return func(ctx T, region *RegionState, payload any) bool {
+		for _, g := range gs {
+			if !g(ctx, region, payload) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func anyOf[T any](gs []GuardFunc[T]) GuardFunc[T] {
+	return func(ctx T, region *RegionState, payload any) bool {
+		for _, g := range gs {
+			if g(ctx, region, payload) {
+				return true
+			}
+		}
+		return len(gs) == 0
+	}
+}
+
+func negate[T any](g GuardFunc[T]) GuardFunc[T] {
+	return func(ctx T, region *RegionState, payload any) bool { return !g(ctx, region, payload) }
+}
+
+// unreadKey names a key of its own table cfg sets that an action reading only keys
+// would ignore
+func unreadKey(cfg ActionConfig, keys []string) string {
+	for _, k := range [...]struct {
+		key string
+		set bool
+	}{
+		{"event", cfg.Event != ""},
+		{"payload", cfg.Payload != nil},
+		{"payload_vars", cfg.PayloadVars != nil},
+		{"region", cfg.Region != ""},
+		{"initial_state", cfg.InitialState != ""},
+	} {
+		if k.set && !slices.Contains(keys, k.key) {
+			return k.key
+		}
+	}
+	return ""
+}
+
+// unknownKeys refuses a key no config field takes under [systems], a region or a
+// state, naming where it sits; a top-level key is its embedder's to check, as a
+// scenario's [map] is and a bot graph's [bot]
+func unknownKeys(doc map[string]any) error {
+	var errs []error
+	for _, k := range toml.Unmapped(doc, (*ScenarioDoc)(nil)) {
+		switch {
+		case len(k) == 1: // the embedder's
+		case len(k) > 2 && k[0] == "states":
+			errs = append(errs, fmt.Errorf("state '%s': %w", k[1], toml.UnknownKeys{k[2:]}))
+		case len(k) > 2 && k[0] == "regions":
+			errs = append(errs, fmt.Errorf("region '%s': %w", k[1], toml.UnknownKeys{k[2:]}))
+		default:
+			errs = append(errs, toml.UnknownKeys{k})
+		}
+	}
+	return errors.Join(errs...)
 }

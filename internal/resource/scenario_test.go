@@ -240,3 +240,14 @@ func TestAScenarioDeclaresItsPlayerRange(t *testing.T) {
 		}
 	}
 }
+
+// TestAnEntryKeyNothingReadsIsRefused: a misspelt top-level key fails the read
+// naming it, where it once loaded as absent.
+func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {
+	entry := "descripton = \"A typo.\"\n[regions.main]\nfile = \"main.toml\"\n"
+	fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
+	_, err := ReadScenario("typo", fsys, "scenario.toml")
+	if err == nil || !strings.Contains(err.Error(), `entry "scenario.toml": unknown key "descripton"`) {
+		t.Fatalf("error %v", err)
+	}
+}
