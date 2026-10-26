@@ -2743,19 +2743,19 @@ func encodeColumnsStormCircle(dst []byte, rows []StoreEntry[component.StormCircl
 		dst = appendInt(dst, rows[i].Value.Index)
 	}
 	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Machine.State)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Machine.Elapsed)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Machine.Duration)
+	}
+	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.IsInvulnerable)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.InvulnerableElapsed)
-	}
-	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.AttackState)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.CooldownRemaining)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.AttackRemaining)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.AttackTargetX)
@@ -2764,7 +2764,7 @@ func encodeColumnsStormCircle(dst []byte, rows []StoreEntry[component.StormCircl
 		dst = appendInt(dst, rows[i].Value.AttackTargetY)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.AttackProgress)
+		dst = appendBool(dst, rows[i].Value.LandingFound)
 	}
 	return dst
 }
@@ -2798,19 +2798,19 @@ func decodeColumnsStormCircle(r *columnReader) []StoreEntry[component.StormCircl
 		readInt(&rows[i].Value.Index, r)
 	}
 	for i := range rows {
+		readUint(&rows[i].Value.Machine.State, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Machine.Elapsed, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Machine.Duration, r)
+	}
+	for i := range rows {
 		readBool(&rows[i].Value.IsInvulnerable, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.InvulnerableElapsed, r)
-	}
-	for i := range rows {
-		readUint(&rows[i].Value.AttackState, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.CooldownRemaining, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.AttackRemaining, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.AttackTargetX, r)
@@ -2819,7 +2819,7 @@ func decodeColumnsStormCircle(r *columnReader) []StoreEntry[component.StormCircl
 		readInt(&rows[i].Value.AttackTargetY, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.AttackProgress, r)
+		readBool(&rows[i].Value.LandingFound, r)
 	}
 	return rows
 }

@@ -61,9 +61,6 @@ const (
 	// SwarmChaseSpeedMultiplier relative to drain base speed
 	SwarmChaseSpeedMultiplier = 4
 
-	// SwarmFuseAnimationDuration matches spirit convergence timing
-	SwarmFuseAnimationDuration = 500 * time.Millisecond
-
 	// SwarmHomingAccel is acceleration toward cursor (cells/sec²)
 	SwarmHomingAccel = 6.0
 	// SwarmDrag is deceleration when overspeed (1/sec)

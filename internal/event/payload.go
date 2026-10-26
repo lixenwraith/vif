@@ -592,7 +592,7 @@ type MaterializeAreaRequestPayload struct {
 	AreaWidth  int                   `toml:"area_width"` // 0 or 1 = single cell
 	AreaHeight int                   `toml:"area_height"`
 	Type       component.SpawnType   `toml:"type"`
-	Species    component.SpeciesType `toml:"species"` // the data species its completion lands; SpeciesNone lands nothing
+	Species    component.SpeciesType `toml:"species"` // the species its completion lands; SpeciesNone lands nothing
 }
 
 // MaterializeCompletedPayload carries details about a completed materialization
@@ -880,20 +880,20 @@ type FuseQuasarRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// FuseEffect defines visual effect type for fusion animations
+// FuseEffect is how a fusion's sources reach the beam every fusion plays
 type FuseEffect int
 
 const (
-	FuseEffectNone        FuseEffect = iota
-	FuseEffectSpirit                 // Converging spirit trails
-	FuseEffectMaterialize            // Reverse beam convergence
+	FuseEffectNone        FuseEffect = iota // As FuseEffectSpirit
+	FuseEffectSpirit                        // Spirits converge into the beam
+	FuseEffectMaterialize                   // The beam alone
 )
 
 // FuseSwarmRequestPayload contains the two drains to fuse
 type FuseSwarmRequestPayload struct {
 	DrainA core.Entity `toml:"drain_a"`
 	DrainB core.Entity `toml:"drain_b"`
-	Effect FuseEffect  `toml:"effect"` // Defaults to FuseEffectSpirit (0)
+	Effect FuseEffect  `toml:"effect"`
 }
 
 // FuseBehaviorRequestPayload names the program beamed in and the cell its

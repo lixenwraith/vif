@@ -405,7 +405,7 @@ Declared system carriers are:
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
 | `gold` | sequence liveness, spawn gate, header, per-slot contribution; the deadline rides the header's timer in the stores |
-| `storm` | live root entity, swarm spawns pending a blue attack |
+| `storm` | live root entity; a blue attack's pending swarm is its beam, in the stores |
 | `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration and per-level sub-cell phases |
 

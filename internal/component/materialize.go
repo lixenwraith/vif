@@ -20,8 +20,8 @@ type MaterializeComponent struct {
 
 	// Type of entity being spawned (for completion event)
 	Type SpawnType
-	// Species is the data species the completion lands, so the beam itself holds
-	// the spawn; SpeciesNone lands nothing
+	// Species is the species the completion lands, so the beam itself holds the
+	// spawn; SpeciesNone lands nothing
 	Species SpeciesType
 }
 

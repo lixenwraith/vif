@@ -1,8 +1,8 @@
 // Package machine steps per-entity state machines. An Instance (a state, its
 // elapsed time and the duration of its entry) lives in a component as plain
 // integers; a Graph, built once from typed hooks and immutable after Build, steps
-// it in fixed phases. Queue defers values behind relative timers. Standard library
-// only, so a graph reaches its world only through the context its host passes.
+// it in fixed phases. Standard library only, so a graph reaches its world only
+// through the context its host passes.
 package machine
 
 import (

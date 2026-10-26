@@ -207,12 +207,12 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
 	// Render attack effects before body (background layer)
 	circleComp := circle.component
-	if circleComp.AttackState == component.StormCircleAttackActive {
+	if circleComp.Machine.State == component.StormCircleActive {
 		switch component.StormCircleType(circle.index) {
 		case component.StormCircleGreen:
 			r.renderGreenPulse(ctx, buf, circle, circleComp)
 		case component.StormCircleRed:
-			r.renderRedMuzzleFlash(ctx, buf, circle, circleComp)
+			r.renderRedMuzzleFlash(ctx, buf, circle)
 		case component.StormCircleBlue:
 			r.renderBlueGlow(ctx, buf, circle, circleComp)
 		}
@@ -503,7 +503,7 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 
 // renderGreenPulse draws expanding green pulse effect
 func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
-	progress := circleComp.AttackProgress
+	progress := circleComp.Machine.Progress()
 	if progress <= 0 {
 		return
 	}
@@ -565,14 +565,12 @@ func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.R
 	}
 }
 
-// renderRedMuzzleFlash draws the short directional effect at the circle edge.
-func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
-	if circleComp.AttackProgress <= 0 {
-		return
-	}
-
+// renderRedMuzzleFlash draws the short directional effect at the circle edge while
+// the turret fires: a burst held by a stun or by no cursor has its mount disarmed
+// and shows none.
+func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
 	mount, ok := r.gameCtx.World.Components.Mount.GetPtr(circle.entity)
-	if !ok || !mount.HasAim {
+	if !ok || !mount.Armed || !mount.HasAim {
 		return
 	}
 	targetX, targetY := mount.AimX, mount.AimY
@@ -646,15 +644,15 @@ func (r *StormRenderer) renderRedMuzzleFlash(ctx render.RenderContext, buf *rend
 
 // renderBlueGlow draws the rotating amber highlights around the blue circle.
 func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
-	progress := circleComp.AttackProgress
+	progress := circleComp.Machine.Progress()
 	if progress <= 0.01 {
 		return
 	}
 
-	// Fade out during materialize phase (last 20%)
+	// Fade out once the beam opens
 	intensityMult := 1.0
-	if progress > 0.8 {
-		intensityMult = (1.0 - progress) / 0.2
+	if beam := float64(parameter.StormBlueMaterializePermille) / 1000; progress > beam {
+		intensityMult = (1.0 - progress) / (1.0 - beam)
 	}
 	if intensityMult <= 0.05 {
 		return

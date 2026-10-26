@@ -157,7 +157,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 	"drain":          {Domain: engine.SystemPlayer, Requires: append(engine.Require("materialize", "timer"), engine.Optional("heat", "navigation", "combat")...)},
 	"quasar":         {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation", "combat", "lightning")...)},
 	"swarm":          {Domain: engine.SystemShared, Requires: append(engine.Require("composite", "timer"), engine.Optional("navigation", "combat")...)},
-	"storm":          {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation", "combat", "mount", "particle", "wall")...)},
+	"storm":          {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation", "combat", "mount", "particle", "wall", "materialize")...)},
 	"kraken":         {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("combat")...)},
 	"pylon":          {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation", "combat")...)},
 	"snake":          {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("navigation", "combat")...)},

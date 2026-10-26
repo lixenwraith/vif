@@ -12,16 +12,10 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
-
-// pendingBlueSpawn tracks storm-initiated swarm spawns waiting for visual completion
-type pendingBlueSpawn struct {
-	TargetX int
-	TargetY int
-	Timer   time.Duration
-}
 
 // StormSystem manages the storm boss entity lifecycle
 // Storm is a 3-part composite boss with 3D orbital physics
@@ -42,8 +36,8 @@ type StormSystem struct {
 	// Reusable map
 	memberExcludeSet map[core.Entity]struct{}
 
-	// Pending blue attack spawns (waiting for materialize completion)
-	pendingBlueSpawns []pendingBlueSpawn
+	graphs [component.StormCircleCount]*machine.Graph[component.StormCircleState, *circleCtx] // by circle type
+	ctx    circleCtx                                                                          // the circle being stepped, refilled per circle
 
 	// Telemetry
 	statActive           *atomic.Bool
@@ -68,8 +62,7 @@ func NewStormSystem(world *engine.World) engine.System {
 	}
 
 	s.memberExcludeSet = make(map[core.Entity]struct{}, 256)
-	s.pendingBlueSpawns = make([]pendingBlueSpawn, 0, 4)
-	s.buffers = newBufferTelemetry(world.Resources.Status, "storm", "ellipse_offsets", "member_excludes", "pending_blue_spawns")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "storm", "ellipse_offsets", "member_excludes")
 
 	// Precompute ellipse cell offsets for wall collision checks
 	s.buildEllipseOffsets()
@@ -84,15 +77,100 @@ func NewStormSystem(world *engine.World) engine.System {
 	s.statProtectedPlayer = world.Resources.Status.Ints.Get("storm.protected_player_rejects")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "storm")
 	s.motion = newBounceTelemetry(world.Resources.Status, "storm")
+	for i := range circleVariants {
+		s.graphs[i] = newCircleGraph(s, &circleVariants[i])
+	}
 
 	return s
+}
+
+// circleVariant is one circle colour's attack cycle: a circle waits out its
+// cooldown, then attacks once it is convex, and the row times both and names what
+// the attack runs
+type circleVariant struct {
+	initial, attack, repeat time.Duration                  // the spawn's cooldown, the attack, the cooldown after one
+	flags                   uint64                         // Active's flags beside circleAttacking
+	enter, tick             func(*StormSystem, *circleCtx) // Active's hooks
+	cue                     uint16                         // ‰ of the attack at which beamIn runs; 0 for none
+}
+
+// circleVariants is indexed by StormCircleType
+var circleVariants = [component.StormCircleCount]circleVariant{
+	component.StormCircleGreen: {
+		initial: parameter.StormGreenInitialCooldown, attack: parameter.StormGreenRepeatInterval,
+		repeat: parameter.StormGreenRepeatInterval, tick: (*StormSystem).pulse,
+	},
+	component.StormCircleRed: {
+		initial: parameter.StormRedInitialCooldown, attack: parameter.StormRedBurstDuration,
+		repeat: parameter.StormRedPostAttackDelay, flags: circleArmed, tick: (*StormSystem).burst,
+	},
+	component.StormCircleBlue: {
+		initial: parameter.StormBlueInitialCooldown, attack: parameter.StormBlueEffectDuration,
+		repeat: parameter.StormBlueRepeatCooldown, enter: (*StormSystem).findLanding, tick: (*StormSystem).glow,
+		cue: parameter.StormBlueMaterializePermille,
+	},
+}
+
+// Storm circle flags, which updateCircleAttacks writes to the components after every step
+const (
+	circleAttacking uint64 = 1 << iota // held in the convex, so not invulnerable
+	circleArmed                        // the turret mount fires
+)
+
+// circleCtx is what one circle's step reads and its hooks write through
+type circleCtx struct {
+	entity    core.Entity
+	circle    *component.StormCircleComponent
+	x, y      int // the circle's cell
+	hasCursor bool
+	stunned   bool
+}
+
+// circleHeld suspends a circle with no cursor to attack or under a stun
+func circleHeld(c *circleCtx) bool { return !c.hasCursor || c.stunned }
+
+func circleConvex(c *circleCtx) bool { return !concave(c.circle) }
+
+// newCircleGraph builds one colour's machine: a timed cooldown that ends in the
+// attack once the circle is convex, and the attack, which re-enters the cooldown
+// with the repeat duration. The spawn enters the cooldown with the initial one.
+func newCircleGraph(s *StormSystem, v *circleVariant) *machine.Graph[component.StormCircleState, *circleCtx] {
+	type edge = machine.Edge[component.StormCircleState, *circleCtx]
+	type target = machine.Target[component.StormCircleState, *circleCtx]
+	bind := func(hook func(*StormSystem, *circleCtx)) func(*circleCtx) {
+		if hook == nil {
+			return nil
+		}
+		return func(c *circleCtx) { hook(s, c) }
+	}
+	active := machine.State[*circleCtx]{
+		Name:     "active",
+		Duration: v.attack,
+		Flags:    circleAttacking | v.flags,
+		Enter:    bind(v.enter),
+		Tick:     bind(v.tick),
+	}
+	if v.cue > 0 {
+		active.Cues = []machine.Cue[*circleCtx]{{AtPermille: v.cue, Do: s.beamIn}}
+	}
+
+	return machine.Must(machine.New[component.StormCircleState, *circleCtx](nil).
+		State(component.StormCircleCooldown, machine.State[*circleCtx]{Name: "cooldown", Duration: v.repeat}).
+		State(component.StormCircleActive, active).
+		Suspend(circleHeld).
+		// An expired cooldown waits for the convex, where a circle attacks from
+		Timeout(component.StormCircleCooldown, edge{
+			To:       []target{{State: component.StormCircleActive, Guard: circleConvex}},
+			Fallback: machine.Hold,
+		}).
+		Timeout(component.StormCircleActive, edge{To: []target{{State: component.StormCircleCooldown}}}).
+		Build())
 }
 
 func (s *StormSystem) Init() {
 	s.rootEntity = 0
 	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	clear(s.memberExcludeSet)
-	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)
 	s.statGreenActiveFrame.Store(0)
@@ -121,6 +199,7 @@ func (s *StormSystem) EventTypes() []event.EventType {
 		event.EventStormSpawnRequest,
 		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventMaterializeComplete,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -169,6 +248,17 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 				s.handleCircleBreach(payload.HeaderEntity)
 			}
 		}
+
+	case event.EventMaterializeComplete:
+		// A blue attack's beam is the only Shared one naming the swarm, and the swarm
+		// it carries lands as it ends, on its footprint
+		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok &&
+			ev.Domain == core.DomainShared && payload.Species == component.SpeciesSwarm {
+			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
+				X: payload.X + parameter.SwarmHeaderOffsetX,
+				Y: payload.Y + parameter.SwarmHeaderOffsetY,
+			})
+		}
 	}
 }
 
@@ -176,9 +266,6 @@ func (s *StormSystem) Update() {
 	if !s.enabled || s.rootEntity == 0 {
 		return
 	}
-
-	// Process pending blue spawns regardless of root entity state (unless dead already)
-	s.processPendingBlueSpawns()
 
 	// When termination is requested, liveness edits intentionally are not
 	// committed; retain the detached root value across that early return.
@@ -217,19 +304,18 @@ func (s *StormSystem) Update() {
 	s.statCircleCount.Store(int64(aliveCount))
 }
 
-// stormSnapshot is this system's D-19 record. The live storm's root and the swarm
-// spawns waiting on a blue attack decide future shared outcomes and live outside
-// any store: a receiver whose FSM was moved past StormSetup by an install never ran
-// the spawn, so without these it holds the storm's entities and simulates none of
-// them. Timers are relative already.
+// stormSnapshot is this system's D-19 record. The live storm's root decides future
+// shared outcomes and lives outside any store: a receiver whose FSM was moved past
+// StormSetup by an install never ran the spawn, so without it it holds the storm's
+// entities and simulates none of them. A blue attack's swarm waits in its beam,
+// which the stores carry.
 type stormSnapshot struct {
-	RootEntity core.Entity        `json:"root_entity"`
-	Pending    []pendingBlueSpawn `json:"pending_blue_spawns"`
+	RootEntity core.Entity `json:"root_entity"`
 }
 
 // SaveShared carries the storm's private state (D-19).
 func (s *StormSystem) SaveShared() ([]byte, error) {
-	return json.Marshal(stormSnapshot{RootEntity: s.rootEntity, Pending: s.pendingBlueSpawns})
+	return json.Marshal(stormSnapshot{RootEntity: s.rootEntity})
 }
 
 // LoadShared adopts a captured storm and republishes what derives from it.
@@ -239,7 +325,6 @@ func (s *StormSystem) LoadShared(data []byte) error {
 		return fmt.Errorf("storm: %w", err)
 	}
 	s.rootEntity = snap.RootEntity
-	s.pendingBlueSpawns = append(s.pendingBlueSpawns[:0], snap.Pending...)
 
 	alive := 0
 	if stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity); ok {
@@ -475,10 +560,9 @@ func (s *StormSystem) createCircleHeader(
 
 	// Storm circle component (3D physics + attack state)
 	s.world.Components.StormCircle.SetComponent(circleEntity, component.StormCircleComponent{
-		Pos3D:       pos3D,
-		Vel3D:       vel3D,
-		Index:       index,
-		AttackState: component.StormCircleAttackIdle,
+		Pos3D: pos3D,
+		Vel3D: vel3D,
+		Index: index,
 	})
 
 	if component.StormCircleType(index) == component.StormCircleRed {
@@ -523,6 +607,11 @@ func (s *StormSystem) createCircleHeader(
 	s.world.Components.Member.SetComponent(circleEntity, component.MemberComponent{
 		HeaderEntity: parentEntity,
 	})
+
+	// The machine starts in the colour's first cooldown once the circle is built
+	circleComp, _ := s.world.Components.StormCircle.GetPtr(circleEntity)
+	s.ctx = circleCtx{entity: circleEntity, circle: circleComp}
+	s.graphs[index].Start(&circleComp.Machine, &s.ctx, component.StormCircleCooldown, circleVariants[index].initial)
 
 	return circleEntity
 }
@@ -747,7 +836,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 
 		// --- ATTACK PHYSICS OVERRIDE ---
 		// If attacking, physically trap the circle in the convex
-		if circles[i].circle.AttackState == component.StormCircleAttackActive {
+		if circles[i].circle.Machine.State == component.StormCircleActive {
 			// Define a boundary slightly in front of the Mid point to ensure IsConvex returns true
 			zLimit := parameter.StormZMid - 1.0
 
@@ -1069,7 +1158,7 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 	}
 }
 
-// updateCircleAttacks manages attack state machine for each circle
+// updateCircleAttacks steps each circle's attack machine and writes its outputs
 func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, dt time.Duration) {
 	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
@@ -1087,114 +1176,23 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 			continue
 		}
 
-		if _, _, _, hasCursor := ClosestCursor(s.world, circlePos.X, circlePos.Y); !hasCursor {
-			continue
+		_, _, _, hasCursor := ClosestCursor(s.world, circlePos.X, circlePos.Y)
+		combatComp, ok := s.world.Components.Combat.GetPtr(circleEntity)
+		s.ctx = circleCtx{
+			entity:    circleEntity,
+			circle:    circleComp,
+			x:         circlePos.X,
+			y:         circlePos.Y,
+			hasCursor: hasCursor,
+			stunned:   ok && combatComp.Status[component.StatusStun].Remaining > 0,
 		}
+		flags, suspended := s.graphs[circleComp.Index].Step(&circleComp.Machine, &s.ctx, dt)
 
-		circleType := component.StormCircleType(circleComp.Index)
-		// The red turret is armed for the ticks a burst runs; the mount fires after this system
-		if mount, ok := s.world.Components.Mount.GetPtr(circleEntity); ok && circleType == component.StormCircleRed {
-			mount.Armed = circleComp.AttackState == component.StormCircleAttackActive
+		// The state's outputs, written on every step: a held turret fires nothing
+		circleComp.IsInvulnerable = concave(circleComp) && flags&circleAttacking == 0
+		if mount, ok := s.world.Components.Mount.GetPtr(circleEntity); ok {
+			mount.Armed = flags&circleArmed != 0 && !suspended
 		}
-
-		// Update invulnerable state, isConvex is guaranteed true with physics override
-		circleComp.IsInvulnerable = concave(circleComp) && circleComp.AttackState != component.StormCircleAttackActive
-
-		switch circleComp.AttackState {
-		case component.StormCircleAttackIdle:
-			// Start the cooldown timer
-			circleComp.AttackState = component.StormCircleAttackCooldown
-			circleComp.CooldownRemaining = s.getInitialCooldown(circleType)
-
-		case component.StormCircleAttackCooldown:
-			// Cooldown: Always tick down, regardless of position
-			circleComp.CooldownRemaining -= dt
-			if circleComp.CooldownRemaining <= 0 {
-				// Fire attack if in convex (natural z orbiting)
-				if !circleComp.IsInvulnerable {
-					circleComp.AttackState = component.StormCircleAttackActive
-					circleComp.AttackRemaining = s.getAttackDuration(circleType)
-					circleComp.AttackProgress = 0
-
-					// Blue: init attack (calculate target, trigger spawn)
-					if circleType == component.StormCircleBlue {
-						s.initBlueAttack(circleComp, circlePos.X, circlePos.Y)
-					}
-				}
-			}
-
-		case component.StormCircleAttackActive:
-			// ACTIVE: Run the attack, lock physics in convex
-			s.processCircleAttack(circleComp, circlePos.X, circlePos.Y)
-
-			circleComp.AttackRemaining -= dt
-			if circleComp.AttackRemaining <= 0 {
-				// Attack complete, cycle to cooldown
-				circleComp.AttackState = component.StormCircleAttackCooldown
-				circleComp.CooldownRemaining = s.getRepeatCooldown(circleType)
-				circleComp.AttackProgress = 0
-			}
-		}
-
-	}
-}
-
-// getInitialCooldown returns the first cooldown when entering convex
-func (s *StormSystem) getInitialCooldown(circleType component.StormCircleType) time.Duration {
-	switch circleType {
-	case component.StormCircleGreen:
-		return parameter.StormGreenInitialCooldown
-	case component.StormCircleRed:
-		return parameter.StormRedInitialCooldown
-	case component.StormCircleBlue:
-		return parameter.StormBlueInitialCooldown
-	default:
-		return 0
-	}
-}
-
-// getAttackDuration returns how long the attack phase lasts
-func (s *StormSystem) getAttackDuration(circleType component.StormCircleType) time.Duration {
-	switch circleType {
-	case component.StormCircleGreen:
-		return parameter.StormGreenRepeatInterval
-	case component.StormCircleRed:
-		return parameter.StormRedBurstDuration
-	case component.StormCircleBlue:
-		return parameter.StormBlueEffectDuration
-	default:
-		return 0
-	}
-}
-
-// getRepeatCooldown returns cooldown between repeated attacks
-func (s *StormSystem) getRepeatCooldown(circleType component.StormCircleType) time.Duration {
-	switch circleType {
-	case component.StormCircleGreen:
-		return parameter.StormGreenRepeatInterval
-	case component.StormCircleRed:
-		return parameter.StormRedPostAttackDelay
-	case component.StormCircleBlue:
-		return parameter.StormBlueRepeatCooldown
-	default:
-		return 0
-	}
-}
-
-// processCircleAttack handles per-tick damage for active attacks
-func (s *StormSystem) processCircleAttack(
-	circleComp *component.StormCircleComponent,
-	circleX, circleY int,
-) {
-	circleType := component.StormCircleType(circleComp.Index)
-
-	switch circleType {
-	case component.StormCircleGreen:
-		s.processGreenAttack(circleComp, circleX, circleY)
-	case component.StormCircleRed:
-		s.processRedAttack(circleComp)
-	case component.StormCircleBlue:
-		s.processBlueAttack(circleComp)
 	}
 }
 
@@ -1204,62 +1202,38 @@ var stormGreenDamage = component.CursorDamage{
 	HeatDelta:   -parameter.StormGreenDamageHeat,
 }
 
-// processGreenAttack handles area pulse damage around green circle
-func (s *StormSystem) processGreenAttack(
-	circleComp *component.StormCircleComponent,
-	circleX, circleY int,
-) {
-	// Update visual progress unconditionally
-	attackDuration := parameter.StormGreenRepeatInterval.Seconds()
-	remaining := circleComp.AttackRemaining.Seconds()
-	circleComp.AttackProgress = 1.0 - (remaining / attackDuration)
-
+// pulse strikes the cursors inside the green's area, every tick of its attack
+func (s *StormSystem) pulse(c *circleCtx) {
 	s.statGreenActiveFrame.Add(1)
 
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormGreenRadiusX,
 		s.world.Resources.Config.CellAspect.Y(parameter.StormGreenRadiusY))
 	strikeCursorsIn(s.world, func(x, y int) bool {
-		return vmath.EllipseContainsPoint(x, y, circleX, circleY, invRxSq, invRySq)
+		return vmath.EllipseContainsPoint(x, y, c.x, c.y, invRxSq, invRySq)
 	}, stormGreenDamage)
 }
 
-// processRedAttack advances the burst's visual progress; the circle's turret mount fires it
-func (s *StormSystem) processRedAttack(circleComp *component.StormCircleComponent) {
-	totalDuration := parameter.StormRedBurstDuration.Seconds()
-	remaining := circleComp.AttackRemaining.Seconds()
-	circleComp.AttackProgress = min(max(1.0-remaining/totalDuration, 0), 1)
-	s.statRedActiveFrame.Add(1)
-}
+// burst counts the red's attack ticks; its armed turret mount fires them
+func (s *StormSystem) burst(*circleCtx) { s.statRedActiveFrame.Add(1) }
 
-// initBlueAttack calculates target position at attack start
-func (s *StormSystem) initBlueAttack(
-	circleComp *component.StormCircleComponent,
-	circleX, circleY int,
-) {
+// glow counts the blue's attack ticks; its cue beams the swarm in
+func (s *StormSystem) glow(*circleCtx) { s.statBlueActiveFrame.Add(1) }
+
+// findLanding opens a blue attack: it draws the direction, then searches for room
+// there, so a search that fails has still drawn (D-8)
+func (s *StormSystem) findLanding(c *circleCtx) {
 	config := s.world.Resources.Config
 
 	angle := s.rng.Float64() * vmath.TwoPi
 	distance := parameter.StormBlueSpawnDistance
 
-	circlePX, circlePY := (vmath.Point{X: circleX, Y: circleY}).Center()
+	circlePX, circlePY := (vmath.Point{X: c.x, Y: c.y}).Center()
 	target := vmath.PointAt(
 		circlePX+distance*vmath.Cos(angle),
 		circlePY+distance*vmath.Sin(angle)*0.5,
 	)
-	targetX, targetY := target.X, target.Y
-
-	if targetX < 0 {
-		targetX = 0
-	}
-	if targetX >= config.MapWidth {
-		targetX = config.MapWidth - 1
-	}
-	if targetY < 0 {
-		targetY = 0
-	}
-	if targetY >= config.MapHeight {
-		targetY = config.MapHeight - 1
-	}
+	targetX := min(max(target.X, 0), config.MapWidth-1)
+	targetY := min(max(target.Y, 0), config.MapHeight-1)
 
 	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
 		targetX, targetY,
@@ -1268,94 +1242,25 @@ func (s *StormSystem) initBlueAttack(
 		component.WallBlockSpawn,
 		0,
 	)
-	if !found {
-		circleComp.AttackTargetX = 0
-		circleComp.AttackTargetY = 0
+	c.circle.LandingFound = found
+	c.circle.AttackTargetX = topLeftX + parameter.SwarmHeaderOffsetX
+	c.circle.AttackTargetY = topLeftY + parameter.SwarmHeaderOffsetY
+}
+
+// beamIn beams a swarm onto the landing its attack found: a cue, so once an
+// attack. The beam names the species, so the swarm lands as it ends.
+func (s *StormSystem) beamIn(c *circleCtx) {
+	if !c.circle.LandingFound {
 		return
 	}
-
-	spawnX := topLeftX + parameter.SwarmHeaderOffsetX
-	spawnY := topLeftY + parameter.SwarmHeaderOffsetY
-	circleComp.AttackTargetX = spawnX
-	circleComp.AttackTargetY = spawnY
-}
-
-// processPendingBlueSpawns handles swarm spawns after materialize animation completes
-func (s *StormSystem) processPendingBlueSpawns() {
-	if len(s.pendingBlueSpawns) == 0 {
-		return
-	}
-
-	dt := s.world.Resources.Time.DeltaTime
-
-	for i := len(s.pendingBlueSpawns) - 1; i >= 0; i-- {
-		s.pendingBlueSpawns[i].Timer -= dt
-
-		if s.pendingBlueSpawns[i].Timer <= 0 {
-			spawn := s.pendingBlueSpawns[i]
-
-			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-				X: spawn.TargetX,
-				Y: spawn.TargetY,
-			})
-
-			// Remove completed spawn (swap-remove)
-			s.pendingBlueSpawns[i] = s.pendingBlueSpawns[len(s.pendingBlueSpawns)-1]
-			s.pendingBlueSpawns = s.pendingBlueSpawns[:len(s.pendingBlueSpawns)-1]
-		}
-	}
-}
-
-// processBlueAttack updates visual progress and triggers materialize at threshold
-func (s *StormSystem) processBlueAttack(
-	circleComp *component.StormCircleComponent,
-) {
-	s.statBlueActiveFrame.Add(1)
-
-	totalDuration := parameter.StormBlueEffectDuration.Seconds()
-	remaining := circleComp.AttackRemaining.Seconds()
-	progress := 1.0 - (remaining / totalDuration)
-	if progress < 0 {
-		progress = 0
-	}
-	if progress > 1 {
-		progress = 1
-	}
-	circleComp.AttackProgress = progress
-
-	// Trigger materialize at 80% (one-shot via pending spawn check)
-	if progress >= parameter.StormBlueMaterializeAt &&
-		circleComp.AttackTargetX != 0 &&
-		!s.hasPendingBlueSpawn(circleComp.AttackTargetX, circleComp.AttackTargetY) {
-
-		topLeftX := circleComp.AttackTargetX - parameter.SwarmHeaderOffsetX
-		topLeftY := circleComp.AttackTargetY - parameter.SwarmHeaderOffsetY
-
-		s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
-			X:          topLeftX,
-			Y:          topLeftY,
-			AreaWidth:  parameter.SwarmWidth,
-			AreaHeight: parameter.SwarmHeight,
-			Type:       component.SpawnTypeSwarm,
-		})
-
-		s.pendingBlueSpawns = append(s.pendingBlueSpawns, pendingBlueSpawn{
-			TargetX: circleComp.AttackTargetX,
-			TargetY: circleComp.AttackTargetY,
-			Timer:   component.MaterializeStyles[component.SpawnTypeSwarm].Duration(),
-		})
-		s.buffers.Observe(2, len(s.pendingBlueSpawns))
-	}
-}
-
-// hasPendingBlueSpawn checks if spawn is already pending for target
-func (s *StormSystem) hasPendingBlueSpawn(targetX, targetY int) bool {
-	for _, p := range s.pendingBlueSpawns {
-		if p.TargetX == targetX && p.TargetY == targetY {
-			return true
-		}
-	}
-	return false
+	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
+		X:          c.circle.AttackTargetX - parameter.SwarmHeaderOffsetX,
+		Y:          c.circle.AttackTargetY - parameter.SwarmHeaderOffsetY,
+		AreaWidth:  parameter.SwarmWidth,
+		AreaHeight: parameter.SwarmHeight,
+		Type:       component.SpawnTypeSwarm,
+		Species:    component.SpeciesSwarm,
+	})
 }
 
 // terminateStorm destroys the entire storm entity
@@ -1384,8 +1289,15 @@ func (s *StormSystem) terminateStorm() {
 		Effect:       0,
 	})
 
-	// Update skips the queue once the root is gone; a kept entry would fire into the next storm
-	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
+	// A beam in flight would land its swarm after the storm (S1)
+	var beams []core.Entity
+	for _, e := range s.world.Components.Materialize.Entities() {
+		if m, ok := s.world.Components.Materialize.GetPtr(e); ok && e.Domain() == core.DomainShared && m.Species == component.SpeciesSwarm {
+			beams = append(beams, e)
+		}
+	}
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, beams...)
+
 	s.rootEntity = 0
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)

@@ -331,11 +331,11 @@ relative clock does ([Runtime §5](runtime.md#5-simulation-tick-steps) says what
 that does to a span). Systems whose entities end or act on a slot declare
 `Requires: timer`.
 Cursor countdowns stay in their owner-authored stores (D-13), and species phase
-timers stay in the species component beside the phase they time: the swarm's and
-the quasar's as their behavior machines' elapsed time and entry duration
-(`SwarmComponent.Machine`, `QuasarComponent.Machine`), a data species' as its
-program's (`BehaviorComponent.Machine`), the storm's as countdowns, for which
-[Machine design](machine-design.md) is the future design.
+timers stay in the species component beside the phase they time: the swarm's,
+the quasar's and a storm circle's as their behavior machines' elapsed time and
+entry duration (`SwarmComponent.Machine`, `QuasarComponent.Machine`,
+`StormCircleComponent.Machine`), and a data species' as its program's
+(`BehaviorComponent.Machine`) ([Machine design](machine-design.md)).
 
 ## 8. Event transport
 

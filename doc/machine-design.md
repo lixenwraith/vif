@@ -4,10 +4,10 @@ The design and the phased plan for per-entity state machines in species systems
 and for the data-driven species they prepare. §1 to §8 are the design, verified
 against the code at the plan's date; §9 is the plan, one phase per task, branch and
 PR, each with the files it touches, the tests it adds and the state a person can
-check by hand. Phases 0 to 5 have landed: §6 describes `pkg/machine` as built,
-§5 the swarm's and the quasar's graphs as they run, §7 the dialect kernel and §8
-the data path as built. As phases land, this document becomes the subsystem's
-reference and §9 shrinks to what each phase moved.
+check by hand. Phases 0 to 6 have landed: §6 describes `pkg/machine` as built,
+§5 the swarm's, the quasar's and the storm circles' graphs as they run, §7 the
+dialect kernel and §8 the data path as built. As phases land, this document
+becomes the subsystem's reference and §9 shrinks to what each phase moved.
 
 ## 1. Decision
 
@@ -53,12 +53,13 @@ system are one file, `internal/system/behavior.go`, so the domain audit
   unreachable only because `isCursorInZapRange` returns true on the same
   failures. `SplashTimerCancel` and the lightning despawn were each emitted from
   two sites.
-- Storm circles (`storm.go`) run Idle/Cooldown/Active through three
-  `switch circleType` tables. A missing cursor skips the attack step, physics
-  honours stun (`updateCirclePhysics` reads the header's `StatusStun`) while
-  attacks do not, the root's `pendingBlueSpawns` is a D-19 carrier
+- Storm circles (`storm.go`, before Phase 6) ran Idle/Cooldown/Active through
+  three `switch circleType` tables. A missing cursor skipped the attack step,
+  physics honoured stun (`updateCirclePhysics` reads the header's `StatusStun`)
+  while attacks did not, the root's `pendingBlueSpawns` was a D-19 carrier
   (`stormSnapshot`, `SaveShared`) with relative timers, and the blue landing
-  draw precedes validation (D-8, pinned by `storm_attack_test.go`).
+  draw precedes validation (D-8, pinned by `storm_attack_test.go`, which Phase 6
+  kept).
 - Commit styles differ: swarm, storm circles and, since Phase 2, the quasar use
   `GetPtr`; the storm root uses a detached `GetComponent` plus `SetComponent`.
 - Telemetry binds in constructors, and the status registry closes at
@@ -99,8 +100,9 @@ system are one file, `internal/system/behavior.go`, so the domain audit
    keep them.
 7. **Renderers.** `renderer/chargeline.go` and `teleportline.go` recomputed
    elapsed time as `parameter.X - Remaining` and read `Machine.Elapsed` and
-   `Progress()` since Phase 5; `renderer/storm.go` reads `AttackState` and
-   `AttackProgress`; `renderer/quasar.go` read `IsCharging || IsZapping` and
+   `Progress()` since Phase 5; `renderer/storm.go` read `AttackState` and
+   `AttackProgress` and reads `Machine.State` and `Progress()` since Phase 6;
+   `renderer/quasar.go` read `IsCharging || IsZapping` and
    reads `Machine.State` since Phase 2. `Instance.Elapsed`, `Duration` and
    `Progress()` serve all three.
 8. **Capture schema, not fingerprint.** Replacing component fields changes the
@@ -128,38 +130,45 @@ system are one file, `internal/system/behavior.go`, so the domain audit
 | Storm circle | enum ×3 | cooldown/attack countdowns; `InvulnerableElapsed` | none; no cursor skips the step | none (Active waits for convex) | `IsInvulnerable`, `Mount.Armed`, `AttackProgress`, Z clamp | `GetPtr` |
 | Storm root | liveness aggregation | `pendingBlueSpawns` | — | — | — | detached |
 
-The swarm's and the quasar's rows are their code before Phases 5 and 2, which put
-them on the machines of §5. Snake, drain, eye, gateway, fuse, pylon, tower, kraken
-and materialize have no behavioral machine (§5).
+The swarm's, the quasar's and the storm's rows are their code before Phases 5, 2
+and 6, which put the swarm, the quasar and the storm circles on the machines of
+§5; the root's pending list went in Phase 6, its swarms riding their beams (S16).
+Snake, drain, eye, gateway, fuse, pylon, tower, kraken and materialize have no
+behavioral machine (§5).
 
 ## 4. Timer and state inconsistencies
 
 Each item gives the finding, the proposal and the decision taken for the plan.
 
 - **S1. Storm: the blue spawn queue outlived its storm.** Landed:
-  `terminateStorm` drops the queue. Decided: keep the drop, no flush.
+  `terminateStorm` dropped the queue. Decided: keep the drop, no flush. Since
+  Phase 6 the pending swarm is its beam, and `terminateStorm` ends the storm's
+  beams in flight.
 - **S2. Storm: the blue one-shot rests on parameter arithmetic.** The
   materialize fires once only because its dedup entry (`hasPendingBlueSpawn`,
   1 s) outlives the attack's tail (0.5 s of 2.5 s); `AttackTargetX != 0` works
   as "no target" only because `SwarmHeaderOffsetX = 1`. Decided: a cue at 80 %
   of Active, which fires once per entry by construction (§6.3), plus a stored
   `LandingFound` from the entry hook. That drops the dedup scan and the
-  sentinel.
+  sentinel. Landed in Phase 6.
 - **S3. Storm: outputs lag the state by one tick.** `Mount.Armed` and
   `IsInvulnerable` are written before the state switch. Decided: write flags
-  after the step (the machine default); the one-tick shift is accepted.
+  after the step (the machine default); the one-tick shift is accepted. Landed
+  in Phase 6: the red's mount fires in the step that opens its burst.
 - **S4. Storm: the no-cursor gate also skips outputs.** With no cursor an
   Active red circle keeps `Mount.Armed = true` and a stale `IsInvulnerable`.
   Decided: no-cursor is a suspend condition; timers freeze, flags are written
-  every step, and `Armed` reads false while suspended.
+  every step, and `Armed` reads false while suspended. Landed in Phase 6.
 - **S5. Storm: stun freezes physics but not attacks.** Decided: stun is the
   other suspend condition, so a stunned circle pauses its attack as swarm and
   quasar pause theirs. Stun lands only on a convex or attacking circle, so this
-  changes play: a stunned burst or pulse stops until the stun ends.
+  changes play: a stunned burst or pulse stops until the stun ends. Landed in
+  Phase 6, whose manual check watched a red burst held across ten stuns.
 - **S6. Storm: three switch tables for one topology.** Decided: one
   `[StormCircleCount]` variant row {initial, attack, repeat, cue}, per the
   per-kind table rule. Idle disappears: spawn enters Cooldown with the initial
-  duration, and Active's timeout re-enters it with the repeat duration.
+  duration, and Active's timeout re-enters it with the repeat duration. Landed
+  in Phase 6 as `circleVariants`, whose rows also name Active's flags and hooks.
 - **S7. Quasar: Charging → Zapping totality is non-local** (§2). Decided:
   Charging timeout → [Zapping (probe: position and cursor) | Homing], with an
   unconditional commit. Landed in Phase 2.
@@ -205,17 +214,24 @@ Each item gives the finding, the proposal and the decision taken for the plan.
   Decided: phases move to `Instance`; the swarm pattern and the quasar speed
   move to a carried accumulator in their phases; eye frames, gateway and drain
   stay as they are. The quasar's phases and speed landed in Phase 2, the swarm's
-  phases and pattern in Phase 5.
+  phases and pattern in Phase 5, the storm circles' phases in Phase 6, where the
+  fuse's and the storm's queues became their beams (S16).
 - **S16. Three hand-rolled spawn queues.** Fuse (`fusions`, a `LocalStateSaver`
   carried by a journal's opening), storm (`pendingBlueSpawns`, a
-  `SharedStateSaver`) and drain (`pendingSpawns`) each defer a spawn behind a
-  materialize. Fuse and storm run a timer the length of the materialize and
-  swap-remove while iterating in reverse, so same-tick emission order depends on
-  slice history. Drain completes on `EventMaterializeComplete`, not a timer.
-  Decided: one `machine.Queue[T]` (relative timers, firing in push order, any
-  number of entries, JSON-encodable), adopted by storm and fuse in Phase 6; drain
-  keeps its event-completed queue. "Two users" was the rule for admitting a
-  sibling primitive, not a capacity.
+  `SharedStateSaver`) and drain (`pendingSpawns`) each deferred a spawn behind a
+  materialize. Fuse and storm ran timers of their own beside the beam and
+  swap-removed while iterating in reverse, so same-tick emission order depended
+  on slice history. The storm's timer was the beam's length; the fuse's were
+  0.5 s for a drain pair, whose spirits flew into no beam unless one was asked
+  for, and 0.6 s for a quasar, which landed while its 1 s beam still receded.
+  Drain completes on `EventMaterializeComplete`, not a timer. Decided first: one
+  `machine.Queue[T]` (relative timers, firing in push order, any number of
+  entries, JSON-encodable), built in Phase 1 for storm and fuse. Decided in
+  Phase 6 instead, with the user: a beam names the species its completion lands,
+  as a data species' beam has since Phase 4, so the beam is the pending spawn and
+  its timer, its visual and the spawn end on one tick. Storm and fuse dropped
+  their lists, the queue went with no user left, and drain keeps its
+  event-completed queue. Landed in Phase 6.
 
 ## 5. Target graphs
 
@@ -286,25 +302,45 @@ Each item gives the finding, the proposal and the decision taken for the plan.
   `Stop`, so a death ends the splash or the lightning through the same exit a
   transition does.
 
-**Storm circle** (`C = *circleCtx`, one graph per variant row):
+**Storm circle** (`C = *circleCtx`, one graph per colour), as built in
+`internal/system/storm.go`:
 
-| State | Duration | Flags | Hooks | Edges |
-|---|---|---|---|---|
-| Cooldown | row.initial at spawn, row.repeat after Active | — | — | timeout → [Active (guard: convex)], else `Hold` |
-| Active | row.attack | Attacking (+ Armed on red) | enter: blue landing search (one draw, then validation); tick: variant pulse | timeout → Cooldown (row.repeat) |
-
-- Blue cue at 800 ‰: if `LandingFound`, materialize and push the spawn on the
-  queue.
-- Suspend: no cursor or stunned (the header's `StatusStun`).
-- The host derives `IsInvulnerable = concave && !Attacking` and
-  `Mount.Armed = Armed && !suspended`; the physics Z clamp reads Attacking.
-- `AttackProgress` gives way to `Instance.Progress()`, read only while Active.
+- `circleVariants`, indexed by circle type, holds one row per colour: the
+  spawn's cooldown, the attack, the cooldown after one, Active's flags beside
+  Attacking, its enter and tick hooks, and its cue. `NewStormSystem` builds the
+  three graphs from the rows once (`machine.Must`).
+  - Green, 1 s, 1 s, 1 s: tick `pulse` strikes the cursors inside its area.
+  - Red, 1 s, 2 s, 1 s, flagged Armed: tick `burst` counts; the armed turret
+    mount fires after the storm system.
+  - Blue, 5 s, 2.5 s, 5 s: enter `findLanding` draws the direction, then
+    searches and stores `LandingFound` (D-8); tick `glow` counts; the cue at
+    `StormBlueMaterializePermille` (800 ‰), `beamIn`, beams the swarm onto the
+    landing if one was found.
+- States:
+  - Cooldown, the row's repeat by default: timeout → [Active (guard: convex)],
+    else `Hold`, so an expired cooldown waits for the convex.
+  - Active, the row's attack, flagged Attacking: timeout → Cooldown.
+- `createCircleHeader` calls `Start` into Cooldown with the row's initial
+  cooldown once the circle is built, so Idle is gone.
+- Suspend: no cursor or stunned (the circle header's `StatusStun`).
+- After every step, suspended or not, the host writes
+  `IsInvulnerable = concave && !Attacking` and `Mount.Armed = Armed &&
+  !suspended`. The physics Z clamp and the renderer read `Machine.State`, the
+  green pulse and the blue glow `Machine.Progress()`, and the red's muzzle flash
+  the armed mount, so a held burst shows none while a held pulse or glow keeps
+  its progress.
+- The blue's swarm rides its beam: the beam is Shared and names the swarm, and
+  the storm lands it on the beam's `EventMaterializeComplete`, its header on the
+  beam's footprint. `terminateStorm` ends the storm's beams in flight (S1).
+- The context holds the entity, the component, the circle's cell and the sensed
+  `hasCursor` and `stunned`; the hooks are `StormSystem` methods. No state has
+  an exit hook and the graphs take no observer.
 
 **No adoption.** Snake (shield is body liveness, spawning a counter), drain
 (HP-threshold enrage, player-domain population queue), eye (frame cycle and
-GA-driven motion), gateway (periodic emitter), fuse (a queue, S16), pylon and
-tower (stationary), kraken, materialize (a progress animation), storm root
-(liveness aggregation).
+GA-driven motion), gateway (periodic emitter), fuse (its fusions ride their
+beams, S16), pylon and tower (stationary), kraken, materialize (a progress
+animation), storm root (liveness aggregation).
 
 ## 6. Runtime (`pkg/machine`, stdlib only)
 
@@ -451,21 +487,10 @@ step never skips one.
 - **Generic methods** tidy the dialect kernel's registration and comparisons
   (§7); because one cannot satisfy an interface method, both stay concrete
   types.
-- **Deferred queue** (decided, S16):
-
-  ```go
-  type Item[T any] struct { Remaining time.Duration `json:"remaining"`; Value T `json:"value"` }
-  type Queue[T any] struct { Items []Item[T] `json:"items,omitempty"` }
-  func (q *Queue[T]) Push(after time.Duration, v T)
-  func (q *Queue[T]) Tick(dt time.Duration, fire func(T)) // expired items fire in push order; one fire pushes waits a tick
-  func (q *Queue[T]) Len() int
-  func (q *Queue[T]) Clear()
-  func (q *Queue[T]) Any(match func(T) bool) bool
-  ```
-
-  An emptied queue encodes as one never filled, so a captured queue digests
-  alike on every instance. Any system may hold one; storm and fuse adopt it in
-  Phase 6.
+- **No deferred queue.** `machine.Queue[T]`, values each behind a relative
+  timer, was decided for S16 and built in Phase 1 for storm and fuse; Phase 6
+  deleted it unused. A spawn deferred behind a beam rides the beam, which names
+  the species its completion lands, so nothing waits beside it (S16).
 - **Carried accumulator.** A `time.Duration` field advanced by dt and reduced
   by its period, carrying the remainder: the swarm pattern
   (`SwarmComponent.PatternElapsed`, advanced while not stunned) and the quasar
@@ -747,7 +772,8 @@ Taken with the user for this plan; each phase below assumes them.
 - Storm suspends on no cursor or stun, `Armed` off while suspended (S4, S5).
 - The one-tick shifts are accepted (S3, S10, S12).
 - Quasar speed counts from spawn (S11).
-- One `machine.Queue[T]`, adopted by storm and fuse (S16); S1's drop stays.
+- A spawn deferred behind a beam rides the beam, which replaced the planned
+  `machine.Queue[T]` when Phase 6 was taken up (S16); S1's drop stays.
 - The component mask stays `uint64`; `Behavior` is its 55th bit.
 
 Conventions for every phase: one task, one branch, one PR; the gates of
@@ -768,9 +794,11 @@ Version moves, one per phase that changes a store's layout or adds one:
 `snapshot.Schema` 25 → 26 (Phase 2), 27 (the cursor clocks between Phases 2 and 3),
 28 (Phase 4), 29 (Phase 5), 30 (Phase 6);
 `event.JournalSchema` 39 → 40 (Phase 4, the beam's `Species` in the materialize
-payloads), 41 (Phase 6, the fuse queue's `SaveLocal` form);
+payloads), 41 (Phase 6: an opening without the fuse's record, and a beam's
+`Species` naming any species);
 `manifest.SchemaVersion` 1 → 2 (Phase 3), 3 (Phase 4). `manifest.Fingerprint`
-moves on its own in Phase 4. Each phase updates `doc/term-index.md` entries it
+moves on its own in Phase 4, and in Phase 6 with the storm's optional
+`materialize`. Each phase updates `doc/term-index.md` entries it
 turns from "Future design" into code and the documents it names.
 
 A manual check runs the built binary: `make dev`, then `bin/vif` (the checkout's
@@ -813,16 +841,17 @@ startup and on reset.
 ### Phase 1: `pkg/machine` (landed)
 
 `pkg/machine` holds §6 as built: `machine.go` (the instance, the graph and its
-step), `build.go` (the builder and its validation) and `queue.go`, listed in
-[package map](package-map.md) §5. Tests pin each validation fault by its
-message, one step making all four transitions in phase order, a cue landing on a
-tick boundary, and the queue's order, timing and encoding. `FuzzStep` checks the
-step's invariants from inside its hooks over 1,000 steps a seed, guards, probe,
-suspension, dt and respawns drawn from a PCG; sixty seconds of it (520,000 seeds)
-found nothing, and nineteen mutants of the kernel each fail a test. §6 records
-what the kernel settled or changed: enter runs after the commit rather than
-before it, a retry's period runs cues again, an edge owns its phase, the
-structural faults, and the queue's one empty encoding. No game code changed.
+step), `build.go` (the builder and its validation) and `queue.go` (deleted in
+Phase 6, S16), listed in [package map](package-map.md) §5. Tests pin each
+validation fault by its message, one step making all four transitions in phase
+order, a cue landing on a tick boundary, and the queue's order, timing and
+encoding. `FuzzStep` checks the step's invariants from inside its hooks over
+1,000 steps a seed, guards, probe, suspension, dt and respawns drawn from a PCG;
+sixty seconds of it (520,000 seeds) found nothing, and nineteen mutants of the
+kernel each fail a test. §6 records what the kernel settled or changed: enter
+runs after the commit rather than before it, a retry's period runs cues again,
+an edge owns its phase, and the structural faults; the queue's one empty
+encoding went with the queue. No game code changed.
 
 ### Phase 2: quasar on the machine (landed)
 
@@ -1202,57 +1231,148 @@ charge when its lock would have ended, chased from rest and locked again 5 s
 after the stun ended. `swarm.transition_stalls` stayed 0 over five swarms, every
 lock finding the cursor; the no-target path is the first stall test's.
 
-### Phase 6: storm circles and the deferred queue
+### Phase 6: storm circles, and spawns that ride their beams (landed)
 
-Goal: S2 to S6 close; storm and fuse share `machine.Queue`.
+`StormCircleComponent` holds `Machine machine.Instance[StormCircleState]`
+(`StormCircleCooldown`, `StormCircleActive`) and `LandingFound` where
+`AttackState` with its Idle value, `CooldownRemaining`, `AttackRemaining` and
+`AttackProgress` stood. `StormSystem` builds §5's three graphs once from
+`circleVariants`, starts each circle as its header is built, steps it through
+`GetPtr` and writes `IsInvulnerable` and `Mount.Armed` from the flags, so S2 to
+S6 close as §4 decided, and S15 for the storm; the renderer reads `Machine.State`
+and `Machine.Progress()`, and `snapshot.Schema` is 30.
 
-Steps:
+How the fuse completes was this phase's open question. The user chose to have
+every spawn deferred behind a beam ride it (S16), as a data species' already did:
+the beam names the species its completion lands, so the spawn, the beam's timer
+and its visual end on one tick. The blue's cue starts a Shared beam naming the
+swarm, which `StormSystem` lands on the beam's completion; a fusion's
+player-domain beam names the swarm or the quasar, which `FuseSystem` crosses as
+the spawn request (D-3) on its completion. The storm's pending list and its D-19
+record of it, the fuse's list and its `LocalStateSaver`, and `machine.Queue`
+went; `event.JournalSchema` is 41, and `manifest.Fingerprint` moved with the
+storm's optional `materialize`. Against the steps planned:
 
-1. `internal/component/storm.go`: `StormCircleState` (`StormCircleCooldown`,
-   `StormCircleActive`); `StormCircleComponent` keeps `Pos3D`, `Vel3D`, `Index`,
-   `IsInvulnerable`, `InvulnerableElapsed`, `AttackTargetX`/`Y` (JSON names
-   kept), gains `Machine machine.Instance[StormCircleState]` and
-   `LandingFound bool`, loses `AttackState`, `CooldownRemaining`,
-   `AttackRemaining`, `AttackProgress` and the Idle value.
-2. `internal/system/storm.go`: `circleVariants [StormCircleCount]{initial,
-   attack, repeat time.Duration; cue uint16}` replaces `getInitialCooldown`,
-   `getAttackDuration` and `getRepeatCooldown`; three graphs built in
-   `NewStormSystem` from the rows with shared hooks over `circleCtx`; the blue
-   enter hook draws, then searches, and sets `LandingFound`; the 800 ‰ cue
-   materializes and pushes on `s.pending machine.Queue[pendingBlueSpawn]`;
-   `updateCircleAttacks` senses cursor and stun, steps, then writes
-   `Mount.Armed` and `IsInvulnerable` from the flags; `processPendingBlueSpawns`
-   becomes `s.pending.Tick(dt, fire)`; `hasPendingBlueSpawn` and the sentinel
-   go; `stormSnapshot.Pending` is the queue; `createCircleHeader` calls `Start`
-   with the row's initial duration.
-3. `internal/system/fuse.go`: `fusions` becomes `machine.Queue[pendingFusion]`;
-   `Update` is `Tick`; `hasQuasarFusion` is `Any`; `SaveLocal`/`LoadLocal`
-   carry the queue.
-4. `internal/render/renderer/storm.go`: `AttackState == Active` reads the
-   machine; the three `AttackProgress` reads become `Machine.Progress()` gated
-   on Active (the muzzle flash's `<= 0` skip becomes a state test).
-5. `storm_attack_test.go`: the red fixture sets `Machine` to Cooldown about to
-   expire; `TestStormDrawsBeforeItReadsLivePositions` keeps passing.
-6. `snapshot.Schema` 30; `event.JournalSchema` 41; `make generate`.
+- No queue (steps 2, 3 and 6): the beams replaced it, `stormSnapshot` keeps the
+  root alone, `FuseSystem.Update` is empty, and `pkg/machine` lost `queue.go`.
+- The variant row names Active's flags and its enter and tick hooks beside
+  {initial, attack, repeat, cue}: the colours differ in what Active does as well
+  as in its timing.
+- Every fusion plays a beam and lands as it ends, at 1 s. A drain pair's swarm
+  landed at 0.5 s, its spirits flying into no beam unless one was asked for, and
+  a quasar at 0.6 s while its beam still receded. `SwarmFuseAnimationDuration`
+  and `SpiritSafetyBuffer` went with those timers.
+- A quasar fusion is refused while a quasar's beam flies (`quasarBeaming`),
+  where a pending entry refused it, and its landing no longer despawns every
+  spirit, which could cut a drain pair's spirits short.
+- A drain pair's fusion emitted its drains' death twice; `killDrains` alone
+  emits it now.
+- The blue glow fades from the beam's opening, `StormBlueMaterializePermille`.
+  The red's muzzle flash draws while its mount is armed, where an
+  `AttackProgress <= 0` test skipped the burst's entry tick: with S5 a stunned
+  burst stays Active, and its flash would flicker on with nothing fired.
+- `aboutToExpire` in `swarm_stall_test.go` is generic over the state type, so
+  the storm tests share it.
+- `TestOneSharedQuasarTriggerProducesOneSpawn` steps 28 ticks plus the barrier
+  delay, for the 1 s beam and a lead, where the 0.6 s timer took 20.
+- `storm.buf_pending_blue_spawns_hwm` and `fuse.buf_pending_hwm` went with their
+  lists.
 
-Open, for when this phase is planned: since Phase 4 the fuse has a
-beam-completion path for data species, so its `fusions` list could complete on
-`EventMaterializeComplete`, as drain's queue does, instead of adopting
-`machine.Queue`.
+Mechanical edits, counted as occurrences with `grep -rPo` over `internal/` and
+`pkg/`, tests included and generated files not, before and after: the circle's
+countdown and progress fields (`.AttackState`, `.CooldownRemaining`,
+`.AttackRemaining`, `.AttackProgress`) 29 → 0; `StormCircleAttack{Idle,Cooldown,
+Active}` 16 → 0 and `StormCircle{Cooldown,Active}` 0 → 16; the three duration
+getters 9 → 0 and the per-colour attack functions (`processCircleAttack`,
+`process{Green,Red,Blue}Attack`, `initBlueAttack`) 15 → 0; the storm's list
+(`pendingBlueSpawn(s)`, `hasPendingBlueSpawn`, `processPendingBlueSpawns`) 36 → 0
+and the fuse's (`pendingFusion`, `s.fusions`, `hasQuasarFusion`) 32 → 0;
+`machine.Queue` and `Queue[` 11 → 0; the three deleted parameters 8 → 0; reads of
+a circle's machine (`circle.Machine`, `circleComp.Machine`) 0 → 22, and
+`Machine.Progress()` 1 → 3.
 
-Tests: a stunned Active circle keeps its remaining attack time and `Armed`
-reads false (S5, S4); a circle with no cursor keeps `IsInvulnerable` current
-(S4); the blue cue fires once per Active entry with no landing and with one
-(S2); a storm's termination drops its queue (S1); the fuse queue fires two
-same-tick fusions in push order.
+Tests (`internal/system/storm_attack_test.go`): a stun holds an Active red's
+attack time and disarms its turret, and the burst goes on where it stopped once
+the stun ends (S5, S4); with no cursor a circle's machine holds while
+`IsInvulnerable` follows its depth and its attack on every step (S4); an
+expired cooldown holds in the concave and attacks at the convex; the blue's cue
+beams once an attack and not at all without a landing (S2); the draw still
+precedes the search (D-8); the blue's swarm lands as its beam ends, on its
+footprint; a storm's end ends its beams and no other (S1). In
+`internal/system/fuse_test.go`, a drain pair with spirits and without and a
+quasar each land the tick their beam ends, on its footprint, and not before; a
+second quasar fusion waits for the one in flight. In
+`internal/render/renderer/storm_test.go`, a disarmed turret draws no muzzle
+flash. Twenty-two mutants, thirteen over the landings and the fuse, eight over
+the circle machine and one over the flash: twenty-one fail a test, and the
+survivor, the spawn entering the repeat cooldown, is equivalent while every
+colour's initial cooldown equals its repeat.
 
-Gates: `go test ./internal/system ./internal/render/... ./internal/app`; the
-four shapes before and after. Manually testable state: `bin/vif`, `:n td`
-(or wait for the storm region of the default scenario), `:god`: the green
-circle pulses one second on, one off; the red turret fires for two seconds and
-rests one; the blue circle glows for two and a half seconds, the materialize
-opens at two and a swarm follows; a pulse stun on a convex circle pauses its
-attack and the red turret stops firing until the stun ends.
+Readings, both builds from the same seeds:
+
+- Per tick, headless, seed 1, the storm at tick 101: the red's first burst opens
+  at tick 120 against 122 (Idle's tick gone, S6, and the attack's tick run in
+  its entry step, §6.3); the green's first pulse at 126 against 127 and the
+  blue's glow at 216 against 217, both waiting for the convex; the blue's swarm
+  at 276 against 277.
+- That shift moves a three-body orbit, so a seed plays as another seed would;
+  each build repeats itself exactly, and the readings compare distributions.
+  Headless over 40 seeds (`god` at tick 1, the storm at tick 100, 1,500 ticks of
+  a 120×40 map, embedded content): boundary reflections 48.2 ± 17.1 → 45.7 ±
+  18.2, protected rejects 4,285 → 4,379, green frames 580.4 → 581.2, red frames
+  831.1 → 833.3, swarms 8.9 in both; every gap is under 1.4 standard errors.
+- The harness's four shapes, one fight each: a late commit more on one shape and
+  a late copy more on two, pages and cells repaired both ways. The sweep below
+  reads all of it as the orbit's noise.
+
+  ```
+  shape       pg        cells       kf        lc      lcp     lead     manifests  link B/s
+  3,3,97,0     0 → 4      0 → 65     4        0 → 1   5       11 (13)  279 → 278   5907 → 7016
+  2,2,3,100   30 → 15   374 → 227    4 → 3    1       0       8 (9)    277 → 286  10766 → 8302
+  3,3,251,0    7 → 1     41 → 8      1        3       6 → 7   9 (10)   299         5392 → 6626
+  4,3,41,50   30 → 43   301 → 492   15 → 11   0       1 → 2   13 (15)  115 → 137  12329 → 4004
+  ```
+
+- A session sweep, 8 seeds over the four shapes, 1,200 ticks with the storm
+  raised at tick 400, 32 fights a build: pages repaired 17.0 → 16.8, cells 204 →
+  236, late commits 1.0 → 1.0, late copies 3.7 → 4.4, keyframes 5.0 → 5.0, host
+  to guest 394.5 → 392.9 kB, guest to host 219.8 → 225.3 kB. Every gap is under
+  0.8 standard errors but quasar kills, 5.2 → 4.3 (z = −3.2).
+- That gap is the fusion's landing, not the storm: fuse to spawn takes 24.2
+  ticks against 16.0 (median 20 against 12), a quasar lives 66.3 ticks against
+  46.0 once the storm is raised (58.9 against 55.6 before), and the raised storm
+  370.9 against 341.6. The branch without S5 reads 363.8, and main with its
+  fusion timers at 1 s 369.2 and 4.28 kills. Fusion beams of 0.5 to 0.6 s would
+  give the old pacing back, spawn and visual still matched.
+- CPU: a scratch benchmark over 1,500 ticks of a live storm, six runs
+  interleaved, takes 219 µs a tick on main and 222 µs on the branch, inside the
+  ±7 % between runs; profiles put `StormSystem.Update` at 57 to 70 µs against
+  43 to 67, most of it physics, and the step allocates nothing per tick.
+
+Manual check, in tmux at 160×50 (`bin/vif -seed 1 -nw`, `:god`, `:log on`,
+`:log stat 1`, `:emit EventStormSpawnRequest`), read from the per-tick status
+log and from pane captures every 50 ms:
+
+- The green pulses for 20 ticks with at least 1 s off; the red bursts for 40
+  with at least 1 s of rest, longer where it waits for the convex, and
+  `mount.fired` counts its burst ticks exactly; the blue glows for 50 (546–595,
+  697–746, 851–900 and 1001–1050 of a storm raised at 431), and its swarms land
+  at 606, 757, 911 and 1061, 60 ticks after each glow opens: the cue 40 ticks in,
+  then the 20-tick beam.
+- The first landing's captures show the beam's last cells at tick 605 and, at
+  606, the swarm on the beam's footprint with no beam left. The glow fades from
+  the beam's opening and ends 0.5 s before its swarm lands, as on main.
+- With a disruptor alone (`:energy 100000000`, `EventWeaponRemoveRequest` for
+  weapons 0 to 5, `EventWeaponAddRequest { entity = 1, weapon = 2 }`, `a` for
+  auto-fire) beside a raised storm, pulses every 41 ticks stunned the circles
+  for 40. The red's burst ran 30 ticks, then one tick in each of the ten
+  one-tick gaps between stuns, and ended after exactly 40 burst ticks with
+  `mount.fired` counting each: the stun held the burst and did not restart it
+  (S5).
+- In that run seven drain pairs each landed their swarm 20 ticks after
+  `drain.fusions` counted them, and `:emit EventFuseQuasarRequest` at tick 4805
+  landed its quasar at 4825; the captures show the beam's last cells at 4824 and
+  the quasar with no beam at 4825.
 
 ### Phase 7: close-out
 
