@@ -1025,20 +1025,6 @@ instead of its ticker, the app loop drop its input and frame tickers until a rep
 or event comes, and the render thread stop its vsync callback once it has painted
 the last frame flushed.
 
-### Lay out countdown splashes once a tick
-
-- Priority: P2
-- Affected files: `internal/system/splash.go` (`Update`, `getTimerBBoxes`)
-
-Each live countdown splash places itself by rebuilding every other countdown's
-padded box into a fresh slice (`getTimerBBoxes(self)`), so a tick's scan and its
-bytes grow with the square of the countdowns alive. A charging quasar's telegraph
-is one: with 256 quasars on a 200×60 map (`BenchmarkQuasars`) the call is 89 % of
-the bytes a tick allocates, about 670 KiB, and `sys splash` reads 650 to 710 µs a
-tick, against 45 to 53 µs at 64 quasars. Keep one box buffer on the system, filled
-once a tick and updated in place as each countdown moves, so every placement
-still sees the ones before it.
-
 ### Run every clock for the span it is set to
 
 - Priority: P3
