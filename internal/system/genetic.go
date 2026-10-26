@@ -266,7 +266,7 @@ func (s *GeneticSystem) handleSpeciesCreated(entity core.Entity, speciesType com
 	if _, exists := s.tracking[entity]; exists {
 		return
 	}
-	if speciesType >= component.SpeciesCount {
+	if speciesType >= component.SpeciesMax {
 		speciesType = component.SpeciesNone
 	}
 

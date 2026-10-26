@@ -70,6 +70,7 @@ var SharedWorldStoreNames = []string{
 	"eye",
 	"tower",
 	"kraken",
+	"behavior",
 	"header",
 	"member",
 	"flash",
@@ -408,6 +409,13 @@ func newStoreEncoders() []storeEncoder {
 				return w.Components.Kraken.dense, w.Components.Kraken.entities
 			},
 			equal: equalKraken,
+		},
+		&rowEncoder[component.BehaviorComponent]{
+			read: func(s *SharedWorldState) []StoreEntry[component.BehaviorComponent] { return s.Behavior },
+			live: func(w *World) ([]component.BehaviorComponent, []core.Entity) {
+				return w.Components.Behavior.dense, w.Components.Behavior.entities
+			},
+			equal: equalBehavior,
 		},
 		&rowEncoder[component.HeaderComponent]{
 			read: func(s *SharedWorldState) []StoreEntry[component.HeaderComponent] { return s.Header },
@@ -805,62 +813,69 @@ func SharedWorldApplyStoreRows(s *SharedWorldState, i int, owns func(core.Entity
 		s.Kraken = out
 		return nil
 	case 46:
+		out, err := applyStoreRows(s.Behavior, owns, rows)
+		if err != nil {
+			return err
+		}
+		s.Behavior = out
+		return nil
+	case 47:
 		out, err := applyStoreRows(s.Header, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Header = out
 		return nil
-	case 47:
+	case 48:
 		out, err := applyStoreRows(s.Member, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Member = out
 		return nil
-	case 48:
+	case 49:
 		out, err := applyStoreRows(s.Flash, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Flash = out
 		return nil
-	case 49:
+	case 50:
 		out, err := applyStoreRows(s.Fadeout, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Fadeout = out
 		return nil
-	case 50:
+	case 51:
 		out, err := applyStoreRows(s.Splash, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Splash = out
 		return nil
-	case 51:
+	case 52:
 		out, err := applyStoreRows(s.Marker, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Marker = out
 		return nil
-	case 52:
+	case 53:
 		out, err := applyStoreRows(s.Button, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Button = out
 		return nil
-	case 53:
+	case 54:
 		out, err := applyStoreRows(s.Death, owns, rows)
 		if err != nil {
 			return err
 		}
 		s.Death = out
 		return nil
-	case 54:
+	case 55:
 		out, err := applyStoreRows(s.Timer, owns, rows)
 		if err != nil {
 			return err

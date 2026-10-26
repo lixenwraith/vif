@@ -88,6 +88,7 @@ var Components = []ComponentDef{
 	{"Eye", "EyeComponent", "shared"},
 	{"Tower", "TowerComponent", "shared"},
 	{"Kraken", "KrakenComponent", "shared"},
+	{"Behavior", "BehaviorComponent", "shared"},
 
 	// --- Composite ---
 	{"Header", "HeaderComponent", "shared"},
@@ -218,6 +219,8 @@ var Systems = []SystemDef{
 // validation without widening every ordinary system constructor.
 var ContextSystems = []SystemDef{
 	{Name: "meta", Constructor: "NewMetaSystem", Domain: "shared", Snapshot: "state"}, // world writes are replicated or the D-14 map writer; carries the kill counters, defeat latch and cycle multiplier that gate shared FSM regions
+	{Name: "behavior", Constructor: "NewBehaviorSystem", Domain: "shared", Requires: []string{"composite", "timer"},
+		Optional: []string{"navigation", "combat", "lightning", "materialize", "splash", "swarm", "quasar"}}, // takes the scenario's compiled programs; shared composite species with a D-12 footprint sweep, all state in its stores
 }
 
 // Renderers is the authoritative renderer list
@@ -251,6 +254,7 @@ var Renderers = []RendererDef{
 	{"drain", "NewDrainRenderer", "PriorityDrain"},
 	{"quasar", "NewQuasarRenderer", "PriorityQuasar"},
 	{"swarm", "NewSwarmRenderer", "PrioritySwarm"},
+	{"behavior", "NewBehaviorRenderer", "PriorityBehavior"},
 	{"storm", "NewStormRenderer", "PriorityStorm"},
 	{"kraken", "NewKrakenRenderer", "PriorityKraken"},
 

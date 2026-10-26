@@ -1,6 +1,7 @@
 package system
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -19,6 +20,49 @@ func TestDrainOnlyReceivesKrakenSoftCollisions(t *testing.T) {
 		}
 		if species != component.SpeciesKraken && s.matrix[species][component.SpeciesDrain] != nil {
 			t.Errorf("%s still pushes drain through soft collision", component.SpeciesNames[species])
+		}
+	}
+}
+
+// A data species with mass pushes and flocks as the swarm does, one without takes
+// no row, and every code species pair keeps the rule it had with no programs
+func TestADataSpeciesTakesSoftCollisionRowsOnlyWithMass(t *testing.T) {
+	plain := engine.NewWorld()
+	engine.NewGameContextWithClock(plain, 40, 24, engine.NewManualClock())
+	before := NewSoftCollisionSystem(plain).(*SoftCollisionSystem)
+
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	heavy, weightless := component.SpeciesDataFirst, component.SpeciesDataFirst+1
+	w.Resources.Behaviors = []component.BehaviorPrototype{
+		{Name: "warden", Species: heavy, Width: 4, Height: 2, Mass: 2},
+		{Name: "wisp", Species: weightless, Width: 1, Height: 1},
+	}
+	s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
+
+	for _, pair := range [][2]component.SpeciesType{
+		{heavy, heavy}, {heavy, component.SpeciesSwarm}, {component.SpeciesSwarm, heavy},
+		{heavy, component.SpeciesQuasar}, {component.SpeciesQuasar, heavy},
+		{component.SpeciesStorm, heavy}, {component.SpeciesPylon, heavy}, {component.SpeciesKraken, heavy},
+	} {
+		if s.matrix[pair[0]][pair[1]] == nil {
+			t.Errorf("species %d does not push species %d", pair[0], pair[1])
+		}
+	}
+	if s.flockMatrix[heavy][heavy] == nil || s.flockMatrix[component.SpeciesSwarm][heavy] == nil || s.flockMatrix[heavy][component.SpeciesDrain] == nil {
+		t.Error("a data species with mass is outside the shared flock")
+	}
+	for species := range component.SpeciesMax {
+		if s.matrix[weightless][species] != nil || s.matrix[species][weightless] != nil ||
+			s.flockMatrix[weightless][species] != nil || s.flockMatrix[species][weightless] != nil {
+			t.Errorf("a data species without mass has a row against species %d", species)
+		}
+	}
+	for a := range component.SpeciesCount {
+		for b := range component.SpeciesCount {
+			if !reflect.DeepEqual(s.matrix[a][b], before.matrix[a][b]) || !reflect.DeepEqual(s.flockMatrix[a][b], before.flockMatrix[a][b]) {
+				t.Errorf("species %d against %d changed with a program declared", a, b)
+			}
 		}
 	}
 }

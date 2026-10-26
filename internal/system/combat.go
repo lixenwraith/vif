@@ -1006,6 +1006,11 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 		}
 	}
 
+	// Data species immunity: a state flagged Shielded
+	if b, ok := s.world.Components.Behavior.GetComponent(targetEntity); ok && b.Shielded {
+		return false
+	}
+
 	// Storm circle immunity: concave (invulnerable) state
 	if circleComp, ok := s.world.Components.StormCircle.GetPtr(targetEntity); ok {
 		if circleComp.IsInvulnerable {

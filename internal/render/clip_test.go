@@ -238,7 +238,7 @@ func TestEveryLayerDeclaresItsClip(t *testing.T) {
 		PriorityNugget: true, PriorityHealthBar: true,
 		PriorityPylon: true, PriorityTower: true, PriorityStorm: true, PriorityKraken: true,
 		PriorityEye: true, PrioritySnake: true, PriorityDrain: true,
-		PriorityQuasar: true, PrioritySwarm: true, PriorityTracer: true,
+		PriorityQuasar: true, PrioritySwarm: true, PriorityBehavior: true, PriorityTracer: true,
 		PriorityMaterialize: true, PriorityTeleportLine: true,
 		PriorityShield: true, PriorityEmber: true, PriorityOrb: true,
 		PriorityLightning: true, PriorityMissile: true, PriorityPulse: true, PriorityRay: true,

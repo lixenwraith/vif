@@ -31,6 +31,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Name: "drain", Renderer: renderer.NewDrainRenderer(ctx), Priority: render.PriorityDrain},
 		{Name: "quasar", Renderer: renderer.NewQuasarRenderer(ctx), Priority: render.PriorityQuasar},
 		{Name: "swarm", Renderer: renderer.NewSwarmRenderer(ctx), Priority: render.PrioritySwarm},
+		{Name: "behavior", Renderer: renderer.NewBehaviorRenderer(ctx), Priority: render.PriorityBehavior},
 		{Name: "storm", Renderer: renderer.NewStormRenderer(ctx), Priority: render.PriorityStorm},
 		{Name: "kraken", Renderer: renderer.NewKrakenRenderer(ctx), Priority: render.PriorityKraken},
 		{Name: "tracer", Renderer: renderer.NewTracerRenderer(ctx), Priority: render.PriorityTracer},

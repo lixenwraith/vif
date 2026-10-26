@@ -396,6 +396,13 @@ const (
 	// EventKrakenCancelRequest [shared] removes all Kraken composites
 	EventKrakenCancelRequest
 
+	// --- Behavior ---
+
+	// EventBehaviorSpawnRequest (BehaviorSpawnRequestPayload) [bus] signals BehaviorSystem to create a program's species at location
+	EventBehaviorSpawnRequest
+	// EventBehaviorCancelRequest (BehaviorCancelRequestPayload) [shared] removes one program's composites, or every program's when it names none
+	EventBehaviorCancelRequest
+
 	// --- Environment ---
 
 	// EventWindStart (WindStartPayload) [shared] starts or replaces the global wind

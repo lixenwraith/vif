@@ -2,6 +2,7 @@ package behavior
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +114,7 @@ func testVocabulary() *Vocabulary[*testCtx] {
 	v.Flag("Enraged", flagEnraged)
 	v.Flag("Shielded", flagShielded)
 	v.Integrate(func(c *testCtx) { c.calls = append(c.calls, "integrate") })
+	v.Entered(func(c *testCtx) { c.calls = append(c.calls, "entered") })
 	return v
 }
 
@@ -150,7 +152,8 @@ func TestProgramsTakeIDsInSortedNameOrder(t *testing.T) {
 }
 
 // A step runs the program's edges in the machine's phases with the test verbs:
-// each line is what one step ran and the state it ended in
+// each line is what one step ran and the state it ended in. Every entry, the
+// start's included, ends with the host's entered hook.
 func TestACompiledProgramStepsAsItsStatesSay(t *testing.T) {
 	set, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, warden)})
 	if err != nil {
@@ -160,6 +163,9 @@ func TestACompiledProgramStepsAsItsStatesSay(t *testing.T) {
 	var in machine.Instance[component.BehaviorState]
 	c := &testCtx{}
 	g.Start(&in, c, set.Initial(0), 0)
+	if !slices.Equal(c.calls, []string{"entered"}) {
+		t.Errorf("start ran %v, want the entered hook", c.calls)
+	}
 	step := func(dt time.Duration, setup func(), want string) {
 		t.Helper()
 		setup()
@@ -172,17 +178,17 @@ func TestACompiledProgramStepsAsItsStatesSay(t *testing.T) {
 	}
 	ms := time.Millisecond
 	step(100*ms, func() {}, "Home, integrate -> Roam flags=0 suspended=false")
-	step(100*ms, func() { c.distance = 13 }, "Telegraph cyan, Freeze, integrate -> Wind flags=1 suspended=false")
+	step(100*ms, func() { c.distance = 13 }, "Telegraph cyan, entered, Freeze, integrate -> Wind flags=1 suspended=false")
 	step(1100*ms, func() {}, "Freeze, integrate -> Wind flags=1 suspended=false")
 	step(100*ms, func() {}, "Materialize swarm, Freeze, integrate -> Wind flags=1 suspended=false")
 	step(200*ms, func() {}, "Freeze, integrate -> Wind flags=1 suspended=false")
-	step(100*ms, func() { c.distance = 0 }, "CancelTelegraph, Home, integrate -> Roam flags=0 suspended=false")
-	step(100*ms, func() { c.distance = 13 }, "Telegraph cyan, Freeze, integrate -> Wind flags=1 suspended=false")
+	step(100*ms, func() { c.distance = 0 }, "CancelTelegraph, entered, Home, integrate -> Roam flags=0 suspended=false")
+	step(100*ms, func() { c.distance = 13 }, "Telegraph cyan, entered, Freeze, integrate -> Wind flags=1 suspended=false")
 	step(1500*ms, func() { c.target = true },
-		"Materialize swarm, CancelTelegraph, StoreTarget, ChargeToStored, integrate -> Strike flags=2 suspended=false")
-	step(100*ms, func() { c.hitWall = true }, "ChargeToStored, integrate -> Roam flags=0 suspended=false")
-	step(100*ms, func() { c.hitWall = false }, "Telegraph cyan, Freeze, integrate -> Wind flags=1 suspended=false")
-	step(100*ms, func() { c.stunned = true }, "CancelTelegraph -> Roam flags=0 suspended=true")
+		"Materialize swarm, CancelTelegraph, StoreTarget, entered, ChargeToStored, integrate -> Strike flags=2 suspended=false")
+	step(100*ms, func() { c.hitWall = true }, "ChargeToStored, integrate, entered -> Roam flags=0 suspended=false")
+	step(100*ms, func() { c.hitWall = false }, "Telegraph cyan, entered, Freeze, integrate -> Wind flags=1 suspended=false")
+	step(100*ms, func() { c.stunned = true }, "CancelTelegraph, entered -> Roam flags=0 suspended=true")
 	step(100*ms, func() {}, " -> Roam flags=0 suspended=true")
 }
 

@@ -916,6 +916,20 @@ type KrakenSpawnRequestPayload struct {
 	Y int `toml:"y"`
 }
 
+// --- Behavior ---
+
+// BehaviorSpawnRequestPayload names the program whose species spawns at the cell
+type BehaviorSpawnRequestPayload struct {
+	Program string `toml:"program"`
+	X       int    `toml:"x"`
+	Y       int    `toml:"y"`
+}
+
+// BehaviorCancelRequestPayload names the program cancelled; empty names every program
+type BehaviorCancelRequestPayload struct {
+	Program string `toml:"program"`
+}
+
 // --- Environment ---
 
 // WindStartPayload configures a global gameplay wind. Direction is the direction

@@ -179,6 +179,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 	"audio":          {Domain: engine.SystemPlayer, Requires: nil},
 	"music":          {Domain: engine.SystemPlayer, Requires: engine.Optional("audio")},
 	"meta":           {Domain: engine.SystemShared, Requires: nil},
+	"behavior":       {Domain: engine.SystemShared, Requires: append(engine.Require("composite", "timer"), engine.Optional("navigation", "combat", "lightning", "materialize", "splash", "swarm", "quasar")...)},
 }
 
 // systemSnapshots is every system's declared D-19 obligation: whether it holds
@@ -239,4 +240,5 @@ var systemSnapshots = map[string]engine.SnapshotProfile{
 	"audio":          engine.SnapshotNone,
 	"music":          engine.SnapshotNone,
 	"meta":           engine.SnapshotState,
+	"behavior":       engine.SnapshotNone,
 }

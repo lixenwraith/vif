@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -175,6 +176,67 @@ func TestABehaviorTableNamesAFileOrIsTheProgram(t *testing.T) {
 		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
 		if _, err := ReadScenario("arena", fsys, "scenario.toml"); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: error %v, want %q", program, err, want)
+		}
+	}
+}
+
+// wisp is the least program that compiles: one cell standing still
+const wisp = "initial = \"Idle\"\n" +
+	"[prototype]\nwidth = 1\nheight = 1\nheader = { x = 0, y = 0 }\nhp = 1\ncombat = \"swarm\"\nhoming = \"swarm\"\nglyphs = [[\"o\"]]\n" +
+	"[states.Idle]\non_update = [{ action = \"Freeze\" }]\n"
+
+// writePrograms lays down a scenario whose entry names each program's file
+func writePrograms(t *testing.T, programs map[string]string) string {
+	t.Helper()
+	dir := writeScenario(t, filepath.Join(t.TempDir(), "scenario", "arena"), scenarioRegion)
+	entry := "[regions.main]\nfile = \"main.toml\"\n[behaviors]\n"
+	for _, name := range slices.Sorted(maps.Keys(programs)) {
+		path := filepath.Join(dir, "behavior", name+".toml")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(programs[name]), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		entry += name + " = { file = \"behavior/" + name + ".toml\" }\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "scenario.toml"), []byte(entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// TestAProgramThatDoesNotCompileFailsTheScenario: validation compiles every program
+// against the game's verbs, so -check and a scenario change refuse it, naming its
+// place, before anything is torn down
+func TestAProgramThatDoesNotCompileFailsTheScenario(t *testing.T) {
+	nine := map[string]string{}
+	for i := range parameter.BehaviorProgramsMax + 1 {
+		nine[fmt.Sprintf("wisp%d", i)] = wisp
+	}
+	for name, tc := range map[string]struct {
+		programs map[string]string
+		want     string
+	}{
+		"misspelt verb": {map[string]string{"wisp": strings.Replace(wisp, "Freeze", "Freez", 1)},
+			"scenario arena: program 'wisp': state 'Idle': on_update[0]: unknown sustained action 'Freez'"},
+		"nine programs": {nine, "scenario arena: 9 behavior programs, at most 8"},
+	} {
+		if _, err := ValidateScenario(Options{Scenario: writePrograms(t, tc.programs)}); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error %v, want %q", name, err, tc.want)
+		}
+	}
+}
+
+// TestCheckReportsTheProgramsItCompiled: a scenario declaring none says so
+func TestCheckReportsTheProgramsItCompiled(t *testing.T) {
+	for want, dir := range map[string]string{
+		"behaviors ok: 2 (spark, wisp)\n": writePrograms(t, map[string]string{"spark": wisp, "wisp": wisp}),
+		"behaviors ok: 0\n":               writeScenario(t, filepath.Join(t.TempDir(), "scenario", "plain"), scenarioRegion),
+	} {
+		var out strings.Builder
+		if err := checkScenario(Options{Scenario: dir}, &out); err != nil || !strings.HasSuffix(out.String(), want) {
+			t.Errorf("check printed %q, %v; want it to end %q", out.String(), err, want)
 		}
 	}
 }

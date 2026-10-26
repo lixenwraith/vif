@@ -83,6 +83,7 @@ type SharedWorldState struct {
 	Eye          []StoreEntry[component.EyeComponent]          `json:"eye,omitempty"`
 	Tower        []StoreEntry[component.TowerComponent]        `json:"tower,omitempty"`
 	Kraken       []StoreEntry[component.KrakenComponent]       `json:"kraken,omitempty"`
+	Behavior     []StoreEntry[component.BehaviorComponent]     `json:"behavior,omitempty"`
 	Header       []StoreEntry[component.HeaderComponent]       `json:"header,omitempty"`
 	Member       []StoreEntry[component.MemberComponent]       `json:"member,omitempty"`
 	Flash        []StoreEntry[component.FlashComponent]        `json:"flash,omitempty"`
@@ -152,6 +153,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 	s.Eye = captureRows(w.Components.Eye.dense, w.Components.Eye.entities, core.DomainShared)
 	s.Tower = captureRows(w.Components.Tower.dense, w.Components.Tower.entities, core.DomainShared)
 	s.Kraken = captureRows(w.Components.Kraken.dense, w.Components.Kraken.entities, core.DomainShared)
+	s.Behavior = captureRows(w.Components.Behavior.dense, w.Components.Behavior.entities, core.DomainShared)
 	s.Header = captureRows(w.Components.Header.dense, w.Components.Header.entities, core.DomainShared)
 	s.Member = captureRows(w.Components.Member.dense, w.Components.Member.entities, core.DomainShared)
 	s.Flash = captureRows(w.Components.Flash.dense, w.Components.Flash.entities, core.DomainShared)
@@ -309,6 +311,9 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	}
 	for _, en := range s.Kraken {
 		w.Components.Kraken.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
+	for _, en := range s.Behavior {
+		w.Components.Behavior.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Header {
 		w.Components.Header.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
@@ -516,6 +521,7 @@ type WorldOrder struct {
 	Eye          []core.Entity `json:"eye,omitempty"`
 	Tower        []core.Entity `json:"tower,omitempty"`
 	Kraken       []core.Entity `json:"kraken,omitempty"`
+	Behavior     []core.Entity `json:"behavior,omitempty"`
 	Header       []core.Entity `json:"header,omitempty"`
 	Member       []core.Entity `json:"member,omitempty"`
 	Flash        []core.Entity `json:"flash,omitempty"`
@@ -577,6 +583,7 @@ func (w *World) CaptureOrder() WorldOrder {
 	o.Eye = orderOf(w.Components.Eye.entities)
 	o.Tower = orderOf(w.Components.Tower.entities)
 	o.Kraken = orderOf(w.Components.Kraken.entities)
+	o.Behavior = orderOf(w.Components.Behavior.entities)
 	o.Header = orderOf(w.Components.Header.entities)
 	o.Member = orderOf(w.Components.Member.entities)
 	o.Flash = orderOf(w.Components.Flash.entities)
@@ -733,6 +740,9 @@ func (w *World) InstallOrder(o WorldOrder) error {
 	if err := reorderStore(w.Components.Kraken, o.Kraken); err != nil {
 		return fmt.Errorf("kraken: %w", err)
 	}
+	if err := reorderStore(w.Components.Behavior, o.Behavior); err != nil {
+		return fmt.Errorf("behavior: %w", err)
+	}
 	if err := reorderStore(w.Components.Header, o.Header); err != nil {
 		return fmt.Errorf("header: %w", err)
 	}
@@ -822,6 +832,7 @@ type SharedWorldDelta struct {
 	Eye          StoreDelta[component.EyeComponent]          `json:"eye,omitzero"`
 	Tower        StoreDelta[component.TowerComponent]        `json:"tower,omitzero"`
 	Kraken       StoreDelta[component.KrakenComponent]       `json:"kraken,omitzero"`
+	Behavior     StoreDelta[component.BehaviorComponent]     `json:"behavior,omitzero"`
 	Header       StoreDelta[component.HeaderComponent]       `json:"header,omitzero"`
 	Member       StoreDelta[component.MemberComponent]       `json:"member,omitzero"`
 	Flash        StoreDelta[component.FlashComponent]        `json:"flash,omitzero"`
@@ -888,6 +899,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Eye = diffStore(base.Eye, next.Eye, equalEye)
 	d.Tower = diffStore(base.Tower, next.Tower, equalTower)
 	d.Kraken = diffStore(base.Kraken, next.Kraken, equalKraken)
+	d.Behavior = diffStore(base.Behavior, next.Behavior, equalBehavior)
 	d.Header = diffStore(base.Header, next.Header, equalHeader)
 	d.Member = diffStore(base.Member, next.Member, equalMember)
 	d.Flash = diffStore(base.Flash, next.Flash, equalFlash)
@@ -950,6 +962,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Eye = applyStore(base.Eye, d.Eye)
 	s.Tower = applyStore(base.Tower, d.Tower)
 	s.Kraken = applyStore(base.Kraken, d.Kraken)
+	s.Behavior = applyStore(base.Behavior, d.Behavior)
 	s.Header = applyStore(base.Header, d.Header)
 	s.Member = applyStore(base.Member, d.Member)
 	s.Flash = applyStore(base.Flash, d.Flash)
@@ -1011,6 +1024,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Eye.Entries()
 	n += d.Tower.Entries()
 	n += d.Kraken.Entries()
+	n += d.Behavior.Entries()
 	n += d.Header.Entries()
 	n += d.Member.Entries()
 	n += d.Flash.Entries()
@@ -1075,6 +1089,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Eye, b.Eye, touched, equalEye)
 	w.Entries += countStoreDifference(a.Tower, b.Tower, touched, equalTower)
 	w.Entries += countStoreDifference(a.Kraken, b.Kraken, touched, equalKraken)
+	w.Entries += countStoreDifference(a.Behavior, b.Behavior, touched, equalBehavior)
 	w.Entries += countStoreDifference(a.Header, b.Header, touched, equalHeader)
 	w.Entries += countStoreDifference(a.Member, b.Member, touched, equalMember)
 	w.Entries += countStoreDifference(a.Flash, b.Flash, touched, equalFlash)
@@ -1252,6 +1267,9 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Kraken {
 		target[en.Entity] = struct{}{}
 	}
+	for _, en := range s.Behavior {
+		target[en.Entity] = struct{}{}
+	}
 	for _, en := range s.Header {
 		target[en.Entity] = struct{}{}
 	}
@@ -1342,6 +1360,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Eye, s.Eye)
 	reconcileStore(w.Components.Tower, s.Tower)
 	reconcileStore(w.Components.Kraken, s.Kraken)
+	reconcileStore(w.Components.Behavior, s.Behavior)
 	reconcileStore(w.Components.Header, s.Header)
 	reconcileStore(w.Components.Member, s.Member)
 	reconcileStore(w.Components.Flash, s.Flash)
@@ -1412,6 +1431,7 @@ func (w *World) ReconcileSharedFrom(src *World, record bool) *WorldReconcile {
 	d.Eye = compareStoreFrom(r, w.Components.Eye, src.Components.Eye, equalEye)
 	d.Tower = compareStoreFrom(r, w.Components.Tower, src.Components.Tower, equalTower)
 	d.Kraken = compareStoreFrom(r, w.Components.Kraken, src.Components.Kraken, equalKraken)
+	d.Behavior = compareStoreFrom(r, w.Components.Behavior, src.Components.Behavior, equalBehavior)
 	d.Header = compareStoreFrom(r, w.Components.Header, src.Components.Header, equalHeader)
 	d.Member = compareStoreFrom(r, w.Components.Member, src.Components.Member, equalMember)
 	d.Flash = compareStoreFrom(r, w.Components.Flash, src.Components.Flash, equalFlash)
@@ -1654,6 +1674,10 @@ func equalTower(a, b *component.TowerComponent) bool {
 
 func equalKraken(a, b *component.KrakenComponent) bool {
 	return a.State == b.State && a.StateRemaining == b.StateRemaining && a.IdleTurnRemaining == b.IdleTurnRemaining && a.LastAction == b.LastAction && a.ActionStreak == b.ActionStreak && a.AttackLegs == b.AttackLegs && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && math.Float64bits(float64(a.TurnDir)) == math.Float64bits(float64(b.TurnDir)) && math.Float64bits(float64(a.Angle)) == math.Float64bits(float64(b.Angle)) && math.Float64bits(float64(a.Time)) == math.Float64bits(float64(b.Time)) && math.Float64bits(float64(a.RotSpeed)) == math.Float64bits(float64(b.RotSpeed)) && math.Float64bits(float64(a.MoveBlend)) == math.Float64bits(float64(b.MoveBlend)) && math.Float64bits(float64(a.AttackT)) == math.Float64bits(float64(b.AttackT))
+}
+
+func equalBehavior(a, b *component.BehaviorComponent) bool {
+	return *a == *b
 }
 
 func equalHeader(a, b *component.HeaderComponent) bool {

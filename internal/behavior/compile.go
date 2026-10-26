@@ -162,7 +162,7 @@ func (c *compiler[C]) state(b *machine.Builder[component.BehaviorState, C], name
 	st := machine.State[C]{
 		Name:     name,
 		Duration: time.Duration(d.DurationMs) * time.Millisecond,
-		Enter:    c.effects(where+": on_enter", d.OnEnter),
+		Enter:    sequence([]func(C){c.effects(where+": on_enter", d.OnEnter), c.v.entered}),
 		Exit:     c.effects(where+": on_exit", d.OnExit),
 		Tick:     c.tick(where+": on_update", d.OnUpdate),
 	}
