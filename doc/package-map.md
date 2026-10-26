@@ -78,6 +78,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/event` | Event catalog/payload registry, replication classes and the wire predicate, producer origins, replay record/anchor schema, the MPSC queue and its wire-sink hooks, crossing frame encoding, handler router, pooled/batched payload support. |
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader with macro expansion; transitions, delayed actions, variables, per-region trigger masks, system policy, capture import/export, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and the `Host` capability set. It does not import the game engine. |
+| `internal/fsm/dialect` | What the scenario machine, bot graphs and behavior programs share of their TOML: the comparison `Op`, the strict typed decode of an argument table, the `And`/`Or`/`Not` guard tree, and the vocabulary entries `-schema` lists. A leaf over `lixenwraith/toml`. |
 | `internal/gen-manifest` | The `go generate` program behind `internal/manifest`: reads `definition.go`, the event catalog and the input enums, and writes every `*_gen.go` file (§6). |
 | `internal/help` | Projects the live key bindings into the help overlay's topics. A leaf over `internal/input`. |
 | `internal/input` | Terminal-event parser, semantic intents, the keys a scenario captures, keymap override decoding/merging; the default document comes from `internal/asset`. It does not import the ECS. |
@@ -211,7 +212,7 @@ The practical dependency rules are:
 | External module | Used by | What remains in vif |
 |---|---|---|
 | `lixenwraith/terminal` | app, service, input, mode (`tui` forms), render and renderers, ascimage, cmds and tools; core's crash reset and a few attribute and color-mode types in component, engine, pattern and system | Game-specific input semantics, compositor, renderers, and layout. |
-| `lixenwraith/toml` | content, FSM and std, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the router | Schemas, validation policy, semantic models, and application resolution. |
+| `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the router | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |

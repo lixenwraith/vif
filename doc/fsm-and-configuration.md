@@ -23,8 +23,9 @@ systems. `internal/fsm/std` defines reusable actions/guards against a capability
 `*engine.World`. A nil `Host` field leaves its actions inert and its guards false,
 so a config still loads, and a nil `Seed` roots every `RandomVar` draw at zero;
 with `Host.Refuse` set, `EmitEvent` and the system actions fail the load instead
-when their hook is nil. Bot graphs run the same machine and library over a bot's
-own context with such a host ([Bots](bots.md#shared-vocabulary)).
+when their hook is nil, and `-schema` leaves them out of that vocabulary. Bot
+graphs run the same machine and library over a bot's own context with such a host
+([Bots](bots.md#shared-vocabulary)).
 
 The result is a strict policy/mechanism split:
 
@@ -92,8 +93,8 @@ entry's directory is rejected.
 Use `vif -check [-s <name-or-path>]` to resolve, load and validate the scenario
 plus keymap, audio overrides, content and every bot graph without starting the
 terminal game. `vif -schema` prints generated JSON describing known events and
-their payload fields, actions, guards, comparison operators and script-visible
-config fields.
+their payload fields, the actions and guards of a scenario and of a bot graph with
+their arguments, comparison operators and script-visible config fields.
 
 ## 3. Root schema
 
@@ -337,8 +338,8 @@ the current leaf.
 
 ## 9. Guards
 
-Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; any other
-`op`, or none, compares for equality.
+Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; an omitted
+`op` compares for equality, and any other fails the load.
 
 | Guard | Arguments | Meaning |
 |---|---|---|
@@ -549,7 +550,7 @@ Reading and loading a scenario validates at least:
 - presence of regions and valid initial states;
 - unique state names and valid parent/target references;
 - known event, guard, and action names;
-- action/guard argument decoding and event payload shapes;
+- every key and value, guard and action arguments and event payloads included;
 - legal internal transitions, no actions on `Root`, and `reconcile` placement;
 - external-file cycles, illegal top-level content, and duplicate states;
 - macro definitions, argument names and types, recursion and expansion bounds;
@@ -558,10 +559,13 @@ Reading and loading a scenario validates at least:
   `resource.ValidateScenario`, unknown system names and required dependencies left
   disabled.
 
-Keys the loader does not read are ignored, not refused, except in `[map]`, in macro
-definitions and invocations, and at the top level of a region or macro file: a
-misspelled key in a state, transition, action, payload or `guard_args` reads as
-absent, so an optional argument silently takes its default.
+A key the loader does not read fails the load, named by where it sits
+(`state 'A': unknown key "on_entr"`, `guard 'HasTarget': unknown key "whithin"`,
+`action 'Text' takes no payload_vars`), as does a value its field cannot hold. The
+entry's top-level keys are checked against those it reads, `[systems]`, regions,
+states, transitions and actions against their config structs, and arguments and
+payloads through `internal/fsm/dialect`. The payload fields a payload guard,
+`capture_vars` or `payload_vars` names are not checked against the trigger's event.
 
 State compilation accumulates multiple per-state errors where practical, so
 `-check` is more useful than fail-on-first-error parsing. It does not execute a
@@ -609,6 +613,7 @@ event counter plus an outer tick transition.
 | Macro expansion | `pkg/tomlmacro` |
 | Scenario resolution, canonical form, `-check` | `internal/resource/resolve.go`, `scenario.go`, `check.go` |
 | Standard actions/guards | `internal/fsm/std/*.go` |
+| Ops, strict argument decode, guard trees, vocabulary entries | `internal/fsm/dialect` |
 | Game host adapter, config fields, `-schema` | `internal/manifest/fsm_bridge.go`, `internal/engine/config_access.go`, `internal/manifest/schema.go` |
 | Current embedded campaign | `internal/asset/scenario/*.toml` |
 | External examples | `wad/scenario/*` |

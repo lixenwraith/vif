@@ -48,7 +48,8 @@ bounds and held in memory. Installed layout:
 system names it toggles and the required dependencies a disable strands), keymap,
 audio overrides, content and every bot graph, then exits; all state-level FSM
 errors are reported in one pass. `vif -schema` prints the machine schema (events
-with payload fields, guards, actions, operators and config fields) as JSON.
+with payload fields, the guards and actions of a scenario and of a bot graph with
+their arguments, operators and config fields) as JSON.
 
 ---
 
@@ -264,10 +265,11 @@ same boundary.
 { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 0 }, payload_vars = { entity = "player_entity", delta = "bonus" } }
 ```
 
-The event name and payload are compiled at load: an unknown event or a value of the
-wrong type fails it. Without `payload` the event carries its payload type
-zero-valued. `payload_vars` injects an FSM variable's value into a payload field at
-runtime. Supported field kinds: all signed and unsigned integer widths, `float32`,
+The event name and payload are compiled at load: an unknown event, a payload key
+its type lacks, a value of the wrong type, or a payload on an event that carries
+none fails it. Without `payload` the event carries its payload type zero-valued.
+`payload_vars` injects an FSM variable's value into a payload field at runtime.
+Supported field kinds: all signed and unsigned integer widths, `float32`,
 `float64`, `bool`, and `string`; a negative value is ignored for an unsigned field.
 A string takes the value's decimal form in place of each `{}`, so
 `payload = { message = "Level {}" }, payload_vars = { message = "level" }` reads
@@ -532,9 +534,9 @@ Occurrence counters stay roster-wide totals: `typing.correct`, `typing.errors`,
 | `ConfigBoolCompare` | `field`, `value`       | ConfigResource bool field equals value (default `true`) |
 | `VarCompareVar`     | `var_a`, `op`, `var_b` | Compare two FSM variables            |
 
-**Operators (`op`):** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`. An omitted or
-unrecognized `op` compares `eq`; the loader does not reject one. A status key the
-registry does not hold makes a status guard false.
+**Operators (`op`):** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`. An omitted `op`
+compares `eq`; any other value fails the load. A status key the registry does not
+hold makes a status guard false.
 
 ```toml
 { trigger = "Tick", target = "Victory", guard = "VarCompareVar", guard_args = { var_a = "kills", op = "gte", var_b = "target_kills" } }
@@ -776,8 +778,12 @@ between instances; the first read of one in a shared session logs a D-14 warning
   `actions` and `on_enter`
 - A state whose parent chain never reaches `Root` is refused at load, as is a
   region whose initial state the document does not define
-- A key the loader does not read is ignored, not refused, so a misspelled argument
-  reads as absent; only `[map]`, macro definitions and invocations, and the top
-  level of a region or macro file refuse one. `-check` catches unknown event,
-  action, guard, state and config field names, undeclared regions in region
-  actions, and unknown systems in `[systems]` and region lists
+- A key the loader does not read fails the load naming where it sits: at the top
+  level of the entry, a region file or a macro file, in `[systems]`, `[map]`, a
+  region, a state, a transition, an action (`action 'TerminateRegion' takes no
+  payload`), a payload or `guard_args`, and in macro definitions and invocations;
+  so does a value of the wrong type. A payload field a payload guard,
+  `capture_vars` or `payload_vars` names is not checked: one the event lacks fails
+  the guard or is skipped. `-check` catches unknown event, action, guard, state and
+  config field names, undeclared regions in region actions, and unknown systems in
+  `[systems]` and region lists

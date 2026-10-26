@@ -4,9 +4,10 @@ The design and the phased plan for per-entity state machines in species systems
 and for the data-driven species they prepare. §1 to §8 are the design, verified
 against the code at the plan's date; §9 is the plan, one phase per task, branch and
 PR, each with the files it touches, the tests it adds and the state a person can
-check by hand. Phases 0 to 2 have landed: §6 describes `pkg/machine` as built
-and §5 the quasar's graph as it runs. As phases land, this document becomes the
-subsystem's reference and §9 shrinks to what each phase moved.
+check by hand. Phases 0 to 3 have landed: §6 describes `pkg/machine` as built,
+§5 the quasar's graph as it runs and §7 the dialect kernel as built. As phases
+land, this document becomes the subsystem's reference and §9 shrinks to what each
+phase moved.
 
 ## 1. Decision
 
@@ -449,38 +450,43 @@ step never skips one.
 
 ## 7. Shared dialect kernel (fsm, bot, behavior)
 
-**Today:**
+`internal/fsm/dialect` is what the scenario machine, bot graphs and behavior
+programs share of their TOML. Names resolve once, at load; only `Op.Holds` runs
+per evaluation.
 
-- Guard factories take `map[string]any` (`fsm.GuardFactoryFunc`).
-- `std.ParseIntArg` (`fsm/std/guard.go`) returns 0 for a missing or mistyped
-  key; `std.CompareInt` switches on the op string at every evaluation and
-  treats an unknown op as `eq`; `std.Ops()` lists the six names for `-schema`.
-- `std.decodePayload` (`fsm/std/args.go`) decodes action payloads with
-  `toml.Decode`, which drops unknown keys, as does the `ScenarioDoc` decode in
-  `fsm/loader.go`; `bot/mind.go` hand-lists allowed keys (`decodePayload`,
-  `unknownKey`) and reads ints through `ParseIntArg`.
-- `manifest.Schema` (`SchemaVersion` 1) lists guard and action names, the ops,
-  the config fields and every event's payload fields, but no guard or action
-  arguments.
+1. **`Op`.** An args struct's `dialect.Op` field takes `eq`, `neq`, `gt`, `gte`,
+   `lt` or `lte`; any other value fails the load naming its key, and an omitted
+   op is `eq`. `Op.Holds[T cmp.Ordered](a, b T)` evaluates it, and `Ops()` lists
+   the six for `-schema`.
+2. **`Decode[A](raw)`, `DecodeInto(raw, v)`.** A strict typed decode of an
+   argument table: `toml.Unmapped` names every key no field takes by its path
+   (`unknown keys "inner.y", "vr"`), the `Op` fields are parsed by name, and
+   `toml.Decode` refuses a mistyped value by its path (`within: cannot convert
+   string to int`). The caller prefixes the place (`guard 'HasTarget': `,
+   `action 'Intent': payload: `, `[bot]: `). `Fields[A]` lists A's keys with
+   their kinds: string, int, float, bool, op, array, table or any.
+3. **`Tree[G]`.** `And` and `Or` over `guards = [{ name, args }]` and `Not` over
+   `guard = { name, args }`, nested freely, each node decoded strictly. It is
+   generic over the guard type, so each runtime supplies its leaf builders and its
+   own `All`, `Any` and `Not`: `fsm.GuardFunc[T]` sees region and payload, a
+   behavior guard only `C`. A fault names each compound it is in
+   (`guard 'And': guards[1]: guard 'VarCompareVar': op: ...`).
+4. **`Entry`.** `{name, kind, keys, args}`; `Sort` orders a vocabulary by kind,
+   then name, and `TreeEntries` are `And`, `Not` and `Or`.
 
-**Kernel**, `internal/fsm/dialect`, one implementation used by `fsm/std`, `bot`
-and the behavior compiler:
-
-1. **`Op`.** `ParseOp` accepts the six names and rejects any other; an omitted
-   op stays `eq`, which the reference documents. `Op.Holds[T cmp.Ordered](a, b T)`
-   evaluates it. This replaces the per-tick string switch and the silent `eq`.
-2. **`Decode[A any](raw any, where string) (*A, error)`.** A strict typed
-   decode: keys are checked against A's `toml` tags (cached per type), then
-   `toml.Decode` runs; an unknown key names its table. It replaces
-   `ParseIntArg`, bot's allowed-key lists and std's lenient decode. `Fields[A]`
-   feeds the schema, so an editor learns every guard's and action's arguments.
-3. **Guard trees.** The `{ name, args }` / `guards = [...]` shape of
-   `And`/`Or`/`Not` is parsed once, generically over the guard type:
-   `Tree[G any](raw any, leaf func(string, map[string]any) (G, error), all, anyOf func([]G) G, not func(G) G) (G, error)`.
-   Each runtime keeps its own guard signature; `fsm.GuardFunc[T]` sees region
-   and payload, a behavior guard only `C`.
-4. **`Catalog`.** Name → {kind, fields} in deterministic order, the source of
-   `-schema` output for every vocabulary.
+`fsm.Machine` registers a name with the struct its arguments decode into, through
+generic methods: `RegisterGuard[A]`; `RegisterAction[A, R]` for an action that
+reads only `payload`, compiled to `R` at load (`fsm.Payload[A]` keeps the decoded
+payload as it is); `RegisterKeyedAction[R]` for one that reads keys of its own
+table (`EmitEvent`: `event`, `payload`, `payload_vars`; the region actions:
+`region`, `initial_state`); and `RefuseAction`, a name whose use fails the load
+and which the vocabulary leaves out. The loader refuses a key of an action's
+table the action does not read (`action 'Text' takes no payload_vars`) and a key
+no config struct takes under `[systems]`, a region or a state, its transitions
+and actions included (`state 'A': unknown key "on_entr"`); a top-level key is its
+embedder's to check, `resource.entryKeys` for a scenario entry and `bot` for a
+graph. `Machine.Vocabulary` lists a machine's entries; `-schema`
+(`SchemaVersion` 2) prints a scenario's and a bot graph's under `vocabularies`.
 
 The runtimes are not shared (O9).
 
@@ -801,9 +807,12 @@ at 256, and `QuasarComponent` stays 56 bytes. Over those 2,000 ticks at 64
 quasars the events agree but for the accepted shifts and the paths they move:
 lightning updates 63,689 → 64,104 (one more per zap), splash cancels 10 → 425
 (one per timed-out charge), shield drains 74,173 → 74,245 and area crossings
-10,484 → 10,141. A heap profile of the whole tick at 256 quasars shows a cost
-neither build changes: `SplashSystem.getTimerBBoxes` allocates 89 % of the bytes,
-about 670 KiB a tick (see [todo](todo.md)).
+10,484 → 10,141. A heap profile of the whole tick at 256 quasars showed a cost
+neither build changed: each splash countdown rebuilt every other countdown's box to
+place itself, 89 % of the bytes, about 670 KiB a tick. The splash system has since
+filled one box buffer a tick (`SplashSystem.boxes`), which took `BenchmarkQuasars`
+at 256 quasars from 645 KB to 61 KB a tick and the splash system out of that
+profile.
 
 The harness's fight spawns three of the scenario's own quasars before the storm
 is raised and more after, so its four shapes read the quasar too, and they read
@@ -874,47 +883,46 @@ every-100th-frame drop, and its repairs after the storm differ from there (38 pa
 and 556 cells against 17 and 218). [Runtime §5](runtime.md#5-simulation-tick-steps)
 states the rule for every clock.
 
-### Phase 3: the dialect kernel
+### Phase 3: the dialect kernel (landed)
 
-Goal: §7 for the two existing vocabularies, closing the todo item "Refuse
-unknown keys and `op` values at load" and giving `-schema` argument fields,
-before the third vocabulary is written against it.
+`internal/fsm/dialect` holds §7 as built, in one file and its test where the plan
+named four. Against the steps planned: `Tree` is a struct whose `Build` a runtime
+calls per guard reference; `Decode` takes no place, its callers prefixing one; and
+no `Catalog` type stands between the registrations and `-schema`:
+`Machine.Vocabulary` reads the registries. `fsm/std` and `bot` register typed
+structs through the generic methods of §7, which replace `RegisterGuardFactory`,
+`RegisterActionArgs` and `ArgCompiler`; `ParseIntArg`, `CompareInt`, `std.Ops`,
+both `decodePayload`s, bot's guard and payload key lists and the unread
+`SystemControlArgs.Enabled` are gone. Beyond the plan, an action refuses a key of
+its own table it does not read, an `EmitEvent` payload on an event that carries
+none fails, and a bot graph's refused actions leave its vocabulary. The strict walk
+is `toml.Unmapped` and `toml.UnknownKeys` (toml v0.4.0), which `paths.UnknownKeys`
+now aliases. `resource.entryKeys` holds the nine keys an entry reads today, so
+Phase 4 adds `behaviors`. `-schema` replaces `guards` and `actions` with
+`vocabularies.scenario` and `vocabularies.bot`, and no longer prints the runtime
+capture's banner ahead of its JSON in a race build or under `-dev`. Not yet checked
+at load: the payload fields a `Payload*` guard, `capture_vars` or `payload_vars`
+names ([todo](todo.md)).
 
-Steps:
+Tests: `dialect_test.go`, one per rule (an op outside the six, each op and an
+omitted one, unknown keys and a mistyped value named by path, a tree nesting
+`And`, `Or` and `Not`, a broken tree naming where, the entries' order);
+`TestABrokenGraphFailsAtLoadNamingTheFault` gains a mistyped value, an unknown op,
+a misspelt state and transition key and an unread action key;
+`TestAnEntryKeyNothingReadsIsRefused`. `std_test.go`, `machine_test.go` and the
+`internal/app` tests that load inline scenarios pass unchanged.
 
-1. `internal/fsm/dialect/op.go`, `args.go`, `tree.go`, `catalog.go` and
-   `dialect_test.go`; package doc of five lines.
-2. `internal/fsm/std/guard.go`, `payload.go`, `args.go`, `std.go`: typed
-   argument structs for every factory guard (`StateTimeExceeds{ms}`,
-   `VarEquals{var, value}`, `VarCompare{var, op, value}`, `VarCompareVar{var_a,
-   op, var_b}`, `RegionExists{region}`, the payload, status and config guards),
-   decoded through `dialect.Decode`; compound guards through `dialect.Tree`;
-   actions through `dialect.Decode`; `ParseIntArg` and `CompareInt` deleted;
-   `Ops()` from the kernel; every registration enters the `Catalog`.
-3. `internal/bot/mind.go`: `decodePayload`, `unknownKey` on guard args and the
-   `ParseIntArg` reads replaced by typed `dialect.Decode`; the catalog gains the
-   bot's names.
-4. `internal/fsm/loader.go`: state, transition and action tables are checked
-   against their config structs' tags before decoding, so `on_entr` fails the
-   load naming the state; `internal/resource/scenario.go` `validate` refuses a
-   top-level key outside {description, systems, regions, states, macros,
-   macro_files, map, min_players, max_players, behaviors}.
-5. `internal/manifest/schema.go`: guards and actions become
-   `[]{name, kind, args: [{name, type}]}` from the catalogs; `SchemaVersion` 2.
-6. `doc/fsm-reference.md` (ops are refused, omitted is `eq`; unknown keys fail),
-   `doc/bots.md` if it names the lenient decode, `doc/todo.md` (drop the item,
-   and the editor item's prerequisite reads as met).
-
-Tests: `dialect_test.go`, one per rule (unknown op refused, omitted op is eq,
-unknown key named with its table path, mistyped value refused, each tree shape,
-catalog order deterministic); `std_test.go` and `bot_test.go` keep passing;
-`TestABrokenGraphFailsAtLoadNamingTheFault` gains the unknown-key case.
-
-Gates: `go test ./internal/fsm/... ./internal/bot ./internal/manifest
-./internal/resource`. Manually testable state: `bin/vif -check` and
-`bin/vif -check -s wad/scenario/td` print `scenario ok`; a copy of a scenario
-with `op = "ge"` or a misspelt `on_entr` fails `-check` naming the state and
-the key; `bin/vif -schema` lists each guard's and action's fields.
+Manual check: `bin/vif -check` and `-check -s wad/scenario/<blank, simon, td>`
+print `scenario ok`. Copies of td fail `-check` naming the state and the fault:
+`op = "ge"` (`state 'TdCalm' transitions: guard 'StatusIntCompare': op: "ge" is
+not one of eq, neq, gt, gte, lt, lte`), `on_entr` (`state 'PlayerBoot': unknown key
+"on_entr"`), `=>` inside an `And` (`guard 'And': guards[1]: guard 'VarCompareVar':
+op: ...`), `render_fgg` in an `EmitEvent` payload (`payload for event
+'EventMazeSpawnRequest': unknown key "visual.render_fgg"`) and a `payload` on
+`TerminateRegion` (`action 'TerminateRegion' takes no payload`). `bin/vif -schema`
+prints the same bytes on every run; the scenario vocabulary holds 20 guards
+(`And`, `Or` and `Not` among them) and 19 actions, the bot's 26 and 19, none of
+the four that write the world.
 
 ### Phase 4: programs, the `Behavior` component and the generic system
 
@@ -929,8 +937,8 @@ Four batches, one PR, in this order.
    beside the component, so engine and renderer read it without importing
    this package).
 2. `vocab.go`: `Vocabulary[C]` with `Predicate[A]`, `Probe[A]`, `Effect[A]`,
-   `Sustained[A]` registrations (generic methods, each entering a
-   `dialect.Catalog`) and `Flag(name, bit)`.
+   `Sustained[A]` registrations (generic methods, each listed as a
+   `dialect.Entry` with its `Fields[A]`) and `Flag(name, bit)`.
 3. `compile.go`: `Compile[C](v *Vocabulary[C], programs map[string]map[string]any)
    (*Set[C], error)`: sorted names, IDs from `SpeciesDataFirst`, each program to
    a `machine.Graph[component.BehaviorState, C]` through the builder, errors
@@ -943,7 +951,8 @@ Four batches, one PR, in this order.
 1. `internal/fsm/file_loader.go`: `loadAndResolve` follows
    `behaviors.<name>.file` as §8.3 says; `Machine.LoadScenarioFromMap` deletes
    `behaviors` before decoding.
-2. `internal/resource/scenario.go`: `Scenario.Behaviors()`.
+2. `internal/resource/scenario.go`: `Scenario.Behaviors()`, and `behaviors` in
+   `entryKeys`.
 3. `internal/resource/check.go`: `ValidateScenario` compiles the programs
    against `system.BehaviorVocabulary()`; `checkScenario` prints
    `behaviors ok: <n>`.
@@ -985,8 +994,8 @@ Four batches, one PR, in this order.
    sets `Resources.Behaviors` before the systems and adds the system beside
    `MetaSystem`. `internal/system/meta.go`: kill keys for the prototypes.
 8. `internal/render/renderer/behavior.go`: `BehaviorRenderer`.
-9. `snapshot.Schema` 28; `manifest.SchemaVersion` 3 with a `behavior` catalog
-   section in `-schema`.
+9. `snapshot.Schema` 28; `manifest.SchemaVersion` 3 with a `behavior` vocabulary
+   in `-schema`'s `vocabularies`.
 10. Tests: `domain_test.go` passes with the new file (shared: no player stream,
     no owner-authored writes); `snapshot_declaration_test.go` passes with the
     new system (no private state); a spawned data species steps its graph and
@@ -1102,8 +1111,8 @@ attack and the red turret stops firing until the stun ends.
   reference), `doc/telemetry-reference.md`, `doc/package-map.md`.
 - This document: §2 and §4 shrink to what landed; §9 keeps the readings and the
   version moves.
-- `doc/todo.md`: the editor's prerequisite is met; a deferred gap found in a
-  phase goes there in the file's pattern.
+- `doc/todo.md`: a deferred gap found in a phase goes there in the file's
+  pattern.
 - The user runs the full `go test ./...` sweep.
 
 ## 10. Rejected approaches
