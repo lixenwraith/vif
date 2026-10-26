@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"slices"
 
 	"github.com/lixenwraith/color"
@@ -11,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // TUIAdapter bridges terminal/tui to render.RenderBuffer
@@ -109,13 +111,19 @@ type OverlayRenderer struct {
 	layoutW int
 	layoutH int
 	selKey  string // Last selection scrolled into view
+
+	// The about window's mark, at the frame's cell aspect, on a console in its entries
+	logo    logoCells
+	aspect  vmath.Aspect
+	console *render.Console
 }
 
 // NewOverlayRenderer creates a new overlay renderer
 func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 	r := &OverlayRenderer{gameCtx: gameCtx, pinMarker: parameter.OverlayPinMarker}
-	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
+	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		r.pinMarker = parameter.OverlayPinMarker256
+		r.console = render.ConsoleFor(cfg.ConsolePalette)
 	}
 	return r
 }
@@ -138,6 +146,7 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		r.adapter.Resize(g.W, g.H)
 	}
 	r.adapter.Clear(visual.RgbOverlayBg)
+	r.aspect = ctx.CellAspect
 
 	root := r.adapter.Region()
 	content := r.gameCtx.GetOverlayContent()
@@ -562,7 +571,7 @@ func (r *OverlayRenderer) renderAbout(body tui.Region) {
 	dimFg := visual.RgbOverlayHint
 	headerFg := visual.RgbOverlayHeader
 
-	if body.W < 30 || body.H < 10 {
+	if body.W < parameter.AboutMinWidth || body.H < parameter.AboutMinHeight {
 		body.TextCenter(0, card.Title, headerFg, bg, terminal.AttrBold)
 		if len(card.Entries) > 0 {
 			body.TextBlock(0, 2, card.Entries[0].Value, fg, bg, terminal.AttrNone)
@@ -570,18 +579,41 @@ func (r *OverlayRenderer) renderAbout(body tui.Region) {
 		return
 	}
 
-	if body.W < 50 {
-		logoX := (body.W - logoPatternW) / 2
-		r.renderLogo(body.Sub(logoX, 0, logoPatternW, logoPatternH), bg)
-		info := body.Sub(0, logoPatternH+1, body.W, body.H-logoPatternH-1)
+	stacked := body.W < parameter.AboutStackWidth
+	h := min(parameter.AboutLogoRows, body.H)
+	if stacked {
+		h = min(h, body.H/2)
+	}
+	w := int(math.Round(float64(h) / float64(r.aspect)))
+	if stacked {
+		r.renderLogo(body.Sub((body.W-w)/2, 0, w, h), bg)
+		info := body.Sub(0, h+1, body.W, body.H-h-1)
 		r.renderAboutInfo(info, bg, fg, dimFg, headerFg, card)
 		return
 	}
 
-	logoY := (body.H - logoPatternH) / 2
-	r.renderLogo(body.Sub(0, logoY, logoPatternW, logoPatternH), bg)
-	info := body.Sub(logoPatternW+3, 0, body.W-logoPatternW-3, body.H)
-	r.renderAboutInfo(info, bg, fg, dimFg, headerFg, card)
+	// Side by side, the two centred as one block
+	info := body.Sub(w+parameter.AboutLogoGap, 0, body.W-w-parameter.AboutLogoGap, body.H)
+	top := max(body.H-max(h, aboutInfoRows(info.W, card)), 0) / 2
+	r.renderLogo(body.Sub(0, top, w, h), bg)
+	r.renderAboutInfo(info.Sub(0, top, info.W, info.H-top), bg, fg, dimFg, headerFg, card)
+}
+
+// aboutInfoRows is the rows renderAboutInfo takes w columns wide
+func aboutInfoRows(w int, card *core.OverlayCard) int {
+	if len(card.Entries) == 0 {
+		return 1
+	}
+	return 2 + len(tui.WrapText(card.Entries[0].Value, w)) + len(card.Entries)
+}
+
+// renderLogo draws the mark opaque: a quadrant's black is the stroke's, not see-through
+func (r *OverlayRenderer) renderLogo(region tui.Region, bg color.RGB) {
+	for i, c := range r.logo.layout(region.W, region.H, r.aspect, bg, r.console) {
+		if c.Rune != 0 {
+			region.CellOpaque(i%region.W, i/region.W, c.Rune, c.Fg, c.Bg, terminal.AttrNone)
+		}
+	}
 }
 
 func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, headerFg color.RGB, card *core.OverlayCard) {
@@ -602,73 +634,17 @@ func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, head
 	keyStyle := tui.Style{Fg: dimFg, Bg: bg}
 	valStyle := tui.Style{Fg: fg, Bg: bg}
 
+	// The keys right-aligned on one column, so the values start together
+	keyW := 0
+	for _, e := range card.Entries[1:] {
+		keyW = max(keyW, tui.RuneLen(e.Key))
+	}
 	for i := 1; i < len(card.Entries); i++ {
 		if y >= region.H {
 			break
 		}
 		e := card.Entries[i]
-		region.KeyValue(y, e.Key, e.Value, keyStyle, valStyle, ':')
+		region.KeyValueColumn(y, keyW, e.Key, e.Value, keyStyle, valStyle, ' ')
 		y++
-	}
-}
-
-var logoPattern = []string{
-	"BBBBBBBBBBBBBBBBBBBBBBBBBB",
-	"BByyBBggggggBBbbbbbbBBvvBB",
-	"BByyyBBgggggBBbbbbbBBvvvBB",
-	"BByyyyBBggggBBbbbbBBvvvvBB",
-	"BByyyyyBBgggBBbbbBBvvvvvBB",
-	"BByyyyyyBBggBBbbBBvvvvvvBB",
-	"BBBBBBBBBBBBBBBBBBBBBBBBBB",
-	"BBooooooBBrrBBaaBBppppppBB",
-	"BBoooooBBrrrBBaaaBBpppppBB",
-	"BBooooBBrrrrBBaaaaBBppppBB",
-	"BBoooBBrrrrrBBaaaaaBBpppBB",
-	"BBooBBrrrrrrBBaaaaaaBBppBB",
-	"BBBBBBBBBBBBBBBBBBBBBBBBBB",
-}
-
-var logoColorMap = map[rune]color.RGB{
-	'B': {R: 30, G: 30, B: 40},    // Black (frame)
-	'r': {R: 255, G: 60, B: 60},   // Red
-	'o': {R: 255, G: 165, B: 60},  // Orange
-	'y': {R: 255, G: 255, B: 60},  // Yellow
-	'g': {R: 60, G: 180, B: 60},   // Green
-	'b': {R: 60, G: 100, B: 255},  // Blue
-	'v': {R: 100, G: 60, B: 180},  // Violet
-	'p': {R: 220, G: 130, B: 220}, // Pink
-	'a': {R: 160, G: 160, B: 170}, // Light gray
-}
-
-const (
-	logoPatternW = 26
-	logoPatternH = 13
-)
-
-func (r *OverlayRenderer) renderLogo(region tui.Region, bg color.RGB) {
-	w, h := region.W, region.H
-	if w < 1 || h < 1 {
-		return
-	}
-
-	for y := range h {
-		// Map region Y to pattern Y
-		patY := y * logoPatternH / h
-		if patY >= logoPatternH {
-			patY = logoPatternH - 1
-		}
-		row := logoPattern[patY]
-
-		for x := range w {
-			// Map region X to pattern X
-			patX := x * logoPatternW / w
-			if patX >= logoPatternW {
-				patX = logoPatternW - 1
-			}
-
-			ch := rune(row[patX])
-			c := logoColorMap[ch]
-			region.Cell(x, y, '█', c, bg, terminal.AttrNone)
-		}
 	}
 }

@@ -1,10 +1,12 @@
 package render
 
 import (
-	"github.com/lixenwraith/vif/pkg/vmath"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // RenderContext provides frame state for renderers, passed by value
@@ -54,6 +56,13 @@ type RenderContext struct {
 	// Prompt is the status line shown while no message is: what a game waiting for
 	// its start asks of the player
 	Prompt string
+
+	// StartScreen: the launch waits behind the start screen for its press, and the
+	// screen's button asks for it in Prompt's place on the status line. StartHelp is
+	// the label of its button that opens help, which a held game has and a join's
+	// wait has not.
+	StartScreen bool
+	StartHelp   string
 }
 
 // NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource
@@ -129,6 +138,13 @@ func (rc *RenderContext) GameAreaRect() Rect {
 func (rc *RenderContext) FrameRect() Rect {
 	a := rc.GameAreaRect()
 	return Rect{X0: 0, Y0: a.Y0, X1: a.X1, Y1: a.Y1 + 1}
+}
+
+// StartHelpRect is the start screen's help button with its label, in the top right
+// corner of a screen width columns wide; a click on it opens help rather than the game
+func StartHelpRect(width int, label string) Rect {
+	w := utf8.RuneCountInString(label) + 4 // a frame and a space either side
+	return RectWH(width-parameter.StartHelpMarginX-w, parameter.StartHelpMarginY, w, 3)
 }
 
 // MapToViewport converts map coordinates to viewport-relative coordinates

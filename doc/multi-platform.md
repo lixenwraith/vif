@@ -314,6 +314,11 @@ Makefile writes, from one Go. A deployment that
 edits any of them has forked the launcher, and the fork is only visible the next
 time one side changes.
 
+The page's text is Roboto, as lixen.com's is: the stylesheet takes it from
+`/fonts/`, where the site serves it, and then from `fonts/` beside the page, which
+`web/fonts/` holds with its licence, so no deployment fetches a font from
+elsewhere, and one that serves neither shows the system's sans-serif.
+
 A deployment that publishes the files under other names, as content-hashed ones
 for long caching, names them on the `terminal.js` script element instead of
 editing a script: `data-wasm` for `vif.wasm`, `data-worker` for `worker.js`,
@@ -427,6 +432,16 @@ name. Adding a graphical host is therefore composition, not a simulation fork:
    builder, and leave components, systems, events, scheduler and the manifest
    fingerprint common.
 
+A host without a start screen of its own, the terminal or the desktop window,
+gets the run's (`Host.StartScreen` unset): while the launch's first game stands in
+its start hold, or a `-join` launch waits for its press, every row above the
+status bar is a page in the site's colors with the logo at the centre and the
+prompt under it on a button, as Android's and the page's are. The held game adds
+"F1 help" at the top right, named by the key help is bound to, which a click opens
+as that key does, and help, the configuration menu and `:` open over the page as
+over the game; the status bar keeps its line. The press that starts the game or seats the join lifts it; a
+later new game asks on the status line, and `[play] wait` off opens none.
+
 The desktop window is one such host: `cmd/vif/gui.go`, in every Linux and FreeBSD
 build but `vif_nogui`, sets `Host.Presentation` to a `pkg/window` window when `-g`
 asks for it, as a `vif_gui` build or `vif.toml`'s `[presentation] window` does by
@@ -463,7 +478,7 @@ reports its size before its run takes a resize, and a dedicated host sizes a
 shared map from the first person's report. Without WebGL (a Chromium build on a
 blocklisted GPU) it paints each changed cell on a 2D canvas from the same mask,
 slower on a large grid, and says so once. It reports keys, a soft keyboard's text
-and pastes, the pointer at its cell (a touch is the left button marked as a
+and pastes (each one paste event the run types), the pointer at its cell (a touch is the left button marked as a
 finger's, as on Android) and its size as the terminal events the host posts; a hardware key names its `KeyboardEvent.code`, so its `keyup` ends the
 hold it began, the key strip's and the soft keyboard's keys tap, and blur or a
 hidden tab ends every hold, a pointer's press and a finger's too, whose ends would
@@ -485,8 +500,9 @@ keyboard would, to cycle the channels.
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
-`app.Run`. The app opens on a start screen (`StartScreen`) over the view: the logo,
-"Tap to start" under it and a `?` that opens the touch controls. The run starts
+`app.Run`. The app opens on a start screen (`StartScreen`) over the view, in
+lixen.com's dark theme as every host's is: the logo, "Tap to start" under it on the
+site's blue button and a `?` in a ring of that blue that opens the touch controls. The run starts
 behind it with its player away (`game.Start`'s `away`): its first game waits in its
 start hold, drawn undimmed and silent, and the tap, the press that starts it, lifts
 the screen off a game already built and painted; its keys reach it only from then.
@@ -511,8 +527,10 @@ system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside i
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
 the drawer the whole grid. A tap is a left press and release on its cell and a
 finger moving while down a left drag, both marked as a finger's (`Event.Touch`), posted once per cell as a terminal reports
-motion, so the cursor follows it and a held one repeats fire; keys and the system
-keyboard's text are terminal key events, Back is Escape. A hardware key's
+motion, so the cursor follows it and a held one repeats fire; keys are terminal key
+events and the system keyboard's text a paste (see **paste** in the term index),
+whether committed, composed or the keyboard's paste button, which reads the
+clipboard as the Paste key, Ctrl-Shift-V and Shift-Insert do; Back is Escape. A hardware key's
 `onKeyUp` ends the hold its `onKeyDown` began and `getRepeatCount` marks its
 repeats; the system keyboard's text, its delete and Back tap; the window losing
 focus ends every hold. Two fingers tapped together twice raise or drop the system
@@ -531,7 +549,9 @@ bottom row drawn again above it, and the hold. Every page opens on the same star
 screen in the same words, the key strip listed beside Back; a
 desktop's asks for a click or a key, and its `?` lists the mouse and the first keys.
 The Worker holds the compiled program until that press, made at any point of the
-download or compile, which opens the sound too; a key starts it as it comes up,
+download or compile, which opens the sound too; the loading line under the logo is
+a ring of the button's blue while it counts the download, and the button once it
+asks for the press or the press came; a key starts it as it comes up,
 unseen by the game, and Escape, Tab, the F keys and chords start nothing. The press
 is the first game's (`Host.Pressed`), so that game does not wait again; a later new
 game waits in the game as a terminal's does, unless `[play] wait` is off, and the

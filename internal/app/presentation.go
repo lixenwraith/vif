@@ -53,6 +53,9 @@ type Host struct {
 	// Pressed says the host took the press its first game would wait for, as the
 	// page's start screen does before the program runs
 	Pressed bool
+	// StartScreen says the host shows a start screen of its own, Android's or the
+	// page's, so the launch draws none
+	StartScreen bool
 }
 
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag

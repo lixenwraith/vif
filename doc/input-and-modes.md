@@ -128,6 +128,9 @@ game would not take starts it and does nothing else: a key without Ctrl or Alt,
 one the keymap binds to nothing included, or a left or right press off the status
 bar. What a hold admits keeps its meaning and leaves it waiting. In a live session
 only the host's press starts it ([Multi-player §3.6](multi-player.md#36-holding-a-session)).
+At launch the wait stands behind the host's start screen, which asks for that
+press on a button; a click on a terminal's "F1 help" opens help as F1 does
+([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
 
 A join the player started waits the same way, before any game is shown, for the
 press that seats it in the session: a key that types or moves (a character, Enter,

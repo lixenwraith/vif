@@ -76,15 +76,6 @@ func keyCode(code string) uint32 {
 	return h.Sum32()
 }
 
-// textEvent is one character the page's text field committed, a soft keyboard's
-// or a paste's; a newline presses Enter
-func textEvent(r rune) terminal.Event {
-	if r == '\n' {
-		return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter}
-	}
-	return terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
-}
-
 // mouseEvent is the terminal event for the pointer at cell x, y: button and action in
 // the terminal's own numbering, which the page uses, a move being the one action
 // without a button, and touch for a finger's; ok is false outside it

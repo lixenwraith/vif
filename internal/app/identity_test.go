@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/snapshot"
@@ -82,8 +83,8 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 		t.Fatalf("the offer names capture schema %d, this build reads %d",
 			offer.Identity.CaptureSchema, snapshot.Schema)
 	}
-	if offer.Identity.Build == "" || offer.Identity.Build != buildName() {
-		t.Fatalf("the offer names build %q, this one is %q", offer.Identity.Build, buildName())
+	if offer.Identity.Build == "" || offer.Identity.Build != asset.Build() {
+		t.Fatalf("the offer names build %q, this one is %q", offer.Identity.Build, asset.Build())
 	}
 	// The offer's identity and this instance's own describe the same session,
 	// because one is derived from the anchor the other was read from.

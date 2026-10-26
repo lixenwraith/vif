@@ -85,7 +85,7 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	if away {
 		v.setAway(true) // before the run reads its reports, so it never starts going
 	}
-	cfg := app.Config{Host: app.Host{Presentation: v}, Play: settings.Play, Settings: paths.SettingsFor("", file),
+	cfg := app.Config{Host: app.Host{Presentation: v, StartScreen: true}, Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
 	if unknown != nil {
@@ -184,12 +184,11 @@ func Key(code, typed, meta int32) bool {
 	return ok
 }
 
-// Text is what the system keyboard committed, typed a character at a time
+// Text is what the system keyboard committed or a paste brought, which the run types
+// a character at a time: one event carries it, so a long paste fits the queue whole
 func Text(s string) {
-	if v := current(); v != nil {
-		for _, r := range s {
-			v.keys.Tap(textEvent(r))
-		}
+	if v := current(); v != nil && s != "" {
+		v.post(terminal.Event{Type: terminal.EventPaste, Text: s})
 	}
 }
 

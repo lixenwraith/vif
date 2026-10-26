@@ -321,7 +321,7 @@ also the visual stacking order; exact integer priorities are in
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
 | Overlay effects | `button`, `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |
-| UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor` |
+| UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor`, `start_screen` |
 | Debug and telemetry | `flowfield`, `pinned_state`, `overlay` |
 
 Some rendered concepts do not have a same-named component or system. For
@@ -430,11 +430,22 @@ text console fixed entries, each apart from the items beside it and with the tex
 that reads best on it. The audio state is a letter: X muted, S sfx, M music,
 O both; it is absent without an audio engine.
 
+The start screen (`StartScreenRenderer`) is the terminal's and the desktop
+window's: while `RenderContext.StartScreen` holds it covers every row above the
+status bar, the logo at the centre two fifths of the shorter side and the prompt
+under it on a button, the site's colors in truecolor and console entries on a
+console, where the button is one row because the fonts lack the half blocks that
+round it. The status bar keeps its line under it and leaves its items' row clear;
+`RenderStatus` draws it too, for a join waiting for its press.
+
 The relative row and column gutters number only the rows and columns the
 playfield covers and mark the rest with the void color, so the chrome agrees
 with the margin it borders rather than numbering cells no motion can reach.
 
-The overlay renderer adapts help/about/telemetry content into buffer cells. Flow
+The overlay renderer adapts help/about/telemetry content into buffer cells. The
+about window draws the lixen mark from its shape (`logoCells`): in truecolor as
+quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), on a
+console as whole blocks in the entry each cell mostly shows. Flow
 debug can show a target group's flow field or route graph and is controlled via
 `:flow [group]` and `:graph [group]`. Debug layers are part of the normal
 pipeline but are visibility-gated.

@@ -3,6 +3,7 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -672,25 +673,25 @@ func (s *MetaSystem) handleHelpRequest() {
 
 // === About (placeholder) ===
 
-// handleAboutRequest shows about information overlay
+// handleAboutRequest shows the about overlay: the game as lixen.com describes it, and
+// this build as -version and a refusal name it, with the Go that compiled it
 func (s *MetaSystem) handleAboutRequest() {
 	content := &core.OverlayContent{
 		Title:  "ABOUT",
 		Layout: core.OverlayLayoutAbout,
 	}
 
-	version, _ := asset.Version()
 	content.Items = append(content.Items, core.OverlayCard{
-		Title: "VIF",
+		Title: "ViF",
 		Entries: []core.CardEntry{
-			{Key: "desc", Value: "A terminal-based rouge-like action typing game with vi-style keybindings. Made with love for terminal, Go, VIM, and Games :)"},
-			{Key: "version", Value: version},
-			{Key: "engine", Value: "Custom ECS, Data-driven HFSM, Double-buffered ANSI renderer"},
-			{Key: "go", Value: "1.25+"},
-			{Key: "github", Value: "github.com/lixenwraith/vif"},
+			{Key: "desc", Value: "A real-time roguelike typing shooter, solo or multiplayer, on an HFSM-driven ECS engine of its own, played with Vim motions on a keyboard, a mouse or a phone's touchscreen."},
+			{Key: "version", Value: asset.Build()},
+			{Key: "go", Value: strings.TrimPrefix(runtime.Version(), "go")},
+			{Key: "plays on", Value: "a terminal, a desktop window, Android, a browser"},
+			{Key: "source", Value: "github.com/lixenwraith/vif"},
+			{Key: "website", Value: "lixen.com/vif"},
 			{Key: "author", Value: "Lixen Wraith"},
-			{Key: "website", Value: "lixen.com"},
-			{Key: "license", Value: "BSD-3"},
+			{Key: "license", Value: "BSD-3-Clause"},
 		},
 	})
 
