@@ -54,6 +54,12 @@ func aboutToExpire(s component.SwarmState, d time.Duration) machine.Instance[com
 	return machine.Instance[component.SwarmState]{State: s, Elapsed: d - time.Nanosecond, Duration: d}
 }
 
+func stepSwarm(w *engine.World, s *SwarmSystem) {
+	w.Resources.Time.Update(engine.SimTime(0, parameter.GameUpdateInterval),
+		engine.SimTime(0, parameter.GameUpdateInterval), parameter.GameUpdateInterval)
+	s.Update()
+}
+
 // TestSwarmKeepsIntegratingWhenLockCannotResolve: when no lock target resolves,
 // Chase re-arms and keeps homing and integrating. An early return on every tick
 // would park the swarm inside a shield that strikes and knocks it back without
@@ -68,9 +74,7 @@ func TestSwarmKeepsIntegratingWhenLockCannotResolve(t *testing.T) {
 
 	start, _ := w.Positions.GetPosition(header)
 	for range 20 {
-		w.Resources.Time.Update(engine.SimTime(0, parameter.GameUpdateInterval),
-			engine.SimTime(0, parameter.GameUpdateInterval), parameter.GameUpdateInterval)
-		s.Update()
+		stepSwarm(w, s)
 	}
 
 	end, ok := w.Positions.GetPosition(header)
@@ -93,25 +97,19 @@ func TestSwarmKeepsIntegratingWhenLockCannotResolve(t *testing.T) {
 func TestAStunnedSwarmStillDies(t *testing.T) {
 	w, s, header := newStalledSwarm(t)
 
-	tick := func() {
-		w.Resources.Time.Update(engine.SimTime(0, parameter.GameUpdateInterval),
-			engine.SimTime(0, parameter.GameUpdateInterval), parameter.GameUpdateInterval)
-		s.Update()
-	}
-
 	combat, _ := w.Components.Combat.GetPtr(header)
 	combat.Status[component.StatusStun].Remaining = parameter.PulseStunDuration
 
 	// A stun suspends movement, not membership: swarm.count and combat.live.swarm
 	// disagreeing is what named this defect in the session log.
-	tick()
+	stepSwarm(w, s)
 	if n := w.Resources.Status.Ints.Get("swarm.count").Load(); n != 1 {
 		t.Fatalf("swarm.count = %d while stunned, want 1", n)
 	}
 
 	combat.HitPoints = 0
 	w.Resources.Event.Queue.Consume()
-	tick()
+	stepSwarm(w, s)
 
 	killed, destroyed := false, false
 	for _, ev := range w.Resources.Event.Queue.Consume() {
@@ -164,9 +162,7 @@ func TestSwarmLeavesLockWhenChargeCannotResolve(t *testing.T) {
 	w.Positions.RemoveEntity(header, false)
 
 	for range 10 {
-		w.Resources.Time.Update(engine.SimTime(0, parameter.GameUpdateInterval),
-			engine.SimTime(0, parameter.GameUpdateInterval), parameter.GameUpdateInterval)
-		s.Update()
+		stepSwarm(w, s)
 	}
 
 	sw, ok := w.Components.Swarm.GetComponent(header)
@@ -204,4 +200,80 @@ func TestSwarmLifetimeDespawnsTheWholeComposite(t *testing.T) {
 		}
 	}
 	t.Fatal("an expired swarm lifetime did not despawn its composite")
+}
+
+// TestAStunSendsAnAttackBackToTheChaseWithTheWholeInterval: a stun in any attack
+// state returns the swarm to the chase with the whole interval, where one in the
+// chase freezes what is left of it. Nothing moves while it holds, a teleport
+// included: its landing belongs to its timeout, not to the edge the stun takes.
+func TestAStunSendsAnAttackBackToTheChaseWithTheWholeInterval(t *testing.T) {
+	for _, entry := range []struct {
+		name     string
+		state    component.SwarmState
+		duration time.Duration
+	}{
+		{"chase", component.SwarmStateChase, parameter.SwarmChargeInterval},
+		{"lock", component.SwarmStateLock, parameter.SwarmLockDuration},
+		{"charge", component.SwarmStateCharge, parameter.SwarmChargeDuration},
+		{"teleport", component.SwarmStateTeleport, parameter.SwarmTeleportDuration},
+		{"decelerate", component.SwarmStateDecelerate, parameter.SwarmDecelerationDuration},
+	} {
+		t.Run(entry.name, func(t *testing.T) {
+			w, s, header := newStalledSwarm(t)
+			sw, _ := w.Components.Swarm.GetPtr(header)
+			sw.Machine = machine.Instance[component.SwarmState]{
+				State: entry.state, Elapsed: entry.duration / 2, Duration: entry.duration,
+			}
+			sw.TeleportTargetX, sw.TeleportTargetY = 40, 20
+			combat, _ := w.Components.Combat.GetPtr(header)
+			combat.Status[component.StatusStun] = component.Status{Remaining: parameter.PulseStunDuration}
+			start, _ := w.Positions.GetPosition(header)
+
+			want := machine.Instance[component.SwarmState]{
+				State: component.SwarmStateChase, Duration: parameter.SwarmChargeInterval,
+			}
+			if entry.state == component.SwarmStateChase {
+				want = sw.Machine
+			}
+			for range 3 {
+				stepSwarm(w, s)
+			}
+
+			if sw.Machine != want {
+				t.Fatalf("stunned %s: instance %+v, want %+v", entry.name, sw.Machine, want)
+			}
+			if pos, _ := w.Positions.GetPosition(header); pos != start || combat.IsEnraged {
+				t.Fatalf("stunned %s: at %+v enraged %v, want still at %+v and calm",
+					entry.name, pos, combat.IsEnraged, start)
+			}
+		})
+	}
+}
+
+// TestAChargeThatMeetsAWallDeceleratesInThatStep: a charge that meets a wall, here
+// the map's edge, which bounces it as a wall does, decelerates in the step it hits
+// and keeps the bounce, rather than charging into the wall again on the next
+func TestAChargeThatMeetsAWallDeceleratesInThatStep(t *testing.T) {
+	w, s, header := newStalledSwarm(t)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 75, Y: 10})
+	kin, _ := w.Components.Kinetic.GetPtr(header)
+	kin.PreciseX, kin.PreciseY = 75.5, 10.5
+	sw, _ := w.Components.Swarm.GetPtr(header)
+	sw.Machine = machine.Instance[component.SwarmState]{
+		State:    component.SwarmStateCharge,
+		Elapsed:  parameter.SwarmChargeDuration - 2*parameter.GameUpdateInterval,
+		Duration: parameter.SwarmChargeDuration,
+	}
+	// The last column, past the farthest cell the header reaches
+	sw.ChargeTargetX, sw.ChargeTargetY = 79.5, 10.5
+
+	stepSwarm(w, s)
+
+	if sw.Machine.State != component.SwarmStateDecelerate || sw.Machine.Elapsed != 0 || sw.ChargesCompleted != 1 {
+		t.Fatalf("after the hit: instance %+v with %d charges, want a deceleration just entered counting one",
+			sw.Machine, sw.ChargesCompleted)
+	}
+	if kin.VelX >= 0 {
+		t.Fatalf("velocity %v after the hit, want the bounce back off the edge", kin.VelX)
+	}
 }
