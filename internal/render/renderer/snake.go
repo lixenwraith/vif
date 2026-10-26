@@ -316,19 +316,7 @@ func (r *SnakeRenderer) renderHeadTrueColor(ctx render.RenderContext, buf *rende
 }
 
 func (r *SnakeRenderer) calculateFlashColor(base color.RGB, remaining time.Duration) color.RGB {
-	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
-
-	var intensity float64
-	if progress > 0.67 {
-		intensity = 0.6
-	} else if progress > 0.33 {
-		intensity = 1.0
-	} else {
-		intensity = 0.6
-	}
-
-	flashColor := color.Scale(visual.RgbCombatHitFlash, intensity)
-	return color.Lerp(base, flashColor, visual.SnakeHitFlashIntensity)
+	return color.Lerp(base, hitFlashColor(remaining), visual.SnakeHitFlashIntensity)
 }
 
 func (r *SnakeRenderer) countConnectedSegments(bodyComp *component.SnakeBodyComponent, resolved []snakeResolvedSegment) int {

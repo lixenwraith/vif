@@ -83,6 +83,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/help` | Projects the live key bindings into the help overlay's topics. A leaf over `internal/input`. |
 | `internal/input` | Terminal-event parser, semantic intents, the keys a scenario captures, keymap override decoding/merging; the default document comes from `internal/asset`. It does not import the ECS. |
 | `internal/bot` | Bot graphs: parse and validate a bot document, the vocabulary of actions and guards over the bot's own world, and the driver that feeds a graph the events its instance dispatched during the last step, releases its intents through the router at the graph's rate and keeps its score. Engine-aware like `mode`; it imports neither `app` nor `converge`, and writes the world only through intents. |
+| `internal/behavior` | Behavior programs: the strict decode of a program and its `[prototype]`, the `Vocabulary[C]` registry a host fills with its verbs, flags, movement and entry hook, and `Compile`, one `pkg/machine` graph a program and species IDs from `SpeciesDataFirst` in sorted-name order. It reaches no world: `internal/system/behavior.go` binds the game's verbs ([Behavior machines §8](machine-design.md#8-data-driven-behavior-o4)). |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
 | `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (unstarted, waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
 | `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, the declared system dependency graph, game binding for the generic FSM, and the JSON schema `-schema` prints for authoring tools. |
@@ -101,7 +102,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for categorized files, terminal, content, audio, and network transport. |
 | `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, and the selective shard set — none of which reads a world. Also the comparison surface: the key filters, the line format and diff, the per-store digest, the assembled shared and whole-instance line sets, and the capture/correction telemetry cells. The surface readers take the caller's world lock and never acquire one. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, per-slot player metrics and the bare key that mirrors this instance's own slot, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
-| `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order. |
+| `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order; `behavior.go` runs every species a scenario's behavior programs define. |
 | `internal/vlog` | Build-tagged logger facade: levels, scopes, correlation stamps, correlated sets, standalone files, crash flush, and the ungated journal files, one per journal; no-op on WASM/`novlog`. |
 
 ## 5. Reusable `pkg` libraries
@@ -140,7 +141,7 @@ flowchart TD
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
 | `pkg/network` | Framed messages over TCP or WebSocket (the browser's own socket on `js/wasm`), deflated per link once a handshake opens the stream; the accept and dial transport with its handshake budget and the hooks a session's handshakes plug into; the port's tick-drained inbound queue, bundled sends and the link probe it answers itself; an in-process mesh with shaped links; chunked bodies; crossing fences; session addresses and TLS. | Standard library, `pkg/linkpace` and `pkg/websocket`. It knows no kinds and no game: `Kinds` is the session layer's table over the kind byte, and the handshakes, the timing and the kinds come from its caller's `Config`. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
-| `pkg/machine` | Per-entity state machines: an `Instance` a component carries (a state, its elapsed time, its entry's duration), an immutable `Graph` built and validated once from typed hooks and stepped in fixed phases, and `Queue`, values each behind a relative timer. | Standard library only: hooks reach the world through their host, by the context it passes or as its methods, and the host writes the state's flags to its components; `QuasarSystem` is the first host ([Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only)). |
+| `pkg/machine` | Per-entity state machines: an `Instance` a component carries (a state, its elapsed time, its entry's duration), an immutable `Graph` built and validated once from typed hooks and stepped in fixed phases, and `Queue`, values each behind a relative timer. | Standard library only: hooks reach the world through their host, by the context it passes or as its methods, and the host writes the state's flags to its components; `QuasarSystem` and `BehaviorSystem` are its hosts ([Behavior machines §6](machine-design.md#6-runtime-pkgmachine-stdlib-only)). |
 | `pkg/tomlmacro` | Expand macros in parsed TOML documents: typed parameters, substitution, array splicing, zipped `each`, bounded nesting and output. | Standard library only: it works on the parser's generic trees, so the FSM loader and bot graphs share one expander. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Standard library only, with its own `Point` and a default seed restating `vmath.Golden64`; surfaced through wall/maze events. |
 | `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
@@ -177,9 +178,10 @@ builds select null event sinks without changing the simulation fingerprint.
 
 Important exceptions:
 
-- `MetaSystem` takes a `GameContext`, so `internal/app` registers it once the
-  context exists. Its profile is declared in `manifest.ContextSystems` for the
-  same validation and fingerprint, and the generated builders do not construct it.
+- `MetaSystem` takes a `GameContext` and `BehaviorSystem` the scenario's
+  compiled programs, so `internal/app` registers both once those exist. Their
+  profiles are declared in `manifest.ContextSystems` for the same validation and
+  fingerprint, and the generated builders construct neither.
 - `NetworkSystem` is a manifest-registered dual-domain system. It is inert while
   the world holds no network resource and becomes the tick-owned wire bridge once
   a session attaches one.

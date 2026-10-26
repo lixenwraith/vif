@@ -20,6 +20,7 @@ import (
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/service"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 // Check validates every resolved external resource without starting the game.
@@ -66,9 +67,10 @@ func checkKeymap(o Options, w io.Writer) error {
 }
 
 // ValidateScenario resolves and reads a scenario, loads it into a throwaway
-// machine, and checks every system it names against this build. It is what
-// `-check` proves before a run starts and what an operator changing scenario
-// mid-run proves before the run it would replace is torn down.
+// machine, checks every system it names against this build and compiles its
+// behavior programs. It is what `-check` proves before a run starts and what an
+// operator changing scenario mid-run proves before the run it would replace is
+// torn down.
 func ValidateScenario(o Options) (Scenario, error) {
 	sc, err := LoadScenario(o)
 	if err != nil {
@@ -79,6 +81,12 @@ func ValidateScenario(o Options) (Scenario, error) {
 	err = fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry())
 	if err == nil {
 		err = checkSystems(m)
+	}
+	if err == nil {
+		var programs map[string]map[string]any
+		if programs, err = sc.Behaviors(); err == nil {
+			_, err = system.CompileBehaviors(programs)
+		}
 	}
 	if err != nil {
 		return Scenario{}, fmt.Errorf("scenario %s: %w", sc.Name, err)
@@ -103,6 +111,15 @@ func checkScenario(o Options, w io.Writer) error {
 	fmt.Fprintf(w, "scenario ok: %s (%s, %d files, sha256:%s, players %d..%d)\n",
 		source, sc.Name, sc.Files(), sc.Short(), sc.MinPlayers, sc.MaxPlayers)
 	fmt.Fprintln(w, "systems ok")
+	programs, err := sc.Behaviors()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "behaviors ok: %d", len(programs))
+	if len(programs) > 0 {
+		fmt.Fprintf(w, " (%s)", strings.Join(slices.Sorted(maps.Keys(programs)), ", "))
+	}
+	fmt.Fprintln(w)
 	return nil
 }
 

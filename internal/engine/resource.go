@@ -50,6 +50,10 @@ type Resource struct {
 	// Genetics
 	Genetics *GeneticResource
 
+	// The bodies of this scenario's behavior programs, indexed by program; set
+	// before the systems are built, which bind and size by them
+	Behaviors []component.BehaviorPrototype
+
 	// Transient visual effects
 	Transient *TransientResource
 

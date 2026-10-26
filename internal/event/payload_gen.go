@@ -121,11 +121,14 @@ var payloadNew = [EventTypeCount]func() any{
 	EventDrainDefeated:                   func() any { return new(DrainDefeatedPayload) },
 	EventFuseQuasarRequest:               func() any { return new(FuseQuasarRequestPayload) },
 	EventFuseSwarmRequest:                func() any { return new(FuseSwarmRequestPayload) },
+	EventFuseBehaviorRequest:             func() any { return new(FuseBehaviorRequestPayload) },
 	EventDrainPause:                      func() any { return new(CursorScopePayload) },
 	EventDrainResume:                     func() any { return new(CursorScopePayload) },
 	EventQuasarSpawnRequest:              func() any { return new(QuasarSpawnRequestPayload) },
 	EventSwarmSpawnRequest:               func() any { return new(SwarmSpawnRequestPayload) },
 	EventKrakenSpawnRequest:              func() any { return new(KrakenSpawnRequestPayload) },
+	EventBehaviorSpawnRequest:            func() any { return new(BehaviorSpawnRequestPayload) },
+	EventBehaviorCancelRequest:           func() any { return new(BehaviorCancelRequestPayload) },
 	EventWindStart:                       func() any { return new(WindStartPayload) },
 	EventDriftStart:                      func() any { return new(DriftStartPayload) },
 	EventGrayoutStart:                    func() any { return new(CursorScopePayload) },
@@ -283,11 +286,14 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventDrainDefeated:                   &codecDrainDefeatedPayload,
 	EventFuseQuasarRequest:               &codecFuseQuasarRequestPayload,
 	EventFuseSwarmRequest:                &codecFuseSwarmRequestPayload,
+	EventFuseBehaviorRequest:             &codecFuseBehaviorRequestPayload,
 	EventDrainPause:                      &codecCursorScopePayload,
 	EventDrainResume:                     &codecCursorScopePayload,
 	EventQuasarSpawnRequest:              &codecQuasarSpawnRequestPayload,
 	EventSwarmSpawnRequest:               &codecSwarmSpawnRequestPayload,
 	EventKrakenSpawnRequest:              &codecKrakenSpawnRequestPayload,
+	EventBehaviorSpawnRequest:            &codecBehaviorSpawnRequestPayload,
+	EventBehaviorCancelRequest:           &codecBehaviorCancelRequestPayload,
 	EventWindStart:                       &codecWindStartPayload,
 	EventDriftStart:                      &codecDriftStartPayload,
 	EventGrayoutStart:                    &codecCursorScopePayload,
@@ -1012,6 +1018,7 @@ var codecMaterializeCompletedPayload = structCodec{size: unsafe.Sizeof(Materiali
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
 }}
 
 func (p *MaterializeAreaRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1024,6 +1031,7 @@ var codecMaterializeAreaRequestPayload = structCodec{size: unsafe.Sizeof(Materia
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
 }}
 
 func (p *FlashRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1339,6 +1347,16 @@ var codecFuseSwarmRequestPayload = structCodec{size: unsafe.Sizeof(FuseSwarmRequ
 	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.Effect), kind: kindInt, size: unsafe.Sizeof(FuseEffect(0))},
 }}
 
+func (p *FuseBehaviorRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFuseBehaviorRequestPayload, unsafe.Pointer(p)
+}
+
+var codecFuseBehaviorRequestPayload = structCodec{size: unsafe.Sizeof(FuseBehaviorRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FuseBehaviorRequestPayload{}.Program), kind: kindString},
+	{off: unsafe.Offsetof(FuseBehaviorRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(FuseBehaviorRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
 func (p *CursorScopePayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecCursorScopePayload, unsafe.Pointer(p)
 }
@@ -1372,6 +1390,24 @@ func (p *KrakenSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecKrakenSpawnRequestPayload = structCodec{size: unsafe.Sizeof(KrakenSpawnRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *BehaviorSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBehaviorSpawnRequestPayload, unsafe.Pointer(p)
+}
+
+var codecBehaviorSpawnRequestPayload = structCodec{size: unsafe.Sizeof(BehaviorSpawnRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.Program), kind: kindString},
+	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *BehaviorCancelRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecBehaviorCancelRequestPayload, unsafe.Pointer(p)
+}
+
+var codecBehaviorCancelRequestPayload = structCodec{size: unsafe.Sizeof(BehaviorCancelRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(BehaviorCancelRequestPayload{}.Program), kind: kindString},
 }}
 
 func (p *WindStartPayload) codec() (*structCodec, unsafe.Pointer) {

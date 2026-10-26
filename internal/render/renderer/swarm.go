@@ -52,7 +52,7 @@ func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		var c color.RGB
 		switch {
 		case combatComp.RemainingHitFlash > 0:
-			c = r.calculateFlashColor(combatComp.RemainingHitFlash)
+			c = hitFlashColor(combatComp.RemainingHitFlash)
 		case combatComp.IsEnraged:
 			c = visual.RgbCombatEnraged
 		default:
@@ -105,8 +105,8 @@ func (r *SwarmRenderer) renderMembers(
 	}
 }
 
-// calculateFlashColor returns yellow with pulse effect
-func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
+// hitFlashColor pulses the combat hit flash over its duration, alike on every species
+func hitFlashColor(remaining time.Duration) color.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64

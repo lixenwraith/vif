@@ -51,14 +51,14 @@ it needs, graded required or optional; the grades gate disabling a system
 `SystemDef.Snapshot` declares the D-19 obligation to save private
 future-affecting state. The system type carries none of these: `World.AddSystem`
 takes the domain and dependencies from `manifest.ProfileFor`, also for
-`MetaSystem`, which `manifest.ContextSystems` declares and the app adds beside
-them. A constructor binds telemetry and allocates; it does not initialize. Once
-the set is complete the app runs `World.InitSystems`, which orders the graph
-(`core.TopoSort`), so an unknown name or a cycle fails startup, and calls each
-system's `Init` with a required system before those naming it; a game reset runs
-the same pass in place of each system answering `EventGameResetRequest`. A test
-constructing a system standalone calls `Init` itself. The tick order comes from
-`Priority()`.
+`MetaSystem` and `BehaviorSystem`, which `manifest.ContextSystems` declares and
+the app adds beside them. A constructor binds telemetry and allocates; it does
+not initialize. Once the set is complete the app runs `World.InitSystems`, which
+orders the graph (`core.TopoSort`), so an unknown name or a cycle fails startup,
+and calls each system's `Init` with a required system before those naming it; a
+game reset runs the same pass in place of each system answering
+`EventGameResetRequest`. A test constructing a system standalone calls `Init`
+itself. The tick order comes from `Priority()`.
 
 ## 2. Entities and typed stores
 
@@ -157,7 +157,7 @@ place in the shared-world capture.
 | Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
 | Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping`, `CursorView` |
 | General behavior | `Particle`, `Tracer`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Mount`, `Ray`, `Spirit`, `Materialize` |
-| Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower`, `Kraken` |
+| Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower`, `Kraken`, `Behavior` (every data species) |
 | Composite entities | `Header`, `Member` |
 | Transient effects and overlays | `Flash`, `Fadeout`, `Splash`, `Marker`, `Button` |
 | Lifecycle | `Death`, `Timer` |
@@ -252,7 +252,7 @@ Composite types define where damage and ownership live:
 
 | Type | Damage/lifecycle meaning | Examples |
 |---|---|---|
-| `CompositeTypeUnit` | Header is the actor; members provide visual or collision hitboxes. | Quasar, swarm, eye, Kraken, snake head. |
+| `CompositeTypeUnit` | Header is the actor; members provide visual or collision hitboxes. | Quasar, swarm, eye, Kraken, snake head, data species. |
 | `CompositeTypeAblative` | Members take damage and can be destroyed independently. | Storm circles, player towers, pylons, snake body. |
 | `CompositeTypeContainer` | Header groups members and takes no combat damage. | Storm and snake roots, gold sequences. |
 
@@ -333,8 +333,9 @@ that does to a span). Systems whose entities end or act on a slot declare
 Cursor countdowns stay in their owner-authored stores (D-13), and species phase
 timers stay in the species component beside the phase they time: the quasar's as
 its behavior machine's elapsed time and entry duration (`QuasarComponent.Machine`),
-the swarm's and storm's as countdowns, for which
-[Machine design](machine-design.md) is the future design.
+a data species' as its program's (`BehaviorComponent.Machine`), the swarm's and
+storm's as countdowns, for which [Machine design](machine-design.md) is the future
+design.
 
 ## 8. Event transport
 

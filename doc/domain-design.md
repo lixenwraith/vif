@@ -121,9 +121,9 @@ attacker, so the knockback an instance applies first holds it and the next
 correction repairs a difference.
 
 `barrierBound` names the set: arrival, departure and full reset, which create or
-destroy shared identity; the swarm and quasar spawn requests, which allocate it; and
-a drain's defeat and a cursor's defeat state, which advance the progression a
-region gates its spawns on or rebuild the level.
+destroy shared identity; the swarm, quasar and behavior spawn requests, which
+allocate it; and a drain's defeat and a cursor's defeat state, which advance the
+progression a region gates its spawns on or rebuild the level.
 
 ### D-4 — Wire payloads name Shared entities only
 
@@ -550,7 +550,7 @@ is the Shared placement gate.
 
 | Domain | Entities |
 |---|---|
-| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, tower, gateway, wall, gold, marker, button, FSM, time |
+| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, kraken, data species, tower, gateway, wall, gold, marker, button, FSM, time |
 | **Player** | glyph, nugget, drain, particle (dust/decay/blossom), tracer, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion presentation, loot |
 | **Stamped** | materialise, spirit; domain is resolved per request |
 

@@ -23,6 +23,22 @@ const (
 	CombatEntityCount
 )
 
+// CombatEntityNames indexes CombatEntityType for telemetry keys and the combat row
+// a behavior program's prototype names
+var CombatEntityNames = [CombatEntityCount]string{
+	"cursor",
+	"drain",
+	"quasar",
+	"swarm",
+	"storm",
+	"pylon",
+	"snake_head",
+	"snake_body",
+	"eye",
+	"tower",
+	"kraken",
+}
+
 // Damage Types
 type CombatDamageType int
 

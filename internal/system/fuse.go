@@ -3,6 +3,7 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,7 @@ type pendingFusion struct {
 
 // FuseSystem orchestrates the visual and timing transition of entity fusions and manages fusion source system
 // Player-domain: it consumes drains and their visuals; the crossing is the geometry-only spawn request.
+// A data species' entrance is Shared instead: its beam carries the species, so the fuse holds nothing for it.
 type FuseSystem struct {
 	world *engine.World
 
@@ -78,6 +80,9 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventFuseQuasarRequest,
 		event.EventFuseSwarmRequest,
+		event.EventFuseBehaviorRequest,
+		event.EventMaterializeComplete,
+		event.EventBehaviorCancelRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -92,7 +97,7 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
-		if ev.Type == event.EventFuseQuasarRequest || ev.Type == event.EventFuseSwarmRequest {
+		if ev.Type == event.EventFuseQuasarRequest || ev.Type == event.EventFuseSwarmRequest || ev.Type == event.EventFuseBehaviorRequest {
 			s.statDisabled.Add(1)
 		}
 		return
@@ -119,6 +124,22 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventFuseSwarmRequest:
 		if payload, ok := ev.Payload.(*event.FuseSwarmRequestPayload); ok {
 			s.handleSwarmFuse(payload.DrainA, payload.DrainB, payload.Effect)
+		}
+
+	case event.EventFuseBehaviorRequest:
+		if payload, ok := ev.Payload.(*event.FuseBehaviorRequestPayload); ok {
+			s.handleBehaviorFuse(payload.Program, payload.X, payload.Y)
+		}
+
+	case event.EventMaterializeComplete:
+		// Only the beam every instance ran lands a Shared species (D-7)
+		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok && ev.Domain == core.DomainShared {
+			s.landBehavior(payload)
+		}
+
+	case event.EventBehaviorCancelRequest:
+		if payload, ok := ev.Payload.(*event.BehaviorCancelRequestPayload); ok {
+			s.cancelBehaviorBeams(payload.Program)
 		}
 	}
 }
@@ -323,6 +344,64 @@ func (s *FuseSystem) handleQuasarFuse() {
 		Timer:   parameter.SpiritAnimationDuration + parameter.SpiritSafetyBuffer,
 	})
 	s.buffers.Observe(0, len(s.fusions))
+}
+
+// handleBehaviorFuse beams a program's species in over the nearest place its
+// footprint fits. The beam is a Shared entity naming the species, so a capture
+// taken mid-beam carries the pending spawn as it carries any store (D-19).
+func (s *FuseSystem) handleBehaviorFuse(program string, x, y int) {
+	behaviors := s.world.Resources.Behaviors
+	i := slices.IndexFunc(behaviors, func(p component.BehaviorPrototype) bool { return p.Name == program })
+	if i < 0 {
+		s.statSpawnFailures.Add(1)
+		return
+	}
+	p := &behaviors[i]
+	left, top, found := s.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+	if !found {
+		s.statSpawnFailures.Add(1)
+		return
+	}
+	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
+		X:          left,
+		Y:          top,
+		AreaWidth:  p.Width,
+		AreaHeight: p.Height,
+		Type:       component.SpawnTypeSwarm,
+		Species:    p.Species,
+	})
+}
+
+// landBehavior sends the direct spawn a data species' beam held, its header on
+// the footprint the beam covered
+func (s *FuseSystem) landBehavior(p *event.MaterializeCompletedPayload) {
+	i := int(p.Species) - int(component.SpeciesDataFirst)
+	if i < 0 || i >= len(s.world.Resources.Behaviors) {
+		return
+	}
+	proto := &s.world.Resources.Behaviors[i]
+	s.world.PushEvent(event.EventBehaviorSpawnRequest, &event.BehaviorSpawnRequestPayload{
+		Program: proto.Name,
+		X:       p.X + proto.HeaderX,
+		Y:       p.Y + proto.HeaderY,
+	})
+}
+
+// cancelBehaviorBeams ends the beams of a cancelled program, or of every program
+// when it names none, so none lands after its cancel
+func (s *FuseSystem) cancelBehaviorBeams(program string) {
+	behaviors := s.world.Resources.Behaviors
+	var beams []core.Entity
+	for _, e := range s.world.Components.Materialize.Entities() {
+		m, ok := s.world.Components.Materialize.GetPtr(e)
+		if !ok || e.Domain() != core.DomainShared {
+			continue
+		}
+		if i := int(m.Species) - int(component.SpeciesDataFirst); i >= 0 && i < len(behaviors) && (program == "" || behaviors[i].Name == program) {
+			beams = append(beams, e)
+		}
+	}
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, beams...)
 }
 
 // completeFusion triggers the creation event in the destination system.

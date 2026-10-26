@@ -39,6 +39,14 @@ var SnakeHoming = physics.HomingProfile{
 	DeadZone:         parameter.SnakeDeadZone,
 }
 
+// Homing names the species profiles a behavior program's prototype may steer by
+var Homing = map[string]*physics.HomingProfile{
+	"drain":  &DrainHoming,
+	"quasar": &QuasarHoming,
+	"snake":  &SnakeHoming,
+	"swarm":  &SwarmHoming,
+}
+
 // LootHoming: aggressive arrival drag kills orbital momentum for reliable capture.
 // LootSystem applies the cornering brake beside it, as drains, swarms, quasars and eyes do.
 var LootHoming = physics.HomingProfile{

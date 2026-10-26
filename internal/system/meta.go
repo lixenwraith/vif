@@ -34,8 +34,8 @@ type MetaSystem struct {
 	statPlayerY *status.PlayerInt
 
 	// Kill counters gate FSM region transitions, so they live in a system with
-	// no enable/disable toggle
-	statKills            [component.SpeciesCount]*atomic.Int64
+	// no enable/disable toggle; a data species' row is bound only when its program is
+	statKills            [component.SpeciesMax]*atomic.Int64
 	statKillsTotal       *atomic.Int64
 	statKillsUncredited  *atomic.Int64
 	statAllDefeated      *atomic.Bool
@@ -71,6 +71,9 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	s.statPlayerY = status.NewPlayerInt(reg, parameter.MaxPlayers, "y", "player.y")
 	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
 		s.statKills[i] = reg.Ints.Get("kills." + component.SpeciesNames[i])
+	}
+	for _, p := range s.world.Resources.Behaviors {
+		s.statKills[p.Species] = reg.Ints.Get("kills." + p.Name)
 	}
 	s.statKillsTotal = reg.Ints.Get("kills.total")
 	s.statKillsUncredited = reg.Ints.Get("kills.uncredited")
@@ -332,7 +335,7 @@ func (s *MetaSystem) Update() {
 // credited with. The tower is the players' own: its loss is the region's defeat and
 // its lifecycle's record, never a kill or progress toward a species-kill gate.
 func (s *MetaSystem) recordKill(p *event.SpeciesKilledPayload) {
-	if p.Species <= component.SpeciesNone || p.Species >= component.SpeciesCount {
+	if p.Species <= component.SpeciesNone || p.Species >= component.SpeciesMax || s.statKills[p.Species] == nil {
 		return
 	}
 	if p.Species == component.SpeciesDrain {
@@ -355,12 +358,12 @@ func (s *MetaSystem) recordKill(p *event.SpeciesKilledPayload) {
 // kills.* as a mixed-domain aggregate, an installed state never runs the on_enter
 // action that raises the multiplier, and a pruned crossing never reaches a counter.
 type metaSnapshot struct {
-	Kills            [component.SpeciesCount]int64 `json:"kills"`
-	KillsTotal       int64                         `json:"kills_total"`
-	KillsUncredited  int64                         `json:"kills_uncredited"`
-	Defeated         [parameter.MaxPlayers]bool    `json:"defeated"`
-	DefeatResetTick  uint64                        `json:"defeat_reset_tick"`
-	DamageMultiplier int64                         `json:"damage_multiplier"`
+	Kills            [component.SpeciesMax]int64 `json:"kills"`
+	KillsTotal       int64                       `json:"kills_total"`
+	KillsUncredited  int64                       `json:"kills_uncredited"`
+	Defeated         [parameter.MaxPlayers]bool  `json:"defeated"`
+	DefeatResetTick  uint64                      `json:"defeat_reset_tick"`
+	DamageMultiplier int64                       `json:"damage_multiplier"`
 }
 
 // SaveShared carries shared progression (D-19).
@@ -372,8 +375,10 @@ func (s *MetaSystem) SaveShared() ([]byte, error) {
 		DefeatResetTick:  s.defeatResetTick,
 		DamageMultiplier: s.damageMultiplier,
 	}
-	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
-		snap.Kills[i] = s.statKills[i].Load()
+	for i, kills := range s.statKills {
+		if kills != nil {
+			snap.Kills[i] = kills.Load()
+		}
 	}
 	return json.Marshal(snap)
 }
@@ -384,8 +389,10 @@ func (s *MetaSystem) LoadShared(data []byte) error {
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("meta: %w", err)
 	}
-	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
-		s.statKills[i].Store(snap.Kills[i])
+	for i, kills := range s.statKills {
+		if kills != nil {
+			kills.Store(snap.Kills[i])
+		}
 	}
 	s.statKillsTotal.Store(snap.KillsTotal)
 	s.statKillsUncredited.Store(snap.KillsUncredited)
@@ -398,8 +405,10 @@ func (s *MetaSystem) LoadShared(data []byte) error {
 
 // resetKills zeroes every species counter for a new game
 func (s *MetaSystem) resetKills() {
-	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
-		s.statKills[i].Store(0)
+	for _, kills := range s.statKills {
+		if kills != nil {
+			kills.Store(0)
+		}
 	}
 	s.statKillsTotal.Store(0)
 	s.statKillsUncredited.Store(0)

@@ -5,19 +5,26 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
 // TestSnapshotDeclarationsMatchImplementations asserts the manifest's D-19
 // declarations against the code. A capture carries every input to a future shared
 // outcome, much of it outside component stores (a maze generator, EXP3 weights,
 // genetic populations), so a system declared "state" must implement
-// engine.SharedStateSaver and one declared "none" must not.
+// engine.SharedStateSaver and one declared "none" must not. The context systems
+// the app builds itself answer to the same rule.
 func TestSnapshotDeclarationsMatchImplementations(t *testing.T) {
-	w := scratchWorld(t)
-	systems := BuildSystems(w)
+	ctx := scratchContext(t)
+	systems := BuildSystems(ctx.World)
 	if len(systems) < 50 {
 		t.Fatalf("built %d systems, expected the full set; the manifest has drifted", len(systems))
 	}
+	set, err := system.CompileBehaviors(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	systems = append(systems, system.NewMetaSystem(ctx), system.NewBehaviorSystem(ctx.World, set))
 
 	declared := SnapshotDeclarations()
 	var missing, undeclared []string

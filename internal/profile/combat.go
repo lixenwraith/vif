@@ -76,8 +76,9 @@ var eyeTargets = [...]component.CombatEntityType{
 }
 
 // Contact is what touching a species costs a cursor: energy through an active shield
-// the body reaches, heat to a bare cursor it covers. Applied through strikeCursor.
-var Contact = [component.SpeciesCount]component.CursorDamage{
+// the body reaches, heat to a bare cursor it covers. Applied through strikeCursor; a
+// data species' row stays zero, its prototype carrying its contact.
+var Contact = [component.SpeciesMax]component.CursorDamage{
 	component.SpeciesDrain:  {EnergyDrain: parameter.DrainShieldEnergyDrainAmount, HeatDelta: -parameter.DrainHeatReductionAmount},
 	component.SpeciesSwarm:  {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.DrainHeatReductionAmount},
 	component.SpeciesQuasar: {EnergyDrain: parameter.QuasarShieldDrain, HeatDelta: -parameter.QuasarDamageHeat},

@@ -57,3 +57,30 @@ func TestKrakenHealthBarStaysVisibleCenteredAndScalesInBothColorModes(t *testing
 		}
 	}
 }
+
+// TestADataSpeciesHealthBarSpansItsPrototype: the bar measures the prototype's
+// footprint and hit points, not the swarm row the species fights as
+func TestADataSpeciesHealthBarSpansItsPrototype(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "warden", Width: 6, Height: 2, HeaderX: 1, HitPoints: 40}}
+	e := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(e, component.PositionComponent{X: 20, Y: 12})
+	w.Components.Behavior.SetComponent(e, component.BehaviorComponent{})
+	w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, HitPoints: 20})
+
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 40, 24)
+	NewHealthBarRenderer(game).Render(render.RenderContext{MapWidth: 40, MapHeight: 24, ViewportWidth: 40, ViewportHeight: 24}, buf)
+	var cells [][2]int
+	for y := range 24 {
+		for x := range 40 {
+			if buf.CellAt(x, y).Rune == visual.HealthBarChar {
+				cells = append(cells, [2]int{x, y})
+			}
+		}
+	}
+	// Half of six cells, above the footprint's left edge
+	if want := [][2]int{{19, 11}, {20, 11}, {21, 11}}; !slices.Equal(cells, want) {
+		t.Fatalf("bar cells %v, want %v", cells, want)
+	}
+}

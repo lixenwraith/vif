@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 194
+const EventTypeCount = 197
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -135,6 +135,7 @@ func InitRegistry() {
 	RegisterType("EventDrainDefeated", EventDrainDefeated)
 	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest)
 	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest)
+	RegisterType("EventFuseBehaviorRequest", EventFuseBehaviorRequest)
 	RegisterType("EventDrainPause", EventDrainPause)
 	RegisterType("EventDrainResume", EventDrainResume)
 	RegisterType("EventQuasarSpawnRequest", EventQuasarSpawnRequest)
@@ -146,6 +147,8 @@ func InitRegistry() {
 	RegisterType("EventKrakenSpawnRequest", EventKrakenSpawnRequest)
 	RegisterType("EventKrakenSpawnFailed", EventKrakenSpawnFailed)
 	RegisterType("EventKrakenCancelRequest", EventKrakenCancelRequest)
+	RegisterType("EventBehaviorSpawnRequest", EventBehaviorSpawnRequest)
+	RegisterType("EventBehaviorCancelRequest", EventBehaviorCancelRequest)
 	RegisterType("EventWindStart", EventWindStart)
 	RegisterType("EventWindCancel", EventWindCancel)
 	RegisterType("EventDriftStart", EventDriftStart)
@@ -335,6 +338,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventDrainDefeated:                   ClassBus,
 	EventFuseQuasarRequest:               ClassLocal,
 	EventFuseSwarmRequest:                ClassLocal,
+	EventFuseBehaviorRequest:             ClassShared,
 	EventDrainPause:                      ClassLocal,
 	EventDrainResume:                     ClassLocal,
 	EventQuasarSpawnRequest:              ClassBus,
@@ -346,6 +350,8 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventKrakenSpawnRequest:              ClassShared,
 	EventKrakenSpawnFailed:               ClassShared,
 	EventKrakenCancelRequest:             ClassShared,
+	EventBehaviorSpawnRequest:            ClassBus,
+	EventBehaviorCancelRequest:           ClassShared,
 	EventWindStart:                       ClassShared,
 	EventWindCancel:                      ClassShared,
 	EventDriftStart:                      ClassShared,

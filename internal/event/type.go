@@ -358,6 +358,8 @@ const (
 	EventFuseQuasarRequest
 	// EventFuseSwarmRequest (FuseSwarmRequestPayload) [local] signals two enraged drains should fuse into swarm
 	EventFuseSwarmRequest
+	// EventFuseBehaviorRequest (FuseBehaviorRequestPayload) [shared] beams a program's species in, its spawn sent as the beam ends
+	EventFuseBehaviorRequest
 
 	// --- Drain ---
 
@@ -395,6 +397,13 @@ const (
 	EventKrakenSpawnFailed
 	// EventKrakenCancelRequest [shared] removes all Kraken composites
 	EventKrakenCancelRequest
+
+	// --- Behavior ---
+
+	// EventBehaviorSpawnRequest (BehaviorSpawnRequestPayload) [bus] signals BehaviorSystem to create a program's species at location
+	EventBehaviorSpawnRequest
+	// EventBehaviorCancelRequest (BehaviorCancelRequestPayload) [shared] removes one program's composites, or every program's when it names none
+	EventBehaviorCancelRequest
 
 	// --- Environment ---
 
