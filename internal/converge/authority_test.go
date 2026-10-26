@@ -637,10 +637,10 @@ func (d *dialingNode) DialPeer(addr string) error {
 	return nil
 }
 
-func (d *dialingNode) dials() int {
+func (d *dialingNode) dials() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return len(d.dialed)
+	return slices.Clone(d.dialed)
 }
 
 func (d *dialingNode) setDown(down bool) {
@@ -650,18 +650,20 @@ func (d *dialingNode) setDown(down bool) {
 }
 
 // waitDials waits for the n-th dial, which runs off the loop that decided on it, and
-// for every dial in flight to end, so the next decision is not held back by one.
-func waitDials(t *testing.T, r *run, d *dialingNode, n int) {
+// for every dial in flight to end, so the next decision is not held back by one. It
+// returns the addresses dialled: the log is read only once no dial is writing it.
+func waitDials(t *testing.T, r *run, d *dialingNode, n int) []string {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
 		r.r.mu.Lock()
 		inFlight := len(r.r.dialing)
 		r.r.mu.Unlock()
-		if d.dials() >= n && inFlight == 0 {
-			return
+		dialed := d.dials()
+		if len(dialed) >= n && inFlight == 0 {
+			return dialed
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%d dials and %d in flight, want %d and none", d.dials(), inFlight, n)
+			t.Fatalf("%d dials and %d in flight, want %d and none", len(dialed), inFlight, n)
 		}
 	}
 }
@@ -699,8 +701,8 @@ func followThroughRelay(t *testing.T) (*run, *dialingNode) {
 		r.c.QueuePeerLost(1)
 	}
 	deliver(survivors, 4)
-	if !runs[3].u.Migrating() || slices.ContainsFunc(far.dialed, func(a string) bool { return a != "2" }) {
-		t.Fatalf("the far survivor dialled %v and migrating is %t; want the first candidate alone, refused, and a walk", far.dialed, runs[3].u.Migrating())
+	if dialed := waitDials(t, runs[3], far, 0); !runs[3].u.Migrating() || slices.ContainsFunc(dialed, func(a string) bool { return a != "2" }) {
+		t.Fatalf("the far survivor dialled %v and migrating is %t; want the first candidate alone, refused, and a walk", dialed, runs[3].u.Migrating())
 	}
 	runs[2].world.relaying = true
 	runs[3].u.sendReport()
@@ -726,12 +728,11 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 	t.Run("reaches it", func(t *testing.T) {
 		t.Parallel()
 		far, node := followThroughRelay(t)
-		base := node.dials()
+		base := len(node.dials())
 		node.setDown(false)
 		far.u.drive()
-		waitDials(t, far, node, base+1)
-		if !node.Connected(2) || node.dialed[base] != "2" {
-			t.Fatalf("dialled %v and linked to the host is %t; want the host's chain address, linked", node.dialed[base:], node.Connected(2))
+		if dialed := waitDials(t, far, node, base+1); !node.Connected(2) || dialed[base] != "2" {
+			t.Fatalf("dialled %v and linked to the host is %t; want the host's chain address, linked", dialed[base:], node.Connected(2))
 		}
 		far.u.drive()
 		far.u.mu.Lock()
@@ -741,14 +742,14 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 			t.Fatalf("linked to its host, direct is %t and following %t; want its own link", direct, following)
 		}
 		far.u.drive()
-		if n := node.dials(); n != base+1 {
+		if n := len(waitDials(t, far, node, base+1)); n != base+1 {
 			t.Fatalf("%d dials once linked, want the one that linked it", n-base)
 		}
 	})
 	t.Run("gives up on one it cannot reach", func(t *testing.T) {
 		t.Parallel()
 		far, node := followThroughRelay(t)
-		base := node.dials()
+		base := len(node.dials())
 		for i := 1; i <= parameter.NetworkHostDialAttempts; i++ {
 			far.u.drive()
 			far.u.drive() // paced: the second drive inside the wait dials nothing
@@ -762,7 +763,7 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 			}
 		}
 		far.u.drive()
-		if n := node.dials() - base; n != parameter.NetworkHostDialAttempts {
+		if n := len(waitDials(t, far, node, base+parameter.NetworkHostDialAttempts)) - base; n != parameter.NetworkHostDialAttempts {
 			t.Fatalf("%d dials of the host, want %d and then none", n, parameter.NetworkHostDialAttempts)
 		}
 		if _, following := far.u.followed(); !following {
@@ -801,18 +802,18 @@ func TestTheSuccessorDialIsPaced(t *testing.T) {
 	for i := 1; i <= parameter.NetworkHostDialAttempts; i++ {
 		far.u.drive()
 		far.u.drive() // paced: the second drive inside the wait dials nothing
-		waitDials(t, far, node, i)
+		dialed := waitDials(t, far, node, i)
 		far.r.mu.Lock()
 		wait := far.r.nextSucc.Sub(time.Now()).Round(parameter.NetworkRejoinPassInterval)
 		far.r.mu.Unlock()
-		if want := parameter.NetworkRejoinPassInterval << (i - 1); wait != want || node.dialed[i-1] != "2" {
+		if want := parameter.NetworkRejoinPassInterval << (i - 1); wait != want || dialed[i-1] != "2" {
 			t.Fatalf("dial %d went to %q and waits %v before the next; want the first candidate and %v",
-				i, node.dialed[i-1], wait, want)
+				i, dialed[i-1], wait, want)
 		}
 		passWait()
 	}
 	far.u.drive()
-	if n := node.dials(); n != parameter.NetworkHostDialAttempts {
+	if n := len(waitDials(t, far, node, parameter.NetworkHostDialAttempts)); n != parameter.NetworkHostDialAttempts {
 		t.Fatalf("%d dials of the successor, want %d and then none", n, parameter.NetworkHostDialAttempts)
 	}
 
@@ -820,8 +821,8 @@ func TestTheSuccessorDialIsPaced(t *testing.T) {
 	far.u.chain = network.SuccessionChain{{ID: 3, Addr: "3"}, {ID: 2, Addr: "2"}, {ID: 4, Addr: "4"}}
 	far.u.mu.Unlock()
 	far.u.drive()
-	waitDials(t, far, node, parameter.NetworkHostDialAttempts+1)
-	if last := node.dialed[len(node.dialed)-1]; last != "3" {
+	dialed := waitDials(t, far, node, parameter.NetworkHostDialAttempts+1)
+	if last := dialed[len(dialed)-1]; last != "3" {
 		t.Fatalf("another successor was dialled at %q, want its own address", last)
 	}
 
