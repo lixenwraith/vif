@@ -326,8 +326,10 @@ owners and renderers use instead of keeping their own clock.
 
 A slot armed by a handler settled before a tick's systems run counts that tick,
 because the pass follows that dispatch; one armed in an owner's `Update`, or by
-a handler the closing settle runs, starts counting on the next tick. Systems
-whose entities end or act on a slot declare `Requires: timer`.
+a handler the closing settle runs, starts counting on the next tick, as every
+relative clock does ([Runtime §5](runtime.md#5-simulation-tick-steps) says what
+that does to a span). Systems whose entities end or act on a slot declare
+`Requires: timer`.
 Cursor countdowns stay in their owner-authored stores (D-13), and species phase
 timers stay in the species component beside the phase they time: the quasar's as
 its behavior machine's elapsed time and entry duration (`QuasarComponent.Machine`),

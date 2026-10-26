@@ -861,15 +861,18 @@ phase and the Wraith's wait. The gate world's capture is 3,137 bytes against 3,1
 
 One timing moved. A stamp read its tick's own instant, so a reset settled in the
 tick's pre or post settle started at that tick; an age also counts the tick its owner
-then runs, so that reset's first period ends a tick early: an ember a scenario's arm
-lights decays first after four ticks, then every five. Shield activations (pushed
-from `EnergySystem.Update`), Wraith turns (wire crossings), input and system events
-settle after their owner ticks and fire on the ticks they did, which a scripted arm
-read on both builds. Three of the harness's four shapes read alike before and after
-in every count, and all four in their late counts; on 2,2,3,100 a correction that
-shrank below one `SnapshotCorrectionChunkBytes` chunk travels in one frame instead
-of two at tick 766, which moves the shape's every-100th-frame drop, and its repairs
-after the storm differ from there (38 pages and 556 cells against 17 and 218).
+then runs, so that reset's first period ends a tick early: an ember a solo run's
+scenario lights decays first after four ticks, then every five. Resets outside those
+settles fire on the ticks they did, which a scripted arm read on both builds: shield
+activations (pushed from `EnergySystem.Update`), input and system events, and wire
+crossings (Wraith turns, a session's scenario arms), which land before the tick's
+time advance, where the stamp read the completed tick. Three of the harness's four
+shapes read alike before and after in every count, and all four in their late
+counts; on 2,2,3,100 a correction that shrank below one `SnapshotCorrectionChunkBytes`
+chunk travels in one frame instead of two at tick 766, which moves the shape's
+every-100th-frame drop, and its repairs after the storm differ from there (38 pages
+and 556 cells against 17 and 218). [Runtime §5](runtime.md#5-simulation-tick-steps)
+states the rule for every clock.
 
 ### Phase 3: the dialect kernel
 
