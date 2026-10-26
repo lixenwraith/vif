@@ -42,8 +42,7 @@ func boundsSystem(t *testing.T) *NetworkSystem {
 	event.EnsureRegistry() // payload frames need prototypes whichever test runs first
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	s := NewNetworkSystem(w).(*NetworkSystem)
-	s.Init()
+	s := ready(NewNetworkSystem(w)).(*NetworkSystem)
 	return s
 }
 

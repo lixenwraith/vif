@@ -20,7 +20,7 @@ func newEnvironmentWorld(seed uint64) (*engine.World, *EnvironmentSystem) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
 	w.Resources.Rand = engine.NewRandResource(seed)
-	return w, NewEnvironmentSystem(w).(*EnvironmentSystem)
+	return w, ready(NewEnvironmentSystem(w)).(*EnvironmentSystem)
 }
 
 func setEnvironmentDelta(w *engine.World, tick uint64, delta time.Duration) {
@@ -474,7 +474,7 @@ func TestGlyphLinesEnterAtTheUpwindEdge(t *testing.T) {
 		{"down-left", 3 * math.Pi / 4, []band{right, top}},
 	} {
 		w, _, _ := testCursorWorld(t)
-		glyphs := NewGlyphSystem(w).(*GlyphSystem)
+		glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
 		w.Resources.Status.Bools.Get("environment.drift_active").Store(true)
 		w.Resources.Status.Floats.Get("environment.drift_direction").Set(tc.direction)
 		for range 20 {

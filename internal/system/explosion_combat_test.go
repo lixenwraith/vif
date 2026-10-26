@@ -15,7 +15,7 @@ import (
 // player-domain state; it must not decide whether shared combat is emitted.
 func TestExplosionCombatDoesNotDependOnVisualMergeState(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	explosion := NewExplosionSystem(w).(*ExplosionSystem)
+	explosion := ready(NewExplosionSystem(w)).(*ExplosionSystem)
 
 	header := w.CreateEntity(core.DomainShared)
 	member := w.CreateEntity(core.DomainShared)
@@ -62,7 +62,7 @@ func TestExplosionCombatDoesNotDependOnVisualMergeState(t *testing.T) {
 // shared stream the two instances stand at different positions in (D-8).
 func TestExplosionHitsCarryTheArtifactIdentity(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	explosion := NewExplosionSystem(w).(*ExplosionSystem)
+	explosion := ready(NewExplosionSystem(w)).(*ExplosionSystem)
 	id := event.CrossingID{CrossingSource: 2, CrossingSeq: 9}
 
 	header := w.CreateEntity(core.DomainShared)
@@ -109,10 +109,10 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w, cursor, _ := testCursorWorld(t)
-			heat := NewHeatSystem(w).(*HeatSystem)
+			heat := ready(NewHeatSystem(w)).(*HeatSystem)
 			heat.setHeat(cursor, tc.heat)
 			w.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: tc.energy})
-			dust := NewParticleSystem(w).(*ParticleSystem)
+			dust := ready(NewParticleSystem(w)).(*ParticleSystem)
 			polarity := component.GlyphBlue
 			if tc.energy < 0 {
 				polarity = component.GlyphRed
@@ -244,8 +244,8 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 // A special attack that cannot be paid for, or has nothing to detonate, is inert.
 func TestSpecialAttackWithoutHeatOrDustChangesNothing(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	heat := NewHeatSystem(w).(*HeatSystem)
-	dust := NewParticleSystem(w).(*ParticleSystem)
+	heat := ready(NewHeatSystem(w)).(*HeatSystem)
+	dust := ready(NewParticleSystem(w)).(*ParticleSystem)
 	w.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: 50})
 
 	glyph := w.CreateEntity(core.DomainPlayer)

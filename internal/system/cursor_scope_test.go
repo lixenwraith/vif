@@ -23,7 +23,7 @@ func scopeWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	for slot, control := range map[uint8]component.ControlKind{
 		0: component.ControlLocal, 1: component.ControlRemote,
 	} {
@@ -56,7 +56,7 @@ func scopeEvent(et event.EventType, owner core.Entity) event.GameEvent {
 // participant's quasar stopped every participant's drains.
 func TestADrainPauseFollowsTheCursorItNames(t *testing.T) {
 	w, local, remote := scopeWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 
 	if drains.spawningPaused() {
 		t.Fatal("a fresh drain system is paused")
@@ -89,7 +89,7 @@ func TestADrainPauseFollowsTheCursorItNames(t *testing.T) {
 // every participant is inside it.
 func TestASessionWideDrainPauseStillReachesEveryCursor(t *testing.T) {
 	w, _, _ := scopeWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 
 	// The shape an action with no payload table produces: EmitEvent allocates the
 	// registered prototype, so the entity is zero rather than the payload absent.
@@ -114,7 +114,7 @@ func TestASessionWideDrainPauseStillReachesEveryCursor(t *testing.T) {
 // is still holding.
 func TestOverlappingPausesAreHeldSeparately(t *testing.T) {
 	w, local, _ := scopeWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 
 	drains.HandleEvent(scopeEvent(event.EventDrainPause, 0))     // a storm
 	drains.HandleEvent(scopeEvent(event.EventDrainPause, local)) // a quasar inside it
@@ -133,7 +133,7 @@ func TestOverlappingPausesAreHeldSeparately(t *testing.T) {
 // everything, or a new game, must not leave a hold nothing will ever release.
 func TestAResumeWithNoOwnerClearsEveryHold(t *testing.T) {
 	w, local, remote := scopeWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 
 	drains.HandleEvent(scopeEvent(event.EventDrainPause, local))
 	drains.HandleEvent(scopeEvent(event.EventDrainPause, remote))
@@ -156,7 +156,7 @@ func TestAResumeWithNoOwnerClearsEveryHold(t *testing.T) {
 // rather than a silently dropped hold nothing would release.
 func TestMoreHoldsThanTheRosterFallBackToPausing(t *testing.T) {
 	w, _, _ := scopeWorld(t)
-	drains := NewDrainSystem(w).(*DrainSystem)
+	drains := ready(NewDrainSystem(w)).(*DrainSystem)
 
 	for i := range parameter.MaxPlayers + 2 {
 		drains.HandleEvent(scopeEvent(event.EventDrainPause, core.Entity(1000+i)))
@@ -173,7 +173,7 @@ func TestMoreHoldsThanTheRosterFallBackToPausing(t *testing.T) {
 // TestGrayoutFollowsTheCursorItNames is the same rule for the screen effect.
 func TestGrayoutFollowsTheCursorItNames(t *testing.T) {
 	w, local, remote := scopeWorld(t)
-	transient := NewTransientSystem(w).(*TransientSystem)
+	transient := ready(NewTransientSystem(w)).(*TransientSystem)
 
 	transient.HandleEvent(scopeEvent(event.EventGrayoutStart, remote))
 	if w.Resources.View.Grayout.Active {

@@ -12,7 +12,7 @@ import (
 
 func TestTracerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 	weapon.fireTracers(cursor, 5, 5, &component.WeaponSpecs[component.WeaponGun], 1, component.PalettePositive)
 	w.Resources.Event.Queue.Consume() // Spawn sound.
 
@@ -73,7 +73,7 @@ func TestTracerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 // of the table at the cap, each starting on its own row or column beside the cursor.
 func TestGunLanesFollowItsCharges(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 	spec := &component.WeaponSpecs[component.WeaponGun]
 	for _, charges := range []int{1, spec.MaxCharges} {
 		for _, e := range w.Components.Tracer.GetAllEntities() {
@@ -106,7 +106,7 @@ func TestGunLanesFollowItsCharges(t *testing.T) {
 // it, and main fire then launches nothing.
 func TestGunOutlivesAnEnergyZeroCrossingAndLeavesOnRequest(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	if weaponComp.Charges[component.WeaponGun] != 1 {
 		t.Fatalf("fresh loadout = %v, want one gun charge", weaponComp.Charges)
@@ -135,7 +135,7 @@ func TestGunOutlivesAnEnergyZeroCrossingAndLeavesOnRequest(t *testing.T) {
 // without an impulse refuses every hit.
 func TestStrongerKnockbackResetsTheKineticWindow(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 10, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{

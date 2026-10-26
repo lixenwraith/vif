@@ -26,7 +26,7 @@ func capTarget(w *engine.World, x, y int) core.Entity {
 // does not hide a near single behind the rod's composites-first priority.
 func TestCappedRodArcsToTheNearestOtherTargetInRange(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 	near, next, far := capTarget(w, 8, 5), capTarget(w, 10, 5), capTarget(w, 8+2*int(parameter.LightningArcRange), 5)
 	header, member := w.CreateEntity(core.DomainShared), w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 30, Y: 20})
@@ -66,7 +66,7 @@ func TestCappedRodArcsToTheNearestOtherTargetInRange(t *testing.T) {
 // without touching the cooldown; a cooldown that has ended fires none.
 func TestCappedTurretStreamsBetweenWavesAndStopsWithTheCooldown(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 	capTarget(w, 8, 5)
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	weaponComp.Charges[component.WeaponTurret] = component.WeaponSpecs[component.WeaponTurret].MaxCharges
@@ -109,7 +109,7 @@ func TestCappedTurretStreamsBetweenWavesAndStopsWithTheCooldown(t *testing.T) {
 // nothing relights it without a request, and one request does.
 func TestCappedEmitterSustainsItsRayWhileMainFireIsHeld(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 	capTarget(w, 8, 5)
 	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
 	weaponComp.Charges[component.WeaponGun] = 0

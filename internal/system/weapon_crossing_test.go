@@ -15,8 +15,8 @@ import (
 // targets from one replicated pulse artifact.
 func TestDisruptorCrossesGeometry(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
-	explosion := NewExplosionSystem(w).(*ExplosionSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	explosion := ready(NewExplosionSystem(w)).(*ExplosionSystem)
 
 	drain := w.CreateEntity(core.DomainPlayer)
 	w.Positions.SetPosition(drain, component.PositionComponent{X: 7, Y: 5})
@@ -89,7 +89,7 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 func TestMountedWeaponRaisesOnlyLocalEvents(t *testing.T) {
 	w, first, second := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 20, 6, 9)
-	mount := NewMountSystem(w).(*MountSystem)
+	mount := ready(NewMountSystem(w)).(*MountSystem)
 
 	host := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(host, component.PositionComponent{X: 10, Y: 5})
@@ -127,7 +127,7 @@ func TestMountShotDrawsDependOnlyOnTickAndHost(t *testing.T) {
 	type velocity struct{ x, y float64 }
 	volley := func(reversed bool) map[core.Entity]velocity {
 		w, _, _ := testCursorWorld(t)
-		mounts := NewMountSystem(w).(*MountSystem)
+		mounts := ready(NewMountSystem(w)).(*MountSystem)
 		hosts := []core.Entity{w.CreateEntity(core.DomainShared), w.CreateEntity(core.DomainShared)}
 		for i, host := range hosts {
 			w.Positions.SetPosition(host, component.PositionComponent{X: 20 + 10*i, Y: 12})
@@ -158,7 +158,7 @@ func TestMountShotDrawsDependOnlyOnTickAndHost(t *testing.T) {
 // on a Shared target is one direct request stamped Shared; a hit on a drain stays local.
 func TestPlayerBulletCrossesOnlyItsHit(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	bullets := NewBulletSystem(w).(*BulletSystem)
+	bullets := ready(NewBulletSystem(w)).(*BulletSystem)
 
 	header := w.CreateEntity(core.DomainShared)
 	member := w.CreateEntity(core.DomainShared)
@@ -205,7 +205,7 @@ func TestPlayerBulletCrossesOnlyItsHit(t *testing.T) {
 // scale; a drain's hit stays local; nothing else leaves this instance.
 func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
 
 	header := w.CreateEntity(core.DomainShared)
 	near := w.CreateEntity(core.DomainShared)
@@ -272,7 +272,7 @@ func TestPlayerRayRunsThroughItsOrbAndCrossesOnlyItsImpacts(t *testing.T) {
 func TestMountedRayWarnsBeforeItStrikes(t *testing.T) {
 	w, _, second := testCursorWorld(t)
 	spawnRemoteCursor(t, w, 2, 25, 5, 9)
-	mount := NewMountSystem(w).(*MountSystem)
+	mount := ready(NewMountSystem(w)).(*MountSystem)
 
 	host := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(host, component.PositionComponent{X: 10, Y: 5})

@@ -222,7 +222,9 @@ func (a *App) init() error {
 	if err := a.initServices(); err != nil {
 		return err
 	}
-	a.initWorld()
+	if err := a.initWorld(); err != nil {
+		return err
+	}
 	if err := a.scribe.initJournal(); err != nil {
 		return err
 	}
@@ -274,7 +276,7 @@ func (a *App) initServices() error {
 }
 
 // initWorld builds the ECS world, the game context and the system set
-func (a *App) initWorld() {
+func (a *App) initWorld() error {
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
 	a.membership.world, a.scribe.world = a.world, a.world
@@ -376,12 +378,23 @@ func (a *App) initWorld() {
 		a.ctx.TimeCtl.SetPaused(true)
 	}
 
-	// Systems; AddSystem sorts by Priority(), manifest order breaks ties
+	// Systems; AddSystem sorts by Priority(), manifest order breaks ties.
+	// MetaSystem takes the context rather than the world, so the generator
+	// cannot construct it; its profile stays in manifest.ContextSystems.
 	for _, sys := range manifest.BuildSystems(a.world) {
 		a.world.AddSystem(sys, manifest.ProfileFor(sys.Name()))
 	}
-	// This game's streams are drawn; advance so the next game differs
+	meta := system.NewMetaSystem(a.ctx)
+	a.world.AddSystem(meta, manifest.ProfileFor(meta.Name()))
+	// One ordered pass initialises the complete set, as a reset does; an unknown
+	// dependency or a cycle is a startup error. Before the session advances, so
+	// the streams drawn here are this game's and the journal anchor reads the
+	// session that follows them.
+	if err := a.world.InitSystems(); err != nil {
+		return fmt.Errorf("system dependencies: %w", err)
+	}
 	a.world.Resources.Rand.NextSession()
+	return nil
 }
 
 // applyPlay starts the run as its [play] says; a purge returns to these values.
@@ -516,18 +529,6 @@ func (a *App) initScheduler() error {
 	if err := a.scheduler.LoadScenarioFromFS(
 		a.scenario.FS(), a.scenario.Entry(), manifest.RegisterFSMComponents); err != nil {
 		return fmt.Errorf("load scenario %s: %w", a.scenario.Name, err)
-	}
-
-	// MetaSystem needs the completed GameContext and therefore joins here. Its
-	// profile remains in manifest.ContextSystems for the ordinary validation and
-	// fingerprint checks.
-	meta := system.NewMetaSystem(a.ctx)
-	a.world.AddSystem(meta, manifest.ProfileFor(meta.Name()))
-
-	// The declared dependency graph is checked once the set is complete; an
-	// unknown name or a cycle is a startup error, not a runtime degradation
-	if err := a.world.CheckSystemDependencies(); err != nil {
-		return fmt.Errorf("system dependencies: %w", err)
 	}
 
 	for _, sys := range a.world.Systems() {

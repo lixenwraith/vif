@@ -47,7 +47,7 @@ func TestWallDisplacementMaskUsesEntityCapabilities(t *testing.T) {
 			engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 			e := w.CreateEntity(core.DomainShared)
 			tc.setup(w, e)
-			walls := NewWallSystem(w).(*WallSystem)
+			walls := ready(NewWallSystem(w)).(*WallSystem)
 			if got := walls.getMaskForEntity(e); got != tc.want {
 				t.Fatalf("mask = %v, want %v", got, tc.want)
 			}

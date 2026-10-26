@@ -26,9 +26,9 @@ func consumeStormBullet(t *testing.T, events []event.GameEvent) *event.BulletSpa
 // positions, ties to the lower slot, so its hostile bullets turn with the target.
 func TestStormRedTurretTracksTheNearestCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	storm := NewStormSystem(w).(*StormSystem)
-	mounts := NewMountSystem(w).(*MountSystem)
-	timers := NewTimerSystem(w)
+	storm := ready(NewStormSystem(w)).(*StormSystem)
+	mounts := ready(NewMountSystem(w)).(*MountSystem)
+	timers := ready(NewTimerSystem(w))
 
 	root := w.CreateEntity(core.DomainShared)
 	circle := storm.createCircleHeader(root, int(component.StormCircleRed),
@@ -80,7 +80,7 @@ func TestStormRedTurretTracksTheNearestCursor(t *testing.T) {
 func TestStormDrawsBeforeItReadsLivePositions(t *testing.T) {
 	spawn := func(blocked bool) uint64 {
 		w, _, _ := testCursorWorld(t)
-		storm := NewStormSystem(w).(*StormSystem)
+		storm := ready(NewStormSystem(w)).(*StormSystem)
 		if blocked {
 			for y := range 24 {
 				for x := range 40 {

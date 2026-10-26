@@ -277,17 +277,11 @@ func (w *World) HasSystem(name string) bool {
 	return false
 }
 
-// CheckSystemDependencies reports a dependency on an unregistered system or a
-// cycle. The graph orders nothing: each system initializes itself, in its
-// constructor and on reset, and AddSystem fixes the tick order from Priority().
-func (w *World) CheckSystemDependencies() error {
-	_, err := core.TopoSort(w.systemGraph())
-	return err
-}
-
-// InitSystems re-initialises every registered system in dependency order, a
-// required system before the ones naming it. The scheduler runs it on a game
-// reset once the world is cleared, in place of each system answering the request.
+// InitSystems initialises every registered system in dependency order, a
+// required system before the ones naming it, and reports a dependency on an
+// unregistered system or a cycle. The app runs it once the set is complete and
+// the scheduler on a game reset once the world is cleared; the graph orders only
+// this pass, since AddSystem fixes the tick order from Priority().
 func (w *World) InitSystems() error {
 	order, err := core.TopoSort(w.systemGraph())
 	if err != nil {
@@ -345,7 +339,7 @@ func (w *World) SystemsRequiring(name string, strength DependencyStrength) []str
 func (w *World) ApplySystems(want, decided func(name string) bool) {
 	order, err := core.TopoSort(w.systemGraph())
 	if err != nil {
-		return // CheckSystemDependencies refuses such a graph at startup
+		return // InitSystems refuses such a graph at startup
 	}
 	toggles := make(map[string]bool, len(w.systems))
 	running := make(map[string]bool, len(w.systems))

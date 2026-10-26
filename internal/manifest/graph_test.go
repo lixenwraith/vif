@@ -18,9 +18,9 @@ func buildWorld(t *testing.T) *engine.World {
 }
 
 // TestSystemGraphResolves asserts every declared dependency names a registered
-// system and the graph is acyclic
+// system and the graph is acyclic, so the startup pass initialises every system
 func TestSystemGraphResolves(t *testing.T) {
-	if err := buildWorld(t).CheckSystemDependencies(); err != nil {
+	if err := buildWorld(t).InitSystems(); err != nil {
 		t.Fatalf("system graph: %v", err)
 	}
 }

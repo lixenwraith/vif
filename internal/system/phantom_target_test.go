@@ -17,8 +17,8 @@ func newStormBreachFixture(t *testing.T) (*engine.World, *StormSystem, *Composit
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 160, 60, engine.NewManualClock())
 
-	storm := NewStormSystem(w).(*StormSystem)
-	composite := NewCompositeSystem(w).(*CompositeSystem)
+	storm := ready(NewStormSystem(w)).(*StormSystem)
+	composite := ready(NewCompositeSystem(w)).(*CompositeSystem)
 
 	storm.HandleEvent(event.GameEvent{Type: event.EventStormSpawnRequest})
 	if storm.rootEntity == 0 {
@@ -141,7 +141,7 @@ func TestTrackedLightningRetiresWhenItsLeaseLapses(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
 	tick := newTimerTick(w)
-	lightning := NewLightningSystem(w).(*LightningSystem)
+	lightning := ready(NewLightningSystem(w)).(*LightningSystem)
 
 	owner := w.CreateEntity(core.DomainShared)
 	lightning.HandleEvent(event.GameEvent{
