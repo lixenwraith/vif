@@ -12,7 +12,7 @@ import (
 
 func TestLootSurvivesAnEncounterClearAndMapShrinkUntilReset(t *testing.T) {
 	w, owner, _ := testCursorWorld(t)
-	loot := NewLootSystem(w).(*LootSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
 	drop := dropLoot(w, loot, 35, 20, owner)
 	w.SetupLevel(20, 12, true, false, true)
 	loot.Update()
@@ -34,7 +34,7 @@ func TestLootSurvivesAnEncounterClearAndMapShrinkUntilReset(t *testing.T) {
 // fallback to every later tier: Storm's pulse after bullets, Kraken's 3+3 after rays.
 func TestDropTableYieldsCappedWeaponsThenFallsBack(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	loot := NewLootSystem(w).(*LootSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
 	capWeapon := func(wt component.WeaponType) {
 		weapons, _ := w.Components.Weapon.GetPtr(cursor)
 		weapons.Charges[wt] = component.WeaponSpecs[wt].MaxCharges
@@ -119,9 +119,9 @@ type lootFlight struct {
 // shared navigation state is driven the same way as one that does not.
 func flyLoot(t *testing.T, w *engine.World, lootEntity, owner core.Entity, maxTicks int) lootFlight {
 	t.Helper()
-	nav := NewNavigationSystem(w).(*NavigationSystem)
-	loot := NewLootSystem(w).(*LootSystem)
-	deaths := NewDeathSystem(w).(*DeathSystem)
+	nav := ready(NewNavigationSystem(w)).(*NavigationSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	deaths := ready(NewDeathSystem(w)).(*DeathSystem)
 
 	out := lootFlight{ticks: -1}
 	var lastX, lastY float64
@@ -170,7 +170,7 @@ func TestLootRoutesToItsOwnCursorNotTheNearestOne(t *testing.T) {
 	w, owner, other := testCursorWorld(t) // (5,5) and (15,5)
 	wallWithGap(w, 10)
 
-	loot := NewLootSystem(w).(*LootSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
 	// Behind the barrier from its owner, and two cells from the other cursor.
 	drop := dropLoot(w, loot, 13, 5, owner)
 	if drop == 0 {
@@ -200,12 +200,12 @@ func TestLootRoutesToItsOwnCursorNotTheNearestOne(t *testing.T) {
 func TestLootWithoutLineOfSightKeepsItsOwnRoute(t *testing.T) {
 	solo, soloOwner := soloCursorWorld(t)
 	wallWithGap(solo, 10)
-	soloLoot := NewLootSystem(solo).(*LootSystem)
+	soloLoot := ready(NewLootSystem(solo)).(*LootSystem)
 	alone := flyLoot(t, solo, dropLoot(solo, soloLoot, 13, 5, soloOwner), soloOwner, 300)
 
 	shared, sharedOwner, _ := testCursorWorld(t)
 	wallWithGap(shared, 10)
-	sharedLoot := NewLootSystem(shared).(*LootSystem)
+	sharedLoot := ready(NewLootSystem(shared)).(*LootSystem)
 	beside := flyLoot(t, shared, dropLoot(shared, sharedLoot, 13, 5, sharedOwner), sharedOwner, 300)
 
 	if alone.ticks < 0 || beside.ticks != alone.ticks {
@@ -219,7 +219,7 @@ func TestLootWithoutLineOfSightKeepsItsOwnRoute(t *testing.T) {
 // rather than derived from the profile, so the numbers survive a retune.
 func TestLootSettlesInsteadOfOrbitingItsOwner(t *testing.T) {
 	w, owner := soloCursorWorld(t)
-	loot := NewLootSystem(w).(*LootSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
 
 	const dropX, dropY = 20, 12
 	drop := dropLoot(w, loot, dropX, dropY, owner)
@@ -256,7 +256,7 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 120, 40, engine.NewManualClock())
 
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	cursors.HandleEvent(event.GameEvent{
 		Type: event.EventCursorSpawnRequest,
 		Payload: &event.CursorSpawnRequestPayload{
@@ -268,8 +268,8 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 		t.Fatal("no cursor")
 	}
 
-	loot := NewLootSystem(w).(*LootSystem)
-	nav := NewNavigationSystem(w).(*NavigationSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	nav := ready(NewNavigationSystem(w)).(*NavigationSystem)
 	warmDrop := dropLoot(w, loot, 65, 20, owner)
 	nav.Update()
 	if w.Resources.Pursuit.Field(0) == nil {
@@ -277,7 +277,7 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 	}
 	w.DestroyEntity(warmDrop)
 
-	walls := NewWallSystem(w).(*WallSystem)
+	walls := ready(NewWallSystem(w)).(*WallSystem)
 	walls.HandleEvent(event.GameEvent{
 		Type: event.EventMazeSpawnRequest,
 		Payload: &event.MazeSpawnRequestPayload{
@@ -291,7 +291,7 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 		t.Fatalf("the maze produced %d walls; the crossing proves nothing", walls)
 	}
 
-	deaths := NewDeathSystem(w).(*DeathSystem)
+	deaths := ready(NewDeathSystem(w)).(*DeathSystem)
 
 	rng := w.Rand(core.DomainPlayer, "loot_maze_probe")
 	drops := make([]core.Entity, 0, 32)
@@ -342,7 +342,7 @@ func TestLootWalledOffComesToRest(t *testing.T) {
 	for _, c := range [][2]int{{19, 11}, {20, 11}, {21, 11}, {19, 12}, {21, 12}, {19, 13}, {20, 13}, {21, 13}} {
 		spawnWall(w, c[0], c[1])
 	}
-	loot := NewLootSystem(w).(*LootSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
 	drop := dropLoot(w, loot, 20, 12, owner)
 	if drop == 0 {
 		t.Fatal("the drop was not created")
@@ -369,7 +369,7 @@ func TestLootWalledOffComesToRest(t *testing.T) {
 // it with the cursor; nothing of it lives in the loot system.
 func TestADropsFieldIsItsOwnersPrivateGroup(t *testing.T) {
 	w, _, second := testCursorWorld(t)
-	nav := NewNavigationSystem(w).(*NavigationSystem)
+	nav := ready(NewNavigationSystem(w)).(*NavigationSystem)
 	nav.Update()
 	if w.Resources.Pursuit.Field(0) == nil || w.Resources.Pursuit.Field(1) == nil {
 		t.Fatal("a cursor on the map has no field toward it")
@@ -394,7 +394,7 @@ func TestADropAWallLandedOnIsDisplacedAndCollected(t *testing.T) {
 		spawnWall(w, c[0], c[1]) // a notch open to the south
 	}
 	w.Positions.SetPosition(owner, component.PositionComponent{X: 3, Y: 3})
-	drop := dropLoot(w, NewLootSystem(w).(*LootSystem), 19, 11, owner)
+	drop := dropLoot(w, ready(NewLootSystem(w)).(*LootSystem), 19, 11, owner)
 	spawnWall(w, 19, 11)
 
 	if flight := flyLoot(t, w, drop, owner, 400); flight.ticks < 0 {

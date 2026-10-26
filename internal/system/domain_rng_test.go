@@ -35,7 +35,7 @@ func knockCombat(w *engine.World, e core.Entity) *component.CombatComponent {
 // leaves the shared sequence untouched, and the shared case proves that is not vacuous.
 func TestCombatKnockbackDrawsFromTheTargetsStream(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
-	s := NewCombatSystem(w).(*CombatSystem)
+	s := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	player := knockTarget(w, core.DomainPlayer, 20, 6)
 	shared := knockTarget(w, core.DomainShared, 22, 6)
@@ -70,7 +70,7 @@ func TestCombatKnockbackDrawsFromTheTargetsStream(t *testing.T) {
 // rather than of a stream position they consume at different ticks.
 func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
-	s := NewCombatSystem(w).(*CombatSystem)
+	s := ready(NewCombatSystem(w)).(*CombatSystem)
 	target := knockTarget(w, core.DomainShared, 22, 6)
 	id := event.CrossingID{CrossingSource: 2, CrossingSeq: 7}
 
@@ -103,8 +103,7 @@ func TestCombatKnockbackFollowsTheArtifactNotTheStream(t *testing.T) {
 func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
-	s.Init()
+	s := ready(NewSoftCollisionSystem(w)).(*SoftCollisionSystem)
 
 	rule := s.matrix[component.SpeciesSwarm][component.SpeciesSwarm]
 	if rule == nil {
@@ -138,8 +137,7 @@ func TestSoftCollisionImpulseFollowsTheTickAndThePair(t *testing.T) {
 	// it reaches the same pair having resolved a different number of collisions.
 	w2 := engine.NewWorld()
 	engine.NewGameContextWithClock(w2, 40, 24, engine.NewManualClock())
-	s2 := NewSoftCollisionSystem(w2).(*SoftCollisionSystem)
-	s2.Init()
+	s2 := ready(NewSoftCollisionSystem(w2)).(*SoftCollisionSystem)
 	source2 := knockTarget(w2, core.DomainShared, 15, 10)
 	shared2 := knockTarget(w2, core.DomainShared, 14, 10)
 	doomed := knockTarget(w2, core.DomainShared, 16, 10)
@@ -168,21 +166,21 @@ func TestASharedSpawnDrawsItsPlacementBudgetBeforeFiltering(t *testing.T) {
 		block func(*engine.World, core.Entity, int, int)
 	}{
 		{"pylon", func(w *engine.World) (int, int, uint64) {
-			s := NewPylonSystem(w).(*PylonSystem)
+			s := ready(NewPylonSystem(w)).(*PylonSystem)
 			x, y, _ := s.findRandomPylonPosition(4, 2)
 			return x, y, s.rng.State()
 		}, func(w *engine.World, cursor core.Entity, x, y int) {
 			w.Positions.SetPosition(cursor, component.PositionComponent{X: x, Y: y})
 		}},
 		{"gold", func(w *engine.World) (int, int, uint64) {
-			s := NewGoldSystem(w).(*GoldSystem)
+			s := ready(NewGoldSystem(w)).(*GoldSystem)
 			x, y := s.findValidPosition(10)
 			return x, y, s.rng.State()
 		}, func(w *engine.World, cursor core.Entity, x, y int) {
 			w.Positions.SetPosition(cursor, component.PositionComponent{X: x, Y: y})
 		}},
 		{"tower", func(w *engine.World) (int, int, uint64) {
-			s := NewTowerSystem(w).(*TowerSystem)
+			s := ready(NewTowerSystem(w)).(*TowerSystem)
 			x, y, _ := s.findTowerPosition(4, 2)
 			return x, y, s.rng.State()
 		}, func(w *engine.World, _ core.Entity, x, y int) { spawnWall(w, x, y) }},

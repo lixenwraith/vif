@@ -27,7 +27,7 @@ func pulseAt(w *engine.World, combat *CombatSystem, owner, target core.Entity, c
 // the burn ticks BurnDamage every BurnPeriod for BurnDuration, then clears.
 func TestChargedPulseLeavesABurnCreditedToItsLastRefresher(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
@@ -70,7 +70,7 @@ func TestChargedPulseLeavesABurnCreditedToItsLastRefresher(t *testing.T) {
 // a tick, while the window a player's own direct hit spends does not.
 func TestOnlyAWardBlocksABurnTick(t *testing.T) {
 	w, first, _ := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{

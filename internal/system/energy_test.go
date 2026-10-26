@@ -11,7 +11,7 @@ import (
 
 func TestEnergyRewardKeepsPolarityUntilDrainReachesZero(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	s := NewEnergySystem(w).(*EnergySystem)
+	s := ready(NewEnergySystem(w)).(*EnergySystem)
 	energy, _ := w.Components.Energy.GetPtr(cursor)
 
 	energy.Current = -1000
@@ -36,7 +36,7 @@ func TestEnergyRewardKeepsPolarityUntilDrainReachesZero(t *testing.T) {
 // species instead of collapsing onto the projectile's impact cell.
 func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 10, Y: 5})
@@ -81,7 +81,7 @@ func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 			t.Fatalf("zap = (%d,%d)->entity %d, want cursor (%d,%d)->species %d",
 				p.OriginX, p.OriginY, p.TargetEntity, cursorPos.X, cursorPos.Y, target)
 		}
-		lightning := NewLightningSystem(w).(*LightningSystem)
+		lightning := ready(NewLightningSystem(w)).(*LightningSystem)
 		lightning.HandleEvent(ev)
 		tick := newTimerTick(w)
 		tick.open()

@@ -14,7 +14,7 @@ func newAdaptationFixture(t *testing.T) *AdaptationSystem {
 	t.Helper()
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	return NewAdaptationSystem(w).(*AdaptationSystem)
+	return ready(NewAdaptationSystem(w)).(*AdaptationSystem)
 }
 
 // A death is scored the tick after its event, from the route its eye took, so a

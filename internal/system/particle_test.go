@@ -19,7 +19,7 @@ func newParticleWorld(seed uint64) (*engine.World, *ParticleSystem) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 20, 10, engine.NewManualClock())
 	w.Resources.Rand = engine.NewRandResource(seed)
-	return w, NewParticleSystem(w).(*ParticleSystem)
+	return w, ready(NewParticleSystem(w)).(*ParticleSystem)
 }
 
 func TestParticleSpawnBranchesByBehavior(t *testing.T) {
@@ -345,7 +345,7 @@ func TestDustBouncesOffWalls(t *testing.T) {
 // with a kick in its spin, and drops straight down once the Kraken stands still.
 func TestDecayOrbitsKrakenOnlyWhileItSpinsOrCharges(t *testing.T) {
 	w, _, kraken, _ := krakenFixture(t)
-	particles := NewParticleSystem(w).(*ParticleSystem)
+	particles := ready(NewParticleSystem(w)).(*ParticleSystem)
 	k, _ := w.Components.Kraken.GetPtr(kraken)
 	k.State, k.TurnDir = component.KrakenSpin, 1
 	body, _ := w.Components.Kinetic.GetComponent(kraken)

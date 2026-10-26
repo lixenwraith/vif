@@ -11,8 +11,8 @@ import (
 
 func TestCursorDefeatTransitionCrossesCombinedOwnerState(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	energy := NewEnergySystem(w).(*EnergySystem)
-	heat := NewHeatSystem(w).(*HeatSystem)
+	energy := ready(NewEnergySystem(w)).(*EnergySystem)
+	heat := ready(NewHeatSystem(w)).(*HeatSystem)
 
 	find := func() *event.CursorDefeatStatePayload {
 		t.Helper()
@@ -50,8 +50,8 @@ func TestCursorDefeatTransitionCrossesCombinedOwnerState(t *testing.T) {
 func TestMetaDefeatGatesFollowRosteredOwnerCrossings(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	cursors := NewCursorSystem(w).(*CursorSystem)
-	meta := NewMetaSystem(ctx).(*MetaSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	meta := ready(NewMetaSystem(ctx)).(*MetaSystem)
 	for slot := range uint8(2) {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
 			Payload: &event.CursorSpawnRequestPayload{Slot: slot, X: 5 + int(slot)*10, Y: 5,
@@ -93,8 +93,8 @@ func TestMetaDefeatGatesFollowRosteredOwnerCrossings(t *testing.T) {
 func TestAWraithNeitherLosesNorHoldsUpADefeat(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	cursors := NewCursorSystem(w).(*CursorSystem)
-	meta := NewMetaSystem(ctx).(*MetaSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	meta := ready(NewMetaSystem(ctx)).(*MetaSystem)
 	for slot := range uint8(2) {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
 			Payload: &event.CursorSpawnRequestPayload{Slot: slot, X: 5 + int(slot)*10, Y: 5,
@@ -186,7 +186,7 @@ func TestSnakeHeadHeatsOnlyWhileUnshielded(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	head := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(head, component.PositionComponent{X: 5, Y: 5})
-	snakes := NewSnakeSystem(w).(*SnakeSystem)
+	snakes := ready(NewSnakeSystem(w)).(*SnakeSystem)
 	strikes := func(shielded bool) (drains, heats int) {
 		snakes.handleInteractions(&component.SnakeComponent{HeadEntity: head, IsShielded: shielded})
 		for _, ev := range w.Resources.Event.Queue.Consume() {

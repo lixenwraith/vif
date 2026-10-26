@@ -20,7 +20,7 @@ func newStalledSwarm(t *testing.T) (*engine.World, *SwarmSystem, core.Entity) {
 	t.Helper()
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
-	s := NewSwarmSystem(w).(*SwarmSystem)
+	s := ready(NewSwarmSystem(w)).(*SwarmSystem)
 	s.enabled = true
 
 	header := w.CreateEntity(core.DomainShared)
@@ -128,7 +128,7 @@ func TestAStunnedSwarmStillDies(t *testing.T) {
 // later hit — the other participant's included — cannot extend it.
 func TestAStunIsNotRefreshedWhileItRuns(t *testing.T) {
 	w, _, header := newStalledSwarm(t)
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 
 	c, _ := w.Components.Combat.GetPtr(header)
 	if !combat.applyStunEffect(header, c) {
@@ -189,7 +189,7 @@ func TestSwarmLifetimeDespawnsTheWholeComposite(t *testing.T) {
 	w, s, header := newStalledSwarm(t)
 	combat, _ := w.Components.Combat.GetPtr(header)
 	combat.Status[component.StatusStun].Remaining = time.Second
-	timers := NewTimerSystem(w)
+	timers := ready(NewTimerSystem(w))
 	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
 	armTimer(w, header, component.TimerDeadline, parameter.GameUpdateInterval)
 

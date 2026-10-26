@@ -29,7 +29,7 @@ func syncFor(e core.Entity, slot uint8, seq uint64, energy int64) *event.CursorS
 func TestCursorStateSyncWritesOnlyACoherentRemoteCursor(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
-	net := NewNetworkSystem(w).(*NetworkSystem)
+	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
 
 	energyOf := func(e core.Entity) int64 {
 		c, _ := w.Components.Energy.GetComponent(e)
@@ -70,7 +70,7 @@ func TestCursorStateSyncWritesOnlyACoherentRemoteCursor(t *testing.T) {
 // id the install may hand to another composite. The carrier owns both (D-6, D-19).
 func TestTheTimerSplashFollowsTheInstalledGoldSequence(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
-	gold := NewGoldSystem(w).(*GoldSystem)
+	gold := ready(NewGoldSystem(w)).(*GoldSystem)
 
 	// The store pass installs each header with its deadline before LoadShared
 	header := w.CreateEntity(core.DomainShared)
@@ -141,7 +141,7 @@ func TestTheTimerSplashFollowsTheInstalledGoldSequence(t *testing.T) {
 func TestDepartureReleasesTheSlotSyncSequence(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
-	net := NewNetworkSystem(w).(*NetworkSystem)
+	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
 
 	net.writeCursorState(syncFor(remote, 2, 5, 40))
 	if c, _ := w.Components.Energy.GetComponent(remote); c.Current != 40 {
@@ -168,7 +168,7 @@ func TestDepartureReleasesTheSlotSyncSequence(t *testing.T) {
 func TestLinkLossDoesNotDespawnWhereItIsObserved(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
-	net := NewNetworkSystem(w).(*NetworkSystem)
+	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
 
 	net.noticeDeparture(7, false)
 	w.Resources.Event.Queue.Consume()
@@ -202,7 +202,7 @@ func holderWorld(t *testing.T) (*engine.World, *NetworkSystem, map[uint32]bool) 
 	w.RunSafe(w.LatchSession)
 	finals := map[uint32]bool{}
 	w.Resources.Network.OnDeparture = func(id uint32, final bool) { finals[id] = final }
-	return w, NewNetworkSystem(w).(*NetworkSystem), finals
+	return w, ready(NewNetworkSystem(w)).(*NetworkSystem), finals
 }
 
 // departures is every participant departure the queue holds.
@@ -249,7 +249,7 @@ func TestALinkLossTurnsAHoldersGroupWraithAndADismissalDespawnsIt(t *testing.T) 
 func wraithWorld(t *testing.T) (*engine.World, *NetworkSystem, time.Time) {
 	t.Helper()
 	w, net, _ := holderWorld(t)
-	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	for _, slot := range []uint8{2, 3} {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
 			Payload: &event.CursorWraithRequestPayload{Slot: slot}})
@@ -301,7 +301,7 @@ func TestAWraithOnItsWayBackIsNotDropped(t *testing.T) {
 func TestAYieldedWraithIsDroppedAtOnce(t *testing.T) {
 	w, net, _ := wraithWorld(t)
 	spawnRemoteCursor(t, w, 4, 35, 5, 9)
-	NewCursorSystem(w).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+	ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
 		Payload: &event.CursorWraithRequestPayload{Slot: 4}})
 	w.Resources.Event.Queue.Consume()
 	yield := uint32(9)
@@ -343,7 +343,7 @@ func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
 	host, guest := network.NewLoopbackPair(1, 2)
 	w.Resources.Network = engine.NewNetworkResource(guest)
 	w.RunSafe(w.LatchSession)
-	net := NewNetworkSystem(w).(*NetworkSystem)
+	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
 
 	if err := host.Close(); err != nil {
 		t.Fatal(err)
@@ -381,7 +381,7 @@ func TestDismissalCannotAnnounceClosingLinksAsDepartures(t *testing.T) {
 	dismissed, lost := false, false
 	w.Resources.Network.OnDismissed = func() { dismissed = true }
 	w.Resources.Network.OnPeerLost = func(uint32) bool { lost = true; return false }
-	net := NewNetworkSystem(w).(*NetworkSystem)
+	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
 	net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: 1, Slot: 0}))
 	if lost || len(w.Resources.Event.Queue.Consume()) != 0 {
 		t.Fatal("a neighbour's closing link announced the still-connected host's departure")
@@ -398,7 +398,7 @@ func TestDismissalCannotAnnounceClosingLinksAsDepartures(t *testing.T) {
 
 	// Already-buffered notices from a retired participant cannot remove survivors.
 	w, _, _ = testCursorWorld(t)
-	net = NewNetworkSystem(w).(*NetworkSystem)
+	net = ready(NewNetworkSystem(w)).(*NetworkSystem)
 	net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 2, Slot: 2})
 	net.receiveDeparture(2, mustJSON(t, event.ParticipantDepartedPayload{Participant: 1, Slot: 0}))
 	if net.departed[1] {

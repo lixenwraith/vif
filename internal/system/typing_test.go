@@ -11,7 +11,7 @@ import (
 // matches the nearest layer, the one drawn on top, whatever order they arrived in.
 func TestTypingActsOnTheDrawnGlyph(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
-	typing := NewTypingSystem(w).(*TypingSystem)
+	typing := ready(NewTypingSystem(w)).(*TypingSystem)
 	far := addDriftGlyph(w, 5, 5, component.GlyphDark)
 	near := addDriftGlyph(w, 5, 5, component.GlyphBright)
 	w.Components.Glyph.SetComponent(far, component.GlyphComponent{Rune: 'a', Type: component.GlyphBlue, Level: component.GlyphDark})

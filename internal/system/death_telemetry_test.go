@@ -12,7 +12,7 @@ import (
 func TestDeathTelemetrySeparatesEffectTypes(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	deaths := NewDeathSystem(w).(*DeathSystem)
+	deaths := ready(NewDeathSystem(w)).(*DeathSystem)
 
 	spawn := func(x int) core.Entity {
 		e := w.CreateEntity(core.DomainShared)
@@ -53,7 +53,7 @@ func TestDeathTelemetrySeparatesEffectTypes(t *testing.T) {
 func TestDeathBatchesParticleEffectWithBehavior(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	deaths := NewDeathSystem(w).(*DeathSystem)
+	deaths := ready(NewDeathSystem(w)).(*DeathSystem)
 
 	entity := w.CreateEntity(core.DomainPlayer)
 	w.Positions.SetPosition(entity, component.PositionComponent{X: 7, Y: 8})

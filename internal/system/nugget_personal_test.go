@@ -11,7 +11,7 @@ import (
 func TestPersonalNuggetUsesPlayerDomainAndLocalCursor(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
-	nuggets := NewNuggetSystem(w).(*NuggetSystem)
+	nuggets := ready(NewNuggetSystem(w)).(*NuggetSystem)
 
 	nuggets.spawnNugget()
 	spawned := nuggets.activeNuggetEntity
@@ -37,7 +37,7 @@ func TestPersonalNuggetUsesPlayerDomainAndLocalCursor(t *testing.T) {
 func TestPersonalNuggetJumpCrossesOnlyCursorMove(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
-	nuggets := NewNuggetSystem(w).(*NuggetSystem)
+	nuggets := ready(NewNuggetSystem(w)).(*NuggetSystem)
 
 	nugget := w.CreateEntity(core.DomainPlayer)
 	w.Positions.SetPosition(nugget, component.PositionComponent{X: 12, Y: 7})
@@ -80,7 +80,7 @@ func TestPersonalNuggetJumpCrossesOnlyCursorMove(t *testing.T) {
 // delayed a wholly local reward by a playout lead.
 func TestPersonalNuggetCollectsAtThePredictedCell(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
-	nuggets := NewNuggetSystem(w).(*NuggetSystem)
+	nuggets := ready(NewNuggetSystem(w)).(*NuggetSystem)
 
 	w.PushCursorMove(local, 20, 9)
 	if pos, _ := w.Positions.GetPosition(local); pos.X == 20 && pos.Y == 9 {

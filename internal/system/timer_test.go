@@ -22,7 +22,7 @@ type timerTick struct {
 
 func newTimerTick(w *engine.World) *timerTick {
 	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
-	return &timerTick{w: w, timer: NewTimerSystem(w), deaths: NewDeathSystem(w).(*DeathSystem)}
+	return &timerTick{w: w, timer: ready(NewTimerSystem(w)), deaths: ready(NewDeathSystem(w)).(*DeathSystem)}
 }
 
 func (tt *timerTick) open() {
@@ -50,8 +50,8 @@ func TestLifetimesKeepTheirTickCounts(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
 	tick := newTimerTick(w)
-	bullets := NewBulletSystem(w).(*BulletSystem)
-	spirits := NewSpiritSystem(w).(*SpiritSystem)
+	bullets := ready(NewBulletSystem(w)).(*BulletSystem)
+	spirits := ready(NewSpiritSystem(w)).(*SpiritSystem)
 
 	bullets.HandleEvent(event.GameEvent{Type: event.EventBulletSpawnRequest, Payload: &event.BulletSpawnRequestPayload{
 		OriginX: 2.5, OriginY: 5.5, VelX: 1, MaxLifetime: parameter.TurretBulletLifetime,
@@ -114,7 +114,7 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 		}
 	}
 
-	materialize := NewMaterializeSystem(w).(*MaterializeSystem)
+	materialize := ready(NewMaterializeSystem(w)).(*MaterializeSystem)
 	for _, spawn := range []component.SpawnType{component.SpawnTypeDrain, component.SpawnTypeNugget} {
 		materialize.HandleEvent(event.GameEvent{Type: event.EventMaterializeRequest, Domain: core.DomainPlayer,
 			Payload: &event.MaterializeRequestPayload{X: 10, Y: 10, Type: spawn}})
@@ -126,7 +126,7 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 		}
 	}
 
-	missiles := NewMissileSystem(w).(*MissileSystem)
+	missiles := ready(NewMissileSystem(w)).(*MissileSystem)
 	missiles.HandleEvent(event.GameEvent{Type: event.EventMissileSpawnRequest,
 		Payload: &event.MissileSpawnRequestPayload{OriginX: 20, OriginY: 12, Count: 1}})
 	missile := w.Components.Missile.Entities()[0]
@@ -151,7 +151,7 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 		t.Fatalf("orphaned missile detonated at %+v, want (21,12) where its 60th move left it", blast)
 	}
 
-	gold := NewGoldSystem(w).(*GoldSystem)
+	gold := ready(NewGoldSystem(w)).(*GoldSystem)
 	spawnGold := func() {
 		gold.HandleEvent(event.GameEvent{Type: event.EventGoldSpawnRequest})
 		if !gold.active {

@@ -19,7 +19,7 @@ func krakenFixture(t *testing.T) (*engine.World, *KrakenSystem, core.Entity, vma
 	t.Helper()
 	w, _, _ := testCursorWorld(t)
 	w.SetupLevel(180, 90, false, false, false)
-	s := NewKrakenSystem(w).(*KrakenSystem)
+	s := ready(NewKrakenSystem(w)).(*KrakenSystem)
 	s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45})
 	if w.Components.Kraken.CountEntities() != 1 {
 		t.Fatal("Kraken did not spawn")
@@ -226,8 +226,8 @@ func TestKrakenChargeTargetsThroughWallsAndSkipsCoveredCursors(t *testing.T) {
 func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	w.SetupLevel(180, 90, false, false, false)
-	s := NewKrakenSystem(w).(*KrakenSystem)
-	walls, death := NewWallSystem(w).(*WallSystem), NewDeathSystem(w).(*DeathSystem)
+	s := ready(NewKrakenSystem(w)).(*KrakenSystem)
+	walls, death := ready(NewWallSystem(w)).(*WallSystem), ready(NewDeathSystem(w)).(*DeathSystem)
 	var leg vmath.Point
 	shape := component.KrakenComponent{}
 	for _, p := range shape.AppendTentacleSamples(nil, 90.5, 45.5) {
@@ -287,10 +287,10 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 
 func TestKrakenConvertsGlyphsAndDestroysWholeGoldAndNuggets(t *testing.T) {
 	w, s, _, leg := krakenFixture(t)
-	gold := NewGoldSystem(w).(*GoldSystem)
-	nuggets := NewNuggetSystem(w).(*NuggetSystem)
-	death := NewDeathSystem(w).(*DeathSystem)
-	composite := NewCompositeSystem(w).(*CompositeSystem)
+	gold := ready(NewGoldSystem(w)).(*GoldSystem)
+	nuggets := ready(NewNuggetSystem(w)).(*NuggetSystem)
+	death := ready(NewDeathSystem(w)).(*DeathSystem)
+	composite := ready(NewCompositeSystem(w)).(*CompositeSystem)
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: leg.X, Y: leg.Y})
 	var members []component.MemberEntry
@@ -346,11 +346,11 @@ func TestKrakenConvertsGlyphsAndDestroysWholeGoldAndNuggets(t *testing.T) {
 
 func TestKrakenTracerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testing.T) {
 	w, _, kraken, leg := krakenFixture(t)
-	weapon := NewWeaponSystem(w).(*WeaponSystem)
-	combat := NewCombatSystem(w).(*CombatSystem)
-	explosion := NewExplosionSystem(w).(*ExplosionSystem)
-	dust := NewParticleSystem(w).(*ParticleSystem)
-	heat := NewHeatSystem(w).(*HeatSystem)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	explosion := ready(NewExplosionSystem(w)).(*ExplosionSystem)
+	dust := ready(NewParticleSystem(w)).(*ParticleSystem)
+	heat := ready(NewHeatSystem(w)).(*HeatSystem)
 	settle := func() {
 		for range 10 {
 			evs := w.Resources.Event.Queue.Consume()
@@ -425,14 +425,14 @@ func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 	if !ok || target != e || hit == e {
 		t.Fatalf("leg resolved to (%d, %d, %v)", target, hit, ok)
 	}
-	missiles := NewMissileSystem(w).(*MissileSystem)
+	missiles := ready(NewMissileSystem(w)).(*MissileSystem)
 	x, y, impact := missiles.traverseForImpact(135.5, 45.5, 90.5, 45.5, &component.MissileComponent{
 		Owner: cursor, TargetEntity: e, HitEntity: e,
 	})
 	if impact != impactCombatant || x <= 98 || y != 45 {
 		t.Fatalf("missile passed the leg: impact=(%d,%d,%d)", x, y, impact)
 	}
-	combat := NewCombatSystem(w).(*CombatSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
 		AttackType: component.CombatAttackBullet, OriginEntity: cursor, OwnerEntity: cursor, TargetEntity: e, HitEntity: hit,
 	})
@@ -463,7 +463,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	w, s, e, leg := krakenFixture(t)
 	_, member, _ := CombatTargetAt(w, leg.X, leg.Y, engine.ScopeShared, 0, 0)
 	spawnWall(w, leg.X, leg.Y)
-	walls := NewWallSystem(w).(*WallSystem)
+	walls := ready(NewWallSystem(w)).(*WallSystem)
 	walls.pushEntitiesAtPosition(leg.X, leg.Y)
 	if pos, ok := w.Positions.GetPosition(member); !ok || pos.X != leg.X || pos.Y != leg.Y {
 		t.Fatal("wall displaced a Kraken leg")
@@ -533,7 +533,7 @@ func TestKrakenContactsDamageEachOwnerAndPushOtherSpecies(t *testing.T) {
 	w.Components.Kinetic.SetComponent(other, component.KineticComponent{})
 	w.Components.Combat.SetComponent(other, component.CombatComponent{HitPoints: 100})
 	w.Positions.SetPosition(other, component.PositionComponent{X: leg.X, Y: leg.Y})
-	soft := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
+	soft := ready(NewSoftCollisionSystem(w)).(*SoftCollisionSystem)
 	soft.Update()
 	motion, _ := w.Components.Kinetic.GetPtr(other)
 	if math.Hypot(motion.VelX, motion.VelY) == 0 {
@@ -609,7 +609,7 @@ func TestKrakenDeathRetiresWholeMemberPool(t *testing.T) {
 	hp, _ := w.Components.Combat.GetPtr(e)
 	hp.HitPoints, hp.LastDamagedBy = 0, w.Resources.Player.Slot(0)
 	s.Update()
-	composite, death := NewCompositeSystem(w), NewDeathSystem(w)
+	composite, death := ready(NewCompositeSystem(w)), ready(NewDeathSystem(w))
 	kills := 0
 	for round := 0; round < 8; round++ {
 		events := w.Resources.Event.Queue.Consume()
