@@ -2,6 +2,7 @@
 # Towers: t1 and t2 are the central pair, q1..q4 the quadrant towers, and each
 # keeps its entity in <id>_anchor. Flank sides are l and r, and each side's
 # counters are <side>_p1n, <side>_p2n, <side>_total, <side>_dead, <side>_p2_done.
+# The ST pylons between the central towers count in st_n and st_dead.
 
 # --- Actions ---
 
@@ -127,6 +128,14 @@ defaults = { interval_ms = 3000, rate = 0.92, accel_ms = 15000, min_ms = 800 }
 body = { parent = "Root", on_enter = [
     { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = "${group}", base_interval_ms = "${interval_ms}", rate_multiplier = "${rate}", rate_accel_interval_ms = "${accel_ms}", min_interval_ms = "${min_ms}", use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
     { action = "IncrementVar", payload = { name = "${count}" } },
+], transitions = [{ trigger = "Tick", target = "${next}" }] }
+
+[macros.SnakeGateway]
+doc = "Attach a snake gateway to the ST pylon in gw_anchor, count it in st_n, go to `next`."
+params = { next = "string" }
+body = { parent = "Root", on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 6, sub_type = 0, group_id = 0, base_interval_ms = 60000, rate_multiplier = 1.0, rate_accel_interval_ms = 0, min_interval_ms = 60000, use_route_graph = false }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "st_n" } },
 ], transitions = [{ trigger = "Tick", target = "${next}" }] }
 
 [macros.FlankGateway]

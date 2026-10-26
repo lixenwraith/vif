@@ -1,5 +1,5 @@
 # Setup chain: level → maze → T1/T2 → Q1..Q4 quadrant towers → P1 x4 (+gateways → quadrant groups)
-# → ST pylon (+snake gateway) → arm. Then quasar pressure loop with grayout.
+# → ST pylon pair (+snake gateways) → arm. Then quasar pressure loop with grayout.
 
 # --- Setup ---
 
@@ -8,8 +8,8 @@ parent = "Root"
 on_enter = [
     { macro = "Zero", each = { name = [
         "setup_done", "setup_failed", "l_p1n", "r_p1n", "l_p2n", "r_p2n", "l_total", "r_total",
-        "l_dead", "r_dead", "st_dead", "t1_dead", "t2_dead", "l_p2_done", "r_p2_done", "game_won",
-        "st_pylon", "t1_anchor", "t2_anchor", "q1_anchor", "q2_anchor", "q3_anchor", "q4_anchor",
+        "l_dead", "r_dead", "st_n", "st_dead", "t1_dead", "t2_dead", "l_p2_done", "r_p2_done", "game_won",
+        "t1_anchor", "t2_anchor", "q1_anchor", "q2_anchor", "q3_anchor", "q4_anchor",
     ] } },
 
     # Normalize systems and trackers
@@ -67,28 +67,17 @@ TdP1TR = { macro = "Pylon", x = 480, y = 15, attach = "TdGwTR", next = "TdP1BL" 
 TdGwTR = { macro = "Gateway", group = 4, count = "r_p1n", next = "TdP1BL" }
 TdP1BL = { macro = "Pylon", x = 20, y = 235, attach = "TdGwBL", next = "TdP1BR" }
 TdGwBL = { macro = "Gateway", group = 5, count = "l_p1n", next = "TdP1BR" }
-TdP1BR = { macro = "Pylon", x = 480, y = 235, attach = "TdGwBR", next = "TdStPylon" }
-TdGwBR = { macro = "Gateway", group = 6, count = "r_p1n", next = "TdStPylon" }
+TdP1BR = { macro = "Pylon", x = 480, y = 235, attach = "TdGwBR", next = "TdSt1" }
+TdGwBR = { macro = "Gateway", group = 6, count = "r_p1n", next = "TdSt1" }
 
-# --- ST pylon: snake spawner, storm trigger on death; 2x HP (tuning) ---
-
-[states.TdStPylon]
-macro = "SpawnAwait"
-request = { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 250, y = 125, min_hp = 20, max_hp = 200 } }
-species = 5
-capture = "st_pylon"
-next = "TdStGw"
-refused = "EventPylonSpawnFailed"
-fallback = "TdArm"
-
-[states.TdStGw]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 6, sub_type = 0, group_id = 0, base_interval_ms = 30000, rate_multiplier = 1.0, rate_accel_interval_ms = 0, min_interval_ms = 30000, use_route_graph = false }, payload_vars = { anchor_entity = "st_pylon" } },
-]
-transitions = [
-    { trigger = "Tick", target = "TdArm" },
-]
+# ST pylons, one under T1 and one over T2: snake spawners whose deaths call the storm
+# early. Each has a corner pylon's HP and sends a snake a minute. The map centre
+# between them stays clear: every cursor starts there, and a pylon's touch drains a
+# shield 50 energy a tick.
+TdSt1 = { macro = "Pylon", x = 250, y = 108, attach = "TdSt1Gw", next = "TdSt2" }
+TdSt1Gw = { macro = "SnakeGateway", next = "TdSt2" }
+TdSt2 = { macro = "Pylon", x = 250, y = 142, attach = "TdSt2Gw", next = "TdArm" }
+TdSt2Gw = { macro = "SnakeGateway", next = "TdArm" }
 
 [states.TdArm]
 parent = "Root"
