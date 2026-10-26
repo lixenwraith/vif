@@ -1,11 +1,14 @@
-# Finale: early storm on ST pylon death; forced breach when all side pylons cleared
+# Finale: early storm once every ST pylon is dead; forced breach when all side pylons cleared
 # Victory latches only after storm dead AND all side pylons dead (early-storm path may leave pylons)
 
 [states.StWait]
 parent = "Root"
 transitions = [
-    # Early breach: player killed the ST pylon (counter region sets st_dead)
-    { trigger = "Tick", target = "StIncoming", guard = "VarEquals", guard_args = { var = "st_dead", value = 1 } },
+    # Early breach: players killed every ST pylon that spawned (counter region counts st_dead)
+    { trigger = "Tick", target = "StIncoming", guard = "And", guard_args = { guards = [
+        { name = "VarCompare", args = { var = "st_n", op = "gt", value = 0 } },
+        { name = "VarCompareVar", args = { var_a = "st_dead", op = "gte", var_b = "st_n" } },
+    ] } },
     # Forced breach: every non-ST pylon dead → PylonCancelRequest hits only ST
     { macro = "SidesCleared", target = "StForceBreach" },
 ]
@@ -13,7 +16,7 @@ transitions = [
 [states.StForceBreach]
 parent = "Root"
 on_enter = [
-    # Precondition (gate above) guarantees ST is the only surviving pylon
+    # Precondition (gate above) guarantees the ST pylons are the only survivors
     { action = "EmitEvent", event = "EventPylonCancelRequest" },
 ]
 transitions = [
