@@ -247,7 +247,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 		t.Fatal("walls prevented Kraken from spawning")
 	}
 	e := w.Components.Kraken.Entities()[0]
-	walls.pushEntitiesAtPosition(90, 45)
+	walls.pushEntitiesAtPosition(90, 45, walls.readCursors())
 	pos, _ := w.Positions.GetPosition(e)
 	if pos.X != 90 || pos.Y != 45 {
 		t.Fatal("walls displaced Kraken from its requested spawn center")
@@ -464,7 +464,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	_, member, _ := CombatTargetAt(w, leg.X, leg.Y, engine.ScopeShared, 0, 0)
 	spawnWall(w, leg.X, leg.Y)
 	walls := ready(NewWallSystem(w)).(*WallSystem)
-	walls.pushEntitiesAtPosition(leg.X, leg.Y)
+	walls.pushEntitiesAtPosition(leg.X, leg.Y, walls.readCursors())
 	if pos, ok := w.Positions.GetPosition(member); !ok || pos.X != leg.X || pos.Y != leg.Y {
 		t.Fatal("wall displaced a Kraken leg")
 	}

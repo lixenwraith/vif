@@ -27,6 +27,7 @@ type WallSystem struct {
 
 	// Push-out tracking - positions needing entity check this tick
 	pendingPushChecks []vmath.Point
+	cursors           []cursorCell // the roster's cursors as a push check found them
 
 	// Configuration
 	pushCheckEveryTick bool // When true, runs full push check in Update()
@@ -42,6 +43,12 @@ type WallSystem struct {
 	buffers        bufferTelemetry
 
 	toggle
+}
+
+// cursorCell is a roster cursor and the cell it stood on as a push check began
+type cursorCell struct {
+	entity core.Entity
+	x, y   int
 }
 
 // NewWallSystem creates a new wall system
@@ -501,24 +508,18 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	var fadeoutTargets []core.Entity
 	var silentTargets []core.Entity
 
-	wallEntities := s.world.Components.Wall.Entities()
-	for _, entity := range wallEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
+	// The area's cells rather than every wall: a footprint asks one cell at a time
+	gridW, gridH := s.world.Positions.GridDimensions()
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
+	for y := max(payload.Y, 0); y < min(payload.Y+height, gridH); y++ {
+		for x := max(payload.X, 0); x < min(payload.X+width, gridW); x++ {
+			n := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
+			for _, entity := range entities[:n] {
+				if wall, ok := s.world.Components.Wall.GetPtr(entity); ok {
+					s.classifyWallForDespawn(entity, *wall, &flashTargets, &fadeoutTargets, &silentTargets)
+				}
+			}
 		}
-
-		if pos.X < payload.X || pos.X >= payload.X+width ||
-			pos.Y < payload.Y || pos.Y >= payload.Y+height {
-			continue
-		}
-
-		wall, ok := s.world.Components.Wall.GetPtr(entity)
-		if !ok {
-			continue
-		}
-
-		s.classifyWallForDespawn(entity, *wall, &flashTargets, &fadeoutTargets, &silentTargets)
 	}
 
 	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
@@ -646,9 +647,10 @@ func (s *WallSystem) processPendingPushChecks() {
 	}
 
 	var pushCount int64
+	cursors := s.readCursors()
 
 	for _, pt := range s.pendingPushChecks {
-		pushCount += s.pushEntitiesAtPosition(pt.X, pt.Y)
+		pushCount += s.pushEntitiesAtPosition(pt.X, pt.Y, cursors)
 	}
 
 	s.statPushEvents.Add(pushCount)
@@ -658,6 +660,7 @@ func (s *WallSystem) processPendingPushChecks() {
 // runFullPushCheck iterates all blocking walls and pushes out any entities
 func (s *WallSystem) runFullPushCheck() {
 	var pushCount int64
+	cursors := s.readCursors()
 
 	wallEntities := s.world.Components.Wall.Entities()
 	for _, wallEntity := range wallEntities {
@@ -671,27 +674,37 @@ func (s *WallSystem) runFullPushCheck() {
 			continue
 		}
 
-		pushCount += s.pushEntitiesAtPosition(wallPos.X, wallPos.Y)
+		pushCount += s.pushEntitiesAtPosition(wallPos.X, wallPos.Y, cursors)
 	}
 
 	s.statPushEvents.Add(pushCount)
 }
 
-// pushEntitiesAtPosition displaces all non-wall entities at given position
-func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
-	var pushCount int64
-
-	// Check cursors.
+// readCursors takes the roster's cursors and their cells once a push check, in slot
+// order: a push only queues a cursor's move, so the cells hold for the whole check
+func (s *WallSystem) readCursors() []cursorCell {
+	s.cursors = s.cursors[:0]
 	for i := range parameter.MaxPlayers {
 		cursor := s.world.Resources.Player.Slot(uint8(i))
-		cursorPos, ok := s.world.Positions.GetPosition(cursor)
-		if !ok || cursorPos.X != x || cursorPos.Y != y {
+		if pos, ok := s.world.Positions.GetPosition(cursor); ok {
+			s.cursors = append(s.cursors, cursorCell{entity: cursor, x: pos.X, y: pos.Y})
+		}
+	}
+	return s.cursors
+}
+
+// pushEntitiesAtPosition displaces all non-wall entities at given position
+func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int64 {
+	var pushCount int64
+
+	for _, cursor := range cursors {
+		if cursor.x != x || cursor.y != y {
 			continue
 		}
 		newX, newY, found := s.world.ResolveFreeCell(x, y, component.WallBlockCursor)
 		if found && (newX != x || newY != y) {
 			s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
-				Entity: cursor,
+				Entity: cursor.entity,
 				X:      newX,
 				Y:      newY,
 			})
