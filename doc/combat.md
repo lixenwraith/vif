@@ -98,9 +98,10 @@ striking the cursors inside every `RayHitInterval`, then rest for its interval. 
 laned ray needs no cursor in range; that is the level obstacle. Width is the
 mount's to set; a cursor's is fixed.
 
-Storm's red circle carries a turret mount the storm arms from the state each tick
-opens with, so the burst fires on its active ticks exactly; the storm renderer
-reads the mount's aim for its muzzle.
+Storm's red circle carries a turret mount the storm arms from its machine's flags
+after each step, so the burst fires on its active ticks exactly, the step that
+opens it included, and a stunned or cursorless circle's turret is disarmed; the
+storm renderer draws the muzzle at the mount's aim while it is armed.
 
 ## 4. At the charge cap
 
