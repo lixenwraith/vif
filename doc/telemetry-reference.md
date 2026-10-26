@@ -206,7 +206,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `combat.effect_energy_drain` (int) | Energy-drain effects that emitted an energy reward |
 | `combat.chain_{followups,depth_max,depth_total}` (int) | Follow-up attacks emitted by chain profiles, the deepest chain, and the sum of emitted depths |
 | `swarm.killed_by_lifecycle` (int) | Also counts swarms retired after `SwarmMaxCharges` charges or at their lifetime deadline, which emit no kill event |
-| `swarm.transition_stalls` (int) | Charge transitions that found no lock target and re-armed, or failed to enter the charge state and fell back to deceleration |
+| `swarm.transition_stalls` (int) | Locks that found no target, the chase re-arming, and locks that could neither charge nor teleport and fell back to deceleration |
 | `behavior.unknown_program_rejects` (int) | Spawn and cancel requests naming no program of the scenario, dropped |
 | `behavior.<program>.count` (int) | Live instances of the program; `behavior.count` sums the programs |
 | `drain.count` (int) | Live drains not already queued for death |
