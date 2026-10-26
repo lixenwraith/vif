@@ -42,7 +42,6 @@ func NewExplosionSystem(world *engine.World) engine.System {
 	s.rejects = newRejectionTelemetry(reg, "explosion")
 	s.buffers = newBufferTelemetry(reg, "explosion", "composites")
 
-	s.Init()
 	return s
 }
 

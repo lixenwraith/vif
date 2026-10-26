@@ -123,6 +123,10 @@ It is the contract, not a suggestion.
 `go build ./...`, `gofmt -l` on changed files, and `go test` on the packages the
 change touches. Run `go generate ./internal/manifest` (`make generate`), which
 also writes the event registry, only when an event or manifest definition changed.
+- A mechanical edit across files is checked by a count before and after, with a
+  search that reads its pattern as the file holds it (`grep -P` for a tab, or a
+  literal tab); a search that matches nothing proves nothing, and the PR body
+  states the count.
 - A change to code behind a build constraint also builds that target:
   `GOOS=js GOARCH=wasm go build ./...` for `js/wasm`, `go build -tags vif_headless
   ./...` for the headless profile.

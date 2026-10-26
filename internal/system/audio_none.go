@@ -17,7 +17,6 @@ type unavailableAudioSystem struct {
 
 func NewAudioSystem(world *engine.World) engine.System {
 	s := &unavailableAudioSystem{world: world}
-	s.Init()
 	return s
 }
 

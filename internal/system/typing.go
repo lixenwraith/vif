@@ -52,7 +52,6 @@ func NewTypingSystem(world *engine.World) engine.System {
 	s.buffers = newBufferTelemetry(reg, "typing", "delete")
 	s.rejects = newRejectionTelemetry(reg, "typing")
 
-	s.Init()
 	return s
 }
 

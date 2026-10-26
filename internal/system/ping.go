@@ -26,7 +26,6 @@ func NewPingSystem(world *engine.World) engine.System {
 	}
 	s.statCursorRejects = world.Resources.Status.Ints.Get("ping.cursor_rejects")
 	s.statDisabled = world.Resources.Status.Ints.Get("ping.disabled_rejects")
-	s.Init()
 	return s
 }
 

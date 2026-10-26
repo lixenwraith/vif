@@ -39,7 +39,6 @@ func NewPylonSystem(world *engine.World) engine.System {
 	s.statCount = world.Resources.Status.Ints.Get("pylon.count")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "pylon")
 
-	s.Init()
 	return s
 }
 

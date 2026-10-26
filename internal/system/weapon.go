@@ -84,7 +84,6 @@ func NewWeaponSystem(world *engine.World) engine.System {
 	s.statTracerSteps = reg.Ints.Get("weapon.tracer_grid_steps")
 	s.buffers = newBufferTelemetry(reg, "weapon", "tracers", "glyphs")
 
-	s.Init()
 	return s
 }
 

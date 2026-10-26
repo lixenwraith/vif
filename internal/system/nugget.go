@@ -47,7 +47,6 @@ func NewNuggetSystem(world *engine.World) engine.System {
 	s.statSpawnFailures = world.Resources.Status.Ints.Get("nugget.spawn_failures")
 	s.rejects = newRejectionTelemetry(world.Resources.Status, "nugget")
 
-	s.Init()
 	return s
 }
 

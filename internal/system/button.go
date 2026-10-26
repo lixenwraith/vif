@@ -23,7 +23,6 @@ type ButtonSystem struct {
 
 func NewButtonSystem(world *engine.World) engine.System {
 	s := &ButtonSystem{world: world}
-	s.Init()
 	return s
 }
 

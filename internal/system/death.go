@@ -73,7 +73,6 @@ func NewDeathSystem(world *engine.World) engine.System {
 	s.statDisabledRejects = reg.Ints.Get("death.disabled_rejects")
 	s.buffers = newBufferTelemetry(reg, "death", "destroy")
 
-	s.Init()
 	return s
 }
 

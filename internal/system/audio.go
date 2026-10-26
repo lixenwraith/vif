@@ -55,7 +55,6 @@ func NewAudioSystem(world *engine.World) engine.System {
 		s.statReject[i] = reg.Ints.Get("audio.rej_" + n)
 	}
 
-	s.Init()
 	return s
 }
 
