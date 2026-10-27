@@ -1460,6 +1460,7 @@ var codecDriftStartPayload = structCodec{size: unsafe.Sizeof(DriftStartPayload{}
 	{off: unsafe.Offsetof(DriftStartPayload{}.Direction), kind: kindFloat},
 	{off: unsafe.Offsetof(DriftStartPayload{}.Speed), kind: kindFloat},
 	{off: unsafe.Offsetof(DriftStartPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(DriftStartPayload{}.Scenery), kind: kindBool},
 }}
 
 func (p *StrobeRequestPayload) codec() (*structCodec, unsafe.Pointer) {

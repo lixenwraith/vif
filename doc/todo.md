@@ -229,8 +229,9 @@ What it must keep, across multiplayer, netcode and interactions:
   its owner's record as the rock does, so an idle harness still matches main; any
   change to what ships moves `snapshot.Schema` and `JournalSchema`.
 - Interactions: the wall push and crush (`displaceComposite`,
-  `World.ShiftComposite`), drift's layer `Shift`, splash, loot and spawn placement,
-  tracer and line walks, typing's top glyph, every renderer's read.
+  `World.ShiftComposite`), drift's layer `Shift` and scenery behind rock and walls,
+  splash, loot and spawn placement, tracer and line walks, typing's top glyph, every
+  renderer's read.
 - Cost, measured before and after: `TestTickProfileTD16`, `BenchmarkCaveStep`,
   `BenchmarkCaveStepNavigation`, the renderer benches, the harness counts.
 

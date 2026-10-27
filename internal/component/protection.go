@@ -20,9 +20,21 @@ const (
 	// ProtectFromDeath makes entity immune to death (e.g. out-of-bounds cleanup)
 	ProtectFromDeath
 
+	// ProtectFromWall leaves a glyph where rock or a wall arrives and lets it drift
+	// into them, hidden behind them. Read on glyph paths only, as ProtectAll holds it
+	ProtectFromWall
+
+	// ProtectFromTyping takes a glyph out of typing's reach: typing, motions and bots
+	// look through it. Read on glyph paths only, as ProtectAll holds it
+	ProtectFromTyping
+
 	// ProtectAll makes an entity immune to every protected mechanic and lets it
 	// survive a level clear; World.DestroyEntity does not check it, so its callers must
 	ProtectAll ProtectionFlags = 0xFF
+
+	// ProtectScenery is a glyph placed as scenery: rock, walls, species, deletes and
+	// typing pass it by, while particles act on it as on any glyph
+	ProtectScenery = ProtectFromSpecies | ProtectFromDelete | ProtectFromWall | ProtectFromTyping
 )
 
 // ProtectionComponent provides immunity to game mechanics

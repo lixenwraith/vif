@@ -259,7 +259,7 @@ func TestEnvironmentSnapshotAndRNGContinueTogether(t *testing.T) {
 	originWorld.Components.Swarm.SetComponent(originSwarm, component.SwarmComponent{})
 	originGlyph := addDriftGlyph(originWorld, 40, 10, component.GlyphBright)
 	origin.startWind(&event.WindStartPayload{Force: 45, Direction: 2.5, Duration: 400 * time.Millisecond})
-	origin.startDrift(&event.DriftStartPayload{Direction: 2.6, Speed: 6})
+	origin.startDrift(&event.DriftStartPayload{Direction: 2.6, Speed: 6, Scenery: true})
 	setEnvironmentDelta(originWorld, 1, 50*time.Millisecond)
 	origin.Update()
 
@@ -279,6 +279,9 @@ func TestEnvironmentSnapshotAndRNGContinueTogether(t *testing.T) {
 	receiverGlyph := addDriftGlyph(receiverWorld, 40, 10, component.GlyphBright)
 	if err := receiver.LoadShared(record); err != nil {
 		t.Fatal(err)
+	}
+	if !receiver.statDriftScenery.Load() {
+		t.Fatal("the record lost the drift's scenery")
 	}
 	if unknown := receiverWorld.Resources.Rand.LoadStreams(core.DomainShared, streams); len(unknown) != 0 {
 		t.Fatalf("unknown RNG streams: %v", unknown)
@@ -404,6 +407,39 @@ func TestDriftRemovesGlyphsThatCannotStep(t *testing.T) {
 	}
 }
 
+// TestSceneryDriftsIntoWallsAndLeavesOnlyOffTheMap: under a scenery drift, scenery
+// steps into a wall and out beyond it where a plain glyph would leave play, and
+// still leaves at the map's edge
+func TestSceneryDriftsIntoWallsAndLeavesOnlyOffTheMap(t *testing.T) {
+	w, s := newEnvironmentWorld(1)
+	s.startDrift(&event.DriftStartPayload{Direction: math.Pi, Speed: 4, Scenery: true})
+	if !s.statDriftScenery.Load() {
+		t.Fatal("a scenery drift did not publish its kind")
+	}
+	scenery := func(x, y int) core.Entity {
+		e := addDriftGlyph(w, x, y, component.GlyphBright)
+		w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectScenery})
+		return e
+	}
+	for y := 6; y <= 7; y++ {
+		wall := w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(wall, component.PositionComponent{X: 10, Y: y})
+		w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockAll})
+	}
+	plain := addDriftGlyph(w, 11, 6, component.GlyphBright)
+	behind := scenery(11, 7)
+	edge := scenery(0, 5)
+
+	s.shiftLayer(component.GlyphBright, -1, 0)
+	if w.HasEntity(plain) || w.HasEntity(edge) {
+		t.Fatal("a plain glyph entered the wall or scenery left the map")
+	}
+	s.shiftLayer(component.GlyphBright, -1, 0)
+	if pos, _ := w.Positions.GetPosition(behind); !w.HasEntity(behind) || pos != (component.PositionComponent{X: 9, Y: 7}) {
+		t.Fatalf("scenery at %v, want it through the wall at 9,7", pos)
+	}
+}
+
 func TestDriftExpiryReplacementAndCancel(t *testing.T) {
 	w, s := newEnvironmentWorld(1)
 	toggle := func(enabled bool) {
@@ -503,5 +539,47 @@ func TestGlyphLinesEnterAtTheUpwindEdge(t *testing.T) {
 				t.Fatalf("%s: no line entered through band %d", tc.name, i)
 			}
 		}
+	}
+}
+
+// TestTextPlacedUnderASceneryDriftIsSceneryCountedApart: text placed while the drift
+// is scenery carries ProtectScenery and other text carries none, and the spawner's
+// density and census count only the kind it places, so neither kind crowds out the
+// other where both share the map
+func TestTextPlacedUnderASceneryDriftIsSceneryCountedApart(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
+	drift := w.Resources.Status.Bools.Get("environment.drift_scenery")
+	place := func(scenery bool, glyphType component.GlyphType, level component.GlyphLevel, lines int) []core.Entity {
+		drift.Store(scenery)
+		before := len(w.Components.Glyph.Entities())
+		for range lines {
+			if !glyphs.placeLine("abc", glyphType, level) {
+				t.Fatal("no room for a line")
+			}
+		}
+		return w.Components.Glyph.Entities()[before:]
+	}
+	scenery := place(true, component.GlyphBlue, component.GlyphNormal, 4)
+	typeable := place(false, component.GlyphGreen, component.GlyphBright, 1)
+
+	for _, e := range scenery {
+		if prot, _ := w.Components.Protection.GetComponent(e); prot.Mask != component.ProtectScenery {
+			t.Fatalf("text placed under a scenery drift carries %v, want ProtectScenery", prot.Mask)
+		}
+	}
+	for _, e := range typeable {
+		if w.Components.Protection.HasEntity(e) {
+			t.Fatal("text placed under no scenery drift carries a protection")
+		}
+	}
+	glyphs.updateCensus()
+	blue, green := censusSlot(component.GlyphBlue, component.GlyphNormal), censusSlot(component.GlyphGreen, component.GlyphBright)
+	if n := glyphs.countPlacedKind(); n != len(typeable) || glyphs.census[blue] != 0 || glyphs.census[green] != len(typeable) {
+		t.Fatalf("typeable count %d, census blue %d green %d, want %d and scenery left out", n, glyphs.census[blue], glyphs.census[green], len(typeable))
+	}
+	drift.Store(true)
+	if n := glyphs.countPlacedKind(); n != len(scenery) {
+		t.Fatalf("scenery count %d, want %d", n, len(scenery))
 	}
 }

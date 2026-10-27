@@ -145,7 +145,8 @@ it the cells that moved. A change that names no cells (an install's
 `Position.WallsChanged`, a resize, a rock field laid) loses the log, and the
 reader re-reads every cell. `Shift` moves a rigid group without
 contending with itself for a cell, and `TopGlyphAt` names the one glyph per cell
-that is drawn and typed. Reapplying an entity's existing cell is idempotent
+that is typed, passing over scenery (`IsTypeable`), and `TopGlyphIs` the one
+drawn. Reapplying an entity's existing cell is idempotent
 when the grid already contains it, avoiding remove/reinsert churn for composite
 members; a soft-clipped entity still retries insertion. Where a mechanic needs
 a line through cells, line of sight, a ray or a beam, it walks `vmath.Line`, one
@@ -307,11 +308,13 @@ sequenceDiagram
 ```
 
 `ProtectionComponent` masks operations such as deletion or blanket destruction;
-each cursor is created with full protection. `CursorSystem` deliberately owns
-the direct destruction path for an explicit cursor despawn. Other direct
-`World.DestroyEntity` and batch-destruction callers assume they have already
-established that removal is safe, so gameplay code should prefer the
-appropriate death request unless it owns that invariant.
+each cursor is created with full protection. The wall and typing bits are read on
+glyphs alone, since that full mask holds them too: `ProtectScenery` sets them on
+text placed as scenery ([Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)).
+`CursorSystem` deliberately owns the direct destruction path for an explicit cursor
+despawn. Other direct `World.DestroyEntity` and batch-destruction callers assume
+they have already established that removal is safe, so gameplay code should prefer
+the appropriate death request unless it owns that invariant.
 
 Every death request is an `EventDeathBatch` carrying a pooled
 `DeathRequestPayload`, emitted through `event.EmitDeath` or
