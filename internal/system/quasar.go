@@ -537,13 +537,11 @@ func (s *QuasarSystem) home(c *quasarCtx) {
 		)
 	}
 
-	// Calculate Valid Header Bounds (Header must stay within these grid coordinates)
-	// Min: OffsetX
-	// Max: Width - (QuasarWidth - OffsetX)
+	// The header's bounds, the maxima exclusive as the integrator takes them
 	minHeaderX := parameter.QuasarHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX)
+	maxHeaderX := config.MapWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX) + 1
 	minHeaderY := parameter.QuasarHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
+	maxHeaderY := config.MapHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY) + 1
 
 	// Integrate with Bounce
 	newX, newY, motion := physics.IntegrateWithBounceStats(

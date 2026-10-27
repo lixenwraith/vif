@@ -658,9 +658,9 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 
 	// Bounds
 	minHeaderX := parameter.SwarmHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX)
+	maxHeaderX := config.MapWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX) + 1
 	minHeaderY := parameter.SwarmHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
+	maxHeaderY := config.MapHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY) + 1
 
 	// Integrate with Bounce
 	newX, newY, motion := physics.IntegrateWithBounceStats(

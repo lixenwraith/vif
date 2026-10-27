@@ -279,6 +279,29 @@ func TestAChargeThatMeetsAWallDeceleratesInThatStep(t *testing.T) {
 	}
 }
 
+// TestASwarmReachesTheMapsLastColumn: a swarm whose body stands on the map's last
+// column and row is inside the bounds the integrator keeps, so a step leaves it there
+// rather than reflecting it inward without the wall check a move takes
+func TestASwarmReachesTheMapsLastColumn(t *testing.T) {
+	w, s, header := newStalledSwarm(t)
+	cfg := w.Resources.Config
+	last := component.PositionComponent{X: cfg.MapWidth - parameter.SwarmWidth + parameter.SwarmHeaderOffsetX,
+		Y: cfg.MapHeight - parameter.SwarmHeight + parameter.SwarmHeaderOffsetY}
+	w.Positions.SetPosition(header, last)
+	kin, _ := w.Components.Kinetic.GetPtr(header)
+	kin.PreciseX, kin.PreciseY = float64(last.X)+0.5, float64(last.Y)+0.5
+	sw, _ := w.Components.Swarm.GetPtr(header)
+	sw.Machine = machine.Instance[component.SwarmState]{
+		State: component.SwarmStateDecelerate, Duration: parameter.SwarmDecelerationDuration,
+	}
+
+	stepSwarm(w, s)
+
+	if pos, _ := w.Positions.GetPosition(header); pos != last {
+		t.Fatalf("at %+v after a step braking at rest, want still at %+v", pos, last)
+	}
+}
+
 // rockRows lays rock over the rows [0, ceil) and [floor, 40) of the columns
 // [x0, x1) of an 80-column map, leaving every other cell open
 func rockRows(w *engine.World, x0, x1, ceil, floor int) {
