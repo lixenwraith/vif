@@ -1,0 +1,20 @@
+# The ghost: its hem rippling below its hood. One of the cracked cave's third-tier
+# raiders: RaiderTier3 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier3"
+theme = "Cracked"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 350
+
+# Hood 0, eyes 1, hem 2
+[[frames]]
+glyphs = [" .-. ", "(o o)", "/\\/\\/"]
+fg     = [" 000 ", "01010", "22222"]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = [" .-. ", "(o o)", "\\/\\/\\"]
+fg     = [" 000 ", "01010", "22222"]
+attr   = ["     ", " B B ", "     "]

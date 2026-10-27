@@ -512,21 +512,26 @@ strata, cracked, moss or crystal stone. Glyphs drift left behind the rock at thr
 depths, each stepping on whole ticks, and drains, nuggets, gold and the fuse are
 off. Raiders, the cave's swarms, spawn at the right edge every two seconds while
 fewer than three fly, on a row drawn across the map, in the nearest open rows when
-rock fills it, each of a type drawn at random. Every type is a program of the
-scenario's own (`behavior/<type>.toml`), the template for a species of one's own
-([FSM reference](fsm-reference.md#behavior-programs)), running one cycle, the
-swarm's chase, lock, charge and teleport (`RaiderStates` in `macros.toml`), with
-its own look, hit points, physics and timings, hit points times chase speed alike:
-the invader at the swarm's pace, the scarab fast and fragile (8 hit points, a
-1.2-second lock), the construct slow and armoured (48, a 2.5-second lock and a long
-charge), and the storm eye, the eye species' storm look on a 5×3 body (48). A
-raider lives until killed, and the rock pushes it as it pushes the cursor. One a
-player shoots down drops a `U` where it fell, for every player, and each `U` raises
-the gun a level of the scenario's nine: one shot forward, then two and three, one
-up and one down, one back, two up and down, two back, three up and down, three
-back. Forward is right, the way the ship flies. A crush is a defeat: the game
-starts over at once, the gun back at one shot, and opens with "Crushed against the
-edge".
+rock fills it, each of a type drawn at random among the cave's own eight. Every type
+is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the template for
+a species of one's own ([FSM reference](fsm-reference.md#behavior-programs)),
+running one cycle, the swarm's chase, lock, charge and teleport (`RaiderStates` in
+`macros.toml`), with its own look. Each stone art has two types in each of four
+tiers, the same tiers in every cave, so caves differ in looks alone: a tier up has
+more hit points (8, 16, 28, 44), a heavier body and a costlier touch, and chases
+slower on a longer lock, the first tier darting as the snake does. Each cave's
+raiders wear one hue in four shades, picked against its rock: violet vermin in the
+strata (by tier: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion),
+white haunts in the cracked stone (gremlin, chomper; imp, slime; ghost, skull;
+wraith, demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat,
+puffer; owl, lynx) and orchid constructs among the crystals (drone, shard; saucer,
+trooper; jelly, squid; djinn, robot), each one colour on a console. A raider lives
+until killed, and the rock pushes it as it pushes the cursor. One a player shoots
+down drops a `U` where it fell, for every player, and each `U` raises the gun a
+level of the scenario's nine: one shot forward, then two and three, one up and one
+down, one back, two up and down, two back, three up and down, three back. Forward is
+right, the way the ship flies. A crush is a defeat: the game starts over at once,
+the gun back at one shot, and opens with "Crushed against the edge".
 
 ## 11. System inventory
 

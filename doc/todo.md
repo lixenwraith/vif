@@ -12,42 +12,45 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 The side-scroller's refinements after its first play test (2026-10-27) lead,
 grouped by area so an agent can take a group, beside the navigation items. The
-faster scroll, the jagged cave, the stone art, the raider types and the machine's
-certain faults have landed. Order now: the raider shortlist; the position package
-last, in a session of its own. Until that lands, nothing here adds engine surface
-for rock or caves: a cave's shape stays in `pkg/cave` and its scenario, the rock
-behind `Positions.Rock()` and the wall system and renderers that read it, and a
-query a footprint needs is built by its caller from the existing ones, so the move
-inherits nothing new.
+faster scroll, the jagged cave, the stone art, the raider types by cave and the
+machine's certain faults have landed. Order now: play the cave raiders; the
+position package last, in a session of its own. Until that lands, nothing here
+adds engine surface for rock or caves: a cave's shape stays in `pkg/cave` and its
+scenario, the rock behind `Positions.Rock()` and the wall system and renderers that
+read it, and a query a footprint needs is built by its caller from the existing
+ones, so the move inherits nothing new.
 
 ### Raiders
 
-The prototype's look and the four raider types landed (invader, scarab, construct,
-storm eye: one program each over `RaiderStates` in vanguard's `macros.toml`, drawn
-at random by `RaidSpawn`, spawned directly with no fuse). The cave has opened;
-what is left is the shortlist and the numbers a play there settles.
+Each stone art has its own eight raider types, two to each of four tiers, in one
+hue: strata violet vermin, cracked white haunts, moss orange animals, crystal
+orchid constructs. Every type invokes `RaiderTier1`..`RaiderTier4` in vanguard's
+`macros.toml` with its cave and its look, and `RaidSpawn` draws among the cave's
+eight; `sandbox/raider` shows them by cave over that cave's rock.
 
-#### Play the raider types and settle the shortlist
+#### Play the cave raiders and tune the tiers
 
 - Priority: P1
-- Affected files: `wad/scenario/vanguard/behavior/`, `wad/scenario/vanguard/macros.toml`,
-  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`), `doc/gameplay.md` §10
+- Affected files: `wad/scenario/vanguard/macros.toml` (`RaiderTier1`..`4`, the cave
+  colours), `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`),
+  `wad/scenario/vanguard/behavior/`, `doc/gameplay.md` §10
 - Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression),
   [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
 
-The types' numbers are starting values, hit points times chase speed 96 for each as
-the eye types balance theirs (`parameter.EyeTypeTable`): the invader 12 at the
-swarm's 8, the scarab 8 at the snake's 12, the construct and the storm eye 48 at
-the drain's and the quasar's 2, the slow two carrying their threat in a long lock
-and charge. Play them at the faster scroll and in the jagged cave, against a gun of
-one shot forward, and retune hit points, lock and charge per type, and its speed,
-acceleration and drag in its `[prototype.physics]`.
-Candidates beside them, from `sandbox/swarm` by ID: Interceptor (1) and Bat-Wing
-(12) for their wings, Chevron (18) mirrored to `<<<<` for a fast type, Hover-Tank
-(7), and the flame and frost eyes; `BehaviorProgramsMax` (8) holds four more. The
-aura and border sweep `sandbox/eye` draws around its eyes are a renderer effect of
-their own, worth it only if the storm eye stays. Keep every type within 5×3 until
-the position work gives each footprint its own navigation grid.
+The tiers' numbers are starting values: hit points 8, 16, 28 and 44, hit points
+times chase speed 96, 144, 168 and 198, each tier's lock, charge and contact cost
+rising with it. Play each cave against a gun of one shot forward and retune the tier
+macros, which every cave shares; a cave's colours are its `<Cave>Fg` macros there
+and a type's look its own file. The raid draws its cave's eight evenly, so a
+fourth-tier type comes as often as a first; weighting the draw, or opening tiers as
+a game goes on, is the next lever if the mix plays flat. Colours against the rock
+are a first pick to settle in play. On a console a raider is one colour, and two
+caves' raiders share an entry with their rock's hued points: the moss raiders' brown (3) is
+the FreeBSD console's mustard, the colour of its moss there, while on VGA the moss
+is bright yellow (11), so neither entry clears both palettes and white (15) would;
+the crystal raiders' magenta (13) meets the amethyst points, which are sparse. Keep
+every type within 5×3 until the position work gives each footprint its own
+navigation grid.
 
 ### Gun and loot
 

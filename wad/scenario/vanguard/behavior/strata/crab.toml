@@ -1,0 +1,20 @@
+# The crab: it sidles, its claws snapping open and shut. One of the strata's
+# second-tier raiders: RaiderTier2 in ../../macros.toml gives its stats and cycle
+# and the cave its colours.
+macro = "RaiderTier2"
+theme = "Strata"
+width = 4
+height = 2
+header = { x = 1, y = 0 }
+pattern_ms = 350
+
+# Eyes 1, claws 3, legs 2
+[[frames]]
+glyphs = [">oo<", "/  \\"]
+fg     = ["3113", "2  2"]
+attr   = [" BB ", "    "]
+
+[[frames]]
+glyphs = ["<oo>", "\\  /"]
+fg     = ["3113", "2  2"]
+attr   = [" BB ", "    "]

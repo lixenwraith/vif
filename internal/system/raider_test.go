@@ -13,12 +13,13 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/machine"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
-// newRaiderWorld spawns vanguard's invader, compiled from its shipped program as
+// newRaiderWorld spawns vanguard's scarab, compiled from its shipped program as
 // the scenario expands it, at (20, 10) of an 80x40 world whose one target stands at
 // (50, 10), behind rock open only along row 10: the header's line runs through, the
-// invader's 4x2 body with its header at (1, 0) does not. Every raider type flies
+// scarab's 4x2 body with its header at (1, 0) does not. Every raider type flies
 // the one cycle. It returns the raider's states by name.
 func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, map[string]component.BehaviorState) {
 	t.Helper()
@@ -30,8 +31,8 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, _ := merged["behaviors"].(map[string]any)["invader"].(map[string]any)
-	set, err := CompileBehaviors(map[string]map[string]any{"invader": doc})
+	doc, _ := merged["behaviors"].(map[string]any)["scarab"].(map[string]any)
+	set, err := CompileBehaviors(map[string]map[string]any{"scarab": doc})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +48,7 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
 	s.HandleEvent(event.GameEvent{
 		Type:    event.EventBehaviorSpawnRequest,
-		Payload: &event.BehaviorSpawnRequestPayload{Program: "invader", X: 20, Y: 10},
+		Payload: &event.BehaviorSpawnRequestPayload{Program: "scarab", X: 20, Y: 10},
 	})
 	headers := w.Components.Behavior.Entities()
 	if len(headers) != 1 {
@@ -191,6 +192,12 @@ func TestAStunDuringARaidersBeamMovesNothing(t *testing.T) {
 // vanguardBehaviors compiles every program of the shipped vanguard scenario, as the
 // scenario expands them, and returns the expanded documents beside them
 func vanguardBehaviors(t *testing.T) (*BehaviorSet, map[string]map[string]any) {
+	set, docs, _ := vanguardScenario(t)
+	return set, docs
+}
+
+// vanguardScenario is vanguardBehaviors with the expanded scenario beside them
+func vanguardScenario(t *testing.T) (*BehaviorSet, map[string]map[string]any, map[string]any) {
 	t.Helper()
 	const dir = "../../wad/scenario/vanguard"
 	if _, err := os.Stat(dir); err != nil {
@@ -208,7 +215,7 @@ func vanguardBehaviors(t *testing.T) (*BehaviorSet, map[string]map[string]any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return set, docs
+	return set, docs, merged
 }
 
 // TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt: a spawn names a cell blind to
@@ -267,9 +274,6 @@ func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
 // again, closing on its target, and wears a look of its own footprint
 func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 	set, docs := vanguardBehaviors(t)
-	if got := set.Names(); !slices.Equal(got, []string{"construct", "invader", "scarab", "storm_eye"}) {
-		t.Fatalf("programs %v, want the four raider types", got)
-	}
 	for i, p := range set.Prototypes() {
 		t.Run(p.Name, func(t *testing.T) {
 			for f, frame := range p.Look.Frames {
@@ -326,5 +330,90 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 				t.Fatalf("stands at %v after its charge, want closer to its target at (60, 20)", pos)
 			}
 		})
+	}
+}
+
+// TestEachVanguardCaveRaidsWithTheSameTiers: the raid's pick lists eight raider
+// types to each stone art, in the order CaveStart's pick lists the arts, and every
+// program once. Each cave's eight wear one palette and console colour, and fly the
+// same tiers in the same order, its hit points rising, so caves differ in looks
+// alone. The U drop names every type.
+func TestEachVanguardCaveRaidsWithTheSameTiers(t *testing.T) {
+	set, _, merged := vanguardScenario(t)
+	path := func(v any, keys ...any) any {
+		for _, k := range keys {
+			switch k := k.(type) {
+			case string:
+				v = v.(map[string]any)[k]
+			case int:
+				v = v.([]any)[k]
+			}
+		}
+		return v
+	}
+	list := func(v any) []string {
+		var out []string
+		for _, s := range v.([]any) {
+			out = append(out, s.(string))
+		}
+		return out
+	}
+	states := merged["states"]
+	arts := list(path(states, "CaveStart", "on_enter", 1, "pick", "from"))
+	raiders := list(path(states, "RaidSpawn", "transitions", 0, "actions", 0, "pick", "from"))
+	drops := list(path(states, "Raid", "transitions", 0, "guard_args", "guards", 0, "args", "names"))
+
+	const perCave = 8
+	if len(raiders) != perCave*len(arts) {
+		t.Fatalf("the raid picks among %d types, want %d to each of %d stone arts", len(raiders), perCave, len(arts))
+	}
+	if got := slices.Sorted(slices.Values(raiders)); !slices.Equal(got, set.Names()) {
+		t.Fatalf("the raid picks %v, want every program once: %v", got, set.Names())
+	}
+	if got := slices.Sorted(slices.Values(drops)); !slices.Equal(got, set.Names()) {
+		t.Fatalf("the U drop names %v, want every program: %v", got, set.Names())
+	}
+
+	byName := map[string]component.BehaviorPrototype{}
+	for _, p := range set.Prototypes() {
+		byName[p.Name] = p
+	}
+	// stats is what a tier decides: what it takes to kill, what it costs to touch,
+	// how it flies
+	type stats struct {
+		hp      int
+		mass    float64
+		contact component.CursorDamage
+		homing  physics.HomingProfile
+	}
+	tiers := func(cave []string) []stats {
+		var out []stats
+		for _, name := range cave {
+			p := byName[name]
+			out = append(out, stats{p.HitPoints, p.Mass, p.Contact, p.Homing})
+		}
+		return out
+	}
+	first := tiers(raiders[:perCave])
+	for i := 1; i < perCave; i++ {
+		if first[i].hp < first[i-1].hp {
+			t.Fatalf("%s has %d hit points after %s's %d, want the tiers rising", raiders[i], first[i].hp, raiders[i-1], first[i-1].hp)
+		}
+	}
+	if first[0].hp == first[perCave-1].hp {
+		t.Fatalf("every raider of a cave has %d hit points, want tiers", first[0].hp)
+	}
+	for c, art := range arts {
+		cave := raiders[c*perCave : (c+1)*perCave]
+		if got := tiers(cave); !slices.Equal(got, first) {
+			t.Errorf("%s's raiders %v fly %+v, want the strata's tiers %+v", art, cave, got, first)
+		}
+		look := byName[cave[0]].Look
+		for _, name := range cave[1:] {
+			if l := byName[name].Look; !slices.Equal(l.Fg, look.Fg) || l.Fg256 != look.Fg256 {
+				t.Errorf("%s wears %v (console %d), want %s's palette %v (console %d) as the rest of %s's",
+					name, l.Fg, l.Fg256, cave[0], look.Fg, look.Fg256, art)
+			}
+		}
 	}
 }

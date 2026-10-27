@@ -1,0 +1,20 @@
+# The demon: horned, its jaw working. One of the cracked cave's fourth-tier raiders:
+# RaiderTier4 in ../../macros.toml gives its stats and cycle and the cave its
+# colours.
+macro = "RaiderTier4"
+theme = "Cracked"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 350
+
+# Horns and fangs 3, face 0, eyes 1
+[[frames]]
+glyphs = ["\\\\_//", "(o.o)", " \\v/ "]
+fg     = ["33033", "01010", " 030 "]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = ["\\\\_//", "(o.o)", " \\-/ "]
+fg     = ["33033", "01010", " 030 "]
+attr   = ["     ", " B B ", "     "]

@@ -1,0 +1,25 @@
+# The wraith: a crowned spirit whose face shifts as it drifts. One of the cracked
+# cave's fourth-tier raiders: RaiderTier4 in ../../macros.toml gives its stats and
+# cycle and the cave its colours.
+macro = "RaiderTier4"
+theme = "Cracked"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 400
+
+# Crown 3, face 0, eyes 1, robe 2
+[[frames]]
+glyphs = [" .M. ", "(o o)", " |~| "]
+fg     = [" 333 ", "01010", " 222 "]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = [" :M: ", "{o o}", " |~| "]
+fg     = [" 333 ", "01010", " 222 "]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = [" 'M' ", "[o o]", " |_| "]
+fg     = [" 333 ", "01010", " 222 "]
+attr   = ["     ", " B B ", "     "]

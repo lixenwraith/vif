@@ -1,0 +1,30 @@
+# The hedgehog: its spines bristling as it trundles, and it blinks. One of the moss
+# cave's first-tier raiders: RaiderTier1 in ../../macros.toml gives its stats and
+# cycle and the cave its colours.
+macro = "RaiderTier1"
+theme = "Moss"
+width = 4
+height = 2
+header = { x = 1, y = 0 }
+pattern_ms = 300
+
+# Spines 2, face 0, eyes 1
+[[frames]]
+glyphs = ["/\\/\\", "(oo)"]
+fg     = ["2222", "0110"]
+attr   = ["    ", " BB "]
+
+[[frames]]
+glyphs = ["\\/\\/", "(oo)"]
+fg     = ["2222", "0110"]
+attr   = ["    ", " BB "]
+
+[[frames]]
+glyphs = ["/\\/\\", "(oo)"]
+fg     = ["2222", "0110"]
+attr   = ["    ", " BB "]
+
+[[frames]]
+glyphs = ["\\/\\/", "(--)"]
+fg     = ["2222", "0110"]
+attr   = ["    ", " BB "]

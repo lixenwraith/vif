@@ -1,0 +1,20 @@
+# The puffer: it swells its spines and lets them fall. One of the moss cave's
+# third-tier raiders: RaiderTier3 in ../../macros.toml gives its stats and cycle and
+# the cave its colours.
+macro = "RaiderTier3"
+theme = "Moss"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 450
+
+# Spines 2, crest 3, body 0, eyes 1
+[[frames]]
+glyphs = [" \\|/ ", "(o o)", " /|\\ "]
+fg     = [" 232 ", "01010", " 232 "]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = ["\\\\|//", "(o o)", "//|\\\\"]
+fg     = ["22322", "01010", "22322"]
+attr   = ["     ", " B B ", "     "]

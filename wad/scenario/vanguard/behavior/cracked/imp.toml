@@ -1,0 +1,30 @@
+# The imp: it waves its arms, and blinks. One of the cracked cave's second-tier
+# raiders: RaiderTier2 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier2"
+theme = "Cracked"
+width = 5
+height = 2
+header = { x = 2, y = 0 }
+pattern_ms = 350
+
+# Face 0, eyes 1, arms 2
+[[frames]]
+glyphs = ["(o_o)", "/| |\\"]
+fg     = ["01010", "20 02"]
+attr   = [" B B ", "     "]
+
+[[frames]]
+glyphs = ["(o_o)", "\\| |/"]
+fg     = ["01010", "20 02"]
+attr   = [" B B ", "     "]
+
+[[frames]]
+glyphs = ["(o_o)", "/| |\\"]
+fg     = ["01010", "20 02"]
+attr   = [" B B ", "     "]
+
+[[frames]]
+glyphs = ["(-_-)", "\\| |/"]
+fg     = ["01010", "20 02"]
+attr   = [" B B ", "     "]

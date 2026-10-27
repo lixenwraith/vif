@@ -1,0 +1,20 @@
+# The spider: its eight legs flexing about its face. One of the strata's third-tier
+# raiders: RaiderTier3 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier3"
+theme = "Strata"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 250
+
+# Legs 2, face 0, eyes 1
+[[frames]]
+glyphs = ["\\/ \\/", "(o.o)", "/\\ /\\"]
+fg     = ["22 22", "01010", "22 22"]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = ["/\\ /\\", "(o.o)", "\\/ \\/"]
+fg     = ["22 22", "01010", "22 22"]
+attr   = ["     ", " B B ", "     "]
