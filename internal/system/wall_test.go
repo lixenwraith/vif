@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/pkg/cave"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
@@ -363,6 +364,43 @@ func TestACaveResumesFromItsRecordBetweenColumns(t *testing.T) {
 	}
 }
 
+// A cave with a list of stone art draws the one its seed picks in place of its visual,
+// with the cave's seed, and its record carries it; a name no preset has starts no cave
+func TestACaveWearsTheStoneArtItsSeedPicks(t *testing.T) {
+	art := []string{"strata", "moss", "masonry"}
+	for seed := range uint64(6) {
+		w, walls, _ := newCaveWorld(t, 30, 12)
+		walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: seed + 1, MinWall: 1, Art: art}})
+		preset, _ := pattern.ParseArtPreset(art[(seed+1)%3])
+		want := engine.RockLook{Visual: orStone(component.WallVisualConfig{}), Stone: true, Art: uint8(preset), Seed: seed + 1}
+		if rock := w.Positions.Rock(); rock == nil || rock.Look != want {
+			t.Fatalf("seed %d laid the cave %+v, want the look %+v", seed+1, walls.cave, want)
+		}
+		record, err := walls.SaveShared()
+		if err != nil {
+			t.Fatal(err)
+		}
+		receiver, receiverWalls, _ := newCaveWorld(t, 30, 12)
+		if err := receiverWalls.LoadShared(record); err != nil {
+			t.Fatal(err)
+		}
+		if got := receiver.Positions.Rock().Look; got != want {
+			t.Fatalf("seed %d: the record laid the look %+v, want %+v", seed+1, got, want)
+		}
+	}
+
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1}})
+	if got, want := w.Positions.Rock().Look, (engine.RockLook{Visual: orStone(component.WallVisualConfig{})}); got != want {
+		t.Fatalf("a cave with no art laid the look %+v, want %+v", got, want)
+	}
+	w, walls, _ = newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1, Art: []string{"strata", "granite"}}})
+	if walls.cave.Active || w.Positions.Rock() != nil {
+		t.Fatalf("an unknown art started the cave %+v", walls.cave)
+	}
+}
+
 // A capture with no cave carries the generator's record alone
 func TestARecordWithNoCaveIsTheGeneratorAlone(t *testing.T) {
 	_, walls, _ := newCaveWorld(t, 30, 12)
@@ -387,6 +425,7 @@ func TestACaveRecordNoStartLeavesIsRefused(t *testing.T) {
 		func(c *caveState) { c.Mask = component.WallBlockNone },
 		func(c *caveState) { c.Config.MinGap = 0 },
 		func(c *caveState) { *c = caveState{Offset: 3} },
+		func(c *caveState) { c.Art = "granite" },
 	} {
 		c := good
 		bad(&c)

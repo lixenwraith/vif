@@ -18,11 +18,20 @@ func (c RockColumn) Rock(y int) bool { return y < c.Ceil || y >= c.Floor }
 // capture carries that state and never the field. It blocks Mask as a wall does,
 // and every wall query of Position reads it beside the wall entities.
 type RockField struct {
-	Mask   component.WallBlockMask
-	Visual component.WallVisualConfig
+	Mask component.WallBlockMask
+	Look RockLook
 	// Origin is the profile column at map column 0, which what draws the rock anchors to
 	Origin int64
 	cols   []RockColumn
+}
+
+// RockLook is how a rock field draws: Visual in every cell, or with Stone set the art
+// preset Art (a pattern.ArtPreset) from Seed, cell by cell
+type RockLook struct {
+	Visual component.WallVisualConfig
+	Stone  bool
+	Art    uint8
+	Seed   uint64
 }
 
 // Width is how many map columns the field covers, from x 0
@@ -68,7 +77,7 @@ func (p *Position) Rock() *RockField { return p.rock }
 
 // SetRock lays cols as the rock field from map column 0, origin its first profile
 // column; no columns lift the field
-func (p *Position) SetRock(mask component.WallBlockMask, visual component.WallVisualConfig, origin int64, cols []RockColumn) {
+func (p *Position) SetRock(mask component.WallBlockMask, look RockLook, origin int64, cols []RockColumn) {
 	p.wallEpoch++
 	p.wallLog.lose()
 	if len(cols) == 0 {
@@ -78,7 +87,7 @@ func (p *Position) SetRock(mask component.WallBlockMask, visual component.WallVi
 	if p.rock == nil {
 		p.rock = &RockField{}
 	}
-	p.rock.Mask, p.rock.Visual, p.rock.Origin = mask, visual, origin
+	p.rock.Mask, p.rock.Look, p.rock.Origin = mask, look, origin
 	p.rock.cols = append(p.rock.cols[:0], cols...)
 }
 

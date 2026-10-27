@@ -224,11 +224,11 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					for i := range cols {
 						cols[i] = rockColumn()
 					}
-					w.Positions.SetRock(masks[1+rng.IntN(len(masks)-1)], component.WallVisualConfig{}, 0, cols)
+					w.Positions.SetRock(masks[1+rng.IntN(len(masks)-1)], RockLook{}, 0, cols)
 				case 14:
 					w.Positions.ShiftRock(rockColumn())
 				case 15:
-					w.Positions.SetRock(0, component.WallVisualConfig{}, 0, nil)
+					w.Positions.SetRock(0, RockLook{}, 0, nil)
 				}
 			}
 			// A reader of the wall log re-testing only the cells it names keeps every

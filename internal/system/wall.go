@@ -91,6 +91,7 @@ type caveState struct {
 	Offset int64                      `json:"offset"`
 	Mask   component.WallBlockMask    `json:"mask"`
 	Visual component.WallVisualConfig `json:"visual"`
+	Art    string                     `json:"art,omitempty"` // the stone art preset its rock draws in place of Visual, if any
 }
 
 // NewWallSystem creates a new wall system
@@ -1174,6 +1175,12 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 		s.world.DebugPrint(err.Error())
 		return
 	}
+	for _, name := range p.Art {
+		if _, ok := pattern.ParseArtPreset(name); !ok {
+			s.world.DebugPrint(fmt.Sprintf("cave: unknown stone art %q", name))
+			return
+		}
+	}
 	if cfg.Seed == 0 {
 		cfg.Seed = s.genRng.Uint64()
 	}
@@ -1184,6 +1191,10 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 		Active: true, Config: cfg, Period: time.Duration(math.Round(period)),
 		Mask: cmp.Or(p.BlockMask, component.WallBlockAll), Visual: orStone(p.Visual),
 	}
+	// The seed draws the stone too, so each new cave may wear another of the list
+	if len(p.Art) > 0 {
+		s.cave.Art = p.Art[cfg.Seed%uint64(len(p.Art))]
+	}
 	s.layRock()
 	s.pushOutOfRock()
 }
@@ -1192,7 +1203,7 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 func (s *WallSystem) liftCave() {
 	s.cave = caveState{}
 	s.rockMap = [2]int{}
-	s.world.Positions.SetRock(component.WallBlockNone, component.WallVisualConfig{}, 0, nil)
+	s.world.Positions.SetRock(component.WallBlockNone, engine.RockLook{}, 0, nil)
 }
 
 // caveProfile is the cave's profile at the map's height, or at its start's height
@@ -1221,7 +1232,11 @@ func (s *WallSystem) layRock() {
 		s.rockCols = append(s.rockCols, rockColumn(cfg, s.cave.Offset+int64(x)))
 	}
 	s.rockMap = [2]int{config.MapWidth, config.MapHeight}
-	s.world.Positions.SetRock(s.cave.Mask, s.cave.Visual, s.cave.Offset, s.rockCols)
+	look := engine.RockLook{Visual: s.cave.Visual}
+	if art, ok := pattern.ParseArtPreset(s.cave.Art); ok {
+		look.Stone, look.Art, look.Seed = true, uint8(art), s.cave.Config.Seed
+	}
+	s.world.Positions.SetRock(s.cave.Mask, look, s.cave.Offset, s.rockCols)
 }
 
 // pushOutOfRock queues a push check at every cell where something stands in the
@@ -1658,6 +1673,9 @@ func (c caveState) validate() error {
 	if c.Period < parameter.CaveMinPeriod || c.Period > parameter.CaveMaxPeriod || c.Phase < 0 || c.Phase >= 2*c.Period ||
 		c.Offset < 0 || c.Mask == component.WallBlockNone {
 		return errors.New("wall: cave scroll out of range")
+	}
+	if _, ok := pattern.ParseArtPreset(c.Art); c.Art != "" && !ok {
+		return fmt.Errorf("wall: unknown stone art %q", c.Art)
 	}
 	return nil
 }

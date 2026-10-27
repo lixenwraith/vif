@@ -1,11 +1,14 @@
 package app
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
@@ -186,5 +189,39 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	}
 	if charges, levels := gun(); charges != 1 || levels != 9 {
 		t.Fatalf("after a reset the gun holds %d charges on %d levels, want the first of nine", charges, levels)
+	}
+}
+
+// TestVanguardsCaveWearsOneOfItsStoneArts boots the shipped scenario: its rock draws
+// one of the four stone arts the cave start lists, from the cave's seed, and a new
+// game's cave draws one again
+func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	w := a.World()
+	for game := range 2 {
+		a.Tick(5)
+		var look engine.RockLook
+		w.RunSafe(func() {
+			if rock := w.Positions.Rock(); rock != nil {
+				look = rock.Look
+			}
+		})
+		art := pattern.ArtPreset(look.Art).String()
+		if !look.Stone || look.Seed == 0 || !slices.Contains([]string{"strata", "cracked", "moss", "crystal"}, art) {
+			t.Fatalf("game %d: the cave's rock draws %+v (%s), want one of vanguard's stone arts", game, look, art)
+		}
+		if !a.Reset(false) {
+			t.Fatal("the reset was refused")
+		}
 	}
 }

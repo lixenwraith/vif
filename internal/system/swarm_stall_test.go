@@ -289,7 +289,7 @@ func rockRows(w *engine.World, x0, x1, ceil int) {
 			cols[x].Ceil = ceil
 		}
 	}
-	w.Positions.SetRock(component.WallBlockAll, component.WallVisualConfig{}, 0, cols)
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
 }
 
 // TestATeleportArrivesBesideRockThatTookItsLanding: rock that came over the

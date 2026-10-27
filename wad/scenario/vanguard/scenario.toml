@@ -33,16 +33,17 @@ background = true
 # --- Cave ---
 
 # The mouth holds the centred cursor; the channel strays at most nine rows off the
-# middle, so a tall map climbs no steeper. The rock is a shade of two stones, so it
-# reads on a text console's sixteen colours too. The bright glyphs drift at three
-# quarters of the scroll and the dimmer ones slower, so every layer reads behind it.
-# The seed is drawn from the run's, so each new game flies a new cave and a run's
-# seed replays its caves in order.
+# middle, so a tall map climbs no steeper. The rock wears one of four stone arts, the
+# cave's seed picking it; every rock cell draws a glyph, so it reads on a text
+# console's sixteen colours too. The bright glyphs drift at three quarters of the
+# scroll and the dimmer ones slower, so every layer reads behind it. The seed is drawn
+# from the run's, so each new game flies a new cave and a run's seed replays its caves
+# in order.
 [states.CaveStart]
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
-    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 8.0, min_gap = 7, max_gap = 15, min_wall = 2, wavelength = 44, swing = 9, detail = 1, ramp = 96, visual = { char = 0x2592, fg_color = { r = 125, g = 118, b = 106 }, render_fg = true, bg_color = { r = 84, g = 79, b = 70 }, render_bg = true } }, payload_vars = { seed = "cave_seed" } },
+    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 8.0, min_gap = 7, max_gap = 15, min_wall = 2, wavelength = 44, swing = 9, detail = 1, ramp = 96, art = ["strata", "cracked", "moss", "crystal"] }, payload_vars = { seed = "cave_seed" } },
     { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 6.0, duration_ms = 0 } },
 ]
 

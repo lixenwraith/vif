@@ -326,7 +326,7 @@ func (p *Position) ClearAllComponents() {
 	p.dense = p.dense[:0]
 	p.entities = p.entities[:0]
 	p.grid.Clear()
-	p.SetRock(0, component.WallVisualConfig{}, 0, nil)
+	p.SetRock(0, RockLook{}, 0, nil)
 	p.wallLog.lose()
 }
 

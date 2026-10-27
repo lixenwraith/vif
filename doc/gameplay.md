@@ -400,7 +400,12 @@ instance and platform lays the same rock: a gap between `min_gap` and `max_gap`
 rows, walls of at least `min_wall`, a channel snaking at most `swing` rows off the
 middle with knots every `wavelength` columns, `detail` rows of rough rock, opening
 from a centred mouth over `ramp` columns. The rock is a field of ceiling and floor
-rows per column, not wall entities, which every wall query reads. Each step, at
+rows per column, not wall entities, which every wall query reads. It draws in
+`visual`, or in a stone art preset: `art` lists them (`none` for bare stone,
+`strata`, `cracked`, `moss`, `crystal`, `masonry`) and the seed picks one. A
+cell's glyph and colours follow from the preset, the seed, its profile column and
+row, and how deep it lies from the nearest opening on which side, so the stone
+moves with the rock and reads on a text console. Each step, at
 most one a tick, moves the rock and every shared wall a column left, drops what
 leaves the map and lays the column entering it. What the rock arrives on goes a
 column left and a row toward its column's nearer opening, or straight left: a
@@ -501,7 +506,8 @@ program, `behavior/warden.toml`, is the template for a species of one's own
 
 `vanguard` flies the cursor through a cave (§9) scrolling left at eight columns a
 second, its channel seven to fifteen rows high and never more than nine rows off
-the middle, so a tall terminal climbs no steeper; each new game flies a new cave.
+the middle, so a tall terminal climbs no steeper; each new game flies a new cave,
+its rock in strata, cracked, moss or crystal stone.
 Glyphs drift left behind the rock at three depths, and drains, nuggets and gold
 are off. Raiders, the cave's swarms, beam in at the right edge every four seconds
 while fewer than three fly. A raider is a program of the scenario's own

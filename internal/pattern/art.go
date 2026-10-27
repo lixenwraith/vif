@@ -23,6 +23,10 @@ const (
 	ArtPresetCount
 )
 
+// FaceReach is the depth from which a cell draws as any deeper one does: a face's
+// light, crust and moss reach no further, so a caller measures depth no further
+const FaceReach = max(len(visual.StoneLitDepth), len(visual.MossCover), visual.StoneCrust)
+
 // Face is the side of a rock cell its nearest open cell lies on; a floor's top opens up
 type Face uint8
 

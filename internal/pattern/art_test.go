@@ -95,6 +95,29 @@ func TestEveryPresetDrawsAVisibleGlyph(t *testing.T) {
 	})
 }
 
+// A cell at FaceReach draws as every deeper one does, and one a row shallower does not
+// always, so FaceReach is as far as a caller measures depth and no less
+func TestACellDrawsAlikeFromFaceReachDown(t *testing.T) {
+	shallower := false
+	sweep(func(p ArtPreset, seed uint64, c ArtCell) {
+		c.Depth = FaceReach
+		r, fg, bg := Art(p, seed, c)
+		for _, deeper := range []int{FaceReach + 1, FaceReach + 7, math.MaxInt32} {
+			c.Depth = deeper
+			if r1, fg1, bg1 := Art(p, seed, c); r1 != r || fg1 != fg || bg1 != bg {
+				t.Fatalf("%v seed %d %+v: %q %v %v at depth %d, %q %v %v at %d", p, seed, c, r, fg, bg, FaceReach, r1, fg1, bg1, deeper)
+			}
+		}
+		c.Depth = FaceReach - 1
+		if r1, fg1, bg1 := Art(p, seed, c); r1 != r || fg1 != fg || bg1 != bg {
+			shallower = true
+		}
+	})
+	if !shallower {
+		t.Fatalf("no cell a row above FaceReach (%d) draws apart from one at it", FaceReach)
+	}
+}
+
 // W and H as ArtCell documents them: masonry's joints thin out as W grows, crystals
 // thicken as W×H does, and every other preset draws a cell alike at any size
 func TestArtScalesWithItsGroupAsDocumented(t *testing.T) {
