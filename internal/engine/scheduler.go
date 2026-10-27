@@ -1398,6 +1398,7 @@ func (s *Scheduler) processTick() {
 			s.ctl.RealTime(),
 			s.tickInterval,
 		)
+		s.world.Resources.Time.PaceTime = s.ctl.Now()
 
 		// 2. Update game elapsed time status
 		s.statGameElapsedMs.Store(tickTime.Sub(s.gameStartTime).Milliseconds())

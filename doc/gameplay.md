@@ -125,7 +125,9 @@ cursor, excludes a region around every cursor, and retries only a bounded number
 positions. While a glyph drift is active, new lines are placed in a band
 `DriftEntryBand` cells deep beside an upwind edge, each drawn in proportion to the
 drift crossing it, so text enters where the drift carries it across; the spawner
-reads the drift from the environment's published status.
+reads the drift from the environment's published status. A drift faster than
+`DriftFillSpeed` (10 cells a second) shortens the spawn interval in proportion, as
+it carries text off the map that much sooner.
 
 `ParticleSystem` selects dust, decay or blossom rules from
 `ParticleComponent.Behavior`, and everything that differs between them is one row
@@ -474,7 +476,10 @@ it. A new start at once keeps each phase that still points the new way, so a
 change of pace does not jolt the text and a reversal does not stall it, and an
 eased one carries every phase through; disabling the
 system pauses the drift as it pauses wind. Where layers share a cell the nearest
-draws on top, and typeable text over scenery (§3).
+draws on top, and typeable text over scenery (§3). A layer steps whole cells a
+tick, and the glyph renderer draws scenery where its layer stands between ticks,
+from the part-cell and velocity the environment leaves each tick
+([Rendering §7](rendering.md#7-layer-inventory)).
 
 A start with `scenery` set makes the text placed while it drifts scenery for life:
 `GlyphSystem` stamps `ProtectScenery` on each glyph, a Protection mask of four bits
@@ -549,7 +554,8 @@ jagged, four octaves from 64 columns: its gap runs from nine rows to thirty-six 
 the map allows, mostly two to three times the narrowest, and the scenario's smallest
 map, 18 rows, holds twice the narrowest. Each new game flies a new cave, its rock in
 strata, cracked, moss or crystal stone. Glyphs drift left behind the rock at three
-depths, each stepping on whole ticks, and drains, nuggets, gold and the fuse are
+depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
+moving and the depths come apart, and drains, nuggets, gold and the fuse are
 off. Raiders, the cave's swarms, spawn at the right edge every two seconds while
 fewer than three fly, on a row drawn across the map, in the nearest open rows when
 rock fills it, each of a type drawn at random between the two of the rank the raid

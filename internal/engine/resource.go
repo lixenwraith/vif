@@ -60,6 +60,9 @@ type Resource struct {
 	// Tentacle samples the Kraken system built this tick, for its renderer
 	KrakenShape *KrakenShapeResource
 
+	// The drift's layers as this tick left them, for the glyph renderer
+	Drift *DriftResource
+
 	// Player-domain view effects
 	View *ViewResource
 
@@ -94,6 +97,10 @@ type TimeResource struct {
 
 	// DeltaTime is the duration since the last update
 	DeltaTime time.Duration
+
+	// PaceTime is the pacing clock's instant the tick ran at, zero before one has:
+	// how far a frame stands past its tick, for drawing motion between ticks
+	PaceTime time.Time
 }
 
 // Update overwrites all three fields
@@ -110,6 +117,23 @@ func (tr *TimeResource) GameElapsed() time.Duration { return tr.GameTime.Sub(Sim
 
 // DeltaTimeNano returns the tick delta in nanoseconds
 func (tr *TimeResource) DeltaTimeNano() int64 { return int64(tr.DeltaTime) }
+
+// --- Drift Resource ---
+
+// DriftResource is each drift layer as the environment left it this tick: its
+// part-cell and its velocity per axis. Systems write, renderers read; it is derived
+// state and never copied with a world.
+type DriftResource struct {
+	Phase [len(parameter.DriftLayerFactor)][2]int64 // velocity times nanoseconds
+	Rate  [len(parameter.DriftLayerFactor)][2]int64 // microcells a second
+}
+
+// Carry is how far a layer moves in since past the tick, in whole cells per axis:
+// as far as the next tick would step it, at the rate it has
+func (r *DriftResource) Carry(level int, since time.Duration) (dx, dy int) {
+	p, v := r.Phase[level], r.Rate[level]
+	return int((p[0] + v[0]*int64(since)) / vmath.CellSpan), int((p[1] + v[1]*int64(since)) / vmath.CellSpan)
+}
 
 // --- Config Resource ---
 

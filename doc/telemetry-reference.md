@@ -104,7 +104,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem
 | Explosion | `explosion.{triggered,cursor_rejects,disabled_rejects,buf_composites_hwm}` | `NewExplosionSystem` | Explosion request handler and the composite pass | `Init` | Generic only |
 | Motion marker | `motion_marker.buf_{base_markers,base_positions,colored_markers}_hwm` | `NewMotionMarkerSystem` | Marker-buffer observation | `Init` | Generic only |
 | Splash | None | — | — | — | — |
-| Environment | `environment.{wind_active,drift_active,drift_scenery}`; float `environment.drift_direction` | `NewEnvironmentSystem` | Update gauges | `Init` | `drift_*` steer the glyph spawner's entry band and the kind it places |
+| Environment | `environment.{wind_active,drift_active,drift_scenery}`; floats `environment.{drift_direction,drift_speed}` | `NewEnvironmentSystem` | Update gauges | `Init` | `drift_*` steer the glyph spawner's entry band, its pace and the kind it places |
 | Death | `death.{killed,tagged,batch_{count,entities_total,size_max,silent,flash,blossom,decay,fadeout,dust,other},protected_rejects,zero_rejects,missing_entities,missing_effect_data,payload_rejects,disabled_rejects,buf_destroy_hwm}` | `NewDeathSystem` | The `EventDeathBatch` handler and the `DeathComponent` sweep in `Update` | `Init` | Generic only |
 | Timer | None | — | — | — | — |
 | Adaptation | `adapt.{graphs,populations,buf_*_hwm}`; strings `adapt.{g1,g2,g3,g4}` | `NewAdaptationSystem` | Graphs, populations and the `g` strings every `AdaptTelemetryInterval` ticks; buffer observation as it runs | `Init` | Generic only |
@@ -225,7 +225,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `death.batch_*` (int) | Resolved `EventDeathBatch` payloads (`count`), entries presented (`entities_total`), the largest batch (`size_max`), and requests per effect route (`silent`, `flash`, `blossom`, `decay`, `fadeout`, `dust`, `other`) |
 | `death.tagged` (int) | Entities processed from the `DeathComponent` sweep |
 | `death.{protected,zero,payload}_rejects`, `death.missing_{entities,effect_data}` (int) | Entries refused by `ProtectFromDeath`, zero identifiers, bad payload types, entities already gone, and deaths whose effect lacked position, glyph or wall data |
-| `environment.drift_active`, `environment.drift_scenery` (bool), `environment.drift_direction` (float) | The drift gauge, whether text placed under it is scenery, and its heading. The glyph spawner reads them to bias its entry band and to stamp and count scenery |
+| `environment.drift_active`, `environment.drift_scenery` (bool), `environment.drift_direction`, `environment.drift_speed` (float) | The drift gauge, whether text placed under it is scenery, its heading, and the pace in cells a second it drifts or eases to, 0 while none runs. The glyph spawner reads them to bias its entry band, to spawn sooner past `DriftFillSpeed` and to stamp and count scenery |
 
 ### Network
 

@@ -347,8 +347,7 @@ func TestTopGlyphIsSharedThenNearestThenLowest(t *testing.T) {
 }
 
 // TestTopGlyphPassesOverScenery: typing's top glyph is the top typeable one, of any
-// mask but scenery's, and the one drawn is that over any scenery, or the nearest
-// scenery where only scenery stands
+// mask but scenery's, and it is the one drawn over any scenery
 func TestTopGlyphPassesOverScenery(t *testing.T) {
 	w := NewWorld()
 	NewGameContextWithClock(w, 40, 24, NewManualClock())
@@ -369,10 +368,8 @@ func TestTopGlyphPassesOverScenery(t *testing.T) {
 		}
 	}
 
-	far := glyph(component.GlyphDark, component.ProtectScenery)
-	drawn(far)
+	glyph(component.GlyphDark, component.ProtectScenery)
 	near := glyph(component.GlyphBright, component.ProtectScenery)
-	drawn(near)
 	if _, ok := w.Positions.TopGlyphAt(at.X, at.Y); ok || w.Positions.IsTypeable(near) {
 		t.Fatal("typing found scenery")
 	}

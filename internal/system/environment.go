@@ -41,6 +41,7 @@ type EnvironmentSystem struct {
 	statWindActive     *atomic.Bool
 	statDriftActive    *atomic.Bool
 	statDriftDirection *status.AtomicFloat
+	statDriftSpeed     *status.AtomicFloat
 	statDriftScenery   *atomic.Bool
 	toggle
 }
@@ -76,6 +77,7 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 	s.statWindActive = world.Resources.Status.Bools.Get("environment.wind_active")
 	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
 	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
+	s.statDriftSpeed = world.Resources.Status.Floats.Get("environment.drift_speed")
 	s.statDriftScenery = world.Resources.Status.Bools.Get("environment.drift_scenery")
 	return s
 }
@@ -502,11 +504,20 @@ func (s *EnvironmentSystem) passesWalls(e core.Entity) bool {
 	return prot.Mask&component.ProtectFromWall != 0
 }
 
+// publishStatus also leaves each layer's part-cell and velocity for the glyph
+// renderer, at rest while the system is off
 func (s *EnvironmentSystem) publishStatus() {
+	running := s.enabled && s.drift.Active
+	speed, rate := 0.0, [driftLevels][2]int64{}
+	if running {
+		speed, rate = s.drift.Speed, s.velocities()
+	}
 	s.statWindActive.Store(s.enabled && s.windActive)
-	s.statDriftActive.Store(s.enabled && s.drift.Active)
+	s.statDriftActive.Store(running)
 	s.statDriftDirection.Set(s.drift.Direction)
+	s.statDriftSpeed.Set(speed)
 	s.statDriftScenery.Store(s.enabled && s.drift.Scenery)
+	s.world.Resources.Drift.Phase, s.world.Resources.Drift.Rate = s.drift.Phase, rate
 }
 
 func finite(v float64) bool {

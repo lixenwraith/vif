@@ -75,10 +75,11 @@ type GlyphSystem struct {
 	// Reused placement scratch
 	placement []glyphPlacement
 
-	// Drift as the environment publishes it; read only, for the entry band and the
-	// kind of text placed
+	// Drift as the environment publishes it; read only, for the entry band, the pace
+	// and the kind of text placed
 	statDriftActive    *atomic.Bool
 	statDriftDirection *status.AtomicFloat
+	statDriftSpeed     *status.AtomicFloat
 	statDriftScenery   *atomic.Bool
 
 	// Cached metric pointers
@@ -107,6 +108,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.buffers = newBufferTelemetry(world.Resources.Status, "glyph", "placement")
 	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
 	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
+	s.statDriftSpeed = world.Resources.Status.Floats.Get("environment.drift_speed")
 	s.statDriftScenery = world.Resources.Status.Bools.Get("environment.drift_scenery")
 
 	return s
@@ -216,12 +218,12 @@ func (s *GlyphSystem) updateRateMultiplier(density float64) {
 	}
 }
 
-// calculateNextSpawn calculates and sets the next spawn time
+// calculateNextSpawn is the interval to the next spawn, shorter as the map empties
+// and as a drift outpaces DriftFillSpeed, carrying text off the map sooner
 func (s *GlyphSystem) calculateNextSpawn() time.Duration {
 	baseDelay := time.Duration(parameter.SpawnIntervalMs) * time.Millisecond
-	adjustedDelay := time.Duration(float64(baseDelay) / s.rateMultiplier)
-
-	return adjustedDelay
+	fill := max(1, s.statDriftSpeed.Get()/parameter.DriftFillSpeed)
+	return time.Duration(float64(baseDelay) / s.rateMultiplier / fill)
 }
 
 // countPlacedKind counts the glyphs of the kind placeLine stamps now, scenery or

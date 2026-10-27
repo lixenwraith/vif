@@ -691,7 +691,9 @@ flowchart TD
    a solo run has none;
 3. open the next journal tick stamp, then set `GameTime` to `SimTime(tick)` —
    derived from the tick, never from the pacing clock, so every participant reads
-   the same instant — with wall `RealTime` and fixed `DeltaTime`;
+   the same instant — with wall `RealTime` and fixed `DeltaTime`, and `PaceTime`,
+   the pacing clock's instant, which only renderers read, to draw motion between
+   ticks;
 4. update elapsed-time status;
 5. consume/dispatch events accumulated before the tick until the queue is empty
    or the settling cap is reached;

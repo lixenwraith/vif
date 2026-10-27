@@ -304,6 +304,10 @@ var GlyphColorLUT = [5][3]color.RGB{
 	{RgbGlyphGold, RgbGlyphGold, RgbGlyphGold},
 }
 
+// SceneryDepthMix is how far each scenery layer's colour stands from the background
+// toward its type's bright colour, by level far to near, so depth reads as haze
+var SceneryDepthMix = [3]float64{0.28, 0.52, 0.85}
+
 // RgbPeerCursor is one background colour per roster slot, for the cursors this
 // instance does not drive. They are chosen apart from RgbCursorNormal and
 // RgbCursorInsert rather than merely from each other: the question a player asks
