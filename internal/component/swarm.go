@@ -15,6 +15,7 @@ const (
 	SwarmStateCharge                       // flies at the stored cell, arriving as the entry ends
 	SwarmStateTeleport                     // beams to a landing by the stored cell, out of line of sight
 	SwarmStateDecelerate                   // brakes after the attack, counted as a charge
+	SwarmStateArrive                       // stands where the beam set it down, counted as a charge
 )
 
 // SwarmComponent holds swarm-specific runtime state, composite structure managed via HeaderComponent
@@ -29,8 +30,7 @@ type SwarmComponent struct {
 	ChargeStartX, ChargeStartY   float64 // sub-cell position the charge left from
 	ChargeTargetX, ChargeTargetY float64 // the stored cell's centre
 
-	TeleportStartX, TeleportStartY   int // header cell the beam leaves
-	TeleportTargetX, TeleportTargetY int // header cell it lands on
+	TeleportTargetX, TeleportTargetY int // header cell the beam aims at, which the arrival takes while clear
 
-	ChargesCompleted int // Decelerate entries: charges, teleports and locks that could do neither
+	ChargesCompleted int // Decelerate and Arrive entries: charges, teleports and locks that could do neither
 }

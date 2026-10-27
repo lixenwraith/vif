@@ -2615,12 +2615,6 @@ func encodeColumnsSwarm(dst []byte, rows []StoreEntry[component.SwarmComponent])
 		dst = appendF64(dst, rows[i].Value.ChargeTargetY)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.TeleportStartX)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.TeleportStartY)
-	}
-	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.TeleportTargetX)
 	}
 	for i := range rows {
@@ -2671,12 +2665,6 @@ func decodeColumnsSwarm(r *columnReader) []StoreEntry[component.SwarmComponent] 
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.ChargeTargetY, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.TeleportStartX, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.TeleportStartY, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.TeleportTargetX, r)
