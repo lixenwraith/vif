@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/manifest"
@@ -533,8 +534,8 @@ func (a *App) initScheduler() error {
 	a.glue.scheduler, a.membership.scheduler, a.scribe.scheduler = a.scheduler, a.scheduler, a.scheduler
 	a.scheduler.SetJournalDigest(a.scribe.journalDigestLocked)
 
-	if err := a.scheduler.LoadScenarioFromFS(
-		a.scenario.FS(), a.scenario.Entry(), manifest.RegisterFSMComponents); err != nil {
+	register := func(m *fsm.Machine[*engine.World]) { manifest.RegisterFSMComponents(m, a.behaviors.Prototypes()) }
+	if err := a.scheduler.LoadScenarioFromFS(a.scenario.FS(), a.scenario.Entry(), register); err != nil {
 		return fmt.Errorf("load scenario %s: %w", a.scenario.Name, err)
 	}
 

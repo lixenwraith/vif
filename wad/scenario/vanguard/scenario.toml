@@ -1,26 +1,33 @@
 description = "Fly a cave that scrolls past you: its rock pushes you back, and the left edge crushes you."
 min_players = 1
 max_players = 16
+macro_files = ["macros.toml"]
 
 # A side-scroller after Vanguard (1981): the cursor is a ship and the cave scrolls
 # left past it. Rock pushes the cursor a column back and toward the channel; rock
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
-# left behind the rock at three depths, raiders, the cave's swarms, beam in at the
-# right edge, and each one shot down drops a U that raises the gun a level, from one
-# shot forward to three each way.
+# left behind the rock at three depths, raiders of four types, the cave's swarms,
+# arrive at the right edge on a timer, and each one shot down drops a U that raises
+# the gun a level, from one shot forward to three each way.
 
 # The cave holds a 15-row channel and two walls of at least two rows
 [map]
 min_width = 80
 min_height = 22
 
+# The raider types, one program each over the one cycle in macros.toml, so each
+# keeps its own kill counter and behavior.<type>.* rows; RaidSpawn picks among them
+# and the U drop names them all
 [behaviors]
-raider = { file = "behavior/raider.toml" }
+invader = { file = "behavior/invader.toml" }
+scarab = { file = "behavior/scarab.toml" }
+construct = { file = "behavior/construct.toml" }
+storm_eye = { file = "behavior/storm_eye.toml" }
 
-# The fuse beams the raiders in; with no drains it fuses nothing else
+# No drains, and so nothing to fuse: the raid spawns its raiders directly
 [regions.main]
 initial = "CaveStart"
-disabled_systems = ["nugget", "gold", "drain"]
+disabled_systems = ["nugget", "gold", "drain", "fuse"]
 
 [regions.raid]
 initial = "RaidWait"
@@ -52,29 +59,31 @@ on_enter = [
 # A raider a player shoots down drops a U where it fell, an upgrade for every
 # player (LootUpgrade = 8): an event drop, since no drop table holds it; one that
 # dies by no player's hand drops nothing. Both raid states hold it, so no kill
-# goes uncounted while a raider beams in.
+# goes uncounted while a raider spawns.
 [states.Raid]
 parent = "Root"
 transitions = [
     { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
-        { name = "PayloadIntCompare", args = { field = "species", op = "eq", value = 10 } },
+        { name = "PayloadSpeciesIn", args = { field = "species", names = ["invader", "scarab", "construct", "storm_eye"] } },
         { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
     ] }, capture_vars = { x = "kill_x", y = "kill_y" }, actions = [
         { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = 8 }, payload_vars = { x = "kill_x", y = "kill_y" } },
     ] },
 ]
 
-# A raider beams in at the right edge every four seconds while fewer than three
-# fly, on a row drawn within six of the middle; the beam searches the whole map
-# from there, so rock on that row sends it to the nearest open rows. Its header
-# stands a column in from its left, so the right edge's header column is the width
-# less three.
+# A raider spawns at the right edge every four seconds while fewer than three
+# fly, every data species being a raider, on a row drawn within six of the middle;
+# the spawn searches the whole map from there, so rock on that row sends it to the
+# nearest open rows. A 4-wide type's header stands a column in from its left and
+# the storm eye's two, so the width less three is the right edge's header column
+# for both. The type is drawn too, each equally likely: a new type widens the draw
+# and adds its edge.
 [states.RaidWait]
 parent = "Raid"
 transitions = [
     { trigger = "Tick", target = "RaidSpawn", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 4000 } },
-        { name = "StatusIntCompare", args = { key = "behavior.raider.count", op = "lt", value = 3 } },
+        { name = "StatusIntCompare", args = { key = "behavior.count", op = "lt", value = 3 } },
     ] } },
 ]
 
@@ -88,9 +97,11 @@ on_enter = [
     { action = "IncrementVar", payload = { name = "raid_index" } },
     { action = "RandomVar", payload = { name = "raid_row", min = -6, max = 6, index_var = "raid_index" } },
     { action = "IncrementVar", payload = { name = "raid_y", source_var = "raid_row" } },
-    { action = "EmitEvent", event = "EventFuseBehaviorRequest", payload = { program = "raider" }, payload_vars = { x = "raid_x", y = "raid_y" } },
+    { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
+    { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 3, seed_var = "raid_type_seed", index_var = "raid_index" } },
 ]
 transitions = [
+    { macro = "RaidSpawnAs", each = { type = [0, 1, 2, 3], program = ["invader", "scarab", "construct", "storm_eye"] } },
     { trigger = "Tick", target = "RaidWait" },
 ]
 

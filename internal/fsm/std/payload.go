@@ -2,7 +2,9 @@ package std
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -120,7 +122,7 @@ func setPayloadVar(field reflect.Value, value int64) {
 
 // === Payload Guards ===
 
-func registerPayloadGuards[T any](m *fsm.Machine[T]) {
+func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 	m.RegisterGuard("PayloadIntCompare", func(a *fieldCompareArgs) (fsm.GuardFunc[T], error) {
 		if a.Field == "" {
 			return nil, errors.New("requires 'field'")
@@ -161,6 +163,30 @@ func registerPayloadGuards[T any](m *fsm.Machine[T]) {
 		return func(_ T, _ *fsm.RegionState, payload any) bool {
 			v, ok := ExtractStringField(payload, a.Field)
 			return ok && v == a.Value
+		}, nil
+	})
+
+	// PayloadSpeciesIn passes when a payload's species is one of names, resolved at
+	// load, so a program that sorts before another, which renumbers it, retargets
+	// nothing; a name no species holds fails the load
+	m.RegisterGuard("PayloadSpeciesIn", func(a *fieldSpeciesArgs) (fsm.GuardFunc[T], error) {
+		if a.Field == "" || len(a.Names) == 0 {
+			return nil, errors.New("requires 'field' and 'names'")
+		}
+		if h.Species == nil {
+			return alwaysFalse[T](), nil
+		}
+		ids := make([]int64, len(a.Names))
+		for i, name := range a.Names {
+			id, ok := h.Species(name)
+			if !ok {
+				return nil, fmt.Errorf("'%s' is neither a code species nor a behavior program", name)
+			}
+			ids[i] = id
+		}
+		return func(_ T, _ *fsm.RegionState, payload any) bool {
+			v, ok := ExtractIntField(payload, a.Field)
+			return ok && slices.Contains(ids, v)
 		}, nil
 	})
 

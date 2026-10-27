@@ -23,7 +23,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventFuseQuasarRequest", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
 ]
 transitions = [
-    { trigger = "EventSpeciesCreated", target = "QuasarGoldSpawn", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
+    { trigger = "EventSpeciesCreated", target = "QuasarGoldSpawn", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["quasar"] } },
     # Defensive: spawn never arrived
     { trigger = "Tick", target = "QuasarExit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
@@ -37,10 +37,10 @@ transitions = [
     # FSM dispatch precedes kill telemetry for the same event, so two prior
     # quasar kills plus this payload reaches the three-kill escalation gate.
     { trigger = "EventSpeciesKilled", target = "QuasarEscalate", guard = "And", guard_args = { guards = [
-        { name = "PayloadIntCompare", args = { field = "species", op = "eq", value = 3 } },
+        { name = "PayloadSpeciesIn", args = { field = "species", names = ["quasar"] } },
         { name = "StatusIntCompare", args = { key = "kills.quasar", since = "quasar_mark", op = "gte", value = 2 } },
     ] } },
-    { trigger = "EventSpeciesKilled", target = "QuasarExit", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
+    { trigger = "EventSpeciesKilled", target = "QuasarExit", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["quasar"] } },
     { trigger = "Tick", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", since = "quasar_mark", op = "gte", value = 3 } },
     { macro = "LeftMap", active = "quasar.active", target = "QuasarExit" },
 ]

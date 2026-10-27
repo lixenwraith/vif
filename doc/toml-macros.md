@@ -49,8 +49,8 @@ defaults = { timeout_ms = 500 }
 body = { parent = "Root", on_enter = [
     { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = "${x}", y = "${y}" } },
 ], transitions = [
-    { trigger = "EventSpeciesCreated", target = "${attach}", guard = "PayloadIntCompare",
-      guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
+    { trigger = "EventSpeciesCreated", target = "${attach}", guard = "PayloadSpeciesIn",
+      guard_args = { field = "species", names = ["pylon"] }, capture_vars = { entity = "gw_anchor" } },
     { trigger = "EventPylonSpawnFailed", target = "${next}" },
     { trigger = "Tick", target = "${next}", guard = "StateTimeExceeds", guard_args = { ms = "${timeout_ms}" } },
 ] }
@@ -71,7 +71,7 @@ the wrong type and a `${name}` naming no parameter are errors before any use.
 Inside a body, `${name}` names a parameter, in a string or in a key.
 
 - A string that is exactly one reference becomes the argument itself, of any type:
-  `value = "${species}"` is the integer 5, `payload = "${payload}"` a table.
+  `ms = "${timeout_ms}"` is the integer 500, `payload = "${payload}"` a table.
 - Elsewhere the argument is spliced into the text, and must be a string, an
   integer or a boolean: `capture = "${id}_anchor"`.
 - `$$` is a literal `$`; any other `$` in a body is an error.
@@ -136,7 +136,11 @@ state, tower-loss retargeting, kill-or-left-the-map exits, announcements and
 resets. A flank's counters share a prefix (`l_dead`, `r_p2_done`), so one `side`
 parameter names them. The embedded campaign's `macros.toml` holds the tower
 region's corner pylon and gateway pair and the quasar and storm regions'
-left-the-map exit. `wad/scenario/simon` is one document that defines its own.
+left-the-map exit. `wad/scenario/vanguard`'s `macros.toml` holds the raiders' one
+attack cycle, which each raider type's program invokes as its `[states]` table
+with its own timings, the stun edge each adds to `[[global]]`, and the raid's spawn
+edge per type, invoked with `each` over the types. `wad/scenario/simon` is one
+document that defines its own.
 
 ## 7. Rejected alternatives
 

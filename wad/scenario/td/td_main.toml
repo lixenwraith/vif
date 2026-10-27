@@ -121,7 +121,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "QUASAR FORMING" } },
 ]
 transitions = [
-    { trigger = "EventSpeciesCreated", target = "TdQuasarLive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
+    { trigger = "EventSpeciesCreated", target = "TdQuasarLive", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["quasar"] } },
     # Defensive: fuse never completed
     { trigger = "Tick", target = "TdQuasarEnd", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
@@ -136,7 +136,7 @@ on_exit = [
     { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
 ]
 transitions = [
-    { macro = "Slain", species = 3, active = "quasar.active", target = "TdQuasarEnd" },
+    { macro = "Slain", species = "quasar", active = "quasar.active", target = "TdQuasarEnd" },
 ]
 
 [states.TdQuasarEnd]

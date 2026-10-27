@@ -39,6 +39,10 @@ type Host[T any] struct {
 	// that plays it; a nil Seed roots every draw at zero
 	Seed func(ctx T) uint64
 
+	// Species resolves a species name at load, a code species' or a behavior
+	// program's, to the number its payloads carry
+	Species func(name string) (int64, bool)
+
 	// Refuse, when set, fails the load of an event or system action whose hook
 	// is nil with this reason, for an embedder whose scripts must not name what
 	// does nothing
@@ -55,7 +59,7 @@ func Register[T any](m *fsm.Machine[T], h Host[T]) {
 	registerStatusActions(m, h)
 
 	registerCoreGuards(m)
-	registerPayloadGuards(m)
+	registerPayloadGuards(m, h)
 	registerStatusGuards(m, h)
 	registerConfigGuards(m, h)
 	registerStaticGuards(m)
