@@ -1,0 +1,20 @@
+# The drone: its rotors spinning over its visor. One of the crystal cave's
+# first-tier raiders: RaiderTier1 in ../../macros.toml gives its stats and cycle and
+# the cave its colours.
+macro = "RaiderTier1"
+theme = "Crystal"
+width = 4
+height = 2
+header = { x = 1, y = 0 }
+pattern_ms = 150
+
+# Rotors 3, visor 0, eyes 1
+[[frames]]
+glyphs = ["-==-", "[oo]"]
+fg     = ["3333", "0110"]
+attr   = ["    ", " BB "]
+
+[[frames]]
+glyphs = ["=--=", "[oo]"]
+fg     = ["3333", "0110"]
+attr   = ["    ", " BB "]

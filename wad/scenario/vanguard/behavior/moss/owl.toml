@@ -1,0 +1,30 @@
+# The owl: it shifts its wings, and blinks. One of the moss cave's fourth-tier
+# raiders: RaiderTier4 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier4"
+theme = "Moss"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 500
+
+# Face 0, eyes 1, beak and talons 3, wings 2
+[[frames]]
+glyphs = ["{o,o}", "/)__)", " \" \" "]
+fg     = ["01310", "20000", " 3 3 "]
+attr   = [" B B ", "     ", "     "]
+
+[[frames]]
+glyphs = ["{o,o}", "(__(\\", " \" \" "]
+fg     = ["01310", "00002", " 3 3 "]
+attr   = [" B B ", "     ", "     "]
+
+[[frames]]
+glyphs = ["{o,o}", "/)__)", " \" \" "]
+fg     = ["01310", "20000", " 3 3 "]
+attr   = [" B B ", "     ", "     "]
+
+[[frames]]
+glyphs = ["{-,-}", "/)__)", " \" \" "]
+fg     = ["01310", "20000", " 3 3 "]
+attr   = [" B B ", "     ", "     "]

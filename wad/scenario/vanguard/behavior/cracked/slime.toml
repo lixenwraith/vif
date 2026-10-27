@@ -1,0 +1,20 @@
+# The slime: a blob that heaves itself along. One of the cracked cave's second-tier
+# raiders: RaiderTier2 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier2"
+theme = "Cracked"
+width = 5
+height = 2
+header = { x = 2, y = 0 }
+pattern_ms = 400
+
+# Body 0, eyes 1, mouth 2
+[[frames]]
+glyphs = ["/o o\\", "(___)"]
+fg     = ["01010", "02220"]
+attr   = [" B B ", "     "]
+
+[[frames]]
+glyphs = ["(o o)", "\\___/"]
+fg     = ["01010", "02220"]
+attr   = [" B B ", "     "]

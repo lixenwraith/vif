@@ -1,0 +1,30 @@
+# The lynx: its ears pricked, it blinks and bristles. One of the moss cave's
+# fourth-tier raiders: RaiderTier4 in ../../macros.toml gives its stats and cycle
+# and the cave its colours.
+macro = "RaiderTier4"
+theme = "Moss"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 450
+
+# Ears and whiskers 2, face 0, eyes 1, nose 3
+[[frames]]
+glyphs = ["/\\_/\\", "(o.o)", " >^< "]
+fg     = ["22022", "01310", " 232 "]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = ["/\\_/\\", "(o.o)", " >^< "]
+fg     = ["22022", "01310", " 232 "]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = ["/\\_/\\", "(-.-)", " >^< "]
+fg     = ["22022", "01310", " 232 "]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = ["/|_|\\", "(o.o)", " <^> "]
+fg     = ["22022", "01310", " 232 "]
+attr   = ["     ", " B B ", "     "]

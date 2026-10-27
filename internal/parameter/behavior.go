@@ -5,8 +5,9 @@ import "time"
 // Data species: species a scenario defines by behavior programs
 const (
 	// BehaviorProgramsMax is how many programs a scenario may declare, the rows the
-	// data species range reserves after the code species
-	BehaviorProgramsMax = 8
+	// data species range reserves after the code species: vanguard's 32 raider types,
+	// eight to each of its four caves
+	BehaviorProgramsMax = 32
 
 	// BehaviorNameMax bounds a program name in bytes; the name keys its status rows
 	BehaviorNameMax = 24

@@ -137,10 +137,12 @@ resets. A flank's counters share a prefix (`l_dead`, `r_p2_done`), so one `side`
 parameter names them. The embedded campaign's `macros.toml` holds the tower
 region's corner pylon and gateway pair and the quasar and storm regions'
 left-the-map exit. `wad/scenario/vanguard`'s `macros.toml` holds the raiders' one
-attack cycle, which each raider type's program invokes as its `[states]` table
-with its own timings, the stun edge each adds to `[[global]]`, and the raid's spawn
-edge per type, invoked with `each` over the types. `wad/scenario/simon` is one
-document that defines its own.
+attack cycle (`RaiderStates`) and the stun edge (`RaiderStun`), `Raider`, which
+makes a whole program of a look, stats and timings, the four tiers that invoke it
+with their stats, and each cave's palette and console colour, which `Raider`
+invokes by name (`{ macro = "${theme}Fg" }`). A raider type's program file is one
+invocation at its root: its tier's macro with its cave and its look, frames given
+as `[[frames]]`. `wad/scenario/simon` is one document that defines its own.
 
 ## 7. Rejected alternatives
 

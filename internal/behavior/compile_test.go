@@ -313,15 +313,15 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 
 func TestAProgramNameKeepsToTheRules(t *testing.T) {
 	doc := parse(t, warden)
-	nine := map[string]map[string]any{}
-	for i := range 9 {
-		nine[fmt.Sprintf("w%d", i)] = doc
+	over := map[string]map[string]any{}
+	for i := range parameter.BehaviorProgramsMax + 1 {
+		over[fmt.Sprintf("w%d", i)] = doc
 	}
 	for _, tc := range []struct {
 		programs map[string]map[string]any
 		want     string
 	}{
-		{nine, "9 behavior programs, at most 8"},
+		{over, fmt.Sprintf("%d behavior programs, at most %d", parameter.BehaviorProgramsMax+1, parameter.BehaviorProgramsMax)},
 		{map[string]map[string]any{"Warden": doc}, `program name "Warden" is not [a-z][a-z0-9_]*`},
 		{map[string]map[string]any{"swarm": doc}, `program name "swarm" is a code species`},
 		{map[string]map[string]any{"total": doc}, `program name "total" is reserved`},

@@ -1,0 +1,25 @@
+# The squid: its tentacles curling under its mantle. One of the crystal cave's
+# third-tier raiders: RaiderTier3 in ../../macros.toml gives its stats and cycle and
+# the cave its colours.
+macro = "RaiderTier3"
+theme = "Crystal"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 300
+
+# Mantle 0, eyes 1, tentacles 2
+[[frames]]
+glyphs = [" /^\\ ", "(o o)", "/|||\\"]
+fg     = [" 000 ", "01010", "22222"]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = [" /^\\ ", "(o o)", "\\|||/"]
+fg     = [" 000 ", "01010", "22222"]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = [" /^\\ ", "(o o)", "|/|\\|"]
+fg     = [" 000 ", "01010", "22222"]
+attr   = ["     ", " B B ", "     "]

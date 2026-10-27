@@ -1,23 +1,33 @@
-// Command raider lays out numbered raider candidates for vanguard, each within the
-// 5×3 a composite navigates, under one colour scheme a slider picks, on the game's
-// truecolor tier or its console tier as a VGA or FreeBSD console shows it.
+// Command raider shows vanguard's raider types as its scenario declares them: a
+// band for each stone art, its types weakest tier first between a ceiling and a
+// floor of that art's rock, in the colours their programs give them or one hue a
+// slider picks, on the game's truecolor tier or its console tier as a VGA or
+// FreeBSD console shows it. Run it from the repository root, or name the scenario
+// directory with -s.
 package main
 
 import (
+	"flag"
 	"fmt"
+	"maps"
 	"math/rand/v2"
+	"os"
+	"slices"
 	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/internal/system"
 )
 
-// A frame's fg grid names each glyph's part, which a scheme colours
+// A program's fg grid names each glyph's part, which a hue colours
 const (
 	partBody = iota
 	partEyes
@@ -26,39 +36,24 @@ const (
 	parts
 )
 
-// scheme colours the four parts, each in RGB and as the console entry a 256-colour
-// host draws it in
-type scheme struct {
+// hue colours every raider's four parts alike, and every glyph in one console entry
+type hue struct {
 	name    string
 	rgb     [parts]color.RGB
-	console [parts]uint8
-}
-
-type creature struct {
-	name   string
-	w, h   int
-	ms     int    // per frame, the prototype's pattern_ms
-	mixed  scheme // its own colours, the slider's last stop
-	frames []visual.LookFrame
-	look   component.Look
+	console uint8
 }
 
 func rgb(r, g, b uint8) color.RGB { return color.RGB{R: r, G: g, B: b} }
 
-// The slider's stops before Mixed: each colours every creature in one hue, its
-// eyes the palest and its limbs the darkest
-var schemes = []scheme{
-	{"Purple", [parts]color.RGB{rgb(170, 90, 230), rgb(232, 205, 255), rgb(115, 60, 165), rgb(205, 145, 255)},
-		[parts]uint8{visual.ConBrightMagenta, visual.ConBrightWhite, visual.ConMagenta, visual.ConBrightMagenta}},
-	{"White", [parts]color.RGB{rgb(228, 228, 238), rgb(255, 255, 255), rgb(150, 150, 168), rgb(195, 195, 210)},
-		[parts]uint8{visual.ConBrightWhite, visual.ConBrightWhite, visual.ConWhite, visual.ConWhite}},
-	{"Orange", [parts]color.RGB{rgb(255, 140, 40), rgb(255, 215, 140), rgb(190, 90, 25), rgb(255, 100, 45)},
-		[parts]uint8{visual.ConYellow, visual.ConBrightYellow, visual.ConYellow, visual.ConBrightRed}},
-	{"Yellow", [parts]color.RGB{rgb(255, 225, 60), rgb(255, 255, 215), rgb(195, 160, 35), rgb(255, 240, 150)},
-		[parts]uint8{visual.ConBrightYellow, visual.ConBrightWhite, visual.ConYellow, visual.ConBrightYellow}},
-}
+// The slider's first stop is each program's own palette; the rest colour every
+// raider in one hue, its eyes the palest and its limbs the darkest
+const ownStop = "Vanguard"
 
-const mixedStop = "Mixed"
+var hues = []hue{
+	{"Purple", [parts]color.RGB{rgb(170, 90, 230), rgb(232, 205, 255), rgb(115, 60, 165), rgb(205, 145, 255)}, visual.ConBrightMagenta},
+	{"White", [parts]color.RGB{rgb(228, 228, 238), rgb(255, 255, 255), rgb(150, 150, 168), rgb(195, 195, 210)}, visual.ConBrightWhite},
+	{"Orange", [parts]color.RGB{rgb(255, 140, 40), rgb(255, 215, 140), rgb(190, 90, 25), rgb(255, 100, 45)}, visual.ConYellow},
+}
 
 // The tiers a truecolor terminal can show; a 256-colour terminal shows only its own console
 type tier struct {
@@ -84,14 +79,32 @@ const (
 var stateNames = [states]string{"calm", "enraged", "hit"}
 
 const (
-	cardW, cardH = 13, 5 // a label row, three body rows and a gap
-	gridTop      = 3
+	cardW        = 13 // a raider's column
+	nameW        = 9  // the cave's name, left of its first row of cards
+	bandRows     = 2  // a ceiling's and a floor's rows of rock
+	openRows     = 3  // the 5×3 a composite navigates, between them
+	rowH         = 1 + 2*bandRows + openRows
+	gridTop      = 2
 	footerRows   = 4
 	sliderX      = 10
 	sliderStep   = 10
 	backdropFill = 0.05 // the share of cells a drifting glyph holds
 	driftCPS     = 10.0 // the backdrop's drift, the cave's at half its scroll
+	caveCPS      = 20.0 // the rock's scroll, the cave's own
 )
+
+// raider is one program as the raid spawns it: its prototype, and its tier among
+// its cave's, 1 for the fewest hit points
+type raider struct {
+	proto component.BehaviorPrototype
+	tier  int
+}
+
+// cave is one stone art and the raider types the raid picks under it
+type cave struct {
+	art     pattern.ArtPreset
+	raiders []raider
+}
 
 type glyph struct {
 	x, y float64
@@ -103,34 +116,25 @@ type app struct {
 	term     terminal.Terminal
 	native   bool // the terminal draws 256 colours, so its own console is the only tier
 	buf      *render.RenderBuffer
+	caves    []cave
 	w, h     int
-	stop     int // the slider's position, len(schemes) for Mixed
+	stop     int // the slider's position, 0 for the programs' own colours
 	tier     int
-	oneColor bool // the console draws a body's entry everywhere, as a look's fg256 pair does
 	backdrop bool
 	state    int
-	scroll   int
+	scroll   int // in screen rows
 	glyphs   []glyph
 	start    time.Time
 	dragging bool
 }
 
 func main() {
-	for i := range bestiary {
-		c := &bestiary[i]
-		look, err := visual.CompileLook(c.w, c.h, visual.LookArt{Fg: c.mixed.rgb[:], Frames: c.frames})
-		if err != nil {
-			panic(fmt.Sprintf("%d %s: %v", i+1, c.name, err))
-		}
-		// Eyes draw bold, as the vanguard frames mark them
-		for _, f := range look.Frames {
-			for j := range f {
-				if f[j].Fg == partEyes {
-					f[j].Attr = terminal.AttrBold
-				}
-			}
-		}
-		c.look = look
+	dir := flag.String("s", "wad/scenario/vanguard", "the scenario directory whose raiders to show")
+	flag.Parse()
+	caves, err := load(*dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "raider:", err)
+		os.Exit(1)
 	}
 
 	term := terminal.New()
@@ -140,8 +144,7 @@ func main() {
 	defer term.Fini()
 	_ = term.SetMouseMode(terminal.MouseModeClick | terminal.MouseModeDrag)
 
-	a := &app{term: term, native: term.ColorMode() != terminal.ColorModeTrueColor, backdrop: true, start: time.Now()}
-	a.stop = len(schemes)
+	a := &app{term: term, native: term.ColorMode() != terminal.ColorModeTrueColor, caves: caves, backdrop: true, start: time.Now()}
 	a.resize(term.Size())
 
 	ticker := time.NewTicker(50 * time.Millisecond)
@@ -170,10 +173,95 @@ func main() {
 	}
 }
 
+// load compiles the scenario's programs as the game does and groups them as its
+// raid picks them: the program pick's list split evenly over the stone art pick's,
+// in order
+func load(dir string) ([]cave, error) {
+	merged, err := fsm.ResolveScenario(os.DirFS(dir), "scenario.toml")
+	if err != nil {
+		return nil, err
+	}
+	docs := map[string]map[string]any{}
+	behaviors, _ := merged["behaviors"].(map[string]any)
+	for name, doc := range behaviors {
+		docs[name], _ = doc.(map[string]any)
+	}
+	set, err := system.CompileBehaviors(docs)
+	if err != nil {
+		return nil, err
+	}
+	arts, names := pick(merged, "art"), pick(merged, "program")
+	if len(arts) == 0 || len(names) == 0 || len(names)%len(arts) != 0 {
+		return nil, fmt.Errorf("%d raider types do not split evenly over %d stone arts", len(names), len(arts))
+	}
+	byName := map[string]component.BehaviorPrototype{}
+	for _, p := range set.Prototypes() {
+		byName[p.Name] = p
+	}
+
+	per := len(names) / len(arts)
+	caves := make([]cave, len(arts))
+	for i, name := range arts {
+		art, ok := pattern.ParseArtPreset(name)
+		if !ok {
+			return nil, fmt.Errorf("stone art %q is no preset", name)
+		}
+		c := cave{art: art}
+		var hps []int
+		for _, n := range names[i*per : (i+1)*per] {
+			p, ok := byName[n]
+			if !ok {
+				return nil, fmt.Errorf("the raid picks %q, which no program defines", n)
+			}
+			c.raiders = append(c.raiders, raider{proto: p})
+			if !slices.Contains(hps, p.HitPoints) {
+				hps = append(hps, p.HitPoints)
+			}
+		}
+		slices.Sort(hps)
+		for j := range c.raiders {
+			c.raiders[j].tier = slices.Index(hps, c.raiders[j].proto.HitPoints) + 1
+		}
+		caves[i] = c
+	}
+	return caves, nil
+}
+
+// pick returns the list of the first pick of field in the scenario's tree, in key order
+func pick(v any, field string) []string {
+	switch v := v.(type) {
+	case map[string]any:
+		if p, ok := v["pick"].(map[string]any); ok && p["field"] == field {
+			from, _ := p["from"].([]any)
+			out := make([]string, 0, len(from))
+			for _, s := range from {
+				if s, ok := s.(string); ok {
+					out = append(out, s)
+				}
+			}
+			return out
+		}
+		for _, k := range slices.Sorted(maps.Keys(v)) {
+			if out := pick(v[k], field); out != nil {
+				return out
+			}
+		}
+	case []any:
+		for _, e := range v {
+			if out := pick(e, field); out != nil {
+				return out
+			}
+		}
+	}
+	return nil
+}
+
+func (a *app) console() bool { return a.native || tiers[a.tier].console }
+
 func (a *app) resize(w, h int) {
 	a.w, a.h = w, h
 	mode := terminal.ColorModeTrueColor
-	if a.native || tiers[a.tier].console {
+	if a.console() {
 		mode = terminal.ColorMode256
 	}
 	a.buf = render.NewRenderBuffer(mode, w, h)
@@ -200,20 +288,18 @@ func (a *app) key(ev terminal.Event) bool {
 	case ev.Key == terminal.KeyLeft || ev.Rune == 'h':
 		a.stop = max(a.stop-1, 0)
 	case ev.Key == terminal.KeyRight || ev.Rune == 'l':
-		a.stop = min(a.stop+1, len(schemes))
+		a.stop = min(a.stop+1, len(hues))
 	case ev.Key == terminal.KeyUp || ev.Rune == 'k':
-		a.scroll--
+		a.scroll -= rowH
 	case ev.Key == terminal.KeyDown || ev.Rune == 'j':
-		a.scroll++
+		a.scroll += rowH
 	case ev.Key == terminal.KeyPageUp:
-		a.scroll -= a.gridRows()
+		a.scroll -= a.viewRows()
 	case ev.Key == terminal.KeyPageDown:
-		a.scroll += a.gridRows()
+		a.scroll += a.viewRows()
 	case ev.Rune == 'c' && !a.native:
 		a.tier = (a.tier + 1) % len(tiers)
 		a.resize(a.w, a.h)
-	case ev.Rune == 'o':
-		a.oneColor = !a.oneColor
 	case ev.Rune == 'b':
 		a.backdrop = !a.backdrop
 	case ev.Rune == 's':
@@ -226,16 +312,16 @@ func (a *app) key(ev terminal.Event) bool {
 func (a *app) mouse(ev terminal.Event) {
 	switch ev.MouseBtn {
 	case terminal.MouseBtnWheelUp:
-		a.scroll--
+		a.scroll -= rowH
 	case terminal.MouseBtnWheelDown:
-		a.scroll++
+		a.scroll += rowH
 	case terminal.MouseBtnLeft:
 		track := a.h - footerRows
 		if ev.MouseAction == terminal.MouseActionPress {
 			a.dragging = ev.MouseY == track || ev.MouseY == track+1
 		}
 		if a.dragging && ev.MouseAction != terminal.MouseActionRelease {
-			a.stop = min(max((ev.MouseX-sliderX+sliderStep/2)/sliderStep, 0), len(schemes))
+			a.stop = min(max((ev.MouseX-sliderX+sliderStep/2)/sliderStep, 0), len(hues))
 		}
 		if ev.MouseAction == terminal.MouseActionRelease {
 			a.dragging = false
@@ -244,61 +330,126 @@ func (a *app) mouse(ev terminal.Event) {
 	a.clampScroll()
 }
 
-func (a *app) perRow() int { return max((a.w-2)/cardW, 1) }
+// perRow is the cards a row holds right of the caves' names
+func (a *app) perRow() int { return max((a.w-1-nameW)/cardW, 1) }
 
-// gridRows is the card rows the screen shows between the header and the footer
-func (a *app) gridRows() int { return max((a.h-gridTop-footerRows)/cardH, 1) }
+// viewRows is the screen rows between the header and the footer
+func (a *app) viewRows() int { return max(a.h-gridTop-footerRows, 1) }
+
+func (a *app) contentRows() int {
+	n := 0
+	for _, c := range a.caves {
+		n += (len(c.raiders) + a.perRow() - 1) / a.perRow() * rowH
+	}
+	return n
+}
 
 func (a *app) clampScroll() {
-	rows := (len(bestiary) + a.perRow() - 1) / a.perRow()
-	a.scroll = min(max(a.scroll, 0), max(rows-a.gridRows(), 0))
+	a.scroll = min(max(a.scroll, 0), max(a.contentRows()-a.viewRows(), 0))
 }
 
 func (a *app) render() {
 	b := a.buf
 	b.Clear()
 	elapsed := time.Since(a.start)
+	b.SetClip(render.RectWH(0, gridTop, a.w, a.viewRows()))
 	if a.backdrop {
 		a.drawBackdrop(elapsed)
 	}
-
-	b.SetWriteMask(visual.MaskComposite)
-	per := a.perRow()
-	for i := range bestiary {
-		row := i/per - a.scroll
-		if row < 0 || row >= a.gridRows() {
-			continue
-		}
-		x, y := 1+(i%per)*cardW, gridTop+row*cardH
-		c := &bestiary[i]
-		a.text(x, y, fmt.Sprintf("%2d ", i+1), rgb(255, 255, 255), terminal.AttrBold)
-		a.text(x+3, y, c.name, rgb(150, 150, 165), terminal.AttrNone)
-		frame := c.look.Frames[int(elapsed.Milliseconds()/int64(c.ms))%len(c.look.Frames)]
-		ox, oy := x+(cardW-1-c.w)/2, y+1+3-c.h // bottom-aligned, so legs line up
-		for j := range frame {
-			a.cell(ox+j%c.w, oy+j/c.w, &frame[j], a.schemeFor(c), elapsed)
+	per, y := a.perRow(), gridTop-a.scroll
+	for i := range a.caves {
+		c := &a.caves[i]
+		for first := 0; first < len(c.raiders); first += per {
+			a.drawRow(i, c.raiders[first:min(first+per, len(c.raiders))], first == 0, y, elapsed)
+			y += rowH
 		}
 	}
+	b.ClearClip()
 	a.drawHeader()
 	a.drawFooter()
 	b.FlushToTerminal(surface{a})
 }
 
-func (a *app) schemeFor(c *creature) *scheme {
-	if a.stop == len(schemes) {
-		return &c.mixed
+// drawRow draws one row of a cave's cards: their labels, the cave's ceiling, the
+// raiders bottom-aligned on its floor, so legs line up, and the floor
+func (a *app) drawRow(cave int, rs []raider, first bool, y int, elapsed time.Duration) {
+	c := &a.caves[cave]
+	a.buf.SetWriteMask(visual.MaskUI)
+	a.clearRow(y)
+	if first {
+		a.text(1, y, c.art.String(), a.swatch(&c.raiders[0].proto.Look), terminal.AttrBold)
 	}
-	return &schemes[a.stop]
+	for i, r := range rs {
+		x := 1 + nameW + i*cardW
+		a.text(x, y, fmt.Sprintf("T%d ", r.tier), rgb(255, 255, 255), terminal.AttrBold)
+		a.text(x+3, y, r.proto.Name, rgb(150, 150, 165), terminal.AttrNone)
+	}
+
+	ceiling, open, floor := y+1, y+1+bandRows, y+1+bandRows+openRows
+	scroll := int64(0)
+	if a.backdrop {
+		scroll = int64(elapsed.Seconds() * caveCPS)
+	}
+	for d := range bandRows {
+		a.drawRock(c.art, uint64(cave+1), ceiling+bandRows-1-d, d, pattern.FaceDown, scroll)
+		a.drawRock(c.art, uint64(cave+1), floor+d, d, pattern.FaceUp, scroll)
+	}
+
+	a.buf.SetWriteMask(visual.MaskComposite)
+	for i := range rs {
+		p := &rs[i].proto
+		x := 1 + nameW + i*cardW
+		frame := p.Look.Frames[0]
+		if len(p.Look.Frames) > 1 && p.Pattern > 0 {
+			frame = p.Look.Frames[int(elapsed/p.Pattern)%len(p.Look.Frames)]
+		}
+		ox, oy := x+(cardW-1-p.Width)/2, open+openRows-p.Height
+		for j := range frame {
+			a.cell(ox+j%p.Width, oy+j/p.Width, &frame[j], &p.Look, elapsed)
+		}
+	}
+}
+
+// drawRock draws a screen row of rock in art, depth cells from the open rows it faces,
+// scrolled as the cave scrolls; on a console it takes the art's console indices
+func (a *app) drawRock(art pattern.ArtPreset, seed uint64, y, depth int, face pattern.Face, scroll int64) {
+	a.buf.SetWriteMask(visual.MaskWall)
+	for x := range a.w {
+		cell := pattern.ArtCell{X: int64(x) + scroll, Y: int64(y + a.scroll), Depth: depth, Face: face, W: a.w, H: bandRows}
+		if a.console() {
+			r, fg, bg := pattern.Art256(art, seed, cell)
+			a.buf.SetBg256(x, y, bg)
+			a.buf.SetFgOnly(x, y, r, color.RGB{R: fg}, terminal.AttrFg256)
+			continue
+		}
+		r, fg, bg := pattern.Art(art, seed, cell)
+		a.buf.SetWithBg(x, y, r, fg, bg)
+	}
+}
+
+// swatch is the body colour the slider gives a look
+func (a *app) swatch(look *component.Look) color.RGB {
+	if a.stop > 0 {
+		return hues[a.stop-1].rgb[partBody]
+	}
+	return look.Fg[partBody]
 }
 
 // cell paints one glyph as the game's look painter does: its part's colour, the
 // enraged colour over every glyph, and a hit's flash, which a console shows reversed
-func (a *app) cell(x, y int, cell *component.LookCell, sc *scheme, elapsed time.Duration) {
+func (a *app) cell(x, y int, cell *component.LookCell, look *component.Look, elapsed time.Duration) {
 	if cell.Rune == 0 {
 		return
 	}
-	part := max(int(cell.Fg), partBody)
-	console := a.native || tiers[a.tier].console
+	fg, con := look.Color, look.Fg256
+	if cell.Fg >= 0 {
+		fg = look.Fg[cell.Fg]
+	}
+	if a.stop > 0 {
+		h := &hues[a.stop-1]
+		fg, con = h.rgb[min(max(int(cell.Fg), partBody), partAccent)], h.console
+	}
+	console := a.console()
 	hit := a.state == stateHit && elapsed%(4*parameter.CombatHitFlashDuration) < parameter.CombatHitFlashDuration
 	switch {
 	case a.state == stateEnraged || (hit && !console):
@@ -308,16 +459,13 @@ func (a *app) cell(x, y int, cell *component.LookCell, sc *scheme, elapsed time.
 		}
 		a.buf.SetFgOnly(x, y, cell.Rune, tint, cell.Attr)
 	case console:
-		if a.oneColor {
-			part = partBody
-		}
 		attr := terminal.AttrFg256 | cell.Attr
 		if hit {
 			attr |= terminal.AttrReverse
 		}
-		a.buf.SetFgOnly(x, y, cell.Rune, color.RGB{R: sc.console[part]}, attr)
+		a.buf.SetFgOnly(x, y, cell.Rune, color.RGB{R: con}, attr)
 	default:
-		a.buf.SetFgOnly(x, y, cell.Rune, sc.rgb[part], cell.Attr)
+		a.buf.SetFgOnly(x, y, cell.Rune, fg, cell.Attr)
 	}
 }
 
@@ -345,17 +493,18 @@ func (a *app) drawHeader() {
 	a.buf.SetWriteMask(visual.MaskUI)
 	a.clearRow(0)
 	a.clearRow(1)
-	a.text(1, 0, "RAIDER CANDIDATES", rgb(255, 255, 255), terminal.AttrBold)
-	a.text(20, 0, "each within 5×3; numbers are what to pick by", rgb(150, 150, 165), terminal.AttrNone)
-	help := "←/→ colour  c tier  o one colour  b backdrop  s state  ↑/↓ scroll  q quit"
+	a.text(1, 0, "VANGUARD RAIDERS", rgb(255, 255, 255), terminal.AttrBold)
+	a.text(19, 0, "each cave's types by tier, T1 the weakest", rgb(150, 150, 165), terminal.AttrNone)
+	help := "←/→ colour  c tier  b backdrop  s state  ↑/↓ scroll  q quit"
 	if a.native {
-		help = "←/→ colour  o one colour  b backdrop  s state  ↑/↓ scroll  q quit"
+		help = "←/→ colour  b backdrop  s state  ↑/↓ scroll  q quit"
 	}
 	a.text(1, 1, help, rgb(150, 150, 165), terminal.AttrNone)
 }
 
-// drawFooter draws the colour slider, a track with a stop per scheme and the knob
-// on the chosen one, its names under it, and the view's settings
+// drawFooter draws the colour slider, a track with a stop per hue after the
+// programs' own and the knob on the chosen one, its names under it, and the view's
+// settings
 func (a *app) drawFooter() {
 	b := a.buf
 	b.SetWriteMask(visual.MaskUI)
@@ -364,7 +513,7 @@ func (a *app) drawFooter() {
 		a.clearRow(r)
 	}
 	a.text(1, track, "colour", rgb(255, 255, 255), terminal.AttrBold)
-	last := sliderX + len(schemes)*sliderStep
+	last := sliderX + len(hues)*sliderStep
 	for x := sliderX; x <= last; x++ {
 		r := '─'
 		switch {
@@ -377,10 +526,10 @@ func (a *app) drawFooter() {
 		}
 		b.SetFgOnly(x, track, r, rgb(110, 110, 125), terminal.AttrNone)
 	}
-	for i := 0; i <= len(schemes); i++ {
-		name, fg := mixedStop, rgb(255, 255, 255)
-		if i < len(schemes) {
-			name, fg = schemes[i].name, schemes[i].rgb[partBody]
+	for i := 0; i <= len(hues); i++ {
+		name, fg := ownStop, rgb(255, 255, 255)
+		if i > 0 {
+			name, fg = hues[i-1].name, hues[i-1].rgb[partBody]
 		}
 		x := sliderX + i*sliderStep
 		attr := terminal.AttrNone
@@ -390,19 +539,15 @@ func (a *app) drawFooter() {
 		} else {
 			fg = rgb(120, 120, 135)
 		}
-		a.text(x-len(name)/2, track+1, name, fg, attr)
+		a.text(max(x-len(name)/2, 0), track+1, name, fg, attr)
 	}
 
 	t := tiers[a.tier].name
 	if a.native {
 		t = "this console"
 	}
-	console := "parts"
-	if a.oneColor {
-		console = "one colour"
-	}
 	on := map[bool]string{true: "on", false: "off"}
-	a.text(1, a.h-1, fmt.Sprintf("tier %s · console %s · backdrop %s · state %s", t, console, on[a.backdrop], stateNames[a.state]),
+	a.text(1, a.h-1, fmt.Sprintf("tier %s · backdrop %s · state %s", t, on[a.backdrop], stateNames[a.state]),
 		rgb(150, 150, 165), terminal.AttrNone)
 }
 
@@ -440,176 +585,4 @@ func (s surface) Flush(cells []terminal.Cell, w, h int) {
 		}
 	}
 	s.a.term.Flush(cells, w, h)
-}
-
-// mixed builds a creature's own scheme from its parts' colours and console entries
-func mixed(body, eyes, limbs, accent color.RGB, con [parts]uint8) scheme {
-	return scheme{mixedStop, [parts]color.RGB{body, eyes, limbs, accent}, con}
-}
-
-// Colours the mixed schemes share
-var (
-	purple     = rgb(170, 90, 230)
-	deepPurple = rgb(110, 60, 160)
-	lavender   = rgb(215, 170, 255)
-	white      = rgb(235, 235, 245)
-	silver     = rgb(175, 175, 192)
-	orange     = rgb(255, 145, 45)
-	darkOrange = rgb(200, 100, 30)
-	yellow     = rgb(255, 225, 60)
-	gold       = rgb(215, 170, 40)
-	red        = rgb(255, 70, 70)
-	pink       = rgb(255, 120, 200)
-)
-
-func con(body, eyes, limbs, accent uint8) [parts]uint8 {
-	return [parts]uint8{body, eyes, limbs, accent}
-}
-
-// f is a frame: glyph rows, then the part of each glyph, a digit per cell
-func f(glyphs, fg []string) visual.LookFrame { return visual.LookFrame{Glyphs: glyphs, Fg: fg} }
-
-func rows(r ...string) []string { return r }
-
-const (
-	cYel = visual.ConYellow
-	cMag = visual.ConMagenta
-	cWht = visual.ConWhite
-	cRED = visual.ConBrightRed
-	cYEL = visual.ConBrightYellow
-	cMAG = visual.ConBrightMagenta
-	cWHT = visual.ConBrightWhite
-)
-
-// bestiary is the candidates in the order they are numbered: vanguard's scarab and the
-// two beastie creatures picked first, then the new ones by size
-var bestiary = []creature{
-	{name: "Scarab", w: 4, h: 2, ms: 350, mixed: mixed(purple, red, deepPurple, purple, con(cMAG, cRED, cMag, cMAG)), frames: []visual.LookFrame{
-		f(rows("┌oo┐", "└──┘"), rows("0110", "0220")),
-		f(rows("┌--┐", "└~~┘"), rows("0000", "0220")),
-	}},
-	{name: "Crawler", w: 4, h: 2, ms: 300, mixed: mixed(silver, orange, rgb(140, 140, 160), white, con(cWht, cYEL, cWht, cWHT)), frames: []visual.LookFrame{
-		f(rows("{oo}", `/\/\`), rows("0110", "2222")),
-		f(rows("[oo]", `\/\/`), rows("0110", "2222")),
-	}},
-	{name: "Scorpion", w: 5, h: 3, ms: 300, mixed: mixed(orange, yellow, darkOrange, red, con(cYel, cYEL, cYel, cRED)), frames: []visual.LookFrame{
-		f(rows("  /| ", "(oo) ", `/||\\`), rows("  33 ", "0110 ", "22222")),
-		f(rows(" /|  ", " (oo)", `/||\\`), rows(" 33  ", " 0110", "22222")),
-		f(rows("/|   ", "(oo) ", `/||\\`), rows("33   ", "0110 ", "22222")),
-	}},
-	{name: "Crab", w: 4, h: 2, ms: 350, mixed: mixed(orange, white, darkOrange, red, con(cYel, cWHT, cYel, cRED)), frames: []visual.LookFrame{
-		f(rows(">oo<", `/  \`), rows("3113", "2  2")),
-		f(rows("<oo>", `\  /`), rows("3113", "2  2")),
-	}},
-	{name: "Gremlin", w: 4, h: 2, ms: 400, mixed: mixed(yellow, red, gold, yellow, con(cYEL, cRED, cYel, cYEL)), frames: []visual.LookFrame{
-		f(rows("(oo)", `/""\`), rows("0110", "2002")),
-		f(rows("(oo)", `\""/`), rows("0110", "2002")),
-	}},
-	{name: "Drone", w: 4, h: 2, ms: 150, mixed: mixed(white, red, silver, yellow, con(cWHT, cRED, cWht, cYEL)), frames: []visual.LookFrame{
-		f(rows("-==-", "[oo]"), rows("3333", "0110")),
-		f(rows("=--=", "[oo]"), rows("3333", "0110")),
-	}},
-	{name: "Chomper", w: 4, h: 2, ms: 250, mixed: mixed(purple, yellow, white, purple, con(cMAG, cYEL, cWHT, cMAG)), frames: []visual.LookFrame{
-		f(rows("/oo\\", `\vv/`), rows("0110", "0220")),
-		f(rows("/oo\\", `\--/`), rows("0110", "0220")),
-	}},
-	{name: "Imp", w: 5, h: 2, ms: 350, mixed: mixed(orange, yellow, darkOrange, red, con(cYel, cYEL, cYel, cRED)), frames: []visual.LookFrame{
-		f(rows("(o_o)", `/| |\`), rows("01010", "20 02")),
-		f(rows("(o_o)", `\| |/`), rows("01010", "20 02")),
-		f(rows("(o_o)", `/| |\`), rows("01010", "20 02")),
-		f(rows("(-_-)", `\| |/`), rows("01010", "20 02")),
-	}},
-	{name: "Saucer", w: 5, h: 2, ms: 250, mixed: mixed(silver, yellow, lavender, orange, con(cWht, cYEL, cMAG, cYel)), frames: []visual.LookFrame{
-		f(rows("(o.o)", "<=*=>"), rows("21012", "00300")),
-		f(rows("(o.o)", "<*=*>"), rows("21012", "03030")),
-	}},
-	{name: "Hornet", w: 4, h: 3, ms: 120, mixed: mixed(yellow, red, white, orange, con(cYEL, cRED, cWHT, cYel)), frames: []visual.LookFrame{
-		f(rows(`\  /`, "(oo)", ` \/ `), rows("2  2", "0110", " 33 ")),
-		f(rows("-  -", "(oo)", ` \/ `), rows("2  2", "0110", " 33 ")),
-	}},
-	{name: "Frog", w: 4, h: 3, ms: 400, mixed: mixed(purple, yellow, deepPurple, pink, con(cMAG, cYEL, cMag, cMAG)), frames: []visual.LookFrame{
-		f(rows("@..@", "(--)", `/  \`), rows("1001", "0330", "2  2")),
-		f(rows("@..@", "(><)", `\  /`), rows("1001", "0330", "2  2")),
-	}},
-	{name: "Slime", w: 5, h: 2, ms: 400, mixed: mixed(lavender, white, purple, pink, con(cMAG, cWHT, cMag, cMAG)), frames: []visual.LookFrame{
-		f(rows(`/o o\`, `(___)`), rows("01010", "02220")),
-		f(rows("(o o)", `\___/`), rows("01010", "02220")),
-	}},
-	{name: "Trooper", w: 4, h: 3, ms: 300, mixed: mixed(white, orange, silver, purple, con(cWHT, cYel, cWht, cMAG)), frames: []visual.LookFrame{
-		f(rows("[oo]", "-||-", `/  \`), rows("0110", "3003", "2  2")),
-		f(rows("[oo]", "=||=", ` /\ `), rows("0110", "3003", " 22 ")),
-	}},
-	{name: "Hopper", w: 4, h: 3, ms: 300, mixed: mixed(yellow, purple, gold, orange, con(cYEL, cMAG, cYel, cYel)), frames: []visual.LookFrame{
-		f(rows("(oo)", `/||\`, `/  \`), rows("0110", "2002", "2  2")),
-		f(rows("(oo)", `\||/`, ` \/ `), rows("0110", "2002", " 22 ")),
-	}},
-	{name: "Bat", w: 5, h: 3, ms: 180, mixed: mixed(purple, yellow, deepPurple, white, con(cMAG, cYEL, cMag, cWHT)), frames: []visual.LookFrame{
-		f(rows(`\^ ^/`, "(o.o)", "     "), rows("23 32", "01010", "     ")),
-		f(rows("_^ ^_", "(o.o)", "     "), rows("23 32", "01010", "     ")),
-		f(rows(" ^ ^ ", "(o.o)", `/   \`), rows(" 3 3 ", "01010", "2   2")),
-		f(rows("_^ ^_", "(o.o)", "     "), rows("23 32", "01010", "     ")),
-	}},
-	{name: "Owl", w: 5, h: 3, ms: 500, mixed: mixed(orange, yellow, darkOrange, white, con(cYel, cYEL, cYel, cWHT)), frames: []visual.LookFrame{
-		f(rows("{o,o}", "/)__)", ` " " `), rows("01310", "20000", " 3 3 ")),
-		f(rows("{o,o}", "(__(\\", ` " " `), rows("01310", "00002", " 3 3 ")),
-		f(rows("{o,o}", "/)__)", ` " " `), rows("01310", "20000", " 3 3 ")),
-		f(rows("{-,-}", "/)__)", ` " " `), rows("01310", "20000", " 3 3 ")),
-	}},
-	{name: "Lynx", w: 5, h: 3, ms: 450, mixed: mixed(purple, yellow, deepPurple, pink, con(cMAG, cYEL, cMag, cMAG)), frames: []visual.LookFrame{
-		f(rows(`/\_/\`, "(o.o)", " >^< "), rows("22022", "01310", " 232 ")),
-		f(rows(`/\_/\`, "(o.o)", " >^< "), rows("22022", "01310", " 232 ")),
-		f(rows(`/\_/\`, "(-.-)", " >^< "), rows("22022", "01310", " 232 ")),
-		f(rows(`/|_|\`, "(o.o)", " <^> "), rows("22022", "01310", " 232 ")),
-	}},
-	{name: "Ghost", w: 5, h: 3, ms: 350, mixed: mixed(white, purple, silver, lavender, con(cWHT, cMAG, cWht, cMAG)), frames: []visual.LookFrame{
-		f(rows(" .-. ", "(o o)", `/\/\/`), rows(" 000 ", "01010", "22222")),
-		f(rows(" .-. ", "(o o)", `\/\/\`), rows(" 000 ", "01010", "22222")),
-	}},
-	{name: "Skull", w: 5, h: 3, ms: 300, mixed: mixed(white, red, silver, white, con(cWHT, cRED, cWht, cWHT)), frames: []visual.LookFrame{
-		f(rows(" ___ ", "(O O)", " VVV "), rows(" 000 ", "01010", " 222 ")),
-		f(rows(" ___ ", "(O O)", " vvv "), rows(" 000 ", "01010", " 222 ")),
-	}},
-	{name: "Squid", w: 5, h: 3, ms: 300, mixed: mixed(pink, white, purple, pink, con(cMAG, cWHT, cMag, cMAG)), frames: []visual.LookFrame{
-		f(rows(` /^\ `, "(o o)", `/|||\`), rows(" 000 ", "01010", "22222")),
-		f(rows(` /^\ `, "(o o)", `\|||/`), rows(" 000 ", "01010", "22222")),
-		f(rows(` /^\ `, "(o o)", `|/|\|`), rows(" 000 ", "01010", "22222")),
-	}},
-	{name: "Jelly", w: 5, h: 3, ms: 400, mixed: mixed(lavender, white, purple, pink, con(cMAG, cWHT, cMag, cMAG)), frames: []visual.LookFrame{
-		f(rows(".---.", "(o o)", " ))) "), rows("00000", "01010", " 222 ")),
-		f(rows(".---.", "(o o)", " ((( "), rows("00000", "01010", " 222 ")),
-	}},
-	{name: "Beetle", w: 5, h: 3, ms: 300, mixed: mixed(gold, red, darkOrange, yellow, con(cYel, cRED, cYel, cYEL)), frames: []visual.LookFrame{
-		f(rows(`/===\`, "|o.o|", `/\ /\`), rows("03330", "01010", "22 22")),
-		f(rows(`/===\`, "|o.o|", `\/ \/`), rows("03330", "01010", "22 22")),
-	}},
-	{name: "Robot", w: 5, h: 3, ms: 350, mixed: mixed(silver, orange, white, red, con(cWht, cYel, cWHT, cRED)), frames: []visual.LookFrame{
-		f(rows(" _*_ ", "[o_o]", `/| |\`), rows(" 030 ", "01010", "20 02")),
-		f(rows(" _o_ ", "[o_o]", `\| |/`), rows(" 030 ", "01010", "20 02")),
-	}},
-	{name: "Demon", w: 5, h: 3, ms: 350, mixed: mixed(orange, yellow, red, red, con(cYel, cYEL, cRED, cRED)), frames: []visual.LookFrame{
-		f(rows(`\\_//`, "(o.o)", ` \v/ `), rows("33033", "01010", " 030 ")),
-		f(rows(`\\_//`, "(o.o)", ` \-/ `), rows("33033", "01010", " 030 ")),
-	}},
-	{name: "Wraith", w: 5, h: 3, ms: 400, mixed: mixed(lavender, yellow, purple, white, con(cMAG, cYEL, cMag, cWHT)), frames: []visual.LookFrame{
-		f(rows(" .M. ", "(o o)", " |~| "), rows(" 333 ", "01010", " 222 ")),
-		f(rows(" :M: ", "{o o}", " |~| "), rows(" 333 ", "01010", " 222 ")),
-		f(rows(" 'M' ", "[o o]", " |_| "), rows(" 333 ", "01010", " 222 ")),
-	}},
-	{name: "Djinn", w: 5, h: 3, ms: 350, mixed: mixed(purple, yellow, lavender, orange, con(cMAG, cYEL, cMAG, cYel)), frames: []visual.LookFrame{
-		f(rows(" ~~~ ", "(o o)", " ))) "), rows(" 333 ", "01010", " 222 ")),
-		f(rows(" ~~~ ", "(o o)", " ((( "), rows(" 333 ", "01010", " 222 ")),
-		f(rows(" ~~~ ", "(o o)", " ||| "), rows(" 333 ", "01010", " 222 ")),
-	}},
-	{name: "Spider", w: 5, h: 3, ms: 250, mixed: mixed(purple, red, deepPurple, white, con(cMAG, cRED, cMag, cWHT)), frames: []visual.LookFrame{
-		f(rows(`\/ \/`, "(o.o)", `/\ /\`), rows("22 22", "01010", "22 22")),
-		f(rows(`/\ /\`, "(o.o)", `\/ \/`), rows("22 22", "01010", "22 22")),
-	}},
-	{name: "Puffer", w: 5, h: 3, ms: 450, mixed: mixed(yellow, purple, orange, white, con(cYEL, cMAG, cYel, cWHT)), frames: []visual.LookFrame{
-		f(rows(` \|/ `, "(o o)", ` /|\ `), rows(" 232 ", "01010", " 232 ")),
-		f(rows(`\\|//`, "(o o)", `//|\\`), rows("22322", "01010", "22322")),
-	}},
-	{name: "Mantis", w: 5, h: 3, ms: 300, mixed: mixed(yellow, purple, gold, orange, con(cYEL, cMAG, cYel, cYel)), frames: []visual.LookFrame{
-		f(rows(`\(oo)`, " /|\\ ", "/ | \\"), rows("30110", " 202 ", "2 2 2")),
-		f(rows(`|(oo)`, " /|\\ ", "/ | \\"), rows("30110", " 202 ", "2 2 2")),
-	}},
 }

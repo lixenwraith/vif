@@ -1,0 +1,20 @@
+# The mantis: its raised claw striking as it closes. One of the strata's third-tier
+# raiders: RaiderTier3 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier3"
+theme = "Strata"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 300
+
+# Claw 3, head 0, eyes 1, legs 2
+[[frames]]
+glyphs = ["\\(oo)", " /|\\ ", "/ | \\"]
+fg     = ["30110", " 202 ", "2 2 2"]
+attr   = ["  BB ", "     ", "     "]
+
+[[frames]]
+glyphs = ["|(oo)", " /|\\ ", "/ | \\"]
+fg     = ["30110", " 202 ", "2 2 2"]
+attr   = ["  BB ", "     ", "     "]

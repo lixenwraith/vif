@@ -1,0 +1,20 @@
+# The trooper: a helmeted walker swinging its arms. One of the crystal cave's
+# second-tier raiders: RaiderTier2 in ../../macros.toml gives its stats and cycle
+# and the cave its colours.
+macro = "RaiderTier2"
+theme = "Crystal"
+width = 4
+height = 3
+header = { x = 1, y = 1 }
+pattern_ms = 300
+
+# Helmet 0, eyes 1, arms 3, legs 2
+[[frames]]
+glyphs = ["[oo]", "-||-", "/  \\"]
+fg     = ["0110", "3003", "2  2"]
+attr   = [" BB ", "    ", "    "]
+
+[[frames]]
+glyphs = ["[oo]", "=||=", " /\\ "]
+fg     = ["0110", "3003", " 22 "]
+attr   = [" BB ", "    ", "    "]
