@@ -1356,6 +1356,7 @@ type CaveStartPayload struct {
 	Swing      int                        `toml:"swing"`
 	Detail     int                        `toml:"detail"`
 	Ramp       int                        `toml:"ramp"`
+	Octaves    int                        `toml:"octaves"`
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
 	Art        []string                   `toml:"art"`

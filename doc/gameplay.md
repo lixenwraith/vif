@@ -396,12 +396,19 @@ uses either flow fields toward a target or precomputed multi-route graphs
 
 `EventCaveStart` lays a cave across the map and scrolls it left. `pkg/cave` gives
 each column its ceiling and floor rows from the seed in integer arithmetic, so every
-instance and platform lays the same rock: a gap between `min_gap` and `max_gap`
-rows, walls of at least `min_wall`, a channel snaking at most `swing` rows off the
-middle with knots every `wavelength` columns, `detail` rows of rough rock, opening
-from a centred mouth over `ramp` columns. The rock is a field of ceiling and floor
-rows per column, not wall entities, which every wall query reads. It draws in
-`visual`, or in a stone art preset: `art` lists them (`none` for bare stone,
+instance and platform lays the same rock: walls of at least `min_wall` rows under
+`detail` rows of rough rock, never fewer than `min_gap` open rows, opening from a
+centred mouth over `ramp` columns. A snaking cave's gap wanders up to `max_gap`, its
+channel at most `swing` rows off the middle with knots every `wavelength` columns.
+A jagged cave, one with `octaves` set, snakes a band of `max_gap` rows, or all the
+walls leave, as that channel, and its ceiling and floor each reach into the band by
+fractal noise of their own: `octaves` of value noise from `wavelength` columns
+halving down, stretched and squared, so a wall keeps near its side and now and then
+reaches far in; walls reaching in together share what the min gap leaves. Each
+wall's edge is the median of the five columns around it, so no bump or notch two
+columns wide or less stands. The rock is a field of ceiling and floor rows per
+column, not wall entities, which every wall query reads. It draws in `visual`, or
+in a stone art preset: `art` lists them (`none` for bare stone,
 `strata`, `cracked`, `moss`, `crystal`, `masonry`) and the seed picks one. A
 cell's glyph and colours follow from the preset, the seed, its profile column and
 row, and how deep it lies from the nearest opening on which side, so the stone
@@ -504,27 +511,29 @@ seconds later; one that outlives its 35 seconds is replaced a second later. Its
 program, `behavior/warden.toml`, is the template for a species of one's own
 ([FSM reference](fsm-reference.md#behavior-programs)).
 
-`vanguard` flies the cursor through a cave (§9) scrolling left at eight columns a
-second, its channel seven to fifteen rows high and never more than nine rows off
-the middle, so a tall terminal climbs no steeper; each new game flies a new cave,
-its rock in strata, cracked, moss or crystal stone.
-Glyphs drift left behind the rock at three depths, and drains, nuggets, gold and
-the fuse are off. Raiders, the cave's swarms, spawn at the right edge every four
-seconds while fewer than three fly, in the nearest open rows when rock fills the
-drawn one, each of a type drawn at random. Every type is a program of the
-scenario's own (`behavior/<type>.toml`) running one cycle, the swarm's chase,
-lock, charge and teleport (`RaiderStates` in `macros.toml`), with its own look,
-hit points, homing and timings, hit points times chase speed alike: the invader
-at the swarm's pace, the scarab fast and fragile (8 hit points, a 1.2-second
-lock), the construct slow and armoured (48, a 2.5-second lock and a long charge),
-and the storm eye, the eye species' storm look on a 5×3 body (48). A raider lives
-until killed, and the rock pushes it as it pushes the cursor. One a player
-shoots down drops a `U` where it fell, for every player, and each `U` raises the
-gun a level of the scenario's nine: one shot forward, then two and three, one up
-and one down, one back, two up and down, two back, three up and down, three back.
-Forward is right, the way the ship flies. A crush is a defeat: the game starts
-over at once, the gun back at one shot, and opens with "Crushed against the
-edge".
+`vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
+second, a column every tick: only a whole-tick period steps evenly, and eight a
+second stepped two and three ticks apart, which read as dropped frames. The cave is
+jagged, four octaves from 64 columns: its gap runs from nine rows to thirty-six as
+the map allows, mostly two to three times the narrowest, and the scenario's smallest
+map, 18 rows, holds twice the narrowest. Each new game flies a new cave, its rock in
+strata, cracked, moss or crystal stone. Glyphs drift left behind the rock at three
+depths, each stepping on whole ticks, and drains, nuggets, gold and the fuse are
+off. Raiders, the cave's swarms, spawn at the right edge every two seconds while
+fewer than three fly, on a row drawn across the map, in the nearest open rows when
+rock fills it, each of a type drawn at random. Every type is a program of the
+scenario's own (`behavior/<type>.toml`) running one cycle, the swarm's chase, lock,
+charge and teleport (`RaiderStates` in `macros.toml`), with its own look, hit
+points, homing and timings, hit points times chase speed alike: the invader at the
+swarm's pace, the scarab fast and fragile (8 hit points, a 1.2-second lock), the
+construct slow and armoured (48, a 2.5-second lock and a long charge), and the storm
+eye, the eye species' storm look on a 5×3 body (48). A raider lives until killed,
+and the rock pushes it as it pushes the cursor. One a player shoots down drops a `U`
+where it fell, for every player, and each `U` raises the gun a level of the
+scenario's nine: one shot forward, then two and three, one up and one down, one
+back, two up and down, two back, three up and down, three back. Forward is right,
+the way the ship flies. A crush is a defeat: the game starts over at once, the gun
+back at one shot, and opens with "Crushed against the edge".
 
 ## 11. System inventory
 

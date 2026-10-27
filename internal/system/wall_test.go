@@ -202,6 +202,29 @@ func TestAResizedMapReshapesTheRock(t *testing.T) {
 	}
 }
 
+// A level setup clears every wall entity but not the cave: its rock stands, laid
+// across the new map's bounds from where the cave stood
+func TestALevelSetupKeepsTheCave(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 5, 10)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, Speed: 10, MinWall: 1}})
+	walls.Update()
+	w.SetupLevel(60, 30, true, false, false)
+	walls.Update()
+	config := w.Resources.Config
+	profile := walls.cave.Config
+	profile.Height = config.MapHeight
+	rock := w.Positions.Rock()
+	if !walls.cave.Active || rock == nil || rock.Width() != config.MapWidth || walls.cave.Offset != 2 {
+		t.Fatalf("after a level setup to %dx%d the cave is %+v", config.MapWidth, config.MapHeight, walls.cave)
+	}
+	for x := range config.MapWidth {
+		col := profile.At(walls.cave.Offset + int64(x))
+		if got, _ := rock.Column(x); got.Ceil != col.Top || got.Floor != config.MapHeight-col.Bottom {
+			t.Fatalf("column %d is %+v after the level setup, want %+v at height %d", x, got, col, config.MapHeight)
+		}
+	}
+}
+
 // caveChannel starts a cave of one rock row above and below, then hangs a block from
 // the ceiling at column x down to row bottom, each cell its own wall
 func caveChannel(w *engine.World, walls *WallSystem, x, bottom int) {

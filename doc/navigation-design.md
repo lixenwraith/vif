@@ -251,12 +251,13 @@ tick still holds is one point field per local cursor with drops in flight, the
 reaches, and composite line of sight. What would bound it further is in
 [todo](todo.md#bound-navigations-worst-tick-on-busy-maps).
 
-On vanguard's scrolling cave at 499×250, about 400 cells turning a column, the
-wall upkeep is 65 µs a step, and a tick with eight swarms out of sight of the
-cursor 70 µs, 43% of it the composite field they read recomputed after each
-column closed cells; with every navigator in sight no field is computed
-(`BenchmarkCaveNavigation`). What would cut the fields is in
-[todo](todo.md#spend-less-on-fields-over-a-moving-map).
+Vanguard's jagged cave steps a column every tick. At 500×254 a step turns about
+350 cells and the wall upkeep is 95 µs (`BenchmarkCaveStepNavigation`); a tick with
+eight composites, most of them out of sight of the cursor, costs 410 µs, three
+fifths of it the composite field recomputed after each column closed cells, and
+290 µs with them near the cursor and a third in sight (`BenchmarkCaveNavigation`).
+At 200×60 the upkeep is 35 µs and a tick 95 to 120 µs. What would cut the fields is
+in [todo](todo.md#spend-less-on-fields-over-a-moving-map).
 
 ## 11. Custom maps
 

@@ -13,96 +13,13 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 The side-scroller's first play test (2026-10-27) found it sound for a first
 iteration: its scroll reads as lag, its cave is narrow, its raiders are plain. The
 refinements lead, grouped by area so an agent can take a group, beside the items
-this task left and the navigation ones. Order: the cave first; the machine's certain
-faults next; the raider types' play test after both; the position package last, in
-a session of its own. Until that lands,
-nothing here adds engine surface for rock or caves: a cave's shape stays in
-`pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall system
-and renderers that read it, and a query a footprint needs is built by its caller
-from the existing ones, so the move inherits nothing new.
-
-### Cave and scroll
-
-One agent: `pkg/cave`, `internal/system/wall.go`, the cave's payload and vanguard's
-`CaveStart`. It shares `scenario.toml` and `gameplay.md` with the raider types, so
-the two land in turn.
-
-#### Scroll the cave faster, on a whole-tick cadence
-
-- Priority: P0
-- Affected files: `wad/scenario/vanguard/scenario.toml` (`CaveStart`),
-  `internal/app/vanguard_test.go`, `doc/gameplay.md` §10
-- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
-
-The play test ran at 60 frames a second on little CPU, yet the rock read as dropped
-frames. The cave steps a whole column on a tick, and eight columns a second is a
-period of 2.5 ticks, so its steps fall alternately two and three ticks apart (100
-and 150 ms): that uneven cadence is the lag the eye sees. Only a period of whole
-ticks steps evenly: 20 columns a second steps every tick and 10 every second tick,
-while 16, the doubling, steps four ticks of five and stalls four times a second. 20
-is also the ceiling, as a step moves at most a column a tick (`CaveMinPeriod`).
-Proposed: cave speed 20 and drift speed 10, whose layers (`DriftLayerFactor`) then
-step every 2, 4 and 8 ticks, where today's drift of 6 steps the bright text every
-3.3 ticks. Play 20 against 16 before settling; 10 is the even step below.
-
-A step a tick moves every shared wall, lays a column and displaces what the rock
-reaches each tick instead of every 2.5, and drops every field over the cave as often
-([Spend less on fields over a moving map](#spend-less-on-fields-over-a-moving-map)):
-report `BenchmarkCaveStep` and `BenchmarkCaveStepNavigation` per tick before and
-after. The raid's four-second cadence and the rock's push, a column each step, scale
-with the speed: retune both in play, with the opened cave below, which a faster
-scroll needs.
-
-#### Open the cave, with long open stretches and occasional narrows
-
-- Priority: P0
-- Affected files: `pkg/cave/cave.go`, `pkg/cave/cave_test.go`,
-  `internal/event/payload.go` (`CaveStartPayload`), `internal/system/wall.go`
-  (`startCave`, `caveState`), `wad/scenario/vanguard/scenario.toml`
-- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
-
-The gap wanders between `min_gap` and `max_gap` (7 and 15 rows in vanguard) and the
-channel stays within `swing` rows (9) of the middle, so on a 33-row terminal rock
-fills two thirds of the screen and the fight happens against it: raiders end their
-charges flush with the rock, where the ship must line up beside the rock to hit
-them, and even under `:god` they are hard to kill. Wanted, after Flappy Bird: a cave
-open most of its length, two to four times the area its channel opens today, with
-narrows now and then no tighter than today's typical channel, and open stretches
-long enough to stay and mow raiders down before threading the next narrow, where a
-pack would otherwise catch the ship.
-
-A shape for `pkg/cave`, still a pure integer function of the seed and the column:
-
-- The open gap as a share of the rows the walls leave (`Height − 2·MinWall`), so a
-  taller terminal opens wider instead of keeping a fixed channel: 18 rows at the
-  22-row map minimum, 29 at 33.
-- Narrows on a schedule: segments of about `every` columns, each holding one narrow
-  at a hashed offset, `length` columns at its narrowest and `ease` columns closing
-  in and out by smoothstep, down to `gap` rows (9 to 11, today's typical channel).
-  Its knots draw from a noise channel of their own, so a resize and a load still
-  derive every column from the record. Starting values at 20 columns a second:
-  `every` 120 to 200 (6 to 10 s), `length` 12 to 30, `ease` 8 to 16.
-- The channel's centre travels where there is slack, in the narrows, and its climb
-  stays within what the ship can follow: r rows a column is 20·r rows a second.
-- Zero values keep today's profile, so other caves and old records hold.
-
-`Validate` refuses a narrow below `min_gap` or above the open gap, and a segment
-that cannot hold its narrow and ease. Tests: `FuzzAColumnKeepsItsWallsAndGap` over
-the new fields; a property that consecutive columns' openings overlap by the ship
-and a row, so every cave can be flown; most columns open over a long run. A new
-`CaveStartPayload` field moves `JournalSchema`, and the record's `snapshot.Schema`.
-Vanguard opens its cave, may lower its `[map]` minimum, and draws raid rows across
-the open gap rather than within six rows of the middle.
-
-#### Keep a scrolling cave through a resize and a level setup
-
-- Priority: P3
-- Affected files: `internal/system/wall.go`
-
-A cave lays the columns a wider map brings and reshapes those to come when a new
-height still holds its profile, but the rock it laid keeps the old height, and a
-level setup that clears the walls leaves it scrolling in from the right edge of an
-empty map. Lay the map's columns again on either, or stop the cave with its walls.
+this task left and the navigation ones. Order: the machine's certain faults first;
+the raider types' play test after them; the position package last, in a session of
+its own. Until that lands, nothing here adds engine surface for rock or caves: a
+cave's shape stays in `pkg/cave` and its scenario, the rock behind
+`Positions.Rock()` and the wall system and renderers that read it, and a query a
+footprint needs is built by its caller from the existing ones, so the move inherits
+nothing new.
 
 ### Raiders
 
@@ -123,7 +40,7 @@ The types' numbers are starting values, hit points times chase speed 96 for each
 the eye types balance theirs (`parameter.EyeTypeTable`): the invader 12 at the
 swarm's 8, the scarab 8 at the snake's 12, the construct and the storm eye 48 at
 the drain's and the quasar's 2, the slow two carrying their threat in a long lock
-and charge. Play them at the faster scroll and in the open cave, against a gun of
+and charge. Play them at the faster scroll and in the jagged cave, against a gun of
 one shot forward, and retune hit points, lock and charge per type; the speeds can
 only be the four homing rows until a prototype tunes its own (machine follow-ups).
 Candidates beside them, from `sandbox/swarm` by ID: Interceptor (1) and Bat-Wing
@@ -391,9 +308,11 @@ the answer, and the shared grid already took the cost it would have saved.
 - Guide: [Navigation §10](navigation-design.md#10-costs)
 
 A cell closing drops every field of its tier, so on a scrolling cave a navigator
-out of sight recomputes its field after every column: 30 of the 70 µs a tick at
-499×250 with eight swarms. Two exact cuts remain, for a need rather than a
-measurement. Settle a field only until every reader's cell is settled, resuming
+out of sight recomputes its field after every column. Vanguard's jagged cave, a
+column a tick, makes that most of the tick: with eight composites out of sight
+(`BenchmarkCaveNavigation`, far) 410 µs a tick at 500×254, three fifths of it
+settling fields, and 120 µs at 200×60. Two exact cuts remain, for a need rather
+than a measurement. Settle a field only until every reader's cell is settled, resuming
 when a farther cell is read: a Dijkstra's settled cells do not depend on where it
 stopped, so an instance reading more of it moves nothing shared; it pays when the
 readers out of sight are near their target. Repair a field where cells closed, as
