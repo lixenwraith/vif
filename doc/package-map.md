@@ -110,7 +110,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 ```mermaid
 flowchart TD
     Game["internal systems and tools"] --> Audio["pkg/audio"]
-    Game --> Nav["pkg/navigation and maze"]
+    Game --> Nav["pkg/navigation, maze and cave"]
     Game --> Physics["pkg/vmath and vmath/physics"]
     Game --> Genetic["pkg/genetic and subpackages"]
     Game --> Link["pkg/linkpace"]
@@ -144,6 +144,7 @@ flowchart TD
 | `pkg/machine` | Per-entity state machines: an `Instance` a component carries (a state, its elapsed time, its entry's duration), and an immutable `Graph` built and validated once from typed hooks and stepped in fixed phases. | Standard library only: hooks reach the world through their host, by the context it passes or as its methods, and the host writes the state's flags to its components; `SwarmSystem`, `QuasarSystem`, `StormSystem` and `BehaviorSystem` are its hosts ([Behavior machines §2](machine-design.md#2-runtime)). |
 | `pkg/tomlmacro` | Expand macros in parsed TOML documents: typed parameters, substitution, array splicing, zipped `each`, bounded nesting and output. | Standard library only: it works on the parser's generic trees, so the FSM loader and bot graphs share one expander. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Standard library only, with its own `Point` and a default seed restating `vmath.Golden64`; surfaced through wall/maze events. |
+| `pkg/cave` | Side-scrolling cave profiles: each column's ceiling and floor rows as a pure integer function of its index and seed, from smoothed value noise, a snaking channel, rough-rock detail and a ramp from a centred mouth. | Standard library and `pkg/vmath`'s seed mix; surfaced through `EventCaveStart`, which `WallSystem` lays and scrolls. |
 | `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
 | `pkg/vmath/physics` | `float64` kinetic state, integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Owns `physics.Kinetic`; depends only on the standard library and `pkg/vmath`. |
 | `pkg/vmath` | `float64` scalar/vector math, LUTs, shapes, arcs, grid traversal, cell topology, seeded randomness, and the shared math constants. | Standard-library-only foundation; integer `Point`/`Area` values are grid indices, not fixed-point numbers. |

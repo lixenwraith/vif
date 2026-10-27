@@ -314,10 +314,12 @@ func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
 	t.Fatalf("the gun drop was not collected into a lane: %d", lanes())
 }
 
-// Each shipped scenario must boot a player and end the run on one participant defeat.
+// Each shipped scenario must pass -check, boot a player and end the run on one
+// participant defeat.
 func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"main", "blank", "td", "simon", "warden", ""} {
+	event.EnsureRegistry()
+	for _, name := range []string{"main", "blank", "td", "simon", "warden", "vanguard", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel
@@ -330,6 +332,9 @@ func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 				if _, err := resource.ScenarioPath(opts); err != nil {
 					t.Skipf("external scenario %s not present", name)
 				}
+			}
+			if _, err := resource.ValidateScenario(opts); err != nil {
+				t.Fatalf("check: %v", err)
 			}
 			a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed,
 				Width: 160, Height: 50, Resources: opts})

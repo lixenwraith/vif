@@ -190,6 +190,11 @@ type CursorDefeatStatePayload struct {
 	ProducedTick uint64      `toml:"produced_tick"`
 }
 
+// CursorCrushedPayload names the cursor scrolling rock pressed against the left edge
+type CursorCrushedPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
 // CursorScopePayload scopes local effects to an owned cursor, or all local cursors
 // when zero. Shared FSM emissions need this scope to preserve D-6.
 type CursorScopePayload struct {
@@ -420,6 +425,12 @@ type WeaponRemoveRequestPayload struct {
 // WeaponFireRequestPayload names the cursor firing main and its ready loadout
 type WeaponFireRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
+}
+
+// GunAimRequestPayload is the cardinals the gun fires along, component.TracerDirection
+// bits (right 1, left 2, down 4, up 8); zero restores the gun's own four
+type GunAimRequestPayload struct {
+	Directions component.TracerDirection `toml:"directions"`
 }
 
 // MountRequestPayload puts one weapon on a Shared host, replacing any it carried.
@@ -1324,6 +1335,24 @@ type MazeSpawnRequestPayload struct {
 	// Mixed/smaller structs and scalars
 	Visual        component.WallVisualConfig `toml:"visual"`
 	CollisionMode WallBatchCollisionMode     `toml:"collision_mode"`
+}
+
+// CaveStartPayload lays a cave across the map and scrolls it left at Speed columns a
+// second, at most one a tick; its rock follows cave.Config at the map's height. A
+// zero speed, gap or wavelength takes its parameter default, a zero seed draws one,
+// a zero mask blocks everything, and a zero visual draws stone.
+type CaveStartPayload struct {
+	Seed       uint64                     `toml:"seed"`
+	Speed      float64                    `toml:"speed"`
+	MinGap     int                        `toml:"min_gap"`
+	MaxGap     int                        `toml:"max_gap"`
+	MinWall    int                        `toml:"min_wall"`
+	Wavelength int                        `toml:"wavelength"`
+	Swing      int                        `toml:"swing"`
+	Detail     int                        `toml:"detail"`
+	Ramp       int                        `toml:"ramp"`
+	BlockMask  component.WallBlockMask    `toml:"block_mask"`
+	Visual     component.WallVisualConfig `toml:"visual"`
 }
 
 // --- Fadeout ---

@@ -902,14 +902,17 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	if !found || (newX == pos.X && newY == pos.Y) {
 		return pos.X, pos.Y, false
 	}
-
-	w.Positions.SetPosition(entity, component.PositionComponent{X: newX, Y: newY})
-	// Physics integrates from the sub-cell position; left in the wall, the next
-	// step would write the entity straight back into the cell it was pushed from.
-	if k, ok := w.Components.Kinetic.GetPtr(entity); ok {
-		k.PreciseX, k.PreciseY = vmath.Point{X: newX, Y: newY}.Center()
-	}
+	w.PlaceEntity(entity, newX, newY)
 	return newX, newY, true
+}
+
+// PlaceEntity moves a non-cursor entity to a cell with its sub-cell position: physics
+// integrates from that, and left behind it would write the entity straight back.
+func (w *World) PlaceEntity(entity core.Entity, x, y int) {
+	w.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+	if k, ok := w.Components.Kinetic.GetPtr(entity); ok {
+		k.PreciseX, k.PreciseY = vmath.Point{X: x, Y: y}.Center()
+	}
 }
 
 // ResolveCursor validates that e names a live cursor. Commands must carry an

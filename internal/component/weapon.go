@@ -110,4 +110,5 @@ type WeaponComponent struct {
 	Cooldown         [WeaponCount]time.Duration
 	Stream           [WeaponCount]time.Duration // until a capped kind's next stream shot; runs only while its Cooldown does, and stays with its author
 	MainFireCooldown time.Duration
+	Aim              TracerDirection // the cardinals the gun fires along; zero fires its own
 }

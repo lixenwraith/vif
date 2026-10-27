@@ -1,0 +1,81 @@
+description = "Fly a cave that scrolls past you: its rock pushes you back, and the left edge crushes you."
+min_players = 1
+max_players = 16
+
+# A side-scroller after Vanguard (1981): the cursor is a ship and the cave scrolls
+# left past it. Rock pushes the cursor a column back and toward the channel; rock
+# pressing it against the left edge crushes it and the game starts over. Glyphs drift
+# left behind the rock at three depths, and the gun fires right only.
+
+# The cave holds a 15-row channel and two walls of at least two rows
+[map]
+min_width = 80
+min_height = 22
+
+[regions.main]
+initial = "CaveStart"
+disabled_systems = ["nugget", "gold", "drain", "fuse"]
+
+[regions.player]
+initial = "PlayerBoot"
+background = true
+
+# --- Cave ---
+
+# The mouth holds the centred cursor; the channel strays at most nine rows off the
+# middle, so a tall map climbs no steeper. The rock is a shade of two stones, so it
+# reads on a text console's sixteen colours too. The bright glyphs drift at three
+# quarters of the scroll and the dimmer ones slower, so every layer reads behind it.
+[states.CaveStart]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 8.0, min_gap = 7, max_gap = 15, min_wall = 2, wavelength = 44, swing = 9, detail = 1, ramp = 96, visual = { char = 0x2592, fg_color = { r = 125, g = 118, b = 106 }, render_fg = true, bg_color = { r = 84, g = 79, b = 70 }, render_bg = true } } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 6.0, duration_ms = 0 } },
+]
+
+# --- Player ---
+
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 100 } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+# The gun fires right only (direction bit 1); an instance installing the game mid-run
+# aims its own cursor the same way
+[states.PlayerActive]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGunAimRequest", payload = { directions = 1 }, reconcile = true },
+]
+transitions = [
+    { trigger = "EventCursorCrushed", target = "PlayerCrushed" },
+    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+]
+
+# The cave holds still for a moment on the crush before the game starts over
+[states.PlayerCrushed]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCaveStop" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Crushed against the edge" } },
+]
+transitions = [
+    { trigger = "Tick", target = "PlayerReset", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+]
+
+[states.PlayerReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+]

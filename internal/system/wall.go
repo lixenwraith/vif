@@ -1,14 +1,16 @@
 package system
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"slices"
 	"sync/atomic"
+	"time"
 
-	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -17,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/pattern"
+	"github.com/lixenwraith/vif/pkg/cave"
 	"github.com/lixenwraith/vif/pkg/maze"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -32,9 +35,19 @@ type WallSystem struct {
 	// Configuration
 	pushCheckEveryTick bool // When true, runs full push check in Update()
 
-	// The maze uses PCG outside RandResource; its position needs a D-19 snapshot.
-	mazePCG *rand.PCG
-	mazeRng *rand.Rand
+	// Maze layouts and cave seeds draw from a PCG outside RandResource, whose
+	// position needs a D-19 snapshot
+	genPCG *rand.PCG
+	genRng *rand.Rand
+
+	cave caveState
+	// A cave step's scratch: rock before the step, the walls it moves, those
+	// that left the map, and the cells rock arrived on
+	caveRock   []bool
+	caveMovers []core.Entity
+	caveHeads  map[core.Entity]bool
+	caveDoomed []core.Entity
+	caveLanded []vmath.Point
 
 	// Metrics
 	statEnabled    *atomic.Bool
@@ -49,6 +62,19 @@ type WallSystem struct {
 type cursorCell struct {
 	entity core.Entity
 	x, y   int
+}
+
+// caveState is a scrolling cave and its D-19 record. Column i of the profile stands
+// at x = i − Offset, and Next is the first column not yet laid at the right edge.
+type caveState struct {
+	Active bool                       `json:"active"`
+	Config cave.Config                `json:"config"`
+	Period time.Duration              `json:"period"` // a column's scroll
+	Phase  time.Duration              `json:"phase"`  // carried toward the next column
+	Offset int64                      `json:"offset"`
+	Next   int64                      `json:"next"`
+	Mask   component.WallBlockMask    `json:"mask"`
+	Visual component.WallVisualConfig `json:"visual"`
 }
 
 // NewWallSystem creates a new wall system
@@ -68,9 +94,10 @@ func NewWallSystem(world *engine.World) engine.System {
 func (s *WallSystem) Init() {
 	s.pendingPushChecks = make([]vmath.Point, 0, 64)
 	s.pushCheckEveryTick = false
-	s.mazePCG = rand.NewPCG(
+	s.genPCG = rand.NewPCG(
 		vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name()+":maze"), 0)
-	s.mazeRng = rand.New(s.mazePCG)
+	s.genRng = rand.New(s.genPCG)
+	s.cave = caveState{}
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
 	s.statPushEvents.Store(0)
@@ -96,6 +123,8 @@ func (s *WallSystem) EventTypes() []event.EventType {
 		event.EventWallMaskChangeRequest,
 		event.EventWallPushCheckRequest,
 		event.EventMazeSpawnRequest,
+		event.EventCaveStart,
+		event.EventCaveStop,
 		event.EventWallDespawnAll,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -155,6 +184,14 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 			s.handleMazeSpawn(payload)
 		}
 
+	case event.EventCaveStart:
+		if payload, ok := ev.Payload.(*event.CaveStartPayload); ok {
+			s.startCave(payload)
+		}
+
+	case event.EventCaveStop:
+		s.cave = caveState{}
+
 	case event.EventWallDespawnAll:
 		s.handleDespawnAllSilent()
 	}
@@ -165,13 +202,15 @@ func (s *WallSystem) Update() {
 		return
 	}
 
-	// Process pending checks from this tick's spawns
+	// Spawned walls push from the cells they took, before a cave step moves them
 	s.processPendingPushChecks()
 
 	// Optional full check (toggled for performance testing or special game states)
 	if s.pushCheckEveryTick {
 		s.runFullPushCheck()
 	}
+
+	s.scrollCave()
 
 	s.statWallCount.Store(int64(s.world.Components.Wall.CountEntities()))
 }
@@ -730,24 +769,37 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int6
 			continue
 		}
 
-		if _, _, moved := s.world.PushEntityFromBlocked(entity, mask); moved {
-			pushCount++
-			continue
-		}
-		// Not moved: either this wall does not block the entity, or no free cell exists
-		if !s.world.Positions.IsBlocked(x, y, mask) {
-			continue
-		}
-
-		// Stuck: destroy non-cursor-owned combat entities that cannot escape
-		if combat, ok := s.world.Components.Combat.GetPtr(entity); ok {
-			if !s.world.Components.Cursor.HasEntity(combat.OwnerEntity) {
-				event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
-			}
-		}
+		pushCount += s.pushOut(entity, x, y, mask)
 	}
 
 	return pushCount
+}
+
+// pushOut moves a non-cursor entity to the nearest cell its wall leaves free, or
+// destroys it stuck if it is a combatant no cursor owns. Only a shared entity counts:
+// the count is compared between instances, which hold their own player entities.
+func (s *WallSystem) pushOut(entity core.Entity, x, y int, mask component.WallBlockMask) int64 {
+	if _, _, moved := s.world.PushEntityFromBlocked(entity, mask); moved {
+		return sharedCount(entity)
+	}
+	// Not moved: either this wall does not block the entity, or no free cell exists
+	if !s.world.Positions.IsBlocked(x, y, mask) {
+		return 0
+	}
+	if combat, ok := s.world.Components.Combat.GetPtr(entity); ok {
+		if !s.world.Components.Cursor.HasEntity(combat.OwnerEntity) {
+			event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
+		}
+	}
+	return 0
+}
+
+// sharedCount is 1 for a shared entity: what a push counts toward the compared total
+func sharedCount(e core.Entity) int64 {
+	if e.Domain() == core.DomainShared {
+		return 1
+	}
+	return 0
 }
 
 // getMaskForEntity returns appropriate wall block mask for entity type
@@ -792,20 +844,7 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		return
 	}
 
-	// Resolve visual config (apply defaults if zero-value)
-	vis := payload.Visual
-	isZero := vis.Char == 0 &&
-		vis.FgColor == (color.RGB{}) &&
-		vis.BgColor == (color.RGB{}) &&
-		!vis.RenderFg &&
-		!vis.RenderBg &&
-		vis.BoxStyle == component.BoxDrawNone
-	if isZero {
-		vis = component.WallVisualConfig{
-			BgColor:  visual.RgbWallStone,
-			RenderBg: true,
-		}
-	}
+	vis := orStone(payload.Visual)
 
 	// Convert event rooms to maze.RoomSpec (best-effort placement by generator)
 	var rooms []maze.RoomSpec
@@ -845,7 +884,7 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		Rooms:             rooms,
 		DefaultRoomWidth:  payload.DefaultRoomWidth / payload.CellWidth,
 		DefaultRoomHeight: payload.DefaultRoomHeight / payload.CellHeight,
-		Rng:               s.mazeRng,
+		Rng:               s.genRng,
 	}
 
 	result := maze.Generate(cfg)
@@ -985,6 +1024,258 @@ func (s *WallSystem) handleDespawnAllSilent() {
 		Width: config.MapWidth, Height: config.MapHeight,
 		Count: len(wallEntities),
 	})
+}
+
+// --- Cave ---
+
+// orStone is vis, or the stone fill a zero visual asks for
+func orStone(vis component.WallVisualConfig) component.WallVisualConfig {
+	if vis == (component.WallVisualConfig{}) {
+		return component.WallVisualConfig{BgColor: visual.RgbWallStone, RenderBg: true}
+	}
+	return vis
+}
+
+// startCave runs the payload's cave in place of any other and lays it across the
+// map, its mouth at the left edge, over whatever rock stands there; what the rock
+// lands on is pushed out as from any spawn
+func (s *WallSystem) startCave(p *event.CaveStartPayload) {
+	if !(p.Speed >= 0) {
+		return
+	}
+	cfg := cave.Config{
+		Seed:       p.Seed,
+		Height:     s.world.Resources.Config.MapHeight,
+		MinGap:     cmp.Or(p.MinGap, parameter.CaveDefaultMinGap),
+		MaxGap:     cmp.Or(p.MaxGap, parameter.CaveDefaultMaxGap),
+		MinWall:    p.MinWall,
+		Wavelength: cmp.Or(p.Wavelength, parameter.CaveDefaultWavelength),
+		Swing:      p.Swing,
+		Detail:     p.Detail,
+		Ramp:       p.Ramp,
+	}
+	if err := cfg.Validate(); err != nil {
+		s.world.DebugPrint(err.Error())
+		return
+	}
+	if cfg.Seed == 0 {
+		cfg.Seed = s.genRng.Uint64()
+	}
+	// The period clamps before it converts, so no speed overflows it
+	period := float64(time.Second) / cmp.Or(p.Speed, parameter.CaveDefaultSpeed)
+	period = min(max(period, float64(parameter.CaveMinPeriod)), float64(parameter.CaveMaxPeriod))
+	s.cave = caveState{
+		Active: true, Config: cfg, Period: time.Duration(math.Round(period)),
+		Mask: cmp.Or(p.BlockMask, component.WallBlockAll), Visual: orStone(p.Visual),
+	}
+	s.layColumns()
+}
+
+// scrollCave carries the phase a period a column and steps at most a column a tick:
+// a cursor's push is a queued move, so a second step would push it from a cell it
+// has already left
+func (s *WallSystem) scrollCave() {
+	if !s.cave.Active {
+		return
+	}
+	elapsed := min(max(s.world.Resources.Time.DeltaTime, 0), time.Duration(parameter.MaxSimulationDeltaSeconds*float64(time.Second)))
+	s.cave.Phase = min(s.cave.Phase+elapsed, 2*s.cave.Period-1)
+	if s.cave.Phase >= s.cave.Period {
+		s.cave.Phase -= s.cave.Period
+		s.stepCave()
+	}
+}
+
+// stepCave moves every shared wall a column left, lays the columns the step brings
+// onto the map, and displaces what stands where rock arrived. A wall composite's
+// header moves with its members, so the composite sync finds them in place.
+func (s *WallSystem) stepCave() {
+	positions, walls := s.world.Positions, s.world.Components.Wall
+	w, h := s.world.Resources.Config.MapWidth, s.world.Resources.Config.MapHeight
+	s.caveRock = slices.Grow(s.caveRock[:0], w*h)[:w*h]
+	clear(s.caveRock)
+	if s.caveHeads == nil {
+		s.caveHeads = make(map[core.Entity]bool)
+	}
+	clear(s.caveHeads)
+
+	s.caveMovers = s.caveMovers[:0]
+	for _, e := range walls.Entities() {
+		pos, ok := positions.GetPosition(e)
+		if !ok || e.Domain() != core.DomainShared {
+			continue
+		}
+		s.caveMovers = append(s.caveMovers, e)
+		if wall, _ := walls.GetComponent(e); wall.BlockMask != component.WallBlockNone &&
+			pos.X >= 0 && pos.X < w && pos.Y >= 0 && pos.Y < h {
+			s.caveRock[pos.Y*w+pos.X] = true
+		}
+		if member, ok := s.world.Components.Member.GetComponent(e); ok && !s.caveHeads[member.HeaderEntity] &&
+			positions.HasPosition(member.HeaderEntity) {
+			s.caveHeads[member.HeaderEntity] = true
+			s.caveMovers = append(s.caveMovers, member.HeaderEntity)
+		}
+	}
+
+	// A wall the map no longer holds is gone; a header past the edge still anchors
+	s.caveDoomed = positions.Shift(s.caveMovers, -1, 0, s.caveDoomed[:0])
+	s.caveDoomed = slices.DeleteFunc(s.caveDoomed, func(e core.Entity) bool { return !walls.HasEntity(e) })
+	s.world.DestroyEntitiesBatch(s.caveDoomed)
+	s.cave.Offset++
+
+	// The entering column's cells are this step's landing, not a spawn's push checks
+	mark := len(s.pendingPushChecks)
+	s.layColumns()
+	s.caveLanded = s.caveLanded[:0]
+	land := func(x, y int) {
+		if x >= 0 && x < w && y >= 0 && y < h && !s.caveRock[y*w+x] {
+			s.caveRock[y*w+x] = true
+			s.caveLanded = append(s.caveLanded, vmath.Point{X: x, Y: y})
+		}
+	}
+	for _, e := range s.caveMovers {
+		if wall, ok := walls.GetComponent(e); ok && wall.BlockMask != component.WallBlockNone {
+			pos, _ := positions.GetPosition(e)
+			land(pos.X, pos.Y)
+		}
+	}
+	for _, pt := range s.pendingPushChecks[mark:] {
+		land(pt.X, pt.Y)
+	}
+	s.pendingPushChecks = s.pendingPushChecks[:mark]
+
+	cursors := s.readCursors()
+	var pushes int64
+	for _, pt := range s.caveLanded {
+		pushes += s.displaceCave(pt.X, pt.Y, cursors)
+	}
+	s.statPushEvents.Add(pushes)
+
+	// The rigid shift keeps every neighbour but those of the edge columns
+	if style := s.cave.Visual.BoxStyle; style != component.BoxDrawNone {
+		s.computeBoxCharsInArea(0, 0, 1, h, style)
+		s.computeBoxCharsInArea(w-2, 0, 1, h, style)
+	}
+}
+
+// layColumns lays every column between the cave's laid end and the map's right edge:
+// the whole map as a cave starts, a column a step, more after the map widens. A new
+// height reshapes the columns to come when the profile still fits it.
+func (s *WallSystem) layColumns() {
+	config := s.world.Resources.Config
+	end := s.cave.Offset + int64(config.MapWidth)
+	if s.cave.Next >= end {
+		return
+	}
+	cfg := s.cave.Config
+	if resized := cfg; config.MapHeight != cfg.Height {
+		if resized.Height = config.MapHeight; resized.Validate() == nil {
+			cfg = resized
+		}
+	}
+
+	batch := event.AcquireWallBatchSpawn(int(end-s.cave.Next) * (cfg.Height - cfg.MinGap))
+	defer event.ReleaseWallBatchSpawn(batch)
+	add := func(x, y int) {
+		batch.Cells = append(batch.Cells, component.WallCellDef{OffsetX: x, OffsetY: y, WallVisualConfig: s.cave.Visual})
+	}
+	for ; s.cave.Next < end; s.cave.Next++ {
+		col := cfg.At(s.cave.Next)
+		x := int(s.cave.Next - s.cave.Offset)
+		for y := range col.Top {
+			add(x, y)
+		}
+		for y := config.MapHeight - col.Bottom; y < config.MapHeight; y++ {
+			add(x, y)
+		}
+	}
+	// Anchored at the origin: the offsets are absolute positions
+	batch.BlockMask, batch.BoxStyle, batch.CollisionMode = s.cave.Mask, s.cave.Visual.BoxStyle, event.WallBatchSkipBlocked
+	s.executeBatchSpawn(batch)
+}
+
+// displaceCave moves what stands where rock arrived a column left and toward the
+// channel, the way the rock travels. A cursor already at the left edge is crushed,
+// then squeezed out wherever there is room; a loose glyph is scenery and goes.
+func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
+	positions := s.world.Positions
+	var pushes int64
+	for _, cursor := range cursors {
+		if cursor.x != x || cursor.y != y || !positions.HasBlockingWallAt(x, y, component.WallBlockCursor) {
+			continue
+		}
+		if x == 0 {
+			s.world.PushEvent(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: cursor.entity})
+		}
+		newX, newY, found := s.caveRoom(x, y, component.WallBlockCursor)
+		if !found {
+			newX, newY, found = s.world.ResolveFreeCell(x, y, component.WallBlockCursor)
+		}
+		if found {
+			s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+				Entity: cursor.entity, X: newX, Y: newY,
+			})
+			pushes++
+		}
+	}
+
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
+	n := positions.GetAllEntitiesAtInto(x, y, entities[:])
+	s.caveDoomed = s.caveDoomed[:0]
+	for _, e := range entities[:n] {
+		// A member is placed by its composite's owner
+		if s.world.Components.Cursor.HasEntity(e) || s.world.Components.Wall.HasEntity(e) ||
+			s.world.Components.Member.HasEntity(e) || s.world.Components.Death.HasEntity(e) {
+			continue
+		}
+		if e.Domain() == core.DomainPlayer && s.world.Components.Glyph.HasEntity(e) {
+			s.caveDoomed = append(s.caveDoomed, e)
+			continue
+		}
+		mask := s.getMaskForEntity(e)
+		if mask == component.WallBlockNone || !positions.HasBlockingWallAt(x, y, mask) {
+			continue
+		}
+		if newX, newY, found := s.caveRoom(x, y, mask); found {
+			s.world.PlaceEntity(e, newX, newY)
+			pushes += sharedCount(e)
+			continue
+		}
+		pushes += s.pushOut(e, x, y, mask)
+	}
+	s.world.DestroyEntitiesBatch(s.caveDoomed)
+	return pushes
+}
+
+// caveRoom is where rock arriving at (x, y) sends what it displaces: a column left
+// and a row toward its column's nearer opening, else straight left
+func (s *WallSystem) caveRoom(x, y int, mask component.WallBlockMask) (int, int, bool) {
+	positions := s.world.Positions
+	if dy := s.towardChannel(x, y, mask); dy != 0 && !positions.IsBlocked(x-1, y+dy, mask) {
+		return x - 1, y + dy, true
+	}
+	if !positions.IsBlocked(x-1, y, mask) {
+		return x - 1, y, true
+	}
+	return 0, 0, false
+}
+
+// towardChannel is the row step from (x, y) to the nearer open cell of its column,
+// toward the middle row on a tie, or 0 when the column is rock throughout
+func (s *WallSystem) towardChannel(x, y int, mask component.WallBlockMask) int {
+	positions := s.world.Positions
+	h := s.world.Resources.Config.MapHeight
+	for d := 1; y-d >= 0 || y+d < h; d++ {
+		up := y-d >= 0 && !positions.HasBlockingWallAt(x, y-d, mask)
+		down := y+d < h && !positions.HasBlockingWallAt(x, y+d, mask)
+		switch {
+		case up && down && 2*y < h, down && !up:
+			return 1
+		case up:
+			return -1
+		}
+	}
+	return 0
 }
 
 // --- Box ---
@@ -1153,39 +1444,78 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 	}
 }
 
-// SaveShared carries the maze PCG's position, which RandResource cannot enumerate.
+// genRecordLen is the generator's binary record, rand.PCG's "pcg:" and two words
+const genRecordLen = 20
+
+// SaveShared carries what the stores and RandResource cannot: the generator's
+// position, then, only while a cave runs, its profile, period, phase and columns,
+// so a capture with no cave carries the generator alone.
 func (s *WallSystem) SaveShared() ([]byte, error) {
-	if s.mazePCG == nil {
-		return nil, errors.New("wall: maze generator is not initialized")
+	if s.genPCG == nil {
+		return nil, errors.New("wall: generator is not initialized")
 	}
-	return s.mazePCG.MarshalBinary()
+	gen, err := s.genPCG.MarshalBinary()
+	if err != nil || !s.cave.Active {
+		return gen, err
+	}
+	cave, err := json.Marshal(s.cave)
+	if err != nil {
+		return nil, err
+	}
+	return append(gen, cave...), nil
 }
 
-// LoadShared resumes the maze generator at a captured position. The Rand wrapper
-// reads through the same source, so no rewrap is needed.
+// LoadShared resumes the generator and the cave at a captured position. The Rand
+// wrapper reads through the same source, so no rewrap is needed.
 func (s *WallSystem) LoadShared(data []byte) error {
-	if s.mazePCG == nil {
-		return errors.New("wall: maze generator is not initialized")
+	if s.genPCG == nil {
+		return errors.New("wall: generator is not initialized")
 	}
-	if err := s.mazePCG.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("wall: maze generator state: %w", err)
+	gen, rest := data[:min(len(data), genRecordLen)], data[min(len(data), genRecordLen):]
+	var cave caveState
+	if len(rest) > 0 {
+		if err := json.Unmarshal(rest, &cave); err != nil {
+			return fmt.Errorf("wall: cave: %w", err)
+		}
+		if err := cave.validate(); err != nil {
+			return err
+		}
+	}
+	if err := s.genPCG.UnmarshalBinary(gen); err != nil {
+		return fmt.Errorf("wall: generator state: %w", err)
+	}
+	s.cave = cave
+	return nil
+}
+
+// validate accepts exactly the running caves a start and its steps leave behind
+func (c caveState) validate() error {
+	if !c.Active {
+		return errors.New("wall: a record carries a cave only while one runs")
+	}
+	if err := c.Config.Validate(); err != nil {
+		return fmt.Errorf("wall: %w", err)
+	}
+	if c.Period < parameter.CaveMinPeriod || c.Period > parameter.CaveMaxPeriod || c.Phase < 0 || c.Phase >= 2*c.Period ||
+		c.Offset < 0 || c.Next < c.Offset || c.Mask == component.WallBlockNone {
+		return errors.New("wall: cave scroll out of range")
 	}
 	return nil
 }
 
 type wallLocal struct {
-	Maze      []byte        `json:"maze"`
+	Shared    []byte        `json:"shared"`
 	Pending   []vmath.Point `json:"pending,omitempty"`
 	EveryTick bool          `json:"every_tick"`
 }
 
-// SaveLocal is the maze generator plus the push checks still owed.
+// SaveLocal is the shared record plus the push checks still owed.
 func (s *WallSystem) SaveLocal() ([]byte, error) {
-	maze, err := s.SaveShared()
+	shared, err := s.SaveShared()
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(wallLocal{Maze: maze, Pending: s.pendingPushChecks, EveryTick: s.pushCheckEveryTick})
+	return json.Marshal(wallLocal{Shared: shared, Pending: s.pendingPushChecks, EveryTick: s.pushCheckEveryTick})
 }
 
 func (s *WallSystem) LoadLocal(data []byte) error {
@@ -1194,5 +1524,5 @@ func (s *WallSystem) LoadLocal(data []byte) error {
 		return fmt.Errorf("wall: %w", err)
 	}
 	s.pendingPushChecks, s.pushCheckEveryTick = append(s.pendingPushChecks[:0], l.Pending...), l.EveryTick
-	return s.LoadShared(l.Maze)
+	return s.LoadShared(l.Shared)
 }
