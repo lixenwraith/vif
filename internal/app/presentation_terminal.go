@@ -97,6 +97,7 @@ func (a *App) initPresentation() {
 	// 256 colors is for a text console, whose palette renderers choose their colors from
 	if cfg := a.world.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		cfg.ConsolePalette = render.DetectConsolePalette()
+		cfg.TextConsole = a.pres.Surface().ColorMode() == terminal.ColorMode16
 		a.orchestrator.SetConsole(render.ConsoleFor(cfg.ConsolePalette))
 	}
 	for _, reg := range manifest.BuildRenderers(a.ctx) {

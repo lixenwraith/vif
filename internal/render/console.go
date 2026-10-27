@@ -246,6 +246,9 @@ func (c *Console) nearestWhere(fg uint8, ok func(uint8) bool) uint8 {
 func (b *RenderBuffer) quantize() {
 	c := b.console
 	for i := range b.cells {
+		if b.exact.Contains(i%b.width, i/b.width) {
+			continue
+		}
 		cell := &b.cells[i]
 		fg, fgIndex := cell.Fg, cell.Attrs&terminal.AttrFg256 != 0
 		bg, bgIndex := cell.Bg, cell.Attrs&terminal.AttrBg256 != 0
