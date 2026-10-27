@@ -156,10 +156,13 @@ func (a *App) showJoinAsk() {
 }
 
 // startHelp says ev is a click on the start screen's help button, which opens help
-// rather than the game
+// rather than the game; an overlay drawn over the button keeps the presses on it
 func (a *App) startHelp(ev terminal.Event) bool {
 	if !a.startScreen || ev.Type != terminal.EventMouse || ev.MouseAction != terminal.MouseActionPress ||
 		ev.MouseBtn != terminal.MouseBtnLeft || a.ctx.MouseDisabled.Load() || a.orchestrator == nil {
+		return false
+	}
+	if g := a.ctx.OverlayGeometry(); a.ctx.IsOverlayMode() && render.RectWH(g.X, g.Y, g.W, g.H).Contains(ev.MouseX, ev.MouseY) {
 		return false
 	}
 	width, _ := a.orchestrator.Size()

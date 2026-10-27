@@ -161,6 +161,9 @@ const (
 
 	// OverlayPageOverlap is the rows kept in view across a page scroll
 	OverlayPageOverlap = 1
+
+	// OverlayWheelRows is the rows a wheel step scrolls an overlay
+	OverlayWheelRows = 3
 )
 
 // Overlay Cards (telemetry)

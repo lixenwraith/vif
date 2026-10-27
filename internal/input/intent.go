@@ -80,6 +80,8 @@ const (
 	IntentOverlayPoint // Left press while an overlay or its form has the keys: X, Y
 	IntentKeyRelease   // A captured key let go of, or a hold the terminal ended: Lost
 	IntentHelp         // F1
+	IntentOverlayDrag  // Left drag while an overlay has the keys: X, Y
+	IntentOverlayWheel // Wheel step while an overlay has the keys: X, Y, ScrollDir
 )
 
 // MotionOp identifies motion algorithm

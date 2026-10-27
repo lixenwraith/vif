@@ -106,6 +106,10 @@ func (i IntentType) String() string {
 		return "IntentKeyRelease"
 	case IntentHelp:
 		return "IntentHelp"
+	case IntentOverlayDrag:
+		return "IntentOverlayDrag"
+	case IntentOverlayWheel:
+		return "IntentOverlayWheel"
 	default:
 		return fmt.Sprintf("IntentType(%d)", i)
 	}

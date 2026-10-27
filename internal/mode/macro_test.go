@@ -37,6 +37,40 @@ func TestARecordingLeavesCommandAndOverlayModeOut(t *testing.T) {
 	}
 }
 
+// An overlay's pointer intents drive Overlay mode alone, so a recording keeps none,
+// not even from Search mode, whose pointer the parser hands the overlay too.
+func TestARecordingLeavesAnOverlaysPointerOut(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	key := func(k terminal.Key, ch rune) { press(machine, r, k, ch) }
+	pointer := func(t input.IntentType) bool {
+		return t == input.IntentOverlayPoint || t == input.IntentOverlayDrag || t == input.IntentOverlayWheel
+	}
+	key(terminal.KeyRune, 'q')
+	key(terminal.KeyRune, 'a')
+	key(terminal.KeyRune, '/')
+	for _, ev := range []terminal.Event{
+		{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnWheelDown, MouseAction: terminal.MouseActionPress, MouseX: 5, MouseY: 5},
+		{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: terminal.MouseActionPress, MouseX: 5, MouseY: 5},
+		{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: terminal.MouseActionDrag, MouseX: 5, MouseY: 6},
+	} {
+		intent := machine.Process(ev)
+		if intent == nil || !pointer(intent.Type) {
+			t.Fatalf("search mode made %+v of %v %v", intent, ev.MouseBtn, ev.MouseAction)
+		}
+		r.Handle(intent)
+	}
+	key(terminal.KeyEscape, 0)
+	key(terminal.KeyRune, 'q')
+	for _, intent := range r.macro.buffers['a'] {
+		if pointer(intent.Type) {
+			t.Fatalf("register a holds %v: %+v", intent.Type, r.macro.buffers['a'])
+		}
+	}
+}
+
 // press parses one key as the game would and routes what it makes of it.
 func press(machine *input.Machine, r *Router, k terminal.Key, ch rune) {
 	if intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); intent != nil {
