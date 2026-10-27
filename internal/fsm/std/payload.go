@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/fsm"
 )
 
@@ -173,16 +174,13 @@ func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		if a.Field == "" || len(a.Names) == 0 {
 			return nil, errors.New("requires 'field' and 'names'")
 		}
-		if h.Species == nil {
-			return alwaysFalse[T](), nil
-		}
 		ids := make([]int64, len(a.Names))
 		for i, name := range a.Names {
-			id, ok := h.Species(name)
+			id, ok := h.Names.Value[component.SpeciesType](name)
 			if !ok {
 				return nil, fmt.Errorf("'%s' is neither a code species nor a behavior program", name)
 			}
-			ids[i] = id
+			ids[i] = int64(id)
 		}
 		return func(_ T, _ *fsm.RegionState, payload any) bool {
 			v, ok := ExtractIntField(payload, a.Field)

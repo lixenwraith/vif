@@ -359,3 +359,18 @@ func TestAClonedNamesBuildsWithoutChangingItsSource(t *testing.T) {
 		t.Error("base took what only its clone names")
 	}
 }
+
+// TestAListKeysAVariantsNamesByItsKeysName: -schema's listing gives each type its
+// names in value order and marks a mask, and keys a variant's names by the name
+// its key's value goes by.
+func TestAListKeysAVariantsNamesByItsKeysName(t *testing.T) {
+	want := []dialect.NameList{
+		{Type: "dialect_test.bits", Names: []string{"none", "north", "south", "all"}, Mask: true},
+		{Type: "dialect_test.kind", Names: []string{"hall", "vault"}},
+		{Type: "dialect_test.species", Names: []string{"none", "eye", "snake"}},
+		{Type: "dialect_test.sub", Key: "dialect_test.species", Keyed: map[string][]string{"eye": {"void", "flame"}}},
+	}
+	if got := planNames().List(); !reflect.DeepEqual(got, want) {
+		t.Errorf("listed %+v, want %+v", got, want)
+	}
+}

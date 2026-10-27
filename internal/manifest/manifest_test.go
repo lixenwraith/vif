@@ -45,13 +45,9 @@ func TestActiveSystemsMatchRuntimeNames(t *testing.T) {
 // scenario's programs by name, a program as the species its compile gave it, and a
 // name no species holds fails the load
 func TestASpeciesGuardNamesItsSpecies(t *testing.T) {
-	programs := []component.BehaviorPrototype{
-		{Name: "construct", Species: component.SpeciesDataFirst},
-		{Name: "invader", Species: component.SpeciesDataFirst + 1},
-	}
 	load := func(names string) (*fsm.Machine[*engine.World], error) {
 		m := fsm.NewMachine[*engine.World]()
-		RegisterFSMComponents(m, programs)
+		RegisterFSMComponents(m, []string{"invader", "construct"})
 		return m, m.LoadScenario([]byte(`
 [regions.r]
 initial = "Wait"

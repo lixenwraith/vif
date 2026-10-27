@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/pkg/audio/model"
@@ -49,4 +50,21 @@ func TestEveryEnumAPayloadHoldsTakesNames(t *testing.T) {
 			walk(name, reflect.TypeOf(payload))
 		}
 	})
+}
+
+// TestASpeciesFieldTakesAScenariosPrograms: a scenario's programs name the data
+// species from SpeciesDataFirst in sorted-name order, whatever order they come in,
+// and the code's names, which every scenario shares, gain none of them.
+func TestASpeciesFieldTakesAScenariosPrograms(t *testing.T) {
+	names := event.PayloadNames([]string{"zeta", "alpha"})
+	for name, want := range map[string]component.SpeciesType{
+		"eye": component.SpeciesEye, "alpha": component.SpeciesDataFirst, "zeta": component.SpeciesDataFirst + 1,
+	} {
+		if got, ok := names.Value[component.SpeciesType](name); !ok || got != want {
+			t.Errorf("%s = %d, %t; want %d", name, got, ok, want)
+		}
+	}
+	if _, ok := event.PayloadNames(nil).Value[component.SpeciesType]("alpha"); ok {
+		t.Error("the code's names took a scenario's program")
+	}
 }

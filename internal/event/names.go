@@ -23,6 +23,23 @@ func PayloadNames(programs []string) *dialect.Names {
 	return migrating(codeNames().Clone().Enum[component.SpeciesType](species...))
 }
 
+// AuthoredPayload makes event et's payload from raw, a table an author wrote, as
+// names spell its enum fields; a nil raw is the zero payload, and an event that
+// carries no payload takes none
+func AuthoredPayload(names *dialect.Names, et EventType, raw any) (any, error) {
+	payload := NewPayloadStruct(et)
+	switch {
+	case payload == nil && raw != nil:
+		return nil, fmt.Errorf("event '%s' carries no payload", GetEventName(et))
+	case payload == nil:
+		return nil, nil
+	}
+	if err := names.DecodeInto(raw, payload); err != nil {
+		return nil, fmt.Errorf("payload for event '%s': %w", GetEventName(et), err)
+	}
+	return payload, nil
+}
+
 // codeNames are the names the code declares, which every scenario shares
 var codeNames = sync.OnceValue(func() *dialect.Names {
 	EnsureRegistry()

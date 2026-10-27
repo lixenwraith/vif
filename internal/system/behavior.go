@@ -725,7 +725,8 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			}
 		}, nil
 	})
-	v.Emit("EmitEvent", func(name string, raw any) (func(*behaviorCtx), error) {
+	v.Names(event.PayloadNames)
+	v.Emit("EmitEvent", func(names *dialect.Names, name string, raw any) (func(*behaviorCtx), error) {
 		if name == "" {
 			return nil, errors.New("requires 'event' field")
 		}
@@ -733,14 +734,9 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		if !ok {
 			return nil, fmt.Errorf("unknown event type '%s'", name)
 		}
-		payload := event.NewPayloadStruct(et)
-		if payload == nil && raw != nil {
-			return nil, fmt.Errorf("event '%s' carries no payload", name)
-		}
-		if payload != nil {
-			if err := dialect.DecodeInto(raw, payload); err != nil {
-				return nil, fmt.Errorf("payload for event '%s': %w", name, err)
-			}
+		payload, err := event.AuthoredPayload(names, et, raw)
+		if err != nil {
+			return nil, err
 		}
 		switch event.ClassOf(et) {
 		case event.ClassShared:
