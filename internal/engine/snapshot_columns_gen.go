@@ -3426,6 +3426,9 @@ func encodeColumnsBehavior(dst []byte, rows []StoreEntry[component.BehaviorCompo
 	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.ChargeLine)
 	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Landing)
+	}
 	return dst
 }
 
@@ -3468,6 +3471,9 @@ func decodeColumnsBehavior(r *columnReader) []StoreEntry[component.BehaviorCompo
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.ChargeLine, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Landing, r)
 	}
 	return rows
 }

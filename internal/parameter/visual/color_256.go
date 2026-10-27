@@ -67,6 +67,9 @@ const (
 	Bullet256Player   = ConBrightBlue
 )
 
+// Landing256Blink is the landing marker's cycle, drawn as LandingMark256
+var Landing256Blink = [...]uint8{ConBrightWhite, ConBrightRed, ConBrightMagenta}
+
 // Effects the console cannot blend, drawn solid where TrueColor's blend is strong enough to show
 const (
 	Pulse256Positive  = ConBrightYellow

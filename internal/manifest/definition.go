@@ -276,6 +276,7 @@ var Renderers = []RendererDef{
 	{"bullet", "NewBulletRenderer", "PriorityBullet"},
 
 	// --- Overlays ---
+	{"landing", "NewLandingRenderer", "PriorityLanding"},
 	{"button", "NewButtonRenderer", "PriorityButton"},
 	{"splash", "NewSplashRenderer", "PrioritySplash"},
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},

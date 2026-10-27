@@ -212,6 +212,7 @@ func (s *BehaviorSystem) Update() {
 		b.Shielded = shielded
 		b.Beaming = flags&behaviorBeam != 0
 		b.ChargeLine = flags&behaviorChargeLine != 0
+		b.Landing = flags&behaviorLanding != 0
 		if shielded {
 			c.combat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 		}
@@ -453,6 +454,7 @@ const (
 	behaviorShielded                      // ward held and stun refused: no damage, no stun
 	behaviorBeam                          // a teleport line from the header to the stored cell
 	behaviorChargeLine                    // the swarm's charge line pulsing toward the stored cell
+	behaviorLanding                       // the landing marker blinking where the body lands on the stored cell
 )
 
 // behaviorCtx is what one instance's step reads and its verbs write through. Verbs
@@ -817,6 +819,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	v.Flag("Shielded", behaviorShielded)
 	v.Flag("Beam", behaviorBeam)
 	v.Flag("ChargeLine", behaviorChargeLine)
+	v.Flag("Landing", behaviorLanding)
 	v.Integrate(func(c *behaviorCtx) { c.sys.integrate(c) })
 	v.Entered(func(c *behaviorCtx) { c.probed = false })
 	return v

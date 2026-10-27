@@ -61,7 +61,8 @@ const (
 	PriorityBullet
 
 	// === Overlays ===
-	PriorityButton // Opaque, so every map layer under it passes behind
+	PriorityLanding // Over the player's fields, so a shield's rim never hides it
+	PriorityButton  // Opaque, so every map layer under it passes behind
 	PrioritySplash
 	PriorityMarker
 

@@ -71,8 +71,8 @@ func footprintInRock(w *engine.World, pos component.PositionComponent) bool {
 
 // TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding: a lock whose body
 // cannot fly to the cell it stored beams to the nearest place by its target, the
-// beam's line drawn from the header while the state holds; rock that comes over that
-// place meanwhile moves the landing beside it, and the brake and the chase follow
+// beam's line and landing marker drawn while the state holds; rock that comes over
+// that place meanwhile moves the landing beside it, and the brake and the chase follow
 func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	w, s, header, states := newRaiderWorld(t)
 	b, _ := w.Components.Behavior.GetPtr(header)
@@ -81,8 +81,9 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	start, _ := w.Positions.GetPosition(header)
 
 	stepBehaviors(w, s)
-	if b.Machine.State != states["Beam"] || !b.Beaming {
-		t.Fatalf("a blocked lock went to state %d beaming %t, want the beam", b.Machine.State, b.Beaming)
+	if b.Machine.State != states["Beam"] || !b.Beaming || !b.Landing {
+		t.Fatalf("a blocked lock went to state %d beaming %t marked %t, want the beam marked",
+			b.Machine.State, b.Beaming, b.Landing)
 	}
 	if b.TargetX != 50 || b.TargetY != 10 {
 		t.Fatalf("the beam aims at (%d,%d), want the open target cell (50,10)", b.TargetX, b.TargetY)
@@ -97,8 +98,9 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 		}
 	}
 	pos, _ := w.Positions.GetPosition(header)
-	if b.Machine.State != states["Brake"] || b.Beaming {
-		t.Fatalf("after the beam: state %d beaming %t, want the brake", b.Machine.State, b.Beaming)
+	if b.Machine.State != states["Brake"] || b.Beaming || b.Landing {
+		t.Fatalf("after the beam: state %d beaming %t marked %t, want the brake unmarked",
+			b.Machine.State, b.Beaming, b.Landing)
 	}
 	if pos == start || footprintInRock(w, pos) {
 		t.Fatalf("landed at %+v from %+v, want moved and clear of rock", pos, start)
@@ -114,7 +116,7 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 // TestARaiderLocksTheCursorNearestItInRosterOrder: with several cursors the lock
 // stores the nearest one's cell, and on a tie the lower roster slot's, as the swarm
 // does, so every instance of a session that holds the same Shared cursors aims alike;
-// the lock draws the swarm's charge line toward it
+// the lock draws the swarm's charge line toward it and marks where it lands
 func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -135,8 +137,8 @@ func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
 				t.Fatalf("state %d stored (%d,%d), want the lock on (%d,%d)",
 					b.Machine.State, b.TargetX, b.TargetY, tc.want.X, tc.want.Y)
 			}
-			if !b.ChargeLine {
-				t.Fatal("the lock draws no charge line")
+			if !b.ChargeLine || !b.Landing {
+				t.Fatalf("the lock draws charge line %t and landing marker %t, want both", b.ChargeLine, b.Landing)
 			}
 		})
 	}

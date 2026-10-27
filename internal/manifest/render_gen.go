@@ -45,6 +45,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Name: "pulse", Renderer: renderer.NewPulseRenderer(ctx), Priority: render.PriorityPulse},
 		{Name: "ray", Renderer: renderer.NewRayRenderer(ctx), Priority: render.PriorityRay},
 		{Name: "bullet", Renderer: renderer.NewBulletRenderer(ctx), Priority: render.PriorityBullet},
+		{Name: "landing", Renderer: renderer.NewLandingRenderer(ctx), Priority: render.PriorityLanding},
 		{Name: "button", Renderer: renderer.NewButtonRenderer(ctx), Priority: render.PriorityButton},
 		{Name: "splash", Renderer: renderer.NewSplashRenderer(ctx), Priority: render.PrioritySplash},
 		{Name: "marker", Renderer: renderer.NewMarkerRenderer(ctx), Priority: render.PriorityMarker},

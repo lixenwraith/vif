@@ -183,3 +183,54 @@ func TestADataSpeciesInAChargeLineStateDrawsTheChargeLine(t *testing.T) {
 		t.Fatal("a 1.2 s lock drew nothing midway as its first pulse passed")
 	}
 }
+
+// TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding: the swarm's lock,
+// charge and teleport, and a data species' state flagged Landing, blink the centre
+// of the footprint they land on through the marker's colour cycle; nothing else does
+func TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 3, Height: 2, HeaderX: 1, HitPoints: 20}}
+	raider, swarm := w.CreateEntity(core.DomainShared), w.CreateEntity(core.DomainShared)
+	marked := func(x, y int) color.RGB {
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 40, 24)
+		NewLandingRenderer(game).Render(render.RenderContext{MapWidth: 40, MapHeight: 24, ViewportWidth: 40, ViewportHeight: 24}, buf)
+		return buf.CellAt(x, y).Bg
+	}
+
+	// The 3x2 raider lands on (30,5) over rows 5 and 6, its centre (30,6)
+	b := component.BehaviorComponent{TargetX: 30, TargetY: 5}
+	w.Components.Behavior.SetComponent(raider, b)
+	if bg := marked(30, 6); bg != (color.RGB{}) {
+		t.Fatalf("a state without the flag marked %v, want nothing", bg)
+	}
+	b.Landing = true
+	for step, want := range visual.RgbLandingBlink {
+		b.Machine.Elapsed = time.Duration(step) * visual.LandingBlinkStep
+		w.Components.Behavior.SetComponent(raider, b)
+		if bg := marked(30, 6); bg != want {
+			t.Fatalf("a state flagged Landing marked %v at step %d, want %v", bg, step, want)
+		}
+	}
+
+	// The 4x2 swarm, its header second on the top row, centres a cell right and down
+	sw := component.SwarmComponent{LockedTargetX: 10, LockedTargetY: 15, TeleportTargetX: 20, TeleportTargetY: 15}
+	for _, tc := range []struct {
+		state      component.SwarmState
+		lock, beam bool
+	}{
+		{component.SwarmStateChase, false, false},
+		{component.SwarmStateLock, true, false},
+		{component.SwarmStateCharge, true, false},
+		{component.SwarmStateTeleport, false, true},
+		{component.SwarmStateDecelerate, false, false},
+	} {
+		sw.Machine.State = tc.state
+		w.Components.Swarm.SetComponent(swarm, sw)
+		if lock, beam := marked(11, 16) != (color.RGB{}), marked(21, 16) != (color.RGB{}); lock != tc.lock || beam != tc.beam {
+			t.Fatalf("swarm state %d marked the lock's landing %v and the beam's %v, want %v and %v",
+				tc.state, lock, beam, tc.lock, tc.beam)
+		}
+	}
+}

@@ -7,6 +7,10 @@ var (
 	// ButtonLit256 fills a lit button on a console: eight backgrounds cannot show the
 	// lighter entry of its hue, a foreground block can
 	ButtonLit256 = DensityChars[3]
+
+	// LandingMark256 is the landing marker on a console, a foreground block for the
+	// same reason
+	LandingMark256 = Density256Chars[3]
 )
 
 // ButtonUnlit is the share of its colour an unlit button keeps: dim beside a lit one,

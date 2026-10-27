@@ -132,6 +132,9 @@ var (
 	RgbSwarmChargeLine = color.LightOrchid
 	RgbSwarmTeleport   = color.SoftLavender
 
+	// RgbLandingBlink is the landing marker's cycle: white, red, then pink
+	RgbLandingBlink = [...]color.RGB{color.White, color.BrightRed, color.HotMagenta}
+
 	// Orb sigil colors
 	RgbOrbRod       = color.BrightCyan
 	RgbOrbLauncher  = color.TigerOrange
