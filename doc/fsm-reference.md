@@ -282,9 +282,9 @@ kinds (`species = "eye", sub_type = "flame"`), and a species without kinds takes
 none. A species field takes a code species or one of the scenario's behavior
 programs, as `PayloadSpeciesIn` does. A name its type lacks fails the load,
 naming the field's path and the names it takes. While the shipped scenarios move
-to names, a particle behavior, energy delta, wall mask or box style field also
-takes its number; every other enum field refuses one. `:emit` and an authored
-script's event decode a payload the same way.
+to names, a particle behavior, wall mask or box style field also takes its
+number; every other enum field refuses one. `:emit` and an authored script's
+event decode a payload the same way.
 `payload_vars` injects an FSM variable's value into a payload field at runtime.
 Supported field kinds: all signed and unsigned integer widths, `float32`,
 `float64`, `bool`, and `string`; a negative value is ignored for an unsigned field.

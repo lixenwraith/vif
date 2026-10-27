@@ -89,7 +89,6 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 func migrating(n *dialect.Names) *dialect.Names {
 	return n.
 		Numbers[component.ParticleBehavior]().
-		Numbers[component.EnergyDeltaType]().
 		Numbers[component.WallBlockMask]().
 		Numbers[component.BoxDrawStyle]()
 }
