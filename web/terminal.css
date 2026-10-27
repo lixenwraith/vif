@@ -131,10 +131,10 @@ html, body {
 #loading .actions button:first-child:hover,
 #loading .actions button:first-child:focus-visible { background: var(--button-hover); }
 
-/* Every page opens on Android's start screen: the logo two fifths of the shorter side
-   at the centre, the loading line under it as a button, ? in the corner. The line and
-   the notice stay above it. Back from a game the logo moves up for a line and the
-   actions under it, and a shared game's link takes the other corner. */
+/* Every page opens on the start screen Android's app does: the logo at the centre, two
+   fifths of the shorter side here, the loading line under it as a button, ? in the
+   corner. The line and the notice stay above it. Back from a game the logo moves up
+   for a line and the actions under it, and a shared game's link takes the other corner. */
 :root { --logo: 40vmin; }
 
 #start {

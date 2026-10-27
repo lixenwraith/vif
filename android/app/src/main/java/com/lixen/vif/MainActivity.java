@@ -3,10 +3,10 @@ package com.lixen.vif;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Insets;
-import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.window.OnBackInvokedDispatcher;
@@ -42,10 +42,9 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // The system bars are drawn over the window, which wears the start screen's page
+        // (themes.xml): the screen reaches every edge, and the game's strips stay dark
         getWindow().setDecorFitsSystemWindows(false);
-        // The system bars are drawn over the window, so it wears the start screen's
-        // page: the screen reaches every edge, and the game's strips stay dark
-        getWindow().setBackgroundDrawable(new ColorDrawable(StartScreen.BG));
         try {
             speaker = new Speaker();
             speaker.pause(); // silent until the start screen's tap
@@ -54,10 +53,8 @@ public final class MainActivity extends Activity {
         }
         view = new GameView(this, getFilesDir().getPath(), copyWad().getPath(),
                 getIntent().getBooleanExtra("raster", false), speaker);
-        start = new StartScreen(this, this::play);
         FrameLayout root = new FrameLayout(this);
         root.addView(view);
-        root.addView(start);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
@@ -67,6 +64,20 @@ public final class MainActivity extends Activity {
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
+        // The start screen fills the window as Android's splash screen did, which wore
+        // its page and logo (themes.xml): the splash goes at once rather than in the
+        // system's animation, and the buttons it lacked fade in, the app having loaded
+        start = new StartScreen(this, this::play);
+        addContentView(start, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            getSplashScreen().setOnExitAnimationListener(splash -> {
+                splash.remove();
+                if (start != null) {
+                    start.fadeIn();
+                }
+            });
+        }
     }
 
     /** The start screen is up: a run started now begins away, waiting behind it for the tap. */
@@ -76,7 +87,7 @@ public final class MainActivity extends Activity {
 
     /** The start screen's tap: it leaves the game it covered, which goes on at once. */
     private void play() {
-        ((FrameLayout) start.getParent()).removeView(start);
+        ((ViewGroup) start.getParent()).removeView(start);
         start = null;
         view.takeKeys();
         goOn();

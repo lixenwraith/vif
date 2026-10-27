@@ -153,6 +153,18 @@ func Drag(x, y int32) {
 	}
 }
 
+// OnStatusBar reports whether the view's pixel row y is drawn on the status bar,
+// where a finger presses with the pointer off and three taps raise or drop the
+// system keyboard
+func OnStatusBar(y int32) bool {
+	v := current()
+	if v == nil {
+		return false
+	}
+	_, cy := v.cellAt(0, int(y))
+	return v.onBar(cy)
+}
+
 // KeyDown is a key the view received going down, or repeating while held:
 // Android's key code, the character it types without Ctrl or Alt (0 for none) and
 // its meta state. It reports whether the game takes the key; one it does not, a

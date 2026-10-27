@@ -892,6 +892,8 @@ void main() {
         pointers.clear();
         reading.clear();
         pinch = null;
+        bar.down = false;
+        bar.taps = 0;
     }
 
     function onPointerDown(e) {
@@ -968,10 +970,12 @@ void main() {
     }
 
     // zoomFrom takes Go's range and the cell kept from an earlier visit, 0 for none,
-    // and answers once the grid fits it: Go waits for that before it reads its size,
-    // which a joiner reports and a dedicated host sizes a shared map from
+    // with the status bar's rows, and answers once the grid fits it: Go waits for that
+    // before it reads its size, which a joiner reports and a dedicated host sizes a
+    // shared map from
     function zoomFrom(msg) {
         zoom = { least: msg.least, most: msg.most, step: msg.step };
+        barRows = msg.bar || 0;
         if (msg.cell && msg.cell !== cellBase) {
             cellBase = msg.cell;
             fit();
@@ -982,13 +986,17 @@ void main() {
     // === Fingers ===
     /* Two fingers on the canvas are a gesture, never play: the first's press is let go
        when the second lands. Moved apart or together they pinch the zoom; tapped
-       together twice they raise or drop the keyboard, timed as on Android (GameView).
-       A finger landing on the status strip reads it and plays nothing. */
-    const PAIR_TOGETHER_MS = 150, PAIR_TAP_MS = 300, PAIR_DOUBLE_MS = 500, PAIR_SLOP = 8;
+       together twice they raise or drop the keyboard, as three taps of one finger on
+       the status bar do, timed as on Android (GameView). A finger landing on the status
+       strip reads it and plays nothing, and stands for the bar while the keyboard is up. */
+    const TAP_MS = 300, NEXT_TAP_MS = 500, PAIR_TOGETHER_MS = 150, PAIR_SLOP = 8;
+    const BAR_TAPS = 3, BAR_SLOP = 100;   // a bar tap's finger may stray as far as Android's double tap slop
     const pointers = new Map();   // fingers on the canvas, by id: where each is, and was as the pair formed
     const reading = new Set();    // fingers on the status strip
     let pinch = null;             // { dist, cell }: the pinch's start
     const pair = { first: 0, at: 0, down: false, tap: false, tapAt: 0 };
+    const bar = { taps: 0, at: 0, down: false, x: 0, y: 0, since: 0 };   // one finger's taps on the status bar
+    let barRows = 0;              // the status bar's, as Go names them
     let toggleKeyboard = function() {};
 
     function pinchDistance() {
@@ -1002,8 +1010,19 @@ void main() {
         return !!s && (e.clientY - canvas.getBoundingClientRect().top) * (window.devicePixelRatio || 1) >= s.y;
     }
 
+    // onBar is a finger on the status bar's rows, or past the frame's foot
+    function onBar(e) {
+        return barRows > 0 && cellAt(e)[1] >= (drawer.rows || rows) - barRows;
+    }
+
     // touchDown takes a finger the game does not get: one on the strip, or a second
     function touchDown(e) {
+        const alone = pointers.size === 0 && reading.size === 0;
+        bar.down = alone && (covered ? onStrip(e) : onBar(e));
+        if (!alone) bar.taps = 0;
+        bar.x = e.clientX;
+        bar.y = e.clientY;
+        bar.since = e.timeStamp;
         if (onStrip(e)) {
             reading.add(e.pointerId);
             return true;
@@ -1027,6 +1046,7 @@ void main() {
 
     // touchMove: a pair's finger moved past the slop is a pinch from then on
     function touchMove(e) {
+        if (bar.down && Math.hypot(e.clientX - bar.x, e.clientY - bar.y) > BAR_SLOP) bar.down = false;
         if (reading.has(e.pointerId)) return true;
         const p = pointers.get(e.pointerId);
         if (!p) return false;
@@ -1038,20 +1058,37 @@ void main() {
         return true;
     }
 
+    // barUp ends a finger's tap on the status bar, anywhere on it: the third in time
+    // toggles the keyboard
+    function barUp(e) {
+        if (bar.down && e.type !== 'pointercancel' && e.timeStamp - bar.since <= TAP_MS) {
+            bar.taps = e.timeStamp - bar.at <= NEXT_TAP_MS ? bar.taps + 1 : 1;
+            bar.at = e.timeStamp;
+        } else {
+            bar.taps = 0;
+        }
+        if (bar.taps === BAR_TAPS) {
+            bar.taps = 0;
+            toggleKeyboard();
+        }
+        bar.down = false;
+    }
+
     // touchUp ends a gesture's finger: the last of a pair tapped twice in time
     // toggles the keyboard
     function touchUp(e) {
+        barUp(e);
         if (reading.delete(e.pointerId)) return true;
         pointers.delete(e.pointerId);
         if (!pinch) return false;
         if (e.type === 'pointercancel') pair.down = pair.tap = false;
         if (pointers.size === 1) {
-            pair.tap = pair.down && e.timeStamp - pair.at <= PAIR_TAP_MS;
+            pair.tap = pair.down && e.timeStamp - pair.at <= TAP_MS;
             pair.down = false;
         } else if (pointers.size === 0) {
             pinch = null;
-            if (pair.tap && e.timeStamp - pair.at <= PAIR_TAP_MS) {
-                if (pair.tapAt && e.timeStamp - pair.tapAt <= PAIR_DOUBLE_MS) {
+            if (pair.tap && e.timeStamp - pair.at <= TAP_MS) {
+                if (pair.tapAt && e.timeStamp - pair.tapAt <= NEXT_TAP_MS) {
                     pair.tapAt = 0;
                     toggleKeyboard();
                 } else {

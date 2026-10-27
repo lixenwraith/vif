@@ -91,10 +91,7 @@ func modifiers(meta int32) terminal.Modifier {
 // menu, where the mouse is enabled again; a release follows a press that was taken.
 func (v *view) touch(x, y int, down bool) (terminal.Event, bool) {
 	cx, cy := v.cellAt(x, y)
-	v.mu.Lock()
-	rows := v.rows
-	v.mu.Unlock()
-	if !v.pointer.Load() && (down && cy < rows-parameter.StatusRows || !down && !v.finger.down) {
+	if !v.pointer.Load() && (down && !v.onBar(cy) || !down && !v.finger.down) {
 		return terminal.Event{}, false
 	}
 	v.finger.down, v.finger.x, v.finger.y = down, cx, cy
@@ -119,6 +116,13 @@ func (v *view) drag(x, y int) (terminal.Event, bool) {
 	v.finger.x, v.finger.y = cx, cy
 	return terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft,
 		MouseAction: terminal.MouseActionDrag, MouseX: cx, MouseY: cy, Touch: true}, true
+}
+
+// onBar reports whether row cy is the status bar's, one of the grid's last rows
+func (v *view) onBar(cy int) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return cy >= v.rows-parameter.StatusRows
 }
 
 // cellAt is the cell drawn under pixel x, y, the grid stretched over the view; the

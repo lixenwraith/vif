@@ -17,10 +17,10 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewConfiguration;
 import android.view.WindowInsets;
-import android.view.WindowInsetsController;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputMethodManager;
 
 import com.lixen.vif.game.Game;
 
@@ -29,16 +29,18 @@ import java.util.Arrays;
 /**
  * The game's screen: a render thread takes the newest frame the run flushed at each
  * vsync, hands it to the drawer and posts the drawer's picture. Taps, drags and keys
- * go to the run; two fingers tapped together twice raise or drop the system
- * keyboard, which covers the picture rather than resizing it; the left half of the
- * status bar's bottom row, its mode and input, is then drawn again above the
- * keyboard, twice its size, so what is typed can be read.
+ * go to the run; three taps on the status bar, or two fingers tapped together twice,
+ * raise or drop the system keyboard, which covers the picture rather than resizing
+ * it; the left half of the status bar's bottom row, its mode and input, is then drawn
+ * again above the keyboard, twice its size, so what is typed can be read.
  */
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
-    // Two fingers are a tap when the second lands this soon after the first, neither
-    // moves, and both lift this soon after; a finger joining a held one is play. Two
-    // such taps this close together toggle the keyboard: one still happens in play
-    private static final long PAIR_TOGETHER_MS = 150, PAIR_TAP_MS = 300, PAIR_DOUBLE_MS = 500;
+    // A tap lifts this soon after it lands, and the next tap of a gesture this soon
+    // after the last; two fingers are a tap when the second lands this soon after the
+    // first and neither moves, and a finger joining a held one is play. Two pair taps,
+    // or three of one finger on the status bar, toggle the keyboard
+    private static final long TAP_MS = 300, NEXT_TAP_MS = 500, PAIR_TOGETHER_MS = 150;
+    private static final int BAR_TAPS = 3;
 
     private final MainActivity activity;
     private final String files, wad;
@@ -47,6 +49,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private final CellDrawer drawer;
     private final Stats stats = new Stats();
     private final int slop;
+    private final int barSlop; // how far a finger tapping the status bar may stray, as a double tap's second tap may land
     private final ScaleGestureDetector scaler; // a pinch zooms the cells
     private float pinch; // the scale of the pinch in progress, which the game zooms by at its end
     private boolean scaling; // a pinch is in progress: its fingers are no taps
@@ -61,6 +64,10 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private long pairTapAt; // when the last pair tap ended, 0 once it was used or stale
     private boolean pairDown, pairTap; // two fingers rest together; they tapped
     private final float[] pairX = new float[2], pairY = new float[2];
+    private int barTaps; // one finger's taps on the status bar in a row
+    private long barTapAt; // when the last of them lifted
+    private boolean barDown; // the finger down landed on the status bar and stayed near
+    private float barX, barY; // where it landed
 
     GameView(MainActivity activity, String files, String wad, boolean raster, Speaker speaker) {
         super(activity);
@@ -78,6 +85,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         }
         drawer = d;
         slop = ViewConfiguration.get(activity).getScaledTouchSlop();
+        barSlop = ViewConfiguration.get(activity).getScaledDoubleTapSlop();
         scaler = new ScaleGestureDetector(activity, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override
             public boolean onScaleBegin(ScaleGestureDetector d) {
@@ -199,7 +207,9 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     @Override
     public boolean onTouchEvent(MotionEvent e) {
         int x = (int) e.getX(), y = (int) e.getY();
-        if (covered > 0 && y >= getHeight() - covered - drawer.stripHeight(getHeight())) {
+        boolean strip = covered > 0 && y >= getHeight() - covered - drawer.stripHeight(getHeight());
+        barTap(e, strip);
+        if (strip) {
             return true; // the strip is a readout, not the map under it
         }
         scaler.onTouchEvent(e);
@@ -240,13 +250,13 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
                 }
                 break;
             case MotionEvent.ACTION_POINTER_UP:
-                pairTap = pairDown && e.getPointerCount() == 2 && e.getEventTime() - pairAt <= PAIR_TAP_MS;
+                pairTap = pairDown && e.getPointerCount() == 2 && e.getEventTime() - pairAt <= TAP_MS;
                 pairDown = false;
                 break;
             case MotionEvent.ACTION_UP:
                 Game.tap(x, y, false);
-                if (pairTap && e.getEventTime() - pairAt <= PAIR_TAP_MS) {
-                    if (pairTapAt != 0 && e.getEventTime() - pairTapAt <= PAIR_DOUBLE_MS) {
+                if (pairTap && e.getEventTime() - pairAt <= TAP_MS) {
+                    if (pairTapAt != 0 && e.getEventTime() - pairTapAt <= NEXT_TAP_MS) {
                         pairTapAt = 0;
                         toggleKeyboard();
                     } else {
@@ -263,19 +273,53 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         return true;
     }
 
+    /**
+     * Counts one finger's taps on the status bar, which the strip stands for above the
+     * keyboard: they may land anywhere on it, and the third in time toggles the keyboard.
+     */
+    private void barTap(MotionEvent e, boolean strip) {
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                barDown = covered > 0 ? strip : Game.onStatusBar((int) e.getY());
+                barX = e.getX();
+                barY = e.getY();
+                break;
+            case MotionEvent.ACTION_MOVE:
+                barDown &= Math.hypot(e.getX() - barX, e.getY() - barY) <= barSlop;
+                break;
+            case MotionEvent.ACTION_UP:
+                if (barDown && e.getEventTime() - e.getDownTime() <= TAP_MS) {
+                    barTaps = e.getEventTime() - barTapAt <= NEXT_TAP_MS ? barTaps + 1 : 1;
+                    barTapAt = e.getEventTime();
+                } else {
+                    barTaps = 0;
+                }
+                if (barTaps == BAR_TAPS) {
+                    barTaps = 0;
+                    toggleKeyboard();
+                }
+                barDown = false;
+                break;
+            default: // a second finger, or the gesture cancelled
+                barDown = false;
+                barTaps = 0;
+        }
+    }
+
     // The window's own word on the keyboard, not a flag of ours: Back drops it
-    // without telling the app, which left a flag a toggle behind
+    // without telling the app, which left a flag a toggle behind. The input method
+    // manager's calls raise and drop it, which every Android release takes
     private void toggleKeyboard() {
-        WindowInsetsController c = getWindowInsetsController();
+        InputMethodManager m = getContext().getSystemService(InputMethodManager.class);
         WindowInsets insets = getRootWindowInsets();
-        if (c == null) {
+        if (m == null) {
             return;
         }
         if (insets != null && insets.isVisible(WindowInsets.Type.ime())) {
-            c.hide(WindowInsets.Type.ime());
+            m.hideSoftInputFromWindow(getWindowToken(), 0);
         } else {
             requestFocus();
-            c.show(WindowInsets.Type.ime());
+            m.showSoftInput(this, 0);
         }
     }
 

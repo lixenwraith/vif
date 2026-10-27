@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The logo inset to 128 dp of the 288 dp Android's splash screen draws it in, the size
+     the start screen gives it (themes.xml). A fraction scales with the icon. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/logo"
+    android:inset="27.78%" />
