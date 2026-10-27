@@ -70,6 +70,7 @@ func (p *Position) Rock() *RockField { return p.rock }
 // column; no columns lift the field
 func (p *Position) SetRock(mask component.WallBlockMask, visual component.WallVisualConfig, origin int64, cols []RockColumn) {
 	p.wallEpoch++
+	p.wallLog.lose()
 	if len(cols) == 0 {
 		p.rock = nil
 		return
@@ -82,13 +83,26 @@ func (p *Position) SetRock(mask component.WallBlockMask, visual component.WallVi
 }
 
 // ShiftRock moves the field a column left: map column 0 leaves it and enter stands
-// at its right end
+// at its right end. The wall log takes the cells each column's ends crossed.
 func (p *Position) ShiftRock(enter RockColumn) {
 	r := p.rock
 	if r == nil {
 		return
 	}
 	p.wallEpoch++
+	w, h := p.wallBounds()
+	for x := range min(len(r.cols), w) {
+		was, now := r.cols[x], enter
+		if x+1 < len(r.cols) {
+			now = r.cols[x+1]
+		}
+		// A row neither end crossed is rock in both columns or in neither
+		for _, ends := range [2][2]int{{was.Ceil, now.Ceil}, {was.Floor, now.Floor}} {
+			for y := max(min(ends[0], ends[1]), 0); y < min(max(ends[0], ends[1]), h); y++ {
+				p.wallLog.add(x, y, len(p.grid.Cells))
+			}
+		}
+	}
 	copy(r.cols, r.cols[1:])
 	r.cols[len(r.cols)-1] = enter
 	r.Origin++

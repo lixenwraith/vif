@@ -158,7 +158,7 @@ func (w *World) AddComponentMask(e core.Entity, bit uint64) {
 	}
 	w.componentMask[e] |= bit
 	if bit&WallBit != 0 { // a wall joining or leaving its store changes the wall grids
-		w.Positions.WallsChanged()
+		w.Positions.WallChanged(e)
 	}
 }
 
@@ -189,7 +189,7 @@ func (w *World) Issued(e core.Entity) bool {
 func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
 	w.componentMask[e] &^= bit // &^= clears unconditionally
 	if bit&WallBit != 0 {
-		w.Positions.WallsChanged()
+		w.Positions.WallChanged(e)
 	}
 }
 

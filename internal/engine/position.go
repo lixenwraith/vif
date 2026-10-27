@@ -25,6 +25,7 @@ type Position struct {
 	// wallEpoch moves wherever a wall grid's cells can change: a wall placed, moved
 	// or removed here, a wall component added or removed, a BlockMask rewritten.
 	wallEpoch uint64
+	wallLog   wallLog // the cells each such change can have moved, for WallChanges
 
 	statCellSaturations *atomic.Int64
 	statCellOverflows   *atomic.Int64
@@ -115,7 +116,8 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 		if old == pos && p.grid.containsEntityAt(e, old.X, old.Y) {
 			return
 		}
-		p.wallMoved(e)
+		p.wallMoved(e, old.X, old.Y)
+		p.wallMoved(e, pos.X, pos.Y)
 		countSaturation = old.X != pos.X || old.Y != pos.Y
 		p.grid.RemoveEntityAt(e, old.X, old.Y)
 		p.dense[i] = pos
@@ -132,7 +134,7 @@ func (p *Position) insert(e core.Entity, pos component.PositionComponent) {
 	p.entities = append(p.entities, e)
 	p.world.AddComponentMask(e, p.bit)
 	storeAtomicMax(p.statPositionsHWM, int64(len(p.entities)))
-	p.wallMoved(e)
+	p.wallMoved(e, pos.X, pos.Y)
 }
 
 // setGrid preserves soft clipping while exposing saturation, budget rejection, and
@@ -207,7 +209,7 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 	pos := p.dense[i]
 	p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 	p.removeAt(i)
-	p.wallMoved(e)
+	p.wallMoved(e, pos.X, pos.Y)
 	if len(skipMask) == 0 || !skipMask[0] {
 		p.world.RemoveComponentMask(e, p.bit)
 	}
@@ -227,7 +229,7 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 		pos := p.dense[i]
 		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 		p.removeAt(i)
-		p.wallMoved(e)
+		p.wallMoved(e, pos.X, pos.Y)
 		if clearMask {
 			p.world.RemoveComponentMask(e, p.bit)
 		}
@@ -282,6 +284,7 @@ func (p *Position) HasAnySharedEntityAt(x, y int) bool {
 // Backing storage is grow-only (SpatialGrid.Resize); cheap on shrink
 func (p *Position) ResizeGrid(width, height int) {
 	p.grid.Resize(width, height)
+	p.wallLog.lose()
 
 	// Re-populate grid from dense component data
 	for i, e := range p.entities {
@@ -324,6 +327,7 @@ func (p *Position) ClearAllComponents() {
 	p.entities = p.entities[:0]
 	p.grid.Clear()
 	p.SetRock(0, component.WallVisualConfig{}, 0, nil)
+	p.wallLog.lose()
 }
 
 // --- Wall ---
@@ -348,16 +352,80 @@ func (p *Position) WallTest(mask component.WallBlockMask, buf *[]bool) func(x, y
 	}
 }
 
-// WallsChanged moves the wall epoch. A writer no store sees calls it: a BlockMask
-// set in place, or a wall component overwritten.
-func (p *Position) WallsChanged() { p.wallEpoch++ }
+// WallsChanged moves the wall epoch for walls rewritten wholesale, an install's,
+// and loses the wall log, since it names no cells.
+func (p *Position) WallsChanged() {
+	p.wallEpoch++
+	p.wallLog.lose()
+}
 
-// wallMoved moves the wall epoch when e, a wall a grid can hold, changed placement.
-// The mask, not the wall store, names a wall: a destroy empties the store first.
-func (p *Position) wallMoved(e core.Entity) {
+// WallChanged moves the wall epoch for e, a wall a writer no store sees rewrote:
+// a BlockMask set in place, or a wall component overwritten.
+func (p *Position) WallChanged(e core.Entity) {
+	p.wallEpoch++
+	if i, ok := p.index.get(e); ok {
+		p.wallLog.add(p.dense[i].X, p.dense[i].Y, len(p.grid.Cells))
+	}
+}
+
+// wallMoved moves the wall epoch when e, a wall a grid can hold, left or entered
+// (x, y). The mask, not the wall store, names a wall: a destroy empties the store first.
+func (p *Position) wallMoved(e core.Entity, x, y int) {
 	if e.Domain() != core.DomainPlayer && p.world != nil && p.world.componentMask[e]&WallBit != 0 {
 		p.wallEpoch++
+		p.wallLog.add(x, y, len(p.grid.Cells))
 	}
+}
+
+// wallLog is the cells whose wall answer may have moved since the sequence a reader
+// last read at: each cell a wall left or entered, a wall rewritten in place, a
+// rock column turned. A change naming no cells loses it, as do more cells than
+// re-testing would beat re-reading the grid; a reader from before then re-reads.
+type wallLog struct {
+	cells []vmath.Point
+	base  uint64 // the sequence before cells[0]; zero is no sequence read
+}
+
+// add logs one cell, losing the log past an eighth of the grid's cells
+func (l *wallLog) add(x, y, cells int) {
+	if l.base == 0 {
+		l.base = 1
+	}
+	if len(l.cells) > cells/8+64 {
+		l.lose()
+		return
+	}
+	l.cells = append(l.cells, vmath.Point{X: x, Y: y})
+}
+
+// lose forgets every cell, leaving each reader before now to re-read
+func (l *wallLog) lose() {
+	l.base += uint64(len(l.cells)) + 1
+	l.cells = l.cells[:0]
+}
+
+// WallChanges returns every cell whose HasBlockingWallAt may answer otherwise than
+// it did at sequence since, and the sequence it stands at now, for a reader that
+// keeps its own copy of the answers to re-test only those cells. A cell is named
+// once per change, and may be off the map. ok is false when the log no longer
+// reaches back to since, or since is zero: the reader then re-reads every cell.
+// The cells are the log's, to read before walls change again; entries before since
+// are dropped, so a second reader of one Position re-reads more often.
+// SYNC: caller holds World.updateMutex
+func (p *Position) WallChanges(since uint64) (cells []vmath.Point, now uint64, ok bool) {
+	l := &p.wallLog
+	if l.base == 0 {
+		l.base = 1
+	}
+	now = l.base + uint64(len(l.cells))
+	if since < l.base || since > now {
+		return nil, now, false
+	}
+	if read := int(since - l.base); read > 0 {
+		l.cells = l.cells[:copy(l.cells, l.cells[read:])]
+		l.base = since
+	}
+	return l.cells, now, true
 }
 
 // wallGrid is the cells HasBlockingWallAt answers true for under one mask, at the
@@ -646,7 +714,8 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 	old := p.dense[i]
 	p.grid.RemoveEntityAt(e, old.X, old.Y)
 	p.dense[i] = newPos
-	p.wallMoved(e)
+	p.wallMoved(e, old.X, old.Y)
+	p.wallMoved(e, newPos.X, newPos.Y)
 	// Explicit ignore for OOB and Cell full
 	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
 }
@@ -664,7 +733,8 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 			old := p.dense[i]
 			p.grid.RemoveEntityAt(e, old.X, old.Y)
 			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
-			p.wallMoved(e)
+			p.wallMoved(e, old.X, old.Y)
+			p.wallMoved(e, old.X+dx, old.Y+dy)
 		}
 	}
 	for _, e := range entities {

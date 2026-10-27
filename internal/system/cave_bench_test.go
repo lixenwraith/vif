@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 )
@@ -114,5 +116,53 @@ func BenchmarkCaveCapture(b *testing.B) {
 			b.ReportMetric(float64(len(delta)), "delta-B")
 			b.ReportMetric(float64(deflated(delta)), "delta-deflate-B")
 		})
+	}
+}
+
+// BenchmarkCaveNavigation is a tick of navigation over a scrolling cave: a cursor
+// near the left edge and composites in the channel, near it (sighted) or across the
+// map (most without sight), as rock steps a column every two or three ticks
+func BenchmarkCaveNavigation(b *testing.B) {
+	for _, size := range caveBenchSizes {
+		for _, far := range []bool{false, true} {
+			name := fmt.Sprintf("%dx%d/near", size.w, size.h)
+			if far {
+				name = fmt.Sprintf("%dx%d/far", size.w, size.h)
+			}
+			b.Run(name, func(b *testing.B) {
+				world, walls := newCaveBench(b, size.w, size.h)
+				world.Resources.Time.DeltaTime = 50 * time.Millisecond
+				cols := world.Positions.Rock().Columns()
+				cx := size.w / 8
+				ready(NewCursorSystem(world)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
+					Payload: &event.CursorSpawnRequestPayload{X: cx, Y: (cols[cx].Ceil + cols[cx].Floor) / 2, Control: uint8(component.ControlLocal)}})
+				world.Resources.Event.Queue.Consume()
+				var bodies []core.Entity
+				for i := range 8 {
+					x := cx + 6 + i*2
+					if far {
+						x = size.w/2 + i*(size.w/2-8)/8
+					}
+					bodies = append(bodies, newBody(world, x, cols[x].Ceil+(cols[x].Floor-cols[x].Ceil)/2-1, 4, 2))
+					world.Components.Navigation.SetComponent(bodies[i], component.NavigationComponent{Width: 4, Height: 2})
+				}
+				nav := ready(NewNavigationSystem(world)).(*NavigationSystem)
+				nav.Update()
+				sighted, ticks := 0, 0
+				b.ReportAllocs()
+				for b.Loop() {
+					walls.Update()
+					world.Resources.Event.Queue.Consume()
+					nav.Update()
+					ticks++
+					for _, e := range bodies {
+						if n, ok := world.Components.Navigation.GetComponent(e); ok && n.HasDirectPath {
+							sighted++
+						}
+					}
+				}
+				b.ReportMetric(float64(sighted)/float64(ticks*len(bodies)), "sighted")
+			})
+		}
 	}
 }

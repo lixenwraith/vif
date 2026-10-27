@@ -687,7 +687,7 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 		wasBlocking := wall.BlockMask != component.WallBlockNone
 		if wall.BlockMask != payload.BlockMask {
 			wall.BlockMask = payload.BlockMask
-			s.world.Positions.WallsChanged()
+			s.world.Positions.WallChanged(entity)
 		}
 
 		if !wasBlocking && payload.BlockMask != component.WallBlockNone {

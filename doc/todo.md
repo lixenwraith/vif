@@ -877,6 +877,25 @@ glyph's level, so a glyph they touch changes layer and speed mid-flight. In 256
 colours normal and bright glyphs share one console entry, so only the dark layer
 reads as farther; a distinct attribute for bright would separate the three.
 
+### Spend less on fields over a moving map
+
+- Priority: P3
+- Affected files: `pkg/navigation/flowfield.go`, `pkg/navigation/cache.go`
+- Guide: [Navigation §10](navigation-design.md#10-costs)
+
+A cell closing drops every field of its tier, so on a scrolling cave a navigator
+out of sight recomputes its field after every column: 30 of the 70 µs a tick at
+499×250 with eight swarms. Two exact cuts remain, for a need rather than a
+measurement. Settle a field only until every reader's cell is settled, resuming
+when a farther cell is read: a Dijkstra's settled cells do not depend on where it
+stopped, so an instance reading more of it moves nothing shared; it pays when the
+readers out of sight are near their target. Repair a field where cells closed, as
+an opening repairs it, re-settling the cells whose way ran through them: it pays
+for a local change on an open map, not on the cave, where every bend moves each
+column. Keeping a field across a closing for a few ticks is not planned
+([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)): a
+joiner computes on the grid it has.
+
 ### Keep a scrolling cave through a resize and a level setup
 
 - Priority: P3

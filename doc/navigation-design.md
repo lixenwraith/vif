@@ -74,16 +74,23 @@ Navigation keeps one, for the eye's footprint that the quasar and snake head
 share; every composite navigator, the 4×2 swarm included, steers by it. Each
 tier has its own `SearchGrid`.
 
-Navigation reads the walls once a tick through `Position.WallTest`, a grid read
-from the wall store on the first probe, and diffs them against the walls
-everything stands on, but only when `Position.WallGeneration` says the wall grid
-was rebuilt. A changed cell moves the point tier; the composite passability is
-recomputed for the headers whose footprint covers it alone (`ComputeROI`), so
-the composite tier moves only where a footprint's fit changed, which a storm's
-single-cell holes rarely do. Each tier has a generation that a field or route
-graph is stamped with when computed. A wholesale change — the first derivation,
-a resize, a maze — derives everything whole. Between ticks a route graph
-request brings passability up to date first.
+Navigation keeps the walls everything stands on and brings them up to the walls
+once a tick, re-testing only the cells the engine's wall log names
+(`Position.WallChanges`): a moving map costs the cells that moved, not the map.
+When the log no longer reaches back, after an install, a resize or a restore, it
+reads every cell through `Position.WallTest` and diffs them. A changed cell moves
+the point tier. The composite passability counts the walls under each header's
+footprint, so a changed cell moves only the counts of the headers over it
+(`Moved`), and the composite tier moves only where a footprint's fit changed,
+which a storm's single-cell holes rarely do; a header two cells turned the same
+tick is named only if its fit did change. Each tier has a generation that a field
+or route graph is stamped with when computed. A wholesale change, more than a
+fiftieth of the map — the first derivation, a resize, a maze — derives everything
+whole. Between ticks a route graph request brings passability up to date first.
+A scrolling cave, which turns about 400 cells a column on the largest map, costs
+65 µs a step this way where the re-read and diff cost 240 µs; one wall moving on
+an open map costs 2.5 µs at any size (`BenchmarkCaveStepNavigation`,
+`BenchmarkNavigationWallMoves`).
 
 What a tier's change does to its fields: a cell closed drops them (`Closed`),
 since a direction may now point into it, and they recompute when next read;
@@ -243,6 +250,13 @@ composite passability changes and at most one per twenty ticks. What the storm
 tick still holds is one point field per local cursor with drops in flight, the
 reaches, and composite line of sight. What would bound it further is in
 [todo](todo.md#bound-navigations-worst-tick-on-busy-maps).
+
+On vanguard's scrolling cave at 499×250, about 400 cells turning a column, the
+wall upkeep is 65 µs a step, and a tick with eight swarms out of sight of the
+cursor 70 µs, 43% of it the composite field they read recomputed after each
+column closed cells; with every navigator in sight no field is computed
+(`BenchmarkCaveNavigation`). What would cut the fields is in
+[todo](todo.md#spend-less-on-fields-over-a-moving-map).
 
 ## 11. Custom maps
 

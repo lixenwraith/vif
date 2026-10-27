@@ -86,7 +86,8 @@ func assertPartition(t *testing.T, g *SpatialGrid, x, y, wantShared, wantPlayer 
 // query cell for cell — any mask, either domain, soft-clipped walls, out of bounds
 // — and one reused across storms that destroy, move, remask, respawn, clip, shift
 // and re-index walls, reconcile them to a capture, or lay, shift and lift a rock
-// field, sees every change; an area query is the cells' queries joined.
+// field, sees every change; so does a reader of the wall log re-testing only the
+// cells it names, and an area query is the cells' queries joined.
 func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 	for seed := range uint64(16) {
 		f.Add(seed)
@@ -121,6 +122,8 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 
 		var buf []bool
 		var saved *WorldCopy
+		var since uint64
+		readers := make([][]bool, len(masks))
 		for round := range 24 {
 			if round%4 == 0 {
 				saved = w.CopyOut(saved)
@@ -140,7 +143,11 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					case 1:
 						if wall, ok := w.Components.Wall.GetPtr(e); ok {
 							wall.BlockMask = masks[rng.IntN(len(masks))]
-							w.Positions.WallsChanged()
+							if rng.IntN(2) == 0 {
+								w.Positions.WallChanged(e)
+							} else {
+								w.Positions.WallsChanged()
+							}
 						}
 					case 2:
 						to := component.PositionComponent{X: rng.IntN(cfg.MapWidth), Y: rng.IntN(cfg.MapHeight)}
@@ -222,6 +229,28 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					w.Positions.ShiftRock(rockColumn())
 				case 15:
 					w.Positions.SetRock(0, component.WallVisualConfig{}, 0, nil)
+				}
+			}
+			// A reader of the wall log re-testing only the cells it names keeps every
+			// answer HasBlockingWallAt gives
+			cells, now, logged := w.Positions.WallChanges(since)
+			since = now
+			for i, mask := range masks {
+				if !logged || readers[i] == nil {
+					readers[i] = make([]bool, cfg.MapWidth*cfg.MapHeight)
+					for c := range readers[i] {
+						readers[i][c] = w.Positions.HasBlockingWallAt(c%cfg.MapWidth, c/cfg.MapWidth, mask)
+					}
+				}
+				for _, c := range cells {
+					if c.X >= 0 && c.Y >= 0 && c.X < cfg.MapWidth && c.Y < cfg.MapHeight {
+						readers[i][c.Y*cfg.MapWidth+c.X] = w.Positions.HasBlockingWallAt(c.X, c.Y, mask)
+					}
+				}
+				for c, got := range readers[i] {
+					if x, y := c%cfg.MapWidth, c/cfg.MapWidth; got != w.Positions.HasBlockingWallAt(x, y, mask) {
+						t.Fatalf("round %d mask %d at (%d,%d): the wall log's reader holds %t", round, mask, x, y, got)
+					}
 				}
 			}
 			for _, mask := range masks {

@@ -263,6 +263,15 @@ PCG stream, derived from the shared root and carried in the capture. On
 one wall batch and clears the requested rooms; the start, end, solution path and
 room entries serve `sandbox/maze`.
 
+The grid is one array; the carve backs out of a dead end along a byte per cell
+naming the jump that carved it, with no stack, and the solve runs level by level
+over a byte per cell naming the step that reached it, filling the path back to
+front at its known length. A region start lays td's maze (99×83, braiding 0.5) in
+0.16 ms and 37 kB where it took 1.06 ms and 845 kB, and a 401×121 braided maze
+with four rooms takes 1.2 ms and 175 kB where it took 8.9 ms and 7.1 MB
+(`BenchmarkGenerate`). The mazes are the same: a digest of every result and of the
+caller's stream after it holds across eleven shapes and eight seeds.
+
 ## 8. Extension guidance
 
 - Pair every homing profile with a damping term that acts at cruise speed — the
