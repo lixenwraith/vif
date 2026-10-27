@@ -1,0 +1,20 @@
+# The beetle: a banded carapace on tramping legs. One of the strata's fourth-tier
+# raiders: RaiderTier4 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier4"
+theme = "Strata"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 300
+
+# Shell 0, bands 3, eyes 1, legs 2
+[[frames]]
+glyphs = ["/===\\", "|o.o|", "/\\ /\\"]
+fg     = ["03330", "01010", "22 22"]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = ["/===\\", "|o.o|", "\\/ \\/"]
+fg     = ["03330", "01010", "22 22"]
+attr   = ["     ", " B B ", "     "]

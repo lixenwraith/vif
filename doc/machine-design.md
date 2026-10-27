@@ -485,7 +485,8 @@ A behavior program defines a species: a `[prototype]` body and a state machine
 over the game's verbs. A scenario lists up to `BehaviorProgramsMax` of them, each
 compiled at load into a `machine.Graph` that `BehaviorSystem` steps for every
 instance, over the scaffold every composite species shares. `wad/scenario/vanguard`
-is the worked example: four raider types, each a program over one macro of states.
+is the worked example: thirty-two raider types, eight to each stone art, each a
+program over one macro of states.
 
 ### 6.1 Program shape
 
@@ -569,7 +570,7 @@ system's scaffold (§6.4), not in the vocabulary.
 ### 6.3 Delivery and compilation
 
 - **Programs are scenario files.** The entry lists them
-  (`[behaviors] scarab = { file = "behavior/scarab.toml" }`) or holds one inline.
+  (`[behaviors] scarab = { file = "behavior/strata/scarab.toml" }`) or holds one inline.
   `includeBehaviors` (`internal/fsm/file_loader.go`) reads, parses and expands each
   file against the entry's macros through `readExpanded`, the step region files
   share, records it in `visited` and replaces the `{ file }` table; anything else
@@ -682,8 +683,9 @@ smaller part of it.
 
 A program draws itself from its prototype's look, plain data the renderers read, so
 a new species needs no renderer of its own and no code. The keys are in the
-[FSM reference](fsm-reference.md#behavior-programs); vanguard's four raiders
-(`wad/scenario/vanguard/behavior/*.toml`) are the shipped examples. To define one:
+[FSM reference](fsm-reference.md#behavior-programs); vanguard's thirty-two raiders
+(`wad/scenario/vanguard/behavior/<cave>/*.toml`) are the shipped examples, each
+its look under its tier's macro. To define one:
 
 - **Frames.** `frames` holds a table per frame whose `glyphs` are `height` strings
   of `width` cells; a space draws nothing and the map shows through. Two frames or
@@ -835,8 +837,8 @@ captures, one a tick, read the frames. Per species:
   way, else beams beside it; a disruptor stun drops it back to its chase;
   `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.
   `bin/vif -check -s wad/scenario/vanguard` prints
-  `behaviors ok: 4 (construct, invader, scarab, storm_eye)`. A look shows best in
-  tmux pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`.
+  `behaviors ok: 32 (bat, beetle, chomper, … wraith)`. A look shows best in tmux
+  pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`.
 
 ## 9. Alternatives and prior art
 

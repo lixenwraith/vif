@@ -43,7 +43,7 @@ coordinator's, sent under the same bounds and held in memory. Installed layout:
 │   └── vanguard/
 │       ├── scenario.toml
 │       ├── macros.toml
-│       └── behavior/scarab.toml  # a behavior program, one per raider type
+│       └── behavior/strata/scarab.toml  # a behavior program, one per raider type
 └── input/
     └── keymap.toml
 ```
@@ -75,7 +75,7 @@ fixed = "500x250"                   # Size the map holds throughout, for front-e
 cursors = false                     # Players hold slots, no cursor on the map (optional)
 
 [behaviors]
-scarab = { file = "behavior/scarab.toml" }  # A species of the scenario's own (Behavior Programs)
+scarab = { file = "behavior/strata/scarab.toml" }  # A species of the scenario's own (Behavior Programs)
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
@@ -269,7 +269,7 @@ same boundary.
 { action = "EmitEvent", event = "EventName" }
 { action = "EmitEvent", event = "EventName", payload = { field = value, ... } }
 { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 0 }, payload_vars = { entity = "player_entity", delta = "bonus" } }
-{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["invader", "scarab", "construct", "storm_eye"] } }
+{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle", "scorpion"] } }
 ```
 
 The event name and payload are compiled at load: an unknown event, a payload key
@@ -293,15 +293,16 @@ the load, naming the field's path and the names it takes. `:emit` and an
 authored script's event decode a payload the same way.
 
 `pick` sets one payload field to an entry of `from`: the one its `var`'s value
-names, modulo the list's length, a negative value counting back from the last
-entry. The draw behind it need not know the list: vanguard draws `raid_type` from
-20 bits and spawns one of its four raider programs, so a fifth is one more entry,
-and wears the stone art its cave's seed picks. `field` is a dot path, as a
-`payload_vars` key is, and each entry is checked at load as that field's value
-in its payload, names included: a pick of `species` from `["eye", "snake"]`
-beside `sub_type = "flame"` fails on the snake, which takes no sub-types. An
-entry is any value the field takes, a table or a list among them. `payload_vars`
-sets the other fields after the pick, never the picked one.
+names, modulo the list's length, a negative value counting back from the last entry.
+The draw behind it need not know the list: vanguard's cave wears the stone art its
+seed picks, and the raid draws `raid_type` from 20 bits, takes it modulo eight and
+adds eight times the art's index, so it spawns one of that cave's eight raider
+programs from a list of all thirty-two. `field` is a dot path, as a `payload_vars`
+key is, and each entry is checked at load as that field's value in its payload,
+names included: a pick of `species` from `["eye", "snake"]` beside
+`sub_type = "flame"` fails on the snake, which takes no sub-types. An entry is any
+value the field takes, a table or a list among them. `payload_vars` sets the other
+fields after the pick, never the picked one.
 
 ### Region Control
 
@@ -701,7 +702,7 @@ cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 ### PayloadSpeciesIn
 
 ```toml
-{ trigger = "EventSpeciesKilled", target = "RaiderDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["scarab", "invader"] } }
+{ trigger = "EventSpeciesKilled", target = "RaiderDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["scarab", "crawler"] } }
 ```
 
 Passes when the payload's species is one of `names`: a code species (`drain`,
@@ -856,9 +857,11 @@ program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
 without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
 instances and the beams still bringing them, every program's when it names none.
 `wad/scenario/vanguard` is the worked example: its raider types, spawned directly,
-fly the swarm's attack cycle as four programs over one macro (`RaiderStates` in its
-`macros.toml`), each program's `[states]` an invocation of it with the type's
-timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
+fly the swarm's attack cycle as thirty-two programs over one macro (`RaiderStates`
+in its `macros.toml`). Each program file is one invocation of its tier's macro
+(`RaiderTier1`..`RaiderTier4`) naming its cave and its look, and the tier's
+expansion is the whole program: the look, the tier's stats and physics, the cave's
+palette, and `[states]` invoking `RaiderStates` with the tier's timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
 each fault names program, place and key (`program 'scarab': state 'Lock':
 on_update[0]: unknown sustained action 'Freez'`).
 
@@ -932,8 +935,7 @@ target = "Roam"
   drag 2), no arrival steering, the homing's half-cell snap and restitution 0.5.
   `Home` steers by all but the restitution, which every move bounces by. Each value
   is finite and at least 0, accel above it, and restitution at most 1. Vanguard's
-  construct, scarab and storm eye give the drain's, the snake's and the quasar's
-  values, and the invader flies the default.
+  first raider tier gives the snake's values and each later tier its own, slower.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
   `HitWall` reads this step's move). A global edge has none.

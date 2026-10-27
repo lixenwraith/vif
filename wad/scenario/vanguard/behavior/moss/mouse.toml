@@ -1,0 +1,30 @@
+# The mouse: it twitches its whiskers, and blinks. One of the moss cave's first-tier
+# raiders: RaiderTier1 in ../../macros.toml gives its stats and cycle and the cave
+# its colours.
+macro = "RaiderTier1"
+theme = "Moss"
+width = 5
+height = 2
+header = { x = 2, y = 0 }
+pattern_ms = 300
+
+# Ears and nose 3, face 0, eyes 1, whiskers 2
+[[frames]]
+glyphs = ["()_()", "(o.o)"]
+fg     = ["33033", "01310"]
+attr   = ["     ", " B B "]
+
+[[frames]]
+glyphs = ["()_()", "(o.o)"]
+fg     = ["33033", "01310"]
+attr   = ["     ", " B B "]
+
+[[frames]]
+glyphs = ["()_()", "(-.-)"]
+fg     = ["33033", "01310"]
+attr   = ["     ", " B B "]
+
+[[frames]]
+glyphs = ["()_()", ">o.o<"]
+fg     = ["33033", "21312"]
+attr   = ["     ", " B B "]

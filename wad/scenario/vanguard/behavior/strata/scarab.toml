@@ -1,0 +1,19 @@
+# The scarab: a beetle that darts in on a short warning, its eyes blinking in its
+# shell. One of the strata's first-tier raiders: RaiderTier1 in ../../macros.toml
+# gives its stats and cycle and the cave its colours.
+macro = "RaiderTier1"
+theme = "Strata"
+width = 4
+height = 2
+header = { x = 1, y = 0 }
+pattern_ms = 350
+
+# Shell 0, eyes 1, legs 2
+[[frames]]
+glyphs = ["┌oo┐", "└──┘"]
+fg     = ["0110", "0220"]
+attr   = [" BB ", "    "]
+
+[[frames]]
+glyphs = ["┌--┐", "└~~┘"]
+fg     = ["0000", "0220"]

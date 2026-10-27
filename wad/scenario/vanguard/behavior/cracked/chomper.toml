@@ -1,0 +1,20 @@
+# The chomper: a mouth that opens on its teeth and snaps shut. One of the cracked
+# cave's first-tier raiders: RaiderTier1 in ../../macros.toml gives its stats and
+# cycle and the cave its colours.
+macro = "RaiderTier1"
+theme = "Cracked"
+width = 4
+height = 2
+header = { x = 1, y = 0 }
+pattern_ms = 250
+
+# Jaw 0, eyes 1, teeth 2
+[[frames]]
+glyphs = ["/oo\\", "\\vv/"]
+fg     = ["0110", "0220"]
+attr   = [" BB ", "    "]
+
+[[frames]]
+glyphs = ["/oo\\", "\\--/"]
+fg     = ["0110", "0220"]
+attr   = [" BB ", "    "]

@@ -1,6 +1,7 @@
-# Vanguard's block: the raiders' one attack cycle, which every raider type's
-# program expands with its own timings. doc/toml-macros.md describes definitions
-# and invocations.
+# Vanguard's block: the raiders' one attack cycle, the four difficulty tiers that
+# time it and weigh the body flying it, and the four caves' raider colours. Every
+# raider type's program invokes its tier with its cave and its look, and the tier
+# invokes Raider. doc/toml-macros.md describes definitions and invocations.
 
 # The swarm's machine as a raider flies it. It chases its target for chase_ms, then
 # locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
@@ -68,3 +69,195 @@ transitions = [{ trigger = "Timeout", target = "Chase" }]
 doc = "A stun drops a raider from any attack state back to its chase."
 params = {}
 body = { from = ["Lock", "Charge", "Beam", "Brake"], guard = "Stunned", target = "Chase" }
+
+# --- A raider type ---
+
+# One raider type: its cave's palette and console colour, its own look, and the
+# stats and cycle timings its tier gives. A program invokes RaiderTier1..4, never
+# this, so every theme's tier flies alike and only looks differ.
+[macros.Raider]
+doc = "A raider program: the attack cycle over a body of the given look and stats."
+params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", hp = "int", mass = "float", contact = "table", physics = "table", chase_ms = "int", lock_ms = "int", charge_ms = "int", beam_ms = "int" }
+
+[macros.Raider.body]
+initial = "Chase"
+suspend = { guard = "Stunned" }
+states = { macro = "RaiderStates", chase_ms = "${chase_ms}", lock_ms = "${lock_ms}", charge_ms = "${charge_ms}", beam_ms = "${beam_ms}" }
+global = [{ macro = "RaiderStun" }]
+
+# Its cells index the cave's palette, 0 body, 1 eyes, 2 limbs, 3 accent; the
+# console draws the cave's one colour, a hit reversing it
+[macros.Raider.body.prototype]
+width = "${width}"
+height = "${height}"
+header = "${header}"
+hp = "${hp}"
+combat = "swarm"
+mass = "${mass}"
+contact = "${contact}"
+physics = "${physics}"
+pattern_ms = "${pattern_ms}"
+frames = "${frames}"
+fg = { macro = "${theme}Fg" }
+fg256 = { macro = "${theme}Fg256" }
+bg256 = 0
+
+# --- Tiers ---
+
+# Each cave holds two raider types of each tier, the same four tiers in every cave.
+# A tier up has more hit points (8, 16, 28, 44), a heavier body and a costlier touch,
+# and chases slower on a longer warning and a slower charge; the first darts as the
+# snake does. Hit points times chase speed, the raid's measure of threat, runs 96,
+# 144, 168 and 198.
+
+[macros.RaiderTier1]
+doc = "A first-tier raider: small, quick and fragile, on a short warning."
+params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+
+[macros.RaiderTier1.body]
+macro = "Raider"
+theme = "${theme}"
+width = "${width}"
+height = "${height}"
+header = "${header}"
+pattern_ms = "${pattern_ms}"
+frames = "${frames}"
+hp = 8
+mass = 1.0
+contact = { energy = 600, heat = 6 }
+physics = { speed = 12.0, accel = 42.0, drag = 0.94, arrival_radius = 2.0, arrival_drag = 2.0, dead_zone = 0.5 }
+chase_ms = 3000
+lock_ms = 1200
+charge_ms = 500
+beam_ms = 300
+
+[macros.RaiderTier2]
+doc = "A second-tier raider: twice the first's hit points, a little slower."
+params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+
+[macros.RaiderTier2.body]
+macro = "Raider"
+theme = "${theme}"
+width = "${width}"
+height = "${height}"
+header = "${header}"
+pattern_ms = "${pattern_ms}"
+frames = "${frames}"
+hp = 16
+mass = 1.5
+contact = { energy = 900, heat = 9 }
+physics = { speed = 9.0, accel = 24.0, drag = 1.2, arrival_radius = 2.0, arrival_drag = 2.0, dead_zone = 0.5 }
+chase_ms = 3500
+lock_ms = 1400
+charge_ms = 600
+beam_ms = 350
+
+[macros.RaiderTier3]
+doc = "A third-tier raider: a heavier body on a steadier chase."
+params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+
+[macros.RaiderTier3.body]
+macro = "Raider"
+theme = "${theme}"
+width = "${width}"
+height = "${height}"
+header = "${header}"
+pattern_ms = "${pattern_ms}"
+frames = "${frames}"
+hp = 28
+mass = 2.5
+contact = { energy = 1200, heat = 12 }
+physics = { speed = 6.0, accel = 10.0, drag = 1.6, arrival_radius = 2.5, arrival_drag = 2.5, dead_zone = 0.5 }
+chase_ms = 4000
+lock_ms = 1600
+charge_ms = 700
+beam_ms = 450
+
+[macros.RaiderTier4]
+doc = "A fourth-tier raider: slow and armoured, its touch the costliest."
+params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+
+[macros.RaiderTier4.body]
+macro = "Raider"
+theme = "${theme}"
+width = "${width}"
+height = "${height}"
+header = "${header}"
+pattern_ms = "${pattern_ms}"
+frames = "${frames}"
+hp = 44
+mass = 3.5
+contact = { energy = 1500, heat = 15 }
+physics = { speed = 4.5, accel = 6.0, drag = 2.0, arrival_radius = 3.0, arrival_drag = 3.0, dead_zone = 0.5 }
+chase_ms = 4500
+lock_ms = 1800
+charge_ms = 800
+beam_ms = 500
+
+# --- Cave colours ---
+
+# Each stone art's raiders wear one hue in four shades, picked against the rock:
+# a hue apart from it so they read, its shade of dark kin to it so they belong. On
+# a console a raider is one colour. The hit flash is yellow and the enraged tint
+# red, so no cave's raiders are either.
+
+# Strata, warm brown bands: violet vermin, the cool hue against the warm rock, their
+# legs a plum near its dark bands
+[macros.StrataFg]
+doc = "The strata raiders' palette: body, eyes, limbs, accent."
+body = [
+    { r = 170, g = 90, b = 230 },   # 0 violet
+    { r = 235, g = 208, b = 255 },  # 1 pale lilac
+    { r = 128, g = 64, b = 160 },   # 2 plum
+    { r = 210, g = 140, b = 250 },  # 3 orchid
+]
+
+[macros.StrataFg256]
+doc = "The strata raiders' console colour."
+body = 13                           # bright magenta
+
+# Cracked, cool grey: white haunts, the rock's own cool grey brightened, their limbs
+# a shade above its lighter mottle
+[macros.CrackedFg]
+doc = "The cracked cave's raider palette: body, eyes, limbs, accent."
+body = [
+    { r = 228, g = 228, b = 238 },  # 0 bone white
+    { r = 255, g = 255, b = 255 },  # 1 white
+    { r = 150, g = 152, b = 170 },  # 2 ash
+    { r = 196, g = 198, b = 214 },  # 3 pale steel
+]
+
+[macros.CrackedFg256]
+doc = "The cracked cave's raider console colour."
+body = 15                           # bright white
+
+# Moss, olive stone with green tufts: orange animals, warm against the green, their
+# limbs an earthy brown beside the stone
+[macros.MossFg]
+doc = "The moss cave's raider palette: body, eyes, limbs, accent."
+body = [
+    { r = 255, g = 140, b = 40 },   # 0 orange
+    { r = 255, g = 215, b = 140 },  # 1 pale amber
+    { r = 180, g = 92, b = 30 },    # 2 rust brown
+    { r = 255, g = 104, b = 48 },   # 3 vermilion
+]
+
+[macros.MossFg256]
+doc = "The moss cave's raider console colour."
+body = 3                            # brown, a console's orange
+
+# Crystal, blue-grey stone with amethyst, aqua and quartz points: orchid constructs,
+# a pinker purple than the amethyst so they stand off its points, their limbs a
+# blue violet near the stone
+[macros.CrystalFg]
+doc = "The crystal cave's raider palette: body, eyes, limbs, accent."
+body = [
+    { r = 200, g = 100, b = 235 },  # 0 orchid
+    { r = 245, g = 215, b = 255 },  # 1 pale pink
+    { r = 120, g = 70, b = 175 },   # 2 blue violet
+    { r = 230, g = 150, b = 255 },  # 3 light orchid
+]
+
+[macros.CrystalFg256]
+doc = "The crystal cave's raider console colour."
+body = 13                           # bright magenta

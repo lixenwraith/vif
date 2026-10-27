@@ -1,0 +1,20 @@
+# The robot: its antenna sparking as it marches. One of the crystal cave's
+# fourth-tier raiders: RaiderTier4 in ../../macros.toml gives its stats and cycle
+# and the cave its colours.
+macro = "RaiderTier4"
+theme = "Crystal"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+pattern_ms = 350
+
+# Antenna 3, head 0, eyes 1, limbs 2
+[[frames]]
+glyphs = [" _*_ ", "[o_o]", "/| |\\"]
+fg     = [" 030 ", "01010", "20 02"]
+attr   = ["     ", " B B ", "     "]
+
+[[frames]]
+glyphs = [" _o_ ", "[o_o]", "\\| |/"]
+fg     = [" 030 ", "01010", "20 02"]
+attr   = ["     ", " B B ", "     "]

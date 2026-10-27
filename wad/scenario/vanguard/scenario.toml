@@ -6,9 +6,9 @@ macro_files = ["macros.toml"]
 # A side-scroller after Vanguard (1981): the cursor is a ship and the cave scrolls
 # left past it. Rock pushes the cursor a column back and toward the channel; rock
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
-# left behind the rock at three depths, raiders of four types, the cave's swarms,
-# arrive at the right edge on a timer, and each one shot down drops a U that raises
-# the gun a level, from one shot forward to three each way.
+# left behind the rock at three depths, raiders of the cave's own eight types arrive
+# at the right edge on a timer, and each one shot down drops a U that raises the gun
+# a level, from one shot forward to three each way.
 
 # Twice the cave's narrowest gap, so even the smallest map opens past its narrowest
 [map]
@@ -16,13 +16,46 @@ min_width = 80
 min_height = 18
 
 # The raider types, one program each over the one cycle in macros.toml, so each
-# keeps its own kill counter and behavior.<type>.* rows; RaidSpawn picks among them
-# and the U drop names them all
+# keeps its own kill counter and behavior.<type>.* rows: eight to a stone art, two
+# of each of four tiers, smallest first. RaidSpawn picks among the cave's eight and
+# the U drop names them all.
 [behaviors]
-invader = { file = "behavior/invader.toml" }
-scarab = { file = "behavior/scarab.toml" }
-construct = { file = "behavior/construct.toml" }
-storm_eye = { file = "behavior/storm_eye.toml" }
+# Strata: violet vermin
+scarab = { file = "behavior/strata/scarab.toml" }
+crawler = { file = "behavior/strata/crawler.toml" }
+crab = { file = "behavior/strata/crab.toml" }
+hornet = { file = "behavior/strata/hornet.toml" }
+spider = { file = "behavior/strata/spider.toml" }
+mantis = { file = "behavior/strata/mantis.toml" }
+beetle = { file = "behavior/strata/beetle.toml" }
+scorpion = { file = "behavior/strata/scorpion.toml" }
+# Cracked: white haunts
+gremlin = { file = "behavior/cracked/gremlin.toml" }
+chomper = { file = "behavior/cracked/chomper.toml" }
+imp = { file = "behavior/cracked/imp.toml" }
+slime = { file = "behavior/cracked/slime.toml" }
+ghost = { file = "behavior/cracked/ghost.toml" }
+skull = { file = "behavior/cracked/skull.toml" }
+wraith = { file = "behavior/cracked/wraith.toml" }
+demon = { file = "behavior/cracked/demon.toml" }
+# Moss: orange animals
+hedgehog = { file = "behavior/moss/hedgehog.toml" }
+mouse = { file = "behavior/moss/mouse.toml" }
+frog = { file = "behavior/moss/frog.toml" }
+hopper = { file = "behavior/moss/hopper.toml" }
+bat = { file = "behavior/moss/bat.toml" }
+puffer = { file = "behavior/moss/puffer.toml" }
+owl = { file = "behavior/moss/owl.toml" }
+lynx = { file = "behavior/moss/lynx.toml" }
+# Crystal: orchid constructs
+drone = { file = "behavior/crystal/drone.toml" }
+shard = { file = "behavior/crystal/shard.toml" }
+saucer = { file = "behavior/crystal/saucer.toml" }
+trooper = { file = "behavior/crystal/trooper.toml" }
+jelly = { file = "behavior/crystal/jelly.toml" }
+squid = { file = "behavior/crystal/squid.toml" }
+djinn = { file = "behavior/crystal/djinn.toml" }
+robot = { file = "behavior/crystal/robot.toml" }
 
 # No drains, and so nothing to fuse: the raid spawns its raiders directly
 [regions.main]
@@ -68,7 +101,12 @@ on_enter = [
 parent = "Root"
 transitions = [
     { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
-        { name = "PayloadSpeciesIn", args = { field = "species", names = ["invader", "scarab", "construct", "storm_eye"] } },
+        { name = "PayloadSpeciesIn", args = { field = "species", names = [
+            "scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle", "scorpion",
+            "gremlin", "chomper", "imp", "slime", "ghost", "skull", "wraith", "demon",
+            "hedgehog", "mouse", "frog", "hopper", "bat", "puffer", "owl", "lynx",
+            "drone", "shard", "saucer", "trooper", "jelly", "squid", "djinn", "robot",
+        ] } },
         { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
     ] }, capture_vars = { x = "kill_x", y = "kill_y" }, actions = [
         { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "upgrade" }, payload_vars = { x = "kill_x", y = "kill_y" } },
@@ -80,8 +118,10 @@ transitions = [
 # keeps at its thinnest. The request names the map's width, a column past its right
 # edge, and the spawn stands each body flush against that edge whatever its size;
 # it searches the whole map from there, so rock on that row sends it to the nearest
-# open rows. The type is drawn too, each equally likely: the pick takes the draw
-# modulo its list, so a new type is one more entry.
+# open rows. The type is drawn among the cave's eight, each equally likely: the
+# cave's seed modulo four is its stone art, as CaveStart's pick takes it, and eight
+# times that the first of its types in the pick's list, which runs the arts in
+# CaveStart's order.
 [states.RaidWait]
 parent = "Raid"
 transitions = [
@@ -103,10 +143,21 @@ on_enter = [
     { action = "IncrementVar", payload = { name = "raid_y", delta = 2 } },
     { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
     { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 1048575, seed_var = "raid_type_seed", index_var = "raid_index" } },
+    { action = "ModuloVar", payload = { name = "raid_type", delta = 8 } },
+    { action = "CopyVar", payload = { name = "raid_cave", source_var = "cave_seed" } },
+    { action = "ModuloVar", payload = { name = "raid_cave", delta = 4 } },
+    { action = "MultiplyVar", payload = { name = "raid_cave", delta = 8 } },
+    { action = "IncrementVar", payload = { name = "raid_type", source_var = "raid_cave" } },
 ]
 transitions = [
     { trigger = "Tick", target = "RaidWait", actions = [
-        { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["invader", "scarab", "construct", "storm_eye"] } },
+        { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = [
+            "scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle",
+            "scorpion",
+            "gremlin", "chomper", "imp", "slime", "ghost", "skull", "wraith", "demon",
+            "hedgehog", "mouse", "frog", "hopper", "bat", "puffer", "owl", "lynx",
+            "drone", "shard", "saucer", "trooper", "jelly", "squid", "djinn", "robot",
+        ] } },
     ] },
 ]
 
