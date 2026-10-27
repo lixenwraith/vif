@@ -1076,7 +1076,7 @@ overlay that labels each instance of a species with its state and progress, as
 - Affected files: `internal/system/environment.go` (`applyPlanarWind`)
 
 `applyPlanarWind` accelerates each mobile species by its profile mass, and a data
-species is none of them, so a wind leaves a warden where it stands though its
+species is none of them, so a wind leaves a raider where it stands though its
 prototype has a `mass`. The smallest fix ranges the `Behavior` store in the Shared
 pass with each prototype's mass from `Resources.Behaviors`, skipping a massless one.
 

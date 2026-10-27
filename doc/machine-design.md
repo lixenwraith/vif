@@ -462,25 +462,26 @@ at load ([todo](todo.md#check-payload-field-names-against-their-event-at-load)).
 A behavior program defines a species: a `[prototype]` body and a state machine
 over the game's verbs. A scenario lists up to `BehaviorProgramsMax` of them, each
 compiled at load into a `machine.Graph` that `BehaviorSystem` steps for every
-instance, over the scaffold every composite species shares. `wad/scenario/warden`
-is the worked example.
+instance, over the scaffold every composite species shares. `wad/scenario/vanguard`
+is the worked example: four raider types, each a program over one macro of states.
 
 ### 6.1 Program shape
 
 A program uses the fsm dialect's keys with the machine's additions: `duration_ms`,
 `flags`, `probe`, `cues`, `suspend`, `[[global]]`, a candidate list as `target`,
 `fallback`, the `Timeout` and `AfterTick` triggers, and a `[prototype]` table. The
-warden's wind-up:
+scarab's lock, as vanguard's `RaiderStates` macro expands it with the scarab's
+timings:
 
 ```toml
-[states.Wind]
-duration_ms = 1500
+[states.Lock]
+duration_ms = 1200
 flags = ["Enraged"]
-on_enter = [{ action = "Telegraph", payload = { color = "cyan" } }]
+probe = "ResolveTarget"
+on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]
 on_exit = [{ action = "CancelTelegraph" }]
-cues = [{ at = 800, action = "Materialize", payload = { spawn = "swarm" } }]
-transitions = [{ trigger = "Timeout", target = ["Strike", "Roam"] }]
+transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight", guard_args = { to = "stored" } }, "Beam", "Brake"] }]
 ```
 
 How the keys map onto the runtime:
@@ -544,7 +545,7 @@ system's scaffold (§6.4), not in the vocabulary.
 ### 6.3 Delivery and compilation
 
 - **Programs are scenario files.** The entry lists them
-  (`[behaviors] warden = { file = "behavior/warden.toml" }`) or holds one inline.
+  (`[behaviors] scarab = { file = "behavior/scarab.toml" }`) or holds one inline.
   `includeBehaviors` (`internal/fsm/file_loader.go`) reads, parses and expands each
   file against the entry's macros through `readExpanded`, the step region files
   share, records it in `visited` and replaces the `{ file }` table; anything else
@@ -647,6 +648,49 @@ smaller part of it.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
   bit.
+
+### 6.5 A program's look
+
+A program draws itself from its prototype's look, plain data the renderers read, so
+a new species needs no renderer of its own and no code. The keys are in the
+[FSM reference](fsm-reference.md#behavior-programs); vanguard's four raiders
+(`wad/scenario/vanguard/behavior/*.toml`) are the shipped examples. To define one:
+
+- **Frames.** `frames` holds a table per frame whose `glyphs` are `height` strings
+  of `width` cells; a space draws nothing and the map shows through. Two frames or
+  more cycle every `pattern_ms`, held while a stun holds. Draw the silhouette in
+  glyphs, not in colour: a host that has few colours still shows the shape.
+- **Glyphs.** Each is ASCII or one every text console font carries
+  (`consoleGlyphs` in `renderer/color256_test.go`): the single, double and mixed
+  box drawing, `█░▒`, `■▲▶▼◀♦`, the arrows `←↑→↓` and `·×÷°±•‼≈≡≤≥`. A console
+  draws any other as `#` or a replacement mark, and a look has no console frames
+  to fall back on, so half and quadrant blocks (`▀▄▌▐▘`) are out. The desktop
+  window draws from the font atlas (`internal/asset/font/mono.toml`, rendered by
+  `tool/font-atlas`), which must hold every glyph too.
+  `TestConsoleGlyphsAreInEveryConsoleFont` and
+  `TestTheFontAtlasCoversEveryGlyphTheCodeDraws` read every shipped scenario's
+  TOML, so a glyph outside either set fails CI; `-check` does not test the glyph
+  sets, so a scenario kept outside the repository is its author's to check.
+- **Colour.** `fg` and `bg` are palettes of up to 16 colours. A frame's `fg` and
+  `bg` rows give each cell a palette entry as a hex digit, a space meaning the
+  look's `color` or no background, and `attr` gives a cell bold or dim. Colour the
+  parts (shell, eyes, legs) rather than each cell, as the raiders do.
+- **Console pair.** `fg256` and `bg256` are the pair a 256-colour host draws the
+  whole look in, every glyph in the one and every background in the other, a hit
+  reversing the glyph; without them the host takes each palette entry's nearest
+  colour, which a text console's sixteen can merge into the background. Pick the
+  pair from the console's own entries, the glyph bright (8-15) over a background
+  of 0-7, which is all a Linux console's backgrounds take; such an entry passes
+  through unchanged ([rendering §6](rendering.md#6-finalization-and-color-modes)).
+- **State.** The look does not follow the machine's state: the hit flash, then
+  `Enraged`, tints every glyph, `Beam` draws the teleport line to the stored cell,
+  and `Telegraph` raises the splash countdown beside the body. A look per state
+  would be a feature of its own.
+- **Checking it.** `-check` compiles the look with its program
+  (`visual.CompileLook`: palette sizes, rows and cells against the footprint,
+  palette digits and attributes). Then play it: `bin/vif -s <scenario>` in tmux,
+  captured with colour (`capture-pane -e`) under a 256-colour `TERM` and under
+  `TERM=linux`, and in the desktop window with `-g`.
 
 ## 7. Determinism and identity
 
@@ -754,12 +798,14 @@ captures, one a tick, read the frames. Per species:
   series, and a stunned burst holds and resumes.
 - Fusions: `:emit EventFuseQuasarRequest` lands its quasar the tick its beam's
   last cells go.
-- Data species: `:n warden`, with `:energy 1000000000` to outlast it. A beam
-  converges and the warden appears on its footprint as the beam ends, winds up
-  enraged under the cyan countdown, and charges the cell it saw; a disruptor stun
-  drops it to Roam; `:emit EventBehaviorCancelRequest { program = "warden" }`
-  removes it. `bin/vif -check -s wad/scenario/warden` prints
-  `behaviors ok: 1 (warden)`.
+- Data species: `:n vanguard`, with `:god` to outlast the raid. A raider spawns at
+  the right edge every two seconds while fewer than three fly, chases, locks red
+  under the cyan countdown, and charges the cell it saw where its body clears the
+  way, else beams beside it; a disruptor stun drops it back to its chase;
+  `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.
+  `bin/vif -check -s wad/scenario/vanguard` prints
+  `behaviors ok: 4 (construct, invader, scarab, storm_eye)`. A look shows best in
+  tmux pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`.
 
 ## 9. Alternatives and prior art
 

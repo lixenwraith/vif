@@ -483,9 +483,9 @@ it spawns and arms the cursor before opening `main`.
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `simon` is a memory game, `warden` is blank's arena with a species its
-own behavior program defines, and `vanguard` is a side-scroller. Each entry has a
-short `description` for scenario listings.
+scaffold, `simon` is a memory game, and `vanguard` is a side-scroller whose raiders
+are species its own behavior programs define. Each entry has a short `description`
+for scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its
@@ -502,15 +502,6 @@ the one due, while the due note lights and sounds; the next game starts as the
 decay falls away. The level stops rising at 100 and the energy cell reads it.
 Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 
-`warden` beams its warden into the top-left corner over a second: an orange
-four-by-two body that homes on the cursor. Past twelve cells it stops, turns red
-under a cyan countdown while a beam marks the cursor's cell, then charges the
-cell the cursor holds as the countdown ends; a wall ends the charge, and a stun
-drops it back to homing. A kill shows "Warden down" and beams another in three
-seconds later; one that outlives its 35 seconds is replaced a second later. Its
-program, `behavior/warden.toml`, is the template for a species of one's own
-([FSM reference](fsm-reference.md#behavior-programs)).
-
 `vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
 second, a column every tick: only a whole-tick period steps evenly, and eight a
 second stepped two and three ticks apart, which read as dropped frames. The cave is
@@ -522,18 +513,20 @@ depths, each stepping on whole ticks, and drains, nuggets, gold and the fuse are
 off. Raiders, the cave's swarms, spawn at the right edge every two seconds while
 fewer than three fly, on a row drawn across the map, in the nearest open rows when
 rock fills it, each of a type drawn at random. Every type is a program of the
-scenario's own (`behavior/<type>.toml`) running one cycle, the swarm's chase, lock,
-charge and teleport (`RaiderStates` in `macros.toml`), with its own look, hit
-points, homing and timings, hit points times chase speed alike: the invader at the
-swarm's pace, the scarab fast and fragile (8 hit points, a 1.2-second lock), the
-construct slow and armoured (48, a 2.5-second lock and a long charge), and the storm
-eye, the eye species' storm look on a 5×3 body (48). A raider lives until killed,
-and the rock pushes it as it pushes the cursor. One a player shoots down drops a `U`
-where it fell, for every player, and each `U` raises the gun a level of the
-scenario's nine: one shot forward, then two and three, one up and one down, one
-back, two up and down, two back, three up and down, three back. Forward is right,
-the way the ship flies. A crush is a defeat: the game starts over at once, the gun
-back at one shot, and opens with "Crushed against the edge".
+scenario's own (`behavior/<type>.toml`), the template for a species of one's own
+([FSM reference](fsm-reference.md#behavior-programs)), running one cycle, the
+swarm's chase, lock, charge and teleport (`RaiderStates` in `macros.toml`), with
+its own look, hit points, homing and timings, hit points times chase speed alike:
+the invader at the swarm's pace, the scarab fast and fragile (8 hit points, a
+1.2-second lock), the construct slow and armoured (48, a 2.5-second lock and a long
+charge), and the storm eye, the eye species' storm look on a 5×3 body (48). A
+raider lives until killed, and the rock pushes it as it pushes the cursor. One a
+player shoots down drops a `U` where it fell, for every player, and each `U` raises
+the gun a level of the scenario's nine: one shot forward, then two and three, one
+up and one down, one back, two up and down, two back, three up and down, three
+back. Forward is right, the way the ship flies. A crush is a defeat: the game
+starts over at once, the gun back at one shot, and opens with "Crushed against the
+edge".
 
 ## 11. System inventory
 

@@ -36,14 +36,14 @@ coordinator's, sent under the same bounds and held in memory. Installed layout:
 │   ├── main/              # optional override: a copy of internal/asset/scenario/
 │   ├── blank/scenario.toml
 │   ├── simon/scenario.toml
-│   ├── vanguard/scenario.toml
 │   ├── td/
 │   │   ├── scenario.toml
 │   │   ├── td_macros.toml # macro library
 │   │   └── td_*.toml      # region files
-│   └── warden/
+│   └── vanguard/
 │       ├── scenario.toml
-│       └── behavior/warden.toml  # a behavior program
+│       ├── macros.toml
+│       └── behavior/scarab.toml  # a behavior program, one per raider type
 └── input/
     └── keymap.toml
 ```
@@ -75,7 +75,7 @@ fixed = "500x250"                   # Size the map holds throughout, for front-e
 cursors = false                     # Players hold slots, no cursor on the map (optional)
 
 [behaviors]
-warden = { file = "behavior/warden.toml" }  # A species of the scenario's own (Behavior Programs)
+scarab = { file = "behavior/scarab.toml" }  # A species of the scenario's own (Behavior Programs)
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
@@ -678,7 +678,7 @@ cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 ### PayloadSpeciesIn
 
 ```toml
-{ trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] } }
+{ trigger = "EventSpeciesKilled", target = "RaiderDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["scarab", "invader"] } }
 ```
 
 Passes when the payload's species is one of `names`: a code species (`drain`,
@@ -829,14 +829,13 @@ over the whole map; a request naming no program raises nothing
 whole map from that cell, and spawns the instance as it ends; a request naming no
 program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
 without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
-instances and the beams still bringing them, every program's when it names none;
-`wad/scenario/warden` is the worked example, beamed in, and
-`wad/scenario/vanguard`'s raider types, spawned directly, fly the swarm's attack
-cycle as four programs over one macro (`RaiderStates` in its `macros.toml`), each
-program's `[states]` an invocation of it with the type's timings. `-check` compiles every
-program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
-and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
-'Freez'`).
+instances and the beams still bringing them, every program's when it names none.
+`wad/scenario/vanguard` is the worked example: its raider types, spawned directly,
+fly the swarm's attack cycle as four programs over one macro (`RaiderStates` in its
+`macros.toml`), each program's `[states]` an invocation of it with the type's
+timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
+each fault names program, place and key (`program 'scarab': state 'Lock':
+on_update[0]: unknown sustained action 'Freez'`).
 
 ```toml
 initial = "Roam"                    # State a spawn starts in
@@ -854,8 +853,8 @@ drops = "swarm"                     # Code species whose drop tiers it rolls (op
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
 frames = [                          # Each frame a string per row, height rows of width cells
-    { glyphs = ["▄▀▀▄", "▀▄▄▀"], fg = ["0110", "1001"], attr = ["B  B", "    "] },
-    { glyphs = ["▀▄▄▀", "▄▀▀▄"] },  # fg, bg and attr are each optional
+    { glyphs = ["╔oo╗", "╚══╝"], fg = ["0110", "1001"], attr = [" BB ", "    "] },
+    { glyphs = ["┌--┐", "└──┘"] },  # fg, bg and attr are each optional
 ]
 pattern_ms = 500                    # Frame period; required with two frames or more
 color = { r = 200, g = 120, b = 40 }  # A glyph's without an fg entry
@@ -883,15 +882,18 @@ guard = "Stunned"
 target = "Roam"
 ```
 
-- The look: a frame's `glyphs` row draws a cell's glyph, a space drawing none;
-  `fg` and `bg` rows give each cell an entry of the prototype's palette as a hex
-  digit (`0`-`f`), a space for the prototype's `color` and for no background; an
-  `attr` row gives `B` (bold), `D` (dim) or a space. A 256-colour host draws a
-  look with `fg256` and `bg256` in that pair alone, every glyph in the one and
-  every background in the other, which reads on every console palette, and shows a
-  hit by reversing the glyph; without the pair it draws the palettes' nearest
-  colours. The hit flash, then `Enraged`, tints every glyph. The eye's types are
-  drawn from the same look.
+- The look ([Behavior machines §6.5](machine-design.md#65-a-programs-look)): a
+  frame's `glyphs` row draws a cell's glyph, a space drawing none, each glyph ASCII
+  or one every text console font carries (box drawing, `░▒█`, arrows and a few
+  symbols; not half blocks such as `▀▄`), which the console font test checks in
+  every shipped scenario; `fg` and `bg` rows give each cell an entry of the
+  prototype's palette as a hex digit (`0`-`f`), a space for the prototype's `color`
+  and for no background; an `attr` row gives `B` (bold), `D` (dim) or a space. A
+  256-colour host draws a look with `fg256` and `bg256` in that pair alone, every
+  glyph in the one and every background in the other, which reads on every console
+  palette, and shows a hit by reversing the glyph; without the pair it draws the
+  palettes' nearest colours. The hit flash, then `Enraged`, tints every glyph. The
+  eye's types are drawn from the same look.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
   `HitWall` reads this step's move). A global edge has none.

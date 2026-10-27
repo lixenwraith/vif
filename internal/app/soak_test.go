@@ -319,7 +319,7 @@ func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
 func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	t.Parallel()
 	event.EnsureRegistry()
-	for _, name := range []string{"main", "blank", "td", "simon", "warden", "vanguard", ""} {
+	for _, name := range []string{"main", "blank", "td", "simon", "vanguard", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel
