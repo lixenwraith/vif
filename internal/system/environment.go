@@ -53,11 +53,11 @@ const driftCell = int64(1e6) * int64(time.Second)
 
 // driftState is the whole of a drift, and its D-19 record. Phase is each level's
 // sub-cell remainder per axis, so a layer steps on the same tick everywhere.
-// Scenery marks the text placed while it drifts as scenery.
+// Scenery, left out while false, marks the text placed while it drifts as scenery.
 type driftState struct {
 	Active    bool                  `json:"active"`
 	Endless   bool                  `json:"endless"`
-	Scenery   bool                  `json:"scenery"`
+	Scenery   bool                  `json:"scenery,omitempty"`
 	Speed     float64               `json:"speed"`
 	Direction float64               `json:"direction"`
 	Remaining time.Duration         `json:"remaining"`
