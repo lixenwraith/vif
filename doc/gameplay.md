@@ -325,7 +325,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
-| Gun | Innate. One tracer per cardinal from the cursor, direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back; a gun drop adds a charge. |
+| Gun | Innate. One tracer from the cursor per cardinal of its aim, all four unless the scenario's `EventGunAimRequest` narrows it; direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back; a gun drop adds a charge. |
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity; at the cap each hit arcs to the nearest other target in range. |
 | Launcher | Homing/area missiles assigned from the nearest-target set; at the cap its cooldown halves. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
@@ -392,6 +392,19 @@ evolution](ai-physics-and-evolution.md#7-maze-generation) §7. Navigation then
 uses either flow fields toward a target or precomputed multi-route graphs
 ([Navigation](navigation-design.md)).
 
+`EventCaveStart` lays a cave across the map and scrolls it left. `pkg/cave` gives
+each column its ceiling and floor rows from the seed in integer arithmetic, so every
+instance and platform lays the same rock: a gap between `min_gap` and `max_gap`
+rows, walls of at least `min_wall`, a channel snaking at most `swing` rows off the
+middle with knots every `wavelength` columns, `detail` rows of rough rock, opening
+from a centred mouth over `ramp` columns. Each step, at most one a tick, moves
+every shared wall a column left, drops what leaves the map and lays the column
+entering it. What the rock arrives on goes a column left and a row toward its
+column's nearer opening, or straight left: a cursor by a placement, so the rock
+only pushes. A cursor the rock presses against the left edge is crushed
+(`EventCursorCrushed`), then squeezed out wherever there is room; a loose glyph is
+removed as scenery. `EventCaveStop` leaves the rock where it stands.
+
 `EnvironmentSystem` owns map-wide gameplay effects rather than rendering
 post-process effects. Its first effect is wind: `EventWindStart` supplies force,
 direction in terminal-plane radians, and duration; a later valid start replaces
@@ -452,9 +465,9 @@ it spawns and arms the cursor before opening `main`.
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `simon` is a memory game, and `warden` is blank's arena with a species
-its own behavior program defines. Each entry has a short `description` for
-scenario listings.
+scaffold, `simon` is a memory game, `warden` is blank's arena with a species its
+own behavior program defines, and `vanguard` is a side-scroller. Each entry has a
+short `description` for scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its
@@ -479,6 +492,13 @@ drops it back to homing. A kill shows "Warden down" and beams another in three
 seconds later; one that outlives its 35 seconds is replaced a second later. Its
 program, `behavior/warden.toml`, is the template for a species of one's own
 ([FSM reference](fsm-reference.md#behavior-programs)).
+
+`vanguard` flies the cursor through a cave (§9) scrolling left at eight columns a
+second, its channel seven to fifteen rows high and never more than nine rows off
+the middle, so a tall terminal climbs no steeper. Glyphs drift left behind the
+rock at three depths, the gun fires right only, and drains with their fusions,
+nuggets and gold are off. A crush stops the cave, says so, and starts the game
+over two seconds later.
 
 ## 11. System inventory
 

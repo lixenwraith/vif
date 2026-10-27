@@ -36,6 +36,7 @@ coordinator's, sent under the same bounds and held in memory. Installed layout:
 │   ├── main/              # optional override: a copy of internal/asset/scenario/
 │   ├── blank/scenario.toml
 │   ├── simon/scenario.toml
+│   ├── vanguard/scenario.toml
 │   ├── td/
 │   │   ├── scenario.toml
 │   │   ├── td_macros.toml # macro library

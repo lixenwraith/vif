@@ -13,7 +13,7 @@ import (
 func TestTracerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
-	weapon.fireTracers(cursor, 5, 5, &component.WeaponSpecs[component.WeaponGun], 1, component.PalettePositive)
+	weapon.fireTracers(cursor, 5, 5, component.WeaponSpecs[component.WeaponGun].Directions, 1, component.PalettePositive)
 	w.Resources.Event.Queue.Consume() // Spawn sound.
 
 	target := w.CreateEntity(core.DomainShared)
@@ -79,7 +79,7 @@ func TestGunLanesFollowItsCharges(t *testing.T) {
 		for _, e := range w.Components.Tracer.GetAllEntities() {
 			w.DestroyEntity(e)
 		}
-		weapon.fireTracers(cursor, 5, 5, spec, charges, component.PalettePositive)
+		weapon.fireTracers(cursor, 5, 5, spec.Directions, charges, component.PalettePositive)
 		lanes := tracerLanes(charges)
 		rows, cols := map[int]bool{}, map[int]bool{}
 		for _, e := range w.Components.Tracer.Entities() {
@@ -98,6 +98,36 @@ func TestGunLanesFollowItsCharges(t *testing.T) {
 				t.Fatalf("%d charges: lane %d missing from rows %v or columns %v", charges, lane, rows, cols)
 			}
 		}
+	}
+}
+
+// TestAnAimedGunFiresOnlyAlongItsAim: an aim request narrows the local cursor's
+// volley to its cardinals, and a zero aim gives the gun back its own four.
+func TestAnAimedGunFiresOnlyAlongItsAim(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
+	volley := func(aim component.TracerDirection) (right, other int) {
+		for _, e := range w.Components.Tracer.GetAllEntities() {
+			w.DestroyEntity(e)
+		}
+		weapon.HandleEvent(event.GameEvent{Type: event.EventGunAimRequest, Payload: &event.GunAimRequestPayload{Directions: aim}})
+		weaponComp.Cooldown[component.WeaponGun] = 0
+		weapon.fireLoadout(cursor, weaponComp, weapon.orbsOf(cursor))
+		for _, e := range w.Components.Tracer.Entities() {
+			if k, _ := w.Components.Kinetic.GetComponent(e); k.VelX > 0 {
+				right++
+			} else {
+				other++
+			}
+		}
+		return right, other
+	}
+	if right, other := volley(component.TracerRight); right != 1 || other != 0 {
+		t.Fatalf("aimed right: %d right and %d other tracers, want 1 and 0", right, other)
+	}
+	if right, other := volley(0); right != 1 || other != 3 {
+		t.Fatalf("aim cleared: %d right and %d other tracers, want 1 and 3", right, other)
 	}
 }
 

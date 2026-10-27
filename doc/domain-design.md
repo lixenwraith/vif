@@ -254,7 +254,8 @@ re-derive them on every instance, so sending them would apply the same wind
 twice. Each instance applies the sampled wind to its own Player drains as well as
 the predicted Shared species. A future player-originated wind trigger needs a
 separate Bus artifact rather than changing these derived events into wire data.
-`EventDriftStart` and `EventDriftCancel` follow the same rule.
+`EventDriftStart` and `EventDriftCancel` follow the same rule, as do `EventCaveStart`
+and `EventCaveStop`.
 
 ### D-11 — The host is exact; guests converge
 
@@ -400,7 +401,7 @@ Declared system carriers are:
 
 | System | Private Shared state |
 |---|---|
-| `wall` | maze generator position |
+| `wall` | maze and cave seed generator position; the cave's profile, period, carried phase and columns |
 | `adaptation` | route weights, sample pool, consumer head, fallback rotation |
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |

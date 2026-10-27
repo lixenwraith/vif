@@ -110,9 +110,13 @@ It is the contract, not a suggestion.
 
 ## Agents
 
-- Spin off few agents, one at a time rather than a fan-out, and only for work one
-  context cannot hold. The account quota may run out and, which stops every agent
-  in flight at once.
+- Spin off few agents, and only for work one context cannot hold. The account
+  quota may run out, which stops every agent in flight at once.
+- Agents run in parallel only on finely defined scopes that cannot conflict in
+  commits: each brief names the files its agent owns, disjoint from every other
+  agent's, and the agent touches nothing else. Generated files and shared docs
+  (`doc/term-index.md`, `doc/todo.md`) stay with the parent, which commits each
+  agent's work in turn on the task's one branch.
 - An agent writes what it finds to a file as it goes, one section per step, under
   the scratchpad or `doc/`, so an interrupt costs a step and not the task; the
   parent reads those files rather than waiting for a final report, and resumes

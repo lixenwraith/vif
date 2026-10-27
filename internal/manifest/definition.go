@@ -135,7 +135,7 @@ var Systems = []SystemDef{
 	// --- Composite / Structure ---
 	{Name: "composite", Constructor: "NewCompositeSystem", Domain: "shared"}, // owns the shared header and member contract
 	{Name: "wall", Constructor: "NewWallSystem", Domain: "shared", Snapshot: "state",
-		Requires: []string{"composite"}, Optional: []string{"navigation"}}, // holds the maze generator's position, which is not a vmath stream             // shared walls push occupants from both domains (D-12)
+		Requires: []string{"composite"}, Optional: []string{"navigation"}}, // carries its generator, not a vmath stream, and the cave; pushes both domains (D-12)
 	{Name: "tower", Constructor: "NewTowerSystem", Domain: "shared", Requires: []string{"composite"}, Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
 	{Name: "gateway", Constructor: "NewGatewaySystem", Domain: "shared", Requires: []string{"navigation"}, Optional: []string{"eye", "snake"}},    // shared route anchor; gated species are optional
 

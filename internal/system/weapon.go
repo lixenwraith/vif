@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -124,6 +125,7 @@ func (s *WeaponSystem) EventTypes() []event.EventType {
 		event.EventWeaponRemoveRequest,
 		event.EventEnergyCrossedZero,
 		event.EventWeaponFireRequest,
+		event.EventGunAimRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -200,6 +202,13 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 				s.fire(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
+			}
+		}
+
+	case event.EventGunAimRequest:
+		if payload, ok := ev.Payload.(*event.GunAimRequestPayload); ok {
+			if weaponComp, ok := s.world.Components.Weapon.GetPtr(s.world.Resources.Player.Entity); ok {
+				weaponComp.Aim = payload.Directions & component.TracerAllDirections
 			}
 		}
 	}
@@ -798,7 +807,7 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 			// A sustained ray is holdRays's; main fire leaves it alone
 			fired = !(capped && spec.Sustained) && len(assignments) > 0 && s.fireRay(cursor, orbs[wt], charges)
 		case component.DeliveryTracer:
-			fired = s.fireTracers(cursor, x, y, spec, charges, s.palette(cursor))
+			fired = s.fireTracers(cursor, x, y, cmp.Or(weaponComp.Aim, spec.Directions), charges, s.palette(cursor))
 		}
 		if !fired {
 			continue
@@ -1089,10 +1098,10 @@ func (s *WeaponSystem) clearSlot(slot uint8) {
 	s.statOrbs.Store(slot, 0)
 }
 
-// fireTracers launches the gun's volley from a cell: one streak per direction the
-// kind covers and per lane its charges add, skipping a lane that starts in a wall
-// or off the map. Every tracer is this instance's own (D-6).
-func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, spec *component.WeaponSpec, charges int, palette component.WeaponPalette) bool {
+// fireTracers launches the gun's volley from a cell: one streak per direction it
+// covers and per lane its charges add, skipping a lane that starts in a wall or off
+// the map. Every tracer is this instance's own (D-6).
+func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, directions component.TracerDirection, charges int, palette component.WeaponPalette) bool {
 	config := s.world.Resources.Config
 	minFlightX, maxFlightX := tracerFlightBounds(config.MapWidth)
 	minFlightY, maxFlightY := tracerFlightBounds(config.MapHeight)
@@ -1102,7 +1111,7 @@ func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, spe
 	for _, lane := range tracerLanes(charges) {
 		off := float64(lane)
 		for _, d := range component.TracerCardinals {
-			if spec.Directions&d == 0 {
+			if directions&d == 0 {
 				continue
 			}
 			var vx, vy, sx, sy, tx, ty float64

@@ -741,12 +741,20 @@ PvP: a hit on a remote cursor crosses as its impact and the victim's owner appli
 
 Arc reward (an arc pays the lightning's full energy reward; halve it if the cap doubles the rod's income too far), the sustained ray's scale (three damage per covered member per immunity window, continuously), the burn figures and whether the charged pulse's stun should shorten to offset them, `LightningArcRange`, `WeaponStreamInterval` and `TurretStream`, the gun's lane offsets at two charges, `LightningZapDuration` for an arc, and a burn tint on species renderers, which show only the hit flash per tick now.
 
-### Direct the gun by scenario
+### Grow the gun's aim by upgrade
 
-- Priority: P3
-- Affected files: `internal/component/weapon.go`, `internal/system/weapon.go`, `internal/fsm`
+- Priority: P2
+- Affected files: `internal/component/weapon.go`, `internal/system/weapon.go`,
+  `internal/system/loot.go`, `internal/event/payload.go`
 
-`WeaponSpec.Directions` is a cardinal mask the spawn already reads; a side-scroller needs a level to set one direction, which waits on scenario authoring.
+`EventGunAimRequest` sets the whole aim, and each gun charge adds a lane to every
+aimed cardinal at once. A side-scroller's upgrades add a direction, or shots ahead:
+- An additive grant that ORs a cardinal into `WeaponComponent.Aim`, a drop's reward
+  pushed to the owner as a weapon reward's `EventWeaponAddRequest` is (D-13).
+- Lanes per cardinal: `tracerLanes(charges)` fans every aimed cardinal alike, so
+  more shots ahead than to the sides needs a count per cardinal.
+- More than three shots: `WeaponMaxChargeGun` and the lane table stop at the centre
+  and its two sides.
 
 ### Move storm's green circle onto a disruptor mount
 
@@ -868,6 +876,16 @@ may want some of them carried with the nearest layer. Decay and blossom change a
 glyph's level, so a glyph they touch changes layer and speed mid-flight. In 256
 colours normal and bright glyphs share one console entry, so only the dark layer
 reads as farther; a distinct attribute for bright would separate the three.
+
+### Keep a scrolling cave through a resize and a level setup
+
+- Priority: P3
+- Affected files: `internal/system/wall.go`
+
+A cave lays the columns a wider map brings and reshapes those to come when a new
+height still holds its profile, but the rock it laid keeps the old height, and a
+level setup that clears the walls leaves it scrolling in from the right edge of an
+empty map. Lay the map's columns again on either, or stop the cave with its walls.
 
 ## Rendering
 
