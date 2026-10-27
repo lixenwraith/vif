@@ -16,9 +16,9 @@ min_width = 80
 min_height = 18
 
 # The raider types, one program each over the one cycle in macros.toml, so each
-# keeps its own kill counter and behavior.<type>.* rows: eight to a stone art, two
-# of each of four tiers, smallest first. RaidSpawn picks among the cave's eight and
-# the U drop names them all.
+# keeps its own kill counter and behavior.<type>.* rows: eight to a stone art, its
+# tier, two of each of four ranks, smallest first. RaidSpawn picks among the cave's
+# two of the rank the ramp has reached, and the U drop names them all.
 [behaviors]
 # Strata: violet vermin
 scarab = { file = "behavior/strata/scarab.toml" }
@@ -64,6 +64,10 @@ disabled_systems = ["nugget", "gold", "drain", "fuse"]
 
 [regions.raid]
 initial = "RaidWait"
+background = true
+
+[regions.ramp]
+initial = "RaidRank1"
 background = true
 
 [regions.player]
@@ -119,10 +123,10 @@ transitions = [
 # keeps at its thinnest. The request names the map's width, a column past its right
 # edge, and the spawn stands each body flush against that edge whatever its size;
 # it searches the whole map from there, so rock on that row sends it to the nearest
-# open rows. The type is drawn among the cave's eight, each equally likely: the
-# cave's seed modulo four is its stone art, as CaveStart's pick takes it, and eight
-# times that the first of its types in the pick's list, which runs the arts in
-# CaveStart's order.
+# open rows. The type is drawn between the two of the ramp's rank in the cave's
+# eight: the cave's seed modulo four is its stone art, as CaveStart's pick takes it,
+# eight times that the first of its types in the pick's list, which runs the arts
+# in CaveStart's order, and twice the rank the first of that rank's pair.
 [states.RaidWait]
 parent = "Raid"
 transitions = [
@@ -144,11 +148,14 @@ on_enter = [
     { action = "IncrementVar", payload = { name = "raid_y", delta = 2 } },
     { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
     { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 1048575, seed_var = "raid_type_seed", index_var = "raid_index" } },
-    { action = "ModuloVar", payload = { name = "raid_type", delta = 8 } },
+    { action = "ModuloVar", payload = { name = "raid_type", delta = 2 } },
     { action = "CopyVar", payload = { name = "raid_cave", source_var = "cave_seed" } },
     { action = "ModuloVar", payload = { name = "raid_cave", delta = 4 } },
     { action = "MultiplyVar", payload = { name = "raid_cave", delta = 8 } },
     { action = "IncrementVar", payload = { name = "raid_type", source_var = "raid_cave" } },
+    { action = "CopyVar", payload = { name = "raid_pair", source_var = "raid_rank" } },
+    { action = "MultiplyVar", payload = { name = "raid_pair", delta = 2 } },
+    { action = "IncrementVar", payload = { name = "raid_type", source_var = "raid_pair" } },
 ]
 transitions = [
     { trigger = "Tick", target = "RaidWait", actions = [
@@ -160,6 +167,46 @@ transitions = [
             "drone", "shard", "saucer", "trooper", "jelly", "squid", "djinn", "robot",
         ] } },
     ] },
+]
+
+# --- Ramp ---
+
+# The raid climbs its cave's tier: three of the first rank shot down bring on the
+# second, and so on to the fourth, whose third kill exhausts the tier. Each rank
+# names its two types in every cave, in the order RaidSpawn's pick lists them.
+[states.RaidRank1]
+macro = "RaidRank"
+rank = 0
+next = "RaidRank2"
+names = ["scarab", "crawler", "gremlin", "chomper", "hedgehog", "mouse", "drone", "shard"]
+
+[states.RaidRank2]
+macro = "RaidRank"
+rank = 1
+next = "RaidRank3"
+names = ["crab", "hornet", "imp", "slime", "frog", "hopper", "saucer", "trooper"]
+
+[states.RaidRank3]
+macro = "RaidRank"
+rank = 2
+next = "RaidRank4"
+names = ["spider", "mantis", "ghost", "skull", "bat", "puffer", "jelly", "squid"]
+
+[states.RaidRank4]
+macro = "RaidRank"
+rank = 3
+next = "RaidBoss"
+names = ["beetle", "scorpion", "wraith", "demon", "owl", "lynx", "djinn", "robot"]
+
+
+# The tier's boss stands here: for now a green strobe, and the climb starts over
+[states.RaidBoss]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 250 } },
+]
+transitions = [
+    { trigger = "Tick", target = "RaidRank1" },
 ]
 
 # --- Player ---
@@ -184,7 +231,7 @@ transitions = [
 # left. A level names the lanes, up to three, it fires along each cardinal, and a
 # gun at the last stays there. An instance installing the game mid-run puts its own
 # cursor on the path, with the level it carried. A crushed cursor is defeated, so
-# the crush and every other defeat start the game over at once.
+# the crush ends the game first, with its own message, and any other defeat after.
 [states.PlayerActive]
 parent = "Root"
 on_enter = [
@@ -202,19 +249,42 @@ on_enter = [
 ]
 transitions = [
     { trigger = "EventCursorCrushed", target = "PlayerCrushed" },
-    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+    { trigger = "Tick", target = "PlayerDied", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# The new game opens with what ended the last
+# A lost game freezes the rock and the drift under a red strobe as long as the
+# default scenario's, then starts over; the reset clears the status bar, so the
+# new game opens with what ended the last
+[states.PlayerDown]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCaveStop" },
+    { action = "EmitEvent", event = "EventDriftCancel" },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },
+]
+
 [states.PlayerCrushed]
-parent = "Root"
-on_enter = [
-    { action = "EmitEvent", event = "EventGameResetRequest" },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Crushed against the edge" } },
+parent = "PlayerDown"
+transitions = [
+    { trigger = "Tick", target = "PlayerCrushedReset", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
 ]
 
-[states.PlayerReset]
+[states.PlayerDied]
+parent = "PlayerDown"
+transitions = [
+    { trigger = "Tick", target = "PlayerDiedReset", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
+]
+
+[states.PlayerCrushedReset]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventGameResetRequest" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Crushed Against The Edge!" } },
+]
+
+[states.PlayerDiedReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "You Died!" } },
 ]

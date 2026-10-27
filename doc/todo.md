@@ -22,35 +22,47 @@ from the existing ones, so the move inherits nothing new.
 
 ### Raiders
 
-Each stone art has its own eight raider types, two to each of four tiers, in one
-hue: strata violet vermin, cracked white haunts, moss orange animals, crystal
-orchid constructs. Every type invokes `RaiderTier1`..`RaiderTier4` in vanguard's
-`macros.toml` with its cave and its look, and `RaidSpawn` draws among the cave's
-eight; `sandbox/raider` shows them by cave over that cave's rock.
+Each stone art has its own eight raider types, its tier, two to each of four ranks,
+in one hue: strata violet vermin, cracked white haunts, moss orange animals, crystal
+orchid constructs. Every type invokes `RaiderRank1`..`RaiderRank4` in vanguard's
+`macros.toml` with its cave and its look; the `ramp` region climbs the ranks, three
+player kills a rank, and `RaidSpawn` draws between the cave's two of the rank
+reached; `sandbox/raider` shows them by cave over that cave's rock.
 
-#### Play the cave raiders and tune the tiers
+#### Play the cave raiders and tune the ranks
 
 - Priority: P1
-- Affected files: `wad/scenario/vanguard/macros.toml` (`RaiderTier1`..`4`, the cave
-  colours), `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`),
+- Affected files: `wad/scenario/vanguard/macros.toml` (`RaiderRank1`..`4`, the cave
+  colours), `wad/scenario/vanguard/scenario.toml` (`RaidRank1`..`4`, `RaidSpawn`),
   `wad/scenario/vanguard/behavior/`, `doc/gameplay.md` §10
 - Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression),
   [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
 
-The tiers' numbers are starting values: hit points 8, 16, 28 and 44, hit points
-times chase speed 96, 144, 168 and 198, each tier's lock, charge and contact cost
-rising with it. Play each cave against a gun of one shot forward and retune the tier
-macros, which every cave shares; a cave's colours are its `<Cave>Fg` macros there
-and a type's look its own file. The raid draws its cave's eight evenly, so a
-fourth-tier type comes as often as a first; weighting the draw, or opening tiers as
-a game goes on, is the next lever if the mix plays flat. Colours against the rock
-are a first pick to settle in play. On a console a raider is one colour, and two
-caves' raiders share an entry with their rock's hued points: the moss raiders' brown (3) is
-the FreeBSD console's mustard, the colour of its moss there, while on VGA the moss
-is bright yellow (11), so neither entry clears both palettes and white (15) would;
-the crystal raiders' magenta (13) meets the amethyst points, which are sparse. Keep
-every type within 5×3 until the position work gives each footprint its own
-navigation grid.
+The ranks' numbers are starting values: hit points 8, 10, 12 and 14 and mass 2.0,
+2.4, 2.9 and 3.5, a fifth more a rank, each rank's lock, charge and contact cost
+rising with it and its chase slowing. A kill drops a `U`, so the gun is near its
+ninth level by the fourth rank and climbs faster than the hit points do; play each
+cave and retune the rank macros, which every cave shares, or the kills a rank takes
+(`RaidRank`'s `gte 3`). A cave's colours are its `<Cave>Fg` macros there and a
+type's look its own file. Colours against the rock are a first pick to settle in
+play. On a console a raider is one colour, and two caves' raiders share an entry
+with their rock's hued points: the moss raiders' brown (3) is the FreeBSD console's
+mustard, the colour of its moss there, while on VGA the moss is bright yellow (11),
+so neither entry clears both palettes and white (15) would; the crystal raiders'
+magenta (13) meets the amethyst points, which are sparse. Keep every type within
+5×3 until the position work gives each footprint its own navigation grid.
+
+#### Put the tier's boss where the raid's climb ends
+
+- Priority: P1
+- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`), `doc/gameplay.md`
+  §10
+- Guide: [Script the boss approach](#script-the-boss-approach-and-play-its-stop)
+
+Three kills of the fourth rank exhaust the cave's tier and enter `RaidBoss`, a
+placeholder that strobes green and starts the climb over at the first rank while
+the raid keeps spawning. The boss encounter replaces it: the approach below, a boss
+of the tier's own, and what beating it opens, the next tier or the same climb again.
 
 ### Scenery
 

@@ -1,7 +1,7 @@
-# The ghost: its hem rippling below its hood. One of the cracked cave's third-tier
-# raiders: RaiderTier3 in ../../macros.toml gives its stats and cycle and the cave
+# The ghost: its hem rippling below its hood. One of the cracked cave's third-rank
+# raiders: RaiderRank3 in ../../macros.toml gives its stats and cycle and the cave
 # its colours.
-macro = "RaiderTier3"
+macro = "RaiderRank3"
 theme = "Cracked"
 width = 5
 height = 3

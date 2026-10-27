@@ -1,7 +1,8 @@
-# Vanguard's block: the raiders' one attack cycle, the four difficulty tiers that
-# time it and weigh the body flying it, and the four caves' raider colours. Every
-# raider type's program invokes its tier with its cave and its look, and the tier
-# invokes Raider. doc/toml-macros.md describes definitions and invocations.
+# Vanguard's block: the raiders' one attack cycle, the four difficulty ranks that
+# time it and weigh the body flying it, the four caves' raider colours and the
+# raid's count of kills by rank. Every raider type's program invokes its rank with
+# its cave and its look, and the rank invokes Raider. doc/toml-macros.md describes
+# definitions and invocations.
 
 # The swarm's machine as a raider flies it. It chases its target for chase_ms, then
 # locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
@@ -74,8 +75,8 @@ body = { from = ["Lock", "Charge", "Beam", "Brake"], guard = "Stunned", target =
 # --- A raider type ---
 
 # One raider type: its cave's palette and console colour, its own look, and the
-# stats and cycle timings its tier gives. A program invokes RaiderTier1..4, never
-# this, so every theme's tier flies alike and only looks differ.
+# stats and cycle timings its rank gives. A program invokes RaiderRank1..4, never
+# this, so every theme's rank flies alike and only looks differ.
 [macros.Raider]
 doc = "A raider program: the attack cycle over a body of the given look and stats."
 params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", hp = "int", mass = "float", contact = "table", physics = "table", chase_ms = "int", lock_ms = "int", charge_ms = "int", beam_ms = "int" }
@@ -103,19 +104,19 @@ fg = { macro = "${theme}Fg" }
 fg256 = { macro = "${theme}Fg256" }
 bg256 = 0
 
-# --- Tiers ---
+# --- Ranks ---
 
-# Each cave holds two raider types of each tier, the same four tiers in every cave.
-# A tier up has more hit points (8, 16, 28, 44), a heavier body and a costlier touch,
+# Each cave's eight raider types are its tier, two to each of four ranks, the same
+# ranks in every cave. A rank up has a fifth more hit points (8, 10, 12, 14) and
+# mass (2.0, 2.4, 2.9, 3.5), so a shot knocks it back less, and a costlier touch,
 # and chases slower on a longer warning and a slower charge; the first darts as the
-# snake does. Hit points times chase speed, the raid's measure of threat, runs 96,
-# 144, 168 and 198.
+# snake does, its mass the swarm's.
 
-[macros.RaiderTier1]
-doc = "A first-tier raider: small, quick and fragile, on a short warning."
+[macros.RaiderRank1]
+doc = "A first-rank raider: small, quick and fragile, on a short warning."
 params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
 
-[macros.RaiderTier1.body]
+[macros.RaiderRank1.body]
 macro = "Raider"
 theme = "${theme}"
 width = "${width}"
@@ -124,7 +125,7 @@ header = "${header}"
 pattern_ms = "${pattern_ms}"
 frames = "${frames}"
 hp = 8
-mass = 1.0
+mass = 2.0
 contact = { energy = 600, heat = 6 }
 physics = { speed = 12.0, accel = 42.0, drag = 0.94, arrival_radius = 2.0, arrival_drag = 2.0, dead_zone = 0.5 }
 chase_ms = 3000
@@ -132,11 +133,11 @@ lock_ms = 1200
 charge_ms = 500
 beam_ms = 300
 
-[macros.RaiderTier2]
-doc = "A second-tier raider: twice the first's hit points, a little slower."
+[macros.RaiderRank2]
+doc = "A second-rank raider: a fifth more hit points than the first, a little slower."
 params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
 
-[macros.RaiderTier2.body]
+[macros.RaiderRank2.body]
 macro = "Raider"
 theme = "${theme}"
 width = "${width}"
@@ -144,8 +145,8 @@ height = "${height}"
 header = "${header}"
 pattern_ms = "${pattern_ms}"
 frames = "${frames}"
-hp = 16
-mass = 1.5
+hp = 10
+mass = 2.4
 contact = { energy = 900, heat = 9 }
 physics = { speed = 9.0, accel = 24.0, drag = 1.2, arrival_radius = 2.0, arrival_drag = 2.0, dead_zone = 0.5 }
 chase_ms = 3500
@@ -153,11 +154,11 @@ lock_ms = 1400
 charge_ms = 600
 beam_ms = 350
 
-[macros.RaiderTier3]
-doc = "A third-tier raider: a heavier body on a steadier chase."
+[macros.RaiderRank3]
+doc = "A third-rank raider: a heavier body on a steadier chase."
 params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
 
-[macros.RaiderTier3.body]
+[macros.RaiderRank3.body]
 macro = "Raider"
 theme = "${theme}"
 width = "${width}"
@@ -165,8 +166,8 @@ height = "${height}"
 header = "${header}"
 pattern_ms = "${pattern_ms}"
 frames = "${frames}"
-hp = 28
-mass = 2.5
+hp = 12
+mass = 2.9
 contact = { energy = 1200, heat = 12 }
 physics = { speed = 6.0, accel = 10.0, drag = 1.6, arrival_radius = 2.5, arrival_drag = 2.5, dead_zone = 0.5 }
 chase_ms = 4000
@@ -174,11 +175,11 @@ lock_ms = 1600
 charge_ms = 700
 beam_ms = 450
 
-[macros.RaiderTier4]
-doc = "A fourth-tier raider: slow and armoured, its touch the costliest."
+[macros.RaiderRank4]
+doc = "A fourth-rank raider: slow and armoured, its touch the costliest."
 params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
 
-[macros.RaiderTier4.body]
+[macros.RaiderRank4.body]
 macro = "Raider"
 theme = "${theme}"
 width = "${width}"
@@ -186,7 +187,7 @@ height = "${height}"
 header = "${header}"
 pattern_ms = "${pattern_ms}"
 frames = "${frames}"
-hp = 44
+hp = 14
 mass = 3.5
 contact = { energy = 1500, heat = 15 }
 physics = { speed = 4.5, accel = 6.0, drag = 2.0, arrival_radius = 3.0, arrival_drag = 3.0, dead_zone = 0.5 }
@@ -262,3 +263,26 @@ body = [
 [macros.CrystalFg256]
 doc = "The crystal cave's raider console colour."
 body = 13                           # bright magenta
+
+# --- The raid's ramp ---
+
+# One rank of the raid's climb: while it holds, the raid spawns the rank's two
+# types, and a player's third kill among them moves on to the next state. A kill of
+# another rank's raider still flying counts for nothing here.
+[macros.RaidRank]
+doc = "A rank of the raid: spawns its two types until players shoot down three of them."
+params = { rank = "int", names = "array", next = "string" }
+
+[macros.RaidRank.body]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "raid_rank", value = "${rank}" } },
+    { action = "SetVar", payload = { name = "raid_kills", value = 0 } },
+]
+transitions = [
+    { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
+        { name = "PayloadSpeciesIn", args = { field = "species", names = "${names}" } },
+        { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
+    ] }, actions = [{ action = "IncrementVar", payload = { name = "raid_kills" } }] },
+    { trigger = "Tick", target = "${next}", guard = "VarCompare", guard_args = { var = "raid_kills", op = "gte", value = 3 } },
+]
