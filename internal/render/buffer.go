@@ -37,6 +37,7 @@ type RenderBuffer struct {
 	void         voidRegion
 	finalizeFunc func(*RenderBuffer)
 	console      *Console // quantizes each frame for a text console; nil keeps xterm's 256
+	exact        Rect     // cells the console leaves as drawn this frame
 }
 
 // NewRenderBuffer creates a buffer with the specified dimensions
@@ -63,6 +64,10 @@ func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuf
 // SetConsole makes every frame finish on a text console's palette; nil turns that off
 func (b *RenderBuffer) SetConsole(c *Console) { b.console = c }
 
+// SetExact keeps r out of this frame's console pass: its RGB goes out as xterm's cube,
+// which a 256-color emulator shows as it is, and its palette entries as they are
+func (b *RenderBuffer) SetExact(r Rect) { b.exact = r.Intersect(b.Bounds()) }
+
 // Resize adjusts buffer dimensions, reallocates only if capacity insufficient
 func (b *RenderBuffer) Resize(width, height int) {
 	size := width * height
@@ -86,6 +91,7 @@ func (b *RenderBuffer) Resize(width, height int) {
 func (b *RenderBuffer) Clear() {
 	b.clip = b.Bounds()
 	b.void = voidRegion{}
+	b.exact = Rect{}
 
 	if len(b.cells) == 0 {
 		return
