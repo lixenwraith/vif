@@ -10,23 +10,22 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 ## Vanguard
 
-The side-scroller's first play test (2026-10-27) found it sound for a first
-iteration: its scroll reads as lag, its cave is narrow, its raiders are plain. The
-refinements lead, grouped by area so an agent can take a group, beside the items
-this task left and the navigation ones. Order: the machine's certain faults landed;
-the raider types' play test next; the position package last, in a session of its
-own. Until that lands, nothing here adds engine surface for rock or caves: a
-cave's shape stays in `pkg/cave` and its scenario, the rock behind
-`Positions.Rock()` and the wall system and renderers that read it, and a query a
-footprint needs is built by its caller from the existing ones, so the move inherits
-nothing new.
+The side-scroller's refinements after its first play test (2026-10-27) lead,
+grouped by area so an agent can take a group, beside the navigation items. The
+faster scroll, the jagged cave, the stone art, the raider types and the machine's
+certain faults have landed. Order now: the raider shortlist; the position package
+last, in a session of its own. Until that lands, nothing here adds engine surface
+for rock or caves: a cave's shape stays in `pkg/cave` and its scenario, the rock
+behind `Positions.Rock()` and the wall system and renderers that read it, and a
+query a footprint needs is built by its caller from the existing ones, so the move
+inherits nothing new.
 
 ### Raiders
 
 The prototype's look and the four raider types landed (invader, scarab, construct,
 storm eye: one program each over `RaiderStates` in vanguard's `macros.toml`, drawn
-at random by `RaidSpawn`, spawned directly with no fuse). What is left waits on a
-play test in the opened cave.
+at random by `RaidSpawn`, spawned directly with no fuse). The cave has opened;
+what is left is the shortlist and the numbers a play there settles.
 
 #### Play the raider types and settle the shortlist
 
@@ -52,7 +51,7 @@ the position work gives each footprint its own navigation grid.
 
 ### Gun and loot
 
-The gun path and the `U` this task added, moved from Combat.
+The gun path and vanguard's `U`, moved from Combat.
 
 #### Fan more than three gun lanes along a cardinal
 
@@ -128,8 +127,9 @@ entrances to grow for machines (2026-10-27). What a program would declare:
   ends, since rock scrolls under a beam as it does under a teleport.
 
 The beam is Shared, so the entering state's clock and probe must run alike on every
-instance and a capture mid-beam must restore them (`snapshot.Schema`); the drains'
-fusions stay as they are.
+instance and a capture mid-beam must restore them (`snapshot.Schema`). The entrance
+stays a beam, as a spawn out of nothing's is, while drains that fuse fly in as
+spirits (Lixen, 2026-10-27); the drains' fusions stay as they are.
 
 #### Count a group of programs
 
