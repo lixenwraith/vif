@@ -210,9 +210,9 @@ func writePrograms(t *testing.T, programs map[string]string) string {
 // against the game's verbs, so -check and a scenario change refuse it, naming its
 // place, before anything is torn down
 func TestAProgramThatDoesNotCompileFailsTheScenario(t *testing.T) {
-	nine := map[string]string{}
+	over := map[string]string{}
 	for i := range parameter.BehaviorProgramsMax + 1 {
-		nine[fmt.Sprintf("wisp%d", i)] = wisp
+		over[fmt.Sprintf("wisp%d", i)] = wisp
 	}
 	for name, tc := range map[string]struct {
 		programs map[string]string
@@ -220,7 +220,8 @@ func TestAProgramThatDoesNotCompileFailsTheScenario(t *testing.T) {
 	}{
 		"misspelt verb": {map[string]string{"wisp": strings.Replace(wisp, "Freeze", "Freez", 1)},
 			"scenario arena: program 'wisp': state 'Idle': on_update[0]: unknown sustained action 'Freez'"},
-		"nine programs": {nine, "scenario arena: 9 behavior programs, at most 8"},
+		"one program too many": {over, fmt.Sprintf("scenario arena: %d behavior programs, at most %d",
+			parameter.BehaviorProgramsMax+1, parameter.BehaviorProgramsMax)},
 	} {
 		if _, err := ValidateScenario(Options{Scenario: writePrograms(t, tc.programs)}); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: error %v, want %q", name, err, tc.want)
