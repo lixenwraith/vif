@@ -1,10 +1,14 @@
 package renderer
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
@@ -81,7 +85,8 @@ func TestShield256RimClosesOnEveryAxis(t *testing.T) {
 const consoleGlyphs = "·×÷°±•‼←↑→↓≈≡≤≥─│┌┐└┘├┤┬┴┼═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬█░▒■▲▶▼◀♦"
 
 // TestConsoleGlyphsAreInEveryConsoleFont: a console draws a glyph its font lacks as '#' or a
-// replacement mark, so everything a 256-colour path draws is ASCII or in consoleGlyphs.
+// replacement mark, so everything a 256-colour path draws is ASCII or in consoleGlyphs: the
+// code's tables, and the shipped scenarios, whose programs' frames and messages draw too.
 func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
 	t.Parallel()
 	glyphs := []rune{visual.MissileTrailChar256, visual.OrbFullChar256, visual.HealthBarChar, parameter.OverlayPinMarker256}
@@ -126,4 +131,63 @@ func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
 			t.Errorf("%q is missing from some console font", r)
 		}
 	}
+	for path, runes := range shippedScenarioRunes(t) {
+		for _, r := range runes {
+			if !strings.ContainsRune(consoleGlyphs, r) {
+				t.Errorf("%s: %q is missing from some console font", path, r)
+			}
+		}
+	}
+}
+
+// shippedScenarioRunes is each shipped scenario file's non-ASCII runes in its string
+// values, which hold a program's frames and every message; a key or a comment draws
+// nothing, and a macro's body is a string like any other.
+func shippedScenarioRunes(t *testing.T) map[string][]rune {
+	t.Helper()
+	found := map[string][]rune{}
+	var walk func(path string, v any)
+	walk = func(path string, v any) {
+		switch v := v.(type) {
+		case string:
+			for _, r := range v {
+				if r > '~' && !strings.ContainsRune(string(found[path]), r) {
+					found[path] = append(found[path], r)
+				}
+			}
+		case []any:
+			for _, e := range v {
+				walk(path, e)
+			}
+		case []map[string]any:
+			for _, e := range v {
+				walk(path, e)
+			}
+		case map[string]any:
+			for _, e := range v {
+				walk(path, e)
+			}
+		}
+	}
+	for _, root := range []string{"../../../wad/scenario", "../../asset/scenario"} {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || filepath.Ext(path) != ".toml" {
+				return err
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			doc, err := toml.NewParser(src).Parse()
+			if err != nil {
+				return err
+			}
+			walk(path, doc)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return found
 }

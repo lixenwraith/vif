@@ -3,12 +3,12 @@
 # doc/toml-macros.md describes definitions and invocations.
 
 # The swarm's machine as a raider flies it. It chases its target for chase_ms, then
-# locks onto the cell it saw for lock_ms under a telegraph. Along a clear line it
-# charges that cell over charge_ms; behind rock it beams to the nearest place by its
-# target and lands as the beam_ms ends, beside any rock that came over the landing
-# meanwhile; with no room anywhere it brakes where it stands. Rock pushes it as it
-# pushes the cursor, enraged or not. A program names Chase its initial state and
-# adds RaiderStun to its globals.
+# locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
+# way it charges that cell over charge_ms; behind rock it beams to the nearest place
+# by that cell and lands as the beam_ms ends, beside any rock that came over the
+# landing meanwhile; with no room anywhere it brakes where it stands. Rock pushes it
+# as it pushes the cursor, enraged or not. A program names Chase its initial state
+# and adds RaiderStun to its globals.
 [macros.RaiderStates]
 doc = "The raider's chase, lock, charge, beam and brake, timed per type."
 params = { chase_ms = "int", lock_ms = "int", charge_ms = "int", beam_ms = "int" }
@@ -19,14 +19,16 @@ duration_ms = "${chase_ms}"
 on_update = [{ action = "Home" }]
 transitions = [{ trigger = "Timeout", target = "Lock", fallback = { retry_ms = 200 } }]
 
+# The swarm's charge line pulses toward the stored cell as the lock ends, so a
+# player sees where the charge goes before it leaves
 [macros.RaiderStates.body.Lock]
 duration_ms = "${lock_ms}"
-flags = ["Enraged"]
+flags = ["Enraged", "ChargeLine"]
 probe = "ResolveTarget"
 on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]
 on_exit = [{ action = "CancelTelegraph" }]
-transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight" }, "Beam", "Brake"] }]
+transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight", guard_args = { to = "stored" } }, "Beam", "Brake"] }]
 
 # Arrives on the stored cell as the entry ends; a wall ends it in the step that
 # meets it, so the bounce stands
@@ -39,13 +41,17 @@ transitions = [
     { trigger = "AfterTick", guard = "HitWall", target = "Brake" },
 ]
 
-# The line runs from wherever the raider stands, so rock carrying it bends the
-# beam. The landing is the timeout's, so a stun that ends the beam moves nothing,
-# and Teleport looks for room again as it lands.
+# Lands by the cell the lock stored, as the swarm's teleport does, so moving
+# during the countdown dodges the beam as it does the charge, and in a session the
+# beam keeps to the player the lock marked. The line runs from wherever the raider
+# stands, so rock carrying it bends the beam. The landing is the timeout's, so a
+# stun that ends the beam moves nothing, and Teleport looks for room again as it
+# lands.
 [macros.RaiderStates.body.Beam]
 duration_ms = "${beam_ms}"
 flags = ["Enraged", "Beam"]
 probe = "FindLanding"
+probe_args = { to = "stored" }
 on_enter = [{ action = "StoreTarget" }]
 on_update = [{ action = "Freeze" }]
 transitions = [{ trigger = "Timeout", target = "Brake", actions = [{ action = "Teleport" }] }]

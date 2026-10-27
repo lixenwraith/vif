@@ -13,9 +13,9 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 The side-scroller's first play test (2026-10-27) found it sound for a first
 iteration: its scroll reads as lag, its cave is narrow, its raiders are plain. The
 refinements lead, grouped by area so an agent can take a group, beside the items
-this task left and the navigation ones. Order: the machine's certain faults first;
-the raider types' play test after them; the position package last, in a session of
-its own. Until that lands, nothing here adds engine surface for rock or caves: a
+this task left and the navigation ones. Order: the machine's certain faults landed;
+the raider types' play test next; the position package last, in a session of its
+own. Until that lands, nothing here adds engine surface for rock or caves: a
 cave's shape stays in `pkg/cave` and its scenario, the rock behind
 `Positions.Rock()` and the wall system and renderers that read it, and a query a
 footprint needs is built by its caller from the existing ones, so the move inherits
@@ -41,8 +41,8 @@ the eye types balance theirs (`parameter.EyeTypeTable`): the invader 12 at the
 swarm's 8, the scarab 8 at the snake's 12, the construct and the storm eye 48 at
 the drain's and the quasar's 2, the slow two carrying their threat in a long lock
 and charge. Play them at the faster scroll and in the jagged cave, against a gun of
-one shot forward, and retune hit points, lock and charge per type; the speeds can
-only be the four homing rows until a prototype tunes its own (machine follow-ups).
+one shot forward, and retune hit points, lock and charge per type, and its speed,
+acceleration and drag in its `[prototype.physics]`.
 Candidates beside them, from `sandbox/swarm` by ID: Interceptor (1) and Bat-Wing
 (12) for their wings, Chevron (18) mirrored to `<<<<` for a fast type, Hover-Tank
 (7), and the flame and frost eyes; `BehaviorProgramsMax` (8) holds four more. The
@@ -93,95 +93,82 @@ is the drop half of this for programs.
 
 ### Machine follow-ups
 
-A thread of its own, after the cave: the certain faults land before the raider
-types, the rest are for it to investigate.
+What vanguard met in the machine and is still open, its certain faults having
+landed. Open items elsewhere it meets:
+[payload field names at load](#check-payload-field-names-against-their-event-at-load),
+[a program spawning another](#let-a-program-spawn-another-program),
+[attack, beam and drop rows](#give-data-species-attack-beam-and-drop-rows-of-their-own),
+[loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario),
+[a seat's gun](#aim-a-seats-gun-as-the-scenario-aims-the-players),
+[a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
+and [spawn placement](#audit-spawn-placement-across-the-species).
 
-#### Investigate the machine's rough edges vanguard met
+#### Pick a payload value from a list
 
 - Priority: P0
 - Affected files: `internal/fsm/std` (`payload.go`, `args.go`, `action.go`),
-  `internal/fsm/loader.go`, `internal/event/payload.go`,
-  `internal/behavior/program.go`, `internal/system/behavior.go`
-  (`BehaviorVocabulary`), `internal/system/fuse.go`, `internal/system/wall.go`
-  (`startCave`), `internal/render/renderer/color256_test.go`
-- Guide: [Behavior machines §6](machine-design.md#6-data-species),
-  [FSM reference](fsm-reference.md#behavior-programs)
+  `internal/event/payload.go`, `internal/system/behavior.go`
+  (`BehaviorVocabulary`), `internal/system/wall.go` (`startCave`),
+  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`, `RaidSpawnAs`)
+- Guide: [FSM reference: Event Emission](fsm-reference.md#event-emission)
 
-Vanguard was the first scenario written on the machine design from the start. What
-it met, certain faults first. A guard names a species now (`PayloadSpeciesIn`,
-resolved at load), and the font atlas test reads the shipped scenarios.
+FSM variables are ints, so a value chosen from a list cannot be data: the cave's
+stone art is picked in Go (`startCave`, `Art[seed % len]`), and the raid takes an
+edge per raider type (`RaidSpawnAs`, invoked with `each`), the draw's range written
+beside the list. A list on `EmitEvent` for a payload field, its entry picked by an
+int from `payload_vars` and each entry resolved by the field's names as a single
+value is, would serve both.
 
-1. **Certain: an enum by number.** `EventLootSpawnRequest { type = 8 }` is
-   `LootUpgrade` by its Go value, and a reordered enum changes the drop silently;
-   a payload's species fields (`EventGeneticRegisterSpecies`,
-   `EventGatewaySpawnRequest`) are numbers too. A payload field taking a name
-   resolved at load, as `PayloadSpeciesIn` resolves a guard's, with a names table
-   for `LootType`.
-2. **Certain: line of sight from one cell.** `LineOfSight` tests the header's cell
-   (`HasLineOfSight`), so a charge starts through a slit the body cannot pass and
-   ends on the rock (`HitWall`, then `Brake`): part of why raiders stick to it.
-   `HasAreaLineOfSight` over the prototype's size fixes it; it centres its box, so
-   shift both ends by the header's offset from the centre rather than add a
-   `Position` method the position work would replace.
-3. **Certain: program glyphs unchecked on a console.** The console font test
-   (`TestConsoleGlyphsAreInEveryConsoleFont`) reads named Go tables, so a program's
-   glyphs reach a text console unchecked; warden's `▄▀` already fall outside the
-   console fonts, and its look has no console pair. Read every shipped program's
-   frames in that test as the atlas test reads the scenarios, and give warden a
-   look a console can draw.
-4. **Certain: no pick from a list.** FSM variables are ints, so a value chosen from
-   a list cannot be data: the cave's stone art is picked in Go (`startCave`,
-   `Art[seed % len]`), and the raid takes an edge per raider type (`RaidSpawnAs`,
-   invoked with `each`), the draw's range written beside the list. A list on a
-   request picked by an int from `payload_vars` would serve both.
-5. **Certain: a countdown too big for the cave.** `Telegraph` raises the splash
-   countdown, a digit 12 rows tall; where no slot around the body is free,
-   `FindPlacementAroundExclusion` returns its first slot clamped to the map, and
-   `calculateTimerOffset` ignores the not-found flag, so the digit draws over rock.
-   A countdown sized to its body, or none where none fits, would stay legible.
+#### Give a program an entrance of its own through the fuse
 
-To explore:
+- Priority: P1
+- Affected files: `internal/system/fuse.go` (`handleBehaviorFuse`,
+  `landBehavior`), `internal/behavior/program.go`, `internal/system/behavior.go`,
+  `internal/system/materialize.go`, `wad/scenario/vanguard/scenario.toml`
+- Guide: [Behavior machines §6](machine-design.md#6-data-species)
 
-6. Types over one cycle: a `[behaviors]` entry takes only `file`, so vanguard's
-   types share their states through a macro (`RaiderStates`), each program
-   invoking it as its `[states]` table; per-entry arguments expanded into the
-   file, or a prototype-only entry over another program, would read more directly.
-7. Counts over programs: the raid's cap reads `behavior.count`, every data species,
-   while raiders are the only ones; a prototype `group` with
-   `behavior.group.<g>.count` would serve a scenario that mixes them.
-8. Homing by code row: a prototype names `drain`, `quasar`, `snake` or `swarm`
-   (`profile.Homing`), so a faster type is a Go change; speed, acceleration and drag
-   in the prototype, as the eye types tune theirs, would not be.
-9. Spawn arithmetic: placing a raider takes nine actions before its request (two
-   `ConfigToVar`, `DecrementVar`, `DivideVar`, two `IncrementVar`, `SetVar` and two
-   `RandomVar`), each `RandomVar` an index bumped by hand and a seed variable set
-   to keep two draws on one index apart. A map-relative anchor on the request (an
-   edge and an inset) or a draw advancing its own index would shorten it.
-10. Rock awareness: a program learns of rock only from `HitWall` after striking it.
-    A predicate for clearance ahead, or for the side the channel lies on, would let
-    a raider keep off the rock instead of riding along it after a push.
-11. An event-triggered internal transition in a session: the U drop is one; verify a
-    kill drops one U on a mesh pair, since the `Tick` form proposes itself again
-    ([that item](#stop-an-internal-transition-proposing-itself-again-in-a-session)).
-12. Defeat in a session: any player's defeat restarts every player's game
-    (`session.any_defeated`); a player sitting out, or rejoining after a delay,
-    wants a scenario pattern or a verb.
-13. The fuse as a machine's entrance: vanguard's raiders spawn at once
-    (`EventBehaviorSpawnRequest`), the fuse off with the drains, because the fuse's
-    entrance for a program is fixed, the swarm's one-second beam, and nothing of it
-    reaches the machine. A fuse a program drives (its beam and duration declared in
-    the prototype, an entering state the machine runs while the beam holds, a
-    landing the program's probe chooses) would give data species entrances of
-    their own; Lixen expects it to grow for machines (2026-10-27).
+Vanguard's raiders spawn at once (`EventBehaviorSpawnRequest`), the fuse off with
+the drains, because a program's entrance through the fuse is fixed: the swarm's
+one-second beam over a footprint `FindFreeAreaInside` chose when the fuse was
+asked, then a direct spawn at what the beam covered, and nothing of it reaches the
+machine, which starts in `initial` the tick the body stands. Lixen expects
+entrances to grow for machines (2026-10-27). What a program would declare:
 
-Open items it meets:
+- The beam: its duration and style, the swarm's or the nugget's until a program has
+  [beam rows of its own](#give-data-species-attack-beam-and-drop-rows-of-their-own),
+  and whether a countdown shows over it.
+- An entering state the machine runs while the beam holds, so a program can
+  telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
+  nor takes damage, as no body stands yet.
+- A landing its probe chooses (`FindLanding` or its own), tried again when the beam
+  ends, since rock scrolls under a beam as it does under a teleport.
 
-- [Payload field names at load](#check-payload-field-names-against-their-event-at-load)
-- [A program spawning another](#let-a-program-spawn-another-program)
-- [Attack, beam and drop rows](#give-data-species-attack-beam-and-drop-rows-of-their-own)
-- [Loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario)
-- [A seat's gun](#aim-a-seats-gun-as-the-scenario-aims-the-players)
-- [A one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
+The beam is Shared, so the entering state's clock and probe must run alike on every
+instance and a capture mid-beam must restore them (`snapshot.Schema`); the drains'
+fusions stay as they are.
+
+#### Count a group of programs
+
+- Priority: P2
+- Affected files: `internal/behavior/program.go`, `internal/system/behavior.go`
+  (`behaviorTelemetry`), `doc/telemetry-reference.md`
+
+The raid's cap reads `behavior.count`, every data species, while raiders are the
+only ones. A prototype `group` with `behavior.group.<g>.count` would let a scenario
+that mixes programs cap each kind.
+
+#### Draw a countdown in a smaller splash font
+
+- Priority: P3
+- Affected files: `internal/asset/splash_font.go`, `internal/system/splash.go`
+  (`calculateTimerOffset`), `internal/render/renderer/splash.go`
+
+A `Telegraph` countdown draws a splash digit, a 12×12 box whose ink spans at most
+8×9, and is placed by that ink, taking the slot that overlaps the fewest blocked
+cells when none is clear. In 16 headless vanguard games (8 seeds at 120×40 and 200×60, 2,400 ticks
+each) 961 of 10,560 countdown ticks still ink a cell over rock, 3,538 of 272,730
+inked cells. A smaller font, chosen by the body's size or the room around it, would
+read in vanguard's narrowest cave (9 rows).
 
 ### Position, blocking and navigation
 
@@ -235,7 +222,9 @@ Goals:
 - Footprints: each navigator's own body, size and header offset, where today every
   composite navigates on one grid computed for the eye's 5×3 and the direct-path
   test centres the footprint and accepts it turned 90°
-  (`HasAreaLineOfSightRotatable`). The footprint registry of
+  (`HasAreaLineOfSightRotatable`): in 16 headless vanguard games (8 seeds at 120×40
+  and 200×60, 2,400 ticks each), 1,988 of the 25,168 chase ticks it called direct,
+  7.9%, had the raider's own body blocked on the way. The footprint registry of
   [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps)
   belongs here.
 - A sparse or tiled grid for a ceiling-sized empty map
@@ -267,21 +256,29 @@ cluster; the coordinate type (2D with a third axis reserved, or 3D now); the
 migration (a façade keeping the `World.Positions` surface while the call sites move,
 then narrowed); the footprint grids' cost on td.
 
-#### Let a code composite reach the map's last column and row
+#### Audit spawn placement across the species
 
 - Priority: P2
-- Affected files: `internal/system/swarm.go`, `internal/system/quasar.go`,
-  `internal/system/eye.go`, `internal/system/snake.go`,
-  `pkg/vmath/physics/kinetic.go` (`ReflectBoundsX`, `ReflectBoundsY`)
+- Affected files: `internal/engine/position.go` (`FindFreeAreaSpiral`,
+  `FindFreeAreaInside`), `internal/system/swarm.go`, `internal/system/quasar.go`,
+  `internal/system/eye.go`, `internal/system/snake.go`, `internal/system/gateway.go`,
+  `pkg/vmath/physics/kinetic.go` (`ReflectBoundsX`, `ReflectBoundsY`),
+  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`)
 
-`IntegrateWithBounceStats` takes exclusive maxima, and the swarm, quasar, eye and
-snake pass the last header cell as one, so none of them reaches the map's last
-column or row; one placed there (a spawn's spiral can) is reflected a cell inward
-on its first tick, without the wall check a move takes, onto any rock or wall
-there. The data species pass the cell past it since vanguard's raiders met this
-(`BehaviorSystem.integrate`); the code species want the same, or the bounds made
-inclusive in `ReflectBounds` for every caller at once, with the reflection
-checking the wall it lands on.
+A data species places a spawn with `FindFreeAreaInside`, the spiral search from an
+origin pulled in from the map's edges until the footprint fits, so a request names
+an edge blind to the body. The code species still search `FindFreeAreaSpiral` from
+the origin as given, with sizes their Go code holds, so one requested at an edge
+lands where the spiral first fits. An audit of every spawn path (the species'
+requests, the fuse's beams, the gateway, a scenario's spawns) would put each on the
+one search over the footprint it spawns. The code composites reach the map's last
+column and row by passing the cell past it to `IntegrateWithBounceStats`, as the
+data species do; bounds inclusive in `ReflectBounds` for every caller, the
+reflection checking the wall it lands on, would take that arithmetic from each.
+The raid still spends nine actions before its request to name a row (two
+`ConfigToVar`, `DecrementVar`, two `IncrementVar`, `ModuloVar`, `SetVar` and two
+`RandomVar`, each draw's index bumped by hand); a map-relative anchor on the request
+(an edge and an inset) or a draw advancing its own index would shorten it.
 
 #### Bound navigation's worst tick on busy maps
 
@@ -850,7 +847,9 @@ one leaves its region unparked, and `updateRegion` passes the same guard on ever
 tick until the first crossing's actions land. Simon's `Listen` plays three notes at
 level 1 in a session and one solo. An internal transition in flight has to stop its
 own re-proposal without parking the region's events (D-20); a test plays simon on a
-mesh pair (`shapedPair`) and counts `EventFSMTransition` by owner and index.
+mesh pair (`shapedPair`) and counts `EventFSMTransition` by owner and index. An
+internal transition on an event crosses once: vanguard's U drop on a mesh pair
+(`TestVanguardAKillInAPairDropsEachPlayerOneU`) holds it, and a fix keeps it so.
 
 ### Forgive a one-tick defeat in a session as solo play does
 
@@ -1076,7 +1075,7 @@ overlay that labels each instance of a species with its state and progress, as
 - Affected files: `internal/system/environment.go` (`applyPlanarWind`)
 
 `applyPlanarWind` accelerates each mobile species by its profile mass, and a data
-species is none of them, so a wind leaves a warden where it stands though its
+species is none of them, so a wind leaves a raider where it stands though its
 prototype has a `mass`. The smallest fix ranges the `Behavior` store in the Shared
 pass with each prototype's mass from `Resources.Behaviors`, skipping a massless one.
 

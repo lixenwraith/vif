@@ -3,6 +3,7 @@ package renderer
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -48,7 +49,7 @@ type buttonKey struct {
 func placeButtonKey(key rune, w, h int) buttonKey {
 	glyph, ok := splashGlyph(key)
 	k := buttonKey{glyph: glyph, w: w, h: h}
-	left, top, inkW, inkH := splashInkBounds(glyph)
+	left, top, inkW, inkH := asset.SplashInkBounds(glyph)
 	if ok && inkW > 0 && inkW <= w && inkH <= h {
 		k.big, k.x, k.y = true, (w-inkW)/2-left, (h-inkH)/2-top
 	}
@@ -57,7 +58,7 @@ func placeButtonKey(key rune, w, h int) buttonKey {
 
 func (k buttonKey) at(dx, dy int) buttonCell {
 	switch {
-	case k.big && splashInk(k.glyph, dx-k.x, dy-k.y):
+	case k.big && asset.SplashInk(k.glyph, dx-k.x, dy-k.y):
 		return buttonInk
 	case !k.big && dx == k.w/2 && dy == k.h/2:
 		return buttonLabel

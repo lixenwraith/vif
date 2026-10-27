@@ -25,7 +25,6 @@ height = 2
 header = { x = 1, y = 0 }
 hp = 40
 combat = "swarm"
-homing = "swarm"
 mass = 2.0
 drops = "swarm"
 contact = { energy = 1000, heat = 10 }
@@ -111,8 +110,16 @@ func newProgramWorld(t *testing.T, program string, x, y int) (*engine.GameContex
 
 // aimAt makes (x, y) the target group's one target
 func aimAt(w *engine.World, x, y int) {
-	state := engine.TargetGroupState{Type: component.TargetCursor, Count: 1, Valid: true}
-	state.Targets[0] = engine.TargetData{PosX: x, PosY: y}
+	aimAtCursors(w, component.PositionComponent{X: x, Y: y})
+}
+
+// aimAtCursors sets the cursor group as navigation publishes it: one target per
+// cursor, in roster order
+func aimAtCursors(w *engine.World, cells ...component.PositionComponent) {
+	state := engine.TargetGroupState{Type: component.TargetCursor, Count: len(cells), Valid: true}
+	for i, c := range cells {
+		state.Targets[i] = engine.TargetData{PosX: c.X, PosY: c.Y}
+	}
 	w.Resources.Target.SetGroup(0, state)
 }
 

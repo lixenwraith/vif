@@ -579,6 +579,35 @@ var SplashFont = [95][12]uint16{
 	},
 }
 
+// SplashFontColumns is how many of a row's 16 bits a glyph draws, from the top bit
+const SplashFontColumns = 12
+
+// SplashInk reports whether glyph inks the cell at col, row; rows are MSB-first, bit
+// 15 being column 0
+func SplashInk(glyph [12]uint16, col, row int) bool {
+	return row >= 0 && row < len(glyph) && col >= 0 && col < SplashFontColumns &&
+		glyph[row]&(1<<(15-col)) != 0
+}
+
+// SplashInkBounds returns the rectangle glyph inks within its cell, zero-sized for a
+// blank glyph
+func SplashInkBounds(glyph [12]uint16) (left, top, width, height int) {
+	right, bottom := -1, -1
+	left, top = SplashFontColumns, len(glyph)
+	for row := range len(glyph) {
+		for col := range SplashFontColumns {
+			if SplashInk(glyph, col, row) {
+				left, right = min(left, col), max(right, col)
+				top, bottom = min(top, row), max(bottom, row)
+			}
+		}
+	}
+	if right < 0 {
+		return 0, 0, 0, 0
+	}
+	return left, top, right - left + 1, bottom - top + 1
+}
+
 var SplashFontFallback = [12]uint16{
 	// 12-wide box outline
 	0x0000, 0xFFF0, 0xFFF0, 0xC030,

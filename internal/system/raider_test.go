@@ -17,9 +17,9 @@ import (
 
 // newRaiderWorld spawns vanguard's invader, compiled from its shipped program as
 // the scenario expands it, at (20, 10) of an 80x40 world whose one target stands at
-// (50, 10), behind a column of rock that blocks the line between them. Every raider
-// type flies the one cycle, and the invader's 4x2 footprint with its header at
-// (1, 0) is the one these tests measure. It returns the raider's states by name.
+// (50, 10), behind rock open only along row 10: the header's line runs through, the
+// invader's 4x2 body with its header at (1, 0) does not. Every raider type flies
+// the one cycle. It returns the raider's states by name.
 func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, map[string]component.BehaviorState) {
 	t.Helper()
 	const dir = "../../wad/scenario/vanguard"
@@ -42,7 +42,7 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 		w.Resources.Target = &engine.TargetResource{}
 	}
 	aimAt(w, 50, 10)
-	rockRows(w, 30, 34, 40)
+	rockRows(w, 30, 34, 10, 11)
 
 	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
 	s.HandleEvent(event.GameEvent{
@@ -68,14 +68,15 @@ func footprintInRock(w *engine.World, pos component.PositionComponent) bool {
 	return w.Positions.HasBlockingWallInArea(pos.X-1, pos.Y, 4, 2, component.WallBlockKinetic)
 }
 
-// TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding: a lock that cannot
-// see its target beams to the nearest place by it, the beam's line drawn from the
-// header while the state holds; rock that comes over that place meanwhile moves the
-// landing beside it, and the brake and the chase follow
+// TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding: a lock whose body
+// cannot fly to the cell it stored beams to the nearest place by its target, the
+// beam's line drawn from the header while the state holds; rock that comes over that
+// place meanwhile moves the landing beside it, and the brake and the chase follow
 func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	w, s, header, states := newRaiderWorld(t)
 	b, _ := w.Components.Behavior.GetPtr(header)
 	b.Machine = aboutToExpire(states["Lock"], 2*parameter.GameUpdateInterval)
+	b.TargetX, b.TargetY = 50, 10
 	start, _ := w.Positions.GetPosition(header)
 
 	stepBehaviors(w, s)
@@ -87,7 +88,7 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	}
 
 	// Rock comes over the landing, as a cave's does while a beam runs
-	rockRows(w, 46, 56, 14)
+	rockRows(w, 46, 56, 14, 40)
 	for range 2 * parameter.SwarmTeleportDuration / parameter.GameUpdateInterval {
 		stepBehaviors(w, s)
 		if b.Machine.State != states["Beam"] {
@@ -106,6 +107,62 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	}
 	if b.Machine.State != states["Chase"] {
 		t.Fatalf("after the brake: state %d, want the chase", b.Machine.State)
+	}
+}
+
+// TestARaiderLocksTheCursorNearestItInRosterOrder: with several cursors the lock
+// stores the nearest one's cell, and on a tie the lower roster slot's, as the swarm
+// does, so every instance of a session that holds the same Shared cursors aims alike;
+// the lock draws the swarm's charge line toward it
+func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cursors []component.PositionComponent
+		want    component.PositionComponent
+	}{
+		{"nearest", []component.PositionComponent{{X: 20, Y: 20}, {X: 29, Y: 10}}, component.PositionComponent{X: 29, Y: 10}},
+		{"tie", []component.PositionComponent{{X: 20, Y: 20}, {X: 30, Y: 10}}, component.PositionComponent{X: 20, Y: 20}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, s, header, states := newRaiderWorld(t)
+			b, _ := w.Components.Behavior.GetPtr(header)
+			b.Machine = aboutToExpire(states["Chase"], 2*parameter.GameUpdateInterval)
+			aimAtCursors(w, tc.cursors...)
+
+			stepBehaviors(w, s)
+			if b.Machine.State != states["Lock"] || b.TargetX != tc.want.X || b.TargetY != tc.want.Y {
+				t.Fatalf("state %d stored (%d,%d), want the lock on (%d,%d)",
+					b.Machine.State, b.TargetX, b.TargetY, tc.want.X, tc.want.Y)
+			}
+			if !b.ChargeLine {
+				t.Fatal("the lock draws no charge line")
+			}
+		})
+	}
+}
+
+// TestARaidersBeamLandsByTheCellItsLockStored: a lock that cannot fly to its cell
+// beams there, as the swarm's teleport does, however the cursors moved meanwhile:
+// the locked player stepping away and another coming nearer move nothing
+func TestARaidersBeamLandsByTheCellItsLockStored(t *testing.T) {
+	w, s, header, states := newRaiderWorld(t)
+	b, _ := w.Components.Behavior.GetPtr(header)
+	b.Machine = aboutToExpire(states["Lock"], 2*parameter.GameUpdateInterval)
+	b.TargetX, b.TargetY = 50, 10
+	aimAtCursors(w, component.PositionComponent{X: 60, Y: 30}, component.PositionComponent{X: 24, Y: 20})
+
+	stepBehaviors(w, s)
+	if b.Machine.State != states["Beam"] {
+		t.Fatalf("a blocked lock went to state %d, want the beam", b.Machine.State)
+	}
+	for range 2 * parameter.SwarmTeleportDuration / parameter.GameUpdateInterval {
+		stepBehaviors(w, s)
+		if b.Machine.State != states["Beam"] {
+			break
+		}
+	}
+	if pos, _ := w.Positions.GetPosition(header); pos.X != 50 || pos.Y != 10 {
+		t.Fatalf("landed at (%d,%d), want the stored cell (50,10)", pos.X, pos.Y)
 	}
 }
 
@@ -131,10 +188,10 @@ func TestAStunDuringARaidersBeamMovesNothing(t *testing.T) {
 	}
 }
 
-// TestEveryVanguardRaiderTypeFliesTheCycle: each raider type, compiled as the
-// scenario expands it, chases, locks, charges along a clear line, brakes and chases
-// again, closing on its target, and wears a look of its own footprint
-func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
+// vanguardBehaviors compiles every program of the shipped vanguard scenario, as the
+// scenario expands them, and returns the expanded documents beside them
+func vanguardBehaviors(t *testing.T) (*BehaviorSet, map[string]map[string]any) {
+	t.Helper()
 	const dir = "../../wad/scenario/vanguard"
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("vanguard scenario not present: %v", err)
@@ -151,6 +208,65 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return set, docs
+}
+
+// TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt: a spawn names a cell blind to
+// the body, so a request on any edge of the map, or past it, stands each raider
+// type against that edge on the row or column it named, whatever its size and
+// header offset; a scenario scrolling from any side spawns at its edge alike
+func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
+	set, _ := vanguardBehaviors(t)
+	newWorld := func() *engine.World {
+		w := engine.NewWorld()
+		engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+		w.Resources.Behaviors = set.Prototypes()
+		if w.Resources.Target == nil {
+			w.Resources.Target = &engine.TargetResource{}
+		}
+		return w
+	}
+	cfg := newWorld().Resources.Config
+	width, height, row, col := cfg.MapWidth, cfg.MapHeight, cfg.MapHeight/2, cfg.MapWidth/2
+	for i, p := range set.Prototypes() {
+		right, bottom := width-p.Width+p.HeaderX, height-p.Height+p.HeaderY
+		for _, tc := range []struct {
+			edge         string
+			x, y         int
+			wantX, wantY int
+		}{
+			{"right", width - 1, row, right, row},
+			{"past the right", width + 9, row, right, row},
+			{"left", 0, row, p.HeaderX, row},
+			{"top", col, -3, col, p.HeaderY},
+			{"bottom", col, height - 1, col, bottom},
+			{"corner", width + 2, height + 2, right, bottom},
+		} {
+			t.Run(p.Name+"/"+tc.edge, func(t *testing.T) {
+				w := newWorld()
+				s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
+				s.HandleEvent(event.GameEvent{
+					Type:    event.EventBehaviorSpawnRequest,
+					Payload: &event.BehaviorSpawnRequestPayload{Program: set.Names()[i], X: tc.x, Y: tc.y},
+				})
+				headers := w.Components.Behavior.Entities()
+				if len(headers) != 1 {
+					t.Fatalf("%d spawned, want one", len(headers))
+				}
+				if pos, _ := w.Positions.GetPosition(headers[0]); pos.X != tc.wantX || pos.Y != tc.wantY {
+					t.Fatalf("a %dx%d body asked for (%d,%d) stands at (%d,%d), want (%d,%d)",
+						p.Width, p.Height, tc.x, tc.y, pos.X, pos.Y, tc.wantX, tc.wantY)
+				}
+			})
+		}
+	}
+}
+
+// TestEveryVanguardRaiderTypeFliesTheCycle: each raider type, compiled as the
+// scenario expands it, chases, locks, charges along a clear line, brakes and chases
+// again, closing on its target, and wears a look of its own footprint
+func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
+	set, docs := vanguardBehaviors(t)
 	if got := set.Names(); !slices.Equal(got, []string{"construct", "invader", "scarab", "storm_eye"}) {
 		t.Fatalf("programs %v, want the four raider types", got)
 	}

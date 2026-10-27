@@ -629,9 +629,9 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	}
 
 	minHeaderX := parameter.SnakeHeadHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.SnakeHeadWidth - parameter.SnakeHeadHeaderOffsetX)
+	maxHeaderX := config.MapWidth - (parameter.SnakeHeadWidth - parameter.SnakeHeadHeaderOffsetX) + 1
 	minHeaderY := parameter.SnakeHeadHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.SnakeHeadHeight - parameter.SnakeHeadHeaderOffsetY)
+	maxHeaderY := config.MapHeight - (parameter.SnakeHeadHeight - parameter.SnakeHeadHeaderOffsetY) + 1
 
 	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,

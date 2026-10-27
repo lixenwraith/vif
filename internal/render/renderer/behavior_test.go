@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -135,5 +136,50 @@ func TestADataSpeciesInABeamStateDrawsTheTeleportLine(t *testing.T) {
 	b.Beaming = true
 	if mid := draw(); mid.Bg != visual.RgbSwarmTeleport {
 		t.Fatalf("a state flagged Beam drew %v midway, want the teleport line's %v", mid.Bg, visual.RgbSwarmTeleport)
+	}
+}
+
+// TestADataSpeciesInAChargeLineStateDrawsTheChargeLine: a state flagged ChargeLine
+// pulses the swarm's charge line from the header toward the cell it stored, over the
+// end of its entry at the swarm's rhythm scaled to the entry, and no line without it
+func TestADataSpeciesInAChargeLineStateDrawsTheChargeLine(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 2, Height: 1, HeaderX: 1, HitPoints: 20}}
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 5, Y: 5})
+
+	// Midway along a 25-step line, a pulse whose head stands at 0.6 has just passed
+	midway := func(b component.BehaviorComponent) color.RGB {
+		w.Components.Behavior.SetComponent(header, b)
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 40, 24)
+		NewChargeLineRenderer(game).Render(render.RenderContext{MapWidth: 40, MapHeight: 24, ViewportWidth: 40, ViewportHeight: 24}, buf)
+		return buf.CellAt(17, 5).Bg
+	}
+	at := func(lock, elapsed time.Duration, flagged bool) component.BehaviorComponent {
+		b := component.BehaviorComponent{TargetX: 30, TargetY: 5, ChargeLine: flagged}
+		b.Machine.Duration, b.Machine.Elapsed = lock, elapsed
+		return b
+	}
+
+	// The swarm's lock: its first pulse leaves at the swarm's show delay
+	swarmHead := parameter.SwarmChargeLineShowDelay + parameter.SwarmChargeDuration*6/10
+	if bg := midway(at(parameter.SwarmLockDuration, swarmHead, false)); bg != (color.RGB{}) {
+		t.Fatalf("a state without the flag drew %v midway, want no line", bg)
+	}
+	if bg := midway(at(parameter.SwarmLockDuration, swarmHead, true)); bg == (color.RGB{}) {
+		t.Fatal("a lock flagged ChargeLine drew nothing midway as its first pulse passed")
+	}
+
+	// A shorter lock pulses sooner and faster, each pulse its share of the entry
+	const lock = 1200 * time.Millisecond
+	pulse := time.Duration(float64(lock) * parameter.BehaviorChargeLinePulseShare)
+	delay := lock - parameter.SwarmChargeLinePulseCount*pulse
+	if bg := midway(at(lock, delay-time.Millisecond, true)); bg != (color.RGB{}) {
+		t.Fatalf("drew %v before the pulses' start, want no line", bg)
+	}
+	if bg := midway(at(lock, delay+pulse*6/10, true)); bg == (color.RGB{}) {
+		t.Fatal("a 1.2 s lock drew nothing midway as its first pulse passed")
 	}
 }

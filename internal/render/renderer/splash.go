@@ -75,32 +75,6 @@ func splashGlyph(char rune) (splashBitmap, bool) {
 	return asset.SplashFont[char-32], true
 }
 
-// splashInk reports whether a glyph inks the cell at col, row; rows are MSB-first,
-// bit 15 being column 0
-func splashInk(bitmap splashBitmap, col, row int) bool {
-	return row >= 0 && row < parameter.SplashCharHeight && col >= 0 && col < parameter.SplashCharWidth &&
-		bitmap[row]&(1<<(15-col)) != 0
-}
-
-// splashInkBounds returns the rectangle a glyph inks within its cell, zero-sized
-// for a blank glyph
-func splashInkBounds(bitmap splashBitmap) (left, top, width, height int) {
-	right, bottom := -1, -1
-	left, top = parameter.SplashCharWidth, parameter.SplashCharHeight
-	for row := range parameter.SplashCharHeight {
-		for col := range parameter.SplashCharWidth {
-			if splashInk(bitmap, col, row) {
-				left, right = min(left, col), max(right, col)
-				top, bottom = min(top, row), max(bottom, row)
-			}
-		}
-	}
-	if right < 0 {
-		return 0, 0, 0, 0
-	}
-	return left, top, right - left + 1, bottom - top + 1
-}
-
 func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, c color.RGB) {
 	bitmap, _ := splashGlyph(char)
 
@@ -108,7 +82,7 @@ func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 		mapY := gameY + row
 
 		for col := range parameter.SplashCharWidth {
-			if !splashInk(bitmap, col, row) {
+			if !asset.SplashInk(bitmap, col, row) {
 				continue
 			}
 
