@@ -158,7 +158,7 @@ func (w *World) AddComponentMask(e core.Entity, bit uint64) {
 	}
 	w.componentMask[e] |= bit
 	if bit&WallBit != 0 { // a wall joining or leaving its store changes the wall grids
-		w.Positions.WallsChanged()
+		w.Positions.WallChanged(e)
 	}
 }
 
@@ -189,7 +189,7 @@ func (w *World) Issued(e core.Entity) bool {
 func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
 	w.componentMask[e] &^= bit // &^= clears unconditionally
 	if bit&WallBit != 0 {
-		w.Positions.WallsChanged()
+		w.Positions.WallChanged(e)
 	}
 }
 
@@ -904,6 +904,29 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	}
 	w.PlaceEntity(entity, newX, newY)
 	return newX, newY, true
+}
+
+// ShiftComposite moves a composite's header and living members by (dx, dy) as one
+// body, each kinetic one's sub-cell position with it, so the composite sync and the
+// owner's integration carry on from where it was sent. It returns the body it moved,
+// in buf's storage; a member a full cell refuses is placed again by the sync.
+func (w *World) ShiftComposite(header core.Entity, dx, dy int, buf []core.Entity) []core.Entity {
+	buf = append(buf[:0], header)
+	if h, ok := w.Components.Header.GetComponent(header); ok {
+		for _, m := range h.MemberEntries {
+			if m.Entity != 0 && w.Positions.HasPosition(m.Entity) {
+				buf = append(buf, m.Entity)
+			}
+		}
+	}
+	w.Positions.Shift(buf, dx, dy, nil)
+	for _, e := range buf {
+		if k, ok := w.Components.Kinetic.GetPtr(e); ok {
+			k.PreciseX += float64(dx)
+			k.PreciseY += float64(dy)
+		}
+	}
+	return buf
 }
 
 // PlaceEntity moves a non-cursor entity to a cell with its sub-cell position: physics

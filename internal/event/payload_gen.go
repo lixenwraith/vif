@@ -852,12 +852,20 @@ var codecWeaponFireRequestPayload = structCodec{size: unsafe.Sizeof(WeaponFireRe
 	{off: unsafe.Offsetof(WeaponFireRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
+var codecComponentGunLevel = structCodec{size: unsafe.Sizeof(component.GunLevel{}), fields: []field{
+	{off: unsafe.Offsetof(component.GunLevel{}.Right), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(component.GunLevel{}.Left), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(component.GunLevel{}.Down), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(component.GunLevel{}.Up), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
 func (p *GunAimRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecGunAimRequestPayload, unsafe.Pointer(p)
 }
 
 var codecGunAimRequestPayload = structCodec{size: unsafe.Sizeof(GunAimRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(GunAimRequestPayload{}.Directions), kind: kindUint, size: unsafe.Sizeof(component.TracerDirection(0))},
+	{off: unsafe.Offsetof(GunAimRequestPayload{}.Path), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecComponentGunLevel}, stride: unsafe.Sizeof(component.GunLevel{}), make: func(p unsafe.Pointer, n int) { *(*[]component.GunLevel)(p) = make([]component.GunLevel, n) }},
 }}
 
 func (p *FireSpecialRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1774,6 +1782,7 @@ var codecCaveStartPayload = structCodec{size: unsafe.Sizeof(CaveStartPayload{}),
 	{off: unsafe.Offsetof(CaveStartPayload{}.Ramp), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Art), kind: kindSlice, elem: &field{kind: kindString}, stride: unsafe.Sizeof(""), make: func(p unsafe.Pointer, n int) { *(*[]string)(p) = make([]string, n) }},
 }}
 
 func (p *WallDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

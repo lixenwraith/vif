@@ -147,7 +147,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 	"particle":       {Domain: engine.SystemPlayer, Requires: append(engine.Require("timer"), engine.Optional("glyph", "death", "explosion")...)},
 	"gold":           {Domain: engine.SystemShared, Requires: append(engine.Require("composite", "timer"), engine.Optional("nugget", "energy", "splash")...)},
 	"materialize":    {Domain: engine.SystemDual, Requires: engine.Require("timer")},
-	"fuse":           {Domain: engine.SystemDual, Requires: append(engine.Require("drain", "materialize", "spirit"), engine.Optional("quasar", "swarm")...)},
+	"fuse":           {Domain: engine.SystemDual, Requires: append(engine.Require("materialize", "spirit"), engine.Optional("drain", "quasar", "swarm")...)},
 	"spirit":         {Domain: engine.SystemDual, Requires: engine.Require("timer")},
 	"lightning":      {Domain: engine.SystemPlayer, Requires: append(engine.Require("timer"), engine.Optional("combat")...)},
 	"missile":        {Domain: engine.SystemPlayer, Requires: append(engine.Require("weapon", "timer"), engine.Optional("explosion", "combat")...)},

@@ -814,11 +814,13 @@ IDs 10 to 17 in sorted-name order, the `species` a payload guard on
 A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
 x, y }`, its header at that cell or the nearest place its footprint fits, or
 beams one in with `EventFuseBehaviorRequest { program, x, y }`: the fuse plays a
-one-second swarm beam over that place and spawns the instance as it ends, and a
-request naming no program or finding no room beams nothing
-(`fuse.spawn_failures`). `EventBehaviorCancelRequest { program }` removes
+one-second swarm beam over the nearest place its footprint fits, searching the
+whole map from that cell, and spawns the instance as it ends; a request naming no
+program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
+without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
 instances and the beams still bringing them, every program's when it names none;
-`wad/scenario/warden` is the worked example. `-check` compiles every
+`wad/scenario/warden` is the worked example, and `wad/scenario/vanguard`'s
+raider runs the swarm's attack cycle as a program. `-check` compiles every
 program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
 and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
 'Freez'`).
@@ -898,8 +900,10 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
 - Sustained: `Home` (steer to the target by the homing profile), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
-- Flags: `Enraged` (combat's enrage: no knockback, the enraged colour) and
-  `Shielded` (no damage, no stun).
+- Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
+  `Shielded` (no damage, no stun) and `Beam` (the swarm's teleport line from
+  where the header stands to the stored cell, over the entry: a state that ends in
+  `Teleport` on its timeout's `actions` beams there as the swarm does).
 
 The target is the nearest cursor. Hit points, lifetime, contact strikes, gold
 breaking and the composite's integrity work as for every composite species; a

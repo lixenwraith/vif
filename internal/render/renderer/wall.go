@@ -13,10 +13,11 @@ import (
 type wallCellRenderer func(buf *render.RenderBuffer, screenX, screenY int,
 	char rune, fg, bg color.RGB, renderFg, renderBg bool, attrs terminal.Attr)
 
-// WallRenderer draws wall entities with fg/bg support
+// WallRenderer draws wall entities with fg/bg support, and the rock field
 type WallRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell wallCellRenderer
+	stone      stoneColumns
 }
 
 func NewWallRenderer(ctx *engine.GameContext) *WallRenderer {
@@ -35,10 +36,14 @@ func NewWallRenderer(ctx *engine.GameContext) *WallRenderer {
 
 func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	walls := r.gameCtx.World.Components.Wall
-	if walls.CountEntities() == 0 {
+	rock := r.gameCtx.World.Positions.Rock()
+	if walls.CountEntities() == 0 && rock == nil {
 		return
 	}
 	buf.SetWriteMask(visual.MaskWall)
+	if rock != nil {
+		r.renderRock(&ctx, buf, rock)
+	}
 
 	walls.Each(func(wallEntity core.Entity, wallComp *component.WallComponent) bool {
 		if !(wallComp.RenderFg || wallComp.RenderBg) {

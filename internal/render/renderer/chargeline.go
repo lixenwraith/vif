@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // ChargeLineRenderer draws pulsing bg-only warning lines from swarm to locked target
@@ -88,34 +89,17 @@ func (r *ChargeLineRenderer) tracePulse(
 	ctx render.RenderContext, buf *render.RenderBuffer,
 	x0, y0, x1, y1 int, headT, baseAlpha float64,
 ) {
-	dx := x1 - x0
-	dy := y1 - y0
-	absDx, absDy := dx, dy
-	if absDx < 0 {
-		absDx = -absDx
-	}
-	if absDy < 0 {
-		absDy = -absDy
-	}
-
-	totalSteps := max(absDx, absDy)
+	line := vmath.NewLine(x0, y0, x1, y1)
+	totalSteps := line.Steps()
 	if totalSteps == 0 {
 		return
 	}
 
-	stepX, stepY := 1, 1
-	if dx < 0 {
-		stepX = -1
-	}
-	if dy < 0 {
-		stepY = -1
-	}
-
 	// Swarm bounding box for edge clipping
-	bboxMinX := x0 - parameter.SwarmHeaderOffsetX
-	bboxMaxX := bboxMinX + parameter.SwarmWidth - 1
-	bboxMinY := y0 - parameter.SwarmHeaderOffsetY
-	bboxMaxY := bboxMinY + parameter.SwarmHeight - 1
+	bbox := vmath.Area{
+		X: x0 - parameter.SwarmHeaderOffsetX, Y: y0 - parameter.SwarmHeaderOffsetY,
+		Width: parameter.SwarmWidth, Height: parameter.SwarmHeight,
+	}
 
 	invSteps := 1.0 / float64(totalSteps)
 	trailLen := parameter.SwarmChargeLineTrail
@@ -123,36 +107,21 @@ func (r *ChargeLineRenderer) tracePulse(
 		return
 	}
 
-	err := absDx - absDy
-	mapX, mapY := x0, y0
-
-	for step := 0; step <= totalSteps; step++ {
+	for step := range totalSteps + 1 {
 		// Skip cells inside swarm body
-		inBox := mapX >= bboxMinX && mapX <= bboxMaxX && mapY >= bboxMinY && mapY <= bboxMaxY
-		if !inBox {
+		if !bbox.Contains(line.X(), line.Y()) {
 			t := float64(step) * invSteps
 			if t <= headT {
 				trailDist := headT - t
 				if trailDist <= trailLen {
-					screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+					screenX, screenY, visible := ctx.MapToScreen(line.X(), line.Y())
 					if visible {
 						r.renderCell(buf, screenX, screenY, baseAlpha*(1.0-trailDist/trailLen))
 					}
 				}
 			}
 		}
-
-		if step < totalSteps {
-			e2 := 2 * err
-			if e2 > -absDy {
-				err -= absDy
-				mapX += stepX
-			}
-			if e2 < absDx {
-				err += absDx
-				mapY += stepY
-			}
-		}
+		line = line.Next()
 	}
 }
 

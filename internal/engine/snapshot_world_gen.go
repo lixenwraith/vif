@@ -1622,7 +1622,7 @@ func equalQuasar(a, b *component.QuasarComponent) bool {
 }
 
 func equalSwarm(a, b *component.SwarmComponent) bool {
-	return a.Machine == b.Machine && a.PatternIndex == b.PatternIndex && a.PatternElapsed == b.PatternElapsed && a.LockedTargetX == b.LockedTargetX && a.LockedTargetY == b.LockedTargetY && math.Float64bits(float64(a.ChargeStartX)) == math.Float64bits(float64(b.ChargeStartX)) && math.Float64bits(float64(a.ChargeStartY)) == math.Float64bits(float64(b.ChargeStartY)) && math.Float64bits(float64(a.ChargeTargetX)) == math.Float64bits(float64(b.ChargeTargetX)) && math.Float64bits(float64(a.ChargeTargetY)) == math.Float64bits(float64(b.ChargeTargetY)) && a.TeleportStartX == b.TeleportStartX && a.TeleportStartY == b.TeleportStartY && a.TeleportTargetX == b.TeleportTargetX && a.TeleportTargetY == b.TeleportTargetY && a.ChargesCompleted == b.ChargesCompleted
+	return a.Machine == b.Machine && a.PatternIndex == b.PatternIndex && a.PatternElapsed == b.PatternElapsed && a.LockedTargetX == b.LockedTargetX && a.LockedTargetY == b.LockedTargetY && math.Float64bits(float64(a.ChargeStartX)) == math.Float64bits(float64(b.ChargeStartX)) && math.Float64bits(float64(a.ChargeStartY)) == math.Float64bits(float64(b.ChargeStartY)) && math.Float64bits(float64(a.ChargeTargetX)) == math.Float64bits(float64(b.ChargeTargetX)) && math.Float64bits(float64(a.ChargeTargetY)) == math.Float64bits(float64(b.ChargeTargetY)) && a.TeleportTargetX == b.TeleportTargetX && a.TeleportTargetY == b.TeleportTargetY && a.ChargesCompleted == b.ChargesCompleted
 }
 
 func equalStorm(a, b *component.StormComponent) bool {

@@ -134,6 +134,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventSpeciesKilled,
 		event.EventDrainDefeated,
 		event.EventCursorDefeatState,
+		event.EventCursorCrushed,
 		event.EventCursorSpawned,
 		event.EventCursorDespawned,
 		event.EventCycleDamageMultiplierIncrease,
@@ -256,6 +257,13 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCursorDefeatState:
 		if p, ok := ev.Payload.(*event.CursorDefeatStatePayload); ok && p.ProducedTick >= s.defeatResetTick {
 			s.setCursorDefeated(p.Entity, p.Defeated)
+		}
+
+	// Every instance's walls crush the same cursor on the same tick, so the latch
+	// needs no owner to author it
+	case event.EventCursorCrushed:
+		if p, ok := ev.Payload.(*event.CursorCrushedPayload); ok {
+			s.setCursorDefeated(p.Entity, true)
 		}
 
 	case event.EventCursorSpawned:
