@@ -69,3 +69,122 @@ func TestVanguardRaidersBeamInAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 		t.Fatalf("%d raiders flew at once, want at most three", most)
 	}
 }
+
+// TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun plays the shipped scenario
+// and ends two raiders as they beam in: one that dies by no player's hand drops
+// nothing, and one the player shoots down drops a U where it fell, which flies to
+// the ship and raises its gun a level of vanguard's path; a new game starts the
+// path over.
+func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	w := a.World()
+	var kills []event.SpeciesKilledPayload
+	var drops []event.LootSpawnRequestPayload
+	resets := 0
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		switch p := ev.Payload.(type) {
+		case *event.SpeciesKilledPayload:
+			if ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
+				kills = append(kills, *p)
+			}
+		case *event.LootSpawnRequestPayload:
+			drops = append(drops, *p)
+		}
+		if ev.Type == event.EventGameResetRequest {
+			resets++
+		}
+	})
+	// gun is the player's gun: its charges and the levels of its path
+	gun := func() (charges, levels int) {
+		w.RunSafe(func() {
+			if weapon, ok := w.Components.Weapon.GetComponent(w.Resources.Player.Entity); ok {
+				charges, levels = weapon.Charges[component.WeaponGun], weapon.GunLevels
+			}
+		})
+		return charges, levels
+	}
+	// end waits for a raider and takes its hit points, the player's shot or nobody's
+	end := func(byPlayer bool) {
+		t.Helper()
+		for range 900 {
+			a.Tick(1)
+			ended := false
+			w.RunSafe(func() {
+				for _, header := range w.Components.Behavior.Entities() {
+					if combat, ok := w.Components.Combat.GetPtr(header); ok {
+						combat.HitPoints, combat.LastDamagedBy = 0, 0
+						if byPlayer {
+							combat.LastDamagedBy = w.Resources.Player.Entity
+						}
+						ended = true
+						return
+					}
+				}
+			})
+			if ended {
+				a.Tick(1)
+				return
+			}
+		}
+		t.Fatal("no raider beamed in")
+	}
+
+	for range 60 {
+		if _, levels := gun(); levels > 0 {
+			break
+		}
+		a.Tick(1)
+	}
+	if charges, levels := gun(); charges != 1 || levels != 9 {
+		t.Fatalf("the ship's gun holds %d charges on %d levels, want the first of vanguard's nine", charges, levels)
+	}
+
+	end(false)
+	if len(kills) != 1 || len(drops) != 0 {
+		t.Fatalf("a raider nobody shot: %d kills and drops %+v, want one kill and nothing dropped", len(kills), drops)
+	}
+
+	end(true)
+	if len(kills) != 2 || len(drops) != 1 {
+		t.Fatalf("a raider the player shot: %d kills and drops %+v, want two kills and one drop", len(kills), drops)
+	}
+	if drop, kill := drops[0], kills[1]; drop.Type != component.LootUpgrade || drop.X != kill.X || drop.Y != kill.Y {
+		t.Fatalf("dropped %+v for a kill at (%d,%d), want a U there", drop, kill.X, kill.Y)
+	}
+	for tick := range 600 {
+		if charges, _ := gun(); charges == 2 {
+			break
+		}
+		if resets > 0 {
+			t.Fatalf("tick %d: the game started over before the U reached the ship", tick)
+		}
+		a.Tick(1)
+	}
+	if charges, _ := gun(); charges != 2 {
+		t.Fatalf("the U left the gun at %d charges, want 2", charges)
+	}
+
+	// A new game flies a new ship, back at the path's first level
+	if !a.Reset(false) {
+		t.Fatal("the reset was refused")
+	}
+	for range 60 {
+		if _, levels := gun(); levels > 0 {
+			break
+		}
+		a.Tick(1)
+	}
+	if charges, levels := gun(); charges != 1 || levels != 9 {
+		t.Fatalf("after a reset the gun holds %d charges on %d levels, want the first of nine", charges, levels)
+	}
+}

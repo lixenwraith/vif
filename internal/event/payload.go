@@ -428,9 +428,12 @@ type WeaponFireRequestPayload struct {
 }
 
 // GunAimRequestPayload is the cardinals the gun fires along, component.TracerDirection
-// bits (right 1, left 2, down 4, up 8); zero restores the gun's own four
+// bits (right 1, left 2, down 4, up 8); zero restores the gun's own four. A path
+// replaces them: the gun's levels in order, up to parameter.GunPathMax, a gun of n
+// charges firing level n; an empty one takes the gun off its path.
 type GunAimRequestPayload struct {
 	Directions component.TracerDirection `toml:"directions"`
+	Path       []component.GunLevel      `toml:"path"`
 }
 
 // MountRequestPayload puts one weapon on a Shared host, replacing any it carried.

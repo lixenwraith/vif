@@ -206,9 +206,14 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventGunAimRequest:
+		// The gun's charges stay: a path the request replaces fires the level they
+		// count to on the new one, and an instance installing the game mid-run aims
+		// with the charges it carried
 		if payload, ok := ev.Payload.(*event.GunAimRequestPayload); ok {
 			if weaponComp, ok := s.world.Components.Weapon.GetPtr(s.world.Resources.Player.Entity); ok {
 				weaponComp.Aim = payload.Directions & component.TracerAllDirections
+				weaponComp.GunLevels = copy(weaponComp.GunPath[:], payload.Path)
+				clear(weaponComp.GunPath[weaponComp.GunLevels:])
 			}
 		}
 	}
@@ -299,7 +304,7 @@ func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType
 	}
 
 	firstAcquire := weaponComp.Charges[weapon] == 0
-	if weaponComp.Charges[weapon] < component.WeaponSpecs[weapon].MaxCharges {
+	if weaponComp.Charges[weapon] < chargeCap(weaponComp, weapon) {
 		weaponComp.Charges[weapon]++
 	}
 
@@ -307,6 +312,15 @@ func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType
 		weaponComp.Cooldown[weapon] = 0 // Ready to fire immediately on first pickup
 		s.publishLoadout(cursor, weaponComp)
 	}
+}
+
+// chargeCap is the charges a kind holds at most: its spec's, or a charge per level
+// of the path a gun climbs
+func chargeCap(weaponComp *component.WeaponComponent, weapon component.WeaponType) int {
+	if weaponComp.GunLevels > 0 && component.WeaponSpecs[weapon].Delivery == component.DeliveryTracer {
+		return weaponComp.GunLevels
+	}
+	return component.WeaponSpecs[weapon].MaxCharges
 }
 
 // removeAllWeapons strips the loot from one cursor's loadout and destroys only
@@ -807,7 +821,7 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 			// A sustained ray is holdRays's; main fire leaves it alone
 			fired = !(capped && spec.Sustained) && len(assignments) > 0 && s.fireRay(cursor, orbs[wt], charges)
 		case component.DeliveryTracer:
-			fired = s.fireTracers(cursor, x, y, cmp.Or(weaponComp.Aim, spec.Directions), charges, s.palette(cursor))
+			fired = s.fireTracers(cursor, x, y, gunVolley(weaponComp, spec, charges), s.palette(cursor))
 		}
 		if !fired {
 			continue
@@ -1098,22 +1112,27 @@ func (s *WeaponSystem) clearSlot(slot uint8) {
 	s.statOrbs.Store(slot, 0)
 }
 
-// fireTracers launches the gun's volley from a cell: one streak per direction it
-// covers and per lane its charges add, skipping a lane that starts in a wall or off
-// the map. Every tracer is this instance's own (D-6).
-func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, directions component.TracerDirection, charges int, palette component.WeaponPalette) bool {
+// fireTracers launches a volley from a cell: one streak per lane it fires along each
+// cardinal, lane by lane across the cardinals, skipping a lane that starts in a wall
+// or off the map. Every tracer is this instance's own (D-6).
+func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, volley component.GunLevel, palette component.WeaponPalette) bool {
 	config := s.world.Resources.Config
 	minFlightX, maxFlightX := tracerFlightBounds(config.MapWidth)
 	minFlightY, maxFlightY := tracerFlightBounds(config.MapHeight)
 	ox, oy := vmath.Point{X: originX, Y: originY}.Center()
 
 	fired := false
-	for _, lane := range tracerLanes(charges) {
-		off := float64(lane)
+	for lane := range len(parameter.TracerLaneOffsets) {
 		for _, d := range component.TracerCardinals {
-			if directions&d == 0 {
+			n := volleyLanes(volley, d)
+			if n == 0 {
 				continue
 			}
+			offsets := tracerLanes(n)
+			if lane >= len(offsets) {
+				continue
+			}
+			off := float64(offsets[lane])
 			var vx, vy, sx, sy, tx, ty float64
 			switch d {
 			case component.TracerRight:
@@ -1349,6 +1368,41 @@ func aimed(d component.WeaponDelivery) bool {
 // tracerLanes are the offsets a volley of charges covers; charges past the table cover every lane
 func tracerLanes(charges int) []int {
 	return parameter.TracerLaneOffsets[max(min(charges, len(parameter.TracerLaneOffsets)), 1)-1]
+}
+
+// gunVolley is what a gun of charges fires: the level they count to on its path,
+// the path's last past its end, or off one a lane per charge along each cardinal it
+// aims at
+func gunVolley(weaponComp *component.WeaponComponent, spec *component.WeaponSpec, charges int) component.GunLevel {
+	if weaponComp.GunLevels > 0 {
+		return weaponComp.GunPath[max(min(charges, weaponComp.GunLevels), 1)-1]
+	}
+	directions := cmp.Or(weaponComp.Aim, spec.Directions)
+	along := func(d component.TracerDirection) uint8 {
+		if directions&d == 0 {
+			return 0
+		}
+		return uint8(min(charges, len(parameter.TracerLaneOffsets)))
+	}
+	return component.GunLevel{
+		Right: along(component.TracerRight), Left: along(component.TracerLeft),
+		Down: along(component.TracerDown), Up: along(component.TracerUp),
+	}
+}
+
+// volleyLanes is how many lanes a volley fires along one cardinal
+func volleyLanes(volley component.GunLevel, d component.TracerDirection) int {
+	switch d {
+	case component.TracerRight:
+		return int(volley.Right)
+	case component.TracerLeft:
+		return int(volley.Left)
+	case component.TracerDown:
+		return int(volley.Down)
+	case component.TracerUp:
+		return int(volley.Up)
+	}
+	return 0
 }
 
 // tracerFlightBounds returns cell-centered off-map targets far enough for a

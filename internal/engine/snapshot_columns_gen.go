@@ -1281,6 +1281,29 @@ func encodeColumnsWeapon(dst []byte, rows []StoreEntry[component.WeaponComponent
 	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.Aim)
 	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Right)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Left)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Down)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Up)
+		}
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.GunLevels)
+	}
 	return dst
 }
 
@@ -1311,6 +1334,29 @@ func decodeColumnsWeapon(r *columnReader) []StoreEntry[component.WeaponComponent
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Aim, r)
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Right, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Left, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Down, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Up, r)
+		}
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.GunLevels, r)
 	}
 	return rows
 }

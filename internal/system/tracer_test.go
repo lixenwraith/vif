@@ -1,6 +1,8 @@
 package system
 
 import (
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -13,7 +15,7 @@ import (
 func TestTracerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
-	weapon.fireTracers(cursor, 5, 5, component.WeaponSpecs[component.WeaponGun].Directions, 1, component.PalettePositive)
+	weapon.fireTracers(cursor, 5, 5, gunVolley(&component.WeaponComponent{}, &component.WeaponSpecs[component.WeaponGun], 1), component.PalettePositive)
 	w.Resources.Event.Queue.Consume() // Spawn sound.
 
 	target := w.CreateEntity(core.DomainShared)
@@ -79,7 +81,7 @@ func TestGunLanesFollowItsCharges(t *testing.T) {
 		for _, e := range w.Components.Tracer.GetAllEntities() {
 			w.DestroyEntity(e)
 		}
-		weapon.fireTracers(cursor, 5, 5, spec.Directions, charges, component.PalettePositive)
+		weapon.fireTracers(cursor, 5, 5, gunVolley(&component.WeaponComponent{}, spec, charges), component.PalettePositive)
 		lanes := tracerLanes(charges)
 		rows, cols := map[int]bool{}, map[int]bool{}
 		for _, e := range w.Components.Tracer.Entities() {
@@ -128,6 +130,91 @@ func TestAnAimedGunFiresOnlyAlongItsAim(t *testing.T) {
 	}
 	if right, other := volley(0); right != 1 || other != 3 {
 		t.Fatalf("aim cleared: %d right and %d other tracers, want 1 and 3", right, other)
+	}
+}
+
+// TestAGunOnAPathFiresTheLevelItsChargesCountTo: a path names each level's lanes
+// along each cardinal, and a gun on it fires the level its charges count to, holds
+// a charge per level and keeps its charges when the path changes; a request without
+// a path gives it back a lane per charge along its aim, up to its own cap.
+func TestAGunOnAPathFiresTheLevelItsChargesCountTo(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
+	gun := component.WeaponGun
+	// fired is the lane offsets the cursor's next volley sends along each cardinal
+	fired := func() map[component.TracerDirection][]int {
+		for _, e := range w.Components.Tracer.GetAllEntities() {
+			w.DestroyEntity(e)
+		}
+		weaponComp.Cooldown[gun] = 0
+		weapon.fireLoadout(cursor, weaponComp, weapon.orbsOf(cursor))
+		lanes := map[component.TracerDirection][]int{}
+		for _, e := range w.Components.Tracer.Entities() {
+			pos, _ := w.Positions.GetPosition(e)
+			k, _ := w.Components.Kinetic.GetComponent(e)
+			switch {
+			case k.VelX > 0:
+				lanes[component.TracerRight] = append(lanes[component.TracerRight], pos.Y-5)
+			case k.VelX < 0:
+				lanes[component.TracerLeft] = append(lanes[component.TracerLeft], pos.Y-5)
+			case k.VelY > 0:
+				lanes[component.TracerDown] = append(lanes[component.TracerDown], pos.X-5)
+			default:
+				lanes[component.TracerUp] = append(lanes[component.TracerUp], pos.X-5)
+			}
+		}
+		for _, l := range lanes {
+			slices.Sort(l)
+		}
+		return lanes
+	}
+	want := func(right, left, down, up int) map[component.TracerDirection][]int {
+		lanes := map[component.TracerDirection][]int{}
+		for d, n := range map[component.TracerDirection]int{
+			component.TracerRight: right, component.TracerLeft: left, component.TracerDown: down, component.TracerUp: up,
+		} {
+			if n > 0 {
+				lanes[d] = tracerLanes(n)
+			}
+		}
+		return lanes
+	}
+
+	// One level more than the gun's own cap, so the path's is the one that holds
+	path := []component.GunLevel{{Right: 1}, {Right: 3, Down: 1, Up: 1}, {Left: 2}, {Right: 2, Left: 1}}
+	weapon.HandleEvent(event.GameEvent{Type: event.EventGunAimRequest, Payload: &event.GunAimRequestPayload{Path: path}})
+	for level, expect := range []map[component.TracerDirection][]int{
+		want(1, 0, 0, 0), want(3, 0, 1, 1), want(0, 2, 0, 0), want(2, 1, 0, 0),
+	} {
+		weaponComp.Charges[gun] = level + 1
+		if got := fired(); !maps.EqualFunc(got, expect, slices.Equal) {
+			t.Fatalf("level %d fired %v, want %v", level+1, got, expect)
+		}
+	}
+	weaponComp.Charges[gun] = parameter.WeaponMaxChargeGun
+	for range 3 {
+		weapon.addWeapon(cursor, gun)
+	}
+	if weaponComp.Charges[gun] != len(path) {
+		t.Fatalf("a gun on a %d-level path climbed to %d charges", len(path), weaponComp.Charges[gun])
+	}
+
+	weapon.HandleEvent(event.GameEvent{Type: event.EventGunAimRequest, Payload: &event.GunAimRequestPayload{Path: path[:2]}})
+	if got := fired(); weaponComp.Charges[gun] != len(path) || !maps.EqualFunc(got, want(3, 0, 1, 1), slices.Equal) {
+		t.Fatalf("on a shorter path %d charges fired %v, want %d charges firing its last level", weaponComp.Charges[gun], got, len(path))
+	}
+
+	weapon.HandleEvent(event.GameEvent{Type: event.EventGunAimRequest, Payload: &event.GunAimRequestPayload{Directions: component.TracerRight}})
+	weaponComp.Charges[gun] = 2
+	if got := fired(); !maps.EqualFunc(got, want(2, 0, 0, 0), slices.Equal) {
+		t.Fatalf("off the path two charges aimed right fired %v, want two lanes right", got)
+	}
+	for range 3 {
+		weapon.addWeapon(cursor, gun)
+	}
+	if weaponComp.Charges[gun] != parameter.WeaponMaxChargeGun || weaponComp.GunLevels != 0 || weaponComp.GunPath != [parameter.GunPathMax]component.GunLevel{} {
+		t.Fatalf("off the path: %d charges, %d levels, want the gun's own cap and no path", weaponComp.Charges[gun], weaponComp.GunLevels)
 	}
 }
 

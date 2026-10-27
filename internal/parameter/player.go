@@ -73,6 +73,10 @@ const (
 	WeaponMaxChargeTurret    = 5
 	WeaponMaxChargeEmitter   = 3
 	WeaponMaxChargeGun       = 3 // lanes per direction; only a scenario's event drop or god mode adds one
+
+	// GunPathMax is the levels a scenario's gun upgrade path holds at most; a gun on
+	// one takes a charge per level in place of WeaponMaxChargeGun
+	GunPathMax = 16
 )
 
 // Weapon Orb Configuration

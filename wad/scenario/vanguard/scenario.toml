@@ -5,8 +5,9 @@ max_players = 16
 # A side-scroller after Vanguard (1981): the cursor is a ship and the cave scrolls
 # left past it. Rock pushes the cursor a column back and toward the channel; rock
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
-# left behind the rock at three depths, the gun fires right only, and raiders, the
-# cave's swarms, beam in at the right edge.
+# left behind the rock at three depths, raiders, the cave's swarms, beam in at the
+# right edge, and each one shot down drops a U that raises the gun a level, from one
+# shot forward to three each way.
 
 # The cave holds a 15-row channel and two walls of at least two rows
 [map]
@@ -47,13 +48,28 @@ on_enter = [
 
 # --- Raiders ---
 
+# A raider a player shoots down drops a U where it fell, an upgrade for every
+# player (LootUpgrade = 8): an event drop, since no drop table holds it; one that
+# dies by no player's hand drops nothing. Both raid states hold it, so no kill
+# goes uncounted while a raider beams in.
+[states.Raid]
+parent = "Root"
+transitions = [
+    { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
+        { name = "PayloadIntCompare", args = { field = "species", op = "eq", value = 10 } },
+        { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
+    ] }, capture_vars = { x = "kill_x", y = "kill_y" }, actions = [
+        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = 8 }, payload_vars = { x = "kill_x", y = "kill_y" } },
+    ] },
+]
+
 # A raider beams in at the right edge every four seconds while fewer than three
 # fly, on a row drawn within six of the middle; the beam searches the whole map
 # from there, so rock on that row sends it to the nearest open rows. Its header
 # stands a column in from its left, so the right edge's header column is the width
 # less three.
 [states.RaidWait]
-parent = "Root"
+parent = "Raid"
 transitions = [
     { trigger = "Tick", target = "RaidSpawn", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 4000 } },
@@ -62,7 +78,7 @@ transitions = [
 ]
 
 [states.RaidSpawn]
-parent = "Root"
+parent = "Raid"
 on_enter = [
     { action = "ConfigToVar", payload = { field = "map_width", name = "raid_x" } },
     { action = "DecrementVar", payload = { name = "raid_x", delta = 3 } },
@@ -95,13 +111,25 @@ transitions = [
     { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
-# The gun fires right only (direction bit 1); an instance installing the game mid-run
-# aims its own cursor the same way. A crushed cursor is defeated, so the crush and
-# every other defeat start the game over at once.
+# The gun climbs a level a U: forward is right, the way the ship flies, and back is
+# left. A level names the lanes, up to three, it fires along each cardinal, and a
+# gun at the last stays there. An instance installing the game mid-run puts its own
+# cursor on the path, with the level it carried. A crushed cursor is defeated, so
+# the crush and every other defeat start the game over at once.
 [states.PlayerActive]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventGunAimRequest", payload = { directions = 1 }, reconcile = true },
+    { action = "EmitEvent", event = "EventGunAimRequest", reconcile = true, payload = { path = [
+        { right = 1 },                             # one shot forward
+        { right = 2 },                             # two
+        { right = 3 },                             # three
+        { right = 3, up = 1, down = 1 },           # and one up and one down
+        { right = 3, up = 1, down = 1, left = 1 }, # and one back
+        { right = 3, up = 2, down = 2, left = 1 }, # two up and two down
+        { right = 3, up = 2, down = 2, left = 2 }, # two back
+        { right = 3, up = 3, down = 3, left = 2 }, # three up and three down
+        { right = 3, up = 3, down = 3, left = 3 }, # three back
+    ] } },
 ]
 transitions = [
     { trigger = "EventCursorCrushed", target = "PlayerCrushed" },

@@ -13,7 +13,8 @@ type LootVisualDef struct {
 }
 
 // LootVisuals is indexed by LootType. Weapon loot is lettered for its attack
-// (Lightning, Missile, Pulse, Bullet, Ray, Tracer), the name players use.
+// (Lightning, Missile, Pulse, Bullet, Ray, Tracer), the name players use; the
+// Upgrade is the gun's charge too, lettered for a gun that climbs a path.
 var LootVisuals = [component.LootCount]LootVisualDef{
 	component.LootRod: {
 		Rune:       'L',
@@ -44,6 +45,11 @@ var LootVisuals = [component.LootCount]LootVisualDef{
 		Rune:       'T',
 		InnerColor: RgbTracerPositive,
 		GlowColor:  RgbLootGunGlow,
+	},
+	component.LootUpgrade: {
+		Rune:       'U',
+		InnerColor: RgbTracerPositive,
+		GlowColor:  RgbLootUpgradeGlow,
 	},
 	component.LootHeat: {
 		Rune:       'H',

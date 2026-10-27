@@ -741,20 +741,42 @@ PvP: a hit on a remote cursor crosses as its impact and the victim's owner appli
 
 Arc reward (an arc pays the lightning's full energy reward; halve it if the cap doubles the rod's income too far), the sustained ray's scale (three damage per covered member per immunity window, continuously), the burn figures and whether the charged pulse's stun should shorten to offset them, `LightningArcRange`, `WeaponStreamInterval` and `TurretStream`, the gun's lane offsets at two charges, `LightningZapDuration` for an arc, and a burn tint on species renderers, which show only the hit flash per tick now.
 
-### Grow the gun's aim by upgrade
+### Fan more than three gun lanes along a cardinal
+
+- Priority: P3
+- Affected files: `internal/parameter/tracer.go`, `internal/system/weapon.go`
+
+A level of the gun's upgrade path names its lanes per cardinal, and
+`TracerLaneOffsets` stops at the centre and its two sides, so a level asking for
+more fires three. A wider fan needs offsets two or more rows or columns out, and a
+volley spacing that still reads as lanes in a 15-row cave channel.
+
+### Aim a seat's gun as the scenario aims the player's
+
+- Priority: P3
+- Affected files: `internal/system/weapon.go`, `internal/event/payload.go`
+
+`EventGunAimRequest` is local and sets the aim and path of the cursor this instance
+drives, so a bot seat, or a cursor an instance adopts, fires the gun's own four
+cardinals and stops at three charges. An entity field, as `EventKeyCaptureRequest`
+carries, or a path the weapon system holds per scenario would reach every cursor
+an instance simulates.
+
+### Declare loot kinds and drop tables in a scenario
 
 - Priority: P2
-- Affected files: `internal/component/weapon.go`, `internal/system/weapon.go`,
-  `internal/system/loot.go`, `internal/event/payload.go`
+- Affected files: `internal/component/loot.go`, `internal/parameter/visual/loot.go`,
+  `internal/profile/loot.go`, `internal/system/loot.go`
 
-`EventGunAimRequest` sets the whole aim, and each gun charge adds a lane to every
-aimed cardinal at once. A side-scroller's upgrades add a direction, or shots ahead:
-- An additive grant that ORs a cardinal into `WeaponComponent.Aim`, a drop's reward
-  pushed to the owner as a weapon reward's `EventWeaponAddRequest` is (D-13).
-- Lanes per cardinal: `tracerLanes(charges)` fans every aimed cardinal alike, so
-  more shots ahead than to the sides needs a count per cardinal.
-- More than three shots: `WeaponMaxChargeGun` and the lane table stop at the centre
-  and its two sides.
+Loot kinds, their rewards and runes are a Go enum and the drop tiers are fixed per
+code species, so a scenario's own pickup is a Go change that reaches players only
+as an event drop: vanguard's `U` is `LootUpgrade`, the gun drop's reward under its
+own rune, raised by its FSM where a player shoots a raider down because no tier can
+hold it. Kinds a scenario declares (rune, colours, reward) and tiers that name them
+would let a program list its drops and roll them with pity, with `activeLootTypes`
+and the pity counts sized from the declared kinds rather than `LootCount`.
+[Give data species attack, beam and drop rows of their own](#give-data-species-attack-beam-and-drop-rows-of-their-own)
+is the drop half of this for programs.
 
 ### Move storm's green circle onto a disruptor mount
 
