@@ -13,9 +13,9 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 The side-scroller's first play test (2026-10-27) found it sound for a first
 iteration: its scroll reads as lag, its cave is narrow, its raiders are plain. The
 refinements lead, grouped by area so an agent can take a group, beside the items
-this task left and the navigation ones. Order: the cave and the stone first, in
-parallel; the machine's certain faults next, as the raider types need them; then the
-raider types; the position package last, in a session of its own. Until that lands,
+this task left and the navigation ones. Order: the cave first; the machine's certain
+faults next, as the raider types need them; then the raider types; the position
+package last, in a session of its own. Until that lands,
 nothing here adds engine surface for rock or caves: a cave's shape stays in
 `pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall system
 and renderers that read it, and a query a footprint needs is built by its caller
@@ -103,30 +103,6 @@ A cave lays the columns a wider map brings and reshapes those to come when a new
 height still holds its profile, but the rock it laid keeps the old height, and a
 level setup that clears the walls leaves it scrolling in from the right edge of an
 empty map. Lay the map's columns again on either, or stop the cave with its walls.
-
-### Stone art
-
-One agent, disjoint from the rest: `internal/parameter/visual/stone.go` and the
-art's tests.
-
-#### Give the strata's dotted band the grain the others draw
-
-- Priority: P0
-- Affected files: `internal/parameter/visual/stone.go` (`StrataLight`,
-  `StrataDark`), `internal/pattern/art_test.go`
-- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
-
-Strata alternate light and dark bands, each taking its tones and grain from
-`StrataLight` or `StrataDark` by its hash. The third light band draws `·`, a dotted
-texture that matches no other band and would not suit the whole rock either: the
-play test shows it along the floor, under a dark band ruled with `─`. Give it the
-shade grain the others draw (`░`, or `▒` at a lighter ink) and keep its own tones,
-so bands differ in colour and density rather than in the kind of mark; judge the `─`
-band in the same look, the other grain outside the shade family. Every band keeps a
-foreground glyph, since a background alone vanishes on a 16-colour console. Re-pin
-the digest in `TestArtIsFixedByItsPresetSeedAndCell`, run
-`TestEveryPresetDrawsAVisibleGlyph` and `TestConsoleGlyphsAreInEveryConsoleFont`,
-and look in truecolor and on the console tier (`TERM=linux`).
 
 ### Raiders
 

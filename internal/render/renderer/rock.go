@@ -34,11 +34,12 @@ type stoneCell struct {
 // scrolling field draws a column once it has its neighbours and then keeps it: a frame
 // draws only what entered since the last, a few columns at the field's right edge.
 type stoneColumns struct {
-	look   engine.RockLook
-	height int
-	tags   []int64 // the profile column each slot holds, or -1
-	around []stoneNeighbourhood
-	cells  []stoneCell // height cells a slot
+	look     engine.RockLook
+	height   int
+	index256 bool    // cells hold pattern.Art256's indices, as the 256 tier draws them
+	tags     []int64 // the profile column each slot holds, or -1
+	around   []stoneNeighbourhood
+	cells    []stoneCell // height cells a slot
 }
 
 // renderRock draws the rock field's cells the viewport shows: each column's ceiling
@@ -77,6 +78,10 @@ func (r *WallRenderer) renderStone(ctx *render.RenderContext, buf *render.Render
 	height := r.gameCtx.World.Resources.Config.MapHeight
 	cols := rock.Columns()
 	r.stone.fit(rock.Look, len(cols), height)
+	attrs := terminal.AttrNone
+	if r.stone.index256 {
+		attrs = terminal.AttrFg256 | terminal.AttrBg256
+	}
 	minY, maxY = max(minY, 0), min(maxY, height-1)
 	for x := max(minX, 0); x <= min(maxX, len(cols)-1); x++ {
 		column := r.stone.column(cols, x, rock.Origin)
@@ -86,7 +91,7 @@ func (r *WallRenderer) renderStone(ctx *render.RenderContext, buf *render.Render
 				continue
 			}
 			if screenX, screenY, visible := ctx.MapToScreen(x, y); visible {
-				r.renderCell(buf, screenX, screenY, cell.r, cell.fg, cell.bg, true, true, terminal.AttrNone)
+				r.renderCell(buf, screenX, screenY, cell.r, cell.fg, cell.bg, true, true, attrs)
 			}
 		}
 	}
@@ -133,6 +138,11 @@ func (s *stoneColumns) column(cols []engine.RockColumn, x int, origin int64) []s
 		}
 		depth, face := stoneDepth(&around, y)
 		cell := pattern.ArtCell{X: index, Y: int64(y), Depth: depth, Face: face, W: stoneGroupWidth, H: s.height}
+		if s.index256 {
+			r, fg, bg := pattern.Art256(pattern.ArtPreset(s.look.Art), s.look.Seed, cell)
+			cells[y] = stoneCell{r: r, fg: color.RGB{R: fg}, bg: color.RGB{R: bg}}
+			continue
+		}
 		cells[y].r, cells[y].fg, cells[y].bg = pattern.Art(pattern.ArtPreset(s.look.Art), s.look.Seed, cell)
 	}
 	return cells
