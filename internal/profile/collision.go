@@ -46,6 +46,17 @@ func Soft(impactor, target Mass) physics.CollisionProfile {
 	}
 }
 
+// RowMass is the target mass each combat row's knockback profiles are built with
+var RowMass = [component.CombatEntityCount]Mass{
+	component.CombatEntityDrain:     MassDrain,
+	component.CombatEntityQuasar:    MassQuasar,
+	component.CombatEntitySwarm:     MassSwarm,
+	component.CombatEntityStorm:     MassStorm,
+	component.CombatEntitySnakeHead: MassSnakeHead,
+	component.CombatEntitySnakeBody: MassSnakeBody,
+	component.CombatEntityEye:       MassEye,
+}
+
 // --- Tracer ---
 var (
 	TracerToDrain     = accumulate(MassTracer, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)

@@ -858,10 +858,10 @@ without the drain system, which only its drain fusions need. `EventBehaviorCance
 instances and the beams still bringing them, every program's when it names none.
 `wad/scenario/vanguard` is the worked example: its raider types, spawned directly,
 fly the swarm's attack cycle as thirty-two programs over one macro (`RaiderStates`
-in its `macros.toml`). Each program file is one invocation of its tier's macro
-(`RaiderTier1`..`RaiderTier4`) naming its cave and its look, and the tier's
-expansion is the whole program: the look, the tier's stats and physics, the cave's
-palette, and `[states]` invoking `RaiderStates` with the tier's timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
+in its `macros.toml`). Each program file is one invocation of its rank's macro
+(`RaiderRank1`..`RaiderRank4`) naming its cave and its look, and the rank's
+expansion is the whole program: the look, the rank's stats and physics, the cave's
+palette, and `[states]` invoking `RaiderStates` with the rank's timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
 each fault names program, place and key (`program 'scarab': state 'Lock':
 on_update[0]: unknown sustained action 'Freez'`).
 
@@ -875,7 +875,7 @@ height = 2
 header = { x = 1, y = 0 }           # Header cell inside the footprint
 hp = 40
 combat = "swarm"                    # Attack-matrix row it fights as: swarm or quasar
-mass = 2.0                          # Soft collision and flocking; 0 takes neither (optional)
+mass = 2.0                          # Soft collision, flocking, knockback; 0: the row's knockback only (optional)
 drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
@@ -935,7 +935,7 @@ target = "Roam"
   drag 2), no arrival steering, the homing's half-cell snap and restitution 0.5.
   `Home` steers by all but the restitution, which every move bounces by. Each value
   is finite and at least 0, accel above it, and restitution at most 1. Vanguard's
-  first raider tier gives the snake's values and each later tier its own, slower.
+  first raider rank gives the snake's values and each later rank its own, slower.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
   `HitWall` reads this step's move). A global edge has none.

@@ -1,7 +1,7 @@
-# The owl: it shifts its wings, and blinks. One of the moss cave's fourth-tier
-# raiders: RaiderTier4 in ../../macros.toml gives its stats and cycle and the cave
+# The owl: it shifts its wings, and blinks. One of the moss cave's fourth-rank
+# raiders: RaiderRank4 in ../../macros.toml gives its stats and cycle and the cave
 # its colours.
-macro = "RaiderTier4"
+macro = "RaiderRank4"
 theme = "Moss"
 width = 5
 height = 3

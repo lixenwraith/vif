@@ -4,6 +4,8 @@
 // structs and tables built from them.
 package profile
 
+import "github.com/lixenwraith/vif/internal/component"
+
 // Mass is an entity's collision mass in relative units
 // Baseline: a single-cell entity is 1.0
 type Mass = float64
@@ -54,12 +56,15 @@ func softRatio(impactor, target Mass) float64 {
 
 // massRatio returns impactor/target mass clamped to the usable band
 func massRatio(impactor, target Mass) float64 {
-	r := impactor / target
-	if r < MassRatioMin {
-		return MassRatioMin
-	}
-	if r > MassRatioMax {
-		return MassRatioMax
-	}
-	return r
+	return clampRatio(impactor / target)
+}
+
+// Reweigh takes a knockback's ratio, built against a combat row's mass, against
+// mass instead: a data species fighting as the row weighs what it declares
+func Reweigh(ratio float64, row component.CombatEntityType, mass Mass) float64 {
+	return clampRatio(ratio * RowMass[row] / mass)
+}
+
+func clampRatio(r float64) float64 {
+	return min(max(r, MassRatioMin), MassRatioMax)
 }
