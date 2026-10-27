@@ -152,9 +152,9 @@ parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 500 } },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DEFENSE CLEARED" } },
-    # The level's reward, an event drop rather than a species roll: a gun (LootGun = 7)
-    # for every participant at the tower's cell, after TowerCycle's exit cleared the map
-    { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = 7, x = 0, y = 0 }, payload_vars = { X = "cx", Y = "cy" } },
+    # The level's reward, an event drop rather than a species roll: a gun for every
+    # participant at the tower's cell, after TowerCycle's exit cleared the map
+    { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "gun", x = 0, y = 0 }, payload_vars = { X = "cx", Y = "cy" } },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "tower" },
 ]
