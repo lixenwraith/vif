@@ -308,7 +308,7 @@ func (s *AdaptationSystem) handleSpeciesCreated(payload *event.SpeciesCreatedPay
 	s.tracking[payload.Entity] = trackedRoute{
 		GraphID: nav.RouteGraphID,
 		RouteID: nav.RouteID,
-		SubType: payload.SubType,
+		SubType: uint8(payload.SubType),
 	}
 	s.buffers.Observe(9, len(s.tracking))
 }

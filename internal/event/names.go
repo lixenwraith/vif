@@ -32,6 +32,8 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 	}
 	return migrating(dialect.NewNames().
 		Enum[component.SpeciesType](component.SpeciesNames[:]...).
+		Variant[component.SubType](component.SpeciesEye, component.EyeTypeNames[:]...).
+		Variant[component.SubType](component.SpeciesTower, component.TowerTypeNames[:]...).
 		Enum[component.LootType](namesOf(component.LootSpecs[:], func(s component.LootSpec) string { return s.Name })...).
 		Enum[component.EyeType](component.EyeTypeNames[:]...).
 		Enum[component.TowerType](component.TowerTypeNames[:]...).
@@ -42,6 +44,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[component.GlyphLevel](component.GlyphLevelNames[:]...).
 		Enum[component.LightningColorType](component.LightningColorNames[:]...).
 		Enum[component.MarkerShape](component.MarkerShapeNames[:]...).
+		Enum[component.MarkerFade](component.MarkerFadeNames[:]...).
 		Enum[component.SpawnType](namesOf(component.MaterializeStyles[:], func(s component.MaterializeStyle) string { return s.Name })...).
 		Enum[component.SpiritColor](component.SpiritColorNames[:]...).
 		Mask[component.TracerDirection](component.TracerDirectionNames).
@@ -69,6 +72,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 func migrating(n *dialect.Names) *dialect.Names {
 	return n.
 		Numbers[component.SpeciesType]().
+		Numbers[component.SubType]().
 		Numbers[component.LootType]().
 		Numbers[component.TargetType]().
 		Numbers[component.ParticleBehavior]().

@@ -17,6 +17,18 @@ const (
 // MarkerShapeNames are what a document calls each MarkerShape
 var MarkerShapeNames = [...]string{MarkerShapeNone: "none", MarkerShapeRectangle: "rectangle", MarkerShapeInvert: "invert"}
 
+// MarkerFade is how a marker's intensity changes over its lifetime
+type MarkerFade uint8
+
+const (
+	MarkerFadeNone MarkerFade = iota
+	MarkerFadeOut             // over the marker's remaining lifetime
+	MarkerFadeIn              // unimplemented: reads as none
+)
+
+// MarkerFadeNames are what a document calls each MarkerFade
+var MarkerFadeNames = [...]string{MarkerFadeNone: "none", MarkerFadeOut: "out", MarkerFadeIn: "in"}
+
 // MarkerComponent represents a visual area indicator
 type MarkerComponent struct {
 	X, Y      int // Top-left position
@@ -26,5 +38,5 @@ type MarkerComponent struct {
 	Color     color.RGB
 	Intensity float64 // 0.0-1.0 for alpha/fade control
 	PulseRate float64 // 0 = no pulse, >0 = Hz
-	FadeMode  uint8   // 0=none, 1=fade out, 2=fade in
+	FadeMode  MarkerFade
 }
