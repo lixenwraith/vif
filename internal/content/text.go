@@ -22,7 +22,8 @@ var cr = []byte{'\r'}
 // parseText splits a raw file into blocks of consecutive content lines.
 // A block ends at MaxBlockLines, or at a top-level indent shift once the
 // minimum length is met; brace depth is file-scoped so the split lands on
-// declaration boundaries in source files.
+// declaration boundaries in source files, and a line too short to keep still
+// closes the braces it holds.
 func parseText(data []byte, p *Policy) []core.CodeBlock {
 	var (
 		blocks  []core.CodeBlock
@@ -54,20 +55,18 @@ func parseText(data []byte, p *Policy) []core.CodeBlock {
 			continue
 		}
 
-		if len(cur) > 0 && (len(cur) >= p.MaxBlockLines ||
-			(depth == 0 && len(cur) >= p.MinBlockLines &&
-				vmath.IntAbs(indent-anchor) >= p.IndentDelta)) {
-			flush()
+		if utf8.RuneCountInString(text) >= p.MinLineRunes {
+			if len(cur) > 0 && (len(cur) >= p.MaxBlockLines ||
+				(depth == 0 && len(cur) >= p.MinBlockLines &&
+					vmath.IntAbs(indent-anchor) >= p.IndentDelta)) {
+				flush()
+			}
+			if len(cur) == 0 {
+				anchor = indent
+			}
+			cur = append(cur, text)
 		}
-		if len(cur) == 0 {
-			anchor = indent
-		}
-
-		cur = append(cur, text)
-		depth += strings.Count(text, "{") - strings.Count(text, "}")
-		if depth < 0 {
-			depth = 0
-		}
+		depth = max(depth+strings.Count(text, "{")-strings.Count(text, "}"), 0)
 	}
 	flush()
 
