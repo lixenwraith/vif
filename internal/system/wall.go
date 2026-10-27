@@ -1170,6 +1170,7 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 		Swing:      p.Swing,
 		Detail:     p.Detail,
 		Ramp:       p.Ramp,
+		Octaves:    p.Octaves,
 	}
 	if err := cfg.Validate(); err != nil {
 		s.world.DebugPrint(err.Error())

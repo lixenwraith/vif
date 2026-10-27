@@ -24,10 +24,10 @@ func newCaveBench(b testing.TB, w, h int) (*engine.World, *WallSystem) {
 	engine.NewGameContextWithClock(world, w, h, engine.NewManualClock())
 	walls := ready(NewWallSystem(world)).(*WallSystem)
 	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{
-		Seed: 7, Speed: 8, MinGap: 7, MaxGap: 15, MinWall: 2, Wavelength: 44, Swing: 9, Detail: 1, Ramp: 96,
+		Seed: 7, Speed: 20, MinGap: 9, MaxGap: 36, MinWall: 2, Wavelength: 64, Swing: 9, Detail: 0, Ramp: 96, Octaves: 4,
 	}})
 	world.Resources.Event.Queue.Consume()
-	world.Resources.Time.DeltaTime = 125 * time.Millisecond
+	world.Resources.Time.DeltaTime = 50 * time.Millisecond
 	return world, walls
 }
 
@@ -121,7 +121,7 @@ func BenchmarkCaveCapture(b *testing.B) {
 
 // BenchmarkCaveNavigation is a tick of navigation over a scrolling cave: a cursor
 // near the left edge and composites in the channel, near it (sighted) or across the
-// map (most without sight), as rock steps a column every two or three ticks
+// map (most without sight), as rock steps a column every tick
 func BenchmarkCaveNavigation(b *testing.B) {
 	for _, size := range caveBenchSizes {
 		for _, far := range []bool{false, true} {
@@ -131,7 +131,6 @@ func BenchmarkCaveNavigation(b *testing.B) {
 			}
 			b.Run(name, func(b *testing.B) {
 				world, walls := newCaveBench(b, size.w, size.h)
-				world.Resources.Time.DeltaTime = 50 * time.Millisecond
 				cols := world.Positions.Rock().Columns()
 				cx := size.w / 8
 				ready(NewCursorSystem(world)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
