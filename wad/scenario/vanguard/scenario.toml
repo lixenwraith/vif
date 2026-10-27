@@ -10,10 +10,10 @@ macro_files = ["macros.toml"]
 # arrive at the right edge on a timer, and each one shot down drops a U that raises
 # the gun a level, from one shot forward to three each way.
 
-# The cave holds a 15-row channel and two walls of at least two rows
+# Twice the cave's narrowest gap, so even the smallest map opens past its narrowest
 [map]
 min_width = 80
-min_height = 22
+min_height = 18
 
 # The raider types, one program each over the one cycle in macros.toml, so each
 # keeps its own kill counter and behavior.<type>.* rows; RaidSpawn picks among them
@@ -39,19 +39,23 @@ background = true
 
 # --- Cave ---
 
-# The mouth holds the centred cursor; the channel strays at most nine rows off the
-# middle, so a tall map climbs no steeper. The rock wears one of four stone arts, the
-# cave's seed picking it; every rock cell draws a glyph, so it reads on a text
-# console's sixteen colours too. The bright glyphs drift at three quarters of the
-# scroll and the dimmer ones slower, so every layer reads behind it. The seed is drawn
-# from the run's, so each new game flies a new cave and a run's seed replays its caves
-# in order.
+# The cave scrolls a column a tick, the fastest and the only even cadence above ten.
+# It is jagged: ceiling and floor each reach in by four octaves of noise from 64
+# columns down, smoothed past any bump of two columns, so the gap runs from 9 rows
+# to 36, four times that, as the map allows, mostly two or three times the
+# narrowest; on a taller map the 36 rows stray at most nine off the middle. With no
+# rough rock the walls stay smooth, and the mouth holds the centred cursor. The rock
+# wears one of four stone arts, the cave's seed picking it; every rock cell draws a
+# glyph, so it reads on a text console's sixteen colours too. The glyphs drift at
+# half the scroll and slower, each layer stepping on whole ticks. The seed is drawn
+# from the run's, so each new game flies a new cave and a run's seed replays its
+# caves in order.
 [states.CaveStart]
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
-    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 8.0, min_gap = 7, max_gap = 15, min_wall = 2, wavelength = 44, swing = 9, detail = 1, ramp = 96, art = ["strata", "cracked", "moss", "crystal"] }, payload_vars = { seed = "cave_seed" } },
-    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 6.0, duration_ms = 0 } },
+    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 36, min_wall = 2, wavelength = 64, swing = 9, detail = 0, ramp = 96, octaves = 4, art = ["strata", "cracked", "moss", "crystal"] }, payload_vars = { seed = "cave_seed" } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 10.0, duration_ms = 0 } },
 ]
 
 # --- Raiders ---
@@ -71,18 +75,18 @@ transitions = [
     ] },
 ]
 
-# A raider spawns at the right edge every four seconds while fewer than three
-# fly, every data species being a raider, on a row drawn within six of the middle;
-# the spawn searches the whole map from there, so rock on that row sends it to the
-# nearest open rows. A 4-wide type's header stands a column in from its left and
-# the storm eye's two, so the width less three is the right edge's header column
-# for both. The type is drawn too, each equally likely: a new type widens the draw
-# and adds its edge.
+# A raider spawns at the right edge every two seconds while fewer than three fly,
+# every data species being a raider, on a row drawn across the map, every type's
+# body clear of the two rows a wall keeps at its thinnest; the spawn searches the
+# whole map from there, so rock on that row sends it to the nearest open rows. A
+# 4-wide type's header stands a column in from its left and the storm eye's two, so
+# the width less three is the right edge's header column for both. The type is
+# drawn too, each equally likely: a new type widens the draw and adds its edge.
 [states.RaidWait]
 parent = "Raid"
 transitions = [
     { trigger = "Tick", target = "RaidSpawn", guard = "And", guard_args = { guards = [
-        { name = "StateTimeExceeds", args = { ms = 4000 } },
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusIntCompare", args = { key = "behavior.count", op = "lt", value = 3 } },
     ] } },
 ]
@@ -92,11 +96,12 @@ parent = "Raid"
 on_enter = [
     { action = "ConfigToVar", payload = { field = "map_width", name = "raid_x" } },
     { action = "DecrementVar", payload = { name = "raid_x", delta = 3 } },
-    { action = "ConfigToVar", payload = { field = "map_height", name = "raid_y" } },
-    { action = "DivideVar", payload = { name = "raid_y", delta = 2 } },
+    { action = "ConfigToVar", payload = { field = "map_height", name = "raid_rows" } },
+    { action = "DecrementVar", payload = { name = "raid_rows", delta = 7 } },
     { action = "IncrementVar", payload = { name = "raid_index" } },
-    { action = "RandomVar", payload = { name = "raid_row", min = -6, max = 6, index_var = "raid_index" } },
-    { action = "IncrementVar", payload = { name = "raid_y", source_var = "raid_row" } },
+    { action = "RandomVar", payload = { name = "raid_y", min = 0, max = 1048575, index_var = "raid_index" } },
+    { action = "ModuloVar", payload = { name = "raid_y", source_var = "raid_rows" } },
+    { action = "IncrementVar", payload = { name = "raid_y", delta = 3 } },
     { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
     { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 3, seed_var = "raid_type_seed", index_var = "raid_index" } },
 ]

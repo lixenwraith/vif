@@ -251,3 +251,51 @@ func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
 		}
 	}
 }
+
+// TestVanguardsCaveStepsOnAnEvenCadence boots the shipped scenario: its cave steps a
+// column on whole ticks, the same number apart every time, since a period between
+// whole ticks falls alternately short and long and reads as dropped frames
+func TestVanguardsCaveStepsOnAnEvenCadence(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	w := a.World()
+	origin := func() (o int64) {
+		w.RunSafe(func() {
+			if rock := w.Positions.Rock(); rock != nil {
+				o = rock.Origin
+			}
+		})
+		return o
+	}
+	a.Tick(5)
+	// since counts from the first step seen, so the first gap is whole
+	var gaps []int
+	last, since := origin(), -1
+	for range 100 {
+		a.Tick(1)
+		if since >= 0 {
+			since++
+		}
+		if o := origin(); o != last {
+			if o != last+1 {
+				t.Fatalf("the cave stepped from column %d to %d in a tick, want one column", last, o)
+			}
+			if since > 0 {
+				gaps = append(gaps, since)
+			}
+			last, since = o, 0
+		}
+	}
+	if len(gaps) < 10 || slices.Min(gaps) != slices.Max(gaps) {
+		t.Fatalf("the cave stepped %d ticks apart, want an even cadence", gaps)
+	}
+}
