@@ -38,19 +38,21 @@ func drawRock(game *engine.GameContext, r *WallRenderer) *render.RenderBuffer {
 }
 
 // TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll: a rock field in stone draws
-// pattern.Art in every rock cell, placed by its profile column, and nothing in the open;
-// a renderer that drew the field before it scrolled draws what a new one draws after,
-// the stone moving with its rock, and a new seed redraws it
+// pattern.Art in every rock cell, placed by its profile column, pattern.Art256 on the 256
+// tier, and nothing in the open; a renderer that drew the field before it scrolled draws
+// what a new one draws after, the stone moving with its rock, and a new seed redraws it
 func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	w.Resources.Config.ColorMode = terminal.ColorMode256
+	indexed := NewWallRenderer(game)
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
 	look := engine.RockLook{Stone: true, Art: uint8(pattern.ArtStrata), Seed: 7}
 	stoneField(w, look, 100)
 	kept := NewWallRenderer(game)
 
 	width, height := w.Resources.Config.MapWidth, w.Resources.Config.MapHeight
-	before := drawRock(game, kept)
+	before, before256 := drawRock(game, kept), drawRock(game, indexed)
 	cols := w.Positions.Rock().Columns()
 	for x := range width {
 		var around stoneNeighbourhood
@@ -62,10 +64,10 @@ func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 			}
 		}
 		for y := range height {
-			cell := before.CellAt(x, y)
+			cell, cell256 := before.CellAt(x, y), before256.CellAt(x, y)
 			if !cols[x].Rock(y) {
-				if cell.Rune != 0 {
-					t.Fatalf("open cell (%d,%d) drew %q", x, y, cell.Rune)
+				if cell.Rune != 0 || cell256.Rune != 0 {
+					t.Fatalf("open cell (%d,%d) drew %q, %q in 256 colours", x, y, cell.Rune, cell256.Rune)
 				}
 				continue
 			}
@@ -73,6 +75,10 @@ func TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll(t *testing.T) {
 			r, fg, bg := pattern.Art(pattern.ArtStrata, 7, pattern.ArtCell{X: 100 + int64(x), Y: int64(y), Depth: depth, Face: face, W: stoneGroupWidth, H: height})
 			if cell.Rune != r || cell.Fg != fg || cell.Bg != bg {
 				t.Fatalf("rock (%d,%d) drew %q %v on %v, want %q %v on %v", x, y, cell.Rune, cell.Fg, cell.Bg, r, fg, bg)
+			}
+			_, fg256, bg256 := pattern.Art256(pattern.ArtStrata, 7, pattern.ArtCell{X: 100 + int64(x), Y: int64(y), Depth: depth, Face: face, W: stoneGroupWidth, H: height})
+			if cell256.Rune != r || cell256.Fg.R != fg256 || cell256.Bg.R != bg256 || cell256.Attrs != terminal.AttrFg256|terminal.AttrBg256 {
+				t.Fatalf("rock (%d,%d) drew %q %v on %v (%v) in 256 colours, want %q %d on %d", x, y, cell256.Rune, cell256.Fg, cell256.Bg, cell256.Attrs, r, fg256, bg256)
 			}
 		}
 	}
