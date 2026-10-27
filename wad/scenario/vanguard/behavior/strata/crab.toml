@@ -1,7 +1,7 @@
 # The crab: it sidles, its claws snapping open and shut. One of the strata's
-# second-tier raiders: RaiderTier2 in ../../macros.toml gives its stats and cycle
+# second-rank raiders: RaiderRank2 in ../../macros.toml gives its stats and cycle
 # and the cave its colours.
-macro = "RaiderTier2"
+macro = "RaiderRank2"
 theme = "Strata"
 width = 4
 height = 2

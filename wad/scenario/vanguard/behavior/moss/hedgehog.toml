@@ -1,7 +1,7 @@
 # The hedgehog: its spines bristling as it trundles, and it blinks. One of the moss
-# cave's first-tier raiders: RaiderTier1 in ../../macros.toml gives its stats and
+# cave's first-rank raiders: RaiderRank1 in ../../macros.toml gives its stats and
 # cycle and the cave its colours.
-macro = "RaiderTier1"
+macro = "RaiderRank1"
 theme = "Moss"
 width = 4
 height = 2

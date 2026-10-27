@@ -1,7 +1,7 @@
-# The djinn: a spirit on a swirling tail. One of the crystal cave's fourth-tier
-# raiders: RaiderTier4 in ../../macros.toml gives its stats and cycle and the cave
+# The djinn: a spirit on a swirling tail. One of the crystal cave's fourth-rank
+# raiders: RaiderRank4 in ../../macros.toml gives its stats and cycle and the cave
 # its colours.
-macro = "RaiderTier4"
+macro = "RaiderRank4"
 theme = "Crystal"
 width = 5
 height = 3

@@ -1,7 +1,7 @@
-# The saucer: lights chasing round its rim. One of the crystal cave's second-tier
-# raiders: RaiderTier2 in ../../macros.toml gives its stats and cycle and the cave
+# The saucer: lights chasing round its rim. One of the crystal cave's second-rank
+# raiders: RaiderRank2 in ../../macros.toml gives its stats and cycle and the cave
 # its colours.
-macro = "RaiderTier2"
+macro = "RaiderRank2"
 theme = "Crystal"
 width = 5
 height = 2

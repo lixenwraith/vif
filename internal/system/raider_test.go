@@ -335,12 +335,12 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 	}
 }
 
-// TestEachVanguardCaveRaidsWithTheSameTiers: the raid's pick lists eight raider
+// TestEachVanguardCaveRaidsWithTheSameRanks: the raid's pick lists eight raider
 // types to each stone art, in the order CaveStart's pick lists the arts, and every
 // program once. Each cave's eight wear one palette and console colour, and fly the
-// same tiers in the same order, its hit points rising, so caves differ in looks
+// same ranks in the same order, its hit points rising, so caves differ in looks
 // alone. The U drop names every type.
-func TestEachVanguardCaveRaidsWithTheSameTiers(t *testing.T) {
+func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 	set, _, merged := vanguardScenario(t)
 	path := func(v any, keys ...any) any {
 		for _, k := range keys {
@@ -380,7 +380,7 @@ func TestEachVanguardCaveRaidsWithTheSameTiers(t *testing.T) {
 	for _, p := range set.Prototypes() {
 		byName[p.Name] = p
 	}
-	// stats is what a tier decides: what it takes to kill, what it costs to touch,
+	// stats is what a rank decides: what it takes to kill, what it costs to touch,
 	// how it flies
 	type stats struct {
 		hp      int
@@ -388,7 +388,7 @@ func TestEachVanguardCaveRaidsWithTheSameTiers(t *testing.T) {
 		contact component.CursorDamage
 		homing  physics.HomingProfile
 	}
-	tiers := func(cave []string) []stats {
+	ranks := func(cave []string) []stats {
 		var out []stats
 		for _, name := range cave {
 			p := byName[name]
@@ -396,19 +396,19 @@ func TestEachVanguardCaveRaidsWithTheSameTiers(t *testing.T) {
 		}
 		return out
 	}
-	first := tiers(raiders[:perCave])
+	first := ranks(raiders[:perCave])
 	for i := 1; i < perCave; i++ {
 		if first[i].hp < first[i-1].hp {
-			t.Fatalf("%s has %d hit points after %s's %d, want the tiers rising", raiders[i], first[i].hp, raiders[i-1], first[i-1].hp)
+			t.Fatalf("%s has %d hit points after %s's %d, want the ranks rising", raiders[i], first[i].hp, raiders[i-1], first[i-1].hp)
 		}
 	}
 	if first[0].hp == first[perCave-1].hp {
-		t.Fatalf("every raider of a cave has %d hit points, want tiers", first[0].hp)
+		t.Fatalf("every raider of a cave has %d hit points, want ranks", first[0].hp)
 	}
 	for c, art := range arts {
 		cave := raiders[c*perCave : (c+1)*perCave]
-		if got := tiers(cave); !slices.Equal(got, first) {
-			t.Errorf("%s's raiders %v fly %+v, want the strata's tiers %+v", art, cave, got, first)
+		if got := ranks(cave); !slices.Equal(got, first) {
+			t.Errorf("%s's raiders %v fly %+v, want the strata's ranks %+v", art, cave, got, first)
 		}
 		look := byName[cave[0]].Look
 		for _, name := range cave[1:] {

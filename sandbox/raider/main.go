@@ -1,5 +1,5 @@
 // Command raider shows vanguard's raider types as its scenario declares them: a
-// band for each stone art, its types weakest tier first between a ceiling and a
+// band for each stone art, its types weakest rank first between a ceiling and a
 // floor of that art's rock, in the colours their programs give them or one hue a
 // slider picks, on the game's truecolor tier or its console tier as a VGA or
 // FreeBSD console shows it. Run it from the repository root, or name the scenario
@@ -93,11 +93,11 @@ const (
 	caveCPS      = 20.0 // the rock's scroll, the cave's own
 )
 
-// raider is one program as the raid spawns it: its prototype, and its tier among
+// raider is one program as the raid spawns it: its prototype, and its rank among
 // its cave's, 1 for the fewest hit points
 type raider struct {
 	proto component.BehaviorPrototype
-	tier  int
+	rank  int
 }
 
 // cave is one stone art and the raider types the raid picks under it
@@ -220,7 +220,7 @@ func load(dir string) ([]cave, error) {
 		}
 		slices.Sort(hps)
 		for j := range c.raiders {
-			c.raiders[j].tier = slices.Index(hps, c.raiders[j].proto.HitPoints) + 1
+			c.raiders[j].rank = slices.Index(hps, c.raiders[j].proto.HitPoints) + 1
 		}
 		caves[i] = c
 	}
@@ -381,7 +381,7 @@ func (a *app) drawRow(cave int, rs []raider, first bool, y int, elapsed time.Dur
 	}
 	for i, r := range rs {
 		x := 1 + nameW + i*cardW
-		a.text(x, y, fmt.Sprintf("T%d ", r.tier), rgb(255, 255, 255), terminal.AttrBold)
+		a.text(x, y, fmt.Sprintf("R%d ", r.rank), rgb(255, 255, 255), terminal.AttrBold)
 		a.text(x+3, y, r.proto.Name, rgb(150, 150, 165), terminal.AttrNone)
 	}
 

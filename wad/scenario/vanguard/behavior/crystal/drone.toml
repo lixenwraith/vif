@@ -1,7 +1,7 @@
 # The drone: its rotors spinning over its visor. One of the crystal cave's
-# first-tier raiders: RaiderTier1 in ../../macros.toml gives its stats and cycle and
+# first-rank raiders: RaiderRank1 in ../../macros.toml gives its stats and cycle and
 # the cave its colours.
-macro = "RaiderTier1"
+macro = "RaiderRank1"
 theme = "Crystal"
 width = 4
 height = 2

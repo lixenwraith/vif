@@ -1,7 +1,7 @@
 # The scarab: a beetle that darts in on a short warning, its eyes blinking in its
-# shell. One of the strata's first-tier raiders: RaiderTier1 in ../../macros.toml
+# shell. One of the strata's first-rank raiders: RaiderRank1 in ../../macros.toml
 # gives its stats and cycle and the cave its colours.
-macro = "RaiderTier1"
+macro = "RaiderRank1"
 theme = "Strata"
 width = 4
 height = 2

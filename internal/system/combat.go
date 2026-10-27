@@ -343,14 +343,21 @@ func landKnockback(c *component.CombatComponent, impulseX, impulseY float64, d t
 	return true
 }
 
-// knockbackImpulse draws a knockback along dir, blended toward the struck
-// member's side of its header when the hit names an offset
-func knockbackImpulse(dirX, dirY float64, offsetX, offsetY int, p *physics.CollisionProfile, rng *vmath.FastRand) (float64, float64) {
+// knockbackImpulse draws a knockback on target along dir, blended toward the
+// struck member's side of its header when the hit names an offset; a data species
+// with a mass of its own is weighed by it rather than by its row's
+func (s *CombatSystem) knockbackImpulse(target core.Entity, dirX, dirY float64, offsetX, offsetY int, attack *profile.AttackProfile, rng *vmath.FastRand) (float64, float64) {
 	if dirX == 0 && dirY == 0 {
 		dirX = 1.0
 	}
+	p, ratio := attack.Collision, attack.Collision.MassRatio
+	if b, ok := s.world.Components.Behavior.GetComponent(target); ok && int(b.Program) < len(s.world.Resources.Behaviors) {
+		if mass := s.world.Resources.Behaviors[b.Program].Mass; mass > 0 {
+			ratio = profile.Reweigh(ratio, attack.Defender, mass)
+		}
+	}
 	return physics.ApplyOffsetCollisionImpulse(dirX, dirY, offsetX, offsetY, p.OffsetInfluence,
-		p.MassRatio, p.AngleVariance, p.ImpulseMin, p.ImpulseMax, rng)
+		ratio, p.AngleVariance, p.ImpulseMin, p.ImpulseMax, rng)
 }
 
 // Shared crossings draw from their artifact so playout order cannot change impulses.
@@ -869,7 +876,7 @@ func (s *CombatSystem) applyCollision(id event.CrossingID, salt uint64, target *
 	if !ok {
 		return false
 	}
-	impulseX, impulseY := knockbackImpulse(originVelX, originVelY, offsetX, offsetY, attack.Collision,
+	impulseX, impulseY := s.knockbackImpulse(targetEntity, originVelX, originVelY, offsetX, offsetY, attack,
 		s.knockbackStream(id, body, salt^uint64(body)))
 	if !landKnockback(target, impulseX, impulseY, attack.KineticImmunity) {
 		s.statKineticImmune.Add(1)
@@ -937,7 +944,7 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 		}
 	}
 
-	impulseX, impulseY := knockbackImpulse(radialX, radialY, offsetX, offsetY, attack.Collision, rng)
+	impulseX, impulseY := s.knockbackImpulse(targetEntity, radialX, radialY, offsetX, offsetY, attack, rng)
 	if !landKnockback(target, impulseX, impulseY, attack.KineticImmunity) {
 		s.statKineticImmune.Add(1)
 		return false

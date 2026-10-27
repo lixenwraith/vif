@@ -1,7 +1,7 @@
 # The jelly: a bell trailing tendrils that sway. One of the crystal cave's
-# third-tier raiders: RaiderTier3 in ../../macros.toml gives its stats and cycle and
+# third-rank raiders: RaiderRank3 in ../../macros.toml gives its stats and cycle and
 # the cave its colours.
-macro = "RaiderTier3"
+macro = "RaiderRank3"
 theme = "Crystal"
 width = 5
 height = 3

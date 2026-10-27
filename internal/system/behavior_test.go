@@ -11,6 +11,8 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 // wardenProgram homes on its target, winds up under a telegraph past twelve cells,
@@ -306,6 +308,28 @@ func TestCombatRefusesToStunAShieldedDataSpecies(t *testing.T) {
 	b.Shielded = false
 	if !combat.applyStunEffect(header, c) {
 		t.Fatal("an unshielded warden refused the stun")
+	}
+}
+
+// TestADataSpeciesIsKnockedBackByItsOwnMass: a tracer pushes a warden of the
+// swarm's mass as it pushes the swarm, and one of twice that mass half as far
+func TestADataSpeciesIsKnockedBackByItsOwnMass(t *testing.T) {
+	ctx, _, header := newWardenWorld(t, wardenX+4, wardenY)
+	w := ctx.World
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	attack := profile.Attack(component.CombatAttackTracer, component.CombatEntityCursor, component.CombatEntitySwarm)
+	push := func(mass float64) float64 {
+		w.Resources.Behaviors[0].Mass = mass
+		x, _ := combat.knockbackImpulse(header, 1, 0, 0, 0, attack, nil)
+		return x
+	}
+	swarm, _ := physics.ApplyOffsetCollisionImpulse(1, 0, 0, 0, 0, attack.Collision.MassRatio, 0,
+		attack.Collision.ImpulseMin, attack.Collision.ImpulseMin, nil)
+	if got := push(profile.MassSwarm); got != swarm {
+		t.Fatalf("a warden of the swarm's mass pushed %v, want the swarm's %v", got, swarm)
+	}
+	if got := push(2 * profile.MassSwarm); got != swarm/2 {
+		t.Fatalf("a warden of twice the swarm's mass pushed %v, want half the swarm's %v", got, swarm)
 	}
 }
 

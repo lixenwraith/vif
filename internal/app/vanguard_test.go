@@ -1,14 +1,21 @@
 package app
 
 import (
+	"fmt"
+	"os"
 	"slices"
 	"testing"
+	"time"
+
+	"github.com/lixenwraith/color"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/resource"
 )
@@ -432,5 +439,175 @@ func TestVanguardsCaveStepsOnAnEvenCadence(t *testing.T) {
 	}
 	if len(gaps) < 10 || slices.Min(gaps) != slices.Max(gaps) {
 		t.Fatalf("the cave stepped %d ticks apart, want an even cadence", gaps)
+	}
+}
+
+// newVanguard is a headless 120x40 vanguard run past its boot, the ship armed
+func newVanguard(t *testing.T) *App {
+	t.Helper()
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	w := a.World()
+	for range 60 {
+		armed := false
+		w.RunSafe(func() {
+			weapon, ok := w.Components.Weapon.GetComponent(w.Resources.Player.Entity)
+			armed = ok && weapon.GunLevels > 0
+		})
+		if armed {
+			return a
+		}
+		a.Tick(1)
+	}
+	t.Fatal("the ship never armed")
+	return nil
+}
+
+// TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver: a crush and a defeat
+// by heat and energy alike halt the rock and the drift under a red strobe, and the
+// game starts over once the strobe has run, opening on what ended the last
+func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
+	for _, tc := range []struct {
+		name, message string
+		lose          func(w *engine.World)
+	}{
+		{"crushed", "Crushed Against The Edge!", func(w *engine.World) {
+			w.PushEvent(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: w.Resources.Player.Entity})
+		}},
+		{"died", "You Died!", func(w *engine.World) {
+			w.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: w.Resources.Player.Entity})
+			w.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: w.Resources.Player.Entity})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			a := newVanguard(t)
+			w := a.World()
+			var seen []event.EventType
+			var red bool
+			var messages []string
+			a.SetDispatchTap(func(ev event.GameEvent) {
+				seen = append(seen, ev.Type)
+				switch p := ev.Payload.(type) {
+				case *event.StrobeRequestPayload:
+					red = red || p.Color == (color.RGB{R: 255})
+				case *event.MetaStatusMessagePayload:
+					messages = append(messages, p.Message)
+				}
+			})
+			origin := func() (o int64) {
+				w.RunSafe(func() { o = w.Positions.Rock().Origin })
+				return o
+			}
+			w.RunSafe(func() { tc.lose(w) })
+			a.Tick(2)
+			frozen := origin()
+			if !slices.Contains(seen, event.EventCaveStop) || !slices.Contains(seen, event.EventDriftCancel) || !red {
+				t.Fatalf("lost: cave stop %t, drift cancel %t, red strobe %t, want all three", slices.Contains(seen, event.EventCaveStop), slices.Contains(seen, event.EventDriftCancel), red)
+			}
+			ticks := 2
+			for !slices.Contains(seen, event.EventGameResetRequest) {
+				if ticks > 60 {
+					t.Fatal("the game never started over")
+				}
+				if o := origin(); o != frozen {
+					t.Fatalf("tick %d: the rock scrolled from column %d to %d under the strobe", ticks, frozen, o)
+				}
+				a.Tick(1)
+				ticks++
+			}
+			if held := time.Duration(ticks) * parameter.GameUpdateInterval; held < 250*time.Millisecond {
+				t.Fatalf("the game started over %v after it was lost, want after the strobe's 250ms", held)
+			}
+			if !slices.Contains(messages, tc.message) {
+				t.Fatalf("the new game opened on %q, want %q", messages, tc.message)
+			}
+		})
+	}
+}
+
+// TestVanguardsRaidClimbsARankEveryThreeKillsAndStartsOverAfterItsBoss: raiders
+// the player shoots down as they arrive come from the first rank's two types until
+// three fall, then the next rank's, to the fourth; its third kill brings the boss's
+// green strobe and the first rank again
+func TestVanguardsRaidClimbsARankEveryThreeKillsAndStartsOverAfterItsBoss(t *testing.T) {
+	t.Parallel()
+	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/vanguard"), "scenario.toml")
+	if err != nil {
+		t.Skipf("vanguard scenario not present: %v", err)
+	}
+	// rankOf is each type's rank, read from the guard counting its kills
+	rankOf := map[string]int{}
+	states := merged["states"].(map[string]any)
+	for r := range 4 {
+		kill := states[fmt.Sprintf("RaidRank%d", r+1)].(map[string]any)["transitions"].([]any)[0].(map[string]any)
+		guard := kill["guard_args"].(map[string]any)["guards"].([]any)[0].(map[string]any)
+		for _, name := range guard["args"].(map[string]any)["names"].([]any) {
+			rankOf[name.(string)] = r
+		}
+	}
+
+	a := newVanguard(t)
+	w := a.World()
+	var spawned []string
+	greens, resets := 0, 0
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		switch p := ev.Payload.(type) {
+		case *event.SpeciesCreatedPayload:
+			if p.Species >= component.SpeciesDataFirst {
+				spawned = append(spawned, w.Resources.Behaviors[p.Species-component.SpeciesDataFirst].Name)
+			}
+		case *event.StrobeRequestPayload:
+			if p.Color == (color.RGB{G: 255}) {
+				greens++
+			}
+		}
+		if ev.Type == event.EventGameResetRequest {
+			resets++
+		}
+	})
+	// shoot waits for a raider and has the player shoot it down
+	shoot := func() {
+		t.Helper()
+		for range 900 {
+			a.Tick(1)
+			shot := false
+			w.RunSafe(func() {
+				for _, header := range w.Components.Behavior.Entities() {
+					if combat, ok := w.Components.Combat.GetPtr(header); ok {
+						combat.HitPoints, combat.LastDamagedBy = 0, w.Resources.Player.Entity
+						shot = true
+						return
+					}
+				}
+			})
+			if shot {
+				a.Tick(1)
+				return
+			}
+		}
+		t.Fatal("no raider spawned")
+	}
+
+	const perRank = 3
+	for kill := range 4*perRank + 1 {
+		shoot()
+		if resets != 0 {
+			t.Skip("the game started over mid-climb")
+		}
+		want := kill / perRank % 4
+		if got := spawned[kill]; rankOf[got] != want {
+			t.Fatalf("raider %d is a %s of rank %d, want rank %d after %d kills (%v)", kill, got, rankOf[got]+1, want+1, kill, spawned)
+		}
+		if bosses := kill / (4 * perRank); greens != bosses {
+			t.Fatalf("after %d kills the boss strobed %d times, want %d", kill+1, greens, bosses)
+		}
 	}
 }

@@ -1,7 +1,7 @@
-# The slime: a blob that heaves itself along. One of the cracked cave's second-tier
-# raiders: RaiderTier2 in ../../macros.toml gives its stats and cycle and the cave
+# The slime: a blob that heaves itself along. One of the cracked cave's second-rank
+# raiders: RaiderRank2 in ../../macros.toml gives its stats and cycle and the cave
 # its colours.
-macro = "RaiderTier2"
+macro = "RaiderRank2"
 theme = "Cracked"
 width = 5
 height = 2

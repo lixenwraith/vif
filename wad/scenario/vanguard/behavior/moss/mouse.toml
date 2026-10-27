@@ -1,7 +1,7 @@
-# The mouse: it twitches its whiskers, and blinks. One of the moss cave's first-tier
-# raiders: RaiderTier1 in ../../macros.toml gives its stats and cycle and the cave
+# The mouse: it twitches its whiskers, and blinks. One of the moss cave's first-rank
+# raiders: RaiderRank1 in ../../macros.toml gives its stats and cycle and the cave
 # its colours.
-macro = "RaiderTier1"
+macro = "RaiderRank1"
 theme = "Moss"
 width = 5
 height = 2
