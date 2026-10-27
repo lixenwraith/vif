@@ -37,8 +37,11 @@ type NavigationSystem struct {
 
 	// Composite passability, moved cell by cell as the walls change
 	compositePassability *navigation.CompositePassability
-	walls                []bool // the WallTest grid a derivation reads
-	seenWalls            []bool // the walls everything derived now stands on
+	// walls are what everything derived stands on, wallsW×wallsH, read from the
+	// cells the wall log named since wallsSeq; scratch takes a whole re-read
+	walls, scratch []bool
+	wallsW, wallsH int
+	wallsSeq       uint64
 
 	// grid and comp are the generations of the walls and of the composite
 	// passability: each moves when its tier changes, so a field or route graph
@@ -46,7 +49,6 @@ type NavigationSystem struct {
 	// derived is false until passability and the grids were derived whole.
 	grid, comp uint64
 	derived    bool
-	wallsGen   uint64 // the wall grid rebuild the walls were last diffed at
 
 	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
 	targets [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
@@ -97,7 +99,7 @@ func (s *NavigationSystem) Init() {
 	s.groups = make(map[uint8]*targetGroupNav)
 	clear(s.targets[:])
 	s.routeRebuildTicks = 0
-	s.gridsAt, s.wallsGen, s.derived = 0, 0, false
+	s.gridsAt, s.wallsSeq, s.derived = 0, 0, false
 
 	s.getOrCreateGroup(0)
 
@@ -228,48 +230,70 @@ func (s *NavigationSystem) resizePassability(width, height int) {
 }
 
 // applyWalls brings passability, the grids and every field up to the walls as
-// they stand. A cell closed drops the fields of its tier, cells opened repair them
-// in place, and the composite tier moves only where a footprint's fit changed; a
-// wholesale change, or the first derivation, derives everything whole.
+// they stand, re-testing only the cells the wall log names: a cell closed drops
+// the fields of its tier, cells opened repair them in place, and the composite
+// tier moves only where a footprint's fit changed. A lost log re-reads every cell;
+// a wholesale change, or the first derivation, derives everything whole.
 func (s *NavigationSystem) applyWalls() {
-	isWall := s.world.Positions.WallTest(component.WallBlockKinetic, &s.walls)
-	isWall(-1, -1) // the first call builds the grid
 	config := s.world.Resources.Config
 	w, h := config.MapWidth, config.MapHeight
-	gen := s.world.Positions.WallGeneration(component.WallBlockKinetic)
+	isWall := func(x, y int) bool {
+		return x >= 0 && y >= 0 && x < s.wallsW && y < s.wallsH && s.walls[y*s.wallsW+x]
+	}
 	// A restore carries the walls and passability the fields stand on, not the grids
-	// searched on them: those are refilled before any diff, which may find nothing
+	// searched on them: those are refilled before any change, which may find nothing
 	if s.derived && s.gridsAt != s.grid {
 		s.pointGrid.Fill(w, h, isWall)
 		s.compositeGrid.Fill(w, h, s.compositePassability.IsBlocked)
 		s.gridsAt = s.grid
 	}
-	if s.derived && gen == s.wallsGen {
+	cells, seq, logged := s.world.Positions.WallChanges(s.wallsSeq)
+	s.wallsSeq = seq
+	gw, gh := s.world.Positions.GridDimensions()
+	ww, wh := max(min(w, gw), 0), max(min(h, gh), 0) // the cells a wall test covers
+	whole := !s.derived || ww != s.wallsW || wh != s.wallsH
+	if logged && !whole && len(cells) == 0 {
 		return
 	}
-	s.wallsGen = gen
 	s.pointOpened, s.pointClosed = s.pointOpened[:0], s.pointClosed[:0]
 	s.compOpened, s.compClosed = s.compOpened[:0], s.compClosed[:0]
-	whole := !s.derived || len(s.walls) != len(s.seenWalls)
+	changed, bulk := 0, ww*wh/50
+	turned := func(x, y int, blocked bool) {
+		if changed++; changed > bulk || x >= w || y >= h {
+			return
+		}
+		if blocked {
+			s.pointClosed = append(s.pointClosed, vmath.Point{X: x, Y: y})
+		} else {
+			s.pointOpened = append(s.pointOpened, vmath.Point{X: x, Y: y})
+		}
+	}
+	switch {
+	case whole || !logged:
+		test := s.world.Positions.WallTest(component.WallBlockKinetic, &s.scratch)
+		test(-1, -1) // the first call copies the grid
+		if !whole {
+			navigation.Diff(s.walls, s.scratch, ww, turned)
+		}
+		s.walls, s.scratch, s.wallsW, s.wallsH = s.scratch, s.walls, ww, wh
+	default:
+		for _, c := range cells {
+			if c.X < 0 || c.Y < 0 || c.X >= ww || c.Y >= wh {
+				continue
+			}
+			i := c.Y*ww + c.X
+			if blocked := s.world.Positions.HasBlockingWallAt(c.X, c.Y, component.WallBlockKinetic); blocked != s.walls[i] {
+				s.walls[i] = blocked
+				turned(c.X, c.Y, blocked)
+			}
+		}
+	}
 	if !whole {
-		gw, _ := s.world.Positions.GridDimensions()
-		changed, bulk := 0, len(s.walls)/50
-		navigation.Diff(s.seenWalls, s.walls, min(w, gw), func(x, y int, blocked bool) {
-			if changed++; changed > bulk || x >= w || y >= h {
-				return
-			}
-			if blocked {
-				s.pointClosed = append(s.pointClosed, vmath.Point{X: x, Y: y})
-			} else {
-				s.pointOpened = append(s.pointOpened, vmath.Point{X: x, Y: y})
-			}
-		})
 		if changed == 0 {
-			return // rebuilt to the same walls
+			return // the named cells stand as they stood
 		}
 		whole = changed > bulk
 	}
-	s.seenWalls = append(s.seenWalls[:0], s.walls...)
 	s.grid++
 	if whole {
 		s.compositePassability.Compute(isWall)
@@ -290,20 +314,15 @@ func (s *NavigationSystem) applyWalls() {
 		s.pointGrid.Set(c.X, c.Y, false)
 	}
 	// Every header whose footprint covers a changed cell may fit differently.
-	footW, footH, offX, offY := s.compositePassability.GetFootprint()
-	flip := func(x, y int, valid bool) {
+	footW, footH, _, _ := s.compositePassability.GetFootprint()
+	s.statROICells.Add(int64((len(s.pointClosed) + len(s.pointOpened)) * footW * footH))
+	s.compositePassability.Moved(s.pointClosed, s.pointOpened, func(x, y int, valid bool) {
 		if valid {
 			s.compOpened = append(s.compOpened, vmath.Point{X: x, Y: y})
 		} else {
 			s.compClosed = append(s.compClosed, vmath.Point{X: x, Y: y})
 		}
-	}
-	for _, cells := range [2][]vmath.Point{s.pointClosed, s.pointOpened} {
-		for _, c := range cells {
-			s.statROICells.Add(int64(footW * footH))
-			s.compositePassability.ComputeROI(isWall, c.X-footW+1+offX, c.Y-footH+1+offY, c.X+offX, c.Y+offY, flip)
-		}
-	}
+	})
 	compMoved := len(s.compOpened)+len(s.compClosed) > 0
 	if compMoved {
 		s.comp++
@@ -1262,7 +1281,8 @@ func restoreField(c *navigation.FlowFieldCache, at, gen uint64, grid *navigation
 type navState struct {
 	groups            map[uint8]targetGroupNav
 	passability       *navigation.CompositePassability
-	walls, seenWalls  []bool
+	walls             []bool
+	wallsW, wallsH    int
 	grid, comp        uint64
 	derived           bool
 	targets           [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
@@ -1274,7 +1294,7 @@ type navState struct {
 // phase each was rebuilt in, which LoadShared re-derives as a joiner would.
 func (s *NavigationSystem) CopyState() any {
 	c := navState{groups: make(map[uint8]targetGroupNav, len(s.groups)), walls: slices.Clone(s.walls),
-		seenWalls: slices.Clone(s.seenWalls), grid: s.grid, comp: s.comp, derived: s.derived, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
+		wallsW: s.wallsW, wallsH: s.wallsH, grid: s.grid, comp: s.comp, derived: s.derived, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
 		graphs: s.world.Resources.RouteGraph.Graphs()}
 	if s.compositePassability != nil {
 		c.passability = s.compositePassability.Clone()
@@ -1300,8 +1320,8 @@ func (s *NavigationSystem) RestoreState(v any) error {
 	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
 		dbg.CompositePassability = s.compositePassability
 	}
-	s.walls, s.seenWalls, s.grid, s.comp, s.derived = slices.Clone(c.walls), slices.Clone(c.seenWalls), c.grid, c.comp, c.derived
-	s.gridsAt, s.wallsGen = 0, 0
+	s.walls, s.wallsW, s.wallsH, s.grid, s.comp, s.derived = slices.Clone(c.walls), c.wallsW, c.wallsH, c.grid, c.comp, c.derived
+	s.gridsAt, s.wallsSeq = 0, 0
 	s.targets, s.routeRebuildTicks = c.targets, c.routeRebuildTicks
 	s.world.Resources.RouteGraph.SetGraphs(c.graphs)
 	return nil

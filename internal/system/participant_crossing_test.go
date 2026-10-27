@@ -88,6 +88,23 @@ func TestMetaDefeatGatesFollowRosteredOwnerCrossings(t *testing.T) {
 	}
 }
 
+// A crush is a defeat every instance latches alike: the walls crush the same cursor
+// on the same tick, so no owner crossing has to author it
+func TestACrushedCursorIsDefeated(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	meta := ready(NewMetaSystem(ctx)).(*MetaSystem)
+	cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest,
+		Payload: &event.CursorSpawnRequestPayload{X: 5, Y: 5, Control: uint8(component.ControlLocal)}})
+	w.Resources.Event.Queue.Consume()
+	meta.HandleEvent(event.GameEvent{Type: event.EventCursorCrushed,
+		Payload: &event.CursorCrushedPayload{Entity: w.Resources.Player.Slot(0)}})
+	if !w.Resources.Status.Bools.Get("session.any_defeated").Load() {
+		t.Fatal("a crushed cursor is not defeated")
+	}
+}
+
 // TestAWraithNeitherLosesNorHoldsUpADefeat: the players left decide a defeat, so a
 // defeated player alone with a Wraith has lost, and a session of Wraiths has not.
 func TestAWraithNeitherLosesNorHoldsUpADefeat(t *testing.T) {

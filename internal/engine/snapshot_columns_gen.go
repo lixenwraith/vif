@@ -1281,6 +1281,29 @@ func encodeColumnsWeapon(dst []byte, rows []StoreEntry[component.WeaponComponent
 	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.Aim)
 	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Right)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Left)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Down)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			dst = appendUint(dst, rows[i].Value.GunPath[j].Up)
+		}
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.GunLevels)
+	}
 	return dst
 }
 
@@ -1311,6 +1334,29 @@ func decodeColumnsWeapon(r *columnReader) []StoreEntry[component.WeaponComponent
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Aim, r)
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Right, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Left, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Down, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.GunPath {
+			readUint(&rows[i].Value.GunPath[j].Up, r)
+		}
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.GunLevels, r)
 	}
 	return rows
 }
@@ -2615,12 +2661,6 @@ func encodeColumnsSwarm(dst []byte, rows []StoreEntry[component.SwarmComponent])
 		dst = appendF64(dst, rows[i].Value.ChargeTargetY)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.TeleportStartX)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.TeleportStartY)
-	}
-	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.TeleportTargetX)
 	}
 	for i := range rows {
@@ -2671,12 +2711,6 @@ func decodeColumnsSwarm(r *columnReader) []StoreEntry[component.SwarmComponent] 
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.ChargeTargetY, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.TeleportStartX, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.TeleportStartY, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.TeleportTargetX, r)
@@ -3368,6 +3402,9 @@ func encodeColumnsBehavior(dst []byte, rows []StoreEntry[component.BehaviorCompo
 	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.Shielded)
 	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Beaming)
+	}
 	return dst
 }
 
@@ -3404,6 +3441,9 @@ func decodeColumnsBehavior(r *columnReader) []StoreEntry[component.BehaviorCompo
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.Shielded, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Beaming, r)
 	}
 	return rows
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -105,6 +106,20 @@ func TestConsoleGlyphsAreInEveryConsoleFont(t *testing.T) {
 	for _, quadrant := range "▘▝▖▗▀▄▌▐▚▞▛▜▙▟▓" {
 		shade, _ := wallShade256(quadrant)
 		glyphs = append(glyphs, shade)
+	}
+	// Stone art at every depth a cave reads and on every face, each glyph once
+	stone := map[rune]bool{}
+	for preset := range pattern.ArtPresetCount {
+		for seed := range uint64(4) {
+			for i := range 1 << 12 {
+				cell := pattern.ArtCell{X: int64(i % 128), Y: int64(i / 128), Depth: i % (pattern.FaceReach + 1),
+					Face: pattern.Face(i / 7 % 4), W: stoneGroupWidth, H: 32}
+				if r, _, _ := pattern.Art(preset, seed, cell); !stone[r] {
+					stone[r] = true
+					glyphs = append(glyphs, r)
+				}
+			}
+		}
 	}
 	for _, r := range glyphs {
 		if (r < ' ' || r > '~') && !strings.ContainsRune(consoleGlyphs, r) {

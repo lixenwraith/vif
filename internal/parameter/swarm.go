@@ -78,6 +78,9 @@ const (
 const (
 	// SwarmTeleportDuration is visual effect duration before instant move
 	SwarmTeleportDuration = 400 * time.Millisecond
+	// SwarmArriveDuration is the stop a landing holds before the chase, as long as
+	// the deceleration that followed a teleport before
+	SwarmArriveDuration = SwarmDecelerationDuration
 
 	// SwarmTeleportBeamAlpha is peak beam opacity
 	SwarmTeleportBeamAlpha = 0.5

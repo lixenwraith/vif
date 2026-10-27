@@ -289,19 +289,21 @@ where it is.
 | Disruptor | `P` | Adds a disruptor charge/orb. |
 | Turret | `B` | Adds a turret charge/orb. |
 | Emitter | `R` | Adds an emitter charge/orb. |
-| Gun | `T` | Adds a gun lane per direction, up to three. |
+| Gun | `T` | Adds a gun lane per direction, up to three, or on a scenario's path its next level. |
+| Upgrade | `U` | Raises the gun a level, as a gun drop does; only an event drops it. |
 | Heat | `H` | Adds the configured heat reward (currently 10). |
 | Energy | `E` | Adds the configured energy reward (currently 10,000). |
 
 Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray,
-tracer. The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
+tracer; the upgrade, a gun charge too, is lettered for a gun that climbs a path. The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
 documentation does not duplicate every rate because those values are expected
 to change during tuning.
 
 A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
 places one kind at a cell for every cursor the instance simulates, with no roll,
 and each drop homes on its owner as above. No species drops the gun; the
-campaign's tower victory drops one at the tower. Like any FSM entry action, the
+campaign's tower victory drops one at the tower, and vanguard drops a `U` where a
+player shoots a raider down. Like any FSM entry action, the
 drop does not replay on an instance a correction moves past the state raising it.
 
 ## 7. Weapons and attacks
@@ -325,7 +327,7 @@ locally; only center/radius/attack geometry crosses for shared combat.
 
 | Weapon | Model |
 |---|---|
-| Gun | Innate. One tracer from the cursor per cardinal of its aim, all four unless the scenario's `EventGunAimRequest` narrows it; direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back; a gun drop adds a charge. |
+| Gun | Innate. One tracer from the cursor per cardinal of its aim, all four unless the scenario's `EventGunAimRequest` narrows it; direct damage on contact; a positive tracer turns the red glyphs it crosses into blossom, a negative one turns blue ones green and releases decay from them. Each impact chains into the rod's lightning, so the energy drain and its zap span the firing cursor and the species rather than the impact cell. Two charges fire the two side lanes, three add the centre back; a gun drop adds a charge. A scenario can set an upgrade path instead (`EventGunAimRequest`'s `path`): each level names the lanes, up to three, along each cardinal, a gun of n charges fires level n, and it holds a charge per level. |
 | Rod | Direct lightning against unique nearest targets, rewarding energy in the attacker's current polarity; at the cap each hit arcs to the nearest other target in range. |
 | Launcher | Homing/area missiles assigned from the nearest-target set; at the cap its cooldown halves. |
 | Disruptor | Stun pulse centred on its orb; it fires only while a target is inside the ellipse; at two charges the pulse also burns. |
@@ -397,12 +399,21 @@ each column its ceiling and floor rows from the seed in integer arithmetic, so e
 instance and platform lays the same rock: a gap between `min_gap` and `max_gap`
 rows, walls of at least `min_wall`, a channel snaking at most `swing` rows off the
 middle with knots every `wavelength` columns, `detail` rows of rough rock, opening
-from a centred mouth over `ramp` columns. Each step, at most one a tick, moves
-every shared wall a column left, drops what leaves the map and lays the column
-entering it. What the rock arrives on goes a column left and a row toward its
-column's nearer opening, or straight left: a cursor by a placement, so the rock
-only pushes. A cursor the rock presses against the left edge is crushed
-(`EventCursorCrushed`), then squeezed out wherever there is room; a loose glyph is
+from a centred mouth over `ramp` columns. The rock is a field of ceiling and floor
+rows per column, not wall entities, which every wall query reads. It draws in
+`visual`, or in a stone art preset: `art` lists them (`none` for bare stone,
+`strata`, `cracked`, `moss`, `crystal`, `masonry`) and the seed picks one. A
+cell's glyph and colours follow from the preset, the seed, its profile column and
+row, and how deep it lies from the nearest opening on which side, so the stone
+moves with the rock and reads on a text console. Each step, at
+most one a tick, moves the rock and every shared wall a column left, drops what
+leaves the map and lays the column entering it. What the rock arrives on goes a
+column left and a row toward its column's nearer opening, or straight left: a
+cursor by a placement, so the rock only pushes. A flying composite the rock
+reaches at any member moves whole the same way, else to the nearest place its
+footprint fits, enraged or not, and one with room nowhere is destroyed with no
+reward. A cursor the rock finds no room for, pressed against the left edge, is
+crushed where it stands (`EventCursorCrushed`), which defeats it; a loose glyph is
 removed as scenery. `EventCaveStop` leaves the rock where it stands.
 
 `EnvironmentSystem` owns map-wide gameplay effects rather than rendering
@@ -495,10 +506,19 @@ program, `behavior/warden.toml`, is the template for a species of one's own
 
 `vanguard` flies the cursor through a cave (§9) scrolling left at eight columns a
 second, its channel seven to fifteen rows high and never more than nine rows off
-the middle, so a tall terminal climbs no steeper. Glyphs drift left behind the
-rock at three depths, the gun fires right only, and drains with their fusions,
-nuggets and gold are off. A crush stops the cave, says so, and starts the game
-over two seconds later.
+the middle, so a tall terminal climbs no steeper; each new game flies a new cave,
+its rock in strata, cracked, moss or crystal stone.
+Glyphs drift left behind the rock at three depths, and drains, nuggets and gold
+are off. Raiders, the cave's swarms, beam in at the right edge every four seconds
+while fewer than three fly. A raider is a program of the scenario's own
+(`behavior/raider.toml`) running the swarm's chase, lock, charge and teleport; it
+lives until killed, and the rock pushes it as it pushes the cursor. One a player
+shoots down drops a `U` where it fell, for every player, and each `U` raises the
+gun a level of the scenario's nine: one shot forward, then two and three, one up
+and one down, one back, two up and down, two back, three up and down, three back.
+Forward is right, the way the ship flies. A crush is a defeat: the game starts
+over at once, the gun back at one shot, and opens with "Crushed against the
+edge".
 
 ## 11. System inventory
 

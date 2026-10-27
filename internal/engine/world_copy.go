@@ -101,6 +101,7 @@ func (w *World) CopyIn(c *WorldCopy) {
 		p.index.set(e, int32(i))
 	}
 	p.grid.Resize(c.gridW, c.gridH)
+	p.wallLog.lose()
 	at := 0
 	for _, oc := range c.cells {
 		p.grid.load(oc.index, oc.count, oc.shared, c.occupants[at:at+int(oc.count)])

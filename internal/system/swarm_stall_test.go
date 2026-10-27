@@ -216,6 +216,7 @@ func TestAStunSendsAnAttackBackToTheChaseWithTheWholeInterval(t *testing.T) {
 		{"lock", component.SwarmStateLock, parameter.SwarmLockDuration},
 		{"charge", component.SwarmStateCharge, parameter.SwarmChargeDuration},
 		{"teleport", component.SwarmStateTeleport, parameter.SwarmTeleportDuration},
+		{"arrive", component.SwarmStateArrive, parameter.SwarmArriveDuration},
 		{"decelerate", component.SwarmStateDecelerate, parameter.SwarmDecelerationDuration},
 	} {
 		t.Run(entry.name, func(t *testing.T) {
@@ -275,5 +276,83 @@ func TestAChargeThatMeetsAWallDeceleratesInThatStep(t *testing.T) {
 	}
 	if kin.VelX >= 0 {
 		t.Fatalf("velocity %v after the hit, want the bounce back off the edge", kin.VelX)
+	}
+}
+
+// rockRows lays rock over the rows [0, ceil) of the columns [x0, x1) of an
+// 80-column map, leaving every other cell open
+func rockRows(w *engine.World, x0, x1, ceil int) {
+	cols := make([]engine.RockColumn, 80)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Floor: 40}
+		if x >= x0 && x < x1 {
+			cols[x].Ceil = ceil
+		}
+	}
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+}
+
+// TestATeleportArrivesBesideRockThatTookItsLanding: rock that came over the
+// landing while the beam ran never holds the swarm. The arrival stands on the
+// nearest clear footprint, counted as a charge, and the chase follows it with
+// the whole interval.
+func TestATeleportArrivesBesideRockThatTookItsLanding(t *testing.T) {
+	w, s, header := newStalledSwarm(t)
+	sw, _ := w.Components.Swarm.GetPtr(header)
+	sw.Machine = aboutToExpire(component.SwarmStateTeleport, parameter.SwarmTeleportDuration)
+	sw.TeleportTargetX, sw.TeleportTargetY = 40, 20
+	rockRows(w, 36, 46, 22)
+
+	stepSwarm(w, s)
+
+	if sw.Machine.State != component.SwarmStateArrive || sw.ChargesCompleted != 1 {
+		t.Fatalf("after the beam: instance %+v with %d charges, want an arrival counting one",
+			sw.Machine, sw.ChargesCompleted)
+	}
+	pos, _ := w.Positions.GetPosition(header)
+	left, top := pos.X-parameter.SwarmHeaderOffsetX, pos.Y-parameter.SwarmHeaderOffsetY
+	if !w.Positions.IsAreaFree(left, top, parameter.SwarmWidth, parameter.SwarmHeight, component.WallBlockSpawn) {
+		t.Fatalf("arrived at %+v, whose footprint holds rock", pos)
+	}
+	if kin, _ := w.Components.Kinetic.GetComponent(header); kin.VelX != 0 || kin.VelY != 0 ||
+		kin.PreciseX != float64(pos.X)+0.5 || kin.PreciseY != float64(pos.Y)+0.5 {
+		t.Fatalf("arrived at %+v with a body at (%v,%v) moving (%v,%v), want at rest on the cell",
+			pos, kin.PreciseX, kin.PreciseY, kin.VelX, kin.VelY)
+	}
+
+	for range parameter.SwarmArriveDuration / parameter.GameUpdateInterval {
+		stepSwarm(w, s)
+	}
+	want := machine.Instance[component.SwarmState]{State: component.SwarmStateChase, Duration: parameter.SwarmChargeInterval}
+	if sw.Machine != want || sw.ChargesCompleted != 1 {
+		t.Fatalf("after the arrival: instance %+v with %d charges, want %+v counting one", sw.Machine, sw.ChargesCompleted, want)
+	}
+	if stalls := w.Resources.Status.Ints.Get("swarm.transition_stalls").Load(); stalls != 0 {
+		t.Fatalf("%d stalls counted for an arrival that found room", stalls)
+	}
+}
+
+// TestATeleportWithNoRoomToArriveBrakesWhereItStands: with rock everywhere the
+// arrival is refused, and the swarm brakes where it stood, counted as a charge
+// and as a stall
+func TestATeleportWithNoRoomToArriveBrakesWhereItStands(t *testing.T) {
+	w, s, header := newStalledSwarm(t)
+	sw, _ := w.Components.Swarm.GetPtr(header)
+	sw.Machine = aboutToExpire(component.SwarmStateTeleport, parameter.SwarmTeleportDuration)
+	sw.TeleportTargetX, sw.TeleportTargetY = 40, 20
+	rockRows(w, 0, 80, 40)
+	start, _ := w.Positions.GetPosition(header)
+
+	stepSwarm(w, s)
+
+	if sw.Machine.State != component.SwarmStateDecelerate || sw.ChargesCompleted != 1 {
+		t.Fatalf("after the beam: instance %+v with %d charges, want a brake counting one",
+			sw.Machine, sw.ChargesCompleted)
+	}
+	if pos, _ := w.Positions.GetPosition(header); pos != start {
+		t.Fatalf("moved to %+v with no room anywhere, want still at %+v", pos, start)
+	}
+	if stalls := w.Resources.Status.Ints.Get("swarm.transition_stalls").Load(); stalls != 1 {
+		t.Fatalf("%d stalls counted for a teleport with no room, want 1", stalls)
 	}
 }

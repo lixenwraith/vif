@@ -51,15 +51,16 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s.motion = newBounceTelemetry(world.Resources.Status, "swarm")
 
 	// A timed chase, then a lock that ends in a charge along a clear line, a
-	// teleport around a blocked one or a brake at once, and the brake back into the
-	// chase. A stun sends an attack back to the chase with the full interval and
-	// freezes the swarm.
+	// teleport around a blocked one or a brake at once; a teleport arrives beside
+	// whatever took its landing, or brakes where it stands with no room anywhere,
+	// and the brake and the arrival go back into the chase. A stun sends an attack
+	// back to the chase with the full interval and freezes the swarm.
 	type edge = machine.Edge[component.SwarmState, *swarmCtx]
 	type target = machine.Target[component.SwarmState, *swarmCtx]
 	chase := []target{{State: component.SwarmStateChase, Duration: parameter.SwarmChargeInterval}}
 	decelerate := []target{{State: component.SwarmStateDecelerate}}
 	attacking := machine.MaskOf(component.SwarmStateLock, component.SwarmStateCharge,
-		component.SwarmStateTeleport, component.SwarmStateDecelerate)
+		component.SwarmStateTeleport, component.SwarmStateArrive, component.SwarmStateDecelerate)
 
 	s.graph = machine.Must(machine.New[component.SwarmState, *swarmCtx](s.observe).
 		State(component.SwarmStateChase, machine.State[*swarmCtx]{
@@ -96,6 +97,13 @@ func NewSwarmSystem(world *engine.World) engine.System {
 			Enter:    s.enterDecelerate,
 			Tick:     s.brake,
 		}).
+		State(component.SwarmStateArrive, machine.State[*swarmCtx]{
+			Name:     "arrive",
+			Duration: parameter.SwarmArriveDuration,
+			Flags:    swarmEnraged,
+			Probe:    s.probeArrival,
+			Enter:    s.enterArrive,
+		}).
 		Global(edge{From: attacking, Guard: swarmStunned, To: chase}).
 		Suspend(swarmStunned).
 		// No target to lock delays the lock, and the chase keeps moving meanwhile
@@ -111,8 +119,14 @@ func NewSwarmSystem(world *engine.World) engine.System {
 		Timeout(component.SwarmStateCharge, edge{To: decelerate}).
 		// A wall ends the charge in the step that meets it, so the bounce stands
 		PostTick(component.SwarmStateCharge, edge{Guard: swarmHitWall, To: decelerate}).
-		// The landing is the edge's, so a stun that ends a teleport moves nothing
-		Timeout(component.SwarmStateTeleport, edge{Do: s.relocate, To: decelerate}).
+		// The landing is the arrival's, so a stun that ends a teleport moves nothing,
+		// and is found as the beam ends, so rock that scrolled in meanwhile never
+		// holds the swarm
+		Timeout(component.SwarmStateTeleport, edge{To: []target{
+			{State: component.SwarmStateArrive},
+			{State: component.SwarmStateDecelerate},
+		}}).
+		Timeout(component.SwarmStateArrive, edge{To: chase}).
 		Timeout(component.SwarmStateDecelerate, edge{To: chase}).
 		Build())
 
@@ -134,8 +148,7 @@ type swarmCtx struct {
 	dtSec   float64 // dt capped against tunneling
 
 	targetX, targetY   int  // the lock probe's target cell
-	fromX, fromY       int  // the teleport probe's header cell
-	landingX, landingY int  // and the header cell it lands on
+	landingX, landingY int  // the header cell a teleport or arrival probe found
 	hitWall            bool // the charge's movement met a wall or the map edge
 }
 
@@ -143,9 +156,11 @@ func swarmStunned(c *swarmCtx) bool { return c.stunned }
 func swarmHitWall(c *swarmCtx) bool { return c.hitWall }
 
 // observe counts the transitions a refused entry stalls: a lock with no target,
-// which retries, and a lock that can neither charge nor teleport, which brakes
+// which retries, a lock that can neither charge nor teleport, and a teleport with
+// no room to arrive, which brake
 func (s *SwarmSystem) observe(from, to component.SwarmState, cause machine.Cause) {
-	if cause == machine.CauseRetry || (from == component.SwarmStateLock && to == component.SwarmStateDecelerate) {
+	if cause == machine.CauseRetry || (to == component.SwarmStateDecelerate &&
+		(from == component.SwarmStateLock || from == component.SwarmStateTeleport)) {
 		s.statStalls.Add(1)
 	}
 }
@@ -532,36 +547,48 @@ func (s *SwarmSystem) charge(c *swarmCtx) {
 // probeLanding admits a teleport with a header to beam from and room to land by
 // the stored cell
 func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
-	pos, ok := s.world.Positions.GetPosition(c.entity)
-	if !ok {
+	if !s.world.Positions.HasPosition(c.entity) {
 		return false
 	}
+	return s.findRoom(c, c.swarm.LockedTargetX, c.swarm.LockedTargetY)
+}
+
+// findRoom finds the footprint nearest the header cell (x, y) that holds no
+// wall a spawn is kept from, the cell itself first, into the context's landing
+func (s *SwarmSystem) findRoom(c *swarmCtx, x, y int) bool {
 	left, top, found := s.world.Positions.FindFreeAreaSpiral(
-		c.swarm.LockedTargetX, c.swarm.LockedTargetY,
+		x, y,
 		parameter.SwarmWidth, parameter.SwarmHeight,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 		component.WallBlockSpawn,
 		0,
 	)
-	c.fromX, c.fromY = pos.X, pos.Y
 	c.landingX, c.landingY = left+parameter.SwarmHeaderOffsetX, top+parameter.SwarmHeaderOffsetY
 	return found
 }
 
-// enterTeleport marks the beam's two ends and stops the swarm
+// enterTeleport marks where the beam goes and stops the swarm; the beam leaves
+// from wherever the header stands as it runs
 func (s *SwarmSystem) enterTeleport(c *swarmCtx) {
-	sw := c.swarm
-	sw.TeleportStartX, sw.TeleportStartY = c.fromX, c.fromY
-	sw.TeleportTargetX, sw.TeleportTargetY = c.landingX, c.landingY
+	c.swarm.TeleportTargetX, c.swarm.TeleportTargetY = c.landingX, c.landingY
 	if c.kinetic != nil {
 		c.kinetic.VelX, c.kinetic.VelY = 0, 0
 	}
 }
 
-// relocate lands a teleport that ran its course: the landing's footprint empties
-// in both domains, leaving nothing, and the composite stands on it at rest
-func (s *SwarmSystem) relocate(c *swarmCtx) {
-	x, y := c.swarm.TeleportTargetX, c.swarm.TeleportTargetY
+// probeArrival admits an arrival on the beam's landing while its footprint is
+// clear, else on the nearest clear one: rock scrolling in during the beam takes
+// the landing, and the arrival stands beside it
+func (s *SwarmSystem) probeArrival(c *swarmCtx) bool {
+	return s.findRoom(c, c.swarm.TeleportTargetX, c.swarm.TeleportTargetY)
+}
+
+// enterArrive lands a teleport that ran its course, counted as a charge: the
+// footprint its probe found empties in both domains (D-12), leaving nothing, and
+// the composite stands on it at rest
+func (s *SwarmSystem) enterArrive(c *swarmCtx) {
+	c.swarm.ChargesCompleted++
+	x, y := c.landingX, c.landingY
 	s.clearSwarmSpawnArea(x, y)
 	if c.kinetic != nil {
 		c.kinetic.PreciseX, c.kinetic.PreciseY = vmath.Point{X: x, Y: y}.Center()

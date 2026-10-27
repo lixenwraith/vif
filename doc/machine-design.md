@@ -261,14 +261,19 @@ its edges, then what its host does around the step.
     entry's `Duration` ends; tick steers over what is left of it, integrates and
     notes a wall hit; timeout → Decel; post-tick, a wall hit → Decel in the step
     that meets it, so the bounce stands.
-  - Teleport, 0.4 s: enter marks the beam's two ends and zeroes the velocity;
-    timeout → Decel, its `Do` (`relocate`) clearing the landing and moving the
-    swarm. The move is the edge's rather than an exit, so a stun that ends a
-    teleport moves nothing.
+  - Teleport, 0.4 s: enter marks the landing and zeroes the velocity; the beam
+    leaves from wherever the header stands as it runs, so a wall pushing the
+    swarm carries the beam's source along; timeout → [Arrive | Decel].
+  - Arrive, `SwarmArriveDuration` (0.1 s): probe the landing's footprint, else
+    the nearest clear one (`FindFreeAreaSpiral`, `WallBlockSpawn`), so rock that
+    came over the landing during the beam never holds the swarm; enter counts
+    `ChargesCompleted`, clears the footprint in both domains (D-12) and stands
+    the swarm on it at rest; timeout → Chase. The move is the arrival's entry
+    rather than the beam's exit, so a stun that ends a teleport moves nothing.
   - Decel, 0.1 s: enter counts `ChargesCompleted`; tick scales the velocity by
     `SwarmDecelDrag`, a per-tick factor, and integrates; timeout → Chase.
-- Global edge: stunned, from {Lock, Charge, Teleport, Decel} → Chase with the
-  full interval. Suspend: stunned. A stun in the chase therefore freezes what is
+- Global edge: stunned, from {Lock, Charge, Teleport, Arrive, Decel} → Chase
+  with the full interval. Suspend: stunned. A stun in the chase therefore freezes what is
   left of the interval, and one anywhere else cancels the attack and restarts the
   whole interval.
 - Around the step:
@@ -282,11 +287,12 @@ its edges, then what its host does around the step.
     the step suspended, breaks the gold under the swarm and strikes what it
     touches.
   - The observer, `SwarmSystem.observe`, counts each `CauseRetry` and each Lock →
-    Decel commit in `swarm.transition_stalls`: a lock with no target, and one
-    that can neither charge nor teleport.
+    Decel or Teleport → Decel commit in `swarm.transition_stalls`: a lock with
+    no target, one that can neither charge nor teleport, and a teleport with no
+    room anywhere to arrive.
 - `swarmCtx` holds the entity, the component, combat and kinetic pointers, the
   sensed `stunned`, the capped dt in seconds, the lock probe's target cell, the
-  teleport probe's two header cells and the charge's wall hit. `Start` enters
+  landing a teleport or arrival probe found and the charge's wall hit. `Start` enters
   Chase with the full interval once the composite is built, before
   `EventSpeciesCreated`.
 - The charge line reads `Machine.Elapsed`, the teleport line `Machine.Progress()`.
@@ -384,7 +390,8 @@ system.
   (`quasarBeaming`), the fuse keeps no state of its own (`FuseSystem.Update` is
   empty), and `killDrains` alone reports the consumed drains' deaths.
 - **Data species.** `EventFuseBehaviorRequest` starts a Shared beam naming the
-  data species over the place its footprint fits, and on a shared completion
+  data species over the nearest place its footprint fits, searched over the whole
+  map (`FindFreeAreaSpiral` with a negative radius), and on a shared completion
   `landBehavior` sends the direct spawn, its header on the beam's footprint. A
   cancel of the program ends its beams in flight (`cancelBehaviorBeams`).
 
@@ -619,10 +626,12 @@ smaller part of it.
   points, lifetime, the pattern cycle (held by a stun), `Step`, the flags written
   back (`Enraged` to `Combat.IsEnraged`; `Shielded` to a refreshed ward and
   `BehaviorComponent.Shielded`, which `applyStunEffect` reads as it reads the
-  quasar's shield), then, unless suspended, gold breaking and contacts.
-  `terminate` runs the state's exit (`Stop`) before the composite goes. It owns
-  one manifest component, `Behavior` {program index, instance, pattern frame and
-  accumulator, stored target, `Shielded`}.
+  quasar's shield; `Beam` to `BehaviorComponent.Beaming`, which
+  `TeleportLineRenderer` reads to draw the swarm's line to the stored cell), then,
+  unless suspended, gold breaking and contacts. `terminate` runs the state's exit
+  (`Stop`) before the composite goes. It owns one manifest component, `Behavior`
+  {program index, instance, pattern frame and accumulator, stored target,
+  `Shielded`, `Beaming`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
   bit.

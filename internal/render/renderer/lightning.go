@@ -221,30 +221,10 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 // Uses Bresenham's algorithm at 2x resolution for smooth diagonal coverage
 // Quadrant bitmap: bit0=UL, bit1=UR, bit2=LL, bit3=LR
 func (r *LightningRenderer) traceSubPixelLineQuadrant(hits map[uint64]uint8, sx0, sy0, sx1, sy1 int) {
-	dx := sx1 - sx0
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := sy1 - sy0
-	if dy < 0 {
-		dy = -dy
-	}
-
-	stepX := -1
-	if sx0 < sx1 {
-		stepX = 1
-	}
-	stepY := -1
-	if sy0 < sy1 {
-		stepY = 1
-	}
-
-	err := dx - dy
-
-	for {
+	for line := vmath.NewLine(sx0, sy0, sx1, sy1); ; line = line.Next() {
 		// Convert sub-pixel to cell + quadrant position
-		cx, cy := sx0/2, sy0/2
-		qx, qy := sx0&1, sy0&1
+		cx, cy := line.X()/2, line.Y()/2
+		qx, qy := line.X()&1, line.Y()&1
 
 		// Quadrant bitmap encoding: row-major 2x2
 		// qy=0: top row (UL=0, UR=1)
@@ -255,18 +235,8 @@ func (r *LightningRenderer) traceSubPixelLineQuadrant(hits map[uint64]uint8, sx0
 		key := uint64(cx)<<32 | uint64(cy)
 		hits[key] |= quadrant
 
-		if sx0 == sx1 && sy0 == sy1 {
+		if line.AtEnd() {
 			break
-		}
-
-		e2 := 2 * err
-		if e2 > -dy {
-			err -= dy
-			sx0 += stepX
-		}
-		if e2 < dx {
-			err += dx
-			sy0 += stepY
 		}
 	}
 }

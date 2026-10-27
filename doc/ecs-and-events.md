@@ -130,15 +130,26 @@ flowchart LR
 
 The position layer provides point and area queries, out-of-bounds checks, wall
 masks, line-of-sight traversal, and free-space searches using patterns or a
-spiral. `WallTest` serves a derivation that probes every cell from a per-mask
+spiral, which a negative radius sends over the whole map. Beside the wall
+entities it holds a rock field (`RockField`, `Position.SetRock`): a ceiling and a
+floor row per map column with one mask and one look, which every wall query reads
+as walls, so a cave's rock costs a column, not an entity per cell, and
+`ShiftRock` moves it a column left with the column entering. `WallTest` serves a derivation that probes every cell from a per-mask
 wall grid rebuilt only when the wall epoch or the grid's generation moved: a
 wall's placement and its store membership move the epoch, and a `BlockMask`
-written in place calls `Position.WallsChanged`. `Shift` moves a rigid group without
+written in place calls `Position.WallChanged` for its wall. The same changes log
+the cells they can have turned, both cells of a wall's move and each cell a rock
+shift crossed, and `Position.WallChanges` hands a reader that keeps its own copy
+of the answers those cells since the sequence it last read, so a moving map costs
+it the cells that moved. A change that names no cells (an install's
+`Position.WallsChanged`, a resize, a rock field laid) loses the log, and the
+reader re-reads every cell. `Shift` moves a rigid group without
 contending with itself for a cell, and `TopGlyphAt` names the one glyph per cell
 that is drawn and typed. Reapplying an entity's existing cell is idempotent
 when the grid already contains it, avoiding remove/reinsert churn for composite
-members; a soft-clipped entity still retries insertion. Bresenham-style grid
-traversal is used where a mechanic needs a line through cells.
+members; a soft-clipped entity still retries insertion. Where a mechanic needs
+a line through cells, line of sight, a ray or a beam, it walks `vmath.Line`, one
+integer Bresenham stepper.
 
 Cell capacity is a performance contract, not a hard entity limit. If more than
 the configured maximum occupy one cell, the position store still contains the

@@ -111,7 +111,7 @@ is below the cap.
 
 | Kind | At the cap | Row |
 |---|---|---|
-| Gun | three lanes per direction, one row or column apart; two charges give two | `MaxCharges` |
+| Gun | three lanes per direction, one row or column apart; two charges give two. On a scenario's upgrade path it holds a charge per level and its last level is the cap | `MaxCharges`, or `GunLevels` on a path |
 | Rod | each unique hit arcs once to the nearest other target within `ArcRange`, in the rod's own priority: a request of the same family from the struck cell, so the zap runs target to target; a target the volley struck or arced to is skipped, and nothing random decides a hit | `ArcRange` |
 | Launcher | fires on `MaxedCooldown`, half its cooldown | `MaxedCooldown` |
 | Disruptor | the pulse artifact carries `Charged`, and the pulse profile's `Charged` chain burns every hit entity (§5) | the profile |

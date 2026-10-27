@@ -5,16 +5,26 @@ max_players = 16
 # A side-scroller after Vanguard (1981): the cursor is a ship and the cave scrolls
 # left past it. Rock pushes the cursor a column back and toward the channel; rock
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
-# left behind the rock at three depths, and the gun fires right only.
+# left behind the rock at three depths, raiders, the cave's swarms, beam in at the
+# right edge, and each one shot down drops a U that raises the gun a level, from one
+# shot forward to three each way.
 
 # The cave holds a 15-row channel and two walls of at least two rows
 [map]
 min_width = 80
 min_height = 22
 
+[behaviors]
+raider = { file = "behavior/raider.toml" }
+
+# The fuse beams the raiders in; with no drains it fuses nothing else
 [regions.main]
 initial = "CaveStart"
-disabled_systems = ["nugget", "gold", "drain", "fuse"]
+disabled_systems = ["nugget", "gold", "drain"]
+
+[regions.raid]
+initial = "RaidWait"
+background = true
 
 [regions.player]
 initial = "PlayerBoot"
@@ -23,14 +33,65 @@ background = true
 # --- Cave ---
 
 # The mouth holds the centred cursor; the channel strays at most nine rows off the
-# middle, so a tall map climbs no steeper. The rock is a shade of two stones, so it
-# reads on a text console's sixteen colours too. The bright glyphs drift at three
-# quarters of the scroll and the dimmer ones slower, so every layer reads behind it.
+# middle, so a tall map climbs no steeper. The rock wears one of four stone arts, the
+# cave's seed picking it; every rock cell draws a glyph, so it reads on a text
+# console's sixteen colours too. The bright glyphs drift at three quarters of the
+# scroll and the dimmer ones slower, so every layer reads behind it. The seed is drawn
+# from the run's, so each new game flies a new cave and a run's seed replays its caves
+# in order.
 [states.CaveStart]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 8.0, min_gap = 7, max_gap = 15, min_wall = 2, wavelength = 44, swing = 9, detail = 1, ramp = 96, visual = { char = 0x2592, fg_color = { r = 125, g = 118, b = 106 }, render_fg = true, bg_color = { r = 84, g = 79, b = 70 }, render_bg = true } } },
+    { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
+    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 8.0, min_gap = 7, max_gap = 15, min_wall = 2, wavelength = 44, swing = 9, detail = 1, ramp = 96, art = ["strata", "cracked", "moss", "crystal"] }, payload_vars = { seed = "cave_seed" } },
     { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 6.0, duration_ms = 0 } },
+]
+
+# --- Raiders ---
+
+# A raider a player shoots down drops a U where it fell, an upgrade for every
+# player (LootUpgrade = 8): an event drop, since no drop table holds it; one that
+# dies by no player's hand drops nothing. Both raid states hold it, so no kill
+# goes uncounted while a raider beams in.
+[states.Raid]
+parent = "Root"
+transitions = [
+    { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
+        { name = "PayloadIntCompare", args = { field = "species", op = "eq", value = 10 } },
+        { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
+    ] }, capture_vars = { x = "kill_x", y = "kill_y" }, actions = [
+        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = 8 }, payload_vars = { x = "kill_x", y = "kill_y" } },
+    ] },
+]
+
+# A raider beams in at the right edge every four seconds while fewer than three
+# fly, on a row drawn within six of the middle; the beam searches the whole map
+# from there, so rock on that row sends it to the nearest open rows. Its header
+# stands a column in from its left, so the right edge's header column is the width
+# less three.
+[states.RaidWait]
+parent = "Raid"
+transitions = [
+    { trigger = "Tick", target = "RaidSpawn", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 4000 } },
+        { name = "StatusIntCompare", args = { key = "behavior.raider.count", op = "lt", value = 3 } },
+    ] } },
+]
+
+[states.RaidSpawn]
+parent = "Raid"
+on_enter = [
+    { action = "ConfigToVar", payload = { field = "map_width", name = "raid_x" } },
+    { action = "DecrementVar", payload = { name = "raid_x", delta = 3 } },
+    { action = "ConfigToVar", payload = { field = "map_height", name = "raid_y" } },
+    { action = "DivideVar", payload = { name = "raid_y", delta = 2 } },
+    { action = "IncrementVar", payload = { name = "raid_index" } },
+    { action = "RandomVar", payload = { name = "raid_row", min = -6, max = 6, index_var = "raid_index" } },
+    { action = "IncrementVar", payload = { name = "raid_y", source_var = "raid_row" } },
+    { action = "EmitEvent", event = "EventFuseBehaviorRequest", payload = { program = "raider" }, payload_vars = { x = "raid_x", y = "raid_y" } },
+]
+transitions = [
+    { trigger = "Tick", target = "RaidWait" },
 ]
 
 # --- Player ---
@@ -51,27 +112,37 @@ transitions = [
     { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
-# The gun fires right only (direction bit 1); an instance installing the game mid-run
-# aims its own cursor the same way
+# The gun climbs a level a U: forward is right, the way the ship flies, and back is
+# left. A level names the lanes, up to three, it fires along each cardinal, and a
+# gun at the last stays there. An instance installing the game mid-run puts its own
+# cursor on the path, with the level it carried. A crushed cursor is defeated, so
+# the crush and every other defeat start the game over at once.
 [states.PlayerActive]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventGunAimRequest", payload = { directions = 1 }, reconcile = true },
+    { action = "EmitEvent", event = "EventGunAimRequest", reconcile = true, payload = { path = [
+        { right = 1 },                             # one shot forward
+        { right = 2 },                             # two
+        { right = 3 },                             # three
+        { right = 3, up = 1, down = 1 },           # and one up and one down
+        { right = 3, up = 1, down = 1, left = 1 }, # and one back
+        { right = 3, up = 2, down = 2, left = 1 }, # two up and two down
+        { right = 3, up = 2, down = 2, left = 2 }, # two back
+        { right = 3, up = 3, down = 3, left = 2 }, # three up and three down
+        { right = 3, up = 3, down = 3, left = 3 }, # three back
+    ] } },
 ]
 transitions = [
     { trigger = "EventCursorCrushed", target = "PlayerCrushed" },
     { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# The cave holds still for a moment on the crush before the game starts over
+# The new game opens with what ended the last
 [states.PlayerCrushed]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventCaveStop" },
+    { action = "EmitEvent", event = "EventGameResetRequest" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Crushed against the edge" } },
-]
-transitions = [
-    { trigger = "Tick", target = "PlayerReset", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
 ]
 
 [states.PlayerReset]

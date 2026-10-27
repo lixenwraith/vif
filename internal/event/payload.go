@@ -428,9 +428,12 @@ type WeaponFireRequestPayload struct {
 }
 
 // GunAimRequestPayload is the cardinals the gun fires along, component.TracerDirection
-// bits (right 1, left 2, down 4, up 8); zero restores the gun's own four
+// bits (right 1, left 2, down 4, up 8); zero restores the gun's own four. A path
+// replaces them: the gun's levels in order, up to parameter.GunPathMax, a gun of n
+// charges firing level n; an empty one takes the gun off its path.
 type GunAimRequestPayload struct {
 	Directions component.TracerDirection `toml:"directions"`
+	Path       []component.GunLevel      `toml:"path"`
 }
 
 // MountRequestPayload puts one weapon on a Shared host, replacing any it carried.
@@ -1340,7 +1343,9 @@ type MazeSpawnRequestPayload struct {
 // CaveStartPayload lays a cave across the map and scrolls it left at Speed columns a
 // second, at most one a tick; its rock follows cave.Config at the map's height. A
 // zero speed, gap or wavelength takes its parameter default, a zero seed draws one,
-// a zero mask blocks everything, and a zero visual draws stone.
+// a zero mask blocks everything, and a zero visual draws stone. Art names stone art
+// presets (pattern.ParseArtPreset) the rock draws in place of the visual, one of
+// them drawn from the seed.
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`
@@ -1353,6 +1358,7 @@ type CaveStartPayload struct {
 	Ramp       int                        `toml:"ramp"`
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
+	Art        []string                   `toml:"art"`
 }
 
 // --- Fadeout ---

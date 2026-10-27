@@ -53,3 +53,32 @@ func TestADataSpeciesDrawsTheFrameItShowsInItsStateColour(t *testing.T) {
 		t.Fatalf("hit while enraged in %v, want the hit flash", left.Fg)
 	}
 }
+
+// TestADataSpeciesInABeamStateDrawsTheTeleportLine: a state flagged Beam draws the
+// swarm's teleport line from where the header stands to the cell it stored, and no
+// line without it
+func TestADataSpeciesInABeamStateDrawsTheTeleportLine(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 2, Height: 1, HeaderX: 1, HitPoints: 20}}
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 5, Y: 5})
+	b := component.BehaviorComponent{TargetX: 30, TargetY: 5}
+	b.Machine.Duration = parameter.SwarmTeleportDuration
+	b.Machine.Elapsed = parameter.SwarmTeleportDuration / 2 // the hold, where the whole line shows
+
+	draw := func() terminal.Cell {
+		w.Components.Behavior.SetComponent(header, b)
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 40, 24)
+		NewTeleportLineRenderer(game).Render(render.RenderContext{MapWidth: 40, MapHeight: 24, ViewportWidth: 40, ViewportHeight: 24}, buf)
+		return buf.CellAt(17, 5)
+	}
+	if mid := draw(); mid.Bg != (color.RGB{}) {
+		t.Fatalf("a state without the flag drew %v midway, want no line", mid.Bg)
+	}
+	b.Beaming = true
+	if mid := draw(); mid.Bg != visual.RgbSwarmTeleport {
+		t.Fatalf("a state flagged Beam drew %v midway, want the teleport line's %v", mid.Bg, visual.RgbSwarmTeleport)
+	}
+}

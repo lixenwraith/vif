@@ -17,7 +17,8 @@ const (
 	LootTurret
 	LootEmitter
 	LootGun
-	LootCount // Sentinel for array sizing
+	LootUpgrade // the gun's next level, a scenario's event drop rather than a table's
+	LootCount   // Sentinel for array sizing
 )
 
 // RewardType is what collecting a loot kind changes
@@ -47,6 +48,7 @@ var LootSpecs = [LootCount]LootSpec{
 	LootTurret:    {Reward: RewardWeapon, Weapon: WeaponTurret},
 	LootEmitter:   {Reward: RewardWeapon, Weapon: WeaponEmitter},
 	LootGun:       {Reward: RewardWeapon, Weapon: WeaponGun},
+	LootUpgrade:   {Reward: RewardWeapon, Weapon: WeaponGun},
 }
 
 // LootComponent represents a collectible loot drop entity

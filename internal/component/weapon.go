@@ -103,6 +103,15 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 		MaxCharges: parameter.WeaponMaxChargeGun, Innate: true, FromCursor: true, Directions: TracerAllDirections},
 }
 
+// GunLevel is one step of a gun's upgrade path: the lanes, up to the three a volley
+// holds, it fires along each cardinal
+type GunLevel struct {
+	Right uint8 `toml:"right"`
+	Left  uint8 `toml:"left"`
+	Down  uint8 `toml:"down"`
+	Up    uint8 `toml:"up"`
+}
+
 // WeaponComponent is a cursor's loadout: charges and cooldown per kind, and main fire's cooldown.
 // Charges[wt] == 0 means weapon not owned; availability derives from Charges, no separate flag
 type WeaponComponent struct {
@@ -111,4 +120,9 @@ type WeaponComponent struct {
 	Stream           [WeaponCount]time.Duration // until a capped kind's next stream shot; runs only while its Cooldown does, and stays with its author
 	MainFireCooldown time.Duration
 	Aim              TracerDirection // the cardinals the gun fires along; zero fires its own
+
+	// A scenario's upgrade path for the gun, GunLevels long: a gun of n charges fires
+	// level n and holds a charge per level; zero levels leave it on Aim
+	GunPath   [parameter.GunPathMax]GunLevel
+	GunLevels int
 }
