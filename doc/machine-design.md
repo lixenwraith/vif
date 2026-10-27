@@ -838,7 +838,8 @@ captures, one a tick, read the frames. Per species:
   `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.
   `bin/vif -check -s wad/scenario/vanguard` prints
   `behaviors ok: 32 (bat, beetle, chomper, … wraith)`. A look shows best in tmux
-  pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`.
+  pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`;
+  `go run ./sandbox/raider` lays every type out by cave over its rock.
 
 ## 9. Alternatives and prior art
 
