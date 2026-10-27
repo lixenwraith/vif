@@ -200,9 +200,12 @@ parse the embedded banks and the audio service passes them as
 `AudioConfig.BaseSounds` and `BasePatterns`. A user `sounds.toml` or `music.toml`
 overrides those by name.
 
-The splash and button renderers draw with the built-in bitmap font. The font
-editor exports edited glyphs as Go source for `splash_font.go`. The font atlas is
-the one runtime font document, for hosts that draw the cell grid themselves.
+The splash and button renderers draw with the built-in bitmap font, reading a
+glyph's bits through `asset.SplashInk`. A countdown is placed by the box its digits
+ink, `asset.SplashInkBounds` over 0-9, not by its 12×12 cells, whose blank rows
+would keep it off rows it fits in. The font editor exports edited glyphs as Go
+source for `splash_font.go`. The font atlas is the one runtime font document, for
+hosts that draw the cell grid themselves.
 
 ## 8. Image and pattern pipeline
 
