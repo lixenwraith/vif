@@ -130,7 +130,11 @@ flowchart LR
 
 The position layer provides point and area queries, out-of-bounds checks, wall
 masks, line-of-sight traversal, and free-space searches using patterns or a
-spiral. `WallTest` serves a derivation that probes every cell from a per-mask
+spiral, which a negative radius sends over the whole map. Beside the wall
+entities it holds a rock field (`RockField`, `Position.SetRock`): a ceiling and a
+floor row per map column with one mask and one look, which every wall query reads
+as walls, so a cave's rock costs a column, not an entity per cell, and
+`ShiftRock` moves it a column left with the column entering. `WallTest` serves a derivation that probes every cell from a per-mask
 wall grid rebuilt only when the wall epoch or the grid's generation moved: a
 wall's placement and its store membership move the epoch, and a `BlockMask`
 written in place calls `Position.WallChanged` for its wall. The same changes log

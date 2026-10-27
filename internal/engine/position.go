@@ -587,7 +587,8 @@ var SpiralSearchDirs = [8][2]int{
 // FindFreeAreaSpiral searches outward from origin, 45° counter-clockwise from top,
 // for a width×height area free of walls matching mask (0 = any wall). The anchor
 // offset is the header's position from the area's top-left; maxRadius 0 means
-// FreeAreaSearchRadius.
+// FreeAreaSearchRadius, and a negative one, MapSearchRadius: rays reaching every
+// row and column of the map.
 // Returns the area's top-left and whether one was found.
 func (p *Position) FindFreeAreaSpiral(
 	originX, originY int,
@@ -600,7 +601,10 @@ func (p *Position) FindFreeAreaSpiral(
 		return 0, 0, false
 	}
 
-	if maxRadius <= 0 {
+	switch {
+	case maxRadius < 0:
+		maxRadius = p.MapSearchRadius()
+	case maxRadius == 0:
 		maxRadius = parameter.FreeAreaSearchRadius
 	}
 
@@ -630,6 +634,13 @@ func (p *Position) FindFreeAreaSpiral(
 	}
 
 	return 0, 0, false
+}
+
+// MapSearchRadius is the spiral radius whose rays reach every column and every row
+// of the map from any cell in it, rows being searched at the cell aspect
+func (p *Position) MapSearchRadius() int {
+	config := p.world.Resources.Config
+	return max(config.MapWidth, int(math.Ceil(config.CellAspect.Circular(float64(config.MapHeight)))))
 }
 
 // IsAreaFree checks if the rectangular area is strictly within grid bounds and free of blocking walls

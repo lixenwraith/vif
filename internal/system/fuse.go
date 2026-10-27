@@ -280,8 +280,10 @@ func (s *FuseSystem) handleQuasarFuse() {
 }
 
 // handleBehaviorFuse beams a program's species in over the nearest place its
-// footprint fits. The beam is a Shared entity naming the species, so a capture
-// taken mid-beam carries the pending spawn as it carries any store (D-19).
+// footprint fits, searched over the whole map: a scenario names a cell blind to the
+// walls, a cave's rock among them. The beam is a Shared entity naming the species,
+// so a capture taken mid-beam carries the pending spawn as it carries any store
+// (D-19).
 func (s *FuseSystem) handleBehaviorFuse(program string, x, y int) {
 	behaviors := s.world.Resources.Behaviors
 	i := slices.IndexFunc(behaviors, func(p component.BehaviorPrototype) bool { return p.Name == program })
@@ -290,7 +292,7 @@ func (s *FuseSystem) handleBehaviorFuse(program string, x, y int) {
 		return
 	}
 	p := &behaviors[i]
-	left, top, found := s.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+	left, top, found := s.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
 	if !found {
 		s.statSpawnFailures.Add(1)
 		return

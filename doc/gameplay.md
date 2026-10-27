@@ -397,12 +397,16 @@ each column its ceiling and floor rows from the seed in integer arithmetic, so e
 instance and platform lays the same rock: a gap between `min_gap` and `max_gap`
 rows, walls of at least `min_wall`, a channel snaking at most `swing` rows off the
 middle with knots every `wavelength` columns, `detail` rows of rough rock, opening
-from a centred mouth over `ramp` columns. Each step, at most one a tick, moves
-every shared wall a column left, drops what leaves the map and lays the column
-entering it. What the rock arrives on goes a column left and a row toward its
-column's nearer opening, or straight left: a cursor by a placement, so the rock
-only pushes. A cursor the rock presses against the left edge is crushed
-(`EventCursorCrushed`), then squeezed out wherever there is room; a loose glyph is
+from a centred mouth over `ramp` columns. The rock is a field of ceiling and floor
+rows per column, not wall entities, which every wall query reads. Each step, at
+most one a tick, moves the rock and every shared wall a column left, drops what
+leaves the map and lays the column entering it. What the rock arrives on goes a
+column left and a row toward its column's nearer opening, or straight left: a
+cursor by a placement, so the rock only pushes. A flying composite the rock
+reaches at any member moves whole the same way, else to the nearest place its
+footprint fits, enraged or not, and one with room nowhere is destroyed with no
+reward. A cursor the rock finds no room for, pressed against the left edge, is
+crushed where it stands (`EventCursorCrushed`), which defeats it; a loose glyph is
 removed as scenery. `EventCaveStop` leaves the rock where it stands.
 
 `EnvironmentSystem` owns map-wide gameplay effects rather than rendering
@@ -495,10 +499,14 @@ program, `behavior/warden.toml`, is the template for a species of one's own
 
 `vanguard` flies the cursor through a cave (§9) scrolling left at eight columns a
 second, its channel seven to fifteen rows high and never more than nine rows off
-the middle, so a tall terminal climbs no steeper. Glyphs drift left behind the
-rock at three depths, the gun fires right only, and drains with their fusions,
-nuggets and gold are off. A crush stops the cave, says so, and starts the game
-over two seconds later.
+the middle, so a tall terminal climbs no steeper; each new game flies a new cave.
+Glyphs drift left behind the rock at three depths, the gun fires right only, and
+drains, nuggets and gold are off. Raiders, the cave's swarms, beam in at the right
+edge every four seconds while fewer than three fly. A raider is a program of the
+scenario's own (`behavior/raider.toml`) running the swarm's chase, lock, charge and
+teleport; it lives until killed, and the rock pushes it as it pushes the cursor. A
+crush is a defeat: the game starts over at once and opens with "Crushed against
+the edge".
 
 ## 11. System inventory
 

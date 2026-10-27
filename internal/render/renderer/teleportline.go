@@ -12,7 +12,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TeleportLineRenderer draws a phase-based beam from the swarm to its teleport destination
+// TeleportLineRenderer draws a phase-based beam from the swarm to its teleport destination,
+// and from a data species standing in a state flagged Beam to the cell it stored
 // Phases: Fill (beam extends) → Hold (full line) → Recede (darkness sweeps)
 type TeleportLineRenderer struct {
 	gameCtx    *engine.GameContext
@@ -33,8 +34,9 @@ func NewTeleportLineRenderer(ctx *engine.GameContext) *TeleportLineRenderer {
 }
 
 func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	swarms := r.gameCtx.World.Components.Swarm
-	if swarms.CountEntities() == 0 {
+	world := r.gameCtx.World
+	swarms, behaviors := world.Components.Swarm, world.Components.Behavior
+	if swarms.CountEntities() == 0 && behaviors.CountEntities() == 0 {
 		return
 	}
 
@@ -46,7 +48,7 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 		}
 
 		// The beam leaves the header where it stands: scrolling rock can carry a swarm mid-teleport
-		headerPos, ok := r.gameCtx.World.Positions.GetPosition(headerEntity)
+		headerPos, ok := world.Positions.GetPosition(headerEntity)
 		if !ok {
 			return true
 		}
@@ -57,6 +59,22 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			parameter.SwarmWidth, parameter.SwarmHeight,
 			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 			swarmComp.Machine.Progress())
+		return true
+	})
+
+	// A data species' beam runs over its state's entry, the footprint its prototype's
+	prototypes := world.Resources.Behaviors
+	behaviors.Each(func(header core.Entity, b *component.BehaviorComponent) bool {
+		if !b.Beaming || int(b.Program) >= len(prototypes) {
+			return true
+		}
+		pos, ok := world.Positions.GetPosition(header)
+		if !ok {
+			return true
+		}
+		p := &prototypes[b.Program]
+		r.renderBeam(ctx, buf, pos.X, pos.Y, b.TargetX, b.TargetY,
+			p.Width, p.Height, p.HeaderX, p.HeaderY, b.Machine.Progress())
 		return true
 	})
 }

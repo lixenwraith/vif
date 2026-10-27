@@ -151,8 +151,8 @@ var Systems = []SystemDef{
 
 	// --- Spawning / Materialize ---
 	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester (D-7); every spawn passes this gate, timed by its beam deadline
-	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "dual", Requires: []string{"drain", "materialize", "spirit"},
-		Optional: []string{"quasar", "swarm"}}, // a fusion's player beam holds its spawn, which crosses through the spawn request (D-3); a data species' entrance is shared
+	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "dual", Requires: []string{"materialize", "spirit"},
+		Optional: []string{"drain", "quasar", "swarm"}}, // a fusion's player beam holds its spawn, which crosses through the spawn request (D-3); a data species' entrance is shared and needs no drains
 	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the fuse's player-domain fusions (D-7)
 
 	// --- Projectiles ---

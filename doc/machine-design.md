@@ -390,7 +390,8 @@ system.
   (`quasarBeaming`), the fuse keeps no state of its own (`FuseSystem.Update` is
   empty), and `killDrains` alone reports the consumed drains' deaths.
 - **Data species.** `EventFuseBehaviorRequest` starts a Shared beam naming the
-  data species over the place its footprint fits, and on a shared completion
+  data species over the nearest place its footprint fits, searched over the whole
+  map (`FindFreeAreaSpiral` with a negative radius), and on a shared completion
   `landBehavior` sends the direct spawn, its header on the beam's footprint. A
   cancel of the program ends its beams in flight (`cancelBehaviorBeams`).
 
@@ -625,10 +626,12 @@ smaller part of it.
   points, lifetime, the pattern cycle (held by a stun), `Step`, the flags written
   back (`Enraged` to `Combat.IsEnraged`; `Shielded` to a refreshed ward and
   `BehaviorComponent.Shielded`, which `applyStunEffect` reads as it reads the
-  quasar's shield), then, unless suspended, gold breaking and contacts.
-  `terminate` runs the state's exit (`Stop`) before the composite goes. It owns
-  one manifest component, `Behavior` {program index, instance, pattern frame and
-  accumulator, stored target, `Shielded`}.
+  quasar's shield; `Beam` to `BehaviorComponent.Beaming`, which
+  `TeleportLineRenderer` reads to draw the swarm's line to the stored cell), then,
+  unless suspended, gold breaking and contacts. `terminate` runs the state's exit
+  (`Stop`) before the composite goes. It owns one manifest component, `Behavior`
+  {program index, instance, pattern frame and accumulator, stored target,
+  `Shielded`, `Beaming`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
   bit.
