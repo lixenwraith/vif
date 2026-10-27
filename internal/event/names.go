@@ -88,7 +88,6 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 // until each type's documents name them
 func migrating(n *dialect.Names) *dialect.Names {
 	return n.
-		Numbers[component.TargetType]().
 		Numbers[component.ParticleBehavior]().
 		Numbers[component.EnergyDeltaType]().
 		Numbers[component.WallBlockMask]().

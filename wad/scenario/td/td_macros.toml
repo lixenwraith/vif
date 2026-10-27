@@ -32,7 +32,7 @@ body = [
 [macros.Retarget]
 doc = "Point target group `group` at tower `to`."
 params = { group = "int", to = "string" }
-body = { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = 1, entity = 0 }, payload_vars = { entity = "${to}_anchor" } }
+body = { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = "entity", entity = 0 }, payload_vars = { entity = "${to}_anchor" } }
 
 # --- Tower losses (td_counter, with the fallen tower in dead_tower) ---
 
@@ -44,7 +44,7 @@ body = { action = "SetVar", payload = { name = "${tower}_dead", value = 1 }, gua
 [macros.RetargetOnLoss]
 doc = "When tower `lost` fell and central tower `to` stands, point `group` at `to`."
 params = { lost = "string", group = "int", to = "string" }
-body = { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = 1, entity = 0 }, payload_vars = { entity = "${to}_anchor" }, guard = "And", guard_args = { guards = [
+body = { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = "entity", entity = 0 }, payload_vars = { entity = "${to}_anchor" }, guard = "And", guard_args = { guards = [
     { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "${lost}_anchor" } },
     { name = "VarEquals", args = { var = "${to}_dead", value = 0 } },
 ] } }
@@ -54,7 +54,7 @@ doc = "Quadrant tower `quad` fell: its group goes to central tower `near`, or to
 params = { quad = "string", group = "int", near = "string", far = "string" }
 body = [
     { macro = "RetargetOnLoss", lost = "${quad}", group = "${group}", to = "${near}" },
-    { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = 1, entity = 0 }, payload_vars = { entity = "${far}_anchor" }, guard = "And", guard_args = { guards = [
+    { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = "${group}", type = "entity", entity = 0 }, payload_vars = { entity = "${far}_anchor" }, guard = "And", guard_args = { guards = [
         { name = "VarCompareVar", args = { var_a = "dead_tower", op = "eq", var_b = "${quad}_anchor" } },
         { name = "VarEquals", args = { var = "${near}_dead", value = 1 } },
         { name = "VarEquals", args = { var = "${far}_dead", value = 0 } },
