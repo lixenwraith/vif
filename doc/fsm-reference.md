@@ -273,6 +273,12 @@ same boundary.
 The event name and payload are compiled at load: an unknown event, a payload key
 its type lacks, a value of the wrong type, or a payload on an event that carries
 none fails it. Without `payload` the event carries its payload type zero-valued.
+`payload_vars` injects an FSM variable's value into a payload field at runtime.
+Supported field kinds: all signed and unsigned integer widths, `float32`,
+`float64`, `bool`, and `string`; a negative value is ignored for an unsigned field.
+A string takes the value's decimal form in place of each `{}`, so
+`payload = { message = "Level {}" }, payload_vars = { message = "level" }` reads
+"Level 3".
 
 A field of an enum type takes one of its type's names, which `vif -schema` lists
 under `names` by type: `payload = { type = "upgrade" }` places an upgrade. A
@@ -280,17 +286,9 @@ mask, as a wall's `block_mask`, takes a name or a list of them standing for thei
 union (`["cursor", "kinetic"]`). A gateway's `sub_type` takes its `species`' own
 kinds (`species = "eye", sub_type = "flame"`), and a species without kinds takes
 none. A species field takes a code species or one of the scenario's behavior
-programs, as `PayloadSpeciesIn` does. A name its type lacks fails the load,
-naming the field's path and the names it takes. While the shipped scenarios move
-to names, a wall mask or box style field also takes its number; every other enum
-field refuses one. `:emit` and an authored script's event decode a payload the
-same way.
-`payload_vars` injects an FSM variable's value into a payload field at runtime.
-Supported field kinds: all signed and unsigned integer widths, `float32`,
-`float64`, `bool`, and `string`; a negative value is ignored for an unsigned field.
-A string takes the value's decimal form in place of each `{}`, so
-`payload = { message = "Level {}" }, payload_vars = { message = "level" }` reads
-"Level 3".
+programs, as `PayloadSpeciesIn` does. A name its type lacks, or a number, fails
+the load, naming the field's path and the names it takes. `:emit` and an
+authored script's event decode a payload the same way.
 
 ### Region Control
 

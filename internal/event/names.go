@@ -20,7 +20,7 @@ func PayloadNames(programs []string) *dialect.Names {
 		return codeNames()
 	}
 	species := slices.Concat(component.SpeciesNames[:], slices.Sorted(slices.Values(programs)))
-	return migrating(codeNames().Clone().Enum[component.SpeciesType](species...))
+	return codeNames().Clone().Enum[component.SpeciesType](species...)
 }
 
 // AuthoredPayload makes event et's payload from raw, a table an author wrote, as
@@ -47,7 +47,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 	for et := range events {
 		events[et] = GetEventName(EventType(et))
 	}
-	return migrating(dialect.NewNames().
+	return dialect.NewNames().
 		Enum[component.SpeciesType](component.SpeciesNames[:]...).
 		Variant[component.SubType](component.SpeciesEye, component.EyeTypeNames[:]...).
 		Variant[component.SubType](component.SpeciesTower, component.TowerTypeNames[:]...).
@@ -81,16 +81,8 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[WallBatchCollisionMode](collisionModeNames[:]...).
 		Enum[EventType](events...).
 		Enum[model.InstrumentType](stringsOf(model.InstrumentCount)...).
-		Enum[model.Intensity](stringsOf(model.IntensityCount)...))
+		Enum[model.Intensity](stringsOf(model.IntensityCount)...)
 })
-
-// migrating lets the types shipped documents still give by number take numbers,
-// until each type's documents name them
-func migrating(n *dialect.Names) *dialect.Names {
-	return n.
-		Numbers[component.WallBlockMask]().
-		Numbers[component.BoxDrawStyle]()
-}
 
 // namesOf lists the name each row of a kind's table gives it
 func namesOf[S any](rows []S, name func(S) string) []string {
