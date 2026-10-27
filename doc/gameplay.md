@@ -408,11 +408,11 @@ reaches far in; walls reaching in together share what the min gap leaves. Each
 wall's edge is the median of the five columns around it, so no bump or notch two
 columns wide or less stands. The rock is a field of ceiling and floor rows per
 column, not wall entities, which every wall query reads. It draws in `visual`, or
-in a stone art preset: `art` lists them (`none` for bare stone,
-`strata`, `cracked`, `moss`, `crystal`, `masonry`) and the seed picks one. A
-cell's glyph and colours follow from the preset, the seed, its profile column and
-row, and how deep it lies from the nearest opening on which side, so the stone
-moves with the rock and reads on a text console. Each step, at
+in the stone art preset `art` names (`none` for bare stone, `strata`, `cracked`,
+`moss`, `crystal`, `masonry`); vanguard picks one per cave by its seed, with
+`EmitEvent`'s `pick`. A cell's glyph and colours follow from the preset, the seed,
+its profile column and row, and how deep it lies from the nearest opening on which
+side, so the stone moves with the rock and reads on a text console. Each step, at
 most one a tick, moves the rock and every shared wall a column left, drops what
 leaves the map and lays the column entering it. What the rock arrives on goes a
 column left and a row toward its column's nearer opening, or straight left: a

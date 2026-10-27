@@ -310,7 +310,10 @@ field taking its type's names ([FSM reference](fsm-reference.md#event-emission))
 `"rooms.0.center_x"`. Struct segments use TOML tags first; numeric segments
 index an already populated slice. Injection does not append elements. A
 string field takes the value in place of each `{}`, so a status message can
-carry a count.
+carry a count. `pick = { field, var, from }` sets one field to the entry of
+`from` its variable names, modulo the list's length, each entry checked at load
+as that field's value, so a value chosen from a list is data rather than an
+edge per entry ([FSM reference](fsm-reference.md#event-emission)).
 
 `RandomVar` sets `name` to a draw in `[min, max]` from the run's shared seed, an
 optional `seed_var` and the required `index_var`, so a sequence replays from its

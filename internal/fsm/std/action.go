@@ -234,6 +234,9 @@ func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
 			return
 		}
 		payload := a.Payload
+		if a.Picks != nil {
+			payload = a.Picks[pickIndex(m.GetVar(a.PickVar), len(a.Picks))]
+		}
 		if len(a.PayloadVars) > 0 && payload != nil {
 			payload = ApplyPayloadVars(m, payload, a.PayloadVars)
 		}

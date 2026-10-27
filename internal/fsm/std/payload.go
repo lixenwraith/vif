@@ -59,6 +59,16 @@ func ApplyPayloadVars[T any](m *fsm.Machine[T], payload any, vars map[string]str
 	return copied.Addr().Interface()
 }
 
+// pickIndex is the entry of an n-entry pick that v names: v modulo n, a negative v
+// counting back from the last entry
+func pickIndex(v int64, n int) int {
+	i := v % int64(n)
+	if i < 0 {
+		i += int64(n)
+	}
+	return int(i)
+}
+
 // walkPayloadPath navigates nested structs and slices along dot-path segments
 // Deep-copies slice fields on first encounter to isolate mutations from the original
 func walkPayloadPath(current reflect.Value, segments []string, copiedSlices map[string]bool) reflect.Value {

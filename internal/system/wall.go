@@ -1176,11 +1176,9 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 		s.world.DebugPrint(err.Error())
 		return
 	}
-	for _, name := range p.Art {
-		if _, ok := pattern.ParseArtPreset(name); !ok {
-			s.world.DebugPrint(fmt.Sprintf("cave: unknown stone art %q", name))
-			return
-		}
+	if _, ok := pattern.ParseArtPreset(p.Art); p.Art != "" && !ok {
+		s.world.DebugPrint(fmt.Sprintf("cave: unknown stone art %q", p.Art))
+		return
 	}
 	if cfg.Seed == 0 {
 		cfg.Seed = s.genRng.Uint64()
@@ -1190,11 +1188,7 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 	period = min(max(period, float64(parameter.CaveMinPeriod)), float64(parameter.CaveMaxPeriod))
 	s.cave = caveState{
 		Active: true, Config: cfg, Period: time.Duration(math.Round(period)),
-		Mask: cmp.Or(p.BlockMask, component.WallBlockAll), Visual: orStone(p.Visual),
-	}
-	// The seed draws the stone too, so each new cave may wear another of the list
-	if len(p.Art) > 0 {
-		s.cave.Art = p.Art[cfg.Seed%uint64(len(p.Art))]
+		Mask: cmp.Or(p.BlockMask, component.WallBlockAll), Visual: orStone(p.Visual), Art: p.Art,
 	}
 	s.layRock()
 	s.pushOutOfRock()
