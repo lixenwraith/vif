@@ -21,10 +21,11 @@ on_update = [{ action = "Home" }]
 transitions = [{ trigger = "Timeout", target = "Lock", fallback = { retry_ms = 200 } }]
 
 # The swarm's charge line pulses toward the stored cell as the lock ends, so a
-# player sees where the charge goes before it leaves
+# player sees where the charge goes before it leaves, and the landing marker
+# blinks where it lands from the lock until the charge or beam is over
 [macros.RaiderStates.body.Lock]
 duration_ms = "${lock_ms}"
-flags = ["Enraged", "ChargeLine"]
+flags = ["Enraged", "ChargeLine", "Landing"]
 probe = "ResolveTarget"
 on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]
@@ -35,7 +36,7 @@ transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "Lin
 # meets it, so the bounce stands
 [macros.RaiderStates.body.Charge]
 duration_ms = "${charge_ms}"
-flags = ["Enraged"]
+flags = ["Enraged", "Landing"]
 on_update = [{ action = "ChargeToStored" }]
 transitions = [
     { trigger = "Timeout", target = "Brake" },
@@ -50,7 +51,7 @@ transitions = [
 # lands.
 [macros.RaiderStates.body.Beam]
 duration_ms = "${beam_ms}"
-flags = ["Enraged", "Beam"]
+flags = ["Enraged", "Beam", "Landing"]
 probe = "FindLanding"
 probe_args = { to = "stored" }
 on_enter = [{ action = "StoreTarget" }]
