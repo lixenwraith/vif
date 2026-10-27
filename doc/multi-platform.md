@@ -502,7 +502,11 @@ module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
 `Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
 `app.Run`. The app opens on a start screen (`StartScreen`) over the view, in
 lixen.com's dark theme as every host's is: the logo, "Tap to start" under it on the
-site's blue button and a `?` in a ring of that blue that opens the touch controls. The run starts
+site's blue button and a `?` in a ring of that blue that opens the touch controls.
+Android shows its own splash screen while the app loads, an icon at most 192 dp
+across on one colour, so the theme gives it the start screen's page and logo and the
+start screen fills the window with the logo 128 dp across, not two fifths of the
+shorter side as elsewhere: the splash leaves at once and only the buttons fade in. The run starts
 behind it with its player away (`game.Start`'s `away`): its first game waits in its
 start hold, drawn undimmed and silent, and the tap, the press that starts it, lifts
 the screen off a game already built and painted; its keys reach it only from then.
@@ -533,8 +537,10 @@ whether committed, composed or the keyboard's paste button, which reads the
 clipboard as the Paste key, Ctrl-Shift-V and Shift-Insert do; Back is Escape. A hardware key's
 `onKeyUp` ends the hold its `onKeyDown` began and `getRepeatCount` marks its
 repeats; the system keyboard's text, its delete and Back tap; the window losing
-focus ends every hold. Two fingers tapped together twice raise or drop the system
-keyboard, read from the window's insets rather than a flag of the app's; the
+focus ends every hold. Three taps on the status bar, landing anywhere on it (the
+strip above the keyboard stands for it), or two fingers tapped together twice raise
+or drop the system keyboard through the input method manager, whose state is read
+from the window's insets rather than a flag of the app's; the
 keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
 its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
 `StatusCovered`) and keeps its input to the left half of the bar's bottom row,

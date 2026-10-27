@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The window wears the start screen's page from its first frame, and Android's splash
+     screen shows the logo on it as large and where the start screen does: the splash
+     draws its icon 288 dp across at the window's centre and shows a 192 dp circle of it,
+     and launch_logo insets the logo to the start screen's 128 dp, its diagonal inside
+     that circle. Launched from anywhere, the splash shows the logo. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <color name="page">#11111B</color>
+    <dimen name="logo">128dp</dimen>
+
+    <style name="Theme.Vif" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/page</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/page</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/launch_logo</item>
+        <item name="android:windowSplashScreenBehavior" tools:targetApi="33">icon_preferred</item>
+    </style>
+</resources>
