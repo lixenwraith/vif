@@ -460,7 +460,7 @@ at load; only `Op.Holds` runs per evaluation.
 generic methods: `RegisterGuard[A]`; `RegisterAction[A, R]` for an action that
 reads only `payload`, compiled to `R` at load (`fsm.Payload[A]` keeps the decoded
 payload as it is); `RegisterKeyedAction[R]` for one that reads keys of its own
-table (`EmitEvent`: `event`, `payload`, `payload_vars`; the region actions:
+table (`EmitEvent`: `event`, `payload`, `payload_vars`, `pick`; the region actions:
 `region`, `initial_state`); and `RefuseAction`, a name whose use fails the load
 and which the vocabulary leaves out. The loader refuses a key of an action's
 table the action does not read (`action 'Text' takes no payload_vars`) and a key

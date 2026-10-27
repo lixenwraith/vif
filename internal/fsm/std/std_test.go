@@ -276,3 +276,125 @@ on_enter = [` + payloads + `]
 		t.Fatalf("error %v", err)
 	}
 }
+
+// TestAPickEmitsTheEntryItsVariableNames: a pick writes the entry its variable
+// names into its field, the value modulo the list's length and a negative one
+// counting back from the end, beside the payload's other fields and payload_vars;
+// an enum entry takes its name, a program among the species, and a nested field
+// its dot path.
+func TestAPickEmitsTheEntryItsVariableNames(t *testing.T) {
+	const doc = `
+[regions.r]
+initial = "Say"
+
+[states.Say]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { y = 3 }, payload_vars = { x = "v" }, pick = { field = "program", var = "v", from = ["invader", "scarab", "construct"] } },
+    { action = "EmitEvent", event = "EventGeneticRegisterSpecies", pick = { field = "species", var = "v", from = ["eye", "invader"] } },
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5 }, pick = { field = "visual.box_style", var = "v", from = ["single", "double"] } },
+]
+transitions = [{ trigger = "Tick", target = "Wait" }]
+
+[states.Wait]
+parent = "Root"
+transitions = [{ trigger = "Tick", target = "Say" }]
+`
+	event.EnsureRegistry()
+	var sent []any
+	m := fsm.NewMachine[struct{}]()
+	std.Register(m, std.Host[struct{}]{
+		Emit:  func(_ struct{}, _ event.EventType, p any) { sent = append(sent, p) },
+		Names: event.PayloadNames([]string{"invader"}),
+	})
+	if err := m.LoadScenario([]byte(doc)); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Init(struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	vs := []int64{0, 1, 2, 3, 7, -1, -4}
+	for _, v := range vs[1:] {
+		m.Update(struct{}{}, time.Millisecond)
+		m.SetVar("v", v)
+		m.Update(struct{}{}, time.Millisecond)
+	}
+	eye, invader := component.SpeciesEye, component.SpeciesDataFirst
+	single, double := component.BoxDrawSingle, component.BoxDrawDouble
+	want := []struct {
+		program string
+		species component.SpeciesType
+		style   component.BoxDrawStyle
+	}{
+		{"invader", eye, single},
+		{"scarab", invader, double},
+		{"construct", eye, single},
+		{"invader", invader, double},
+		{"scarab", invader, double},
+		{"construct", invader, double},
+		{"construct", eye, single},
+	}
+	if len(sent) != 3*len(want) {
+		t.Fatalf("sent %d payloads, want %d", len(sent), 3*len(want))
+	}
+	for i, w := range want {
+		spawn, _ := sent[3*i].(*event.BehaviorSpawnRequestPayload)
+		ga, _ := sent[3*i+1].(*event.GeneticRegisterSpeciesPayload)
+		maze, _ := sent[3*i+2].(*event.MazeSpawnRequestPayload)
+		if spawn == nil || ga == nil || maze == nil {
+			t.Fatalf("v %d sent %T, %T, %T", vs[i], sent[3*i], sent[3*i+1], sent[3*i+2])
+		}
+		if spawn.Program != w.program || spawn.X != int(vs[i]) || spawn.Y != 3 || ga.Species != w.species ||
+			maze.Visual.BoxStyle != w.style || maze.CellWidth != 5 {
+			t.Errorf("v %d sent %+v, %+v, %+v; want %s, %v, %v", vs[i], *spawn, *ga, maze.Visual, w.program, w.species, w.style)
+		}
+	}
+}
+
+// TestAPickIsCheckedAtLoad: a pick names its field, its variable and at least one
+// entry, leaves its field to itself, and each entry decodes as its field's value in
+// its payload, or the load fails naming the entry.
+func TestAPickIsCheckedAtLoad(t *testing.T) {
+	event.EnsureRegistry()
+	for _, c := range []struct{ action, want string }{
+		{`{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", pick = { field = "program", from = ["invader"] } }`,
+			"pick: requires 'field' and 'var'"},
+		{`{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", pick = { field = "program", var = "v", from = [] } }`,
+			"pick: requires 'from'"},
+		{`{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { program = "v" }, pick = { field = "program", var = "v", from = ["invader"] } }`,
+			"pick: payload_vars sets 'program' as well"},
+		{`{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", pick = { field = "program", var = "v", from = ["invader", 3] } }`,
+			"pick: from[1]: payload for event 'EventBehaviorSpawnRequest': program: cannot convert int64 to string"},
+		{`{ action = "EmitEvent", event = "EventGeneticRegisterSpecies", pick = { field = "species", var = "v", from = ["eye", "wyvern"] } }`,
+			`pick: from[1]: payload for event 'EventGeneticRegisterSpecies': species: "wyvern" is not one of`},
+		{`{ action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { sub_type = "flame" }, pick = { field = "species", var = "v", from = ["eye", "snake"] } }`,
+			"pick: from[1]: payload for event 'EventGatewaySpawnRequest': sub_type: snake takes no names"},
+		{`{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", pick = { field = "programme", var = "v", from = ["invader"] } }`,
+			`pick: from[0]: payload for event 'EventBehaviorSpawnRequest': unknown key "programme"`},
+		{`{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { x = 1 }, pick = { field = "x.y", var = "v", from = [1] } }`,
+			"pick: field 'x.y': 'y' is under int64, not a table"},
+		{`{ action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { rooms = [{ width = 3 }] }, pick = { field = "rooms.1.width", var = "v", from = [5] } }`,
+			"pick: field 'rooms.1.width': '1' is not an entry of a list of 1"},
+		{`{ action = "SetVar", payload = { name = "v", value = 1 }, pick = { field = "value", var = "v", from = [1] } }`,
+			"action 'SetVar' takes no pick"},
+		{`{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", pick = { field = "program", var = "v", from = ["invader"], by = "w" } }`,
+			`unknown key "on_enter.pick.by"`},
+	} {
+		m := fsm.NewMachine[struct{}]()
+		std.Register(m, std.Host[struct{}]{
+			Emit:  func(struct{}, event.EventType, any) {},
+			Names: event.PayloadNames(nil),
+		})
+		err := m.LoadScenario([]byte(`
+[regions.r]
+initial = "Boot"
+
+[states.Boot]
+parent = "Root"
+on_enter = [` + c.action + `]
+`))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s:\nerror %v, want it to hold %q", c.action, err, c.want)
+		}
+	}
+}
