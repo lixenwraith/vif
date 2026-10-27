@@ -297,6 +297,13 @@ contrast ratio, takes the nearest entry that shows. Styles are resolved rather
 than sent, because the Linux console recolors dim, italic and underlined text
 and FreeBSD brightens bold.
 
+An emulator gets 256-color mode too, when nothing announces truecolor (ssh drops
+`COLORTERM`). It draws entries 0-15 in its theme, which can make a pair the console
+reads, such as bright white on blue, unreadable, but it shows xterm's cube exactly.
+`Config.TextConsole` tells the two apart (the terminal reports a console as 16
+colors), and a renderer that wants the cube keeps its cells out of the last pass
+with `RenderBuffer.SetExact`, which lasts the frame: the start screen's button.
+
 Finalization is immediately followed by the surface's full-buffer `Flush`.
 
 The CLI can force 256-color (`-color 256`) or truecolor (`-color true`);
@@ -435,9 +442,10 @@ O both; it is absent without an audio engine.
 The start screen (`StartScreenRenderer`) is the terminal's and the desktop
 window's: while `RenderContext.StartScreen` holds it covers every row above the
 status bar, the logo at the centre two fifths of the shorter side and the prompt
-under it on a button, the site's colors in truecolor and console entries on a
-console, where the button is one row because the fonts lack the half blocks that
-round it. The status bar keeps its line under it and leaves its items' row clear;
+under it on a button, the site's colors in truecolor and console entries in 256
+colors. An emulator's button keeps the site's blue and white through xterm's cube;
+a console's fonts lack the half blocks that round it, so there it is the label in
+bright white framed in bright blue double lines, which fonts without them draw single. The status bar keeps its line under it and leaves its items' row clear;
 `RenderStatus` draws it too, for a join waiting for its press.
 
 The relative row and column gutters number only the rows and columns the
