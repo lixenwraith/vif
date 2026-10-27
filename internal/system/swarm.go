@@ -509,12 +509,11 @@ func (s *SwarmSystem) enterLock(c *swarmCtx) {
 	}
 }
 
-// hasLineOfSight admits a charge only along a clear line from the header to the
-// stored cell
+// hasLineOfSight admits a charge only along a path the body clears to the stored cell
 func (s *SwarmSystem) hasLineOfSight(c *swarmCtx) bool {
 	pos, ok := s.world.Positions.GetPosition(c.entity)
-	return ok && s.world.Positions.HasLineOfSight(pos.X, pos.Y,
-		c.swarm.LockedTargetX, c.swarm.LockedTargetY, component.WallBlockKinetic)
+	return ok && bodyHasLineOfSight(s.world, pos.X, pos.Y, c.swarm.LockedTargetX, c.swarm.LockedTargetY,
+		parameter.SwarmWidth, parameter.SwarmHeight, parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY)
 }
 
 // probeKinetic admits a charge only with a body to fly

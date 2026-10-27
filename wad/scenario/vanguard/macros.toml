@@ -3,12 +3,12 @@
 # doc/toml-macros.md describes definitions and invocations.
 
 # The swarm's machine as a raider flies it. It chases its target for chase_ms, then
-# locks onto the cell it saw for lock_ms under a telegraph. Along a clear line it
-# charges that cell over charge_ms; behind rock it beams to the nearest place by its
-# target and lands as the beam_ms ends, beside any rock that came over the landing
-# meanwhile; with no room anywhere it brakes where it stands. Rock pushes it as it
-# pushes the cursor, enraged or not. A program names Chase its initial state and
-# adds RaiderStun to its globals.
+# locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
+# way it charges that cell over charge_ms; behind rock it beams to the nearest place
+# by its target and lands as the beam_ms ends, beside any rock that came over the
+# landing meanwhile; with no room anywhere it brakes where it stands. Rock pushes it
+# as it pushes the cursor, enraged or not. A program names Chase its initial state
+# and adds RaiderStun to its globals.
 [macros.RaiderStates]
 doc = "The raider's chase, lock, charge, beam and brake, timed per type."
 params = { chase_ms = "int", lock_ms = "int", charge_ms = "int", beam_ms = "int" }
@@ -26,7 +26,7 @@ probe = "ResolveTarget"
 on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]
 on_exit = [{ action = "CancelTelegraph" }]
-transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight" }, "Beam", "Brake"] }]
+transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight", guard_args = { to = "stored" } }, "Beam", "Brake"] }]
 
 # Arrives on the stored cell as the entry ends; a wall ends it in the step that
 # meets it, so the bounce stands

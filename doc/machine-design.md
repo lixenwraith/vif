@@ -255,8 +255,8 @@ its edges, then what its host does around the step.
     [Lock], else `Retry(SwarmTransitionRetryInterval)`, the chase moving
     meanwhile.
   - Lock, 2 s: probe a base target; enter stores it and zeroes the velocity;
-    timeout → [Charge (guard: line of sight; probe: a kinetic) | Teleport
-    (probe: a position and a landing) | Decel].
+    timeout → [Charge (guard: the body clears the way to the stored cell; probe:
+    a kinetic) | Teleport (probe: a position and a landing) | Decel].
   - Charge, 0.8 s: enter stores start and target and aims to arrive as the
     entry's `Duration` ends; tick steers over what is left of it, integrates and
     notes a wall hit; timeout → Decel; post-tick, a wall hit → Decel in the step

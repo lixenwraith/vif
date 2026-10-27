@@ -279,14 +279,14 @@ func TestAChargeThatMeetsAWallDeceleratesInThatStep(t *testing.T) {
 	}
 }
 
-// rockRows lays rock over the rows [0, ceil) of the columns [x0, x1) of an
-// 80-column map, leaving every other cell open
-func rockRows(w *engine.World, x0, x1, ceil int) {
+// rockRows lays rock over the rows [0, ceil) and [floor, 40) of the columns
+// [x0, x1) of an 80-column map, leaving every other cell open
+func rockRows(w *engine.World, x0, x1, ceil, floor int) {
 	cols := make([]engine.RockColumn, 80)
 	for x := range cols {
 		cols[x] = engine.RockColumn{Floor: 40}
 		if x >= x0 && x < x1 {
-			cols[x].Ceil = ceil
+			cols[x] = engine.RockColumn{Ceil: ceil, Floor: floor}
 		}
 	}
 	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
@@ -301,7 +301,7 @@ func TestATeleportArrivesBesideRockThatTookItsLanding(t *testing.T) {
 	sw, _ := w.Components.Swarm.GetPtr(header)
 	sw.Machine = aboutToExpire(component.SwarmStateTeleport, parameter.SwarmTeleportDuration)
 	sw.TeleportTargetX, sw.TeleportTargetY = 40, 20
-	rockRows(w, 36, 46, 22)
+	rockRows(w, 36, 46, 22, 40)
 
 	stepSwarm(w, s)
 
@@ -340,7 +340,7 @@ func TestATeleportWithNoRoomToArriveBrakesWhereItStands(t *testing.T) {
 	sw, _ := w.Components.Swarm.GetPtr(header)
 	sw.Machine = aboutToExpire(component.SwarmStateTeleport, parameter.SwarmTeleportDuration)
 	sw.TeleportTargetX, sw.TeleportTargetY = 40, 20
-	rockRows(w, 0, 80, 40)
+	rockRows(w, 0, 80, 40, 40)
 	start, _ := w.Positions.GetPosition(header)
 
 	stepSwarm(w, s)

@@ -17,9 +17,9 @@ import (
 
 // newRaiderWorld spawns vanguard's invader, compiled from its shipped program as
 // the scenario expands it, at (20, 10) of an 80x40 world whose one target stands at
-// (50, 10), behind a column of rock that blocks the line between them. Every raider
-// type flies the one cycle, and the invader's 4x2 footprint with its header at
-// (1, 0) is the one these tests measure. It returns the raider's states by name.
+// (50, 10), behind rock open only along row 10: the header's line runs through, the
+// invader's 4x2 body with its header at (1, 0) does not. Every raider type flies
+// the one cycle. It returns the raider's states by name.
 func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, map[string]component.BehaviorState) {
 	t.Helper()
 	const dir = "../../wad/scenario/vanguard"
@@ -42,7 +42,7 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 		w.Resources.Target = &engine.TargetResource{}
 	}
 	aimAt(w, 50, 10)
-	rockRows(w, 30, 34, 40)
+	rockRows(w, 30, 34, 10, 11)
 
 	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
 	s.HandleEvent(event.GameEvent{
@@ -68,14 +68,15 @@ func footprintInRock(w *engine.World, pos component.PositionComponent) bool {
 	return w.Positions.HasBlockingWallInArea(pos.X-1, pos.Y, 4, 2, component.WallBlockKinetic)
 }
 
-// TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding: a lock that cannot
-// see its target beams to the nearest place by it, the beam's line drawn from the
-// header while the state holds; rock that comes over that place meanwhile moves the
-// landing beside it, and the brake and the chase follow
+// TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding: a lock whose body
+// cannot fly to the cell it stored beams to the nearest place by its target, the
+// beam's line drawn from the header while the state holds; rock that comes over that
+// place meanwhile moves the landing beside it, and the brake and the chase follow
 func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	w, s, header, states := newRaiderWorld(t)
 	b, _ := w.Components.Behavior.GetPtr(header)
 	b.Machine = aboutToExpire(states["Lock"], 2*parameter.GameUpdateInterval)
+	b.TargetX, b.TargetY = 50, 10
 	start, _ := w.Positions.GetPosition(header)
 
 	stepBehaviors(w, s)
@@ -87,7 +88,7 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	}
 
 	// Rock comes over the landing, as a cave's does while a beam runs
-	rockRows(w, 46, 56, 14)
+	rockRows(w, 46, 56, 14, 40)
 	for range 2 * parameter.SwarmTeleportDuration / parameter.GameUpdateInterval {
 		stepBehaviors(w, s)
 		if b.Machine.State != states["Beam"] {

@@ -911,7 +911,9 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
 `-schema` lists as `vocabularies.behavior`:
 
 - Guards: `TargetDistance { op, cells }` (header to target, rows scaled by the
-  cell aspect), `LineOfSight`, `HasTarget`, `Stunned`, `HPFraction { op, value }`,
+  cell aspect), `LineOfSight { to }` (the body clears the way from where it stands
+  to the target, or with `to = "stored"` to the cell `StoreTarget` kept), `HasTarget`,
+  `Stunned`, `HPFraction { op, value }`,
   `HitWall` (this step's move met a wall or the map edge), `Chance { percent }`
   (mixed from tick, entity and site, so no random stream moves),
   `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.

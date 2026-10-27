@@ -523,6 +523,9 @@ type (
 		Op    dialect.Op `toml:"op"`
 		Cells float64    `toml:"cells"`
 	}
+	lineOfSightArgs struct {
+		To string `toml:"to"`
+	}
 	fractionArgs struct {
 		Op    dialect.Op `toml:"op"`
 		Value float64    `toml:"value"`
@@ -571,11 +574,21 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			return ok && a.Op.Holds(d, a.Cells)
 		}, nil
 	})
-	v.Predicate("LineOfSight", reads(func(c *behaviorCtx) bool {
-		x, y, ok := c.target()
-		pos, placed := c.sys.world.Positions.GetPosition(c.entity)
-		return ok && placed && c.sys.world.Positions.HasLineOfSight(pos.X, pos.Y, x, y, component.WallBlockKinetic)
-	}))
+	v.Predicate("LineOfSight", func(a *lineOfSightArgs) (func(*behaviorCtx) bool, error) {
+		if a.To != "" && a.To != "target" && a.To != "stored" {
+			return nil, fmt.Errorf("to %q is not one of target, stored", a.To)
+		}
+		stored := a.To == "stored"
+		return func(c *behaviorCtx) bool {
+			x, y, ok := c.target()
+			if stored {
+				x, y, ok = c.behavior.TargetX, c.behavior.TargetY, true
+			}
+			pos, placed := c.sys.world.Positions.GetPosition(c.entity)
+			p := c.proto
+			return ok && placed && bodyHasLineOfSight(c.sys.world, pos.X, pos.Y, x, y, p.Width, p.Height, p.HeaderX, p.HeaderY)
+		}, nil
+	})
 	v.Predicate("HasTarget", reads(func(c *behaviorCtx) bool {
 		_, _, ok := c.target()
 		return ok
