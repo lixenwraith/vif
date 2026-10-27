@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
@@ -28,9 +30,10 @@ mass = 2.0
 drops = "swarm"
 contact = { energy = 1000, heat = 10 }
 lifetime_ms = 35000
-glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]
+frames = [{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, { glyphs = ["▀▄▄▀", "▄▀▀▄"] }]
 pattern_ms = 500
 color = { r = 200, g = 120, b = 40 }
+fg = [{ r = 240, g = 160, b = 60 }]
 
 [states.Roam]
 on_update = [{ action = "Home" }]
@@ -151,6 +154,35 @@ func TestProgramsTakeIDsInSortedNameOrder(t *testing.T) {
 	}
 }
 
+// A prototype's frames compile to cells: a glyph per cell, none for a space, with
+// the palette entries and attributes its other grids give, and the console pair
+func TestAPrototypeLooksAsItsFramesSay(t *testing.T) {
+	src := strings.Replace(warden, `{ glyphs = ["▀▄▄▀", "▄▀▀▄"] }`,
+		`{ glyphs = ["▀ ▄▀", "▄▀▀▄"], fg = ["0  0", "    "], bg = ["    ", "0  0"], attr = ["B  D", "    "] }`, 1)
+	src = strings.Replace(src, "pattern_ms = 500", "pattern_ms = 500\nbg = [{ r = 20, g = 10, b = 0 }]\nfg256 = 214\nbg256 = 52", 1)
+	set, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, src)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	look := set.Prototypes()[0].Look
+	if len(look.Frames) != 2 || len(look.Frames[1]) != 8 {
+		t.Fatalf("%d frames, want two of eight cells", len(look.Frames))
+	}
+	if !look.Console || look.Fg256 != 214 || look.Bg256 != 52 || look.Color != (color.RGB{R: 200, G: 120, B: 40}) {
+		t.Fatalf("look %+v, want the console pair 214/52 and the prototype's colour", look)
+	}
+	want := []component.LookCell{
+		{Rune: '▀', Fg: 0, Bg: -1, Attr: terminal.AttrBold}, {Rune: 0, Fg: -1, Bg: -1}, {Rune: '▄', Fg: -1, Bg: -1}, {Rune: '▀', Fg: 0, Bg: -1, Attr: terminal.AttrDim},
+		{Rune: '▄', Fg: -1, Bg: 0}, {Rune: '▀', Fg: -1, Bg: -1}, {Rune: '▀', Fg: -1, Bg: -1}, {Rune: '▄', Fg: -1, Bg: 0},
+	}
+	if !slices.Equal(look.Frames[1], want) {
+		t.Fatalf("frame 1 %+v\nwant %+v", look.Frames[1], want)
+	}
+	if first := look.Frames[0][0]; first.Fg != -1 || first.Bg != -1 || first.Rune != '▄' {
+		t.Fatalf("a frame without grids compiled %+v, want its glyph alone", first)
+	}
+}
+
 // A step runs the program's edges in the machine's phases with the test verbs:
 // each line is what one step ran and the state it ended in. Every entry, the
 // start's included, ends with the host's entered hook.
@@ -219,7 +251,13 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"combat row", `combat = "swarm"`, `combat = "drain"`, `program 'warden': prototype: combat "drain" is not one of swarm, quasar`, 1},
 		{"homing", `homing = "swarm"`, `homing = "bee"`, `program 'warden': prototype: homing "bee" is not one of drain, quasar, snake, swarm`, 1},
 		{"drops", `drops = "swarm"`, `drops = "tower"`, `program 'warden': prototype: drops "tower": that species drops nothing`, 1},
-		{"glyph width", `["▄▀▀▄", "▀▄▄▀"], [`, `["▄▀▀", "▀▄▄▀"], [`, `program 'warden': prototype: glyphs[0][0] "▄▀▀" has 3 cells, want width 4`, 1},
+		{"glyph width", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀", "▀▄▄▀"] }, {`, `program 'warden': prototype: frames[0]: glyphs[0] "▄▀▀" has 3 cells, want width 4`, 1},
+		{"frame height", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀▄"] }, {`, `program 'warden': prototype: frames[0]: glyphs has 1 rows, want height 2`, 1},
+		{"no frame", `frames = [{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, { glyphs = ["▀▄▄▀", "▄▀▀▄"] }]`, `frames = []`, `program 'warden': prototype: no frame`, 1},
+		{"palette entry", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀▄", "▀▄▄▀"], fg = ["0   ", "  1 "] }, {`, `program 'warden': prototype: frames[0]: fg[1] "  1 ": '1' is not a space or an entry of fg's 1`, 1},
+		{"attribute", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀▄", "▀▄▄▀"], attr = ["B  U", "    "] }, {`, `program 'warden': prototype: frames[0]: attr[0] "B  U": 'U' is not B, D or a space`, 1},
+		{"console pair", `pattern_ms = 500`, `pattern_ms = 500` + "\nfg256 = 14", `program 'warden': prototype: fg256 and bg256 come together`, 1},
+		{"one frame a period", `pattern_ms = 500`, `pattern_ms = 0`, `program 'warden': prototype: pattern_ms 0: 2 frames need a positive period`, 1},
 		{"header", `header = { x = 1, y = 0 }`, `header = { x = 4, y = 0 }`, "program 'warden': prototype: header {4, 0} outside the 4×2 footprint", 1},
 		{"two faults", "hp = 40\ncombat = \"swarm\"", "hp = 0\ncombat = \"drain\"", "program 'warden': prototype: hp 0 is not positive", 2},
 	}

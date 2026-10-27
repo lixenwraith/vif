@@ -21,7 +21,7 @@ homing = "swarm"
 mass = 2.0
 contact = { energy = 1000, heat = 10 }
 lifetime_ms = 0
-glyphs = [["╔══╗", "╚══╝"], ["═╗╔═", "═╝╚═"]]
+frames = [{ glyphs = ["╔══╗", "╚══╝"] }, { glyphs = ["═╗╔═", "═╝╚═"] }]
 pattern_ms = 500
 color = { r = 0, g = 200, b = 200 }
 

@@ -196,11 +196,11 @@ func (s *BehaviorSystem) Update() {
 		}
 
 		// A stun freezes the animation as it freezes the step
-		if c.combat.Status[component.StatusStun].Remaining <= 0 && len(c.proto.Frames) > 1 {
+		if c.combat.Status[component.StatusStun].Remaining <= 0 && len(c.proto.Look.Frames) > 1 {
 			b.PatternElapsed += dt
 			for b.PatternElapsed >= c.proto.Pattern {
 				b.PatternElapsed -= c.proto.Pattern
-				b.PatternIndex = (b.PatternIndex + 1) % len(c.proto.Frames)
+				b.PatternIndex = (b.PatternIndex + 1) % len(c.proto.Look.Frames)
 			}
 		}
 

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/machine"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -45,7 +46,25 @@ type BehaviorPrototype struct {
 	Contact   CursorDamage          // what touching it costs a cursor
 	Lifetime  time.Duration         // 0 = lives until killed or cancelled
 
-	Frames  [][]rune      // glyph frames, each Width*Height runes row-major
+	Look    Look          // its frames, cell by cell
 	Pattern time.Duration // how long each frame shows
-	Color   color.RGB
+}
+
+// LookCell is one cell of a frame: its glyph, none where 0, and its foreground and
+// background palette entries, -1 for the look's colour and for no background
+type LookCell struct {
+	Rune   rune
+	Fg, Bg int8
+	Attr   terminal.Attr
+}
+
+// Look is a composite's frames cell by cell, row-major, with the palettes they
+// index, a data species' and an eye's alike. Where Console, a 256-colour host draws
+// every glyph in Fg256 and every background in Bg256.
+type Look struct {
+	Fg, Bg       []color.RGB
+	Color        color.RGB // a glyph's without a foreground entry
+	Fg256, Bg256 uint8
+	Console      bool
+	Frames       [][]LookCell
 }
