@@ -89,7 +89,7 @@ body = { trigger = "EventInputPressed", internal = true, guard = "And", guard_ar
     { name = "VarEquals", args = { var = "color", value = "${k}" } },
     { name = "VarCompareVar", args = { var_a = "i", op = "lt", var_b = "level" } },
 ] }, actions = [
-    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 2, button = "${k}" } },
+    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = "blossom", button = "${k}" } },
     { action = "IncrementVar", payload = { name = "i" } },
     { macro = "Note" },
 ] }
@@ -262,8 +262,8 @@ on_enter = [
     { action = "EmitEvent", event = "EventGrayoutStart", reconcile = true },
     { action = "SetVar", payload = { name = "ember", value = 0 } },
     { macro = "Score", heat = 0 },
-    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
-    { action = "EmitEvent", event = "EventParticleVortex", payload = { behavior = 1, button = 0, duration_ms = 1000 }, payload_vars = { button = "fault" } },
+    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = "decay" } },
+    { action = "EmitEvent", event = "EventParticleVortex", payload = { behavior = "decay", button = 0, duration_ms = 1000 }, payload_vars = { button = "fault" } },
     { macro = "Cue", sound = "buzz" },
     { action = "EmitEvent", event = "EventButtonLightRequest", payload = { button = 0, duration_ms = 550 }, payload_vars = { button = "color" }, delay_ms = 450 },
     { macro = "Say", message = "The note was {}", var = "color", delay_ms = 450 },

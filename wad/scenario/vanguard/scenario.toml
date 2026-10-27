@@ -61,9 +61,9 @@ on_enter = [
 # --- Raiders ---
 
 # A raider a player shoots down drops a U where it fell, an upgrade for every
-# player (LootUpgrade = 8): an event drop, since no drop table holds it; one that
-# dies by no player's hand drops nothing. Both raid states hold it, so no kill
-# goes uncounted while a raider spawns.
+# player: an event drop, since no drop table holds it; one that dies by no
+# player's hand drops nothing. Both raid states hold it, so no kill goes
+# uncounted while a raider spawns.
 [states.Raid]
 parent = "Root"
 transitions = [
@@ -71,7 +71,7 @@ transitions = [
         { name = "PayloadSpeciesIn", args = { field = "species", names = ["invader", "scarab", "construct", "storm_eye"] } },
         { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
     ] }, capture_vars = { x = "kill_x", y = "kill_y" }, actions = [
-        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = 8 }, payload_vars = { x = "kill_x", y = "kill_y" } },
+        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "upgrade" }, payload_vars = { x = "kill_x", y = "kill_y" } },
     ] },
 ]
 

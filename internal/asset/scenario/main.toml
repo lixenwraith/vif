@@ -52,9 +52,8 @@ transitions = [
 
 [states.MainDecayWave]
 parent = "MainCycle"
-# ParticleBehavior: 1 = decay, 2 = blossom.
 on_enter = [
-    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = 1 } },
+    { action = "EmitEvent", event = "EventParticleWave", payload = { behavior = "decay" } },
 ]
 transitions = [
     { trigger = "Tick", target = "MainSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
