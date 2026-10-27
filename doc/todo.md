@@ -84,8 +84,9 @@ rate falls from mostly double to mostly normal (mean multiplier 1.84 to 1.10 at
 120×40); counting only the visible text closes that. Scenery passes behind any cell
 that blocks spawns, rock and walls alike, until the position package gives rock a
 test of its own. A boss region of fixed, typeable text over moving scenery needs a
-drift that moves scenery alone, since a drift moves every loose glyph, and may want
-scenery drawn apart from the typeable text it now matches.
+drift that moves scenery alone, since a drift moves every loose glyph; in truecolor
+scenery is hazed by depth apart from typeable text, but on a console it takes the
+same two entries.
 
 ### Boss approach
 
@@ -94,7 +95,7 @@ scenery drawn apart from the typeable text it now matches.
 - Priority: P1
 - Affected files: `wad/scenario/vanguard/scenario.toml` (`CaveStart`),
   `internal/parameter/environment.go` (`CaveMaxSpeed`, `DriftMaxSpeed`),
-  `internal/system/glyph.go` (`Update`), `doc/gameplay.md` §9
+  `doc/gameplay.md` §9
 - Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
 
 The cave's pace and the drift's change at once or ease (`EventCavePace`,
@@ -105,10 +106,11 @@ sudden as the opening fills, and play which reads as a boss. Off whole columns a
 the rock steps unevenly, one and two in turn at 30 columns a second, and past 20 it
 jumps more than a column a tick. The soft caps sit past what was measured: a whole
 vanguard tick, headless, reads 0.07 to 0.20 ms from 20 to 200 columns a second at
-120×40 and 0.39 to 2.42 ms at 500×254. The parallax thins as the drift quickens,
-since the spawner places a block an interval whatever the pace: 347 glyphs at 10
-cells a second on 120×40 with the rock halted, 180 at 50 and 129 at 100. A cave
-opens once and nothing narrows it again; a later stage starts a new cave.
+120×40 and 0.39 to 2.42 ms at 500×254. The renderer carries scenery between ticks
+but not the rock, which at boss speeds jumps several columns a tick; carrying it
+needs the columns ahead of the map, engine surface for rock that waits for the
+position package. A cave opens once and nothing narrows it again; a later stage
+starts a new cave.
 
 ### Gun and loot
 
@@ -956,6 +958,30 @@ and a guest's arrival lowers it only after the 300-tick renegotiation window. Ea
 crossing a host playing alone makes lands two ticks later than it needs to. Push
 the authority's lead when hosting starts, or let `driveOwnLead` run for an
 authority with no peers.
+
+### Let a run tick faster than twenty times a second
+
+- Priority: P3
+- Affected files: `internal/parameter/engine.go` (`GameUpdateInterval`,
+  `FrameUpdateInterval`), `internal/parameter/network.go`,
+  `internal/engine/scheduler.go`, `wad/scenario/vanguard/scenario.toml`
+- Guide: [Runtime §3](runtime.md#3-runtime-clocks-and-cadence),
+  [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
+
+At time scale 8x vanguard's parallax reads as depth on its own, every layer stepping
+at least twenty times a second; a faster tick would give every motion that, where
+the renderer now carries only scenery between ticks. `GameUpdateInterval` (50 ms)
+is a constant: a frame is a third of it, `SimTime` derives each tick's instant from
+it, and parameters count in ticks, the network's windows most
+(`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`, `SnapshotFloorKeyframeTicks`
+and the rest), so a shorter tick shortens each of them in time. Every participant
+of a session must step the same interval, so it would travel in the session's
+handshake and the journal, and a session's traffic per second, command frames,
+epochs and corrections, grows with the rate. Vanguard's rock steps a column a tick,
+evenly only on a whole-tick period, so its pace follows the interval. The smallest
+step is an interval set per run and carried where every participant reads it, the
+tick-counted windows derived from durations, and the divergence harness run at two
+intervals.
 
 ## Session membership
 

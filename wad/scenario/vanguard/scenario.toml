@@ -83,17 +83,19 @@ background = true
 # narrowest; on a taller map the 36 rows stray at most nine off the middle. With no
 # rough rock the walls stay smooth, and the mouth holds the centred cursor. The rock
 # wears one of four stone arts, the cave's seed picking it; every rock cell draws a
-# glyph, so it reads on a text console's sixteen colours too. The glyphs drift at
-# half the scroll and slower, each layer stepping on whole ticks, as scenery: rock
-# and raiders pass them by and the rock hides them, while particles and the gun act
-# on them. The seed is drawn from the run's, so each new game flies a new cave and a
-# run's seed replays its caves in order.
+# glyph, so it reads on a text console's sixteen colours too. The glyphs drift past
+# faster than the rock, at 20, 40 and 80 cells a second by layer, fast enough for
+# each layer to read as moving and the depths to come apart; a layer steps whole
+# cells a tick, which the renderer spreads over the frames between. They are
+# scenery: rock and raiders pass them by and the rock hides them, while particles and
+# the gun act on them. The seed is drawn from the run's, so each new game flies a new
+# cave and a run's seed replays its caves in order.
 [states.CaveStart]
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
     { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 36, min_wall = 2, wavelength = 64, swing = 9, detail = 0, ramp = 96, octaves = 4 }, payload_vars = { seed = "cave_seed" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
-    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 10.0, duration_ms = 0, scenery = true } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 80.0, duration_ms = 0, scenery = true } },
 ]
 
 # --- Raiders ---

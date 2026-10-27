@@ -527,6 +527,63 @@ func TestADriftEasesFromItsPaceAndAnEasedCancelEndsAtRest(t *testing.T) {
 	}
 }
 
+// TestALayersCarryOverATickIsTheStepItTakesNext: the drift a tick leaves for the
+// renderer carries each layer, over the next tick, exactly as far as that tick steps
+// it, part-cells and a diagonal included; a disabled drift carries nothing
+func TestALayersCarryOverATickIsTheStepItTakesNext(t *testing.T) {
+	w, s := newEnvironmentWorld(1)
+	levels := []core.Entity{
+		addDriftGlyph(w, 60, 6, component.GlyphDark),
+		addDriftGlyph(w, 60, 12, component.GlyphNormal),
+		addDriftGlyph(w, 60, 18, component.GlyphBright),
+	}
+	s.startDrift(&event.DriftStartPayload{Direction: 5 * math.Pi / 6, Speed: 30})
+	tick := uint64(1)
+	for range 12 {
+		var carry [3][2]int
+		var before [3]component.PositionComponent
+		for level, e := range levels {
+			before[level], _ = w.Positions.GetPosition(e)
+			carry[level][0], carry[level][1] = w.Resources.Drift.Carry(level, 50*time.Millisecond)
+		}
+		tick = runEnvironment(w, s, tick, 1)
+		for level, e := range levels {
+			if pos, _ := w.Positions.GetPosition(e); pos.X-before[level].X != carry[level][0] || pos.Y-before[level].Y != carry[level][1] {
+				t.Fatalf("tick %d: level %d stepped from %v to %v, carry %v", tick, level, before[level], pos, carry[level])
+			}
+		}
+	}
+	s.HandleEvent(event.GameEvent{Type: event.EventMetaSystemCommandRequest,
+		Payload: &event.MetaSystemCommandPayload{SystemName: s.Name(), Enabled: false}})
+	for level := range levels {
+		if dx, dy := w.Resources.Drift.Carry(level, 50*time.Millisecond); dx != 0 || dy != 0 {
+			t.Fatalf("a disabled drift carries level %d by (%d,%d)", level, dx, dy)
+		}
+	}
+}
+
+// TestAFastDriftSpawnsSoonerInProportion: the spawn interval shrinks by how far the
+// drift outpaces DriftFillSpeed, so its text keeps its density in passing, and a
+// slower drift spawns at the plain interval
+func TestAFastDriftSpawnsSoonerInProportion(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
+	speed := w.Resources.Status.Floats.Get("environment.drift_speed")
+	plain := glyphs.calculateNextSpawn()
+	for _, tc := range []struct {
+		speed float64
+		want  time.Duration
+	}{
+		{parameter.DriftFillSpeed / 2, plain},
+		{parameter.DriftFillSpeed * 8, plain / 8},
+	} {
+		speed.Set(tc.speed)
+		if got := glyphs.calculateNextSpawn(); got != tc.want {
+			t.Fatalf("a drift at %v spawns every %v, want %v", tc.speed, got, tc.want)
+		}
+	}
+}
+
 // TestGlyphLinesEnterAtTheUpwindEdge: while glyphs drift, new lines are placed in
 // the band beside the edge the drift comes from.
 func TestGlyphLinesEnterAtTheUpwindEdge(t *testing.T) {

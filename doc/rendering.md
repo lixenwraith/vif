@@ -365,14 +365,23 @@ disc stamps its box with squared distances, and only a cell within
 compares, so the cells are exactly those of the per-cell distance test.
 
 A cell can hold several glyphs while drift carries layers past one another. The
-glyph renderer draws only the cell's top glyph, the one typing acts on or else the
-nearest scenery, so a nearer parallax layer covers a farther one and typeable text
-covers scenery; `Position.TopGlyphIs` settles a cell holding one entity by its
-length and ranks a stacked one. Scenery standing in rock or a wall that blocks
-spawns is not drawn: rock and walls draw first and a glyph prints over them
-foreground-only, so the text passes behind them. In 256-color mode a glyph hue has
-two console entries, one for dark and one shared by normal and bright, so only the
-dark layer stands apart there.
+glyph renderer draws typeable text in its cell, only the cell's top glyph, the one
+typing acts on (`Position.TopGlyphIs` settles a cell holding one entity by its
+length and ranks a stacked one). Scenery is drawn where its layer stands at the
+frame's moment. A tick steps a layer whole cells, so the renderer carries each
+layer on from its cells by the part-cell and velocity the environment leaves in
+`Drift` each tick, over the time since the tick (`TimeResource.PaceTime`, the
+pacing clock's instant it ran at) and a tick at most: a fast layer moves every
+frame and lands where the next tick puts it, and a frame before the tick draws it
+in its cells. The layers draw far to near and typeable text last, each over the
+ones behind it, so the nearest glyph shows where several are drawn in one cell,
+and lines of two depths interleave where they cross. Scenery standing in rock or a
+wall that blocks spawns is not drawn: rock and walls draw first and a glyph prints
+over them foreground-only, so the text passes behind them. In truecolor each
+scenery layer mixes its type's bright color into the background by
+`visual.SceneryDepthMix`, so far text fades as haze, while typeable text keeps its
+level's color. In 256-color mode a glyph hue has two console entries, one for dark
+and one shared by normal and bright, so only the dark layer stands apart there.
 
 ### Local and peer cursors
 

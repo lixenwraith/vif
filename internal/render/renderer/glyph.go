@@ -6,16 +6,33 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// GlyphRenderer draws typeable spawned content entities
+// GlyphRenderer draws typeable spawned content entities and the scenery drifting
+// behind them
 type GlyphRenderer struct {
-	gameCtx    *engine.GameContext
-	renderCell glyphCellRenderer
-	levels256  [5][3]uint8 // console entry per [GlyphType][GlyphLevel]
+	gameCtx       *engine.GameContext
+	renderCell    glyphCellRenderer
+	renderScenery glyphCellRenderer
+	levels256     [5][3]uint8     // console entry per [GlyphType][GlyphLevel]
+	sceneryTC     [5][3]color.RGB // scenery per [GlyphType][GlyphLevel], hazed by depth
+
+	// Per frame, each layer's glyphs at the cells they are drawn in: scenery by level
+	// far to near, then typeable text
+	layers [typeableLayer + 1][]drawnGlyph
 }
+
+// drawnGlyph is a glyph at the cell it is drawn in this frame
+type drawnGlyph struct {
+	x, y  int
+	glyph component.GlyphComponent
+}
+
+// typeableLayer is the layer typeable text draws in, over every scenery level
+const typeableLayer = len(parameter.DriftLayerFactor)
 
 // glyphCellRenderer draws one glyph in the colour mode chosen at construction
 type glyphCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent)
@@ -25,24 +42,37 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 	r := &GlyphRenderer{gameCtx: gameCtx}
 	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		r.renderCell, r.levels256 = r.cell256, glyphLevels256(render.ConsoleFor(cfg.ConsolePalette))
+		r.renderScenery = r.cell256
 	} else {
-		r.renderCell = r.cellTrueColor
+		r.renderCell, r.renderScenery = r.cellTrueColor, r.sceneryTrueColor
+		for typ, tc := range visual.GlyphColorLUT {
+			for level, mix := range visual.SceneryDepthMix {
+				r.sceneryTC[typ][level] = color.Lerp(visual.RgbBackground, tc[component.GlyphBright], mix)
+			}
+		}
 	}
 	return r
 }
 
-// Render draws each cell's top glyph, the one typing acts on or else the nearest
-// scenery, so a nearer drift layer covers a farther one and a glyph its cell refused
-// is not shown. Scenery in rock or a wall is behind it: they draw first and a glyph
-// over them would print on them, so it is not shown either.
+// Render draws each cell's top typeable glyph in its cell, and scenery where its
+// layer stands at the frame's moment, carried on from its cells by the part of a
+// tick since. The layers draw far to near, typeable text last, each over the ones
+// behind it. Rock and walls draw first, and a glyph in them would print over them,
+// so it is not shown.
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	glyphs := r.gameCtx.World.Components.Glyph
+	world := r.gameCtx.World
+	glyphs := world.Components.Glyph
 	if glyphs.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskGlyph)
-	positions := r.gameCtx.World.Positions
+	positions := world.Positions
+	width, height := world.Resources.Config.MapWidth, world.Resources.Config.MapHeight
+	carry := r.carry(ctx)
+	for i := range r.layers {
+		r.layers[i] = r.layers[i][:0]
+	}
 
 	glyphs.Each(func(entity core.Entity, glyph *component.GlyphComponent) bool {
 		// Gold is handled in its own composite renderer with a different mask
@@ -54,23 +84,56 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		if !ok {
 			return true
 		}
-
-		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
-		if !visible {
+		if positions.IsTypeable(entity) {
+			if positions.TopGlyphIs(entity, pos.X, pos.Y) {
+				r.layers[typeableLayer] = append(r.layers[typeableLayer], drawnGlyph{x: pos.X, y: pos.Y, glyph: *glyph})
+			}
 			return true
 		}
-		if !positions.TopGlyphIs(entity, pos.X, pos.Y) ||
-			positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn) {
-			return true
+		x, y := pos.X+carry[glyph.Level][0], pos.Y+carry[glyph.Level][1]
+		if x >= 0 && x < width && y >= 0 && y < height {
+			r.layers[glyph.Level] = append(r.layers[glyph.Level], drawnGlyph{x: x, y: y, glyph: *glyph})
 		}
-
-		r.renderCell(buf, screenX, screenY, glyph)
 		return true
 	})
+
+	for layer, drawn := range r.layers {
+		renderCell := r.renderScenery
+		if layer == typeableLayer {
+			renderCell = r.renderCell
+		}
+		for i := range drawn {
+			d := &drawn[i]
+			if positions.HasBlockingWallAt(d.x, d.y, component.WallBlockSpawn) {
+				continue
+			}
+			if screenX, screenY, visible := ctx.MapToScreen(d.x, d.y); visible {
+				renderCell(buf, screenX, screenY, &d.glyph)
+			}
+		}
+	}
+}
+
+// carry is how far each drift layer stands past its cells at the frame's moment:
+// from the tick the frame follows, a tick on at most, and none before a first tick
+func (r *GlyphRenderer) carry(ctx render.RenderContext) (c [len(parameter.DriftLayerFactor)][2]int) {
+	t := r.gameCtx.World.Resources.Time
+	if t.PaceTime.IsZero() {
+		return c
+	}
+	since := min(max(ctx.GameTime.Sub(t.PaceTime), 0), t.DeltaTime)
+	for level := range c {
+		c[level][0], c[level][1] = r.gameCtx.World.Resources.Drift.Carry(level, since)
+	}
+	return c
 }
 
 func (r *GlyphRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
 	buf.SetFgOnly(screenX, screenY, glyph.Rune, visual.GlyphColorLUT[glyph.Type][glyph.Level], terminal.AttrNone)
+}
+
+func (r *GlyphRenderer) sceneryTrueColor(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
+	buf.SetFgOnly(screenX, screenY, glyph.Rune, r.sceneryTC[glyph.Type][glyph.Level], terminal.AttrNone)
 }
 
 func (r *GlyphRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {

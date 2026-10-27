@@ -26,6 +26,10 @@ const (
 	// DriftEntryBand is how many cells from the upwind edge new glyph lines are
 	// placed while a drift is active.
 	DriftEntryBand = 4
+
+	// DriftFillSpeed is the drift pace the glyph spawner's interval suits: a faster
+	// drift spawns sooner in proportion, so its text keeps its density in passing.
+	DriftFillSpeed = 10.0
 )
 
 const (
