@@ -417,17 +417,29 @@ in the stone art preset `art` names (`none` for bare stone, `strata`, `cracked`,
 `moss`, `crystal`, `masonry`); vanguard picks one per cave by its seed, with
 `EmitEvent`'s `pick`. A cell's glyph and colours follow from the preset, the seed,
 its profile column and row, and how deep it lies from the nearest opening on which
-side, so the stone moves with the rock and reads on a text console. Each step, at
-most one a tick, moves the rock and every shared wall a column left, drops what
-leaves the map and lays the column entering it. What the rock arrives on goes a
-column left and a row toward its column's nearer opening, or straight left: a
-cursor by a placement, so the rock only pushes. A flying composite the rock
+side, so the stone moves with the rock and reads on a text console. The cave
+scrolls at `speed` columns a second, at most the soft cap `CaveMaxSpeed`, as an
+integer rate and phase, and each whole column the phase carries is a step, as many
+a tick as it carries. Each step moves the rock and every shared wall a column left,
+drops what leaves the map and lays the column entering it. What the rock arrives
+on goes a column left and a row toward its column's nearer opening, or straight
+left: a cursor by a placement, so the rock only pushes. A flying composite the rock
 reaches at any member moves whole the same way, else to the nearest place its
 footprint fits, enraged or not, and one with room nowhere is destroyed with no
 reward. A cursor the rock finds no room for, pressed against the left edge, is
 crushed where it stands (`EventCursorCrushed`), which defeats it; a loose glyph is
-removed, unless it is scenery, which the rock passes in front of. `EventCaveStop`
-leaves the rock where it stands.
+removed, unless it is scenery, which the rock passes in front of. A cursor's push
+is a queued move, so a tick's steps carry each cursor from where the last left it
+and its move goes out once, to the last cell.
+
+The pace changes by event, each at once or easing linearly over `ease_ms`.
+`EventCaveStop` brings the scroll to rest and leaves the rock where it stands, and
+`EventCavePace` sets a new `speed`, resuming a halted cave. `EventCaveOpen` widens
+the cave from the first column past the right edge, so no rock in view changes,
+over `ramp` columns, the cave's own when 0, to `gap` open rows centred, all the
+walls leave when 0, and holds it open from there; a cave opens once.
+`EventCaveOpened` announces the opening filling the map, the cue a boss encounter
+waits on.
 
 `EnvironmentSystem` owns map-wide gameplay effects rather than rendering
 post-process effects. Its first effect is wind: `EventWindStart` supplies force,
@@ -443,9 +455,12 @@ future design that would extend wind to more of them.
 
 Its second effect is glyph drift, a parallax background for side-scrolling
 levels. `EventDriftStart` supplies a direction in the same radians, a speed in
-cells per second (capped at `DriftMaxSpeed`) and `duration_ms`, where zero drifts
-until `EventDriftCancel`. Every loose player glyph moves along that direction at
-its level's fraction of the speed, `DriftLayerFactor`: bright at full speed,
+cells per second (at most the soft cap `DriftMaxSpeed`), `duration_ms`, where zero
+drifts until `EventDriftCancel`, and `ease_ms`, over which each layer's velocity
+eases linearly from where it stands, from rest when no drift runs. An eased
+`EventDriftCancel` brings every layer to rest and ends the drift there. Every loose
+player glyph moves along that direction at its level's fraction of the speed,
+`DriftLayerFactor`: bright at full speed,
 normal at half, dark at a quarter, with rows scaled by the cell aspect so one
 speed reads the same in every direction. Each level keeps an integer sub-cell
 phase per axis that advances
@@ -455,8 +470,9 @@ a rigid group, so no step crosses a wall's corner. A glyph that would leave the
 map, enter rock or a wall or find its target cell full is removed with no reward
 or effect; scenery enters rock and walls. Composite members (gold) and glyphs
 already tagged to die stay put, and the cursor does not ride with the text under
-it. A new start keeps each phase that still points the new way, so a change of
-pace does not jolt the text and a reversal does not stall it, and disabling the
+it. A new start at once keeps each phase that still points the new way, so a
+change of pace does not jolt the text and a reversal does not stall it, and an
+eased one carries every phase through; disabling the
 system pauses the drift as it pauses wind. Where layers share a cell the nearest
 draws on top, and typeable text over scenery (§3).
 

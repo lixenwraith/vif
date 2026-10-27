@@ -13,6 +13,7 @@ const (
 // Policy controls corpus ingest
 type Policy struct {
 	MaxLineRunes    int
+	MinLineRunes    int
 	MinBlockLines   int
 	MaxBlockLines   int
 	IndentDelta     int
@@ -27,6 +28,7 @@ type Policy struct {
 func DefaultPolicy() Policy {
 	return Policy{
 		MaxLineRunes:    parameter.ContentMaxLineRunes,
+		MinLineRunes:    parameter.ContentMinLineRunes,
 		MinBlockLines:   parameter.ContentMinBlockLines,
 		MaxBlockLines:   parameter.ContentMaxBlockLines,
 		IndentDelta:     parameter.ContentIndentDelta,

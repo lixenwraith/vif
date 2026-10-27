@@ -987,12 +987,20 @@ type WindStartPayload struct {
 // DriftStartPayload sets loose glyphs drifting along Direction (radians, as for
 // wind) at Speed cells/second, each level at its own parallax fraction and rows
 // scaled for the cell aspect. DurationMs 0 drifts until cancelled. Scenery makes
-// the text placed while it drifts scenery (ProtectScenery) for life.
+// the text placed while it drifts scenery (ProtectScenery) for life. EaseMs eases
+// each layer from how it drifts now, at rest when no drift runs, at once when 0.
 type DriftStartPayload struct {
 	Direction  float64 `toml:"direction"`
 	Speed      float64 `toml:"speed"`
 	DurationMs int64   `toml:"duration_ms"`
+	EaseMs     int64   `toml:"ease_ms"`
 	Scenery    bool    `toml:"scenery"`
+}
+
+// DriftCancelPayload ends the drift at once, or eases it to a rest over EaseMs and
+// then ends it
+type DriftCancelPayload struct {
+	EaseMs int64 `toml:"ease_ms"`
 }
 
 // --- Post-Process ---
@@ -1380,12 +1388,11 @@ type MazeSpawnRequestPayload struct {
 	CollisionMode WallBatchCollisionMode     `toml:"collision_mode"`
 }
 
-// CaveStartPayload lays a cave across the map and scrolls it left at Speed columns a
-// second, at most one a tick; its rock follows cave.Config at the map's height. A
-// zero speed, gap or wavelength takes its parameter default, a zero seed draws one,
-// a zero mask blocks everything, and a zero visual draws stone. Art names the stone
-// art preset (pattern.ParseArtPreset) the rock draws in place of the visual; a
-// scenario that varies it from cave to cave picks it (EmitEvent's pick).
+// CaveStartPayload lays a cave across the map, its rock following cave.Config at the
+// map's height, and scrolls it left at Speed columns a second, up to the soft cap. A
+// zero speed, gap or wavelength takes its default, a zero seed draws one, a zero mask
+// blocks everything and a zero visual draws stone. Art names a stone art preset
+// (pattern.ParseArtPreset) the rock draws instead, as EmitEvent's pick may choose.
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`
@@ -1400,6 +1407,27 @@ type CaveStartPayload struct {
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
 	Art        string                     `toml:"art"`
+}
+
+// CaveStopPayload brings the cave's scroll to rest at once, or easing over EaseMs
+type CaveStopPayload struct {
+	EaseMs int64 `toml:"ease_ms"`
+}
+
+// CavePacePayload sets the running cave's scroll to Speed columns a second, above
+// zero, easing from its pace over EaseMs or at once when 0; a halted cave resumes
+type CavePacePayload struct {
+	Speed  float64 `toml:"speed"`
+	EaseMs int64   `toml:"ease_ms"`
+}
+
+// CaveOpenPayload widens the cave from the first column past the map's right edge,
+// over Ramp columns (the cave's own ramp when 0), to Gap open rows centred (all the
+// walls leave when 0), and holds it open; EventCaveOpened follows once the opening
+// fills the map. A cave opens once.
+type CaveOpenPayload struct {
+	Gap  int `toml:"gap"`
+	Ramp int `toml:"ramp"`
 }
 
 // --- Fadeout ---

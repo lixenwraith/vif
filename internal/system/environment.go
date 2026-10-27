@@ -47,13 +47,11 @@ type EnvironmentSystem struct {
 
 const driftLevels = len(parameter.DriftLayerFactor)
 
-// driftCell is one cell of phase: velocity in microcells/second times elapsed
-// nanoseconds, kept in integers so every instance crosses on the same tick.
-const driftCell = int64(1e6) * int64(time.Second)
-
 // driftState is the whole of a drift, and its D-19 record. Phase is each level's
-// sub-cell remainder per axis, so a layer steps on the same tick everywhere.
-// Scenery, left out while false, marks the text placed while it drifts as scenery.
+// sub-cell remainder per axis, velocity in microcells a second times nanoseconds, so
+// a layer steps on the same tick everywhere. Speed is the pace it drifts or eases to,
+// 0 only while it eases to a rest. Scenery, left out while false, marks the text
+// placed while it drifts as scenery.
 type driftState struct {
 	Active    bool                  `json:"active"`
 	Endless   bool                  `json:"endless"`
@@ -62,6 +60,11 @@ type driftState struct {
 	Direction float64               `json:"direction"`
 	Remaining time.Duration         `json:"remaining"`
 	Phase     [driftLevels][2]int64 `json:"phase"`
+	// While it eases, each layer's velocity as the ease began and how far along it
+	// is; all left out once it holds its pace
+	From [driftLevels][2]int64 `json:"from,omitzero"`
+	Done time.Duration         `json:"done,omitempty"`
+	Span time.Duration         `json:"span,omitempty"`
 }
 
 // NewEnvironmentSystem creates the global gameplay environment system.
@@ -138,7 +141,11 @@ func (s *EnvironmentSystem) HandleEvent(ev event.GameEvent) {
 			s.startDrift(payload)
 		}
 	case event.EventDriftCancel:
-		s.endDrift()
+		var ease int64
+		if payload, ok := ev.Payload.(*event.DriftCancelPayload); ok {
+			ease = payload.EaseMs
+		}
+		s.cancelDrift(ease)
 		s.publishStatus()
 	}
 }
@@ -286,14 +293,13 @@ func (s *EnvironmentSystem) clearPlanarWind() {
 	s.applyPlanarWind(0, 0)
 }
 
-// startDrift replaces any drift but keeps each layer's phase where it still points
-// the new way, so a change of pace does not jolt text already on its way to the next
-// cell, and a reversal does not first unwind the old part-cell.
+// startDrift replaces any drift, easing each layer from how it drifts now
 func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	if payload == nil || !finite(payload.Direction) || !finite(payload.Speed) || payload.Speed <= 0 ||
-		payload.DurationMs < 0 || payload.DurationMs > int64(math.MaxInt64/time.Millisecond) {
+		!validMs(payload.DurationMs) || !validMs(payload.EaseMs) {
 		return
 	}
+	from := s.velocities()
 	s.drift.Active = true
 	s.drift.Endless = payload.DurationMs == 0
 	s.drift.Scenery = payload.Scenery
@@ -301,6 +307,36 @@ func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	s.drift.Direction = vmath.NormalizeAngle(payload.Direction)
 	s.drift.Remaining = time.Duration(payload.DurationMs) * time.Millisecond
 	s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction, s.world.Resources.Config.CellAspect)
+	s.easeDrift(from, payload.EaseMs)
+	s.publishStatus()
+}
+
+// cancelDrift ends the drift at once, or eases every layer to a rest over easeMs and
+// ends it there; text placed meanwhile is still the drift's kind
+func (s *EnvironmentSystem) cancelDrift(easeMs int64) {
+	if !validMs(easeMs) {
+		return
+	}
+	if !s.drift.Active || easeMs == 0 {
+		s.endDrift()
+		return
+	}
+	from := s.velocities()
+	s.drift.Speed = 0
+	s.driftVelocity = [driftLevels][2]int64{}
+	s.easeDrift(from, easeMs)
+}
+
+// easeDrift eases every layer from the velocities from to the drift's over easeMs. At
+// once, it keeps each layer's phase where it still points the new way, so a change of
+// pace does not jolt text already on its way to the next cell, and a reversal does
+// not first unwind the old part-cell; an ease carries the part-cell through.
+func (s *EnvironmentSystem) easeDrift(from [driftLevels][2]int64, easeMs int64) {
+	if easeMs > 0 {
+		s.drift.From, s.drift.Done, s.drift.Span = from, 0, time.Duration(easeMs)*time.Millisecond
+		return
+	}
+	s.drift.From, s.drift.Done, s.drift.Span = [driftLevels][2]int64{}, 0, 0
 	for level := range driftLevels {
 		for axis, v := range s.driftVelocity[level] {
 			if p := &s.drift.Phase[level][axis]; !phaseFollows(*p, v) {
@@ -308,7 +344,32 @@ func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 			}
 		}
 	}
-	s.publishStatus()
+}
+
+// ramp is a layer's velocity on one axis, easing to the drift's or holding it
+func (s *EnvironmentSystem) ramp(level, axis int) vmath.Ramp {
+	return vmath.Ramp{
+		From: s.drift.From[level][axis], To: s.driftVelocity[level][axis],
+		Done: int64(s.drift.Done), Span: int64(s.drift.Span),
+	}
+}
+
+// velocities is each layer's velocity where the drift stands, at rest when none runs
+func (s *EnvironmentSystem) velocities() (v [driftLevels][2]int64) {
+	if !s.drift.Active {
+		return v
+	}
+	for level := range driftLevels {
+		for axis := range v[level] {
+			v[level][axis] = s.ramp(level, axis).Rate()
+		}
+	}
+	return v
+}
+
+// validMs reports a duration in milliseconds that converts without overflow
+func validMs(ms int64) bool {
+	return ms >= 0 && ms <= int64(math.MaxInt64/time.Millisecond)
 }
 
 // endDrift leaves the one inactive state every path that stops a drift encodes alike
@@ -323,7 +384,7 @@ func (s *EnvironmentSystem) endDrift() {
 func driftVelocity(speed, direction float64, aspect vmath.Aspect) (v [driftLevels][2]int64) {
 	sin, cos := math.Sincos(direction)
 	for level, factor := range parameter.DriftLayerFactor {
-		micro := speed * factor * 1e6
+		micro := speed * factor * float64(vmath.MicroRate)
 		v[level] = [2]int64{
 			int64(math.Round(micro * cos)),
 			int64(math.Round(aspect.FromCircular(micro * sin))),
@@ -350,17 +411,28 @@ func (s *EnvironmentSystem) updateDrift(delta time.Duration) {
 	s.world.WithDomain(core.DomainPlayer, func() {
 		for level := range driftLevels {
 			phase := &s.drift.Phase[level]
-			phase[0] += s.driftVelocity[level][0] * int64(elapsed)
-			phase[1] += s.driftVelocity[level][1] * int64(elapsed)
-			stepX, stepY := phase[0]/driftCell, phase[1]/driftCell
-			phase[0] -= stepX * driftCell
-			phase[1] -= stepY * driftCell
+			for axis := range phase {
+				covered, _ := s.ramp(level, axis).Cover(int64(elapsed))
+				phase[axis] += covered
+			}
+			stepX, stepY := phase[0]/vmath.CellSpan, phase[1]/vmath.CellSpan
+			phase[0] -= stepX * vmath.CellSpan
+			phase[1] -= stepY * vmath.CellSpan
 			if stepX != 0 || stepY != 0 {
 				s.shiftLayer(component.GlyphLevel(level), int(stepX), int(stepY))
 			}
 		}
 	})
 
+	if s.drift.Span > 0 {
+		if s.drift.Done = min(s.drift.Done+elapsed, s.drift.Span); s.drift.Done == s.drift.Span {
+			s.drift.From, s.drift.Done, s.drift.Span = [driftLevels][2]int64{}, 0, 0
+			if s.drift.Speed == 0 {
+				s.endDrift()
+				return
+			}
+		}
+	}
 	if !s.drift.Endless {
 		s.drift.Remaining -= min(delta, s.drift.Remaining)
 		if s.drift.Remaining <= 0 {
@@ -507,7 +579,8 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	return nil
 }
 
-// validate accepts exactly the drift states Update can leave behind
+// validate accepts the drift states Update can leave behind. A part-cell may point
+// against the velocity once an ease has turned a layer round.
 func (d driftState) validate(aspect vmath.Aspect) error {
 	if !d.Active {
 		if d != (driftState{}) {
@@ -515,15 +588,17 @@ func (d driftState) validate(aspect vmath.Aspect) error {
 		}
 		return nil
 	}
-	if !finite(d.Speed) || d.Speed <= 0 || d.Speed > parameter.DriftMaxSpeed ||
-		!(d.Direction >= 0 && d.Direction <= vmath.TwoPi) || d.Remaining < 0 || d.Endless != (d.Remaining == 0) {
+	easing := d.Span > 0
+	if !finite(d.Speed) || d.Speed < 0 || d.Speed == 0 && !easing || d.Speed > parameter.DriftMaxSpeed ||
+		!(d.Direction >= 0 && d.Direction <= vmath.TwoPi) || d.Remaining < 0 || d.Endless != (d.Remaining == 0) ||
+		d.Done < 0 || easing && d.Done >= d.Span || !easing && (d.Done != 0 || d.From != [driftLevels][2]int64{}) {
 		return fmt.Errorf("environment: invalid drift state")
 	}
-	velocity := driftVelocity(d.Speed, d.Direction, aspect)
-	for level, phase := range d.Phase {
-		for axis, p := range phase {
-			if p <= -driftCell || p >= driftCell || !phaseFollows(p, velocity[level][axis]) {
-				return fmt.Errorf("environment: drift phase beyond one cell or against its velocity")
+	limit := int64(math.Ceil(parameter.DriftMaxSpeed * float64(vmath.MicroRate) * max(1, float64(aspect))))
+	for level := range d.Phase {
+		for axis, p := range d.Phase[level] {
+			if from := d.From[level][axis]; p <= -vmath.CellSpan || p >= vmath.CellSpan || from < -limit || from > limit {
+				return fmt.Errorf("environment: drift phase beyond one cell or velocity beyond the cap")
 			}
 		}
 	}

@@ -415,9 +415,9 @@ const (
 	EventWindStart
 	// EventWindCancel [shared] cancels the global wind
 	EventWindCancel
-	// EventDriftStart (DriftStartPayload) [shared] starts or replaces the global glyph drift
+	// EventDriftStart (DriftStartPayload) [shared] starts or replaces the global glyph drift, at once or eased
 	EventDriftStart
-	// EventDriftCancel [shared] cancels the global glyph drift
+	// EventDriftCancel (DriftCancelPayload) [shared] cancels the global glyph drift, at once or eased to a rest
 	EventDriftCancel
 
 	// --- Post-Process ---
@@ -511,8 +511,14 @@ const (
 	EventMazeSpawnRequest
 	// EventCaveStart (CaveStartPayload) [shared] fills the map with a cave and scrolls it left, in place of any running one
 	EventCaveStart
-	// EventCaveStop [shared] halts the cave's scroll, leaving its walls where they stand
+	// EventCaveStop (CaveStopPayload) [shared] halts the cave's scroll at once or eased to a rest, leaving its walls where they stand
 	EventCaveStop
+	// EventCavePace (CavePacePayload) [shared] sets the running cave's scroll to a new pace, at once or eased, resuming a halted one
+	EventCavePace
+	// EventCaveOpen (CaveOpenPayload) [shared] widens the cave from just past the map's right edge to an opening it then holds
+	EventCaveOpen
+	// EventCaveOpened [shared] announces the cave's opening filling the map
+	EventCaveOpened
 	// EventWallDespawnRequest (WallDespawnRequestPayload) [shared] requests removal of walls in specified area or globally
 	EventWallDespawnRequest
 	// EventWallMaskChangeRequest (WallMaskChangeRequestPayload) [shared] modifies blocking behavior of existing walls

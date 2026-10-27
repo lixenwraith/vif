@@ -262,6 +262,9 @@ func TestEnvironmentSnapshotAndRNGContinueTogether(t *testing.T) {
 	origin.startDrift(&event.DriftStartPayload{Direction: 2.6, Speed: 6, Scenery: true})
 	setEnvironmentDelta(originWorld, 1, 50*time.Millisecond)
 	origin.Update()
+	origin.startDrift(&event.DriftStartPayload{Direction: 2.2, Speed: 9, EaseMs: 300, Scenery: true})
+	setEnvironmentDelta(originWorld, 1, 50*time.Millisecond)
+	origin.Update()
 
 	record, err := origin.SaveShared()
 	if err != nil {
@@ -269,8 +272,8 @@ func TestEnvironmentSnapshotAndRNGContinueTogether(t *testing.T) {
 	}
 	streams := originWorld.Resources.Rand.SaveStreams(core.DomainShared)
 
-	if origin.drift.Phase[component.GlyphBright] == ([2]int64{}) {
-		t.Fatal("drift phase is whole at capture; the record must carry a part-cell remainder")
+	if origin.drift.Phase[component.GlyphBright] == ([2]int64{}) || origin.drift.Done == 0 {
+		t.Fatal("drift phase is whole or its ease done at capture; the record must carry both part way")
 	}
 
 	receiverWorld, receiver := newEnvironmentWorld(0xC0FFEE)
@@ -487,6 +490,40 @@ func TestDriftExpiryReplacementAndCancel(t *testing.T) {
 	s.HandleEvent(event.GameEvent{Type: event.EventDriftCancel})
 	if s.drift != (driftState{}) || s.statDriftActive.Load() {
 		t.Fatalf("cancel left state: %+v", s.drift)
+	}
+}
+
+// An eased start ramps each layer from how it drifts now, covering the area under the
+// ramp, and an eased cancel brings the layers to rest before the drift ends: bright
+// text easing from rest to four cells a second over a second moves two cells, six
+// more easing on to eight, and two more easing to rest over half a second
+func TestADriftEasesFromItsPaceAndAnEasedCancelEndsAtRest(t *testing.T) {
+	w, s := newEnvironmentWorld(1)
+	bright := addDriftGlyph(w, 40, 10, component.GlyphBright)
+	at := func(want int) {
+		t.Helper()
+		if pos, _ := w.Positions.GetPosition(bright); pos.X != want {
+			t.Fatalf("bright text at column %d, want %d; drift %+v", pos.X, want, s.drift)
+		}
+	}
+	ease := func(speed float64) {
+		s.HandleEvent(event.GameEvent{Type: event.EventDriftStart, Payload: &event.DriftStartPayload{Direction: math.Pi, Speed: speed, EaseMs: 1000}})
+	}
+	ease(4)
+	tick := runEnvironment(w, s, 1, 20)
+	at(38)
+	ease(8)
+	tick = runEnvironment(w, s, tick, 20)
+	at(32)
+	s.HandleEvent(event.GameEvent{Type: event.EventDriftCancel, Payload: &event.DriftCancelPayload{EaseMs: 500}})
+	tick = runEnvironment(w, s, tick, 9)
+	if !s.statDriftActive.Load() {
+		t.Fatal("the drift ended before its ease to rest")
+	}
+	runEnvironment(w, s, tick, 20)
+	at(30)
+	if s.drift != (driftState{}) || s.statDriftActive.Load() {
+		t.Fatalf("an eased cancel left the drift %+v", s.drift)
 	}
 }
 

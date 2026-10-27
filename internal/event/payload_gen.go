@@ -133,6 +133,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventBehaviorCancelRequest:           func() any { return new(BehaviorCancelRequestPayload) },
 	EventWindStart:                       func() any { return new(WindStartPayload) },
 	EventDriftStart:                      func() any { return new(DriftStartPayload) },
+	EventDriftCancel:                     func() any { return new(DriftCancelPayload) },
 	EventGrayoutStart:                    func() any { return new(CursorScopePayload) },
 	EventGrayoutEnd:                      func() any { return new(CursorScopePayload) },
 	EventStrobeRequest:                   func() any { return new(StrobeRequestPayload) },
@@ -159,6 +160,9 @@ var payloadNew = [EventTypeCount]func() any{
 	EventWallPatternSpawnRequest:         func() any { return new(WallPatternSpawnRequestPayload) },
 	EventMazeSpawnRequest:                func() any { return new(MazeSpawnRequestPayload) },
 	EventCaveStart:                       func() any { return new(CaveStartPayload) },
+	EventCaveStop:                        func() any { return new(CaveStopPayload) },
+	EventCavePace:                        func() any { return new(CavePacePayload) },
+	EventCaveOpen:                        func() any { return new(CaveOpenPayload) },
 	EventWallDespawnRequest:              func() any { return new(WallDespawnRequestPayload) },
 	EventWallMaskChangeRequest:           func() any { return new(WallMaskChangeRequestPayload) },
 	EventWallSpawned:                     func() any { return new(WallSpawnedPayload) },
@@ -302,6 +306,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventBehaviorCancelRequest:           &codecBehaviorCancelRequestPayload,
 	EventWindStart:                       &codecWindStartPayload,
 	EventDriftStart:                      &codecDriftStartPayload,
+	EventDriftCancel:                     &codecDriftCancelPayload,
 	EventGrayoutStart:                    &codecCursorScopePayload,
 	EventGrayoutEnd:                      &codecCursorScopePayload,
 	EventStrobeRequest:                   &codecStrobeRequestPayload,
@@ -328,6 +333,9 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventWallPatternSpawnRequest:         &codecWallPatternSpawnRequestPayload,
 	EventMazeSpawnRequest:                &codecMazeSpawnRequestPayload,
 	EventCaveStart:                       &codecCaveStartPayload,
+	EventCaveStop:                        &codecCaveStopPayload,
+	EventCavePace:                        &codecCavePacePayload,
+	EventCaveOpen:                        &codecCaveOpenPayload,
 	EventWallDespawnRequest:              &codecWallDespawnRequestPayload,
 	EventWallMaskChangeRequest:           &codecWallMaskChangeRequestPayload,
 	EventWallSpawned:                     &codecWallSpawnedPayload,
@@ -1460,7 +1468,16 @@ var codecDriftStartPayload = structCodec{size: unsafe.Sizeof(DriftStartPayload{}
 	{off: unsafe.Offsetof(DriftStartPayload{}.Direction), kind: kindFloat},
 	{off: unsafe.Offsetof(DriftStartPayload{}.Speed), kind: kindFloat},
 	{off: unsafe.Offsetof(DriftStartPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+	{off: unsafe.Offsetof(DriftStartPayload{}.EaseMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(DriftStartPayload{}.Scenery), kind: kindBool},
+}}
+
+func (p *DriftCancelPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecDriftCancelPayload, unsafe.Pointer(p)
+}
+
+var codecDriftCancelPayload = structCodec{size: unsafe.Sizeof(DriftCancelPayload{}), fields: []field{
+	{off: unsafe.Offsetof(DriftCancelPayload{}.EaseMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 func (p *StrobeRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1800,6 +1817,32 @@ var codecCaveStartPayload = structCodec{size: unsafe.Sizeof(CaveStartPayload{}),
 	{off: unsafe.Offsetof(CaveStartPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Art), kind: kindString},
+}}
+
+func (p *CaveStopPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCaveStopPayload, unsafe.Pointer(p)
+}
+
+var codecCaveStopPayload = structCodec{size: unsafe.Sizeof(CaveStopPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CaveStopPayload{}.EaseMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+}}
+
+func (p *CavePacePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCavePacePayload, unsafe.Pointer(p)
+}
+
+var codecCavePacePayload = structCodec{size: unsafe.Sizeof(CavePacePayload{}), fields: []field{
+	{off: unsafe.Offsetof(CavePacePayload{}.Speed), kind: kindFloat},
+	{off: unsafe.Offsetof(CavePacePayload{}.EaseMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
+}}
+
+func (p *CaveOpenPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCaveOpenPayload, unsafe.Pointer(p)
+}
+
+var codecCaveOpenPayload = structCodec{size: unsafe.Sizeof(CaveOpenPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CaveOpenPayload{}.Gap), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveOpenPayload{}.Ramp), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *WallDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

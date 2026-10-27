@@ -1,7 +1,5 @@
 package parameter
 
-import "time"
-
 // Wind variation is sampled once per active simulation tick from the
 // environment system's Shared RNG stream. Keeping both ranges global makes the
 // current effect authoring surface small; they can move into WindStartPayload if
@@ -21,9 +19,9 @@ const (
 var DriftLayerFactor = [3]float64{0.25, 0.5, 1}
 
 const (
-	// DriftMaxSpeed caps a drift start in cells/second, bounding a layer's steps
-	// per tick.
-	DriftMaxSpeed = 20.0
+	// DriftMaxSpeed caps a drift's pace in cells/second, bounding a layer's steps per
+	// tick: a soft cap, past which the bright layer jumps more than five cells a tick.
+	DriftMaxSpeed = 100.0
 
 	// DriftEntryBand is how many cells from the upwind edge new glyph lines are
 	// placed while a drift is active.
@@ -31,10 +29,10 @@ const (
 )
 
 const (
-	// CaveMinPeriod caps a cave's scroll at a column a tick, so a cursor's push has
-	// landed before the rock steps again; CaveMaxPeriod bounds the slowest
-	CaveMinPeriod = GameUpdateInterval
-	CaveMaxPeriod = 10 * time.Second
+	// CaveMaxSpeed caps a cave's scroll in columns a second, a soft cap: the rock steps
+	// a column at a time however many a tick carries, and past it a tick jumps more
+	// than ten columns.
+	CaveMaxSpeed = 200.0
 
 	// A cave start that leaves its shape unnamed takes these; any map of 18 rows
 	// holds them

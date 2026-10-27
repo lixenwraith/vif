@@ -92,6 +92,7 @@ The default ingest policy is:
 | Corpus byte budget | 32 MiB |
 | Maximum accepted files | 256 |
 | Plain-text block size | 2–5 lines |
+| Plain-text line minimum | 5 characters |
 | Plain-text indent split | 2 columns at brace depth zero |
 | Tab width for leading-indent measurement | 4 columns |
 
@@ -108,7 +109,8 @@ Plain `.txt` files are converted with source-code-oriented heuristics:
 3. measure leading spaces/tabs for structural splitting, then omit that leading
    indentation from the stored text;
 4. collapse an interior tab to one space;
-5. drop blank lines and lines beginning `//`, `#`, or `/*`;
+5. drop blank lines, lines beginning `//`, `#`, or `/*`, and lines under five
+   characters, such as a lone `}`, whose braces still count toward depth;
 6. collect consecutive usable lines into blocks.
 
 A block closes at five lines, or when at least two lines have accumulated and a

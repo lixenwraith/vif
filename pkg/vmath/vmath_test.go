@@ -25,6 +25,27 @@ func TestScalarHelpers(t *testing.T) {
 	}
 }
 
+// A ramp covers the area under its rate, alike in one step or many, and holds its end
+// once it gets there; its rate stays exact over a span whose product overflows
+func TestARampCoversTheAreaUnderItsRate(t *testing.T) {
+	const tick = 50_000_000
+	r := Ramp{}.EaseTo(20*MicroRate, 20*tick)
+	var ticked int64
+	for range 40 {
+		var d int64
+		d, r = r.Cover(tick)
+		ticked += d
+	}
+	// A second easing up to 20 cells a second covers 10 cells, and the next at 20 covers 20
+	once, _ := Ramp{}.EaseTo(20*MicroRate, 20*tick).Cover(40 * tick)
+	if ticked != 30*CellSpan || once != ticked || r != (Ramp{To: 20 * MicroRate}) {
+		t.Fatalf("covered %d a tick at a time and %d at once, want %d; ramp %+v", ticked, once, 30*CellSpan, r)
+	}
+	if got := (Ramp{To: 4e8, Done: 3e17, Span: 4e17}).Rate(); got != 3e8 {
+		t.Fatalf("rate three quarters through = %d, want 3e8", got)
+	}
+}
+
 // --- grid types ---
 
 func TestPointCenterRoundTrip(t *testing.T) {

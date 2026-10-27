@@ -17,6 +17,10 @@ const (
 	// ContentMaxBlockLines is the maximum lines in a single block
 	ContentMaxBlockLines = 5
 
+	// ContentMinLineRunes drops a shorter plain-text line, such as a lone closing
+	// brace, which reads as no text where it lands
+	ContentMinLineRunes = 5
+
 	// ContentIndentDelta is the indent shift in columns that starts a new block
 	ContentIndentDelta = 2
 
