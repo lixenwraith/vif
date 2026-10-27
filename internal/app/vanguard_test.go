@@ -14,10 +14,10 @@ import (
 
 // TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock plays the shipped
 // vanguard scenario with nobody steering, through the resets its crushes and
-// collisions bring: raiders spawn directly at the right edge, no fuse beaming them
-// in and no drain ever standing, at most three fly at once, and no tick ends with
-// one standing in rock, which pushes them as it scrolls and which their teleports
-// land beside.
+// collisions bring: raiders of several types spawn directly at the right edge, no
+// fuse beaming them in and no drain ever standing, at most three fly at once, and
+// no tick ends with one standing in rock, which pushes them as it scrolls and which
+// their teleports land beside.
 func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
@@ -41,6 +41,7 @@ func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 			}
 		case *event.FuseBehaviorRequestPayload:
 			beams++
+
 		case *event.MaterializeAreaRequestPayload:
 			if p.Species >= component.SpeciesDataFirst {
 				beams++
@@ -79,6 +80,13 @@ func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	}
 	if beams != 0 {
 		t.Fatalf("%d beams brought raiders in, want each spawned directly", beams)
+	}
+	types := map[component.SpeciesType]bool{}
+	for _, p := range created {
+		types[p.Species] = true
+	}
+	if len(types) < 2 {
+		t.Fatalf("%d raiders of %d types, want the raid to pick among its types", len(created), len(types))
 	}
 	width := w.Resources.Config.MapWidth
 	for _, p := range created {

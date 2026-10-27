@@ -1,0 +1,73 @@
+# Vanguard's blocks: the raiders' one attack cycle, which every raider type's
+# program expands with its own timings, and the raid's spawn of one type.
+# doc/toml-macros.md describes definitions and invocations.
+
+# The swarm's machine as a raider flies it. It chases its target for chase_ms, then
+# locks onto the cell it saw for lock_ms under a telegraph. Along a clear line it
+# charges that cell over charge_ms; behind rock it beams to the nearest place by its
+# target and lands as the beam_ms ends, beside any rock that came over the landing
+# meanwhile; with no room anywhere it brakes where it stands. Rock pushes it as it
+# pushes the cursor, enraged or not. A program names Chase its initial state and
+# adds RaiderStun to its globals.
+[macros.RaiderStates]
+doc = "The raider's chase, lock, charge, beam and brake, timed per type."
+params = { chase_ms = "int", lock_ms = "int", charge_ms = "int", beam_ms = "int" }
+
+# With no target the lock waits, the chase moving meanwhile
+[macros.RaiderStates.body.Chase]
+duration_ms = "${chase_ms}"
+on_update = [{ action = "Home" }]
+transitions = [{ trigger = "Timeout", target = "Lock", fallback = { retry_ms = 200 } }]
+
+[macros.RaiderStates.body.Lock]
+duration_ms = "${lock_ms}"
+flags = ["Enraged"]
+probe = "ResolveTarget"
+on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
+on_update = [{ action = "Freeze" }]
+on_exit = [{ action = "CancelTelegraph" }]
+transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight" }, "Beam", "Brake"] }]
+
+# Arrives on the stored cell as the entry ends; a wall ends it in the step that
+# meets it, so the bounce stands
+[macros.RaiderStates.body.Charge]
+duration_ms = "${charge_ms}"
+flags = ["Enraged"]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [
+    { trigger = "Timeout", target = "Brake" },
+    { trigger = "AfterTick", guard = "HitWall", target = "Brake" },
+]
+
+# The line runs from wherever the raider stands, so rock carrying it bends the
+# beam. The landing is the timeout's, so a stun that ends the beam moves nothing,
+# and Teleport looks for room again as it lands.
+[macros.RaiderStates.body.Beam]
+duration_ms = "${beam_ms}"
+flags = ["Enraged", "Beam"]
+probe = "FindLanding"
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Brake", actions = [{ action = "Teleport" }] }]
+
+# The swarm's stop: a tenth of the speed left each tick
+[macros.RaiderStates.body.Brake]
+duration_ms = 100
+flags = ["Enraged"]
+on_update = [{ action = "Drag", payload = { rate = 18.0 } }]
+transitions = [{ trigger = "Timeout", target = "Chase" }]
+
+# A stun cancels the attack and restarts the whole chase
+[macros.RaiderStun]
+doc = "A stun drops a raider from any attack state back to its chase."
+params = {}
+body = { from = ["Lock", "Charge", "Beam", "Brake"], guard = "Stunned", target = "Chase" }
+
+# RaidSpawn's edge for one type: taken when the draw names it, it spawns that
+# program at the raid's cell
+[macros.RaidSpawnAs]
+doc = "Spawn program at (raid_x, raid_y) and go back to RaidWait when raid_type is type."
+params = { type = "int", program = "string" }
+body = { trigger = "Tick", target = "RaidWait", guard = "VarCompare", guard_args = { var = "raid_type", op = "eq", value = "${type}" }, actions = [
+    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { program = "${program}" }, payload_vars = { x = "raid_x", y = "raid_y" } },
+] }

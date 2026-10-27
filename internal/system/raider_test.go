@@ -2,31 +2,36 @@ package system
 
 import (
 	"os"
+	"slices"
 	"testing"
+	"time"
 
-	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/machine"
 )
 
-// newRaiderWorld spawns vanguard's raider, compiled from its shipped program, at
-// (20, 10) of an 80x40 world whose one target stands at (50, 10), behind a column
-// of rock that blocks the line between them. It returns the raider's states by name.
+// newRaiderWorld spawns vanguard's invader, compiled from its shipped program as
+// the scenario expands it, at (20, 10) of an 80x40 world whose one target stands at
+// (50, 10), behind a column of rock that blocks the line between them. Every raider
+// type flies the one cycle, and the invader's 4x2 footprint with its header at
+// (1, 0) is the one these tests measure. It returns the raider's states by name.
 func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, map[string]component.BehaviorState) {
 	t.Helper()
-	src, err := os.ReadFile("../../wad/scenario/vanguard/behavior/raider.toml")
-	if err != nil {
-		t.Skipf("vanguard's raider program not present: %v", err)
+	const dir = "../../wad/scenario/vanguard"
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("vanguard scenario not present: %v", err)
 	}
-	doc, err := toml.NewParser(src).Parse()
+	merged, err := fsm.ResolveScenario(os.DirFS(dir), "scenario.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := CompileBehaviors(map[string]map[string]any{"raider": doc})
+	doc, _ := merged["behaviors"].(map[string]any)["invader"].(map[string]any)
+	set, err := CompileBehaviors(map[string]map[string]any{"invader": doc})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +47,7 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
 	s.HandleEvent(event.GameEvent{
 		Type:    event.EventBehaviorSpawnRequest,
-		Payload: &event.BehaviorSpawnRequestPayload{Program: "raider", X: 20, Y: 10},
+		Payload: &event.BehaviorSpawnRequestPayload{Program: "invader", X: 20, Y: 10},
 	})
 	headers := w.Components.Behavior.Entities()
 	if len(headers) != 1 {
@@ -123,5 +128,87 @@ func TestAStunDuringARaidersBeamMovesNothing(t *testing.T) {
 	if pos, _ := w.Positions.GetPosition(header); pos != start || b.Machine.State != states["Chase"] || b.Beaming {
 		t.Fatalf("stunned mid-beam: at %+v in state %d beaming %t, want still at %+v in the chase",
 			pos, b.Machine.State, b.Beaming, start)
+	}
+}
+
+// TestEveryVanguardRaiderTypeFliesTheCycle: each raider type, compiled as the
+// scenario expands it, chases, locks, charges along a clear line, brakes and chases
+// again, closing on its target, and wears a look of its own footprint
+func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
+	const dir = "../../wad/scenario/vanguard"
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("vanguard scenario not present: %v", err)
+	}
+	merged, err := fsm.ResolveScenario(os.DirFS(dir), "scenario.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs := map[string]map[string]any{}
+	for name, doc := range merged["behaviors"].(map[string]any) {
+		docs[name] = doc.(map[string]any)
+	}
+	set, err := CompileBehaviors(docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := set.Names(); !slices.Equal(got, []string{"construct", "invader", "scarab", "storm_eye"}) {
+		t.Fatalf("programs %v, want the four raider types", got)
+	}
+	for i, p := range set.Prototypes() {
+		t.Run(p.Name, func(t *testing.T) {
+			for f, frame := range p.Look.Frames {
+				if len(frame) != p.Width*p.Height {
+					t.Fatalf("frame %d holds %d cells, want %d×%d", f, len(frame), p.Width, p.Height)
+				}
+			}
+			if len(p.Look.Frames) < 2 || !p.Look.Console {
+				t.Fatalf("%d frames, console pair %t: want an animation and a console pair", len(p.Look.Frames), p.Look.Console)
+			}
+
+			w := engine.NewWorld()
+			engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+			w.Resources.Behaviors = set.Prototypes()
+			if w.Resources.Target == nil {
+				w.Resources.Target = &engine.TargetResource{}
+			}
+			aimAt(w, 60, 20)
+			s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
+			s.HandleEvent(event.GameEvent{
+				Type:    event.EventBehaviorSpawnRequest,
+				Payload: &event.BehaviorSpawnRequestPayload{Program: p.Name, X: 20, Y: 20},
+			})
+			headers := w.Components.Behavior.Entities()
+			if len(headers) != 1 {
+				t.Fatalf("%d spawned, want one", len(headers))
+			}
+			b, _ := w.Components.Behavior.GetPtr(headers[0])
+			if int(b.Program) != i {
+				t.Fatalf("spawned program %d, want %d", b.Program, i)
+			}
+
+			g := set.Graph(i)
+			path, ticks := []string{g.Name(b.Machine.State)}, []int{0}
+			for range int(15 * time.Second / parameter.GameUpdateInterval) {
+				stepBehaviors(w, s)
+				if name := g.Name(b.Machine.State); name != path[len(path)-1] {
+					path, ticks = append(path, name), append(ticks, 0)
+				}
+				if len(path) == 5 {
+					break
+				}
+				ticks[len(ticks)-1]++
+			}
+			if want := []string{"Chase", "Lock", "Charge", "Brake", "Chase"}; !slices.Equal(path, want) {
+				t.Fatalf("flew %v, want %v", path, want)
+			}
+			// The lock holds the type's own lock_ms, the macro's parameter
+			lock := docs[p.Name]["states"].(map[string]any)["Lock"].(map[string]any)["duration_ms"].(int64)
+			if held := time.Duration(ticks[1]) * parameter.GameUpdateInterval; held != time.Duration(lock)*time.Millisecond {
+				t.Fatalf("locked for %v, want its lock_ms %d", held, lock)
+			}
+			if pos, _ := w.Positions.GetPosition(headers[0]); pos.X <= 20 {
+				t.Fatalf("stands at %v after its charge, want closer to its target at (60, 20)", pos)
+			}
+		})
 	}
 }

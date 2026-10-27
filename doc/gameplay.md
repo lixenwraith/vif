@@ -511,9 +511,14 @@ its rock in strata, cracked, moss or crystal stone.
 Glyphs drift left behind the rock at three depths, and drains, nuggets, gold and
 the fuse are off. Raiders, the cave's swarms, spawn at the right edge every four
 seconds while fewer than three fly, in the nearest open rows when rock fills the
-drawn one. A raider is a program of the scenario's own
-(`behavior/raider.toml`) running the swarm's chase, lock, charge and teleport; it
-lives until killed, and the rock pushes it as it pushes the cursor. One a player
+drawn one, each of a type drawn at random. Every type is a program of the
+scenario's own (`behavior/<type>.toml`) running one cycle, the swarm's chase,
+lock, charge and teleport (`RaiderStates` in `macros.toml`), with its own look,
+hit points, homing and timings, hit points times chase speed alike: the invader
+at the swarm's pace, the scarab fast and fragile (8 hit points, a 1.2-second
+lock), the construct slow and armoured (48, a 2.5-second lock and a long charge),
+and the storm eye, the eye species' storm look on a 5×3 body (48). A raider lives
+until killed, and the rock pushes it as it pushes the cursor. One a player
 shoots down drops a `U` where it fell, for every player, and each `U` raises the
 gun a level of the scenario's nine: one shot forward, then two and three, one up
 and one down, one back, two up and down, two back, three up and down, three back.

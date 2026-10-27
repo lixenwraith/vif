@@ -136,7 +136,11 @@ state, tower-loss retargeting, kill-or-left-the-map exits, announcements and
 resets. A flank's counters share a prefix (`l_dead`, `r_p2_done`), so one `side`
 parameter names them. The embedded campaign's `macros.toml` holds the tower
 region's corner pylon and gateway pair and the quasar and storm regions'
-left-the-map exit. `wad/scenario/simon` is one document that defines its own.
+left-the-map exit. `wad/scenario/vanguard`'s `macros.toml` holds the raiders' one
+attack cycle, which each raider type's program invokes as its `[states]` table
+with its own timings, the stun edge each adds to `[[global]]`, and the raid's spawn
+edge per type, invoked with `each` over the types. `wad/scenario/simon` is one
+document that defines its own.
 
 ## 7. Rejected alternatives
 

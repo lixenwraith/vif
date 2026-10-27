@@ -831,8 +831,9 @@ program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
 without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
 instances and the beams still bringing them, every program's when it names none;
 `wad/scenario/warden` is the worked example, beamed in, and
-`wad/scenario/vanguard`'s raider, spawned directly, runs the swarm's attack cycle
-as a program. `-check` compiles every
+`wad/scenario/vanguard`'s raider types, spawned directly, fly the swarm's attack
+cycle as four programs over one macro (`RaiderStates` in its `macros.toml`), each
+program's `[states]` an invocation of it with the type's timings. `-check` compiles every
 program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
 and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
 'Freez'`).
