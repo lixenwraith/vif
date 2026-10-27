@@ -112,7 +112,8 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 
 // TestARaiderLocksTheCursorNearestItInRosterOrder: with several cursors the lock
 // stores the nearest one's cell, and on a tie the lower roster slot's, as the swarm
-// does, so every instance of a session that holds the same Shared cursors aims alike
+// does, so every instance of a session that holds the same Shared cursors aims alike;
+// the lock draws the swarm's charge line toward it
 func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -132,6 +133,9 @@ func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
 			if b.Machine.State != states["Lock"] || b.TargetX != tc.want.X || b.TargetY != tc.want.Y {
 				t.Fatalf("state %d stored (%d,%d), want the lock on (%d,%d)",
 					b.Machine.State, b.TargetX, b.TargetY, tc.want.X, tc.want.Y)
+			}
+			if !b.ChargeLine {
+				t.Fatal("the lock draws no charge line")
 			}
 		})
 	}

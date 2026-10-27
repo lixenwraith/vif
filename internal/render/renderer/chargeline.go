@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"time"
+
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -14,6 +16,7 @@ import (
 // ChargeLineRenderer draws pulsing bg-only warning lines from swarm to locked target
 // Active only during SwarmStateLock within the pulse visibility window
 // Two pulses travel swarm→target at charge speed, acting as countdown before the charge
+// A data species in a state flagged ChargeLine draws the same line to its stored cell
 type ChargeLineRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell chargeLineCellRenderer
@@ -33,72 +36,93 @@ func NewChargeLineRenderer(ctx *engine.GameContext) *ChargeLineRenderer {
 }
 
 func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	swarms := r.gameCtx.World.Components.Swarm
-	if swarms.CountEntities() == 0 {
+	world := r.gameCtx.World
+	swarms, behaviors := world.Components.Swarm, world.Components.Behavior
+	if swarms.CountEntities() == 0 && behaviors.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
-
-	pulseDur := parameter.SwarmChargeDuration
-	if pulseDur <= 0 {
-		return
-	}
-	showDelay := parameter.SwarmChargeLineShowDelay
-	if showDelay < 0 {
-		showDelay = 0
-	}
-	pulseWindow := parameter.SwarmChargeLinePulseCount * pulseDur
 
 	swarms.Each(func(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
 		if swarmComp.Machine.State != component.SwarmStateLock {
 			return true
 		}
 
-		pulseElapsed := swarmComp.Machine.Elapsed - showDelay
-		if pulseElapsed < 0 || pulseElapsed >= pulseWindow {
-			return true
-		}
-
-		pulseIndex := int(pulseElapsed / pulseDur)
-		pulseLocalT := pulseElapsed % pulseDur
-		headT := float64(pulseLocalT) / float64(pulseDur)
-
-		// Escalating alpha per pulse
-		alpha := parameter.SwarmChargeLineAlpha1
-		if pulseIndex > 0 {
-			alpha = parameter.SwarmChargeLineAlpha2
-		}
-
-		headerPos, ok := r.gameCtx.World.Positions.GetPosition(headerEntity)
+		headerPos, ok := world.Positions.GetPosition(headerEntity)
 		if !ok {
 			return true
 		}
 
-		r.tracePulse(ctx, buf,
+		body := vmath.Area{
+			X: headerPos.X - parameter.SwarmHeaderOffsetX, Y: headerPos.Y - parameter.SwarmHeaderOffsetY,
+			Width: parameter.SwarmWidth, Height: parameter.SwarmHeight,
+		}
+		r.renderPulses(ctx, buf,
 			headerPos.X, headerPos.Y,
 			swarmComp.LockedTargetX, swarmComp.LockedTargetY,
-			headT, alpha)
+			body, swarmComp.Machine.Elapsed,
+			parameter.SwarmChargeDuration, parameter.SwarmChargeLineShowDelay)
+		return true
+	})
+
+	// A data species' pulses end with its flagged entry, each the share of it the
+	// swarm's charge is of its lock, so they keep the swarm's rhythm at any lock
+	prototypes := world.Resources.Behaviors
+	behaviors.Each(func(header core.Entity, b *component.BehaviorComponent) bool {
+		if !b.ChargeLine || int(b.Program) >= len(prototypes) {
+			return true
+		}
+		pos, ok := world.Positions.GetPosition(header)
+		if !ok {
+			return true
+		}
+		p := &prototypes[b.Program]
+		pulse := time.Duration(float64(b.Machine.Duration) * parameter.BehaviorChargeLinePulseShare)
+		body := vmath.Area{X: pos.X - p.HeaderX, Y: pos.Y - p.HeaderY, Width: p.Width, Height: p.Height}
+		r.renderPulses(ctx, buf, pos.X, pos.Y, b.TargetX, b.TargetY, body, b.Machine.Elapsed,
+			pulse, b.Machine.Duration-parameter.SwarmChargeLinePulseCount*pulse)
 		return true
 	})
 }
 
-// tracePulse draws a single pulse via Bresenham, skipping cells inside swarm footprint
+// renderPulses draws the pulse due elapsed into a lock: SwarmChargeLinePulseCount
+// pulses of pulse each from showDelay on, the later one brighter
+func (r *ChargeLineRenderer) renderPulses(
+	ctx render.RenderContext, buf *render.RenderBuffer,
+	x0, y0, x1, y1 int, body vmath.Area,
+	elapsed, pulse, showDelay time.Duration,
+) {
+	if pulse <= 0 {
+		return
+	}
+	pulseElapsed := elapsed - max(showDelay, 0)
+	if pulseElapsed < 0 || pulseElapsed >= parameter.SwarmChargeLinePulseCount*pulse {
+		return
+	}
+
+	pulseIndex := int(pulseElapsed / pulse)
+	headT := float64(pulseElapsed%pulse) / float64(pulse)
+
+	// Escalating alpha per pulse
+	alpha := parameter.SwarmChargeLineAlpha1
+	if pulseIndex > 0 {
+		alpha = parameter.SwarmChargeLineAlpha2
+	}
+
+	r.tracePulse(ctx, buf, x0, y0, x1, y1, body, headT, alpha)
+}
+
+// tracePulse draws a single pulse via Bresenham, skipping cells inside the body
 // headT [0,1] is normalized pulse head position along the line
 func (r *ChargeLineRenderer) tracePulse(
 	ctx render.RenderContext, buf *render.RenderBuffer,
-	x0, y0, x1, y1 int, headT, baseAlpha float64,
+	x0, y0, x1, y1 int, body vmath.Area, headT, baseAlpha float64,
 ) {
 	line := vmath.NewLine(x0, y0, x1, y1)
 	totalSteps := line.Steps()
 	if totalSteps == 0 {
 		return
-	}
-
-	// Swarm bounding box for edge clipping
-	bbox := vmath.Area{
-		X: x0 - parameter.SwarmHeaderOffsetX, Y: y0 - parameter.SwarmHeaderOffsetY,
-		Width: parameter.SwarmWidth, Height: parameter.SwarmHeight,
 	}
 
 	invSteps := 1.0 / float64(totalSteps)
@@ -108,8 +132,8 @@ func (r *ChargeLineRenderer) tracePulse(
 	}
 
 	for step := range totalSteps + 1 {
-		// Skip cells inside swarm body
-		if !bbox.Contains(line.X(), line.Y()) {
+		// Skip cells inside the body
+		if !body.Contains(line.X(), line.Y()) {
 			t := float64(step) * invSteps
 			if t <= headT {
 				trailDist := headT - t

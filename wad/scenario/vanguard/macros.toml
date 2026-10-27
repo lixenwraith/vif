@@ -19,9 +19,11 @@ duration_ms = "${chase_ms}"
 on_update = [{ action = "Home" }]
 transitions = [{ trigger = "Timeout", target = "Lock", fallback = { retry_ms = 200 } }]
 
+# The swarm's charge line pulses toward the stored cell as the lock ends, so a
+# player sees where the charge goes before it leaves
 [macros.RaiderStates.body.Lock]
 duration_ms = "${lock_ms}"
-flags = ["Enraged"]
+flags = ["Enraged", "ChargeLine"]
 probe = "ResolveTarget"
 on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]

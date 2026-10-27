@@ -211,6 +211,7 @@ func (s *BehaviorSystem) Update() {
 		c.combat.IsEnraged = flags&behaviorEnraged != 0
 		b.Shielded = shielded
 		b.Beaming = flags&behaviorBeam != 0
+		b.ChargeLine = flags&behaviorChargeLine != 0
 		if shielded {
 			c.combat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 		}
@@ -447,9 +448,10 @@ func (s *BehaviorSystem) LoadLocal(data []byte) error {
 
 // Behavior flags, which Update writes to the components after every step
 const (
-	behaviorEnraged  uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
-	behaviorShielded                    // ward held and stun refused: no damage, no stun
-	behaviorBeam                        // a teleport line from the header to the stored cell
+	behaviorEnraged    uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
+	behaviorShielded                      // ward held and stun refused: no damage, no stun
+	behaviorBeam                          // a teleport line from the header to the stored cell
+	behaviorChargeLine                    // the swarm's charge line pulsing toward the stored cell
 )
 
 // behaviorCtx is what one instance's step reads and its verbs write through. Verbs
@@ -827,6 +829,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	v.Flag("Enraged", behaviorEnraged)
 	v.Flag("Shielded", behaviorShielded)
 	v.Flag("Beam", behaviorBeam)
+	v.Flag("ChargeLine", behaviorChargeLine)
 	v.Integrate(func(c *behaviorCtx) { c.sys.integrate(c) })
 	v.Entered(func(c *behaviorCtx) { c.probed = false })
 	return v

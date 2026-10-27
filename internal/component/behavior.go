@@ -24,8 +24,9 @@ type BehaviorComponent struct {
 
 	TargetX, TargetY int // the cell StoreTarget kept, which a charge or teleport goes to
 
-	Shielded bool // Written from the machine's flags each step: damage and stun immunity
-	Beaming  bool // Written likewise: a teleport line runs from the header to the stored cell
+	Shielded   bool // Written from the machine's flags each step: damage and stun immunity
+	Beaming    bool // Written likewise: a teleport line runs from the header to the stored cell
+	ChargeLine bool // Written likewise: the swarm's charge line pulses toward the stored cell
 }
 
 // BehaviorPrototype is what a program declares about its species' body: plain data

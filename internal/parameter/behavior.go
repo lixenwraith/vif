@@ -18,6 +18,11 @@ const (
 	// bounce, the swarm's
 	BehaviorRestitution = 0.5
 
+	// BehaviorChargeLinePulseShare is one charge-line pulse's share of the entry its
+	// state flags, the swarm's charge to its lock: the pulses run the entry's end, so
+	// a raider timed as the swarm draws the swarm's line and another its own lock's
+	BehaviorChargeLinePulseShare = float64(SwarmChargeDuration) / float64(SwarmLockDuration)
+
 	// BehaviorChargeRemainingMin floors the time a charge divides its distance by,
 	// so the last tick of an entry does not ask for unbounded speed
 	BehaviorChargeRemainingMin = time.Millisecond
