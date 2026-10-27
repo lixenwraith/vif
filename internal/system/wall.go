@@ -223,9 +223,11 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventCaveOpen:
+		var open event.CaveOpenPayload
 		if p, ok := ev.Payload.(*event.CaveOpenPayload); ok {
-			s.openCave(p)
+			open = *p
 		}
+		s.openCave(open)
 
 	case event.EventWallDespawnAll:
 		s.handleDespawnAllSilent()
@@ -1237,7 +1239,7 @@ func (s *WallSystem) paceCave(speed float64, easeMs int64) {
 // openCave widens the cave from the first column past the map's right edge, so no
 // rock in view changes, to the opening the payload asks for; the scroll announces it
 // once it fills the map. A cave opens once.
-func (s *WallSystem) openCave(p *event.CaveOpenPayload) {
+func (s *WallSystem) openCave(p event.CaveOpenPayload) {
 	if !s.cave.Active || s.cave.Config.Open != (cave.Opening{}) || p.Gap < 0 || p.Ramp < 0 {
 		return
 	}
