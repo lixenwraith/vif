@@ -508,9 +508,10 @@ program, `behavior/warden.toml`, is the template for a species of one's own
 second, its channel seven to fifteen rows high and never more than nine rows off
 the middle, so a tall terminal climbs no steeper; each new game flies a new cave,
 its rock in strata, cracked, moss or crystal stone.
-Glyphs drift left behind the rock at three depths, and drains, nuggets and gold
-are off. Raiders, the cave's swarms, beam in at the right edge every four seconds
-while fewer than three fly. A raider is a program of the scenario's own
+Glyphs drift left behind the rock at three depths, and drains, nuggets, gold and
+the fuse are off. Raiders, the cave's swarms, spawn at the right edge every four
+seconds while fewer than three fly, in the nearest open rows when rock fills the
+drawn one. A raider is a program of the scenario's own
 (`behavior/raider.toml`) running the swarm's chase, lock, charge and teleport; it
 lives until killed, and the rock pushes it as it pushes the cursor. One a player
 shoots down drops a `U` where it fell, for every player, and each `U` raises the

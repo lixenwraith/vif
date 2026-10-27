@@ -821,15 +821,18 @@ IDs 10 to 17 in sorted-name order, so a guard on `EventSpeciesCreated` or
 ([Telemetry](telemetry-reference.md)).
 
 A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
-x, y }`, its header at that cell or the nearest place its footprint fits, or
-beams one in with `EventFuseBehaviorRequest { program, x, y }`: the fuse plays a
-one-second swarm beam over the nearest place its footprint fits, searching the
+x, y }`, its header at that cell or the nearest place its footprint fits, searched
+over the whole map; a request naming no program raises nothing
+(`behavior.unknown_program_rejects`), nor one finding no room
+(`behavior.<name>.spawn_failures`). Or it beams one in with
+`EventFuseBehaviorRequest { program, x, y }`: the fuse plays a one-second swarm beam over the nearest place its footprint fits, searching the
 whole map from that cell, and spawns the instance as it ends; a request naming no
 program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
 without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
 instances and the beams still bringing them, every program's when it names none;
-`wad/scenario/warden` is the worked example, and `wad/scenario/vanguard`'s
-raider runs the swarm's attack cycle as a program. `-check` compiles every
+`wad/scenario/warden` is the worked example, beamed in, and
+`wad/scenario/vanguard`'s raider, spawned directly, runs the swarm's attack cycle
+as a program. `-check` compiles every
 program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
 and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
 'Freez'`).
@@ -849,9 +852,16 @@ mass = 2.0                          # Soft collision and flocking; 0 takes neith
 drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
-glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]  # Frames, each height rows of width cells
+frames = [                          # Each frame a string per row, height rows of width cells
+    { glyphs = ["▄▀▀▄", "▀▄▄▀"], fg = ["0110", "1001"], attr = ["B  B", "    "] },
+    { glyphs = ["▀▄▄▀", "▄▀▀▄"] },  # fg, bg and attr are each optional
+]
 pattern_ms = 500                    # Frame period; required with two frames or more
-color = { r = 200, g = 120, b = 40 }
+color = { r = 200, g = 120, b = 40 }  # A glyph's without an fg entry
+fg = [{ r = 240, g = 160, b = 60 }, { r = 160, g = 80, b = 20 }]  # Palettes, at most 16 each (optional)
+bg = []
+fg256 = 214                         # The console pair, together or not at all (optional)
+bg256 = 52
 
 [states.Strike]
 duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
@@ -872,6 +882,15 @@ guard = "Stunned"
 target = "Roam"
 ```
 
+- The look: a frame's `glyphs` row draws a cell's glyph, a space drawing none;
+  `fg` and `bg` rows give each cell an entry of the prototype's palette as a hex
+  digit (`0`-`f`), a space for the prototype's `color` and for no background; an
+  `attr` row gives `B` (bold), `D` (dim) or a space. A 256-colour host draws a
+  look with `fg256` and `bg256` in that pair alone, every glyph in the one and
+  every background in the other, which reads on every console palette, and shows a
+  hit by reversing the glyph; without the pair it draws the palettes' nearest
+  colours. The hit flash, then `Enraged`, tints every glyph. The eye's types are
+  drawn from the same look.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
   `HitWall` reads this step's move). A global edge has none.
