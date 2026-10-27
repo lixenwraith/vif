@@ -5,7 +5,7 @@
 # Tower retargeting exploits anchor precedence in NavigationSystem.resolveGroupTargets:
 # EventTargetGroupUpdate on a group whose anchor tower still lives is overwritten
 # every tick (harmless); it sticks permanently the moment the anchor dies.
-# Groups: 1=T1, 2=T2, 3=Q-TL, 4=Q-TR, 5=Q-BL, 6=Q-BR; type = 1 is component.TargetEntity
+# Groups: 1=T1, 2=T2, 3=Q-TL, 4=Q-TR, 5=Q-BL, 6=Q-BR
 
 [states.CntWatch]
 parent = "Root"

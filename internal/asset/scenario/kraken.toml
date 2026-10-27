@@ -19,7 +19,7 @@ on_enter = [
     { action = "ConfigToVar", payload = { field = "viewport_height", name = "vh" } },
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, preserve_loot = true, crop_on_resize = false }, payload_vars = { Width = "vw", Height = "vh" } },
     # Borderless ▒ (0x2592) blocks: Kraken breaks these walls, and a box border shows every break
-    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5, cell_height = 3, braiding = 0.5, room_count = 0, block_mask = 255, visual = { char = 0x2592, fg_color = { r = 235, g = 235, b = 240 }, render_fg = true, bg_color = { r = 185, g = 185, b = 190 }, render_bg = true } } },
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5, cell_height = 3, braiding = 0.5, room_count = 0, block_mask = "all", visual = { char = 0x2592, fg_color = { r = 235, g = 235, b = 240 }, render_fg = true, bg_color = { r = 185, g = 185, b = 190 }, render_bg = true } } },
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "LURE KRAKEN THROUGH THE MAZE" } },
 ]

@@ -25,13 +25,12 @@ type Names struct {
 // enum is one type's names and the values they stand for, in listing order; a
 // variant's live in keyed, by the value of its key
 type enum struct {
-	what    string // the type's name, for a list too long to print
-	names   []string
-	values  []int64
-	mask    bool // a list of names stands for their union
-	numbers bool // a number decodes as it is, while the type's documents migrate
-	key     reflect.Type
-	keyed   map[int64]*enum
+	what   string // the type's name, for a list too long to print
+	names  []string
+	values []int64
+	mask   bool // a list of names stands for their union
+	key    reflect.Type
+	keyed  map[int64]*enum
 }
 
 type integer interface {
@@ -82,15 +81,6 @@ func (n *Names) Variant[E, K integer](key K, names ...string) *Names {
 	}
 	e.keyed[int64(key)] = dense(t, names)
 	n.enums[t] = e
-	return n
-}
-
-// Numbers lets E's fields take a number as well, while documents move to its names
-func (n *Names) Numbers[E integer]() *Names {
-	t := reflect.TypeFor[E]()
-	e := *n.enums[t]
-	e.numbers = true
-	n.enums[t] = &e
 	return n
 }
 
@@ -187,7 +177,7 @@ func (n *Names) DecodeInto(raw, v any) error {
 // walks what toml.Decode walks, which reports any mismatch it passes over.
 func (n *Names) resolve(raw any, t reflect.Type) (any, bool, error) {
 	if e := n.enums[t]; e != nil && e.key == nil {
-		return e.resolve(raw, e.numbers)
+		return e.resolve(raw)
 	}
 	switch t.Kind() {
 	case reflect.Pointer:
@@ -267,12 +257,9 @@ func (n *Names) resolveStruct(table map[string]any, t reflect.Type) (any, bool, 
 		}
 		sub := e.keyed[pick]
 		if sub == nil {
-			if e.numbers && isNumber(table[key]) {
-				continue
-			}
 			return nil, false, at(key, fmt.Errorf("%s takes no names, got %s", n.nameOf(e.key, pick), quoted(table[key])))
 		}
-		v, changed, err := sub.resolve(table[key], e.numbers)
+		v, changed, err := sub.resolve(table[key])
 		if err != nil {
 			return nil, false, at(key, err)
 		}
@@ -304,8 +291,8 @@ func resolveList[T any](list []T, resolve func(T) (T, bool, error)) (any, bool, 
 	return out, true, nil
 }
 
-// resolve is the value raw names, or raw as it is where a number may stand
-func (e *enum) resolve(raw any, numbers bool) (any, bool, error) {
+// resolve is the value raw names
+func (e *enum) resolve(raw any) (any, bool, error) {
 	switch v := raw.(type) {
 	case string:
 		if i := slices.Index(e.names, v); i >= 0 {
@@ -325,10 +312,6 @@ func (e *enum) resolve(raw any, numbers bool) (any, bool, error) {
 			union |= e.values[j]
 		}
 		return union, true, nil
-	default:
-		if numbers && isNumber(raw) {
-			return raw, false, nil
-		}
 	}
 	return nil, false, e.refuse(raw)
 }
@@ -345,16 +328,6 @@ func (e *enum) refuse(raw any) error {
 		return fmt.Errorf("want one of %s, or a list of them, got %T", list, raw)
 	}
 	return fmt.Errorf("want one of %s, got %T", list, raw)
-}
-
-func isNumber(v any) bool {
-	switch reflect.ValueOf(v).Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64:
-		return true
-	}
-	return false
 }
 
 // integral is v as a whole number, if it is one

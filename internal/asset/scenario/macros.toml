@@ -25,6 +25,6 @@ body = { parent = "TowerCycle", on_enter = [
 doc = "Attach an eye gateway to the pylon in gw_anchor, count the pylon toward victory, and go to `next`."
 params = { next = "string" }
 body = { parent = "TowerCycle", on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = "eye", sub_type = "void", group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
     { action = "IncrementVar", payload = { name = "pylons_spawned" } },
 ], transitions = [{ trigger = "Tick", target = "${next}" }] }

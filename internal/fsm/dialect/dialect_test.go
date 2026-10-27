@@ -279,17 +279,21 @@ func TestAnUnknownNameIsRefusedByItsPath(t *testing.T) {
 	}
 }
 
-// TestANumberDecodesOnlyWhileItsTypeMigrates: an enum field refuses a number,
-// which a reordered enum would silently retarget, unless its type still takes
-// numbers while its documents move to names.
-func TestANumberDecodesOnlyWhileItsTypeMigrates(t *testing.T) {
-	raw := map[string]any{"kind": int64(2)}
-	if _, err := planNames().Decode[plan](raw); err == nil || err.Error() != "kind: want one of hall, vault, got int64" {
-		t.Errorf("closed: error %v", err)
-	}
-	p, err := planNames().Numbers[kind]().Decode[plan](raw)
-	if err != nil || p.Kind != 2 {
-		t.Errorf("migrating: %v, %v", p, err)
+// TestAnEnumFieldRefusesANumber: a number in an enum field, which a reordered enum
+// would silently retarget, fails naming the names the field takes, a variant's
+// as its key picks them.
+func TestAnEnumFieldRefusesANumber(t *testing.T) {
+	for _, c := range []struct {
+		raw  map[string]any
+		want string
+	}{
+		{map[string]any{"kind": int64(2)}, "kind: want one of hall, vault, got int64"},
+		{map[string]any{"spawn": map[string]any{"species": "eye", "sub_type": int64(1)}}, "spawn.sub_type: want one of void, flame, got int64"},
+		{map[string]any{"spawn": map[string]any{"species": "snake", "sub_type": int64(0)}}, "spawn.sub_type: snake takes no names, got int64"},
+	} {
+		if _, err := planNames().Decode[plan](c.raw); err == nil || err.Error() != c.want {
+			t.Errorf("%v: error %v, want %s", c.raw, err, c.want)
+		}
 	}
 }
 
@@ -318,8 +322,7 @@ func TestAMaskTakesANameOrAListOfThem(t *testing.T) {
 }
 
 // TestAVariantTakesTheNamesItsKeyPicks: a variant field takes the names its
-// struct's key value has, and where that value has none it takes none, unless
-// its type still takes numbers.
+// struct's key value has, and where that value has none it takes none.
 func TestAVariantTakesTheNamesItsKeyPicks(t *testing.T) {
 	decode := func(n *dialect.Names, s map[string]any) (*plan, error) {
 		return n.Decode[plan](map[string]any{"spawn": s})
@@ -334,14 +337,10 @@ func TestAVariantTakesTheNamesItsKeyPicks(t *testing.T) {
 		{map[string]any{"species": "eye", "sub_type": "frost"}, `spawn.sub_type: "frost" is not one of void, flame`},
 		{map[string]any{"species": "snake", "sub_type": "void"}, `spawn.sub_type: snake takes no names, got "void"`},
 		{map[string]any{"sub_type": "void"}, `spawn.sub_type: none takes no names, got "void"`},
-		{map[string]any{"species": "snake", "sub_type": int64(0)}, "spawn.sub_type: snake takes no names, got int64"},
 	} {
 		if _, err := decode(planNames(), c.spawn); err == nil || err.Error() != c.want {
 			t.Errorf("%v: error %v, want %s", c.spawn, err, c.want)
 		}
-	}
-	if _, err := decode(planNames().Numbers[sub](), map[string]any{"species": "snake", "sub_type": int64(0)}); err != nil {
-		t.Errorf("migrating snake 0: %v", err)
 	}
 }
 
@@ -350,8 +349,8 @@ func TestAVariantTakesTheNamesItsKeyPicks(t *testing.T) {
 // they were.
 func TestAClonedNamesBuildsWithoutChangingItsSource(t *testing.T) {
 	base := planNames()
-	clone := base.Clone().Variant[sub](species(2), "long").Numbers[kind]()
-	snake := map[string]any{"spawn": map[string]any{"species": "snake", "sub_type": "long"}, "kind": int64(2)}
+	clone := base.Clone().Variant[sub](species(2), "long")
+	snake := map[string]any{"spawn": map[string]any{"species": "snake", "sub_type": "long"}}
 	if _, err := clone.Decode[plan](snake); err != nil {
 		t.Errorf("clone: %v", err)
 	}
