@@ -246,7 +246,7 @@ region does not prevent another region from observing it.
 { trigger = "Tick", target = "Timeout",
   guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
 { trigger = "EventSpeciesCreated", internal = true,
-  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 1 },
+  guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["drain"] },
   actions = [{ action = "IncrementVar", payload = { name = "seen" } }] }
 ```
 
@@ -270,7 +270,7 @@ transitions declared on ancestors remain active for every descendant.
 
 ```toml
 { trigger = "EventSpeciesCreated", target = "Attach",
-  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] },
   capture_vars = { entity = "anchor_id" } }
 ```
 
@@ -359,6 +359,7 @@ Comparison operators are `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`; an omitted
 | `PayloadIntCompareVar` | `field`, `op`, `var` | Event payload numeric field against an FSM variable. |
 | `PayloadBoolEquals` | `field`, `value` | Event payload boolean field comparison. |
 | `PayloadStringEquals` | `field`, `value` | Event payload string field comparison. |
+| `PayloadSpeciesIn` | `field`, `names` | Event payload species is one of the named code species or behavior programs, resolved at load. |
 | `PayloadExists` | none | Event payload is non-nil. |
 | `And`, `Or` | `guards`: array of `{ name, args }` | Recursively combine parameterized/static guards; an empty list passes. |
 | `Not` | `guard`: one `{ name, args }` | Negates one guard. |
@@ -588,7 +589,7 @@ on_enter = [
 ]
 transitions = [
     { trigger = "EventSpeciesKilled", internal = true,
-      guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 1 },
+      guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["drain"] },
       actions = [{ action = "IncrementVar", payload = { name = "kills" } }] },
     { trigger = "Tick", target = "WaveDone", guard = "VarCompare",
       guard_args = { var = "kills", op = "gte", value = 10 } },

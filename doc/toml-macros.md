@@ -49,8 +49,8 @@ defaults = { timeout_ms = 500 }
 body = { parent = "Root", on_enter = [
     { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = "${x}", y = "${y}" } },
 ], transitions = [
-    { trigger = "EventSpeciesCreated", target = "${attach}", guard = "PayloadIntCompare",
-      guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
+    { trigger = "EventSpeciesCreated", target = "${attach}", guard = "PayloadSpeciesIn",
+      guard_args = { field = "species", names = ["pylon"] }, capture_vars = { entity = "gw_anchor" } },
     { trigger = "EventPylonSpawnFailed", target = "${next}" },
     { trigger = "Tick", target = "${next}", guard = "StateTimeExceeds", guard_args = { ms = "${timeout_ms}" } },
 ] }
@@ -71,7 +71,7 @@ the wrong type and a `${name}` naming no parameter are errors before any use.
 Inside a body, `${name}` names a parameter, in a string or in a key.
 
 - A string that is exactly one reference becomes the argument itself, of any type:
-  `value = "${species}"` is the integer 5, `payload = "${payload}"` a table.
+  `ms = "${timeout_ms}"` is the integer 500, `payload = "${payload}"` a table.
 - Elsewhere the argument is spliced into the text, and must be a string, an
   integer or a boolean: `capture = "${id}_anchor"`.
 - `$$` is a literal `$`; any other `$` in a body is an error.

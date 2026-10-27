@@ -151,12 +151,9 @@ Extract event payload fields into FSM variables when a transition matches:
 
 ```toml
 { trigger = "EventSpeciesCreated", target = "NextState",
-  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] },
   capture_vars = { entity = "pylon_entity" } }
 ```
-
-`species` uses the `component.SpeciesType` values: drain `1`, swarm `2`,
-quasar `3`, storm `4`, pylon `5`, snake `6`, eye `7`, tower `8`, and kraken `9`.
 
 `capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name. Captured values are set **before** the target state's `on_enter` executes.
 
@@ -168,7 +165,7 @@ Combine with guards and payload injection:
 ```toml
 # Capture a pylon from the shared species response, then inject it into a follow-up request
 { trigger = "EventSpeciesCreated", target = "AttachGateway",
-  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] },
   capture_vars = { entity = "anchor_id" } }
 # In AttachGateway on_enter:
 { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0 }, payload_vars = { anchor_entity = "anchor_id" } }
@@ -201,7 +198,7 @@ events without leaving the current state:
 [states.TowerCycle]
 transitions = [
     { trigger = "EventSpeciesKilled", internal = true,
-      guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, actions = [
+      guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] }, actions = [
         { action = "IncrementVar", payload = { name = "pylons_dead" } },
     ] },
 ]
@@ -614,7 +611,7 @@ struct tag first, then Go field name — identical to `capture_vars` and
 ### PayloadIntCompare
 
 ```toml
-{ trigger = "EventSpeciesKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 } }
+{ trigger = "EventSpeciesKilled", target = "Shot", guard = "PayloadIntCompare", guard_args = { field = "killer_entity", op = "neq", value = 0 } }
 ```
 
 ### PayloadIntCompareVar
@@ -677,6 +674,18 @@ in the row, counted from 1, with its sound; a spawn on a key that already has a
 button is refused. A button shows its key in the splash font once it is about ten
 cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 `wad/scenario/simon` is the worked example.
+
+### PayloadSpeciesIn
+
+```toml
+{ trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] } }
+```
+
+Passes when the payload's species is one of `names`: a code species (`drain`,
+`swarm`, `quasar`, `storm`, `pylon`, `snake`, `eye`, `tower`, `kraken`) or one of
+the scenario's behavior programs, each resolved at load. A program's number moves
+with every name that sorts before it, so a guard names it; a name no species holds
+fails the load.
 
 ### PayloadExists
 
@@ -805,8 +814,8 @@ A behavior program defines a species the scenario brings: its body in
 `[behaviors]` table lists at most eight, each in its own file, which is read,
 expanded against the entry's macros and carried, digested and sent to a joiner as
 the entry's other files are, or inline as the table itself. Programs take species
-IDs 10 to 17 in sorted-name order, the `species` a payload guard on
-`EventSpeciesCreated` or `EventSpeciesKilled` compares. A name is
+IDs 10 to 17 in sorted-name order, so a guard on `EventSpeciesCreated` or
+`EventSpeciesKilled` names its program (`PayloadSpeciesIn`). A name is
 `[a-z][a-z0-9_]*` of at most 24 bytes, neither a code species' name nor `total` or
 `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`
 ([Telemetry](telemetry-reference.md)).

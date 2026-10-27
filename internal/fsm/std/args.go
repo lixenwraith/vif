@@ -120,6 +120,10 @@ type (
 		Field string `toml:"field"`
 		Value string `toml:"value"`
 	}
+	fieldSpeciesArgs struct {
+		Field string   `toml:"field"`
+		Names []string `toml:"names"`
+	}
 )
 
 // The keys of their own tables the keyed actions read

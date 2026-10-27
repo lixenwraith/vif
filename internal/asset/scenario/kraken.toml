@@ -34,7 +34,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventKrakenSpawnRequest" },
 ]
 transitions = [
-    { trigger = "EventSpeciesCreated", target = "KrakenActive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 9 } },
+    { trigger = "EventSpeciesCreated", target = "KrakenActive", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
     { trigger = "EventKrakenSpawnFailed", target = "KrakenWait" },
 ]
 
@@ -42,7 +42,7 @@ transitions = [
 parent = "KrakenHold"
 transitions = [
     { trigger = "EventKrakenSpawnFailed", target = "KrakenWait" },
-    { trigger = "EventSpeciesKilled", target = "KrakenDecision", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 9 } },
+    { trigger = "EventSpeciesKilled", target = "KrakenDecision", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
 ]
 
 [states.KrakenDecision]

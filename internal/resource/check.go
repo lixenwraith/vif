@@ -66,26 +66,26 @@ func checkKeymap(o Options, w io.Writer) error {
 	return nil
 }
 
-// ValidateScenario resolves and reads a scenario, loads it into a throwaway
-// machine, checks every system it names against this build and compiles its
-// behavior programs. It is what `-check` proves before a run starts and what an
-// operator changing scenario mid-run proves before the run it would replace is
-// torn down.
+// ValidateScenario resolves and reads a scenario, compiles its behavior programs,
+// loads it into a throwaway machine, whose species names resolve against them, and
+// checks every system it names against this build. It is what `-check` proves before
+// a run starts and what an operator changing scenario mid-run proves before the run
+// it would replace is torn down.
 func ValidateScenario(o Options) (Scenario, error) {
 	sc, err := LoadScenario(o)
 	if err != nil {
 		return Scenario{}, err
 	}
-	m := fsm.NewMachine[*engine.World]()
-	manifest.RegisterFSMComponents(m)
-	err = fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry())
+	var set *system.BehaviorSet
+	programs, err := sc.Behaviors()
 	if err == nil {
-		err = checkSystems(m)
+		set, err = system.CompileBehaviors(programs)
 	}
 	if err == nil {
-		var programs map[string]map[string]any
-		if programs, err = sc.Behaviors(); err == nil {
-			_, err = system.CompileBehaviors(programs)
+		m := fsm.NewMachine[*engine.World]()
+		manifest.RegisterFSMComponents(m, set.Prototypes())
+		if err = fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry()); err == nil {
+			err = checkSystems(m)
 		}
 	}
 	if err != nil {

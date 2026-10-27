@@ -57,7 +57,7 @@ on_enter = [
 parent = "Root"
 transitions = [
     { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
-        { name = "PayloadIntCompare", args = { field = "species", op = "eq", value = 10 } },
+        { name = "PayloadSpeciesIn", args = { field = "species", names = ["raider"] } },
         { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
     ] }, capture_vars = { x = "kill_x", y = "kill_y" }, actions = [
         { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = 8 }, payload_vars = { x = "kill_x", y = "kill_y" } },

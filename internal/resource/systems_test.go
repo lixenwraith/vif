@@ -28,7 +28,7 @@ transitions = []
 	}
 
 	m := fsm.NewMachine[*engine.World]()
-	manifest.RegisterFSMComponents(m)
+	manifest.RegisterFSMComponents(m, nil)
 	if err := fsm.LoadScenarioFromPath(m, path); err != nil {
 		t.Fatalf("load config: %v", err)
 	}

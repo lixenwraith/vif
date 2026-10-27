@@ -556,14 +556,16 @@ system's scaffold (§6.4), not in the vocabulary.
 - **Compiled once per run.** `App.readScenario` compiles the programs
   (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
   `resource.LoadScenario`, so a bad program fails as a bad scenario does, before
-  any service starts. `initWorld` puts the prototypes in `world.Resources.Behaviors`
+  any service starts, and before the scenario machine loads, whose species names
+  resolve against the prototypes. `initWorld` puts the prototypes in `world.Resources.Behaviors`
   before the systems are built, so loot, soft collision and `NewMetaSystem` size
   their data rows and the renderers read glyphs. The compiled graphs go to
   `system.NewBehaviorSystem(world, set)`, which the app adds beside `MetaSystem`
   (`manifest.ContextSystems`), because the generator's constructors take only a
   world.
 - **`-check` compiles every program.** `resource.ValidateScenario` runs the same
-  compile, so an unknown name or a bad argument fails validation, not play, and a
+  compile, then the machine load, so an unknown name or a bad argument fails
+  validation, not play, and a
   mid-run scenario change refuses a bad program before anything is torn down.
   `-check` prints `behaviors ok: <n> (<names>)`.
 
@@ -585,7 +587,9 @@ smaller part of it.
   `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
   `SpeciesMax = SpeciesCount + parameter.BehaviorProgramsMax` bound the data
   range. Programs take `SpeciesDataFirst + i` in sorted-name order, and a scenario
-  with more fails to compile. A name is `[a-z][a-z0-9_]*` of at most
+  with more fails to compile. A scenario's guard names a species
+  (`PayloadSpeciesIn`): the FSM bridge resolves it at load against
+  `SpeciesNames` and the compiled prototypes, so a new program moves no guard. A name is `[a-z][a-z0-9_]*` of at most
   `BehaviorNameMax` bytes, neither a code species' name nor `total` or
   `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`.
 - **Species tables.** Every table indexed by `SpeciesType` is `[SpeciesMax]`, so a
