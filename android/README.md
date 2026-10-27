@@ -7,7 +7,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | Path | What |
 |---|---|
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
-| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows and the launcher icon insets on black, with its lines alone as the themed icon. |
+| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
 | `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sfx, music, sfx volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
@@ -69,7 +69,9 @@ adb shell am start -n com.lixen.vif/.MainActivity
 The app opens on its start screen, in lixen.com's dark theme: the logo at the
 centre, "Tap to start" under it on the site's blue button, and a `?` in the corner
 that opens the touch controls in a window nearly the screen's size, which its ×,
-Back or a tap outside closes. The run starts behind
+Back or a tap outside closes. Android's splash screen, up while the app loads, is
+the same page with the logo 128 dp across in the same place, so when it goes only
+the buttons appear, fading in. The run starts behind
 it, paused at its first tick and silent, and a tap anywhere else lifts the screen
 off the game; a screen turned first starts that game over at its new size. Back
 there is the system's, and no key reaches the game until the tap.

@@ -3,12 +3,15 @@ package com.lixen.vif;
 import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -16,12 +19,11 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * The screen the app opens on, over the game: the logo at the centre, "Tap to start"
- * under it on a button and a ? in the corner that opens the touch controls. The run
- * starts behind it and waits, paused; a tap anywhere else lifts the screen and the
- * game goes on at once. A browser on a touch screen shows the same screen
- * (web/index.html) in the same words while it loads, and needs no tap. Both wear
- * lixen.com's dark theme in its font, Roboto, the system's sans-serif here.
+ * The screen the app opens on, over the game, filling the window as Android's splash
+ * screen before it does: the logo as large and where the splash showed it, "Tap to
+ * start" under it on a button and a ? in the corner that opens the touch controls. The
+ * run waits behind it, paused, until a tap anywhere else. A touch browser shows the
+ * same screen (web/index.html); both wear lixen.com's dark theme in Roboto.
  */
 final class StartScreen extends FrameLayout {
     // The touch controls as web/index.html words them; Back is each platform's own
@@ -36,28 +38,30 @@ final class StartScreen extends FrameLayout {
             {"Back", "Escape; twice quickly, leave with the game paused"},
     };
     private static final String KEYBOARD = "With a keyboard, F1 or :help lists every key and command, and :q quits.";
-    // The site's page, which the window wears under the system bars too, then its
-    // hairline, muted text, the primary button's blue and the periwinkle a ring of
-    // that blue is labelled in, as web/terminal.css names them
-    static final int BG = 0xFF11111B;
+    // The site's hairline, muted text, the primary button's blue and the periwinkle a
+    // ring of that blue is labelled in, as web/terminal.css names them; its page is
+    // R.color.page, which the window and the splash wear too
     private static final int LINE = 0x26FFFFFF, MUTED = 0xFF94A3B8, BUTTON = 0xFF2563EB, ACCENT = 0xFF8EA2FF;
+    // The buttons' fade in after the splash, which showed the logo alone while the app loaded
+    private static final long FADE_MS = 150;
     private static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
 
-    private final ImageView logo;
+    private final int logoSide;
     private final TextView prompt;
     private final TextView help;
 
     StartScreen(Context context, Runnable start) {
         super(context);
-        setBackgroundColor(BG);
+        setBackgroundColor(context.getColor(R.color.page));
         setOnClickListener(v -> start.run());
         // The whole screen is the button, so a keyboard's focus would wash all of it
         // lighter than the bars around it; the ? keeps its own highlight
         setDefaultFocusHighlightEnabled(false);
-        logo = new ImageView(context);
+        ImageView logo = new ImageView(context);
         logo.setImageResource(R.drawable.logo);
         logo.setContentDescription("lixen");
-        addView(logo, new LayoutParams(0, 0, Gravity.CENTER));
+        logoSide = getResources().getDimensionPixelSize(R.dimen.logo);
+        addView(logo, new LayoutParams(logoSide, logoSide, Gravity.CENTER));
         prompt = text("Tap to start", 18, Color.WHITE);
         prompt.setTypeface(MEDIUM);
         prompt.setPadding(dp(28), dp(12), dp(28), dp(12));
@@ -77,19 +81,29 @@ final class StartScreen extends FrameLayout {
         help.setBackground(ring);
         help.setOnClickListener(v -> showControls());
         LayoutParams corner = new LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.END);
-        corner.setMargins(dp(12), dp(12), dp(12), dp(12));
         addView(help, corner);
+        // The screen reaches under the system bars as the splash did; the ? keeps clear
+        setOnApplyWindowInsetsListener((v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            corner.setMargins(bars.left + dp(12), bars.top + dp(12), bars.right + dp(12), bars.bottom + dp(12));
+            help.setLayoutParams(corner);
+            return insets;
+        });
     }
 
-    // The logo takes two fifths of the shorter side, and the prompt starts below it
+    // The prompt starts below the logo
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
-        int h = MeasureSpec.getSize(heightSpec);
-        int side = Math.min(MeasureSpec.getSize(widthSpec), h) * 2 / 5;
-        logo.getLayoutParams().width = side;
-        logo.getLayoutParams().height = side;
-        ((LayoutParams) prompt.getLayoutParams()).topMargin = (h + side) / 2 + dp(24);
+        ((LayoutParams) prompt.getLayoutParams()).topMargin = (MeasureSpec.getSize(heightSpec) + logoSide) / 2 + dp(24);
         super.onMeasure(widthSpec, heightSpec);
+    }
+
+    /** The buttons the splash lacked appear as it leaves, the app having loaded meanwhile. */
+    void fadeIn() {
+        for (View v : new View[] {prompt, help}) {
+            v.setAlpha(0);
+            v.animate().alpha(1).setDuration(FADE_MS);
+        }
     }
 
     /** The touch controls in a window nearly the screen's size: × closes it, as do Back and a tap outside. */
@@ -102,7 +116,7 @@ final class StartScreen extends FrameLayout {
         window.setOrientation(LinearLayout.VERTICAL);
         window.setClickable(true); // a tap inside is not one outside
         GradientDrawable frame = new GradientDrawable();
-        frame.setColor(BG);
+        frame.setColor(c.getColor(R.color.page));
         frame.setStroke(dp(1), LINE);
         frame.setCornerRadius(dp(8));
         window.setBackground(frame);
