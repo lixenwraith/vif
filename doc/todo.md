@@ -38,11 +38,11 @@ reached; `sandbox/raider` shows them by cave over that cave's rock.
 - Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression),
   [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
 
-The ranks' numbers are starting values: hit points 8, 10, 12 and 14 and mass 2.0,
+The ranks' numbers are starting values: hit points 8, 16, 28 and 44 and mass 2.0,
 2.4, 2.9 and 3.5, a fifth more a rank, each rank's lock, charge and contact cost
 rising with it and its chase slowing. A kill drops a `U`, so the gun is near its
-ninth level by the fourth rank and climbs faster than the hit points do; play each
-cave and retune the rank macros, which every cave shares, or the kills a rank takes
+ninth level by the fourth rank, which the steeper hit points answer; play each cave
+and retune the rank macros, which every cave shares, or the kills a rank takes
 (`RaidRank`'s `gte 3`). A cave's colours are its `<Cave>Fg` macros there and a
 type's look its own file. Colours against the rock are a first pick to settle in
 play. On a console a raider is one colour, and two caves' raiders share an entry

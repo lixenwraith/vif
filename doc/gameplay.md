@@ -559,8 +559,8 @@ a species of one's own ([FSM reference](fsm-reference.md#behavior-programs)),
 running one cycle, the swarm's chase, lock, charge and teleport (`RaiderStates` in
 `macros.toml`), its landing marked as the swarm's is, with its own look. Each stone
 art's eight are its tier, two types in each of four ranks, the same ranks in every
-cave, so caves differ in looks alone: a rank up has a fifth more hit points (8, 10,
-12, 14) and mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and
+cave, so caves differ in looks alone: a rank up has more hit points (8, 16, 28, 44)
+and a fifth more mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and
 chases slower on a longer lock, the first rank darting as the snake does. The raid
 climbs the tier: it spawns the first rank until players shoot three of it down, then
 the next, and three of the fourth exhaust the tier, where its boss is to stand; for

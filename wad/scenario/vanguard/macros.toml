@@ -107,10 +107,11 @@ bg256 = 0
 # --- Ranks ---
 
 # Each cave's eight raider types are its tier, two to each of four ranks, the same
-# ranks in every cave. A rank up has a fifth more hit points (8, 10, 12, 14) and
+# ranks in every cave. A rank up has more hit points (8, 16, 28, 44), a fifth more
 # mass (2.0, 2.4, 2.9, 3.5), so a shot knocks it back less, and a costlier touch,
 # and chases slower on a longer warning and a slower charge; the first darts as the
-# snake does, its mass the swarm's.
+# snake does, its mass the swarm's. Hit points times chase speed, the raid's measure
+# of threat, runs 96, 144, 168 and 198.
 
 [macros.RaiderRank1]
 doc = "A first-rank raider: small, quick and fragile, on a short warning."
@@ -134,7 +135,7 @@ charge_ms = 500
 beam_ms = 300
 
 [macros.RaiderRank2]
-doc = "A second-rank raider: a fifth more hit points than the first, a little slower."
+doc = "A second-rank raider: twice the first's hit points, a little slower."
 params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
 
 [macros.RaiderRank2.body]
@@ -145,7 +146,7 @@ height = "${height}"
 header = "${header}"
 pattern_ms = "${pattern_ms}"
 frames = "${frames}"
-hp = 10
+hp = 16
 mass = 2.4
 contact = { energy = 900, heat = 9 }
 physics = { speed = 9.0, accel = 24.0, drag = 1.2, arrival_radius = 2.0, arrival_drag = 2.0, dead_zone = 0.5 }
@@ -166,7 +167,7 @@ height = "${height}"
 header = "${header}"
 pattern_ms = "${pattern_ms}"
 frames = "${frames}"
-hp = 12
+hp = 28
 mass = 2.9
 contact = { energy = 1200, heat = 12 }
 physics = { speed = 6.0, accel = 10.0, drag = 1.6, arrival_radius = 2.5, arrival_drag = 2.5, dead_zone = 0.5 }
@@ -187,7 +188,7 @@ height = "${height}"
 header = "${header}"
 pattern_ms = "${pattern_ms}"
 frames = "${frames}"
-hp = 14
+hp = 44
 mass = 3.5
 contact = { energy = 1500, heat = 15 }
 physics = { speed = 4.5, accel = 6.0, drag = 2.0, arrival_radius = 3.0, arrival_drag = 3.0, dead_zone = 0.5 }
