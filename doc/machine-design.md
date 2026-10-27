@@ -522,7 +522,9 @@ per instance:
   `Genotype` genes), with the kernel's `And`, `Or` and `Not`.
 - Probes read too, and leave their result in the context: `ResolveTarget`
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
-  (`FindFreeAreaSpiral` over the footprint).
+  (`FindFreeAreaSpiral` over the footprint). `LineOfSight` and `FindLanding` read
+  the live target, or with `to = "stored"` the cell `StoreTarget` kept: the swarm
+  charges and teleports to the cell its lock stored, and so do vanguard's raiders.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),

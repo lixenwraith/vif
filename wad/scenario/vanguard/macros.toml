@@ -5,7 +5,7 @@
 # The swarm's machine as a raider flies it. It chases its target for chase_ms, then
 # locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
 # way it charges that cell over charge_ms; behind rock it beams to the nearest place
-# by its target and lands as the beam_ms ends, beside any rock that came over the
+# by that cell and lands as the beam_ms ends, beside any rock that came over the
 # landing meanwhile; with no room anywhere it brakes where it stands. Rock pushes it
 # as it pushes the cursor, enraged or not. A program names Chase its initial state
 # and adds RaiderStun to its globals.
@@ -39,13 +39,17 @@ transitions = [
     { trigger = "AfterTick", guard = "HitWall", target = "Brake" },
 ]
 
-# The line runs from wherever the raider stands, so rock carrying it bends the
-# beam. The landing is the timeout's, so a stun that ends the beam moves nothing,
-# and Teleport looks for room again as it lands.
+# Lands by the cell the lock stored, as the swarm's teleport does, so moving
+# during the countdown dodges the beam as it does the charge, and in a session the
+# beam keeps to the player the lock marked. The line runs from wherever the raider
+# stands, so rock carrying it bends the beam. The landing is the timeout's, so a
+# stun that ends the beam moves nothing, and Teleport looks for room again as it
+# lands.
 [macros.RaiderStates.body.Beam]
 duration_ms = "${beam_ms}"
 flags = ["Enraged", "Beam"]
 probe = "FindLanding"
+probe_args = { to = "stored" }
 on_enter = [{ action = "StoreTarget" }]
 on_update = [{ action = "Freeze" }]
 transitions = [{ trigger = "Timeout", target = "Brake", actions = [{ action = "Teleport" }] }]

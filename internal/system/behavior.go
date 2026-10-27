@@ -487,6 +487,18 @@ func (c *behaviorCtx) targetDistance() (float64, bool) {
 
 func (c *behaviorCtx) probe(x, y int) { c.probeX, c.probeY, c.probed = x, y, true }
 
+// aim reads the cell a verb's to names: the target by default, or with "stored"
+// the cell StoreTarget kept, which holds still however the cursors move after it
+func (a *targetArgs) aim() (func(*behaviorCtx) (int, int, bool), error) {
+	switch a.To {
+	case "", "target":
+		return (*behaviorCtx).target, nil
+	case "stored":
+		return func(c *behaviorCtx) (int, int, bool) { return c.behavior.TargetX, c.behavior.TargetY, true }, nil
+	}
+	return nil, fmt.Errorf("to %q is not one of target, stored", a.To)
+}
+
 // The colours a program names: of a telegraph's splash, and of a lightning bolt
 var (
 	telegraphColors = []struct {
@@ -523,7 +535,7 @@ type (
 		Op    dialect.Op `toml:"op"`
 		Cells float64    `toml:"cells"`
 	}
-	lineOfSightArgs struct {
+	targetArgs struct {
 		To string `toml:"to"`
 	}
 	fractionArgs struct {
@@ -574,16 +586,13 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			return ok && a.Op.Holds(d, a.Cells)
 		}, nil
 	})
-	v.Predicate("LineOfSight", func(a *lineOfSightArgs) (func(*behaviorCtx) bool, error) {
-		if a.To != "" && a.To != "target" && a.To != "stored" {
-			return nil, fmt.Errorf("to %q is not one of target, stored", a.To)
+	v.Predicate("LineOfSight", func(a *targetArgs) (func(*behaviorCtx) bool, error) {
+		aim, err := a.aim()
+		if err != nil {
+			return nil, err
 		}
-		stored := a.To == "stored"
 		return func(c *behaviorCtx) bool {
-			x, y, ok := c.target()
-			if stored {
-				x, y, ok = c.behavior.TargetX, c.behavior.TargetY, true
-			}
+			x, y, ok := aim(c)
 			pos, placed := c.sys.world.Positions.GetPosition(c.entity)
 			p := c.proto
 			return ok && placed && bodyHasLineOfSight(c.sys.world, pos.X, pos.Y, x, y, p.Width, p.Height, p.HeaderX, p.HeaderY)
@@ -627,18 +636,24 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		}
 		return ok
 	}))
-	v.Probe("FindLanding", reads(func(c *behaviorCtx) bool {
-		x, y, ok := c.target()
-		if !ok {
-			return false
+	v.Probe("FindLanding", func(a *targetArgs) (func(*behaviorCtx) bool, error) {
+		aim, err := a.aim()
+		if err != nil {
+			return nil, err
 		}
-		p := c.proto
-		left, top, found := c.sys.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
-		if found {
-			c.probe(left+p.HeaderX, top+p.HeaderY)
-		}
-		return found
-	}))
+		return func(c *behaviorCtx) bool {
+			x, y, ok := aim(c)
+			if !ok {
+				return false
+			}
+			p := c.proto
+			left, top, found := c.sys.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+			if found {
+				c.probe(left+p.HeaderX, top+p.HeaderY)
+			}
+			return found
+		}, nil
+	})
 
 	// --- Effects: each fixes its push ---
 	v.Effect("StoreTarget", does(func(c *behaviorCtx) {

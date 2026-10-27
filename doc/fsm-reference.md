@@ -920,7 +920,8 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   (mixed from tick, entity and site, so no random stream moves),
   `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.
 - Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
-  `FindLanding` (the nearest place the footprint fits around the target).
+  `FindLanding { to }` (the nearest place the footprint fits around the target, or
+  with `to = "stored"` around the cell `StoreTarget` kept).
 - Effects: `StoreTarget` (the probe's cell, else the target's), `ZeroVelocity`,
   `Teleport` (to the stored cell, clearing the landing with a flash),
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
@@ -938,6 +939,8 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   where the header stands to the stored cell, over the entry: a state that ends in
   `Teleport` on its timeout's `actions` beams there as the swarm does).
 
-The target is the nearest cursor. Hit points, lifetime, contact strikes, gold
-breaking and the composite's integrity work as for every composite species; a
-program does not script them.
+The target is the cursor nearest the header, read from the Shared positions with
+the lower roster slot taking a tie, as for the swarm, so every instance of a
+session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
+composite's integrity work as for every composite species; a program does not
+script them.

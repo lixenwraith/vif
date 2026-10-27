@@ -110,6 +110,58 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	}
 }
 
+// TestARaiderLocksTheCursorNearestItInRosterOrder: with several cursors the lock
+// stores the nearest one's cell, and on a tie the lower roster slot's, as the swarm
+// does, so every instance of a session that holds the same Shared cursors aims alike
+func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cursors []component.PositionComponent
+		want    component.PositionComponent
+	}{
+		{"nearest", []component.PositionComponent{{X: 20, Y: 20}, {X: 29, Y: 10}}, component.PositionComponent{X: 29, Y: 10}},
+		{"tie", []component.PositionComponent{{X: 20, Y: 20}, {X: 30, Y: 10}}, component.PositionComponent{X: 20, Y: 20}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, s, header, states := newRaiderWorld(t)
+			b, _ := w.Components.Behavior.GetPtr(header)
+			b.Machine = aboutToExpire(states["Chase"], 2*parameter.GameUpdateInterval)
+			aimAtCursors(w, tc.cursors...)
+
+			stepBehaviors(w, s)
+			if b.Machine.State != states["Lock"] || b.TargetX != tc.want.X || b.TargetY != tc.want.Y {
+				t.Fatalf("state %d stored (%d,%d), want the lock on (%d,%d)",
+					b.Machine.State, b.TargetX, b.TargetY, tc.want.X, tc.want.Y)
+			}
+		})
+	}
+}
+
+// TestARaidersBeamLandsByTheCellItsLockStored: a lock that cannot fly to its cell
+// beams there, as the swarm's teleport does, however the cursors moved meanwhile:
+// the locked player stepping away and another coming nearer move nothing
+func TestARaidersBeamLandsByTheCellItsLockStored(t *testing.T) {
+	w, s, header, states := newRaiderWorld(t)
+	b, _ := w.Components.Behavior.GetPtr(header)
+	b.Machine = aboutToExpire(states["Lock"], 2*parameter.GameUpdateInterval)
+	b.TargetX, b.TargetY = 50, 10
+	aimAtCursors(w, component.PositionComponent{X: 60, Y: 30}, component.PositionComponent{X: 24, Y: 20})
+
+	stepBehaviors(w, s)
+	if b.Machine.State != states["Beam"] {
+		t.Fatalf("a blocked lock went to state %d, want the beam", b.Machine.State)
+	}
+	for range 2 * parameter.SwarmTeleportDuration / parameter.GameUpdateInterval {
+		stepBehaviors(w, s)
+		if b.Machine.State != states["Beam"] {
+			break
+		}
+	}
+	if pos, _ := w.Positions.GetPosition(header); pos.X != 50 || pos.Y != 10 {
+		t.Fatalf("landed at (%d,%d), want the stored cell (50,10)", pos.X, pos.Y)
+	}
+}
+
 // TestAStunDuringARaidersBeamMovesNothing: the landing is the beam's timeout, so a
 // stun that ends the beam leaves the raider where it stood, back in the chase
 func TestAStunDuringARaidersBeamMovesNothing(t *testing.T) {
