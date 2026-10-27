@@ -542,8 +542,9 @@ which the view draws again above the keyboard at twice its size from the same
 picture. A second Back within a second and a half sends the app to the
 background. A tap held on the status bar opens the configuration menu, the hold
 every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse input
-off a press on the bar's rows still reaches the run, and the open menu takes the
-pointer. The page does each of these on a touch screen, timed alike: the double
+off a press on the bar's rows still reaches the run, and an open overlay takes the
+pointer: a tap picks a row or a card or moves the scrollbar's thumb, a finger drags
+the thumb, and a tap outside the window is Escape. The page does each of these on a touch screen, timed alike: the double
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
 bottom row drawn again above it, and the hold. Every page opens on the same start
 screen in the same words, the key strip listed beside Back; a

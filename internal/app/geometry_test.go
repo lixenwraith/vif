@@ -626,6 +626,62 @@ func TestTheLaunchWaitsBehindTheStartScreen(t *testing.T) {
 	}
 }
 
+// TestHelpOverTheStartScreenTakesThePointer: help opened from the start screen
+// scrolls by the wheel and its scrollbar, even where the window covers the help
+// button, and a press outside it closes it as Escape does, the game still waiting.
+func TestHelpOverTheStartScreenTakesThePointer(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	const w, h = 80, 18 // short enough that the scrollbar's top cell lies under the button
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746,
+		Host: Host{Presentation: &framePresentation{w: w, h: h}}, startScreen: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	a.holdFirstGame(nil)
+	mouse := func(btn terminal.MouseButton, action terminal.MouseAction, x, y int) {
+		t.Helper()
+		if !a.takeEvent(terminal.Event{Type: terminal.EventMouse, MouseBtn: btn, MouseAction: action, MouseX: x, MouseY: y}) {
+			t.Fatal("the run quit")
+		}
+	}
+	help := render.StartHelpRect(w, a.renderContext().StartHelp)
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, help.X0+1, help.Y0+1)
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionRelease, help.X0+1, help.Y0+1)
+	if a.ctx.GetOverlayTitle() != core.OverlayHelpTitle {
+		t.Fatalf("a click on the help button opened %q", a.ctx.GetOverlayTitle())
+	}
+	a.frame() // lays help out, publishing the rows it scrolls through
+
+	mouse(terminal.MouseBtnWheelDown, terminal.MouseActionPress, w/2, h/2)
+	if got := a.ctx.GetOverlayScroll(); got != parameter.OverlayWheelRows {
+		t.Fatalf("a wheel step scrolled help to %d, want %d", got, parameter.OverlayWheelRows)
+	}
+	g := a.ctx.OverlayGeometry()
+	barX, top, foot := g.X+g.ScrollX, g.Y+g.ContentY, g.Y+g.ContentY+g.ContentH-1
+	if g.ScrollW == 0 || !help.Contains(barX, top) {
+		t.Fatalf("the scrollbar's top cell %d,%d is not under the help button %+v", barX, top, help)
+	}
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, barX, foot)
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionRelease, barX, foot)
+	if got, want := a.ctx.GetOverlayScroll(), a.ctx.GetOverlayContentH()-g.ContentH; got != want {
+		t.Fatalf("a press at the foot of the scrollbar scrolled help to %d, want its end %d", got, want)
+	}
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, barX, top)
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionRelease, barX, top)
+	if a.ctx.GetOverlayTitle() != core.OverlayHelpTitle || a.ctx.GetOverlayScroll() != 0 {
+		t.Fatalf("a press on the scrollbar's top cell: overlay %q at row %d; want help at its top",
+			a.ctx.GetOverlayTitle(), a.ctx.GetOverlayScroll())
+	}
+
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, 0, h/2)
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionRelease, 0, h/2)
+	if a.ctx.IsOverlayMode() || !a.ctx.TimeCtl.Holds(engine.HoldStart) {
+		t.Fatalf("a press outside help: overlay open %v, waiting %v; want help closed and the game waiting",
+			a.ctx.IsOverlayMode(), a.ctx.TimeCtl.Holds(engine.HoldStart))
+	}
+}
+
 // TestAPasteTypesWhole: a host's paste, one event, types a key at a time into the
 // command line, all of it however much longer than a presentation's queue, with
 // each key let go as it presses where releases are reported; a control character

@@ -6,7 +6,7 @@ require (
 	github.com/ebitengine/purego v0.11.2
 	github.com/lixenwraith/color v0.1.3
 	github.com/lixenwraith/log v0.1.13
-	github.com/lixenwraith/terminal v0.5.2
+	github.com/lixenwraith/terminal v0.5.3-0.20261027003038-28be022906d6
 	github.com/lixenwraith/toml v0.4.0
 	golang.org/x/sys v0.49.0
 )

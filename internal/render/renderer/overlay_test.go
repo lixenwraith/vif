@@ -7,36 +7,48 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-func TestConfigMenuKeepsSelectionVisibleAcrossResize(t *testing.T) {
+// TestConfigMenuViewFollowsTheSelectionAsItMoves: the selected row stays in view
+// across a resize and comes into view as the selection moves; otherwise the view
+// stays where the wheel or the scrollbar put it.
+func TestConfigMenuViewFollowsTheSelectionAsItMoves(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 100, 40)
 	menu := &core.OverlayMenu{}
-	for i := range 20 {
+	for i := range 40 {
 		menu.Rows = append(menu.Rows, core.OverlayMenuRow{Key: fmt.Sprint(i), Label: "Setting", Value: "on", Description: "A setting that changes immediately."})
 	}
 	ctx.SetOverlayContent(&core.OverlayContent{Title: "Configuration", Layout: core.OverlayLayoutMenu, Menu: menu})
-	ctx.SetOverlaySelection("19")
+	ctx.SetOverlaySelection("39")
 	r := NewOverlayRenderer(ctx)
-	for _, size := range [][2]int{{100, 40}, {40, 15}, {18, 8}, {100, 40}} {
+	shown := func(size [2]int, row int) {
+		t.Helper()
 		ctx.SetPresentationSize(size[0], size[1])
 		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, size[0], size[1])
 		r.Render(render.RenderContext{}, buf)
 		g := ctx.OverlayGeometry()
-		visible := max(g.ContentH-parameter.OverlayMenuDetailRows, 1)
 		offset := ctx.GetOverlayScroll()
-		if offset > 19 || offset+visible <= 19 {
-			t.Fatalf("size %v hides selected row: offset=%d visible=%d", size, offset, visible)
+		if offset > row || offset+g.ListH() <= row {
+			t.Fatalf("size %v hides row %d: offset=%d visible=%d", size, row, offset, g.ListH())
 		}
-		cell := buf.CellAt(g.X+g.ContentX, g.Y+g.ContentY+19-offset)
+		cell := buf.CellAt(g.X+g.ContentX, g.Y+g.ContentY+row-offset)
 		if cell.Bg != visual.RgbOverlaySelected {
 			t.Fatalf("size %v lost selection highlight", size)
 		}
 	}
+	for _, size := range [][2]int{{100, 40}, {40, 15}, {18, 8}, {100, 40}} {
+		shown(size, 39)
+	}
+	ctx.SetOverlayScroll(0)
+	r.Render(render.RenderContext{}, render.NewRenderBuffer(terminal.ColorModeTrueColor, 100, 40))
+	if got := ctx.GetOverlayScroll(); got != 0 {
+		t.Fatalf("the view the wheel took to the top went back to %d", got)
+	}
+	ctx.SetOverlaySelection("38")
+	shown([2]int{100, 40}, 38)
 }
 
 func TestConfigFormKeepsCursorVisibleWithoutMutatingPublishedFields(t *testing.T) {

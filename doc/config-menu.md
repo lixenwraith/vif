@@ -16,6 +16,8 @@ never rewritten.
 | Menu | Enter or Space | Enter a category, advance a setting, or activate an action. |
 | Menu | Home/End, PageUp/PageDown | Navigate longer lists. |
 | Menu | A press (a click, a tap) | Select the row; on the selected row act as Enter, or as Left on a setting's left half. |
+| Menu | The wheel | Scroll the list `OverlayWheelRows` rows a notch, wherever the pointer is; the selection stays. |
+| Menu | A press on the scrollbar, then a drag | Move the thumb's middle to the press, or take hold where it lands on the thumb, and carry it until the release; the selection stays. |
 | Form | Up/Down | Move between fields; the focused field's help appears below. |
 | Form | Left/Right, Home/End, Backspace/Delete | Edit the field. Printable characters, including `q`, enter text. |
 | Form | Enter | Submit all fields. Invalid input keeps the form and its values. |
