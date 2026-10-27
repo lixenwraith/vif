@@ -85,14 +85,34 @@ func TestArtIsFixedByItsPresetSeedAndCell(t *testing.T) {
 }
 
 // Every glyph shows: a printing rune, its foreground apart from its background even in
-// the 256 colours a wall falls back to
+// the 256 colours Art256 draws it in
 func TestEveryPresetDrawsAVisibleGlyph(t *testing.T) {
 	sweep(func(p ArtPreset, seed uint64, c ArtCell) {
-		r, fg, bg := Art(p, seed, c)
-		if !unicode.IsGraphic(r) || unicode.IsSpace(r) || color.RGBTo256(fg) == color.RGBTo256(bg) {
-			t.Fatalf("%v seed %d %+v: %q in %v on %v", p, seed, c, r, fg, bg)
+		if r, fg, bg := Art256(p, seed, c); !unicode.IsGraphic(r) || unicode.IsSpace(r) || fg == bg {
+			t.Fatalf("%v seed %d %+v: %q in %d on %d", p, seed, c, r, fg, bg)
 		}
 	})
+}
+
+// Art256 draws Art's glyph in grey, which a console keeps grey, but moss and crystal
+// points in their hue
+func TestOnlyMossAndCrystalsKeepAHueIn256Colours(t *testing.T) {
+	grey := func(i uint8) bool {
+		r, g, b := color.CubeRGB256(i)
+		return i >= 232 || r == g && g == b
+	}
+	hued := map[ArtPreset]bool{}
+	sweep(func(p ArtPreset, seed uint64, c ArtCell) {
+		r, _, _ := Art(p, seed, c)
+		r256, fg, bg := Art256(p, seed, c)
+		if r256 != r || !grey(bg) || !grey(fg) && p != ArtMoss && p != ArtCrystal {
+			t.Fatalf("%v seed %d %+v: %q drew %q in %d on %d", p, seed, c, r, r256, fg, bg)
+		}
+		hued[p] = hued[p] || !grey(fg)
+	})
+	if !hued[ArtMoss] || !hued[ArtCrystal] {
+		t.Fatalf("moss or crystals drew no hue: %v", hued)
+	}
 }
 
 // A cell at FaceReach draws as every deeper one does, and one a row shallower does not

@@ -290,7 +290,9 @@ writes), FreeBSD vt's default, or VGA; it is in `Config.ConsolePalette` for
 renderers that pick colors from it. An entry (0-15) passes through, an xterm
 index keeps its hue family by the rules FreeBSD's teken documents, and RGB takes
 the nearest entry in CIELAB, except that the theme background is the console's
-black. Text that would vanish into its background, or UI text under a 2.5
+black. Stone art sends every color but a moss or crystal glyph's as the gray of
+its luma (`pattern.Art256`), since those rules put a muted brown in the red
+family. Text that would vanish into its background, or UI text under a 2.5
 contrast ratio, takes the nearest entry that shows. Styles are resolved rather
 than sent, because the Linux console recolors dim, italic and underlined text
 and FreeBSD brightens bold.
