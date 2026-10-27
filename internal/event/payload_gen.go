@@ -67,6 +67,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventWeaponAddRequest:                func() any { return new(WeaponAddRequestPayload) },
 	EventWeaponRemoveRequest:             func() any { return new(WeaponRemoveRequestPayload) },
 	EventWeaponFireRequest:               func() any { return new(WeaponFireRequestPayload) },
+	EventGunAimRequest:                   func() any { return new(GunAimRequestPayload) },
 	EventFireSpecialRequest:              func() any { return new(FireSpecialRequestPayload) },
 	EventMountRequest:                    func() any { return new(MountRequestPayload) },
 	EventHeatAddRequest:                  func() any { return new(HeatAddRequestPayload) },
@@ -234,6 +235,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventWeaponAddRequest:                &codecWeaponAddRequestPayload,
 	EventWeaponRemoveRequest:             &codecWeaponRemoveRequestPayload,
 	EventWeaponFireRequest:               &codecWeaponFireRequestPayload,
+	EventGunAimRequest:                   &codecGunAimRequestPayload,
 	EventFireSpecialRequest:              &codecFireSpecialRequestPayload,
 	EventMountRequest:                    &codecMountRequestPayload,
 	EventHeatAddRequest:                  &codecHeatAddRequestPayload,
@@ -848,6 +850,14 @@ func (p *WeaponFireRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecWeaponFireRequestPayload = structCodec{size: unsafe.Sizeof(WeaponFireRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(WeaponFireRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *GunAimRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGunAimRequestPayload, unsafe.Pointer(p)
+}
+
+var codecGunAimRequestPayload = structCodec{size: unsafe.Sizeof(GunAimRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GunAimRequestPayload{}.Directions), kind: kindUint, size: unsafe.Sizeof(component.TracerDirection(0))},
 }}
 
 func (p *FireSpecialRequestPayload) codec() (*structCodec, unsafe.Pointer) {

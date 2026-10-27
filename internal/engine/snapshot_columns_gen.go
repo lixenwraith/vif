@@ -1278,6 +1278,9 @@ func encodeColumnsWeapon(dst []byte, rows []StoreEntry[component.WeaponComponent
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.MainFireCooldown)
 	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Aim)
+	}
 	return dst
 }
 
@@ -1305,6 +1308,9 @@ func decodeColumnsWeapon(r *columnReader) []StoreEntry[component.WeaponComponent
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.MainFireCooldown, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Aim, r)
 	}
 	return rows
 }

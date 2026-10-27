@@ -202,6 +202,8 @@ const (
 	EventWeaponRemoveRequest
 	// EventWeaponFireRequest (WeaponFireRequestPayload) [local] signals weapon fire request
 	EventWeaponFireRequest
+	// EventGunAimRequest (GunAimRequestPayload) [local] sets the cardinals the gun of the cursor this instance drives fires along
+	EventGunAimRequest
 	// EventFireSpecialRequest (FireSpecialRequestPayload) [local] signals player intent to fire special ability
 	EventFireSpecialRequest
 	// EventMountRequest (MountRequestPayload) [shared] puts a weapon on a Shared host

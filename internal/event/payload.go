@@ -427,6 +427,12 @@ type WeaponFireRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
+// GunAimRequestPayload is the cardinals the gun fires along, component.TracerDirection
+// bits (right 1, left 2, down 4, up 8); zero restores the gun's own four
+type GunAimRequestPayload struct {
+	Directions component.TracerDirection `toml:"directions"`
+}
+
 // MountRequestPayload puts one weapon on a Shared host, replacing any it carried.
 // Zero interval, range and width take the weapon's hosted defaults; zero muzzle fires
 // from the host cell. A ray's Lane (1-8, vmath.Octants) fixes its direction; 0 aims.
