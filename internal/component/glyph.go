@@ -19,6 +19,9 @@ const (
 	GlyphGold  GlyphType = 4
 )
 
+// GlyphTypeNames are what a document calls each GlyphType
+var GlyphTypeNames = [...]string{GlyphGreen: "green", GlyphBlue: "blue", GlyphRed: "red", GlyphWhite: "white", GlyphGold: "gold"}
+
 // GlyphLevel represents brightness
 type GlyphLevel int
 
@@ -28,3 +31,6 @@ const (
 	GlyphNormal GlyphLevel = 1
 	GlyphBright GlyphLevel = 2
 )
+
+// GlyphLevelNames are what a document calls each GlyphLevel
+var GlyphLevelNames = [...]string{GlyphDark: "dark", GlyphNormal: "normal", GlyphBright: "bright"}

@@ -17,6 +17,11 @@ const (
 	TracerAllDirections = TracerRight | TracerLeft | TracerDown | TracerUp
 )
 
+// TracerDirectionNames are what a document calls each direction, and all four
+var TracerDirectionNames = map[string]TracerDirection{
+	"right": TracerRight, "left": TracerLeft, "down": TracerDown, "up": TracerUp, "all": TracerAllDirections,
+}
+
 // TracerCardinals is the spawn order of a volley's directions
 var TracerCardinals = [...]TracerDirection{TracerRight, TracerLeft, TracerDown, TracerUp}
 

@@ -12,6 +12,9 @@ const (
 	TargetPosition
 )
 
+// TargetTypeNames are what a document calls each TargetType
+var TargetTypeNames = [...]string{TargetCursor: "cursor", TargetEntity: "entity", TargetPosition: "position"}
+
 // MaxTargetGroups bounds the fixed-size group array in TargetResource
 const MaxTargetGroups = 16
 

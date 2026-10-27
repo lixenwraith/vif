@@ -14,6 +14,9 @@ const (
 	// Future: MarkerShapeCircle, MarkerShapeCross, MarkerShapeDiamond, MarkerShapeRing
 )
 
+// MarkerShapeNames are what a document calls each MarkerShape
+var MarkerShapeNames = [...]string{MarkerShapeNone: "none", MarkerShapeRectangle: "rectangle", MarkerShapeInvert: "invert"}
+
 // MarkerComponent represents a visual area indicator
 type MarkerComponent struct {
 	X, Y      int // Top-left position

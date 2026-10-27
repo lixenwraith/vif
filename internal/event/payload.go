@@ -51,6 +51,8 @@ const (
 	MuteSet                               // set the mask verbatim
 )
 
+var muteToggleModeNames = [...]string{MuteCycle: "cycle", MuteToggle: "toggle", MuteSet: "set"}
+
 // SoundMuteTogglePayload requests an audio mute-mask change
 // A nil payload is equivalent to {Mode: MuteCycle}
 type SoundMuteTogglePayload struct {
@@ -539,6 +541,15 @@ const (
 	InputTouch                    // a finger, on a host that reports one
 )
 
+var inputSourceNames = [...]string{
+	InputKey:          "key",
+	InputPointer:      "pointer",
+	InputPointerRight: "pointer_right",
+	InputWheelUp:      "wheel_up",
+	InputWheelDown:    "wheel_down",
+	InputTouch:        "touch",
+}
+
 // InputPayload names the roster slot that pressed or released a captured key, the key,
 // what made the input, and the tick it was made at: engine.ticks on the instance
 // that made it, which a scenario judges timing by however late it applies. Lost
@@ -572,6 +583,8 @@ const (
 	DeleteRangeChar DeleteRangeType = iota
 	DeleteRangeLine
 )
+
+var deleteRangeNames = [...]string{DeleteRangeChar: "char", DeleteRangeLine: "line"}
 
 // DeleteRequestPayload contains coordinates for deletion
 type DeleteRequestPayload struct {
@@ -636,6 +649,8 @@ const (
 	ExplosionTypeMissile                      // Visual only, warm palette
 	ExplosionTypeEye                          // Self-destruct explosion with character noise
 )
+
+var explosionTypeNames = [...]string{ExplosionTypeDust: "dust", ExplosionTypeMissile: "missile", ExplosionTypeEye: "eye"}
 
 // ExplosionRequestPayload requires explicit attack data for the D-3 explosion.
 // CrossingID seeds derived hits independently of each receiver's timing.
@@ -902,6 +917,8 @@ const (
 	FuseEffectSpirit                        // Spirits converge into the beam
 	FuseEffectMaterialize                   // The beam alone
 )
+
+var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
 
 // FuseSwarmRequestPayload contains the two drains to fuse
 type FuseSwarmRequestPayload struct {
@@ -1243,6 +1260,12 @@ const (
 	// WallBatchFailIfBlocked aborts entire batch if any target position has a wall
 	WallBatchFailIfBlocked
 )
+
+var collisionModeNames = [...]string{
+	WallBatchSkipBlocked:   "skip_blocked",
+	WallBatchOverwrite:     "overwrite",
+	WallBatchFailIfBlocked: "fail_if_blocked",
+}
 
 // WallBatchSpawnRequestPayload contains parameters for bulk wall creation
 // Cells use offset coordinates relative to anchor (X, Y)
