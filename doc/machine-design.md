@@ -447,12 +447,12 @@ at load; only `Op.Holds` runs per evaluation.
   kinds. `Names.DecodeInto` swaps each name for its value in the raw table, at any
   depth, before `toml.Decode` reads it, so a reordered enum retargets nothing a
   document reads; a name the type lacks fails by its path with the names it takes
-  (`rooms[1].kind: "attic" is not one of hall, vault`), and so does a number unless
-  the type takes `Numbers` while its documents migrate. `Decode` is the names that
-  hold only `Op`. `event.PayloadNames(programs)` holds every enum a payload holds,
-  a scenario's programs among the species; `event.AuthoredPayload` decodes through
-  it for a scenario's and a program's `EmitEvent`, `:emit` and a script's event,
-  and `List` is what `-schema` prints under `names`.
+  (`rooms[1].kind: "attic" is not one of hall, vault`), and so does a number.
+  `Decode` is the names that hold only `Op`. `event.PayloadNames(programs)` holds
+  every enum a payload holds, a scenario's programs among the species;
+  `event.AuthoredPayload` decodes through it for a scenario's and a program's
+  `EmitEvent`, `:emit` and a script's event, and `List` is what `-schema` prints
+  under `names`.
 
 `fsm.Machine` registers a name with the struct its arguments decode into, through
 generic methods: `RegisterGuard[A]`; `RegisterAction[A, R]` for an action that
