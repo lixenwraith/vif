@@ -29,12 +29,11 @@ const eventQueue = 256
 // to the page's thread, so only a page that never answers runs out of it
 const fitWait = time.Second
 
-// The Worker's side of the bridge, web/worker.js: vifGrid is the grid the page
-// measured before the program started, vifSettings the settings document it kept
-// and vifClaims the claims its tab kept; vifAtlas, vifZoom, vifFrame, vifPointer,
-// vifAudio, vifKeepSettings and vifKeepClaims post the texture, the zoom, a frame,
-// the pointer mode, a PCM buffer, the settings and the claims to keep to the page;
-// goEvent is what the page sends back, one object a message
+// The Worker's side of the bridge, web/worker.js: vifGrid, vifSettings and vifClaims
+// hold the grid the page measured at the start and the settings and claims it kept;
+// vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio, vifKeepSettings and vifKeepClaims
+// post the texture, the zoom and the bar's rows, a frame, the pointer mode, PCM, and
+// settings and claims to keep; goEvent takes what the page sends, one object a message
 const (
 	jsGrid       = "vifGrid"
 	jsSettings   = "vifSettings"
@@ -50,8 +49,9 @@ const (
 )
 
 // Config is what the run tells the page: the status bar's rows, whose hold a
-// finger starts even with the pointer off, and the zoom, a cell's height in CSS
-// pixels the page opens at (0 for its own) and the range and step a zoom keeps to
+// finger starts even with the pointer off and whose three taps raise the keyboard,
+// and the zoom, a cell's height in CSS pixels the page opens at (0 for its own)
+// and the range and step a zoom keeps to
 type Config struct {
 	BarRows                             int
 	Cell, CellLeast, CellMost, CellStep float64
@@ -108,7 +108,7 @@ func Open(a *glyph.Atlas, c Config) (*Host, error) {
 	h.event = js.FuncOf(h.handle)
 	g.Set(jsEvent, h.event)
 	g.Call(jsAtlas, bytes(h.tex.Bytes()))
-	g.Call(jsZoom, c.Cell, c.CellLeast, c.CellMost, c.CellStep)
+	g.Call(jsZoom, c.Cell, c.CellLeast, c.CellMost, c.CellStep, c.BarRows)
 	select {
 	case <-h.fitted:
 	case <-time.After(fitWait): // [wall] a page that never answers starts at its own grid
