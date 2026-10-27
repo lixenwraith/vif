@@ -372,23 +372,30 @@ its edges, then what its host does around the step.
 - `circleCtx` holds the entity, the component, the circle's cell and the sensed
   `hasCursor` and `stunned`; the hooks are `StormSystem` methods, bound per row.
 
-### 4.4 Spawns that ride their beams
+### 4.4 Spawns that ride their beams and spirits
 
-A spawn deferred behind a materialize beam rides the beam:
-`MaterializeComponent.Species` names the species the beam's completion lands, so
-the spawn, the beam's timer and its visual end on one tick. The pending spawn is
-the beam entity, which a capture carries with the stores, not a list beside its
-system.
+A deferred spawn rides the entrance that shows it, so the spawn, the entrance's
+timer and its visual end on one tick. A spawn out of nothing rides a materialize
+beam, `MaterializeComponent.Species` naming the species the beam's completion
+lands; a drain pair's swarm rides the spirits its drains fly in,
+`SpiritComponent.Species` naming the species the spirit's arrival lands. The
+pending spawn is the beam or spirit entity, which a capture carries with the
+stores, not a list beside its system.
 
 - **Storm.** The blue's cue starts a Shared beam naming the swarm, and
   `StormSystem` lands the swarm on the beam's `EventMaterializeComplete`, its
   header on the beam's footprint. `terminateStorm` ends the storm's beams in
   flight, and the storm's own capture (`stormSnapshot`) holds its root alone.
-- **Fusions.** A drain pair's swarm and a quasar fusion fly player-domain beams
-  naming the species; on the beam's completion `landFusion` crosses the spawn
-  request (D-3). A quasar fusion is refused while one's beam flies
-  (`quasarBeaming`), the fuse keeps no state of its own (`FuseSystem.Update` is
-  empty), and `killDrains` alone reports the consumed drains' deaths.
+- **Fusions.** A drain pair flies its drains in as player-domain spirits, the
+  first naming the swarm and its footprint, and `SpiritSystem` sends
+  `EventSpiritArrived` on the tick the spirits draw their arrival frame, its
+  deadline running the half-second flight. A quasar fusion plays a player-domain
+  beam naming the quasar, as does a drain pair whose request asks for the beam
+  (`FuseEffectMaterialize`). On the arrival or the beam's completion
+  `landFusion` crosses the spawn request (D-3). A quasar fusion is refused while
+  one's beam flies (`quasarBeaming`), the fuse keeps no state of its own
+  (`FuseSystem.Update` is empty), and `killDrains` alone reports the consumed
+  drains' deaths.
 - **Data species.** `EventFuseBehaviorRequest` starts a Shared beam naming the
   data species over the nearest place its footprint fits, searched over the whole
   map (`FindFreeAreaInside` with a negative radius: `FindFreeAreaSpiral` from the
@@ -410,7 +417,7 @@ machine makes structural.
   queue above.
 - Eye: a frame cycle and motion the genetics drive.
 - Gateway: a periodic emitter, counting up with carry.
-- Fuse: no state; its fusions ride their beams (§4.4).
+- Fuse: no state; its fusions ride their spirits or beams (§4.4).
 - Pylon and tower: stationary.
 - Kraken: an animation that is all simulation state, its cycle of idle, attack,
   spin and move chosen by draws and timed by countdowns of its own.
@@ -819,8 +826,9 @@ captures, one a tick, read the frames. Per species:
   alone (`:energy 100000000`, `EventWeaponRemoveRequest` for each weapon, `rod`
   to `gun`, `EventWeaponAddRequest { entity = 1, weapon = "disruptor" }`, `a`)
   stuns the circles in a series, and a stunned burst holds and resumes.
-- Fusions: `:emit EventFuseQuasarRequest` lands its quasar the tick its beam's
-  last cells go.
+- Fusions: two enraged drains fly in as cyan spirits, and their swarm lands as
+  the spirits arrive, with no beam. `:emit EventFuseQuasarRequest` lands its
+  quasar the tick its beam's last cells go.
 - Data species: `:n vanguard`, with `:god` to outlast the raid. A raider spawns at
   the right edge every two seconds while fewer than three fly, chases, locks red
   under the cyan countdown, and charges the cell it saw where its body clears the

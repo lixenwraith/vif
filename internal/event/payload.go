@@ -909,13 +909,14 @@ type FuseQuasarRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// FuseEffect is how a fusion's sources reach the beam every fusion plays
+// FuseEffect is what plays a fusion and carries its spawn: the spirits its sources
+// fly in, or a beam over the footprint
 type FuseEffect int
 
 const (
 	FuseEffectNone        FuseEffect = iota // As FuseEffectSpirit
-	FuseEffectSpirit                        // Spirits converge into the beam
-	FuseEffectMaterialize                   // The beam alone
+	FuseEffectSpirit                        // Spirits fly the sources in, and the species lands as they arrive
+	FuseEffectMaterialize                   // A beam over the footprint, and the species lands as it ends
 )
 
 var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
@@ -1015,6 +1016,20 @@ type SpiritSpawnRequestPayload struct {
 	TargetY   int                   `toml:"target_y"`
 	Char      rune                  `toml:"char"`
 	BaseColor component.SpiritColor `toml:"base_color"`
+	// Species is the species the spirit's arrival lands, on the footprint whose
+	// top-left is LandX, LandY, so a drain pair's swarm rides its spirit;
+	// SpeciesNone lands nothing
+	Species component.SpeciesType `toml:"species"`
+	LandX   int                   `toml:"land_x"`
+	LandY   int                   `toml:"land_y"`
+}
+
+// SpiritArrivedPayload is the species a spirit's arrival lands and the top-left of
+// the footprint it lands on
+type SpiritArrivedPayload struct {
+	X       int                   `toml:"x"`
+	Y       int                   `toml:"y"`
+	Species component.SpeciesType `toml:"species"`
 }
 
 // --- Lightning ---

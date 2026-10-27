@@ -8,7 +8,7 @@ type TimerSlot uint8
 
 const (
 	TimerLifetime TimerSlot = iota
-	TimerDeadline           // one deadline its owner acts on: missile flight, materialize beam, gold sequence, swarm life, button light
+	TimerDeadline           // one deadline its owner acts on: missile flight, materialize beam, spirit flight, gold sequence, swarm life, button light
 	TimerCooldown           // a ready gate: mount discharge, drain energy drain, nugget beacon
 	TimerSlotCount
 )

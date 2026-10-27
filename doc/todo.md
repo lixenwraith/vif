@@ -1029,18 +1029,19 @@ Its area pulse is the hosted disruptor's shape; the red circle's turret mount is
 
 ## Species
 
-### Pace fusions as their own timers did
+### Pace a quasar fusion as its own timer did
 
 - Priority: P3
 - Affected files: `internal/component/materialize.go` (`MaterializeStyles`),
   `internal/parameter/effect.go`, `internal/system/fuse.go` (`fuseInto`)
 
-A fusion's swarm or quasar lands as its beam ends, a whole spawn beam, where the
-timers the beams replaced landed a drain pair's swarm at half of it and a quasar a
-little after. Over a session sweep the longer wait cost quasar kills, the one gap
-beyond the noise. A fusion row in `MaterializeStyles` with a shorter fill, hold and
-recede would give the old pacing back, spawn and visual still ending on one tick;
-the session sweep decides it.
+A quasar fusion's quasar lands as its beam ends, a whole spawn beam, where the
+timer the beam replaced landed it a little after half of it. A session sweep with
+both fusions waiting a whole beam cost quasar kills, the one gap beyond the noise;
+a drain pair's swarm lands at half a second again, as its spirits arrive, so the
+sweep decides whether the quasar's wait alone still costs them. A fusion row in
+`MaterializeStyles` with a shorter fill, hold and recede would give the old pacing
+back, spawn and visual still ending on one tick.
 
 ### Show a species' machine state in a debug overlay
 

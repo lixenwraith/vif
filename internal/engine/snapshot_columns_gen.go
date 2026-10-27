@@ -2390,6 +2390,15 @@ func encodeColumnsSpirit(dst []byte, rows []StoreEntry[component.SpiritComponent
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.BlinkColor)
 	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Species)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.LandX)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.LandY)
+	}
 	return dst
 }
 
@@ -2432,6 +2441,15 @@ func decodeColumnsSpirit(r *columnReader) []StoreEntry[component.SpiritComponent
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.BlinkColor, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Species, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.LandX, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.LandY, r)
 	}
 	return rows
 }

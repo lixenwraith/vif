@@ -137,6 +137,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventGrayoutEnd:                      func() any { return new(CursorScopePayload) },
 	EventStrobeRequest:                   func() any { return new(StrobeRequestPayload) },
 	EventSpiritSpawnRequest:              func() any { return new(SpiritSpawnRequestPayload) },
+	EventSpiritArrived:                   func() any { return new(SpiritArrivedPayload) },
 	EventLightningSpawnRequest:           func() any { return new(LightningSpawnRequestPayload) },
 	EventLightningUpdateRequest:          func() any { return new(LightningUpdateRequestPayload) },
 	EventLightningDespawnRequest:         func() any { return new(LightningDespawnRequestPayload) },
@@ -305,6 +306,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventGrayoutEnd:                      &codecCursorScopePayload,
 	EventStrobeRequest:                   &codecStrobeRequestPayload,
 	EventSpiritSpawnRequest:              &codecSpiritSpawnRequestPayload,
+	EventSpiritArrived:                   &codecSpiritArrivedPayload,
 	EventLightningSpawnRequest:           &codecLightningSpawnRequestPayload,
 	EventLightningUpdateRequest:          &codecLightningUpdateRequestPayload,
 	EventLightningDespawnRequest:         &codecLightningDespawnRequestPayload,
@@ -1482,6 +1484,19 @@ var codecSpiritSpawnRequestPayload = structCodec{size: unsafe.Sizeof(SpiritSpawn
 	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.TargetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
 	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.BaseColor), kind: kindInt, size: unsafe.Sizeof(component.SpiritColor(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.LandX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpiritSpawnRequestPayload{}.LandY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *SpiritArrivedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSpiritArrivedPayload, unsafe.Pointer(p)
+}
+
+var codecSpiritArrivedPayload = structCodec{size: unsafe.Sizeof(SpiritArrivedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SpiritArrivedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpiritArrivedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SpiritArrivedPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
 }}
 
 func (p *LightningSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

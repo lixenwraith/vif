@@ -18,6 +18,7 @@ type beamWorld struct {
 	w           *engine.World
 	timers      engine.System
 	materialize engine.System
+	spirits     engine.System // updated each tick when the world flies spirits
 	handlers    []event.Handler
 	delivered   []event.GameEvent // every event delivered, in order
 }
@@ -67,10 +68,13 @@ func (b *beamWorld) deliver(events ...event.GameEvent) {
 	}
 }
 
-// tick ages the beams one step and delivers what their completion raised
+// tick ages the beams and spirits one step and delivers what their ends raised
 func (b *beamWorld) tick() {
 	b.timers.Update()
 	b.materialize.Update()
+	if b.spirits != nil {
+		b.spirits.Update()
+	}
 	b.deliver(b.w.Resources.Event.Queue.Consume()...)
 }
 
@@ -188,35 +192,117 @@ func newFusionWorld(t *testing.T) (*beamWorld, core.Entity, [2]core.Entity) {
 		w.Positions.SetPosition(drains[i], component.PositionComponent{X: x, Y: 12})
 		w.Components.Drain.SetComponent(drains[i], component.DrainComponent{})
 	}
-	return newBeamWorld(w, ready(NewFuseSystem(w)), ready(NewSpiritSystem(w))), cursor, drains
+	spirits := ready(NewSpiritSystem(w))
+	b := newBeamWorld(w, ready(NewFuseSystem(w)), spirits)
+	b.spirits = spirits
+	return b, cursor, drains
 }
 
-// TestAFusionLandsWhenItsBeamEnds: every fusion plays a player-domain beam naming
-// its species over the footprint, spirits flying the drains in unless the effect
-// is the beam alone, and its spawn crosses on that footprint the tick the beam,
-// and so its visual, ends; nothing waits beside the beam
+// TestADrainPairsSwarmLandsAsItsSpiritsArrive: a drain pair's fusion flies its
+// drains' spirits and plays no beam, the first spirit naming the swarm and the
+// footprint the others fly onto, and the swarm crosses on that footprint the tick
+// the spirits draw their arrival frame, where the timer the beam replaced landed it
+func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		effect event.FuseEffect
+	}{
+		{"spirit", event.FuseEffectSpirit},
+		{"none", event.FuseEffectNone},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b, _, drains := newFusionWorld(t)
+			w := b.w
+			b.deliver(event.GameEvent{Type: event.EventFuseSwarmRequest, Domain: core.DomainPlayer,
+				Payload: &event.FuseSwarmRequestPayload{DrainA: drains[0], DrainB: drains[1], Effect: c.effect}})
+			if n := w.Components.Materialize.CountEntities(); n != 0 {
+				t.Fatalf("%d beams, want the spirits alone", n)
+			}
+			spirits := w.Components.Spirit.Entities()
+			if len(spirits) != 2 || w.Components.Drain.CountEntities() != 0 {
+				t.Fatalf("%d spirits with %d drains left, want 2 and none", len(spirits), w.Components.Drain.CountEntities())
+			}
+			var carrier component.SpiritComponent
+			carriers := 0
+			for _, e := range spirits {
+				if sp, _ := w.Components.Spirit.GetComponent(e); sp.Species != component.SpeciesNone {
+					carrier = sp
+					carriers++
+				}
+			}
+			if carriers != 1 || carrier.Species != component.SpeciesSwarm || spirits[0].Domain() != core.DomainPlayer {
+				t.Fatalf("%d spirits name a species (the first %+v), want one player-domain spirit naming the swarm", carriers, carrier)
+			}
+			for _, e := range spirits {
+				sp, _ := w.Components.Spirit.GetComponent(e)
+				if x, y := int(sp.TargetX), int(sp.TargetY); x < carrier.LandX || x >= carrier.LandX+parameter.SwarmWidth ||
+					y < carrier.LandY || y >= carrier.LandY+parameter.SwarmHeight {
+					t.Fatalf("a spirit flies to (%d, %d), off the footprint at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
+				}
+			}
+
+			mark := len(b.delivered)
+			flight := int(parameter.SpiritAnimationDuration / parameter.GameUpdateInterval)
+			for range flight - 1 {
+				b.tick()
+			}
+			if n := len(b.sent(event.EventSwarmSpawnRequest, mark)); n != 0 {
+				t.Fatalf("%d swarms before the spirits arrived", n)
+			}
+			b.tick()
+			spawns := b.sent(event.EventSwarmSpawnRequest, mark)
+			if len(spawns) != 1 || spawns[0].Domain != core.DomainPlayer {
+				t.Fatalf("spawns = %+v as the spirits arrived, want one crossing", spawns)
+			}
+			if x, y := spawnCell(spawns[0].Payload); x != carrier.LandX+parameter.SwarmHeaderOffsetX || y != carrier.LandY+parameter.SwarmHeaderOffsetY {
+				t.Fatalf("the swarm lands at (%d, %d), off the footprint at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
+			}
+			for _, e := range spirits {
+				if timer, ok := w.Components.Timer.GetPtr(e); !ok || timer.Expired(component.TimerLifetime) ||
+					timer.Elapsed(component.TimerLifetime) != parameter.SpiritAnimationDuration {
+					t.Fatal("the swarm landed off the spirits' arrival frame")
+				}
+			}
+
+			b.tick()
+			if n := len(b.sent(event.EventSwarmSpawnRequest, mark)); n != 1 || w.Components.Spirit.CountEntities() != 0 {
+				t.Fatalf("%d swarms and %d spirits a tick on, want one and none", n, w.Components.Spirit.CountEntities())
+			}
+		})
+	}
+}
+
+// TestOnlyAPlayerSpiritLandsAFusion: a fusion's spirits run on one instance alone,
+// so a Shared spirit's arrival crosses nothing (D-7)
+func TestOnlyAPlayerSpiritLandsAFusion(t *testing.T) {
+	b, _, _ := newFusionWorld(t)
+	b.deliver(event.GameEvent{Type: event.EventSpiritArrived, Domain: core.DomainShared,
+		Payload: &event.SpiritArrivedPayload{X: 10, Y: 10, Species: component.SpeciesSwarm}})
+	if n := len(b.sent(event.EventSwarmSpawnRequest, 0)); n != 0 {
+		t.Fatalf("a Shared spirit crossed %d swarms", n)
+	}
+	b.deliver(event.GameEvent{Type: event.EventSpiritArrived, Domain: core.DomainPlayer,
+		Payload: &event.SpiritArrivedPayload{X: 10, Y: 10, Species: component.SpeciesSwarm}})
+	if n := len(b.sent(event.EventSwarmSpawnRequest, 0)); n != 1 {
+		t.Fatalf("a player spirit crossed %d swarms, want one", n)
+	}
+}
+
+// TestAFusionLandsWhenItsBeamEnds: a fusion a beam plays, a quasar's or a drain
+// pair's asking for the beam, flies no spirits and plays one player-domain beam
+// naming its species over the footprint, and its spawn crosses on that footprint
+// the tick the beam, and so its visual, ends; nothing waits beside the beam
 func TestAFusionLandsWhenItsBeamEnds(t *testing.T) {
 	for _, c := range []struct {
 		name          string
 		request       func(cursor core.Entity, drains [2]core.Entity) event.GameEvent
 		species       component.SpeciesType
 		spawn         event.EventType
-		spirits       int
 		width, height int
 		headX, headY  int
 	}{
 		{
-			name: "drain pair",
-			request: func(_ core.Entity, d [2]core.Entity) event.GameEvent {
-				return event.GameEvent{Type: event.EventFuseSwarmRequest, Domain: core.DomainPlayer,
-					Payload: &event.FuseSwarmRequestPayload{DrainA: d[0], DrainB: d[1], Effect: event.FuseEffectSpirit}}
-			},
-			species: component.SpeciesSwarm, spawn: event.EventSwarmSpawnRequest, spirits: 2,
-			width: parameter.SwarmWidth, height: parameter.SwarmHeight,
-			headX: parameter.SwarmHeaderOffsetX, headY: parameter.SwarmHeaderOffsetY,
-		},
-		{
-			name: "drain pair, the beam alone",
+			name: "drain pair, the beam",
 			request: func(_ core.Entity, d [2]core.Entity) event.GameEvent {
 				return event.GameEvent{Type: event.EventFuseSwarmRequest, Domain: core.DomainPlayer,
 					Payload: &event.FuseSwarmRequestPayload{DrainA: d[0], DrainB: d[1], Effect: event.FuseEffectMaterialize}}
@@ -247,8 +333,8 @@ func TestAFusionLandsWhenItsBeamEnds(t *testing.T) {
 			if beam.Species != c.species || beam.AreaWidth != c.width || beam.AreaHeight != c.height {
 				t.Fatalf("beam = %+v, want species %d over a %dx%d footprint", beam, c.species, c.width, c.height)
 			}
-			if n := len(b.sent(event.EventSpiritSpawnRequest, 0)); n != c.spirits || w.Components.Drain.CountEntities() != 0 {
-				t.Fatalf("%d spirits with %d drains left, want %d and none", n, w.Components.Drain.CountEntities(), c.spirits)
+			if n := len(b.sent(event.EventSpiritSpawnRequest, 0)); n != 0 || w.Components.Drain.CountEntities() != 0 {
+				t.Fatalf("%d spirits with %d drains left, want none and none", n, w.Components.Drain.CountEntities())
 			}
 
 			mark := len(b.delivered)
@@ -272,7 +358,7 @@ func TestAFusionLandsWhenItsBeamEnds(t *testing.T) {
 
 // TestAQuasarFusionWaitsForTheOneInFlight: the beam is the pending fusion, so a
 // second request is refused while it flies and admitted once it has landed; a
-// drain pair's beam holds back nothing
+// drain pair's spirits hold back nothing
 func TestAQuasarFusionWaitsForTheOneInFlight(t *testing.T) {
 	b, cursor, drains := newFusionWorld(t)
 	quasarBeams := func() (n int) {
@@ -288,7 +374,7 @@ func TestAQuasarFusionWaitsForTheOneInFlight(t *testing.T) {
 		Payload: &event.FuseSwarmRequestPayload{DrainA: drains[0], DrainB: drains[1]}})
 	b.deliver(request)
 	if n := quasarBeams(); n != 1 {
-		t.Fatalf("%d quasar beams beside a drain pair's, want one", n)
+		t.Fatalf("%d quasar beams beside a drain pair's spirits, want one", n)
 	}
 	b.tick()
 	b.deliver(request)

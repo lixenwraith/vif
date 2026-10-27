@@ -14,7 +14,8 @@ import (
 )
 
 // FuseSystem orchestrates the visual and timing transition of entity fusions and manages fusion source system
-// Every spawn it plays rides a beam naming the species, and the beam's completion lands it, so it holds nothing.
+// Every spawn it plays rides what plays it, so it holds nothing: a drain pair's swarm lands as the spirits its
+// drains fly in arrive, and a spawn with no drains to fly in, a quasar or a data species, as its beam ends.
 // A fusion is player-domain: it consumes drains and their visuals; the crossing is the geometry-only spawn request.
 // A data species' entrance is Shared instead, its spawn every instance's own.
 type FuseSystem struct {
@@ -60,6 +61,7 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 		event.EventFuseSwarmRequest,
 		event.EventFuseBehaviorRequest,
 		event.EventMaterializeComplete,
+		event.EventSpiritArrived,
 		event.EventBehaviorCancelRequest,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -116,8 +118,14 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 			if ev.Domain == core.DomainShared {
 				s.landBehavior(payload)
 			} else {
-				s.landFusion(payload)
+				s.landFusion(payload.Species, payload.X, payload.Y)
 			}
+		}
+
+	case event.EventSpiritArrived:
+		// A fusion's spirits ran on this instance alone, as its beam does
+		if payload, ok := ev.Payload.(*event.SpiritArrivedPayload); ok && ev.Domain != core.DomainShared {
+			s.landFusion(payload.Species, payload.X, payload.Y)
 		}
 
 	case event.EventBehaviorCancelRequest:
@@ -127,7 +135,7 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update is empty: a fusion's beam runs it, and its completion lands it
+// Update is empty: a fusion's spirits or beam run it, and their end lands it
 func (s *FuseSystem) Update() {}
 
 // quasarBeaming reports a quasar fusion in flight, whose beam is its pending spawn
@@ -141,12 +149,14 @@ func (s *FuseSystem) quasarBeaming() bool {
 	return false
 }
 
-// fuseInto plays a fusion over area: spirits fly the sources in unless the effect
-// is the beam alone, and the beam names the species its completion lands. The beam
-// is this instance's own: a shared one would exist only on the producer.
+// fuseInto plays a fusion over area, and the species lands as what plays it ends:
+// the spirits the sources fly in, unless the effect is the beam or no source flies,
+// else a beam naming the species its completion lands. Either is this instance's
+// own: a shared one would exist only on the producer.
 func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, area vmath.Area) {
-	if effect != event.FuseEffectMaterialize {
-		s.effectSpiritArea(sources, area, component.SpiritCyan)
+	if effect != event.FuseEffectMaterialize && len(sources) > 0 {
+		s.effectSpiritArea(species, sources, area, component.SpiritCyan)
+		return
 	}
 	s.world.PushLocal(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
 		X:          area.X,
@@ -158,19 +168,25 @@ func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEf
 	})
 }
 
-// effectSpiritArea flies one spirit per source into the target area; player-domain visuals
-func (s *FuseSystem) effectSpiritArea(sources []vmath.Point, area vmath.Area, c component.SpiritColor) {
+// effectSpiritArea flies one spirit per source into the target area, player-domain
+// visuals; every spirit flies one time, and the first names the species its arrival
+// lands on the area, so the spawn rides it
+func (s *FuseSystem) effectSpiritArea(species component.SpeciesType, sources []vmath.Point, area vmath.Area, c component.SpiritColor) {
 	for i, src := range sources {
 		dest := area.DistributePoint(i, s.rng)
 
-		s.world.PushLocal(event.EventSpiritSpawnRequest, &event.SpiritSpawnRequestPayload{
+		request := &event.SpiritSpawnRequestPayload{
 			StartX:    src.X,
 			StartY:    src.Y,
 			TargetX:   dest.X,
 			TargetY:   dest.Y,
 			Char:      visual.DrainChar,
 			BaseColor: c,
-		})
+		}
+		if i == 0 {
+			request.Species, request.LandX, request.LandY = species, area.X, area.Y
+		}
+		s.world.PushLocal(event.EventSpiritSpawnRequest, request)
 	}
 }
 
@@ -340,21 +356,21 @@ func (s *FuseSystem) cancelBehaviorBeams(program string) {
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, beams...)
 }
 
-// landFusion crosses the spawn a fusion's beam held, its header on the footprint
-// the beam covered. The species spawn is the shared result, and the request is the
-// D-3 artifact that carries it — stamped player because the fuse produced it, which
-// is what tells it from the same type a shared storm pushes.
-func (s *FuseSystem) landFusion(p *event.MaterializeCompletedPayload) {
-	switch p.Species {
+// landFusion crosses the spawn a fusion's spirit or beam held, its header on the
+// footprint whose top-left is x, y. The species spawn is the shared result, and the
+// request is the D-3 artifact that carries it — stamped player because the fuse
+// produced it, which is what tells it from the same type a shared storm pushes.
+func (s *FuseSystem) landFusion(species component.SpeciesType, x, y int) {
+	switch species {
 	case component.SpeciesQuasar:
 		s.world.PushCrossing(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
-			X: p.X + parameter.QuasarHeaderOffsetX,
-			Y: p.Y + parameter.QuasarHeaderOffsetY,
+			X: x + parameter.QuasarHeaderOffsetX,
+			Y: y + parameter.QuasarHeaderOffsetY,
 		})
 	case component.SpeciesSwarm:
 		s.world.PushCrossing(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-			X: p.X + parameter.SwarmHeaderOffsetX,
-			Y: p.Y + parameter.SwarmHeaderOffsetY,
+			X: x + parameter.SwarmHeaderOffsetX,
+			Y: y + parameter.SwarmHeaderOffsetY,
 		})
 	}
 }
