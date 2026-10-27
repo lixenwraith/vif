@@ -294,7 +294,9 @@ authored script's event decode a payload the same way.
 
 `pick` sets one payload field to an entry of `from`: the one its `var`'s value
 names, modulo the list's length, a negative value counting back from the last
-entry, so the draw behind it need not know the list. `field` is a dot path, as a
+entry. The draw behind it need not know the list: vanguard draws `raid_type` from
+20 bits and spawns one of its four raider programs, so a fifth is one more entry,
+and wears the stone art its cave's seed picks. `field` is a dot path, as a
 `payload_vars` key is, and each entry is checked at load as that field's value
 in its payload, names included: a pick of `species` from `["eye", "snake"]`
 beside `sub_type = "flame"` fails on the snake, which takes no sub-types. An

@@ -1,6 +1,6 @@
-# Vanguard's blocks: the raiders' one attack cycle, which every raider type's
-# program expands with its own timings, and the raid's spawn of one type.
-# doc/toml-macros.md describes definitions and invocations.
+# Vanguard's block: the raiders' one attack cycle, which every raider type's
+# program expands with its own timings. doc/toml-macros.md describes definitions
+# and invocations.
 
 # The swarm's machine as a raider flies it. It chases its target for chase_ms, then
 # locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
@@ -68,12 +68,3 @@ transitions = [{ trigger = "Timeout", target = "Chase" }]
 doc = "A stun drops a raider from any attack state back to its chase."
 params = {}
 body = { from = ["Lock", "Charge", "Beam", "Brake"], guard = "Stunned", target = "Chase" }
-
-# RaidSpawn's edge for one type: taken when the draw names it, it spawns that
-# program at the raid's cell
-[macros.RaidSpawnAs]
-doc = "Spawn program at (raid_x, raid_y) and go back to RaidWait when raid_type is type."
-params = { type = "int", program = "string" }
-body = { trigger = "Tick", target = "RaidWait", guard = "VarCompare", guard_args = { var = "raid_type", op = "eq", value = "${type}" }, actions = [
-    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { program = "${program}" }, payload_vars = { x = "raid_x", y = "raid_y" } },
-] }

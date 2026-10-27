@@ -54,7 +54,7 @@ background = true
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
-    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 36, min_wall = 2, wavelength = 64, swing = 9, detail = 0, ramp = 96, octaves = 4, art = ["strata", "cracked", "moss", "crystal"] }, payload_vars = { seed = "cave_seed" } },
+    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 36, min_wall = 2, wavelength = 64, swing = 9, detail = 0, ramp = 96, octaves = 4 }, payload_vars = { seed = "cave_seed" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
     { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 10.0, duration_ms = 0 } },
 ]
 
@@ -80,8 +80,8 @@ transitions = [
 # keeps at its thinnest. The request names the map's width, a column past its right
 # edge, and the spawn stands each body flush against that edge whatever its size;
 # it searches the whole map from there, so rock on that row sends it to the nearest
-# open rows. The type is drawn too, each equally likely: a new type widens the draw
-# and adds its edge.
+# open rows. The type is drawn too, each equally likely: the pick takes the draw
+# modulo its list, so a new type is one more entry.
 [states.RaidWait]
 parent = "Raid"
 transitions = [
@@ -102,11 +102,12 @@ on_enter = [
     { action = "ModuloVar", payload = { name = "raid_y", source_var = "raid_rows" } },
     { action = "IncrementVar", payload = { name = "raid_y", delta = 2 } },
     { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
-    { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 3, seed_var = "raid_type_seed", index_var = "raid_index" } },
+    { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 1048575, seed_var = "raid_type_seed", index_var = "raid_index" } },
 ]
 transitions = [
-    { macro = "RaidSpawnAs", each = { type = [0, 1, 2, 3], program = ["invader", "scarab", "construct", "storm_eye"] } },
-    { trigger = "Tick", target = "RaidWait" },
+    { trigger = "Tick", target = "RaidWait", actions = [
+        { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["invader", "scarab", "construct", "storm_eye"] } },
+    ] },
 ]
 
 # --- Player ---

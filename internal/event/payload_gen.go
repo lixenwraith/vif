@@ -1783,7 +1783,7 @@ var codecCaveStartPayload = structCodec{size: unsafe.Sizeof(CaveStartPayload{}),
 	{off: unsafe.Offsetof(CaveStartPayload{}.Octaves), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
-	{off: unsafe.Offsetof(CaveStartPayload{}.Art), kind: kindSlice, elem: &field{kind: kindString}, stride: unsafe.Sizeof(""), make: func(p unsafe.Pointer, n int) { *(*[]string)(p) = make([]string, n) }},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Art), kind: kindString},
 }}
 
 func (p *WallDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

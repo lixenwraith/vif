@@ -103,22 +103,6 @@ landed. Open items elsewhere it meets:
 [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
 and [spawn placement](#audit-spawn-placement-across-the-species).
 
-#### Pick a payload value from a list
-
-- Priority: P0
-- Affected files: `internal/fsm/std` (`payload.go`, `args.go`, `action.go`),
-  `internal/event/payload.go`, `internal/system/behavior.go`
-  (`BehaviorVocabulary`), `internal/system/wall.go` (`startCave`),
-  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`, `RaidSpawnAs`)
-- Guide: [FSM reference: Event Emission](fsm-reference.md#event-emission)
-
-FSM variables are ints, so a value chosen from a list cannot be data: the cave's
-stone art is picked in Go (`startCave`, `Art[seed % len]`), and the raid takes an
-edge per raider type (`RaidSpawnAs`, invoked with `each`), the draw's range written
-beside the list. A list on `EmitEvent` for a payload field, its entry picked by an
-int from `payload_vars` and each entry resolved by the field's names as a single
-value is, would serve both.
-
 #### Give a program an entrance of its own through the fuse
 
 - Priority: P1
