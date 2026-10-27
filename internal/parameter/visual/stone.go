@@ -93,15 +93,17 @@ type StrataBand struct {
 	Grain  rune
 }
 
-// Light and dark bands alternate, each drawn from its family
+// Light and dark bands alternate, each drawn from its family; bands differ in tone and
+// shade density, never in the kind of mark. The light ▒ band inks toward its background
+// so its denser shade lifts the band less, as far as its grain still shows in 256 colours.
 var (
 	StrataLight = [...]StrataBand{
 		{Bg: color.RGB{R: 96, G: 85, B: 68}, Fg: color.RGB{R: 126, G: 113, B: 92}, Grain: '░'},
 		{Bg: color.RGB{R: 98, G: 94, B: 85}, Fg: color.RGB{R: 128, G: 123, B: 112}, Grain: '░'},
-		{Bg: color.RGB{R: 92, G: 80, B: 64}, Fg: color.RGB{R: 124, G: 109, B: 89}, Grain: '·'},
+		{Bg: color.RGB{R: 92, G: 80, B: 64}, Fg: color.RGB{R: 118, G: 103, B: 84}, Grain: '▒'},
 	}
 	StrataDark = [...]StrataBand{
-		{Bg: color.RGB{R: 70, G: 66, B: 63}, Fg: color.RGB{R: 90, G: 86, B: 82}, Grain: '─'},
+		{Bg: color.RGB{R: 70, G: 66, B: 63}, Fg: color.RGB{R: 90, G: 86, B: 82}, Grain: '░'},
 		{Bg: color.RGB{R: 74, G: 66, B: 58}, Fg: color.RGB{R: 102, G: 92, B: 82}, Grain: '░'},
 		{Bg: color.RGB{R: 72, G: 64, B: 58}, Fg: color.RGB{R: 100, G: 90, B: 82}, Grain: '▒'},
 	}

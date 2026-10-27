@@ -79,7 +79,7 @@ func TestArtIsFixedByItsPresetSeedAndCell(t *testing.T) {
 		b = [9]byte{byte(r >> 16), byte(r >> 8), byte(r), fg.R, fg.G, fg.B, bg.R, bg.G, bg.B}
 		h.Write(b[:])
 	})
-	if got, want := h.Sum64(), uint64(0xad8ab6a81e6cf4c); got != want {
+	if got, want := h.Sum64(), uint64(0x25c7e09c2298fe02); got != want {
 		t.Fatalf("stone digest %#x, want %#x", got, want)
 	}
 }
