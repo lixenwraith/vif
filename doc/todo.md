@@ -10,11 +10,11 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 ## Vanguard
 
-The side-scroller's refinements after its first play test (2026-10-27) lead,
-grouped by area so an agent can take a group, beside the navigation items. The
-faster scroll, the jagged cave, the stone art, the raider types by cave and the
-machine's certain faults have landed. Order now: play the cave raiders; the
-position package last, in a session of its own. Until that lands, nothing here
+The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
+by area so an agent can take a group, beside the navigation items. The faster
+scroll, the jagged cave, the stone art, the raider types by cave and the machine's
+certain faults have landed. Order now: play the cave raiders and the scenery text;
+the position package last, in a session of its own. Until that lands, nothing here
 adds engine surface for rock or caves: a cave's shape stays in `pkg/cave` and its
 scenario, the rock behind `Positions.Rock()` and the wall system and renderers that
 read it, and a query a footprint needs is built by its caller from the existing
@@ -51,6 +51,29 @@ is bright yellow (11), so neither entry clears both palettes and white (15) woul
 the crystal raiders' magenta (13) meets the amethyst points, which are sparse. Keep
 every type within 5×3 until the position work gives each footprint its own
 navigation grid.
+
+### Scenery
+
+#### Play the scenery text and settle what it leaves open
+
+- Priority: P1
+- Affected files: `internal/system/glyph.go` (`placeLine`, `countPlacedKind`),
+  `internal/system/environment.go`, `wad/scenario/vanguard/scenario.toml`
+  (`CaveStart`), `doc/gameplay.md` §9
+- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
+
+Vanguard's drifting text is scenery: rock and raiders pass it by and no key types
+it. Typing was the ship's only heat and energy income (+1 heat a key), so a game now
+earns none; play shows whether kills or a pickup should pay instead. Two gaps remain
+in the measured numbers. The upwind quarter stays thinner, as a line appears whole
+within `DriftEntryBand` (4) of the edge; entering lines part off the map closes it.
+The spawner counts the scenery hidden in rock, a quarter to a third of it, so its
+rate falls from mostly double to mostly normal (mean multiplier 1.84 to 1.10 at
+120×40); counting only the visible text closes that. Scenery passes behind any cell
+that blocks spawns, rock and walls alike, until the position package gives rock a
+test of its own. A boss region of fixed, typeable text over moving scenery needs a
+drift that moves scenery alone, since a drift moves every loose glyph, and may want
+scenery drawn apart from the typeable text it now matches.
 
 ### Gun and loot
 
@@ -229,8 +252,9 @@ What it must keep, across multiplayer, netcode and interactions:
   its owner's record as the rock does, so an idle harness still matches main; any
   change to what ships moves `snapshot.Schema` and `JournalSchema`.
 - Interactions: the wall push and crush (`displaceComposite`,
-  `World.ShiftComposite`), drift's layer `Shift`, splash, loot and spawn placement,
-  tracer and line walks, typing's top glyph, every renderer's read.
+  `World.ShiftComposite`), drift's layer `Shift` and scenery behind rock and walls,
+  splash, loot and spawn placement, tracer and line walks, typing's top glyph, every
+  renderer's read.
 - Cost, measured before and after: `TestTickProfileTD16`, `BenchmarkCaveStep`,
   `BenchmarkCaveStepNavigation`, the renderer benches, the harness counts.
 

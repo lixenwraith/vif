@@ -810,10 +810,7 @@ func motionScanDirectional(ctx *engine.GameContext, x, y, count, dx, dy int) Mot
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
-	glyphStore := ctx.World.Components.Glyph
-	filter := func(e core.Entity) bool {
-		return glyphStore.HasEntity(e)
-	}
+	filter := ctx.World.Positions.IsTypeable
 
 	for range count {
 		// Both domains: glyphs are player, gold members are shared and carry one

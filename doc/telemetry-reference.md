@@ -75,7 +75,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem
 | Tower | `tower.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewTowerSystem` | Spawn, cancel and death handlers; update | `Init` | Generic only |
 | Gateway | `gateway.{active,count}` | `NewGatewaySystem` | `Update` | `Init` | Generic only |
 | Loot | `loot.{drops,active,collects,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm}` | `NewLootSystem` | Drop and collect handlers; per-tick `active` and `unreachable`; owner-route maintenance; bounce integration | `Init` | Generic only |
-| Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,buf_placement_hwm}`; floats `glyph.{density,rate_mult}` | `NewGlyphSystem` | Spawn pacing in update and the enable command | `Init` | Generic only. The spawner reads `environment.drift_*` |
+| Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,buf_placement_hwm}`; floats `glyph.{density,rate_mult}` | `NewGlyphSystem` | Spawn pacing in update and the enable command | `Init` | Generic only; `density` counts the kind being placed, scenery or typeable. The spawner reads `environment.drift_*` |
 | Nugget | `nugget.{active,spawned,collected,jumps,spawn_failures,cursor_rejects,disabled_rejects}` | `NewNuggetSystem` | Resolved nugget handlers and update | `Init` | Generic only |
 | Particle | `{dust,decay,blossom}.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`; `dust.{created,destroyed,centers_dropped,buf_{centers,flash,impulses,transform}_hwm}`; `particle.{cursor_rejects,disabled_rejects}` | `NewParticleSystem` | Behavior-selected spawn, apply, update and detonation paths | `Init` | Generic only |
 | Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers and update | `Init` | Generic only |
@@ -104,7 +104,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem
 | Explosion | `explosion.{triggered,cursor_rejects,disabled_rejects,buf_composites_hwm}` | `NewExplosionSystem` | Explosion request handler and the composite pass | `Init` | Generic only |
 | Motion marker | `motion_marker.buf_{base_markers,base_positions,colored_markers}_hwm` | `NewMotionMarkerSystem` | Marker-buffer observation | `Init` | Generic only |
 | Splash | None | — | — | — | — |
-| Environment | `environment.{wind_active,drift_active}`; float `environment.drift_direction` | `NewEnvironmentSystem` | Update gauges | `Init` | `drift_*` steer the glyph spawner's entry band |
+| Environment | `environment.{wind_active,drift_active,drift_scenery}`; float `environment.drift_direction` | `NewEnvironmentSystem` | Update gauges | `Init` | `drift_*` steer the glyph spawner's entry band and the kind it places |
 | Death | `death.{killed,tagged,batch_{count,entities_total,size_max,silent,flash,blossom,decay,fadeout,dust,other},protected_rejects,zero_rejects,missing_entities,missing_effect_data,payload_rejects,disabled_rejects,buf_destroy_hwm}` | `NewDeathSystem` | The `EventDeathBatch` handler and the `DeathComponent` sweep in `Update` | `Init` | Generic only |
 | Timer | None | — | — | — | — |
 | Adaptation | `adapt.{graphs,populations,buf_*_hwm}`; strings `adapt.{g1,g2,g3,g4}` | `NewAdaptationSystem` | Graphs, populations and the `g` strings every `AdaptTelemetryInterval` ticks; buffer observation as it runs | `Init` | Generic only |
@@ -225,7 +225,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `death.batch_*` (int) | Resolved `EventDeathBatch` payloads (`count`), entries presented (`entities_total`), the largest batch (`size_max`), and requests per effect route (`silent`, `flash`, `blossom`, `decay`, `fadeout`, `dust`, `other`) |
 | `death.tagged` (int) | Entities processed from the `DeathComponent` sweep |
 | `death.{protected,zero,payload}_rejects`, `death.missing_{entities,effect_data}` (int) | Entries refused by `ProtectFromDeath`, zero identifiers, bad payload types, entities already gone, and deaths whose effect lacked position, glyph or wall data |
-| `environment.drift_active` (bool), `environment.drift_direction` (float) | The drift gauge and heading. The glyph spawner reads both to bias its entry band |
+| `environment.drift_active`, `environment.drift_scenery` (bool), `environment.drift_direction` (float) | The drift gauge, whether text placed under it is scenery, and its heading. The glyph spawner reads them to bias its entry band and to stamp and count scenery |
 
 ### Network
 

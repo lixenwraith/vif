@@ -356,11 +356,14 @@ disc stamps its box with squared distances, and only a cell within
 compares, so the cells are exactly those of the per-cell distance test.
 
 A cell can hold several glyphs while drift carries layers past one another. The
-glyph renderer draws only the cell's top glyph, the one typing acts on, so a
-nearer parallax layer covers a farther one; `Position.TopGlyphIs` settles a cell
-holding one entity by its length and asks `TopGlyphAt` only for a stacked cell. In 256-color
-mode a glyph hue has two console entries, one for dark and one shared by normal
-and bright, so only the dark layer stands apart there.
+glyph renderer draws only the cell's top glyph, the one typing acts on or else the
+nearest scenery, so a nearer parallax layer covers a farther one and typeable text
+covers scenery; `Position.TopGlyphIs` settles a cell holding one entity by its
+length and ranks a stacked one. Scenery standing in rock or a wall that blocks
+spawns is not drawn: rock and walls draw first and a glyph prints over them
+foreground-only, so the text passes behind them. In 256-color mode a glyph hue has
+two console entries, one for dark and one shared by normal and bright, so only the
+dark layer stands apart there.
 
 ### Local and peer cursors
 

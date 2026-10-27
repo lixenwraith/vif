@@ -75,9 +75,11 @@ type GlyphSystem struct {
 	// Reused placement scratch
 	placement []glyphPlacement
 
-	// Drift as the environment publishes it; read only, for the entry band
+	// Drift as the environment publishes it; read only, for the entry band and the
+	// kind of text placed
 	statDriftActive    *atomic.Bool
 	statDriftDirection *status.AtomicFloat
+	statDriftScenery   *atomic.Bool
 
 	// Cached metric pointers
 	statEnabled     *atomic.Bool
@@ -105,6 +107,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.buffers = newBufferTelemetry(world.Resources.Status, "glyph", "placement")
 	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
 	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
+	s.statDriftScenery = world.Resources.Status.Bools.Get("environment.drift_scenery")
 
 	return s
 }
@@ -169,7 +172,7 @@ func (s *GlyphSystem) Update() {
 	config := s.world.Resources.Config
 
 	// Calculate current density and update rate multiplier
-	glyphCount := s.world.Components.Glyph.CountEntities()
+	glyphCount := s.countPlacedKind()
 	screenCapacity := config.MapWidth * config.MapHeight
 	density := s.calculateDensity(glyphCount, screenCapacity)
 	s.updateRateMultiplier(density)
@@ -221,15 +224,43 @@ func (s *GlyphSystem) calculateNextSpawn() time.Duration {
 	return adjustedDelay
 }
 
-// updateCensus counts live glyphs per spawn slot, called once per spawn, O(n)
+// countPlacedKind counts the glyphs of the kind placeLine stamps now, scenery or
+// typeable text, so each keeps its own fill where both live side by side. Scenery is
+// counted off the protection store, which a map without it keeps small.
+func (s *GlyphSystem) countPlacedKind() int {
+	glyphs, scenery := s.world.Components.Glyph, 0
+	s.world.Components.Protection.Each(func(e core.Entity, p *component.ProtectionComponent) bool {
+		if p.Mask&component.ProtectFromTyping != 0 && glyphs.HasEntity(e) {
+			scenery++
+		}
+		return true
+	})
+	if s.statDriftScenery.Load() {
+		return scenery
+	}
+	return glyphs.CountEntities() - scenery
+}
+
+// isScenery reports a glyph placed as scenery, which typing passes over
+func (s *GlyphSystem) isScenery(e core.Entity) bool {
+	prot, _ := s.world.Components.Protection.GetComponent(e)
+	return prot.Mask&component.ProtectFromTyping != 0
+}
+
+// updateCensus counts live glyphs of the placed kind per spawn slot, called once
+// per spawn, O(n)
 func (s *GlyphSystem) updateCensus() {
 	s.census = glyphCensus{}
+	scenery := s.statDriftScenery.Load()
 
 	var orphanGlyph int64
 
 	for _, glyphEntity := range s.world.Components.Glyph.Entities() {
 		if !s.world.Positions.HasPosition(glyphEntity) {
 			orphanGlyph++
+			continue
+		}
+		if s.isScenery(glyphEntity) != scenery {
 			continue
 		}
 
@@ -363,13 +394,19 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 			continue
 		}
 
-		// 3. Attach glyph components
+		// 3. Attach glyph components; text placed under a scenery drift is scenery for life
+		scenery := s.statDriftScenery.Load()
 		for _, gp := range s.placement {
 			s.world.Components.Glyph.SetComponent(gp.entity, component.GlyphComponent{
 				Rune:  gp.char,
 				Type:  glyphType,
 				Level: glyphLevel,
 			})
+			if scenery {
+				s.world.Components.Protection.SetComponent(gp.entity, component.ProtectionComponent{
+					Mask: component.ProtectScenery,
+				})
+			}
 		}
 		return true
 	}

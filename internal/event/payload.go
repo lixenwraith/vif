@@ -986,11 +986,13 @@ type WindStartPayload struct {
 
 // DriftStartPayload sets loose glyphs drifting along Direction (radians, as for
 // wind) at Speed cells/second, each level at its own parallax fraction and rows
-// scaled for the cell aspect. DurationMs 0 drifts until cancelled.
+// scaled for the cell aspect. DurationMs 0 drifts until cancelled. Scenery makes
+// the text placed while it drifts scenery (ProtectScenery) for life.
 type DriftStartPayload struct {
 	Direction  float64 `toml:"direction"`
 	Speed      float64 `toml:"speed"`
 	DurationMs int64   `toml:"duration_ms"`
+	Scenery    bool    `toml:"scenery"`
 }
 
 // --- Post-Process ---

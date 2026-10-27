@@ -41,6 +41,7 @@ type EnvironmentSystem struct {
 	statWindActive     *atomic.Bool
 	statDriftActive    *atomic.Bool
 	statDriftDirection *status.AtomicFloat
+	statDriftScenery   *atomic.Bool
 	toggle
 }
 
@@ -52,9 +53,11 @@ const driftCell = int64(1e6) * int64(time.Second)
 
 // driftState is the whole of a drift, and its D-19 record. Phase is each level's
 // sub-cell remainder per axis, so a layer steps on the same tick everywhere.
+// Scenery, left out while false, marks the text placed while it drifts as scenery.
 type driftState struct {
 	Active    bool                  `json:"active"`
 	Endless   bool                  `json:"endless"`
+	Scenery   bool                  `json:"scenery,omitempty"`
 	Speed     float64               `json:"speed"`
 	Direction float64               `json:"direction"`
 	Remaining time.Duration         `json:"remaining"`
@@ -70,6 +73,7 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 	s.statWindActive = world.Resources.Status.Bools.Get("environment.wind_active")
 	s.statDriftActive = world.Resources.Status.Bools.Get("environment.drift_active")
 	s.statDriftDirection = world.Resources.Status.Floats.Get("environment.drift_direction")
+	s.statDriftScenery = world.Resources.Status.Bools.Get("environment.drift_scenery")
 	return s
 }
 
@@ -292,6 +296,7 @@ func (s *EnvironmentSystem) startDrift(payload *event.DriftStartPayload) {
 	}
 	s.drift.Active = true
 	s.drift.Endless = payload.DurationMs == 0
+	s.drift.Scenery = payload.Scenery
 	s.drift.Speed = min(payload.Speed, parameter.DriftMaxSpeed)
 	s.drift.Direction = vmath.NormalizeAngle(payload.Direction)
 	s.drift.Remaining = time.Duration(payload.DurationMs) * time.Millisecond
@@ -392,15 +397,18 @@ func (s *EnvironmentSystem) shiftLayer(level component.GlyphLevel, stepX, stepY 
 }
 
 // stepLayer moves the collected layer one cell, removing outright the glyphs that
-// would leave the map, enter a wall, or find their cell full: drift is scenery
-// passing by, so leaving play costs and rewards nothing.
+// would leave the map, enter rock or a wall, which scenery passes behind, or find
+// their cell full: drift is scenery passing by, so leaving play costs and rewards
+// nothing.
 func (s *EnvironmentSystem) stepLayer(dx, dy int) {
 	positions := s.world.Positions
 	movers := s.driftLayer[:0]
 	s.driftDoomed = s.driftDoomed[:0]
 	for _, e := range s.driftLayer {
 		pos, _ := positions.GetPosition(e)
-		if positions.IsBlocked(pos.X+dx, pos.Y+dy, component.WallBlockSpawn) {
+		x, y := pos.X+dx, pos.Y+dy
+		if positions.IsOutOfBounds(x, y) || positions.HasBlockingWallAt(x, y, component.WallBlockSpawn) &&
+			!s.passesWalls(e) {
 			s.driftDoomed = append(s.driftDoomed, e)
 		} else {
 			movers = append(movers, e)
@@ -416,10 +424,17 @@ func (s *EnvironmentSystem) stepLayer(dx, dy int) {
 	s.driftLayer = movers
 }
 
+// passesWalls reports a glyph that drifts into rock and walls rather than leaving
+func (s *EnvironmentSystem) passesWalls(e core.Entity) bool {
+	prot, _ := s.world.Components.Protection.GetComponent(e)
+	return prot.Mask&component.ProtectFromWall != 0
+}
+
 func (s *EnvironmentSystem) publishStatus() {
 	s.statWindActive.Store(s.enabled && s.windActive)
 	s.statDriftActive.Store(s.enabled && s.drift.Active)
 	s.statDriftDirection.Set(s.drift.Direction)
+	s.statDriftScenery.Store(s.enabled && s.drift.Scenery)
 }
 
 func finite(v float64) bool {

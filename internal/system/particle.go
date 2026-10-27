@@ -491,12 +491,19 @@ func (s *ParticleSystem) vortex(p *event.ParticleVortexPayload) {
 	s.destroyBuf = s.destroyBuf[:0]
 	for _, e := range s.world.Components.Glyph.Entities() {
 		// Glyph mechanics are player-domain; a shared glyph is a gold member
-		if e.Domain() == core.DomainPlayer && !s.world.Components.Death.HasEntity(e) {
+		if e.Domain() == core.DomainPlayer && !s.world.Components.Death.HasEntity(e) && !s.behindWall(e) {
 			s.destroyBuf = append(s.destroyBuf, e)
 		}
 	}
 	event.EmitParticleDeath(s.world.Resources.Event.Queue, p.Behavior, s.destroyBuf...)
 	s.destroyBuf = s.destroyBuf[:0]
+}
+
+// behindWall reports a glyph standing in rock or a wall, as scenery may: it is
+// behind them, where no conversion reaches, and a particle born there would stay
+func (s *ParticleSystem) behindWall(e core.Entity) bool {
+	pos, ok := s.world.Positions.GetPosition(e)
+	return ok && s.world.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn)
 }
 
 // buttonRect places the button in slot on this map; ok is false when none is there
@@ -1082,7 +1089,7 @@ func (s *ParticleSystem) convertGlyphs(cursorX, cursorY int, area *blastArea, ma
 		}
 
 		glyphPos, ok := s.world.Positions.GetPosition(glyphEntity)
-		if !ok {
+		if !ok || s.behindWall(glyphEntity) {
 			continue
 		}
 		if area != nil {

@@ -31,8 +31,10 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 	return r
 }
 
-// Render draws each cell's top glyph, the one typing acts on, so a nearer drift
-// layer covers a farther one and a glyph its cell refused is not shown
+// Render draws each cell's top glyph, the one typing acts on or else the nearest
+// scenery, so a nearer drift layer covers a farther one and a glyph its cell refused
+// is not shown. Scenery in rock or a wall is behind it: they draw first and a glyph
+// over them would print on them, so it is not shown either.
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	glyphs := r.gameCtx.World.Components.Glyph
 	if glyphs.CountEntities() == 0 {
@@ -57,7 +59,8 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		if !visible {
 			return true
 		}
-		if !positions.TopGlyphIs(entity, pos.X, pos.Y) {
+		if !positions.TopGlyphIs(entity, pos.X, pos.Y) ||
+			positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn) {
 			return true
 		}
 

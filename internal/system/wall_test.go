@@ -273,6 +273,47 @@ func TestRockPressingACursorAgainstTheLeftEdgeCrushesIt(t *testing.T) {
 	}
 }
 
+// Rock and walls leave scenery where it stands, hidden behind them: arriving rock
+// removes a plain glyph and a new wall pushes one aside, while scenery stays put
+func TestRockAndWallsLeaveSceneryWhereItStands(t *testing.T) {
+	glyph := func(w *engine.World, x, y int, mask component.ProtectionFlags) core.Entity {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'g', Type: component.GlyphBlue})
+		if mask != component.ProtectNone {
+			w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: mask})
+		}
+		return e
+	}
+	stays := func(w *engine.World, e core.Entity, x, y int) {
+		t.Helper()
+		if pos, _ := w.Positions.GetPosition(e); !w.HasEntity(e) || pos != (component.PositionComponent{X: x, Y: y}) {
+			t.Fatalf("scenery at %v, want it left at %d,%d", pos, x, y)
+		}
+	}
+
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	caveChannel(w, walls, 10, 5)
+	plain := glyph(w, 9, 3, component.ProtectNone)
+	scenery := glyph(w, 9, 4, component.ProtectScenery)
+	walls.Update()
+	if w.HasEntity(plain) {
+		t.Fatal("arriving rock left a plain glyph")
+	}
+	stays(w, scenery, 9, 4)
+
+	w, walls, _ = newCaveWorld(t, 30, 12)
+	pushed := glyph(w, 5, 5, component.ProtectNone)
+	scenery = glyph(w, 5, 5, component.ProtectScenery)
+	walls.HandleEvent(event.GameEvent{Type: event.EventWallBatchSpawnRequest, Payload: &event.WallBatchSpawnRequestPayload{
+		BlockMask: component.WallBlockAll, Cells: []component.WallCellDef{{OffsetX: 5, OffsetY: 5}}}})
+	walls.Update()
+	if pos, _ := w.Positions.GetPosition(pushed); pos == (component.PositionComponent{X: 5, Y: 5}) {
+		t.Fatal("a new wall left a plain glyph in its cell")
+	}
+	stays(w, scenery, 5, 5)
+}
+
 // newBody is a flying composite, header at (x, y) with members over the w×h cells
 // from there, each a cell's centre
 func newBody(w *engine.World, x, y, width, height int) core.Entity {

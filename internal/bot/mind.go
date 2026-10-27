@@ -58,7 +58,7 @@ var targets = [targetCount]struct {
 	targetGlyph: {"glyph", func(m *mind, visit func(core.Entity)) {
 		c := m.ctx.World.Components
 		c.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
-			if g.Type != component.GlyphGold && !c.Member.HasEntity(e) {
+			if g.Type != component.GlyphGold && !c.Member.HasEntity(e) && m.ctx.World.Positions.IsTypeable(e) {
 				visit(e)
 			}
 			return true

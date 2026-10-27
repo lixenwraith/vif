@@ -179,11 +179,8 @@ func (s *MotionMarkerSystem) regenerateBaseMarkers(cursorX, cursorY int) {
 
 	bounds := s.world.GetPingAbsoluteBounds()
 
-	// Filter for glyphs
-	glyphStore := s.world.Components.Glyph
-	glyphFilter := func(e core.Entity) bool {
-		return glyphStore.HasEntity(e)
-	}
+	// Filter for the glyphs typing can act on
+	glyphFilter := s.world.Positions.IsTypeable
 
 	// Cardinal directions: Up, Down, Left, Right
 	directions := [][2]int{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
@@ -245,9 +242,7 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 	}
 
 	bounds := s.world.GetPingAbsoluteBounds()
-	glyphFilter := func(e core.Entity) bool {
-		return s.world.Components.Glyph.HasEntity(e)
-	}
+	glyphFilter := s.world.Positions.IsTypeable
 
 	directions := [][2]int{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 

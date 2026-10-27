@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/render"
@@ -35,6 +36,32 @@ func drawRock(game *engine.GameContext, r *WallRenderer) *render.RenderBuffer {
 	r.Render(render.RenderContext{MapWidth: config.MapWidth, MapHeight: config.MapHeight,
 		ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}, buf)
 	return buf
+}
+
+// TestSceneryPassesBehindRock: the glyph renderer draws scenery in the open and none
+// where rock stands, since rock draws first and a glyph would print on it
+func TestSceneryPassesBehindRock(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	config := w.Resources.Config
+	cols := make([]engine.RockColumn, config.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Ceil: 3, Floor: config.MapHeight}
+	}
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	for _, at := range []component.PositionComponent{{X: 5, Y: 1}, {X: 5, Y: 6}} {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, at)
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 's', Type: component.GlyphBlue, Level: component.GlyphNormal})
+		w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectScenery})
+	}
+
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+	NewGlyphRenderer(game).Render(render.RenderContext{MapWidth: config.MapWidth, MapHeight: config.MapHeight,
+		ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}, buf)
+	if hidden, shown := buf.CellAt(5, 1).Rune, buf.CellAt(5, 6).Rune; hidden != 0 || shown != 's' {
+		t.Fatalf("drew %q in rock and %q in the open, want nothing and 's'", hidden, shown)
+	}
 }
 
 // TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll: a rock field in stone draws

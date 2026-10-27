@@ -346,6 +346,44 @@ func TestTopGlyphIsSharedThenNearestThenLowest(t *testing.T) {
 	}
 }
 
+// TestTopGlyphPassesOverScenery: typing's top glyph is the top typeable one, of any
+// mask but scenery's, and the one drawn is that over any scenery, or the nearest
+// scenery where only scenery stands
+func TestTopGlyphPassesOverScenery(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+	at := component.PositionComponent{X: 7, Y: 2}
+	glyph := func(level component.GlyphLevel, mask component.ProtectionFlags) core.Entity {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, at)
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'x', Level: level})
+		w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: mask})
+		return e
+	}
+	drawn := func(want core.Entity) {
+		t.Helper()
+		for _, e := range w.Positions.GetAllEntityAt(at.X, at.Y) {
+			if got := w.Positions.TopGlyphIs(e, at.X, at.Y); got != (e == want) {
+				t.Fatalf("TopGlyphIs(%v) = %v, want %v drawn", e, got, want)
+			}
+		}
+	}
+
+	far := glyph(component.GlyphDark, component.ProtectScenery)
+	drawn(far)
+	near := glyph(component.GlyphBright, component.ProtectScenery)
+	drawn(near)
+	if _, ok := w.Positions.TopGlyphAt(at.X, at.Y); ok || w.Positions.IsTypeable(near) {
+		t.Fatal("typing found scenery")
+	}
+	typeable := glyph(component.GlyphDark, component.ProtectFromDelete|component.ProtectFromParticle)
+	glyph(component.GlyphBright, component.ProtectScenery)
+	if top, _ := w.Positions.TopGlyphAt(at.X, at.Y); top != typeable || !w.Positions.IsTypeable(typeable) {
+		t.Fatalf("top glyph = %v, want the typeable %v under nearer scenery", top, typeable)
+	}
+	drawn(typeable)
+}
+
 // TestGridOccupiedListIsTheCellsHoldingEntities holds the index a copy and the gauges
 // read in place of the map: every listed cell holds something, every cell holding
 // something is listed once at its slot, and the stats read off the list are the
