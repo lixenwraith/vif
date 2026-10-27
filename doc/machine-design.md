@@ -550,7 +550,7 @@ per instance:
   over the in-place helpers of `pkg/vmath/physics` the code species use
   ([generic kinetic §8](generic-kinetic.md#8-feasible-pseudo-system-design)).
 - `Integrate` ends every tick unless `Freeze` ran: `IntegrateWithBounceStats` over
-  the footprint with `parameter.BehaviorRestitution`, recording `HitWall` and the
+  the footprint with the prototype's restitution, recording `HitWall` and the
   bounce rows; the members follow, and moving sweeps nothing.
 
 Each verb fixes its own event routing, so an author never names a domain:
@@ -595,9 +595,12 @@ smaller part of it.
 - **Prototype** (`component.BehaviorPrototype`, plain data in
   `Resources.Behaviors`). Footprint (at most `BehaviorFootprintMax` cells each
   way) and header offset, hit points, the combat row it fights as (`swarm` or
-  `quasar`, the unit composites whose damage lands on their header), homing
-  profile (`profile.Homing`, by name), soft-collision mass, the code species whose
-  drop tiers it rolls, contact damage, lifetime, its look and the pattern period.
+  `quasar`, the unit composites whose damage lands on their header), its physics
+  (a homing profile and a restitution, `profile.BehaviorHoming` and
+  `parameter.BehaviorRestitution`, the swarm's chase, with each key of the program's
+  `[prototype.physics]` replacing its value), soft-collision mass, the code species
+  whose drop tiers it rolls, contact damage, lifetime, its look and the pattern
+  period.
   The look (`component.Look`) is the frames cell by cell, each cell a glyph and
   entries of the prototype's fg and bg palettes with its attributes, plus the
   colour of a glyph without an entry and an optional console pair;

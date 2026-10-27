@@ -25,7 +25,6 @@ height = 2
 header = { x = 1, y = 0 }
 hp = 40
 combat = "swarm"
-homing = "swarm"
 mass = 2.0
 drops = "swarm"
 contact = { energy = 1000, heat = 10 }

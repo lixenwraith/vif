@@ -39,13 +39,14 @@ type BehaviorPrototype struct {
 	Width, Height    int // footprint in cells
 	HeaderX, HeaderY int // phantom head offset from the top-left
 
-	HitPoints int
-	Combat    CombatEntityType      // the attack-matrix row it fights as
-	Homing    physics.HomingProfile // what its homing steers by
-	Mass      float64               // soft-collision mass; 0 takes no soft collision or flocking
-	Drops     SpeciesType           // the code species whose drop tiers it rolls; SpeciesNone drops nothing
-	Contact   CursorDamage          // what touching it costs a cursor
-	Lifetime  time.Duration         // 0 = lives until killed or cancelled
+	HitPoints   int
+	Combat      CombatEntityType      // the attack-matrix row it fights as
+	Homing      physics.HomingProfile // what its homing steers by
+	Restitution float64               // velocity it keeps on a wall or boundary bounce
+	Mass        float64               // soft-collision mass; 0 takes no soft collision or flocking
+	Drops       SpeciesType           // the code species whose drop tiers it rolls; SpeciesNone drops nothing
+	Contact     CursorDamage          // what touching it costs a cursor
+	Lifetime    time.Duration         // 0 = lives until killed or cancelled
 
 	Look    Look          // its frames, cell by cell
 	Pattern time.Duration // how long each frame shows

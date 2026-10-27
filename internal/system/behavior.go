@@ -410,7 +410,7 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 		p.HeaderX, p.HeaderY,
 		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX)+1,
 		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY)+1,
-		parameter.BehaviorRestitution,
+		p.Restitution,
 		wallCheck,
 	)
 	s.motion.Record(motion)

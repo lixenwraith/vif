@@ -39,12 +39,15 @@ var SnakeHoming = physics.HomingProfile{
 	DeadZone:         parameter.SnakeDeadZone,
 }
 
-// Homing names the species profiles a behavior program's prototype may steer by
-var Homing = map[string]*physics.HomingProfile{
-	"drain":  &DrainHoming,
-	"quasar": &QuasarHoming,
-	"snake":  &SnakeHoming,
-	"swarm":  &SwarmHoming,
+// BehaviorHoming is a data species' homing before its program's physics keys
+// replace any of it
+var BehaviorHoming = physics.HomingProfile{
+	BaseSpeed:        parameter.BehaviorSpeed,
+	HomingAccel:      parameter.BehaviorAccel,
+	Drag:             parameter.BehaviorDrag,
+	ArrivalRadius:    parameter.BehaviorArrivalRadius,
+	ArrivalDragBoost: parameter.BehaviorArrivalDrag,
+	DeadZone:         parameter.BehaviorDeadZone,
 }
 
 // LootHoming: aggressive arrival drag kills orbital momentum for reliable capture.

@@ -861,7 +861,6 @@ height = 2
 header = { x = 1, y = 0 }           # Header cell inside the footprint
 hp = 40
 combat = "swarm"                    # Attack-matrix row it fights as: swarm or quasar
-homing = "swarm"                    # Profile Home steers by: drain, quasar, snake or swarm
 mass = 2.0                          # Soft collision and flocking; 0 takes neither (optional)
 drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
@@ -876,6 +875,15 @@ fg = [{ r = 240, g = 160, b = 60 }, { r = 160, g = 80, b = 20 }]  # Palettes, at
 bg = []
 fg256 = 214                         # The console pair, together or not at all (optional)
 bg256 = 52
+
+[prototype.physics]                 # How it flies; each key replaces its default (optional)
+speed = 12.0                        # Cruise, cells/s: Home brakes above it
+accel = 42.0                        # Toward the target, cells/s²
+drag = 0.94                         # Braking above the cruise, per second
+arrival_radius = 2.0                # Cells from the target where arrival steering starts
+arrival_drag = 2.0                  # Drag's added multiple at the target; needs arrival_radius
+dead_zone = 0.5                     # Snap radius at the target once slow
+restitution = 0.5                   # Speed kept off a wall or the map's edge, 0 to 1
 
 [states.Strike]
 duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
@@ -908,6 +916,13 @@ target = "Roam"
   palette, and shows a hit by reversing the glyph; without the pair it draws the
   palettes' nearest colours. The hit flash, then `Enraged`, tints every glyph. The
   eye's types are drawn from the same look.
+- The physics: a key `[prototype.physics]` leaves out keeps its default, the
+  `Behavior*` values in `internal/parameter`: the swarm's chase (speed 8, accel 6,
+  drag 2), no arrival steering, the homing's half-cell snap and restitution 0.5.
+  `Home` steers by all but the restitution, which every move bounces by. Each value
+  is finite and at least 0, accel above it, and restitution at most 1. Vanguard's
+  construct, scarab and storm eye give the drain's, the snake's and the quasar's
+  values, and the invader flies the default.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
   `HitWall` reads this step's move). A global edge has none.
@@ -945,7 +960,7 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
   swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local
   events).
-- Sustained: `Home` (steer to the target by the homing profile), `ChargeToStored`
+- Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),

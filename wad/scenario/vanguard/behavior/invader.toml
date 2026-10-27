@@ -5,14 +5,14 @@
 initial = "Chase"
 suspend = { guard = "Stunned" }
 
-# A middleweight: hit points times chase speed is the raid's 96
+# A middleweight: hit points times chase speed is the raid's 96. With no
+# [prototype.physics] it flies the default, the swarm's chase
 [prototype]
 width = 4
 height = 2
 header = { x = 1, y = 0 }
 hp = 12
 combat = "swarm"
-homing = "swarm"
 mass = 2.0
 contact = { energy = 1000, heat = 10 }
 pattern_ms = 500

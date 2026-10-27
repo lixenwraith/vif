@@ -12,6 +12,8 @@ import (
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/profile"
 	"github.com/lixenwraith/vif/pkg/machine"
 )
 
@@ -25,7 +27,6 @@ height = 2
 header = { x = 1, y = 0 }
 hp = 40
 combat = "swarm"
-homing = "swarm"
 mass = 2.0
 drops = "swarm"
 contact = { energy = 1000, heat = 10 }
@@ -183,6 +184,27 @@ func TestAPrototypeLooksAsItsFramesSay(t *testing.T) {
 	}
 }
 
+// A program's physics keys replace the default one by one: a program naming none
+// flies the default, and one naming a few keeps the rest of it
+func TestAProgramsPhysicsKeysReplaceTheDefaultOneByOne(t *testing.T) {
+	src := strings.Replace(warden, "mass = 2.0", "mass = 2.0\nphysics = { speed = 12, dead_zone = 0.25, restitution = 0.3 }", 1)
+	set, err := Compile(testVocabulary(), map[string]map[string]any{"plain": parse(t, warden), "tuned": parse(t, src)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, tuned := set.Prototypes()[0], set.Prototypes()[1]
+	if plain.Homing != profile.BehaviorHoming || plain.Restitution != parameter.BehaviorRestitution {
+		t.Errorf("no physics keys fly %+v at restitution %v, want the default %+v at %v",
+			plain.Homing, plain.Restitution, profile.BehaviorHoming, parameter.BehaviorRestitution)
+	}
+	want := profile.BehaviorHoming
+	want.BaseSpeed, want.DeadZone = 12, 0.25
+	if tuned.Homing != want || tuned.Restitution != 0.3 {
+		t.Errorf("speed 12, dead_zone 0.25 and restitution 0.3 fly %+v at restitution %v, want %+v at 0.3",
+			tuned.Homing, tuned.Restitution, want)
+	}
+}
+
 // A step runs the program's edges in the machine's phases with the test verbs:
 // each line is what one step ran and the state it ended in. Every entry, the
 // start's included, ends with the host's entered hook.
@@ -249,7 +271,12 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"trigger", `trigger = "AfterTick"`, `trigger = "OnTick"`, "program 'warden': state 'Strike': transitions[1]: trigger 'OnTick' is not Timeout, Tick or AfterTick", 1},
 		{"fallback", `target = ["Strike", "Roam"]`, `target = ["Strike"]`, `program 'warden': machine: timeout edge 1 from state "Wind": every candidate can fail and no fallback is declared`, 1},
 		{"combat row", `combat = "swarm"`, `combat = "drain"`, `program 'warden': prototype: combat "drain" is not one of swarm, quasar`, 1},
-		{"homing", `homing = "swarm"`, `homing = "bee"`, `program 'warden': prototype: homing "bee" is not one of drain, quasar, snake, swarm`, 1},
+		{"homing name", `mass = 2.0`, "mass = 2.0\nhoming = \"swarm\"", `program 'warden': unknown key "prototype.homing"`, 1},
+		{"physics key", `mass = 2.0`, "mass = 2.0\nphysics = { sped = 9.0 }", `program 'warden': unknown key "prototype.physics.sped"`, 1},
+		{"negative physics", `mass = 2.0`, "mass = 2.0\nphysics = { drag = -1.0 }", `program 'warden': prototype: physics: drag -1 is negative`, 1},
+		{"no accel", `mass = 2.0`, "mass = 2.0\nphysics = { accel = 0.0 }", `program 'warden': prototype: physics: accel 0 never homes`, 1},
+		{"restitution", `mass = 2.0`, "mass = 2.0\nphysics = { restitution = 1.5 }", `program 'warden': prototype: physics: restitution 1.5 keeps more speed than a bounce met`, 1},
+		{"arrival drag alone", `mass = 2.0`, "mass = 2.0\nphysics = { arrival_drag = 2.0 }", `program 'warden': prototype: physics: arrival_drag 2 ramps in over an arrival_radius, and that is 0`, 1},
 		{"drops", `drops = "swarm"`, `drops = "tower"`, `program 'warden': prototype: drops "tower": that species drops nothing`, 1},
 		{"glyph width", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀", "▀▄▄▀"] }, {`, `program 'warden': prototype: frames[0]: glyphs[0] "▄▀▀" has 3 cells, want width 4`, 1},
 		{"frame height", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀▄"] }, {`, `program 'warden': prototype: frames[0]: glyphs has 1 rows, want height 2`, 1},

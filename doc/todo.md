@@ -41,8 +41,8 @@ the eye types balance theirs (`parameter.EyeTypeTable`): the invader 12 at the
 swarm's 8, the scarab 8 at the snake's 12, the construct and the storm eye 48 at
 the drain's and the quasar's 2, the slow two carrying their threat in a long lock
 and charge. Play them at the faster scroll and in the jagged cave, against a gun of
-one shot forward, and retune hit points, lock and charge per type; the speeds can
-only be the four homing rows until a prototype tunes its own (machine follow-ups).
+one shot forward, and retune hit points, lock and charge per type, and its speed,
+acceleration and drag in its `[prototype.physics]`.
 Candidates beside them, from `sandbox/swarm` by ID: Interceptor (1) and Bat-Wing
 (12) for their wings, Chevron (18) mirrored to `<<<<` for a fast type, Hover-Tank
 (7), and the flame and frost eyes; `BehaviorProgramsMax` (8) holds four more. The

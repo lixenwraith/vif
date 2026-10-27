@@ -516,7 +516,7 @@ rock fills it, each of a type drawn at random. Every type is a program of the
 scenario's own (`behavior/<type>.toml`), the template for a species of one's own
 ([FSM reference](fsm-reference.md#behavior-programs)), running one cycle, the
 swarm's chase, lock, charge and teleport (`RaiderStates` in `macros.toml`), with
-its own look, hit points, homing and timings, hit points times chase speed alike:
+its own look, hit points, physics and timings, hit points times chase speed alike:
 the invader at the swarm's pace, the scarab fast and fragile (8 hit points, a
 1.2-second lock), the construct slow and armoured (48, a 2.5-second lock and a long
 charge), and the storm eye, the eye species' storm look on a 5×3 body (48). A
