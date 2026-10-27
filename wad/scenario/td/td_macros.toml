@@ -65,9 +65,9 @@ body = [
 
 [macros.Slain]
 doc = "Go to `target` when `species` dies, or once status `active` reports it gone without a kill event (it left the map)."
-params = { species = "int", active = "string", target = "string" }
+params = { species = "string", active = "string", target = "string" }
 body = [
-    { trigger = "EventSpeciesKilled", target = "${target}", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = "${species}" } },
+    { trigger = "EventSpeciesKilled", target = "${target}", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["${species}"] } },
     { trigger = "Tick", target = "${target}", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusBoolEquals", args = { key = "${active}", value = false } },
@@ -97,10 +97,10 @@ body = { trigger = "Tick", target = "${target}", guard = "And", guard_args = { g
 
 [macros.SpawnAwait]
 doc = "Emit `request`; once `species` exists go to `next` with its entity in `capture`, and on `refused` or after `timeout_ms` run `fallback_actions` and go to `fallback`."
-params = { request = "table", species = "int", capture = "string", next = "string", refused = "string", fallback = "string", fallback_actions = "array", timeout_ms = "int" }
+params = { request = "table", species = "string", capture = "string", next = "string", refused = "string", fallback = "string", fallback_actions = "array", timeout_ms = "int" }
 defaults = { fallback_actions = [], timeout_ms = 500 }
 body = { parent = "Root", on_enter = ["${request}"], transitions = [
-    { trigger = "EventSpeciesCreated", target = "${next}", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = "${species}" }, capture_vars = { entity = "${capture}" } },
+    { trigger = "EventSpeciesCreated", target = "${next}", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["${species}"] }, capture_vars = { entity = "${capture}" } },
     { trigger = "${refused}", target = "${fallback}", actions = "${fallback_actions}" },
     { trigger = "Tick", target = "${fallback}", guard = "StateTimeExceeds", guard_args = { ms = "${timeout_ms}" }, actions = "${fallback_actions}" },
 ] }
@@ -109,7 +109,7 @@ body = { parent = "Root", on_enter = ["${request}"], transitions = [
 doc = "Spawn tower `id` at (x, y), feeding target group `group`."
 params = { id = "string", x = "int", y = "int", group = "int", next = "string", fallback = "string", fallback_actions = "array" }
 defaults = { fallback_actions = [] }
-body = { macro = "SpawnAwait", species = 8, capture = "${id}_anchor", next = "${next}", refused = "EventTowerSpawnFailed", fallback = "${fallback}", fallback_actions = "${fallback_actions}", request = { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = "${x}", y = "${y}", target_group_id = "${group}" } } }
+body = { macro = "SpawnAwait", species = "tower", capture = "${id}_anchor", next = "${next}", refused = "EventTowerSpawnFailed", fallback = "${fallback}", fallback_actions = "${fallback_actions}", request = { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = "${x}", y = "${y}", target_group_id = "${group}" } } }
 
 [macros.QuadrantTower]
 doc = "A forward tower whose failure is not fatal: unspawned, its group feeds central tower `cover` instead."
@@ -119,7 +119,7 @@ body = { macro = "Tower", id = "${id}", x = "${x}", y = "${y}", group = "${group
 [macros.Pylon]
 doc = "Spawn a pylon at (x, y) into gw_anchor and go to `attach`, or skip to `next` when it cannot spawn."
 params = { x = "int", y = "int", attach = "string", next = "string" }
-body = { macro = "SpawnAwait", species = 5, capture = "gw_anchor", next = "${attach}", refused = "EventPylonSpawnFailed", fallback = "${next}", request = { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = "${x}", y = "${y}" } } }
+body = { macro = "SpawnAwait", species = "pylon", capture = "gw_anchor", next = "${attach}", refused = "EventPylonSpawnFailed", fallback = "${next}", request = { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = "${x}", y = "${y}" } } }
 
 [macros.Gateway]
 doc = "Attach an eye gateway feeding `group` to the pylon in gw_anchor, count it in `count`, go to `next`. Timing defaults to a corner pylon's."

@@ -1,0 +1,43 @@
+# The invader: the raid"s line trooper, after the arcade"s. It flies the raiders'
+# one cycle (RaiderStates in ../macros.toml) at the swarm's chase and timings, its
+# eyes lit over a green body that waves its arms. doc/fsm-reference.md lists every
+# key and verb.
+initial = "Chase"
+suspend = { guard = "Stunned" }
+
+# A middleweight: hit points times chase speed is the raid's 96
+[prototype]
+width = 4
+height = 2
+header = { x = 1, y = 0 }
+hp = 12
+combat = "swarm"
+homing = "swarm"
+mass = 2.0
+contact = { energy = 1000, heat = 10 }
+pattern_ms = 500
+fg = [{ r = 80, g = 230, b = 80 }, { r = 255, g = 240, b = 60 }, { r = 40, g = 150, b = 40 }]
+fg256 = 10                          # bright green, on a console's black
+bg256 = 0
+
+# Body 0, eyes 1, legs 2; a quote and a backslash take a backslash, so the first
+# frame reads ' oo ' over '/""\' and the second '\oo/' over ' "" '
+[[prototype.frames]]
+glyphs = [" oo ", "/\"\"\\"]
+fg     = [" 11 ", "0220"]
+attr   = [" BB ", "    "]
+
+[[prototype.frames]]
+glyphs = ["\\oo/", " \"\" "]
+fg     = ["0110", " 22 "]
+attr   = [" BB ", "    "]
+
+[states]
+macro = "RaiderStates"
+chase_ms = 5000
+lock_ms = 2000
+charge_ms = 800
+beam_ms = 400
+
+[[global]]
+macro = "RaiderStun"

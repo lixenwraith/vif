@@ -3,8 +3,10 @@ package manifest
 import (
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/fsm"
 )
 
 // scratchWorld builds a world with resources but no services, enough to
@@ -35,6 +37,51 @@ func TestActiveSystemsMatchRuntimeNames(t *testing.T) {
 	for i, sys := range built {
 		if sys.Name() != declared[i] {
 			t.Errorf("manifest key %q but System.Name() is %q", declared[i], sys.Name())
+		}
+	}
+}
+
+// TestASpeciesGuardNamesItsSpecies: PayloadSpeciesIn takes code species and the
+// scenario's programs by name, a program as the species its compile gave it, and a
+// name no species holds fails the load
+func TestASpeciesGuardNamesItsSpecies(t *testing.T) {
+	programs := []component.BehaviorPrototype{
+		{Name: "construct", Species: component.SpeciesDataFirst},
+		{Name: "invader", Species: component.SpeciesDataFirst + 1},
+	}
+	load := func(names string) (*fsm.Machine[*engine.World], error) {
+		m := fsm.NewMachine[*engine.World]()
+		RegisterFSMComponents(m, programs)
+		return m, m.LoadScenario([]byte(`
+[regions.r]
+initial = "Wait"
+
+[states.Wait]
+parent = "Root"
+transitions = [{ trigger = "EventSpeciesKilled", target = "Hit", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ` + names + ` } }]
+
+[states.Hit]
+parent = "Root"
+`))
+	}
+	if _, err := load(`["invader", "raider"]`); err == nil {
+		t.Fatal("a name no species holds loaded")
+	}
+	w := scratchWorld(t)
+	for _, c := range []struct {
+		species component.SpeciesType
+		hit     bool
+	}{{component.SpeciesStorm, true}, {component.SpeciesDataFirst + 1, true}, {component.SpeciesDataFirst, false}, {component.SpeciesSwarm, false}} {
+		m, err := load(`["storm", "invader"]`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Init(w); err != nil {
+			t.Fatal(err)
+		}
+		m.HandleEvent(w, event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{Species: c.species}})
+		if state, _, _ := m.GetActiveRegionTelemetry(); (state == "Hit") != c.hit {
+			t.Fatalf("species %d left the guard in %s, want a hit %v", c.species, state, c.hit)
 		}
 	}
 }

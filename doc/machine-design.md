@@ -556,14 +556,16 @@ system's scaffold (§6.4), not in the vocabulary.
 - **Compiled once per run.** `App.readScenario` compiles the programs
   (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
   `resource.LoadScenario`, so a bad program fails as a bad scenario does, before
-  any service starts. `initWorld` puts the prototypes in `world.Resources.Behaviors`
+  any service starts, and before the scenario machine loads, whose species names
+  resolve against the prototypes. `initWorld` puts the prototypes in `world.Resources.Behaviors`
   before the systems are built, so loot, soft collision and `NewMetaSystem` size
   their data rows and the renderers read glyphs. The compiled graphs go to
   `system.NewBehaviorSystem(world, set)`, which the app adds beside `MetaSystem`
   (`manifest.ContextSystems`), because the generator's constructors take only a
   world.
 - **`-check` compiles every program.** `resource.ValidateScenario` runs the same
-  compile, so an unknown name or a bad argument fails validation, not play, and a
+  compile, then the machine load, so an unknown name or a bad argument fails
+  validation, not play, and a
   mid-run scenario change refuses a bad program before anything is torn down.
   `-check` prints `behaviors ok: <n> (<names>)`.
 
@@ -577,15 +579,21 @@ smaller part of it.
   way) and header offset, hit points, the combat row it fights as (`swarm` or
   `quasar`, the unit composites whose damage lands on their header), homing
   profile (`profile.Homing`, by name), soft-collision mass, the code species whose
-  drop tiers it rolls, contact damage, lifetime, glyph frames, colour and pattern
-  period. It names rows of per-kind tables that are code, so a new attack profile,
+  drop tiers it rolls, contact damage, lifetime, its look and the pattern period.
+  The look (`component.Look`) is the frames cell by cell, each cell a glyph and
+  entries of the prototype's fg and bg palettes with its attributes, plus the
+  colour of a glyph without an entry and an optional console pair;
+  `visual.CompileLook` builds it from the authored rows, the eye's types' art
+  included. It names rows of per-kind tables that are code, so a new attack profile,
   beam style or drop table is a code change
   ([todo](todo.md#give-data-species-attack-beam-and-drop-rows-of-their-own)).
 - **Species IDs.** `component.SpeciesType` keeps its code enum, ending at
   `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
   `SpeciesMax = SpeciesCount + parameter.BehaviorProgramsMax` bound the data
   range. Programs take `SpeciesDataFirst + i` in sorted-name order, and a scenario
-  with more fails to compile. A name is `[a-z][a-z0-9_]*` of at most
+  with more fails to compile. A scenario's guard names a species
+  (`PayloadSpeciesIn`): the FSM bridge resolves it at load against
+  `SpeciesNames` and the compiled prototypes, so a new program moves no guard. A name is `[a-z][a-z0-9_]*` of at most
   `BehaviorNameMax` bytes, neither a code species' name nor `total` or
   `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`.
 - **Species tables.** Every table indexed by `SpeciesType` is `[SpeciesMax]`, so a
@@ -607,8 +615,9 @@ smaller part of it.
   identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
   cancel; an empty program cancels every data species). A program no entry
   defines is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
-  immediate, as the swarm's and the quasar's are; `EventFuseBehaviorRequest` beams
-  one in (§4.4). A scenario registers a data species with genetics through
+  immediate, as the swarm's and the quasar's are, its footprint searched over the
+  whole map as a beam's is, since a scenario names a cell blind to the walls;
+  `EventFuseBehaviorRequest` beams one in (§4.4). A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and the
@@ -619,8 +628,11 @@ smaller part of it.
   the count.
 - **Renderer.** `BehaviorRenderer` (`renderer/behavior.go`,
   `render.PriorityBehavior` after `PrioritySwarm`) draws each header's members
-  from the prototype's frame at `PatternIndex`: the hit flash, then enraged, then
-  the prototype's colour. The hit-flash pulse is `hitFlashColor`, one function for
+  from the look's frame at `PatternIndex`, each cell its background and its glyph
+  in its palette entry, else the look's colour; the hit flash, then enraged, tints
+  every glyph. A 256-colour host draws a look with a console pair in that pair and
+  shows a hit by reversing the glyph. `lookPainter` draws the eye's cells too, so
+  the two cannot drift. The hit-flash pulse is `hitFlashColor`, one function for
   every species renderer.
 - **Generic species system.** `BehaviorSystem` runs every data species: hit
   points, lifetime, the pattern cycle (held by a stun), `Step`, the flags written

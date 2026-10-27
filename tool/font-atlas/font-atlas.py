@@ -11,8 +11,9 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-# The Go packages that draw glyphs; internal/asset/font_test.go scans the same
-# set, so a rune added anywhere else needs both lists extended.
+# The Go packages that draw glyphs, and the shipped scenarios, whose programs'
+# frames and messages draw too; internal/asset/font_test.go scans the same set, so
+# a rune added anywhere else needs both lists extended.
 SCAN_DIRS = (
     "internal/parameter/visual",
     "internal/render/renderer",
@@ -23,11 +24,34 @@ SCAN_DIRS = (
     "internal/asset",
     "internal/prof",
 )
+SCAN_TOML = (
+    "wad/scenario",
+    "internal/asset/scenario",
+)
+
+
+def toml_code(line: str) -> str:
+    """A TOML line up to its comment, a # outside a string."""
+    quote, escaped = "", False
+    for i, ch in enumerate(line):
+        if escaped:
+            escaped = False
+        elif quote == '"' and ch == "\\":
+            escaped = True
+        elif quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "#":
+            return line[:i]
+    return line
 
 
 def code_runes(root: Path) -> set[str]:
     """Every printable ASCII rune, plus every non-ASCII rune in the scanned Go
-    sources outside line comments and test files."""
+    sources outside line comments and test files, and in the shipped scenarios'
+    TOML outside comments."""
     runes = {chr(c) for c in range(0x20, 0x7F)}
     for rel in SCAN_DIRS:
         for path in sorted((root / rel).glob("*.go")):
@@ -37,6 +61,10 @@ def code_runes(root: Path) -> set[str]:
                 if line.lstrip().startswith("//"):
                     continue
                 runes.update(ch for ch in line if ord(ch) > 0x7F)
+    for rel in SCAN_TOML:
+        for path in sorted((root / rel).rglob("*.toml")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                runes.update(ch for ch in toml_code(line) if ord(ch) > 0x7F)
     return runes
 
 

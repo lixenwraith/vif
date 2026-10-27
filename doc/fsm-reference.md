@@ -151,12 +151,9 @@ Extract event payload fields into FSM variables when a transition matches:
 
 ```toml
 { trigger = "EventSpeciesCreated", target = "NextState",
-  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] },
   capture_vars = { entity = "pylon_entity" } }
 ```
-
-`species` uses the `component.SpeciesType` values: drain `1`, swarm `2`,
-quasar `3`, storm `4`, pylon `5`, snake `6`, eye `7`, tower `8`, and kraken `9`.
 
 `capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name. Captured values are set **before** the target state's `on_enter` executes.
 
@@ -168,7 +165,7 @@ Combine with guards and payload injection:
 ```toml
 # Capture a pylon from the shared species response, then inject it into a follow-up request
 { trigger = "EventSpeciesCreated", target = "AttachGateway",
-  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] },
   capture_vars = { entity = "anchor_id" } }
 # In AttachGateway on_enter:
 { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0 }, payload_vars = { anchor_entity = "anchor_id" } }
@@ -201,7 +198,7 @@ events without leaving the current state:
 [states.TowerCycle]
 transitions = [
     { trigger = "EventSpeciesKilled", internal = true,
-      guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, actions = [
+      guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] }, actions = [
         { action = "IncrementVar", payload = { name = "pylons_dead" } },
     ] },
 ]
@@ -614,7 +611,7 @@ struct tag first, then Go field name — identical to `capture_vars` and
 ### PayloadIntCompare
 
 ```toml
-{ trigger = "EventSpeciesKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 } }
+{ trigger = "EventSpeciesKilled", target = "Shot", guard = "PayloadIntCompare", guard_args = { field = "killer_entity", op = "neq", value = 0 } }
 ```
 
 ### PayloadIntCompareVar
@@ -677,6 +674,18 @@ in the row, counted from 1, with its sound; a spawn on a key that already has a
 button is refused. A button shows its key in the splash font once it is about ten
 cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 `wad/scenario/simon` is the worked example.
+
+### PayloadSpeciesIn
+
+```toml
+{ trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] } }
+```
+
+Passes when the payload's species is one of `names`: a code species (`drain`,
+`swarm`, `quasar`, `storm`, `pylon`, `snake`, `eye`, `tower`, `kraken`) or one of
+the scenario's behavior programs, each resolved at load. A program's number moves
+with every name that sorts before it, so a guard names it; a name no species holds
+fails the load.
 
 ### PayloadExists
 
@@ -805,22 +814,26 @@ A behavior program defines a species the scenario brings: its body in
 `[behaviors]` table lists at most eight, each in its own file, which is read,
 expanded against the entry's macros and carried, digested and sent to a joiner as
 the entry's other files are, or inline as the table itself. Programs take species
-IDs 10 to 17 in sorted-name order, the `species` a payload guard on
-`EventSpeciesCreated` or `EventSpeciesKilled` compares. A name is
+IDs 10 to 17 in sorted-name order, so a guard on `EventSpeciesCreated` or
+`EventSpeciesKilled` names its program (`PayloadSpeciesIn`). A name is
 `[a-z][a-z0-9_]*` of at most 24 bytes, neither a code species' name nor `total` or
 `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`
 ([Telemetry](telemetry-reference.md)).
 
 A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
-x, y }`, its header at that cell or the nearest place its footprint fits, or
-beams one in with `EventFuseBehaviorRequest { program, x, y }`: the fuse plays a
-one-second swarm beam over the nearest place its footprint fits, searching the
+x, y }`, its header at that cell or the nearest place its footprint fits, searched
+over the whole map; a request naming no program raises nothing
+(`behavior.unknown_program_rejects`), nor one finding no room
+(`behavior.<name>.spawn_failures`). Or it beams one in with
+`EventFuseBehaviorRequest { program, x, y }`: the fuse plays a one-second swarm beam over the nearest place its footprint fits, searching the
 whole map from that cell, and spawns the instance as it ends; a request naming no
 program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
 without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
 instances and the beams still bringing them, every program's when it names none;
-`wad/scenario/warden` is the worked example, and `wad/scenario/vanguard`'s
-raider runs the swarm's attack cycle as a program. `-check` compiles every
+`wad/scenario/warden` is the worked example, beamed in, and
+`wad/scenario/vanguard`'s raider types, spawned directly, fly the swarm's attack
+cycle as four programs over one macro (`RaiderStates` in its `macros.toml`), each
+program's `[states]` an invocation of it with the type's timings. `-check` compiles every
 program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
 and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
 'Freez'`).
@@ -840,9 +853,16 @@ mass = 2.0                          # Soft collision and flocking; 0 takes neith
 drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
-glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]  # Frames, each height rows of width cells
+frames = [                          # Each frame a string per row, height rows of width cells
+    { glyphs = ["▄▀▀▄", "▀▄▄▀"], fg = ["0110", "1001"], attr = ["B  B", "    "] },
+    { glyphs = ["▀▄▄▀", "▄▀▀▄"] },  # fg, bg and attr are each optional
+]
 pattern_ms = 500                    # Frame period; required with two frames or more
-color = { r = 200, g = 120, b = 40 }
+color = { r = 200, g = 120, b = 40 }  # A glyph's without an fg entry
+fg = [{ r = 240, g = 160, b = 60 }, { r = 160, g = 80, b = 20 }]  # Palettes, at most 16 each (optional)
+bg = []
+fg256 = 214                         # The console pair, together or not at all (optional)
+bg256 = 52
 
 [states.Strike]
 duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
@@ -863,6 +883,15 @@ guard = "Stunned"
 target = "Roam"
 ```
 
+- The look: a frame's `glyphs` row draws a cell's glyph, a space drawing none;
+  `fg` and `bg` rows give each cell an entry of the prototype's palette as a hex
+  digit (`0`-`f`), a space for the prototype's `color` and for no background; an
+  `attr` row gives `B` (bold), `D` (dim) or a space. A 256-colour host draws a
+  look with `fg256` and `bg256` in that pair alone, every glyph in the one and
+  every background in the other, which reads on every console palette, and shows a
+  hit by reversing the glyph; without the pair it draws the palettes' nearest
+  colours. The hit flash, then `Enraged`, tints every glyph. The eye's types are
+  drawn from the same look.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
   `HitWall` reads this step's move). A global edge has none.

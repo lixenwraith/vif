@@ -39,7 +39,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventFuseBehaviorRequest", payload = { program = "warden", x = 10, y = 5 } },
 ]
 transitions = [
-    { trigger = "EventSpeciesCreated", target = "WardenLive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 10 } },
+    { trigger = "EventSpeciesCreated", target = "WardenLive", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] } },
     { trigger = "Tick", target = "WardenWait", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
 ]
 
@@ -47,14 +47,14 @@ transitions = [
 [states.WardenLive]
 parent = "Root"
 transitions = [
-    { trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 10 } },
+    { trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] } },
     { trigger = "Tick", target = "WardenGone", guard = "StatusIntCompare", guard_args = { key = "behavior.warden.count", op = "eq", value = 0 } },
 ]
 
 [states.WardenGone]
 parent = "Root"
 transitions = [
-    { trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 10 } },
+    { trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] } },
     { trigger = "Tick", target = "WardenSpawn", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
 ]
 

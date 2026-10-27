@@ -11,11 +11,11 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/profile"
 )
 
@@ -103,9 +103,16 @@ type prototypeDoc struct {
 	Drops      string     `toml:"drops"`
 	Contact    contactDoc `toml:"contact"`
 	LifetimeMs int        `toml:"lifetime_ms"`
-	Glyphs     [][]string `toml:"glyphs"`
 	PatternMs  int        `toml:"pattern_ms"`
-	Color      color.RGB  `toml:"color"`
+
+	// The look: frames, the palettes their cells index, the colour of a glyph
+	// without an entry, and the console pair a 256-colour host draws
+	Frames []visual.LookFrame `toml:"frames"`
+	Fg     []color.RGB        `toml:"fg"`
+	Bg     []color.RGB        `toml:"bg"`
+	Color  color.RGB          `toml:"color"`
+	Fg256  *uint8             `toml:"fg256"`
+	Bg256  *uint8             `toml:"bg256"`
 }
 
 type cellDoc struct {
@@ -153,7 +160,6 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (co
 		Contact:  component.CursorDamage{EnergyDrain: d.Contact.Energy, HeatDelta: -d.Contact.Heat},
 		Lifetime: time.Duration(d.LifetimeMs) * time.Millisecond,
 		Pattern:  time.Duration(d.PatternMs) * time.Millisecond,
-		Color:    d.Color,
 	}
 	var errs []error
 	fail := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
@@ -161,8 +167,24 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (co
 	limit := parameter.BehaviorFootprintMax
 	if d.Width < 1 || d.Width > limit || d.Height < 1 || d.Height > limit {
 		fail("width and height %d×%d outside 1..%d", d.Width, d.Height, limit)
-	} else if d.Header.X < 0 || d.Header.X >= d.Width || d.Header.Y < 0 || d.Header.Y >= d.Height {
-		fail("header {%d, %d} outside the %d×%d footprint", d.Header.X, d.Header.Y, d.Width, d.Height)
+	} else {
+		if d.Header.X < 0 || d.Header.X >= d.Width || d.Header.Y < 0 || d.Header.Y >= d.Height {
+			fail("header {%d, %d} outside the %d×%d footprint", d.Header.X, d.Header.Y, d.Width, d.Height)
+		}
+		art := visual.LookArt{Fg: d.Fg, Bg: d.Bg, Color: d.Color, Frames: d.Frames}
+		if d.Fg256 != nil && d.Bg256 != nil {
+			art.Fg256, art.Bg256, art.Console = *d.Fg256, *d.Bg256, true
+		}
+		var err error
+		if p.Look, err = visual.CompileLook(d.Width, d.Height, art); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (d.Fg256 == nil) != (d.Bg256 == nil) {
+		fail("fg256 and bg256 come together, the pair a 256-colour host draws")
+	}
+	if len(d.Frames) > 1 && d.PatternMs <= 0 {
+		fail("pattern_ms %d: %d frames need a positive period", d.PatternMs, len(d.Frames))
 	}
 	if d.HP <= 0 {
 		fail("hp %d is not positive", d.HP)
@@ -203,27 +225,6 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (co
 		default:
 			p.Drops = component.SpeciesType(i)
 		}
-	}
-
-	if len(d.Glyphs) == 0 {
-		fail("glyphs holds no frame")
-	}
-	if len(d.Glyphs) > 1 && d.PatternMs <= 0 {
-		fail("pattern_ms %d: %d frames need a positive period", d.PatternMs, len(d.Glyphs))
-	}
-	for i, frame := range d.Glyphs {
-		if len(frame) != d.Height {
-			fail("glyphs[%d] has %d rows, want height %d", i, len(frame), d.Height)
-			continue
-		}
-		runes := make([]rune, 0, d.Width*d.Height)
-		for j, row := range frame {
-			if n := utf8.RuneCountInString(row); n != d.Width {
-				fail("glyphs[%d][%d] %q has %d cells, want width %d", i, j, row, n, d.Width)
-			}
-			runes = append(runes, []rune(row)...)
-		}
-		p.Frames = append(p.Frames, runes)
 	}
 
 	if len(errs) > 0 {

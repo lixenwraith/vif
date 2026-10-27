@@ -15,9 +15,9 @@ mass = 2.0                          # soft collision and flocking, as the swarm'
 drops = "swarm"                     # rolls the swarm's drop tiers
 contact = { energy = 1000, heat = 10 }
 lifetime_ms = 35000
-glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]   # frames of height rows
+frames = [{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, { glyphs = ["▀▄▄▀", "▄▀▀▄"] }]   # a row a string, height rows
 pattern_ms = 500
-color = { r = 200, g = 120, b = 40 }
+color = { r = 200, g = 120, b = 40 }  # every glyph's: these frames name no palette
 
 [states.Roam]
 on_update = [{ action = "Home" }]

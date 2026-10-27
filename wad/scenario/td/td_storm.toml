@@ -40,7 +40,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [
-    { trigger = "EventSpeciesCreated", target = "StLive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
+    { trigger = "EventSpeciesCreated", target = "StLive", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["storm"] } },
     { trigger = "Tick", target = "StLive", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 500 } },
         { name = "StatusBoolEquals", args = { key = "storm.active", value = true } },
@@ -57,7 +57,7 @@ transitions = [
 [states.StLive]
 parent = "Root"
 transitions = [
-    { macro = "Slain", species = 4, active = "storm.active", target = "StCleared" },
+    { macro = "Slain", species = "storm", active = "storm.active", target = "StCleared" },
 ]
 
 [states.StCleared]

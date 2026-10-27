@@ -1,8 +1,9 @@
 package renderer
 
 import (
+	"fmt"
+
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -11,115 +12,26 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// === Render Data ===
-
-// eyeCell holds resolved per-cell render data for one animation frame position
-type eyeCell struct {
-	Ch    rune
-	FgIdx int8          // -1 = no foreground
-	BgIdx int8          // -1 = transparent (preserve underlying bg)
-	Attr  terminal.Attr // style bits only (Bold, Dim)
-}
-
-// eyeTypeRender holds compiled render data for one eye type
-type eyeTypeRender struct {
-	FgPalette  [8]color.RGB
-	BgPalette  [3]color.RGB
-	Fg256      uint8
-	Bg256      uint8
-	FrameCount int
-	Frames     [visual.EyeMaxFrames][parameter.EyeHeight][parameter.EyeWidth]eyeCell
-}
-
-var eyeRenderTable [parameter.EyeTypeCount]eyeTypeRender
-
-// === Init: Parse Visual Specs → Render Table ===
-
-func parsePaletteIdx(b byte) int8 {
-	if b >= '0' && b <= '9' {
-		return int8(b - '0')
-	}
-	if b >= 'a' && b <= 'f' {
-		return int8(b-'a') + 10
-	}
-	return -1
-}
-
-func parseAttr(b byte) terminal.Attr {
-	switch b {
-	case 'B':
-		return terminal.AttrBold
-	case 'D':
-		return terminal.AttrDim
-	default:
-		return terminal.AttrNone
-	}
-}
-
-func buildEyeType(spec *visual.EyeTypeVisual) eyeTypeRender {
-	r := eyeTypeRender{
-		FgPalette:  spec.FgPalette,
-		BgPalette:  spec.BgPalette,
-		Fg256:      spec.Fg256,
-		Bg256:      spec.Bg256,
-		FrameCount: spec.FrameCount,
-	}
-	for f := range spec.FrameCount {
-		fs := &spec.Frames[f]
-		for row := range parameter.EyeHeight {
-			for col := range parameter.EyeWidth {
-				cell := &r.Frames[f][row][col]
-				if col < len(fs.Art[row]) {
-					ch := rune(fs.Art[row][col])
-					if ch != ' ' {
-						cell.Ch = ch
-					}
-				}
-				if col < len(fs.Fg[row]) {
-					cell.FgIdx = parsePaletteIdx(fs.Fg[row][col])
-				} else {
-					cell.FgIdx = -1
-				}
-				if col < len(fs.Bg[row]) {
-					cell.BgIdx = parsePaletteIdx(fs.Bg[row][col])
-				} else {
-					cell.BgIdx = -1
-				}
-				if col < len(fs.Attr[row]) {
-					cell.Attr = parseAttr(fs.Attr[row][col])
-				}
-			}
+// eyeLooks are the eye types' looks, compiled once
+var eyeLooks = func() (looks [parameter.EyeTypeCount]component.Look) {
+	for i := range looks {
+		look, err := visual.CompileLook(parameter.EyeWidth, parameter.EyeHeight, visual.EyeTypeVisuals[i])
+		if err != nil {
+			panic(fmt.Sprintf("eye type %d: %v", i, err))
 		}
+		looks[i] = look
 	}
-	return r
-}
-
-func init() {
-	for i := range visual.EyeTypeVisuals {
-		eyeRenderTable[i] = buildEyeType(&visual.EyeTypeVisuals[i])
-	}
-}
-
-// === Renderer ===
-
-// eyeCellRenderer callback for color mode strategy (256 vs TrueColor)
-type eyeCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor color.RGB, hasFlash bool)
+	return looks
+}()
 
 // EyeRenderer draws eye composite entities
 type EyeRenderer struct {
-	gameCtx    *engine.GameContext
-	renderCell eyeCellRenderer
+	gameCtx *engine.GameContext
+	paint   lookPainter
 }
 
-// NewEyeRenderer creates an eye renderer with color mode strategy
 func NewEyeRenderer(gameCtx *engine.GameContext) *EyeRenderer {
-	r := &EyeRenderer{gameCtx: gameCtx}
-	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
-		r.renderCell = r.cell256
-	} else {
-		r.renderCell = r.cellTrueColor
-	}
-	return r
+	return &EyeRenderer{gameCtx: gameCtx, paint: newLookPainter(gameCtx.World.Resources.Config.ColorMode)}
 }
 
 // Render draws all active eye entities
@@ -147,14 +59,13 @@ func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 			return true
 		}
 
-		tr := &eyeRenderTable[typeIdx]
-		frameIdx := eyeComp.FrameIndex % tr.FrameCount
-		frame := &tr.Frames[frameIdx]
+		look := &eyeLooks[typeIdx]
+		frame := look.Frames[eyeComp.FrameIndex%len(look.Frames)]
 
-		var flashColor color.RGB
-		hasFlash := combatComp.RemainingHitFlash > 0
-		if hasFlash {
-			flashColor = hitFlashColor(combatComp.RemainingHitFlash)
+		var flash color.RGB
+		hit := combatComp.RemainingHitFlash > 0
+		if hit {
+			flash = hitFlashColor(combatComp.RemainingHitFlash)
 		}
 
 		for _, member := range headerComp.MemberEntries {
@@ -178,53 +89,8 @@ func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 				continue
 			}
 
-			r.renderCell(buf, screenX, screenY, &frame[row][col], tr, flashColor, hasFlash)
+			r.paint.cell(buf, screenX, screenY, look, &frame[row*parameter.EyeWidth+col], flash, hit, hit)
 		}
 		return true
 	})
-}
-
-// cellTrueColor renders with per-cell palette colors and attributes
-func (r *EyeRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor color.RGB, hasFlash bool) {
-	hasCh := cell.Ch != 0 && cell.FgIdx >= 0
-	hasBg := cell.BgIdx >= 0
-
-	if !hasCh && !hasBg {
-		return
-	}
-
-	if hasBg {
-		buf.SetBgOnly(screenX, screenY, tr.BgPalette[cell.BgIdx])
-	}
-
-	if hasCh {
-		fg := tr.FgPalette[cell.FgIdx]
-		if hasFlash {
-			fg = flashColor
-		}
-		buf.SetFgOnly(screenX, screenY, cell.Ch, fg, cell.Attr)
-	}
-}
-
-// cell256 renders with simplified per-type 256-color palette
-func (r *EyeRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor color.RGB, hasFlash bool) {
-	hasCh := cell.Ch != 0
-	hasBg := cell.BgIdx >= 0
-
-	if !hasCh && !hasBg {
-		return
-	}
-
-	if hasBg {
-		buf.SetBg256(screenX, screenY, tr.Bg256)
-	}
-
-	if hasCh {
-		// A hit inverts the eye: no one flash color shows on every body and console palette
-		attr := terminal.AttrFg256 | cell.Attr
-		if hasFlash {
-			attr |= terminal.AttrReverse
-		}
-		buf.SetFgOnly(screenX, screenY, cell.Ch, color.RGB{R: tr.Fg256}, attr)
-	}
 }

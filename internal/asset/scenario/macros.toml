@@ -16,7 +16,7 @@ params = { corner = "string", attach = "string", next = "string" }
 body = { parent = "TowerCycle", on_enter = [
     { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_${corner}_x", Y = "p_${corner}_y" } },
 ], transitions = [
-    { trigger = "EventSpeciesCreated", target = "${attach}", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
+    { trigger = "EventSpeciesCreated", target = "${attach}", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] }, capture_vars = { entity = "gw_anchor" } },
     { trigger = "EventPylonSpawnFailed", target = "${next}" },
     { trigger = "Tick", target = "${next}", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
 ] }

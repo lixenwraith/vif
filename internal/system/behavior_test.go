@@ -29,7 +29,7 @@ mass = 2.0
 drops = "swarm"
 contact = { energy = 1000, heat = 10 }
 lifetime_ms = 35000
-glyphs = [["▄▀▀▄", "▀▄▄▀"], ["▀▄▄▀", "▄▀▀▄"]]
+frames = [{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, { glyphs = ["▀▄▄▀", "▄▀▀▄"] }]
 pattern_ms = 500
 color = { r = 200, g = 120, b = 40 }
 

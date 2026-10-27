@@ -10,13 +10,13 @@
 [states.CntWatch]
 parent = "Root"
 transitions = [
-    { trigger = "EventSpeciesKilled", internal = true, guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { x = "dead_x" }, actions = [
+    { trigger = "EventSpeciesKilled", internal = true, guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] }, capture_vars = { x = "dead_x" }, actions = [
         { action = "IncrementVar", payload = { name = "st_dead" }, guard = "VarCompare", guard_args = { var = "dead_x", op = "eq", value = 250 } },
         { action = "IncrementVar", payload = { name = "l_dead" }, guard = "VarCompare", guard_args = { var = "dead_x", op = "lt", value = 250 } },
         { action = "IncrementVar", payload = { name = "r_dead" }, guard = "VarCompare", guard_args = { var = "dead_x", op = "gt", value = 250 } },
     ] },
 
-    { trigger = "EventSpeciesKilled", internal = true, guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 8 }, capture_vars = { entity = "dead_tower" }, actions = [
+    { trigger = "EventSpeciesKilled", internal = true, guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["tower"] }, capture_vars = { entity = "dead_tower" }, actions = [
         # Central death flags first: retarget guards below read them post-update
         { macro = "MarkFallen", each = { tower = ["t1", "t2"] } },
 

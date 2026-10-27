@@ -17,7 +17,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [
-    { trigger = "EventSpeciesCreated", target = "StormActive", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
+    { trigger = "EventSpeciesCreated", target = "StormActive", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["storm"] } },
     # The request was refused: ask again instead of falling through StormActive's
     # defensive timeout, which retires the region as if the storm had been fought.
     { trigger = "Tick", target = "StormSetupRetry", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
@@ -32,7 +32,7 @@ transitions = [
 [states.StormActive]
 parent = "StormHold"
 transitions = [
-    { trigger = "EventSpeciesKilled", target = "StormDecision", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
+    { trigger = "EventSpeciesKilled", target = "StormDecision", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["storm"] } },
     { macro = "LeftMap", active = "storm.active", target = "StormVictory" },
 ]
 
