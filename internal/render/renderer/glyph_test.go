@@ -1,0 +1,122 @@
+package renderer
+
+import (
+	"testing"
+	"time"
+
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
+)
+
+// glyphWorld is a 40×24 truecolour map with no rock, ready for glyphs
+func glyphWorld() (*engine.World, *engine.GameContext) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	return w, game
+}
+
+// addGlyph places a glyph at (x, y), scenery unless typeable
+func addGlyph(w *engine.World, x, y int, r rune, level component.GlyphLevel, scenery bool) {
+	e := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+	w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: r, Type: component.GlyphBlue, Level: level})
+	if scenery {
+		w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectScenery})
+	}
+}
+
+// drawGlyphs renders the glyph layer of a frame standing at gameTime
+func drawGlyphs(game *engine.GameContext, gameTime time.Time) *render.RenderBuffer {
+	config := game.World.Resources.Config
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+	NewGlyphRenderer(game).Render(render.RenderContext{GameTime: gameTime, MapWidth: config.MapWidth,
+		MapHeight: config.MapHeight, ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}, buf)
+	return buf
+}
+
+// TestSceneryIsDrawnWhereItsLayerStandsBetweenTicks: a frame draws scenery carried on
+// from its cell by its layer's part-cell and velocity over the time since the tick,
+// a tick at most, none for a frame before the tick or before any; typeable text
+// stays in its cell
+func TestSceneryIsDrawnWhereItsLayerStandsBetweenTicks(t *testing.T) {
+	w, game := glyphWorld()
+	addGlyph(w, 20, 5, 'b', component.GlyphBright, true)
+	addGlyph(w, 20, 7, 'd', component.GlyphDark, true)
+	addGlyph(w, 20, 9, 't', component.GlyphBright, false)
+	drift := w.Resources.Drift
+	drift.Rate[component.GlyphBright][0] = -80 * vmath.MicroRate
+	drift.Rate[component.GlyphDark][0] = -20 * vmath.MicroRate
+	drift.Phase[component.GlyphDark][0] = -vmath.CellSpan / 2
+	tick := engine.SimEpoch.Add(time.Second)
+
+	for _, tc := range []struct {
+		name       string
+		pace       time.Time
+		since      time.Duration
+		bright, dk int
+	}{
+		{"at the tick", tick, 0, 20, 20},
+		{"half a tick on", tick, 25 * time.Millisecond, 18, 19},
+		{"past the next tick", tick, 80 * time.Millisecond, 16, 19},
+		{"before the tick", tick, -10 * time.Millisecond, 20, 20},
+		{"before any tick", time.Time{}, 25 * time.Millisecond, 20, 20},
+	} {
+		w.Resources.Time.PaceTime = tc.pace
+		buf := drawGlyphs(game, tick.Add(tc.since))
+		for _, want := range []struct {
+			x, y int
+			r    rune
+		}{{tc.bright, 5, 'b'}, {tc.dk, 7, 'd'}, {20, 9, 't'}} {
+			if got := buf.CellAt(want.x, want.y).Rune; got != want.r {
+				t.Fatalf("%s: (%d,%d) drew %q, want %q", tc.name, want.x, want.y, got, want.r)
+			}
+		}
+	}
+}
+
+// TestTheNearestGlyphDrawsOverTheOnesBehind: where glyphs are drawn in one cell, the
+// nearer scenery shows over the farther and typeable text over any scenery, whatever
+// order they were made in, and a glyph hides nothing beside it
+func TestTheNearestGlyphDrawsOverTheOnesBehind(t *testing.T) {
+	w, game := glyphWorld()
+	addGlyph(w, 10, 5, 'n', component.GlyphBright, true)
+	addGlyph(w, 10, 5, 'f', component.GlyphDark, true)
+	addGlyph(w, 11, 5, 'f', component.GlyphDark, true)
+	addGlyph(w, 12, 5, 't', component.GlyphDark, false)
+	addGlyph(w, 12, 5, 'n', component.GlyphBright, true)
+
+	buf := drawGlyphs(game, time.Time{})
+	for i, want := range "nft" {
+		if got := buf.CellAt(10+i, 5).Rune; got != want {
+			t.Fatalf("(%d,5) drew %q, want %q", 10+i, got, want)
+		}
+	}
+}
+
+// TestSceneryTakesItsColourFromItsDepth: each scenery layer mixes its type's bright
+// colour into the background by its depth, while typeable text keeps its level's colour
+func TestSceneryTakesItsColourFromItsDepth(t *testing.T) {
+	w, game := glyphWorld()
+	levels := []component.GlyphLevel{component.GlyphDark, component.GlyphNormal, component.GlyphBright}
+	for i, level := range levels {
+		addGlyph(w, 5+5*i, 3, 's', level, true)
+		addGlyph(w, 5+5*i, 6, 't', level, false)
+	}
+	buf := drawGlyphs(game, time.Time{})
+	bright := visual.GlyphColorLUT[component.GlyphBlue][component.GlyphBright]
+	for i, level := range levels {
+		if got, want := buf.CellAt(5+5*i, 3).Fg, color.Lerp(visual.RgbBackground, bright, visual.SceneryDepthMix[level]); got != want {
+			t.Fatalf("scenery of level %d drew %v, want %v", level, got, want)
+		}
+		if got, want := buf.CellAt(5+5*i, 6).Fg, visual.GlyphColorLUT[component.GlyphBlue][level]; got != want {
+			t.Fatalf("typeable text of level %d drew %v, want %v", level, got, want)
+		}
+	}
+}
