@@ -9,25 +9,27 @@ import (
 )
 
 // Vocabulary is what a program compiles against: its host's verbs over the context
-// C each step fills, the flags its states raise, and the movement every tick ends
-// with. Built once, it serves every program; Compile only reads it.
+// C each step fills, the flags its states raise, the movement every tick ends with,
+// and the names a payload takes. Built once, it serves every program; Compile only
+// reads it.
 type Vocabulary[C any] struct {
 	verbs     map[string]verb[C]
 	flags     map[string]uint64
 	integrate func(C)
 	entered   func(C)
+	names     func(programs []string) *dialect.Names
 }
 
 // verb is one registered name: its kind, the keys of its table it reads beside
 // action, the args -schema lists, and the build that decodes them once at load. A
 // test's build takes its site, the compiler's count of its program's guards and
-// probes in load order.
+// probes in load order; an action's takes the names its set's payloads take.
 type verb[C any] struct {
 	kind  string
 	keys  []string
 	args  []dialect.Field
 	test  func(args map[string]any, site int) (func(C) bool, error)
-	apply func(event string, payload any) (func(C), error)
+	apply func(names *dialect.Names, event string, payload any) (func(C), error)
 }
 
 func NewVocabulary[C any]() *Vocabulary[C] {
@@ -64,10 +66,15 @@ func (v *Vocabulary[C]) Sustained[A any](name string, build func(*A) (func(C), e
 }
 
 // Emit registers an effect that reads its table's event beside its payload, as
-// the scenario dialect's EmitEvent does; build checks both
-func (v *Vocabulary[C]) Emit(name string, build func(event string, payload any) (func(C), error)) {
+// the scenario dialect's EmitEvent does; build checks both, decoding the payload
+// as names, its set's, spell its enum fields
+func (v *Vocabulary[C]) Emit(name string, build func(names *dialect.Names, event string, payload any) (func(C), error)) {
 	v.add(name, verb[C]{kind: dialect.KindAction, keys: []string{"event", "payload"}, apply: build})
 }
+
+// Names sets the names a set's payloads take, given its programs, which name data
+// species beside the code's; unset, a payload takes none
+func (v *Vocabulary[C]) Names(f func(programs []string) *dialect.Names) { v.names = f }
 
 func (v *Vocabulary[C]) Flag(name string, bit uint64) {
 	if _, ok := v.flags[name]; ok {
@@ -119,8 +126,8 @@ func decoded[A, R any](build func(*A, int) (R, error)) func(map[string]any, int)
 }
 
 // payload adapts a build over A to an action table, which holds no event
-func payload[A, R any](build func(*A) (R, error)) func(string, any) (R, error) {
-	return func(_ string, raw any) (R, error) {
+func payload[A, R any](build func(*A) (R, error)) func(*dialect.Names, string, any) (R, error) {
+	return func(_ *dialect.Names, _ string, raw any) (R, error) {
 		a, err := dialect.Decode[A](raw)
 		if err != nil {
 			var zero R

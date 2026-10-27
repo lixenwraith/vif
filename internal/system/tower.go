@@ -236,7 +236,7 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
 		Entity:      headerEntity,
 		Species:     component.SpeciesTower,
-		SubType:     uint8(towerType),
+		SubType:     component.SubType(towerType),
 		X:           centerX,
 		Y:           centerY,
 		MemberCount: len(members),
@@ -414,7 +414,7 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 	s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 		Entity:  headerEntity,
 		Species: component.SpeciesTower,
-		SubType: uint8(towerComp.Type),
+		SubType: component.SubType(towerComp.Type),
 		X:       towerComp.SpawnX,
 		Y:       towerComp.SpawnY,
 	})

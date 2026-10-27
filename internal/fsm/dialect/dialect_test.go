@@ -1,6 +1,8 @@
 package dialect_test
 
 import (
+	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -181,5 +183,194 @@ func TestAVocabularyNamesEachArgAsADocumentDoesInAFixedOrder(t *testing.T) {
 	}
 	if want := []string{"action z", "guard a", "guard b"}; !slices.Equal(order, want) {
 		t.Errorf("order %v, want %v", order, want)
+	}
+}
+
+// The enums a names test decodes: a plain one with a gap, a mask, and a variant
+// whose names its struct's species picks
+type (
+	kind    uint8
+	bits    uint8
+	species uint8
+	sub     uint8
+	room    struct {
+		Kind  kind `toml:"kind"`
+		Walls bits `toml:"walls"`
+	}
+	spawn struct {
+		Species species `toml:"species"`
+		Sub     sub     `toml:"sub_type"`
+	}
+	plan struct {
+		Kind   kind            `toml:"kind"`
+		Rooms  []room          `toml:"rooms"`
+		Door   *room           `toml:"door"`
+		ByName map[string]kind `toml:"by_name"`
+		Kinds  []kind          `toml:"kinds"`
+		Spawn  spawn           `toml:"spawn"`
+		Count  int             `toml:"count"`
+	}
+)
+
+func planNames() *dialect.Names {
+	return dialect.NewNames().
+		Enum[kind]("hall", "", "vault").
+		Mask[bits](map[string]bits{"none": 0, "north": 1, "south": 2, "all": 3}).
+		Enum[species]("none", "eye", "snake").
+		Variant[sub](species(1), "void", "flame")
+}
+
+// TestANameResolvesWhereverItsTypeSits: a field of a type the names hold takes a
+// name at the top, in a nested table, an array of tables, a pointer, a map and a
+// list, and the raw table the caller holds is left as it was.
+func TestANameResolvesWhereverItsTypeSits(t *testing.T) {
+	raw := func() map[string]any {
+		return map[string]any{
+			"kind":    "vault",
+			"rooms":   []map[string]any{{"kind": "hall"}, {"kind": "vault", "walls": "north"}},
+			"door":    map[string]any{"kind": "vault"},
+			"by_name": map[string]any{"a": "vault"},
+			"kinds":   []any{"vault", "hall"},
+			"spawn":   map[string]any{"species": "eye", "sub_type": "flame"},
+			"count":   int64(3),
+		}
+	}
+	held := raw()
+	p, err := planNames().Decode[plan](held)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := plan{Kind: 2, Rooms: []room{{0, 0}, {2, 1}}, Door: &room{Kind: 2}, ByName: map[string]kind{"a": 2},
+		Kinds: []kind{2, 0}, Spawn: spawn{1, 1}, Count: 3}
+	if !reflect.DeepEqual(*p, want) {
+		t.Errorf("decoded %+v, want %+v", *p, want)
+	}
+	if !reflect.DeepEqual(held, raw()) {
+		t.Errorf("raw table changed to %v", held)
+	}
+}
+
+// TestAnUnknownNameIsRefusedByItsPath: a name its type lacks, or a value that is
+// no name, fails naming its path and the names it may take, and a type with more
+// names than an error lists is named instead.
+func TestAnUnknownNameIsRefusedByItsPath(t *testing.T) {
+	many := make([]string, 40)
+	for i := range many {
+		many[i] = fmt.Sprintf("n%d", i)
+	}
+	for _, c := range []struct {
+		raw  map[string]any
+		want string
+	}{
+		{map[string]any{"kind": "attic"}, `kind: "attic" is not one of hall, vault`},
+		{map[string]any{"rooms": []map[string]any{{}, {"kind": "attic"}}}, `rooms[1].kind: "attic" is not one of hall, vault`},
+		{map[string]any{"kinds": []any{"hall", true}}, "kinds[1]: want one of hall, vault, got bool"},
+		{map[string]any{"by_name": map[string]any{"a": "attic"}}, `by_name.a: "attic" is not one of hall, vault`},
+		{map[string]any{"count": "n9"}, "count: cannot convert string to int"},
+	} {
+		if _, err := planNames().Decode[plan](c.raw); err == nil || err.Error() != c.want {
+			t.Errorf("%v: error %v, want %s", c.raw, err, c.want)
+		}
+	}
+	long := dialect.NewNames().Enum[kind](many...)
+	if _, err := long.Decode[plan](map[string]any{"kind": "attic"}); err == nil ||
+		err.Error() != `kind: "attic" is not one of the 40 names of dialect_test.kind` {
+		t.Errorf("error %v", err)
+	}
+}
+
+// TestANumberDecodesOnlyWhileItsTypeMigrates: an enum field refuses a number,
+// which a reordered enum would silently retarget, unless its type still takes
+// numbers while its documents move to names.
+func TestANumberDecodesOnlyWhileItsTypeMigrates(t *testing.T) {
+	raw := map[string]any{"kind": int64(2)}
+	if _, err := planNames().Decode[plan](raw); err == nil || err.Error() != "kind: want one of hall, vault, got int64" {
+		t.Errorf("closed: error %v", err)
+	}
+	p, err := planNames().Numbers[kind]().Decode[plan](raw)
+	if err != nil || p.Kind != 2 {
+		t.Errorf("migrating: %v, %v", p, err)
+	}
+}
+
+// TestAMaskTakesANameOrAListOfThem: a mask field takes one name, or a list that
+// stands for the union of its names, an empty one for none.
+func TestAMaskTakesANameOrAListOfThem(t *testing.T) {
+	for _, c := range []struct {
+		walls any
+		want  bits
+		err   string
+	}{
+		{"all", 3, ""},
+		{[]any{"north", "south"}, 3, ""},
+		{[]any{}, 0, ""},
+		{[]any{"north", "west"}, 0, `door.walls[1]: "west" is not one of none, north, south, all`},
+		{int64(1), 0, "door.walls: want one of none, north, south, all, or a list of them, got int64"},
+	} {
+		p, err := planNames().Decode[plan](map[string]any{"door": map[string]any{"walls": c.walls}})
+		switch {
+		case c.err != "" && (err == nil || err.Error() != c.err):
+			t.Errorf("%v: error %v, want %s", c.walls, err, c.err)
+		case c.err == "" && (err != nil || p.Door.Walls != c.want):
+			t.Errorf("%v: %v, %v; want %d", c.walls, p, err, c.want)
+		}
+	}
+}
+
+// TestAVariantTakesTheNamesItsKeyPicks: a variant field takes the names its
+// struct's key value has, and where that value has none it takes none, unless
+// its type still takes numbers.
+func TestAVariantTakesTheNamesItsKeyPicks(t *testing.T) {
+	decode := func(n *dialect.Names, s map[string]any) (*plan, error) {
+		return n.Decode[plan](map[string]any{"spawn": s})
+	}
+	if p, err := decode(planNames(), map[string]any{"sub_type": "flame", "species": "eye"}); err != nil || p.Spawn.Sub != 1 {
+		t.Errorf("eye flame: %v, %v", p, err)
+	}
+	for _, c := range []struct {
+		spawn map[string]any
+		want  string
+	}{
+		{map[string]any{"species": "eye", "sub_type": "frost"}, `spawn.sub_type: "frost" is not one of void, flame`},
+		{map[string]any{"species": "snake", "sub_type": "void"}, `spawn.sub_type: snake takes no names, got "void"`},
+		{map[string]any{"sub_type": "void"}, `spawn.sub_type: none takes no names, got "void"`},
+		{map[string]any{"species": "snake", "sub_type": int64(0)}, "spawn.sub_type: snake takes no names, got int64"},
+	} {
+		if _, err := decode(planNames(), c.spawn); err == nil || err.Error() != c.want {
+			t.Errorf("%v: error %v, want %s", c.spawn, err, c.want)
+		}
+	}
+	if _, err := decode(planNames().Numbers[sub](), map[string]any{"species": "snake", "sub_type": int64(0)}); err != nil {
+		t.Errorf("migrating snake 0: %v", err)
+	}
+}
+
+// TestAClonedNamesBuildsWithoutChangingItsSource: names built on a clone, as a
+// scenario adds its programs to the code's, leave the names it was cloned from as
+// they were.
+func TestAClonedNamesBuildsWithoutChangingItsSource(t *testing.T) {
+	base := planNames()
+	clone := base.Clone().Variant[sub](species(2), "long").Numbers[kind]()
+	snake := map[string]any{"spawn": map[string]any{"species": "snake", "sub_type": "long"}, "kind": int64(2)}
+	if _, err := clone.Decode[plan](snake); err != nil {
+		t.Errorf("clone: %v", err)
+	}
+	if _, err := base.Decode[plan](snake); err == nil {
+		t.Error("base took what only its clone names")
+	}
+}
+
+// TestAListKeysAVariantsNamesByItsKeysName: -schema's listing gives each type its
+// names in value order and marks a mask, and keys a variant's names by the name
+// its key's value goes by.
+func TestAListKeysAVariantsNamesByItsKeysName(t *testing.T) {
+	want := []dialect.NameList{
+		{Type: "dialect_test.bits", Names: []string{"none", "north", "south", "all"}, Mask: true},
+		{Type: "dialect_test.kind", Names: []string{"hall", "vault"}},
+		{Type: "dialect_test.species", Names: []string{"none", "eye", "snake"}},
+		{Type: "dialect_test.sub", Key: "dialect_test.species", Keyed: map[string][]string{"eye": {"void", "flame"}}},
+	}
+	if got := planNames().List(); !reflect.DeepEqual(got, want) {
+		t.Errorf("listed %+v, want %+v", got, want)
 	}
 }

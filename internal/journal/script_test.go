@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
@@ -20,6 +21,7 @@ type scriptFake struct {
 	position event.Stamp
 	intents  []input.Intent
 	events   []scriptEmission
+	programs []string
 }
 
 func (f *scriptFake) Position() event.Stamp { return f.position }
@@ -33,6 +35,7 @@ func (f *scriptFake) Inject(intents ...*input.Intent) bool {
 func (f *scriptFake) Emit(et event.EventType, payload any, domain core.Domain) {
 	f.events = append(f.events, scriptEmission{typeID: et, payload: payload, domain: domain})
 }
+func (f *scriptFake) Programs() []string { return f.programs }
 
 func TestAuthoredScriptRunsActionsAtNamedTicks(t *testing.T) {
 	script, err := ParseScript([]byte(`
@@ -118,6 +121,41 @@ intnet = "motion_right"
 `))
 	if err == nil || !strings.Contains(err.Error(), `unknown field "intnet"`) {
 		t.Fatalf("ParseScript() error = %v, want unknown-field error", err)
+	}
+}
+
+// TestAScriptPayloadNamesItsTargetsSpecies: an event's payload decodes as a
+// scenario's EmitEvent does, the target's programs among its species, and a name
+// the target holds no species for fails the driver before any action runs
+func TestAScriptPayloadNamesItsTargetsSpecies(t *testing.T) {
+	script, err := ParseScript([]byte(`
+schema = 1
+ticks = 1
+[[action]]
+tick = 0
+event = "GeneticAbandonEval"
+payload = "eval_id = 3\nspecies = \"warden\""
+`))
+	if err != nil {
+		t.Fatalf("ParseScript() error = %v", err)
+	}
+	if _, err := NewScriptDriver(&scriptFake{}, script); err == nil || !strings.Contains(err.Error(), `species: "warden" is not one of`) {
+		t.Fatalf("NewScriptDriver() error = %v, want warden refused with no programs", err)
+	}
+
+	target := &scriptFake{programs: []string{"warden"}}
+	driver, err := NewScriptDriver(target, script)
+	if err != nil {
+		t.Fatalf("NewScriptDriver() error = %v", err)
+	}
+	if err := driver.RunAll(); err != nil {
+		t.Fatalf("RunAll() error = %v", err)
+	}
+	if len(target.events) != 1 {
+		t.Fatalf("events = %+v, want one", target.events)
+	}
+	if p, ok := target.events[0].payload.(*event.GeneticAbandonEvalPayload); !ok || p.EvalID != 3 || p.Species != component.SpeciesDataFirst {
+		t.Fatalf("event payload = %#v, want eval 3 of the warden", target.events[0].payload)
 	}
 }
 

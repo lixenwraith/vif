@@ -14,6 +14,18 @@ const (
 	SpiritWhite
 )
 
+// SpiritColorNames are what a document calls each SpiritColor
+var SpiritColorNames = [...]string{
+	SpiritRed:     "red",
+	SpiritOrange:  "orange",
+	SpiritYellow:  "yellow",
+	SpiritGreen:   "green",
+	SpiritCyan:    "cyan",
+	SpiritBlue:    "blue",
+	SpiritMagenta: "magenta",
+	SpiritWhite:   "white",
+}
+
 type SpiritPattern int
 
 const (

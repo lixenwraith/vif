@@ -131,7 +131,7 @@ type compiledScriptAction struct {
 	intent    input.Intent
 	text      string
 	eventType event.EventType
-	payload   string
+	payload   map[string]any // the table an event's payload text holds; nil for none
 	domain    core.Domain
 }
 
@@ -228,10 +228,14 @@ func compileScriptAction(index int, spec ScriptAction) (compiledScriptAction, er
 		if err != nil {
 			return a, err
 		}
-		if _, err := decodeScriptPayload(et, spec.Payload); err != nil {
-			return a, fmt.Errorf("%s payload: %w", name, err)
+		if spec.Payload != "" {
+			raw, err := toml.NewParser([]byte(spec.Payload)).Parse()
+			if err != nil {
+				return a, fmt.Errorf("%s payload: %w", name, err)
+			}
+			a.payload = raw
 		}
-		a.kind, a.eventType, a.payload, a.domain = scriptEvent, et, spec.Payload, domain
+		a.kind, a.eventType, a.domain = scriptEvent, et, domain
 	}
 	return a, nil
 }
@@ -256,12 +260,15 @@ func scriptEventDomain(et event.EventType, text string) (core.Domain, error) {
 	}
 }
 
-// ScriptTarget is the App-independent surface an authored script drives.
+// ScriptTarget is the App-independent surface an authored script drives. Programs
+// are the running scenario's behavior programs, data species an event's payload
+// may name.
 type ScriptTarget interface {
 	Position() event.Stamp
 	Tick(int)
 	Inject(...*input.Intent) bool
 	Emit(event.EventType, any, core.Domain)
+	Programs() []string
 }
 
 // ScriptStats reports one authored run's progress.
@@ -284,13 +291,20 @@ type ScriptDriver struct {
 	live    bool
 }
 
-// NewScriptDriver validates and binds an authored script.
+// NewScriptDriver validates and binds an authored script; each event's payload
+// decodes as the target's scenario names its enums, and again when it runs
 func NewScriptDriver(target ScriptTarget, script Script) (*ScriptDriver, error) {
 	actions, err := compileScript(script)
 	if err != nil {
 		return nil, err
 	}
-	return &ScriptDriver{target: target, script: script, actions: actions}, nil
+	d := &ScriptDriver{target: target, script: script, actions: actions}
+	for _, a := range actions {
+		if _, err := d.payload(a); err != nil {
+			return nil, fmt.Errorf("action %d at run %d tick %d: %w", a.index, a.run, a.tick, err)
+		}
+	}
+	return d, nil
 }
 
 // Live schedules actions on the ticks this driver has issued instead of the
@@ -397,7 +411,7 @@ func (d *ScriptDriver) execute(a compiledScriptAction) error {
 			return errors.New("command quit the game")
 		}
 	case scriptEvent:
-		payload, err := decodeScriptPayload(a.eventType, a.payload)
+		payload, err := d.payload(a)
 		if err != nil {
 			return err
 		}
@@ -419,18 +433,11 @@ func injectCommand(inject func(...*input.Intent) bool, command string) bool {
 	return true
 }
 
-// decodeScriptPayload allocates a typed event payload and decodes the TOML an
-// author wrote into it. Empty text is a nil payload.
-func decodeScriptPayload(et event.EventType, text string) (any, error) {
-	if text == "" {
+// payload is an event action's payload as a scenario's EmitEvent decodes it, the
+// target's programs among its species; no payload text is a nil payload
+func (d *ScriptDriver) payload(a compiledScriptAction) (any, error) {
+	if a.kind != scriptEvent || a.payload == nil {
 		return nil, nil
 	}
-	p := event.NewPayloadStruct(et)
-	if p == nil {
-		return nil, errors.New("payload text with no registry prototype")
-	}
-	if err := toml.Unmarshal([]byte(text), p); err != nil {
-		return nil, err
-	}
-	return p, nil
+	return event.AuthoredPayload(event.PayloadNames(d.target.Programs()), a.eventType, a.payload)
 }

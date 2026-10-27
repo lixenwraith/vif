@@ -160,7 +160,7 @@ func (s *EyeSystem) Update() {
 				Entity:       headerEntity,
 				KillerEntity: combatComp.LastDamagedBy,
 				Species:      component.SpeciesEye,
-				SubType:      uint8(eyeComp.Type),
+				SubType:      component.SubType(eyeComp.Type),
 				X:            killX,
 				Y:            killY,
 			})
@@ -199,7 +199,7 @@ func (s *EyeSystem) Update() {
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:  headerEntity,
 				Species: component.SpeciesEye,
-				SubType: uint8(eyeComp.Type),
+				SubType: component.SubType(eyeComp.Type),
 				X:       killX,
 				Y:       killY,
 			})
@@ -384,7 +384,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 		Genes:       genes,
 		Entity:      headerEntity,
 		Species:     component.SpeciesEye,
-		SubType:     uint8(eyeType),
+		SubType:     component.SubType(eyeType),
 		X:           headerX,
 		Y:           headerY,
 		MemberCount: len(members),

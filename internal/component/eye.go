@@ -16,6 +16,17 @@ const (
 	eyeTypeSentinel // unexported; equals parameter.EyeTypeCount
 )
 
+// EyeTypeNames are what a document calls each EyeType
+var EyeTypeNames = [eyeTypeSentinel]string{
+	EyeTypeVoid:   "void",
+	EyeTypeFlame:  "flame",
+	EyeTypeFrost:  "frost",
+	EyeTypeStorm:  "storm",
+	EyeTypeBlood:  "blood",
+	EyeTypeGolden: "golden",
+	EyeTypeAbyss:  "abyss",
+}
+
 // EyeComponent holds per-entity runtime state for eye composites
 type EyeComponent struct {
 	Type           EyeType

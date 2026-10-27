@@ -11,6 +11,9 @@ const (
 	TowerTypeCount // must be last
 )
 
+// TowerTypeNames are what a document calls each TowerType
+var TowerTypeNames = [TowerTypeCount]string{TowerCyan: "cyan", TowerGold: "gold", TowerViolet: "violet", TowerEmerald: "emerald"}
+
 // TowerComponent holds tower-specific runtime state
 // Tower is a stationary ablative composite the players defend, attacked by eyes
 type TowerComponent struct {

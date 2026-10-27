@@ -1,6 +1,7 @@
 package system
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -73,9 +74,15 @@ const wardenX, wardenY = 20, 10
 // holds one target at (x, y). The spawn's events are consumed.
 func newWardenWorld(t *testing.T, x, y int) (*engine.GameContext, *BehaviorSystem, core.Entity) {
 	t.Helper()
+	return newProgramWorld(t, wardenProgram, x, y)
+}
+
+// newProgramWorld is newWardenWorld with program as the warden's
+func newProgramWorld(t *testing.T, program string, x, y int) (*engine.GameContext, *BehaviorSystem, core.Entity) {
+	t.Helper()
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
-	doc, err := toml.NewParser([]byte(wardenProgram)).Parse()
+	doc, err := toml.NewParser([]byte(program)).Parse()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,5 +307,35 @@ func TestCombatRefusesToStunAShieldedDataSpecies(t *testing.T) {
 	b.Shielded = false
 	if !combat.applyStunEffect(header, c) {
 		t.Fatal("an unshielded warden refused the stun")
+	}
+}
+
+// TestAnEmittedPayloadNamesADataSpeciesByItsProgram: EmitEvent spells a species by
+// a program's name, which its set numbers, and a name no species holds fails the
+// compile
+func TestAnEmittedPayloadNamesADataSpeciesByItsProgram(t *testing.T) {
+	const enter = `on_enter = [{ action = "Telegraph", payload = { color = "cyan" } }]`
+	emitting := func(species string) string {
+		return strings.Replace(wardenProgram, enter, strings.TrimSuffix(enter, "]")+
+			`, { action = "EmitEvent", event = "EventGeneticAbandonEval", payload = { species = "`+species+`" } }]`, 1)
+	}
+	ctx, s, _ := newProgramWorld(t, emitting("warden"), wardenX+40, wardenY)
+	var abandoned *event.GeneticAbandonEvalPayload
+	for _, ev := range stepBehaviors(ctx.World, s) {
+		if p, ok := ev.Payload.(*event.GeneticAbandonEvalPayload); ok {
+			abandoned = p
+		}
+	}
+	if abandoned == nil || abandoned.Species != component.SpeciesDataFirst {
+		t.Fatalf("entering Wind emitted %+v, want species %d", abandoned, component.SpeciesDataFirst)
+	}
+
+	doc, err := toml.NewParser([]byte(emitting("ghost"))).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc})
+	if err == nil || !strings.Contains(err.Error(), `species: "ghost" is not one of`) {
+		t.Fatalf("a payload naming no species compiled: %v", err)
 	}
 }
