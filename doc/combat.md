@@ -127,7 +127,9 @@ status instead of taking hit points. Damage allowances are per player and attack
 family within the target's immunity window (D-3); chained effects keep their
 originating weapon's allowance. Knockback and stun immunity each cover all players
 and weapons; a knockback stronger than the one that opened the kinetic window
-resets it and lands. Species-authored invulnerability is the ward status and blocks every
+resets it and lands. A data species with a mass of its own is pushed as its row's
+profile pushes that mass (`profile.Reweigh`), so a heavier one is knocked back less.
+Species-authored invulnerability is the ward status and blocks every
 weapon's damage.
 
 A status is one slot per kind on `CombatComponent`, no stacking: remaining time, a
