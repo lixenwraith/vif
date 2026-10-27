@@ -296,6 +296,8 @@ its edges, then what its host does around the step.
   Chase with the full interval once the composite is built, before
   `EventSpeciesCreated`.
 - The charge line reads `Machine.Elapsed`, the teleport line `Machine.Progress()`.
+  The landing marker blinks on the lock's cell through Lock and Charge and on the
+  landing through Teleport, its colour cycle restarting at each entry.
 
 ### 4.2 Quasar
 
@@ -668,13 +670,14 @@ smaller part of it.
   back (`Enraged` to `Combat.IsEnraged`; `Shielded` to a refreshed ward and
   `BehaviorComponent.Shielded`, which `applyStunEffect` reads as it reads the
   quasar's shield; `Beam` to `BehaviorComponent.Beaming`, which
-  `TeleportLineRenderer` reads to draw the swarm's line to the stored cell; and
+  `TeleportLineRenderer` reads to draw the swarm's line to the stored cell;
   `ChargeLine` to `BehaviorComponent.ChargeLine`, which `ChargeLineRenderer` reads
-  to pulse the swarm's charge line toward it), then, unless suspended, gold
-  breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
+  to pulse the swarm's charge line toward it; and `Landing` to
+  `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
+  marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
   instance, pattern frame and accumulator, stored target, `Shielded`, `Beaming`,
-  `ChargeLine`}.
+  `ChargeLine`, `Landing`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
   bit.
@@ -715,7 +718,8 @@ its look under its tier's macro. To define one:
   through unchanged ([rendering §6](rendering.md#6-finalization-and-color-modes)).
 - **State.** The look does not follow the machine's state: the hit flash, then
   `Enraged`, tints every glyph, `ChargeLine` pulses the charge line and `Beam`
-  draws the teleport line to the stored cell, and `Telegraph` raises the splash
+  draws the teleport line to the stored cell, `Landing` blinks the landing marker
+  where the body lands on it, and `Telegraph` raises the splash
   countdown beside the body. A look per state
   would be a feature of its own.
 - **Checking it.** `-check` compiles the look with its program

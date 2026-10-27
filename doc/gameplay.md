@@ -363,7 +363,7 @@ a blocked tracer drains to its stop point.
 |---|---|
 | Drain | Local population is `ceil(current heat × 10 / 100)`, capped at 10 and excluding overheat: heat 0 gives 0; 1–10 gives 1; 11–20 gives 2; 91–100 gives 10. Materializes, chases, drains shield energy, removes heat on unshielded contact, turns the player glyphs it crosses into dust (§4) and breaks the gold sequence it crosses; one that crosses a swarm or quasar is absorbed into it, healing it. |
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor, emits lightning when the cursor leaves its effective range, and absorbs drains. It is created by fusing drains in the default progression. |
-| Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. |
+| Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. A blinking cell marks where a charge or teleport lands, from the lock until it does. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle carries a turret it fires in bursts at the nearest cursor, and the blue circle creates swarm pressure. |
 | Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. |
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. It keeps one cursor target and its route until the target disappears, becomes unreachable, or another route is over one-third shorter. |
@@ -540,7 +540,7 @@ rock fills it, each of a type drawn at random among the cave's own eight. Every 
 is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the template for
 a species of one's own ([FSM reference](fsm-reference.md#behavior-programs)),
 running one cycle, the swarm's chase, lock, charge and teleport (`RaiderStates` in
-`macros.toml`), with its own look. Each stone art has two types in each of four
+`macros.toml`), its landing marked as the swarm's is, with its own look. Each stone art has two types in each of four
 tiers, the same tiers in every cave, so caves differ in looks alone: a tier up has
 more hit points (8, 16, 28, 44), a heavier body and a costlier touch, and chases
 slower on a longer lock, the first tier darting as the snake does. Each cave's
