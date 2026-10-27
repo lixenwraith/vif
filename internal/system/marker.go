@@ -86,8 +86,7 @@ func (s *MarkerSystem) Update() {
 			markerComp.Intensity = 0.5 + pulseMod*0.25
 		}
 
-		// FadeMode 1 fades out over the marker's remaining lifetime; 2 (fade in) is unimplemented
-		if markerComp.FadeMode == 1 {
+		if markerComp.FadeMode == component.MarkerFadeOut {
 			if timer, ok := s.world.Components.Timer.GetPtr(markerEntity); ok {
 				if remaining := timer.Slots[component.TimerLifetime].Remaining; remaining > 0 {
 					markerComp.Intensity = max(markerComp.Intensity-dtSeconds/remaining.Seconds(), 0)

@@ -1330,7 +1330,7 @@ func (p *SpeciesCreatedPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecSpeciesCreatedPayload = structCodec{size: unsafe.Sizeof(SpeciesCreatedPayload{}), fields: []field{
 	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
-	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(component.SubType(0))},
 	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpeciesCreatedPayload{}.MemberCount), kind: kindInt, size: unsafe.Sizeof(int(0))},
@@ -1348,7 +1348,7 @@ var codecSpeciesKilledPayload = structCodec{size: unsafe.Sizeof(SpeciesKilledPay
 	{off: unsafe.Offsetof(SpeciesKilledPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpeciesKilledPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SpeciesKilledPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
-	{off: unsafe.Offsetof(SpeciesKilledPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(SpeciesKilledPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(component.SubType(0))},
 }}
 
 func (p *DrainDefeatedPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1631,7 +1631,7 @@ var codecMarkerSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MarkerSpawn
 	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.PulseRate), kind: kindFloat},
 	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Color), kind: kindStruct, sub: &codecColorRGB},
 	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.Shape), kind: kindUint, size: unsafe.Sizeof(component.MarkerShape(0))},
-	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.FadeMode), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(MarkerSpawnRequestPayload{}.FadeMode), kind: kindUint, size: unsafe.Sizeof(component.MarkerFade(0))},
 }}
 
 func (p *ButtonSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1952,8 +1952,8 @@ var codecGatewaySpawnRequestPayload = structCodec{size: unsafe.Sizeof(GatewaySpa
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.MinIntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.OffsetX), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.OffsetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
-	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.SubType), kind: kindUint, size: unsafe.Sizeof(component.SubType(0))},
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.GroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(GatewaySpawnRequestPayload{}.UseRouteGraph), kind: kindBool},
 }}

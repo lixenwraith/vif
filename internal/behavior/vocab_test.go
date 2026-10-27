@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+
+	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
 // -schema reads each name's kind, the keys of its table and its args from Entries,
 // listed kind by kind and name by name
 func TestTheVocabularyListsEachNameWithItsKindKeysAndArgs(t *testing.T) {
 	v := testVocabulary()
-	v.Emit("EmitEvent", func(string, any) (func(*testCtx), error) { return nil, nil })
+	v.Emit("EmitEvent", func(*dialect.Names, string, any) (func(*testCtx), error) { return nil, nil })
 	var got []string
 	for _, e := range v.Entries() {
 		got = append(got, fmt.Sprintf("%s %s %v %v", e.Kind, e.Name, e.Keys, e.Args))

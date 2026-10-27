@@ -19,6 +19,21 @@ const (
 	BehaviorData // a species a scenario's behavior program defines
 )
 
+// BehaviorNames are what a document calls each Behavior
+var BehaviorNames = [...]string{
+	BehaviorNone:   "none",
+	BehaviorGold:   "gold",
+	BehaviorQuasar: "quasar",
+	BehaviorSwarm:  "swarm",
+	BehaviorStorm:  "storm",
+	BehaviorPylon:  "pylon",
+	BehaviorSnake:  "snake",
+	BehaviorEye:    "eye",
+	BehaviorTower:  "tower",
+	BehaviorKraken: "kraken",
+	BehaviorData:   "data",
+}
+
 // CompositeType defines how the composite handles damage and lifecycle
 type CompositeType uint8
 

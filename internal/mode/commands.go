@@ -638,11 +638,10 @@ func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
 	// Parse payload if provided
 	var payload any
 	if len(args) > 1 {
-		payloadStr := strings.Join(args[1:], " ")
 		var err error
-		payload, err = parseEventPayload(eventType, payloadStr)
+		payload, err = parseEventPayload(ctx, eventType, strings.Join(args[1:], " "))
 		if err != nil {
-			setCommandError(ctx, fmt.Sprintf("Payload error: %v", err))
+			setCommandError(ctx, sentence(err))
 			return CommandResult{Continue: true}
 		}
 	}
@@ -652,40 +651,25 @@ func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true}
 }
 
-// parseEventPayload parses an inline TOML table string into the typed payload struct
-// Input: "{ field = value, ... }" or empty string
-// Returns: typed payload pointer or nil
-func parseEventPayload(et event.EventType, raw string) (any, error) {
+// parseEventPayload reads an inline TOML table, "{ field = value, ... }", into the
+// event's payload as a scenario's EmitEvent would, the running programs among its
+// species; empty text is no payload
+func parseEventPayload(ctx *engine.GameContext, et event.EventType, raw string) (any, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, nil
 	}
 
-	// Get typed payload struct for this event
-	payload := event.NewPayloadStruct(et)
-	if payload == nil {
-		return nil, fmt.Errorf("event does not accept payload")
-	}
-
 	// Wrap inline table as TOML key-value for parser compatibility
-	wrapped := "_p = " + raw
-
-	p := toml.NewParser([]byte(wrapped))
-	parsed, err := p.Parse()
+	parsed, err := toml.NewParser([]byte("_p = " + raw)).Parse()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("payload: %w", err)
 	}
-
-	payloadMap, ok := parsed["_p"]
-	if !ok {
-		return nil, fmt.Errorf("malformed payload")
+	programs := make([]string, len(ctx.World.Resources.Behaviors))
+	for i, p := range ctx.World.Resources.Behaviors {
+		programs[i] = p.Name
 	}
-
-	if err := toml.Decode(payloadMap, payload); err != nil {
-		return nil, err
-	}
-
-	return payload, nil
+	return event.AuthoredPayload(event.PayloadNames(programs), et, parsed["_p"])
 }
 
 // handleTelemetryCommand opens the telemetry overlay, or runs a telemetry subcommand

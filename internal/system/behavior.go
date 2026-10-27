@@ -487,21 +487,11 @@ func (c *behaviorCtx) targetDistance() (float64, bool) {
 
 func (c *behaviorCtx) probe(x, y int) { c.probeX, c.probeY, c.probed = x, y, true }
 
-// The colours a program names: of a telegraph's splash, and of a lightning bolt
-var (
-	telegraphColors = []struct {
-		name string
-		rgb  color.RGB
-	}{{"cyan", visual.RgbSplashCyan}, {"white", visual.RgbSplashWhite}}
-	lightningColorNames = [...]string{
-		component.LightningCyan:   "cyan",
-		component.LightningRed:    "red",
-		component.LightningGold:   "gold",
-		component.LightningGreen:  "green",
-		component.LightningPurple: "purple",
-	}
-	materializeSpawns = [...]string{component.SpawnTypeSwarm: "swarm", component.SpawnTypeNugget: "nugget"}
-)
+// telegraphColors are the colours a program names a telegraph's splash by
+var telegraphColors = []struct {
+	name string
+	rgb  color.RGB
+}{{"cyan", visual.RgbSplashCyan}, {"white", visual.RgbSplashWhite}}
 
 // spawnRequests are the code species SpawnSpecies spawns, each by its request
 var spawnRequests = []struct {
@@ -668,9 +658,9 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		c.sys.world.PushLocal(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{AnchorEntity: c.entity})
 	}))
 	v.Effect("Lightning", func(a *colorArgs) (func(*behaviorCtx), error) {
-		i := slices.Index(lightningColorNames[:], a.Color)
+		i := slices.Index(component.LightningColorNames[:], a.Color)
 		if i < 0 {
-			return nil, fmt.Errorf("color %q is not one of %s", a.Color, strings.Join(lightningColorNames[:], ", "))
+			return nil, fmt.Errorf("color %q is not one of %s", a.Color, strings.Join(component.LightningColorNames[:], ", "))
 		}
 		bolt := component.LightningColorType(i)
 		// The bolt is presentation; the hit lands on the cursor's owner alone
@@ -699,8 +689,8 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	})
 	v.Effect("Materialize", func(a *materializeArgs) (func(*behaviorCtx), error) {
 		// A drain beam's completion spawns a drain, so only the announcing beams
-		spawn := slices.Index(materializeSpawns[:], a.Spawn)
-		if spawn < 0 || a.Spawn == "" {
+		spawn := slices.IndexFunc(component.MaterializeStyles[:], func(s component.MaterializeStyle) bool { return s.Name == a.Spawn })
+		if spawn < 0 || component.SpawnType(spawn) == component.SpawnTypeDrain {
 			return nil, fmt.Errorf("spawn %q is not one of swarm, nugget", a.Spawn)
 		}
 		return func(c *behaviorCtx) {
@@ -735,7 +725,8 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			}
 		}, nil
 	})
-	v.Emit("EmitEvent", func(name string, raw any) (func(*behaviorCtx), error) {
+	v.Names(event.PayloadNames)
+	v.Emit("EmitEvent", func(names *dialect.Names, name string, raw any) (func(*behaviorCtx), error) {
 		if name == "" {
 			return nil, errors.New("requires 'event' field")
 		}
@@ -743,14 +734,9 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		if !ok {
 			return nil, fmt.Errorf("unknown event type '%s'", name)
 		}
-		payload := event.NewPayloadStruct(et)
-		if payload == nil && raw != nil {
-			return nil, fmt.Errorf("event '%s' carries no payload", name)
-		}
-		if payload != nil {
-			if err := dialect.DecodeInto(raw, payload); err != nil {
-				return nil, fmt.Errorf("payload for event '%s': %w", name, err)
-			}
+		payload, err := event.AuthoredPayload(names, et, raw)
+		if err != nil {
+			return nil, err
 		}
 		switch event.ClassOf(et) {
 		case event.ClassShared:

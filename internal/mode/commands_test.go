@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -101,5 +102,26 @@ func TestAutoFireCycleRoutesOnlySelectedWeapons(t *testing.T) {
 	machine.SetMode(input.ModeInsert)
 	if intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'a'}); intent == nil || intent.Type != input.IntentTextChar || intent.Char != 'a' {
 		t.Fatalf("insert-mode a = %+v, want text", intent)
+	}
+}
+
+// TestEmitSpellsAPayloadsEnumsByName: :emit decodes its payload as a scenario's
+// EmitEvent does, so a loot kind takes its name and a key no field takes is refused
+func TestEmitSpellsAPayloadsEnumsByName(t *testing.T) {
+	event.EnsureRegistry()
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	mode.ExecuteCommand(ctx, `emit LootSpawnRequest { type = "upgrade", x = 3, y = 4 }`)
+	events := w.Resources.Event.Queue.Consume()
+	if len(events) != 1 {
+		t.Fatalf(":emit pushed %d events, want one: %q", len(events), ctx.GetStatusMessage())
+	}
+	if p, ok := events[0].Payload.(*event.LootSpawnRequestPayload); !ok || *p != (event.LootSpawnRequestPayload{Type: component.LootUpgrade, X: 3, Y: 4}) {
+		t.Fatalf(":emit pushed %+v, want an upgrade at (3, 4)", events[0].Payload)
+	}
+
+	mode.ExecuteCommand(ctx, `emit LootSpawnRequest { kind = "upgrade" }`)
+	if n := len(w.Resources.Event.Queue.Consume()); n != 0 || !strings.Contains(ctx.GetStatusMessage(), `"kind"`) {
+		t.Fatalf("an unknown key pushed %d events and answered %q", n, ctx.GetStatusMessage())
 	}
 }

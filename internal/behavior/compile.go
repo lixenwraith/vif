@@ -47,13 +47,17 @@ func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any) (*Set[
 		return nil, fmt.Errorf("%d behavior programs, at most %d", len(names), parameter.BehaviorProgramsMax)
 	}
 	set := &Set[C]{names: names}
+	payloads := dialect.NewNames()
+	if v.names != nil {
+		payloads = v.names(names)
+	}
 	var errs []error
 	for i, name := range names {
 		if err := checkName(name); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		c := compiler[C]{v: v, program: name}
+		c := compiler[C]{v: v, program: name, payloads: payloads}
 		proto, graph, initial := c.build(programs[name], component.SpeciesDataFirst+component.SpeciesType(i))
 		errs = append(errs, c.errs...)
 		set.protos = append(set.protos, proto)
@@ -68,11 +72,12 @@ func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any) (*Set[
 
 // compiler builds one program, collecting every fault with its place
 type compiler[C any] struct {
-	v       *Vocabulary[C]
-	program string
-	ids     map[string]component.BehaviorState
-	sites   int
-	errs    []error
+	v        *Vocabulary[C]
+	program  string
+	payloads *dialect.Names
+	ids      map[string]component.BehaviorState
+	sites    int
+	errs     []error
 }
 
 // fail records err at where, a path below the program; each error a join holds
@@ -379,7 +384,7 @@ func (c *compiler[C]) action(where string, d actionDoc, kind string) func(C) {
 	case d.Payload != nil && !slices.Contains(vb.keys, "payload"):
 		c.fail(where, fmt.Errorf("action '%s' takes no payload", d.Action))
 	default:
-		f, err := vb.apply(d.Event, d.Payload)
+		f, err := vb.apply(c.payloads, d.Event, d.Payload)
 		if err != nil {
 			c.fail(where, fmt.Errorf("action '%s': %w", d.Action, err))
 		}

@@ -534,7 +534,7 @@ func (a *App) initScheduler() error {
 	a.glue.scheduler, a.membership.scheduler, a.scribe.scheduler = a.scheduler, a.scheduler, a.scheduler
 	a.scheduler.SetJournalDigest(a.scribe.journalDigestLocked)
 
-	register := func(m *fsm.Machine[*engine.World]) { manifest.RegisterFSMComponents(m, a.behaviors.Prototypes()) }
+	register := func(m *fsm.Machine[*engine.World]) { manifest.RegisterFSMComponents(m, a.behaviors.Names()) }
 	if err := a.scheduler.LoadScenarioFromFS(a.scenario.FS(), a.scenario.Entry(), register); err != nil {
 		return fmt.Errorf("load scenario %s: %w", a.scenario.Name, err)
 	}

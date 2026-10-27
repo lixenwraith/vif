@@ -328,9 +328,11 @@ Intent names are canonical keymap action names, plus `press`, which presses the
 captured key its `char` names. `text` emits one semantic
 text-character intent per rune; `command` performs command-mode entry, text,
 and confirmation as separate settled groups. An event resolves through the
-generated registry and its payload uses the same TOML field names as the
-journal. Local and Bus events default to the player domain, Shared events to
-shared; Stamped events require `domain = "player"` or `"shared"`.
+generated registry, and its payload decodes as a scenario's `EmitEvent` does
+([FSM reference](fsm-reference.md#event-emission)), the running scenario's
+behavior programs among its species, when the script binds. Local and Bus events
+default to the player domain, Shared events to shared; Stamped events require
+`domain = "player"` or `"shared"`.
 Unknown top-level and action fields are errors. `run` and `tick` default to zero;
 `count` applies only to an intent, and the four char-wait intents and `press`
 additionally require a one-rune `char`. Geometry must either omit both dimensions or set both.

@@ -13,6 +13,15 @@ const (
 	LightningPurple                           // Negative energy drain
 )
 
+// LightningColorNames are what a document calls each bolt colour
+var LightningColorNames = [...]string{
+	LightningCyan:   "cyan",
+	LightningRed:    "red",
+	LightningGold:   "gold",
+	LightningGreen:  "green",
+	LightningPurple: "purple",
+}
+
 // LightningComponent represents a transient electrical effect between two points
 type LightningComponent struct {
 	// Endpoint positions - used as fallback when entity is 0
