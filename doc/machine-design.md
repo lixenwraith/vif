@@ -762,9 +762,9 @@ captures, one a tick, read the frames. Per species:
 - Storm: `:emit EventStormSpawnRequest` with `:log stat 1`. The per-tick status
   log counts each colour's attack frames and `mount.fired`, and captures show the
   blue's beam and the swarm on its footprint the tick the beam goes. A disruptor
-  alone (`:energy 100000000`, `EventWeaponRemoveRequest` for weapons 0 to 5,
-  `EventWeaponAddRequest { entity = 1, weapon = 2 }`, `a`) stuns the circles in a
-  series, and a stunned burst holds and resumes.
+  alone (`:energy 100000000`, `EventWeaponRemoveRequest` for each weapon, `rod`
+  to `gun`, `EventWeaponAddRequest { entity = 1, weapon = "disruptor" }`, `a`)
+  stuns the circles in a series, and a stunned burst holds and resumes.
 - Fusions: `:emit EventFuseQuasarRequest` lands its quasar the tick its beam's
   last cells go.
 - Data species: `:n warden`, with `:energy 1000000000` to outlast it. A beam
