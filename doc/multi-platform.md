@@ -533,8 +533,10 @@ whether committed, composed or the keyboard's paste button, which reads the
 clipboard as the Paste key, Ctrl-Shift-V and Shift-Insert do; Back is Escape. A hardware key's
 `onKeyUp` ends the hold its `onKeyDown` began and `getRepeatCount` marks its
 repeats; the system keyboard's text, its delete and Back tap; the window losing
-focus ends every hold. Two fingers tapped together twice raise or drop the system
-keyboard, read from the window's insets rather than a flag of the app's; the
+focus ends every hold. Three taps on the status bar, landing anywhere on it (the
+strip above the keyboard stands for it), or two fingers tapped together twice raise
+or drop the system keyboard through the input method manager, whose state is read
+from the window's insets rather than a flag of the app's; the
 keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
 its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
 `StatusCovered`) and keeps its input to the left half of the bar's bottom row,
