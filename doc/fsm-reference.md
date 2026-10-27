@@ -978,10 +978,11 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
   `Shielded` (no damage, no stun), `ChargeLine` (the swarm's charge line: two
-  pulses from the header toward the stored cell over the end of the entry, each the
+  pulses from the body's centre to the centre of the footprint on the stored cell,
+  the landing marker's cell, over the end of the entry, each the
   share of it the swarm's charge is of its lock, so a lock flagged with it shows
-  where a charge goes), `Beam` (the swarm's teleport line from where the header
-  stands to the stored cell, over the entry: a state that ends in `Teleport` on its
+  where a charge goes), `Beam` (the swarm's teleport line from the body where it
+  stands to the same centre, over the entry: a state that ends in `Teleport` on its
   timeout's `actions` beams there as the swarm does) and `Landing` (the landing
   marker: the centre of the footprint the body takes on the stored cell blinks
   white, red and pink, so flagging the lock, the charge and the beam marks where an

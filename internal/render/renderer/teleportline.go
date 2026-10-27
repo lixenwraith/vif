@@ -54,10 +54,10 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 		}
 
 		r.renderBeam(ctx, buf,
-			headerPos.X, headerPos.Y,
-			swarmComp.TeleportTargetX, swarmComp.TeleportTargetY,
-			parameter.SwarmWidth, parameter.SwarmHeight,
-			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
+			footprintAt(headerPos.X, headerPos.Y, parameter.SwarmWidth, parameter.SwarmHeight,
+				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
+			footprintAt(swarmComp.TeleportTargetX, swarmComp.TeleportTargetY, parameter.SwarmWidth, parameter.SwarmHeight,
+				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
 			swarmComp.Machine.Progress())
 		return true
 	})
@@ -73,29 +73,27 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			return true
 		}
 		p := &prototypes[b.Program]
-		r.renderBeam(ctx, buf, pos.X, pos.Y, b.TargetX, b.TargetY,
-			p.Width, p.Height, p.HeaderX, p.HeaderY, b.Machine.Progress())
+		r.renderBeam(ctx, buf,
+			footprintAt(pos.X, pos.Y, p.Width, p.Height, p.HeaderX, p.HeaderY),
+			footprintAt(b.TargetX, b.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY),
+			b.Machine.Progress())
 		return true
 	})
 }
 
-// renderBeam draws single line with phase-based visibility, excluding entity bounding boxes
-// (x0, y0) and (x1, y1) are header cells; width/height and offsets define the bounding box to exclude
+// renderBeam draws the line with phase-based visibility from the body's centre into the
+// landing's, where the landing marker blinks, skipping the cells of the body it leaves
 func (r *TeleportLineRenderer) renderBeam(
 	ctx render.RenderContext, buf *render.RenderBuffer,
-	x0, y0, x1, y1 int,
-	boxWidth, boxHeight, headerOffsetX, headerOffsetY int,
+	body, landing vmath.Area,
 	progress float64,
 ) {
-	line := vmath.NewLine(x0, y0, x1, y1)
+	from, to := body.Center(), landing.Center()
+	line := vmath.NewLine(from.X, from.Y, to.X, to.Y)
 	totalSteps := line.Steps()
 	if totalSteps == 0 {
 		return
 	}
-
-	// Calculate bounding boxes for start and end entities
-	startBox := vmath.Area{X: x0 - headerOffsetX, Y: y0 - headerOffsetY, Width: boxWidth, Height: boxHeight}
-	endBox := vmath.Area{X: x1 - headerOffsetX, Y: y1 - headerOffsetY, Width: boxWidth, Height: boxHeight}
 
 	// Calculate visible segment bounds based on phase
 	var segStart, segEnd float64
@@ -117,8 +115,7 @@ func (r *TeleportLineRenderer) renderBeam(
 	for step := range totalSteps + 1 {
 		t := float64(step) * invSteps
 
-		// Only draw cells within visible segment, outside both bounding boxes
-		if t >= segStart && t <= segEnd && !startBox.Contains(line.X(), line.Y()) && !endBox.Contains(line.X(), line.Y()) {
+		if t >= segStart && t <= segEnd && !body.Contains(line.X(), line.Y()) {
 			screenX, screenY, visible := ctx.MapToScreen(line.X(), line.Y())
 			if visible {
 				r.renderCell(buf, screenX, screenY, r.calcIntensity(progress, t, segStart, segEnd))

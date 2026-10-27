@@ -54,10 +54,8 @@ func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		default:
 			return true
 		}
-		r.mark(ctx, buf, vmath.Area{
-			X: x - parameter.SwarmHeaderOffsetX, Y: y - parameter.SwarmHeaderOffsetY,
-			Width: parameter.SwarmWidth, Height: parameter.SwarmHeight,
-		}, sw.Machine.Elapsed)
+		r.mark(ctx, buf, footprintAt(x, y, parameter.SwarmWidth, parameter.SwarmHeight,
+			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY), sw.Machine.Elapsed)
 		return true
 	})
 
@@ -67,10 +65,15 @@ func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			return true
 		}
 		p := &prototypes[b.Program]
-		r.mark(ctx, buf, vmath.Area{X: b.TargetX - p.HeaderX, Y: b.TargetY - p.HeaderY, Width: p.Width, Height: p.Height},
-			b.Machine.Elapsed)
+		r.mark(ctx, buf, footprintAt(b.TargetX, b.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY), b.Machine.Elapsed)
 		return true
 	})
+}
+
+// footprintAt is the area a body covers with its header on (x, y); its centre is where
+// the landing marker blinks and where the charge and teleport lines run between
+func footprintAt(x, y, width, height, headerX, headerY int) vmath.Area {
+	return vmath.Area{X: x - headerX, Y: y - headerY, Width: width, Height: height}
 }
 
 // mark draws the marker on the footprint's centre, its cycle starting on each state's entry

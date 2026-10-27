@@ -184,6 +184,39 @@ func TestADataSpeciesInAChargeLineStateDrawsTheChargeLine(t *testing.T) {
 	}
 }
 
+// TestTheChargeAndTeleportLinesReachTheLandingMarker: both lines run between the
+// footprints' centres, so they end on the marker's cell, the charge line's head on
+// a pulse's last tick and the teleport line into the landing's body while it holds
+func TestTheChargeAndTeleportLinesReachTheLandingMarker(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 3, Height: 2, HeaderX: 1, HitPoints: 20}}
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: 5, Y: 5})
+
+	// Landing on (30,5), the 3x2 body's centre and so the marker is (30,6)
+	marker := func(r render.SystemRenderer, b component.BehaviorComponent) color.RGB {
+		b.TargetX, b.TargetY = 30, 5
+		w.Components.Behavior.SetComponent(header, b)
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 40, 24)
+		r.Render(render.RenderContext{MapWidth: 40, MapHeight: 24, ViewportWidth: 40, ViewportHeight: 24}, buf)
+		return buf.CellAt(30, 6).Bg
+	}
+
+	const lock = 1200 * time.Millisecond
+	charge := component.BehaviorComponent{ChargeLine: true}
+	charge.Machine.Duration, charge.Machine.Elapsed = lock, lock-parameter.GameUpdateInterval
+	if bg := marker(NewChargeLineRenderer(game), charge); bg == (color.RGB{}) {
+		t.Fatal("the lock's last tick drew no charge line on the landing marker")
+	}
+	beam := component.BehaviorComponent{Beaming: true}
+	beam.Machine.Duration, beam.Machine.Elapsed = parameter.SwarmTeleportDuration, parameter.SwarmTeleportDuration/2
+	if bg := marker(NewTeleportLineRenderer(game), beam); bg != visual.RgbSwarmTeleport {
+		t.Fatalf("the beam's hold drew %v on the landing marker, want the teleport line's %v", bg, visual.RgbSwarmTeleport)
+	}
+}
+
 // TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding: the swarm's lock,
 // charge and teleport, and a data species' state flagged Landing, blink the centre
 // of the footprint they land on through the marker's colour cycle; nothing else does
