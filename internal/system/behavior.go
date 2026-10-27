@@ -254,10 +254,11 @@ func (s *BehaviorSystem) fill(header core.Entity, b *component.BehaviorComponent
 
 // spawn builds program i's composite with its header at the cell, or the nearest
 // place its footprint fits, searched over the whole map as a fuse's beam is: a
-// scenario names a cell blind to the walls, a cave's rock among them
+// scenario names a cell blind to the walls, a cave's rock among them, and to the
+// body, a cell on an edge or past it searching from the footprint flush against it
 func (s *BehaviorSystem) spawn(i, x, y int) {
 	p := &s.set.Prototypes()[i]
-	left, top, found := s.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
+	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
 	if !found {
 		s.programs[i].lifecycle.spawnFailures.Add(1)
 		return
@@ -423,7 +424,7 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 // footprint fits, clearing the landing with a flash
 func (s *BehaviorSystem) teleport(c *behaviorCtx) {
 	p := c.proto
-	left, top, found := s.world.Positions.FindFreeAreaSpiral(
+	left, top, found := s.world.Positions.FindFreeAreaInside(
 		c.behavior.TargetX, c.behavior.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
 	if !found {
 		return
@@ -649,7 +650,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 				return false
 			}
 			p := c.proto
-			left, top, found := c.sys.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+			left, top, found := c.sys.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
 			if found {
 				c.probe(left+p.HeaderX, top+p.HeaderY)
 			}

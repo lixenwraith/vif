@@ -188,10 +188,10 @@ func TestAStunDuringARaidersBeamMovesNothing(t *testing.T) {
 	}
 }
 
-// TestEveryVanguardRaiderTypeFliesTheCycle: each raider type, compiled as the
-// scenario expands it, chases, locks, charges along a clear line, brakes and chases
-// again, closing on its target, and wears a look of its own footprint
-func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
+// vanguardBehaviors compiles every program of the shipped vanguard scenario, as the
+// scenario expands them, and returns the expanded documents beside them
+func vanguardBehaviors(t *testing.T) (*BehaviorSet, map[string]map[string]any) {
+	t.Helper()
 	const dir = "../../wad/scenario/vanguard"
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("vanguard scenario not present: %v", err)
@@ -208,6 +208,65 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return set, docs
+}
+
+// TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt: a spawn names a cell blind to
+// the body, so a request on any edge of the map, or past it, stands each raider
+// type against that edge on the row or column it named, whatever its size and
+// header offset; a scenario scrolling from any side spawns at its edge alike
+func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
+	set, _ := vanguardBehaviors(t)
+	newWorld := func() *engine.World {
+		w := engine.NewWorld()
+		engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+		w.Resources.Behaviors = set.Prototypes()
+		if w.Resources.Target == nil {
+			w.Resources.Target = &engine.TargetResource{}
+		}
+		return w
+	}
+	cfg := newWorld().Resources.Config
+	width, height, row, col := cfg.MapWidth, cfg.MapHeight, cfg.MapHeight/2, cfg.MapWidth/2
+	for i, p := range set.Prototypes() {
+		right, bottom := width-p.Width+p.HeaderX, height-p.Height+p.HeaderY
+		for _, tc := range []struct {
+			edge         string
+			x, y         int
+			wantX, wantY int
+		}{
+			{"right", width - 1, row, right, row},
+			{"past the right", width + 9, row, right, row},
+			{"left", 0, row, p.HeaderX, row},
+			{"top", col, -3, col, p.HeaderY},
+			{"bottom", col, height - 1, col, bottom},
+			{"corner", width + 2, height + 2, right, bottom},
+		} {
+			t.Run(p.Name+"/"+tc.edge, func(t *testing.T) {
+				w := newWorld()
+				s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
+				s.HandleEvent(event.GameEvent{
+					Type:    event.EventBehaviorSpawnRequest,
+					Payload: &event.BehaviorSpawnRequestPayload{Program: set.Names()[i], X: tc.x, Y: tc.y},
+				})
+				headers := w.Components.Behavior.Entities()
+				if len(headers) != 1 {
+					t.Fatalf("%d spawned, want one", len(headers))
+				}
+				if pos, _ := w.Positions.GetPosition(headers[0]); pos.X != tc.wantX || pos.Y != tc.wantY {
+					t.Fatalf("a %dx%d body asked for (%d,%d) stands at (%d,%d), want (%d,%d)",
+						p.Width, p.Height, tc.x, tc.y, pos.X, pos.Y, tc.wantX, tc.wantY)
+				}
+			})
+		}
+	}
+}
+
+// TestEveryVanguardRaiderTypeFliesTheCycle: each raider type, compiled as the
+// scenario expands it, chases, locks, charges along a clear line, brakes and chases
+// again, closing on its target, and wears a look of its own footprint
+func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
+	set, docs := vanguardBehaviors(t)
 	if got := set.Names(); !slices.Equal(got, []string{"construct", "invader", "scarab", "storm_eye"}) {
 		t.Fatalf("programs %v, want the four raider types", got)
 	}

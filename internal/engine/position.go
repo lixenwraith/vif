@@ -636,6 +636,27 @@ func (p *Position) FindFreeAreaSpiral(
 	return 0, 0, false
 }
 
+// FindFreeAreaInside is FindFreeAreaSpiral from the origin pulled in from the
+// map's edges until the area with its anchor there lies inside the map: an origin
+// on an edge, or past it, searches from the area flush against that edge on the
+// origin's row or column, whichever edge it is, so a caller names an edge cell
+// blind to the area's size and anchor. An area larger than the map finds nothing.
+func (p *Position) FindFreeAreaInside(
+	originX, originY int,
+	width, height int,
+	anchorOffsetX, anchorOffsetY int,
+	mask component.WallBlockMask,
+	maxRadius int,
+) (int, int, bool) {
+	if p.world == nil {
+		return 0, 0, false
+	}
+	config := p.world.Resources.Config
+	originX = max(anchorOffsetX, min(originX, config.MapWidth-width+anchorOffsetX))
+	originY = max(anchorOffsetY, min(originY, config.MapHeight-height+anchorOffsetY))
+	return p.FindFreeAreaSpiral(originX, originY, width, height, anchorOffsetX, anchorOffsetY, mask, maxRadius)
+}
+
 // MapSearchRadius is the spiral radius whose rays reach every column and every row
 // of the map from any cell in it, rows being searched at the cell aspect
 func (p *Position) MapSearchRadius() int {

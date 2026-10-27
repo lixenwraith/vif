@@ -391,7 +391,9 @@ system.
   empty), and `killDrains` alone reports the consumed drains' deaths.
 - **Data species.** `EventFuseBehaviorRequest` starts a Shared beam naming the
   data species over the nearest place its footprint fits, searched over the whole
-  map (`FindFreeAreaSpiral` with a negative radius), and on a shared completion
+  map (`FindFreeAreaInside` with a negative radius: `FindFreeAreaSpiral` from the
+  origin pulled in from the edges until the footprint fits, as a direct spawn,
+  `FindLanding` and `Teleport` search), and on a shared completion
   `landBehavior` sends the direct spawn, its header on the beam's footprint. A
   cancel of the program ends its beams in flight (`cancelBehaviorBeams`).
 

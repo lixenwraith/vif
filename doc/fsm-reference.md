@@ -822,11 +822,13 @@ IDs 10 to 17 in sorted-name order, so a guard on `EventSpeciesCreated` or
 
 A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
 x, y }`, its header at that cell or the nearest place its footprint fits, searched
-over the whole map; a request naming no program raises nothing
+over the whole map. A cell on an edge or past it searches from the footprint flush
+against that edge, on the row or column it names, so a request names an edge blind
+to the body's size and header offset. A request naming no program raises nothing
 (`behavior.unknown_program_rejects`), nor one finding no room
 (`behavior.<name>.spawn_failures`). Or it beams one in with
 `EventFuseBehaviorRequest { program, x, y }`: the fuse plays a one-second swarm beam over the nearest place its footprint fits, searching the
-whole map from that cell, and spawns the instance as it ends; a request naming no
+whole map from that cell as a direct spawn does, and spawns the instance as it ends; a request naming no
 program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
 without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
 instances and the beams still bringing them, every program's when it names none.
