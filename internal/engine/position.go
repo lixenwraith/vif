@@ -628,47 +628,12 @@ func (p *Position) HasLineOfSight(x0, y0, x1, y1 int, mask component.WallBlockMa
 
 // HasLineOfSightUnsafe performs Bresenham LOS checking intermediate cells for blocking walls
 func (p *Position) HasLineOfSightUnsafe(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
-	dx := x1 - x0
-	dy := y1 - y0
-	absDx, absDy := dx, dy
-	if absDx < 0 {
-		absDx = -absDx
-	}
-	if absDy < 0 {
-		absDy = -absDy
-	}
-
-	stepX, stepY := 1, 1
-	if dx < 0 {
-		stepX = -1
-	}
-	if dy < 0 {
-		stepY = -1
-	}
-
-	err := absDx - absDy
-	x, y := x0, y0
-
-	for {
-		if x == x1 && y == y1 {
-			return true
-		}
-
-		// Check intermediate cells (skip origin)
-		if (x != x0 || y != y0) && p.HasBlockingWallAt(x, y, mask) {
+	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
+		if p.HasBlockingWallAt(line.X(), line.Y(), mask) {
 			return false
 		}
-
-		e2 := 2 * err
-		if e2 > -absDy {
-			err -= absDy
-			x += stepX
-		}
-		if e2 < absDx {
-			err += absDx
-			y += stepY
-		}
 	}
+	return true
 }
 
 // Move updates the position of an existing entity; it is a no-op when the entity
@@ -1305,97 +1270,21 @@ func getSearchDirection(originX, centerX int) SearchDirection {
 func (p *Position) FindLastFreeOnRay(startX, startY, endX, endY int, mask component.WallBlockMask) (int, int, bool) {
 	// Start must be free (caller's responsibility to ensure valid origin)
 	lastFreeX, lastFreeY := startX, startY
-
-	dx := endX - startX
-	dy := endY - startY
-	absDx, absDy := vmath.IntAbs(dx), vmath.IntAbs(dy)
-
-	stepX, stepY := 1, 1
-	if dx < 0 {
-		stepX = -1
-	}
-	if dy < 0 {
-		stepY = -1
-	}
-
-	err := absDx - absDy
-	x, y := startX, startY
-
-	for {
-		// Check current cell (skip origin)
-		if (x != startX || y != startY) && p.HasBlockingWallAt(x, y, mask) {
+	line := vmath.NewLine(startX, startY, endX, endY)
+	for !line.AtEnd() {
+		line = line.Next()
+		if p.HasBlockingWallAt(line.X(), line.Y(), mask) {
 			return lastFreeX, lastFreeY, false
 		}
-
-		// Update last free position
-		lastFreeX, lastFreeY = x, y
-
-		if x == endX && y == endY {
-			return lastFreeX, lastFreeY, true
-		}
-
-		e2 := 2 * err
-		if e2 > -absDy {
-			err -= absDy
-			x += stepX
-		}
-		if e2 < absDx {
-			err += absDx
-			y += stepY
-		}
+		lastFreeX, lastFreeY = line.X(), line.Y()
 	}
+	return lastFreeX, lastFreeY, true
 }
 
 // IsPathBlocked checks if straight line from (x0,y0) to (x1,y1) intersects any blocking wall
-// Uses Bresenham traversal, returns true if ANY intermediate cell is blocked
 // Endpoints are NOT checked - only path between them
 func (p *Position) IsPathBlocked(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
-	if x0 == x1 && y0 == y1 {
-		return false
-	}
-
-	dx := x1 - x0
-	dy := y1 - y0
-	absDx, absDy := dx, dy
-	if absDx < 0 {
-		absDx = -absDx
-	}
-	if absDy < 0 {
-		absDy = -absDy
-	}
-
-	stepX, stepY := 1, 1
-	if dx < 0 {
-		stepX = -1
-	}
-	if dy < 0 {
-		stepY = -1
-	}
-
-	err := absDx - absDy
-	x, y := x0, y0
-
-	for {
-		e2 := 2 * err
-		if e2 > -absDy {
-			err -= absDy
-			x += stepX
-		}
-		if e2 < absDx {
-			err += absDx
-			y += stepY
-		}
-
-		// Reached destination - path clear
-		if x == x1 && y == y1 {
-			return false
-		}
-
-		// Check intermediate cell
-		if p.HasBlockingWallAt(x, y, mask) {
-			return true
-		}
-	}
+	return !p.HasLineOfSightUnsafe(x0, y0, x1, y1, mask)
 }
 
 // IsPointValidForOrbit checks if grid point is within bounds and not wall-blocked
@@ -1413,7 +1302,7 @@ func (p *Position) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask co
 }
 
 // HasAreaLineOfSightUnsafe performs area LOS check without acquiring lock
-// Caller MUST hold RLock() or Lock()
+// SYNC: caller holds World.updateMutex
 func (p *Position) HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
 	// Degenerate case: point entity
 	if width <= 1 && height <= 1 {
@@ -1424,58 +1313,21 @@ func (p *Position) HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height int, m
 	halfW := width / 2
 	halfH := height / 2
 
-	dx := x1 - x0
-	dy := y1 - y0
-	absDx, absDy := dx, dy
-	if absDx < 0 {
-		absDx = -absDx
-	}
-	if absDy < 0 {
-		absDy = -absDy
-	}
+	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
+		boxX := line.X() - halfW
+		boxY := line.Y() - halfH
 
-	stepX, stepY := 1, 1
-	if dx < 0 {
-		stepX = -1
-	}
-	if dy < 0 {
-		stepY = -1
-	}
-
-	err := absDx - absDy
-	x, y := x0, y0
-
-	for {
-		if x == x1 && y == y1 {
-			return true
+		// Bounds check: entity bbox must fit entirely within map
+		if boxX < 0 || boxY < 0 || boxX+width > config.MapWidth || boxY+height > config.MapHeight {
+			return false
 		}
 
-		// Skip origin, check intermediate cells
-		if x != x0 || y != y0 {
-			boxX := x - halfW
-			boxY := y - halfH
-
-			// Bounds check: entity bbox must fit entirely within map
-			if boxX < 0 || boxY < 0 || boxX+width > config.MapWidth || boxY+height > config.MapHeight {
-				return false
-			}
-
-			// Wall collision
-			if p.HasBlockingWallInAreaUnsafe(boxX, boxY, width, height, mask) {
-				return false
-			}
-		}
-
-		e2 := 2 * err
-		if e2 > -absDy {
-			err -= absDy
-			x += stepX
-		}
-		if e2 < absDx {
-			err += absDx
-			y += stepY
+		// Wall collision
+		if p.HasBlockingWallInAreaUnsafe(boxX, boxY, width, height, mask) {
+			return false
 		}
 	}
+	return true
 }
 
 // HasAreaLineOfSightRotatable checks LOS with optional 90° rotation

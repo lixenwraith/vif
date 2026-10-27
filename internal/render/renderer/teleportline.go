@@ -9,16 +9,10 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// Phase thresholds matching materialize timing
-const (
-	teleportFillEnd = 0.3
-	teleportHoldEnd = 0.7
-	teleportRecede  = 1.0 - teleportHoldEnd
-)
-
-// TeleportLineRenderer draws a phase-based beam from swarm origin to teleport destination
+// TeleportLineRenderer draws a phase-based beam from the swarm to its teleport destination
 // Phases: Fill (beam extends) → Hold (full line) → Recede (darkness sweeps)
 type TeleportLineRenderer struct {
 	gameCtx    *engine.GameContext
@@ -46,13 +40,19 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	swarms.Each(func(_ core.Entity, swarmComp *component.SwarmComponent) bool {
+	swarms.Each(func(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
 		if swarmComp.Machine.State != component.SwarmStateTeleport {
 			return true
 		}
 
+		// The beam leaves the header where it stands: scrolling rock can carry a swarm mid-teleport
+		headerPos, ok := r.gameCtx.World.Positions.GetPosition(headerEntity)
+		if !ok {
+			return true
+		}
+
 		r.renderBeam(ctx, buf,
-			swarmComp.TeleportStartX, swarmComp.TeleportStartY,
+			headerPos.X, headerPos.Y,
 			swarmComp.TeleportTargetX, swarmComp.TeleportTargetY,
 			parameter.SwarmWidth, parameter.SwarmHeight,
 			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
@@ -62,96 +62,51 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 }
 
 // renderBeam draws single line with phase-based visibility, excluding entity bounding boxes
-// headerX/Y are anchor positions; width/height and offsets define the bounding box to exclude
+// (x0, y0) and (x1, y1) are header cells; width/height and offsets define the bounding box to exclude
 func (r *TeleportLineRenderer) renderBeam(
 	ctx render.RenderContext, buf *render.RenderBuffer,
 	x0, y0, x1, y1 int,
 	boxWidth, boxHeight, headerOffsetX, headerOffsetY int,
 	progress float64,
 ) {
-	dx := x1 - x0
-	dy := y1 - y0
-	absDx, absDy := dx, dy
-	if absDx < 0 {
-		absDx = -absDx
-	}
-	if absDy < 0 {
-		absDy = -absDy
-	}
-
-	totalSteps := max(absDx, absDy)
+	line := vmath.NewLine(x0, y0, x1, y1)
+	totalSteps := line.Steps()
 	if totalSteps == 0 {
 		return
 	}
 
 	// Calculate bounding boxes for start and end entities
-	startBoxMinX := x0 - headerOffsetX
-	startBoxMinY := y0 - headerOffsetY
-	endBoxMinX := x1 - headerOffsetX
-	endBoxMinY := y1 - headerOffsetY
+	startBox := vmath.Area{X: x0 - headerOffsetX, Y: y0 - headerOffsetY, Width: boxWidth, Height: boxHeight}
+	endBox := vmath.Area{X: x1 - headerOffsetX, Y: y1 - headerOffsetY, Width: boxWidth, Height: boxHeight}
 
 	// Calculate visible segment bounds based on phase
 	var segStart, segEnd float64
 	switch {
-	case progress < teleportFillEnd:
-		fillT := progress / teleportFillEnd
+	case progress < visual.TeleportFillEnd:
+		fillT := progress / visual.TeleportFillEnd
 		segStart = 0
 		segEnd = fillT
-	case progress < teleportHoldEnd:
+	case progress < visual.TeleportHoldEnd:
 		segStart = 0
 		segEnd = 1
 	default:
-		recedeT := (progress - teleportHoldEnd) / teleportRecede
+		recedeT := (progress - visual.TeleportHoldEnd) / visual.TeleportRecede
 		segStart = recedeT
 		segEnd = 1
 	}
 
-	stepX, stepY := 1, 1
-	if dx < 0 {
-		stepX = -1
-	}
-	if dy < 0 {
-		stepY = -1
-	}
-
 	invSteps := 1.0 / float64(totalSteps)
-	err := absDx - absDy
-	mapX, mapY := x0, y0
-
 	for step := range totalSteps + 1 {
 		t := float64(step) * invSteps
 
-		// Only draw cells within visible segment
-		if t >= segStart && t <= segEnd {
-			// Skip cells inside start entity bounding box
-			if mapX >= startBoxMinX && mapX < startBoxMinX+boxWidth &&
-				mapY >= startBoxMinY && mapY < startBoxMinY+boxHeight {
-				goto advance
-			}
-			// Skip cells inside end entity bounding box
-			if mapX >= endBoxMinX && mapX < endBoxMinX+boxWidth &&
-				mapY >= endBoxMinY && mapY < endBoxMinY+boxHeight {
-				goto advance
-			}
-
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+		// Only draw cells within visible segment, outside both bounding boxes
+		if t >= segStart && t <= segEnd && !startBox.Contains(line.X(), line.Y()) && !endBox.Contains(line.X(), line.Y()) {
+			screenX, screenY, visible := ctx.MapToScreen(line.X(), line.Y())
 			if visible {
 				r.renderCell(buf, screenX, screenY, r.calcIntensity(progress, t, segStart, segEnd))
 			}
 		}
-
-	advance:
-		if step < totalSteps {
-			e2 := 2 * err
-			if e2 > -absDy {
-				err -= absDy
-				mapX += stepX
-			}
-			if e2 < absDx {
-				err += absDx
-				mapY += stepY
-			}
-		}
+		line = line.Next()
 	}
 }
 
@@ -165,7 +120,7 @@ func (r *TeleportLineRenderer) calcIntensity(progress, t, segStart, segEnd float
 	posInSeg := (t - segStart) / segLen
 
 	switch {
-	case progress < teleportFillEnd:
+	case progress < visual.TeleportFillEnd:
 		// Fill: gradient dim→bright toward leading edge, pulse at head
 		base := 0.4 + 0.6*posInSeg
 		if posInSeg > 0.9 {
@@ -173,7 +128,7 @@ func (r *TeleportLineRenderer) calcIntensity(progress, t, segStart, segEnd float
 		}
 		return base
 
-	case progress < teleportHoldEnd:
+	case progress < visual.TeleportHoldEnd:
 		return 1.0
 
 	default:
