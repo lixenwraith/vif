@@ -1,0 +1,95 @@
+package engine
+
+import (
+	"github.com/lixenwraith/vif/internal/component"
+)
+
+// RockColumn is one map column of a rock field: its ceiling fills rows [0, Ceil)
+// and its floor rows [Floor, map height)
+type RockColumn struct {
+	Ceil, Floor int
+}
+
+// Rock reports whether row y of the column is rock
+func (c RockColumn) Rock(y int) bool { return y < c.Ceil || y >= c.Floor }
+
+// RockField is rock no entity holds, a column for each map column from x 0. Its
+// writer lays it from shared state (the wall system's cave from its record), so a
+// capture carries that state and never the field. It blocks Mask as a wall does,
+// and every wall query of Position reads it beside the wall entities.
+type RockField struct {
+	Mask   component.WallBlockMask
+	Visual component.WallVisualConfig
+	// Origin is the profile column at map column 0, which what draws the rock anchors to
+	Origin int64
+	cols   []RockColumn
+}
+
+// Width is how many map columns the field covers, from x 0
+func (r *RockField) Width() int { return len(r.cols) }
+
+// Columns is the field's columns from map column 0, to read and not to keep
+func (r *RockField) Columns() []RockColumn { return r.cols }
+
+// Column returns map column x's rock, and false outside the field
+func (r *RockField) Column(x int) (RockColumn, bool) {
+	if x < 0 || x >= len(r.cols) {
+		return RockColumn{}, false
+	}
+	return r.cols[x], true
+}
+
+// blocks reports whether the field's rock fills (x, y) for mask (0 = any wall);
+// the caller has bounded y by the map
+func (r *RockField) blocks(x, y int, mask component.WallBlockMask) bool {
+	if x < 0 || x >= len(r.cols) || (mask != 0 && r.Mask&mask == 0) {
+		return false
+	}
+	return r.cols[x].Rock(y)
+}
+
+// blocksArea reports whether the field's rock fills any cell of [x0, x1) × [y0, y1)
+// for mask; the caller has bounded the rows by the map
+func (r *RockField) blocksArea(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
+	if (mask != 0 && r.Mask&mask == 0) || y0 >= y1 {
+		return false
+	}
+	for x := max(x0, 0); x < min(x1, len(r.cols)); x++ {
+		if c := r.cols[x]; y0 < c.Ceil || y1 > c.Floor {
+			return true
+		}
+	}
+	return false
+}
+
+// Rock returns the rock field, or nil when none stands. Its readers hold
+// World.updateMutex and change it only through SetRock and ShiftRock.
+func (p *Position) Rock() *RockField { return p.rock }
+
+// SetRock lays cols as the rock field from map column 0, origin its first profile
+// column; no columns lift the field
+func (p *Position) SetRock(mask component.WallBlockMask, visual component.WallVisualConfig, origin int64, cols []RockColumn) {
+	p.wallEpoch++
+	if len(cols) == 0 {
+		p.rock = nil
+		return
+	}
+	if p.rock == nil {
+		p.rock = &RockField{}
+	}
+	p.rock.Mask, p.rock.Visual, p.rock.Origin = mask, visual, origin
+	p.rock.cols = append(p.rock.cols[:0], cols...)
+}
+
+// ShiftRock moves the field a column left: map column 0 leaves it and enter stands
+// at its right end
+func (p *Position) ShiftRock(enter RockColumn) {
+	r := p.rock
+	if r == nil {
+		return
+	}
+	p.wallEpoch++
+	copy(r.cols, r.cols[1:])
+	r.cols[len(r.cols)-1] = enter
+	r.Origin++
+}

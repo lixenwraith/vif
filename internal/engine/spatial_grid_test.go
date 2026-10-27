@@ -85,7 +85,8 @@ func assertPartition(t *testing.T, g *SpatialGrid, x, y, wantShared, wantPlayer 
 // FuzzWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
 // query cell for cell — any mask, either domain, soft-clipped walls, out of bounds
 // — and one reused across storms that destroy, move, remask, respawn, clip, shift
-// and re-index walls, or reconcile them to a capture, sees every change.
+// and re-index walls, reconcile them to a capture, or lay, shift and lift a rock
+// field, sees every change; an area query is the cells' queries joined.
 func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 	for seed := range uint64(16) {
 		f.Add(seed)
@@ -124,8 +125,11 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 			if round%4 == 0 {
 				saved = w.CopyOut(saved)
 			}
+			rockColumn := func() RockColumn {
+				return RockColumn{Ceil: rng.IntN(cfg.MapHeight+2) - 1, Floor: rng.IntN(cfg.MapHeight+2) - 1}
+			}
 			if round%2 == 1 { // a storm of one kind between two derivations, so none hides another
-				kind := rng.IntN(13)
+				kind := rng.IntN(16)
 				for _, e := range walls {
 					if rng.IntN(3) != 0 {
 						continue
@@ -208,6 +212,16 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						}
 					}
 					w.Positions.Shift(group, rng.IntN(5)-2, rng.IntN(5)-2, nil)
+				case 13: // a field narrower or wider than the map
+					cols := make([]RockColumn, rng.IntN(cfg.MapWidth+2))
+					for i := range cols {
+						cols[i] = rockColumn()
+					}
+					w.Positions.SetRock(masks[1+rng.IntN(len(masks)-1)], component.WallVisualConfig{}, 0, cols)
+				case 14:
+					w.Positions.ShiftRock(rockColumn())
+				case 15:
+					w.Positions.SetRock(0, component.WallVisualConfig{}, 0, nil)
 				}
 			}
 			for _, mask := range masks {
@@ -217,6 +231,19 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						if got, want := test(x, y), w.Positions.HasBlockingWallAt(x, y, mask); got != want {
 							t.Fatalf("round %d mask %d at (%d,%d): WallTest %t, HasBlockingWallAt %t", round, mask, x, y, got, want)
 						}
+					}
+				}
+				for range 8 {
+					x, y := rng.IntN(cfg.MapWidth+4)-2, rng.IntN(cfg.MapHeight+4)-2
+					aw, ah := rng.IntN(6), rng.IntN(6)
+					want := false
+					for cy := y; cy < y+ah; cy++ {
+						for cx := x; cx < x+aw; cx++ {
+							want = want || w.Positions.HasBlockingWallAt(cx, cy, mask)
+						}
+					}
+					if got := w.Positions.HasBlockingWallInArea(x, y, aw, ah, mask); got != want {
+						t.Fatalf("round %d mask %d area (%d,%d) %dx%d: %t, cells say %t", round, mask, x, y, aw, ah, got, want)
 					}
 				}
 			}

@@ -10,6 +10,8 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/pkg/cave"
+	"github.com/lixenwraith/vif/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 func TestWallDisplacementMaskUsesEntityCapabilities(t *testing.T) {
@@ -109,6 +111,96 @@ func TestACaveLaysItsProfileAndScrollsItAColumnAStep(t *testing.T) {
 	}
 }
 
+// A cave's rock is a field no wall entity holds, so a capture of the world carries
+// no rock and the record is the whole of it
+func TestACavesRockIsAFieldNoWallHolds(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1}})
+	for range 20 {
+		walls.stepCave()
+	}
+	rock := w.Positions.Rock()
+	if rock == nil || rock.Width() != w.Resources.Config.MapWidth || rock.Origin != walls.cave.Offset {
+		t.Fatalf("field %+v after 20 steps, want the map's width from offset %d", rock, walls.cave.Offset)
+	}
+	if n := w.Components.Wall.CountEntities(); n != 0 || len(w.CaptureSharedWorld().Wall) != 0 {
+		t.Fatalf("%d wall entities hold the rock, want none", n)
+	}
+}
+
+// A stopped cave's rock stands where it stopped, and its record carries it there
+func TestAStoppedCaveStandsAndItsRecordCarriesIt(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, Speed: 10, MinWall: 1, Detail: 1}})
+	walls.Update()
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStop})
+	before := rockAt(w, 1)
+	for range 5 {
+		walls.Update()
+	}
+	if after := rockAt(w, 1); after != before || walls.cave.Offset != 1 {
+		t.Fatalf("a stopped cave moved to offset %d:\n before %s\n after  %s", walls.cave.Offset, before, after)
+	}
+	record, err := walls.SaveShared()
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiver, receiverWalls, _ := newCaveWorld(t, 30, 12)
+	if err := receiverWalls.LoadShared(record); err != nil {
+		t.Fatal(err)
+	}
+	if got := rockAt(receiver, 1); got != before || !receiverWalls.cave.Halted {
+		t.Fatalf("the record laid %s (halted %t), want %s", got, receiverWalls.cave.Halted, before)
+	}
+}
+
+// Every wall going takes the cave's rock with it, and a record with no cave lifts it
+func TestRemovingEveryWallLiftsTheCave(t *testing.T) {
+	for _, remove := range []event.GameEvent{
+		{Type: event.EventWallDespawnAll},
+		{Type: event.EventWallDespawnRequest, Payload: &event.WallDespawnRequestPayload{All: true}},
+	} {
+		w, walls, _ := newCaveWorld(t, 30, 12)
+		walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7}})
+		walls.HandleEvent(remove)
+		if w.Positions.Rock() != nil || walls.cave.Active || w.Positions.HasBlockingWallAt(0, 0, component.WallBlockAll) {
+			t.Fatalf("%v left the cave standing", remove.Type)
+		}
+	}
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	idle, _ := walls.SaveShared()
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7}})
+	if err := walls.LoadShared(idle); err != nil || w.Positions.Rock() != nil || walls.cave.Active {
+		t.Fatalf("a record with no cave left one standing (err %v)", err)
+	}
+}
+
+// A resized map takes the rock reshaped to its height, and what the rock now covers
+// is pushed out
+func TestAResizedMapReshapesTheRock(t *testing.T) {
+	w, walls, cursor := newCaveWorld(t, 5, 10)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1}})
+	w.Resources.Event.Queue.Consume()
+	config := w.Resources.Config
+	profile := walls.cave.Config
+	profile.Height = config.MapHeight + 10
+	// The cursor stands on the reshaped ceiling's lowest row
+	w.Positions.SetPosition(cursor, component.PositionComponent{X: 5, Y: profile.At(5).Top - 1})
+	config.MapHeight = profile.Height
+	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	walls.Update()
+	for x := range config.MapWidth {
+		col := profile.At(walls.cave.Offset + int64(x))
+		if got, _ := w.Positions.Rock().Column(x); got.Ceil != col.Top || got.Floor != config.MapHeight-col.Bottom {
+			t.Fatalf("column %d is %+v after the resize, want the profile at height %d: %+v", x, got, config.MapHeight, col)
+		}
+	}
+	walls.Update()
+	if moves, _ := movesOf(w); len(moves) != 1 || moves[0].Entity != cursor {
+		t.Fatalf("the reshaped rock covers the cursor and moved it %+v", moves)
+	}
+}
+
 // caveChannel starts a cave of one rock row above and below, then hangs a block from
 // the ceiling at column x down to row bottom, each cell its own wall
 func caveChannel(w *engine.World, walls *WallSystem, x, bottom int) {
@@ -146,18 +238,100 @@ func TestArrivingRockPushesACursorAColumnLeftAndTowardTheChannel(t *testing.T) {
 	}
 }
 
+// A crushed cursor stays where the rock found it: no squeeze moves it elsewhere
 func TestRockPressingACursorAgainstTheLeftEdgeCrushesIt(t *testing.T) {
 	w, walls, cursor := newCaveWorld(t, 0, 5)
 	caveChannel(w, walls, 1, 5)
 	walls.Update()
 	moves, crushed := movesOf(w)
-	if len(crushed) != 1 || crushed[0] != cursor || len(moves) != 1 || moves[0].Entity != cursor {
-		t.Fatalf("crushes %v and moves %+v, want cursor %d crushed and squeezed out once", crushed, moves, cursor)
+	if len(crushed) != 1 || crushed[0] != cursor || len(moves) != 0 {
+		t.Fatalf("crushes %v and moves %+v, want cursor %d crushed and left in place", crushed, moves, cursor)
 	}
 }
 
-// A record taken between columns carries the part period, so a receiver laid from
-// the same start steps on the origin's ticks
+// newBody is a flying composite, header at (x, y) with members over the w×h cells
+// from there, each a cell's centre
+func newBody(w *engine.World, x, y, width, height int) core.Entity {
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: x, Y: y})
+	px, py := vmath.Point{X: x, Y: y}.Center()
+	w.Components.Kinetic.SetComponent(header, component.KineticComponent{Kinetic: physics.Kinetic{PreciseX: px + 0.25, PreciseY: py}})
+	var members []component.MemberEntry
+	for dy := range height {
+		for dx := range width {
+			m := w.CreateEntity(core.DomainShared)
+			w.Positions.SetPosition(m, component.PositionComponent{X: x + dx, Y: y + dy})
+			w.Components.Member.SetComponent(m, component.MemberComponent{HeaderEntity: header})
+			members = append(members, component.MemberEntry{Entity: m, OffsetX: dx, OffsetY: dy})
+		}
+	}
+	w.Components.Header.SetComponent(header, component.HeaderComponent{Behavior: component.BehaviorSwarm, MemberEntries: members})
+	return header
+}
+
+// bodyAt reports where a composite's header stands and its sub-cell position, and
+// whether any of its members stands on a wall
+func bodyAt(w *engine.World, header core.Entity) (x, y int, px float64, walled bool) {
+	pos, _ := w.Positions.GetPosition(header)
+	k, _ := w.Components.Kinetic.GetComponent(header)
+	h, _ := w.Components.Header.GetComponent(header)
+	for _, m := range h.MemberEntries {
+		mp, _ := w.Positions.GetPosition(m.Entity)
+		walled = walled || w.Positions.HasBlockingWallAt(mp.X, mp.Y, component.WallBlockKinetic)
+	}
+	return pos.X, pos.Y, k.PreciseX, walled
+}
+
+// Rock reaching any member, not the header alone, moves the whole composite a column
+// left and toward the channel, its sub-cell position with it
+func TestRockReachingAnyMemberMovesTheWholeComposite(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	caveChannel(w, walls, 10, 4)
+	body := newBody(w, 8, 4, 2, 2)
+	walls.stepCave()
+	if x, y, px, walled := bodyAt(w, body); x != 7 || y != 5 || px != 7.75 || walled {
+		t.Fatalf("body at (%d,%d) precise x %v, on a wall %t; want (7,5) at 7.75, clear", x, y, px, walled)
+	}
+}
+
+// A composite the rock pins at the left edge goes to the nearest place it fits, and
+// one with nowhere to go is crushed with no kill to reward
+func TestACompositeWithNoRoomBackFindsTheNearestOrIsCrushed(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	caveChannel(w, walls, 2, 4)
+	body := newBody(w, 0, 4, 2, 2)
+	walls.stepCave()
+	if x, y, _, walled := bodyAt(w, body); walled || (x == 0 && y == 4) {
+		t.Fatalf("pinned body at (%d,%d), on a wall %t; want it moved clear", x, y, walled)
+	}
+
+	// Rock everywhere else leaves the edge no 2×2 room but its own vacated column
+	w, walls, _ = newCaveWorld(t, 30, 12)
+	body = newBody(w, 0, 5, 2, 2)
+	batch := &event.WallBatchSpawnRequestPayload{BlockMask: component.WallBlockAll}
+	for y := range w.Resources.Config.MapHeight {
+		for x := range w.Resources.Config.MapWidth {
+			if x > 1 || y < 5 || y > 6 {
+				batch.Cells = append(batch.Cells, component.WallCellDef{OffsetX: x, OffsetY: y})
+			}
+		}
+	}
+	walls.HandleEvent(event.GameEvent{Type: event.EventWallBatchSpawnRequest, Payload: batch})
+	w.Resources.Event.Queue.Consume()
+	walls.stepCave()
+	var destroyed, killed bool
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		p, ok := ev.Payload.(*event.CompositeDestroyRequestPayload)
+		destroyed = destroyed || (ok && p.HeaderEntity == body)
+		killed = killed || ev.Type == event.EventSpeciesKilled
+	}
+	if !destroyed || killed {
+		t.Fatalf("a body with no room: destroyed %t, a kill %t; want destroyed and no kill", destroyed, killed)
+	}
+}
+
+// A record taken between columns carries the part period, and the record alone lays
+// the rock, so a receiver that never saw the start steps on the origin's ticks
 func TestACaveResumesFromItsRecordBetweenColumns(t *testing.T) {
 	start := &event.CaveStartPayload{Seed: 7, Speed: 6, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 8, Detail: 1, Ramp: 4}
 	origin, originWalls, _ := newCaveWorld(t, 30, 12)
@@ -172,7 +346,6 @@ func TestACaveResumesFromItsRecordBetweenColumns(t *testing.T) {
 	}
 
 	receiver, receiverWalls, _ := newCaveWorld(t, 30, 12)
-	receiverWalls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: start})
 	if err := receiverWalls.LoadShared(record); err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +383,7 @@ func TestACaveRecordNoStartLeavesIsRefused(t *testing.T) {
 	for i, bad := range []func(c *caveState){
 		func(c *caveState) { c.Period = 0 },
 		func(c *caveState) { c.Phase = 2 * c.Period },
-		func(c *caveState) { c.Next = c.Offset - 1 },
+		func(c *caveState) { c.Offset = -1 },
 		func(c *caveState) { c.Mask = component.WallBlockNone },
 		func(c *caveState) { c.Config.MinGap = 0 },
 		func(c *caveState) { *c = caveState{Offset: 3} },

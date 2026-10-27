@@ -41,13 +41,23 @@ type WallSystem struct {
 	genRng *rand.Rand
 
 	cave caveState
-	// A cave step's scratch: rock before the step, the walls it moves, those
-	// that left the map, and the cells rock arrived on
-	caveRock   []bool
+	// The cave's rock as last laid, and the map it was laid across
+	rockCols []engine.RockColumn
+	rockMap  [2]int
+	// A cave step's scratch: the rock's columns and the walls' cells before the step
+	// (then the cells rock arrived on as well), the walls it moves, those that left
+	// the map, and the cells rock arrived on
+	rockPrev   []engine.RockColumn
+	caveRock   map[int]bool
 	caveMovers []core.Entity
 	caveHeads  map[core.Entity]bool
 	caveDoomed []core.Entity
 	caveLanded []vmath.Point
+	// The composites a push check reached, each moved once as one body
+	bodyHits  []compositeHit
+	bodySeen  map[core.Entity]bool
+	bodyCells []vmath.Point
+	body      []core.Entity
 
 	// Metrics
 	statEnabled    *atomic.Bool
@@ -64,15 +74,21 @@ type cursorCell struct {
 	x, y   int
 }
 
-// caveState is a scrolling cave and its D-19 record. Column i of the profile stands
-// at x = i − Offset, and Next is the first column not yet laid at the right edge.
+// compositeHit is a composite a wall reached, and the cell where it first did
+type compositeHit struct {
+	header core.Entity
+	x, y   int
+}
+
+// caveState is a cave and its D-19 record. Column i of the profile stands at
+// x = i − Offset as the Position's rock field, which the record alone derives.
 type caveState struct {
-	Active bool                       `json:"active"`
+	Active bool                       `json:"active"`           // its rock stands
+	Halted bool                       `json:"halted,omitempty"` // its scroll stopped
 	Config cave.Config                `json:"config"`
 	Period time.Duration              `json:"period"` // a column's scroll
 	Phase  time.Duration              `json:"phase"`  // carried toward the next column
 	Offset int64                      `json:"offset"`
-	Next   int64                      `json:"next"`
 	Mask   component.WallBlockMask    `json:"mask"`
 	Visual component.WallVisualConfig `json:"visual"`
 }
@@ -97,7 +113,7 @@ func (s *WallSystem) Init() {
 	s.genPCG = rand.NewPCG(
 		vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name()+":maze"), 0)
 	s.genRng = rand.New(s.genPCG)
-	s.cave = caveState{}
+	s.liftCave()
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
 	s.statPushEvents.Store(0)
@@ -190,7 +206,7 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventCaveStop:
-		s.cave = caveState{}
+		s.cave.Halted = s.cave.Active
 
 	case event.EventWallDespawnAll:
 		s.handleDespawnAllSilent()
@@ -582,8 +598,10 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	}
 }
 
-// despawnAllWalls handles All=true despawn with proper effects
+// despawnAllWalls handles All=true despawn with proper effects; the cave's rock
+// lifts at once
 func (s *WallSystem) despawnAllWalls() {
+	s.liftCave()
 	var flashTargets []core.Entity
 	var fadeoutTargets []core.Entity
 	var silentTargets []core.Entity
@@ -691,6 +709,7 @@ func (s *WallSystem) processPendingPushChecks() {
 	for _, pt := range s.pendingPushChecks {
 		pushCount += s.pushEntitiesAtPosition(pt.X, pt.Y, cursors)
 	}
+	pushCount += s.displaceBodies(false)
 
 	s.statPushEvents.Add(pushCount)
 	s.pendingPushChecks = s.pendingPushChecks[:0]
@@ -715,6 +734,8 @@ func (s *WallSystem) runFullPushCheck() {
 
 		pushCount += s.pushEntitiesAtPosition(wallPos.X, wallPos.Y, cursors)
 	}
+	s.inRock(func(x, y int) { pushCount += s.pushEntitiesAtPosition(x, y, cursors) })
+	pushCount += s.displaceBodies(false)
 
 	s.statPushEvents.Add(pushCount)
 }
@@ -760,7 +781,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int6
 		if s.world.Components.Cursor.HasEntity(entity) {
 			continue
 		}
-		if s.world.Components.Wall.HasEntity(entity) {
+		if s.world.Components.Wall.HasEntity(entity) || s.reachBody(entity, x, y) {
 			continue
 		}
 
@@ -773,6 +794,99 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int6
 	}
 
 	return pushCount
+}
+
+// reachBody queues the composite e moves with, a header with a body to fly or one of
+// its members, to move as one body once the check has reached all it reaches
+func (s *WallSystem) reachBody(e core.Entity, x, y int) bool {
+	header := e
+	if member, ok := s.world.Components.Member.GetComponent(e); ok {
+		header = member.HeaderEntity
+	}
+	if !s.world.Components.Header.HasEntity(header) || !s.world.Components.Kinetic.HasEntity(header) ||
+		s.getMaskForEntity(header) == component.WallBlockNone {
+		return false
+	}
+	if s.bodySeen == nil {
+		s.bodySeen = make(map[core.Entity]bool)
+	}
+	if !s.bodySeen[header] {
+		s.bodySeen[header] = true
+		s.bodyHits = append(s.bodyHits, compositeHit{header: header, x: x, y: y})
+	}
+	return true
+}
+
+// displaceBodies moves every composite the check reached, in the order it reached
+// them, and forgets them for the next check
+func (s *WallSystem) displaceBodies(cave bool) int64 {
+	var pushes int64
+	for _, hit := range s.bodyHits {
+		pushes += s.displaceComposite(hit, cave)
+	}
+	s.bodyHits = s.bodyHits[:0]
+	clear(s.bodySeen)
+	return pushes
+}
+
+// displaceComposite moves a composite a wall reached as one body: in a cave a column
+// left and a row toward the channel, else straight left, as the rock travels; else to
+// the nearest place its footprint fits. One with nowhere to go is crushed, and no
+// one is rewarded for it.
+func (s *WallSystem) displaceComposite(hit compositeHit, cave bool) int64 {
+	positions := s.world.Positions
+	header, ok := s.world.Components.Header.GetComponent(hit.header)
+	headerPos, placed := positions.GetPosition(hit.header)
+	if !ok || !placed {
+		return 0
+	}
+	mask := s.getMaskForEntity(hit.header)
+	s.bodyCells = s.bodyCells[:0]
+	for _, m := range header.MemberEntries {
+		if pos, ok := positions.GetPosition(m.Entity); ok && m.Entity != 0 {
+			s.bodyCells = append(s.bodyCells, vmath.Point{X: pos.X, Y: pos.Y})
+		}
+	}
+	if len(s.bodyCells) == 0 {
+		s.bodyCells = append(s.bodyCells, vmath.Point{X: headerPos.X, Y: headerPos.Y})
+	}
+	fits := func(dx, dy int) bool {
+		for _, c := range s.bodyCells {
+			if positions.IsBlocked(c.X+dx, c.Y+dy, mask) {
+				return false
+			}
+		}
+		return true
+	}
+	if fits(0, 0) {
+		return 0
+	}
+
+	dx, dy, found := 0, 0, false
+	if cave {
+		if row := s.towardChannel(hit.x, hit.y, mask); row != 0 && fits(-1, row) {
+			dx, dy, found = -1, row, true
+		} else if fits(-1, 0) {
+			dx, found = -1, true
+		}
+	}
+	if !found {
+		left, top := s.bodyCells[0].X, s.bodyCells[0].Y
+		right, bottom := left, top
+		for _, c := range s.bodyCells[1:] {
+			left, top, right, bottom = min(left, c.X), min(top, c.Y), max(right, c.X), max(bottom, c.Y)
+		}
+		var x, y int
+		x, y, found = positions.FindFreeAreaSpiral(headerPos.X, headerPos.Y, right-left+1, bottom-top+1,
+			headerPos.X-left, headerPos.Y-top, mask, 0)
+		dx, dy = x-left, y-top
+	}
+	if !found {
+		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: hit.header})
+		return 0
+	}
+	s.body = s.world.ShiftComposite(hit.header, dx, dy, s.body)
+	return sharedCount(hit.header)
 }
 
 // pushOut moves a non-cursor entity to the nearest cell its wall leaves free, or
@@ -1008,8 +1122,10 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 	}
 }
 
-// handleDespawnAllSilent destroys all walls bypassing death system
+// handleDespawnAllSilent destroys all walls bypassing death system, and lifts the
+// cave's rock
 func (s *WallSystem) handleDespawnAllSilent() {
+	s.liftCave()
 	wallEntities := s.world.Components.Wall.GetAllEntities()
 	if len(wallEntities) == 0 {
 		return
@@ -1036,9 +1152,9 @@ func orStone(vis component.WallVisualConfig) component.WallVisualConfig {
 	return vis
 }
 
-// startCave runs the payload's cave in place of any other and lays it across the
-// map, its mouth at the left edge, over whatever rock stands there; what the rock
-// lands on is pushed out as from any spawn
+// startCave runs the payload's cave in place of any other and lays its rock across
+// the map, its mouth at the left edge, over whatever walls stand there; what the
+// rock lands on is pushed out as from any spawn
 func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 	if !(p.Speed >= 0) {
 		return
@@ -1068,14 +1184,78 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 		Active: true, Config: cfg, Period: time.Duration(math.Round(period)),
 		Mask: cmp.Or(p.BlockMask, component.WallBlockAll), Visual: orStone(p.Visual),
 	}
-	s.layColumns()
+	s.layRock()
+	s.pushOutOfRock()
+}
+
+// liftCave ends any cave and lifts its rock
+func (s *WallSystem) liftCave() {
+	s.cave = caveState{}
+	s.rockMap = [2]int{}
+	s.world.Positions.SetRock(component.WallBlockNone, component.WallVisualConfig{}, 0, nil)
+}
+
+// caveProfile is the cave's profile at the map's height, or at its start's height
+// when the profile cannot fit the map
+func (s *WallSystem) caveProfile() cave.Config {
+	cfg := s.cave.Config
+	if cfg.Height = s.world.Resources.Config.MapHeight; cfg.Validate() != nil {
+		return s.cave.Config
+	}
+	return cfg
+}
+
+// rockColumn is profile column i as rock
+func rockColumn(cfg cave.Config, i int64) engine.RockColumn {
+	col := cfg.At(i)
+	return engine.RockColumn{Ceil: col.Top, Floor: cfg.Height - col.Bottom}
+}
+
+// layRock lays the cave's rock across the map from its offset: a start, a resize
+// and a load each derive the same field from the record and the map
+func (s *WallSystem) layRock() {
+	config := s.world.Resources.Config
+	cfg := s.caveProfile()
+	s.rockCols = s.rockCols[:0]
+	for x := range config.MapWidth {
+		s.rockCols = append(s.rockCols, rockColumn(cfg, s.cave.Offset+int64(x)))
+	}
+	s.rockMap = [2]int{config.MapWidth, config.MapHeight}
+	s.world.Positions.SetRock(s.cave.Mask, s.cave.Visual, s.cave.Offset, s.rockCols)
+}
+
+// pushOutOfRock queues a push check at every cell where something stands in the
+// rock, as a spawn queues its cells
+func (s *WallSystem) pushOutOfRock() {
+	s.inRock(func(x, y int) { s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: x, Y: y}) })
+}
+
+// inRock calls fn with the cell of every entity standing in the rock field
+func (s *WallSystem) inRock(fn func(x, y int)) {
+	rock, h := s.world.Positions.Rock(), s.world.Resources.Config.MapHeight
+	if rock == nil {
+		return
+	}
+	for _, e := range s.world.Positions.Entities() {
+		pos, _ := s.world.Positions.GetPosition(e)
+		if col, ok := rock.Column(pos.X); ok && pos.Y >= 0 && pos.Y < h && col.Rock(pos.Y) {
+			fn(pos.X, pos.Y)
+		}
+	}
 }
 
 // scrollCave carries the phase a period a column and steps at most a column a tick:
 // a cursor's push is a queued move, so a second step would push it from a cell it
-// has already left
+// has already left. A resized map takes the rock reshaped to its bounds first.
 func (s *WallSystem) scrollCave() {
 	if !s.cave.Active {
+		return
+	}
+	if config := s.world.Resources.Config; s.rockMap != [2]int{config.MapWidth, config.MapHeight} {
+		s.layRock()
+		s.pushOutOfRock()
+	}
+	if s.cave.Halted {
 		return
 	}
 	elapsed := min(max(s.world.Resources.Time.DeltaTime, 0), time.Duration(parameter.MaxSimulationDeltaSeconds*float64(time.Second)))
@@ -1086,19 +1266,19 @@ func (s *WallSystem) scrollCave() {
 	}
 }
 
-// stepCave moves every shared wall a column left, lays the columns the step brings
-// onto the map, and displaces what stands where rock arrived. A wall composite's
-// header moves with its members, so the composite sync finds them in place.
+// stepCave moves the cave's rock and every shared wall a column left, and displaces
+// what stands where rock arrived. A wall composite's header moves with its members,
+// so the composite sync finds them in place.
 func (s *WallSystem) stepCave() {
 	positions, walls := s.world.Positions, s.world.Components.Wall
 	w, h := s.world.Resources.Config.MapWidth, s.world.Resources.Config.MapHeight
-	s.caveRock = slices.Grow(s.caveRock[:0], w*h)[:w*h]
-	clear(s.caveRock)
-	if s.caveHeads == nil {
-		s.caveHeads = make(map[core.Entity]bool)
+	if s.caveRock == nil {
+		s.caveRock, s.caveHeads = make(map[int]bool), make(map[core.Entity]bool)
 	}
+	clear(s.caveRock)
 	clear(s.caveHeads)
 
+	// Rock before the step: the field's columns, and the cells of the walls
 	s.caveMovers = s.caveMovers[:0]
 	for _, e := range walls.Entities() {
 		pos, ok := positions.GetPosition(e)
@@ -1116,21 +1296,41 @@ func (s *WallSystem) stepCave() {
 			s.caveMovers = append(s.caveMovers, member.HeaderEntity)
 		}
 	}
+	rock := positions.Rock()
+	s.rockPrev = s.rockPrev[:0]
+	if rock != nil {
+		s.rockPrev = append(s.rockPrev, rock.Columns()...)
+	}
 
 	// A wall the map no longer holds is gone; a header past the edge still anchors
-	s.caveDoomed = positions.Shift(s.caveMovers, -1, 0, s.caveDoomed[:0])
-	s.caveDoomed = slices.DeleteFunc(s.caveDoomed, func(e core.Entity) bool { return !walls.HasEntity(e) })
-	s.world.DestroyEntitiesBatch(s.caveDoomed)
+	if len(s.caveMovers) > 0 {
+		s.caveDoomed = positions.Shift(s.caveMovers, -1, 0, s.caveDoomed[:0])
+		s.caveDoomed = slices.DeleteFunc(s.caveDoomed, func(e core.Entity) bool { return !walls.HasEntity(e) })
+		s.world.DestroyEntitiesBatch(s.caveDoomed)
+	}
+	if rock != nil {
+		positions.ShiftRock(rockColumn(s.caveProfile(), s.cave.Offset+int64(rock.Width())))
+	}
 	s.cave.Offset++
 
-	// The entering column's cells are this step's landing, not a spawn's push checks
-	mark := len(s.pendingPushChecks)
-	s.layColumns()
 	s.caveLanded = s.caveLanded[:0]
 	land := func(x, y int) {
-		if x >= 0 && x < w && y >= 0 && y < h && !s.caveRock[y*w+x] {
-			s.caveRock[y*w+x] = true
-			s.caveLanded = append(s.caveLanded, vmath.Point{X: x, Y: y})
+		idx := y*w + x
+		if x < 0 || x >= w || y < 0 || y >= h || s.caveRock[idx] || (x < len(s.rockPrev) && s.rockPrev[x].Rock(y)) {
+			return
+		}
+		s.caveRock[idx] = true
+		s.caveLanded = append(s.caveLanded, vmath.Point{X: x, Y: y})
+	}
+	if rock != nil {
+		for x := range min(w, rock.Width()) {
+			was, now := s.rockPrev[x], rock.Columns()[x]
+			for y := max(was.Ceil, 0); y < min(now.Ceil, h); y++ {
+				land(x, y)
+			}
+			for y := max(now.Floor, 0); y < min(was.Floor, h); y++ {
+				land(x, y)
+			}
 		}
 	}
 	for _, e := range s.caveMovers {
@@ -1139,64 +1339,20 @@ func (s *WallSystem) stepCave() {
 			land(pos.X, pos.Y)
 		}
 	}
-	for _, pt := range s.pendingPushChecks[mark:] {
-		land(pt.X, pt.Y)
-	}
-	s.pendingPushChecks = s.pendingPushChecks[:mark]
 
 	cursors := s.readCursors()
 	var pushes int64
 	for _, pt := range s.caveLanded {
 		pushes += s.displaceCave(pt.X, pt.Y, cursors)
 	}
+	pushes += s.displaceBodies(true)
 	s.statPushEvents.Add(pushes)
-
-	// The rigid shift keeps every neighbour but those of the edge columns
-	if style := s.cave.Visual.BoxStyle; style != component.BoxDrawNone {
-		s.computeBoxCharsInArea(0, 0, 1, h, style)
-		s.computeBoxCharsInArea(w-2, 0, 1, h, style)
-	}
-}
-
-// layColumns lays every column between the cave's laid end and the map's right edge:
-// the whole map as a cave starts, a column a step, more after the map widens. A new
-// height reshapes the columns to come when the profile still fits it.
-func (s *WallSystem) layColumns() {
-	config := s.world.Resources.Config
-	end := s.cave.Offset + int64(config.MapWidth)
-	if s.cave.Next >= end {
-		return
-	}
-	cfg := s.cave.Config
-	if resized := cfg; config.MapHeight != cfg.Height {
-		if resized.Height = config.MapHeight; resized.Validate() == nil {
-			cfg = resized
-		}
-	}
-
-	batch := event.AcquireWallBatchSpawn(int(end-s.cave.Next) * (cfg.Height - cfg.MinGap))
-	defer event.ReleaseWallBatchSpawn(batch)
-	add := func(x, y int) {
-		batch.Cells = append(batch.Cells, component.WallCellDef{OffsetX: x, OffsetY: y, WallVisualConfig: s.cave.Visual})
-	}
-	for ; s.cave.Next < end; s.cave.Next++ {
-		col := cfg.At(s.cave.Next)
-		x := int(s.cave.Next - s.cave.Offset)
-		for y := range col.Top {
-			add(x, y)
-		}
-		for y := config.MapHeight - col.Bottom; y < config.MapHeight; y++ {
-			add(x, y)
-		}
-	}
-	// Anchored at the origin: the offsets are absolute positions
-	batch.BlockMask, batch.BoxStyle, batch.CollisionMode = s.cave.Mask, s.cave.Visual.BoxStyle, event.WallBatchSkipBlocked
-	s.executeBatchSpawn(batch)
 }
 
 // displaceCave moves what stands where rock arrived a column left and toward the
-// channel, the way the rock travels. A cursor already at the left edge is crushed,
-// then squeezed out wherever there is room; a loose glyph is scenery and goes.
+// channel, the way the rock travels; a composite it reached waits to move as one
+// body. Rock that finds a cursor no room crushes it where it stands, and a loose
+// glyph is scenery and goes.
 func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 	positions := s.world.Positions
 	var pushes int64
@@ -1204,28 +1360,25 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 		if cursor.x != x || cursor.y != y || !positions.HasBlockingWallAt(x, y, component.WallBlockCursor) {
 			continue
 		}
-		if x == 0 {
-			s.world.PushEvent(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: cursor.entity})
-		}
 		newX, newY, found := s.caveRoom(x, y, component.WallBlockCursor)
 		if !found {
-			newX, newY, found = s.world.ResolveFreeCell(x, y, component.WallBlockCursor)
+			s.world.PushEvent(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: cursor.entity})
+			continue
 		}
-		if found {
-			s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
-				Entity: cursor.entity, X: newX, Y: newY,
-			})
-			pushes++
-		}
+		s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+			Entity: cursor.entity, X: newX, Y: newY,
+		})
+		pushes++
 	}
 
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	n := positions.GetAllEntitiesAtInto(x, y, entities[:])
 	s.caveDoomed = s.caveDoomed[:0]
 	for _, e := range entities[:n] {
-		// A member is placed by its composite's owner
+		// A composite that flies moves whole wherever the rock reached it; any other
+		// member is placed by its composite's owner
 		if s.world.Components.Cursor.HasEntity(e) || s.world.Components.Wall.HasEntity(e) ||
-			s.world.Components.Member.HasEntity(e) || s.world.Components.Death.HasEntity(e) {
+			s.world.Components.Death.HasEntity(e) || s.reachBody(e, x, y) || s.world.Components.Member.HasEntity(e) {
 			continue
 		}
 		if e.Domain() == core.DomainPlayer && s.world.Components.Glyph.HasEntity(e) {
@@ -1448,8 +1601,9 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 const genRecordLen = 20
 
 // SaveShared carries what the stores and RandResource cannot: the generator's
-// position, then, only while a cave runs, its profile, period, phase and columns,
-// so a capture with no cave carries the generator alone.
+// position, then, only while a cave stands, its profile, period, phase and offset,
+// from which a load lays its rock; a capture with no cave carries the generator
+// alone.
 func (s *WallSystem) SaveShared() ([]byte, error) {
 	if s.genPCG == nil {
 		return nil, errors.New("wall: generator is not initialized")
@@ -1484,11 +1638,16 @@ func (s *WallSystem) LoadShared(data []byte) error {
 	if err := s.genPCG.UnmarshalBinary(gen); err != nil {
 		return fmt.Errorf("wall: generator state: %w", err)
 	}
+	if !cave.Active {
+		s.liftCave()
+		return nil
+	}
 	s.cave = cave
+	s.layRock()
 	return nil
 }
 
-// validate accepts exactly the running caves a start and its steps leave behind
+// validate accepts exactly the standing caves a start and its steps leave behind
 func (c caveState) validate() error {
 	if !c.Active {
 		return errors.New("wall: a record carries a cave only while one runs")
@@ -1497,7 +1656,7 @@ func (c caveState) validate() error {
 		return fmt.Errorf("wall: %w", err)
 	}
 	if c.Period < parameter.CaveMinPeriod || c.Period > parameter.CaveMaxPeriod || c.Phase < 0 || c.Phase >= 2*c.Period ||
-		c.Offset < 0 || c.Next < c.Offset || c.Mask == component.WallBlockNone {
+		c.Offset < 0 || c.Mask == component.WallBlockNone {
 		return errors.New("wall: cave scroll out of range")
 	}
 	return nil

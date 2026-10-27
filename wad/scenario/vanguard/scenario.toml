@@ -52,7 +52,8 @@ transitions = [
 ]
 
 # The gun fires right only (direction bit 1); an instance installing the game mid-run
-# aims its own cursor the same way
+# aims its own cursor the same way. A crushed cursor is defeated, so the crush and
+# every other defeat start the game over at once.
 [states.PlayerActive]
 parent = "Root"
 on_enter = [
@@ -63,15 +64,12 @@ transitions = [
     { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# The cave holds still for a moment on the crush before the game starts over
+# The new game opens with what ended the last
 [states.PlayerCrushed]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventCaveStop" },
+    { action = "EmitEvent", event = "EventGameResetRequest" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Crushed against the edge" } },
-]
-transitions = [
-    { trigger = "Tick", target = "PlayerReset", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
 ]
 
 [states.PlayerReset]

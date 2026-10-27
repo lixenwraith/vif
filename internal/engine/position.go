@@ -21,6 +21,7 @@ type Position struct {
 	entities []core.Entity // Dense array for cache-friendly iteration
 	bit      uint64        // Component bit mask
 	walls    []*wallGrid   // WallTest's grid for each mask asked
+	rock     *RockField    // rock no entity holds, nil when none stands
 	// wallEpoch moves wherever a wall grid's cells can change: a wall placed, moved
 	// or removed here, a wall component added or removed, a BlockMask rewritten.
 	wallEpoch uint64
@@ -322,6 +323,7 @@ func (p *Position) ClearAllComponents() {
 	p.dense = p.dense[:0]
 	p.entities = p.entities[:0]
 	p.grid.Clear()
+	p.SetRock(0, component.WallVisualConfig{}, 0, nil)
 }
 
 // --- Wall ---
@@ -406,6 +408,16 @@ func (p *Position) wallGridFor(mask component.WallBlockMask) *wallGrid {
 			g.cells[cell] = true
 		}
 	}
+	if r := p.rock; r != nil && (mask == 0 || r.Mask&mask != 0) {
+		for x, c := range r.cols[:min(len(r.cols), w)] {
+			for y := range min(c.Ceil, h) {
+				g.cells[y*w+x] = true
+			}
+			for y := max(c.Floor, 0); y < h; y++ {
+				g.cells[y*w+x] = true
+			}
+		}
+	}
 	return g
 }
 
@@ -454,6 +466,9 @@ func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) boo
 	if x >= p.grid.Width || y >= p.grid.Height {
 		return false
 	}
+	if p.rock != nil && p.rock.blocks(x, y, mask) {
+		return true
+	}
 
 	idx := y*p.grid.Width + x
 	cell := &p.grid.Cells[idx]
@@ -478,6 +493,13 @@ func (p *Position) HasBlockingWallInArea(x, y, width, height int, mask component
 func (p *Position) HasBlockingWallInAreaUnsafe(x, y, width, height int, mask component.WallBlockMask) bool {
 	if p.world == nil {
 		return false
+	}
+	if p.rock != nil {
+		config := p.world.Resources.Config
+		w, h := min(config.MapWidth, p.grid.Width), min(config.MapHeight, p.grid.Height)
+		if p.rock.blocksArea(x, max(y, 0), min(x+width, w), min(y+height, h), mask) {
+			return true
+		}
 	}
 
 	return p.grid.HasAnyEntityInArea(x, y, width, height, ScopeShared, func(e core.Entity) bool {

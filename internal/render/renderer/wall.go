@@ -35,10 +35,14 @@ func NewWallRenderer(ctx *engine.GameContext) *WallRenderer {
 
 func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	walls := r.gameCtx.World.Components.Wall
-	if walls.CountEntities() == 0 {
+	rock := r.gameCtx.World.Positions.Rock()
+	if walls.CountEntities() == 0 && rock == nil {
 		return
 	}
 	buf.SetWriteMask(visual.MaskWall)
+	if rock != nil {
+		r.renderRock(&ctx, buf, rock)
+	}
 
 	walls.Each(func(wallEntity core.Entity, wallComp *component.WallComponent) bool {
 		if !(wallComp.RenderFg || wallComp.RenderBg) {
@@ -60,6 +64,31 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 			wallComp.RenderFg, wallComp.RenderBg, wallComp.Attrs)
 		return true
 	})
+}
+
+// renderRock draws the rock field's cells the viewport shows: each column's ceiling
+// rows, then its floor rows
+func (r *WallRenderer) renderRock(ctx *render.RenderContext, buf *render.RenderBuffer, rock *engine.RockField) {
+	vis := rock.Visual
+	if !(vis.RenderFg || vis.RenderBg) {
+		return
+	}
+	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
+	cols := rock.Columns()
+	draw := func(x, y int) {
+		if screenX, screenY, visible := ctx.MapToScreen(x, y); visible {
+			r.renderCell(buf, screenX, screenY, vis.Char, vis.FgColor, vis.BgColor, vis.RenderFg, vis.RenderBg, terminal.AttrNone)
+		}
+	}
+	for x := max(minX, 0); x <= min(maxX, len(cols)-1); x++ {
+		c := cols[x]
+		for y := minY; y < min(c.Ceil, maxY+1); y++ {
+			draw(x, y)
+		}
+		for y := max(c.Floor, minY); y <= maxY; y++ {
+			draw(x, y)
+		}
+	}
 }
 
 func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, screenY int,
