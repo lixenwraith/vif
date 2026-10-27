@@ -126,7 +126,7 @@ doc = "Attach an eye gateway feeding `group` to the pylon in gw_anchor, count it
 params = { group = "int", count = "string", next = "string", interval_ms = "int", rate = "float", accel_ms = "int", min_ms = "int" }
 defaults = { interval_ms = 3000, rate = 0.92, accel_ms = 15000, min_ms = 800 }
 body = { parent = "Root", on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = "${group}", base_interval_ms = "${interval_ms}", rate_multiplier = "${rate}", rate_accel_interval_ms = "${accel_ms}", min_interval_ms = "${min_ms}", use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = "eye", sub_type = "void", group_id = "${group}", base_interval_ms = "${interval_ms}", rate_multiplier = "${rate}", rate_accel_interval_ms = "${accel_ms}", min_interval_ms = "${min_ms}", use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
     { action = "IncrementVar", payload = { name = "${count}" } },
 ], transitions = [{ trigger = "Tick", target = "${next}" }] }
 
@@ -134,7 +134,7 @@ body = { parent = "Root", on_enter = [
 doc = "Attach a snake gateway to the ST pylon in gw_anchor, count it in st_n, go to `next`."
 params = { next = "string" }
 body = { parent = "Root", on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 6, sub_type = 0, group_id = 0, base_interval_ms = 60000, rate_multiplier = 1.0, rate_accel_interval_ms = 0, min_interval_ms = 60000, use_route_graph = false }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = "snake", group_id = 0, base_interval_ms = 60000, rate_multiplier = 1.0, rate_accel_interval_ms = 0, min_interval_ms = 60000, use_route_graph = false }, payload_vars = { anchor_entity = "gw_anchor" } },
     { action = "IncrementVar", payload = { name = "st_n" } },
 ], transitions = [{ trigger = "Tick", target = "${next}" }] }
 
