@@ -555,7 +555,9 @@ down drops a `U` where it fell, for every player, and each `U` raises the gun a
 level of the scenario's nine: one shot forward, then two and three, one up and one
 down, one back, two up and down, two back, three up and down, three back. Forward is
 right, the way the ship flies. A crush is a defeat: the game starts over at once,
-the gun back at one shot, and opens with "Crushed against the edge".
+the gun back at one shot, and opens with "Crushed against the edge". The drifting
+text is scenery (§9): rock and raiders pass it by and no key types it, so the ship
+earns no heat by typing.
 
 ## 11. System inventory
 
