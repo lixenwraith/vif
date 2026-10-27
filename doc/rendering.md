@@ -328,14 +328,14 @@ also the visual stacking order; exact integer priorities are in
 | Species/structures | `pylon`, `tower`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, `behavior` (every data species), then `healthbar` over them |
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |
-| Overlay effects | `button`, `splash`, `marker` |
+| Overlay effects | `landing`, `button`, `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |
 | UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor`, `start_screen` |
 | Debug and telemetry | `flowfield`, `pinned_state`, `overlay` |
 
 Some rendered concepts do not have a same-named component or system. For
-example, charge/teleport lines are projections of species state, ember is a
-heat phase, and status/overlay renderers read resources/adapters. Conversely,
+example, charge/teleport lines and the landing marker are projections of species
+state, ember is a heat phase, and status/overlay renderers read resources/adapters. Conversely,
 a game component needs no renderer if another renderer deliberately projects
 it (nuggets use their visual/sigil representation rather than a registered
 `nugget` renderer).
@@ -345,6 +345,13 @@ cell writes no rune/foreground, so typeable text remains readable as a tracer
 crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
 instead of accumulating color, and the visible ring-buffer prefix contracts as
 a blocked tracer drains to its stop point.
+
+The landing marker is one cell, the centre of the footprint a charge or a beam
+lands on, cycling white, red and pink every `visual.LandingBlinkStep` from the
+lock until the landing. It draws over the player's fields, so a shield's rim never
+hides it. Truecolor lights its background alone, so a glyph under it still reads;
+256-color draws a foreground block, since eight backgrounds cannot show its bright
+entries.
 
 The kraken renderer shades a pose once. A tick moves the Kraken and the frames
 until the next show the same pose, so it keeps the shaded cells while the pose,

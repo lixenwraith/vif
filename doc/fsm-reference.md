@@ -980,9 +980,12 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Shielded` (no damage, no stun), `ChargeLine` (the swarm's charge line: two
   pulses from the header toward the stored cell over the end of the entry, each the
   share of it the swarm's charge is of its lock, so a lock flagged with it shows
-  where a charge goes) and `Beam` (the swarm's teleport line from where the header
+  where a charge goes), `Beam` (the swarm's teleport line from where the header
   stands to the stored cell, over the entry: a state that ends in `Teleport` on its
-  timeout's `actions` beams there as the swarm does).
+  timeout's `actions` beams there as the swarm does) and `Landing` (the landing
+  marker: the centre of the footprint the body takes on the stored cell blinks
+  white, red and pink, so flagging the lock, the charge and the beam marks where an
+  attack lands until it does).
 
 The target is the cursor nearest the header, read from the Shared positions with
 the lower roster slot taking a tie, as for the swarm, so every instance of a
