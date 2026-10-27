@@ -163,6 +163,10 @@ type ConfigResource struct {
 	// ConsolePalette is the text console a 256-color frame is drawn on; set with ColorMode
 	ConsolePalette ConsolePalette `toml:"-"`
 
+	// TextConsole is a 256-color frame shown on a text console; false is an emulator in 256
+	// colors, whose theme draws entries 0-15 but xterm's cube as it is
+	TextConsole bool `toml:"-"`
+
 	// pointer records that the pointer made the last local placement; FollowCamera
 	// holds its narrower margins until another input moves the cursor.
 	pointer bool

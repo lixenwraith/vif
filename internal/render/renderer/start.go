@@ -12,8 +12,8 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// startPalette is the start screen's colors: lixen.com's in truecolor, console entries on
-// a console
+// startPalette is the start screen's colors: lixen.com's in truecolor, console entries in
+// 256 colors but for an emulator's button, which keeps the site's through xterm's cube
 type startPalette struct {
 	bg, button, buttonText, ghost, ghostText color.RGB
 }
@@ -28,6 +28,7 @@ type StartScreenRenderer struct {
 	logo    logoCells
 	console *render.Console
 	pal     startPalette
+	frame   bool // a console's fonts lack the half blocks that round the button
 }
 
 // NewStartScreenRenderer creates the start screen renderer
@@ -38,9 +39,11 @@ func NewStartScreenRenderer(gameCtx *engine.GameContext) *StartScreenRenderer {
 	}
 	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		c := render.ConsoleFor(cfg.ConsolePalette)
-		r.console = c
-		r.pal = startPalette{c.Color(visual.Start256Bg), c.Color(visual.Start256Button), c.Color(visual.Start256ButtonText),
-			c.Color(visual.Start256Ghost), c.Color(visual.Start256GhostText)}
+		r.console, r.frame = c, cfg.TextConsole
+		r.pal.bg, r.pal.ghost, r.pal.ghostText = c.Color(visual.Start256Bg), c.Color(visual.Start256Ghost), c.Color(visual.Start256GhostText)
+		if r.frame {
+			r.pal.button, r.pal.buttonText = c.Color(visual.Start256Button), c.Color(visual.Start256ButtonText)
+		}
 	}
 	return r
 }
@@ -59,12 +62,8 @@ func (r *StartScreenRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	r.adapter.Clear(r.pal.bg)
 	root := r.adapter.Region()
 
-	// A console's fonts lack the half blocks that round the button's ends, so it is one row
 	label := tui.Truncate(ctx.Prompt, w-2*parameter.StartButtonPadX)
 	bw, bh := tui.RuneLen(label)+2*parameter.StartButtonPadX, 3
-	if r.console != nil {
-		bh = 1
-	}
 	if label == "" {
 		bw, bh = 0, 0
 	}
@@ -90,8 +89,10 @@ func (r *StartScreenRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	} else {
 		top = (h - bh) / 2
 	}
+	var button tui.Region
 	if bh > 0 {
-		r.button(root.Sub((w-bw)/2, top+lh+gap, bw, bh), label)
+		button = root.Sub((w-bw)/2, top+lh+gap, bw, bh)
+		r.button(button, label)
 	}
 
 	if help := render.StartHelpRect(w, ctx.StartHelp); ctx.StartHelp != "" && help.X0 >= 0 && help.Y1 <= h {
@@ -101,12 +102,29 @@ func (r *StartScreenRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	}
 
 	r.adapter.FlushTo(buf, 0, 0, visual.MaskUI)
+	// An emulator in 256 colors draws 0-15 in its theme but xterm's cube as it is
+	if r.console != nil && !r.frame && button.H > 0 {
+		x, y, bw, bh := button.Bounds()
+		buf.SetExact(render.RectWH(x, y, bw, bh))
+		// The caps' page halves stay the theme's black, which the cube lacks
+		for i := x; i < x+bw && bh >= 3; i++ {
+			buf.SetBg256(i, y, visual.Start256Bg)
+			buf.SetBg256(i, y+bh-1, visual.Start256Bg)
+		}
+	}
 }
 
-// button draws the prompt as the site's primary button: a filled row, between half-block
-// rows whose quadrant corners round it where the font has them
+// button draws the prompt as the site's primary button: a filled row between half-block
+// rows whose quadrant corners round it, or on a console a frame of lines every font has
 func (r *StartScreenRenderer) button(region tui.Region, label string) {
 	mid := region.H / 2
+	if r.frame {
+		if region.H >= 3 {
+			region.Box(tui.LineDouble, r.pal.button)
+		}
+		region.TextCenter(mid, label, r.pal.buttonText, r.pal.bg, terminal.AttrNone)
+		return
+	}
 	region.Sub(0, mid, region.W, 1).Fill(r.pal.button)
 	region.TextCenter(mid, label, r.pal.buttonText, r.pal.button, terminal.AttrBold)
 	if region.H < 3 {

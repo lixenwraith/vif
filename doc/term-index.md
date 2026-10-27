@@ -13,7 +13,7 @@ code does not have yet, described only by a design such as
 
 ## 0-9
 
-**256-color** (also: 256-colour, `-color 256`) — The palette color mode: cells may carry xterm-256 indices instead of RGB, finalization fills untouched backgrounds without occlusion dimming, and a last pass settles every cell on a text console's sixteen colors. `-color auto` lets the terminal's capability choose between it and truecolor. See also **truecolor**, **xterm**. [Rendering §6](rendering.md#6-finalization-and-color-modes) · `internal/render` `console.go`
+**256-color** (also: 256-colour, `-color 256`) — The palette color mode: cells may carry xterm-256 indices instead of RGB, finalization fills untouched backgrounds without occlusion dimming, and a last pass settles every cell on a text console's sixteen colors, but for a rectangle a renderer keeps out of it (`SetExact`). `-color auto` lets the terminal's capability choose between it and truecolor; a terminal that is not a text console (`Config.TextConsole` false), such as an emulator over ssh, gets it too, and its theme draws the sixteen entries while xterm's cube shows as it is. See also **truecolor**, **xterm**. [Rendering §6](rendering.md#6-finalization-and-color-modes) · `internal/render` `console.go`, `RenderBuffer.SetExact` · `internal/engine` `ConfigResource.TextConsole`
 
 **30-session.yaml** — The fleet's session template: one Job and one Service per session. The router builds the same objects for each request (`tool/vif-router/manifest.go`), and `session.sh create` renders the file itself through `render-session.sh`. See also **template**. [Fleet deploy §9](kube-docker-deploy.md#9-the-fleet-objects-and-the-shared-volumes) · `deploy/k3s/30-session.yaml`
 

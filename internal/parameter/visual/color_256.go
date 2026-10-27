@@ -88,11 +88,11 @@ const (
 	Effect256Threshold = 0.25
 )
 
-// The start screen on a console: its page, the prompt's button and label, and the help
-// button's frame and label, bright since a blue line does not read on black
+// The start screen in 256 colors: its page, the prompt's label and, on a console, its frame,
+// and the help button's frame and label, bright since a blue line does not read on black
 const (
 	Start256Bg         = ConBlack
-	Start256Button     = ConBlue
+	Start256Button     = ConBrightBlue
 	Start256ButtonText = ConBrightWhite
 	Start256Ghost      = ConBrightBlue
 	Start256GhostText  = ConBrightBlue
