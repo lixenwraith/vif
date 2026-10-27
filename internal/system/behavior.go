@@ -211,6 +211,7 @@ func (s *BehaviorSystem) Update() {
 		c.combat.IsEnraged = flags&behaviorEnraged != 0
 		b.Shielded = shielded
 		b.Beaming = flags&behaviorBeam != 0
+		b.ChargeLine = flags&behaviorChargeLine != 0
 		if shielded {
 			c.combat.Status[component.StatusWard] = component.Status{Remaining: parameter.CombatDamageImmunityDuration}
 		}
@@ -253,10 +254,11 @@ func (s *BehaviorSystem) fill(header core.Entity, b *component.BehaviorComponent
 
 // spawn builds program i's composite with its header at the cell, or the nearest
 // place its footprint fits, searched over the whole map as a fuse's beam is: a
-// scenario names a cell blind to the walls, a cave's rock among them
+// scenario names a cell blind to the walls, a cave's rock among them, and to the
+// body, a cell on an edge or past it searching from the footprint flush against it
 func (s *BehaviorSystem) spawn(i, x, y int) {
 	p := &s.set.Prototypes()[i]
-	left, top, found := s.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
+	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
 	if !found {
 		s.programs[i].lifecycle.spawnFailures.Add(1)
 		return
@@ -408,7 +410,7 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 		p.HeaderX, p.HeaderY,
 		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX)+1,
 		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY)+1,
-		parameter.BehaviorRestitution,
+		p.Restitution,
 		wallCheck,
 	)
 	s.motion.Record(motion)
@@ -422,7 +424,7 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 // footprint fits, clearing the landing with a flash
 func (s *BehaviorSystem) teleport(c *behaviorCtx) {
 	p := c.proto
-	left, top, found := s.world.Positions.FindFreeAreaSpiral(
+	left, top, found := s.world.Positions.FindFreeAreaInside(
 		c.behavior.TargetX, c.behavior.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
 	if !found {
 		return
@@ -447,9 +449,10 @@ func (s *BehaviorSystem) LoadLocal(data []byte) error {
 
 // Behavior flags, which Update writes to the components after every step
 const (
-	behaviorEnraged  uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
-	behaviorShielded                    // ward held and stun refused: no damage, no stun
-	behaviorBeam                        // a teleport line from the header to the stored cell
+	behaviorEnraged    uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
+	behaviorShielded                      // ward held and stun refused: no damage, no stun
+	behaviorBeam                          // a teleport line from the header to the stored cell
+	behaviorChargeLine                    // the swarm's charge line pulsing toward the stored cell
 )
 
 // behaviorCtx is what one instance's step reads and its verbs write through. Verbs
@@ -487,6 +490,18 @@ func (c *behaviorCtx) targetDistance() (float64, bool) {
 
 func (c *behaviorCtx) probe(x, y int) { c.probeX, c.probeY, c.probed = x, y, true }
 
+// aim reads the cell a verb's to names: the target by default, or with "stored"
+// the cell StoreTarget kept, which holds still however the cursors move after it
+func (a *targetArgs) aim() (func(*behaviorCtx) (int, int, bool), error) {
+	switch a.To {
+	case "", "target":
+		return (*behaviorCtx).target, nil
+	case "stored":
+		return func(c *behaviorCtx) (int, int, bool) { return c.behavior.TargetX, c.behavior.TargetY, true }, nil
+	}
+	return nil, fmt.Errorf("to %q is not one of target, stored", a.To)
+}
+
 // telegraphColors are the colours a program names a telegraph's splash by
 var telegraphColors = []struct {
 	name string
@@ -512,6 +527,9 @@ type (
 	distanceArgs   struct {
 		Op    dialect.Op `toml:"op"`
 		Cells float64    `toml:"cells"`
+	}
+	targetArgs struct {
+		To string `toml:"to"`
 	}
 	fractionArgs struct {
 		Op    dialect.Op `toml:"op"`
@@ -561,11 +579,18 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			return ok && a.Op.Holds(d, a.Cells)
 		}, nil
 	})
-	v.Predicate("LineOfSight", reads(func(c *behaviorCtx) bool {
-		x, y, ok := c.target()
-		pos, placed := c.sys.world.Positions.GetPosition(c.entity)
-		return ok && placed && c.sys.world.Positions.HasLineOfSight(pos.X, pos.Y, x, y, component.WallBlockKinetic)
-	}))
+	v.Predicate("LineOfSight", func(a *targetArgs) (func(*behaviorCtx) bool, error) {
+		aim, err := a.aim()
+		if err != nil {
+			return nil, err
+		}
+		return func(c *behaviorCtx) bool {
+			x, y, ok := aim(c)
+			pos, placed := c.sys.world.Positions.GetPosition(c.entity)
+			p := c.proto
+			return ok && placed && bodyHasLineOfSight(c.sys.world, pos.X, pos.Y, x, y, p.Width, p.Height, p.HeaderX, p.HeaderY)
+		}, nil
+	})
 	v.Predicate("HasTarget", reads(func(c *behaviorCtx) bool {
 		_, _, ok := c.target()
 		return ok
@@ -604,18 +629,24 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		}
 		return ok
 	}))
-	v.Probe("FindLanding", reads(func(c *behaviorCtx) bool {
-		x, y, ok := c.target()
-		if !ok {
-			return false
+	v.Probe("FindLanding", func(a *targetArgs) (func(*behaviorCtx) bool, error) {
+		aim, err := a.aim()
+		if err != nil {
+			return nil, err
 		}
-		p := c.proto
-		left, top, found := c.sys.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
-		if found {
-			c.probe(left+p.HeaderX, top+p.HeaderY)
-		}
-		return found
-	}))
+		return func(c *behaviorCtx) bool {
+			x, y, ok := aim(c)
+			if !ok {
+				return false
+			}
+			p := c.proto
+			left, top, found := c.sys.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+			if found {
+				c.probe(left+p.HeaderX, top+p.HeaderY)
+			}
+			return found
+		}, nil
+	})
 
 	// --- Effects: each fixes its push ---
 	v.Effect("StoreTarget", does(func(c *behaviorCtx) {
@@ -785,6 +816,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 	v.Flag("Enraged", behaviorEnraged)
 	v.Flag("Shielded", behaviorShielded)
 	v.Flag("Beam", behaviorBeam)
+	v.Flag("ChargeLine", behaviorChargeLine)
 	v.Integrate(func(c *behaviorCtx) { c.sys.integrate(c) })
 	v.Entered(func(c *behaviorCtx) { c.probed = false })
 	return v

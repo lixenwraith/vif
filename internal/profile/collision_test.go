@@ -92,6 +92,7 @@ func TestHomingProfilesSane(t *testing.T) {
 	profiles := map[string]*physics.HomingProfile{
 		"Drain": &DrainHoming, "Swarm": &SwarmHoming, "Quasar": &QuasarHoming,
 		"Snake": &SnakeHoming, "Loot": &LootHoming, "Missile": &MissileHoming,
+		"Behavior": &BehaviorHoming,
 	}
 	for name, p := range profiles {
 		if p.HomingAccel <= 0 {

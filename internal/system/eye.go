@@ -445,9 +445,9 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *comp
 	}
 
 	minHeaderX := parameter.EyeHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.EyeWidth - parameter.EyeHeaderOffsetX)
+	maxHeaderX := config.MapWidth - (parameter.EyeWidth - parameter.EyeHeaderOffsetX) + 1
 	minHeaderY := parameter.EyeHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.EyeHeight - parameter.EyeHeaderOffsetY)
+	maxHeaderY := config.MapHeight - (parameter.EyeHeight - parameter.EyeHeaderOffsetY) + 1
 
 	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -32,6 +33,24 @@ type SplashSystem struct {
 type timerBox struct {
 	entity core.Entity
 	BBox
+}
+
+// timerInk is the box a countdown's digits ink inside their cells, the union over 0-9
+// so a countdown holds still as its count changes. Placement reserves the ink, not
+// the cells, whose blank rows and columns would keep the count off rows it fits in.
+var timerInk = func() BBox {
+	left, top, right, bottom := parameter.SplashCharWidth, parameter.SplashCharHeight, 0, 0
+	for digit := '0'; digit <= '9'; digit++ {
+		x, y, w, h := asset.SplashInkBounds(asset.SplashFont[digit-' '])
+		left, top = min(left, x), min(top, y)
+		right, bottom = max(right, x+w), max(bottom, y+h)
+	}
+	return BBox{X: left, Y: top, W: right - left, H: bottom - top}
+}()
+
+// timerInkBox is the box a countdown of length digits inks, from its first cell's origin
+func timerInkBox(length int) BBox {
+	return BBox{X: timerInk.X, Y: timerInk.Y, W: (max(length, 1)-1)*parameter.SplashCharWidth + timerInk.W, H: timerInk.H}
 }
 
 // NewSplashSystem creates a new splash system
@@ -425,8 +444,7 @@ func (s *SplashSystem) collidesTimer(candidate BBox, skip int) bool {
 // of every countdown's box but its own at self
 // Uses 8-direction search: cardinals first, then diagonals
 func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponent, self int) {
-	timerWidth := splashComp.Length * parameter.SplashCharWidth
-	timerHeight := parameter.SplashCharHeight
+	ink := timerInkBox(splashComp.Length)
 
 	var anchorX, anchorY int
 	if splashComp.AnchorEntity != 0 {
@@ -450,19 +468,20 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 		Bottom: splashComp.MarginBottom,
 	}
 
+	// Where nothing is clear, the search returns the slot overlapping the least
 	offsetX, offsetY, _ := s.world.Positions.FindPlacementAroundExclusion(
 		anchorX, anchorY,
-		timerWidth, timerHeight,
+		ink.W, ink.H,
 		exclusion,
 		parameter.SplashTimerPadding,
-		parameter.SplashTopPadding,
 		engine.PatternCardinalFirst,
 		component.WallBlockAll,
 		checkTimers,
 	)
 
-	splashComp.OffsetX = offsetX
-	splashComp.OffsetY = offsetY
+	// The search placed the ink; the cells start that far up and left of it
+	splashComp.OffsetX = offsetX - ink.X
+	splashComp.OffsetY = offsetY - ink.Y
 }
 
 // fillTimerBoxes rebuilds the box of every countdown that holds space, in store order
@@ -493,11 +512,12 @@ func (s *SplashSystem) paddedBox(splashComp *component.SplashComponent) (BBox, b
 	}
 
 	pad := parameter.SplashCollisionPadding
+	ink := timerInkBox(splashComp.Length)
 	return BBox{
-		X: x - pad,
-		Y: y - pad,
-		W: splashComp.Length*parameter.SplashCharWidth + pad*2,
-		H: parameter.SplashCharHeight + pad*2,
+		X: x + ink.X - pad,
+		Y: y + ink.Y - pad,
+		W: ink.W + pad*2,
+		H: ink.H + pad*2,
 	}, true
 }
 

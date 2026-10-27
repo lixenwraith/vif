@@ -36,14 +36,14 @@ coordinator's, sent under the same bounds and held in memory. Installed layout:
 │   ├── main/              # optional override: a copy of internal/asset/scenario/
 │   ├── blank/scenario.toml
 │   ├── simon/scenario.toml
-│   ├── vanguard/scenario.toml
 │   ├── td/
 │   │   ├── scenario.toml
 │   │   ├── td_macros.toml # macro library
 │   │   └── td_*.toml      # region files
-│   └── warden/
+│   └── vanguard/
 │       ├── scenario.toml
-│       └── behavior/warden.toml  # a behavior program
+│       ├── macros.toml
+│       └── behavior/scarab.toml  # a behavior program, one per raider type
 └── input/
     └── keymap.toml
 ```
@@ -75,7 +75,7 @@ fixed = "500x250"                   # Size the map holds throughout, for front-e
 cursors = false                     # Players hold slots, no cursor on the map (optional)
 
 [behaviors]
-warden = { file = "behavior/warden.toml" }  # A species of the scenario's own (Behavior Programs)
+scarab = { file = "behavior/scarab.toml" }  # A species of the scenario's own (Behavior Programs)
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
@@ -690,7 +690,7 @@ cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 ### PayloadSpeciesIn
 
 ```toml
-{ trigger = "EventSpeciesKilled", target = "WardenDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] } }
+{ trigger = "EventSpeciesKilled", target = "RaiderDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["scarab", "invader"] } }
 ```
 
 Passes when the payload's species is one of `names`: a code species (`drain`,
@@ -834,21 +834,22 @@ IDs 10 to 17 in sorted-name order, so a guard on `EventSpeciesCreated` or
 
 A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
 x, y }`, its header at that cell or the nearest place its footprint fits, searched
-over the whole map; a request naming no program raises nothing
+over the whole map. A cell on an edge or past it searches from the footprint flush
+against that edge, on the row or column it names, so a request names an edge blind
+to the body's size and header offset. A request naming no program raises nothing
 (`behavior.unknown_program_rejects`), nor one finding no room
 (`behavior.<name>.spawn_failures`). Or it beams one in with
 `EventFuseBehaviorRequest { program, x, y }`: the fuse plays a one-second swarm beam over the nearest place its footprint fits, searching the
-whole map from that cell, and spawns the instance as it ends; a request naming no
+whole map from that cell as a direct spawn does, and spawns the instance as it ends; a request naming no
 program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
 without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
-instances and the beams still bringing them, every program's when it names none;
-`wad/scenario/warden` is the worked example, beamed in, and
-`wad/scenario/vanguard`'s raider types, spawned directly, fly the swarm's attack
-cycle as four programs over one macro (`RaiderStates` in its `macros.toml`), each
-program's `[states]` an invocation of it with the type's timings. `-check` compiles every
-program and prints `behaviors ok: <n> (<names>)`; each fault names program, place
-and key (`program 'warden': state 'Wind': on_update[0]: unknown sustained action
-'Freez'`).
+instances and the beams still bringing them, every program's when it names none.
+`wad/scenario/vanguard` is the worked example: its raider types, spawned directly,
+fly the swarm's attack cycle as four programs over one macro (`RaiderStates` in its
+`macros.toml`), each program's `[states]` an invocation of it with the type's
+timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
+each fault names program, place and key (`program 'scarab': state 'Lock':
+on_update[0]: unknown sustained action 'Freez'`).
 
 ```toml
 initial = "Roam"                    # State a spawn starts in
@@ -860,14 +861,13 @@ height = 2
 header = { x = 1, y = 0 }           # Header cell inside the footprint
 hp = 40
 combat = "swarm"                    # Attack-matrix row it fights as: swarm or quasar
-homing = "swarm"                    # Profile Home steers by: drain, quasar, snake or swarm
 mass = 2.0                          # Soft collision and flocking; 0 takes neither (optional)
 drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
 frames = [                          # Each frame a string per row, height rows of width cells
-    { glyphs = ["▄▀▀▄", "▀▄▄▀"], fg = ["0110", "1001"], attr = ["B  B", "    "] },
-    { glyphs = ["▀▄▄▀", "▄▀▀▄"] },  # fg, bg and attr are each optional
+    { glyphs = ["╔oo╗", "╚══╝"], fg = ["0110", "1001"], attr = [" BB ", "    "] },
+    { glyphs = ["┌--┐", "└──┘"] },  # fg, bg and attr are each optional
 ]
 pattern_ms = 500                    # Frame period; required with two frames or more
 color = { r = 200, g = 120, b = 40 }  # A glyph's without an fg entry
@@ -875,6 +875,15 @@ fg = [{ r = 240, g = 160, b = 60 }, { r = 160, g = 80, b = 20 }]  # Palettes, at
 bg = []
 fg256 = 214                         # The console pair, together or not at all (optional)
 bg256 = 52
+
+[prototype.physics]                 # How it flies; each key replaces its default (optional)
+speed = 12.0                        # Cruise, cells/s: Home brakes above it
+accel = 42.0                        # Toward the target, cells/s²
+drag = 0.94                         # Braking above the cruise, per second
+arrival_radius = 2.0                # Cells from the target where arrival steering starts
+arrival_drag = 2.0                  # Drag's added multiple at the target; needs arrival_radius
+dead_zone = 0.5                     # Snap radius at the target once slow
+restitution = 0.5                   # Speed kept off a wall or the map's edge, 0 to 1
 
 [states.Strike]
 duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
@@ -895,15 +904,25 @@ guard = "Stunned"
 target = "Roam"
 ```
 
-- The look: a frame's `glyphs` row draws a cell's glyph, a space drawing none;
-  `fg` and `bg` rows give each cell an entry of the prototype's palette as a hex
-  digit (`0`-`f`), a space for the prototype's `color` and for no background; an
-  `attr` row gives `B` (bold), `D` (dim) or a space. A 256-colour host draws a
-  look with `fg256` and `bg256` in that pair alone, every glyph in the one and
-  every background in the other, which reads on every console palette, and shows a
-  hit by reversing the glyph; without the pair it draws the palettes' nearest
-  colours. The hit flash, then `Enraged`, tints every glyph. The eye's types are
-  drawn from the same look.
+- The look ([Behavior machines §6.5](machine-design.md#65-a-programs-look)): a
+  frame's `glyphs` row draws a cell's glyph, a space drawing none, each glyph ASCII
+  or one every text console font carries (box drawing, `░▒█`, arrows and a few
+  symbols; not half blocks such as `▀▄`), which the console font test checks in
+  every shipped scenario; `fg` and `bg` rows give each cell an entry of the
+  prototype's palette as a hex digit (`0`-`f`), a space for the prototype's `color`
+  and for no background; an `attr` row gives `B` (bold), `D` (dim) or a space. A
+  256-colour host draws a look with `fg256` and `bg256` in that pair alone, every
+  glyph in the one and every background in the other, which reads on every console
+  palette, and shows a hit by reversing the glyph; without the pair it draws the
+  palettes' nearest colours. The hit flash, then `Enraged`, tints every glyph. The
+  eye's types are drawn from the same look.
+- The physics: a key `[prototype.physics]` leaves out keeps its default, the
+  `Behavior*` values in `internal/parameter`: the swarm's chase (speed 8, accel 6,
+  drag 2), no arrival steering, the homing's half-cell snap and restitution 0.5.
+  `Home` steers by all but the restitution, which every move bounces by. Each value
+  is finite and at least 0, accel above it, and restitution at most 1. Vanguard's
+  construct, scarab and storm eye give the drain's, the snake's and the quasar's
+  values, and the invader flies the default.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so
   `HitWall` reads this step's move). A global edge has none.
@@ -923,12 +942,15 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
 `-schema` lists as `vocabularies.behavior`:
 
 - Guards: `TargetDistance { op, cells }` (header to target, rows scaled by the
-  cell aspect), `LineOfSight`, `HasTarget`, `Stunned`, `HPFraction { op, value }`,
+  cell aspect), `LineOfSight { to }` (the body clears the way from where it stands
+  to the target, or with `to = "stored"` to the cell `StoreTarget` kept), `HasTarget`,
+  `Stunned`, `HPFraction { op, value }`,
   `HitWall` (this step's move met a wall or the map edge), `Chance { percent }`
   (mixed from tick, entity and site, so no random stream moves),
   `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.
 - Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
-  `FindLanding` (the nearest place the footprint fits around the target).
+  `FindLanding { to }` (the nearest place the footprint fits around the target, or
+  with `to = "stored"` around the cell `StoreTarget` kept).
 - Effects: `StoreTarget` (the probe's cell, else the target's), `ZeroVelocity`,
   `Teleport` (to the stored cell, clearing the landing with a flash),
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
@@ -938,14 +960,19 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
   swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local
   events).
-- Sustained: `Home` (steer to the target by the homing profile), `ChargeToStored`
+- Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
-  `Shielded` (no damage, no stun) and `Beam` (the swarm's teleport line from
-  where the header stands to the stored cell, over the entry: a state that ends in
-  `Teleport` on its timeout's `actions` beams there as the swarm does).
+  `Shielded` (no damage, no stun), `ChargeLine` (the swarm's charge line: two
+  pulses from the header toward the stored cell over the end of the entry, each the
+  share of it the swarm's charge is of its lock, so a lock flagged with it shows
+  where a charge goes) and `Beam` (the swarm's teleport line from where the header
+  stands to the stored cell, over the entry: a state that ends in `Teleport` on its
+  timeout's `actions` beams there as the swarm does).
 
-The target is the nearest cursor. Hit points, lifetime, contact strikes, gold
-breaking and the composite's integrity work as for every composite species; a
-program does not script them.
+The target is the cursor nearest the header, read from the Shared positions with
+the lower roster slot taking a tie, as for the swarm, so every instance of a
+session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
+composite's integrity work as for every composite species; a program does not
+script them.

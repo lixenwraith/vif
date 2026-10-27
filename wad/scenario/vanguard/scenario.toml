@@ -76,12 +76,12 @@ transitions = [
 ]
 
 # A raider spawns at the right edge every two seconds while fewer than three fly,
-# every data species being a raider, on a row drawn across the map, every type's
-# body clear of the two rows a wall keeps at its thinnest; the spawn searches the
-# whole map from there, so rock on that row sends it to the nearest open rows. A
-# 4-wide type's header stands a column in from its left and the storm eye's two, so
-# the width less three is the right edge's header column for both. The type is
-# drawn too, each equally likely: a new type widens the draw and adds its edge.
+# every data species being a raider, on a row drawn inside the two rows a wall
+# keeps at its thinnest. The request names the map's width, a column past its right
+# edge, and the spawn stands each body flush against that edge whatever its size;
+# it searches the whole map from there, so rock on that row sends it to the nearest
+# open rows. The type is drawn too, each equally likely: a new type widens the draw
+# and adds its edge.
 [states.RaidWait]
 parent = "Raid"
 transitions = [
@@ -95,13 +95,12 @@ transitions = [
 parent = "Raid"
 on_enter = [
     { action = "ConfigToVar", payload = { field = "map_width", name = "raid_x" } },
-    { action = "DecrementVar", payload = { name = "raid_x", delta = 3 } },
     { action = "ConfigToVar", payload = { field = "map_height", name = "raid_rows" } },
-    { action = "DecrementVar", payload = { name = "raid_rows", delta = 7 } },
+    { action = "DecrementVar", payload = { name = "raid_rows", delta = 4 } },
     { action = "IncrementVar", payload = { name = "raid_index" } },
     { action = "RandomVar", payload = { name = "raid_y", min = 0, max = 1048575, index_var = "raid_index" } },
     { action = "ModuloVar", payload = { name = "raid_y", source_var = "raid_rows" } },
-    { action = "IncrementVar", payload = { name = "raid_y", delta = 3 } },
+    { action = "IncrementVar", payload = { name = "raid_y", delta = 2 } },
     { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
     { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 3, seed_var = "raid_type_seed", index_var = "raid_index" } },
 ]

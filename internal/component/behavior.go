@@ -24,8 +24,9 @@ type BehaviorComponent struct {
 
 	TargetX, TargetY int // the cell StoreTarget kept, which a charge or teleport goes to
 
-	Shielded bool // Written from the machine's flags each step: damage and stun immunity
-	Beaming  bool // Written likewise: a teleport line runs from the header to the stored cell
+	Shielded   bool // Written from the machine's flags each step: damage and stun immunity
+	Beaming    bool // Written likewise: a teleport line runs from the header to the stored cell
+	ChargeLine bool // Written likewise: the swarm's charge line pulses toward the stored cell
 }
 
 // BehaviorPrototype is what a program declares about its species' body: plain data
@@ -38,13 +39,14 @@ type BehaviorPrototype struct {
 	Width, Height    int // footprint in cells
 	HeaderX, HeaderY int // phantom head offset from the top-left
 
-	HitPoints int
-	Combat    CombatEntityType      // the attack-matrix row it fights as
-	Homing    physics.HomingProfile // what its homing steers by
-	Mass      float64               // soft-collision mass; 0 takes no soft collision or flocking
-	Drops     SpeciesType           // the code species whose drop tiers it rolls; SpeciesNone drops nothing
-	Contact   CursorDamage          // what touching it costs a cursor
-	Lifetime  time.Duration         // 0 = lives until killed or cancelled
+	HitPoints   int
+	Combat      CombatEntityType      // the attack-matrix row it fights as
+	Homing      physics.HomingProfile // what its homing steers by
+	Restitution float64               // velocity it keeps on a wall or boundary bounce
+	Mass        float64               // soft-collision mass; 0 takes no soft collision or flocking
+	Drops       SpeciesType           // the code species whose drop tiers it rolls; SpeciesNone drops nothing
+	Contact     CursorDamage          // what touching it costs a cursor
+	Lifetime    time.Duration         // 0 = lives until killed or cancelled
 
 	Look    Look          // its frames, cell by cell
 	Pattern time.Duration // how long each frame shows

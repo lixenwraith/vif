@@ -3405,6 +3405,9 @@ func encodeColumnsBehavior(dst []byte, rows []StoreEntry[component.BehaviorCompo
 	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.Beaming)
 	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.ChargeLine)
+	}
 	return dst
 }
 
@@ -3444,6 +3447,9 @@ func decodeColumnsBehavior(r *columnReader) []StoreEntry[component.BehaviorCompo
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.Beaming, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.ChargeLine, r)
 	}
 	return rows
 }

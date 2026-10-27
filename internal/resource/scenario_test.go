@@ -182,7 +182,7 @@ func TestABehaviorTableNamesAFileOrIsTheProgram(t *testing.T) {
 
 // wisp is the least program that compiles: one cell standing still
 const wisp = "initial = \"Idle\"\n" +
-	"[prototype]\nwidth = 1\nheight = 1\nheader = { x = 0, y = 0 }\nhp = 1\ncombat = \"swarm\"\nhoming = \"swarm\"\nframes = [{ glyphs = [\"o\"] }]\n" +
+	"[prototype]\nwidth = 1\nheight = 1\nheader = { x = 0, y = 0 }\nhp = 1\ncombat = \"swarm\"\nframes = [{ glyphs = [\"o\"] }]\n" +
 	"[states.Idle]\non_update = [{ action = \"Freeze\" }]\n"
 
 // writePrograms lays down a scenario whose entry names each program's file

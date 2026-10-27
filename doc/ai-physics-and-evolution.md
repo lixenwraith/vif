@@ -177,8 +177,10 @@ traversal in their owning system rather than relying only on final-cell overlap.
 Homing separates desired cruise speed, acceleration, overspeed drag, arrival
 radius, near-target drag/acceleration, and a snap dead zone. The profiles in
 `internal/profile/homing.go`, built from `internal/parameter` tunables, choose
-these values for loot, missiles, and each homing species. Eyes, quasars and
-snake heads apply the overspeed drag only on a direct path (`ApplyHomingScaled`).
+these values for loot, missiles, and each homing species; a data species flies
+`BehaviorHoming`, the swarm's chase, under its program's `[prototype.physics]`
+keys. Eyes, quasars and snake heads apply the overspeed drag only on a direct path
+(`ApplyHomingScaled`).
 
 Two of those values are read together, because a constant pull toward a target
 with nothing damping the sideways component of velocity is an orbit, not an

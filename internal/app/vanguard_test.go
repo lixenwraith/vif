@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/resource"
 )
@@ -215,6 +216,140 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	}
 	if charges, levels := gun(); charges != 1 || levels != 9 {
 		t.Fatalf("after a reset the gun holds %d charges on %d levels, want the first of nine", charges, levels)
+	}
+}
+
+// TestVanguardAKillInAPairDropsEachPlayerOneU ends a raider by the host player's
+// shot on a mesh pair. The raid's kill edge, an internal transition on the kill
+// event, moves on the authority's crossing (D-20) and runs once on each instance,
+// so each requests one U, and each player's ship takes the U its own instance
+// simulates and goes up a level, where an edge proposed again on the lead would
+// drop once more.
+func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	an := host.JoinAnchor()
+	guest, err := NewHeadless(Config{
+		Seed: fixtureSeed, Width: 84, Height: 26, Resources: opts,
+		MapWidth: an.Anchor.MapWidth, MapHeight: an.Anchor.MapHeight,
+		CropOnResize: an.Anchor.CropOnResize, LockMap: an.Anchor.SessionShared,
+	})
+	if err != nil {
+		t.Fatalf("headless joiner: %v", err)
+	}
+	t.Cleanup(func() { host.Close(); guest.Close() })
+	if err := guest.Join(an); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	host.membership.adoptMapLatch(an.Anchor)
+	apps := []*App{host, guest}
+	for _, a := range apps {
+		tickUntilCursor(t, a)
+		if !a.SetupLevel(100, 30, true, false) {
+			t.Fatal("level setup refused before the session was live")
+		}
+		a.Tick(1)
+	}
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	host.AttachTransport(mesh.Node(1))
+	guest.AttachTransport(mesh.Node(2))
+
+	var kills, drops, resets [2]int
+	for i, a := range apps {
+		a.SetDispatchTap(func(ev event.GameEvent) {
+			switch p := ev.Payload.(type) {
+			case *event.SpeciesKilledPayload:
+				if ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
+					kills[i]++
+				}
+			case *event.LootSpawnRequestPayload:
+				if p.Type == component.LootUpgrade {
+					drops[i]++
+				}
+			}
+			if ev.Type == event.EventGameResetRequest {
+				resets[i]++
+			}
+		})
+	}
+	step := func() {
+		host.Tick(1)
+		guest.Tick(1)
+		_ = host.corrections.PublishDue()
+		guest.ApplyPendingCorrections()
+	}
+	// charges is the gun of the ship an instance flies
+	charges := func(a *App) (n int) {
+		w := a.World()
+		w.RunSafe(func() {
+			if weapon, ok := w.Components.Weapon.GetComponent(w.Resources.Player.Entity); ok && weapon.GunLevels > 0 {
+				n = weapon.Charges[component.WeaponGun]
+			}
+		})
+		return n
+	}
+
+	// A raider both instances fly, ended by the host player's shot in both worlds
+	var raider core.Entity
+	for range 900 {
+		step()
+		host.World().RunSafe(func() {
+			for _, e := range host.World().Components.Behavior.Entities() {
+				raider = e
+				return
+			}
+		})
+		onGuest := false
+		guest.World().RunSafe(func() { onGuest = raider != 0 && guest.World().Components.Behavior.HasEntity(raider) })
+		if onGuest {
+			break
+		}
+		raider = 0
+	}
+	if raider == 0 {
+		t.Fatal("no raider flew on both instances")
+	}
+	for i, a := range apps {
+		if n := charges(a); n != 1 {
+			t.Fatalf("instance %d: the ship's gun holds %d charges before the kill, want vanguard's first level", i, n)
+		}
+	}
+	var shooter core.Entity
+	host.World().RunSafe(func() { shooter = host.World().Resources.Player.Entity })
+	for _, a := range apps {
+		w := a.World()
+		w.RunSafe(func() {
+			if combat, ok := w.Components.Combat.GetPtr(raider); ok {
+				combat.HitPoints, combat.LastDamagedBy = 0, shooter
+			}
+		})
+	}
+
+	for tick := 0; charges(host) < 2 || charges(guest) < 2; tick++ {
+		if tick == 600 {
+			t.Fatalf("the guns hold %d and %d charges 600 ticks after the kill, want 2 each", charges(host), charges(guest))
+		}
+		if resets != [2]int{} {
+			t.Fatalf("tick %d: the game started over before a U reached each ship", tick)
+		}
+		step()
+	}
+	if h, g := charges(host), charges(guest); h != 2 || g != 2 {
+		t.Fatalf("the guns hold %d and %d charges, want one level up each", h, g)
+	}
+	for range 30 {
+		step()
+	}
+	if kills != [2]int{1, 1} || drops != [2]int{1, 1} {
+		t.Fatalf("kills %v and U requests %v on host and guest, want one of each on each", kills, drops)
 	}
 }
 

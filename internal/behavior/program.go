@@ -7,7 +7,7 @@ package behavior
 import (
 	"errors"
 	"fmt"
-	"maps"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -98,10 +98,10 @@ type prototypeDoc struct {
 	Header     cellDoc    `toml:"header"`
 	HP         int        `toml:"hp"`
 	Combat     string     `toml:"combat"`
-	Homing     string     `toml:"homing"`
 	Mass       float64    `toml:"mass"`
 	Drops      string     `toml:"drops"`
 	Contact    contactDoc `toml:"contact"`
+	Physics    physicsDoc `toml:"physics"`
 	LifetimeMs int        `toml:"lifetime_ms"`
 	PatternMs  int        `toml:"pattern_ms"`
 
@@ -118,6 +118,18 @@ type prototypeDoc struct {
 type cellDoc struct {
 	X int `toml:"x"`
 	Y int `toml:"y"`
+}
+
+// physicsDoc is how the species flies: each key replaces its value in
+// profile.BehaviorHoming, or parameter.BehaviorRestitution, and one left out keeps it
+type physicsDoc struct {
+	Speed         *float64 `toml:"speed"`
+	Accel         *float64 `toml:"accel"`
+	Drag          *float64 `toml:"drag"`
+	ArrivalRadius *float64 `toml:"arrival_radius"`
+	ArrivalDrag   *float64 `toml:"arrival_drag"`
+	DeadZone      *float64 `toml:"dead_zone"`
+	Restitution   *float64 `toml:"restitution"`
 }
 
 // contactDoc is energy drained through a shield and heat a bare cursor loses
@@ -210,10 +222,37 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (co
 		}
 		fail("combat %q is not one of %s", d.Combat, strings.Join(names, ", "))
 	}
-	if h, ok := profile.Homing[d.Homing]; ok {
-		p.Homing = *h
-	} else {
-		fail("homing %q is not one of %s", d.Homing, strings.Join(slices.Sorted(maps.Keys(profile.Homing)), ", "))
+	p.Homing, p.Restitution = profile.BehaviorHoming, parameter.BehaviorRestitution
+	for _, k := range []struct {
+		key      string
+		doc, set *float64
+	}{
+		{"speed", d.Physics.Speed, &p.Homing.BaseSpeed},
+		{"accel", d.Physics.Accel, &p.Homing.HomingAccel},
+		{"drag", d.Physics.Drag, &p.Homing.Drag},
+		{"arrival_radius", d.Physics.ArrivalRadius, &p.Homing.ArrivalRadius},
+		{"arrival_drag", d.Physics.ArrivalDrag, &p.Homing.ArrivalDragBoost},
+		{"dead_zone", d.Physics.DeadZone, &p.Homing.DeadZone},
+		{"restitution", d.Physics.Restitution, &p.Restitution},
+	} {
+		switch v := k.doc; {
+		case v == nil:
+		case math.IsNaN(*v) || math.IsInf(*v, 0):
+			fail("physics: %s %v is not finite", k.key, *v)
+		case *v < 0:
+			fail("physics: %s %v is negative", k.key, *v)
+		default:
+			*k.set = *v
+		}
+	}
+	if p.Homing.HomingAccel == 0 {
+		fail("physics: accel 0 never homes")
+	}
+	if p.Restitution > 1 {
+		fail("physics: restitution %v keeps more speed than a bounce met", p.Restitution)
+	}
+	if p.Homing.ArrivalDragBoost > 0 && p.Homing.ArrivalRadius == 0 {
+		fail("physics: arrival_drag %v ramps in over an arrival_radius, and that is 0", p.Homing.ArrivalDragBoost)
 	}
 	if d.Drops != "" {
 		i := slices.Index(component.SpeciesNames[:], d.Drops)

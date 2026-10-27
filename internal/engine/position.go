@@ -636,6 +636,27 @@ func (p *Position) FindFreeAreaSpiral(
 	return 0, 0, false
 }
 
+// FindFreeAreaInside is FindFreeAreaSpiral from the origin pulled in from the
+// map's edges until the area with its anchor there lies inside the map: an origin
+// on an edge, or past it, searches from the area flush against that edge on the
+// origin's row or column, whichever edge it is, so a caller names an edge cell
+// blind to the area's size and anchor. An area larger than the map finds nothing.
+func (p *Position) FindFreeAreaInside(
+	originX, originY int,
+	width, height int,
+	anchorOffsetX, anchorOffsetY int,
+	mask component.WallBlockMask,
+	maxRadius int,
+) (int, int, bool) {
+	if p.world == nil {
+		return 0, 0, false
+	}
+	config := p.world.Resources.Config
+	originX = max(anchorOffsetX, min(originX, config.MapWidth-width+anchorOffsetX))
+	originY = max(anchorOffsetY, min(originY, config.MapHeight-height+anchorOffsetY))
+	return p.FindFreeAreaSpiral(originX, originY, width, height, anchorOffsetX, anchorOffsetY, mask, maxRadius)
+}
+
 // MapSearchRadius is the spiral radius whose rays reach every column and every row
 // of the map from any cell in it, rows being searched at the cell aspect
 func (p *Position) MapSearchRadius() int {
@@ -668,6 +689,20 @@ func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.Wall
 
 	// Check for any blocking walls in the area
 	return !p.HasBlockingWallInAreaUnsafe(x, y, width, height, mask)
+}
+
+// blockedCellsUnsafe counts the cells of an area that walls matching mask block
+// SYNC: caller holds World.updateMutex
+func (p *Position) blockedCellsUnsafe(x, y, width, height int, mask component.WallBlockMask) int {
+	n := 0
+	for row := y; row < y+height; row++ {
+		for col := x; col < x+width; col++ {
+			if p.HasBlockingWallAt(col, row, mask) {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // IsOutOfBounds checks if position is outside spatial grid bounds
@@ -1212,12 +1247,13 @@ var (
 // FindPlacementAroundExclusion finds valid position for object outside exclusion zone
 // Returns (offsetX, offsetY, found) where offset is relative to anchor
 // padding: gap between exclusion edge and placed object
-// topAdjust: visual compensation for font asymmetry (typically -1)
+// Where no slot is clear, it returns the one overlapping the fewest blocked cells,
+// with found false.
 func (p *Position) FindPlacementAroundExclusion(
 	anchorX, anchorY int,
 	objectW, objectH int,
 	exclusion Exclusion,
-	padding, topAdjust int,
+	padding int,
 	pattern PatternType,
 	mask component.WallBlockMask,
 	additionalCheck func(absX, absY, w, h int) bool,
@@ -1234,14 +1270,14 @@ func (p *Position) FindPlacementAroundExclusion(
 	// 8 positions: cardinals (0-3), diagonals (4-7)
 	// Matches timer positioning logic exactly
 	offsets := [8][2]int{
-		{hCenter - objHalfW, exclusion.Bottom + padding},                                      // 0: Bottom
-		{hCenter - objHalfW, -exclusion.Top - objectH - padding + topAdjust},                  // 1: Top
-		{exclusion.Right + padding, -objHalfH + topAdjust},                                    // 2: Right
-		{-exclusion.Left - objectW - padding, -objHalfH + topAdjust},                          // 3: Left
-		{exclusion.Right + padding, exclusion.Bottom + padding},                               // 4: Bottom-right
-		{-exclusion.Left - objectW - padding, exclusion.Bottom + padding},                     // 5: Bottom-left
-		{exclusion.Right + padding, -exclusion.Top - objectH + padding + topAdjust},           // 6: Top-right
-		{-exclusion.Left - objectW - padding, -exclusion.Top - objectH + padding + topAdjust}, // 7: Top-left
+		{hCenter - objHalfW, exclusion.Bottom + padding},                          // 0: Bottom
+		{hCenter - objHalfW, -exclusion.Top - objectH - padding},                  // 1: Top
+		{exclusion.Right + padding, -objHalfH},                                    // 2: Right
+		{-exclusion.Left - objectW - padding, -objHalfH},                          // 3: Left
+		{exclusion.Right + padding, exclusion.Bottom + padding},                   // 4: Bottom-right
+		{-exclusion.Left - objectW - padding, exclusion.Bottom + padding},         // 5: Bottom-left
+		{exclusion.Right + padding, -exclusion.Top - objectH + padding},           // 6: Top-right
+		{-exclusion.Left - objectW - padding, -exclusion.Top - objectH + padding}, // 7: Top-left
 	}
 
 	var order [8]int
@@ -1328,13 +1364,19 @@ func (p *Position) FindPlacementAroundExclusion(
 		return absX - anchorX, absY - anchorY, true
 	}
 
-	// Ultimate: force clamp first position
-	absX := anchorX + offsets[order[0]][0]
-	absY := anchorY + offsets[order[0]][1]
-	absX = max(0, min(absX, config.MapWidth-objectW))
-	absY = max(0, min(absY, config.MapHeight-objectH))
-
-	return absX - anchorX, absY - anchorY, false
+	// Ultimate: every slot overlaps a wall, so the one, clamped to the map, at either
+	// distance, overlapping the fewest blocked cells; ties keep the search order
+	bestX, bestY, best := 0, 0, -1
+	for _, scale := range [2]int{1, 2} {
+		for _, idx := range order {
+			absX := max(0, min(anchorX+offsets[idx][0]*scale, config.MapWidth-objectW))
+			absY := max(0, min(anchorY+offsets[idx][1]*scale, config.MapHeight-objectH))
+			if n := p.blockedCellsUnsafe(absX, absY, objectW, objectH, mask); best < 0 || n < best {
+				bestX, bestY, best = absX, absY, n
+			}
+		}
+	}
+	return bestX - anchorX, bestY - anchorY, false
 }
 
 // GetSearchDirection returns CCW if origin is right of center, CW otherwise
