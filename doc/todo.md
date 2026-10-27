@@ -8,6 +8,454 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
+## Vanguard
+
+The side-scroller's first play test (2026-10-27) found it sound for a first
+iteration: its scroll reads as lag, its cave is narrow, its raiders are plain. The
+refinements lead, grouped by area so an agent can take a group, beside the items
+this task left and the navigation ones. Order: the cave and the stone first, in
+parallel; the machine's certain faults next, as the raider types need them; then the
+raider types; the position package last, in a session of its own. Until that lands,
+nothing here adds engine surface for rock or caves: a cave's shape stays in
+`pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall system
+and renderers that read it, and a query a footprint needs is built by its caller
+from the existing ones, so the move inherits nothing new.
+
+### Cave and scroll
+
+One agent: `pkg/cave`, `internal/system/wall.go`, the cave's payload and vanguard's
+`CaveStart`. It shares `scenario.toml` and `gameplay.md` with the raider types, so
+the two land in turn.
+
+#### Scroll the cave faster, on a whole-tick cadence
+
+- Priority: P0
+- Affected files: `wad/scenario/vanguard/scenario.toml` (`CaveStart`),
+  `internal/app/vanguard_test.go`, `doc/gameplay.md` §10
+- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
+
+The play test ran at 60 frames a second on little CPU, yet the rock read as dropped
+frames. The cave steps a whole column on a tick, and eight columns a second is a
+period of 2.5 ticks, so its steps fall alternately two and three ticks apart (100
+and 150 ms): that uneven cadence is the lag the eye sees. Only a period of whole
+ticks steps evenly: 20 columns a second steps every tick and 10 every second tick,
+while 16, the doubling, steps four ticks of five and stalls four times a second. 20
+is also the ceiling, as a step moves at most a column a tick (`CaveMinPeriod`).
+Proposed: cave speed 20 and drift speed 10, whose layers (`DriftLayerFactor`) then
+step every 2, 4 and 8 ticks, where today's drift of 6 steps the bright text every
+3.3 ticks. Play 20 against 16 before settling; 10 is the even step below.
+
+A step a tick moves every shared wall, lays a column and displaces what the rock
+reaches each tick instead of every 2.5, and drops every field over the cave as often
+([Spend less on fields over a moving map](#spend-less-on-fields-over-a-moving-map)):
+report `BenchmarkCaveStep` and `BenchmarkCaveStepNavigation` per tick before and
+after. The raid's four-second cadence and the rock's push, a column each step, scale
+with the speed: retune both in play, with the opened cave below, which a faster
+scroll needs.
+
+#### Open the cave, with long open stretches and occasional narrows
+
+- Priority: P0
+- Affected files: `pkg/cave/cave.go`, `pkg/cave/cave_test.go`,
+  `internal/event/payload.go` (`CaveStartPayload`), `internal/system/wall.go`
+  (`startCave`, `caveState`), `wad/scenario/vanguard/scenario.toml`
+- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
+
+The gap wanders between `min_gap` and `max_gap` (7 and 15 rows in vanguard) and the
+channel stays within `swing` rows (9) of the middle, so on a 33-row terminal rock
+fills two thirds of the screen and the fight happens against it: raiders end their
+charges flush with the rock, where the ship must line up beside the rock to hit
+them, and even under `:god` they are hard to kill. Wanted, after Flappy Bird: a cave
+open most of its length, two to four times the area its channel opens today, with
+narrows now and then no tighter than today's typical channel, and open stretches
+long enough to stay and mow raiders down before threading the next narrow, where a
+pack would otherwise catch the ship.
+
+A shape for `pkg/cave`, still a pure integer function of the seed and the column:
+
+- The open gap as a share of the rows the walls leave (`Height − 2·MinWall`), so a
+  taller terminal opens wider instead of keeping a fixed channel: 18 rows at the
+  22-row map minimum, 29 at 33.
+- Narrows on a schedule: segments of about `every` columns, each holding one narrow
+  at a hashed offset, `length` columns at its narrowest and `ease` columns closing
+  in and out by smoothstep, down to `gap` rows (9 to 11, today's typical channel).
+  Its knots draw from a noise channel of their own, so a resize and a load still
+  derive every column from the record. Starting values at 20 columns a second:
+  `every` 120 to 200 (6 to 10 s), `length` 12 to 30, `ease` 8 to 16.
+- The channel's centre travels where there is slack, in the narrows, and its climb
+  stays within what the ship can follow: r rows a column is 20·r rows a second.
+- Zero values keep today's profile, so other caves and old records hold.
+
+`Validate` refuses a narrow below `min_gap` or above the open gap, and a segment
+that cannot hold its narrow and ease. Tests: `FuzzAColumnKeepsItsWallsAndGap` over
+the new fields; a property that consecutive columns' openings overlap by the ship
+and a row, so every cave can be flown; most columns open over a long run. A new
+`CaveStartPayload` field moves `JournalSchema`, and the record's `snapshot.Schema`.
+Vanguard opens its cave, may lower its `[map]` minimum, and draws raid rows across
+the open gap rather than within six rows of the middle.
+
+#### Keep a scrolling cave through a resize and a level setup
+
+- Priority: P3
+- Affected files: `internal/system/wall.go`
+
+A cave lays the columns a wider map brings and reshapes those to come when a new
+height still holds its profile, but the rock it laid keeps the old height, and a
+level setup that clears the walls leaves it scrolling in from the right edge of an
+empty map. Lay the map's columns again on either, or stop the cave with its walls.
+
+### Stone art
+
+One agent, disjoint from the rest: `internal/parameter/visual/stone.go` and the
+art's tests.
+
+#### Give the strata's dotted band the grain the others draw
+
+- Priority: P0
+- Affected files: `internal/parameter/visual/stone.go` (`StrataLight`,
+  `StrataDark`), `internal/pattern/art_test.go`
+- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
+
+Strata alternate light and dark bands, each taking its tones and grain from
+`StrataLight` or `StrataDark` by its hash. The third light band draws `·`, a dotted
+texture that matches no other band and would not suit the whole rock either: the
+play test shows it along the floor, under a dark band ruled with `─`. Give it the
+shade grain the others draw (`░`, or `▒` at a lighter ink) and keep its own tones,
+so bands differ in colour and density rather than in the kind of mark; judge the `─`
+band in the same look, the other grain outside the shade family. Every band keeps a
+foreground glyph, since a background alone vanishes on a 16-colour console. Re-pin
+the digest in `TestArtIsFixedByItsPresetSeedAndCell`, run
+`TestEveryPresetDrawsAVisibleGlyph` and `TestConsoleGlyphsAreInEveryConsoleFont`,
+and look in truecolor and on the console tier (`TERM=linux`).
+
+### Raiders
+
+One agent, after the cave and the machine's certain faults: the prototype's look
+(`internal/behavior`, `internal/component/behavior.go`, the behavior renderer), the
+programs under `wad/scenario/vanguard/behavior/` and the raid states.
+
+#### Let a prototype colour each cell of its frames
+
+- Priority: P0
+- Affected files: `internal/behavior/program.go` (`prototypeDoc`),
+  `internal/component/behavior.go` (`BehaviorPrototype`),
+  `internal/render/renderer/behavior.go`, `internal/render/renderer/eye.go`
+- Guide: [Behavior machines §6.4](machine-design.md#64-beyond-the-machine)
+
+A prototype draws every cell of every frame in its one `color`, so the eye's look
+cannot be data and a raider cannot tint its eyes apart from its shell. Give a frame
+optional rows as `visual.EyeFrameArt` holds them: `fg` and `bg` palette indices per
+cell (hex, a space for none, so a cell without a background keeps what is under it)
+and `attr` (`B` bold, `D` dim), with the prototype's `fg` and `bg` palettes and the
+console pair (`fg256`, `bg256`) a species draws in 256 colours. A frame without them
+draws as today, and the hit flash and the enraged colour still win. The renderer
+compiles a look once into a per-cell table, as `buildEyeType` does, and the eye
+could then read the same tables, one look for code and data species alike.
+Validation refuses an index outside its palette and a row of the wrong width. The
+aura and border sweep `sandbox/eye` draws around its eyes (a pulsing glow, a
+highlight running the perimeter) are a renderer effect of their own, worth it only
+if the play test keeps the storm eye.
+
+#### Fly several raider types, picked at random
+
+- Priority: P0
+- Affected files: `wad/scenario/vanguard/behavior/`,
+  `wad/scenario/vanguard/scenario.toml` (`Raid`, `RaidSpawn`),
+  `internal/asset/font/mono.toml`
+- Guide: [Behavior machines §6](machine-design.md#6-data-species),
+  [TOML macros](toml-macros.md)
+
+The one raider, a `╔══╗` box in one colour, reads as a placeholder. Types to try,
+from `sandbox/swarm` (which prints its 4×2 concepts by ID) and the eye species, by
+frame:
+
+```
+Invader (ID 15)   Construct (ID 10)   Scarab (ID 2)   Storm eye (5×3)
+ oo     \oo/      ╓──╖    ╒══╕        ┌oo┐    ┌--┐    +~~~+  +~~~+  +~~~+
+/""\     ""       ╙──╜    ╘══╛        └──┘    └~~┘    |(O)|  |(=)|  |{O}|
+                                                      +~~~+  +~~~+  +~~~+
+```
+
+The storm eye is the eye species' type 3 (`visual.EyeTypeVisuals[3]`), in the
+palette look above. Candidates for the shortlist after the play test: Interceptor
+(1) and Bat-Wing (12) for their wings, Chevron (18) mirrored to `<<<<` for a fast
+type, Hover-Tank (7), the flame and frost eyes. Types differ beyond their look, in
+hit points, mass, homing and the lock, charge and beam timings, balanced as the eye
+types are (`parameter.EyeTypeTable`: hit points times speed near constant).
+
+- Programs: a program per type, so each keeps its kill counter,
+  `behavior.<name>.count` and drops, with the chase, lock, charge and teleport
+  written once as a macro the programs expand (`macro_files`). `BehaviorProgramsMax`
+  is 8, which a play test of every candidate fills: raise it if the shortlist needs
+  more (a slot is a row of each `[SpeciesMax]` table). The spawn cap can read
+  `behavior.count`, every data species, while raiders are the only ones.
+- The pick: `RandomVar` draws an int and a spawn names its program, so the pick is a
+  state per type branching on the draw (`VarCompare`; works today, a state per
+  type), or a list on the request picked by an int from `payload_vars` (`programs`,
+  `pick`), the smaller change the machine follow-ups propose for every list.
+- The drop: the U guard names species 10, which sorted program names hand to a
+  `construct` or `invader` program the moment it exists, so the species-by-name fix
+  lands first.
+- Glyphs: the construct's `╓╖╙╜╒╕╘╛` are in the console fonts but not the desktop
+  atlas (`internal/asset/font/mono.toml`): regenerate it with them
+  (`tool/font-atlas/README.md`), since no test reads a program's glyphs yet.
+- Size: every composite navigates on one grid computed for the eye's 5×3 at its
+  centre (`resizePassability`), so a larger body is led into gaps it cannot pass;
+  keep the types within 5×3 (the eye's, not the sandbox's 6×3) until the position
+  work gives each footprint its own. The charge's line of sight checks one cell
+  (machine follow-ups).
+- The countdown: the lock's is a splash digit 12 rows tall (`SplashCharHeight`),
+  re-placed each tick around the raider; where no side of it has room, the search
+  falls back to the slot below, over the floor's rock. The open cave mostly clears
+  it; the machine follow-ups weigh a countdown sized to its body.
+
+### Gun and loot
+
+The gun path and the `U` this task added, moved from Combat.
+
+#### Fan more than three gun lanes along a cardinal
+
+- Priority: P3
+- Affected files: `internal/parameter/tracer.go`, `internal/system/weapon.go`
+
+A level of the gun's upgrade path names its lanes per cardinal, and
+`TracerLaneOffsets` stops at the centre and its two sides, so a level asking for
+more fires three. A wider fan needs offsets two or more rows or columns out, and a
+volley spacing that still reads as lanes in a 15-row cave channel.
+
+#### Aim a seat's gun as the scenario aims the player's
+
+- Priority: P3
+- Affected files: `internal/system/weapon.go`, `internal/event/payload.go`
+
+`EventGunAimRequest` is local and sets the aim and path of the cursor this instance
+drives, so a bot seat, or a cursor an instance adopts, fires the gun's own four
+cardinals and stops at three charges. An entity field, as `EventKeyCaptureRequest`
+carries, or a path the weapon system holds per scenario would reach every cursor
+an instance simulates.
+
+#### Declare loot kinds and drop tables in a scenario
+
+- Priority: P2
+- Affected files: `internal/component/loot.go`, `internal/parameter/visual/loot.go`,
+  `internal/profile/loot.go`, `internal/system/loot.go`
+
+Loot kinds, their rewards and runes are a Go enum and the drop tiers are fixed per
+code species, so a scenario's own pickup is a Go change that reaches players only
+as an event drop: vanguard's `U` is `LootUpgrade`, the gun drop's reward under its
+own rune, raised by its FSM where a player shoots a raider down because no tier can
+hold it. Kinds a scenario declares (rune, colours, reward) and tiers that name them
+would let a program list its drops and roll them with pity, with `activeLootTypes`
+and the pity counts sized from the declared kinds rather than `LootCount`.
+[Give data species attack, beam and drop rows of their own](#give-data-species-attack-beam-and-drop-rows-of-their-own)
+is the drop half of this for programs.
+
+### Machine follow-ups
+
+A thread of its own, after the cave: the certain faults land before the raider
+types, the rest are for it to investigate.
+
+#### Investigate the machine's rough edges vanguard met
+
+- Priority: P0
+- Affected files: `internal/fsm/std` (`payload.go`, `args.go`, `action.go`),
+  `internal/fsm/loader.go`, `internal/event/payload.go`,
+  `internal/behavior/program.go`, `internal/system/behavior.go`
+  (`BehaviorVocabulary`), `internal/system/fuse.go`, `internal/system/wall.go`
+  (`startCave`), `internal/asset/font_test.go`
+- Guide: [Behavior machines §6](machine-design.md#6-data-species),
+  [FSM reference](fsm-reference.md#behavior-programs)
+
+Vanguard was the first scenario written on the machine design from the start. What
+it met, certain faults first:
+
+1. **Certain: a species by number.** The U drop guards `EventSpeciesKilled` on
+   `species eq 10`. Programs take `SpeciesDataFirst + i` in sorted-name order after
+   the code enum, so a program sorting before `raider`, or a new code species,
+   retargets the drop and nothing at load notices. A guard on an enum field, and an
+   enum field of a payload, could take a name resolved at load: a species against
+   `SpeciesNames` and the scenario's `[behaviors]`.
+2. **Certain: an enum by number.** `EventLootSpawnRequest { type = 8 }` is
+   `LootUpgrade` by its Go value, and a reordered enum changes the drop silently:
+   the same resolution, with a names table for `LootType`.
+3. **Certain: line of sight from one cell.** `LineOfSight` tests the header's cell
+   (`HasLineOfSight`), so a charge starts through a slit the body cannot pass and
+   ends on the rock (`HitWall`, then `Brake`): part of why raiders stick to it.
+   `HasAreaLineOfSight` over the prototype's size fixes it; it centres its box, so
+   shift both ends by the header's offset from the centre rather than add a
+   `Position` method the position work would replace.
+4. **Certain: program glyphs unchecked.** The font atlas test scans Go source and
+   the console font test reads named Go tables, so a program's glyphs reach the
+   desktop host unchecked; nothing shipped trips it yet, and the construct's
+   `╓╖╙╜╒╕╘╛` would, being in the console fonts but not the atlas. Read every
+   shipped program's glyphs in both tests, or have `-check` report a glyph the atlas
+   lacks.
+5. **Certain: no pick from a list.** FSM variables are ints, so a value chosen from
+   a list cannot be data: the cave's stone art is picked in Go (`startCave`,
+   `Art[seed % len]`), and a raider type takes a state per type. A list on a request
+   picked by an int from `payload_vars` would serve both.
+6. **Certain: a countdown too big for the cave.** `Telegraph` raises the splash
+   countdown, a digit 12 rows tall; where no slot around the body is free,
+   `FindPlacementAroundExclusion` returns its first slot clamped to the map, and
+   `calculateTimerOffset` ignores the not-found flag, so the digit draws over rock.
+   A countdown sized to its body, or none where none fits, would stay legible.
+
+To explore:
+
+7. Types over one cycle: a `[behaviors]` entry takes only `file`, so programs share
+   states through a macro; per-entry arguments expanded into the file, or a
+   prototype-only entry over another program, would read more directly.
+8. Counts over programs: a cap over several reads `behavior.count`, every data
+   species; a prototype `group` with `behavior.group.<g>.count` would serve a
+   scenario that mixes them.
+9. Homing by code row: a prototype names `drain`, `quasar`, `snake` or `swarm`
+   (`profile.Homing`), so a faster type is a Go change; speed, acceleration and drag
+   in the prototype, as the eye types tune theirs, would not be.
+10. Spawn arithmetic: placing a raider takes seven actions before its request (two
+    `ConfigToVar`, `DecrementVar`, `DivideVar`, two `IncrementVar`, `RandomVar`),
+    and each `RandomVar` an index bumped by hand. A map-relative anchor on the
+    request (an edge and an inset) or a draw advancing its own index would shorten
+    it.
+11. Rock awareness: a program learns of rock only from `HitWall` after striking it.
+    A predicate for clearance ahead, or for the side the channel lies on, would let
+    a raider keep off the rock instead of riding along it after a push.
+12. An event-triggered internal transition in a session: the U drop is one; verify a
+    kill drops one U on a mesh pair, since the `Tick` form proposes itself again
+    ([that item](#stop-an-internal-transition-proposing-itself-again-in-a-session)).
+13. Defeat in a session: any player's defeat restarts every player's game
+    (`session.any_defeated`); a player sitting out, or rejoining after a delay,
+    wants a scenario pattern or a verb.
+
+Open items it meets:
+
+- [Payload field names at load](#check-payload-field-names-against-their-event-at-load)
+- [A program spawning another](#let-a-program-spawn-another-program)
+- [Attack, beam and drop rows](#give-data-species-attack-beam-and-drop-rows-of-their-own)
+- [Loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario)
+- [A seat's gun](#aim-a-seats-gun-as-the-scenario-aims-the-players)
+- [A one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
+
+### Position, blocking and navigation
+
+A full session of its own, last: it moves what the rest builds on.
+
+#### Move Position into a package of its own, walls and rock one blocking model
+
+- Priority: P0
+- Affected files: `internal/engine/position.go`, `internal/engine/spatial_grid.go`,
+  `internal/engine/rock.go`, `internal/engine/snapshot_world_gen.go` (generated),
+  `internal/snapshot/digest.go`, `internal/system/wall.go`,
+  `internal/system/navigation.go`, `pkg/navigation/composite.go`,
+  `internal/render/renderer/rock.go`, and the 473 `Positions.` calls in 80 files (42
+  in `internal/system`, 23 in the renderers)
+- Guide: [ECS and events §3](ecs-and-events.md#3-position-and-spatial-queries),
+  [D-12](domain-design.md#d-12--shared-geometry-may-inspect-both-domains),
+  [D-14](domain-design.md#d-14--map-bounds-are-shared-authority),
+  [Rendering §2.2](rendering.md#22-the-cell-aspect),
+  [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)
+
+`engine/rock.go` put one kind of environment into the engine, a cave's columns with
+their stone look: right for a first iteration, wrong for an engine meant to outlive
+this game, and hard to move because `Position` is the spatial index and the game's
+geometry at once. It holds a dense row store and a grid of fixed-capacity cells (31
+entities, Shared before Player); the wall queries, where `HasBlockingWallAt` reads
+the rock, then each Shared occupant's `Wall` component; a `WallTest` grid per mask,
+with the wall epoch and change log navigation reads incrementally; the area and line
+queries (point and area line of sight, `FindFreeAreaSpiral`, `FindFreeFromPattern`,
+`FindPlacementAroundExclusion`, `ScanLine`); typing's `TopGlyphAt`; batches and
+`Shift`. It reads `World.Components.Wall` and `Resources.Config` (bounds,
+`CellAspect`), so nothing in it stands alone.
+
+Goals:
+
+- A position package that knows no game: placement, the cell index and the geometry
+  queries, given its masks and its blockers rather than reading the world. A 1:1
+  cell for a graphical host, and later a third axis, enter there: authored geometry
+  stays at `RefAspect` and the package owns the conversion.
+- One blocking model: a blocker is a single cell (a wall entity) or a cluster (a
+  field a system owns: a cave's columns, a maze, a composite wall), each with its
+  mask and bounds, behind one surface for point, area and line tests and the change
+  log. The cave's columns and look leave the engine for the wall system and
+  `pkg/cave`, the look becoming the rock renderer's input.
+- The rock's bounds check for walls where it pays: the rock answers an area by a
+  column's bounds (`RockField.blocksArea`), not cell by cell; a maze kept as
+  per-mask row bitsets (or runs) updated from the wall log answers an area or a line
+  in words, with no component lookup a cell. td (500×250, narrow mazes everywhere)
+  proves it and navigation with it: its passability
+  (`CompositePassability.Compute`), the search grids `applyWalls` refills whole, its
+  direct-path tests.
+- Footprints: each navigator's own body, size and header offset, where today every
+  composite navigates on one grid computed for the eye's 5×3 and the direct-path
+  test centres the footprint and accepts it turned 90°
+  (`HasAreaLineOfSightRotatable`). The footprint registry of
+  [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps)
+  belongs here.
+- A sparse or tiled grid for a ceiling-sized empty map
+  ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)).
+
+What it must keep, across multiplayer, netcode and interactions:
+
+- Determinism: Shared positions, each cell's order (`WorldOrder.Cells`) and every
+  query's answer alike on every instance; the journal digest hashes positions, and
+  the divergence harness and the cross-instance tests read as before.
+- Domains: the Shared and Player halves of a cell (`ReservedPlayerPerCell`),
+  geometry over both (D-12), bounds as Shared authority (D-14), prediction's private
+  writes (D-18), the staging world's grid.
+- Records: positions ship as rows and the index is derived; a cluster derives from
+  its owner's record as the rock does, so an idle harness still matches main; any
+  change to what ships moves `snapshot.Schema` and `JournalSchema`.
+- Interactions: the wall push and crush (`displaceComposite`,
+  `World.ShiftComposite`), drift's layer `Shift`, splash, loot and spawn placement,
+  tracer and line walks, typing's top glyph, every renderer's read.
+- Cost, measured before and after: `TestTickProfileTD16`, `BenchmarkCaveStep`,
+  `BenchmarkCaveStepNavigation`, the renderer benches, the harness counts.
+
+A full session at the highest effort (or ultracode): the plan first, each of its
+choices confirmed before any code. The choices to settle early: the package's
+boundary and what stays in `engine` (the `World` wiring, the generated snapshot
+code); a cluster's representation (bitsets, runs, a summed-area table) and its
+update path; whether a maze's walls stay entities a cluster indexes or become the
+cluster; the coordinate type (2D with a third axis reserved, or 3D now); the
+migration (a façade keeping the `World.Positions` surface while the call sites move,
+then narrowed); the footprint grids' cost on td.
+
+#### Bound navigation's worst tick on busy maps
+
+- Priority: P2
+- Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`,
+  `internal/system/loot.go`
+- Guide: [Navigation §10](navigation-design.md#10-costs)
+
+On td with eight walking cursors and seven snake heads a storm tick peaks at 30 ms
+against 6.4 ms on average, and no wall change computes more than two fields in a
+tick. A td tick with sixteen cursors on one core reads 0.55 ms
+(`TestTickProfileTD16`), 42% of it the level resets' maze spawn and route graphs
+and 13% `applyWalls`, the search grids refilled whole when a level's walls land.
+What is left, for a need rather than a measurement: a per-tick field budget
+in canonical group order, if a browser frame still stalls, and a footprint tier
+registry deriving the grids to keep from the live navigators, so a data-driven
+species' footprint costs one row. A 2×2 coarse field is not planned: it changes
+the answer, and the shared grid already took the cost it would have saved.
+
+#### Spend less on fields over a moving map
+
+- Priority: P3
+- Affected files: `pkg/navigation/flowfield.go`, `pkg/navigation/cache.go`
+- Guide: [Navigation §10](navigation-design.md#10-costs)
+
+A cell closing drops every field of its tier, so on a scrolling cave a navigator
+out of sight recomputes its field after every column: 30 of the 70 µs a tick at
+499×250 with eight swarms. Two exact cuts remain, for a need rather than a
+measurement. Settle a field only until every reader's cell is settled, resuming
+when a farther cell is read: a Dijkstra's settled cells do not depend on where it
+stopped, so an instance reading more of it moves nothing shared; it pays when the
+readers out of sight are near their target. Repair a field where cells closed, as
+an opening repairs it, re-settling the cells whose way ran through them: it pays
+for a local change on an open map, not on the cave, where every bend moves each
+column. Keeping a field across a closing for a few ticks is not planned
+([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)): a
+joiner computes on the grid it has.
+
 ## Bots
 
 ### Open fleet sessions to bots
@@ -174,24 +622,6 @@ regions, states and blocks; placing and editing blocks into editor-owned files; 
 map layer and point markers; root `[[expand]]` blocks and library copies.
 
 ## Browser sessions
-
-### Bound navigation's worst tick on busy maps
-
-- Priority: P2
-- Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`,
-  `internal/system/loot.go`
-- Guide: [Navigation §10](navigation-design.md#10-costs)
-
-On td with eight walking cursors and seven snake heads a storm tick peaks at 30 ms
-against 6.4 ms on average, and no wall change computes more than two fields in a
-tick. A td tick with sixteen cursors on one core reads 0.55 ms
-(`TestTickProfileTD16`), 42% of it the level resets' maze spawn and route graphs
-and 13% `applyWalls`, the search grids refilled whole when a level's walls land.
-What is left, for a need rather than a measurement: a per-tick field budget
-in canonical group order, if a browser frame still stalls, and a footprint tier
-registry deriving the grids to keep from the live navigators, so a data-driven
-species' footprint costs one row. A 2×2 coarse field is not planned: it changes
-the answer, and the shared grid already took the cost it would have saved.
 
 ### Budget a fleet pod's joins per player
 
@@ -741,43 +1171,6 @@ PvP: a hit on a remote cursor crosses as its impact and the victim's owner appli
 
 Arc reward (an arc pays the lightning's full energy reward; halve it if the cap doubles the rod's income too far), the sustained ray's scale (three damage per covered member per immunity window, continuously), the burn figures and whether the charged pulse's stun should shorten to offset them, `LightningArcRange`, `WeaponStreamInterval` and `TurretStream`, the gun's lane offsets at two charges, `LightningZapDuration` for an arc, and a burn tint on species renderers, which show only the hit flash per tick now.
 
-### Fan more than three gun lanes along a cardinal
-
-- Priority: P3
-- Affected files: `internal/parameter/tracer.go`, `internal/system/weapon.go`
-
-A level of the gun's upgrade path names its lanes per cardinal, and
-`TracerLaneOffsets` stops at the centre and its two sides, so a level asking for
-more fires three. A wider fan needs offsets two or more rows or columns out, and a
-volley spacing that still reads as lanes in a 15-row cave channel.
-
-### Aim a seat's gun as the scenario aims the player's
-
-- Priority: P3
-- Affected files: `internal/system/weapon.go`, `internal/event/payload.go`
-
-`EventGunAimRequest` is local and sets the aim and path of the cursor this instance
-drives, so a bot seat, or a cursor an instance adopts, fires the gun's own four
-cardinals and stops at three charges. An entity field, as `EventKeyCaptureRequest`
-carries, or a path the weapon system holds per scenario would reach every cursor
-an instance simulates.
-
-### Declare loot kinds and drop tables in a scenario
-
-- Priority: P2
-- Affected files: `internal/component/loot.go`, `internal/parameter/visual/loot.go`,
-  `internal/profile/loot.go`, `internal/system/loot.go`
-
-Loot kinds, their rewards and runes are a Go enum and the drop tiers are fixed per
-code species, so a scenario's own pickup is a Go change that reaches players only
-as an event drop: vanguard's `U` is `LootUpgrade`, the gun drop's reward under its
-own rune, raised by its FSM where a player shoots a raider down because no tier can
-hold it. Kinds a scenario declares (rune, colours, reward) and tiers that name them
-would let a program list its drops and roll them with pity, with `activeLootTypes`
-and the pity counts sized from the declared kinds rather than `LootCount`.
-[Give data species attack, beam and drop rows of their own](#give-data-species-attack-beam-and-drop-rows-of-their-own)
-is the drop half of this for programs.
-
 ### Move storm's green circle onto a disruptor mount
 
 - Priority: P3
@@ -898,35 +1291,6 @@ may want some of them carried with the nearest layer. Decay and blossom change a
 glyph's level, so a glyph they touch changes layer and speed mid-flight. In 256
 colours normal and bright glyphs share one console entry, so only the dark layer
 reads as farther; a distinct attribute for bright would separate the three.
-
-### Spend less on fields over a moving map
-
-- Priority: P3
-- Affected files: `pkg/navigation/flowfield.go`, `pkg/navigation/cache.go`
-- Guide: [Navigation §10](navigation-design.md#10-costs)
-
-A cell closing drops every field of its tier, so on a scrolling cave a navigator
-out of sight recomputes its field after every column: 30 of the 70 µs a tick at
-499×250 with eight swarms. Two exact cuts remain, for a need rather than a
-measurement. Settle a field only until every reader's cell is settled, resuming
-when a farther cell is read: a Dijkstra's settled cells do not depend on where it
-stopped, so an instance reading more of it moves nothing shared; it pays when the
-readers out of sight are near their target. Repair a field where cells closed, as
-an opening repairs it, re-settling the cells whose way ran through them: it pays
-for a local change on an open map, not on the cave, where every bend moves each
-column. Keeping a field across a closing for a few ticks is not planned
-([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)): a
-joiner computes on the grid it has.
-
-### Keep a scrolling cave through a resize and a level setup
-
-- Priority: P3
-- Affected files: `internal/system/wall.go`
-
-A cave lays the columns a wider map brings and reshapes those to come when a new
-height still holds its profile, but the rock it laid keeps the old height, and a
-level setup that clears the walls leaves it scrolling in from the right edge of an
-empty map. Lay the map's columns again on either, or stop the cave with its walls.
 
 ## Rendering
 
