@@ -108,6 +108,24 @@ func ParseArtPreset(name string) (ArtPreset, bool) {
 // its arguments in integer arithmetic, so every platform draws the same stone, and it
 // allocates nothing, so a renderer may call it for every rock cell of a frame.
 func Art(p ArtPreset, seed uint64, c ArtCell) (rune, color.RGB, color.RGB) {
+	l := paint(p, seed, c)
+	return l.r, l.fg, l.bg
+}
+
+// Art256 is Art in xterm-256 indices, every colour but a hued glyph's the grey of its
+// luma: a console would turn the rock's muted browns red, so rock reads grey there and
+// only moss and crystal points keep a hue
+func Art256(p ArtPreset, seed uint64, c ArtCell) (rune, uint8, uint8) {
+	l := paint(p, seed, c)
+	if !l.hued {
+		l.fg = color.Grayscale(l.fg)
+	}
+	return l.r, color.RGBTo256(l.fg), color.RGBTo256(color.Grayscale(l.bg))
+}
+
+// paint draws cell c in preset p: the host rock, the preset's features over it, and the
+// light of the face it lies near
+func paint(p ArtPreset, seed uint64, c ArtCell) look {
 	if p >= ArtPresetCount {
 		p = ArtNone
 	}
@@ -130,14 +148,16 @@ func Art(p ArtPreset, seed uint64, c ArtCell) (rune, color.RGB, color.RGB) {
 			s.fg = tint(s.fg, lit)
 		}
 	}
-	return s.r, s.fg, s.bg
+	return s.look
 }
 
-// look is what a cell shows; a lamp's glyph shines by itself, so a face's light leaves it
+// look is what a cell shows; a lamp's glyph shines by itself, so a face's light leaves it,
+// and a hued glyph keeps its hue in 256 colours
 type look struct {
 	r      rune
 	fg, bg color.RGB
 	lamp   bool
+	hued   bool
 }
 
 // stone is one cell as it is drawn: its inputs as int64, the seed's first MixChain round
@@ -324,7 +344,7 @@ func (s stone) moss() look {
 	strength := min(thick*visual.StoneUnit/visual.MossThick, visual.StoneUnit)
 	s.fg = color.LerpFixed(visual.MossDark, visual.MossLight, strength, visual.StoneUnitBits)
 	s.bg = color.LerpFixed(s.bg, visual.MossBg, strength*visual.MossShade/visual.StoneUnit, visual.StoneUnitBits)
-	s.r = visual.MossThin
+	s.r, s.hued = visual.MossThin, true
 	if thick >= visual.MossThick {
 		s.r = visual.MossDense
 		if s.depth == 0 && s.face == FaceUp && s.draw(3) < visual.MossSprouts {
@@ -360,7 +380,7 @@ func (s stone) crystal() look {
 		s.r = visual.CrystalGlyphs[d%uint64(len(visual.CrystalGlyphs))]
 		s.fg = color.LerpFixed(hue.Dim, hue.Bright, share(d/uint64(len(visual.CrystalGlyphs))), visual.StoneUnitBits)
 		s.bg = color.LerpFixed(s.bg, hue.Glow, visual.CrystalCore, visual.StoneUnitBits)
-		s.lamp = true
+		s.lamp, s.hued = true, true
 	case 1:
 		s.bg = color.LerpFixed(s.bg, hue.Glow, visual.CrystalHalo, visual.StoneUnitBits)
 	case 2:
