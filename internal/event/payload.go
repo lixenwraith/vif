@@ -51,6 +51,8 @@ const (
 	MuteSet                               // set the mask verbatim
 )
 
+var muteToggleModeNames = [...]string{MuteCycle: "cycle", MuteToggle: "toggle", MuteSet: "set"}
+
 // SoundMuteTogglePayload requests an audio mute-mask change
 // A nil payload is equivalent to {Mode: MuteCycle}
 type SoundMuteTogglePayload struct {
@@ -539,6 +541,15 @@ const (
 	InputTouch                    // a finger, on a host that reports one
 )
 
+var inputSourceNames = [...]string{
+	InputKey:          "key",
+	InputPointer:      "pointer",
+	InputPointerRight: "pointer_right",
+	InputWheelUp:      "wheel_up",
+	InputWheelDown:    "wheel_down",
+	InputTouch:        "touch",
+}
+
 // InputPayload names the roster slot that pressed or released a captured key, the key,
 // what made the input, and the tick it was made at: engine.ticks on the instance
 // that made it, which a scenario judges timing by however late it applies. Lost
@@ -572,6 +583,8 @@ const (
 	DeleteRangeChar DeleteRangeType = iota
 	DeleteRangeLine
 )
+
+var deleteRangeNames = [...]string{DeleteRangeChar: "char", DeleteRangeLine: "line"}
 
 // DeleteRequestPayload contains coordinates for deletion
 type DeleteRequestPayload struct {
@@ -636,6 +649,8 @@ const (
 	ExplosionTypeMissile                      // Visual only, warm palette
 	ExplosionTypeEye                          // Self-destruct explosion with character noise
 )
+
+var explosionTypeNames = [...]string{ExplosionTypeDust: "dust", ExplosionTypeMissile: "missile", ExplosionTypeEye: "eye"}
 
 // ExplosionRequestPayload requires explicit attack data for the D-3 explosion.
 // CrossingID seeds derived hits independently of each receiver's timing.
@@ -903,6 +918,8 @@ const (
 	FuseEffectMaterialize                   // The beam alone
 )
 
+var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
+
 // FuseSwarmRequestPayload contains the two drains to fuse
 type FuseSwarmRequestPayload struct {
 	DrainA core.Entity `toml:"drain_a"`
@@ -1115,7 +1132,7 @@ type SpeciesKilledPayload struct {
 	X            int                   `toml:"x"` // -1 when no death position is available
 	Y            int                   `toml:"y"` // -1 when no death position is available
 	Species      component.SpeciesType `toml:"species"`
-	SubType      uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
+	SubType      component.SubType     `toml:"sub_type"`
 }
 
 // SpeciesCreatedPayload announces one fully initialized species instance.
@@ -1123,7 +1140,7 @@ type SpeciesKilledPayload struct {
 type SpeciesCreatedPayload struct {
 	Entity      core.Entity           `toml:"entity"`
 	Species     component.SpeciesType `toml:"species"`
-	SubType     uint8                 `toml:"sub_type"`     // Species variant (e.g. EyeType)
+	SubType     component.SubType     `toml:"sub_type"`
 	X           int                   `toml:"x"`            // -1 when the species has no single position
 	Y           int                   `toml:"y"`            // -1 when the species has no single position
 	MemberCount int                   `toml:"member_count"` // Composite members; zero for non-composites
@@ -1182,7 +1199,7 @@ type MarkerSpawnRequestPayload struct {
 	PulseRate float64               `toml:"pulse_rate"` // Hz, 0 = none
 	Color     color.RGB             `toml:"color"`
 	Shape     component.MarkerShape `toml:"shape"`
-	FadeMode  uint8                 `toml:"fade_mode"` // 0=none, 1=out, 2=in
+	FadeMode  component.MarkerFade  `toml:"fade_mode"`
 }
 
 // --- Button ---
@@ -1243,6 +1260,12 @@ const (
 	// WallBatchFailIfBlocked aborts entire batch if any target position has a wall
 	WallBatchFailIfBlocked
 )
+
+var collisionModeNames = [...]string{
+	WallBatchSkipBlocked:   "skip_blocked",
+	WallBatchOverwrite:     "overwrite",
+	WallBatchFailIfBlocked: "fail_if_blocked",
+}
 
 // WallBatchSpawnRequestPayload contains parameters for bulk wall creation
 // Cells use offset coordinates relative to anchor (X, Y)
@@ -1457,17 +1480,17 @@ type TowerSpawnRequestPayload struct {
 
 // GatewaySpawnRequestPayload requests creation of a gateway entity
 type GatewaySpawnRequestPayload struct {
-	AnchorEntity        core.Entity `toml:"anchor_entity"`          // Parent entity (pylon header)
-	BaseIntervalMs      int         `toml:"base_interval_ms"`       // Spawn interval in milliseconds
-	RateMultiplier      float64     `toml:"rate_multiplier"`        // <1.0 = accelerating, 1.0 = constant
-	RateAccelIntervalMs int         `toml:"rate_accel_interval_ms"` // How often multiplier applied (ms), 0 = disabled
-	MinIntervalMs       int         `toml:"min_interval_ms"`        // Floor interval in milliseconds
-	OffsetX             int         `toml:"offset_x"`
-	OffsetY             int         `toml:"offset_y"`
-	Species             uint8       `toml:"species"`         // component.SpeciesType
-	SubType             uint8       `toml:"sub_type"`        // Species variant (e.g. EyeType)
-	GroupID             uint8       `toml:"group_id"`        // Target group for spawned entities
-	UseRouteGraph       bool        `toml:"use_route_graph"` // If true, request route graph computation for this gateway
+	AnchorEntity        core.Entity           `toml:"anchor_entity"`          // Parent entity (pylon header)
+	BaseIntervalMs      int                   `toml:"base_interval_ms"`       // Spawn interval in milliseconds
+	RateMultiplier      float64               `toml:"rate_multiplier"`        // <1.0 = accelerating, 1.0 = constant
+	RateAccelIntervalMs int                   `toml:"rate_accel_interval_ms"` // How often multiplier applied (ms), 0 = disabled
+	MinIntervalMs       int                   `toml:"min_interval_ms"`        // Floor interval in milliseconds
+	OffsetX             int                   `toml:"offset_x"`
+	OffsetY             int                   `toml:"offset_y"`
+	Species             component.SpeciesType `toml:"species"`
+	SubType             component.SubType     `toml:"sub_type"`
+	GroupID             uint8                 `toml:"group_id"`        // Target group for spawned entities
+	UseRouteGraph       bool                  `toml:"use_route_graph"` // If true, request route graph computation for this gateway
 }
 
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity

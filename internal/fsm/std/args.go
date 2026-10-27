@@ -133,25 +133,23 @@ var (
 	spawnKeys  = []string{"region", "initial_state"}
 )
 
-// compileEmitEvent resolves the event type and decodes its payload at load
-func compileEmitEvent(cfg fsm.ActionConfig, _ fsm.StateResolver) (*EmitEventArgs, error) {
-	if cfg.Event == "" {
-		return nil, errors.New("requires 'event' field")
-	}
-	et, ok := event.GetEventType(cfg.Event)
-	if !ok {
-		return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
-	}
-	payload := event.NewPayloadStruct(et)
-	if payload == nil && cfg.Payload != nil {
-		return nil, fmt.Errorf("event '%s' carries no payload", cfg.Event)
-	}
-	if payload != nil {
-		if err := dialect.DecodeInto(cfg.Payload, payload); err != nil {
-			return nil, fmt.Errorf("payload for event '%s': %w", cfg.Event, err)
+// compileEmitEvent resolves the event type and decodes its payload at load, its
+// enum fields as names spell them
+func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateResolver) (*EmitEventArgs, error) {
+	return func(cfg fsm.ActionConfig, _ fsm.StateResolver) (*EmitEventArgs, error) {
+		if cfg.Event == "" {
+			return nil, errors.New("requires 'event' field")
 		}
+		et, ok := event.GetEventType(cfg.Event)
+		if !ok {
+			return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
+		}
+		payload, err := event.AuthoredPayload(names, et, cfg.Payload)
+		if err != nil {
+			return nil, err
+		}
+		return &EmitEventArgs{Type: et, Payload: payload, PayloadVars: cfg.PayloadVars}, nil
 	}
-	return &EmitEventArgs{Type: et, Payload: payload, PayloadVars: cfg.PayloadVars}, nil
 }
 
 // compileRandomVar refuses a draw that would repeat or has no range: without an index

@@ -52,9 +52,9 @@ coordinator's, sent under the same bounds and held in memory. Installed layout:
 system names it toggles, the required dependencies a disable strands and its
 behavior programs), keymap, audio overrides, content and every bot graph, then
 exits; all state-level FSM errors are reported in one pass. `vif -schema` prints
-the machine schema (events with payload fields; the guards and actions of a
-scenario, a bot graph and a behavior program with their arguments; operators and
-config fields) as JSON.
+the machine schema (events with payload fields and the names an enum field takes;
+the guards and actions of a scenario, a bot graph and a behavior program with
+their arguments; operators and config fields) as JSON.
 
 ---
 
@@ -100,7 +100,7 @@ and every scenario file, the entry included, invokes them:
 [macros.Gateway]
 params = { group = "int", count = "string", next = "string" }
 body = { parent = "Root", on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, group_id = "${group}" }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = "eye", group_id = "${group}" }, payload_vars = { anchor_entity = "gw_anchor" } },
     { action = "IncrementVar", payload = { name = "${count}" } },
 ], transitions = [{ trigger = "Tick", target = "${next}" }] }
 
@@ -273,6 +273,18 @@ same boundary.
 The event name and payload are compiled at load: an unknown event, a payload key
 its type lacks, a value of the wrong type, or a payload on an event that carries
 none fails it. Without `payload` the event carries its payload type zero-valued.
+
+A field of an enum type takes one of its type's names, which `vif -schema` lists
+under `names` by type: `payload = { type = "upgrade" }` places an upgrade. A
+mask, as a wall's `block_mask`, takes a name or a list of them standing for their
+union (`["cursor", "kinetic"]`). A gateway's `sub_type` takes its `species`' own
+kinds (`species = "eye", sub_type = "flame"`), and a species without kinds takes
+none. A species field takes a code species or one of the scenario's behavior
+programs, as `PayloadSpeciesIn` does. A name its type lacks fails the load,
+naming the field's path and the names it takes. While the shipped scenarios move
+to names, a species, sub-type, loot, target, particle behavior, energy delta,
+wall mask or box style field also takes its number; every other enum field
+refuses one. `:emit` and an authored script's event decode a payload the same way.
 `payload_vars` injects an FSM variable's value into a payload field at runtime.
 Supported field kinds: all signed and unsigned integer widths, `float32`,
 `float64`, `bool`, and `string`; a negative value is ignored for an unsigned field.

@@ -1,6 +1,6 @@
 // Package std is the standard action and guard library for fsm.Machine. Those over
 // machine state (variables, regions, timing, payloads) always work; those needing
-// the embedder go through Host. A nil Host field leaves its actions inert and its
+// the embedder go through Host. A nil Host hook leaves its actions inert and its
 // guards false; Host.Refuse makes a nil hook fail the load of the event and system
 // actions instead. A zero Host yields a pure machine. See doc/fsm-and-configuration.md.
 package std
@@ -8,11 +8,12 @@ package std
 import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
 // Host exposes embedder capabilities to FSM scripts
 //
-// Every field is optional. A nil field leaves its actions registered but inert
+// Every field is optional. A nil hook leaves its actions registered but inert
 // and its guards reporting false, so a config referencing them still loads and
 // validates. A zero Host yields a pure machine.
 type Host[T any] struct {
@@ -39,9 +40,9 @@ type Host[T any] struct {
 	// that plays it; a nil Seed roots every draw at zero
 	Seed func(ctx T) uint64
 
-	// Species resolves a species name at load, a code species' or a behavior
-	// program's, to the number its payloads carry
-	Species func(name string) (int64, bool)
+	// Names are what a payload's enum fields, and a species guard, take at load:
+	// event.PayloadNames over a scenario's behavior programs; nil takes the code's
+	Names *dialect.Names
 
 	// Refuse, when set, fails the load of an event or system action whose hook
 	// is nil with this reason, for an embedder whose scripts must not name what
@@ -52,6 +53,9 @@ type Host[T any] struct {
 // Register installs the standard actions and guards on m
 // Must be called before a scenario loads; names are resolved at load time
 func Register[T any](m *fsm.Machine[T], h Host[T]) {
+	if h.Names == nil {
+		h.Names = event.PayloadNames(nil)
+	}
 	registerCoreActions(m, h)
 	registerVariableActions(m, h)
 	registerRegionActions(m, h)

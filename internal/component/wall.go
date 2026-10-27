@@ -17,6 +17,16 @@ const (
 	WallBlockAll      WallBlockMask = 0xFF
 )
 
+// WallBlockNames are what a document calls each blocked kind, and none or all
+var WallBlockNames = map[string]WallBlockMask{
+	"none":     WallBlockNone,
+	"cursor":   WallBlockCursor,
+	"kinetic":  WallBlockKinetic,
+	"particle": WallBlockParticle,
+	"spawn":    WallBlockSpawn,
+	"all":      WallBlockAll,
+}
+
 // BoxDrawStyle defines box-drawing character set
 type BoxDrawStyle uint8
 
@@ -25,6 +35,9 @@ const (
 	BoxDrawSingle BoxDrawStyle = 1
 	BoxDrawDouble BoxDrawStyle = 2
 )
+
+// BoxDrawStyleNames are what a document calls each BoxDrawStyle
+var BoxDrawStyleNames = [...]string{BoxDrawNone: "none", BoxDrawSingle: "single", BoxDrawDouble: "double"}
 
 // WallComponent marks an entity as a wall/obstacle with visual properties
 type WallComponent struct {
@@ -53,6 +66,21 @@ type WallCellDef struct {
 	OffsetY int
 	WallVisualConfig
 	Attrs terminal.Attr
+}
+
+// WallAttrNames are what a document calls each attribute a cell's Attrs holds
+var WallAttrNames = map[string]terminal.Attr{
+	"none":       terminal.AttrNone,
+	"bold":       terminal.AttrBold,
+	"dim":        terminal.AttrDim,
+	"italic":     terminal.AttrItalic,
+	"underline":  terminal.AttrUnderline,
+	"blink":      terminal.AttrBlink,
+	"reverse":    terminal.AttrReverse,
+	"fg256":      terminal.AttrFg256,
+	"bg256":      terminal.AttrBg256,
+	"fg_default": terminal.AttrFgDefault,
+	"bg_default": terminal.AttrBgDefault,
 }
 
 // WallVisualConfig defines visual properties for wall rendering

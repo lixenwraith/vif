@@ -83,7 +83,7 @@ func ValidateScenario(o Options) (Scenario, error) {
 	}
 	if err == nil {
 		m := fsm.NewMachine[*engine.World]()
-		manifest.RegisterFSMComponents(m, set.Prototypes())
+		manifest.RegisterFSMComponents(m, set.Names())
 		if err = fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry()); err == nil {
 			err = checkSystems(m)
 		}

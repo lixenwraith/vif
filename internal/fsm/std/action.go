@@ -229,7 +229,7 @@ func registerCoreActions[T any](m *fsm.Machine[T], h Host[T]) {
 	if refused(m, h, h.Emit == nil, "EmitEvent") {
 		return
 	}
-	m.RegisterKeyedAction("EmitEvent", emitKeys, compileEmitEvent, func(ctx T, a *EmitEventArgs) {
+	m.RegisterKeyedAction("EmitEvent", emitKeys, compileEmitEvent(h.Names), func(ctx T, a *EmitEventArgs) {
 		if h.Emit == nil {
 			return
 		}

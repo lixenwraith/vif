@@ -69,6 +69,21 @@ const (
 	CombatAttackTypeCount
 )
 
+// CombatAttackNames are what a document calls each attack family, and the key its
+// damage reads under in telemetry
+var CombatAttackNames = [CombatAttackTypeCount]string{
+	CombatAttackTracer:       "tracer",
+	CombatAttackShield:       "shield",
+	CombatAttackLightning:    "lightning",
+	CombatAttackExplosion:    "explosion",
+	CombatAttackMissile:      "missile",
+	CombatAttackPulse:        "pulse",
+	CombatAttackSelfDestruct: "self_destruct",
+	CombatAttackBullet:       "bullet",
+	CombatAttackRay:          "ray",
+	CombatAttackBurn:         "burn",
+}
+
 // Effect Types
 type CombatEffectMask uint64
 

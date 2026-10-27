@@ -1,20 +1,17 @@
 // Package dialect is what the scenario machine, bot graphs and behavior programs
-// share of their TOML: the comparison Op, the strict Decode of an argument table
-// into a typed struct, the And, Or and Not of a guard Tree, and the vocabulary
-// entries -schema lists. Names resolve once, at load; only Op.Holds runs per
-// evaluation.
+// share of their TOML: the comparison Op, the Names an enum's fields take, the
+// strict Decode of an argument table into a typed struct, the And, Or and Not of a
+// guard Tree, and the vocabulary entries -schema lists. Names resolve once, at
+// load; only Op.Holds runs per evaluation.
 package dialect
 
 import (
 	"cmp"
 	"errors"
 	"fmt"
-	"maps"
 	"reflect"
 	"slices"
 	"strings"
-
-	"github.com/lixenwraith/toml"
 )
 
 // Op is a comparison a guard makes. An args struct's Op field takes one of the six
@@ -56,74 +53,16 @@ func (o Op) Holds[T cmp.Ordered](a, b T) bool {
 	return a == b
 }
 
-func parseOp(raw any) (Op, error) {
-	name, ok := raw.(string)
-	if i := slices.Index(opNames[:], name); ok && i >= 0 {
-		return Op(i), nil
-	}
-	list := strings.Join(opNames[:], ", ")
-	if !ok {
-		return 0, fmt.Errorf("want one of %s, got %T", list, raw)
-	}
-	return 0, fmt.Errorf("%.32q is not one of %s", name, list)
-}
+// ops names the dialect's own enum, Op, which every argument table may hold
+var ops = NewNames().Enum[Op](opNames[:]...)
 
 // Decode reads raw, an argument table as the parser produced it, into a new A as
 // DecodeInto does
-func Decode[A any](raw any) (*A, error) {
-	a := new(A)
-	if err := DecodeInto(raw, a); err != nil {
-		return nil, err
-	}
-	return a, nil
-}
+func Decode[A any](raw any) (*A, error) { return ops.Decode[A](raw) }
 
-// DecodeInto reads raw into v, a pointer to a struct, refusing a key no field takes
-// and a value its field cannot hold, each named by its path. An Op field of v's
-// struct takes an op's name. A nil raw leaves v as it is.
-func DecodeInto(raw, v any) error {
-	if raw == nil {
-		return nil
-	}
-	if keys := toml.Unmapped(raw, v); len(keys) > 0 {
-		return toml.UnknownKeys(keys)
-	}
-	// toml has no hook for a named type, so an op's name leaves the table it decodes
-	type opAt struct {
-		field int
-		op    Op
-	}
-	var ops []opAt
-	rest := raw
-	table, _ := raw.(map[string]any)
-	if t := reflect.TypeOf(v); table != nil && t != nil && t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct {
-		for i := range t.Elem().NumField() {
-			f := t.Elem().Field(i)
-			key := keyOf(f)
-			name, set := table[key]
-			if f.Type != opType || key == "" || !set {
-				continue
-			}
-			op, err := parseOp(name)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-			if ops == nil {
-				table = maps.Clone(table)
-				rest = table
-			}
-			delete(table, key)
-			ops = append(ops, opAt{i, op})
-		}
-	}
-	if err := toml.Decode(rest, v); err != nil {
-		return err
-	}
-	for _, o := range ops {
-		reflect.ValueOf(v).Elem().Field(o.field).Set(reflect.ValueOf(o.op))
-	}
-	return nil
-}
+// DecodeInto reads raw into v as Names.DecodeInto does, an Op field taking an op's
+// name. A nil raw leaves v as it is.
+func DecodeInto(raw, v any) error { return ops.DecodeInto(raw, v) }
 
 // keyOf is the key a document sets field f by, as toml matches it; "" for a field
 // toml skips

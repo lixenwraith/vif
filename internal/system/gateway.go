@@ -127,8 +127,8 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 
 	gwComp := component.GatewayComponent{
 		AnchorEntity:      anchorEntity,
-		Species:           component.SpeciesType(payload.Species),
-		SubType:           payload.SubType,
+		Species:           payload.Species,
+		SubType:           uint8(payload.SubType),
 		GroupID:           payload.GroupID,
 		BaseInterval:      baseInterval,
 		Accumulated:       0,

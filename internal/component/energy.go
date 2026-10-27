@@ -14,3 +14,11 @@ const (
 	EnergyDeltaSpend                          // Moves toward zero; an oversized spend can cross it
 	EnergyDeltaPassive                        // Penalty that bypasses protection and clamps at zero
 )
+
+// EnergyDeltaNames are what a document calls each EnergyDeltaType
+var EnergyDeltaNames = [...]string{
+	EnergyDeltaPenalty: "penalty",
+	EnergyDeltaReward:  "reward",
+	EnergyDeltaSpend:   "spend",
+	EnergyDeltaPassive: "passive",
+}

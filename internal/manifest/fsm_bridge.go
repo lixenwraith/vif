@@ -1,9 +1,6 @@
 package manifest
 
 import (
-	"slices"
-
-	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -13,13 +10,13 @@ import (
 )
 
 // RegisterFSMComponents installs the FSM standard library bound to the ECS world;
-// programs are the scenario's compiled prototypes, the species its names resolve to
-func RegisterFSMComponents(m *fsm.Machine[*engine.World], programs []component.BehaviorPrototype) {
+// programs are the scenario's behavior programs, data species its names take
+func RegisterFSMComponents(m *fsm.Machine[*engine.World], programs []string) {
 	std.Register(m, worldHost(programs))
 }
 
 // worldHost binds std.Host capabilities to the ECS world
-func worldHost(programs []component.BehaviorPrototype) std.Host[*engine.World] {
+func worldHost(programs []string) std.Host[*engine.World] {
 	return std.Host[*engine.World]{
 		// A region's actions run on every instance, so an artifact one raises is a
 		// per-instance effect unless its class says otherwise. The Local class keeps it
@@ -62,15 +59,7 @@ func worldHost(programs []component.BehaviorPrototype) std.Host[*engine.World] {
 		ConfigInt:  engine.ConfigIntAccessor,
 		ConfigBool: engine.ConfigBoolAccessor,
 
-		Species: func(name string) (int64, bool) {
-			if i := slices.Index(component.SpeciesNames[:], name); i >= 0 {
-				return int64(i), true
-			}
-			if i := slices.IndexFunc(programs, func(p component.BehaviorPrototype) bool { return p.Name == name }); i >= 0 {
-				return int64(programs[i].Species), true
-			}
-			return 0, false
-		},
+		Names: event.PayloadNames(programs),
 
 		// The session root is shared session identity, and the run moves before a
 		// reset re-enters the machine, which the session counter does only after

@@ -11,5 +11,12 @@ const (
 	ModeOverlay
 )
 
-// modeNames indexes core.GameMode for telemetry display
-var ModeNames = [...]string{"normal", "visual", "insert", "search", "command", "overlay"}
+// ModeNames are what telemetry and a document call each GameMode
+var ModeNames = [...]string{
+	ModeNormal:  "normal",
+	ModeVisual:  "visual",
+	ModeInsert:  "insert",
+	ModeSearch:  "search",
+	ModeCommand: "command",
+	ModeOverlay: "overlay",
+}

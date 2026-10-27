@@ -64,21 +64,6 @@ type CombatSystem struct {
 	toggle
 }
 
-// combatAttackNames keys the damage each attack family deals, which is how a
-// weapon's effect reads in telemetry
-var combatAttackNames = [component.CombatAttackTypeCount]string{
-	component.CombatAttackTracer:       "tracer",
-	component.CombatAttackShield:       "shield",
-	component.CombatAttackLightning:    "lightning",
-	component.CombatAttackExplosion:    "explosion",
-	component.CombatAttackMissile:      "missile",
-	component.CombatAttackPulse:        "pulse",
-	component.CombatAttackSelfDestruct: "self_destruct",
-	component.CombatAttackBullet:       "bullet",
-	component.CombatAttackRay:          "ray",
-	component.CombatAttackBurn:         "burn",
-}
-
 func NewCombatSystem(world *engine.World) engine.System {
 	s := &CombatSystem{
 		world: world,
@@ -110,7 +95,7 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statChainFollowups = reg.Ints.Get("combat.chain_followups")
 	s.statChainDepthTotal = reg.Ints.Get("combat.chain_depth_total")
 	s.statChainDepthMax = reg.Ints.Get("combat.chain_depth_max")
-	for i, name := range combatAttackNames {
+	for i, name := range component.CombatAttackNames {
 		s.statDamageFamily[i] = reg.Ints.Get("combat.damage_family_" + name)
 	}
 	for i, name := range component.CombatEntityNames {

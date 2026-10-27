@@ -177,7 +177,7 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventSpeciesCreated:
 		if payload, ok := ev.Payload.(*event.SpeciesCreatedPayload); ok {
 			s.mu.Lock()
-			s.handleSpeciesCreated(payload.Entity, payload.Species, payload.SubType, payload.EvalID, payload.Genes)
+			s.handleSpeciesCreated(payload.Entity, payload.Species, uint8(payload.SubType), payload.EvalID, payload.Genes)
 			s.mu.Unlock()
 		}
 

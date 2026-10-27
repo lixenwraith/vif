@@ -95,9 +95,9 @@ in the same way, each a behavior program compiled once per run
 Use `vif -check [-s <name-or-path>]` to resolve, load and validate the scenario
 plus its behavior programs, keymap, audio overrides, content and every bot graph
 without starting the terminal game. `vif -schema` prints generated JSON describing
-known events and their payload fields, the vocabularies of a scenario, a bot graph
-and a behavior program with their arguments, comparison operators and
-script-visible config fields.
+known events and their payload fields, the names an enum field takes, the
+vocabularies of a scenario, a bot graph and a behavior program with their
+arguments, comparison operators and script-visible config fields.
 
 ## 3. Root schema
 
@@ -297,11 +297,12 @@ when its delay elapses.
 Variable arithmetic can use literal `value`/`delta` or `source_var`, and can
 apply optional `min`/`max` clamps. Division and modulo by zero are no-ops.
 
-`EmitEvent` compiles its event name and payload type at config load time:
+`EmitEvent` compiles its event name and payload type at config load time, an enum
+field taking its type's names ([FSM reference](fsm-reference.md#event-emission)):
 
 ```toml
 { action = "EmitEvent", event = "EventGatewaySpawnRequest",
-  payload = { anchor_entity = 0, species = 7 },
+  payload = { anchor_entity = 0, species = "eye" },
   payload_vars = { anchor_entity = "anchor_id" } }
 ```
 
@@ -554,7 +555,8 @@ Reading and loading a scenario validates at least:
 - presence of regions and valid initial states;
 - unique state names and valid parent/target references;
 - known event, guard, and action names;
-- every key and value, guard and action arguments and event payloads included;
+- every key and value, guard and action arguments and event payloads included, an
+  enum field's name among its type's;
 - legal internal transitions, no actions on `Root`, and `reconcile` placement;
 - external-file cycles, illegal top-level content, and duplicate states;
 - macro definitions, argument names and types, recursion and expansion bounds;

@@ -27,6 +27,10 @@ const (
 	SpeciesMax       = SpeciesCount + parameter.BehaviorProgramsMax
 )
 
+// SubType is a species' own kind, which its events carry beside it: an eye's
+// EyeType, a tower's TowerType; zero for a species without kinds
+type SubType uint8
+
 // SpeciesNames indexes SpeciesType for telemetry keys and display.
 var SpeciesNames = [SpeciesCount]string{
 	SpeciesNone:   "none",

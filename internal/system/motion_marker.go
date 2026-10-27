@@ -167,7 +167,7 @@ func (s *MotionMarkerSystem) spawnMarker(x, y int, slice *[]core.Entity) {
 		Color:     visual.RgbWhite,
 		Intensity: 1.0,
 		PulseRate: 0,
-		FadeMode:  0,
+		FadeMode:  component.MarkerFadeNone,
 	})
 
 	*slice = append(*slice, entity)

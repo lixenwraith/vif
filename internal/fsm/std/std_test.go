@@ -2,9 +2,11 @@ package std_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/std"
@@ -230,5 +232,47 @@ transitions = [{ trigger = "Tick", target = "Say" }]
 	}
 	if want := []string{"Level 7 of 7", "Level 8 of 8"}; !slices.Equal(said, want) {
 		t.Fatalf("said %q, want %q", said, want)
+	}
+}
+
+// TestAnEmittedPayloadSpellsItsEnumsByName: EmitEvent decodes a payload as the
+// host's names spell its enums, a sub-type by its species and a program as its data
+// species, and a name its type lacks fails the load.
+func TestAnEmittedPayloadSpellsItsEnumsByName(t *testing.T) {
+	load := func(payloads string) (*fsm.Machine[struct{}], *[]any, error) {
+		var sent []any
+		m := fsm.NewMachine[struct{}]()
+		std.Register(m, std.Host[struct{}]{
+			Emit:  func(_ struct{}, _ event.EventType, p any) { sent = append(sent, p) },
+			Names: event.PayloadNames([]string{"invader"}),
+		})
+		return m, &sent, m.LoadScenario([]byte(`
+[regions.r]
+initial = "Boot"
+
+[states.Boot]
+parent = "Root"
+on_enter = [` + payloads + `]
+`))
+	}
+	event.EnsureRegistry()
+	m, sent, err := load(`
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { species = "eye", sub_type = "flame" } },
+    { action = "EmitEvent", event = "EventGeneticRegisterSpecies", payload = { species = "invader" } },`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Init(struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	gw, _ := (*sent)[0].(*event.GatewaySpawnRequestPayload)
+	ga, _ := (*sent)[1].(*event.GeneticRegisterSpeciesPayload)
+	if gw == nil || gw.Species != component.SpeciesEye || gw.SubType != component.SubType(component.EyeTypeFlame) ||
+		ga == nil || ga.Species != component.SpeciesDataFirst {
+		t.Fatalf("sent %+v, %+v", gw, ga)
+	}
+	_, _, err = load(`{ action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { species = "tower", sub_type = "flame" } },`)
+	if err == nil || !strings.Contains(err.Error(), `sub_type: "flame" is not one of cyan, gold, violet, emerald`) {
+		t.Fatalf("error %v", err)
 	}
 }

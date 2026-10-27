@@ -73,6 +73,9 @@ const (
 	PaletteCount
 )
 
+// WeaponPaletteNames are what a document calls each WeaponPalette
+var WeaponPaletteNames = [PaletteCount]string{PalettePositive: "positive", PaletteNegative: "negative", PaletteHostile: "hostile"}
+
 // WeaponSpecs is indexed by WeaponType
 var WeaponSpecs = [WeaponCount]WeaponSpec{
 	WeaponRod: {Name: "rod", Delivery: DeliveryLightning, Attack: CombatAttackLightning,

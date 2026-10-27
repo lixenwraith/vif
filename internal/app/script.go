@@ -319,6 +319,7 @@ func waitScriptTick(signals <-chan os.Signal, delay time.Duration) bool {
 type scriptTarget struct{ a *App }
 
 func (t scriptTarget) Position() event.Stamp { return t.a.Position() }
+func (t scriptTarget) Programs() []string    { return t.a.behaviors.Names() }
 func (t scriptTarget) Tick(n int)            { t.a.Tick(n) }
 func (t scriptTarget) Inject(intents ...*input.Intent) bool {
 	return t.a.Inject(intents...)

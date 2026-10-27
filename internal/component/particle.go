@@ -11,6 +11,14 @@ const (
 	ParticleBehaviorCount
 )
 
+// ParticleBehaviorNames are what a document and telemetry call each behavior
+var ParticleBehaviorNames = [ParticleBehaviorCount]string{
+	ParticleNone:    "none",
+	ParticleDecay:   "decay",
+	ParticleBlossom: "blossom",
+	ParticleDust:    "dust",
+}
+
 // ParticleComponent marks a non-typeable moving glyph whose gameplay is
 // selected by Behavior. Kinetic owns its sub-cell motion, Sigil its render
 // state and Timer its lifetime, when the behavior has one.

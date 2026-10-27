@@ -52,7 +52,6 @@ type particleOrbit struct {
 // behavior enters orbit with a tangential kick and leaves it back into its fall;
 // dust orbits the cursor from spawn and only loses the pull while its anchor lapses.
 type particleProfile struct {
-	name     string           // telemetry key prefix
 	fall     float64          // spawn and gravity direction: 1 down, -1 up, 0 none
 	color    [3]color.RGB     // by glyph level
 	lifetime [3]time.Duration // by glyph level; 0 is no timer, an infinite life
@@ -75,7 +74,6 @@ var (
 	}
 	particleProfiles = [component.ParticleBehaviorCount]particleProfile{
 		component.ParticleDecay: {
-			name:     "decay",
 			fall:     1,
 			color:    [3]color.RGB{visual.RgbDecay, visual.RgbDecay, visual.RgbDecay},
 			runeSwap: parameter.ParticleChangeChance,
@@ -89,14 +87,12 @@ var (
 			},
 		},
 		component.ParticleBlossom: {
-			name:     "blossom",
 			fall:     -1,
 			color:    [3]color.RGB{visual.RgbBlossom, visual.RgbBlossom, visual.RgbBlossom},
 			runeSwap: parameter.ParticleChangeChance,
 			orbits:   [anchorCount]particleOrbit{anchorVortex: fallVortexOrbit},
 		},
 		component.ParticleDust: {
-			name:     "dust",
 			color:    [3]color.RGB{visual.RgbDustDark, visual.RgbDustNormal, visual.RgbDustBright},
 			lifetime: [3]time.Duration{parameter.DustTimerDark, parameter.DustTimerNormal, parameter.DustTimerBright},
 			protect:  component.ProtectFromSpecies,
@@ -227,7 +223,7 @@ func NewParticleSystem(world *engine.World) engine.System {
 		state.hitThisFrame = make(map[core.Entity]bool)
 		state.processedGridCells = make(map[int]bool)
 
-		name := particleProfiles[behavior].name
+		name := component.ParticleBehaviorNames[behavior]
 		state.statCount = reg.Ints.Get(name + ".count")
 		state.statApplied = reg.Ints.Get(name + ".applied")
 		state.statWallCollisions = reg.Ints.Get(name + ".wall_collisions")
