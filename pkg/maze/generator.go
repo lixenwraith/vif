@@ -3,6 +3,7 @@ package maze
 import (
 	"math"
 	"math/rand/v2"
+	"slices"
 )
 
 // mazeDefaultSeed keeps a caller-less Generate reproducible rather than
@@ -14,6 +15,13 @@ const mazeDefaultSeed = 0x9E3779B97F4A7C15
 const (
 	Wall    = true
 	Passage = false
+)
+
+// Up, down, left, right: the draws among candidates, the forced openings and
+// the solve's pick between equal paths all follow this order
+var (
+	steps = [4]Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
+	jumps = [4]Point{{0, -2}, {0, 2}, {-2, 0}, {2, 0}}
 )
 
 type Point struct {
@@ -79,12 +87,12 @@ func Generate(cfg Config) Result {
 	rows := ensureOdd(cfg.Height)
 	cols := ensureOdd(cfg.Width)
 
+	// Rows share one backing array; each row's capacity ends at its length, so
+	// an append to a row cannot spill into the next
+	cells := slices.Repeat([]bool{Wall}, rows*cols)
 	grid := make([][]bool, rows)
-	for i := range grid {
-		grid[i] = make([]bool, cols)
-		for j := range grid[i] {
-			grid[i][j] = Wall
-		}
+	for y := range grid {
+		grid[y] = cells[y*cols : (y+1)*cols : (y+1)*cols]
 	}
 
 	rng := cfg.Rng
@@ -518,35 +526,37 @@ func recursiveBacktracker(grid [][]bool, start Point, rng *rand.Rand) {
 		start = Point{1, 1}
 	}
 
-	stack := []Point{start}
+	// via holds one plus the jump that carved each cell, so the walk backs out
+	// along it instead of keeping a stack
+	via := make([]uint8, rows*cols)
+	curr := start
 	grid[start.Y][start.X] = Passage
 
-	dirs := []Point{{0, -2}, {0, 2}, {-2, 0}, {2, 0}}
-
-	for len(stack) > 0 {
-		curr := stack[len(stack)-1]
-		candidates := make([]Point, 0, 4)
-
-		for _, d := range dirs {
+	var candidates [len(jumps)]int
+	for {
+		n := 0
+		for k, d := range jumps {
 			nx, ny := curr.X+d.X, curr.Y+d.Y
 			if nx > 0 && nx < cols-1 && ny > 0 && ny < rows-1 {
 				if grid[ny][nx] == Wall {
-					candidates = append(candidates, d)
+					candidates[n] = k
+					n++
 				}
 			}
 		}
 
-		if len(candidates) > 0 {
-			d := candidates[rng.IntN(len(candidates))]
-			wallX, wallY := curr.X+d.X/2, curr.Y+d.Y/2
-			nextX, nextY := curr.X+d.X, curr.Y+d.Y
-
-			grid[wallY][wallX] = Passage
-			grid[nextY][nextX] = Passage
-
-			stack = append(stack, Point{nextX, nextY})
+		if n > 0 {
+			k := candidates[rng.IntN(n)]
+			d := jumps[k]
+			grid[curr.Y+d.Y/2][curr.X+d.X/2] = Passage
+			curr = Point{curr.X + d.X, curr.Y + d.Y}
+			grid[curr.Y][curr.X] = Passage
+			via[curr.Y*cols+curr.X] = uint8(k) + 1
+		} else if curr == start {
+			return
 		} else {
-			stack = stack[:len(stack)-1]
+			d := jumps[via[curr.Y*cols+curr.X]-1]
+			curr = Point{curr.X - d.X, curr.Y - d.Y}
 		}
 	}
 }
@@ -554,6 +564,7 @@ func recursiveBacktracker(grid [][]bool, start Point, rng *rand.Rand) {
 func applySmartBraiding(grid [][]bool, probability float64, rng *rand.Rand) {
 	rows, cols := len(grid), len(grid[0])
 
+	var candidates [len(jumps)]Point
 	for y := 1; y < rows-1; y += 2 {
 		for x := 1; x < cols-1; x += 2 {
 			if grid[y][x] == Wall {
@@ -561,32 +572,30 @@ func applySmartBraiding(grid [][]bool, probability float64, rng *rand.Rand) {
 			}
 
 			exits := 0
-			checkDirs := []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
-			for _, d := range checkDirs {
+			for _, d := range steps {
 				if grid[y+d.Y][x+d.X] == Passage {
 					exits++
 				}
 			}
 
 			if exits == 1 && rng.Float64() < probability {
-				candidates := make([]Point, 0, 4)
-
-				jumpDirs := []Point{{0, -2}, {0, 2}, {-2, 0}, {2, 0}}
-				for _, jd := range jumpDirs {
+				n := 0
+				for _, jd := range jumps {
 					nx, ny := x+jd.X, y+jd.Y
 					wx, wy := x+jd.X/2, y+jd.Y/2
 
 					if nx >= 0 && nx < cols && ny >= 0 && ny < rows {
 						if grid[ny][nx] == Passage && grid[wy][wx] == Wall {
 							if canSafelyRemoveWall(grid, wx, wy) {
-								candidates = append(candidates, Point{wx, wy})
+								candidates[n] = Point{wx, wy}
+								n++
 							}
 						}
 					}
 				}
 
-				if len(candidates) > 0 {
-					c := candidates[rng.IntN(len(candidates))]
+				if n > 0 {
+					c := candidates[rng.IntN(n)]
 					grid[c.Y][c.X] = Passage
 				}
 			}
@@ -622,14 +631,12 @@ func canSafelyRemoveWall(grid [][]bool, x, y int) bool {
 	}
 
 	// Check 2: No Pillars (Isolated Walls)
-	ortho := []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
-
-	for _, d := range ortho {
+	for _, d := range steps {
 		nx, ny := x+d.X, y+d.Y
 		if nx >= 0 && nx < cols && ny >= 0 && ny < rows {
 			if grid[ny][nx] == Wall {
 				wallConnections := 0
-				for _, d2 := range ortho {
+				for _, d2 := range steps {
 					nnx, nny := nx+d2.X, ny+d2.Y
 					if nnx == x && nny == y {
 						continue
@@ -702,9 +709,8 @@ func forceOpen(grid [][]bool, p Point) {
 	}
 	grid[p.Y][p.X] = Passage
 
-	dirs := []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 	hasPassage := false
-	for _, d := range dirs {
+	for _, d := range steps {
 		nx, ny := p.X+d.X, p.Y+d.Y
 		if nx >= 0 && nx < len(grid[0]) && ny >= 0 && ny < len(grid) {
 			if grid[ny][nx] == Passage {
@@ -715,7 +721,7 @@ func forceOpen(grid [][]bool, p Point) {
 	}
 
 	if !hasPassage {
-		for _, d := range dirs {
+		for _, d := range steps {
 			nx, ny := p.X+d.X, p.Y+d.Y
 			if nx > 0 && nx < len(grid[0])-1 && ny > 0 && ny < len(grid)-1 {
 				grid[ny][nx] = Passage
@@ -738,38 +744,37 @@ func solveBFS(grid [][]bool, start, end Point) []Point {
 		return nil
 	}
 
-	queue := []Point{start}
-	cameFrom := make(map[Point]Point)
-	visited := make(map[Point]bool)
-	visited[start] = true
+	// via holds one plus the step that first reached each cell, zero while it is
+	// unreached; the start's mark is never followed
+	via := make([]uint8, rows*cols)
+	via[start.Y*cols+start.X] = uint8(len(steps)) + 1
 
-	for len(queue) > 0 {
-		curr := queue[0]
-		queue = queue[1:]
-
-		if curr == end {
-			path := []Point{}
-			for curr != start {
-				path = append([]Point{curr}, path...)
-				curr = cameFrom[curr]
+	// Level by level is the queue's own order, and a level's index is its distance
+	level, next := []Point{start}, []Point(nil)
+	for dist := 0; len(level) > 0; dist++ {
+		for _, curr := range level {
+			if curr == end {
+				path := make([]Point, dist+1)
+				for i := dist; i > 0; i-- {
+					path[i] = curr
+					d := steps[via[curr.Y*cols+curr.X]-1]
+					curr = Point{curr.X - d.X, curr.Y - d.Y}
+				}
+				path[0] = start
+				return path
 			}
-			path = append([]Point{start}, path...)
-			return path
-		}
 
-		dirs := []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
-		for _, d := range dirs {
-			nx, ny := curr.X+d.X, curr.Y+d.Y
-			next := Point{nx, ny}
-
-			if nx >= 0 && nx < cols && ny >= 0 && ny < rows {
-				if grid[ny][nx] == Passage && !visited[next] {
-					visited[next] = true
-					cameFrom[next] = curr
-					queue = append(queue, next)
+			for k, d := range steps {
+				nx, ny := curr.X+d.X, curr.Y+d.Y
+				if nx >= 0 && nx < cols && ny >= 0 && ny < rows {
+					if i := ny*cols + nx; grid[ny][nx] == Passage && via[i] == 0 {
+						via[i] = uint8(k) + 1
+						next = append(next, Point{nx, ny})
+					}
 				}
 			}
 		}
+		level, next = next, level[:0]
 	}
 	return nil
 }
