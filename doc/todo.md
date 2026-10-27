@@ -13,12 +13,12 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
 by area so an agent can take a group, beside the navigation items. The faster
 scroll, the jagged cave, the stone art, the raider types by cave and the machine's
-certain faults have landed. Order now: play the cave raiders and the scenery text;
-the position package last, in a session of its own. Until that lands, nothing here
-adds engine surface for rock or caves: a cave's shape stays in `pkg/cave` and its
-scenario, the rock behind `Positions.Rock()` and the wall system and renderers that
-read it, and a query a footprint needs is built by its caller from the existing
-ones, so the move inherits nothing new.
+certain faults have landed. Order now: play the cave raiders, the scenery text and
+the boss approach; the position package last, in a session of its own. Until that
+lands, nothing here adds engine surface for rock or caves: a cave's shape stays in
+`pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall system
+and renderers that read it, and a query a footprint needs is built by its caller
+from the existing ones, so the move inherits nothing new.
 
 ### Raiders
 
@@ -74,6 +74,29 @@ that blocks spawns, rock and walls alike, until the position package gives rock 
 test of its own. A boss region of fixed, typeable text over moving scenery needs a
 drift that moves scenery alone, since a drift moves every loose glyph, and may want
 scenery drawn apart from the typeable text it now matches.
+
+### Boss approach
+
+#### Script the boss approach and play its stop
+
+- Priority: P1
+- Affected files: `wad/scenario/vanguard/scenario.toml` (`CaveStart`),
+  `internal/parameter/environment.go` (`CaveMaxSpeed`, `DriftMaxSpeed`),
+  `internal/system/glyph.go` (`Update`), `doc/gameplay.md` §9
+- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
+
+The cave's pace and the drift's change at once or ease (`EventCavePace`,
+`EventCaveStop`, `ease_ms` on both drift events), and `EventCaveOpen` widens the cave
+past the right edge, `EventCaveOpened` announcing it filling the map; vanguard uses
+none of them yet. Script the approach, faster rock and drift, then a halt eased or
+sudden as the opening fills, and play which reads as a boss. Off whole columns a tick
+the rock steps unevenly, one and two in turn at 30 columns a second, and past 20 it
+jumps more than a column a tick. The soft caps sit past what was measured: a whole
+vanguard tick, headless, reads 0.07 to 0.20 ms from 20 to 200 columns a second at
+120×40 and 0.39 to 2.42 ms at 500×254. The parallax thins as the drift quickens,
+since the spawner places a block an interval whatever the pace: 347 glyphs at 10
+cells a second on 120×40 with the rock halted, 180 at 50 and 129 at 100. A cave
+opens once and nothing narrows it again; a later stage starts a new cave.
 
 ### Gun and loot
 

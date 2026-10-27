@@ -39,7 +39,7 @@ func BenchmarkCaveStep(b *testing.B) {
 			world, walls := newCaveBench(b, size.w, size.h)
 			b.ReportAllocs()
 			for b.Loop() {
-				walls.stepCave()
+				walls.stepCave(walls.readCursors())
 				world.Resources.Event.Queue.Consume()
 			}
 			rock, h := 0, world.Resources.Config.MapHeight
@@ -74,7 +74,7 @@ func BenchmarkCaveStepNavigation(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				b.StopTimer()
-				walls.stepCave()
+				walls.stepCave(walls.readCursors())
 				world.Resources.Event.Queue.Consume()
 				b.StartTimer()
 				nav.applyWalls()
@@ -105,7 +105,7 @@ func BenchmarkCaveCapture(b *testing.B) {
 					full = engine.SharedWorldEncodeStoreColumns(full, &base, i)
 				}
 				b.StopTimer()
-				walls.stepCave()
+				walls.stepCave(walls.readCursors())
 				world.Resources.Event.Queue.Consume()
 				b.StartTimer()
 				d := engine.DiffSharedWorld(base, world.CaptureSharedWorld())

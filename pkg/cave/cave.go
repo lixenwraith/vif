@@ -2,7 +2,7 @@
 // ceiling and of floor each column holds. A column is a pure function of its index and
 // the seed, in integer arithmetic, so any instance derives any column on its own and
 // every platform rounds it alike. A cave's channel snakes, or each of its walls is a
-// jagged fractal of its own.
+// jagged fractal of its own, and an opening widens it from a column on.
 package cave
 
 import (
@@ -31,6 +31,17 @@ type Config struct {
 	// Octaves, when set, makes the cave jagged: each wall reaches into the gap by its
 	// own fractal noise of that many octaves, from Wavelength halving down
 	Octaves int `json:"octaves,omitempty"`
+
+	// Open, when set, widens the cave from one column on
+	Open Opening `json:"open,omitzero"`
+}
+
+// Opening widens a cave past column At, over Ramp columns, to Gap open rows centred,
+// all the walls leave when 0, and holds it open from there.
+type Opening struct {
+	At   int64 `json:"at"`
+	Gap  int   `json:"gap,omitempty"`
+	Ramp int   `json:"ramp"`
 }
 
 // Column is one column's rock: Top rows down from row 0, Bottom rows up from the last.
@@ -92,6 +103,8 @@ func (c Config) Validate() error {
 		return errors.New("cave: height must hold both walls, the min gap and two rows of detail")
 	case c.Wavelength < 1 || c.Wavelength > MaxWavelength:
 		return errors.New("cave: wavelength out of range")
+	case c.Open != (Opening{}) && (c.Open.At < 0 || c.Open.Ramp < 1 || c.Open.Gap < 0 || c.Open.Gap > 0 && c.Open.Gap < c.MinGap):
+		return errors.New("cave: an opening needs a column, a ramp, and a gap of all the walls leave or at least the min gap")
 	}
 	return nil
 }
@@ -106,7 +119,7 @@ func (c Config) widest() int {
 // always leaves MinGap open rows and MinWall rows of each wall.
 func (c Config) At(i int64) Column {
 	if c.Octaves == 0 {
-		return c.column(i)
+		return c.opened(i, c.column(i))
 	}
 	// A jagged wall's edge is the median of its own around it. Of 2r+1 columns, r+1
 	// keep each wall at least its median, so one column keeps both and the medians
@@ -118,7 +131,28 @@ func (c Config) At(i int64) Column {
 	}
 	slices.Sort(tops[:])
 	slices.Sort(bottoms[:])
-	return Column{Top: tops[jaggedMedian], Bottom: bottoms[jaggedMedian]}
+	return c.opened(i, Column{Top: tops[jaggedMedian], Bottom: bottoms[jaggedMedian]})
+}
+
+// opened eases column i out to the opening past its column, a weighted mean as the
+// mouth's ramp takes. It follows a jagged cave's median, so every column up to the
+// opening's keeps the rock it had before the opening was set.
+func (c Config) opened(i int64, col Column) Column {
+	o := c.Open
+	if o.Ramp == 0 || i <= o.At {
+		return col
+	}
+	gap := c.Height - 2*c.MinWall
+	if o.Gap > 0 {
+		gap = min(o.Gap, gap)
+	}
+	top := int64(c.Height-gap) / 2
+	bottom := int64(c.Height-gap) - top
+	k, r := min(i-o.At, int64(o.Ramp)), int64(o.Ramp)
+	return Column{
+		Top:    int((int64(col.Top)*(r-k) + top*k) / r),
+		Bottom: int((int64(col.Bottom)*(r-k) + bottom*k) / r),
+	}
 }
 
 // column is column i's rock before a jagged cave's median

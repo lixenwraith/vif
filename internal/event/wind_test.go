@@ -17,7 +17,7 @@ func TestEnvironmentEventsAreSharedAndTyped(t *testing.T) {
 		{EventWindStart, &WindStartPayload{}},
 		{EventWindCancel, nil},
 		{EventDriftStart, &DriftStartPayload{}},
-		{EventDriftCancel, nil},
+		{EventDriftCancel, &DriftCancelPayload{}},
 	} {
 		if got := ClassOf(tc.eventType); got != ClassShared {
 			t.Fatalf("event %d class = %s, want shared", tc.eventType, got)
