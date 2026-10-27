@@ -62,20 +62,18 @@ func validatePosition(ctx *engine.GameContext, x, y int) (int, int) {
 
 // --- Paragraph Helpers ---
 
-// findPrevEmptyLine finds the previous line with no interactable entities
+// findPrevEmptyLine finds the previous line with no typeable glyph
 // Optimized for high entity counts using spatial grid traversal
 func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [parameter.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Components.Glyph
-
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
-		// Scan row; stop early if any interactable entity is found
+		// Scan row; stop early if any typeable glyph is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := range count {
-				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
+				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					rowEmpty = false
 					break
 				}
@@ -88,20 +86,18 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	return 0
 }
 
-// findNextEmptyLine finds the next line with no interactable entities
+// findNextEmptyLine finds the next line with no typeable glyph
 // Optimized for high entity counts using spatial grid traversal
 func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	var buf [parameter.MaxEntitiesPerCell]core.Entity
 
-	glyphStore := ctx.World.Components.Glyph
-
 	for y := cursorY + 1; y < ctx.World.Resources.Config.MapHeight; y++ {
 		rowEmpty := true
-		// Scan row; stop early if any interactable entity is found
+		// Scan row; stop early if any typeable glyph is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := range count {
-				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
+				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					rowEmpty = false
 					break
 				}
@@ -305,18 +301,17 @@ func findCharInBounds(ctx *engine.GameContext, startX, startY int, target rune, 
 	return -1, -1, false
 }
 
-// findLineEndInBounds returns rightmost entity X across all bounds rows
-// Returns -1 if no entities found
+// findLineEndInBounds returns rightmost typeable glyph X across all bounds rows
+// Returns -1 if no glyph found
 func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBounds) int {
 	var buf [parameter.MaxEntitiesPerCell]core.Entity
-	glyphStore := ctx.World.Components.Glyph
 	rightmost := -1
 
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := ctx.World.Resources.Config.MapWidth - 1; x >= 0; x-- {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := range count {
-				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
+				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					if x > rightmost {
 						rightmost = x
 					}
@@ -339,44 +334,6 @@ func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingA
 		}
 	}
 	return 0, bounds.MinY
-}
-
-// findColumnUpInBounds finds first glyph above cursor within bounds's X range
-// Searches from cursor row-1 to screen top, returns (x, y) of found character
-// Y search is NOT constrained by bounds - bounds only defines X search width
-func findColumnUpInBounds(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingAbsoluteBounds) (int, int) {
-	glyphStore := ctx.World.Components.Glyph
-
-	for y := startY - 1; y >= 0; y-- {
-		for x := bounds.MinX; x <= bounds.MaxX; x++ {
-			entities := ctx.World.Positions.GetAllEntityAt(x, y)
-			for _, entity := range entities {
-				if entity != 0 && glyphStore.HasEntity(entity) {
-					return x, y
-				}
-			}
-		}
-	}
-	return cursorX, startY
-}
-
-// findColumnDownInBounds finds first glyph below cursor within bounds's X range
-// Searches from cursor row+1 to screen bottom, returns (x, y) of found character
-// Y search is NOT constrained by bounds - bounds only defines X search width
-func findColumnDownInBounds(ctx *engine.GameContext, cursorX, startY int, bounds engine.PingAbsoluteBounds, gameHeight int) (int, int) {
-	glyphStore := ctx.World.Components.Glyph
-
-	for y := startY + 1; y < gameHeight; y++ {
-		for x := bounds.MinX; x <= bounds.MaxX; x++ {
-			entities := ctx.World.Positions.GetAllEntityAt(x, y)
-			for _, entity := range entities {
-				if entity != 0 && glyphStore.HasEntity(entity) {
-					return x, y
-				}
-			}
-		}
-	}
-	return cursorX, startY
 }
 
 // === Bounds Scanning Primitives ===

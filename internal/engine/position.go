@@ -791,35 +791,64 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 	return unplaced
 }
 
-// TopGlyphAt returns the one glyph at (x, y) that is drawn and typed: shared (gold)
-// before player, then the nearer level, then the lower entity. It reads the grid,
-// so a glyph its cell refused is never on top.
+// TopGlyphAt returns the one glyph at (x, y) that typing acts on: shared (gold)
+// before player, then the nearer level, then the lower entity, passing over
+// scenery. It reads the grid, so a glyph its cell refused is never on top.
 func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
+	top := p.topGlyph(x, y, false)
+	return top, top != 0
+}
+
+// TopGlyphIs reports whether e is the glyph drawn at (x, y): the one typing acts
+// on, or in a cell of scenery alone the top scenery by the same order. Alone in
+// its cell it is, which spares the lookup.
+func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
+	if cell := p.grid.EntitiesAt(x, y, ScopeBoth); len(cell) == 1 {
+		return cell[0] == e
+	}
+	return p.topGlyph(x, y, true) == e
+}
+
+// IsTypeable reports whether e is a glyph typing can act on: one not placed as
+// scenery (ProtectFromTyping)
+func (p *Position) IsTypeable(e core.Entity) bool {
+	return p.world.Components.Glyph.HasEntity(e) && !p.isScenery(e)
+}
+
+func (p *Position) isScenery(e core.Entity) bool {
+	prot, _ := p.world.Components.Protection.GetComponent(e)
+	return prot.Mask&component.ProtectFromTyping != 0
+}
+
+// topGlyph ranks the glyphs at (x, y), typeable before scenery, which it drops
+// unless withScenery
+func (p *Position) topGlyph(x, y int, withScenery bool) core.Entity {
 	glyphs := p.world.Components.Glyph
 	var top core.Entity
 	var topLevel component.GlyphLevel
+	var topScenery bool
 	for _, e := range p.grid.EntitiesAt(x, y, ScopeBoth) {
 		g, ok := glyphs.GetPtr(e)
 		if !ok {
 			continue
 		}
-		if top != 0 && (e.Domain() > top.Domain() || e.Domain() == top.Domain() &&
-			(g.Level < topLevel || g.Level == topLevel && e > top)) {
+		scenery := p.isScenery(e)
+		if scenery && !withScenery {
 			continue
 		}
-		top, topLevel = e, g.Level
+		if top != 0 {
+			if scenery != topScenery {
+				if scenery {
+					continue
+				}
+			} else if e.Domain() > top.Domain() || e.Domain() == top.Domain() &&
+				(g.Level < topLevel || g.Level == topLevel && e > top) {
+				continue
+			}
+		}
+		top, topLevel, topScenery = e, g.Level, scenery
 	}
-	return top, top != 0
-}
-
-// TopGlyphIs reports whether e is the glyph typing acts on at (x, y). Alone in
-// its cell it is, which spares the lookup; a stacked cell asks TopGlyphAt.
-func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
-	if cell := p.grid.EntitiesAt(x, y, ScopeBoth); len(cell) == 1 {
-		return cell[0] == e
-	}
-	top, _ := p.TopGlyphAt(x, y)
-	return top == e
+	return top
 }
 
 // --- Batch Implementation ---

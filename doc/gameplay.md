@@ -67,10 +67,11 @@ cursors and moves each into the new bounds.
 ## 3. Typing rules
 
 Insert-mode character input emits a character event at the cursor cell.
-`TypingSystem` selects the cell's top glyph, the one drawn, and validates the
-rune. `Position.TopGlyphAt` picks it: a Shared glyph (a gold member) before a
-player glyph, then the nearer drift layer (bright, normal, dark), then the lower
-entity ID.
+`TypingSystem` selects the cell's top glyph, the one drawn over any scenery, and
+validates the rune. `Position.TopGlyphAt` picks it, passing over scenery (§9): a
+Shared glyph (a gold member) before a player glyph, then the nearer drift layer
+(bright, normal, dark), then the lower entity ID. Motions, search, motion markers
+and bots look through scenery by the same test, `Position.IsTypeable`.
 
 ```mermaid
 flowchart TD
@@ -91,9 +92,9 @@ A correct character:
 - blinks the energy meter in the glyph's colour, removes the glyph, and moves the
   cursor one cell right when the map edge permits.
 
-A typing error, including a key on a cell with no glyph, flashes the cursor,
-removes 10 heat, deactivates boost, plays the error sound, increments the error
-metric, and resets the streak.
+A typing error, including a key on a cell with no glyph or only scenery, flashes the
+cursor, removes 10 heat, deactivates boost, plays the error sound, increments the
+error metric, and resets the streak.
 
 For composite text, the next valid member is the living member with the lowest
 X, then Y, then entity ID. This enforces visible left-to-right typing even if
@@ -116,13 +117,15 @@ random. Red comes from decay, and gold marks gold members. A glyph's energy
 depends on its colour and the typist's heat; its level sets its brightness, its
 drift layer (§9) and its dust lifetime.
 
-Spawn pacing adapts to screen occupancy: sparse maps receive text faster while
-dense maps sharply reduce new placement. Placement needs at least one cursor,
-excludes a region around every cursor, and retries only a bounded number of
+Spawn pacing adapts to screen occupancy: sparse maps receive text faster while dense
+maps sharply reduce new placement. Occupancy and the type and level census count
+only the kind being placed, scenery under a scenery drift (§9) or typeable text
+otherwise, so each keeps its own fill where both stand. Placement needs at least one
+cursor, excludes a region around every cursor, and retries only a bounded number of
 positions. While a glyph drift is active, new lines are placed in a band
-`DriftEntryBand` cells deep beside an upwind edge, each drawn in proportion to
-the drift crossing it, so text enters where the drift carries it across; the
-spawner reads the drift from the environment's published status.
+`DriftEntryBand` cells deep beside an upwind edge, each drawn in proportion to the
+drift crossing it, so text enters where the drift carries it across; the spawner
+reads the drift from the environment's published status.
 
 `ParticleSystem` selects dust, decay or blossom rules from
 `ParticleComponent.Behavior`, and everything that differs between them is one row
@@ -138,22 +141,24 @@ in its spin; with no anchor left it drops straight down at fresh decay speed.
 
 A behavior's profile holds an orbit for each anchor kind that pulls it: the cursor
 for dust, a Kraken for decay, and a vortex's button for all three. A vortex
-(`EventParticleVortex`) turns every Player glyph into particles of the behavior it
-names, as a Kraken turns what it covers into decay, and for its duration holds all
-of that behavior in a ring just clear of one button, round at the button's
-proportions; then decay falls, blossom rises and dust returns to the cursor. A
-vortex orbit is damped hard, since it draws particles from across the map.
+(`EventParticleVortex`) turns every Player glyph not hidden in rock or a wall (§9)
+into particles of the behavior it names, as a Kraken turns what it covers into
+decay, and for its duration holds all of that behavior in a ring just clear of one
+button, round at the button's proportions; then decay falls, blossom rises and dust
+returns to the cursor. A vortex orbit is damped hard, since it draws particles from
+across the map.
 
 Dust is what glyphs become: a drain crossing a normal or bright glyph, a dust-all
 request (`:dust`, each gold round of a quasar encounter, a gold sequence destroyed
 in `main`, or two storm circles colliding) converting every loose glyph while dark
-ones flash away, and special fire (§7), which converts dark ones too. It orbits
-the local cursor while that cursor's energy is nonzero, bounces off walls and
-bounds, nudges the drains it crosses, and lives 2, 4 or 8 s by its glyph's level
-through `TimerComponent`, fading a level each time its remaining life drops below
-the lower level's lifetime. All three behaviors share one deterministic
-Player-domain RNG stream. Flash, fade, splash, marker, explosion, and motion-marker
-systems are transient feedback rather than durable text state.
+ones flash away, and special fire (§7), which converts dark ones too; a glyph hidden
+in rock or a wall carries none, since dust born there would stay. It orbits the
+local cursor while that cursor's energy is nonzero, bounces off walls and bounds,
+nudges the drains it crosses, and lives 2, 4 or 8 s by its glyph's level through
+`TimerComponent`, fading a level each time its remaining life drops below the lower
+level's lifetime. All three behaviors share one deterministic Player-domain RNG
+stream. Flash, fade, splash, marker, explosion, and motion-marker systems are
+transient feedback rather than durable text state.
 
 ## 5. Energy, heat, boost, and shield
 
@@ -421,7 +426,8 @@ reaches at any member moves whole the same way, else to the nearest place its
 footprint fits, enraged or not, and one with room nowhere is destroyed with no
 reward. A cursor the rock finds no room for, pressed against the left edge, is
 crushed where it stands (`EventCursorCrushed`), which defeats it; a loose glyph is
-removed as scenery. `EventCaveStop` leaves the rock where it stands.
+removed, unless it is scenery, which the rock passes in front of. `EventCaveStop`
+leaves the rock where it stands.
 
 `EnvironmentSystem` owns map-wide gameplay effects rather than rendering
 post-process effects. Its first effect is wind: `EventWindStart` supplies force,
@@ -446,13 +452,31 @@ phase per axis that advances
 by simulated time, so drift follows game speed, draws no RNG, and every instance
 steps a layer on the same tick. A layer moves one cell and one axis at a time as
 a rigid group, so no step crosses a wall's corner. A glyph that would leave the
-map, enter a wall or find its target cell full is removed with no reward or
-effect. Composite members (gold) and glyphs already tagged to die stay put, and
-the cursor does not ride with the text under it. A new start keeps each phase
-that still points the new way, so a change of pace does not jolt the text and a
-reversal does not stall it, and disabling the system pauses the drift as it
-pauses wind. Where layers share a cell the nearest draws on top and is the one
-typing acts on (§3).
+map, enter rock or a wall or find its target cell full is removed with no reward
+or effect; scenery enters rock and walls. Composite members (gold) and glyphs
+already tagged to die stay put, and the cursor does not ride with the text under
+it. A new start keeps each phase that still points the new way, so a change of
+pace does not jolt the text and a reversal does not stall it, and disabling the
+system pauses the drift as it pauses wind. Where layers share a cell the nearest
+draws on top, and typeable text over scenery (§3).
+
+A start with `scenery` set makes the text placed while it drifts scenery for life:
+`GlyphSystem` stamps `ProtectScenery` on each glyph, a Protection mask of four bits
+that each mechanic reads on glyphs alone.
+
+- `ProtectFromWall`: arriving rock and a wall's push leave the glyph where it
+  stands, and it drifts into rock and walls. The glyph renderer draws nothing in a
+  cell that blocks spawns, since rock and walls draw first and a glyph prints over
+  them, so the text passes behind them.
+- `ProtectFromSpecies`: spawn, teleport and Kraken sweeps, drains and gold pass it.
+- `ProtectFromDelete` and `ProtectFromTyping`: deletes skip it, and typing, motions,
+  search, markers and bots look through it.
+- Particles act on it as on any glyph: decay and blossom change its level, and so
+  its layer, and its type; the gun's tracers and special fire take it. Dust and a
+  vortex pass over a glyph hidden in rock or a wall.
+
+Scenery and other glyphs share the map with their own masks: text placed after the
+drift, or under a drift without `scenery`, is typeable as before.
 
 ## 10. Embedded campaign progression
 
@@ -531,7 +555,9 @@ down drops a `U` where it fell, for every player, and each `U` raises the gun a
 level of the scenario's nine: one shot forward, then two and three, one up and one
 down, one back, two up and down, two back, three up and down, three back. Forward is
 right, the way the ship flies. A crush is a defeat: the game starts over at once,
-the gun back at one shot, and opens with "Crushed against the edge".
+the gun back at one shot, and opens with "Crushed against the edge". The drifting
+text is scenery (§9): rock and raiders pass it by and no key types it, so the ship
+earns no heat by typing.
 
 ## 11. System inventory
 

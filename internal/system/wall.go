@@ -782,7 +782,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int6
 		if s.world.Components.Cursor.HasEntity(entity) {
 			continue
 		}
-		if s.world.Components.Wall.HasEntity(entity) || s.reachBody(entity, x, y) {
+		if s.world.Components.Wall.HasEntity(entity) || s.reachBody(entity, x, y) || s.passesWalls(entity) {
 			continue
 		}
 
@@ -915,6 +915,15 @@ func sharedCount(e core.Entity) int64 {
 		return 1
 	}
 	return 0
+}
+
+// passesWalls reports a glyph that rock and walls leave where it stands, behind them
+func (s *WallSystem) passesWalls(e core.Entity) bool {
+	if !s.world.Components.Glyph.HasEntity(e) {
+		return false
+	}
+	prot, _ := s.world.Components.Protection.GetComponent(e)
+	return prot.Mask&component.ProtectFromWall != 0
 }
 
 // getMaskForEntity returns appropriate wall block mask for entity type
@@ -1362,7 +1371,7 @@ func (s *WallSystem) stepCave() {
 // displaceCave moves what stands where rock arrived a column left and toward the
 // channel, the way the rock travels; a composite it reached waits to move as one
 // body. Rock that finds a cursor no room crushes it where it stands, and a loose
-// glyph is scenery and goes.
+// glyph goes, unless it is scenery the rock passes in front of.
 func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 	positions := s.world.Positions
 	var pushes int64
@@ -1392,7 +1401,9 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 			continue
 		}
 		if e.Domain() == core.DomainPlayer && s.world.Components.Glyph.HasEntity(e) {
-			s.caveDoomed = append(s.caveDoomed, e)
+			if !s.passesWalls(e) {
+				s.caveDoomed = append(s.caveDoomed, e)
+			}
 			continue
 		}
 		mask := s.getMaskForEntity(e)

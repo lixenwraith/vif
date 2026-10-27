@@ -199,7 +199,8 @@ The environment is a deliberate dual-domain exception with one Shared stream.
 An active wind draws force and direction exactly once per tick before iterating
 entities, so different local drain populations cannot move the Shared RNG. Glyph
 drift draws nothing: its per-level phases advance by tick delta alone, so every
-instance steps its own Player glyphs on the same ticks.
+instance steps its own Player glyphs on the same ticks, and each instance's glyph
+system stamps its own text as scenery from the drift's published flag.
 
 A Shared stream orders draws by tick, so only work every instance performs at the
 same tick, in the same number, may take one. The count matters as much as the tick:
@@ -408,7 +409,7 @@ Declared system carriers are:
 | `gold` | sequence liveness, spawn gate, header, per-slot contribution; the deadline rides the header's timer in the stores |
 | `storm` | live root entity; a blue attack's pending swarm is its beam, in the stores |
 | `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
-| `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration and per-level sub-cell phases |
+| `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration, scenery flag and per-level sub-cell phases |
 
 A carrier is also where a status cell the compared surface excludes has to live.
 `SharedKey` answers what two instances must agree on, and a capture reads through

@@ -6,9 +6,9 @@ macro_files = ["macros.toml"]
 # A side-scroller after Vanguard (1981): the cursor is a ship and the cave scrolls
 # left past it. Rock pushes the cursor a column back and toward the channel; rock
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
-# left behind the rock at three depths, raiders of the cave's own eight types arrive
-# at the right edge on a timer, and each one shot down drops a U that raises the gun
-# a level, from one shot forward to three each way.
+# left behind the rock at three depths as scenery no key types, raiders of the cave's
+# own eight types arrive at the right edge on a timer, and each one shot down drops a
+# U that raises the gun a level, from one shot forward to three each way.
 
 # Twice the cave's narrowest gap, so even the smallest map opens past its narrowest
 [map]
@@ -80,15 +80,16 @@ background = true
 # rough rock the walls stay smooth, and the mouth holds the centred cursor. The rock
 # wears one of four stone arts, the cave's seed picking it; every rock cell draws a
 # glyph, so it reads on a text console's sixteen colours too. The glyphs drift at
-# half the scroll and slower, each layer stepping on whole ticks. The seed is drawn
-# from the run's, so each new game flies a new cave and a run's seed replays its
-# caves in order.
+# half the scroll and slower, each layer stepping on whole ticks, as scenery: rock
+# and raiders pass them by and the rock hides them, while particles and the gun act
+# on them. The seed is drawn from the run's, so each new game flies a new cave and a
+# run's seed replays its caves in order.
 [states.CaveStart]
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
     { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 36, min_wall = 2, wavelength = 64, swing = 9, detail = 0, ramp = 96, octaves = 4 }, payload_vars = { seed = "cave_seed" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
-    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 10.0, duration_ms = 0 } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 10.0, duration_ms = 0, scenery = true } },
 ]
 
 # --- Raiders ---

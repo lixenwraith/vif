@@ -317,6 +317,49 @@ func TestParticleLifetimeFollowsProfile(t *testing.T) {
 	}
 }
 
+// TestSpecialFireAndVortexTakeSceneryButNotWhereRockHidesIt: dust conversion and
+// a vortex take scenery as any glyph, and pass over a glyph hidden in rock, where a
+// particle born would stay
+func TestSpecialFireAndVortexTakeSceneryButNotWhereRockHidesIt(t *testing.T) {
+	w, particles := newParticleWorld(1)
+	cols := make([]engine.RockColumn, w.Resources.Config.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Ceil: 3, Floor: w.Resources.Config.MapHeight}
+	}
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	glyph := func(x, y int, mask component.ProtectionFlags) core.Entity {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'g', Type: component.GlyphBlue, Level: component.GlyphNormal})
+		w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: mask})
+		return e
+	}
+	plain := glyph(4, 6, component.ProtectNone)
+	scenery := glyph(5, 6, component.ProtectScenery)
+	hidden := glyph(6, 1, component.ProtectScenery)
+
+	particles.convertGlyphs(10, 6, nil, nil)
+	if w.HasEntity(plain) || w.HasEntity(scenery) || !w.HasEntity(hidden) {
+		t.Fatalf("conversion left plain %v, scenery %v, hidden %v; want only the hidden glyph",
+			w.HasEntity(plain), w.HasEntity(scenery), w.HasEntity(hidden))
+	}
+	if n := w.Components.Particle.CountEntities(); n != 2 {
+		t.Fatalf("%d dust from the conversion, want 2", n)
+	}
+
+	shown := glyph(5, 6, component.ProtectScenery)
+	particles.vortex(&event.ParticleVortexPayload{Behavior: component.ParticleDecay})
+	var taken []core.Entity
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
+			taken = append(taken, p.Entities...)
+		}
+	}
+	if len(taken) != 1 || taken[0] != shown {
+		t.Fatalf("vortex took %v, want only the scenery in the open %v", taken, shown)
+	}
+}
+
 func TestDustBouncesOffWalls(t *testing.T) {
 	w, particles := newParticleWorld(0xB0)
 	wall := w.CreateEntity(core.DomainShared)
