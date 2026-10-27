@@ -188,6 +188,77 @@ parent = "Hold"
 	}
 }
 
+// TestImportReconcilesAChangedPick: a reconciled action's pick reads its variable
+// as payload_vars do, so an import that changes only that variable exits with the
+// old entry and enters with the new one
+func TestImportReconcilesAChangedPick(t *testing.T) {
+	event.EnsureRegistry()
+	const cfg = `
+[regions.base]
+initial = "Idle"
+[regions.quasar]
+
+[states.Idle]
+parent = "Root"
+[states.Hold]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainPause", pick = { field = "entity", var = "slot", from = [11, 22] }, reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventDrainResume", pick = { field = "entity", var = "slot", from = [11, 22] }, reconcile = true },
+]
+[states.Live]
+parent = "Hold"
+`
+	type record struct {
+		typeID event.EventType
+		owner  int64
+	}
+	type trace []record
+	build := func(t *testing.T, slot int64) (*fsm.Machine[*trace], *trace) {
+		t.Helper()
+		got := new(trace)
+		m := fsm.NewMachine[*trace]()
+		std.Register(m, std.Host[*trace]{
+			Emit: func(dst *trace, et event.EventType, payload any) {
+				var owner int64
+				if p, ok := payload.(*event.CursorScopePayload); ok {
+					owner = int64(p.Entity)
+				}
+				*dst = append(*dst, record{typeID: et, owner: owner})
+			},
+		})
+		if err := m.LoadScenario([]byte(cfg)); err != nil {
+			t.Fatalf("load picking machine: %v", err)
+		}
+		if err := m.Init(got); err != nil {
+			t.Fatalf("init picking machine: %v", err)
+		}
+		m.SetVar("slot", slot)
+		id, _ := m.GetStateID("Live")
+		if err := m.SpawnRegion(got, "quasar", id); err != nil {
+			t.Fatalf("spawn picking hold: %v", err)
+		}
+		*got = nil
+		return m, got
+	}
+
+	source, _ := build(t, 1)
+	live, got := build(t, 0)
+	actions, err := live.ImportReconciled(got, source.Export())
+	if err != nil {
+		t.Fatalf("reconcile changed pick: %v", err)
+	}
+	want := trace{
+		{typeID: event.EventDrainResume, owner: 11},
+		{typeID: event.EventDrainPause, owner: 22},
+	}
+	if !reflect.DeepEqual(*got, want) || actions != len(want) {
+		t.Fatalf("reconciled %d actions, events %+v, want %+v", actions, *got, want)
+	}
+}
+
 func TestStagingImportHasNoLocalSideEffects(t *testing.T) {
 	source, sourceTrace := newReconcileMachine(t)
 	spawnState(t, source, sourceTrace, "storm", "StormLive")

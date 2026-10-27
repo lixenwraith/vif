@@ -3,6 +3,10 @@ package std
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -10,11 +14,14 @@ import (
 )
 
 // EmitEventArgs holds pre-compiled event data for the EmitEvent action
-// Type identifies the event; Payload is the decoded struct (or nil)
+// Type identifies the event; Payload is the decoded struct (or nil). With a pick,
+// Picks holds the payload decoded once per entry in place of Payload.
 type EmitEventArgs struct {
 	Type        event.EventType
 	Payload     any
 	PayloadVars map[string]string // Field name -> variable name
+	Picks       []any             // The payload with each entry of the pick in its field
+	PickVar     string            // The variable whose value, modulo len(Picks), names the entry
 }
 
 // RegionControlArgs holds args for region control actions
@@ -128,7 +135,7 @@ type (
 
 // The keys of their own tables the keyed actions read
 var (
-	emitKeys   = []string{"event", "payload", "payload_vars"}
+	emitKeys   = []string{"event", "payload", "payload_vars", "pick"}
 	regionKeys = []string{"region"}
 	spawnKeys  = []string{"region", "initial_state"}
 )
@@ -144,12 +151,78 @@ func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateReso
 		if !ok {
 			return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
 		}
-		payload, err := event.AuthoredPayload(names, et, cfg.Payload)
-		if err != nil {
-			return nil, err
+		if cfg.Pick == nil {
+			payload, err := event.AuthoredPayload(names, et, cfg.Payload)
+			if err != nil {
+				return nil, err
+			}
+			return &EmitEventArgs{Type: et, Payload: payload, PayloadVars: cfg.PayloadVars}, nil
 		}
-		return &EmitEventArgs{Type: et, Payload: payload, PayloadVars: cfg.PayloadVars}, nil
+		// The payload decodes only with an entry in its field, which may be the key
+		// a sibling's names hang on, as a sub-type's on its species
+		picks, err := compilePick(names, et, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("pick: %w", err)
+		}
+		return &EmitEventArgs{Type: et, PayloadVars: cfg.PayloadVars, Picks: picks, PickVar: cfg.Pick.Var}, nil
 	}
+}
+
+// compilePick decodes the payload once per entry of the pick's list, the entry
+// written at its field, so each entry is checked as that field's value is: its
+// type, and its names where the field is an enum
+func compilePick(names *dialect.Names, et event.EventType, cfg fsm.ActionConfig) ([]any, error) {
+	p := cfg.Pick
+	switch {
+	case p.Field == "" || p.Var == "":
+		return nil, errors.New("requires 'field' and 'var'")
+	case len(p.From) == 0:
+		return nil, errors.New("requires 'from', a list of at least one entry")
+	}
+	if _, ok := cfg.PayloadVars[p.Field]; ok {
+		return nil, fmt.Errorf("payload_vars sets '%s' as well", p.Field)
+	}
+	path := strings.Split(p.Field, ".")
+	picks := make([]any, len(p.From))
+	for i, entry := range p.From {
+		raw, err := withField(cfg.Payload, path, entry)
+		if err != nil {
+			return nil, fmt.Errorf("field '%s': %w", p.Field, err)
+		}
+		if picks[i], err = event.AuthoredPayload(names, et, raw); err != nil {
+			return nil, fmt.Errorf("from[%d]: %w", i, err)
+		}
+	}
+	return picks, nil
+}
+
+// withField is raw, a payload as its document gives it, with value at path. The
+// tables and lists along the path are copied, a table made where raw has none, so
+// raw is left as it was.
+func withField(raw any, path []string, value any) (any, error) {
+	if len(path) == 0 {
+		return value, nil
+	}
+	switch v := raw.(type) {
+	case nil:
+		next, err := withField(nil, path[1:], value)
+		return map[string]any{path[0]: next}, err
+	case map[string]any:
+		next, err := withField(v[path[0]], path[1:], value)
+		out := maps.Clone(v)
+		out[path[0]] = next
+		return out, err
+	case []any:
+		i, err := strconv.Atoi(path[0])
+		if err != nil || i < 0 || i >= len(v) {
+			return nil, fmt.Errorf("'%s' is not an entry of a list of %d", path[0], len(v))
+		}
+		next, err := withField(v[i], path[1:], value)
+		out := slices.Clone(v)
+		out[i] = next
+		return out, err
+	}
+	return nil, fmt.Errorf("'%s' is under %T, not a table", path[0], raw)
 }
 
 // compileRandomVar refuses a draw that would repeat or has no range: without an index

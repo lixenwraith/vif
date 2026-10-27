@@ -65,10 +65,20 @@ type ActionConfig struct {
 	Event        string            `toml:"event,omitempty"`         // For EmitEvent: Event Name
 	Payload      any               `toml:"payload,omitempty"`       // For EmitEvent: Event Payload (map[string]any from parser)
 	PayloadVars  map[string]string `toml:"payload_vars,omitempty"`  // Field name -> variable name for runtime injection
+	Pick         *PickConfig       `toml:"pick,omitempty"`          // For EmitEvent: a payload field's value picked from a list
 	Region       string            `toml:"region,omitempty"`        // For region control actions
 	InitialState string            `toml:"initial_state,omitempty"` // For SpawnRegion
 	Guard        string            `toml:"guard,omitempty"`         // Conditional execution guard
 	GuardArgs    map[string]any    `toml:"guard_args,omitempty"`    // Guard parameters
 	DelayMs      int               `toml:"delay_ms,omitempty"`      // Delay before execution (ms)
 	Reconcile    bool              `toml:"reconcile,omitempty"`     // Replay an idempotent local lifecycle action across an imported state boundary
+}
+
+// PickConfig sets one payload field to an entry of From, the one Var's value names
+// modulo From's length. Field is a dot path, as a payload_vars key is, and each
+// entry is checked at load as that field's value.
+type PickConfig struct {
+	Field string `toml:"field"`
+	Var   string `toml:"var"`
+	From  []any  `toml:"from"`
 }

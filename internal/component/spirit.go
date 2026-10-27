@@ -59,4 +59,9 @@ type SpiritComponent struct {
 	Rune       rune
 	BaseColor  SpiritColor
 	BlinkColor SpiritColor
+
+	// Species is the species the spirit's arrival lands, on the footprint whose
+	// top-left is LandX, LandY; SpeciesNone lands nothing
+	Species      SpeciesType
+	LandX, LandY int
 }

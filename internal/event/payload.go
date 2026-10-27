@@ -909,13 +909,14 @@ type FuseQuasarRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// FuseEffect is how a fusion's sources reach the beam every fusion plays
+// FuseEffect is what plays a fusion and carries its spawn: the spirits its sources
+// fly in, or a beam over the footprint
 type FuseEffect int
 
 const (
 	FuseEffectNone        FuseEffect = iota // As FuseEffectSpirit
-	FuseEffectSpirit                        // Spirits converge into the beam
-	FuseEffectMaterialize                   // The beam alone
+	FuseEffectSpirit                        // Spirits fly the sources in, and the species lands as they arrive
+	FuseEffectMaterialize                   // A beam over the footprint, and the species lands as it ends
 )
 
 var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
@@ -1015,6 +1016,20 @@ type SpiritSpawnRequestPayload struct {
 	TargetY   int                   `toml:"target_y"`
 	Char      rune                  `toml:"char"`
 	BaseColor component.SpiritColor `toml:"base_color"`
+	// Species is the species the spirit's arrival lands, on the footprint whose
+	// top-left is LandX, LandY, so a drain pair's swarm rides its spirit;
+	// SpeciesNone lands nothing
+	Species component.SpeciesType `toml:"species"`
+	LandX   int                   `toml:"land_x"`
+	LandY   int                   `toml:"land_y"`
+}
+
+// SpiritArrivedPayload is the species a spirit's arrival lands and the top-left of
+// the footprint it lands on
+type SpiritArrivedPayload struct {
+	X       int                   `toml:"x"`
+	Y       int                   `toml:"y"`
+	Species component.SpeciesType `toml:"species"`
 }
 
 // --- Lightning ---
@@ -1366,9 +1381,9 @@ type MazeSpawnRequestPayload struct {
 // CaveStartPayload lays a cave across the map and scrolls it left at Speed columns a
 // second, at most one a tick; its rock follows cave.Config at the map's height. A
 // zero speed, gap or wavelength takes its parameter default, a zero seed draws one,
-// a zero mask blocks everything, and a zero visual draws stone. Art names stone art
-// presets (pattern.ParseArtPreset) the rock draws in place of the visual, one of
-// them drawn from the seed.
+// a zero mask blocks everything, and a zero visual draws stone. Art names the stone
+// art preset (pattern.ParseArtPreset) the rock draws in place of the visual; a
+// scenario that varies it from cave to cave picks it (EmitEvent's pick).
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`
@@ -1382,7 +1397,7 @@ type CaveStartPayload struct {
 	Octaves    int                        `toml:"octaves"`
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
-	Art        []string                   `toml:"art"`
+	Art        string                     `toml:"art"`
 }
 
 // --- Fadeout ---

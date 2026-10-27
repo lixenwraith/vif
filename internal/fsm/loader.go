@@ -297,22 +297,19 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 			}
 		}
 
+		// The variables a reconciled payload reads, a pick's among them, in name order
 		var reconcileVars []string
-		if cfg.Reconcile && len(cfg.PayloadVars) > 0 {
-			fields := make([]string, 0, len(cfg.PayloadVars))
-			for field := range cfg.PayloadVars {
-				fields = append(fields, field)
-			}
-			sort.Strings(fields)
-			seen := make(map[string]bool, len(cfg.PayloadVars))
-			for _, field := range fields {
-				name := cfg.PayloadVars[field]
-				if name != "" && !seen[name] {
-					seen[name] = true
+		if cfg.Reconcile {
+			for _, name := range cfg.PayloadVars {
+				if name != "" {
 					reconcileVars = append(reconcileVars, name)
 				}
 			}
-			sort.Strings(reconcileVars)
+			if cfg.Pick != nil {
+				reconcileVars = append(reconcileVars, cfg.Pick.Var)
+			}
+			slices.Sort(reconcileVars)
+			reconcileVars = slices.Compact(reconcileVars)
 		}
 
 		m.nextActionID++
@@ -434,6 +431,7 @@ func unreadKey(cfg ActionConfig, keys []string) string {
 		{"event", cfg.Event != ""},
 		{"payload", cfg.Payload != nil},
 		{"payload_vars", cfg.PayloadVars != nil},
+		{"pick", cfg.Pick != nil},
 		{"region", cfg.Region != ""},
 		{"initial_state", cfg.InitialState != ""},
 	} {

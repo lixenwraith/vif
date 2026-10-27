@@ -387,17 +387,17 @@ func TestACaveResumesFromItsRecordBetweenColumns(t *testing.T) {
 	}
 }
 
-// A cave with a list of stone art draws the one its seed picks in place of its visual,
-// with the cave's seed, and its record carries it; a name no preset has starts no cave
-func TestACaveWearsTheStoneArtItsSeedPicks(t *testing.T) {
-	art := []string{"strata", "moss", "masonry"}
-	for seed := range uint64(6) {
+// A cave draws the stone art it names in place of its visual, with the cave's seed,
+// whatever the seed, and its record carries it; a name no preset has starts no cave
+func TestACaveWearsTheStoneArtItNames(t *testing.T) {
+	for i, art := range []string{"strata", "moss", "masonry", "strata", "moss", "masonry"} {
+		seed := uint64(i + 1)
 		w, walls, _ := newCaveWorld(t, 30, 12)
-		walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: seed + 1, MinWall: 1, Art: art}})
-		preset, _ := pattern.ParseArtPreset(art[(seed+1)%3])
-		want := engine.RockLook{Visual: orStone(component.WallVisualConfig{}), Stone: true, Art: uint8(preset), Seed: seed + 1}
+		walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: seed, MinWall: 1, Art: art}})
+		preset, _ := pattern.ParseArtPreset(art)
+		want := engine.RockLook{Visual: orStone(component.WallVisualConfig{}), Stone: true, Art: uint8(preset), Seed: seed}
 		if rock := w.Positions.Rock(); rock == nil || rock.Look != want {
-			t.Fatalf("seed %d laid the cave %+v, want the look %+v", seed+1, walls.cave, want)
+			t.Fatalf("seed %d laid the cave %+v, want the look %+v", seed, walls.cave, want)
 		}
 		record, err := walls.SaveShared()
 		if err != nil {
@@ -408,7 +408,7 @@ func TestACaveWearsTheStoneArtItsSeedPicks(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := receiver.Positions.Rock().Look; got != want {
-			t.Fatalf("seed %d: the record laid the look %+v, want %+v", seed+1, got, want)
+			t.Fatalf("seed %d: the record laid the look %+v, want %+v", seed, got, want)
 		}
 	}
 
@@ -418,7 +418,7 @@ func TestACaveWearsTheStoneArtItsSeedPicks(t *testing.T) {
 		t.Fatalf("a cave with no art laid the look %+v, want %+v", got, want)
 	}
 	w, walls, _ = newCaveWorld(t, 30, 12)
-	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1, Art: []string{"strata", "granite"}}})
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1, Art: "granite"}})
 	if walls.cave.Active || w.Positions.Rock() != nil {
 		t.Fatalf("an unknown art started the cave %+v", walls.cave)
 	}

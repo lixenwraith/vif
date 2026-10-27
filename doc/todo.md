@@ -10,23 +10,22 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 ## Vanguard
 
-The side-scroller's first play test (2026-10-27) found it sound for a first
-iteration: its scroll reads as lag, its cave is narrow, its raiders are plain. The
-refinements lead, grouped by area so an agent can take a group, beside the items
-this task left and the navigation ones. Order: the machine's certain faults landed;
-the raider types' play test next; the position package last, in a session of its
-own. Until that lands, nothing here adds engine surface for rock or caves: a
-cave's shape stays in `pkg/cave` and its scenario, the rock behind
-`Positions.Rock()` and the wall system and renderers that read it, and a query a
-footprint needs is built by its caller from the existing ones, so the move inherits
-nothing new.
+The side-scroller's refinements after its first play test (2026-10-27) lead,
+grouped by area so an agent can take a group, beside the navigation items. The
+faster scroll, the jagged cave, the stone art, the raider types and the machine's
+certain faults have landed. Order now: the raider shortlist; the position package
+last, in a session of its own. Until that lands, nothing here adds engine surface
+for rock or caves: a cave's shape stays in `pkg/cave` and its scenario, the rock
+behind `Positions.Rock()` and the wall system and renderers that read it, and a
+query a footprint needs is built by its caller from the existing ones, so the move
+inherits nothing new.
 
 ### Raiders
 
 The prototype's look and the four raider types landed (invader, scarab, construct,
 storm eye: one program each over `RaiderStates` in vanguard's `macros.toml`, drawn
-at random by `RaidSpawn`, spawned directly with no fuse). What is left waits on a
-play test in the opened cave.
+at random by `RaidSpawn`, spawned directly with no fuse). The cave has opened;
+what is left is the shortlist and the numbers a play there settles.
 
 #### Play the raider types and settle the shortlist
 
@@ -52,7 +51,7 @@ the position work gives each footprint its own navigation grid.
 
 ### Gun and loot
 
-The gun path and the `U` this task added, moved from Combat.
+The gun path and vanguard's `U`, moved from Combat.
 
 #### Fan more than three gun lanes along a cardinal
 
@@ -103,22 +102,6 @@ landed. Open items elsewhere it meets:
 [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
 and [spawn placement](#audit-spawn-placement-across-the-species).
 
-#### Pick a payload value from a list
-
-- Priority: P0
-- Affected files: `internal/fsm/std` (`payload.go`, `args.go`, `action.go`),
-  `internal/event/payload.go`, `internal/system/behavior.go`
-  (`BehaviorVocabulary`), `internal/system/wall.go` (`startCave`),
-  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`, `RaidSpawnAs`)
-- Guide: [FSM reference: Event Emission](fsm-reference.md#event-emission)
-
-FSM variables are ints, so a value chosen from a list cannot be data: the cave's
-stone art is picked in Go (`startCave`, `Art[seed % len]`), and the raid takes an
-edge per raider type (`RaidSpawnAs`, invoked with `each`), the draw's range written
-beside the list. A list on `EmitEvent` for a payload field, its entry picked by an
-int from `payload_vars` and each entry resolved by the field's names as a single
-value is, would serve both.
-
 #### Give a program an entrance of its own through the fuse
 
 - Priority: P1
@@ -144,8 +127,9 @@ entrances to grow for machines (2026-10-27). What a program would declare:
   ends, since rock scrolls under a beam as it does under a teleport.
 
 The beam is Shared, so the entering state's clock and probe must run alike on every
-instance and a capture mid-beam must restore them (`snapshot.Schema`); the drains'
-fusions stay as they are.
+instance and a capture mid-beam must restore them (`snapshot.Schema`). The entrance
+stays a beam, as a spawn out of nothing's is, while drains that fuse fly in as
+spirits (Lixen, 2026-10-27); the drains' fusions stay as they are.
 
 #### Count a group of programs
 
@@ -1045,18 +1029,19 @@ Its area pulse is the hosted disruptor's shape; the red circle's turret mount is
 
 ## Species
 
-### Pace fusions as their own timers did
+### Pace a quasar fusion as its own timer did
 
 - Priority: P3
 - Affected files: `internal/component/materialize.go` (`MaterializeStyles`),
   `internal/parameter/effect.go`, `internal/system/fuse.go` (`fuseInto`)
 
-A fusion's swarm or quasar lands as its beam ends, a whole spawn beam, where the
-timers the beams replaced landed a drain pair's swarm at half of it and a quasar a
-little after. Over a session sweep the longer wait cost quasar kills, the one gap
-beyond the noise. A fusion row in `MaterializeStyles` with a shorter fill, hold and
-recede would give the old pacing back, spawn and visual still ending on one tick;
-the session sweep decides it.
+A quasar fusion's quasar lands as its beam ends, a whole spawn beam, where the
+timer the beam replaced landed it a little after half of it. A session sweep with
+both fusions waiting a whole beam cost quasar kills, the one gap beyond the noise;
+a drain pair's swarm lands at half a second again, as its spirits arrive, so the
+sweep decides whether the quasar's wait alone still costs them. A fusion row in
+`MaterializeStyles` with a shorter fill, hold and recede would give the old pacing
+back, spawn and visual still ending on one tick.
 
 ### Show a species' machine state in a debug overlay
 

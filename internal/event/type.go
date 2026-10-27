@@ -435,6 +435,8 @@ const (
 	EventSpiritSpawnRequest
 	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit entities
 	EventSpiritDespawnRequest
+	// EventSpiritArrived (SpiritArrivedPayload) [stamped] signals a spirit naming a species reached its target, which lands the species
+	EventSpiritArrived
 
 	// --- Lightning ---
 
