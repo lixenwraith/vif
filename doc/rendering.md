@@ -348,8 +348,10 @@ a blocked tracer drains to its stop point.
 
 The landing marker is one cell, the centre of the footprint a charge or a beam
 lands on, cycling white, red and pink every `visual.LandingBlinkStep` from the
-lock until the landing. It draws over the player's fields, so a shield's rim never
-hides it. Truecolor lights its background alone, so a glyph under it still reads;
+lock until the landing. The charge and teleport lines run between the footprints'
+centres, so both end on it: a charge pulse's head arrives on the pulse's last tick,
+since `Machine.Elapsed` moves a tick at a time. It draws over the player's fields,
+so a shield's rim never hides it. Truecolor lights its background alone, so a glyph under it still reads;
 256-color draws a foreground block, since eight backgrounds cannot show its bright
 entries.
 

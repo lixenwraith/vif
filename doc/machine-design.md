@@ -295,9 +295,10 @@ its edges, then what its host does around the step.
   landing a teleport or arrival probe found and the charge's wall hit. `Start` enters
   Chase with the full interval once the composite is built, before
   `EventSpeciesCreated`.
-- The charge line reads `Machine.Elapsed`, the teleport line `Machine.Progress()`.
-  The landing marker blinks on the lock's cell through Lock and Charge and on the
-  landing through Teleport, its colour cycle restarting at each entry.
+- The charge line reads `Machine.Elapsed`, the teleport line `Machine.Progress()`;
+  both run from the body's centre to the landing footprint's, ending on the landing
+  marker. It blinks on the lock's cell through Lock and Charge and on the landing
+  through Teleport, its colour cycle restarting at each entry.
 
 ### 4.2 Quasar
 

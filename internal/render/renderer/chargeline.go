@@ -54,15 +54,12 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 			return true
 		}
 
-		body := vmath.Area{
-			X: headerPos.X - parameter.SwarmHeaderOffsetX, Y: headerPos.Y - parameter.SwarmHeaderOffsetY,
-			Width: parameter.SwarmWidth, Height: parameter.SwarmHeight,
-		}
 		r.renderPulses(ctx, buf,
-			headerPos.X, headerPos.Y,
-			swarmComp.LockedTargetX, swarmComp.LockedTargetY,
-			body, swarmComp.Machine.Elapsed,
-			parameter.SwarmChargeDuration, parameter.SwarmChargeLineShowDelay)
+			footprintAt(headerPos.X, headerPos.Y, parameter.SwarmWidth, parameter.SwarmHeight,
+				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
+			footprintAt(swarmComp.LockedTargetX, swarmComp.LockedTargetY, parameter.SwarmWidth, parameter.SwarmHeight,
+				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
+			swarmComp.Machine.Elapsed, parameter.SwarmChargeDuration, parameter.SwarmChargeLineShowDelay)
 		return true
 	})
 
@@ -79,18 +76,20 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 		}
 		p := &prototypes[b.Program]
 		pulse := time.Duration(float64(b.Machine.Duration) * parameter.BehaviorChargeLinePulseShare)
-		body := vmath.Area{X: pos.X - p.HeaderX, Y: pos.Y - p.HeaderY, Width: p.Width, Height: p.Height}
-		r.renderPulses(ctx, buf, pos.X, pos.Y, b.TargetX, b.TargetY, body, b.Machine.Elapsed,
-			pulse, b.Machine.Duration-parameter.SwarmChargeLinePulseCount*pulse)
+		r.renderPulses(ctx, buf,
+			footprintAt(pos.X, pos.Y, p.Width, p.Height, p.HeaderX, p.HeaderY),
+			footprintAt(b.TargetX, b.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY),
+			b.Machine.Elapsed, pulse, b.Machine.Duration-parameter.SwarmChargeLinePulseCount*pulse)
 		return true
 	})
 }
 
 // renderPulses draws the pulse due elapsed into a lock: SwarmChargeLinePulseCount
-// pulses of pulse each from showDelay on, the later one brighter
+// pulses of pulse each from showDelay on, the later one brighter, from the body's
+// centre to the landing's, where the landing marker blinks
 func (r *ChargeLineRenderer) renderPulses(
 	ctx render.RenderContext, buf *render.RenderBuffer,
-	x0, y0, x1, y1 int, body vmath.Area,
+	body, landing vmath.Area,
 	elapsed, pulse, showDelay time.Duration,
 ) {
 	if pulse <= 0 {
@@ -102,7 +101,10 @@ func (r *ChargeLineRenderer) renderPulses(
 	}
 
 	pulseIndex := int(pulseElapsed / pulse)
-	headT := float64(pulseElapsed%pulse) / float64(pulse)
+	// Elapsed moves a tick at a time, so the head reaches the landing on a pulse's
+	// last tick rather than at the instant after it, which no frame shows
+	span := max(pulse-parameter.GameUpdateInterval, 1)
+	headT := min(float64(pulseElapsed%pulse)/float64(span), 1)
 
 	// Escalating alpha per pulse
 	alpha := parameter.SwarmChargeLineAlpha1
@@ -110,7 +112,8 @@ func (r *ChargeLineRenderer) renderPulses(
 		alpha = parameter.SwarmChargeLineAlpha2
 	}
 
-	r.tracePulse(ctx, buf, x0, y0, x1, y1, body, headT, alpha)
+	from, to := body.Center(), landing.Center()
+	r.tracePulse(ctx, buf, from.X, from.Y, to.X, to.Y, body, headT, alpha)
 }
 
 // tracePulse draws a single pulse via Bresenham, skipping cells inside the body
