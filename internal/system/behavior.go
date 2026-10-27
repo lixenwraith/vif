@@ -252,10 +252,11 @@ func (s *BehaviorSystem) fill(header core.Entity, b *component.BehaviorComponent
 }
 
 // spawn builds program i's composite with its header at the cell, or the nearest
-// place its footprint fits
+// place its footprint fits, searched over the whole map as a fuse's beam is: a
+// scenario names a cell blind to the walls, a cave's rock among them
 func (s *BehaviorSystem) spawn(i, x, y int) {
 	p := &s.set.Prototypes()[i]
-	left, top, found := s.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+	left, top, found := s.world.Positions.FindFreeAreaSpiral(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
 	if !found {
 		s.programs[i].lifecycle.spawnFailures.Add(1)
 		return
@@ -388,7 +389,10 @@ func (s *BehaviorSystem) terminate(header core.Entity) {
 }
 
 // integrate is every tick's movement unless Freeze ran: the footprint bounces off
-// walls and the map edge, and the members follow the header
+// walls and the map edge, and the members follow the header. The integrator's
+// maxima are exclusive, so the header's last column and row are one past them: a
+// footprint the spawn put against the right edge or the bottom stays where it
+// stands, and the edge's reflection never moves it into rock the walls refuse.
 func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 	pos, ok := s.world.Positions.GetPosition(c.entity)
 	if c.frozen || !ok {
@@ -402,8 +406,8 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 		&c.kinetic.Kinetic,
 		c.dtSec,
 		p.HeaderX, p.HeaderY,
-		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX),
-		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY),
+		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX)+1,
+		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY)+1,
 		parameter.BehaviorRestitution,
 		wallCheck,
 	)
