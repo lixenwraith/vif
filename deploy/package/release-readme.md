@@ -148,16 +148,17 @@ Nightly builds of this binary are also the container image
 <!-- end -->
 <!-- if client windows -->
 The binary carries the main scenario and a tutorial typing corpus. The `td`,
-`simon`, `blank` and `warden` scenarios, the full corpus, wall images and editable
-copies of the keymap, bot graphs and `vif.toml` are the wad,
+`simon`, `blank`, `warden` and `vanguard` scenarios, the full corpus, wall images
+and editable copies of the keymap, bot graphs and `vif.toml` are the wad,
 `vif-@LABEL@-wad.tar.gz` in the same release. It unpacks as the `vif/`
 configuration directory:
 
 <!-- end -->
 <!-- if headless -->
-The binary carries the main scenario. The `td`, `simon`, `blank` and `warden`
-scenarios and their wall images are in the wad, `vif-@LABEL@-wad.tar.gz` in the
-same release, which unpacks as the `vif/` configuration directory:
+The binary carries the main scenario. The `td`, `simon`, `blank`, `warden` and
+`vanguard` scenarios and their wall images are in the wad,
+`vif-@LABEL@-wad.tar.gz` in the same release, which unpacks as the `vif/`
+configuration directory:
 
 <!-- end -->
 <!-- if client headless -->

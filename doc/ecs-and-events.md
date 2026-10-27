@@ -448,7 +448,7 @@ The catalog covers these domains:
 | Audio and music | sound requests, mute state, music start/stop, beat and melody patterns, tempo, intensity, seed and swing |
 | FSM and meta | region control, system commands, cycle damage multiplier, overlays, status messages, debug views |
 | Player and input | cursor lifecycle/placement, character input, deletion, key capture and captured-input presses, mode, ping, per-cursor energy, heat, boost, shield and weapons, nugget and gold jumps |
-| World structure | walls, maze, composites, gateways, towers, buttons, navigation targets and route graphs, wind and glyph drift |
+| World structure | walls, maze, the scrolling cave, composites, gateways, towers, buttons, navigation targets and route graphs, wind and glyph drift |
 | Species and combat | spawn and cancel requests, creation, death, fusion and spirits, attacks and heals, explosions, projectiles, loot, genetics |
 | Visual effects | flash, fadeout, splash, particles, lightning, materialize, markers, motion markers, grayout and strobe |
 | Multiplayer network | connect/disconnect, participant join/departure, playout lead, cursor state sync, session state |
