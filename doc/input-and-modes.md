@@ -245,7 +245,8 @@ entries. These are session interaction structures, not persisted editor files.
 
 Macros record semantic intents after parsing, so they replay the same actions
 even when they contain multi-key motions. Command and Overlay mode stay out of a
-recording, the `:`, menu or help key that enters them included: playback waits in
+recording, the `:`, menu or help key that enters them included, and so does an
+overlay's pointer, which Search mode hands the overlay too: playback waits in
 both, so a macro replays Normal, Insert, Visual and Search actions only.
 
 | Sequence | Behavior |
@@ -280,9 +281,11 @@ When terminal mouse reporting is enabled:
 | Left press | Move the cursor to the translated map cell and fire main. |
 | Left or right press, or a finger, on a button | Press the button's key (§1), held until that button or finger lets go; never moves or fires. |
 | Wheel over a button | Press the button's key for one notch, released at once (§1); never moves. |
-| Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on Android and in the browser. The hold, and the menu's rows, take the pointer with mouse input disabled too, so a phone can enable it again. |
-| Left release | End held fire; release a held button. Passed on from every mode. |
-| Left press in the configuration menu | Select and act on its rows, focus a form field, or go back from outside its window ([Config menu](config-menu.md#navigation)). |
+| Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on Android and in the browser. The hold, and every overlay, take the pointer with mouse input disabled too, so a phone can enable it again. |
+| Left release | End held fire; release a held button or scrollbar thumb. Passed on from every mode. |
+| Left press in an overlay | Outside its window, act as Escape: the configuration menu goes back a level, the telemetry filter's edit ends, any other overlay closes. On the scrollbar, move the thumb's middle to the press, or take hold where it lands on the thumb. In the configuration menu, select and act on its rows or focus a form field ([Config menu](config-menu.md#navigation)); in telemetry, select a card, or pin the one selected as Enter does. |
+| Left drag in an overlay | Carry the scrollbar thumb a press holds, keeping the row it holds under the pointer. |
+| Wheel in an overlay | Scroll its view `OverlayWheelRows` rows a notch, wherever the pointer is; a selected row or card stays selected. |
 | Left drag | Continue moving the cursor. A finger moving while down is this drag on a phone, one per cell. |
 | Held left | Repeat main fire at the shared repeat interval. |
 | Right press/hold | Fire/repeat special without moving first, off a button. |
@@ -308,6 +311,12 @@ short toggle for free mouse motion, on by default. The parser passes pointer inp
 on only in Normal, Visual and Insert, and the router drops it while the mouse is
 disabled or input is suspended (paused, Command or Overlay); a release still ends
 the held fire of a press made before, and a held button ends as play stops (§1).
+An overlay's own left press, left drag and wheel are separate intents
+(`IntentOverlayPoint`, `IntentOverlayDrag`, `IntentOverlayWheel`) that the router
+resolves against the window it draws, through the same `OverlayGeometry` and
+`tui.ScrollThumb` the renderer draws with, so a press lands on the row, card or
+thumb under it. A wheel tilted left or right, and the side buttons, report as
+their own buttons and do nothing in a run.
 
 Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
 cycles both weapons → off → main only → both weapons. `:auto on`, `:auto off`,

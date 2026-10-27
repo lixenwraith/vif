@@ -222,9 +222,16 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 			}
 		}
 	case ModeOverlay, ModeSearch:
-		// The router resolves the press against the menu it draws, if one is open
-		if ev.MouseBtn == terminal.MouseBtnLeft && ev.MouseAction == terminal.MouseActionPress {
+		// The router resolves these against the overlay it draws, if one is open
+		switch {
+		case ev.MouseBtn == terminal.MouseBtnLeft && ev.MouseAction == terminal.MouseActionPress:
 			return &Intent{Type: IntentOverlayPoint, X: ev.MouseX, Y: ev.MouseY}
+		case ev.MouseBtn == terminal.MouseBtnLeft && ev.MouseAction == terminal.MouseActionDrag:
+			return &Intent{Type: IntentOverlayDrag, X: ev.MouseX, Y: ev.MouseY}
+		case ev.MouseBtn == terminal.MouseBtnWheelUp:
+			return &Intent{Type: IntentOverlayWheel, X: ev.MouseX, Y: ev.MouseY, ScrollDir: ScrollUp}
+		case ev.MouseBtn == terminal.MouseBtnWheelDown:
+			return &Intent{Type: IntentOverlayWheel, X: ev.MouseX, Y: ev.MouseY, ScrollDir: ScrollDown}
 		}
 	}
 	return nil

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"testing"
+	"unsafe"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -70,6 +72,41 @@ func TestAPixelMapsToTheCellDrawnUnderIt(t *testing.T) {
 		if x, y := w.cellAt(c.px, c.py); x != c.x || y != c.y {
 			t.Errorf("pixel %d,%d is cell %d,%d, want %d,%d", c.px, c.py, x, y, c.x, c.y)
 		}
+	}
+}
+
+// TestAButtonReportsWhatATerminalReports: X's buttons 1 to 9 become the buttons SGR
+// mouse reporting names; a wheel step reports its press alone, any other button
+// its press and its release
+func TestAButtonReportsWhatATerminalReports(t *testing.T) {
+	atlas, err := glyph.Parse([]byte("[font]\nwidth = 4\nheight = 8\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := newWindow(Config{Atlas: atlas, Cols: 10, Rows: 5, Scale: 1})
+	w.raster.Flush(make([]terminal.Cell, 10*5), 10, 5)
+	w.winW, w.winH = 10*4, 5*8
+	w.pointer.Store(pointerButtons)
+	event := func(kind, button int32) *xEvent {
+		var ev xEvent
+		*(*int32)(unsafe.Pointer(&ev)) = kind
+		*(*int32)(unsafe.Add(unsafe.Pointer(&ev), 84)) = button
+		return &ev
+	}
+	wheel := []terminal.MouseButton{terminal.MouseBtnWheelUp, terminal.MouseBtnWheelDown, terminal.MouseBtnWheelLeft, terminal.MouseBtnWheelRight}
+	for i, want := range []terminal.MouseButton{terminal.MouseBtnLeft, terminal.MouseBtnMiddle, terminal.MouseBtnRight,
+		wheel[0], wheel[1], wheel[2], wheel[3], terminal.MouseBtnBack, terminal.MouseBtnForward} {
+		button := int32(i + 1)
+		if got, ok := w.mouseEvent(event(xButtonPress, button)); !ok || got.MouseBtn != want || got.MouseAction != terminal.MouseActionPress {
+			t.Errorf("button %d pressed: %v %v %v, want a press of %v", button, got.MouseBtn, got.MouseAction, ok, want)
+		}
+		step := slices.Contains(wheel, want)
+		if got, ok := w.mouseEvent(event(xButtonRelease, button)); ok == step || ok && got.MouseAction != terminal.MouseActionRelease {
+			t.Errorf("button %d released: %v %v, a wheel step %v", button, got.MouseAction, ok, step)
+		}
+	}
+	if ev, ok := w.mouseEvent(event(xButtonPress, 10)); ok {
+		t.Errorf("button 10 reported %+v", ev)
 	}
 }
 

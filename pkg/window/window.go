@@ -467,12 +467,10 @@ func (w *Window) mouseEvent(ev *xEvent) (terminal.Event, bool) {
 	if button < 1 || int(button) > len(xButtons) {
 		return m, false
 	}
-	if m.MouseBtn = xButtons[button-1]; m.MouseBtn == terminal.MouseBtnNone {
-		return m, false
-	}
+	m.MouseBtn = xButtons[button-1]
 	m.MouseAction = terminal.MouseActionPress
 	if kind == xButtonRelease {
-		if m.MouseBtn == terminal.MouseBtnWheelUp || m.MouseBtn == terminal.MouseBtnWheelDown {
+		if button >= 4 && button <= 7 {
 			return m, false // a wheel step is its press
 		}
 		m.MouseAction = terminal.MouseActionRelease
@@ -480,10 +478,10 @@ func (w *Window) mouseEvent(ev *xEvent) (terminal.Event, bool) {
 	return m, true
 }
 
-// xButtons is X's button numbering from 1: left, middle, right, the wheel, then
-// two horizontal-scroll buttons a terminal does not report and back and forward
+// xButtons is X's button numbering from 1: left, middle, right, the wheel up,
+// down, left and right, then back and forward
 var xButtons = []terminal.MouseButton{terminal.MouseBtnLeft, terminal.MouseBtnMiddle, terminal.MouseBtnRight,
-	terminal.MouseBtnWheelUp, terminal.MouseBtnWheelDown, terminal.MouseBtnNone, terminal.MouseBtnNone,
+	terminal.MouseBtnWheelUp, terminal.MouseBtnWheelDown, terminal.MouseBtnWheelLeft, terminal.MouseBtnWheelRight,
 	terminal.MouseBtnBack, terminal.MouseBtnForward}
 
 // cellAt is the cell under a window pixel, the frame being drawn centred; a pixel

@@ -110,7 +110,7 @@ type OverlayRenderer struct {
 	doc     *tui.DocState
 	layoutW int
 	layoutH int
-	selKey  string // Last selection scrolled into view
+	selKey  string // Last selection scrolled into view, a card's or a menu row's
 
 	// The about window's mark, at the frame's cell aspect, on a console in its entries
 	logo    logoCells
@@ -215,6 +215,7 @@ func (r *OverlayRenderer) syncLayout(g engine.OverlayGeometry, data *core.Overla
 	}
 	r.content, r.layoutW, r.layoutH = data, g.ContentW, g.ContentH
 	r.cards = data.Cards()
+	r.selKey = "" // Force the selection back into view after a relayout
 
 	switch data.Layout {
 	case core.OverlayLayoutMenu:
@@ -272,8 +273,12 @@ func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeom
 	selected = max(selected, 0)
 	listH := g.ListH()
 	scroll := tui.NewScrollState(len(menu.Rows), listH)
-	scroll.Offset = r.gameCtx.GetOverlayScroll()
-	scroll.Select(selected)
+	scroll.ScrollTo(r.gameCtx.GetOverlayScroll())
+	// Scroll only when the selection moved, so the wheel and the scrollbar stay free
+	if key := menu.Rows[selected].Key; key != r.selKey {
+		r.selKey = key
+		scroll.EnsureVisible(selected)
+	}
 	r.gameCtx.SetOverlayScroll(scroll.Offset)
 
 	items := make([]tui.ListItem, len(menu.Rows))
@@ -347,8 +352,6 @@ func (r *OverlayRenderer) buildCards(g engine.OverlayGeometry) {
 		refs = append(refs, engine.OverlayCardRef{Key: l.Item.Key, X: l.X, Y: l.Y, W: l.W, H: l.H})
 	}
 	r.gameCtx.SetOverlayCards(refs)
-
-	r.selKey = "" // Force the selection back into view after a relayout
 }
 
 // buildDoc flattens cards into document blocks and publishes the row count

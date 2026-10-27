@@ -70,12 +70,88 @@ func (r *Router) handleOverlayPageScroll(direction int) bool {
 
 // scrollOverlay applies a row delta clamped to the rendered content height
 func (r *Router) scrollOverlay(delta int) {
-	if delta == 0 {
+	visible, total := r.overlayView()
+	if delta == 0 || visible == 0 {
 		return
 	}
+	r.ctx.SetOverlayScroll(min(max(r.ctx.GetOverlayScroll()+delta, 0), max(total-visible, 0)))
+}
+
+// overlayView is the rows the overlay shows and the rows it scrolls through, as
+// its scrollbar is drawn; none for the about window or a menu's form
+func (r *Router) overlayView() (visible, total int) {
+	c := r.ctx.GetOverlayContent()
+	switch {
+	case c == nil || c.Layout == core.OverlayLayoutAbout:
+		return 0, 0
+	case c.Layout == core.OverlayLayoutMenu:
+		if c.Menu == nil || c.Menu.Form != nil {
+			return 0, 0
+		}
+		return r.ctx.OverlayGeometry().ListH(), len(c.Menu.Rows)
+	}
+	return r.ctx.OverlayGeometry().ContentH, r.ctx.GetOverlayContentH()
+}
+
+// handleOverlayPoint is a left press on an overlay. Outside its window it acts as
+// Escape; right of the content it takes hold of the scrollbar's thumb; in the menu
+// it drives the rows, and on a telemetry card it selects it, or pins the one selected.
+func (r *Router) handleOverlayPoint(intent *input.Intent) bool {
+	c := r.ctx.GetOverlayContent()
+	if c == nil {
+		return true
+	}
 	g := r.ctx.OverlayGeometry()
-	maxOffset := max(r.ctx.GetOverlayContentH()-g.ContentH, 0)
-	r.ctx.SetOverlayScroll(min(max(r.ctx.GetOverlayScroll()+delta, 0), maxOffset))
+	x, y := intent.X-g.X, intent.Y-g.Y
+	if x < 0 || y < 0 || x >= g.W || y >= g.H {
+		return r.handleEscape()
+	}
+	if visible, total := r.overlayView(); visible > 0 && g.ScrollW > 0 && x >= g.ContentX+g.ContentW &&
+		y >= g.ContentY && y < g.ContentY+visible {
+		r.ctx.SetOverlayScroll(r.overlayBar.Press(y-g.ContentY, visible, r.ctx.GetOverlayScroll(), visible, total))
+		return true
+	}
+	x, y = x-g.ContentX, y-g.ContentY
+	switch {
+	case c.Layout == core.OverlayLayoutMenu:
+		return r.pointConfigMenu(x, y)
+	case c.Layout == core.OverlayLayoutCards && x >= 0 && y >= 0 && x < g.ContentW && y < g.ContentH:
+		r.pointOverlayCard(x, y+r.ctx.GetOverlayScroll())
+	}
+	return true
+}
+
+// pointOverlayCard selects the card at a content cell, or pins it, as Enter does,
+// when it is the one selected
+func (r *Router) pointOverlayCard(x, y int) {
+	for _, card := range r.ctx.OverlayCards() {
+		if x < card.X || y < card.Y || x >= card.X+card.W || y >= card.Y+card.H {
+			continue
+		}
+		if card.Key == r.ctx.GetOverlaySelection() {
+			r.handleOverlayActivate()
+			return
+		}
+		r.ctx.SetOverlaySelection(card.Key)
+		return
+	}
+}
+
+// handleOverlayDrag moves the scrollbar's thumb a press holds
+func (r *Router) handleOverlayDrag(intent *input.Intent) bool {
+	if r.overlayBar.Active {
+		g := r.ctx.OverlayGeometry()
+		visible, total := r.overlayView()
+		r.ctx.SetOverlayScroll(r.overlayBar.Drag(intent.Y-g.Y-g.ContentY, visible, r.ctx.GetOverlayScroll(), visible, total))
+	}
+	return true
+}
+
+// handleOverlayWheel scrolls the overlay's view wherever the pointer is; a
+// selection stays as it is
+func (r *Router) handleOverlayWheel(intent *input.Intent) bool {
+	r.scrollOverlay(int(intent.ScrollDir) * parameter.OverlayWheelRows)
+	return true
 }
 
 // handleOverlayActivate pins or unpins the selected card and requests a rebuild

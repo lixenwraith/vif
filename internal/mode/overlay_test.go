@@ -226,6 +226,111 @@ func TestAPressDrivesTheMenu(t *testing.T) {
 	}
 }
 
+// TestThePointerScrollsAnOverlay: a wheel step scrolls an overlay's view by
+// OverlayWheelRows; a press on the scrollbar's track jumps the thumb there and a
+// drag carries it until the release; a menu's selection stays as its view moves,
+// and a press on a row picks the row the view shows there.
+func TestThePointerScrollsAnOverlay(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	g := ctx.OverlayGeometry()
+	mouse := func(btn terminal.MouseButton, action terminal.MouseAction, x, y int) {
+		t.Helper()
+		ev := terminal.Event{Type: terminal.EventMouse, MouseBtn: btn, MouseAction: action, MouseX: x, MouseY: y}
+		if intent := machine.Process(ev); intent != nil {
+			r.Handle(intent)
+		}
+	}
+	bar, top, foot := g.X+g.ScrollX, g.Y+g.ContentY, g.Y+g.ContentY+g.ContentH-1
+
+	r.handleHelp()
+	ctx.SetOverlayContent(&core.OverlayContent{Title: core.OverlayHelpTitle, Layout: core.OverlayLayoutDoc})
+	ctx.SetOverlayContentH(10 * g.ContentH) // as the renderer lays it out
+	mouse(terminal.MouseBtnWheelDown, terminal.MouseActionPress, 0, 0)
+	if got := ctx.GetOverlayScroll(); got != parameter.OverlayWheelRows {
+		t.Fatalf("a wheel step scrolled help to %d, want %d", got, parameter.OverlayWheelRows)
+	}
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, bar, foot)
+	if got, want := ctx.GetOverlayScroll(), 9*g.ContentH; got != want {
+		t.Fatalf("a press at the track's foot scrolled help to %d, want its end %d", got, want)
+	}
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionDrag, bar, top)
+	if got := ctx.GetOverlayScroll(); got != 0 {
+		t.Fatalf("the thumb dragged to the track's top scrolled help to %d", got)
+	}
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionRelease, bar, top)
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionDrag, bar, foot)
+	if got := ctx.GetOverlayScroll(); got != 0 {
+		t.Fatalf("a drag after the release scrolled help to %d", got)
+	}
+
+	r.handleConfigMenu()
+	showConfigMenu(ctx, "diagnostics")
+	m := configMenu(ctx)
+	if len(m.Rows) <= g.ListH()+parameter.OverlayWheelRows {
+		t.Fatalf("the page's %d rows fit a list of %d", len(m.Rows), g.ListH())
+	}
+	selected := ctx.GetOverlaySelection()
+	mouse(terminal.MouseBtnWheelDown, terminal.MouseActionPress, 0, 0)
+	if ctx.GetOverlayScroll() != parameter.OverlayWheelRows || ctx.GetOverlaySelection() != selected {
+		t.Fatalf("a wheel step in the menu: view at %d, selection %q", ctx.GetOverlayScroll(), ctx.GetOverlaySelection())
+	}
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, g.X+g.ContentX, top)
+	if got, want := ctx.GetOverlaySelection(), m.Rows[parameter.OverlayWheelRows].Key; got != want {
+		t.Fatalf("a press on the view's first row selected %q, want %q", got, want)
+	}
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionRelease, g.X+g.ContentX, top)
+	mouse(terminal.MouseBtnLeft, terminal.MouseActionPress, bar, top+g.ListH()-1)
+	if got, want := ctx.GetOverlayScroll(), len(m.Rows)-g.ListH(); got != want {
+		t.Fatalf("a press at the foot of the menu's track scrolled it to %d, want %d", got, want)
+	}
+}
+
+// TestAPressPicksACardAndOutsideActsAsEscape: in telemetry a press selects the card
+// under it and pins the card already selected, as Enter does; a press in a row
+// below the cards in view picks nothing, and one outside the window is Escape.
+func TestAPressPicksACardAndOutsideActsAsEscape(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	g := ctx.OverlayGeometry()
+	press := func(x, y int) {
+		t.Helper()
+		ev := terminal.Event{Type: terminal.EventMouse, MouseBtn: terminal.MouseBtnLeft, MouseAction: terminal.MouseActionPress, MouseX: x, MouseY: y}
+		if intent := machine.Process(ev); intent != nil {
+			r.Handle(intent)
+		}
+	}
+	r.enterOverlay()
+	ExecuteCommand(ctx, "t")
+	ctx.SetOverlayContent(&core.OverlayContent{Title: "TELEMETRY", Items: []core.OverlayItem{
+		core.OverlayCard{Key: "a", Title: "A"}, core.OverlayCard{Key: "b", Title: "B"}, core.OverlayCard{Key: "c", Title: "C"},
+	}})
+	// As the renderer lays them out: c starts below the rows in view
+	ctx.SetOverlayCards([]engine.OverlayCardRef{{Key: "a", W: 20, H: 4}, {Key: "b", X: 22, W: 20, H: 4}, {Key: "c", Y: g.ContentH, W: 20, H: 4}})
+	left, row := g.X+g.ContentX, g.Y+g.ContentY
+
+	press(left+25, row+1)
+	if got := ctx.GetOverlaySelection(); got != "b" || len(ctx.OverlayPins()) != 0 {
+		t.Fatalf("a press on a card: selection %q, pins %q", got, ctx.OverlayPins())
+	}
+	press(left+25, row+3)
+	if got := ctx.OverlayPins(); !slices.Equal(got, []string{"b"}) {
+		t.Fatalf("a press on the selected card pinned %q", got)
+	}
+	press(left+1, g.Y+g.H-2)
+	if got := ctx.GetOverlaySelection(); got != "b" || !ctx.IsOverlayMode() {
+		t.Fatalf("a press on the hint row: selection %q, overlay %v", got, ctx.IsOverlayMode())
+	}
+	press(g.X+g.W, row)
+	if ctx.IsOverlayMode() {
+		t.Fatal("a press outside the window did not close telemetry")
+	}
+}
+
 func TestConfigFormsPreserveEditsOnFailureAndCancelWithoutSubmitting(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)

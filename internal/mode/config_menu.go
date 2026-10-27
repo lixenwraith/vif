@@ -495,20 +495,13 @@ func configOptionFor(ctx *engine.GameContext, page, key string) (configOption, b
 	return configOption{}, false
 }
 
-// pointConfigMenu is a left press on the menu. Outside its window it goes back as
-// Escape does; on a form field it focuses it; on a row it selects it, and on the
-// row already selected it acts as Enter does, or as Left on a setting's left half.
-func (r *Router) pointConfigMenu(intent *input.Intent) bool {
+// pointConfigMenu is a left press on a body cell of the menu: on a form field it
+// focuses it; on a row it selects it, and on the row already selected it acts as
+// Enter does, or as Left on a setting's left half.
+func (r *Router) pointConfigMenu(x, y int) bool {
 	m := configMenu(r.ctx)
-	if m == nil {
-		return true
-	}
 	g := r.ctx.OverlayGeometry()
-	if intent.X < g.X || intent.Y < g.Y || intent.X >= g.X+g.W || intent.Y >= g.Y+g.H {
-		return r.configMenuBack()
-	}
-	x, y := intent.X-g.X-g.ContentX, intent.Y-g.Y-g.ContentY
-	if x < 0 || x >= g.ContentW || y < 0 || y >= g.ListH() {
+	if m == nil || x < 0 || x >= g.ContentW || y < 0 || y >= g.ListH() {
 		return true
 	}
 	if f := r.configForm; f != nil {

@@ -4,6 +4,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/lixenwraith/terminal/tui"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -89,6 +90,9 @@ type Router struct {
 	menuHold   bool
 	menuHoldAt [2]int
 	menuSince  time.Time // [wall]
+
+	// overlayBar is the overlay's scrollbar thumb a left press holds until its release
+	overlayBar tui.ScrollDrag
 
 	// holds are the captured keys and buttons this instance's presses hold down; a
 	// button's release goes to the button pressed, wherever the pointer lets go
@@ -205,6 +209,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		switch intent.Type {
 		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
 			r.mouseLeftHeld, r.menuHold = false, false
+			r.overlayBar.Release()
 			r.releasePointer(false, intent.Type == input.IntentMouseLeftDown)
 		case input.IntentMouseRightDown, input.IntentMouseRightUp:
 			r.mouseRightHeld = false
@@ -343,7 +348,11 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	case input.IntentOverlayFilter:
 		return r.handleOverlayFilter()
 	case input.IntentOverlayPoint:
-		return r.pointConfigMenu(intent)
+		return r.handleOverlayPoint(intent)
+	case input.IntentOverlayDrag:
+		return r.handleOverlayDrag(intent)
+	case input.IntentOverlayWheel:
+		return r.handleOverlayWheel(intent)
 
 	// Mouse
 	case input.IntentMouseLeftDown:
@@ -1104,6 +1113,7 @@ func (r *Router) handleOverlayClose() bool {
 
 func (r *Router) closeOverlay() bool {
 	r.configForm = nil
+	r.overlayBar.Release()
 	r.ctx.SetOverlayContent(nil)
 	r.ctx.SetPaused(false)
 	r.transitionMode(core.ModeNormal)
@@ -1125,6 +1135,7 @@ func (r *Router) handleHelp() bool {
 func (r *Router) enterOverlay() {
 	r.configForm = nil
 	r.mouseLeftHeld, r.mouseRightHeld = false, false
+	r.overlayBar.Release()
 	r.ctx.SetCommandText("")
 	r.ctx.SetSearchText("")
 	r.ctx.SetCommandCursorPos(0)
@@ -1176,6 +1187,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 
 func (r *Router) handleMouseLeftUp() bool {
 	r.mouseLeftHeld, r.menuHold = false, false
+	r.overlayBar.Release()
 	r.releasePointer(false, false)
 	return true
 }
@@ -1361,7 +1373,7 @@ func (r *Router) syncMouseMode() {
 	if r.applyMouseMode == nil {
 		return
 	}
-	// The menu takes the pointer whatever the setting: a tap is all a phone has
+	// An overlay takes the pointer whatever the setting: a tap is all a phone has
 	enabled := !r.ctx.MouseDisabled.Load() || r.ctx.IsOverlayMode()
 	motion := enabled && r.ctx.MouseFreeMode.Load()
 
@@ -1552,8 +1564,11 @@ func (r *Router) suspendsPlayback(intent *input.Intent) bool {
 	if r.ctx.IsCommandMode() || r.ctx.IsOverlayMode() {
 		return true
 	}
-	return intent.Type == input.IntentConfigMenu || intent.Type == input.IntentHelp ||
-		intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand
+	switch intent.Type {
+	case input.IntentConfigMenu, input.IntentHelp, input.IntentOverlayPoint, input.IntentOverlayDrag, input.IntentOverlayWheel:
+		return true
+	}
+	return intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand
 }
 
 func isMouseIntent(t input.IntentType) bool {
