@@ -1,4 +1,4 @@
-# The invader: the raid"s line trooper, after the arcade"s. It flies the raiders'
+# The invader: the raid's line trooper, after the arcade's. It flies the raiders'
 # one cycle (RaiderStates in ../macros.toml) at the swarm's chase and timings, its
 # eyes lit over a green body that waves its arms. doc/fsm-reference.md lists every
 # key and verb.

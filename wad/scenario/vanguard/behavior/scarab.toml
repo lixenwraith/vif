@@ -1,5 +1,5 @@
 # The scarab: a fast, fragile beetle that darts in on a short warning. It flies the
-# raiders" one cycle (RaiderStates in ../macros.toml) at the snake"s chase, its red
+# raiders' one cycle (RaiderStates in ../macros.toml) at the snake's chase, its red
 # eyes blinking in a violet shell. doc/fsm-reference.md lists every key and verb.
 initial = "Chase"
 suspend = { guard = "Stunned" }

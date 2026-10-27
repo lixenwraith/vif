@@ -1,11 +1,11 @@
-# The storm eye: the eye species" storm type flown as a raider, the raid"s largest
+# The storm eye: the eye species' storm type flown as a raider, the raid's largest
 # body. It flies the raiders' one cycle (RaiderStates in ../macros.toml) with the
 # quasar's slow arrival, its pupil flickering under a rotating highlight.
 # doc/fsm-reference.md lists every key and verb.
 initial = "Chase"
 suspend = { guard = "Stunned" }
 
-# Heavy: hit points times chase speed is the raid"s 96; the eye"s 5×3, the largest a
+# Heavy: hit points times chase speed is the raid's 96; the eye's 5×3, the largest a
 # composite navigates
 [prototype]
 width = 5

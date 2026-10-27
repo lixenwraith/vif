@@ -1,5 +1,5 @@
 # The construct: a slow armoured hull that winds up long and hits hard. It flies the
-# raiders" one cycle (RaiderStates in ../macros.toml) at the drain"s crawl, its
+# raiders' one cycle (RaiderStates in ../macros.toml) at the drain's crawl, its
 # core flaring amber between its plates. doc/fsm-reference.md lists every key and
 # verb.
 initial = "Chase"
