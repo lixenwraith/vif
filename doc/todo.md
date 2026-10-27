@@ -63,17 +63,17 @@ navigation grid.
 - Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
 
 Vanguard's drifting text is scenery: rock and raiders pass it by and no key types
-it. Typing was the ship's only heat and shield income (+1 heat a key), so a game
-now earns none; play shows whether kills or a pickup should pay instead. Two gaps
-remain from the prototype's numbers. The upwind quarter stays thinner, as a line
-appears whole within `DriftEntryBand` (4) of the edge; entering lines part off the
-map closes it. The spawner counts the scenery hidden in rock, a quarter to a third
-of it, which keeps its rate near the floor (multiplier 1.84 to 1.10); counting only
-the visible text closes that. Scenery passes behind any cell that blocks spawns,
-rock and walls alike, until the position package gives rock a test of its own. A
-boss region of fixed, typeable text over moving scenery needs a drift that moves
-scenery alone, since a drift moves every loose glyph, and may want scenery drawn
-apart from the typeable text it now matches.
+it. Typing was the ship's only heat and energy income (+1 heat a key), so a game now
+earns none; play shows whether kills or a pickup should pay instead. Two gaps remain
+in the measured numbers. The upwind quarter stays thinner, as a line appears whole
+within `DriftEntryBand` (4) of the edge; entering lines part off the map closes it.
+The spawner counts the scenery hidden in rock, a quarter to a third of it, so its
+rate falls from mostly double to mostly normal (mean multiplier 1.84 to 1.10 at
+120×40); counting only the visible text closes that. Scenery passes behind any cell
+that blocks spawns, rock and walls alike, until the position package gives rock a
+test of its own. A boss region of fixed, typeable text over moving scenery needs a
+drift that moves scenery alone, since a drift moves every loose glyph, and may want
+scenery drawn apart from the typeable text it now matches.
 
 ### Gun and loot
 
