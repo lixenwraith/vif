@@ -72,7 +72,7 @@ background = true
 
 # --- Cave ---
 
-# The cave scrolls a column a tick, the fastest and the only even cadence above ten.
+# The cave scrolls a column a tick: only whole columns a tick step evenly.
 # It is jagged: ceiling and floor each reach in by four octaves of noise from 64
 # columns down, smoothed past any bump of two columns, so the gap runs from 9 rows
 # to 36, four times that, as the map allows, mostly two or three times the

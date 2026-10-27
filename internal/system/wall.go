@@ -68,10 +68,12 @@ type WallSystem struct {
 	toggle
 }
 
-// cursorCell is a roster cursor and the cell it stood on as a push check began
+// cursorCell is a roster cursor and the cell it stood on as a push check began; a
+// cave's scroll carries it from step to step, pushed or crushed
 type cursorCell struct {
-	entity core.Entity
-	x, y   int
+	entity          core.Entity
+	x, y            int
+	pushed, crushed bool
 }
 
 // compositeHit is a composite a wall reached, and the cell where it first did
@@ -83,11 +85,11 @@ type compositeHit struct {
 // caveState is a cave and its D-19 record. Column i of the profile stands at
 // x = i − Offset as the Position's rock field, which the record alone derives.
 type caveState struct {
-	Active bool                       `json:"active"`           // its rock stands
-	Halted bool                       `json:"halted,omitempty"` // its scroll stopped
-	Config cave.Config                `json:"config"`
-	Period time.Duration              `json:"period"` // a column's scroll
-	Phase  time.Duration              `json:"phase"`  // carried toward the next column
+	Active bool        `json:"active"` // its rock stands
+	Config cave.Config `json:"config"`
+	// Pace is the scroll in microcolumns a second, easing to a new one; at 0 it holds
+	Pace   vmath.Ramp                 `json:"pace"`
+	Phase  int64                      `json:"phase"` // carried toward the next column, a CellSpan to it
 	Offset int64                      `json:"offset"`
 	Mask   component.WallBlockMask    `json:"mask"`
 	Visual component.WallVisualConfig `json:"visual"`
@@ -142,6 +144,8 @@ func (s *WallSystem) EventTypes() []event.EventType {
 		event.EventMazeSpawnRequest,
 		event.EventCaveStart,
 		event.EventCaveStop,
+		event.EventCavePace,
+		event.EventCaveOpen,
 		event.EventWallDespawnAll,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -207,7 +211,23 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventCaveStop:
-		s.cave.Halted = s.cave.Active
+		var ease int64
+		if p, ok := ev.Payload.(*event.CaveStopPayload); ok {
+			ease = p.EaseMs
+		}
+		s.paceCave(0, ease)
+
+	case event.EventCavePace:
+		if p, ok := ev.Payload.(*event.CavePacePayload); ok && p.Speed > 0 {
+			s.paceCave(p.Speed, p.EaseMs)
+		}
+
+	case event.EventCaveOpen:
+		var open event.CaveOpenPayload
+		if p, ok := ev.Payload.(*event.CaveOpenPayload); ok {
+			open = *p
+		}
+		s.openCave(open)
 
 	case event.EventWallDespawnAll:
 		s.handleDespawnAllSilent()
@@ -1192,15 +1212,48 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 	if cfg.Seed == 0 {
 		cfg.Seed = s.genRng.Uint64()
 	}
-	// The period clamps before it converts, so no speed overflows it
-	period := float64(time.Second) / cmp.Or(p.Speed, parameter.CaveDefaultSpeed)
-	period = min(max(period, float64(parameter.CaveMinPeriod)), float64(parameter.CaveMaxPeriod))
 	s.cave = caveState{
-		Active: true, Config: cfg, Period: time.Duration(math.Round(period)),
+		Active: true, Config: cfg, Pace: vmath.Ramp{To: caveRate(cmp.Or(p.Speed, parameter.CaveDefaultSpeed))},
 		Mask: cmp.Or(p.BlockMask, component.WallBlockAll), Visual: orStone(p.Visual), Art: p.Art,
 	}
 	s.layRock()
 	s.pushOutOfRock()
+}
+
+// caveRate is a speed in columns a second as the scroll's rate, at most the soft cap;
+// the cap clamps before the speed converts, so none overflows
+func caveRate(speed float64) int64 {
+	return int64(math.Round(min(speed, parameter.CaveMaxSpeed) * float64(vmath.MicroRate)))
+}
+
+// paceCave eases the running cave's scroll from its pace to speed columns a second
+// over easeMs, at once when 0; a speed of 0 brings it to rest, and a later pace
+// resumes it from there
+func (s *WallSystem) paceCave(speed float64, easeMs int64) {
+	if !s.cave.Active || easeMs < 0 || easeMs > int64(math.MaxInt64/time.Millisecond) {
+		return
+	}
+	s.cave.Pace = s.cave.Pace.EaseTo(caveRate(speed), easeMs*int64(time.Millisecond))
+}
+
+// openCave widens the cave from the first column past the map's right edge, so no
+// rock in view changes, to the opening the payload asks for; the scroll announces it
+// once it fills the map. A cave opens once.
+func (s *WallSystem) openCave(p event.CaveOpenPayload) {
+	if !s.cave.Active || s.cave.Config.Open != (cave.Opening{}) || p.Gap < 0 || p.Ramp < 0 {
+		return
+	}
+	cfg := s.cave.Config
+	cfg.Open = cave.Opening{
+		At:   s.cave.Offset + int64(s.world.Resources.Config.MapWidth),
+		Gap:  p.Gap,
+		Ramp: max(cmp.Or(p.Ramp, cfg.Ramp), 1),
+	}
+	if err := cfg.Validate(); err != nil {
+		s.world.DebugPrint(err.Error())
+		return
+	}
+	s.cave.Config = cfg
 }
 
 // liftCave ends any cave and lifts its rock
@@ -1263,9 +1316,10 @@ func (s *WallSystem) inRock(fn func(x, y int)) {
 	}
 }
 
-// scrollCave carries the phase a period a column and steps at most a column a tick:
-// a cursor's push is a queued move, so a second step would push it from a cell it
-// has already left. A resized map takes the rock reshaped to its bounds first.
+// scrollCave carries the phase at the scroll's pace and steps the cave a column for
+// each whole column carried. A cursor's push is a queued move, so the steps push each
+// cursor from where the last one left it, and its move goes out once, to the last
+// cell. A resized map takes the rock reshaped to its bounds first.
 func (s *WallSystem) scrollCave() {
 	if !s.cave.Active {
 		return
@@ -1274,21 +1328,32 @@ func (s *WallSystem) scrollCave() {
 		s.layRock()
 		s.pushOutOfRock()
 	}
-	if s.cave.Halted {
+	elapsed := min(max(s.world.Resources.Time.DeltaTime, 0), time.Duration(parameter.MaxSimulationDeltaSeconds*float64(time.Second)))
+	covered, pace := s.cave.Pace.Cover(int64(elapsed))
+	s.cave.Pace = pace
+	s.cave.Phase += covered
+	steps := s.cave.Phase / vmath.CellSpan
+	if steps == 0 {
 		return
 	}
-	elapsed := min(max(s.world.Resources.Time.DeltaTime, 0), time.Duration(parameter.MaxSimulationDeltaSeconds*float64(time.Second)))
-	s.cave.Phase = min(s.cave.Phase+elapsed, 2*s.cave.Period-1)
-	if s.cave.Phase >= s.cave.Period {
-		s.cave.Phase -= s.cave.Period
-		s.stepCave()
+	s.cave.Phase -= steps * vmath.CellSpan
+	cursors := s.readCursors()
+	for range steps {
+		s.stepCave(cursors)
+	}
+	for _, cursor := range cursors {
+		if cursor.pushed {
+			s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+				Entity: cursor.entity, X: cursor.x, Y: cursor.y,
+			})
+		}
 	}
 }
 
 // stepCave moves the cave's rock and every shared wall a column left, and displaces
 // what stands where rock arrived. A wall composite's header moves with its members,
 // so the composite sync finds them in place.
-func (s *WallSystem) stepCave() {
+func (s *WallSystem) stepCave(cursors []cursorCell) {
 	positions, walls := s.world.Positions, s.world.Components.Wall
 	w, h := s.world.Resources.Config.MapWidth, s.world.Resources.Config.MapHeight
 	if s.caveRock == nil {
@@ -1331,6 +1396,9 @@ func (s *WallSystem) stepCave() {
 		positions.ShiftRock(rockColumn(s.caveProfile(), s.cave.Offset+int64(rock.Width())))
 	}
 	s.cave.Offset++
+	if open := s.cave.Config.Open; open.Ramp > 0 && s.cave.Offset == open.At+int64(open.Ramp) {
+		s.world.PushEvent(event.EventCaveOpened, nil)
+	}
 
 	s.caveLanded = s.caveLanded[:0]
 	land := func(x, y int) {
@@ -1359,7 +1427,6 @@ func (s *WallSystem) stepCave() {
 		}
 	}
 
-	cursors := s.readCursors()
 	var pushes int64
 	for _, pt := range s.caveLanded {
 		pushes += s.displaceCave(pt.X, pt.Y, cursors)
@@ -1371,22 +1438,23 @@ func (s *WallSystem) stepCave() {
 // displaceCave moves what stands where rock arrived a column left and toward the
 // channel, the way the rock travels; a composite it reached waits to move as one
 // body. Rock that finds a cursor no room crushes it where it stands, and a loose
-// glyph goes, unless it is scenery the rock passes in front of.
+// glyph goes, unless it is scenery the rock passes in front of. A cursor's cell is
+// carried for the scroll to move it to once its steps are done.
 func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 	positions := s.world.Positions
 	var pushes int64
-	for _, cursor := range cursors {
-		if cursor.x != x || cursor.y != y || !positions.HasBlockingWallAt(x, y, component.WallBlockCursor) {
+	for i := range cursors {
+		cursor := &cursors[i]
+		if cursor.crushed || cursor.x != x || cursor.y != y || !positions.HasBlockingWallAt(x, y, component.WallBlockCursor) {
 			continue
 		}
 		newX, newY, found := s.caveRoom(x, y, component.WallBlockCursor)
 		if !found {
+			cursor.crushed = true
 			s.world.PushEvent(event.EventCursorCrushed, &event.CursorCrushedPayload{Entity: cursor.entity})
 			continue
 		}
-		s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
-			Entity: cursor.entity, X: newX, Y: newY,
-		})
+		cursor.x, cursor.y, cursor.pushed = newX, newY, true
 		pushes++
 	}
 
@@ -1676,8 +1744,10 @@ func (c caveState) validate() error {
 	if err := c.Config.Validate(); err != nil {
 		return fmt.Errorf("wall: %w", err)
 	}
-	if c.Period < parameter.CaveMinPeriod || c.Period > parameter.CaveMaxPeriod || c.Phase < 0 || c.Phase >= 2*c.Period ||
-		c.Offset < 0 || c.Mask == component.WallBlockNone {
+	limit := caveRate(parameter.CaveMaxSpeed)
+	if p := c.Pace; p.From < 0 || p.From > limit || p.To < 0 || p.To > limit || p.Span < 0 || p.Done < 0 ||
+		p.Span > 0 && p.Done >= p.Span || p.Span == 0 && (p.From != 0 || p.Done != 0) ||
+		c.Phase < 0 || c.Phase >= vmath.CellSpan || c.Offset < 0 || c.Mask == component.WallBlockNone {
 		return errors.New("wall: cave scroll out of range")
 	}
 	if _, ok := pattern.ParseArtPreset(c.Art); c.Art != "" && !ok {

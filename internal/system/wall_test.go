@@ -2,6 +2,7 @@ package system
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/pkg/cave"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -118,7 +120,7 @@ func TestACavesRockIsAFieldNoWallHolds(t *testing.T) {
 	w, walls, _ := newCaveWorld(t, 30, 12)
 	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1}})
 	for range 20 {
-		walls.stepCave()
+		walls.stepCave(walls.readCursors())
 	}
 	rock := w.Positions.Rock()
 	if rock == nil || rock.Width() != w.Resources.Config.MapWidth || rock.Origin != walls.cave.Offset {
@@ -150,8 +152,70 @@ func TestAStoppedCaveStandsAndItsRecordCarriesIt(t *testing.T) {
 	if err := receiverWalls.LoadShared(record); err != nil {
 		t.Fatal(err)
 	}
-	if got := rockAt(receiver, 1); got != before || !receiverWalls.cave.Halted {
-		t.Fatalf("the record laid %s (halted %t), want %s", got, receiverWalls.cave.Halted, before)
+	if got := rockAt(receiver, 1); got != before || receiverWalls.cave.Pace != (vmath.Ramp{}) {
+		t.Fatalf("the record laid %s at pace %+v, want %s at rest", got, receiverWalls.cave.Pace, before)
+	}
+}
+
+// A stop eases the scroll to rest over its span, covering the area under the ramp and
+// no more, and a pace resumes it from there
+func TestACaveEasesToRestAndAPaceResumesIt(t *testing.T) {
+	_, walls, _ := newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, Speed: 10, MinWall: 1}})
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStop, Payload: &event.CaveStopPayload{EaseMs: 1000}})
+	for range 15 {
+		walls.Update()
+	}
+	// From ten columns a second to rest over a second is five columns
+	if walls.cave.Offset != 5 || walls.cave.Pace != (vmath.Ramp{}) {
+		t.Fatalf("eased stop left the cave at offset %d, pace %+v; want 5, at rest", walls.cave.Offset, walls.cave.Pace)
+	}
+	walls.HandleEvent(event.GameEvent{Type: event.EventCavePace, Payload: &event.CavePacePayload{Speed: 10}})
+	for range 3 {
+		walls.Update()
+	}
+	if walls.cave.Offset != 8 {
+		t.Fatalf("a resumed cave stands at offset %d, want 8", walls.cave.Offset)
+	}
+}
+
+// A cave faster than a column a tick steps each column, pushing a cursor on from
+// where the last step left it, and moves it once, to the last cell
+func TestAFastCaveStepsEachColumnAndMovesACursorOnce(t *testing.T) {
+	w, walls, cursor := newCaveWorld(t, 9, 5)
+	caveChannel(w, walls, 10, w.Resources.Config.MapHeight-2)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCavePace, Payload: &event.CavePacePayload{Speed: 40}})
+	walls.Update()
+	moves, crushed := movesOf(w)
+	if want := (event.CursorMoveRequestPayload{Entity: cursor, X: 5, Y: 5}); len(moves) != 1 || moves[0] != want || len(crushed) != 0 {
+		t.Fatalf("moves %+v and crushes %v, want only %+v", moves, crushed, want)
+	}
+}
+
+// An opening comes in past the right edge, and EventCaveOpened arrives on the step its
+// first open column reaches the left edge, when only the walls' least is rock
+func TestACaveOpensPastTheEdgeAndAnnouncesFillingTheMap(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{
+		Seed: 7, Speed: 10, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 8, Ramp: 4, Octaves: 3}})
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveOpen, Payload: &event.CaveOpenPayload{Ramp: 6}})
+	mapW, mapH := w.Resources.Config.MapWidth, w.Resources.Config.MapHeight
+	steps := 0
+	for opened := false; !opened; {
+		if steps > mapW+6 {
+			t.Fatalf("no opening after %d steps", steps)
+		}
+		walls.Update()
+		steps++
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			opened = opened || ev.Type == event.EventCaveOpened
+		}
+	}
+	open, wall := strings.Repeat(".", mapW), strings.Repeat("#", mapW)
+	for y := range mapH {
+		if want := map[bool]string{true: wall, false: open}[y == 0 || y == mapH-1]; steps != mapW+6 || rockAt(w, y) != want {
+			t.Fatalf("opened after %d steps, want %d; row %d %s", steps, mapW+6, y, rockAt(w, y))
+		}
 	}
 }
 
@@ -353,7 +417,7 @@ func TestRockReachingAnyMemberMovesTheWholeComposite(t *testing.T) {
 	w, walls, _ := newCaveWorld(t, 30, 12)
 	caveChannel(w, walls, 10, 4)
 	body := newBody(w, 8, 4, 2, 2)
-	walls.stepCave()
+	walls.stepCave(walls.readCursors())
 	if x, y, px, walled := bodyAt(w, body); x != 7 || y != 5 || px != 7.75 || walled {
 		t.Fatalf("body at (%d,%d) precise x %v, on a wall %t; want (7,5) at 7.75, clear", x, y, px, walled)
 	}
@@ -365,7 +429,7 @@ func TestACompositeWithNoRoomBackFindsTheNearestOrIsCrushed(t *testing.T) {
 	w, walls, _ := newCaveWorld(t, 30, 12)
 	caveChannel(w, walls, 2, 4)
 	body := newBody(w, 0, 4, 2, 2)
-	walls.stepCave()
+	walls.stepCave(walls.readCursors())
 	if x, y, _, walled := bodyAt(w, body); walled || (x == 0 && y == 4) {
 		t.Fatalf("pinned body at (%d,%d), on a wall %t; want it moved clear", x, y, walled)
 	}
@@ -383,7 +447,7 @@ func TestACompositeWithNoRoomBackFindsTheNearestOrIsCrushed(t *testing.T) {
 	}
 	walls.HandleEvent(event.GameEvent{Type: event.EventWallBatchSpawnRequest, Payload: batch})
 	w.Resources.Event.Queue.Consume()
-	walls.stepCave()
+	walls.stepCave(walls.readCursors())
 	var destroyed, killed bool
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		p, ok := ev.Payload.(*event.CompositeDestroyRequestPayload)
@@ -395,12 +459,14 @@ func TestACompositeWithNoRoomBackFindsTheNearestOrIsCrushed(t *testing.T) {
 	}
 }
 
-// A record taken between columns carries the part period, and the record alone lays
-// the rock, so a receiver that never saw the start steps on the origin's ticks
+// A record taken between columns and part way through an ease carries both, and the
+// record alone lays the rock, so a receiver that never saw the start steps on the
+// origin's ticks
 func TestACaveResumesFromItsRecordBetweenColumns(t *testing.T) {
 	start := &event.CaveStartPayload{Seed: 7, Speed: 6, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 8, Detail: 1, Ramp: 4}
 	origin, originWalls, _ := newCaveWorld(t, 30, 12)
 	originWalls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: start})
+	originWalls.HandleEvent(event.GameEvent{Type: event.EventCavePace, Payload: &event.CavePacePayload{Speed: 9, EaseMs: 700}})
 	originWalls.Update()
 	if originWalls.cave.Phase == 0 || originWalls.cave.Offset != 0 {
 		t.Fatalf("cave %+v: the record must fall between columns", originWalls.cave)
@@ -483,8 +549,10 @@ func TestACaveRecordNoStartLeavesIsRefused(t *testing.T) {
 	good := walls.cave
 	gen, _ := walls.genPCG.MarshalBinary()
 	for i, bad := range []func(c *caveState){
-		func(c *caveState) { c.Period = 0 },
-		func(c *caveState) { c.Phase = 2 * c.Period },
+		func(c *caveState) { c.Pace.To = caveRate(parameter.CaveMaxSpeed) + 1 },
+		func(c *caveState) { c.Pace = vmath.Ramp{From: 1, To: 2} },
+		func(c *caveState) { c.Pace = vmath.Ramp{To: 1, Done: 1, Span: 1} },
+		func(c *caveState) { c.Phase = vmath.CellSpan },
 		func(c *caveState) { c.Offset = -1 },
 		func(c *caveState) { c.Mask = component.WallBlockNone },
 		func(c *caveState) { c.Config.MinGap = 0 },
