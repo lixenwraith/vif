@@ -336,6 +336,8 @@ const (
 	EventCursorPredicted
 	// EventCursorDefeatState (CursorDefeatStatePayload) [bus] carries one owner's terminal lifecycle state
 	EventCursorDefeatState
+	// EventCursorCrushed (CursorCrushedPayload) [shared] announces scrolling rock pressing a cursor against the map's left edge
+	EventCursorCrushed
 	// EventCursorSetLocalRequest (CursorSetLocalPayload) [local] rebinds which cursor input and camera follow
 	EventCursorSetLocalRequest
 	// EventCursorLocalChanged (CursorSetLocalPayload) [local] announces the bound slot
@@ -503,6 +505,10 @@ const (
 	EventWallPatternSpawnRequest
 	// EventMazeSpawnRequest (MazeSpawnRequestPayload) [shared] signals maze generation and wall spawning
 	EventMazeSpawnRequest
+	// EventCaveStart (CaveStartPayload) [shared] fills the map with a cave and scrolls it left, in place of any running one
+	EventCaveStart
+	// EventCaveStop [shared] halts the cave's scroll, leaving its walls where they stand
+	EventCaveStop
 	// EventWallDespawnRequest (WallDespawnRequestPayload) [shared] requests removal of walls in specified area or globally
 	EventWallDespawnRequest
 	// EventWallMaskChangeRequest (WallMaskChangeRequestPayload) [shared] modifies blocking behavior of existing walls

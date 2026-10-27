@@ -113,6 +113,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventCursorMoved:                     func() any { return new(CursorMovedPayload) },
 	EventCursorPredicted:                 func() any { return new(CursorMoveRequestPayload) },
 	EventCursorDefeatState:               func() any { return new(CursorDefeatStatePayload) },
+	EventCursorCrushed:                   func() any { return new(CursorCrushedPayload) },
 	EventCursorSetLocalRequest:           func() any { return new(CursorSetLocalPayload) },
 	EventCursorLocalChanged:              func() any { return new(CursorSetLocalPayload) },
 	EventSpeciesCreated:                  func() any { return new(SpeciesCreatedPayload) },
@@ -155,6 +156,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventWallCompositeSpawnRequest:       func() any { return new(WallCompositeSpawnRequestPayload) },
 	EventWallPatternSpawnRequest:         func() any { return new(WallPatternSpawnRequestPayload) },
 	EventMazeSpawnRequest:                func() any { return new(MazeSpawnRequestPayload) },
+	EventCaveStart:                       func() any { return new(CaveStartPayload) },
 	EventWallDespawnRequest:              func() any { return new(WallDespawnRequestPayload) },
 	EventWallMaskChangeRequest:           func() any { return new(WallMaskChangeRequestPayload) },
 	EventWallSpawned:                     func() any { return new(WallSpawnedPayload) },
@@ -278,6 +280,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventCursorMoved:                     &codecCursorMovedPayload,
 	EventCursorPredicted:                 &codecCursorMoveRequestPayload,
 	EventCursorDefeatState:               &codecCursorDefeatStatePayload,
+	EventCursorCrushed:                   &codecCursorCrushedPayload,
 	EventCursorSetLocalRequest:           &codecCursorSetLocalPayload,
 	EventCursorLocalChanged:              &codecCursorSetLocalPayload,
 	EventSpeciesCreated:                  &codecSpeciesCreatedPayload,
@@ -320,6 +323,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventWallCompositeSpawnRequest:       &codecWallCompositeSpawnRequestPayload,
 	EventWallPatternSpawnRequest:         &codecWallPatternSpawnRequestPayload,
 	EventMazeSpawnRequest:                &codecMazeSpawnRequestPayload,
+	EventCaveStart:                       &codecCaveStartPayload,
 	EventWallDespawnRequest:              &codecWallDespawnRequestPayload,
 	EventWallMaskChangeRequest:           &codecWallMaskChangeRequestPayload,
 	EventWallSpawned:                     &codecWallSpawnedPayload,
@@ -1285,6 +1289,14 @@ var codecCursorDefeatStatePayload = structCodec{size: unsafe.Sizeof(CursorDefeat
 	{off: unsafe.Offsetof(CursorDefeatStatePayload{}.ProducedTick), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
 }}
 
+func (p *CursorCrushedPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCursorCrushedPayload, unsafe.Pointer(p)
+}
+
+var codecCursorCrushedPayload = structCodec{size: unsafe.Sizeof(CursorCrushedPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CursorCrushedPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
 func (p *CursorSetLocalPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecCursorSetLocalPayload, unsafe.Pointer(p)
 }
@@ -1734,6 +1746,24 @@ var codecMazeSpawnRequestPayload = structCodec{size: unsafe.Sizeof(MazeSpawnRequ
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
 	{off: unsafe.Offsetof(MazeSpawnRequestPayload{}.CollisionMode), kind: kindUint, size: unsafe.Sizeof(WallBatchCollisionMode(0))},
+}}
+
+func (p *CaveStartPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecCaveStartPayload, unsafe.Pointer(p)
+}
+
+var codecCaveStartPayload = structCodec{size: unsafe.Sizeof(CaveStartPayload{}), fields: []field{
+	{off: unsafe.Offsetof(CaveStartPayload{}.Seed), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Speed), kind: kindFloat},
+	{off: unsafe.Offsetof(CaveStartPayload{}.MinGap), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.MaxGap), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.MinWall), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Wavelength), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Swing), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Detail), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Ramp), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
 }}
 
 func (p *WallDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

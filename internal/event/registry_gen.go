@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 197
+const EventTypeCount = 200
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -127,6 +127,7 @@ func InitRegistry() {
 	RegisterType("EventCursorMoved", EventCursorMoved)
 	RegisterType("EventCursorPredicted", EventCursorPredicted)
 	RegisterType("EventCursorDefeatState", EventCursorDefeatState)
+	RegisterType("EventCursorCrushed", EventCursorCrushed)
 	RegisterType("EventCursorSetLocalRequest", EventCursorSetLocalRequest)
 	RegisterType("EventCursorLocalChanged", EventCursorLocalChanged)
 	RegisterType("EventSpeciesCreated", EventSpeciesCreated)
@@ -179,6 +180,8 @@ func InitRegistry() {
 	RegisterType("EventWallCompositeSpawnRequest", EventWallCompositeSpawnRequest)
 	RegisterType("EventWallPatternSpawnRequest", EventWallPatternSpawnRequest)
 	RegisterType("EventMazeSpawnRequest", EventMazeSpawnRequest)
+	RegisterType("EventCaveStart", EventCaveStart)
+	RegisterType("EventCaveStop", EventCaveStop)
 	RegisterType("EventWallDespawnRequest", EventWallDespawnRequest)
 	RegisterType("EventWallMaskChangeRequest", EventWallMaskChangeRequest)
 	RegisterType("EventWallPushCheckRequest", EventWallPushCheckRequest)
@@ -330,6 +333,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventCursorMoved:                     ClassShared,
 	EventCursorPredicted:                 ClassLocal,
 	EventCursorDefeatState:               ClassBus,
+	EventCursorCrushed:                   ClassShared,
 	EventCursorSetLocalRequest:           ClassLocal,
 	EventCursorLocalChanged:              ClassLocal,
 	EventSpeciesCreated:                  ClassStamped,
@@ -382,6 +386,8 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventWallCompositeSpawnRequest:       ClassShared,
 	EventWallPatternSpawnRequest:         ClassShared,
 	EventMazeSpawnRequest:                ClassShared,
+	EventCaveStart:                       ClassShared,
+	EventCaveStop:                        ClassShared,
 	EventWallDespawnRequest:              ClassShared,
 	EventWallMaskChangeRequest:           ClassShared,
 	EventWallPushCheckRequest:            ClassShared,
