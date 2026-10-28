@@ -538,8 +538,8 @@ it spawns and arms the cursor before opening `main`.
    the notice reads `Species Damage Up`. Three storm kills create
    a full-map maze without rooms and spawn one Kraken (§8) at its center, which
    demolishes the maze as it moves.
-4. The first Kraken kill returns to `main` with the maze gone and the text the
-   Kraken left in place; another three storm kills open the
+4. A Kraken kill fades the maze out, and the field rests half a second past the
+   fade. The first then returns to `main` with the text the Kraken left in place; another three storm kills open the
    second Kraken encounter. Its defeat starts tower defense. Thus the escalation
    is **3 storms → 1 Kraken → 3 storms → 1 Kraken → tower**. Each threshold counts
    kills since the escalation before it; `kills.*` keeps the game's totals.
