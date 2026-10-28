@@ -201,7 +201,7 @@ func (a *allocator) describe(limits *fleetLimits) {
 	for _, name := range limits.Scenarios {
 		head, err := readHead(filepath.Join(root, name, paths.ScenarioFile), describeScan)
 		if errors.Is(err, fs.ErrNotExist) && name == paths.MainScenarioName {
-			head, err = fs.ReadFile(asset.DefaultScenario, asset.DefaultScenarioEntry)
+			head, err = fs.ReadFile(asset.MainScenario, asset.MainScenarioEntry)
 		}
 		if err != nil {
 			continue

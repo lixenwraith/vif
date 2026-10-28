@@ -256,9 +256,9 @@ transitions = [
     { trigger = "Tick", target = "PlayerDied", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
 
-# A lost game freezes the rock and the drift under a red strobe as long as the
-# default scenario's, then starts over; the reset clears the status bar, so the
-# new game opens with what ended the last
+# A lost game freezes the rock and the drift under a red strobe as long as main's,
+# then starts over; the reset clears the status bar, so the new game opens with
+# what ended the last
 [states.PlayerDown]
 parent = "Root"
 on_enter = [

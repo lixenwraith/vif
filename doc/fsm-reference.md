@@ -11,7 +11,7 @@ Entry config search order:
 3. the same under the user root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
    `/usr/local/etc/vif` and `/etc/vif`;
-5. embedded default (`internal/asset/scenario/`; forced with `-d`).
+5. the embedded main scenario (`internal/asset/scenario/`; forced with `-d`).
 
 `-d` is mutually exclusive with both `-s` and `-f`; by itself it selects the
 embedded scenario and content corpus. For the runtime design behind this reference, see

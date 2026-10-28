@@ -242,7 +242,7 @@ their defaults; `vif-router -h` lists every flag.
 | `-players`, `-players-max` | `4`, `-players` | the default guest ceiling and the highest a request may select (at most 16) |
 | `-bots-max` | `0` | the most bots a request may seat (at most 6) |
 | `-log-level`, `-log-level-min` | `info`, `debug` | the default session level and the most verbose a request may select |
-| `-scenario`, `-wad` | `main`, `/var/db/vif/wad` | the default scenario and the volume scanned for the others |
+| `-scenario`, `-wad` | `main`, `/var/db/vif/wad` | the scenario a request runs when it names none, and the volume scanned for the others |
 | `-size` | `first` | the default session screen, the host's `-size`: `WxH`, or `first` for the first person's terminal, which a session seating bots plays at 120x40 instead; a scenario may or may not make it its map |
 | `-first-join`, `-empty`, `-drain` | `90s`, `90s`, `20s` | the session's lifetime bounds, passed to its pod |
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |

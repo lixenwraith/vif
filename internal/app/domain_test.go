@@ -86,7 +86,7 @@ func scenarioTrees(t *testing.T) map[string]func() (map[string]any, error) {
 	root := repoRoot(t)
 	trees := map[string]func() (map[string]any, error){
 		"asset(embedded)": func() (map[string]any, error) {
-			return fsm.ResolveScenario(asset.DefaultScenario, asset.DefaultScenarioEntry)
+			return fsm.ResolveScenario(asset.MainScenario, asset.MainScenarioEntry)
 		},
 	}
 	for _, dir := range []string{"scenario/td", "scenario/blank", "scenario/simon", "scenario/vanguard"} {

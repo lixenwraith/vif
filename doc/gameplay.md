@@ -23,7 +23,7 @@ combat entity. Movement is discrete on the character grid. Hostile species,
 projectiles, and effects may keep higher-precision `float64` kinetic state but
 are projected back into the same grid for collision and rendering.
 
-The embedded/default campaign is endless rather than a fixed sequence of
+The main campaign is endless rather than a fixed sequence of
 levels. Typing drives the resource economy, drains supply the first hostile
 pressure, and kill counters let the FSM introduce composite encounters. The
 author may replace that progression entirely with external TOML configuration.
@@ -376,7 +376,7 @@ a blocked tracer drains to its stop point.
 | Actor | Role |
 |---|---|
 | Drain | Local population is `ceil(current heat × 10 / 100)`, capped at 10 and excluding overheat: heat 0 gives 0; 1–10 gives 1; 11–20 gives 2; 91–100 gives 10. Materializes, chases, drains shield energy, removes heat on unshielded contact, turns the player glyphs it crosses into dust (§4) and breaks the gold sequence it crosses; one that crosses a swarm or quasar is absorbed into it, healing it. |
-| Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor, emits lightning when the cursor leaves its effective range, and absorbs drains. It is created by fusing drains in the default progression. |
+| Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor, emits lightning when the cursor leaves its effective range, and absorbs drains. It is created by fusing drains in the main campaign. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. A blinking cell marks where a charge or teleport lands, from the lock until it does. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. The green circle pulses an area, the red circle carries a turret it fires in bursts at the nearest cursor, and the blue circle creates swarm pressure. |
 | Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. |
@@ -659,7 +659,7 @@ Each entry declares a domain profile and its dependencies in
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |
-| Default progression | `internal/asset/scenario/*.toml` |
+| Main campaign | `internal/asset/scenario/*.toml` |
 | External scenarios | `wad/scenario/*` |
 
 Changing a number in `parameter` changes a mechanic; changing a transition in
