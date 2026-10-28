@@ -928,14 +928,6 @@ type FuseSwarmRequestPayload struct {
 	Effect FuseEffect  `toml:"effect"`
 }
 
-// FuseBehaviorRequestPayload names the program beamed in and the cell its
-// header asks for
-type FuseBehaviorRequestPayload struct {
-	Program string `toml:"program"`
-	X       int    `toml:"x"`
-	Y       int    `toml:"y"`
-}
-
 // --- Quasar ---
 
 // QuasarSpawnRequestPayload contains coordinates for creation

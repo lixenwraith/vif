@@ -152,7 +152,7 @@ var Systems = []SystemDef{
 	// --- Spawning / Materialize ---
 	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester (D-7); every spawn passes this gate, timed by its beam deadline
 	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "dual", Requires: []string{"materialize", "spirit"},
-		Optional: []string{"drain", "quasar", "swarm"}}, // a fusion's player beam holds its spawn, which crosses through the spawn request (D-3); a data species' entrance is shared and needs no drains
+		Optional: []string{"drain", "quasar", "swarm"}}, // a fusion's player spirits or materialize hold its spawn, which crosses through the spawn request (D-3)
 	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the fuse's player-domain fusions (D-7)
 
 	// --- Projectiles ---
@@ -220,7 +220,7 @@ var Systems = []SystemDef{
 var ContextSystems = []SystemDef{
 	{Name: "meta", Constructor: "NewMetaSystem", Domain: "shared", Snapshot: "state"}, // world writes are replicated or the D-14 map writer; carries the kill counters, defeat latch and cycle multiplier that gate shared FSM regions
 	{Name: "behavior", Constructor: "NewBehaviorSystem", Domain: "shared", Requires: []string{"composite", "timer"},
-		Optional: []string{"navigation", "combat", "lightning", "materialize", "splash", "swarm", "quasar"}}, // takes the scenario's compiled programs; shared composite species with a D-12 footprint sweep, all state in its stores
+		Optional: []string{"navigation", "combat", "lightning", "materialize", "splash", "swarm", "quasar"}}, // takes the scenario's compiled programs; shared composite species with a D-12 footprint sweep, all state in its stores, an entrance's in its Shared materialize
 }
 
 // Renderers is the authoritative renderer list

@@ -20,13 +20,13 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
-// TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock plays the shipped
+// TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock plays the shipped
 // vanguard scenario with nobody steering, through the resets its crushes and
-// collisions bring: raiders of several types spawn directly at the right edge, no
-// fuse beaming them in and no drain ever standing, at most three fly at once, and
-// no tick ends with one standing in rock, which pushes them as it scrolls and which
-// their teleports land beside.
-func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
+// collisions bring: raiders of several types materialize at the right edge, each
+// landing as its materialize ends, no drain ever standing, at most three fly at
+// once, and no tick ends with one standing in rock, which pushes them as it scrolls
+// and which their landings and teleports keep clear of.
+func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
@@ -40,19 +40,16 @@ func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 
 	w := a.World()
 	var created []event.SpeciesCreatedPayload
-	beams := 0
+	materialized := 0
 	a.SetDispatchTap(func(ev event.GameEvent) {
 		switch p := ev.Payload.(type) {
 		case *event.SpeciesCreatedPayload:
 			if p.Species >= component.SpeciesDataFirst {
 				created = append(created, *p)
 			}
-		case *event.FuseBehaviorRequestPayload:
-			beams++
-
-		case *event.MaterializeAreaRequestPayload:
-			if p.Species >= component.SpeciesDataFirst {
-				beams++
+		case *event.MaterializeCompletedPayload:
+			if ev.Domain == core.DomainShared && p.Species >= component.SpeciesDataFirst {
+				materialized++
 			}
 		}
 	})
@@ -86,8 +83,8 @@ func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	if len(created) < 3 {
 		t.Fatalf("%d raiders spawned over a minute, want several", len(created))
 	}
-	if beams != 0 {
-		t.Fatalf("%d beams brought raiders in, want each spawned directly", beams)
+	if materialized != len(created) {
+		t.Fatalf("%d raiders stood as %d materializes ended, want each landing as its own ends", len(created), materialized)
 	}
 	types := map[component.SpeciesType]bool{}
 	for _, p := range created {

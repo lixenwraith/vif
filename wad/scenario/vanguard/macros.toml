@@ -88,8 +88,10 @@ states = { macro = "RaiderStates", chase_ms = "${chase_ms}", lock_ms = "${lock_m
 global = [{ macro = "RaiderStun" }]
 
 # Its cells index the cave's palette, 0 body, 1 eyes, 2 limbs, 3 accent; the
-# console draws the cave's one colour, a hit reversing it
+# console draws the cave's one colour, a hit reversing it. It materializes onto
+# the map and lands as the materialize ends.
 [macros.Raider.body.prototype]
+entrance = "materialize"
 width = "${width}"
 height = "${height}"
 header = "${header}"

@@ -46,10 +46,7 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 	rockRows(w, 30, 34, 10, 11)
 
 	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
-	s.HandleEvent(event.GameEvent{
-		Type:    event.EventBehaviorSpawnRequest,
-		Payload: &event.BehaviorSpawnRequestPayload{Program: "scarab", X: 20, Y: 10},
-	})
+	standRaider(s, "scarab", 20, 10)
 	headers := w.Components.Behavior.Entities()
 	if len(headers) != 1 {
 		t.Fatalf("%d raiders spawned, want one", len(headers))
@@ -61,6 +58,23 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 		states[g.Name(st)] = st
 	}
 	return w, s, headers[0], states
+}
+
+// standRaider asks for a raider with its header at the cell and lands it at once,
+// completing the materialize it comes on through, so a test of its machine starts
+// on the body the request stood
+func standRaider(s *BehaviorSystem, program string, x, y int) {
+	s.HandleEvent(event.GameEvent{
+		Type:    event.EventBehaviorSpawnRequest,
+		Payload: &event.BehaviorSpawnRequestPayload{Program: program, X: x, Y: y},
+	})
+	for _, ev := range s.world.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.MaterializeAreaRequestPayload); ok {
+			s.HandleEvent(event.GameEvent{Type: event.EventMaterializeComplete, Domain: core.DomainShared, Payload: &event.MaterializeCompletedPayload{
+				X: p.X, Y: p.Y, Type: p.Type, Species: p.Species,
+			}})
+		}
+	}
 }
 
 // footprintInRock reports whether any cell of a 4x2 footprint with its header at
@@ -254,10 +268,7 @@ func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
 			t.Run(p.Name+"/"+tc.edge, func(t *testing.T) {
 				w := newWorld()
 				s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
-				s.HandleEvent(event.GameEvent{
-					Type:    event.EventBehaviorSpawnRequest,
-					Payload: &event.BehaviorSpawnRequestPayload{Program: set.Names()[i], X: tc.x, Y: tc.y},
-				})
+				standRaider(s, set.Names()[i], tc.x, tc.y)
 				headers := w.Components.Behavior.Entities()
 				if len(headers) != 1 {
 					t.Fatalf("%d spawned, want one", len(headers))
@@ -295,10 +306,7 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 			}
 			aimAt(w, 60, 20)
 			s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
-			s.HandleEvent(event.GameEvent{
-				Type:    event.EventBehaviorSpawnRequest,
-				Payload: &event.BehaviorSpawnRequestPayload{Program: p.Name, X: 20, Y: 20},
-			})
+			standRaider(s, p.Name, 20, 20)
 			headers := w.Components.Behavior.Entities()
 			if len(headers) != 1 {
 				t.Fatalf("%d spawned, want one", len(headers))

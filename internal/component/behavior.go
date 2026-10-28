@@ -48,10 +48,22 @@ type BehaviorPrototype struct {
 	Drops       SpeciesType           // the code species whose drop tiers it rolls; SpeciesNone drops nothing
 	Contact     CursorDamage          // what touching it costs a cursor
 	Lifetime    time.Duration         // 0 = lives until killed or cancelled
+	Entrance    BehaviorEntrance      // how it comes onto the map
 
 	Look    Look          // its frames, cell by cell
 	Pattern time.Duration // how long each frame shows
 }
+
+// BehaviorEntrance is how a data species comes onto the map when it is asked for
+type BehaviorEntrance uint8
+
+const (
+	EntranceNone        BehaviorEntrance = iota // it stands the tick it is asked for
+	EntranceMaterialize                         // a materialize over its footprint, and it lands as that ends
+)
+
+// EntranceNames are a prototype's entrance keys, none naming EntranceNone
+var EntranceNames = [...]string{EntranceNone: "", EntranceMaterialize: "materialize"}
 
 // LookCell is one cell of a frame: its glyph, none where 0, and its foreground and
 // background palette entries, -1 for the look's colour and for no background

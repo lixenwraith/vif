@@ -104,6 +104,7 @@ type prototypeDoc struct {
 	Physics    physicsDoc `toml:"physics"`
 	LifetimeMs int        `toml:"lifetime_ms"`
 	PatternMs  int        `toml:"pattern_ms"`
+	Entrance   string     `toml:"entrance"`
 
 	// The look: frames, the palettes their cells index, the colour of a glyph
 	// without an entry, and the console pair a 256-colour host draws
@@ -209,6 +210,11 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (co
 	}
 	if d.LifetimeMs < 0 {
 		fail("lifetime_ms %d is negative", d.LifetimeMs)
+	}
+	if i := slices.Index(component.EntranceNames[:], d.Entrance); i >= 0 {
+		p.Entrance = component.BehaviorEntrance(i)
+	} else {
+		fail("entrance %q is not one of %s", d.Entrance, strings.Join(component.EntranceNames[1:], ", "))
 	}
 
 	if i := slices.IndexFunc(combatRows, func(r component.CombatEntityType) bool {

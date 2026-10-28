@@ -150,34 +150,31 @@ landed. Open items elsewhere it meets:
 [loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario)
 and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does).
 
-#### Give a program an entrance of its own through the fuse
+#### Give a program's entrance an entering state
 
-- Priority: P1
-- Affected files: `internal/system/fuse.go` (`handleBehaviorFuse`,
-  `landBehavior`), `internal/behavior/program.go`, `internal/system/behavior.go`,
-  `internal/system/materialize.go`, `wad/scenario/vanguard/scenario.toml`
-- Guide: [Behavior machines §6](machine-design.md#6-data-species)
+- Priority: P2
+- Affected files: `internal/behavior/program.go`, `internal/system/behavior.go`
+  (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
+- Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-beams-and-spirits)
 
-Vanguard's raiders spawn at once (`EventBehaviorSpawnRequest`), the fuse off with
-the drains, because a program's entrance through the fuse is fixed: the swarm's
-one-second beam over a footprint `FindFreeAreaInside` chose when the fuse was
-asked, then a direct spawn at what the beam covered, and nothing of it reaches the
-machine, which starts in `initial` the tick the body stands. Lixen expects
-entrances to grow for machines (2026-10-27). What a program would declare:
+A prototype's `entrance = "materialize"` plays the swarm-style one-second
+materialize over the footprint and lands the body as it ends, beside any rock that
+came over it, and nothing of it reaches the machine, which starts in `initial` the
+tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
+What a program would declare next:
 
-- The beam: its duration and style, the swarm's or the nugget's until a program has
-  [beam rows of its own](#give-data-species-attack-beam-and-drop-rows-of-their-own),
+- The materialize's duration and style, the swarm's or the nugget's until a program
+  has [rows of its own](#give-data-species-attack-beam-and-drop-rows-of-their-own),
   and whether a countdown shows over it.
-- An entering state the machine runs while the beam holds, so a program can
+- An entering state the machine runs while the materialize holds, so a program can
   telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
   nor takes damage, as no body stands yet.
-- A landing its probe chooses (`FindLanding` or its own), tried again when the beam
-  ends, since rock scrolls under a beam as it does under a teleport.
+- A landing its probe chooses (`FindLanding` or its own) as the materialize ends,
+  in place of the nearest clear footprint.
 
-The beam is Shared, so the entering state's clock and probe must run alike on every
-instance and a capture mid-beam must restore them (`snapshot.Schema`). The entrance
-stays a beam, as a spawn out of nothing's is, while drains that fuse fly in as
-spirits (Lixen, 2026-10-27); the drains' fusions stay as they are.
+The materialize is Shared, so the entering state's clock and probe must run alike
+on every instance and a capture mid-materialize must restore them
+(`snapshot.Schema`).
 
 #### Count a group of programs
 

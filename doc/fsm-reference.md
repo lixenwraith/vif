@@ -835,29 +835,28 @@ between instances; the first read of one in a shared session logs a D-14 warning
 
 A behavior program defines a species the scenario brings: its body in
 `[prototype]` and its conduct as a state machine over the game's verbs. The entry's
-`[behaviors]` table lists at most eight, each in its own file, which is read,
+`[behaviors]` table lists at most 32, each in its own file, which is read,
 expanded against the entry's macros and carried, digested and sent to a joiner as
 the entry's other files are, or inline as the table itself. Programs take species
-IDs 10 to 17 in sorted-name order, so a guard on `EventSpeciesCreated` or
+IDs 10 to 41 in sorted-name order, so a guard on `EventSpeciesCreated` or
 `EventSpeciesKilled` names its program (`PayloadSpeciesIn`). A name is
 `[a-z][a-z0-9_]*` of at most 24 bytes, neither a code species' name nor `total` or
 `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`
 ([Telemetry](telemetry-reference.md)).
 
-A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
-x, y }`, its header at that cell or the nearest place its footprint fits, searched
-over the whole map. A cell on an edge or past it searches from the footprint flush
-against that edge, on the row or column it names, so a request names an edge blind
-to the body's size and header offset. A request naming no program raises nothing
-(`behavior.unknown_program_rejects`), nor one finding no room
-(`behavior.<name>.spawn_failures`). Or it beams one in with
-`EventFuseBehaviorRequest { program, x, y }`: the fuse plays a one-second swarm beam over the nearest place its footprint fits, searching the
-whole map from that cell as a direct spawn does, and spawns the instance as it ends; a request naming no
-program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
-without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
-instances and the beams still bringing them, every program's when it names none.
-`wad/scenario/vanguard` is the worked example: its raider types, spawned directly,
-fly the swarm's attack cycle as thirty-two programs over one macro (`RaiderStates`
+A scenario raises an instance with `EventBehaviorSpawnRequest { program, x, y }`,
+its header at that cell or the nearest place its footprint fits, searched over the
+whole map. A cell on an edge or past it searches from the footprint flush against
+that edge, on the row or column it names, so a request names an edge blind to the
+body's size and header offset. The instance stands at once, or, its prototype
+naming `entrance = "materialize"`, a one-second materialize plays over that
+footprint and the instance lands as it ends, beside any rock that came over the
+footprint meanwhile; `behavior.count` counts it from the request. A request naming
+no program raises nothing (`behavior.unknown_program_rejects`), nor one finding no
+room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
+removes instances and the materializes still bringing them, every program's when
+it names none. `wad/scenario/vanguard` is the worked example: its raider types,
+materializing in, fly the swarm's attack cycle as thirty-two programs over one macro (`RaiderStates`
 in its `macros.toml`). Each program file is one invocation of its rank's macro
 (`RaiderRank1`..`RaiderRank4`) naming its cave and its look, and the rank's
 expansion is the whole program: the look, the rank's stats and physics, the cave's
@@ -879,6 +878,7 @@ mass = 2.0                          # Soft collision, flocking, knockback; 0: th
 drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
+entrance = "materialize"            # Lands as a materialize over its footprint ends; none stands at once (optional)
 frames = [                          # Each frame a string per row, height rows of width cells
     { glyphs = ["╔oo╗", "╚══╝"], fg = ["0110", "1001"], attr = [" BB ", "    "] },
     { glyphs = ["┌--┐", "└──┘"] },  # fg, bg and attr are each optional

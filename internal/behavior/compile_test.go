@@ -278,6 +278,7 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"restitution", `mass = 2.0`, "mass = 2.0\nphysics = { restitution = 1.5 }", `program 'warden': prototype: physics: restitution 1.5 keeps more speed than a bounce met`, 1},
 		{"arrival drag alone", `mass = 2.0`, "mass = 2.0\nphysics = { arrival_drag = 2.0 }", `program 'warden': prototype: physics: arrival_drag 2 ramps in over an arrival_radius, and that is 0`, 1},
 		{"drops", `drops = "swarm"`, `drops = "tower"`, `program 'warden': prototype: drops "tower": that species drops nothing`, 1},
+		{"entrance", `mass = 2.0`, "mass = 2.0\nentrance = \"fly\"", `program 'warden': prototype: entrance "fly" is not one of materialize`, 1},
 		{"glyph width", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀", "▀▄▄▀"] }, {`, `program 'warden': prototype: frames[0]: glyphs[0] "▄▀▀" has 3 cells, want width 4`, 1},
 		{"frame height", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀▄"] }, {`, `program 'warden': prototype: frames[0]: glyphs has 1 rows, want height 2`, 1},
 		{"no frame", `frames = [{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, { glyphs = ["▀▄▄▀", "▄▀▀▄"] }]`, `frames = []`, `program 'warden': prototype: no frame`, 1},

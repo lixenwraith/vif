@@ -120,15 +120,17 @@ transitions = [
     ] },
 ]
 
-# A raider spawns at the right edge every two seconds while fewer than three fly,
-# every data species being a raider, on a row drawn inside the two rows a wall
-# keeps at its thinnest. The request names the map's width, a column past its right
-# edge, and the spawn stands each body flush against that edge whatever its size;
-# it searches the whole map from there, so rock on that row sends it to the nearest
-# open rows. The type is drawn between the two of the ramp's rank in the cave's
-# eight: the cave's seed modulo four is its stone art, as CaveStart's pick takes it,
-# eight times that the first of its types in the pick's list, which runs the arts
-# in CaveStart's order, and twice the rank the first of that rank's pair.
+# A raider materializes at the right edge every two seconds while fewer than three
+# fly or materialize, every data species being a raider, on a row drawn inside the
+# two rows a wall keeps at its thinnest. The request names the map's width, a column
+# past its right edge, and the materialize stands each footprint flush against that
+# edge whatever its size; it searches the whole map from there, so rock on that row
+# sends it to the nearest open rows, and the raider lands as it ends, beside any
+# rock that came over it meanwhile. The type is drawn between the two of the ramp's
+# rank in the cave's eight: the cave's seed modulo four is its stone art, as
+# CaveStart's pick takes it, eight times that the first of its types in the pick's
+# list, which runs the arts in CaveStart's order, and twice the rank the first of
+# that rank's pair.
 [states.RaidWait]
 parent = "Raid"
 transitions = [
