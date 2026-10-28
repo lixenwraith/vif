@@ -270,6 +270,61 @@ func TestFallingParticlesUseCommonWallDestruction(t *testing.T) {
 	}
 }
 
+// A cave step carries every particle no anchor holds a column left, its sub-cell
+// place and the cell it last entered with it, and leaves one an anchor holds
+func TestACaveStepCarriesTheParticlesNoAnchorHolds(t *testing.T) {
+	w, particles := newParticleWorld(1)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 6, Y: 3, Char: 'd', SkipStartCell: true}, 0, 0)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDust, X: 9, Y: 3, Char: 'u', Level: component.GlyphNormal}, 9, 3)
+	loose, held := w.Components.Particle.Entities()[0], w.Components.Particle.Entities()[1]
+	before, _ := w.Components.Kinetic.GetComponent(loose)
+
+	particles.carry(1)
+
+	pos, _ := w.Positions.GetPosition(loose)
+	after, _ := w.Components.Kinetic.GetComponent(loose)
+	p, _ := w.Components.Particle.GetComponent(loose)
+	if pos != (component.PositionComponent{X: 5, Y: 3}) || after.PreciseX != before.PreciseX-1 || p.LastIntX != 5 {
+		t.Fatalf("loose particle at %+v, precise %v from %v, last cell %d; want 5,3 a column on", pos, after.PreciseX, before.PreciseX, p.LastIntX)
+	}
+	if pos, _ := w.Positions.GetPosition(held); pos != (component.PositionComponent{X: 9, Y: 3}) {
+		t.Fatalf("held particle at %+v, want it left at 9,3", pos)
+	}
+}
+
+// A particle a cave step carries past the map's left edge is gone
+func TestAParticleCarriedOffTheMapIsGone(t *testing.T) {
+	w, particles := newParticleWorld(1)
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 0, Y: 3, Char: 'd'}, 0, 0)
+	particles.carry(1)
+	if n := w.Components.Particle.CountEntities(); n != 0 {
+		t.Fatalf("%d particles after the carry off the map, want 0", n)
+	}
+	if got := w.Resources.Status.Ints.Get("decay.boundary_hits").Load(); got != 1 {
+		t.Fatalf("decay boundary hits = %d, want 1", got)
+	}
+}
+
+// A carried particle enters a cell only by its own motion: one at rest takes nothing
+// from the glyph a step carries it onto
+func TestACarriedParticleEntersACellOnlyByItsOwnMotion(t *testing.T) {
+	w, particles := newParticleWorld(1)
+	glyph := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(glyph, component.PositionComponent{X: 5, Y: 3})
+	w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'g', Type: component.GlyphBlue, Level: component.GlyphBright})
+	particles.spawnOne(event.ParticleSpawnEntry{Behavior: component.ParticleDecay, X: 6, Y: 3, Char: 'd', SkipStartCell: true}, 0, 0)
+	k, _ := w.Components.Kinetic.GetPtr(w.Components.Particle.Entities()[0])
+	k.VelY, k.AccelY = 0, 0
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+
+	w.Resources.Cave.Steps = 1
+	particles.Update()
+
+	if g, _ := w.Components.Glyph.GetComponent(glyph); g.Level != component.GlyphBright || g.Type != component.GlyphBlue {
+		t.Fatalf("glyph went to %v %v, want it untouched", g.Type, g.Level)
+	}
+}
+
 func TestParticleBehaviorOrderCoversEveryProfile(t *testing.T) {
 	seen := make(map[component.ParticleBehavior]bool, len(particleBehaviorOrder))
 	for _, behavior := range particleBehaviorOrder {

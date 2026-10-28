@@ -64,6 +64,32 @@ func TestSceneryPassesBehindRock(t *testing.T) {
 	}
 }
 
+// TestAParticlePassesHiddenThroughRock: the sigil renderer draws a particle in the
+// open and none in rock that lets it pass, since rock draws first
+func TestAParticlePassesHiddenThroughRock(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	config := w.Resources.Config
+	cols := make([]engine.RockColumn, config.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Ceil: 3, Floor: config.MapHeight}
+	}
+	w.Positions.SetRock(component.WallBlockAll&^component.WallBlockParticle, engine.RockLook{}, 0, cols)
+	for _, at := range []component.PositionComponent{{X: 5, Y: 1}, {X: 5, Y: 6}} {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, at)
+		w.Components.Particle.SetComponent(e, component.ParticleComponent{Behavior: component.ParticleDecay})
+		w.Components.Sigil.SetComponent(e, component.SigilComponent{Rune: 'd'})
+	}
+
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+	NewSigilRenderer(game).Render(render.RenderContext{MapWidth: config.MapWidth, MapHeight: config.MapHeight,
+		ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}, buf)
+	if hidden, shown := buf.CellAt(5, 1).Rune, buf.CellAt(5, 6).Rune; hidden != 0 || shown != 'd' {
+		t.Fatalf("drew %q in rock and %q in the open, want nothing and 'd'", hidden, shown)
+	}
+}
+
 // TestStoneRockDrawsEachCellsArtAndKeepsItAcrossAScroll: a rock field in stone draws
 // pattern.Art in every rock cell, placed by its profile column, pattern.Art256 on the 256
 // tier, and nothing in the open; a renderer that drew the field before it scrolled draws

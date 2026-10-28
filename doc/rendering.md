@@ -381,11 +381,12 @@ layers draw far to near and typeable text last, each over the ones behind it, so
 the nearest glyph shows where several are drawn in one cell, and lines of two
 depths interleave where they cross. Scenery standing in rock or a wall that blocks
 spawns is not drawn: rock and walls draw first and a glyph prints over them
-foreground-only, so the text passes behind them. In truecolor each scenery layer
-mixes its type's bright color into the background by `visual.SceneryDepthMix`, so
-far text fades as haze, while typeable text keeps its level's color. In 256-color
-mode a glyph hue has two console entries, one for dark and one shared by normal
-and bright, so only the dark layer stands apart there.
+foreground-only, so the text passes behind them; the sigil renderer leaves out a
+sigil there the same way, so a particle passing through rock goes behind it. In
+truecolor each scenery layer mixes its type's bright color into the background by
+`visual.SceneryDepthMix`, so far text fades as haze, while typeable text keeps its
+level's color. In 256-color mode a glyph hue has two console entries, one for dark
+and one shared by normal and bright, so only the dark layer stands apart there.
 
 ### Local and peer cursors
 

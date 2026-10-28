@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/pattern"
@@ -561,6 +562,64 @@ func TestVanguardsCaveOpensTheRowsATallMapAdds(t *testing.T) {
 	}
 	if seen == 0 {
 		t.Fatal("no cave stood")
+	}
+}
+
+// TestVanguardsDecayFallsDownOneColumnOfTheCaveThroughItsRock fires the ship on
+// negative energy, which sheds decay: each decay keeps one column of the cave, its map
+// column plus the rock's origin, never rises, and falls on from the open into the
+// floor, which lets it pass. A new game lays a new cave and starts the count again.
+func TestVanguardsDecayFallsDownOneColumnOfTheCaveThroughItsRock(t *testing.T) {
+	t.Parallel()
+	a := newVanguard(t)
+	w := a.World()
+	w.RunSafe(func() {
+		player := w.Resources.Player.Entity
+		w.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
+		w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount, Weapons: true})
+	})
+	type place struct {
+		column    int64
+		row       int
+		wasInOpen bool
+	}
+	seen := map[core.Entity]place{}
+	origin, passed := int64(-1), 0
+	for tick := range 200 {
+		if tick%2 == 0 {
+			a.Inject(&input.Intent{Type: input.IntentFireMain})
+		}
+		a.Tick(1)
+		w.RunSafe(func() {
+			rock := w.Positions.Rock()
+			if rock == nil {
+				return
+			}
+			if rock.Origin < origin {
+				clear(seen)
+			}
+			origin = rock.Origin
+			for _, e := range w.Components.Particle.Entities() {
+				if p, _ := w.Components.Particle.GetComponent(e); p.Behavior != component.ParticleDecay {
+					continue
+				}
+				pos, _ := w.Positions.GetPosition(e)
+				col, _ := rock.Column(pos.X)
+				was, ok := seen[e]
+				at := place{column: int64(pos.X) + rock.Origin, row: pos.Y, wasInOpen: was.wasInOpen || !col.Rock(pos.Y)}
+				if ok && (at.column != was.column || at.row < was.row) {
+					t.Fatalf("tick %d: decay went from cave column %d row %d to column %d row %d, want its column, falling",
+						tick, was.column, was.row, at.column, at.row)
+				}
+				if was.wasInOpen && pos.Y >= col.Floor {
+					passed++
+				}
+				seen[e] = at
+			}
+		})
+	}
+	if passed == 0 {
+		t.Fatalf("of %d decay none fell from the open into the floor", len(seen))
 	}
 }
 
